@@ -282,6 +282,8 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 		switch kind {
 		case "rpc":
 			a.serveRPCStream(ctx, stream, meta, fsSvc)
+		case "fs/read_file":
+			fsSvc.ServeReadFileStream(ctx, stream, meta)
 		default:
 			// Unknown stream kind: close immediately.
 			_ = stream.Close()
