@@ -22,6 +22,7 @@ import (
 	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/fs"
+	"github.com/floegence/redeven-agent/internal/monitor"
 	"github.com/floegence/redeven-agent/internal/session"
 	"github.com/floegence/redeven-agent/internal/terminal"
 )
@@ -56,6 +57,7 @@ type Agent struct {
 	fsRoot string
 
 	term *terminal.Manager
+	mon  *monitor.Service
 
 	mu       sync.Mutex
 	sessions map[string]context.CancelFunc // channel_id -> cancel
@@ -103,6 +105,7 @@ func New(opts Options) (*Agent, error) {
 		buildTime: strings.TrimSpace(opts.BuildTime),
 		fsRoot:    rootAbs,
 		term:      terminal.NewManager(shell, rootAbs, logger),
+		mon:       monitor.NewService(logger),
 		sessions:  make(map[string]context.CancelFunc),
 	}, nil
 }
@@ -329,6 +332,9 @@ func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, m
 
 	// Terminal domain
 	a.term.Register(router, meta, srv)
+
+	// Monitor domain
+	a.mon.Register(router, meta)
 
 	_ = srv.Serve(ctx)
 }
