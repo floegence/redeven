@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime"
@@ -144,11 +145,11 @@ func (s *Service) collectSnapshot(ctx context.Context) monitorSnapshot {
 		Platform: runtime.GOOS,
 	}
 
-	// CPU usage: use a short sampling interval to avoid the first call returning 0.
-	cpuPercentages, err := cpu.PercentWithContext(ctx, 250*time.Millisecond, false)
-	if err == nil && len(cpuPercentages) > 0 {
-		resp.CPUUsage = cpuPercentages[0]
-	} else if err != nil {
+	// CPU usage: prefer non-blocking sampling (diff from last call) and per-CPU sampling on
+	// macOS to avoid 0% results caused by coarse aggregated tick updates.
+	if usage, err := readCPUUsage(ctx); err == nil {
+		resp.CPUUsage = usage
+	} else {
 		s.log.Warn("sys_monitor: get cpu percent failed", "error", err)
 	}
 
@@ -196,6 +197,51 @@ func (s *Service) collectSnapshot(ctx context.Context) monitorSnapshot {
 		data:        resp,
 		procMetrics: procMetrics,
 	}
+}
+
+func readCPUUsage(ctx context.Context) (float64, error) {
+	var errs []error
+
+	// Non-blocking: compare against the last call. This avoids short-interval sampling returning 0
+	// on newer macOS versions due to coarse aggregated tick updates.
+	if p, err := cpu.PercentWithContext(ctx, 0, true); err == nil && len(p) > 0 {
+		return average(p), nil
+	} else if err != nil {
+		errs = append(errs, err)
+	}
+	if p, err := cpu.PercentWithContext(ctx, 0, false); err == nil && len(p) > 0 {
+		return p[0], nil
+	} else if err != nil {
+		errs = append(errs, err)
+	}
+
+	// Fallback: take a short blocking interval to bootstrap lastTimes if needed.
+	if p, err := cpu.PercentWithContext(ctx, 250*time.Millisecond, true); err == nil && len(p) > 0 {
+		return average(p), nil
+	} else if err != nil {
+		errs = append(errs, err)
+	}
+	if p, err := cpu.PercentWithContext(ctx, 250*time.Millisecond, false); err == nil && len(p) > 0 {
+		return p[0], nil
+	} else if err != nil {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return 0, errors.Join(errs...)
+	}
+	return 0, fmt.Errorf("cpu percent unavailable")
+}
+
+func average(xs []float64) float64 {
+	if len(xs) == 0 {
+		return 0
+	}
+	var sum float64
+	for _, x := range xs {
+		sum += x
+	}
+	return sum / float64(len(xs))
 }
 
 func collectProcessMetrics(ctx context.Context) ([]processWithMetrics, error) {
