@@ -10,11 +10,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@fontsource/iosevka": "^5.2.5",
     "@floegence/floe-webapp-core": "^0.14.3",
     "@floegence/floe-webapp-protocol": "^0.14.3",
-    "@floegence/floeterm-terminal-web": "^0.2.0",
+    "@floegence/floeterm-terminal-web": "^0.3.1",
     "@floegence/flowersec-core": "^0.7.0",
+    "@fontsource/iosevka": "^5.2.5",
     "@solidjs/router": "^0.15.3",
     "docx-preview": "^0.3.6",
     "exceljs": "^4.4.0",

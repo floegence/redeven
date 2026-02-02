@@ -13,8 +13,10 @@ import {
   Terminal,
   Trash,
   type TabItem,
+  useCurrentWidgetId,
   useResolvedFloeConfig,
   useTheme,
+  useViewActivation,
 } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import {
@@ -23,6 +25,7 @@ import {
   getThemeColors,
   type Logger,
   type TerminalEventSource,
+  type TerminalResponsiveConfig,
   type TerminalSessionInfo,
   type TerminalThemeName,
   type TerminalTransport,
@@ -46,12 +49,6 @@ export type TerminalPanelVariant = 'panel' | 'deck';
 export interface TerminalPanelProps {
   variant?: TerminalPanelVariant;
 }
-
-type terminal_search_match = {
-  row: number;
-  col: number;
-  len: number;
-};
 
 function readActiveSessionId(): string | null {
   try {
@@ -123,6 +120,8 @@ type terminal_session_view_props = {
   session: TerminalSessionInfo;
   active: () => boolean;
   connected: () => boolean;
+  viewActive: () => boolean;
+  autoFocus: () => boolean;
   themeName: () => TerminalThemeName;
   themeColors: () => Record<string, string>;
   fontSize: () => number;
@@ -148,8 +147,6 @@ const HISTORY_STATS_POLL_MS = 10_000;
 
 const TERMINAL_SELECTION_BACKGROUND = 'rgba(255, 234, 0, 0.72)';
 const TERMINAL_SELECTION_FOREGROUND = '#000000';
-
-const TERMINAL_SEARCH_MAX_RESULTS = 5000;
 
 const TERMINAL_FONT_OPTIONS: Array<{ id: string; label: string; family: string }> = [
   {
@@ -365,7 +362,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       setLoading('idle');
       requestAnimationFrame(() => {
         core.forceResize();
-        if (props.active()) core.focus();
+        if (props.viewActive() && props.active() && props.autoFocus()) core.focus();
       });
     } catch (e) {
       if (seq !== refreshSeq) return;
@@ -401,14 +398,21 @@ function TerminalSessionView(props: terminal_session_view_props) {
         allowTransparency: false,
         theme: colors(),
         fontFamily: fontFamily(),
+        // 多视图/多面板同时展示同一个 terminal session 时：只让“当前获得输入焦点”的终端触发远端 resize。
+        // 这样可以避免隐藏终端把远端 PTY 的 cols/rows 锁死在某个宽度。
+        responsive: {
+          fitOnFocus: true,
+          emitResizeOnFocus: true,
+          notifyResizeOnlyWhenFocused: true,
+        } satisfies TerminalResponsiveConfig,
       }),
       {
         onData: (data: string) => {
-          if (!props.active()) return;
+          if (!props.viewActive() || !props.active()) return;
           void props.transport.sendInput(id, data, props.connId);
         },
         onResize: (size: { cols: number; rows: number }) => {
-          if (!props.active()) return;
+          if (!props.viewActive() || !props.active()) return;
           void props.transport.resize(id, size.cols, size.rows);
         },
         onError: (e: Error) => {
@@ -481,7 +485,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
       requestAnimationFrame(() => {
         core.forceResize();
-        if (props.active()) core.focus();
+        if (props.viewActive() && props.active() && props.autoFocus()) core.focus();
         const el = container;
         if (el && el.style.opacity !== '1') {
           el.style.opacity = '1';
@@ -530,14 +534,14 @@ function TerminalSessionView(props: terminal_session_view_props) {
   });
 
   createEffect(() => {
-    if (!props.active()) return;
+    if (!props.viewActive() || !props.active()) return;
     const core = term;
     if (!core) return;
     requestAnimationFrame(() => {
       core.setTheme(colors());
       core.setFontSize(fontSize());
       core.forceResize();
-      core.focus();
+      if (props.autoFocus()) core.focus();
     });
   });
 
@@ -614,7 +618,24 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
   const protocol = useProtocol();
   const theme = useTheme();
   const floe = useResolvedFloeConfig();
+  const view = useViewActivation();
+  const widgetId = (() => {
+    try {
+      return useCurrentWidgetId();
+    } catch {
+      return null;
+    }
+  })();
   const connId = getOrCreateTerminalConnId();
+
+  const [searchOpen, setSearchOpen] = createSignal(false);
+  const [searchQuery, setSearchQuery] = createSignal('');
+  const [searchResultCount, setSearchResultCount] = createSignal(0);
+  const [searchResultIndex, setSearchResultIndex] = createSignal(-1);
+  const [panelHasFocus, setPanelHasFocus] = createSignal(false);
+
+  let searchLastAppliedKey = '';
+  let searchBoundCore: TerminalCore | null = null;
 
   ensureTerminalPreferencesInitialized(floe.persist);
   const terminalPrefs = useTerminalPreferences();
@@ -623,6 +644,14 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
   const eventSource = createFlowersecTerminalEventSource(protocol as any);
 
   const connected = () => Boolean(protocol.client());
+  const viewActive = () => view.active();
+  const isInDeckWidget = Boolean(String(widgetId ?? '').trim());
+
+  createEffect(() => {
+    if (viewActive()) return;
+    // view 失活时重置一次，避免某些场景下 focus 状态残留影响后续 autoFocus 判定。
+    setPanelHasFocus(false);
+  });
 
   const userTheme = terminalPrefs.userTheme;
   const fontSize = terminalPrefs.fontSize;
@@ -735,22 +764,7 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
     }
   });
 
-  createEffect(() => {
-    // 用户切换到某个 tab 后，强制触发一次 resize，同步前后端 cols/rows（避免后端仍沿用旧尺寸）。
-    const sid = activeSessionId();
-    const isConnected = connected();
-    void coreRegistrySeq();
-    if (!isConnected || !sid) return;
-
-    const core = coreRegistry.get(sid);
-    if (!core) return;
-
-    requestAnimationFrame(() => {
-      core.forceResize();
-      const dims = core.getDimensions();
-      void transport.resize(sid, dims.cols, dims.rows);
-    });
-  });
+  const shouldAutoFocus = () => !isInDeckWidget || panelHasFocus();
 
   createEffect(() => {
     const sid = activeSessionId();
@@ -1020,11 +1034,6 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
     ];
   });
 
-  const [searchOpen, setSearchOpen] = createSignal(false);
-  const [searchQuery, setSearchQuery] = createSignal('');
-  const [searchResults, setSearchResults] = createSignal<terminal_search_match[]>([]);
-  const [searchIndex, setSearchIndex] = createSignal(0);
-
   let searchInputEl: HTMLInputElement | null = null;
   let rootEl: HTMLDivElement | null = null;
 
@@ -1034,121 +1043,40 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
     return coreRegistry.get(sid) ?? null;
   };
 
-  const getActiveTerminal = (): any | null => {
-    const core = getActiveCore();
-    if (!core) return null;
-    return (core as any)?.terminal ?? null;
-  };
+  const bindSearchCore = (core: TerminalCore | null) => {
+    if (searchBoundCore && searchBoundCore !== core) {
+      // 解除旧 core 的回调，避免后台 session 输出导致 UI 计数串台。
+      searchBoundCore.setSearchResultsCallback(null);
+    }
 
-  const clearSearchHighlight = () => {
-    const t = getActiveTerminal();
-    if (t?.clearSelection) t.clearSelection();
-  };
+    searchBoundCore = core;
 
-  const applySearchMatch = (match: terminal_search_match) => {
-    const t = getActiveTerminal();
-    if (!t) return;
-
-    const scrollbackLen = typeof t.getScrollbackLength === 'function' ? t.getScrollbackLength() : 0;
-    const rows = typeof t.rows === 'number' ? t.rows : 24;
-
-    // 让匹配行尽量出现在视口中间，便于查看上下文
-    const desiredTop =
-      match.row >= scrollbackLen ? scrollbackLen : Math.max(0, Math.min(scrollbackLen, match.row - Math.floor(rows / 2)));
-    const viewportY = Math.max(0, Math.min(scrollbackLen, scrollbackLen - desiredTop));
-    if (typeof t.scrollToLine === 'function') t.scrollToLine(viewportY);
-
-    const sm = (t as any)?.selectionManager;
-    const startCol = Math.max(0, match.col);
-    const endCol = Math.max(startCol, startCol + Math.max(1, match.len) - 1);
-    if (sm) {
-      sm.selectionStart = { col: startCol, absoluteRow: match.row };
-      sm.selectionEnd = { col: endCol, absoluteRow: match.row };
-      sm.selectionChangedEmitter?.fire?.();
+    if (!core) {
+      setSearchResultIndex(-1);
+      setSearchResultCount(0);
       return;
     }
 
-    // 兜底：如果没有 selectionManager，尝试用公开 API（可能不支持滚动历史定位）
-    if (typeof t.select === 'function') {
-      t.select(startCol, 0, Math.max(1, match.len));
-    }
-  };
-
-  const scanTerminalMatches = (query: string) => {
-    const t = getActiveTerminal();
-    const q = query.trim();
-    if (!t || !q) {
-      setSearchResults([]);
-      setSearchIndex(0);
-      clearSearchHighlight();
-      return;
-    }
-
-    const buffer = t?.buffer?.active;
-    if (!buffer || typeof buffer.length !== 'number') {
-      setSearchResults([]);
-      setSearchIndex(0);
-      clearSearchHighlight();
-      return;
-    }
-
-    const tokens = q.split(/\s+/).filter(Boolean);
-    const results: terminal_search_match[] = [];
-
-    for (let row = 0; row < buffer.length; row += 1) {
-      const line = buffer.getLine(row);
-      if (!line) continue;
-      const text = line.translateToString(false);
-      if (!text) continue;
-
-      const haystack = text.toLowerCase();
-
-      if (tokens.length <= 1) {
-        const needle = q.toLowerCase();
-        let idx = 0;
-        while (idx <= haystack.length - needle.length) {
-          const at = haystack.indexOf(needle, idx);
-          if (at < 0) break;
-          results.push({ row, col: at, len: Math.max(1, needle.length) });
-          if (results.length >= TERMINAL_SEARCH_MAX_RESULTS) break;
-          idx = at + Math.max(1, needle.length);
-        }
-      } else {
-        let from = 0;
-        let start = -1;
-        let end = -1;
-        let ok = true;
-        for (const token of tokens) {
-          const needle = token.toLowerCase();
-          const at = haystack.indexOf(needle, from);
-          if (at < 0) {
-            ok = false;
-            break;
-          }
-          if (start < 0) start = at;
-          end = at + needle.length;
-          from = end;
-        }
-        if (ok && start >= 0 && end > start) {
-          results.push({ row, col: start, len: end - start });
-        }
-      }
-
-      if (results.length >= TERMINAL_SEARCH_MAX_RESULTS) break;
-    }
-
-    // 默认更偏向最近输出：从底部往上看
-    results.sort((a, b) => {
-      const dr = b.row - a.row;
-      if (dr !== 0) return dr;
-      return a.col - b.col;
+    core.setSearchResultsCallback(({ resultIndex, resultCount }) => {
+      setSearchResultIndex(Number.isFinite(resultIndex) ? resultIndex : -1);
+      setSearchResultCount(Number.isFinite(resultCount) ? resultCount : 0);
     });
-
-    setSearchResults(results);
-    setSearchIndex(0);
-    if (results.length > 0) applySearchMatch(results[0]!);
-    else clearSearchHighlight();
   };
+
+  createEffect(() => {
+    const open = searchOpen();
+    const sid = activeSessionId();
+    void coreRegistrySeq();
+
+    const core = sid ? (coreRegistry.get(sid) ?? null) : null;
+    if (!open || !core) {
+      bindSearchCore(null);
+      searchLastAppliedKey = '';
+      return;
+    }
+
+    bindSearchCore(core);
+  });
 
   let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   createEffect(() => {
@@ -1159,19 +1087,32 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
     if (!open || !sid) {
       if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
       searchDebounceTimer = null;
-      setSearchResults([]);
-      setSearchIndex(0);
       return;
     }
 
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
-      scanTerminalMatches(q);
+      const core = coreRegistry.get(sid) ?? null;
+      if (!core) return;
+
+      const term = q.trim();
+      const key = `${sid}:${term}`;
+      if (key === searchLastAppliedKey) return;
+
+      if (!term) {
+        core.clearSearch();
+        searchLastAppliedKey = key;
+        return;
+      }
+
+      core.findNext(term);
+      searchLastAppliedKey = key;
     }, 120);
   });
 
   onCleanup(() => {
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    bindSearchCore(null);
   });
 
   const openSearch = () => {
@@ -1185,28 +1126,31 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
   const closeSearch = () => {
     setSearchOpen(false);
     setSearchQuery('');
-    setSearchResults([]);
-    setSearchIndex(0);
-    clearSearchHighlight();
+    setSearchResultIndex(-1);
+    setSearchResultCount(0);
+    searchLastAppliedKey = '';
+    // Search 是面板级 UI：关闭时清理所有 session，避免残留高亮。
+    for (const core of coreRegistry.values()) {
+      core.clearSearch();
+    }
+    bindSearchCore(null);
     requestAnimationFrame(() => {
       getActiveCore()?.focus();
     });
   };
 
   const goNextMatch = () => {
-    const list = searchResults();
-    if (list.length === 0) return;
-    const next = (searchIndex() + 1) % list.length;
-    setSearchIndex(next);
-    applySearchMatch(list[next]!);
+    const core = getActiveCore();
+    const term = searchQuery().trim();
+    if (!core || !term) return;
+    core.findNext(term);
   };
 
   const goPrevMatch = () => {
-    const list = searchResults();
-    if (list.length === 0) return;
-    const next = (searchIndex() - 1 + list.length) % list.length;
-    setSearchIndex(next);
-    applySearchMatch(list[next]!);
+    const core = getActiveCore();
+    const term = searchQuery().trim();
+    if (!core || !term) return;
+    core.findPrevious(term);
   };
 
   const handleRootKeyDown: (e: KeyboardEvent) => void = (e) => {
@@ -1251,7 +1195,20 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
   };
 
   const body = (
-    <div ref={(n) => (rootEl = n)} class="h-full flex flex-col" onKeyDown={handleRootKeyDown}>
+    <div
+      ref={(n) => (rootEl = n)}
+      class="h-full flex flex-col"
+      onKeyDown={handleRootKeyDown}
+      onFocusIn={() => setPanelHasFocus(true)}
+      onPointerDown={() => setPanelHasFocus(true)}
+      onFocusOut={() => {
+        // focusout 在子树内移动也会触发，这里下一帧再确认一次“是否真的离开了该 panel”。
+        requestAnimationFrame(() => {
+          const active = typeof document !== 'undefined' ? document.activeElement : null;
+          setPanelHasFocus(Boolean(active && rootEl?.contains(active)));
+        });
+      }}
+    >
       <div
         class={`relative pt-2 px-2 pb-0 flex items-end gap-2 ${variant === 'panel' ? 'justify-between' : 'justify-end'}`}
       >
@@ -1266,7 +1223,9 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
           <Tabs
             items={tabItems()}
             activeId={activeSessionId() ?? undefined}
-            onChange={(id) => setActiveSessionId(id)}
+            onChange={(id) => {
+              setActiveSessionId(id);
+            }}
             onClose={(id) => closeSession(id)}
             onAdd={createSession}
             showAdd={connected() && !creating()}
@@ -1320,14 +1279,14 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
                 onInput={(e) => setSearchQuery(e.currentTarget.value)}
               />
               <div class="text-[10px] text-[#94a3b8] tabular-nums min-w-[54px] text-right">
-                {searchResults().length === 0 ? '0/0' : `${searchIndex() + 1}/${searchResults().length}`}
+                {searchResultCount() <= 0 || searchResultIndex() < 0 ? '0/0' : `${searchResultIndex() + 1}/${searchResultCount()}`}
               </div>
               <Button
                 size="sm"
                 variant="ghost"
                 class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
                 onClick={goPrevMatch}
-                disabled={searchResults().length === 0}
+                disabled={searchResultCount() <= 0}
                 title="Previous"
               >
                 Prev
@@ -1337,7 +1296,7 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
                 variant="ghost"
                 class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
                 onClick={goNextMatch}
-                disabled={searchResults().length === 0}
+                disabled={searchResultCount() <= 0}
                 title="Next"
               >
                 Next
@@ -1363,6 +1322,8 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
                         session={session()}
                         active={() => activeSessionId() === session().id}
                         connected={connected}
+                        viewActive={viewActive}
+                        autoFocus={shouldAutoFocus}
                         themeName={terminalThemeName}
                         themeColors={terminalThemeColors}
                         fontSize={fontSize}
