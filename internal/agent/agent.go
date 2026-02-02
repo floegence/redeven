@@ -118,6 +118,8 @@ func New(opts Options) (*Agent, error) {
 		Logger:              logger,
 		StateDir:            stateDir,
 		ControlplaneBaseURL: strings.TrimSpace(opts.Config.ControlplaneBaseURL),
+		CodeServerPortMin:   opts.Config.CodeServerPortMin,
+		CodeServerPortMax:   opts.Config.CodeServerPortMax,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init codeapp: %w", err)

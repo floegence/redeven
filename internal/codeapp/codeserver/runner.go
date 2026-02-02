@@ -30,6 +30,10 @@ type Runner struct {
 
 	mu        sync.Mutex
 	instances map[string]*Instance // code_space_id -> instance
+
+	// startLocks prevents concurrent double-starts for the same code_space_id.
+	// It intentionally grows with ids and is never pruned to avoid lock lifecycle races.
+	startLocks map[string]*sync.Mutex
 }
 
 type Instance struct {
@@ -48,11 +52,12 @@ func NewRunner(opts RunnerOptions) *Runner {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
 	return &Runner{
-		log:       logger,
-		stateDir:  strings.TrimSpace(opts.StateDir),
-		portMin:   opts.PortMin,
-		portMax:   opts.PortMax,
-		instances: make(map[string]*Instance),
+		log:        logger,
+		stateDir:   strings.TrimSpace(opts.StateDir),
+		portMin:    opts.PortMin,
+		portMax:    opts.PortMax,
+		instances:  make(map[string]*Instance),
+		startLocks: make(map[string]*sync.Mutex),
 	}
 }
 
@@ -87,6 +92,10 @@ func (r *Runner) EnsureRunning(codeSpaceID string, workspacePath string, desired
 		return nil, errors.New("invalid args")
 	}
 
+	// Prevent concurrent double-starts for the same code_space_id.
+	lk := r.lockStart(id)
+	defer lk.Unlock()
+
 	r.mu.Lock()
 	if ins, ok := r.instances[id]; ok && ins != nil && ins.cmd != nil && ins.cmd.Process != nil && isPortListening(ins.Port) {
 		r.mu.Unlock()
@@ -115,6 +124,25 @@ func (r *Runner) EnsureRunning(codeSpaceID string, workspacePath string, desired
 	return ins, nil
 }
 
+func (r *Runner) lockStart(codeSpaceID string) *sync.Mutex {
+	id := strings.TrimSpace(codeSpaceID)
+	if id == "" {
+		// Fallback lock for invalid ids; should not happen because callers validate.
+		id = "_"
+	}
+
+	r.mu.Lock()
+	lk := r.startLocks[id]
+	if lk == nil {
+		lk = &sync.Mutex{}
+		r.startLocks[id] = lk
+	}
+	r.mu.Unlock()
+
+	lk.Lock()
+	return lk
+}
+
 func (r *Runner) Stop(codeSpaceID string) error {
 	if r == nil {
 		return nil
@@ -123,6 +151,9 @@ func (r *Runner) Stop(codeSpaceID string) error {
 	if id == "" {
 		return errors.New("missing codeSpaceID")
 	}
+
+	lk := r.lockStart(id)
+	defer lk.Unlock()
 
 	r.mu.Lock()
 	ins := r.instances[id]

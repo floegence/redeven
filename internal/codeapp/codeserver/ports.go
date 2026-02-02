@@ -28,11 +28,6 @@ func pickFreePortInRange(min int, max int) (int, error) {
 	return 0, fmt.Errorf("no free port in range %s-%s", strconv.Itoa(min), strconv.Itoa(max))
 }
 
-// PickFreePortInRange is an exported wrapper used by higher-level orchestration (registry creation).
-func PickFreePortInRange(min int, max int) (int, error) {
-	return pickFreePortInRange(min, max)
-}
-
 func isPortFree(port int) bool {
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {

@@ -26,6 +26,7 @@ type Options struct {
 type Backend interface {
 	ListSpaces(ctx context.Context) ([]SpaceStatus, error)
 	CreateSpace(ctx context.Context, req CreateSpaceRequest) (*SpaceStatus, error)
+	UpdateSpace(ctx context.Context, codeSpaceID string, req UpdateSpaceRequest) (*SpaceStatus, error)
 	DeleteSpace(ctx context.Context, codeSpaceID string) error
 	StartSpace(ctx context.Context, codeSpaceID string) (*SpaceStatus, error)
 	StopSpace(ctx context.Context, codeSpaceID string) error
@@ -35,6 +36,8 @@ type Backend interface {
 type SpaceStatus struct {
 	CodeSpaceID        string `json:"code_space_id"`
 	WorkspacePath      string `json:"workspace_path"`
+	Name               string `json:"name"`
+	Description        string `json:"description"`
 	CodePort           int    `json:"code_port"`
 	CreatedAtUnixMs    int64  `json:"created_at_unix_ms"`
 	UpdatedAtUnixMs    int64  `json:"updated_at_unix_ms"`
@@ -47,6 +50,13 @@ type SpaceStatus struct {
 type CreateSpaceRequest struct {
 	CodeSpaceID   string `json:"code_space_id"`
 	WorkspacePath string `json:"workspace_path"`
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+}
+
+type UpdateSpaceRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
 }
 
 type Gateway struct {
@@ -78,8 +88,11 @@ func New(opts Options) (*Gateway, error) {
 		addr = "127.0.0.1:0"
 	}
 
-	// /_redeven_proxy/* is mapped to dist/*
-	dist := http.StripPrefix("/_redeven_proxy/", http.FileServer(http.FS(opts.DistFS)))
+	// /_redeven_proxy/* is mapped to dist/*.
+	//
+	// Note: use the prefix without a trailing slash, so the stripped path keeps a
+	// leading "/" (avoids FileServer canonicalization redirects).
+	dist := http.StripPrefix("/_redeven_proxy", http.FileServer(http.FS(opts.DistFS)))
 
 	return &Gateway{
 		log:     logger,
@@ -256,6 +269,24 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
+		}
+		if r.Method == http.MethodPatch && action == "" {
+			var req UpdateSpaceRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if req.Name == nil && req.Description == nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
+				return
+			}
+			s, err := g.backend.UpdateSpace(r.Context(), id, req)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: s})
 			return
 		}
 		if r.Method == http.MethodPost && action == "start" {

@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
-	"github.com/floegence/redeven-agent/internal/codeapp/codeserver"
 	"github.com/floegence/redeven-agent/internal/codeapp/gateway"
 	"github.com/floegence/redeven-agent/internal/codeapp/registry"
 )
@@ -27,14 +27,18 @@ func (s *Service) ListSpaces(ctx context.Context) ([]gateway.SpaceStatus, error)
 	for _, sp := range spaces {
 		var running bool
 		var pid int
+		var port int
 		if ins, ok := s.runner.Get(sp.CodeSpaceID); ok && ins != nil {
 			running = true
 			pid = ins.PID
+			port = ins.Port
 		}
 		out = append(out, gateway.SpaceStatus{
 			CodeSpaceID:        sp.CodeSpaceID,
 			WorkspacePath:      sp.WorkspacePath,
-			CodePort:           sp.CodePort,
+			Name:               sp.Name,
+			Description:        sp.Description,
+			CodePort:           port,
 			CreatedAtUnixMs:    sp.CreatedAtUnixMs,
 			UpdatedAtUnixMs:    sp.UpdatedAtUnixMs,
 			LastOpenedAtUnixMs: sp.LastOpenedAtUnixMs,
@@ -77,8 +81,7 @@ func (s *Service) CreateSpace(ctx context.Context, req gateway.CreateSpaceReques
 		return nil, err
 	}
 
-	// Allocate an initial port. If the port becomes unavailable later, EnsureRunning will re-allocate and update the DB.
-	port, err := codeserver.PickFreePortInRange(s.codePortMin, s.codePortMax)
+	name, description, err := normalizeMeta(req.Name, req.Description)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +90,8 @@ func (s *Service) CreateSpace(ctx context.Context, req gateway.CreateSpaceReques
 	if err := s.reg.CreateSpace(ctx, registry.Space{
 		CodeSpaceID:        id,
 		WorkspacePath:      abs,
-		CodePort:           port,
+		Name:               name,
+		Description:        description,
 		CreatedAtUnixMs:    now,
 		UpdatedAtUnixMs:    now,
 		LastOpenedAtUnixMs: 0,
@@ -102,7 +106,9 @@ func (s *Service) CreateSpace(ctx context.Context, req gateway.CreateSpaceReques
 	return &gateway.SpaceStatus{
 		CodeSpaceID:        id,
 		WorkspacePath:      abs,
-		CodePort:           port,
+		Name:               name,
+		Description:        description,
+		CodePort:           0,
 		CreatedAtUnixMs:    now,
 		UpdatedAtUnixMs:    now,
 		LastOpenedAtUnixMs: 0,
@@ -164,9 +170,17 @@ func (s *Service) StartSpace(ctx context.Context, codeSpaceID string) (*gateway.
 	}
 	ins, _ := s.runner.Get(id)
 
+	// Touch only when explicitly started (user intent).
+	_ = s.reg.TouchLastOpened(ctx, id)
+	if updated, err := s.reg.GetSpace(ctx, id); err == nil && updated != nil {
+		sp = updated
+	}
+
 	return &gateway.SpaceStatus{
 		CodeSpaceID:        sp.CodeSpaceID,
 		WorkspacePath:      sp.WorkspacePath,
+		Name:               sp.Name,
+		Description:        sp.Description,
 		CodePort:           port,
 		CreatedAtUnixMs:    sp.CreatedAtUnixMs,
 		UpdatedAtUnixMs:    sp.UpdatedAtUnixMs,
@@ -212,15 +226,82 @@ func (s *Service) ResolveCodeServerPort(ctx context.Context, codeSpaceID string)
 		return 0, errors.New("codespace not found")
 	}
 
-	ins, err := s.runner.EnsureRunning(id, sp.WorkspacePath, sp.CodePort)
+	ins, err := s.runner.EnsureRunning(id, sp.WorkspacePath, 0)
 	if err != nil {
 		return 0, err
 	}
-	if ins != nil && ins.Port != sp.CodePort {
-		_ = s.reg.UpdateCodePort(ctx, id, ins.Port)
-	}
-	_ = s.reg.TouchLastOpened(ctx, id)
 	return ins.Port, nil
+}
+
+func (s *Service) UpdateSpace(ctx context.Context, codeSpaceID string, req gateway.UpdateSpaceRequest) (*gateway.SpaceStatus, error) {
+	if s == nil || s.reg == nil {
+		return nil, errors.New("codeapp not ready")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	id := strings.TrimSpace(codeSpaceID)
+	if !IsValidCodeSpaceID(id) {
+		return nil, errors.New("invalid code_space_id")
+	}
+
+	sp, err := s.reg.GetSpace(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if sp == nil {
+		return nil, errors.New("codespace not found")
+	}
+
+	name := sp.Name
+	desc := sp.Description
+	if req.Name != nil {
+		name = strings.TrimSpace(*req.Name)
+	}
+	if req.Description != nil {
+		desc = strings.TrimSpace(*req.Description)
+	}
+
+	name, desc, err = normalizeMeta(name, desc)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.reg.UpdateMeta(ctx, id, name, desc); err != nil {
+		return nil, err
+	}
+
+	// Re-fetch to include updated timestamps.
+	sp, err = s.reg.GetSpace(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if sp == nil {
+		return nil, errors.New("codespace not found")
+	}
+
+	var running bool
+	var pid int
+	var port int
+	if ins, ok := s.runner.Get(id); ok && ins != nil {
+		running = true
+		pid = ins.PID
+		port = ins.Port
+	}
+
+	return &gateway.SpaceStatus{
+		CodeSpaceID:        sp.CodeSpaceID,
+		WorkspacePath:      sp.WorkspacePath,
+		Name:               sp.Name,
+		Description:        sp.Description,
+		CodePort:           port,
+		CreatedAtUnixMs:    sp.CreatedAtUnixMs,
+		UpdatedAtUnixMs:    sp.UpdatedAtUnixMs,
+		LastOpenedAtUnixMs: sp.LastOpenedAtUnixMs,
+		Running:            running,
+		PID:                pid,
+	}, nil
 }
 
 func validateWorkspacePath(p string) error {
@@ -251,4 +332,20 @@ func randomCodeSpaceID() string {
 		out = append(out, alphabet[int(b[i])%len(alphabet)])
 	}
 	return string(out)
+}
+
+func normalizeMeta(name string, description string) (string, string, error) {
+	name = strings.TrimSpace(name)
+	description = strings.TrimSpace(description)
+
+	const maxName = 64
+	const maxDesc = 256
+
+	if utf8.RuneCountInString(name) > maxName {
+		return "", "", errors.New("name is too long")
+	}
+	if utf8.RuneCountInString(description) > maxDesc {
+		return "", "", errors.New("description is too long")
+	}
+	return name, description, nil
 }

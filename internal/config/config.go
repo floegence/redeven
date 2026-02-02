@@ -36,6 +36,11 @@ type Config struct {
 	LogFormat string `json:"log_format,omitempty"`
 	// LogLevel is "debug|info|warn|error".
 	LogLevel string `json:"log_level,omitempty"`
+
+	// CodeServerPortMin/Max configures the dynamic port range used for code-server processes.
+	// If unset/invalid, the agent uses a safe default range.
+	CodeServerPortMin int `json:"code_server_port_min,omitempty"`
+	CodeServerPortMax int `json:"code_server_port_max,omitempty"`
 }
 
 func (c *Config) Validate() error {

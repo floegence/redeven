@@ -221,15 +221,21 @@ func parseControlplaneBase(raw string) (scheme string, host string, err error) {
 }
 
 func normalizePortRange(min int, max int) (int, int) {
-	// Keep a wide high-port range by default.
+	// Keep a safe high-port range by default.
 	const defaultMin = 20000
-	const defaultMax = 39999
+	const defaultMax = 21000
 
-	if min <= 0 || max <= 0 || min >= max || max > 65535 {
+	if min <= 0 || max <= 0 || max > 65535 {
 		return defaultMin, defaultMax
 	}
 	if min < 1024 {
 		min = 1024
+	}
+	if max < 1024 {
+		max = 1024
+	}
+	if min >= max {
+		return defaultMin, defaultMax
 	}
 	return min, max
 }
