@@ -1,4 +1,4 @@
-import { CommandPalette, FloeProvider, NotificationContainer } from '@floegence/floe-webapp-core';
+import { CommandPalette, FileBrowserDragProvider, FloeProvider, NotificationContainer } from '@floegence/floe-webapp-core';
 import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { EnvAppShell } from './EnvAppShell';
 import { REDEVEN_DECK_LAYOUT_IDS, redevenDeckPresets } from './deck/redevenDeckPresets';
@@ -30,7 +30,16 @@ const floeConfig = {
 
 export function App() {
   return (
-    <FloeProvider config={floeConfig} wrapAfterTheme={(renderChildren) => <ProtocolProvider>{renderChildren()}</ProtocolProvider>}>
+    <FloeProvider
+      config={floeConfig}
+      wrapAfterTheme={(renderChildren) => (
+        <ProtocolProvider>
+          <FileBrowserDragProvider>
+            {renderChildren()}
+          </FileBrowserDragProvider>
+        </ProtocolProvider>
+      )}
+    >
       <>
         <EnvAppShell />
         <CommandPalette />

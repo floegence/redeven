@@ -126,6 +126,31 @@ function toFileItem(entry: any): FileItem {
   };
 }
 
+function sortFileItems(items: FileItem[]): FileItem[] {
+  return [...items].sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'folder' ? -1 : 1));
+}
+
+function rewriteSubtreePaths(item: FileItem, fromBase: string, toBase: string): FileItem {
+  const from = normalizePath(fromBase);
+  const to = normalizePath(toBase);
+
+  const rewritePath = (p: string): string => {
+    const n = normalizePath(p);
+    if (n === from) return to;
+    if (n.startsWith(from + '/')) return to + n.slice(from.length);
+    return n;
+  };
+
+  const nextPath = rewritePath(item.path);
+  const nextChildren = item.children?.map((c) => rewriteSubtreePaths(c, from, to));
+  return {
+    ...item,
+    path: nextPath,
+    id: nextPath,
+    children: nextChildren,
+  };
+}
+
 function withChildren(tree: FileItem[], folderPath: string, children: FileItem[]): FileItem[] {
   const target = folderPath.trim() || '/';
   if (target === '/' || target === '') {
@@ -195,7 +220,7 @@ function insertItemToTree(tree: FileItem[], parentPath: string, item: FileItem):
     if (tree.some((it) => normalizePath(it.path) === normalizePath(item.path))) {
       return tree;
     }
-    return [...tree, item];
+    return sortFileItems([...tree, item]);
   }
 
   const visit = (items: FileItem[]): [FileItem[], boolean] => {
@@ -208,7 +233,7 @@ function insertItemToTree(tree: FileItem[], parentPath: string, item: FileItem):
           return it;
         }
         changed = true;
-        return { ...it, children: [...children, item] };
+        return { ...it, children: sortFileItems([...children, item]) };
       }
       if (!it.children?.length) return it;
       const [newChildren, hit] = visit(it.children);
@@ -348,6 +373,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const [duplicateLoading, setDuplicateLoading] = createSignal(false);
 
+  const [dragMoveLoading, setDragMoveLoading] = createSignal(false);
+  const [fileBrowserResetSeq, setFileBrowserResetSeq] = createSignal(0);
+
   const [copyToDialogOpen, setCopyToDialogOpen] = createSignal(false);
   const [copyToDialogItem, setCopyToDialogItem] = createSignal<FileItem | null>(null);
   const [copyToLoading, setCopyToLoading] = createSignal(false);
@@ -482,6 +510,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setLoading(false);
     setCurrentBrowserPath('/');
     setHomePath(undefined);
+    setDragMoveLoading(false);
+    setFileBrowserResetSeq(0);
 
     previewReqSeq += 1;
     cleanupPreview();
@@ -781,6 +811,122 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     await loadPathChain(dirPath);
   };
 
+  const rewriteCachePathPrefix = (fromPrefix: string, toPrefix: string) => {
+    const from = normalizePath(fromPrefix);
+    const to = normalizePath(toPrefix);
+    if (from === to) return;
+
+    const captured: Array<[string, FileItem[]]> = [];
+    for (const [key, value] of cache.entries()) {
+      const k = normalizePath(key);
+      if (k === from || k.startsWith(from + '/')) {
+        captured.push([k, value]);
+      }
+    }
+    if (captured.length === 0) return;
+
+    for (const [oldKey] of captured) {
+      cache.delete(oldKey);
+    }
+
+    for (const [oldKey, items] of captured) {
+      const newKey = oldKey === from ? to : to + oldKey.slice(from.length);
+      const rewritten = items.map((it) => rewriteSubtreePaths(it, from, to));
+      cache.set(newKey, sortFileItems(rewritten));
+    }
+  };
+
+  const applyLocalMove = (item: FileItem, destDir: string) => {
+    const from = normalizePath(item.path);
+    const to = destDir === '/' ? `/${item.name}` : `${destDir}/${item.name}`;
+    const movedItem = rewriteSubtreePaths(item, from, to);
+
+    setFiles((prev) => {
+      const removed = removeItemsFromTree(prev, new Set([from]));
+      return insertItemToTree(removed, destDir, movedItem);
+    });
+
+    const srcDir = getParentDir(from);
+    const srcCached = cache.get(srcDir);
+    if (srcCached) {
+      cache.set(srcDir, srcCached.filter((c) => normalizePath(c.path) !== from));
+    }
+
+    const destCached = cache.get(destDir);
+    if (destCached) {
+      const next = destCached.filter((c) => normalizePath(c.path) !== normalizePath(to));
+      cache.set(destDir, sortFileItems([...next, movedItem]));
+    }
+
+    if (item.type === 'folder') {
+      rewriteCachePathPrefix(from, to);
+    }
+  };
+
+  const handleDragMove = async (items: FileItem[], targetPath: string) => {
+    if (items.length === 0) return;
+
+    const client = protocol.client();
+    if (!client) {
+      setFileBrowserResetSeq((v) => v + 1);
+      notification.error('Move failed', 'Connection is not ready.');
+      return;
+    }
+
+    if (dragMoveLoading()) return;
+
+    const destDir = normalizePath(targetPath);
+    setDragMoveLoading(true);
+
+    let okCount = 0;
+    const failures: string[] = [];
+
+    try {
+      for (const item of items) {
+        const from = normalizePath(item.path);
+        const to = destDir === '/' ? `/${item.name}` : `${destDir}/${item.name}`;
+        if (normalizePath(to) === from) continue;
+
+        try {
+          const resp = await client.rpc.call(TypeIds.FsRename, {
+            old_path: from,
+            new_path: to,
+          });
+          if (resp.error) {
+            throw new Error(resp.error.message ?? 'Move failed');
+          }
+
+          applyLocalMove(item, destDir);
+          okCount += 1;
+        } catch (e) {
+          failures.push(`${item.name}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
+      if (okCount > 0) {
+        writePersistedTargetPath(envId(), destDir);
+      }
+
+      if (failures.length > 0) {
+        // FileBrowser drag uses optimistic UI updates; when the RPC fails we need to remount
+        // the FileBrowser to clear those optimistic ops and show the real state again.
+        setFileBrowserResetSeq((v) => v + 1);
+
+        const prefix = okCount > 0
+          ? `${okCount} moved, ${failures.length} failed.`
+          : `${failures.length} failed.`;
+        notification.error('Move failed', `${prefix} ${failures[0] ?? ''}`.trim());
+        return;
+      }
+
+      if (okCount > 0) {
+        notification.success('Moved', okCount === 1 ? '1 item moved.' : `${okCount} items moved.`);
+      }
+    } finally {
+      setDragMoveLoading(false);
+    }
+  };
+
   const handleDelete = async (items: FileItem[]) => {
     const client = protocol.client();
     if (!client || items.length === 0) return;
@@ -903,7 +1049,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setFiles((prev) => insertItemToTree(prev, parentDir, newItem));
       const cached = cache.get(parentDir);
       if (cached && !cached.some((c) => normalizePath(c.path) === normalizePath(destPath))) {
-        cache.set(parentDir, [...cached, newItem]);
+        cache.set(parentDir, sortFileItems([...cached, newItem]));
       }
       return { ok: true, newName };
     } catch (e) {
@@ -987,7 +1133,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const destCached = cache.get(destDir);
       if (destCached) {
         if (!destCached.some((c) => normalizePath(c.path) === normalizePath(finalDestPath))) {
-          cache.set(destDir, [...destCached, newItem]);
+          cache.set(destDir, sortFileItems([...destCached, newItem]));
           setFiles((prev) => insertItemToTree(prev, destDir, newItem));
         }
       }
@@ -1111,33 +1257,40 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         fallback={<div class="h-full" />}
       >
         {(id) => (
-          <FileBrowser
-            files={files()}
-            initialPath={readPersistedLastPath(id)}
-            initialViewMode="list"
-            homeLabel="Home"
-            sidebarWidth={240}
-            persistenceKey={`files:${id}`}
-            onNavigate={(path) => {
-              writePersistedLastPath(id, path);
-              setCurrentBrowserPath(path);
-              void loadPathChain(path);
-            }}
-            onOpen={(item) => void openPreview(item)}
-            contextMenuCallbacks={ctxMenu}
-            hideContextMenuItems={(items: FileItem[]): BuiltinContextMenuAction[] => {
-              const hidden: BuiltinContextMenuAction[] = ['ask-agent'];
-              if (items.some((i) => i.type === 'folder')) {
-                hidden.push('duplicate', 'copy-to');
-              }
-              return hidden;
-            }}
-            class="h-full border-0 rounded-none shadow-none"
-          />
+          <Show when={fileBrowserResetSeq() + 1} keyed>
+            {(_seq) => (
+              <FileBrowser
+                files={files()}
+                initialPath={readPersistedLastPath(id)}
+                initialViewMode="list"
+                homeLabel="Home"
+                sidebarWidth={240}
+                persistenceKey={`files:${id}`}
+                instanceId={props.widgetId ? `redeven-files:${id}:${props.widgetId}` : `redeven-files:${id}`}
+                onNavigate={(path) => {
+                  writePersistedLastPath(id, path);
+                  setCurrentBrowserPath(path);
+                  void loadPathChain(path);
+                }}
+                onOpen={(item) => void openPreview(item)}
+                onDragMove={(items, targetPath) => void handleDragMove(items, targetPath)}
+                contextMenuCallbacks={ctxMenu}
+                hideContextMenuItems={(items: FileItem[]): BuiltinContextMenuAction[] => {
+                  const hidden: BuiltinContextMenuAction[] = ['ask-agent'];
+                  if (items.some((i) => i.type === 'folder')) {
+                    hidden.push('duplicate', 'copy-to');
+                  }
+                  return hidden;
+                }}
+                class="h-full border-0 rounded-none shadow-none"
+              />
+            )}
+          </Show>
         )}
       </Show>
 
       <LoadingOverlay visible={loading()} message="Loading files..." />
+      <LoadingOverlay visible={dragMoveLoading()} message="Moving..." />
 
       <FloatingWindow
         open={previewOpen()}

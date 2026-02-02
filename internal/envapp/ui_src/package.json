@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@fontsource/iosevka": "^5.2.5",
-    "@floegence/floe-webapp-core": "^0.12.0",
-    "@floegence/floe-webapp-protocol": "^0.12.0",
+    "@floegence/floe-webapp-core": "^0.13.0",
+    "@floegence/floe-webapp-protocol": "^0.13.0",
     "@floegence/floeterm-terminal-web": "^0.2.0",
     "@floegence/flowersec-core": "^0.7.0",
     "@solidjs/router": "^0.15.3",
