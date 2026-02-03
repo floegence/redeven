@@ -4,8 +4,10 @@ go 1.25.6
 
 require (
 	github.com/floegence/floeterm/terminal-go v0.0.0-20260128115438-ef5c50e18031
-	github.com/floegence/flowersec/flowersec-go v0.7.0
+	github.com/floegence/flowersec/flowersec-go v0.9.0
 	github.com/shirou/gopsutil/v3 v3.24.5
+	golang.org/x/sys v0.31.0
+	modernc.org/sqlite v1.37.0
 )
 
 require (
@@ -25,9 +27,7 @@ require (
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
-	golang.org/x/sys v0.31.0 // indirect
 	modernc.org/libc v1.62.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.9.1 // indirect
-	modernc.org/sqlite v1.37.0 // indirect
 )
