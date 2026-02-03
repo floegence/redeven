@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { LoadingOverlay, MonitoringChart, Panel, PanelContent } from '@floegence/floe-webapp-core';
-import { useProtocol, useRpc, type SysMonitorProcessInfo, type SysMonitorSnapshot, type SysMonitorSortBy } from '@floegence/floe-webapp-protocol';
+import { useProtocol } from '@floegence/floe-webapp-protocol';
+import { useRedevenRpc, type SysMonitorProcessInfo, type SysMonitorSnapshot, type SysMonitorSortBy } from '../protocol/redeven_v1';
 
 export type AgentMonitorPanelVariant = 'page' | 'deck';
 
@@ -57,7 +58,7 @@ function formatTimeLabel(ts: number): string {
 
 export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
   const protocol = useProtocol();
-  const rpc = useRpc();
+  const rpc = useRedevenRpc();
 
   const [sortBy, setSortBy] = createSignal<SysMonitorSortBy>('cpu');
   const [data, setData] = createSignal<SysMonitorSnapshot | null>(null);

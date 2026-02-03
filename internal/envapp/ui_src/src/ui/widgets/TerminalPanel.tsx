@@ -18,7 +18,8 @@ import {
   useTheme,
   useViewActivation,
 } from '@floegence/floe-webapp-core';
-import { useProtocol, useRpc } from '@floegence/floe-webapp-protocol';
+import { useProtocol } from '@floegence/floe-webapp-protocol';
+import { useRedevenRpc } from '../protocol/redeven_v1';
 import {
   TerminalCore,
   getDefaultTerminalConfig,
@@ -624,7 +625,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
 export function TerminalPanel(props: TerminalPanelProps = {}) {
   const variant: TerminalPanelVariant = props.variant ?? 'panel';
   const protocol = useProtocol();
-  const rpc = useRpc();
+  const rpc = useRedevenRpc();
   const theme = useTheme();
   const floe = useResolvedFloeConfig();
   const view = useViewActivation();

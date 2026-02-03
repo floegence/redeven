@@ -1,6 +1,8 @@
 import { CommandPalette, FileBrowserDragProvider, FloeProvider, NotificationContainer } from '@floegence/floe-webapp-core';
 import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { EnvAppShell } from './EnvAppShell';
+import { redevenV1Contract } from './protocol/redeven_v1';
+import { TerminalSessionsLifecycleSync } from './services/terminalSessionsLifecycleSync';
 import { REDEVEN_DECK_LAYOUT_IDS, redevenDeckPresets } from './deck/redevenDeckPresets';
 
 function readSessionStorage(key: string): string {
@@ -33,7 +35,8 @@ export function App() {
     <FloeProvider
       config={floeConfig}
       wrapAfterTheme={(renderChildren) => (
-        <ProtocolProvider>
+        <ProtocolProvider contract={redevenV1Contract}>
+          <TerminalSessionsLifecycleSync />
           <FileBrowserDragProvider>
             {renderChildren()}
           </FileBrowserDragProvider>

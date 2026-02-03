@@ -5,7 +5,7 @@ import type {
   TerminalSessionInfo,
   TerminalTransport,
 } from '@floegence/floeterm-terminal-web';
-import type { RedevenV1Rpc } from '@floegence/floe-webapp-protocol';
+import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import { ProtocolNotConnectedError } from '@floegence/floe-webapp-protocol';
 
 export function getOrCreateTerminalConnId(storageKey = 'redeven_terminal_conn_id'): string {

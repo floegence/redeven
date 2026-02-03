@@ -19,7 +19,8 @@ import {
   useNotification,
   type FileItem,
 } from "@floegence/floe-webapp-core";
-import { useProtocol, useRpc, type FsFileInfo } from "@floegence/floe-webapp-protocol";
+import { useProtocol } from "@floegence/floe-webapp-protocol";
+import { useRedevenRpc, type FsFileInfo } from "../protocol/redeven_v1";
 import { getEnvPublicIDFromSession, mintEnvEntryTicketForApp } from "../services/controlplaneApi";
 import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
 
@@ -474,7 +475,7 @@ function CreateCodespaceDialog(props: {
 export function EnvCodespacesPage() {
   const notification = useNotification();
   const protocol = useProtocol();
-  const rpc = useRpc();
+  const rpc = useRedevenRpc();
 
   const [createDialogOpen, setCreateDialogOpen] = createSignal(false);
   const [createLoading, setCreateLoading] = createSignal(false);

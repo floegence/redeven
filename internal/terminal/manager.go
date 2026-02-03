@@ -31,9 +31,10 @@ const (
 	TypeID_TERMINAL_HISTORY uint32 = 2007
 	TypeID_TERMINAL_CLEAR   uint32 = 2008
 
-	TypeID_TERMINAL_SESSION_DELETE uint32 = 2009
-	TypeID_TERMINAL_NAME_UPDATE    uint32 = 2010 // notify (agent -> client): session name/working dir changed
-	TypeID_TERMINAL_SESSION_STATS  uint32 = 2011 // history buffer stats (client -> agent)
+	TypeID_TERMINAL_SESSION_DELETE   uint32 = 2009
+	TypeID_TERMINAL_NAME_UPDATE      uint32 = 2010 // notify (agent -> client): session name/working dir changed
+	TypeID_TERMINAL_SESSION_STATS    uint32 = 2011 // history buffer stats (client -> agent)
+	TypeID_TERMINAL_SESSIONS_CHANGED uint32 = 2012 // notify (agent -> client): terminal sessions list changed
 )
 
 type Manager struct {
@@ -42,11 +43,12 @@ type Manager struct {
 
 	term *termgo.Manager
 
-	mu          sync.Mutex
-	writers     map[*rpc.Server]*sinkWriter
-	byServer    map[*rpc.Server]map[string]string // server -> session_id -> conn_id
-	bySession   map[string]map[*rpc.Server]string // session_id -> server -> conn_id
-	closedSinks map[*rpc.Server]struct{}          // best-effort marker to avoid repeated work
+	mu              sync.Mutex
+	writers         map[*rpc.Server]*sinkWriter
+	byServer        map[*rpc.Server]map[string]string // server -> session_id -> conn_id
+	bySession       map[string]map[*rpc.Server]string // session_id -> server -> conn_id
+	closedSinks     map[*rpc.Server]struct{}          // best-effort marker to avoid repeated work
+	deleteRequested map[string]struct{}               // session_id -> delete requested (used for lifecycle reason)
 }
 
 type slogTerminalLogger struct{ log *slog.Logger }
@@ -81,12 +83,13 @@ func NewManager(shell string, root string, log *slog.Logger) *Manager {
 	}
 
 	m := &Manager{
-		root:        root,
-		log:         log,
-		writers:     make(map[*rpc.Server]*sinkWriter),
-		byServer:    make(map[*rpc.Server]map[string]string),
-		bySession:   make(map[string]map[*rpc.Server]string),
-		closedSinks: make(map[*rpc.Server]struct{}),
+		root:            root,
+		log:             log,
+		writers:         make(map[*rpc.Server]*sinkWriter),
+		byServer:        make(map[*rpc.Server]map[string]string),
+		bySession:       make(map[string]map[*rpc.Server]string),
+		closedSinks:     make(map[*rpc.Server]struct{}),
+		deleteRequested: make(map[string]struct{}),
 	}
 
 	cfg := termgo.ManagerConfig{
@@ -102,6 +105,10 @@ func NewManager(shell string, root string, log *slog.Logger) *Manager {
 func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server) {
 	if m == nil || r == nil {
 		return
+	}
+
+	if meta != nil && meta.CanExecute && streamServer != nil {
+		m.ensureWriter(streamServer)
 	}
 
 	// Create session
@@ -321,7 +328,9 @@ func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.
 		if sessionID == "" {
 			return nil, &rpc.Error{Code: 400, Message: "session_id is required"}
 		}
+		m.markDeleteRequested(sessionID)
 		if err := m.term.DeleteSession(sessionID); err != nil {
+			m.unmarkDeleteRequested(sessionID)
 			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
 		}
 		return &terminalDeleteResp{OK: true}, nil
@@ -371,6 +380,49 @@ func (m *Manager) DetachSink(streamServer *rpc.Server) {
 type sinkDetach struct {
 	sessionID string
 	connID    string
+}
+
+func (m *Manager) ensureWriter(sink *rpc.Server) {
+	if m == nil || sink == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.writers[sink]; ok {
+		return
+	}
+	m.writers[sink] = newSinkWriter(sink, m.log)
+}
+
+func (m *Manager) markDeleteRequested(sessionID string) {
+	if m == nil || sessionID == "" {
+		return
+	}
+	m.mu.Lock()
+	m.deleteRequested[sessionID] = struct{}{}
+	m.mu.Unlock()
+}
+
+func (m *Manager) unmarkDeleteRequested(sessionID string) {
+	if m == nil || sessionID == "" {
+		return
+	}
+	m.mu.Lock()
+	delete(m.deleteRequested, sessionID)
+	m.mu.Unlock()
+}
+
+func (m *Manager) takeDeleteRequested(sessionID string) bool {
+	if m == nil || sessionID == "" {
+		return false
+	}
+	m.mu.Lock()
+	_, ok := m.deleteRequested[sessionID]
+	if ok {
+		delete(m.deleteRequested, sessionID)
+	}
+	m.mu.Unlock()
+	return ok
 }
 
 func (m *Manager) attachSink(sessionID string, connID string, sink *rpc.Server) {
@@ -466,6 +518,38 @@ func (m *Manager) broadcastNameUpdate(sessionID string, newName string, workingD
 	}
 }
 
+func (m *Manager) broadcastSessionsChanged(payload terminalSessionsChangedPayload) {
+	if m == nil || strings.TrimSpace(payload.Reason) == "" {
+		return
+	}
+
+	b, err := json.Marshal(payload)
+	if err != nil || len(b) == 0 {
+		return
+	}
+
+	var writers []*sinkWriter
+	m.mu.Lock()
+	if len(m.writers) > 0 {
+		writers = make([]*sinkWriter, 0, len(m.writers))
+		for _, w := range m.writers {
+			if w != nil {
+				writers = append(writers, w)
+			}
+		}
+	}
+	m.mu.Unlock()
+
+	if len(writers) == 0 {
+		return
+	}
+
+	msg := sinkMsg{TypeID: TypeID_TERMINAL_SESSIONS_CHANGED, Payload: b}
+	for _, w := range writers {
+		w.TrySend(msg)
+	}
+}
+
 func (m *Manager) write(sessionID string, connID string, dataB64 string) error {
 	if m == nil {
 		return &rpc.Error{Code: 500, Message: "internal error"}
@@ -548,13 +632,41 @@ func (h *eventHandler) OnTerminalNameChanged(sessionID string, oldName string, n
 }
 
 func (h *eventHandler) OnTerminalSessionCreated(session *termgo.Session) {
-	void := func(any) {}
-	void(session)
+	if h == nil || h.m == nil || session == nil {
+		return
+	}
+	info := session.ToSessionInfo()
+	sessionID := strings.TrimSpace(info.ID)
+	if sessionID == "" {
+		return
+	}
+
+	h.m.broadcastSessionsChanged(terminalSessionsChangedPayload{
+		Reason:      "created",
+		SessionID:   sessionID,
+		TimestampMs: time.Now().UnixMilli(),
+	})
 }
 
 func (h *eventHandler) OnTerminalSessionClosed(sessionID string) {
-	void := func(any) {}
-	void(sessionID)
+	if h == nil || h.m == nil {
+		return
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return
+	}
+
+	reason := "closed"
+	if h.m.takeDeleteRequested(sessionID) {
+		reason = "deleted"
+	}
+
+	h.m.broadcastSessionsChanged(terminalSessionsChangedPayload{
+		Reason:      reason,
+		SessionID:   sessionID,
+		TimestampMs: time.Now().UnixMilli(),
+	})
 }
 
 func (h *eventHandler) OnTerminalError(sessionID string, err error) {
@@ -640,6 +752,12 @@ type terminalNameUpdatePayload struct {
 	SessionID  string `json:"session_id"`
 	NewName    string `json:"new_name"`
 	WorkingDir string `json:"working_dir"`
+}
+
+type terminalSessionsChangedPayload struct {
+	Reason      string `json:"reason"`
+	SessionID   string `json:"session_id,omitempty"`
+	TimestampMs int64  `json:"timestamp_ms,omitempty"`
 }
 
 type terminalHistoryReq struct {

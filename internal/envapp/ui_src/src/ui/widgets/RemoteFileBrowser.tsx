@@ -3,7 +3,8 @@ import { Button, ConfirmDialog, Dialog, DirectoryPicker, FileBrowser, FileSavePi
 import type { Client } from '@floegence/flowersec-core';
 import { DEFAULT_MAX_JSON_FRAME_BYTES, readJsonFrame, writeJsonFrame } from '@floegence/flowersec-core/framing';
 import { ByteReader, type YamuxStream } from '@floegence/flowersec-core/yamux';
-import { useProtocol, useRpc, type FsFileInfo } from '@floegence/floe-webapp-protocol';
+import { useProtocol } from '@floegence/floe-webapp-protocol';
+import { useRedevenRpc, type FsFileInfo } from '../protocol/redeven_v1';
 import { getExtDot, isLikelyTextContent, mimeFromExtDot, previewModeByName, type PreviewMode } from '../utils/filePreview';
 import { useEnvContext } from '../pages/EnvContext';
 
@@ -330,7 +331,7 @@ async function readFileBytesOnce(params: {
 
 export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const protocol = useProtocol();
-  const rpc = useRpc();
+  const rpc = useRedevenRpc();
   const ctx = useEnvContext();
   const deck = useDeck();
   const floe = useResolvedFloeConfig();

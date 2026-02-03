@@ -28,7 +28,7 @@ export function getRedevenTerminalSessionsCoordinator(opts: {
 
   const coordinator = new TerminalSessionsCoordinator({
     transport: opts.transport,
-    pollMs: 10_000,
+    pollMs: 60_000,
     logger: opts.logger,
   });
 
@@ -36,3 +36,12 @@ export function getRedevenTerminalSessionsCoordinator(opts: {
   return coordinator;
 }
 
+
+
+export async function refreshRedevenTerminalSessionsCoordinator(): Promise<void> {
+  try {
+    await singleton?.coordinator.refresh();
+  } catch {
+    // Best-effort refresh; coordinator handles retry via polling.
+  }
+}
