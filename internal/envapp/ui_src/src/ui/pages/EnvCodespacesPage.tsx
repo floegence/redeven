@@ -291,6 +291,10 @@ function CodespaceCard(props: {
       </CardHeader>
       <CardContent class="pb-2">
         <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+          <div class="text-muted-foreground">ID</div>
+          <div class="font-mono truncate text-right" title={props.space.code_space_id}>
+            {props.space.code_space_id}
+          </div>
           <div class="text-muted-foreground">Path</div>
           <div class="font-mono truncate text-right" title={props.space.workspace_path}>
             {props.space.workspace_path}
