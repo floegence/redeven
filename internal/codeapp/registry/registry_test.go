@@ -158,4 +158,3 @@ func tableColumns(db *sql.DB, table string) ([]string, error) {
 	}
 	return cols, rows.Err()
 }
-

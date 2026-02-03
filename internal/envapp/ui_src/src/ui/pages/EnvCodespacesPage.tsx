@@ -172,7 +172,7 @@ function extNoDot(name: string): string | undefined {
 function toFileItem(entry: FsFileInfo): FileItem {
   const isDir = !!entry.isDirectory;
   const name = String(entry.name ?? "");
-  // 规范化路径，确保与 withChildren 中的路径比较一致
+  // Normalize path so it matches the comparisons inside withChildren.
   const p = normalizePath(String(entry.path ?? ""));
   const modifiedAtMs = Number(entry.modifiedAt ?? 0);
   return {
@@ -515,14 +515,14 @@ export function EnvCodespacesPage() {
     })();
   });
 
-  // 加载单个目录的子项，并更新树
+  // Load a single directory's children and update the tree.
   const loadDir = async (path: string) => {
     const client = protocol.client();
     if (!client) return;
 
     const p = normalizePath(path);
 
-    // 如果已缓存，直接从缓存更新树
+    // If cached, update the tree from cache.
     if (cache.has(p)) {
       setFiles((prev) => withChildren(prev, p, cache.get(p)!));
       return;
@@ -539,14 +539,14 @@ export function EnvCodespacesPage() {
     }
   };
 
-  // 加载根目录（用于初始化）
+  // Load root directory (for initialization).
   const loadRootDir = async () => {
     const client = protocol.client();
     if (!client) return;
 
     const p = "/";
     if (cache.has(p)) {
-      // 根目录已缓存，直接设置
+      // Root is cached; set directly.
       setFiles(cache.get(p)!);
       return;
     }
@@ -565,10 +565,10 @@ export function EnvCodespacesPage() {
   const handleLoadDir = (path: string) => {
     const p = normalizePath(path);
     if (p === "/") {
-      // 根目录：初始化或刷新
+      // Root: init or refresh.
       void loadRootDir();
     } else {
-      // 非根目录：加载并更新子树
+      // Non-root: load and update subtree.
       void loadDir(p);
     }
   };

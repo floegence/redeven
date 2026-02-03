@@ -20,6 +20,9 @@ type Config struct {
 	AgentInstanceID     string                      `json:"agent_instance_id"`
 	Direct              *directv1.DirectConnectInfo `json:"direct"`
 
+	// AI config controls the optional TS sidecar-based agent features.
+	AI *AIConfig `json:"ai,omitempty"`
+
 	// PermissionPolicy is the local permission cap applied on the endpoint.
 	// It is designed to limit the effective permissions even if the control-plane grants more.
 	PermissionPolicy *PermissionPolicy `json:"permission_policy,omitempty"`
@@ -62,6 +65,11 @@ func (c *Config) Validate() error {
 	if c.PermissionPolicy != nil {
 		if err := c.PermissionPolicy.Validate(); err != nil {
 			return fmt.Errorf("invalid permission_policy: %w", err)
+		}
+	}
+	if c.AI != nil {
+		if err := c.AI.Validate(); err != nil {
+			return fmt.Errorf("invalid ai: %w", err)
 		}
 	}
 	return nil

@@ -14,6 +14,7 @@ import {
   Panel,
   PanelContent,
   Refresh,
+  Sparkles,
   Search,
   Shell,
   StatusIndicator,
@@ -31,13 +32,14 @@ import {
 import type { ClientObserverLike } from '@floegence/flowersec-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
-import { EnvContext } from './pages/EnvContext';
+import { EnvContext, type EnvNavTab } from './pages/EnvContext';
 import { EnvDeckPage } from './pages/EnvDeckPage';
 import { EnvTerminalPage } from './pages/EnvTerminalPage';
 import { EnvMonitorPage } from './pages/EnvMonitorPage';
 import { EnvFileBrowserPage } from './pages/EnvFileBrowserPage';
 import { EnvCodespacesPage } from './pages/EnvCodespacesPage';
 import { EnvPluginMarketPage } from './pages/EnvPluginMarketPage';
+import { EnvAIPage } from './pages/EnvAIPage';
 import { redevenDeckWidgets } from './deck/redevenDeckWidgets';
 import { useRedevenRpc } from './protocol/redeven_v1';
 import { GrantAuditDialog } from './widgets/GrantAuditDialog';
@@ -52,17 +54,23 @@ import {
   type EnvironmentDetail,
 } from './services/controlplaneApi';
 
-type NavTab = 'deck' | 'terminal' | 'monitor' | 'files' | 'codespaces' | 'market';
-
 const FLOE_APP_AGENT = 'com.floegence.redeven.agent';
 const CODE_SPACE_ID_ENV_UI = 'env-ui';
 
 const ACTIVE_TAB_STORAGE_KEY = 'redeven_envapp_active_tab';
 
-function readPersistedActiveTab(): NavTab | null {
+function readPersistedActiveTab(): EnvNavTab | null {
   try {
     const v = String(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) ?? '').trim();
-    if (v === 'deck' || v === 'terminal' || v === 'monitor' || v === 'files' || v === 'codespaces' || v === 'market') {
+    if (
+      v === 'deck' ||
+      v === 'terminal' ||
+      v === 'monitor' ||
+      v === 'files' ||
+      v === 'codespaces' ||
+      v === 'market' ||
+      v === 'ai'
+    ) {
       return v;
     }
     return null;
@@ -71,7 +79,7 @@ function readPersistedActiveTab(): NavTab | null {
   }
 }
 
-function persistActiveTab(tab: NavTab): void {
+function persistActiveTab(tab: EnvNavTab): void {
   try {
     localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tab);
   } catch {
@@ -99,6 +107,14 @@ export function EnvAppShell() {
 
   const [manualError, setManualError] = createSignal<string | null>(null);
   const [auditOpen, setAuditOpen] = createSignal(false);
+
+  const [aiInjectionSeq, setAiInjectionSeq] = createSignal(0);
+  const [aiInjectionMarkdown, setAiInjectionMarkdown] = createSignal<string | null>(null);
+
+  const injectAiMarkdown = (markdown: string) => {
+    setAiInjectionMarkdown(String(markdown ?? ''));
+    setAiInjectionSeq((n) => n + 1);
+  };
 
   const status = createMemo(() => (manualError() ? 'error' : protocol.status()));
   const connecting = () => protocol.status() === 'connecting';
@@ -358,9 +374,10 @@ export function EnvAppShell() {
     { id: 'files', name: 'File Browser', icon: Files, component: EnvFileBrowserPage, sidebar: { order: 4, fullScreen: true } },
     { id: 'codespaces', name: 'Codespaces', icon: Code, component: EnvCodespacesPage, sidebar: { order: 5, fullScreen: true } },
     { id: 'market', name: 'Plugin Market', icon: Grid, component: EnvPluginMarketPage, sidebar: { order: 6, fullScreen: true } },
+    { id: 'ai', name: 'AI', icon: Sparkles, component: EnvAIPage, sidebar: { order: 7, fullScreen: true } },
   ];
 
-  const goTab = (tab: NavTab) => {
+  const goTab = (tab: EnvNavTab) => {
     // Persist the user's preference; the runtime may downgrade it on mobile (deck -> terminal).
     persistActiveTab(tab);
     let next = tab;
@@ -380,6 +397,7 @@ export function EnvAppShell() {
       { id: 'files', icon: Files, label: 'File Browser', onClick: () => goTab('files') },
       { id: 'codespaces', icon: Code, label: 'Codespaces', onClick: () => goTab('codespaces') },
       { id: 'market', icon: Grid, label: 'Plugin Market', onClick: () => goTab('market') },
+      { id: 'ai', icon: Sparkles, label: 'AI', onClick: () => goTab('ai') },
     );
     return items;
   };
@@ -531,7 +549,19 @@ export function EnvAppShell() {
   });
 
   return (
-    <EnvContext.Provider value={{ env_id: envId, env, connect, connecting, connectError }}>
+    <EnvContext.Provider
+      value={{
+        env_id: envId,
+        env,
+        connect,
+        connecting,
+        connectError,
+        goTab,
+        aiInjectionSeq,
+        aiInjectionMarkdown,
+        injectAiMarkdown,
+      }}
+    >
       <FloeRegistryRuntime components={components}>
         <Shell
           sidebarMode="hidden"

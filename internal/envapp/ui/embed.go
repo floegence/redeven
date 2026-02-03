@@ -12,7 +12,7 @@ import (
 //
 // To update dist, edit `internal/envapp/ui_src/` and run:
 //
-//	npm ci && npm run build
+//	pnpm install && pnpm build
 //
 //go:embed all:dist
 var embeddedDist embed.FS

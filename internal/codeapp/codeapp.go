@@ -10,11 +10,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/floegence/redeven-agent/internal/ai"
 	"github.com/floegence/redeven-agent/internal/codeapp/codeserver"
 	"github.com/floegence/redeven-agent/internal/codeapp/gateway"
 	"github.com/floegence/redeven-agent/internal/codeapp/registry"
 	"github.com/floegence/redeven-agent/internal/codeapp/ui"
+	"github.com/floegence/redeven-agent/internal/config"
 	envui "github.com/floegence/redeven-agent/internal/envapp/ui"
+	"github.com/floegence/redeven-agent/internal/session"
 )
 
 const (
@@ -31,6 +34,13 @@ type Options struct {
 	// If unset/invalid, a safe default range is used.
 	CodeServerPortMin int
 	CodeServerPortMax int
+
+	// Env/App-level context (used by AI tools).
+	FSRoot string
+	Shell  string
+
+	AIConfig           *config.AIConfig
+	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
 }
 
 type Service struct {
@@ -106,10 +116,24 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		runner:      runner,
 	}
 
+	aiSvc, err := ai.NewService(ai.Options{
+		Logger:             logger,
+		StateDir:           stateAbs,
+		FSRoot:             strings.TrimSpace(opts.FSRoot),
+		Shell:              strings.TrimSpace(opts.Shell),
+		Config:             opts.AIConfig,
+		ResolveSessionMeta: opts.ResolveSessionMeta,
+	})
+	if err != nil {
+		_ = reg.Close()
+		return nil, err
+	}
+
 	gw, err := gateway.New(gateway.Options{
 		Logger:     logger,
 		DistFS:     mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
 		Backend:    svc,
+		AI:         aiSvc,
 		ListenAddr: "127.0.0.1:0",
 	})
 	if err != nil {

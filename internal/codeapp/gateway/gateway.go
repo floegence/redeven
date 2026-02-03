@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/base32"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/floegence/redeven-agent/internal/ai"
 )
 
 type Options struct {
@@ -21,6 +24,7 @@ type Options struct {
 	ListenAddr string
 	DistFS     fs.FS
 	Backend    Backend
+	AI         *ai.Service
 }
 
 type Backend interface {
@@ -62,6 +66,7 @@ type Gateway struct {
 	log *slog.Logger
 
 	backend Backend
+	ai      *ai.Service
 
 	distFS fs.FS
 	dist   http.Handler
@@ -96,6 +101,7 @@ func New(opts Options) (*Gateway, error) {
 	return &Gateway{
 		log:     logger,
 		backend: opts.Backend,
+		ai:      opts.AI,
 		distFS:  opts.DistFS,
 		dist:    dist,
 		addr:    addr,
@@ -224,6 +230,186 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/models":
+		if g.ai == nil || !g.ai.Enabled() {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+			return
+		}
+		models, err := g.ai.ListModels()
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: models})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/runs":
+		if g.ai == nil || !g.ai.Enabled() {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+			return
+		}
+		channelID, err := channelIDFromRequest(r)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		if g.ai.HasActiveRun(channelID) {
+			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "run already active"})
+			return
+		}
+
+		var req ai.RunRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if strings.TrimSpace(req.Model) == "" {
+			models, err := g.ai.ListModels()
+			if err != nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			req.Model = models.DefaultModel
+		}
+
+		runID, err := ai.NewRunID()
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "failed to allocate run id"})
+			return
+		}
+
+		// Stream response (NDJSON).
+		w.Header().Set("X-Redeven-AI-Run-ID", runID)
+		w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+
+		// Block until the run completes (or the client disconnects).
+		if err := g.ai.StartRun(r.Context(), channelID, runID, req, w); err != nil {
+			g.log.Warn("ai run failed", "channel_id", channelID, "run_id", runID, "error", err)
+		}
+		return
+
+	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/runs/"):
+		if g.ai == nil || !g.ai.Enabled() {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+			return
+		}
+		channelID, err := channelIDFromRequest(r)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+
+		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/runs/")
+		rest = strings.TrimPrefix(rest, "/")
+		if rest == "" {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+		parts := strings.Split(rest, "/")
+		runID := strings.TrimSpace(parts[0])
+		action := ""
+		if len(parts) > 1 {
+			action = strings.TrimSpace(parts[1])
+		}
+
+		if r.Method == http.MethodPost && action == "cancel" {
+			if err := g.ai.CancelRun(channelID, runID); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
+		}
+
+		if r.Method == http.MethodPost && action == "tool_approvals" {
+			var body ai.ToolApprovalRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if strings.TrimSpace(body.ToolID) == "" {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing tool_id"})
+				return
+			}
+			if err := g.ai.ApproveTool(channelID, runID, body.ToolID, body.Approved); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
+		}
+
+		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/uploads":
+		if g.ai == nil || !g.ai.Enabled() {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+			return
+		}
+		// 10 MiB upload cap (aligned with ChatInput defaults).
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid multipart form"})
+			return
+		}
+		f, fh, err := r.FormFile("file")
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing file"})
+			return
+		}
+		defer f.Close()
+
+		name := ""
+		mimeType := ""
+		if fh != nil {
+			name = fh.Filename
+			mimeType = fh.Header.Get("Content-Type")
+		}
+
+		out, err := g.ai.SaveUpload(f, name, mimeType, 10<<20)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+		return
+
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/uploads/"):
+		if g.ai == nil || !g.ai.Enabled() {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+			return
+		}
+		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/uploads/")
+		rest = strings.TrimPrefix(rest, "/")
+		uploadID := strings.TrimSpace(rest)
+		if uploadID == "" {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+		info, filePath, err := g.ai.OpenUpload(uploadID)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+
+		f, err := os.Open(filePath)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+		defer f.Close()
+		st, err := f.Stat()
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+
+		w.Header().Set("Content-Type", strings.TrimSpace(info.MimeType))
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", info.Name))
+		http.ServeContent(w, r, info.Name, st.ModTime(), f)
+		return
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/spaces":
 		spaces, err := g.backend.ListSpaces(r.Context())
 		if err != nil {
@@ -371,6 +557,42 @@ func externalOriginFromRequest(r *http.Request) (scheme string, host string, err
 		return "", "", errors.New("invalid origin")
 	}
 	return scheme, host, nil
+}
+
+func channelIDFromRequest(r *http.Request) (string, error) {
+	_, host, err := externalOriginFromRequest(r)
+	if err != nil {
+		return "", err
+	}
+
+	hostNoPort := strings.TrimSpace(host)
+	if i := strings.IndexByte(hostNoPort, ':'); i >= 0 {
+		hostNoPort = hostNoPort[:i]
+	}
+	parts := strings.Split(hostNoPort, ".")
+	if len(parts) < 2 {
+		return "", errors.New("missing session origin label")
+	}
+
+	// Env App sessions inject a second label: "ch-<base32(channel_id)>"
+	chLabel := strings.ToLower(strings.TrimSpace(parts[1]))
+	if !strings.HasPrefix(chLabel, "ch-") {
+		return "", errors.New("missing channel label")
+	}
+	enc := strings.TrimSpace(strings.TrimPrefix(chLabel, "ch-"))
+	if enc == "" {
+		return "", errors.New("invalid channel label")
+	}
+
+	dec, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(strings.ToUpper(enc))
+	if err != nil {
+		return "", errors.New("invalid channel label encoding")
+	}
+	channelID := strings.TrimSpace(string(dec))
+	if channelID == "" {
+		return "", errors.New("invalid channel id")
+	}
+	return channelID, nil
 }
 
 func codeSpaceIDFromExternalHost(host string) (string, bool) {

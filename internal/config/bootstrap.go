@@ -90,6 +90,7 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 		EnvironmentID:       envID,
 		AgentInstanceID:     agentInstanceID,
 		Direct:              direct,
+		AI:                  nil,
 		PermissionPolicy:    nil,
 		RootDir:             strings.TrimSpace(args.RootDir),
 		Shell:               strings.TrimSpace(args.Shell),
@@ -109,6 +110,11 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 		cfg.PermissionPolicy = prev.PermissionPolicy
 	} else {
 		cfg.PermissionPolicy = defaultPermissionPolicy()
+	}
+
+	// Preserve AI config when bootstrapping, so users don't accidentally lose their local model/provider setup.
+	if prev != nil && prev.AI != nil {
+		cfg.AI = prev.AI
 	}
 
 	if err := Save(cfgPath, cfg); err != nil {

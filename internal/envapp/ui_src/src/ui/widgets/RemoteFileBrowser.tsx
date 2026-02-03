@@ -1207,6 +1207,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         setCopyToDialogOpen(true);
       }
     },
+    onAskAgent: (items: FileItem[]) => {
+      const paths = items
+        .map((it) => String(it?.path ?? '').trim())
+        .filter((p) => p);
+      if (paths.length <= 0) return;
+
+      const md = `Use these files as context:\n${paths.map((p) => `- ${p}`).join('\n')}`;
+      ctx.goTab('ai');
+      ctx.injectAiMarkdown(md);
+    },
   };
 
   return (
@@ -1236,7 +1246,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                 onDragMove={(items, targetPath) => void handleDragMove(items, targetPath)}
                 contextMenuCallbacks={ctxMenu}
                 hideContextMenuItems={(items: FileItem[]): BuiltinContextMenuAction[] => {
-                  const hidden: BuiltinContextMenuAction[] = ['ask-agent'];
+                  const hidden: BuiltinContextMenuAction[] = [];
                   if (items.some((i) => i.type === 'folder')) {
                     hidden.push('duplicate', 'copy-to');
                   }

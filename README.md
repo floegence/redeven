@@ -16,6 +16,7 @@ Implemented in this repo:
   - Terminal RPC (create/list/attach) + bidirectional data notifications
   - Monitor RPC (CPU/network/process snapshot)
   - Agent-bundled Env App UI assets: `internal/envapp/ui_src/` -> `internal/envapp/ui/dist/`
+  - Optional: Env App AI Agent (TS sidecar + Go tool executor). Documentation: [`docs/AI_AGENT.md`](docs/AI_AGENT.md)
   - Documentation: [`docs/ENV_APP.md`](docs/ENV_APP.md)
 - `floe_app = com.floegence.redeven.code`
   - code-server over Flowersec E2EE proxy (`flowersec-proxy/http1`, `flowersec-proxy/ws`)

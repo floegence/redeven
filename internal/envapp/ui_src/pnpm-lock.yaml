@@ -12,11 +12,11 @@ importers:
   .:
     dependencies:
       '@floegence/floe-webapp-core':
-        specifier: ^0.16.0
-        version: 0.16.0(solid-js@1.9.11)
+        specifier: ^0.17.0
+        version: 0.17.0(solid-js@1.9.11)
       '@floegence/floe-webapp-protocol':
-        specifier: ^0.16.0
-        version: 0.16.0(solid-js@1.9.11)
+        specifier: ^0.17.0
+        version: 0.17.0(solid-js@1.9.11)
       '@floegence/floeterm-terminal-web':
         specifier: ^0.4.1
         version: 0.4.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -330,13 +330,13 @@ packages:
   '@fast-csv/parse@4.3.6':
     resolution: {integrity: sha512-uRsLYksqpbDmWaSmzvJcuApSEe38+6NQZBUsuAyMZKqHxH0g1wcJgsKUvN3WC8tewaqFjBMMGrkHmC+T7k8LvA==}
 
-  '@floegence/floe-webapp-core@0.16.0':
-    resolution: {integrity: sha512-tNVZ5hw+ETVAQfugaMsj922Aq1qPmQbjxGGPvLZXF8UZFy6rHGGYYZXMzTkz4FJ+Y8XWcnkd6MUx6clrLD4dGQ==}
+  '@floegence/floe-webapp-core@0.17.0':
+    resolution: {integrity: sha512-lXQOatEeY6Eo+m1q7qAj4EM7XQZziRQq5SnJP39mcHRYHBw7J7aMNiCDZWhHqswpeaFWePGxWRYY7iDGMAEU3Q==}
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floe-webapp-protocol@0.16.0':
-    resolution: {integrity: sha512-krvi06Elu13Lw+/FzNyUsgM6fVIq5ecVBiuxgVFdM1DTKF2QFhrNWH7fnmZHSCdOYZbCVPUFXXjBeHfLwwmyrQ==}
+  '@floegence/floe-webapp-protocol@0.17.0':
+    resolution: {integrity: sha512-ka9nPxdk/zgmI4UkSBjCUe6g4KP0V4ejrrtVCscGIWSdvZw0uClIphH7nlEYSP9Lt0CrafMShoixL1DhFRQUMw==}
     peerDependencies:
       solid-js: ^1.8.0
 
@@ -2059,7 +2059,7 @@ snapshots:
       lodash.isundefined: 3.0.1
       lodash.uniq: 4.5.0
 
-  '@floegence/floe-webapp-core@0.16.0(solid-js@1.9.11)':
+  '@floegence/floe-webapp-core@0.17.0(solid-js@1.9.11)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.3
@@ -2069,7 +2069,7 @@ snapshots:
       solid-js: 1.9.11
       tailwind-merge: 3.4.0
 
-  '@floegence/floe-webapp-protocol@0.16.0(solid-js@1.9.11)':
+  '@floegence/floe-webapp-protocol@0.17.0(solid-js@1.9.11)':
     dependencies:
       '@floegence/flowersec-core': 0.9.0
       solid-js: 1.9.11

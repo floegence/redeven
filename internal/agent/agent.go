@@ -2,11 +2,13 @@ package agent
 
 import (
 	"context"
+	"encoding/base32"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -125,18 +127,7 @@ func New(opts Options) (*Agent, error) {
 	}
 	stateDir := filepath.Dir(cfgPathAbs)
 
-	codeSvc, err := codeapp.New(context.Background(), codeapp.Options{
-		Logger:              logger,
-		StateDir:            stateDir,
-		ControlplaneBaseURL: strings.TrimSpace(opts.Config.ControlplaneBaseURL),
-		CodeServerPortMin:   opts.Config.CodeServerPortMin,
-		CodeServerPortMax:   opts.Config.CodeServerPortMax,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("init codeapp: %w", err)
-	}
-
-	return &Agent{
+	a := &Agent{
 		cfg:       opts.Config,
 		log:       logger,
 		version:   strings.TrimSpace(opts.Version),
@@ -151,9 +142,45 @@ func New(opts Options) (*Agent, error) {
 			Commit:          opts.Commit,
 			BuildTime:       opts.BuildTime,
 		}),
-		code:     codeSvc,
 		sessions: make(map[string]*activeSession),
-	}, nil
+	}
+
+	codeSvc, err := codeapp.New(context.Background(), codeapp.Options{
+		Logger:              logger,
+		StateDir:            stateDir,
+		ControlplaneBaseURL: strings.TrimSpace(opts.Config.ControlplaneBaseURL),
+		CodeServerPortMin:   opts.Config.CodeServerPortMin,
+		CodeServerPortMax:   opts.Config.CodeServerPortMax,
+		FSRoot:              rootAbs,
+		Shell:               shell,
+		AIConfig:            opts.Config.AI,
+		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
+			if a == nil {
+				return nil, false
+			}
+			channelID = strings.TrimSpace(channelID)
+			if channelID == "" {
+				return nil, false
+			}
+			a.mu.Lock()
+			s := a.sessions[channelID]
+			var meta session.Meta
+			if s != nil {
+				meta = s.meta
+			}
+			a.mu.Unlock()
+			if s == nil {
+				return nil, false
+			}
+			return &meta, true
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("init codeapp: %w", err)
+	}
+	a.code = codeSvc
+
+	return a, nil
 }
 
 func (a *Agent) Run(ctx context.Context) error {
@@ -538,7 +565,11 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 		if up == "" {
 			return errors.New("codeapp gateway not ready")
 		}
-		origin, err := a.code.ExternalOriginForEnvApp(meta.EndpointID)
+		baseOrigin, err := a.code.ExternalOriginForEnvApp(meta.EndpointID)
+		if err != nil {
+			return err
+		}
+		origin, err := originWithChannelLabel(baseOrigin, meta.ChannelID)
 		if err != nil {
 			return err
 		}
@@ -614,6 +645,41 @@ func hostnameBestEffort() string {
 		return ""
 	}
 	return strings.TrimSpace(h)
+}
+
+func originWithChannelLabel(baseOrigin string, channelID string) (string, error) {
+	baseOrigin = strings.TrimSpace(baseOrigin)
+	channelID = strings.TrimSpace(channelID)
+	if baseOrigin == "" || channelID == "" {
+		return "", errors.New("invalid origin args")
+	}
+
+	u, err := url.Parse(baseOrigin)
+	if err != nil || u == nil {
+		return "", errors.New("invalid base origin")
+	}
+	host := strings.TrimSpace(u.Host)
+	if host == "" {
+		return "", errors.New("invalid base origin host")
+	}
+
+	labels := strings.Split(host, ".")
+	if len(labels) < 2 {
+		return "", errors.New("invalid base origin host")
+	}
+
+	enc := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString([]byte(channelID))
+	enc = strings.ToLower(strings.TrimSpace(enc))
+	if enc == "" {
+		return "", errors.New("invalid channel id")
+	}
+
+	// Insert as the second label: env-xxx.ch-<enc>.<rest>.
+	out := make([]string, 0, len(labels)+1)
+	out = append(out, labels[0], "ch-"+enc)
+	out = append(out, labels[1:]...)
+	u.Host = strings.Join(out, ".")
+	return u.String(), nil
 }
 
 // --- control channel types (wire JSON) ---
