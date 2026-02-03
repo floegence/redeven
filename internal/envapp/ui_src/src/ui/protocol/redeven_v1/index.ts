@@ -4,6 +4,7 @@ export { redevenV1Contract, type RedevenV1Rpc, createRedevenV1Rpc } from './cont
 export * from './sdk/fs';
 export * from './sdk/terminal';
 export * from './sdk/monitor';
+export * from './sdk/sessions';
 export * from './sdk/sys';
 
 export { useRedevenRpc } from './hooks';
