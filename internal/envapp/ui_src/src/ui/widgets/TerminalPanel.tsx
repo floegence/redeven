@@ -1,4 +1,4 @@
-import { Index, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { Index, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import {
   Button,
   Dropdown,
@@ -112,6 +112,7 @@ type terminal_session_view_props = {
   session: TerminalSessionInfo;
   active: () => boolean;
   connected: () => boolean;
+  protocolClient: () => unknown;
   viewActive: () => boolean;
   autoFocus: () => boolean;
   themeName: () => TerminalThemeName;
@@ -122,7 +123,7 @@ type terminal_session_view_props = {
   transport: TerminalTransport;
   eventSource: TerminalEventSource;
   registerCore: (sessionId: string, core: TerminalCore | null) => void;
-  registerActions: (sessionId: string, actions: { refreshHistory: () => Promise<void> } | null) => void;
+  registerActions: (sessionId: string, actions: { reload: () => Promise<void> } | null) => void;
   onNameUpdate?: (sessionId: string, newName: string, workingDir: string) => void;
 };
 
@@ -314,10 +315,9 @@ function TerminalSessionView(props: terminal_session_view_props) {
     core.endHistoryReplay();
   };
 
-  let refreshSeq = 0;
+  let reloadSeq = 0;
   const disposeTerminal = () => {
     clearOutputSubscription();
-    refreshSeq += 1;
     term?.dispose();
     term = null;
     queued = [];
@@ -330,61 +330,49 @@ function TerminalSessionView(props: terminal_session_view_props) {
   };
 
   let initSeq = 0;
-  let initialized = false;
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-  const refreshHistory = async () => {
+  const reload = async (opts?: { fadeOut?: boolean }) => {
     const id = sessionId();
-    const core = term;
-    if (!props.connected() || !core) return;
-    if (loading() !== 'idle') return;
+    if (!id) return;
+    if (!props.connected()) return;
+    if (!container) return;
 
-    const seq = ++refreshSeq;
+    const seq = ++reloadSeq;
+
+    // Keep the surface hidden until the new terminal is attached and history is replayed (same as page open).
     setError(null);
-    setLoading('loading_history');
+    setLoading('initializing');
 
-    queued = [];
-    flushScheduled = false;
-    bufferedLive = [];
-    replaying = true;
+    if (opts?.fadeOut) {
+      container.style.opacity = '0';
+      await sleep(150);
+      if (seq !== reloadSeq) return;
+    }
+
+    // Cancel any in-flight init and dispose the previous core before rebuilding.
+    initSeq += 1;
+    disposeTerminal();
+
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    if (seq !== reloadSeq) return;
+    if (!props.connected()) return;
+    if (!container) return;
 
     try {
-      const history = await props.transport.history(id, 0, -1);
-      if (seq !== refreshSeq) return;
-
-      const sorted = [...history].sort((a, b) => a.sequence - b.sequence);
-      historyMaxSeq = sorted.length > 0 ? sorted[sorted.length - 1]!.sequence : 0;
-
-      await replayHistory(sorted.map((c) => c.data));
-      if (seq !== refreshSeq) return;
-
-      replaying = false;
-      const liveSorted = [...bufferedLive]
-        .filter((c) => typeof c.sequence !== 'number' || c.sequence <= 0 || c.sequence > historyMaxSeq)
-        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
-      bufferedLive = [];
-      for (const c of liveSorted) {
-        queued.push(c.data);
-      }
-      if (queued.length > 0) scheduleFlush();
-
-      setLoading('idle');
-      requestAnimationFrame(() => {
-        core.forceResize();
-        if (props.viewActive() && props.active() && props.autoFocus()) core.focus();
-      });
+      await initOnce();
     } catch (e) {
-      if (seq !== refreshSeq) return;
-      replaying = false;
-      bufferedLive = [];
       setLoading('idle');
       setError(e instanceof Error ? e.message : String(e));
+      const el = container;
+      if (el) el.style.opacity = '1';
     }
   };
 
   createEffect(() => {
     const id = sessionId();
     if (!id) return;
-    props.registerActions(id, { refreshHistory });
+    props.registerActions(id, { reload: () => reload() });
     onCleanup(() => {
       props.registerActions(id, null);
     });
@@ -509,36 +497,23 @@ function TerminalSessionView(props: terminal_session_view_props) {
   };
 
   createEffect(() => {
-    if (!props.connected()) return;
-    if (initialized) return;
+    const client = props.protocolClient();
+    if (!client) return;
     if (!container) return;
-    initialized = true;
-    void initOnce();
+
+    // Untrack to avoid capturing theme/font reactivity as init dependencies.
+    untrack(() => void reload());
   });
 
   createEffect(() => {
-    const themeName = props.themeName();
+    void props.themeName();
     if (!didApplyTheme) {
       didApplyTheme = true;
       return;
     }
-    if (!initialized || !term) return;
+    if (!term) return;
 
-    const el = container;
-    if (el) {
-      el.style.opacity = '0';
-    }
-
-    setTimeout(() => {
-      disposeTerminal();
-      initialized = false;
-
-      requestAnimationFrame(() => {
-        if (!props.connected() || !container) return;
-        initialized = true;
-        void initOnce();
-      });
-    }, 150);
+    untrack(() => void reload({ fadeOut: true }));
   });
 
   createEffect(() => {
@@ -554,13 +529,13 @@ function TerminalSessionView(props: terminal_session_view_props) {
   });
 
   createEffect(() => {
-    if (!initialized || !term) return;
+    if (!term) return;
     term.setFontSize(fontSize());
     term.forceResize();
   });
 
   createEffect(() => {
-    if (!initialized || !term) return;
+    if (!term) return;
     // TerminalCore does not expose setFontFamily yet; pass through to ghostty-web options (a Proxy) to trigger re-layout.
     const anyCore = term as any;
     const inner = anyCore?.terminal;
@@ -572,7 +547,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
   onCleanup(() => {
     initSeq += 1;
-    refreshSeq += 1;
+    reloadSeq += 1;
     disposeTerminal();
     props.registerCore(sessionId(), null);
   });
@@ -714,7 +689,7 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
   const [historyBytes, setHistoryBytes] = createSignal<number | null>(null);
 
   const coreRegistry = new Map<string, TerminalCore>();
-  const actionsRegistry = new Map<string, { refreshHistory: () => Promise<void> }>();
+  const actionsRegistry = new Map<string, { reload: () => Promise<void> }>();
 
   const [coreRegistrySeq, setCoreRegistrySeq] = createSignal(0);
 
@@ -736,7 +711,7 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
     setCoreRegistrySeq((v) => v + 1);
   };
 
-  const registerActions = (id: string, actions: { refreshHistory: () => Promise<void> } | null) => {
+  const registerActions = (id: string, actions: { reload: () => Promise<void> } | null) => {
     if (!id) return;
     if (actions) {
       actionsRegistry.set(id, actions);
@@ -889,6 +864,26 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
 
   const [refreshing, setRefreshing] = createSignal(false);
 
+  const refreshHistoryStats = async (sid: string) => {
+    if (!connected()) return;
+    if (!sid) return;
+    try {
+      const stats = await transport.getSessionStats(sid);
+      if (activeSessionId() !== sid) return;
+      setHistoryBytes(stats.history.totalBytes);
+    } catch {
+    }
+  };
+
+  const waitForActions = async (sid: string, maxFrames = 4) => {
+    for (let i = 0; i < maxFrames; i += 1) {
+      const actions = actionsRegistry.get(sid);
+      if (actions) return actions;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+    return null;
+  };
+
   const handleRefresh = async () => {
     if (!connected() || refreshing()) return;
 
@@ -900,7 +895,13 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
 
       const sid = activeSessionId();
       if (sid) {
-        await actionsRegistry.get(sid)?.refreshHistory();
+        setHistoryBytes(null);
+
+        // Ensure the refresh flow matches the page open path: rebuild + attach + replay history.
+        const actions = await waitForActions(sid);
+        await actions?.reload();
+
+        await refreshHistoryStats(sid);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -1335,14 +1336,15 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
                 {(session) => (
                   <Show when={mountedSessionIds().has(session().id)}>
                     <TabPanel active={activeSessionId() === session().id} keepMounted class="h-full">
-                      <TerminalSessionView
-                        session={session()}
-                        active={() => activeSessionId() === session().id}
-                        connected={connected}
-                        viewActive={viewActive}
-                        autoFocus={shouldAutoFocus}
-                        themeName={terminalThemeName}
-                        themeColors={terminalThemeColors}
+	                      <TerminalSessionView
+	                        session={session()}
+	                        active={() => activeSessionId() === session().id}
+	                        connected={connected}
+	                        protocolClient={() => protocol.client()}
+	                        viewActive={viewActive}
+	                        autoFocus={shouldAutoFocus}
+	                        themeName={terminalThemeName}
+	                        themeColors={terminalThemeColors}
                         fontSize={fontSize}
                         fontFamily={fontFamily}
                         connId={connId}
