@@ -117,7 +117,8 @@ async function openCodespace(codeSpaceID: string, setStatus: (s: string) => void
   if (!envPublicID) throw new Error("Missing env context. Please reopen from the Redeven Portal.");
 
   const origin = codespaceOrigin(codeSpaceID);
-  const bootURL = `${origin}/_redeven_boot/`;
+  // Keep `?env=` in the final URL so users can copy/paste the link and reopen the codespace later.
+  const bootURL = `${origin}/_redeven_boot/?env=${encodeURIComponent(envPublicID)}`;
 
   const win = window.open("about:blank", `redeven_codespace_${codeSpaceID}`);
   if (!win) throw new Error("Popup was blocked. Please allow popups and try again.");

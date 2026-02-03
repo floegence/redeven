@@ -11,7 +11,6 @@ export interface Environment {
 
 export type EnvironmentDetail = Environment & {
   agent?: {
-    status: string;
     os?: string;
     arch?: string;
     hostname?: string;

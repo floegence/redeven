@@ -137,7 +137,8 @@ export function EnvAppShell() {
     let agentStatus: string | null = null;
     try {
       const detail = await getEnvironment(id);
-      agentStatus = detail?.agent?.status ? String(detail.agent.status) : null;
+      // `status` is the only availability source of truth returned by the controlplane API.
+      agentStatus = detail?.status ? String(detail.status) : null;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes('Missing broker token')) throw new Error(msg);

@@ -64,7 +64,7 @@ func bootstrapCmd(args []string) {
 
 	controlplane := fs.String("controlplane", "", "Controlplane base URL (e.g. https://sg.example.invalid)")
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
-	envToken := fs.String("env-token", "", "Environment token (Bearer)")
+	envToken := fs.String("env-token", "", "Environment token (raw; do not include 'Bearer ' prefix)")
 	cfgPath := fs.String("config", config.DefaultConfigPath(), "Config file path")
 
 	rootDir := fs.String("root-dir", "", "Filesystem root dir (default: user home dir)")

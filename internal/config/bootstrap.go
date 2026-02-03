@@ -38,10 +38,19 @@ type bootstrapResponse struct {
 	Direct *directv1.DirectConnectInfo `json:"direct"`
 }
 
+type bootstrapEnvelope struct {
+	Success bool              `json:"success"`
+	Data    bootstrapResponse `json:"data"`
+	Error   *struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
 func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath string, err error) {
 	baseURL := strings.TrimSpace(args.ControlplaneBaseURL)
 	envID := strings.TrimSpace(args.EnvironmentID)
-	envToken := strings.TrimSpace(args.EnvironmentToken)
+	envToken := normalizeBearerToken(args.EnvironmentToken)
 	cfgPath := strings.TrimSpace(args.ConfigPath)
 	if cfgPath == "" {
 		cfgPath = DefaultConfigPath()
@@ -130,18 +139,33 @@ func fetchBootstrap(ctx context.Context, baseURL string, envID string, envToken 
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("bootstrap failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
 
-	var out bootstrapResponse
-	if err := json.Unmarshal(body, &out); err != nil {
+	var env bootstrapEnvelope
+	if err := json.Unmarshal(body, &env); err != nil {
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("bootstrap failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+		}
 		return nil, fmt.Errorf("invalid bootstrap json: %w", err)
 	}
-	if out.Direct == nil {
+	if !env.Success {
+		msg := "bootstrap failed"
+		if env.Error != nil && strings.TrimSpace(env.Error.Message) != "" {
+			msg = strings.TrimSpace(env.Error.Message)
+		} else if raw := strings.TrimSpace(string(body)); raw != "" {
+			msg = raw
+		}
+		if env.Error != nil && strings.TrimSpace(env.Error.Code) != "" {
+			return nil, fmt.Errorf("bootstrap failed: %s (%s)", msg, strings.TrimSpace(env.Error.Code))
+		}
+		return nil, fmt.Errorf("bootstrap failed: %s", msg)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("bootstrap failed: status=%d", resp.StatusCode)
+	}
+	if env.Data.Direct == nil {
 		return nil, errors.New("invalid bootstrap response: missing direct")
 	}
-	return out.Direct, nil
+	return env.Data.Direct, nil
 }
 
 func newAgentInstanceID() (string, error) {
@@ -151,4 +175,16 @@ func newAgentInstanceID() (string, error) {
 	}
 	// Prefix keeps the value self-descriptive in logs and debugging tools.
 	return "ai_" + base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func normalizeBearerToken(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	parts := strings.Fields(s)
+	if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
+		return strings.TrimSpace(parts[1])
+	}
+	return s
 }
