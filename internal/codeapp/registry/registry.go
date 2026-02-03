@@ -15,6 +15,8 @@ import (
 
 type Space struct {
 	CodeSpaceID        string `json:"code_space_id"`
+	Name               string `json:"name"`
+	Description        string `json:"description"`
 	WorkspacePath      string `json:"workspace_path"`
 	CodePort           int    `json:"code_port"`
 	CreatedAtUnixMs    int64  `json:"created_at_unix_ms"`
@@ -68,7 +70,7 @@ func (r *Registry) ListSpaces(ctx context.Context) ([]Space, error) {
 	}
 
 	rows, err := r.db.QueryContext(ctx, `
-SELECT code_space_id, workspace_path, code_port, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms
+SELECT code_space_id, name, description, workspace_path, code_port, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms
 FROM code_spaces
 ORDER BY created_at_unix_ms ASC
 `)
@@ -80,7 +82,7 @@ ORDER BY created_at_unix_ms ASC
 	var out []Space
 	for rows.Next() {
 		var s Space
-		if err := rows.Scan(&s.CodeSpaceID, &s.WorkspacePath, &s.CodePort, &s.CreatedAtUnixMs, &s.UpdatedAtUnixMs, &s.LastOpenedAtUnixMs); err != nil {
+		if err := rows.Scan(&s.CodeSpaceID, &s.Name, &s.Description, &s.WorkspacePath, &s.CodePort, &s.CreatedAtUnixMs, &s.UpdatedAtUnixMs, &s.LastOpenedAtUnixMs); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -102,10 +104,10 @@ func (r *Registry) GetSpace(ctx context.Context, codeSpaceID string) (*Space, er
 
 	var s Space
 	err := r.db.QueryRowContext(ctx, `
-SELECT code_space_id, workspace_path, code_port, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms
+SELECT code_space_id, name, description, workspace_path, code_port, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms
 FROM code_spaces
 WHERE code_space_id = ?
-`, id).Scan(&s.CodeSpaceID, &s.WorkspacePath, &s.CodePort, &s.CreatedAtUnixMs, &s.UpdatedAtUnixMs, &s.LastOpenedAtUnixMs)
+`, id).Scan(&s.CodeSpaceID, &s.Name, &s.Description, &s.WorkspacePath, &s.CodePort, &s.CreatedAtUnixMs, &s.UpdatedAtUnixMs, &s.LastOpenedAtUnixMs)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -123,6 +125,8 @@ func (r *Registry) CreateSpace(ctx context.Context, s Space) error {
 		ctx = context.Background()
 	}
 	s.CodeSpaceID = strings.TrimSpace(s.CodeSpaceID)
+	s.Name = strings.TrimSpace(s.Name)
+	s.Description = strings.TrimSpace(s.Description)
 	s.WorkspacePath = strings.TrimSpace(s.WorkspacePath)
 	if s.CodeSpaceID == "" || s.WorkspacePath == "" {
 		return errors.New("invalid space")
@@ -135,9 +139,9 @@ func (r *Registry) CreateSpace(ctx context.Context, s Space) error {
 	}
 
 	_, err := r.db.ExecContext(ctx, `
-INSERT INTO code_spaces(code_space_id, workspace_path, code_port, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms)
-VALUES(?, ?, ?, ?, ?, ?)
-`, s.CodeSpaceID, s.WorkspacePath, s.CodePort, s.CreatedAtUnixMs, s.UpdatedAtUnixMs, s.LastOpenedAtUnixMs)
+INSERT INTO code_spaces(code_space_id, name, description, workspace_path, code_port, created_at_unix_ms, updated_at_unix_ms, last_opened_at_unix_ms)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+`, s.CodeSpaceID, s.Name, s.Description, s.WorkspacePath, s.CodePort, s.CreatedAtUnixMs, s.UpdatedAtUnixMs, s.LastOpenedAtUnixMs)
 	return err
 }
 
@@ -208,6 +212,8 @@ func initSchema(db *sql.DB) error {
 	_, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS code_spaces (
   code_space_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
   workspace_path TEXT NOT NULL,
   code_port INTEGER NOT NULL,
   created_at_unix_ms INTEGER NOT NULL,
@@ -218,5 +224,37 @@ CREATE TABLE IF NOT EXISTS code_spaces (
 	if err != nil {
 		return fmt.Errorf("create table: %w", err)
 	}
+
+	// Migrate existing tables: add name and description columns if they don't exist.
+	// SQLite doesn't support IF NOT EXISTS for ALTER TABLE, so we check first.
+	var hasNameCol bool
+	rows, err := db.Query(`PRAGMA table_info(code_spaces)`)
+	if err != nil {
+		return fmt.Errorf("pragma table_info: %w", err)
+	}
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan table_info: %w", err)
+		}
+		if name == "name" {
+			hasNameCol = true
+		}
+	}
+	rows.Close()
+
+	if !hasNameCol {
+		if _, err := db.Exec(`ALTER TABLE code_spaces ADD COLUMN name TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("alter table add name: %w", err)
+		}
+		if _, err := db.Exec(`ALTER TABLE code_spaces ADD COLUMN description TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("alter table add description: %w", err)
+		}
+	}
+
 	return nil
 }

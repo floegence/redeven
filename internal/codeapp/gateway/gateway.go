@@ -34,6 +34,8 @@ type Backend interface {
 
 type SpaceStatus struct {
 	CodeSpaceID        string `json:"code_space_id"`
+	Name               string `json:"name"`
+	Description        string `json:"description"`
 	WorkspacePath      string `json:"workspace_path"`
 	CodePort           int    `json:"code_port"`
 	CreatedAtUnixMs    int64  `json:"created_at_unix_ms"`
@@ -45,8 +47,9 @@ type SpaceStatus struct {
 }
 
 type CreateSpaceRequest struct {
-	CodeSpaceID   string `json:"code_space_id"`
-	WorkspacePath string `json:"workspace_path"`
+	Path        string `json:"path"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
 }
 
 type Gateway struct {

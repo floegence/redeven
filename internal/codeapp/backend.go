@@ -33,6 +33,8 @@ func (s *Service) ListSpaces(ctx context.Context) ([]gateway.SpaceStatus, error)
 		}
 		out = append(out, gateway.SpaceStatus{
 			CodeSpaceID:        sp.CodeSpaceID,
+			Name:               sp.Name,
+			Description:        sp.Description,
 			WorkspacePath:      sp.WorkspacePath,
 			CodePort:           sp.CodePort,
 			CreatedAtUnixMs:    sp.CreatedAtUnixMs,
@@ -53,21 +55,17 @@ func (s *Service) CreateSpace(ctx context.Context, req gateway.CreateSpaceReques
 		ctx = context.Background()
 	}
 
-	id := strings.TrimSpace(req.CodeSpaceID)
-	if id == "" {
-		id = randomCodeSpaceID()
-	}
-	if !IsValidCodeSpaceID(id) {
-		return nil, errors.New("invalid code_space_id")
-	}
+	// Always auto-generate code_space_id for DNS safety and uniqueness.
+	id := randomCodeSpaceID()
 
-	workspacePath := strings.TrimSpace(req.WorkspacePath)
+	// Process path (required field).
+	workspacePath := strings.TrimSpace(req.Path)
 	if workspacePath == "" {
 		home, _ := os.UserHomeDir()
 		workspacePath = strings.TrimSpace(home)
 	}
 	if workspacePath == "" {
-		return nil, errors.New("missing workspace_path")
+		return nil, errors.New("missing path")
 	}
 	abs, err := filepath.Abs(workspacePath)
 	if err != nil {
@@ -75,6 +73,18 @@ func (s *Service) CreateSpace(ctx context.Context, req gateway.CreateSpaceReques
 	}
 	if err := validateWorkspacePath(abs); err != nil {
 		return nil, err
+	}
+
+	// Process name: default to the last segment of the path.
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = filepath.Base(abs)
+	}
+
+	// Process description: default to "codespace at <path>".
+	description := strings.TrimSpace(req.Description)
+	if description == "" {
+		description = "codespace at " + abs
 	}
 
 	// Allocate an initial port. If the port becomes unavailable later, EnsureRunning will re-allocate and update the DB.
@@ -86,6 +96,8 @@ func (s *Service) CreateSpace(ctx context.Context, req gateway.CreateSpaceReques
 	now := time.Now().UnixMilli()
 	if err := s.reg.CreateSpace(ctx, registry.Space{
 		CodeSpaceID:        id,
+		Name:               name,
+		Description:        description,
 		WorkspacePath:      abs,
 		CodePort:           port,
 		CreatedAtUnixMs:    now,
@@ -101,6 +113,8 @@ func (s *Service) CreateSpace(ctx context.Context, req gateway.CreateSpaceReques
 
 	return &gateway.SpaceStatus{
 		CodeSpaceID:        id,
+		Name:               name,
+		Description:        description,
 		WorkspacePath:      abs,
 		CodePort:           port,
 		CreatedAtUnixMs:    now,
@@ -166,6 +180,8 @@ func (s *Service) StartSpace(ctx context.Context, codeSpaceID string) (*gateway.
 
 	return &gateway.SpaceStatus{
 		CodeSpaceID:        sp.CodeSpaceID,
+		Name:               sp.Name,
+		Description:        sp.Description,
 		WorkspacePath:      sp.WorkspacePath,
 		CodePort:           port,
 		CreatedAtUnixMs:    sp.CreatedAtUnixMs,

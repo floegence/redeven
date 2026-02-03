@@ -1,4 +1,4 @@
-import { For, Show, createResource, createSignal } from 'solid-js';
+import { For, Show, createEffect, createResource, createSignal } from 'solid-js';
 import {
   Button,
   Card,
@@ -7,20 +7,26 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
+  cn,
   ConfirmDialog,
   Dialog,
+  DirectoryInput,
   Input,
   LoadingOverlay,
   Panel,
   PanelContent,
   Tooltip,
   useNotification,
+  type FileItem,
 } from '@floegence/floe-webapp-core';
+import { useProtocol, useRpc, type FsFileInfo } from '@floegence/floe-webapp-protocol';
 import { getEnvPublicIDFromSession, mintEnvEntryTicketForApp } from '../services/controlplaneApi';
 import { registerSandboxWindow } from '../services/sandboxWindowRegistry';
 
 type SpaceStatus = Readonly<{
   code_space_id: string;
+  name: string;
+  description: string;
   workspace_path: string;
   code_port: number;
   created_at_unix_ms: number;
@@ -84,7 +90,6 @@ function codespaceOrigin(codeSpaceID: string): string {
   const host = window.location.hostname.toLowerCase();
   const port = window.location.port ? `:${window.location.port}` : '';
   const parts = host.split('.');
-  // env-<env_id>.<rest>
   const restHost = parts.slice(1).join('.') || host;
   return `${scheme}//cs-${codeSpaceID}.${restHost}${port}`;
 }
@@ -101,11 +106,9 @@ async function openCodespace(codeSpaceID: string, setStatus: (s: string) => void
   const origin = codespaceOrigin(codeSpaceID);
   const bootURL = `${origin}/_redeven_boot/`;
 
-  // Important: open in the synchronous click stack to avoid popup blocking.
   const win = window.open('about:blank', `redeven_codespace_${codeSpaceID}`);
   if (!win) throw new Error('Popup was blocked. Please allow popups and try again.');
 
-  // Register for refresh-recover handshake (codespace window -> opener Env App).
   registerSandboxWindow(win, { origin, floe_app: FLOE_APP_CODE, code_space_id: codeSpaceID, app_path: '/' });
 
   try {
@@ -134,7 +137,70 @@ async function openCodespace(codeSpaceID: string, setStatus: (s: string) => void
   }
 }
 
-// 状态徽章组件
+// File tree utilities
+function normalizePath(path: string): string {
+  const raw = String(path ?? '').trim();
+  if (!raw) return '/';
+  const p = raw.startsWith('/') ? raw : `/${raw}`;
+  if (p === '/') return '/';
+  return p.endsWith('/') ? p.replace(/\/+$/, '') || '/' : p;
+}
+
+function extNoDot(name: string): string | undefined {
+  const idx = name.lastIndexOf('.');
+  if (idx <= 0) return undefined;
+  return name.slice(idx + 1).toLowerCase();
+}
+
+function toFileItem(entry: FsFileInfo): FileItem {
+  const isDir = !!entry.isDirectory;
+  const name = String(entry.name ?? '');
+  // 规范化路径，确保与 withChildren 中的路径比较一致
+  const p = normalizePath(String(entry.path ?? ''));
+  const modifiedAtMs = Number(entry.modifiedAt ?? 0);
+  return {
+    id: p,
+    name,
+    type: isDir ? 'folder' : 'file',
+    path: p,
+    size: Number.isFinite(entry.size) ? entry.size : undefined,
+    modifiedAt: Number.isFinite(modifiedAtMs) && modifiedAtMs > 0 ? new Date(modifiedAtMs) : undefined,
+    extension: isDir ? undefined : extNoDot(name),
+  };
+}
+
+function sortFileItems(items: FileItem[]): FileItem[] {
+  return [...items].sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'folder' ? -1 : 1));
+}
+
+function withChildren(tree: FileItem[], folderPath: string, children: FileItem[]): FileItem[] {
+  const target = folderPath.trim() || '/';
+  if (target === '/' || target === '') {
+    return children;
+  }
+
+  const visit = (items: FileItem[]): [FileItem[], boolean] => {
+    let changed = false;
+    const next = items.map((it) => {
+      if (it.type !== 'folder') return it;
+      if (it.path === target) {
+        changed = true;
+        return { ...it, children };
+      }
+      if (!it.children || it.children.length === 0) return it;
+      const [nextChildren, hit] = visit(it.children);
+      if (!hit) return it;
+      changed = true;
+      return { ...it, children: nextChildren };
+    });
+    return [changed ? next : items, changed];
+  };
+
+  const [next] = visit(tree);
+  return next;
+}
+
+// Status badge component
 function StatusBadge(props: { running: boolean; pid?: number }) {
   return (
     <Tooltip content={props.running ? `Process ID: ${props.pid}` : 'Codespace is stopped'} placement="top">
@@ -156,7 +222,7 @@ function StatusBadge(props: { running: boolean; pid?: number }) {
   );
 }
 
-// 空状态组件
+// Empty state component
 function EmptyState(props: { onCreateClick: () => void }) {
   return (
     <div class="flex flex-col items-center justify-center py-12 px-4">
@@ -176,7 +242,7 @@ function EmptyState(props: { onCreateClick: () => void }) {
   );
 }
 
-// Codespace 卡片组件
+// Codespace card component
 function CodespaceCard(props: {
   space: SpaceStatus;
   busy: boolean;
@@ -185,20 +251,23 @@ function CodespaceCard(props: {
   onStop: () => void;
   onDelete: () => void;
 }) {
-  const pathName = () => {
-    const path = props.space.workspace_path;
-    const parts = path.split('/');
-    return parts[parts.length - 1] || path;
-  };
+  const isRunning = () => props.space.running;
 
   return (
-    <Card class="border border-border hover:border-border/80 transition-colors">
+    <Card
+      class={cn(
+        'border transition-all duration-200',
+        isRunning()
+          ? 'border-emerald-500/30 bg-emerald-500/[0.02] hover:border-emerald-500/50'
+          : 'border-border/60 opacity-75 hover:opacity-100 hover:border-border'
+      )}
+    >
       <CardHeader class="pb-2">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
-            <CardTitle class="text-sm font-mono truncate">{props.space.code_space_id}</CardTitle>
-            <CardDescription class="text-xs truncate mt-0.5" title={props.space.workspace_path}>
-              {pathName()}
+            <CardTitle class="text-sm truncate">{props.space.name || props.space.code_space_id}</CardTitle>
+            <CardDescription class="text-xs truncate mt-0.5" title={props.space.description}>
+              {props.space.description}
             </CardDescription>
           </div>
           <StatusBadge running={props.space.running} pid={props.space.pid} />
@@ -206,7 +275,7 @@ function CodespaceCard(props: {
       </CardHeader>
       <CardContent class="pb-2">
         <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-          <div class="text-muted-foreground">Workspace</div>
+          <div class="text-muted-foreground">Path</div>
           <div class="font-mono truncate text-right" title={props.space.workspace_path}>
             {props.space.workspace_path}
           </div>
@@ -219,22 +288,37 @@ function CodespaceCard(props: {
         </div>
       </CardContent>
       <CardFooter class="pt-2 flex items-center justify-between gap-2 border-t border-border/50">
-        <Button size="sm" variant="default" disabled={props.busy} onClick={props.onOpen} class="flex-1">
-          Open
-        </Button>
-        <div class="flex items-center gap-1">
-          <Show
-            when={props.space.running}
-            fallback={
-              <Tooltip content="Start codespace" placement="top">
-                <Button size="sm" variant="outline" disabled={props.busy} onClick={props.onStart} class="px-2">
+        <Show
+          when={isRunning()}
+          fallback={
+            // Stopped: Start is primary action
+            <div class="flex items-center gap-2 flex-1">
+              <Button size="sm" variant="default" disabled={props.busy} onClick={props.onStart} class="flex-1">
+                <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                </svg>
+                Start
+              </Button>
+              <Tooltip content="Open (will auto-start)" placement="top">
+                <Button size="sm" variant="ghost" disabled={props.busy} onClick={props.onOpen} class="px-2 text-muted-foreground">
                   <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                   </svg>
                 </Button>
               </Tooltip>
-            }
-          >
+            </div>
+          }
+        >
+          {/* Running: Open is primary action */}
+          <Button size="sm" variant="default" disabled={props.busy} onClick={props.onOpen} class="flex-1">
+            <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+            Open
+          </Button>
+        </Show>
+        <div class="flex items-center gap-1">
+          <Show when={isRunning()}>
             <Tooltip content="Stop codespace" placement="top">
               <Button size="sm" variant="outline" disabled={props.busy} onClick={props.onStop} class="px-2">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -256,28 +340,41 @@ function CodespaceCard(props: {
   );
 }
 
-// 创建 Codespace 对话框组件
+// Simple Create Codespace dialog - single dialog with DirectoryInput
 function CreateCodespaceDialog(props: {
   open: boolean;
   loading: boolean;
+  files: FileItem[];
+  homePath?: string;
   onOpenChange: (open: boolean) => void;
-  onCreate: (id: string, path: string) => void;
+  onCreate: (path: string, name: string, description: string) => void;
+  onLoadDir: (path: string) => void;
 }) {
-  const [id, setId] = createSignal('');
-  const [path, setPath] = createSignal('');
-
-  const handleCreate = () => {
-    props.onCreate(id().trim(), path().trim());
-    setId('');
-    setPath('');
-  };
+  const [selectedPath, setSelectedPath] = createSignal('');
+  const [name, setName] = createSignal('');
+  const [description, setDescription] = createSignal('');
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
-      setId('');
-      setPath('');
+      setSelectedPath('');
+      setName('');
+      setDescription('');
     }
     props.onOpenChange(open);
+  };
+
+  const handlePathChange = (path: string) => {
+    setSelectedPath(path);
+    // Auto-fill name and description from selected directory
+    const segments = path.split('/').filter(Boolean);
+    const defaultName = segments[segments.length - 1] || '';
+    setName(defaultName);
+    setDescription(`codespace at ${path}`);
+  };
+
+  const handleCreate = () => {
+    if (!selectedPath()) return;
+    props.onCreate(selectedPath(), name().trim(), description().trim());
   };
 
   return (
@@ -290,43 +387,51 @@ function CreateCodespaceDialog(props: {
           <Button size="sm" variant="outline" onClick={() => handleOpenChange(false)} disabled={props.loading}>
             Cancel
           </Button>
-          <Button size="sm" variant="default" onClick={handleCreate} loading={props.loading}>
+          <Button size="sm" variant="default" onClick={handleCreate} loading={props.loading} disabled={!selectedPath()}>
             Create
           </Button>
         </div>
       }
     >
       <div class="space-y-4">
-        <p class="text-xs text-muted-foreground">
-          Create a new codespace with VS Code in the browser. Your code stays securely on your machine.
-        </p>
-        <div class="space-y-3">
-          <div>
-            <label class="block text-xs font-medium mb-1">Codespace ID</label>
-            <Input
-              value={id()}
-              onInput={(e) => setId(e.currentTarget.value)}
-              placeholder="my-project (auto-generated if empty)"
-              size="sm"
-              class="w-full"
-            />
-            <p class="text-[11px] text-muted-foreground mt-1">
-              Lowercase letters, numbers, and hyphens only. Used in the URL.
-            </p>
-          </div>
-          <div>
-            <label class="block text-xs font-medium mb-1">Workspace Path</label>
-            <Input
-              value={path()}
-              onInput={(e) => setPath(e.currentTarget.value)}
-              placeholder="/path/to/project (home directory if empty)"
-              size="sm"
-              class="w-full"
-            />
-            <p class="text-[11px] text-muted-foreground mt-1">
-              The local directory to open in VS Code.
-            </p>
-          </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">Directory</label>
+          <DirectoryInput
+            value={selectedPath()}
+            onChange={handlePathChange}
+            files={props.files}
+            onExpand={props.onLoadDir}
+            placeholder="Click to select a directory..."
+            homePath={props.homePath}
+            homeLabel="Home"
+            size="sm"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">Name</label>
+          <Input
+            value={name()}
+            onInput={(e) => setName(e.currentTarget.value)}
+            placeholder="My Project"
+            size="sm"
+            class="w-full"
+          />
+          <p class="text-[11px] text-muted-foreground mt-1">
+            Display name for the codespace.
+          </p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">Description</label>
+          <Input
+            value={description()}
+            onInput={(e) => setDescription(e.currentTarget.value)}
+            placeholder="codespace at /path/to/project"
+            size="sm"
+            class="w-full"
+          />
+          <p class="text-[11px] text-muted-foreground mt-1">
+            Optional description for the codespace.
+          </p>
         </div>
       </div>
     </Dialog>
@@ -335,6 +440,8 @@ function CreateCodespaceDialog(props: {
 
 export function EnvCodespacesPage() {
   const notification = useNotification();
+  const protocol = useProtocol();
+  const rpc = useRpc();
 
   const [createDialogOpen, setCreateDialogOpen] = createSignal(false);
   const [createLoading, setCreateLoading] = createSignal(false);
@@ -343,25 +450,104 @@ export function EnvCodespacesPage() {
   const [deleteLoading, setDeleteLoading] = createSignal(false);
   const [busyId, setBusyId] = createSignal<string | null>(null);
 
+  // File tree for directory picker
+  const [files, setFiles] = createSignal<FileItem[]>([]);
+  const [homePath, setHomePath] = createSignal<string | undefined>(undefined);
+  type DirCache = Map<string, FileItem[]>;
+  let cache: DirCache = new Map();
+
   const [spaces, { refetch }] = createResource<SpaceStatus[]>(async () => {
-    const out = await fetchGatewayJSON<GatewayResp<{ spaces: SpaceStatus[] }>>('/_redeven_proxy/api/spaces', { method: 'GET' });
-    const list = out?.data?.spaces;
+    const out = await fetchGatewayJSON<{ spaces: SpaceStatus[] }>('/_redeven_proxy/api/spaces', { method: 'GET' });
+    const list = out?.spaces;
     return Array.isArray(list) ? list : [];
   });
 
-  const handleCreate = async (id: string, path: string) => {
+  // Load home directory path
+  createEffect(() => {
+    if (!protocol.client()) return;
+    void (async () => {
+      try {
+        const resp = await rpc.fs.getHome();
+        const home = String(resp?.path ?? '').trim();
+        if (home) setHomePath(home);
+      } catch {
+        // ignore
+      }
+    })();
+  });
+
+  // 加载单个目录的子项，并更新树
+  const loadDir = async (path: string) => {
+    const client = protocol.client();
+    if (!client) return;
+
+    const p = normalizePath(path);
+
+    // 如果已缓存，直接从缓存更新树
+    if (cache.has(p)) {
+      setFiles((prev) => withChildren(prev, p, cache.get(p)!));
+      return;
+    }
+
+    try {
+      const resp = await rpc.fs.list({ path: p, showHidden: false });
+      const entries = resp?.entries ?? [];
+      const items = sortFileItems(entries.map(toFileItem).filter((item) => item.type === 'folder'));
+      cache.set(p, items);
+      setFiles((prev) => withChildren(prev, p, items));
+    } catch (e) {
+      // ignore errors for now
+    }
+  };
+
+  // 加载根目录（用于初始化）
+  const loadRootDir = async () => {
+    const client = protocol.client();
+    if (!client) return;
+
+    const p = '/';
+    if (cache.has(p)) {
+      // 根目录已缓存，直接设置
+      setFiles(cache.get(p)!);
+      return;
+    }
+
+    try {
+      const resp = await rpc.fs.list({ path: p, showHidden: false });
+      const entries = resp?.entries ?? [];
+      const items = sortFileItems(entries.map(toFileItem).filter((item) => item.type === 'folder'));
+      cache.set(p, items);
+      setFiles(items);
+    } catch (e) {
+      // ignore errors for now
+    }
+  };
+
+  const handleLoadDir = (path: string) => {
+    const p = normalizePath(path);
+    if (p === '/') {
+      // 根目录：初始化或刷新
+      void loadRootDir();
+    } else {
+      // 非根目录：加载并更新子树
+      void loadDir(p);
+    }
+  };
+
+  const handleCreate = async (path: string, name: string, description: string) => {
     setCreateLoading(true);
     try {
       await fetchGatewayJSON<GatewayResp<SpaceStatus>>('/_redeven_proxy/api/spaces', {
         method: 'POST',
         body: JSON.stringify({
-          code_space_id: id || undefined,
-          workspace_path: path || undefined,
+          path: path,
+          name: name || undefined,
+          description: description || undefined,
         }),
       });
       await refetch();
       setCreateDialogOpen(false);
-      notification.success('Codespace created', id ? `Created "${id}"` : 'Codespace created successfully');
+      notification.success('Codespace created', name ? `Created "${name}"` : 'Codespace created successfully');
     } catch (e) {
       notification.error('Failed to create', e instanceof Error ? e.message : String(e));
     } finally {
@@ -374,7 +560,7 @@ export function EnvCodespacesPage() {
     try {
       await fetchGatewayJSON<GatewayResp<SpaceStatus>>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/start`, { method: 'POST' });
       await refetch();
-      notification.success('Started', `Codespace "${space.code_space_id}" is now running`);
+      notification.success('Started', `Codespace "${space.name || space.code_space_id}" is now running`);
     } catch (e) {
       notification.error('Failed to start', e instanceof Error ? e.message : String(e));
     } finally {
@@ -387,7 +573,7 @@ export function EnvCodespacesPage() {
     try {
       await fetchGatewayJSON<GatewayResp<void>>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/stop`, { method: 'POST' });
       await refetch();
-      notification.success('Stopped', `Codespace "${space.code_space_id}" has been stopped`);
+      notification.success('Stopped', `Codespace "${space.name || space.code_space_id}" has been stopped`);
     } catch (e) {
       notification.error('Failed to stop', e instanceof Error ? e.message : String(e));
     } finally {
@@ -405,7 +591,7 @@ export function EnvCodespacesPage() {
       await refetch();
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
-      notification.success('Deleted', `Codespace "${target.code_space_id}" has been deleted`);
+      notification.success('Deleted', `Codespace "${target.name || target.code_space_id}" has been deleted`);
     } catch (e) {
       notification.error('Failed to delete', e instanceof Error ? e.message : String(e));
     } finally {
@@ -432,9 +618,9 @@ export function EnvCodespacesPage() {
   const spaceList = () => spaces() ?? [];
   const sortedSpaces = () => {
     return [...spaceList()].sort((a, b) => {
-      // 运行中的排前面
+      // Running spaces first
       if (a.running !== b.running) return a.running ? -1 : 1;
-      // 最近打开的排前面
+      // Recently opened first
       return (b.last_opened_at_unix_ms || 0) - (a.last_opened_at_unix_ms || 0);
     });
   };
@@ -443,7 +629,7 @@ export function EnvCodespacesPage() {
     <div class="h-full min-h-0 overflow-auto">
       <Panel class="border border-border rounded-md overflow-hidden">
         <PanelContent class="p-4 space-y-4">
-          {/* 页面头部 */}
+          {/* Page header */}
           <div class="flex items-start justify-between gap-4">
             <div class="space-y-1">
               <div class="text-sm font-semibold">Codespaces</div>
@@ -467,7 +653,7 @@ export function EnvCodespacesPage() {
             </div>
           </div>
 
-          {/* Codespaces 列表 */}
+          {/* Codespaces list */}
           <div class="relative" style={{ 'min-height': '200px' }}>
             <LoadingOverlay visible={spaces.loading} message="Loading codespaces..." />
             <Show when={!spaces.loading}>
@@ -492,15 +678,18 @@ export function EnvCodespacesPage() {
         </PanelContent>
       </Panel>
 
-      {/* 创建对话框 */}
+      {/* Create dialog */}
       <CreateCodespaceDialog
         open={createDialogOpen()}
         loading={createLoading()}
+        files={files()}
+        homePath={homePath()}
         onOpenChange={setCreateDialogOpen}
         onCreate={handleCreate}
+        onLoadDir={handleLoadDir}
       />
 
-      {/* 删除确认对话框 */}
+      {/* Delete confirmation dialog */}
       <ConfirmDialog
         open={deleteDialogOpen()}
         onOpenChange={(open) => {
@@ -517,10 +706,10 @@ export function EnvCodespacesPage() {
       >
         <div class="space-y-2">
           <p class="text-sm">
-            Are you sure you want to delete <span class="font-semibold font-mono">"{deleteTarget()?.code_space_id}"</span>?
+            Are you sure you want to delete <span class="font-semibold">"{deleteTarget()?.name || deleteTarget()?.code_space_id}"</span>?
           </p>
           <p class="text-xs text-muted-foreground">
-            This will remove the codespace configuration. The workspace directory at{' '}
+            This will remove the codespace configuration. The directory at{' '}
             <span class="font-mono">{deleteTarget()?.workspace_path}</span> will not be deleted.
           </p>
         </div>

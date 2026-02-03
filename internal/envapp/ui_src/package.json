@@ -10,10 +10,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@floegence/floe-webapp-core": "^0.15.1",
-    "@floegence/floe-webapp-protocol": "^0.15.1",
+    "@floegence/floe-webapp-core": "^0.15.10",
+    "@floegence/floe-webapp-protocol": "^0.15.10",
     "@floegence/floeterm-terminal-web": "^0.3.2",
-    "@floegence/flowersec-core": "^0.7.0",
+    "@floegence/flowersec-core": "^0.9.0",
     "@fontsource/iosevka": "^5.2.5",
     "@solidjs/router": "^0.15.3",
     "docx-preview": "^0.3.6",
@@ -21,11 +21,11 @@
     "solid-js": "^1.9.3"
   },
   "overrides": {
-    "@floegence/flowersec-core": "^0.7.0"
+    "@floegence/flowersec-core": "^0.9.0"
   },
   "pnpm": {
     "overrides": {
-      "@floegence/flowersec-core": "^0.7.0"
+      "@floegence/flowersec-core": "^0.9.0"
     }
   },
   "devDependencies": {

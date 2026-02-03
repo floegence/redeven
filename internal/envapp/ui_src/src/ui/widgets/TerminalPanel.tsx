@@ -176,6 +176,22 @@ const TERMINAL_FONT_OPTIONS: Array<{ id: string; label: string; family: string }
   },
 ];
 
+const PlusIcon = (props: { class?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class={props.class}
+  >
+    <path d="M12 5v14" />
+    <path d="M5 12h14" />
+  </svg>
+);
+
 const RefreshIcon = (props: { class?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -1236,6 +1252,18 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
         </Show>
 
         <div class="flex items-center gap-1 border-b border-border h-8 shrink-0">
+          <Show when={tabItems().length === 0}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={createSession}
+              disabled={!connected() || creating()}
+              loading={creating()}
+              title="New session"
+            >
+              <PlusIcon class="w-3.5 h-3.5" />
+            </Button>
+          </Show>
           <Button
             size="sm"
             variant="ghost"
@@ -1246,23 +1274,20 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
           >
             <RefreshIcon class="w-3.5 h-3.5" />
           </Button>
-          <Button size="sm" variant="ghost" onClick={clearActive} disabled={!connected() || !activeSessionId()} title="Clear">
-            <Trash class="w-3.5 h-3.5" />
-          </Button>
-          <Dropdown
-            trigger={
-              <Button size="sm" variant="ghost" disabled={!connected()} title="More options">
-                <MoreVerticalIcon class="w-3.5 h-3.5" />
-              </Button>
-            }
-            items={moreItems()}
-            onSelect={handleMoreSelect}
-            align="end"
-          />
-          <Show when={tabItems().length === 0}>
-            <Button size="sm" variant="outline" onClick={createSession} disabled={!connected() || creating()} loading={creating()}>
-              New
+          <Show when={tabItems().length > 0}>
+            <Button size="sm" variant="ghost" onClick={clearActive} disabled={!connected() || !activeSessionId()} title="Clear">
+              <Trash class="w-3.5 h-3.5" />
             </Button>
+            <Dropdown
+              trigger={
+                <Button size="sm" variant="ghost" disabled={!connected()} title="More options">
+                  <MoreVerticalIcon class="w-3.5 h-3.5" />
+                </Button>
+              }
+              items={moreItems()}
+              onSelect={handleMoreSelect}
+              align="end"
+            />
           </Show>
         </div>
       </div>
