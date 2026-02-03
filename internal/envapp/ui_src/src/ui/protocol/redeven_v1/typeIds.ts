@@ -27,6 +27,9 @@ export const redevenV1TypeIds = {
   monitor: {
     sysMonitor: 3001,
   },
+  sessions: {
+    listActive: 5001,
+  },
   sys: {
     ping: 4001,
   },

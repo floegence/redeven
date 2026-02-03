@@ -69,7 +69,16 @@ type Agent struct {
 	code *codeapp.Service
 
 	mu       sync.Mutex
-	sessions map[string]context.CancelFunc // channel_id -> cancel
+	sessions map[string]*activeSession // channel_id -> session
+}
+
+// activeSession represents a server-side Flowersec channel session handled by the agent.
+//
+// NOTE: This is an in-memory registry used for UI/auditing; it must not be used for authorization decisions.
+type activeSession struct {
+	cancel            context.CancelFunc
+	meta              session.Meta
+	connectedAtUnixMs int64 // set after ConnectTunnel succeeds
 }
 
 func New(opts Options) (*Agent, error) {
@@ -143,7 +152,7 @@ func New(opts Options) (*Agent, error) {
 			BuildTime:       opts.BuildTime,
 		}),
 		code:     codeSvc,
-		sessions: make(map[string]context.CancelFunc),
+		sessions: make(map[string]*activeSession),
 	}, nil
 }
 
@@ -334,6 +343,9 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		}
 	}
 
+	// Freeze the metadata snapshot used for auditing/UI and for the session runtime.
+	metaCopy := *meta
+
 	a.mu.Lock()
 	if _, ok := a.sessions[channelID]; ok {
 		a.mu.Unlock()
@@ -341,17 +353,20 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		return
 	}
 	sessCtx, cancel := context.WithCancel(ctx)
-	a.sessions[channelID] = cancel
+	a.sessions[channelID] = &activeSession{
+		cancel: cancel,
+		meta:   metaCopy,
+	}
 	a.mu.Unlock()
 
-	go func() {
+	go func(meta *session.Meta) {
 		defer func() {
 			a.mu.Lock()
 			delete(a.sessions, channelID)
 			a.mu.Unlock()
 		}()
 		_ = a.runDataSession(sessCtx, n.GrantServer, meta)
-	}()
+	}(&metaCopy)
 }
 
 func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInitGrant, meta *session.Meta) (err error) {
@@ -365,6 +380,8 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	floeApp := strings.TrimSpace(meta.FloeApp)
 	codeSpaceID := strings.TrimSpace(meta.CodeSpaceID)
+	userPublicID := strings.TrimSpace(meta.UserPublicID)
+	userEmail := strings.TrimSpace(meta.UserEmail)
 	defer func() {
 		reason := "eof"
 		if !opened {
@@ -381,6 +398,8 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 			"env_public_id", endpointID,
 			"floe_app", floeApp,
 			"code_space_id", codeSpaceID,
+			"user_public_id", userPublicID,
+			"user_email", userEmail,
 			"opened", opened,
 			"reason", reason,
 			"duration_ms", time.Since(startedAt).Milliseconds(),
@@ -404,11 +423,18 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 		return err
 	}
 	opened = true
+
+	connectedAtUnixMs := time.Now().UnixMilli()
+	a.markSessionConnected(channelID, connectedAtUnixMs)
+
 	a.log.Info("data session opened",
 		"channel_id", channelID,
 		"env_public_id", endpointID,
 		"floe_app", floeApp,
 		"code_space_id", codeSpaceID,
+		"user_public_id", userPublicID,
+		"user_email", userEmail,
+		"connected_at_unix_ms", connectedAtUnixMs,
 	)
 	defer sess.Close()
 
@@ -544,16 +570,42 @@ func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, m
 	// Monitor domain
 	a.mon.Register(router, meta)
 
+	// Sessions domain (active Flowersec channel sessions).
+	a.registerSessionsRPC(router, meta)
+
 	_ = srv.Serve(ctx)
+}
+
+func (a *Agent) markSessionConnected(channelID string, connectedAtUnixMs int64) {
+	if a == nil {
+		return
+	}
+	channelID = strings.TrimSpace(channelID)
+	if channelID == "" {
+		return
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	s := a.sessions[channelID]
+	if s == nil {
+		return
+	}
+	if connectedAtUnixMs > 0 {
+		s.connectedAtUnixMs = connectedAtUnixMs
+	}
 }
 
 func (a *Agent) stopAllSessions() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for _, cancel := range a.sessions {
-		cancel()
+	for _, s := range a.sessions {
+		if s == nil || s.cancel == nil {
+			continue
+		}
+		s.cancel()
 	}
-	a.sessions = make(map[string]context.CancelFunc)
+	a.sessions = make(map[string]*activeSession)
 }
 
 func hostnameBestEffort() string {
