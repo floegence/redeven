@@ -3,9 +3,7 @@ import { Button, ConfirmDialog, Dialog, DirectoryPicker, FileBrowser, FileSavePi
 import type { Client } from '@floegence/flowersec-core';
 import { DEFAULT_MAX_JSON_FRAME_BYTES, readJsonFrame, writeJsonFrame } from '@floegence/flowersec-core/framing';
 import { ByteReader, type YamuxStream } from '@floegence/flowersec-core/yamux';
-import { useProtocol } from '@floegence/floe-webapp-protocol';
-
-import { TypeIds } from '../services/typeIds';
+import { useProtocol, useRpc, type FsFileInfo } from '@floegence/floe-webapp-protocol';
 import { getExtDot, isLikelyTextContent, mimeFromExtDot, previewModeByName, type PreviewMode } from '../utils/filePreview';
 import { useEnvContext } from '../pages/EnvContext';
 
@@ -111,17 +109,18 @@ function normalizePath(path: string): string {
   return p.endsWith('/') ? p.replace(/\/+$/, '') || '/' : p;
 }
 
-function toFileItem(entry: any): FileItem {
-  const isDir = !!entry.is_directory;
+function toFileItem(entry: FsFileInfo): FileItem {
+  const isDir = !!entry.isDirectory;
   const name = String(entry.name ?? '');
   const p = String(entry.path ?? '');
+  const modifiedAtMs = Number(entry.modifiedAt ?? 0);
   return {
     id: p,
     name,
     type: isDir ? 'folder' : 'file',
     path: p,
-    size: typeof entry.size === 'number' ? entry.size : undefined,
-    modifiedAt: typeof entry.modified_at === 'number' ? new Date(entry.modified_at) : undefined,
+    size: Number.isFinite(entry.size) ? entry.size : undefined,
+    modifiedAt: Number.isFinite(modifiedAtMs) && modifiedAtMs > 0 ? new Date(modifiedAtMs) : undefined,
     extension: isDir ? undefined : extNoDot(name),
   };
 }
@@ -331,6 +330,7 @@ async function readFileBytesOnce(params: {
 
 export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const protocol = useProtocol();
+  const rpc = useRpc();
   const ctx = useEnvContext();
   const deck = useDeck();
   const floe = useResolvedFloeConfig();
@@ -530,12 +530,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
-    const resp = await client.rpc.call(TypeIds.FsList, { path: p, show_hidden: false });
+    const resp = await rpc.fs.list({ path: p, showHidden: false });
     if (seq !== dirReqSeq) return;
-    if (resp.error) throw new Error(resp.error.message ?? `RPC error: ${resp.error.code}`);
 
-    const entries = (resp.payload as any)?.entries ?? [];
-    const items = (entries ?? [])
+    const entries = resp?.entries ?? [];
+    const items = entries
       .map(toFileItem)
       .sort((a: FileItem, b: FileItem) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'folder' ? -1 : 1));
     if (seq !== dirReqSeq) return;
@@ -888,13 +887,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         if (normalizePath(to) === from) continue;
 
         try {
-          const resp = await client.rpc.call(TypeIds.FsRename, {
-            old_path: from,
-            new_path: to,
-          });
-          if (resp.error) {
-            throw new Error(resp.error.message ?? 'Move failed');
-          }
+          await rpc.fs.rename({ oldPath: from, newPath: to });
 
           applyLocalMove(item, destDir);
           okCount += 1;
@@ -937,13 +930,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     try {
       for (const item of items) {
         const isDir = item.type === 'folder';
-        const resp = await client.rpc.call(TypeIds.FsDelete, {
-          path: item.path,
-          recursive: isDir,
-        });
-        if (resp.error) {
-          throw new Error(resp.error.message ?? `Failed to delete ${item.name}`);
-        }
+        await rpc.fs.delete({ path: item.path, recursive: isDir });
       }
       const pathsToRemove = new Set(items.map((i) => normalizePath(i.path)));
       setFiles((prev) => removeItemsFromTree(prev, pathsToRemove));
@@ -984,13 +971,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setRenameDialogOpen(false);
 
     try {
-      const resp = await client.rpc.call(TypeIds.FsRename, {
-        old_path: item.path,
-        new_path: newPath,
-      });
-      if (resp.error) {
-        throw new Error(resp.error.message ?? 'Rename failed');
-      }
+      await rpc.fs.rename({ oldPath: item.path, newPath });
       const updates: Partial<FileItem> = {
         name: newNameTrimmed,
         path: newPath,
@@ -1032,13 +1013,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const destPath = parentDir === '/' ? `/${newName}` : `${parentDir}/${newName}`;
 
     try {
-      const resp = await client.rpc.call(TypeIds.FsCopy, {
-        source_path: item.path,
-        dest_path: destPath,
-      });
-      if (resp.error) {
-        throw new Error(resp.error.message ?? 'Duplicate failed');
-      }
+      await rpc.fs.copy({ sourcePath: item.path, destPath });
       const newItem: FileItem = {
         ...item,
         id: destPath,
@@ -1074,13 +1049,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setMoveToDialogOpen(false);
 
     try {
-      const resp = await client.rpc.call(TypeIds.FsRename, {
-        old_path: item.path,
-        new_path: finalDestPath,
-      });
-      if (resp.error) {
-        throw new Error(resp.error.message ?? 'Move failed');
-      }
+      await rpc.fs.rename({ oldPath: item.path, newPath: finalDestPath });
       const srcDir = getParentDir(item.path);
       const pathsToRemove = new Set([normalizePath(item.path)]);
       setFiles((prev) => removeItemsFromTree(prev, pathsToRemove));
@@ -1114,13 +1083,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setCopyToDialogOpen(false);
 
     try {
-      const resp = await client.rpc.call(TypeIds.FsCopy, {
-        source_path: item.path,
-        dest_path: finalDestPath,
-      });
-      if (resp.error) {
-        throw new Error(resp.error.message ?? 'Copy failed');
-      }
+      await rpc.fs.copy({ sourcePath: item.path, destPath: finalDestPath });
       const destDir = getParentDir(finalDestPath);
       const newName = finalDestPath.split('/').pop() ?? item.name;
       const newItem: FileItem = {
@@ -1157,13 +1120,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const client = protocol.client();
       if (!client) return;
       try {
-        const resp = await client.rpc.call(TypeIds.FsGetHome, {});
-        if (!resp.error && resp.payload) {
-          const home = (resp.payload as any).home_path ?? (resp.payload as any).path;
-          if (typeof home === 'string' && home.trim()) {
-            setHomePath(home.trim());
-          }
-        }
+        const resp = await rpc.fs.getHome();
+        const home = String(resp?.path ?? '').trim();
+        if (home) setHomePath(home);
       } catch {
       }
     })();

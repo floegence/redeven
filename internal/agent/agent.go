@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -19,6 +18,7 @@ import (
 	"github.com/floegence/flowersec/flowersec-go/endpoint"
 	"github.com/floegence/flowersec/flowersec-go/endpoint/serve"
 	controlv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/controlplane/v1"
+	"github.com/floegence/flowersec/flowersec-go/origin"
 	fsproxy "github.com/floegence/flowersec/flowersec-go/proxy"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
@@ -184,7 +184,7 @@ func (a *Agent) Run(ctx context.Context) error {
 }
 
 func (a *Agent) runControlOnce(ctx context.Context) error {
-	origin, err := originFromWSURL(a.cfg.Direct.WsUrl)
+	origin, err := origin.FromWSURL(a.cfg.Direct.WsUrl)
 	if err != nil {
 		return err
 	}
@@ -384,7 +384,7 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 		a.log.Info("data session closed", attrs...)
 	}()
 
-	origin, err := originForTunnel(grant.TunnelUrl, a.cfg.ControlplaneBaseURL)
+	origin, err := origin.ForTunnel(grant.TunnelUrl, a.cfg.ControlplaneBaseURL)
 	if err != nil {
 		return err
 	}
@@ -551,39 +551,6 @@ func hostnameBestEffort() string {
 		return ""
 	}
 	return strings.TrimSpace(h)
-}
-
-func originFromWSURL(wsURL string) (string, error) {
-	u, err := url.Parse(strings.TrimSpace(wsURL))
-	if err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(u.Host) == "" {
-		return "", errors.New("ws url missing host")
-	}
-	switch strings.ToLower(strings.TrimSpace(u.Scheme)) {
-	case "wss":
-		return "https://" + u.Host, nil
-	case "ws":
-		return "http://" + u.Host, nil
-	default:
-		return "", fmt.Errorf("unsupported ws scheme: %s", u.Scheme)
-	}
-}
-
-func originForTunnel(tunnelURL string, controlplaneBaseURL string) (string, error) {
-	// Prefer controlplane origin for consistent policy across official/custom tunnels.
-	if strings.TrimSpace(controlplaneBaseURL) != "" {
-		u, err := url.Parse(strings.TrimSpace(controlplaneBaseURL))
-		if err == nil && strings.TrimSpace(u.Host) != "" {
-			scheme := strings.ToLower(strings.TrimSpace(u.Scheme))
-			if scheme == "http" || scheme == "https" {
-				return scheme + "://" + u.Host, nil
-			}
-		}
-	}
-	// Fall back to tunnel host.
-	return originFromWSURL(tunnelURL)
 }
 
 // --- control channel types (wire JSON) ---

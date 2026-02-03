@@ -18,7 +18,7 @@ import {
   useTheme,
   useViewActivation,
 } from '@floegence/floe-webapp-core';
-import { useProtocol } from '@floegence/floe-webapp-protocol';
+import { useProtocol, useRpc } from '@floegence/floe-webapp-protocol';
 import {
   TerminalCore,
   getDefaultTerminalConfig,
@@ -31,8 +31,8 @@ import {
   type TerminalTransport,
 } from '@floegence/floeterm-terminal-web';
 import {
-  createFlowersecTerminalEventSource,
-  createFlowersecTerminalTransport,
+  createRedevenTerminalEventSource,
+  createRedevenTerminalTransport,
   getOrCreateTerminalConnId,
 } from '../services/terminalTransport';
 import {
@@ -616,6 +616,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
 export function TerminalPanel(props: TerminalPanelProps = {}) {
   const variant: TerminalPanelVariant = props.variant ?? 'panel';
   const protocol = useProtocol();
+  const rpc = useRpc();
   const theme = useTheme();
   const floe = useResolvedFloeConfig();
   const view = useViewActivation();
@@ -640,8 +641,8 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
   ensureTerminalPreferencesInitialized(floe.persist);
   const terminalPrefs = useTerminalPreferences();
 
-  const transport = createFlowersecTerminalTransport(protocol as any, connId);
-  const eventSource = createFlowersecTerminalEventSource(protocol as any);
+  const transport = createRedevenTerminalTransport(rpc, connId);
+  const eventSource = createRedevenTerminalEventSource(rpc);
 
   const connected = () => Boolean(protocol.client());
   const viewActive = () => view.active();

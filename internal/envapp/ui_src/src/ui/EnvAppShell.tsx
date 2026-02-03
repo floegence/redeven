@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
+import { Show, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import {
   Activity,
   ActivityAppsMain,
@@ -6,6 +6,7 @@ import {
   Copy,
   Code,
   Files,
+  FloeRegistryRuntime,
   Grid,
   Grid3x3,
   LayoutDashboard,
@@ -22,7 +23,6 @@ import {
   type ActivityBarItem,
   type FloeComponent,
   useCommand,
-  useComponentRegistry,
   useLayout,
   useNotification,
   useTheme,
@@ -58,7 +58,6 @@ const CODE_SPACE_ID_ENV_UI = 'env-ui';
 export function EnvAppShell() {
   const layout = useLayout();
   const theme = useTheme();
-  const registry = useComponentRegistry();
   const widgetRegistry = useWidgetRegistry();
   const protocol = useProtocol();
   const cmd = useCommand();
@@ -73,178 +72,85 @@ export function EnvAppShell() {
     (id) => (id ? getEnvironment(id) : null),
   );
 
-  const [connectError, setConnectError] = createSignal<string | null>(null);
-  const [connecting, setConnecting] = createSignal(false);
+  const [manualError, setManualError] = createSignal<string | null>(null);
   const [auditOpen, setAuditOpen] = createSignal(false);
-  let connectSeq = 0;
 
-  const status = createMemo(() => (connectError() ? 'error' : protocol.status()));
-  const isConnected = () => protocol.status() === 'connected' && !!protocol.client();
+  const status = createMemo(() => (manualError() ? 'error' : protocol.status()));
+  const connecting = () => protocol.status() === 'connecting';
+  const connectError = createMemo(() => manualError() ?? protocol.error()?.message ?? null);
 
-  // Connection supervisor:
-  // - Env App must be resilient to agent restarts (control/ws reconnect).
-  // - We do NOT rely on protocol autoReconnect, because a fresh grant is required after disruptions.
-  // - We try to avoid spamming grant audits when agent is clearly offline by probing env agent status first.
-  let superviseSeq = 1;
-  let superviseTimer: number | null = null;
-  let superviseInFlight = false;
-  let reconnectAttempt = 0;
-  let agentPollAttempt = 0;
+  const createGetGrant = () => async () => {
+    const id = envId();
+    if (!id) throw new Error('Missing env context. Please reopen from the Redeven Portal.');
 
-  const clearSuperviseTimer = () => {
-    if (superviseTimer == null) return;
-    window.clearTimeout(superviseTimer);
-    superviseTimer = null;
-  };
+    const brokerToken = getBrokerTokenFromSession();
+    if (!brokerToken) throw new Error('Missing broker token. Please reopen from the Redeven Portal.');
 
-  const resetSuperviseBackoff = () => {
-    reconnectAttempt = 0;
-    agentPollAttempt = 0;
-  };
-
-  const backoffMs = (attempt: number, baseMs: number, capMs: number) => {
-    const a = Math.max(0, attempt);
-    const exp = Math.min(capMs, baseMs * Math.pow(2, a));
-    const jitter = exp * (0.2 * Math.random());
-    return Math.round(Math.min(capMs, exp + jitter));
-  };
-
-  const scheduleSuperviseTick = (seq: number, delayMs: number) => {
-    clearSuperviseTimer();
-    superviseTimer = window.setTimeout(() => {
-      superviseTimer = null;
-      void superviseTick(seq);
-    }, Math.max(0, delayMs));
-  };
-
-  const kickReconnect = (opts?: { immediate?: boolean; resetBackoff?: boolean }) => {
-    if (opts?.resetBackoff) resetSuperviseBackoff();
-    const seq = superviseSeq;
-    if (opts?.immediate) {
-      clearSuperviseTimer();
-      void superviseTick(seq);
-      return;
-    }
-    if (superviseTimer != null) return;
-    scheduleSuperviseTick(seq, 0);
-  };
-
-  const superviseTick = async (seq: number) => {
-    if (seq !== superviseSeq) return;
-    if (superviseInFlight) return;
-    superviseInFlight = true;
+    // Probe agent status to avoid grant-audit spam while the agent is clearly offline.
+    let agentStatus: string | null = null;
     try {
-      if (isConnected()) {
-        resetSuperviseBackoff();
-        clearSuperviseTimer();
-        return;
-      }
-      if (connecting()) {
-        scheduleSuperviseTick(seq, 500);
-        return;
-      }
-
-      // Browser offline: wait for 'online' and keep a slow poll loop.
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        agentPollAttempt += 1;
-        scheduleSuperviseTick(seq, backoffMs(agentPollAttempt, 1000, 10_000));
-        return;
-      }
-
-      const id = envId();
-      if (!id) {
-        setConnectError('Missing env context. Please reopen from the Redeven Portal.');
-        return;
-      }
-
-      // Probe agent status to avoid grant-audit spam while the agent is clearly offline.
-      try {
-        const detail = await getEnvironment(id);
-        const st = detail?.agent?.status;
-        if (st && st !== 'online') {
-          agentPollAttempt += 1;
-          reconnectAttempt = 0;
-          scheduleSuperviseTick(seq, backoffMs(agentPollAttempt, 1000, 10_000));
-          return;
-        }
-        agentPollAttempt = 0;
-      } catch (e) {
-        // Missing broker token is not recoverable inside sandbox.
-        const msg = e instanceof Error ? e.message : String(e);
-        if (msg.includes('Missing broker token')) {
-          setConnectError(msg);
-          return;
-        }
-        // For transient failures (meta/network), allow reconnect attempt below.
-      }
-
-      await connect();
-      if (seq !== superviseSeq) return;
-      if (isConnected()) {
-        resetSuperviseBackoff();
-        clearSuperviseTimer();
-        return;
-      }
-
-      reconnectAttempt += 1;
-      scheduleSuperviseTick(seq, backoffMs(reconnectAttempt, 1000, 30_000));
-    } finally {
-      superviseInFlight = false;
+      const detail = await getEnvironment(id);
+      agentStatus = detail?.agent?.status ? String(detail.agent.status) : null;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('Missing broker token')) throw new Error(msg);
+      // For transient failures (meta/network), continue with the grant flow below.
     }
+    if (agentStatus && agentStatus !== 'online') {
+      throw new Error(`Agent is ${agentStatus}.`);
+    }
+
+    const entryTicket = await exchangeBrokerToEntryTicket({
+      endpointId: id,
+      floeApp: FLOE_APP_AGENT,
+      brokerToken,
+      codeSpaceId: CODE_SPACE_ID_ENV_UI,
+    });
+
+    return channelInitEntry({ endpointId: id, floeApp: FLOE_APP_AGENT, entryTicket });
   };
 
   const connect = async () => {
+    if (connecting()) return;
+
     const id = envId();
     if (!id) {
-      setConnectError('Missing env context. Please reopen from the Redeven Portal.');
+      setManualError('Missing env context. Please reopen from the Redeven Portal.');
+      protocol.disconnect();
       return;
     }
 
-    const seq = ++connectSeq;
-    setConnectError(null);
-    setConnecting(true);
-
-    try {
+    const brokerToken = getBrokerTokenFromSession();
+    if (!brokerToken) {
+      setManualError('Missing broker token. Please reopen from the Redeven Portal.');
       protocol.disconnect();
-
-      const brokerToken = getBrokerTokenFromSession();
-      if (!brokerToken) {
-        throw new Error('Missing broker token. Please reopen from the Redeven Portal.');
-      }
-
-      const entryTicket = await exchangeBrokerToEntryTicket({
-        endpointId: id,
-        floeApp: FLOE_APP_AGENT,
-        brokerToken,
-        codeSpaceId: CODE_SPACE_ID_ENV_UI,
-      });
-      if (seq !== connectSeq) return;
-
-      const grant = await channelInitEntry({ endpointId: id, floeApp: FLOE_APP_AGENT, entryTicket });
-      if (seq !== connectSeq) return;
-
-      await protocol.connect({
-        mode: 'tunnel',
-        grant,
-        autoReconnect: { enabled: false },
-      });
-    } catch (e) {
-      if (seq !== connectSeq) return;
-      setConnectError(e instanceof Error ? e.message : String(e));
-    } finally {
-      if (seq === connectSeq) setConnecting(false);
+      return;
     }
+
+    setManualError(null);
+
+    void protocol.connect({
+      mode: 'tunnel',
+      getGrant: createGetGrant(),
+      autoReconnect: {
+        enabled: true,
+        // Env App should be resilient to agent restarts and transient network issues.
+        maxAttempts: 1_000_000,
+        initialDelayMs: 500,
+        maxDelayMs: 30_000,
+      },
+    }).catch(() => {
+      // protocol.error() will expose the last failure; avoid unhandled rejections here.
+    });
   };
 
   onMount(() => {
     layout.setSidebarCollapsed(true);
-    layout.setSidebarActiveTab(layout.isMobile() ? 'terminal' : 'deck');
+    layout.setSidebarActiveTab(layout.isMobile() ? 'terminal' : 'deck', { openSidebar: false });
+    void connect();
   });
 
   onCleanup(() => {
-    superviseSeq += 1;
-    clearSuperviseTimer();
-    connectSeq += 1;
     protocol.disconnect();
   });
 
@@ -297,16 +203,12 @@ export function EnvAppShell() {
     onCleanup(() => window.removeEventListener('message', onMessage));
   });
 
-  // Auto reconnect: kick on status/connecting changes, and on common browser lifecycle events.
-  // - status/client changes: handle agent restarts and WS drops
-  // - focus/visibility/online: reduce perceived downtime
+  // 在常见浏览器生命周期事件下补一次 connect，用于降低离线恢复/切回标签页的感知延迟。
   onMount(() => {
-    kickReconnect({ immediate: true, resetBackoff: true });
-
-    const onOnline = () => kickReconnect({ immediate: true, resetBackoff: true });
-    const onFocus = () => kickReconnect({ immediate: true });
+    const onOnline = () => void connect();
+    const onFocus = () => void connect();
     const onVisibility = () => {
-      if (!document.hidden) kickReconnect({ immediate: true });
+      if (!document.hidden) void connect();
     };
 
     window.addEventListener('online', onOnline);
@@ -314,23 +216,10 @@ export function EnvAppShell() {
     document.addEventListener('visibilitychange', onVisibility);
 
     onCleanup(() => {
-      clearSuperviseTimer();
       window.removeEventListener('online', onOnline);
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
     });
-  });
-
-  createEffect(() => {
-    // Track these signals to react to dropped connections and completed manual reconnect attempts.
-    const _connecting = connecting();
-    if (_connecting) return;
-    if (isConnected()) {
-      resetSuperviseBackoff();
-      clearSuperviseTimer();
-      return;
-    }
-    kickReconnect({ immediate: true });
   });
 
   const components: FloeComponent[] = [
@@ -341,12 +230,11 @@ export function EnvAppShell() {
     { id: 'codespaces', name: 'Codespaces', icon: Code, component: EnvCodespacesPage, sidebar: { order: 5, fullScreen: true } },
     { id: 'market', name: 'Plugin Market', icon: Grid, component: EnvPluginMarketPage, sidebar: { order: 6, fullScreen: true } },
   ];
-  registry.registerAll(components);
 
   const goTab = (tab: NavTab) => {
     let next = tab;
     if (layout.isMobile() && next === 'deck') next = 'terminal';
-    layout.setSidebarActiveTab(next);
+    layout.setSidebarActiveTab(next, { openSidebar: false });
   };
 
   const activityItems = (): ActivityBarItem[] => {
@@ -460,8 +348,7 @@ export function EnvAppShell() {
         keybind: 'mod+shift+r',
         icon: Refresh,
         execute: () => {
-          if (connecting()) return;
-          kickReconnect({ immediate: true, resetBackoff: true });
+          void connect();
         },
       },
       {
@@ -514,84 +401,87 @@ export function EnvAppShell() {
 
   return (
     <EnvContext.Provider value={{ env_id: envId, env, connect, connecting, connectError }}>
-      <Shell
-        logo={
-          <Tooltip content="Back to environments" placement="bottom" delay={0}>
-            <button
-              type="button"
-              class="flex items-center justify-center w-8 h-8 rounded cursor-pointer hover:bg-muted/60 transition-colors"
-              onClick={() => window.location.assign(`${portalOrigin()}/`)}
-              aria-label="Back to environments"
-            >
-              <img src="/logo.png" alt="Redeven" class="w-6 h-6 object-contain" />
-            </button>
-          </Tooltip>
-        }
-        activityItems={activityItems()}
-        topBarActions={
-          <div class="flex items-center gap-1">
-            <Tooltip content="Command palette" placement="bottom" delay={0}>
+      <FloeRegistryRuntime components={components}>
+        <Shell
+          sidebarMode="hidden"
+          logo={
+            <Tooltip content="Back to environments" placement="bottom" delay={0}>
               <button
                 type="button"
                 class="flex items-center justify-center w-8 h-8 rounded cursor-pointer hover:bg-muted/60 transition-colors"
-                onClick={() => cmd.open()}
-                aria-label="Command palette"
+                onClick={() => window.location.assign(`${portalOrigin()}/`)}
+                aria-label="Back to environments"
               >
-                <Search class="w-4 h-4" />
+                <img src="/logo.png" alt="Redeven" class="w-6 h-6 object-contain" />
               </button>
             </Tooltip>
-            <Tooltip content="Toggle theme" placement="bottom" delay={0}>
-              <button
-                type="button"
-                class="flex items-center justify-center w-8 h-8 rounded cursor-pointer hover:bg-muted/60 transition-colors"
-                onClick={() => theme.toggleTheme()}
-                aria-label="Toggle theme"
-              >
-                {theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />}
-              </button>
-            </Tooltip>
-          </div>
-        }
-        bottomBarItems={
-          <>
-            <div class="flex items-center gap-2 min-w-0">
-              <BottomBarItem class="min-w-0">
-                <span class="truncate">{envName()}</span>
-              </BottomBarItem>
-              <BottomBarItem class="min-w-0">
-                <span class="truncate">{envId() || '(missing env id)'}</span>
-              </BottomBarItem>
+          }
+          activityItems={activityItems()}
+          topBarActions={
+            <div class="flex items-center gap-1">
+              <Tooltip content="Command palette" placement="bottom" delay={0}>
+                <button
+                  type="button"
+                  class="flex items-center justify-center w-8 h-8 rounded cursor-pointer hover:bg-muted/60 transition-colors"
+                  onClick={() => cmd.open()}
+                  aria-label="Command palette"
+                >
+                  <Search class="w-4 h-4" />
+                </button>
+              </Tooltip>
+              <Tooltip content="Toggle theme" placement="bottom" delay={0}>
+                <button
+                  type="button"
+                  class="flex items-center justify-center w-8 h-8 rounded cursor-pointer hover:bg-muted/60 transition-colors"
+                  onClick={() => theme.toggleTheme()}
+                  aria-label="Toggle theme"
+                >
+                  {theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />}
+                </button>
+              </Tooltip>
             </div>
-            <div class="flex items-center gap-2">
-              <StatusIndicator status={status()} />
-              <BottomBarItem onClick={() => setAuditOpen(true)}>Audit log</BottomBarItem>
-              <BottomBarItem
-                onClick={connecting() ? undefined : () => kickReconnect({ immediate: true, resetBackoff: true })}
-                class={connecting() ? 'opacity-60 pointer-events-none' : undefined}
-              >
-                {connecting() ? 'Connecting...' : 'Reconnect'}
-              </BottomBarItem>
+          }
+          bottomBarItems={
+            <>
+              <div class="flex items-center gap-2 min-w-0">
+                <BottomBarItem class="min-w-0">
+                  <span class="truncate">{envName()}</span>
+                </BottomBarItem>
+                <BottomBarItem class="min-w-0">
+                  <span class="truncate">{envId() || '(missing env id)'}</span>
+                </BottomBarItem>
+              </div>
+              <div class="flex items-center gap-2">
+                <StatusIndicator status={status()} />
+                <BottomBarItem onClick={() => setAuditOpen(true)}>Audit log</BottomBarItem>
+                <BottomBarItem
+                  onClick={connecting() ? undefined : () => void connect()}
+                  class={connecting() ? 'opacity-60 pointer-events-none' : undefined}
+                >
+                  {connecting() ? 'Connecting...' : 'Reconnect'}
+                </BottomBarItem>
+              </div>
+            </>
+          }
+        >
+          <div class="h-full min-h-0 overflow-hidden flex flex-col">
+            <Show when={connectError()}>
+              <Panel class="h-auto rounded-none border-0 border-b border-error/40">
+                <PanelContent class="p-3 text-xs">
+                  <div class="text-error font-medium">Connection failed</div>
+                  <div class="text-muted-foreground break-words">{connectError()}</div>
+                </PanelContent>
+              </Panel>
+            </Show>
+
+            <div class="flex-1 min-h-0 overflow-hidden relative">
+              <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />
             </div>
-          </>
-        }
-      >
-        <div class="h-full min-h-0 overflow-hidden flex flex-col">
-          <Show when={connectError()}>
-            <Panel class="h-auto rounded-none border-0 border-b border-error/40">
-              <PanelContent class="p-3 text-xs">
-                <div class="text-error font-medium">Connection failed</div>
-                <div class="text-muted-foreground break-words">{connectError()}</div>
-              </PanelContent>
-            </Panel>
-          </Show>
-
-          <div class="flex-1 min-h-0 overflow-hidden relative">
-            <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />
           </div>
-        </div>
 
-        <GrantAuditDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
-      </Shell>
+          <GrantAuditDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
+        </Shell>
+      </FloeRegistryRuntime>
     </EnvContext.Provider>
   );
 }

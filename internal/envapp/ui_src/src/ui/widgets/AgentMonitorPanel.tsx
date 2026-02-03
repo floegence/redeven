@@ -1,7 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { LoadingOverlay, MonitoringChart, Panel, PanelContent } from '@floegence/floe-webapp-core';
-import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { getSysMonitor, type SysMonitorProcessInfo, type SysMonitorSnapshot, type SysMonitorSortBy } from '../services/sysMonitor';
+import { useProtocol, useRpc, type SysMonitorProcessInfo, type SysMonitorSnapshot, type SysMonitorSortBy } from '@floegence/floe-webapp-protocol';
 
 export type AgentMonitorPanelVariant = 'page' | 'deck';
 
@@ -58,6 +57,7 @@ function formatTimeLabel(ts: number): string {
 
 export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
   const protocol = useProtocol();
+  const rpc = useRpc();
 
   const [sortBy, setSortBy] = createSignal<SysMonitorSortBy>('cpu');
   const [data, setData] = createSignal<SysMonitorSnapshot | null>(null);
@@ -74,10 +74,10 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
     const copied = [...list];
     const mode = sortBy();
     copied.sort((a, b) => {
-      const ac = Number(a?.cpu_percent ?? 0);
-      const bc = Number(b?.cpu_percent ?? 0);
-      const am = Number(a?.memory_bytes ?? 0);
-      const bm = Number(b?.memory_bytes ?? 0);
+      const ac = Number(a?.cpuPercent ?? 0);
+      const bc = Number(b?.cpuPercent ?? 0);
+      const am = Number(a?.memoryBytes ?? 0);
+      const bm = Number(b?.memoryBytes ?? 0);
       return mode === 'memory' ? (bm - am) : (bc - ac);
     });
     return copied;
@@ -101,18 +101,15 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
   };
 
   const fetchOnce = async (opts: { silent?: boolean } = {}) => {
-    const client = protocol.client();
-    if (!client) return;
-
     const seq = ++reqSeq;
     if (!opts.silent) setLoading(true);
     setError(null);
 
     try {
-      const resp = await getSysMonitor(protocol, { sortBy: sortBy() });
+      const resp = await rpc.monitor.getSysMonitor({ sortBy: sortBy() });
       if (seq !== reqSeq) return;
 
-      const ts = Number(resp.timestamp_ms ?? 0);
+      const ts = Number(resp.timestampMs ?? 0);
       const prevTs = lastSampleTs;
       lastSampleTs = ts;
 
@@ -126,10 +123,10 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
       setData(resp);
       setSample({
         ts,
-        cpu: Math.max(0, Math.min(100, Number(resp.cpu_usage ?? 0))),
-        cpuCores: Number(resp.cpu_cores ?? 0),
-        netIn: Math.max(0, Number(resp.network_speed_received ?? 0)),
-        netOut: Math.max(0, Number(resp.network_speed_sent ?? 0)),
+        cpu: Math.max(0, Math.min(100, Number(resp.cpuUsage ?? 0))),
+        cpuCores: Number(resp.cpuCores ?? 0),
+        netIn: Math.max(0, Number(resp.networkSpeedReceived ?? 0)),
+        netOut: Math.max(0, Number(resp.networkSpeedSent ?? 0)),
       });
       setSampleSeq((v) => v + 1);
     } catch (e) {
@@ -335,8 +332,8 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
                         <tr class="border-b border-border/40 hover:bg-muted/30 transition-colors">
                           <td class="py-2 px-2 font-mono text-[11px] text-muted-foreground">{proc.pid}</td>
                           <td class="py-2 px-2 truncate max-w-[220px]" title={proc.name}>{proc.name}</td>
-                          <td class="py-2 px-2 text-right font-mono tabular-nums">{Number(proc.cpu_percent ?? 0).toFixed(1)}</td>
-                          <td class="py-2 px-2 text-right font-mono tabular-nums">{formatBytes(Number(proc.memory_bytes ?? 0))}</td>
+                          <td class="py-2 px-2 text-right font-mono tabular-nums">{Number(proc.cpuPercent ?? 0).toFixed(1)}</td>
+                          <td class="py-2 px-2 text-right font-mono tabular-nums">{formatBytes(Number(proc.memoryBytes ?? 0))}</td>
                           <td class="py-2 px-2 truncate max-w-[160px] text-muted-foreground" title={proc.username}>{proc.username}</td>
                         </tr>
                       )}
