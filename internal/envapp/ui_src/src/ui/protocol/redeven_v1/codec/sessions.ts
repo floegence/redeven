@@ -22,6 +22,7 @@ export function fromWireActiveSession(s: wire_sessions_active_session): ActiveSe
     userEmail: str((s as any)?.user_email),
     floeApp: str((s as any)?.floe_app),
     codeSpaceID: codeSpaceID || undefined,
+    tunnelUrl: str((s as any)?.tunnel_url),
     createdAtUnixMs: num((s as any)?.created_at_unix_ms),
     connectedAtUnixMs: num((s as any)?.connected_at_unix_ms),
     canReadFiles: bool((s as any)?.can_read_files),
@@ -34,4 +35,3 @@ export function fromWireSessionsListActiveResponse(resp: wire_sessions_list_acti
   const list = Array.isArray((resp as any)?.sessions) ? (resp as any).sessions : [];
   return { sessions: list.map(fromWireActiveSession) };
 }
-

@@ -33,6 +33,7 @@ type sessionsActiveSession struct {
 
 	FloeApp     string `json:"floe_app"`
 	CodeSpaceID string `json:"code_space_id,omitempty"`
+	TunnelURL   string `json:"tunnel_url"`
 
 	CreatedAtUnixMs   int64 `json:"created_at_unix_ms"`
 	ConnectedAtUnixMs int64 `json:"connected_at_unix_ms"`
@@ -81,6 +82,7 @@ func (a *Agent) listActiveSessionsSnapshot() []sessionsActiveSession {
 			UserEmail:         strings.TrimSpace(m.UserEmail),
 			FloeApp:           strings.TrimSpace(m.FloeApp),
 			CodeSpaceID:       strings.TrimSpace(m.CodeSpaceID),
+			TunnelURL:         strings.TrimSpace(s.tunnelURL),
 			CreatedAtUnixMs:   m.CreatedAtUnixMs,
 			ConnectedAtUnixMs: connectedAt,
 			CanReadFiles:      m.CanReadFiles,

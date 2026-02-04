@@ -12,18 +12,39 @@ const ERR_SW_REGISTER_DISABLED = "service worker register is disabled by flowers
 //
 // Facts (from ../code-server patches):
 // - Webview pre registers `service-worker.js?...` under `/out/vs/workbench/contrib/webview/browser/pre/`.
-// - code-server also registers a PWA service worker `serviceWorker.js` and explicitly sets
-//   `Service-Worker-Allowed: /` for it, which can expand its scope to `/`.
+// - code-server also registers a PWA service worker `serviceWorker.js` which can claim a broad scope.
 //
-// We must keep the root scope controlled by our proxy Service Worker, so only allow the
-// webview pre service worker and block everything else.
+// We must keep the root scope controlled by our proxy Service Worker:
+// - Allow the webview pre service worker (required for webviews to work).
+// - Block the PWA service worker from actually registering (it is optional), but return a no-op
+//   registration to avoid noisy user-facing errors.
 const CODE_SERVER_WEBVIEW_SW_SUFFIX = "/out/vs/workbench/contrib/webview/browser/pre/service-worker.js";
+const CODE_SERVER_PWA_SW_SUFFIX = "/out/browser/serviceWorker.js";
 
 function rejectSWRegister(): Promise<never> {
   return Promise.reject(new Error(ERR_SW_REGISTER_DISABLED));
 }
 
-function patchServiceWorkerRegisterForCodeServerWebview(): void {
+function noopSWRegister(options?: RegistrationOptions): Promise<ServiceWorkerRegistration> {
+  // A minimal stub: code-server only awaits the promise and logs on success/failure.
+  let scope = `${window.location.origin}/`;
+  try {
+    const scopeRaw = String(options?.scope ?? "").trim();
+    if (scopeRaw) scope = new URL(scopeRaw, window.location.href).toString();
+  } catch {
+    // ignore
+  }
+
+  const reg = {
+    scope,
+    update: async () => {},
+    unregister: async () => true,
+  } as unknown as ServiceWorkerRegistration;
+
+  return Promise.resolve(reg);
+}
+
+function patchServiceWorkerRegisterForCodeServer(): void {
   const sw = globalThis.navigator?.serviceWorker;
   if (!sw || typeof sw.register !== "function") return;
 
@@ -35,22 +56,27 @@ function patchServiceWorkerRegisterForCodeServerWebview(): void {
   const patched = ((scriptURL: string | URL, options?: RegistrationOptions) => {
     try {
       const u = new URL(String(scriptURL), window.location.href);
-      if (!u.pathname.endsWith(CODE_SERVER_WEBVIEW_SW_SUFFIX)) {
-        return rejectSWRegister();
-      }
-
-      // Hardening: only allow scopes within the webview pre directory.
-      // If a caller tries to widen the scope, reject it.
-      const scopeRaw = String(options?.scope ?? "").trim();
-      if (scopeRaw) {
-        const scopeURL = new URL(scopeRaw, window.location.href);
-        const dir = u.pathname.slice(0, u.pathname.lastIndexOf("/") + 1);
-        if (!scopeURL.pathname.startsWith(dir)) {
-          return rejectSWRegister();
+      if (u.pathname.endsWith(CODE_SERVER_WEBVIEW_SW_SUFFIX)) {
+        // Hardening: only allow scopes within the webview pre directory.
+        // If a caller tries to widen the scope, reject it.
+        const scopeRaw = String(options?.scope ?? "").trim();
+        if (scopeRaw) {
+          const scopeURL = new URL(scopeRaw, window.location.href);
+          const dir = u.pathname.slice(0, u.pathname.lastIndexOf("/") + 1);
+          if (!scopeURL.pathname.startsWith(dir)) {
+            return rejectSWRegister();
+          }
         }
+
+        return originalRegister(scriptURL as any, options as any);
       }
 
-      return originalRegister(scriptURL as any, options as any);
+      if (u.pathname.endsWith(CODE_SERVER_PWA_SW_SUFFIX)) {
+        // Keep root scope controlled by our proxy SW, but avoid noisy workbench errors.
+        return noopSWRegister(options);
+      }
+
+      return rejectSWRegister();
     } catch {
       return rejectSWRegister();
     }
@@ -77,7 +103,7 @@ function getProxyRuntime(): ProxyRuntime | null {
 try {
   const rt = getProxyRuntime();
   if (rt) {
-    patchServiceWorkerRegisterForCodeServerWebview();
+    patchServiceWorkerRegisterForCodeServer();
 
     // Route same-origin WebSocket connections through flowersec-proxy/ws streams.
     installWebSocketPatch({ runtime: rt });
