@@ -377,6 +377,14 @@ func (m *Manager) DetachSink(streamServer *rpc.Server) {
 	}
 }
 
+// Cleanup terminates all running terminal sessions (best-effort).
+func (m *Manager) Cleanup() {
+	if m == nil || m.term == nil {
+		return
+	}
+	m.term.Cleanup()
+}
+
 type sinkDetach struct {
 	sessionID string
 	connID    string

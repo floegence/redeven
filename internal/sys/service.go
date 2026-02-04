@@ -15,13 +15,32 @@ const (
 	//
 	// NOTE: The type_id must match Env App: internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts.
 	TypeID_SYS_PING uint32 = 4001
+
+	// TypeID_SYS_UPGRADE triggers an in-place self-upgrade (download latest + restart).
+	//
+	// NOTE: The type_id must match Env App: internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts.
+	TypeID_SYS_UPGRADE uint32 = 4002
 )
+
+type Upgrader interface {
+	StartUpgrade(ctx context.Context, meta *session.Meta, req *UpgradeRequest) (*UpgradeResponse, error)
+}
+
+type UpgradeRequest struct {
+	DryRun *bool `json:"dry_run,omitempty"`
+}
+
+type UpgradeResponse struct {
+	OK      bool   `json:"ok"`
+	Message string `json:"message,omitempty"`
+}
 
 type Options struct {
 	AgentInstanceID string
 	Version         string
 	Commit          string
 	BuildTime       string
+	Upgrader        Upgrader
 }
 
 type Service struct {
@@ -29,6 +48,8 @@ type Service struct {
 	version         string
 	commit          string
 	buildTime       string
+
+	upgrader Upgrader
 }
 
 func NewService(opts Options) *Service {
@@ -37,10 +58,11 @@ func NewService(opts Options) *Service {
 		version:         strings.TrimSpace(opts.Version),
 		commit:          strings.TrimSpace(opts.Commit),
 		buildTime:       strings.TrimSpace(opts.BuildTime),
+		upgrader:        opts.Upgrader,
 	}
 }
 
-func (s *Service) Register(r *rpc.Router, _meta *session.Meta) {
+func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 	if s == nil || r == nil {
 		return
 	}
@@ -53,6 +75,19 @@ func (s *Service) Register(r *rpc.Router, _meta *session.Meta) {
 			Commit:          s.commit,
 			BuildTime:       s.buildTime,
 		}, nil
+	})
+
+	rpctyped.Register[UpgradeRequest, UpgradeResponse](r, TypeID_SYS_UPGRADE, func(ctx context.Context, req *UpgradeRequest) (*UpgradeResponse, error) {
+		if meta == nil || !meta.CanAdmin {
+			return nil, &rpc.Error{Code: 403, Message: "admin permission denied"}
+		}
+		if s.upgrader == nil {
+			return nil, &rpc.Error{Code: 501, Message: "upgrade not supported"}
+		}
+		if req == nil {
+			req = &UpgradeRequest{}
+		}
+		return s.upgrader.StartUpgrade(ctx, meta, req)
 	})
 }
 
