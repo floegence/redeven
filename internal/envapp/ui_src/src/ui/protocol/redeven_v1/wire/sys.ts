@@ -16,3 +16,10 @@ export type wire_sys_upgrade_resp = {
   ok: boolean;
   message?: string;
 };
+
+export type wire_sys_restart_req = Record<string, never>;
+
+export type wire_sys_restart_resp = {
+  ok: boolean;
+  message?: string;
+};

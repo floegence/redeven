@@ -33,5 +33,6 @@ export const redevenV1TypeIds = {
   sys: {
     ping: 4001,
     upgrade: 4002,
+    restart: 4003,
   },
 } as const;

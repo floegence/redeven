@@ -14,3 +14,8 @@ export type SysUpgradeResponse = {
   ok: boolean;
   message?: string;
 };
+
+export type SysRestartResponse = {
+  ok: boolean;
+  message?: string;
+};

@@ -3,17 +3,17 @@ import { redevenV1TypeIds } from './typeIds';
 import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsGetHomeResponse, FsListRequest, FsListResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
 import type { SysMonitorRequest, SysMonitorSnapshot } from './sdk/monitor';
 import type { SessionsListActiveResponse } from './sdk/sessions';
-import type { SysPingResponse, SysUpgradeRequest, SysUpgradeResponse } from './sdk/sys';
+import type { SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgradeResponse } from './sdk/sys';
 import type { TerminalClearRequest, TerminalClearResponse, TerminalHistoryRequest, TerminalHistoryResponse, TerminalNameUpdateEvent, TerminalOutputEvent, TerminalSessionAttachRequest, TerminalSessionAttachResponse, TerminalSessionCreateRequest, TerminalSessionCreateResponse, TerminalSessionDeleteRequest, TerminalSessionDeleteResponse, TerminalSessionInfo, TerminalSessionStatsRequest, TerminalSessionStatsResponse, TerminalSessionsChangedEvent } from './sdk/terminal';
 import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsGetHomeResponse, fromWireFsListResponse, fromWireFsReadFileResponse, fromWireFsRenameResponse, fromWireFsWriteFileResponse, toWireFsCopyRequest, toWireFsDeleteRequest, toWireFsListRequest, toWireFsReadFileRequest, toWireFsRenameRequest, toWireFsWriteFileRequest } from './codec/fs';
 import { fromWireSysMonitorResponse, toWireSysMonitorRequest } from './codec/monitor';
 import { fromWireSessionsListActiveResponse } from './codec/sessions';
-import { fromWireSysPingResponse, fromWireSysUpgradeResponse, toWireSysUpgradeRequest } from './codec/sys';
+import { fromWireSysPingResponse, fromWireSysRestartResponse, fromWireSysUpgradeResponse, toWireSysRestartRequest, toWireSysUpgradeRequest } from './codec/sys';
 import { fromWireTerminalNameUpdateNotify, fromWireTerminalOutputNotify, fromWireTerminalSessionAttachResponse, fromWireTerminalSessionCreateResponse, fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionListResponse, fromWireTerminalSessionStatsResponse, fromWireTerminalHistoryResponse, toWireTerminalInputNotify, toWireTerminalResizeNotify, toWireTerminalSessionAttachRequest, toWireTerminalSessionCreateRequest, toWireTerminalSessionDeleteRequest, toWireTerminalSessionStatsRequest, toWireTerminalHistoryRequest, toWireTerminalClearRequest, fromWireTerminalClearResponse, fromWireTerminalSessionsChangedNotify } from './codec/terminal';
 import type { wire_fs_copy_req, wire_fs_copy_resp, wire_fs_delete_req, wire_fs_delete_resp, wire_fs_get_home_resp, wire_fs_list_req, wire_fs_list_resp, wire_fs_read_file_req, wire_fs_read_file_resp, wire_fs_rename_req, wire_fs_rename_resp, wire_fs_write_file_req, wire_fs_write_file_resp } from './wire/fs';
 import type { wire_sys_monitor_req, wire_sys_monitor_resp } from './wire/monitor';
 import type { wire_sessions_list_active_resp } from './wire/sessions';
-import type { wire_sys_ping_resp, wire_sys_upgrade_req, wire_sys_upgrade_resp } from './wire/sys';
+import type { wire_sys_ping_resp, wire_sys_restart_req, wire_sys_restart_resp, wire_sys_upgrade_req, wire_sys_upgrade_resp } from './wire/sys';
 import type { wire_terminal_clear_req, wire_terminal_clear_resp, wire_terminal_history_req, wire_terminal_history_resp, wire_terminal_name_update_notify, wire_terminal_output_notify, wire_terminal_session_attach_req, wire_terminal_session_attach_resp, wire_terminal_session_create_req, wire_terminal_session_create_resp, wire_terminal_session_delete_req, wire_terminal_session_delete_resp, wire_terminal_session_list_resp, wire_terminal_session_stats_req, wire_terminal_session_stats_resp, wire_terminal_sessions_changed_notify } from './wire/terminal';
 
 export type RedevenV1Rpc = {
@@ -50,6 +50,7 @@ export type RedevenV1Rpc = {
   sys: {
     ping: () => Promise<SysPingResponse>;
     upgrade: (req?: SysUpgradeRequest) => Promise<SysUpgradeResponse>;
+    restart: () => Promise<SysRestartResponse>;
   };
 };
 
@@ -189,6 +190,11 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireSysUpgradeRequest(req);
         const resp = await call<wire_sys_upgrade_req, wire_sys_upgrade_resp>(redevenV1TypeIds.sys.upgrade, payload);
         return fromWireSysUpgradeResponse(resp);
+      },
+      restart: async () => {
+        const payload = toWireSysRestartRequest();
+        const resp = await call<wire_sys_restart_req, wire_sys_restart_resp>(redevenV1TypeIds.sys.restart, payload);
+        return fromWireSysRestartResponse(resp);
       },
     },
   };

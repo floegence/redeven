@@ -1,5 +1,5 @@
-import type { SysPingResponse, SysUpgradeRequest, SysUpgradeResponse } from '../sdk/sys';
-import type { wire_sys_ping_resp, wire_sys_upgrade_req, wire_sys_upgrade_resp } from '../wire/sys';
+import type { SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgradeResponse } from '../sdk/sys';
+import type { wire_sys_ping_resp, wire_sys_restart_req, wire_sys_restart_resp, wire_sys_upgrade_req, wire_sys_upgrade_resp } from '../wire/sys';
 
 export function fromWireSysPingResponse(resp: wire_sys_ping_resp): SysPingResponse {
   return {
@@ -19,6 +19,17 @@ export function toWireSysUpgradeRequest(req?: SysUpgradeRequest): wire_sys_upgra
 }
 
 export function fromWireSysUpgradeResponse(resp: wire_sys_upgrade_resp): SysUpgradeResponse {
+  return {
+    ok: !!resp?.ok,
+    message: resp?.message ? String(resp.message) : undefined,
+  };
+}
+
+export function toWireSysRestartRequest(): wire_sys_restart_req {
+  return {};
+}
+
+export function fromWireSysRestartResponse(resp: wire_sys_restart_resp): SysRestartResponse {
   return {
     ok: !!resp?.ok,
     message: resp?.message ? String(resp.message) : undefined,
