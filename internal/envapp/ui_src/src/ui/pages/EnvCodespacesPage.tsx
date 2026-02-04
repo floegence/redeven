@@ -15,6 +15,7 @@ import {
   LoadingOverlay,
   Panel,
   PanelContent,
+  SnakeLoader,
   Tooltip,
   useNotification,
   type FileItem,
@@ -36,6 +37,8 @@ type SpaceStatus = Readonly<{
   running: boolean;
   pid: number;
 }>;
+
+type CodespaceBusyAction = "open" | "start" | "stop";
 
 const FLOE_APP_CODE = "com.floegence.redeven.code";
 
@@ -235,6 +238,16 @@ function StatusBadge(props: { running: boolean; pid?: number }) {
   );
 }
 
+function InlineButtonSnakeLoading(props: { class?: string }) {
+  return (
+    <span class={cn("relative inline-flex w-4 h-4 shrink-0", props.class)} aria-hidden="true">
+      <span class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 scale-[0.66] origin-center">
+        <SnakeLoader size="sm" />
+      </span>
+    </span>
+  );
+}
+
 // Empty state component
 function EmptyState(props: { onCreateClick: () => void }) {
   return (
@@ -262,13 +275,14 @@ function EmptyState(props: { onCreateClick: () => void }) {
 // Codespace card component
 function CodespaceCard(props: {
   space: SpaceStatus;
-  busy: boolean;
+  busyAction?: CodespaceBusyAction;
   onOpen: () => void;
   onStart: () => void;
   onStop: () => void;
   onDelete: () => void;
 }) {
   const isRunning = () => props.space.running;
+  const isBusy = () => !!props.busyAction;
 
   return (
     <Card
@@ -314,49 +328,81 @@ function CodespaceCard(props: {
           fallback={
             // Stopped: Start is primary action
             <div class="flex items-center gap-2 flex-1">
-              <Button size="sm" variant="default" disabled={props.busy} onClick={props.onStart} class="flex-1">
-                <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"
-                  />
-                </svg>
+              <Button size="sm" variant="default" disabled={isBusy()} onClick={props.onStart} class="flex-1">
+                <Show
+                  when={props.busyAction === "start"}
+                  fallback={
+                    <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"
+                      />
+                    </svg>
+                  }
+                >
+                  <InlineButtonSnakeLoading class="mr-1" />
+                </Show>
                 Start
               </Button>
               <Tooltip content="Open (will auto-start)" placement="top">
-                <Button size="sm" variant="ghost" disabled={props.busy} onClick={props.onOpen} class="px-2 text-muted-foreground">
-                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-                    />
-                  </svg>
+                <Button size="sm" variant="ghost" disabled={isBusy()} onClick={props.onOpen} class="px-2 text-muted-foreground">
+                  <Show
+                    when={props.busyAction === "open"}
+                    fallback={
+                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+                        />
+                      </svg>
+                    }
+                  >
+                    <InlineButtonSnakeLoading />
+                  </Show>
                 </Button>
               </Tooltip>
             </div>
           }
         >
           {/* Running: Open is primary action */}
-          <Button size="sm" variant="default" disabled={props.busy} onClick={props.onOpen} class="flex-1">
-            <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-              />
-            </svg>
+          <Button size="sm" variant="default" disabled={isBusy()} onClick={props.onOpen} class="flex-1">
+            <Show
+              when={props.busyAction === "open"}
+              fallback={
+                <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
+                  />
+                </svg>
+              }
+            >
+              <InlineButtonSnakeLoading class="mr-1" />
+            </Show>
             Open
           </Button>
         </Show>
         <div class="flex items-center gap-1">
           <Show when={isRunning()}>
             <Tooltip content="Stop codespace" placement="top">
-              <Button size="sm" variant="outline" disabled={props.busy} onClick={props.onStop} class="px-2">
-                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z" />
-                </svg>
+              <Button size="sm" variant="outline" disabled={isBusy()} onClick={props.onStop} class="px-2">
+                <Show
+                  when={props.busyAction === "stop"}
+                  fallback={
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z"
+                      />
+                    </svg>
+                  }
+                >
+                  <InlineButtonSnakeLoading />
+                </Show>
               </Button>
             </Tooltip>
           </Show>
@@ -364,7 +410,7 @@ function CodespaceCard(props: {
             <Button
               size="sm"
               variant="ghost"
-              disabled={props.busy}
+              disabled={isBusy()}
               onClick={props.onDelete}
               class="px-2 text-muted-foreground hover:text-destructive"
             >
@@ -487,7 +533,22 @@ export function EnvCodespacesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
   const [deleteTarget, setDeleteTarget] = createSignal<SpaceStatus | null>(null);
   const [deleteLoading, setDeleteLoading] = createSignal(false);
-  const [busyId, setBusyId] = createSignal<string | null>(null);
+  const [busyActions, setBusyActions] = createSignal<Record<string, CodespaceBusyAction | undefined>>({});
+
+  const busyActionOf = (codeSpaceID: string): CodespaceBusyAction | undefined => busyActions()[codeSpaceID];
+
+  const setBusyAction = (codeSpaceID: string, action: CodespaceBusyAction) => {
+    setBusyActions((prev) => ({ ...prev, [codeSpaceID]: action }));
+  };
+
+  const clearBusyAction = (codeSpaceID: string) => {
+    setBusyActions((prev) => {
+      if (!prev[codeSpaceID]) return prev;
+      const next = { ...prev };
+      delete next[codeSpaceID];
+      return next;
+    });
+  };
 
   // File tree for directory picker
   const [files, setFiles] = createSignal<FileItem[]>([]);
@@ -598,7 +659,8 @@ export function EnvCodespacesPage() {
   };
 
   const handleStart = async (space: SpaceStatus) => {
-    setBusyId(space.code_space_id);
+    if (busyActionOf(space.code_space_id)) return;
+    setBusyAction(space.code_space_id, "start");
     try {
       await fetchGatewayJSON<SpaceStatus>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/start`, { method: "POST" });
       await refetch();
@@ -606,12 +668,13 @@ export function EnvCodespacesPage() {
     } catch (e) {
       notification.error("Failed to start", e instanceof Error ? e.message : String(e));
     } finally {
-      setBusyId(null);
+      clearBusyAction(space.code_space_id);
     }
   };
 
   const handleStop = async (space: SpaceStatus) => {
-    setBusyId(space.code_space_id);
+    if (busyActionOf(space.code_space_id)) return;
+    setBusyAction(space.code_space_id, "stop");
     try {
       await fetchGatewayJSON<void>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/stop`, { method: "POST" });
       await refetch();
@@ -619,7 +682,7 @@ export function EnvCodespacesPage() {
     } catch (e) {
       notification.error("Failed to stop", e instanceof Error ? e.message : String(e));
     } finally {
-      setBusyId(null);
+      clearBusyAction(space.code_space_id);
     }
   };
 
@@ -642,13 +705,15 @@ export function EnvCodespacesPage() {
   };
 
   const handleOpen = async (space: SpaceStatus) => {
-    setBusyId(space.code_space_id);
+    if (busyActionOf(space.code_space_id)) return;
+    setBusyAction(space.code_space_id, "open");
     try {
       await openCodespace(space.code_space_id, () => {});
+      await refetch();
     } catch (e) {
       notification.error("Failed to open", e instanceof Error ? e.message : String(e));
     } finally {
-      setBusyId(null);
+      clearBusyAction(space.code_space_id);
     }
   };
 
@@ -709,7 +774,7 @@ export function EnvCodespacesPage() {
                     {(space) => (
                       <CodespaceCard
                         space={space}
-                        busy={busyId() === space.code_space_id}
+                        busyAction={busyActionOf(space.code_space_id)}
                         onOpen={() => void handleOpen(space)}
                         onStart={() => void handleStart(space)}
                         onStop={() => void handleStop(space)}
