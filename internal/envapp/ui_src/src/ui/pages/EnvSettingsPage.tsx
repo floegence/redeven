@@ -28,6 +28,7 @@ import { useEnvContext } from './EnvContext';
 // ============================================================================
 
 type ViewMode = 'ui' | 'json';
+type MaintenanceKind = 'upgrade' | 'restart';
 
 type PermissionSet = Readonly<{ read: boolean; write: boolean; execute: boolean }>;
 type PermissionPolicy = Readonly<{
@@ -319,7 +320,7 @@ export function EnvSettingsPage() {
   const canInteract = createMemo(() => protocol.status() === 'connected' && !settings.loading && !settings.error);
 
   // ============================================================================
-  // Agent self-upgrade (E2EE, data plane)
+  // Agent maintenance actions (E2EE, data plane)
   // ============================================================================
 
   const canAdmin = createMemo(() => !!env.env()?.permissions?.can_admin || !!env.env()?.permissions?.is_owner);
@@ -337,12 +338,18 @@ export function EnvSettingsPage() {
   );
 
   const [upgradeOpen, setUpgradeOpen] = createSignal(false);
-  const [upgrading, setUpgrading] = createSignal(false);
-  const [upgradeError, setUpgradeError] = createSignal<string | null>(null);
-  const [upgradePolledStatus, setUpgradePolledStatus] = createSignal<string | null>(null);
+  const [restartOpen, setRestartOpen] = createSignal(false);
+
+  const [maintenanceKind, setMaintenanceKind] = createSignal<MaintenanceKind | null>(null);
+  const maintaining = createMemo(() => maintenanceKind() !== null);
+  const isUpgrading = createMemo(() => maintenanceKind() === 'upgrade');
+  const isRestarting = createMemo(() => maintenanceKind() === 'restart');
+
+  const [maintenanceError, setMaintenanceError] = createSignal<string | null>(null);
+  const [maintenancePolledStatus, setMaintenancePolledStatus] = createSignal<string | null>(null);
 
   const displayedStatus = createMemo(() => {
-    const st = upgrading() && upgradePolledStatus() ? String(upgradePolledStatus()) : controlplaneStatus();
+    const st = maintaining() && maintenancePolledStatus() ? String(maintenancePolledStatus()) : controlplaneStatus();
     return st || 'unknown';
   });
 
@@ -354,9 +361,13 @@ export function EnvSettingsPage() {
     return `${st.slice(0, 1).toUpperCase()}${st.slice(1)}`;
   });
 
-  const agentCardBadge = createMemo(() => (upgrading() ? 'Updating' : statusLabel()));
+  const agentCardBadge = createMemo(() => {
+    if (isUpgrading()) return 'Updating';
+    if (isRestarting()) return 'Restarting';
+    return statusLabel();
+  });
   const agentCardBadgeVariant = createMemo<'default' | 'warning' | 'success'>(() => {
-    if (upgrading()) return 'warning';
+    if (maintaining()) return 'warning';
     const st = displayedStatus();
     if (st === 'online') return 'success';
     if (st === 'offline') return 'warning';
@@ -364,16 +375,27 @@ export function EnvSettingsPage() {
   });
 
   const canStartUpgrade = createMemo(() => {
-    if (upgrading()) return false;
+    if (maintaining()) return false;
     if (protocol.status() !== 'connected') return false;
     if (!canAdmin()) return false;
     return controlplaneStatus() === 'online';
   });
 
-  const upgradeStage = createMemo(() => {
-    if (!upgrading()) return null;
-    if (protocol.status() === 'connected') return 'Downloading and installing update...';
-    const st = upgradePolledStatus();
+  const canStartRestart = createMemo(() => {
+    if (maintaining()) return false;
+    if (protocol.status() !== 'connected') return false;
+    if (!canAdmin()) return false;
+    return controlplaneStatus() === 'online';
+  });
+
+  const maintenanceStage = createMemo(() => {
+    const kind = maintenanceKind();
+    if (!kind) return null;
+    if (protocol.status() === 'connected') {
+      if (kind === 'upgrade') return 'Downloading and installing update...';
+      return 'Restarting agent...';
+    }
+    const st = maintenancePolledStatus();
     if (st && st !== 'online') return 'Agent restarting...';
     if (st === 'online') return 'Reconnecting...';
     return 'Waiting for agent...';
@@ -381,81 +403,85 @@ export function EnvSettingsPage() {
 
   const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
-  let upgradeAbort = false;
+  let maintenanceAbort = false;
   onCleanup(() => {
-    upgradeAbort = true;
+    maintenanceAbort = true;
   });
 
-  const startUpgrade = async () => {
-    if (upgrading()) return;
-    setUpgradeError(null);
-    setUpgradePolledStatus(null);
+  const startMaintenance = async (kind: MaintenanceKind) => {
+    if (maintaining()) return;
+    setMaintenanceError(null);
+    setMaintenancePolledStatus(null);
 
     const envId = env.env_id().trim();
     if (!envId) {
       const msg = 'Missing env context. Please reopen from the Redeven Portal.';
-      setUpgradeError(msg);
-      notify.error('Update failed', msg);
+      setMaintenanceError(msg);
+      notify.error(kind === 'upgrade' ? 'Update failed' : 'Restart failed', msg);
       return;
     }
 
     if (!canAdmin()) {
       const msg = 'Admin permission required.';
-      setUpgradeError(msg);
-      notify.error('Update failed', msg);
+      setMaintenanceError(msg);
+      notify.error(kind === 'upgrade' ? 'Update failed' : 'Restart failed', msg);
       return;
     }
 
-    setUpgrading(true);
+    setMaintenanceKind(kind);
 
-    const beforeVersion = agentPing()?.version ? String(agentPing()!.version) : '';
+    const beforeVersion = kind === 'upgrade' && agentPing()?.version ? String(agentPing()!.version) : '';
 
     let started = false;
     try {
-      const resp = await rpc.sys.upgrade({});
+      const resp = kind === 'upgrade' ? await rpc.sys.upgrade({}) : await rpc.sys.restart();
       if (!resp?.ok) {
-        const msg = resp?.message ? String(resp.message) : 'Upgrade rejected.';
-        setUpgradeError(msg);
-        notify.error('Update failed', msg);
-        setUpgrading(false);
+        const msg = resp?.message ? String(resp.message) : kind === 'upgrade' ? 'Upgrade rejected.' : 'Restart rejected.';
+        setMaintenanceError(msg);
+        notify.error(kind === 'upgrade' ? 'Update failed' : 'Restart failed', msg);
+        setMaintenanceKind(null);
         return;
       }
       started = true;
-      notify.success('Update started', resp?.message ? String(resp.message) : 'The agent will restart shortly.');
+      notify.success(
+        kind === 'upgrade' ? 'Update started' : 'Restart started',
+        resp?.message ? String(resp.message) : 'The agent will restart shortly.',
+      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       // If the call fails due to a disconnect, assume the upgrade has started.
       if (protocol.status() !== 'connected') {
         started = true;
-        notify.info('Update started', 'Waiting for agent restart...');
+        notify.info(kind === 'upgrade' ? 'Update started' : 'Restart started', 'Waiting for agent restart...');
       } else {
-        setUpgradeError(msg || 'Request failed.');
-        notify.error('Update failed', msg || 'Request failed.');
-        setUpgrading(false);
+        setMaintenanceError(msg || 'Request failed.');
+        notify.error(kind === 'upgrade' ? 'Update failed' : 'Restart failed', msg || 'Request failed.');
+        setMaintenanceKind(null);
         return;
       }
     } finally {
       setUpgradeOpen(false);
+      setRestartOpen(false);
     }
 
     if (!started) {
-      setUpgrading(false);
+      setMaintenanceKind(null);
       return;
     }
 
     const startedAt = Date.now();
-    const timeoutMs = 10 * 60 * 1000;
+    const timeoutMs = kind === 'upgrade' ? 10 * 60 * 1000 : 5 * 60 * 1000;
     const pollIntervalMs = 1500;
     let sawDisconnect = false;
 
     for (;;) {
-      if (upgradeAbort) return;
+      if (maintenanceAbort) return;
 
       if (Date.now() - startedAt > timeoutMs) {
         const msg = 'Timed out waiting for the agent to restart.';
-        setUpgradeError(msg);
-        notify.error('Update timed out', msg);
-        setUpgrading(false);
+        setMaintenanceError(msg);
+        notify.error(kind === 'upgrade' ? 'Update timed out' : 'Restart timed out', msg);
+        setMaintenanceKind(null);
         return;
       }
 
@@ -466,12 +492,12 @@ export function EnvSettingsPage() {
       try {
         const detail = await getEnvironment(envId);
         const st = detail?.status ? String(detail.status) : null;
-        if (st) setUpgradePolledStatus(st);
+        if (st) setMaintenancePolledStatus(st);
       } catch {
         // Ignore transient control plane failures; keep polling.
       }
 
-      if (sawDisconnect && upgradePolledStatus() === 'online') {
+      if (sawDisconnect && maintenancePolledStatus() === 'online') {
         try {
           await env.connect();
         } catch {
@@ -485,13 +511,10 @@ export function EnvSettingsPage() {
           const v = p?.version ? String(p.version) : '';
           setAgentPingSeq((n) => n + 1);
 
-          setUpgrading(false);
+          setMaintenanceKind(null);
 
-          if (beforeVersion && v && v !== beforeVersion) {
-            notify.success('Updated', `Agent updated to ${v}.`);
-          } else {
-            notify.success('Reconnected', 'Agent is back online.');
-          }
+          if (kind === 'upgrade' && beforeVersion && v && v !== beforeVersion) notify.success('Updated', `Agent updated to ${v}.`);
+          else notify.success('Reconnected', 'Agent is back online.');
           return;
         } catch {
           // Still reconnecting; keep polling.
@@ -502,7 +525,10 @@ export function EnvSettingsPage() {
     }
   };
 
-  const connectOverlayMessage = createMemo(() => (upgrading() ? 'Agent restarting...' : 'Connecting to agent...'));
+  const startUpgrade = async () => startMaintenance('upgrade');
+  const startRestart = async () => startMaintenance('restart');
+
+  const connectOverlayMessage = createMemo(() => (maintaining() ? 'Agent restarting...' : 'Connecting to agent...'));
 
   // View mode signals
   const [configView, setConfigView] = createSignal<ViewMode>('ui');
@@ -1222,14 +1248,19 @@ export function EnvSettingsPage() {
         <SettingsCard
           icon={Zap}
           title="Agent"
-          description="Version and self-upgrade."
+          description="Version and maintenance actions."
           badge={agentCardBadge()}
           badgeVariant={agentCardBadgeVariant()}
-          error={upgradeError()}
+          error={maintenanceError()}
           actions={
-            <Button size="sm" variant="default" onClick={() => setUpgradeOpen(true)} loading={upgrading()} disabled={!canStartUpgrade()}>
-              Update agent
-            </Button>
+            <div class="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setRestartOpen(true)} loading={isRestarting()} disabled={!canStartRestart()}>
+                Restart agent
+              </Button>
+              <Button size="sm" variant="default" onClick={() => setUpgradeOpen(true)} loading={isUpgrading()} disabled={!canStartUpgrade()}>
+                Update agent
+              </Button>
+            </div>
           }
         >
           <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-1 divide-y md:divide-y-0 divide-border">
@@ -1239,11 +1270,11 @@ export function EnvSettingsPage() {
           </div>
 
           <Show when={!canAdmin()}>
-            <div class="text-xs text-muted-foreground">Admin permission required to update.</div>
+            <div class="text-xs text-muted-foreground">Admin permission required.</div>
           </Show>
 
-          <Show when={upgradeStage()}>
-            <div class="text-xs text-muted-foreground">{upgradeStage()}</div>
+          <Show when={maintenanceStage()}>
+            <div class="text-xs text-muted-foreground">{maintenanceStage()}</div>
           </Show>
         </SettingsCard>
 
@@ -2020,8 +2051,23 @@ export function EnvSettingsPage() {
         onOpenChange={(open) => setUpgradeOpen(open)}
         title="Update agent"
         confirmText="Update"
-        loading={upgrading()}
+        loading={isUpgrading()}
         onConfirm={() => void startUpgrade()}
+      >
+        <div class="space-y-3">
+          <p class="text-sm">This will restart the agent and terminate all running activities. Continue?</p>
+          <p class="text-xs text-muted-foreground">You will reconnect automatically after the agent comes back online.</p>
+        </div>
+      </ConfirmDialog>
+
+      {/* Restart Agent Confirmation Dialog */}
+      <ConfirmDialog
+        open={restartOpen()}
+        onOpenChange={(open) => setRestartOpen(open)}
+        title="Restart agent"
+        confirmText="Restart"
+        loading={isRestarting()}
+        onConfirm={() => void startRestart()}
       >
         <div class="space-y-3">
           <p class="text-sm">This will restart the agent and terminate all running activities. Continue?</p>

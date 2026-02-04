@@ -39,14 +39,21 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 		return &syssvc.UpgradeResponse{OK: true, Message: "Dry run ok."}, nil
 	}
 
-	exePath, installDir, err := resolveSelfUpgradePaths()
+	exePath, installDir, err := resolveSelfExecPaths()
 	if err != nil {
 		a.log.Warn("sys_upgrade: resolve self paths failed", "error", err)
 		return nil, &rpc.Error{Code: 500, Message: "failed to resolve agent executable path"}
 	}
 
-	if !a.upgrading.CompareAndSwap(false, true) {
-		return &syssvc.UpgradeResponse{OK: false, Message: "Upgrade already in progress."}, nil
+	if !a.maintenance.CompareAndSwap(maintenanceOpNone, maintenanceOpUpgrade) {
+		switch a.maintenance.Load() {
+		case maintenanceOpUpgrade:
+			return &syssvc.UpgradeResponse{OK: false, Message: "Upgrade already in progress."}, nil
+		case maintenanceOpRestart:
+			return &syssvc.UpgradeResponse{OK: false, Message: "Restart is in progress."}, nil
+		default:
+			return &syssvc.UpgradeResponse{OK: false, Message: "Maintenance already in progress."}, nil
+		}
 	}
 
 	userPublicID := ""
@@ -71,7 +78,7 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 	}, nil
 }
 
-func resolveSelfUpgradePaths() (exePath string, installDir string, err error) {
+func resolveSelfExecPaths() (exePath string, installDir string, err error) {
 	exePath, err = os.Executable()
 	if err != nil {
 		return "", "", err
@@ -118,7 +125,7 @@ func (a *Agent) runSelfUpgrade(exePath string, installDir string, userPublicID s
 			"output_len", out.Len(),
 			"output_snippet", truncateForLog(out.String(), 8_000),
 		)
-		a.upgrading.Store(false)
+		a.maintenance.Store(maintenanceOpNone)
 		return
 	}
 
@@ -149,7 +156,7 @@ func (a *Agent) runSelfUpgrade(exePath string, installDir string, userPublicID s
 			"channel_id", channelID,
 			"error", err,
 		)
-		a.upgrading.Store(false)
+		a.maintenance.Store(maintenanceOpNone)
 		return
 	}
 }

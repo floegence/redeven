@@ -20,6 +20,11 @@ const (
 	//
 	// NOTE: The type_id must match Env App: internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts.
 	TypeID_SYS_UPGRADE uint32 = 4002
+
+	// TypeID_SYS_RESTART restarts the agent process (best-effort).
+	//
+	// NOTE: The type_id must match Env App: internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts.
+	TypeID_SYS_RESTART uint32 = 4003
 )
 
 type Upgrader interface {
@@ -35,12 +40,24 @@ type UpgradeResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
+type Restarter interface {
+	StartRestart(ctx context.Context, meta *session.Meta, req *RestartRequest) (*RestartResponse, error)
+}
+
+type RestartRequest struct{}
+
+type RestartResponse struct {
+	OK      bool   `json:"ok"`
+	Message string `json:"message,omitempty"`
+}
+
 type Options struct {
 	AgentInstanceID string
 	Version         string
 	Commit          string
 	BuildTime       string
 	Upgrader        Upgrader
+	Restarter       Restarter
 }
 
 type Service struct {
@@ -49,7 +66,8 @@ type Service struct {
 	commit          string
 	buildTime       string
 
-	upgrader Upgrader
+	upgrader  Upgrader
+	restarter Restarter
 }
 
 func NewService(opts Options) *Service {
@@ -59,6 +77,7 @@ func NewService(opts Options) *Service {
 		commit:          strings.TrimSpace(opts.Commit),
 		buildTime:       strings.TrimSpace(opts.BuildTime),
 		upgrader:        opts.Upgrader,
+		restarter:       opts.Restarter,
 	}
 }
 
@@ -88,6 +107,19 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 			req = &UpgradeRequest{}
 		}
 		return s.upgrader.StartUpgrade(ctx, meta, req)
+	})
+
+	rpctyped.Register[RestartRequest, RestartResponse](r, TypeID_SYS_RESTART, func(ctx context.Context, req *RestartRequest) (*RestartResponse, error) {
+		if meta == nil || !meta.CanAdmin {
+			return nil, &rpc.Error{Code: 403, Message: "admin permission denied"}
+		}
+		if s.restarter == nil {
+			return nil, &rpc.Error{Code: 501, Message: "restart not supported"}
+		}
+		if req == nil {
+			req = &RestartRequest{}
+		}
+		return s.restarter.StartRestart(ctx, meta, req)
 	})
 }
 

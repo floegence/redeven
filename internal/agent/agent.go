@@ -49,6 +49,12 @@ const (
 	FloeAppRedevenPortForward = "com.floegence.redeven.portforward"
 )
 
+const (
+	maintenanceOpNone    int32 = 0
+	maintenanceOpUpgrade int32 = 1
+	maintenanceOpRestart int32 = 2
+)
+
 type Options struct {
 	Config *config.Config
 	// ConfigPath is the path used to load the config file (used to derive state_dir).
@@ -74,7 +80,7 @@ type Agent struct {
 	sys  *syssvc.Service
 	code *codeapp.Service
 
-	upgrading atomic.Bool
+	maintenance atomic.Int32
 
 	mu       sync.Mutex
 	sessions map[string]*activeSession // channel_id -> session
@@ -151,6 +157,7 @@ func New(opts Options) (*Agent, error) {
 		Commit:          opts.Commit,
 		BuildTime:       opts.BuildTime,
 		Upgrader:        &sysUpgrader{a: a},
+		Restarter:       &sysRestarter{a: a},
 	})
 
 	codeSvc, err := codeapp.New(context.Background(), codeapp.Options{
@@ -294,8 +301,8 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 }
 
 func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) {
-	if a != nil && a.upgrading.Load() {
-		a.log.Debug("upgrade in progress; ignoring grant_server notify")
+	if a != nil && a.maintenance.Load() != maintenanceOpNone {
+		a.log.Debug("maintenance in progress; ignoring grant_server notify", "op", a.maintenance.Load())
 		return
 	}
 
