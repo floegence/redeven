@@ -8,7 +8,6 @@ import {
   CardHeader,
   CardTitle,
   cn,
-  ConfirmDialog,
   Dialog,
   DirectoryInput,
   Input,
@@ -801,19 +800,29 @@ export function EnvCodespacesPage() {
       />
 
       {/* Delete confirmation dialog */}
-      <ConfirmDialog
+      <Dialog
         open={deleteDialogOpen()}
         onOpenChange={(open) => {
+          if (deleteLoading()) return;
           if (!open) {
             setDeleteDialogOpen(false);
             setDeleteTarget(null);
           }
         }}
         title="Delete Codespace"
-        confirmText="Delete"
-        variant="destructive"
-        loading={deleteLoading()}
-        onConfirm={handleDeleteConfirm}
+        footer={
+          <div class="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading()}>
+              Cancel
+            </Button>
+            <Button size="sm" variant="destructive" onClick={handleDeleteConfirm} disabled={deleteLoading()}>
+              <Show when={deleteLoading()}>
+                <InlineButtonSnakeLoading class="mr-1" />
+              </Show>
+              Delete
+            </Button>
+          </div>
+        }
       >
         <div class="space-y-2">
           <p class="text-sm">
@@ -823,7 +832,7 @@ export function EnvCodespacesPage() {
             This will remove the codespace configuration. The directory at <span class="font-mono">{deleteTarget()?.workspace_path}</span> will not be deleted.
           </p>
         </div>
-      </ConfirmDialog>
+      </Dialog>
     </div>
   );
 }
