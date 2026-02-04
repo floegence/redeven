@@ -19,7 +19,12 @@ type Meta struct {
 	CanReadFiles      bool   `json:"can_read_files"`
 	CanWriteFiles     bool   `json:"can_write_files"`
 	CanExecute        bool   `json:"can_execute"`
-	CreatedAtUnixMs   int64  `json:"created_at_unix_ms"`
+	// CanAdmin gates management actions on the data plane (e.g. codespace create/delete/rename).
+	//
+	// NOTE: this is the namespace-level "admin" bit computed by service metadata and delivered by control plane.
+	// It is NOT part of the local permission_policy RWX clamp.
+	CanAdmin        bool  `json:"can_admin"`
+	CreatedAtUnixMs int64 `json:"created_at_unix_ms"`
 }
 
 // GrantServerNotify is a control-channel notification:

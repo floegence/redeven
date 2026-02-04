@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/base32"
 	"encoding/json"
 	"errors"
 	"net"
@@ -14,6 +15,8 @@ import (
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"github.com/floegence/redeven-agent/internal/session"
 )
 
 type stubBackend struct {
@@ -96,6 +99,23 @@ func writeTestConfig(t *testing.T) string {
 	return p
 }
 
+func envOriginWithChannel(channelID string) string {
+	enc := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString([]byte(channelID))
+	enc = strings.ToLower(strings.TrimSpace(enc))
+	return "https://env-123.ch-" + enc + ".example.com"
+}
+
+func resolveMetaForTest(channelID string, meta session.Meta) func(channelID string) (*session.Meta, bool) {
+	return func(ch string) (*session.Meta, bool) {
+		if strings.TrimSpace(ch) != strings.TrimSpace(channelID) {
+			return nil, false
+		}
+		m := meta
+		m.ChannelID = strings.TrimSpace(channelID)
+		return &m, true
+	}
+}
+
 func TestGateway_ManagementAPI_EnvOriginOnly(t *testing.T) {
 	t.Parallel()
 
@@ -108,7 +128,15 @@ func TestGateway_ManagementAPI_EnvOriginOnly(t *testing.T) {
 			return []SpaceStatus{{CodeSpaceID: "abc"}}, nil
 		},
 	}
-	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
+	channelID := "ch_test_1"
+	envOrigin := envOriginWithChannel(channelID)
+	gw, err := New(Options{
+		Backend:            b,
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanReadFiles: true}),
+	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -116,7 +144,7 @@ func TestGateway_ManagementAPI_EnvOriginOnly(t *testing.T) {
 	// Env origin should pass.
 	{
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/spaces", nil)
-		req.Header.Set("Origin", "https://env-123.example.com")
+		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		gw.serveHTTP(rr, req)
 
@@ -157,7 +185,13 @@ func TestGateway_DistRoutes_AreIsolated(t *testing.T) {
 		"inject.js":      {Data: []byte("console.log('inject');")},
 		"other.txt":      {Data: []byte("should-not-be-served")},
 	}
-	gw, err := New(Options{Backend: &stubBackend{}, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -271,12 +305,18 @@ func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
 		},
 	}
 
-	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
+	channelID := "ch_test_2"
+	envOrigin := envOriginWithChannel(channelID)
+	gw, err := New(Options{
+		Backend:            b,
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanReadFiles: true, CanWriteFiles: true, CanExecute: true, CanAdmin: true}),
+	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-
-	envOrigin := "https://env-123.example.com"
 
 	// POST create
 	{
@@ -400,6 +440,125 @@ func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
 	}
 }
 
+func TestGateway_ManagementAPI_PermissionGates(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+
+	channelID := "ch_perm_1"
+	envOrigin := envOriginWithChannel(channelID)
+
+	// Admin actions should be forbidden when can_admin=false.
+	{
+		b := &stubBackend{
+			createSpace: func(ctx context.Context, req CreateSpaceRequest) (*SpaceStatus, error) {
+				t.Fatalf("CreateSpace must not be called without admin")
+				return nil, nil
+			},
+			updateSpace: func(ctx context.Context, codeSpaceID string, req UpdateSpaceRequest) (*SpaceStatus, error) {
+				t.Fatalf("UpdateSpace must not be called without admin")
+				return nil, nil
+			},
+			deleteSpace: func(ctx context.Context, codeSpaceID string) error {
+				t.Fatalf("DeleteSpace must not be called without admin")
+				return nil
+			},
+		}
+		gw, err := New(Options{
+			Backend:            b,
+			DistFS:             dist,
+			ListenAddr:         "127.0.0.1:0",
+			ConfigPath:         writeTestConfig(t),
+			ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanReadFiles: true, CanExecute: true, CanAdmin: false}),
+		})
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+
+		// POST create
+		{
+			req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/spaces", strings.NewReader(`{"path":"/tmp","name":"n","description":"d"}`))
+			req.Header.Set("Origin", envOrigin)
+			rr := httptest.NewRecorder()
+			gw.serveHTTP(rr, req)
+			if rr.Code != http.StatusForbidden {
+				t.Fatalf("create status = %d, want %d", rr.Code, http.StatusForbidden)
+			}
+		}
+
+		// PATCH rename/description
+		{
+			req := httptest.NewRequest(http.MethodPatch, "/_redeven_proxy/api/spaces/abc", strings.NewReader(`{"name":"n2"}`))
+			req.Header.Set("Origin", envOrigin)
+			rr := httptest.NewRecorder()
+			gw.serveHTTP(rr, req)
+			if rr.Code != http.StatusForbidden {
+				t.Fatalf("patch status = %d, want %d", rr.Code, http.StatusForbidden)
+			}
+		}
+
+		// DELETE
+		{
+			req := httptest.NewRequest(http.MethodDelete, "/_redeven_proxy/api/spaces/abc", nil)
+			req.Header.Set("Origin", envOrigin)
+			rr := httptest.NewRecorder()
+			gw.serveHTTP(rr, req)
+			if rr.Code != http.StatusForbidden {
+				t.Fatalf("delete status = %d, want %d", rr.Code, http.StatusForbidden)
+			}
+		}
+	}
+
+	// Execute actions should be forbidden when can_execute=false.
+	{
+		b := &stubBackend{
+			startSpace: func(ctx context.Context, codeSpaceID string) (*SpaceStatus, error) {
+				t.Fatalf("StartSpace must not be called without execute")
+				return nil, nil
+			},
+			stopSpace: func(ctx context.Context, codeSpaceID string) error {
+				t.Fatalf("StopSpace must not be called without execute")
+				return nil
+			},
+		}
+		gw, err := New(Options{
+			Backend:            b,
+			DistFS:             dist,
+			ListenAddr:         "127.0.0.1:0",
+			ConfigPath:         writeTestConfig(t),
+			ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanReadFiles: true, CanExecute: false, CanAdmin: true}),
+		})
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+
+		// POST start
+		{
+			req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/spaces/abc/start", nil)
+			req.Header.Set("Origin", envOrigin)
+			rr := httptest.NewRecorder()
+			gw.serveHTTP(rr, req)
+			if rr.Code != http.StatusForbidden {
+				t.Fatalf("start status = %d, want %d", rr.Code, http.StatusForbidden)
+			}
+		}
+
+		// POST stop
+		{
+			req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/spaces/abc/stop", nil)
+			req.Header.Set("Origin", envOrigin)
+			rr := httptest.NewRecorder()
+			gw.serveHTTP(rr, req)
+			if rr.Code != http.StatusForbidden {
+				t.Fatalf("stop status = %d, want %d", rr.Code, http.StatusForbidden)
+			}
+		}
+	}
+}
+
 func TestGateway_Settings_RedactsSecrets(t *testing.T) {
 	t.Parallel()
 
@@ -409,7 +568,15 @@ func TestGateway_Settings_RedactsSecrets(t *testing.T) {
 	}
 
 	cfgPath := writeTestConfig(t)
-	gw, err := New(Options{Backend: &stubBackend{}, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: cfgPath})
+	channelID := "ch_test_3"
+	envOrigin := envOriginWithChannel(channelID)
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         cfgPath,
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanReadFiles: true}),
+	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -417,7 +584,7 @@ func TestGateway_Settings_RedactsSecrets(t *testing.T) {
 	// Env origin should be able to read settings.
 	{
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil)
-		req.Header.Set("Origin", "https://env-123.example.com")
+		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		gw.serveHTTP(rr, req)
 
@@ -508,7 +675,13 @@ func TestGateway_CodeServerProxy_RewritesHostAndStripsForwardedHeaders(t *testin
 			return port, nil
 		},
 	}
-	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
+	gw, err := New(Options{
+		Backend:            b,
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -559,7 +732,13 @@ func TestGateway_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder(t *test
 			return 0, errors.New("should not be called")
 		},
 	}
-	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
+	gw, err := New(Options{
+		Backend:            b,
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -600,7 +779,13 @@ func TestGateway_CodeServerProxy_RequiresCodespaceOrigin(t *testing.T) {
 			return 0, errors.New("should not be called")
 		},
 	}
-	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
+	gw, err := New(Options{
+		Backend:            b,
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -624,7 +809,13 @@ func TestGateway_DistFS_UsesEmbedLayout(t *testing.T) {
 		"env/index.html": {Data: []byte("<html>env</html>")},
 		"inject.js":      {Data: []byte("console.log('inject');")},
 	}
-	gw, err := New(Options{Backend: &stubBackend{}, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

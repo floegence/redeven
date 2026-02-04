@@ -21,14 +21,16 @@ import (
 
 	"github.com/floegence/redeven-agent/internal/ai"
 	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven-agent/internal/session"
 )
 
 type Options struct {
-	Logger     *slog.Logger
-	ListenAddr string
-	DistFS     fs.FS
-	Backend    Backend
-	AI         *ai.Service
+	Logger             *slog.Logger
+	ListenAddr         string
+	DistFS             fs.FS
+	Backend            Backend
+	AI                 *ai.Service
+	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
 	// ConfigPath is the absolute path to the agent config file.
 	// It is used to read and persist settings updates initiated from the Env App UI.
 	ConfigPath string
@@ -75,6 +77,8 @@ type Gateway struct {
 	backend Backend
 	ai      *ai.Service
 
+	resolveSessionMeta func(channelID string) (*session.Meta, bool)
+
 	configPath string
 	configMu   sync.Mutex
 
@@ -96,6 +100,9 @@ func New(opts Options) (*Gateway, error) {
 	if strings.TrimSpace(opts.ConfigPath) == "" {
 		return nil, errors.New("missing ConfigPath")
 	}
+	if opts.ResolveSessionMeta == nil {
+		return nil, errors.New("missing ResolveSessionMeta")
+	}
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -112,13 +119,14 @@ func New(opts Options) (*Gateway, error) {
 	dist := http.StripPrefix("/_redeven_proxy", http.FileServer(http.FS(opts.DistFS)))
 
 	return &Gateway{
-		log:        logger,
-		backend:    opts.Backend,
-		ai:         opts.AI,
-		configPath: strings.TrimSpace(opts.ConfigPath),
-		distFS:     opts.DistFS,
-		dist:       dist,
-		addr:       addr,
+		log:                logger,
+		backend:            opts.Backend,
+		ai:                 opts.AI,
+		resolveSessionMeta: opts.ResolveSessionMeta,
+		configPath:         strings.TrimSpace(opts.ConfigPath),
+		distFS:             opts.DistFS,
+		dist:               dist,
+		addr:               addr,
 	}, nil
 }
 
@@ -374,9 +382,71 @@ func (g *Gateway) updateConfigLocked(mut func(cfg *config.Config) error) (*confi
 	return cfg, nil
 }
 
+type requiredPermission int
+
+const (
+	requiredPermissionRead requiredPermission = iota
+	requiredPermissionWrite
+	requiredPermissionExecute
+	requiredPermissionAdmin
+)
+
+func (g *Gateway) requirePermission(w http.ResponseWriter, r *http.Request, perm requiredPermission) (*session.Meta, bool) {
+	if g == nil || w == nil || r == nil {
+		return nil, false
+	}
+	if g.resolveSessionMeta == nil {
+		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "gateway not ready"})
+		return nil, false
+	}
+
+	channelID, err := channelIDFromRequest(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid session origin"})
+		return nil, false
+	}
+
+	meta, ok := g.resolveSessionMeta(channelID)
+	if !ok || meta == nil {
+		writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "permission denied"})
+		return nil, false
+	}
+
+	switch perm {
+	case requiredPermissionRead:
+		if !meta.CanReadFiles {
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "read permission denied"})
+			return nil, false
+		}
+	case requiredPermissionWrite:
+		if !meta.CanWriteFiles {
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "write permission denied"})
+			return nil, false
+		}
+	case requiredPermissionExecute:
+		if !meta.CanExecute {
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "execute permission denied"})
+			return nil, false
+		}
+	case requiredPermissionAdmin:
+		if !meta.CanAdmin {
+			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "admin permission denied"})
+			return nil, false
+		}
+	default:
+		writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "permission denied"})
+		return nil, false
+	}
+
+	return meta, true
+}
+
 func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/settings":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
 		cfg, err := g.loadConfigLocked()
 		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
@@ -386,6 +456,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/settings":
+		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			return
+		}
 		type settingsUpdateReq struct {
 			RootDir *string `json:"root_dir,omitempty"`
 			Shell   *string `json:"shell,omitempty"`
@@ -525,6 +598,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/models":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
 		if g.ai == nil || !g.ai.Enabled() {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
@@ -538,6 +614,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/runs":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
 		if g.ai == nil || !g.ai.Enabled() {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
@@ -584,6 +663,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/runs/"):
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
 		if g.ai == nil || !g.ai.Enabled() {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
@@ -638,6 +720,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/uploads":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
 		if g.ai == nil || !g.ai.Enabled() {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
@@ -670,6 +755,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/uploads/"):
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
 		if g.ai == nil || !g.ai.Enabled() {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
@@ -705,6 +793,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/spaces":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
 		spaces, err := g.backend.ListSpaces(r.Context())
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
@@ -714,6 +805,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/spaces":
+		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			return
+		}
 		var req CreateSpaceRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
@@ -743,6 +837,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if r.Method == http.MethodDelete && action == "" {
+			if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+				return
+			}
 			if err := g.backend.DeleteSpace(r.Context(), id); err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
@@ -751,6 +848,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodPatch && action == "" {
+			if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+				return
+			}
 			var req UpdateSpaceRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
@@ -769,6 +869,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodPost && action == "start" {
+			if _, ok := g.requirePermission(w, r, requiredPermissionExecute); !ok {
+				return
+			}
 			s, err := g.backend.StartSpace(r.Context(), id)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
@@ -778,6 +881,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodPost && action == "stop" {
+			if _, ok := g.requirePermission(w, r, requiredPermissionExecute); !ok {
+				return
+			}
 			if err := g.backend.StopSpace(r.Context(), id); err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return

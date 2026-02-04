@@ -132,12 +132,13 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	gw, err := gateway.New(gateway.Options{
-		Logger:     logger,
-		DistFS:     mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
-		Backend:    svc,
-		AI:         aiSvc,
-		ConfigPath: strings.TrimSpace(opts.ConfigPath),
-		ListenAddr: "127.0.0.1:0",
+		Logger:             logger,
+		DistFS:             mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
+		Backend:            svc,
+		AI:                 aiSvc,
+		ResolveSessionMeta: opts.ResolveSessionMeta,
+		ConfigPath:         strings.TrimSpace(opts.ConfigPath),
+		ListenAddr:         "127.0.0.1:0",
 	})
 	if err != nil {
 		_ = reg.Close()
