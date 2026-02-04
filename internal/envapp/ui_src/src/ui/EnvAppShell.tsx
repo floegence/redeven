@@ -33,7 +33,7 @@ import {
 import type { ClientObserverLike } from '@floegence/flowersec-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
-import { EnvContext, type EnvNavTab } from './pages/EnvContext';
+import { EnvContext, type EnvNavTab, type EnvSettingsSection } from './pages/EnvContext';
 import { EnvDeckPage } from './pages/EnvDeckPage';
 import { EnvTerminalPage } from './pages/EnvTerminalPage';
 import { EnvMonitorPage } from './pages/EnvMonitorPage';
@@ -41,10 +41,10 @@ import { EnvFileBrowserPage } from './pages/EnvFileBrowserPage';
 import { EnvCodespacesPage } from './pages/EnvCodespacesPage';
 import { EnvPluginMarketPage } from './pages/EnvPluginMarketPage';
 import { EnvAIPage } from './pages/EnvAIPage';
+import { EnvSettingsPage } from './pages/EnvSettingsPage';
 import { redevenDeckWidgets } from './deck/redevenDeckWidgets';
 import { useRedevenRpc } from './protocol/redeven_v1';
 import { GrantAuditDialog } from './widgets/GrantAuditDialog';
-import { EnvAISettingsDialog } from './widgets/EnvAISettingsDialog';
 import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
 import {
   channelInitEntry,
@@ -113,11 +113,22 @@ export function EnvAppShell() {
   const [aiInjectionSeq, setAiInjectionSeq] = createSignal(0);
   const [aiInjectionMarkdown, setAiInjectionMarkdown] = createSignal<string | null>(null);
 
-  const [aiConfigSeq, setAiConfigSeq] = createSignal(0);
-  const bumpAiConfigSeq = () => setAiConfigSeq((n) => n + 1);
+  const [settingsSeq, setSettingsSeq] = createSignal(0);
+  const bumpSettingsSeq = () => setSettingsSeq((n) => n + 1);
 
-  const [aiSettingsOpen, setAiSettingsOpen] = createSignal(false);
-  const openAiSettings = () => setAiSettingsOpen(true);
+  const [settingsFocusSeq, setSettingsFocusSeq] = createSignal(0);
+  const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
+
+  const openSettings = (section?: EnvSettingsSection) => {
+    if (!section) {
+      setSettingsFocusSection(null);
+    }
+    if (section) {
+      setSettingsFocusSection(section);
+      setSettingsFocusSeq((n) => n + 1);
+    }
+    layout.setSidebarActiveTab('settings', { openSidebar: false });
+  };
 
   const injectAiMarkdown = (markdown: string) => {
     setAiInjectionMarkdown(String(markdown ?? ''));
@@ -383,6 +394,7 @@ export function EnvAppShell() {
     { id: 'codespaces', name: 'Codespaces', icon: Code, component: EnvCodespacesPage, sidebar: { order: 5, fullScreen: true } },
     { id: 'market', name: 'Plugin Market', icon: Grid, component: EnvPluginMarketPage, sidebar: { order: 6, fullScreen: true } },
     { id: 'ai', name: 'AI', icon: Sparkles, component: EnvAIPage, sidebar: { order: 7, fullScreen: true } },
+    { id: 'settings', name: 'Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } },
   ];
 
   const goTab = (tab: EnvNavTab) => {
@@ -412,7 +424,7 @@ export function EnvAppShell() {
 
   const activityBottomItems = (): ActivityBarItem[] => {
     if (layout.isMobile()) return [];
-    return [{ id: 'ai-settings', icon: Settings, label: 'AI Settings', onClick: () => openAiSettings() }];
+    return [{ id: 'settings', icon: Settings, label: 'Settings', onClick: () => openSettings() }];
   };
 
   const envName = () => {
@@ -570,8 +582,11 @@ export function EnvAppShell() {
         connecting,
         connectError,
         goTab,
-        aiConfigSeq,
-        openAiSettings,
+        settingsSeq,
+        bumpSettingsSeq,
+        openSettings,
+        settingsFocusSeq,
+        settingsFocusSection,
         aiInjectionSeq,
         aiInjectionMarkdown,
         injectAiMarkdown,
@@ -596,6 +611,18 @@ export function EnvAppShell() {
           activityBottomItems={activityBottomItems()}
           topBarActions={
             <div class="flex items-center gap-1">
+              <Show when={layout.isMobile()}>
+                <Tooltip content="Settings" placement="bottom" delay={0}>
+                  <button
+                    type="button"
+                    class="flex items-center justify-center w-8 h-8 rounded cursor-pointer hover:bg-muted/60 transition-colors"
+                    onClick={() => openSettings()}
+                    aria-label="Settings"
+                  >
+                    <Settings class="w-4 h-4" />
+                  </button>
+                </Tooltip>
+              </Show>
               <Tooltip content="Command palette" placement="bottom" delay={0}>
                 <button
                   type="button"
@@ -657,11 +684,6 @@ export function EnvAppShell() {
           </div>
 
           <GrantAuditDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
-          <EnvAISettingsDialog
-            open={aiSettingsOpen()}
-            onClose={() => setAiSettingsOpen(false)}
-            onSaved={() => bumpAiConfigSeq()}
-          />
         </Shell>
       </FloeRegistryRuntime>
     </EnvContext.Provider>

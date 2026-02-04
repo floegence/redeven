@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/floegence/redeven-agent/internal/ai"
@@ -28,6 +29,9 @@ type Options struct {
 	DistFS     fs.FS
 	Backend    Backend
 	AI         *ai.Service
+	// ConfigPath is the absolute path to the agent config file.
+	// It is used to read and persist settings updates initiated from the Env App UI.
+	ConfigPath string
 }
 
 type Backend interface {
@@ -71,6 +75,9 @@ type Gateway struct {
 	backend Backend
 	ai      *ai.Service
 
+	configPath string
+	configMu   sync.Mutex
+
 	distFS fs.FS
 	dist   http.Handler
 
@@ -85,6 +92,9 @@ func New(opts Options) (*Gateway, error) {
 	}
 	if opts.DistFS == nil {
 		return nil, errors.New("missing DistFS")
+	}
+	if strings.TrimSpace(opts.ConfigPath) == "" {
+		return nil, errors.New("missing ConfigPath")
 	}
 	logger := opts.Logger
 	if logger == nil {
@@ -102,12 +112,13 @@ func New(opts Options) (*Gateway, error) {
 	dist := http.StripPrefix("/_redeven_proxy", http.FileServer(http.FS(opts.DistFS)))
 
 	return &Gateway{
-		log:     logger,
-		backend: opts.Backend,
-		ai:      opts.AI,
-		distFS:  opts.DistFS,
-		dist:    dist,
-		addr:    addr,
+		log:        logger,
+		backend:    opts.Backend,
+		ai:         opts.AI,
+		configPath: strings.TrimSpace(opts.ConfigPath),
+		distFS:     opts.DistFS,
+		dist:       dist,
+		addr:       addr,
 	}, nil
 }
 
@@ -237,69 +248,270 @@ type apiResp struct {
 	Data  interface{} `json:"data,omitempty"`
 }
 
+type settingsView struct {
+	ConfigPath string `json:"config_path"`
+
+	Connection settingsConnectionView `json:"connection"`
+	Runtime    settingsRuntimeView    `json:"runtime"`
+	Logging    settingsLoggingView    `json:"logging"`
+	Codespaces settingsCodespacesView `json:"codespaces"`
+
+	PermissionPolicy *config.PermissionPolicy `json:"permission_policy"`
+	AI               *config.AIConfig         `json:"ai"`
+}
+
+type settingsConnectionView struct {
+	ControlplaneBaseURL string             `json:"controlplane_base_url"`
+	EnvironmentID       string             `json:"environment_id"`
+	AgentInstanceID     string             `json:"agent_instance_id"`
+	Direct              settingsDirectView `json:"direct"`
+}
+
+type settingsDirectView struct {
+	WsURL                    string `json:"ws_url"`
+	ChannelID                string `json:"channel_id"`
+	ChannelInitExpireAtUnixS int64  `json:"channel_init_expire_at_unix_s"`
+	DefaultSuite             uint16 `json:"default_suite"`
+	E2eePskSet               bool   `json:"e2ee_psk_set"`
+}
+
+type settingsRuntimeView struct {
+	RootDir string `json:"root_dir"`
+	Shell   string `json:"shell"`
+}
+
+type settingsLoggingView struct {
+	LogFormat string `json:"log_format"`
+	LogLevel  string `json:"log_level"`
+}
+
+type settingsCodespacesView struct {
+	CodeServerPortMin int `json:"code_server_port_min"`
+	CodeServerPortMax int `json:"code_server_port_max"`
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+func toSettingsView(cfg *config.Config, configPath string) settingsView {
+	var direct settingsDirectView
+	if cfg != nil && cfg.Direct != nil {
+		direct = settingsDirectView{
+			WsURL:                    strings.TrimSpace(cfg.Direct.WsUrl),
+			ChannelID:                strings.TrimSpace(cfg.Direct.ChannelId),
+			ChannelInitExpireAtUnixS: cfg.Direct.ChannelInitExpireAtUnixS,
+			DefaultSuite:             uint16(cfg.Direct.DefaultSuite),
+			E2eePskSet:               strings.TrimSpace(cfg.Direct.E2eePskB64u) != "",
+		}
+	}
+
+	var out settingsView
+	out.ConfigPath = strings.TrimSpace(configPath)
+	if cfg != nil {
+		out.Connection = settingsConnectionView{
+			ControlplaneBaseURL: strings.TrimSpace(cfg.ControlplaneBaseURL),
+			EnvironmentID:       strings.TrimSpace(cfg.EnvironmentID),
+			AgentInstanceID:     strings.TrimSpace(cfg.AgentInstanceID),
+			Direct:              direct,
+		}
+		out.Runtime = settingsRuntimeView{
+			RootDir: strings.TrimSpace(cfg.RootDir),
+			Shell:   strings.TrimSpace(cfg.Shell),
+		}
+		out.Logging = settingsLoggingView{
+			LogFormat: strings.TrimSpace(cfg.LogFormat),
+			LogLevel:  strings.TrimSpace(cfg.LogLevel),
+		}
+		out.Codespaces = settingsCodespacesView{
+			CodeServerPortMin: cfg.CodeServerPortMin,
+			CodeServerPortMax: cfg.CodeServerPortMax,
+		}
+		out.PermissionPolicy = cfg.PermissionPolicy
+		out.AI = cfg.AI
+	}
+	return out
+}
+
+func (g *Gateway) loadConfigLocked() (*config.Config, error) {
+	if g == nil {
+		return nil, errors.New("gateway not ready")
+	}
+	path := strings.TrimSpace(g.configPath)
+	if path == "" {
+		return nil, errors.New("missing config path")
+	}
+	g.configMu.Lock()
+	defer g.configMu.Unlock()
+	return config.Load(path)
+}
+
+func (g *Gateway) updateConfigLocked(mut func(cfg *config.Config) error) (*config.Config, error) {
+	if g == nil {
+		return nil, errors.New("gateway not ready")
+	}
+	path := strings.TrimSpace(g.configPath)
+	if path == "" {
+		return nil, errors.New("missing config path")
+	}
+	g.configMu.Lock()
+	defer g.configMu.Unlock()
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		return nil, err
+	}
+	if mut != nil {
+		if err := mut(cfg); err != nil {
+			return nil, err
+		}
+	}
+	if err := config.Save(path, cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
 func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 	switch {
-	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/config":
-		if g.ai == nil {
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: ai.ConfigView{Enabled: false}})
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/settings":
+		cfg, err := g.loadConfigLocked()
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.ai.GetConfig()})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: toSettingsView(cfg, g.configPath)})
 		return
 
-	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/config":
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
-			return
-		}
+	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/settings":
+		type settingsUpdateReq struct {
+			RootDir *string `json:"root_dir,omitempty"`
+			Shell   *string `json:"shell,omitempty"`
 
-		type reqBody struct {
-			AI json.RawMessage `json:"ai"`
+			LogFormat *string `json:"log_format,omitempty"`
+			LogLevel  *string `json:"log_level,omitempty"`
+
+			CodeServerPortMin *int `json:"code_server_port_min,omitempty"`
+			CodeServerPortMax *int `json:"code_server_port_max,omitempty"`
+
+			PermissionPolicy json.RawMessage `json:"permission_policy,omitempty"`
+			AI               json.RawMessage `json:"ai,omitempty"`
 		}
 
 		dec := json.NewDecoder(r.Body)
 		dec.DisallowUnknownFields()
-
-		var body reqBody
+		var body settingsUpdateReq
 		if err := dec.Decode(&body); err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
-		// No trailing tokens.
 		if err := dec.Decode(&struct{}{}); err != io.EOF {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
 
-		if len(body.AI) == 0 {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing ai"})
+		if body.RootDir == nil && body.Shell == nil &&
+			body.LogFormat == nil && body.LogLevel == nil &&
+			body.CodeServerPortMin == nil && body.CodeServerPortMax == nil &&
+			len(body.PermissionPolicy) == 0 && len(body.AI) == 0 {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 			return
 		}
 
-		var nextAI *config.AIConfig
-		raw := bytes.TrimSpace(body.AI)
-		if !bytes.Equal(raw, []byte("null")) {
-			var cfg config.AIConfig
-			aiDec := json.NewDecoder(bytes.NewReader(raw))
-			aiDec.DisallowUnknownFields()
-			if err := aiDec.Decode(&cfg); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid ai config json"})
-				return
+		var nextPolicy *config.PermissionPolicy
+		if len(body.PermissionPolicy) > 0 {
+			raw := bytes.TrimSpace(body.PermissionPolicy)
+			if !bytes.Equal(raw, []byte("null")) {
+				var p config.PermissionPolicy
+				ppDec := json.NewDecoder(bytes.NewReader(raw))
+				ppDec.DisallowUnknownFields()
+				if err := ppDec.Decode(&p); err != nil {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid permission_policy json"})
+					return
+				}
+				if err := ppDec.Decode(&struct{}{}); err != io.EOF {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid permission_policy json"})
+					return
+				}
+				if err := p.Validate(); err != nil {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: fmt.Sprintf("invalid permission_policy: %s", err.Error())})
+					return
+				}
+				nextPolicy = &p
 			}
-			if err := aiDec.Decode(&struct{}{}); err != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid ai config json"})
-				return
-			}
-			nextAI = &cfg
 		}
 
-		out, err := g.ai.UpdateConfig(nextAI)
+		var nextAI *config.AIConfig
+		if len(body.AI) > 0 {
+			raw := bytes.TrimSpace(body.AI)
+			if !bytes.Equal(raw, []byte("null")) {
+				var cfg config.AIConfig
+				aiDec := json.NewDecoder(bytes.NewReader(raw))
+				aiDec.DisallowUnknownFields()
+				if err := aiDec.Decode(&cfg); err != nil {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid ai json"})
+					return
+				}
+				if err := aiDec.Decode(&struct{}{}); err != io.EOF {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid ai json"})
+					return
+				}
+				if err := cfg.Validate(); err != nil {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: fmt.Sprintf("invalid ai: %s", err.Error())})
+					return
+				}
+				nextAI = &cfg
+			}
+		}
+
+		var updated *config.Config
+		persist := func() error {
+			cfg, err := g.updateConfigLocked(func(c *config.Config) error {
+				if body.RootDir != nil {
+					c.RootDir = strings.TrimSpace(*body.RootDir)
+				}
+				if body.Shell != nil {
+					c.Shell = strings.TrimSpace(*body.Shell)
+				}
+				if body.LogFormat != nil {
+					c.LogFormat = strings.TrimSpace(*body.LogFormat)
+				}
+				if body.LogLevel != nil {
+					c.LogLevel = strings.TrimSpace(*body.LogLevel)
+				}
+				if body.CodeServerPortMin != nil {
+					c.CodeServerPortMin = *body.CodeServerPortMin
+				}
+				if body.CodeServerPortMax != nil {
+					c.CodeServerPortMax = *body.CodeServerPortMax
+				}
+				if len(body.PermissionPolicy) > 0 {
+					c.PermissionPolicy = nextPolicy
+				}
+				if len(body.AI) > 0 {
+					c.AI = nextAI
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			updated = cfg
+			return nil
+		}
+
+		var err error
+		if len(body.AI) > 0 {
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			err = g.ai.UpdateConfig(nextAI, persist)
+		} else {
+			err = persist()
+		}
 		if err != nil {
 			status := http.StatusBadRequest
 			if errors.Is(err, ai.ErrConfigLocked) {
@@ -308,7 +520,8 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: toSettingsView(updated, g.configPath)})
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/models":

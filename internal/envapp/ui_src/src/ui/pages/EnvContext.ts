@@ -3,6 +3,8 @@ import type { EnvironmentDetail } from '../services/controlplaneApi';
 
 export type EnvNavTab = 'deck' | 'terminal' | 'monitor' | 'files' | 'codespaces' | 'market' | 'ai';
 
+export type EnvSettingsSection = 'ai';
+
 export type EnvContextValue = {
   env_id: () => string;
   env: Resource<EnvironmentDetail | null>;
@@ -12,8 +14,11 @@ export type EnvContextValue = {
 
   goTab: (tab: EnvNavTab) => void;
 
-  aiConfigSeq: () => number;
-  openAiSettings: () => void;
+  settingsSeq: () => number;
+  bumpSettingsSeq: () => void;
+  openSettings: (section?: EnvSettingsSection) => void;
+  settingsFocusSeq: () => number;
+  settingsFocusSection: () => EnvSettingsSection | null;
 
   aiInjectionSeq: () => number;
   aiInjectionMarkdown: () => string | null;

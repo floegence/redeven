@@ -26,9 +26,6 @@ var (
 type Options struct {
 	Logger   *slog.Logger
 	StateDir string
-	// ConfigPath is the absolute path to the agent config file.
-	// It is used to persist AI settings updates initiated from the Env App UI.
-	ConfigPath string
 
 	FSRoot string
 	Shell  string
@@ -41,10 +38,9 @@ type Options struct {
 type Service struct {
 	log *slog.Logger
 
-	stateDir   string
-	configPath string
-	fsRoot     string
-	shell      string
+	stateDir string
+	fsRoot   string
+	shell    string
 
 	cfg *config.AIConfig
 
@@ -60,9 +56,6 @@ type Service struct {
 func NewService(opts Options) (*Service, error) {
 	if strings.TrimSpace(opts.StateDir) == "" {
 		return nil, errors.New("missing StateDir")
-	}
-	if strings.TrimSpace(opts.ConfigPath) == "" {
-		return nil, errors.New("missing ConfigPath")
 	}
 	if strings.TrimSpace(opts.FSRoot) == "" {
 		return nil, errors.New("missing FSRoot")
@@ -81,7 +74,6 @@ func NewService(opts Options) (*Service, error) {
 	return &Service{
 		log:                logger,
 		stateDir:           strings.TrimSpace(opts.StateDir),
-		configPath:         strings.TrimSpace(opts.ConfigPath),
 		fsRoot:             strings.TrimSpace(opts.FSRoot),
 		shell:              strings.TrimSpace(opts.Shell),
 		cfg:                opts.Config,
@@ -100,6 +92,38 @@ func (s *Service) Enabled() bool {
 	enabled := s.cfg != nil
 	s.mu.Unlock()
 	return enabled
+}
+
+// UpdateConfig updates the in-memory AI config after persisting it via the provided callback.
+//
+// It blocks new runs from starting while the update is in progress. If any run is active,
+// the update is rejected with ErrConfigLocked.
+func (s *Service) UpdateConfig(next *config.AIConfig, persist func() error) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if persist == nil {
+		return errors.New("missing persist function")
+	}
+	if next != nil {
+		if err := next.Validate(); err != nil {
+			return err
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(s.activeRunByChan) > 0 {
+		return ErrConfigLocked
+	}
+
+	if err := persist(); err != nil {
+		return err
+	}
+
+	s.cfg = next
+	return nil
 }
 
 func (s *Service) HasActiveRun(channelID string) bool {

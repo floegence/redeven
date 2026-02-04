@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -67,6 +69,33 @@ func (s *stubBackend) ResolveCodeServerPort(ctx context.Context, codeSpaceID str
 	return 0, errors.New("not implemented")
 }
 
+func writeTestConfig(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	p := filepath.Join(dir, "config.json")
+
+	// Minimal valid config for config.Load. Includes E2EE PSK to validate redaction in /api/settings.
+	raw := `{
+  "controlplane_base_url": "https://example.com",
+  "environment_id": "env_123",
+  "agent_instance_id": "agent_123",
+  "direct": {
+    "ws_url": "wss://example.com/ws",
+    "channel_id": "ch_123",
+    "e2ee_psk_b64u": "secret",
+    "channel_init_expire_at_unix_s": 0,
+    "default_suite": 1
+  }
+}
+`
+
+	if err := os.WriteFile(p, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return p
+}
+
 func TestGateway_ManagementAPI_EnvOriginOnly(t *testing.T) {
 	t.Parallel()
 
@@ -79,7 +108,7 @@ func TestGateway_ManagementAPI_EnvOriginOnly(t *testing.T) {
 			return []SpaceStatus{{CodeSpaceID: "abc"}}, nil
 		},
 	}
-	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0"})
+	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -128,7 +157,7 @@ func TestGateway_DistRoutes_AreIsolated(t *testing.T) {
 		"inject.js":      {Data: []byte("console.log('inject');")},
 		"other.txt":      {Data: []byte("should-not-be-served")},
 	}
-	gw, err := New(Options{Backend: &stubBackend{}, DistFS: dist, ListenAddr: "127.0.0.1:0"})
+	gw, err := New(Options{Backend: &stubBackend{}, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -242,7 +271,7 @@ func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
 		},
 	}
 
-	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0"})
+	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -371,6 +400,68 @@ func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
 	}
 }
 
+func TestGateway_Settings_RedactsSecrets(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+
+	cfgPath := writeTestConfig(t)
+	gw, err := New(Options{Backend: &stubBackend{}, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: cfgPath})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Env origin should be able to read settings.
+	{
+		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil)
+		req.Header.Set("Origin", "https://env-123.example.com")
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("env origin status = %d, want %d", rr.Code, http.StatusOK)
+		}
+
+		var resp map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+
+		ok, _ := resp["ok"].(bool)
+		if !ok {
+			t.Fatalf("unexpected ok=%v resp=%v", resp["ok"], resp)
+		}
+
+		data, _ := resp["data"].(map[string]any)
+		if strings.TrimSpace(data["config_path"].(string)) != cfgPath {
+			t.Fatalf("config_path mismatch: got=%q want=%q", data["config_path"], cfgPath)
+		}
+
+		conn, _ := data["connection"].(map[string]any)
+		direct, _ := conn["direct"].(map[string]any)
+		if _, ok := direct["e2ee_psk_b64u"]; ok {
+			t.Fatalf("secret leaked: e2ee_psk_b64u must not be returned")
+		}
+		if direct["e2ee_psk_set"] != true {
+			t.Fatalf("e2ee_psk_set mismatch: got=%v want=true", direct["e2ee_psk_set"])
+		}
+	}
+
+	// Codespace origin should be rejected (404).
+	{
+		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil)
+		req.Header.Set("Origin", "https://cs-abc.example.com")
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("cs origin status = %d, want %d", rr.Code, http.StatusNotFound)
+		}
+	}
+}
+
 func TestGateway_CodeServerProxy_RewritesHostAndStripsForwardedHeaders(t *testing.T) {
 	t.Parallel()
 
@@ -417,7 +508,7 @@ func TestGateway_CodeServerProxy_RewritesHostAndStripsForwardedHeaders(t *testin
 			return port, nil
 		},
 	}
-	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0"})
+	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -468,7 +559,7 @@ func TestGateway_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder(t *test
 			return 0, errors.New("should not be called")
 		},
 	}
-	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0"})
+	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -509,7 +600,7 @@ func TestGateway_CodeServerProxy_RequiresCodespaceOrigin(t *testing.T) {
 			return 0, errors.New("should not be called")
 		},
 	}
-	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0"})
+	gw, err := New(Options{Backend: b, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -533,7 +624,7 @@ func TestGateway_DistFS_UsesEmbedLayout(t *testing.T) {
 		"env/index.html": {Data: []byte("<html>env</html>")},
 		"inject.js":      {Data: []byte("console.log('inject');")},
 	}
-	gw, err := New(Options{Backend: &stubBackend{}, DistFS: dist, ListenAddr: "127.0.0.1:0"})
+	gw, err := New(Options{Backend: &stubBackend{}, DistFS: dist, ListenAddr: "127.0.0.1:0", ConfigPath: writeTestConfig(t)})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

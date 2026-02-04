@@ -27,9 +27,7 @@ type ModelsResponse = Readonly<{
 
 type RunHistoryMsg = Readonly<{ role: 'user' | 'assistant'; text: string }>;
 
-type AIConfigView = Readonly<{
-  config_path: string;
-  enabled: boolean;
+type SettingsResponse = Readonly<{
   ai: any | null;
 }>;
 
@@ -54,19 +52,17 @@ export function EnvAIPage() {
   const protocol = useProtocol();
   const notify = useNotification();
 
-  const cfgKey = createMemo<number | null>(() => (protocol.status() === 'connected' ? env.aiConfigSeq() : null));
-
-  const [aiCfg] = createResource<AIConfigView | null, number | null>(
-    () => cfgKey(),
-    async (k) => (k == null ? null : await fetchGatewayJSON<AIConfigView>('/_redeven_proxy/api/ai/config', { method: 'GET' })),
+  const settingsKey = createMemo<number | null>(() => (protocol.status() === 'connected' ? env.settingsSeq() : null));
+  const [settings] = createResource<SettingsResponse | null, number | null>(
+    () => settingsKey(),
+    async (k) => (k == null ? null : await fetchGatewayJSON<SettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' })),
   );
-
-  const aiEnabled = createMemo(() => !!aiCfg()?.enabled);
+  const aiEnabled = createMemo(() => !!settings()?.ai);
 
   const modelsKey = createMemo<number | null>(() => {
-    if (cfgKey() == null) return null;
+    if (settingsKey() == null) return null;
     if (!aiEnabled()) return null;
-    return env.aiConfigSeq();
+    return env.settingsSeq();
   });
 
   const [models] = createResource<ModelsResponse | null, number | null>(
@@ -200,7 +196,7 @@ export function EnvAIPage() {
       return;
     }
     if (!aiEnabled()) {
-      notify.error('AI not configured', 'Open AI Settings to enable AI.');
+      notify.error('AI not configured', 'Open Settings to enable AI.');
       return;
     }
     if (models.error) {
@@ -357,12 +353,12 @@ export function EnvAIPage() {
           <div class="chat-header">
             <div class="chat-header-title">AI</div>
             <div class="flex items-center gap-2">
-              <Tooltip content="AI Settings" placement="bottom" delay={0}>
+              <Tooltip content="Settings" placement="bottom" delay={0}>
                 <button
                   type="button"
                   class="flex items-center justify-center w-8 h-8 rounded cursor-pointer hover:bg-muted/60 transition-colors"
-                  onClick={() => env.openAiSettings()}
-                  aria-label="AI Settings"
+                  onClick={() => env.openSettings('ai')}
+                  aria-label="Settings"
                 >
                   <Settings class="w-4 h-4" />
                 </button>
@@ -395,20 +391,20 @@ export function EnvAIPage() {
             </div>
           </div>
 
-          <Show when={aiCfg.error}>
+          <Show when={settings.error}>
             <div class="px-3 py-2 text-xs border-b border-border text-muted-foreground">
-              <div class="font-medium text-foreground">AI settings are not available.</div>
-              <div class="mt-1">Error: {aiCfg.error instanceof Error ? aiCfg.error.message : String(aiCfg.error)}</div>
+              <div class="font-medium text-foreground">Settings are not available.</div>
+              <div class="mt-1">Error: {settings.error instanceof Error ? settings.error.message : String(settings.error)}</div>
             </div>
           </Show>
 
-          <Show when={aiCfg() && !aiEnabled() && !aiCfg.error && !aiCfg.loading}>
+          <Show when={settings() && !aiEnabled() && !settings.error && !settings.loading}>
             <div class="px-3 py-2 text-xs border-b border-border text-muted-foreground">
               <div class="font-medium text-foreground">AI is not configured.</div>
-              <div class="mt-1">Open AI Settings to enable AI.</div>
+              <div class="mt-1">Open Settings to enable AI.</div>
               <div class="mt-2">
-                <Button size="sm" variant="default" onClick={() => env.openAiSettings()}>
-                  Open AI Settings
+                <Button size="sm" variant="default" onClick={() => env.openSettings('ai')}>
+                  Open Settings
                 </Button>
               </div>
             </div>
@@ -432,7 +428,7 @@ export function EnvAIPage() {
       </ChatProvider>
 
       <LoadingOverlay visible={protocol.status() !== 'connected'} message="Connecting to agent..." />
-      <LoadingOverlay visible={aiCfg.loading && protocol.status() === 'connected'} message="Loading AI settings..." />
+      <LoadingOverlay visible={settings.loading && protocol.status() === 'connected'} message="Loading settings..." />
       <LoadingOverlay visible={models.loading && aiEnabled()} message="Loading models..." />
     </div>
   );

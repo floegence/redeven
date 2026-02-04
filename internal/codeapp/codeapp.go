@@ -28,7 +28,7 @@ const (
 type Options struct {
 	Logger   *slog.Logger
 	StateDir string
-	// ConfigPath is the absolute path to the agent config file (used to persist AI settings).
+	// ConfigPath is the absolute path to the agent config file (used to persist settings updates from the Env App UI).
 	ConfigPath          string
 	ControlplaneBaseURL string
 
@@ -121,7 +121,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	aiSvc, err := ai.NewService(ai.Options{
 		Logger:             logger,
 		StateDir:           stateAbs,
-		ConfigPath:         strings.TrimSpace(opts.ConfigPath),
 		FSRoot:             strings.TrimSpace(opts.FSRoot),
 		Shell:              strings.TrimSpace(opts.Shell),
 		Config:             opts.AIConfig,
@@ -137,6 +136,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		DistFS:     mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
 		Backend:    svc,
 		AI:         aiSvc,
+		ConfigPath: strings.TrimSpace(opts.ConfigPath),
 		ListenAddr: "127.0.0.1:0",
 	})
 	if err != nil {
