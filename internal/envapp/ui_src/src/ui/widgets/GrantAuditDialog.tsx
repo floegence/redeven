@@ -23,6 +23,52 @@ function formatPerm(e: GrantAuditEntry): string {
   return parts.length > 0 ? parts.join('') : '-';
 }
 
+function kindLabel(kind: string): string {
+  const v = String(kind ?? '').trim();
+  switch (v) {
+    case 'portal':
+      return 'Portal';
+    case 'envapp_rpc':
+    case 'envapp_proxy':
+      return 'Env UI';
+    case 'codeapp':
+      return 'Codespace';
+    case 'portforward':
+      return 'Port Forward';
+    case 'app':
+      return 'App';
+    default:
+      return v || '-';
+  }
+}
+
+function formatActionPrimary(e: GrantAuditEntry): string {
+  const kind = String(e.session_kind ?? '').trim();
+  const codeSpaceID = String(e.code_space_id ?? '').trim();
+  const label = kindLabel(kind);
+
+  if (!codeSpaceID) return label;
+  // Avoid redundant "Env UI (env-ui)".
+  if ((kind === 'envapp_rpc' || kind === 'envapp_proxy') && codeSpaceID === 'env-ui') return label;
+  return `${label} (${codeSpaceID})`;
+}
+
+function formatUserPrimary(e: GrantAuditEntry): string {
+  const email = String(e.user_email ?? '').trim();
+  if (email) return email;
+  return String(e.user_public_id ?? '').trim();
+}
+
+function formatTunnelHost(tunnelURL: string): string {
+  const raw = String(tunnelURL ?? '').trim();
+  if (!raw) return '';
+  try {
+    return new URL(raw).host;
+  } catch {
+    return raw;
+  }
+}
+
 export function GrantAuditDialog(props: { open: boolean; envId: string; onClose: () => void }) {
   const notify = useNotification();
 
@@ -86,7 +132,7 @@ export function GrantAuditDialog(props: { open: boolean; envId: string; onClose:
                     <tr class="text-left">
                       <th class="py-2 pr-2 whitespace-nowrap">Time</th>
                       <th class="py-2 pr-2 whitespace-nowrap">User</th>
-                      <th class="py-2 pr-2 whitespace-nowrap">App</th>
+                      <th class="py-2 pr-2 whitespace-nowrap">Action</th>
                       <th class="py-2 pr-2 whitespace-nowrap">Perm</th>
                       <th class="py-2 pr-2 whitespace-nowrap">Status</th>
                       <th class="py-2 whitespace-nowrap">Channel</th>
@@ -97,11 +143,33 @@ export function GrantAuditDialog(props: { open: boolean; envId: string; onClose:
                       {(e) => (
                         <tr class="border-t border-border/60">
                           <td class="py-2 pr-2 whitespace-nowrap">{fmtTime(e.created_at)}</td>
-                          <td class="py-2 pr-2 font-mono truncate max-w-[200px]" title={e.user_public_id}>
-                            {e.user_public_id}
+                          <td class="py-2 pr-2 max-w-[240px]">
+                            <div class="min-w-0">
+                              <div class="truncate" title={formatUserPrimary(e)}>
+                                <button type="button" class="hover:underline" onClick={() => void copy('User', formatUserPrimary(e))}>
+                                  {formatUserPrimary(e) || '-'}
+                                </button>
+                              </div>
+                              <Show when={String(e.user_email ?? '').trim() && String(e.user_public_id ?? '').trim()}>
+                                <div class="text-muted-foreground font-mono truncate" title={e.user_public_id}>
+                                  <button type="button" class="hover:underline" onClick={() => void copy('User ID', e.user_public_id)}>
+                                    {e.user_public_id}
+                                  </button>
+                                </div>
+                              </Show>
+                            </div>
                           </td>
-                          <td class="py-2 pr-2 font-mono truncate max-w-[240px]" title={e.floe_app}>
-                            {e.floe_app}
+                          <td class="py-2 pr-2 max-w-[320px]">
+                            <div class="min-w-0">
+                              <div class="truncate" title={formatActionPrimary(e)}>
+                                {formatActionPrimary(e)}
+                              </div>
+                              <div class="text-muted-foreground font-mono truncate" title={e.floe_app}>
+                                <button type="button" class="hover:underline" onClick={() => void copy('Floe app', e.floe_app)}>
+                                  {e.floe_app}
+                                </button>
+                              </div>
+                            </div>
                           </td>
                           <td class="py-2 pr-2 whitespace-nowrap">{formatPerm(e)}</td>
                           <td class={`py-2 pr-2 whitespace-nowrap ${e.status === 'failure' ? 'text-error' : ''}`}>
@@ -110,10 +178,21 @@ export function GrantAuditDialog(props: { open: boolean; envId: string; onClose:
                               <span class="text-muted-foreground">{` (${e.error_code})`}</span>
                             </Show>
                           </td>
-                          <td class="py-2 font-mono truncate max-w-[240px]" title={e.channel_id}>
-                            <button type="button" class="hover:underline" onClick={() => void copy('Channel ID', e.channel_id)}>
-                              {e.channel_id}
-                            </button>
+                          <td class="py-2 max-w-[280px]">
+                            <div class="min-w-0">
+                              <div class="font-mono truncate" title={e.channel_id}>
+                                <button type="button" class="hover:underline" onClick={() => void copy('Channel ID', e.channel_id)}>
+                                  {e.channel_id || '-'}
+                                </button>
+                              </div>
+                              <Show when={String(e.tunnel_url ?? '').trim()}>
+                                <div class="text-muted-foreground truncate" title={e.tunnel_url}>
+                                  <button type="button" class="hover:underline" onClick={() => void copy('Tunnel URL', e.tunnel_url ?? '')}>
+                                    {`Tunnel: ${formatTunnelHost(e.tunnel_url ?? '')}`}
+                                  </button>
+                                </div>
+                              </Show>
+                            </div>
                           </td>
                         </tr>
                       )}
