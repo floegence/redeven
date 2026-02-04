@@ -81,6 +81,17 @@ function formatAppLabel(floeApp: string): string {
   return v || '-';
 }
 
+function formatTunnelHost(tunnelURL: string): string {
+  const v = String(tunnelURL ?? '').trim();
+  if (!v) return '-';
+  try {
+    const u = new URL(v);
+    return String(u.host || u.origin || v).trim() || '-';
+  } catch {
+    return v;
+  }
+}
+
 export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -428,6 +439,7 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">User</th>
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">App</th>
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">Code Space</th>
+                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">Tunnel</th>
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">Connected</th>
                       <th class="text-center py-2 px-2 font-medium text-muted-foreground">Perm</th>
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">Channel</th>
@@ -436,7 +448,7 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
                   <tbody>
                     <Show when={activeSessions().length > 0} fallback={
                       <tr>
-                        <td colSpan={6} class="py-6 px-2 text-[11px] text-muted-foreground text-center">
+                        <td colSpan={7} class="py-6 px-2 text-[11px] text-muted-foreground text-center">
                           {loading() ? 'Loading...' : 'No active sessions.'}
                         </td>
                       </tr>
@@ -448,6 +460,8 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
                           const userLabel = email || uid || '-';
                           const appLabel = formatAppLabel(sess.floeApp);
                           const codeSpace = String(sess.codeSpaceID ?? '').trim();
+                          const tunnelURL = String(sess.tunnelUrl ?? '').trim();
+                          const tunnelLabel = formatTunnelHost(tunnelURL);
                           const connected = formatDateTime(sess.connectedAtUnixMs);
                           return (
                             <tr class="border-b border-border/40 hover:bg-muted/30 transition-colors">
@@ -461,6 +475,13 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
                               </td>
                               <td class="py-2 px-2 font-mono truncate max-w-[240px]" title={sess.floeApp}>{appLabel}</td>
                               <td class="py-2 px-2 font-mono truncate max-w-[160px]" title={codeSpace}>{codeSpace || '-'}</td>
+                              <td class="py-2 px-2 font-mono truncate max-w-[240px]" title={tunnelURL}>
+                                <Show when={tunnelURL} fallback={<span>{tunnelLabel}</span>}>
+                                  <button type="button" class="hover:underline" onClick={() => void copy('Tunnel URL', tunnelURL)}>
+                                    {tunnelLabel}
+                                  </button>
+                                </Show>
+                              </td>
                               <td class="py-2 px-2 whitespace-nowrap tabular-nums">{connected || '-'}</td>
                               <td class="py-2 px-2 text-center font-mono tabular-nums">{formatSessionPerm(sess)}</td>
                               <td class="py-2 px-2 font-mono truncate max-w-[240px]" title={sess.channelId}>

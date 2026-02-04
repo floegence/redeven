@@ -80,7 +80,8 @@ type Agent struct {
 type activeSession struct {
 	cancel            context.CancelFunc
 	meta              session.Meta
-	connectedAtUnixMs int64 // set after ConnectTunnel succeeds
+	tunnelURL         string // grant_server.tunnel_url (for UI/auditing only)
+	connectedAtUnixMs int64  // set after ConnectTunnel succeeds
 }
 
 func New(opts Options) (*Agent, error) {
@@ -381,8 +382,9 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	}
 	sessCtx, cancel := context.WithCancel(ctx)
 	a.sessions[channelID] = &activeSession{
-		cancel: cancel,
-		meta:   metaCopy,
+		cancel:    cancel,
+		meta:      metaCopy,
+		tunnelURL: strings.TrimSpace(n.GrantServer.TunnelUrl),
 	}
 	a.mu.Unlock()
 
