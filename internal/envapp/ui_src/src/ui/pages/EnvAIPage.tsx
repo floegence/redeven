@@ -1,8 +1,8 @@
 import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, type Component } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
-import { Settings } from '@floegence/floe-webapp-core/icons';
+import { Settings, Sparkles, Stop } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
-import { Button, Tooltip } from '@floegence/floe-webapp-core/ui';
+import { Button, Select, Tooltip } from '@floegence/floe-webapp-core/ui';
 import {
   ChatInput,
   ChatProvider,
@@ -330,6 +330,16 @@ export function EnvAIPage() {
     abortCtrl = null;
   });
 
+  // Select options derived from models
+  const modelOptions = createMemo(() => {
+    const m = models();
+    if (!m) return [];
+    return m.models.map((it) => ({
+      value: it.id,
+      label: it.label ?? it.id,
+    }));
+  });
+
   return (
     <div class="h-full min-h-0 overflow-hidden relative">
       <ChatProvider
@@ -349,79 +359,106 @@ export function EnvAIPage() {
         />
 
         <div class="chat-container h-full">
+          {/* Header */}
           <div class="chat-header">
-            <div class="chat-header-title">AI</div>
-            <div class="flex items-center gap-2">
-              <Tooltip content="Settings" placement="bottom" delay={0}>
-                <button
-                  type="button"
-                  class="flex items-center justify-center w-8 h-8 rounded cursor-pointer hover:bg-muted/60 transition-colors"
+            <div class="chat-header-title flex items-center gap-2">
+              <Sparkles class="w-4 h-4 text-primary" />
+              <span>AI Assistant</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              {/* Model selector */}
+              <Show when={aiEnabled() && modelOptions().length > 0}>
+                <Select
+                  value={selectedModel()}
+                  onChange={setSelectedModel}
+                  options={modelOptions()}
+                  placeholder="Select model..."
+                  disabled={models.loading || !!models.error || running()}
+                  class="min-w-[140px] max-w-[220px] h-7 text-[11px]"
+                />
+              </Show>
+
+              {/* Stop button */}
+              <Show when={running()}>
+                <Tooltip content="Stop generation" placement="bottom" delay={0}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    icon={Stop}
+                    onClick={() => void cancel()}
+                    class="h-7 px-2 text-error border-error/30 hover:bg-error/10 hover:text-error"
+                  >
+                    Stop
+                  </Button>
+                </Tooltip>
+              </Show>
+
+              {/* Settings button */}
+              <Tooltip content="AI Settings" placement="bottom" delay={0}>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  icon={Settings}
                   onClick={() => env.openSettings('ai')}
                   aria-label="Settings"
-                >
-                  <Settings class="w-4 h-4" />
-                </button>
+                  class="w-7 h-7"
+                />
               </Tooltip>
-
-              <Show when={aiEnabled()}>
-                <select
-                  class="text-xs border border-border rounded px-2 py-1 bg-background max-w-[280px]"
-                  value={selectedModel()}
-                  onChange={(e) => setSelectedModel(e.currentTarget.value)}
-                  disabled={models.loading || !!models.error || running()}
-                >
-                  <Show when={models()}>
-                    {(m) => (
-                      <>
-                        {m().models.map((it) => (
-                          <option value={it.id}>{it.label ?? it.id}</option>
-                        ))}
-                      </>
-                    )}
-                  </Show>
-                </select>
-              </Show>
-
-              <Show when={running()}>
-                <Button size="sm" variant="secondary" onClick={() => void cancel()}>
-                  Stop
-                </Button>
-              </Show>
             </div>
           </div>
 
+          {/* Error banner: Settings unavailable */}
           <Show when={settings.error}>
-            <div class="px-3 py-2 text-xs border-b border-border text-muted-foreground">
-              <div class="font-medium text-foreground">Settings are not available.</div>
-              <div class="mt-1">Error: {settings.error instanceof Error ? settings.error.message : String(settings.error)}</div>
-            </div>
-          </Show>
-
-          <Show when={settings() && !aiEnabled() && !settings.error && !settings.loading}>
-            <div class="px-3 py-2 text-xs border-b border-border text-muted-foreground">
-              <div class="font-medium text-foreground">AI is not configured.</div>
-              <div class="mt-1">Open Settings to enable AI.</div>
-              <div class="mt-2">
-                <Button size="sm" variant="default" onClick={() => env.openSettings('ai')}>
-                  Open Settings
-                </Button>
+            <div class="px-4 py-3 text-xs border-b border-border bg-error/5">
+              <div class="flex items-center gap-2 font-medium text-error">
+                <span class="w-1.5 h-1.5 rounded-full bg-error" />
+                Settings are not available
+              </div>
+              <div class="mt-1 text-muted-foreground">
+                {settings.error instanceof Error ? settings.error.message : String(settings.error)}
               </div>
             </div>
           </Show>
 
-          <Show when={models.error && aiEnabled()}>
-            <div class="px-3 py-2 text-xs border-b border-border text-muted-foreground">
-              <div class="font-medium text-foreground">AI is not available.</div>
-              <div class="mt-1">Error: {models.error instanceof Error ? models.error.message : String(models.error)}</div>
+          {/* Empty state: AI not configured */}
+          <Show when={settings() && !aiEnabled() && !settings.error && !settings.loading}>
+            <div class="flex flex-col items-center justify-center flex-1 p-8 text-center">
+              <div class="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+                <Sparkles class="w-8 h-8 text-primary" />
+              </div>
+              <div class="text-base font-semibold text-foreground mb-2">AI is not configured</div>
+              <div class="text-xs text-muted-foreground mb-4 max-w-[280px]">
+                Configure an AI provider in settings to start using the AI assistant.
+              </div>
+              <Button size="sm" variant="default" onClick={() => env.openSettings('ai')}>
+                Open Settings
+              </Button>
             </div>
           </Show>
 
-          <VirtualMessageList class="chat-container-messages" />
+          {/* Error banner: Models unavailable */}
+          <Show when={models.error && aiEnabled()}>
+            <div class="px-4 py-3 text-xs border-b border-border bg-error/5">
+              <div class="flex items-center gap-2 font-medium text-error">
+                <span class="w-1.5 h-1.5 rounded-full bg-error" />
+                AI is not available
+              </div>
+              <div class="mt-1 text-muted-foreground">
+                {models.error instanceof Error ? models.error.message : String(models.error)}
+              </div>
+            </div>
+          </Show>
 
+          {/* Message list - only show when AI is enabled and no empty state */}
+          <Show when={aiEnabled() || settings.loading}>
+            <VirtualMessageList class="chat-container-messages" />
+          </Show>
+
+          {/* Input area */}
           <ChatInput
             class="chat-container-input"
             disabled={!canInteract()}
-            placeholder="Type a message..."
+            placeholder={aiEnabled() ? 'Type a message...' : 'Configure AI in settings to start...'}
           />
         </div>
       </ChatProvider>
