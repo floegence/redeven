@@ -47,10 +47,14 @@ export type GrantAuditEntry = {
   env_public_id: string;
   namespace_public_id: string;
   user_public_id: string;
+  user_email?: string;
   floe_app: string;
+  session_kind?: string;
+  code_space_id?: string;
   can_read_files: boolean;
   can_write_files: boolean;
   can_execute: boolean;
+  tunnel_url?: string;
   client_ip?: string;
   user_agent?: string;
   status: string;
