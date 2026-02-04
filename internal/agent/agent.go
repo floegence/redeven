@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	fsclient "github.com/floegence/flowersec/flowersec-go/client"
@@ -28,6 +29,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/fs"
 	"github.com/floegence/redeven-agent/internal/monitor"
+	"github.com/floegence/redeven-agent/internal/portforward"
 	"github.com/floegence/redeven-agent/internal/session"
 	syssvc "github.com/floegence/redeven-agent/internal/sys"
 	"github.com/floegence/redeven-agent/internal/terminal"
@@ -71,6 +73,8 @@ type Agent struct {
 	mon  *monitor.Service
 	sys  *syssvc.Service
 	code *codeapp.Service
+
+	upgrading atomic.Bool
 
 	mu       sync.Mutex
 	sessions map[string]*activeSession // channel_id -> session
@@ -139,14 +143,15 @@ func New(opts Options) (*Agent, error) {
 		fsRoot:    rootAbs,
 		term:      terminal.NewManager(shell, rootAbs, logger),
 		mon:       monitor.NewService(logger),
-		sys: syssvc.NewService(syssvc.Options{
-			AgentInstanceID: opts.Config.AgentInstanceID,
-			Version:         opts.Version,
-			Commit:          opts.Commit,
-			BuildTime:       opts.BuildTime,
-		}),
-		sessions: make(map[string]*activeSession),
+		sessions:  make(map[string]*activeSession),
 	}
+	a.sys = syssvc.NewService(syssvc.Options{
+		AgentInstanceID: opts.Config.AgentInstanceID,
+		Version:         opts.Version,
+		Commit:          opts.Commit,
+		BuildTime:       opts.BuildTime,
+		Upgrader:        &sysUpgrader{a: a},
+	})
 
 	codeSvc, err := codeapp.New(context.Background(), codeapp.Options{
 		Logger:              logger,
@@ -289,6 +294,11 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 }
 
 func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) {
+	if a != nil && a.upgrading.Load() {
+		a.log.Debug("upgrade in progress; ignoring grant_server notify")
+		return
+	}
+
 	var n session.GrantServerNotify
 	if err := json.Unmarshal(payload, &n); err != nil {
 		a.log.Warn("invalid grant_server notify json", "error", err)
@@ -316,7 +326,7 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		a.log.Warn("grant_server channel_id mismatch", "channel_id", channelID)
 		return
 	}
-	if floeApp != FloeAppRedevenAgent && floeApp != FloeAppRedevenCode {
+	if floeApp != FloeAppRedevenAgent && floeApp != FloeAppRedevenCode && floeApp != FloeAppRedevenPortForward {
 		a.log.Warn("unsupported floe_app; ignoring session", "floe_app", floeApp, "channel_id", channelID)
 		return
 	}
@@ -368,6 +378,28 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 				"code_space_id", csID,
 				"can_read_files", meta.CanReadFiles,
 				"can_write_files", meta.CanWriteFiles,
+				"can_execute", meta.CanExecute,
+			)
+			return
+		}
+	}
+
+	// Port Forward security: forwarding arbitrary HTTP traffic is an execute-like capability.
+	if meta.FloeApp == FloeAppRedevenPortForward {
+		forwardID := strings.TrimSpace(meta.CodeSpaceID)
+		if forwardID == "" {
+			a.log.Warn("missing forward_id for port forward session", "channel_id", channelID)
+			return
+		}
+		if !portforward.IsValidForwardID(forwardID) {
+			a.log.Warn("invalid forward_id for port forward session", "forward_id", forwardID, "channel_id", channelID)
+			return
+		}
+		if !meta.CanExecute {
+			a.log.Warn("insufficient permissions for port forward session; ignoring",
+				"channel_id", channelID,
+				"user_public_id", meta.UserPublicID,
+				"forward_id", forwardID,
 				"can_execute", meta.CanExecute,
 			)
 			return
