@@ -426,18 +426,27 @@ export function EnvAppShell() {
     return env()?.name || 'Environment';
   };
 
-  function portalOrigin(): string {
-    // The Env App runs on a sandbox subdomain (env-<env_id>.<region>.<base>),
-    // while the Portal is on the region root domain (<region>.<base>).
+  function consoleOrigin(): string {
+    // Env App runs on a sandbox subdomain (env-<id>.<region>.<base>).
+    // Console is served on the base domain (<base>).
     const proto = window.location.protocol;
     const host = window.location.hostname.trim().toLowerCase();
     const port = window.location.port ? `:${window.location.port}` : '';
     const parts = host.split('.');
-    // sandbox origin always has an extra label (sandbox_id.<region>.<base>).
-    if (parts.length >= 4) {
+
+    // sandbox_id.<region>.<base>
+    if (parts.length >= 4 && (parts[0].startsWith('env-') || parts[0].startsWith('cs-'))) {
+      parts.shift();
       parts.shift();
       return `${proto}//${parts.join('.')}${port}`;
     }
+
+    // <region>.<base>
+    if (parts.length >= 3) {
+      parts.shift();
+      return `${proto}//${parts.join('.')}${port}`;
+    }
+
     return `${proto}//${host}${port}`;
   }
 
@@ -500,13 +509,13 @@ export function EnvAppShell() {
         execute: () => goTab('market'),
       },
       {
-        id: 'redeven.env.backToEnvironments',
-        title: 'Back to Environments',
-        description: 'Return to the environments list',
+        id: 'redeven.env.backToDashboard',
+        title: 'Back to Dashboard',
+        description: 'Return to the console dashboard',
         category: 'Navigation',
         keybind: 'mod+shift+e',
         icon: Grid3x3,
-        execute: () => window.location.assign(`${portalOrigin()}/`),
+        execute: () => window.location.assign(`${consoleOrigin()}/dashboard`),
       },
       {
         id: 'redeven.env.reconnect',
@@ -590,12 +599,12 @@ export function EnvAppShell() {
         <Shell
           sidebarMode="hidden"
           logo={
-            <Tooltip content="Back to environments" placement="bottom" delay={0}>
+            <Tooltip content="Back to dashboard" placement="bottom" delay={0}>
               <button
                 type="button"
                 class="flex items-center justify-center w-8 h-8 rounded cursor-pointer hover:bg-muted/60 transition-colors"
-                onClick={() => window.location.assign(`${portalOrigin()}/`)}
-                aria-label="Back to environments"
+                onClick={() => window.location.assign(`${consoleOrigin()}/dashboard`)}
+                aria-label="Back to dashboard"
               >
                 <img src="/logo.png" alt="Redeven" class="w-6 h-6 object-contain" />
               </button>
