@@ -27,8 +27,8 @@ export function fromWireActiveSession(s: wire_sessions_active_session): ActiveSe
     tunnelUrl: str((s as any)?.tunnel_url),
     createdAtUnixMs: num((s as any)?.created_at_unix_ms),
     connectedAtUnixMs: num((s as any)?.connected_at_unix_ms),
-    canReadFiles: bool((s as any)?.can_read_files),
-    canWriteFiles: bool((s as any)?.can_write_files),
+    canRead: bool((s as any)?.can_read),
+    canWrite: bool((s as any)?.can_write),
     canExecute: bool((s as any)?.can_execute),
   };
 }

@@ -39,14 +39,14 @@ type Entry struct {
 	UserPublicID string `json:"user_public_id,omitempty"`
 	UserEmail    string `json:"user_email,omitempty"`
 
-	FloeApp       string `json:"floe_app,omitempty"`
-	SessionKind   string `json:"session_kind,omitempty"`
-	CodeSpaceID   string `json:"code_space_id,omitempty"`
-	TunnelURL     string `json:"tunnel_url,omitempty"`
-	CanReadFiles  bool   `json:"can_read_files"`
-	CanWriteFiles bool   `json:"can_write_files"`
-	CanExecute    bool   `json:"can_execute"`
-	CanAdmin      bool   `json:"can_admin"`
+	FloeApp     string `json:"floe_app,omitempty"`
+	SessionKind string `json:"session_kind,omitempty"`
+	CodeSpaceID string `json:"code_space_id,omitempty"`
+	TunnelURL   string `json:"tunnel_url,omitempty"`
+	CanRead     bool   `json:"can_read"`
+	CanWrite    bool   `json:"can_write"`
+	CanExecute  bool   `json:"can_execute"`
+	CanAdmin    bool   `json:"can_admin"`
 
 	// Detail is a small, action-specific object (avoid secrets).
 	Detail map[string]any `json:"detail,omitempty"`

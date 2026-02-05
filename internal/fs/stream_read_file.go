@@ -25,7 +25,7 @@ func (s *Service) ServeReadFileStream(ctx context.Context, stream io.ReadWriteCl
 	defer func() { _ = stream.Close() }()
 
 	// Enforce permissions from session_meta.
-	if meta == nil || !meta.CanReadFiles {
+	if meta == nil || !meta.CanRead {
 		_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
 			Ok: false,
 			Error: &fsStreamError{

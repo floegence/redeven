@@ -74,8 +74,8 @@ function formatDateTime(ms: number): string {
 
 function formatSessionPerm(s: ActiveSession): string {
   const parts: string[] = [];
-  if (s.canReadFiles) parts.push('R');
-  if (s.canWriteFiles) parts.push('W');
+  if (s.canRead) parts.push('R');
+  if (s.canWrite) parts.push('W');
   if (s.canExecute) parts.push('X');
   return parts.length > 0 ? parts.join('') : '-';
 }

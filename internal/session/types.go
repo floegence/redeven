@@ -16,8 +16,8 @@ type Meta struct {
 	UserPublicID      string `json:"user_public_id"`
 	UserEmail         string `json:"user_email"`
 	NamespacePublicID string `json:"namespace_public_id"`
-	CanReadFiles      bool   `json:"can_read_files"`
-	CanWriteFiles     bool   `json:"can_write_files"`
+	CanRead           bool   `json:"can_read"`
+	CanWrite          bool   `json:"can_write"`
 	CanExecute        bool   `json:"can_execute"`
 	// CanAdmin gates management actions on the data plane (e.g. codespace create/delete/rename).
 	//

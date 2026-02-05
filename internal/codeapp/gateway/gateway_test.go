@@ -135,7 +135,7 @@ func TestGateway_ManagementAPI_EnvOriginOnly(t *testing.T) {
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
 		ConfigPath:         writeTestConfig(t),
-		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanReadFiles: true}),
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true}),
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -312,7 +312,7 @@ func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
 		ConfigPath:         writeTestConfig(t),
-		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanReadFiles: true, CanWriteFiles: true, CanExecute: true, CanAdmin: true}),
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true}),
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -472,7 +472,7 @@ func TestGateway_ManagementAPI_PermissionGates(t *testing.T) {
 			DistFS:             dist,
 			ListenAddr:         "127.0.0.1:0",
 			ConfigPath:         writeTestConfig(t),
-			ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanReadFiles: true, CanExecute: true, CanAdmin: false}),
+			ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanExecute: true, CanAdmin: false}),
 		})
 		if err != nil {
 			t.Fatalf("New: %v", err)
@@ -529,7 +529,7 @@ func TestGateway_ManagementAPI_PermissionGates(t *testing.T) {
 			DistFS:             dist,
 			ListenAddr:         "127.0.0.1:0",
 			ConfigPath:         writeTestConfig(t),
-			ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanReadFiles: true, CanExecute: false, CanAdmin: true}),
+			ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanExecute: false, CanAdmin: true}),
 		})
 		if err != nil {
 			t.Fatalf("New: %v", err)
@@ -575,7 +575,7 @@ func TestGateway_Settings_RedactsSecrets(t *testing.T) {
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
 		ConfigPath:         cfgPath,
-		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanReadFiles: true}),
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true}),
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)

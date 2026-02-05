@@ -48,7 +48,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 	}
 
 	rpctyped.Register[fsGetHomeReq, fsGetHomeResp](r, TypeID_FS_GET_HOME, func(_ctx context.Context, _ *fsGetHomeReq) (*fsGetHomeResp, error) {
-		if meta == nil || !meta.CanReadFiles {
+		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		// Return the real filesystem root path configured for this agent.
@@ -56,7 +56,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 	})
 
 	rpctyped.Register[fsListReq, fsListResp](r, TypeID_FS_LIST, func(_ctx context.Context, req *fsListReq) (*fsListResp, error) {
-		if meta == nil || !meta.CanReadFiles {
+		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		vp, p, err := s.resolve(req.Path)
@@ -96,7 +96,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 	})
 
 	rpctyped.Register[fsReadFileReq, fsReadFileResp](r, TypeID_FS_READ_FILE, func(_ctx context.Context, req *fsReadFileReq) (*fsReadFileResp, error) {
-		if meta == nil || !meta.CanReadFiles {
+		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		_, p, err := s.resolve(req.Path)
@@ -120,7 +120,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 	})
 
 	rpctyped.Register[fsWriteFileReq, fsWriteFileResp](r, TypeID_FS_WRITE, func(_ctx context.Context, req *fsWriteFileReq) (*fsWriteFileResp, error) {
-		if meta == nil || !meta.CanWriteFiles {
+		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		_, p, err := s.resolve(req.Path)
@@ -156,7 +156,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 	})
 
 	rpctyped.Register[fsDeleteReq, fsDeleteResp](r, TypeID_FS_DELETE, func(_ctx context.Context, req *fsDeleteReq) (*fsDeleteResp, error) {
-		if meta == nil || !meta.CanWriteFiles {
+		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		_, p, err := s.resolve(req.Path)
@@ -176,7 +176,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 	})
 
 	rpctyped.Register[fsRenameReq, fsRenameResp](r, TypeID_FS_RENAME, func(_ctx context.Context, req *fsRenameReq) (*fsRenameResp, error) {
-		if meta == nil || !meta.CanWriteFiles {
+		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		vpOld, pOld, err := s.resolve(req.OldPath)
@@ -209,7 +209,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 	})
 
 	rpctyped.Register[fsCopyReq, fsCopyResp](r, TypeID_FS_COPY, func(_ctx context.Context, req *fsCopyReq) (*fsCopyResp, error) {
-		if meta == nil || !meta.CanWriteFiles {
+		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
 		_, pSrc, err := s.resolve(req.SourcePath)

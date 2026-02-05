@@ -12,8 +12,8 @@ export type ActiveSession = {
   createdAtUnixMs: number;
   connectedAtUnixMs: number;
 
-  canReadFiles: boolean;
-  canWriteFiles: boolean;
+  canRead: boolean;
+  canWrite: boolean;
   canExecute: boolean;
 };
 

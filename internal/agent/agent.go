@@ -389,8 +389,8 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 
 	// Clamp control-plane granted permissions using the local endpoint cap.
 	declared := config.PermissionSet{
-		Read:    meta.CanReadFiles,
-		Write:   meta.CanWriteFiles,
+		Read:    meta.CanRead,
+		Write:   meta.CanWrite,
 		Execute: meta.CanExecute,
 	}
 	localCap := a.cfg.PermissionPolicy.ResolveCap(meta.UserPublicID, meta.FloeApp)
@@ -411,8 +411,8 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 			"effective_execute", effective.Execute,
 		)
 	}
-	meta.CanReadFiles = effective.Read
-	meta.CanWriteFiles = effective.Write
+	meta.CanRead = effective.Read
+	meta.CanWrite = effective.Write
 	meta.CanExecute = effective.Execute
 
 	// Code App security: code-server is a "full environment" capability.
@@ -427,13 +427,13 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 			a.log.Warn("invalid code_space_id for code app session", "code_space_id", csID, "channel_id", channelID)
 			return
 		}
-		if !meta.CanReadFiles || !meta.CanWriteFiles || !meta.CanExecute {
+		if !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			a.log.Warn("insufficient permissions for code app session; ignoring",
 				"channel_id", channelID,
 				"user_public_id", meta.UserPublicID,
 				"code_space_id", csID,
-				"can_read_files", meta.CanReadFiles,
-				"can_write_files", meta.CanWriteFiles,
+				"can_read", meta.CanRead,
+				"can_write", meta.CanWrite,
 				"can_execute", meta.CanExecute,
 			)
 			return
@@ -576,8 +576,8 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 				SessionKind:       strings.TrimSpace(meta.SessionKind),
 				CodeSpaceID:       codeSpaceID,
 				TunnelURL:         tunnelURL,
-				CanReadFiles:      meta.CanReadFiles,
-				CanWriteFiles:     meta.CanWriteFiles,
+				CanRead:           meta.CanRead,
+				CanWrite:          meta.CanWrite,
 				CanExecute:        meta.CanExecute,
 				CanAdmin:          meta.CanAdmin,
 				Detail:            detail,
@@ -624,8 +624,8 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 			SessionKind:       strings.TrimSpace(meta.SessionKind),
 			CodeSpaceID:       codeSpaceID,
 			TunnelURL:         tunnelURL,
-			CanReadFiles:      meta.CanReadFiles,
-			CanWriteFiles:     meta.CanWriteFiles,
+			CanRead:           meta.CanRead,
+			CanWrite:          meta.CanWrite,
 			CanExecute:        meta.CanExecute,
 			CanAdmin:          meta.CanAdmin,
 			Detail: map[string]any{

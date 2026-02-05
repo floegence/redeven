@@ -17,8 +17,8 @@ function fmtTime(iso: string): string {
 
 function formatPerm(e: AgentAuditEntry): string {
   const parts: string[] = [];
-  if (e.can_read_files) parts.push('R');
-  if (e.can_write_files) parts.push('W');
+  if (e.can_read) parts.push('R');
+  if (e.can_write) parts.push('W');
   if (e.can_execute) parts.push('X');
   if (e.can_admin) parts.push('A');
   return parts.length > 0 ? parts.join('') : '-';

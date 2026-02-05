@@ -12,8 +12,8 @@ export type wire_sessions_active_session = {
   created_at_unix_ms: number;
   connected_at_unix_ms: number;
 
-  can_read_files: boolean;
-  can_write_files: boolean;
+  can_read: boolean;
+  can_write: boolean;
   can_execute: boolean;
 };
 

@@ -515,7 +515,7 @@ func (r *run) sendToolResult(sc *sidecarProcess, toolID string, ok bool, result 
 func (r *run) execTool(ctx context.Context, meta *session.Meta, toolName string, args map[string]any) (any, error) {
 	switch toolName {
 	case "fs.list_dir":
-		if meta == nil || !meta.CanReadFiles {
+		if meta == nil || !meta.CanRead {
 			return nil, errors.New("read permission denied")
 		}
 		var p struct {
@@ -528,7 +528,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolName string,
 		return r.toolFSListDir(p.Path)
 
 	case "fs.stat":
-		if meta == nil || !meta.CanReadFiles {
+		if meta == nil || !meta.CanRead {
 			return nil, errors.New("read permission denied")
 		}
 		var p struct {
@@ -541,7 +541,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolName string,
 		return r.toolFSStat(p.Path)
 
 	case "fs.read_file":
-		if meta == nil || !meta.CanReadFiles {
+		if meta == nil || !meta.CanRead {
 			return nil, errors.New("read permission denied")
 		}
 		var p struct {
@@ -556,7 +556,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolName string,
 		return r.toolFSReadFile(p.Path, p.Offset, p.MaxBytes)
 
 	case "fs.write_file":
-		if meta == nil || !meta.CanWriteFiles {
+		if meta == nil || !meta.CanWrite {
 			return nil, errors.New("write permission denied")
 		}
 		var p struct {

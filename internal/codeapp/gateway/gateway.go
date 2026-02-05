@@ -444,12 +444,12 @@ func (g *Gateway) requirePermission(w http.ResponseWriter, r *http.Request, perm
 
 	switch perm {
 	case requiredPermissionRead:
-		if !meta.CanReadFiles {
+		if !meta.CanRead {
 			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "read permission denied"})
 			return nil, false
 		}
 	case requiredPermissionWrite:
-		if !meta.CanWriteFiles {
+		if !meta.CanWrite {
 			writeJSON(w, http.StatusForbidden, apiResp{OK: false, Error: "write permission denied"})
 			return nil, false
 		}
@@ -535,15 +535,15 @@ func (g *Gateway) appendAudit(meta *session.Meta, action string, status string, 
 		UserPublicID: strings.TrimSpace(meta.UserPublicID),
 		UserEmail:    strings.TrimSpace(meta.UserEmail),
 
-		FloeApp:       strings.TrimSpace(meta.FloeApp),
-		SessionKind:   strings.TrimSpace(meta.SessionKind),
-		CodeSpaceID:   strings.TrimSpace(meta.CodeSpaceID),
-		TunnelURL:     tunnelURL,
-		CanReadFiles:  meta.CanReadFiles,
-		CanWriteFiles: meta.CanWriteFiles,
-		CanExecute:    meta.CanExecute,
-		CanAdmin:      meta.CanAdmin,
-		Detail:        detail,
+		FloeApp:     strings.TrimSpace(meta.FloeApp),
+		SessionKind: strings.TrimSpace(meta.SessionKind),
+		CodeSpaceID: strings.TrimSpace(meta.CodeSpaceID),
+		TunnelURL:   tunnelURL,
+		CanRead:     meta.CanRead,
+		CanWrite:    meta.CanWrite,
+		CanExecute:  meta.CanExecute,
+		CanAdmin:    meta.CanAdmin,
+		Detail:      detail,
 	})
 }
 

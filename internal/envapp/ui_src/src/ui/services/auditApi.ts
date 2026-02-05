@@ -19,8 +19,8 @@ export type AgentAuditEntry = {
   code_space_id?: string;
   tunnel_url?: string;
 
-  can_read_files: boolean;
-  can_write_files: boolean;
+  can_read: boolean;
+  can_write: boolean;
   can_execute: boolean;
   can_admin: boolean;
 
@@ -35,4 +35,3 @@ export async function listAgentAuditLogs(limit = 200): Promise<AgentAuditEntry[]
   });
   return Array.isArray(out?.entries) ? out.entries : [];
 }
-

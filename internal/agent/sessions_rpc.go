@@ -39,9 +39,9 @@ type sessionsActiveSession struct {
 	CreatedAtUnixMs   int64 `json:"created_at_unix_ms"`
 	ConnectedAtUnixMs int64 `json:"connected_at_unix_ms"`
 
-	CanReadFiles  bool `json:"can_read_files"`
-	CanWriteFiles bool `json:"can_write_files"`
-	CanExecute    bool `json:"can_execute"`
+	CanRead    bool `json:"can_read"`
+	CanWrite   bool `json:"can_write"`
+	CanExecute bool `json:"can_execute"`
 }
 
 func (a *Agent) registerSessionsRPC(r *rpc.Router, meta *session.Meta) {
@@ -53,7 +53,7 @@ func (a *Agent) registerSessionsRPC(r *rpc.Router, meta *session.Meta) {
 		// This is a read-only observability endpoint that returns session metadata.
 		// Gate it by read permission to avoid leaking user identities / connection metadata
 		// when the session is clamped to no permissions.
-		if meta == nil || !meta.CanReadFiles {
+		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		return &sessionsListActiveResp{Sessions: a.listActiveSessionsSnapshot()}, nil
@@ -90,8 +90,8 @@ func (a *Agent) listActiveSessionsSnapshot() []sessionsActiveSession {
 			TunnelURL:         strings.TrimSpace(s.tunnelURL),
 			CreatedAtUnixMs:   m.CreatedAtUnixMs,
 			ConnectedAtUnixMs: connectedAt,
-			CanReadFiles:      m.CanReadFiles,
-			CanWriteFiles:     m.CanWriteFiles,
+			CanRead:           m.CanRead,
+			CanWrite:          m.CanWrite,
 			CanExecute:        m.CanExecute,
 		})
 	}
