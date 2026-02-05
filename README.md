@@ -25,7 +25,7 @@ Implemented in this repo:
 
 Not implemented yet (planned):
 
-- `floe_app = ...` (rebrowser, plugin marketplace apps, etc)
+- `floe_app = ...` (rebrowser, 3rd-party apps, etc)
 
 ## Build
 

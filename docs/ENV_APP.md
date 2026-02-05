@@ -6,7 +6,7 @@ Key points:
 
 - The Env App UI is **agent-bundled** (built + embedded into the agent binary).
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
-- Env details features live here (Deck/Terminal/Monitor/File Browser/Market/Codespaces).
+- Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/AI).
 
 ## What runs where
 
@@ -30,8 +30,6 @@ the sandbox origin `sessionStorage`.
 
 - `POST /api/srv/v1/floeproxy/entry` (Env App only; broker_token -> one-time entry_ticket for itself)
 - `GET /api/srv/v1/floeproxy/environments/:envId`
-- `GET /api/srv/v1/floeproxy/environments/:envId/floe-apps`
-- `PUT /api/srv/v1/floeproxy/environments/:envId/floe-apps/:appId`
 - `POST /api/srv/v1/floeproxy/environments/:envId/entry` (Env App launcher; mint one-time entry_ticket for target apps)
 
 All requests are `credentials: 'omit'` and include:

@@ -7,7 +7,6 @@ import {
   Copy,
   Files,
   Globe,
-  Grid,
   Grid3x3,
   LayoutDashboard,
   Moon,
@@ -30,7 +29,6 @@ import { EnvMonitorPage } from './pages/EnvMonitorPage';
 import { EnvFileBrowserPage } from './pages/EnvFileBrowserPage';
 import { EnvCodespacesPage } from './pages/EnvCodespacesPage';
 import { EnvPortForwardsPage } from './pages/EnvPortForwardsPage';
-import { EnvPluginMarketPage } from './pages/EnvPluginMarketPage';
 import { EnvAIPage } from './pages/EnvAIPage';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
 import { redevenDeckWidgets } from './deck/redevenDeckWidgets';
@@ -55,6 +53,8 @@ const ACTIVE_TAB_STORAGE_KEY = 'redeven_envapp_active_tab';
 function readPersistedActiveTab(): EnvNavTab | null {
   try {
     const v = String(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) ?? '').trim();
+    // Backward compat: the "market" tab was removed; redirect old preferences.
+    if (v === 'market') return 'codespaces';
     if (
       v === 'deck' ||
       v === 'terminal' ||
@@ -62,7 +62,6 @@ function readPersistedActiveTab(): EnvNavTab | null {
       v === 'files' ||
       v === 'codespaces' ||
       v === 'ports' ||
-      v === 'market' ||
       v === 'ai'
     ) {
       return v;
@@ -391,8 +390,7 @@ export function EnvAppShell() {
     { id: 'files', name: 'File Browser', icon: Files, component: EnvFileBrowserPage, sidebar: { order: 4, fullScreen: true } },
     { id: 'codespaces', name: 'Codespaces', icon: Code, component: EnvCodespacesPage, sidebar: { order: 5, fullScreen: true } },
     { id: 'ports', name: 'Ports', icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 6, fullScreen: true } },
-    { id: 'market', name: 'Plugin Market', icon: Grid, component: EnvPluginMarketPage, sidebar: { order: 7, fullScreen: true } },
-    { id: 'ai', name: 'AI', icon: Sparkles, component: EnvAIPage, sidebar: { order: 8, fullScreen: true } },
+    { id: 'ai', name: 'AI', icon: Sparkles, component: EnvAIPage, sidebar: { order: 7, fullScreen: true } },
     { id: 'settings', name: 'Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } },
   ];
 
@@ -416,7 +414,6 @@ export function EnvAppShell() {
       { id: 'files', icon: Files, label: 'File Browser', onClick: () => goTab('files') },
       { id: 'codespaces', icon: Code, label: 'Codespaces', onClick: () => goTab('codespaces') },
       { id: 'ports', icon: Globe, label: 'Ports', onClick: () => goTab('ports') },
-      { id: 'market', icon: Grid, label: 'Plugin Market', onClick: () => goTab('market') },
       { id: 'ai', icon: Sparkles, label: 'AI', onClick: () => goTab('ai') },
     );
     return items;
@@ -513,15 +510,6 @@ export function EnvAppShell() {
         keybind: 'mod+shift+o',
         icon: Globe,
         execute: () => goTab('ports'),
-      },
-      {
-        id: 'redeven.env.goToMarket',
-        title: 'Go to Plugin Market',
-        description: 'Browse plugins',
-        category: 'Navigation',
-        keybind: 'mod+shift+p',
-        icon: Grid,
-        execute: () => goTab('market'),
       },
       {
         id: 'redeven.env.backToDashboard',

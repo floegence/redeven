@@ -1,7 +1,7 @@
 import { createContext, useContext, type Resource } from 'solid-js';
 import type { EnvironmentDetail } from '../services/controlplaneApi';
 
-export type EnvNavTab = 'deck' | 'terminal' | 'monitor' | 'files' | 'codespaces' | 'ports' | 'market' | 'ai';
+export type EnvNavTab = 'deck' | 'terminal' | 'monitor' | 'files' | 'codespaces' | 'ports' | 'ai';
 
 export type EnvSettingsSection = 'ai';
 
