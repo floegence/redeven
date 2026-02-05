@@ -11,7 +11,7 @@ High-level design:
 ## Requirements
 
 - Node.js `>= 20` available on `PATH` as `node` (the agent spawns the sidecar as `node sidecar.mjs`).
-- Provider API keys must be provided via environment variables (never store secrets in `config.json`).
+- Provider API keys are stored locally in a separate secrets file (never store secrets in `config.json`).
 
 ## Configuration
 
@@ -22,7 +22,13 @@ Notes:
 - `default_model` format is `<provider_id>/<model_name>`.
 - `models` is an optional allow-list. If provided, `default_model` must be listed.
 - `providers[].base_url` is optional for `openai` / `anthropic`, and **required** for `openai_compatible`.
-- `providers[].api_key_env` is the environment variable name holding the API key.
+- `providers[].api_key_env` is fixed to `REDEVEN_API_KEY`.
+
+API keys:
+
+- Keys are stored in `~/.redeven-agent/secrets.json` (chmod `0600`) and never returned in plaintext.
+- You can configure keys from the Env App UI: Settings → AI → Provider → API key.
+- Multiple provider keys can be stored at the same time (keyed by `providers[].id`).
 
 Example:
 
@@ -50,13 +56,13 @@ Example:
         "id": "openai",
         "type": "openai",
         "base_url": "https://api.openai.com/v1",
-        "api_key_env": "OPENAI_API_KEY"
+        "api_key_env": "REDEVEN_API_KEY"
       },
       {
         "id": "anthropic",
         "type": "anthropic",
         "base_url": "https://api.anthropic.com/v1",
-        "api_key_env": "ANTHROPIC_API_KEY"
+        "api_key_env": "REDEVEN_API_KEY"
       }
     ]
   }

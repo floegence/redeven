@@ -10,8 +10,9 @@ import (
 // AIConfig configures the optional AI Agent feature (TS sidecar + Go executor).
 //
 // Notes:
-// - Secrets (api keys) must never be stored in this config; use api_key_env and rely on process env vars.
-// - Field names are snake_case to match the rest of the agent config surface.
+//   - Secrets (api keys) must never be stored in this config. Keys are managed via a separate local secrets file
+//     and injected into the AI sidecar process env at run start.
+//   - Field names are snake_case to match the rest of the agent config surface.
 type AIConfig struct {
 	// DefaultModel is the default model id used by the UI when starting a run.
 	// Format: "<provider_id>/<model_name>" (example: "openai/gpt-5-mini").
@@ -38,9 +39,17 @@ type AIProvider struct {
 	// When empty, provider defaults apply (except openai_compatible where base_url is required).
 	BaseURL string `json:"base_url,omitempty"`
 
-	// APIKeyEnv is the environment variable name holding the provider API key.
+	// APIKeyEnv is the environment variable name used by the sidecar to read the provider API key.
+	//
+	// This value is fixed to AIProviderAPIKeyEnvFixed to keep the UI intuitive and avoid conflicts
+	// with other local tools.
 	APIKeyEnv string `json:"api_key_env"`
 }
+
+// AIProviderAPIKeyEnvFixed is the fixed environment variable name injected into the AI sidecar process.
+//
+// It is intentionally Redeven-specific to avoid collisions with other local tools.
+const AIProviderAPIKeyEnvFixed = "REDEVEN_API_KEY"
 
 func (c *AIConfig) Validate() error {
 	if c == nil {
@@ -77,6 +86,9 @@ func (c *AIConfig) Validate() error {
 
 		if strings.TrimSpace(p.APIKeyEnv) == "" {
 			return fmt.Errorf("providers[%d]: missing api_key_env", i)
+		}
+		if strings.TrimSpace(p.APIKeyEnv) != AIProviderAPIKeyEnvFixed {
+			return fmt.Errorf("providers[%d]: api_key_env must be %q", i, AIProviderAPIKeyEnvFixed)
 		}
 
 		baseURL := strings.TrimSpace(p.BaseURL)

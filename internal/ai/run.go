@@ -32,6 +32,7 @@ type runOptions struct {
 	AIConfig *config.AIConfig
 
 	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
+	ResolveProviderKey func(providerID string) (string, bool, error)
 
 	RunID     string
 	ChannelID string
@@ -51,6 +52,7 @@ type run struct {
 	cfg      *config.AIConfig
 
 	resolveSessionMeta func(channelID string) (*session.Meta, bool)
+	resolveProviderKey func(providerID string) (string, bool, error)
 
 	id        string
 	channelID string
@@ -85,6 +87,7 @@ func newRun(opts runOptions) *run {
 		shell:              strings.TrimSpace(opts.Shell),
 		cfg:                opts.AIConfig,
 		resolveSessionMeta: opts.ResolveSessionMeta,
+		resolveProviderKey: opts.ResolveProviderKey,
 		id:                 strings.TrimSpace(opts.RunID),
 		channelID:          strings.TrimSpace(opts.ChannelID),
 		messageID:          strings.TrimSpace(opts.MessageID),
@@ -163,7 +166,61 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 	r.currentTextBlockIndex = 0
 	r.needNewTextBlock = false
 
-	sc, err := startSidecar(ctx, r.log, r.stateDir)
+	// Resolve provider key for this run, then inject it into the sidecar env.
+	modelID := strings.TrimSpace(req.Model)
+	providerID, _, ok := strings.Cut(modelID, "/")
+	providerID = strings.TrimSpace(providerID)
+	if !ok || providerID == "" {
+		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "Invalid model id"})
+		return fmt.Errorf("invalid model id %q", modelID)
+	}
+	if r.cfg == nil {
+		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI not configured"})
+		return errors.New("ai not configured")
+	}
+	knownProvider := false
+	for _, p := range r.cfg.Providers {
+		if strings.TrimSpace(p.ID) == providerID {
+			knownProvider = true
+			break
+		}
+	}
+	if !knownProvider {
+		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "Unknown AI provider"})
+		return fmt.Errorf("unknown provider %q", providerID)
+	}
+
+	if r.resolveProviderKey == nil {
+		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI provider key resolver not configured"})
+		return errors.New("missing provider key resolver")
+	}
+	apiKey, ok, err := r.resolveProviderKey(providerID)
+	if err != nil {
+		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "Failed to load AI provider key"})
+		return err
+	}
+	if !ok || strings.TrimSpace(apiKey) == "" {
+		_ = r.stream.send(streamEventError{
+			Type:      "error",
+			MessageID: r.messageID,
+			Error:     fmt.Sprintf("AI provider %q is missing API key. Open Settings to configure it.", providerID),
+		})
+		return fmt.Errorf("missing api key for provider %q", providerID)
+	}
+
+	// Filter out any inherited var with the same name to keep behavior deterministic.
+	// The effective key must always come from the local secrets store.
+	env := make([]string, 0, len(os.Environ())+1)
+	prefix := config.AIProviderAPIKeyEnvFixed + "="
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, prefix) {
+			continue
+		}
+		env = append(env, kv)
+	}
+	env = append(env, prefix+strings.TrimSpace(apiKey))
+
+	sc, err := startSidecar(ctx, r.log, r.stateDir, env)
 	if err != nil {
 		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI sidecar unavailable"})
 		return err

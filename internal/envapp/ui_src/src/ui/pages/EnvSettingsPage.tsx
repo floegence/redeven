@@ -42,6 +42,7 @@ type AIProviderType = 'openai' | 'anthropic' | 'openai_compatible';
 type AIProvider = Readonly<{ id: string; type: AIProviderType; base_url?: string; api_key_env: string }>;
 type AIModel = Readonly<{ id: string; label?: string }>;
 type AIConfig = Readonly<{ default_model: string; models?: AIModel[]; providers: AIProvider[] }>;
+type AISecretsView = Readonly<{ provider_api_key_set: Record<string, boolean> }>;
 
 type SettingsResponse = Readonly<{
   config_path: string;
@@ -62,6 +63,7 @@ type SettingsResponse = Readonly<{
   codespaces: Readonly<{ code_server_port_min: number; code_server_port_max: number }>;
   permission_policy: PermissionPolicy | null;
   ai: AIConfig | null;
+  ai_secrets?: AISecretsView | null;
 }>;
 
 type PermissionRow = { key: string; read: boolean; write: boolean; execute: boolean };
@@ -74,6 +76,7 @@ type AIModelRow = { id: string; label: string };
 
 const DEFAULT_CODE_SERVER_PORT_MIN = 20000;
 const DEFAULT_CODE_SERVER_PORT_MAX = 21000;
+const AI_API_KEY_ENV = 'REDEVEN_API_KEY';
 
 function defaultPermissionPolicy(): PermissionPolicy {
   return { schema_version: 1, local_max: { read: true, write: false, execute: true } };
@@ -83,7 +86,7 @@ function defaultAIConfig(): AIConfig {
   return {
     default_model: 'openai/gpt-5-mini',
     models: [],
-    providers: [{ id: 'openai', type: 'openai', base_url: 'https://api.openai.com/v1', api_key_env: 'OPENAI_API_KEY' }],
+    providers: [{ id: 'openai', type: 'openai', base_url: 'https://api.openai.com/v1', api_key_env: AI_API_KEY_ENV }],
   };
 }
 
@@ -529,10 +532,15 @@ export function EnvSettingsPage() {
   // AI fields
   const [aiDefaultModel, setAiDefaultModel] = createSignal('openai/gpt-5-mini');
   const [aiProviders, setAiProviders] = createSignal<AIProviderRow[]>([
-    { id: 'openai', type: 'openai', base_url: 'https://api.openai.com/v1', api_key_env: 'OPENAI_API_KEY' },
+    { id: 'openai', type: 'openai', base_url: 'https://api.openai.com/v1', api_key_env: AI_API_KEY_ENV },
   ]);
   const [aiUseModelList, setAiUseModelList] = createSignal(false);
   const [aiModels, setAiModels] = createSignal<AIModelRow[]>([]);
+
+  // AI provider keys (stored locally in secrets.json; never returned in plaintext).
+  const [aiProviderKeySet, setAiProviderKeySet] = createSignal<Record<string, boolean>>({});
+  const [aiProviderKeyDraft, setAiProviderKeyDraft] = createSignal<Record<string, string>>({});
+  const [aiProviderKeySaving, setAiProviderKeySaving] = createSignal<Record<string, boolean>>({});
 
   // JSON editor values
   const [runtimeJSON, setRuntimeJSON] = createSignal('');
@@ -618,7 +626,7 @@ export function EnvSettingsPage() {
       const out: any = {
         id: String(p.id ?? '').trim(),
         type: p.type,
-        api_key_env: String(p.api_key_env ?? '').trim(),
+        api_key_env: AI_API_KEY_ENV,
       };
       const baseURL = String(p.base_url ?? '').trim();
       if (baseURL) out.base_url = baseURL;
@@ -661,6 +669,7 @@ export function EnvSettingsPage() {
         throw new Error(`Invalid provider type: ${typ || '(empty)'}`);
       }
       if (!envKey) throw new Error(`Provider "${id}" is missing api_key_env.`);
+      if (envKey !== AI_API_KEY_ENV) throw new Error(`Provider "${id}" api_key_env must be "${AI_API_KEY_ENV}".`);
       if (typ === 'openai_compatible' && !baseURL) throw new Error(`Provider "${id}" requires base_url.`);
       if (baseURL) {
         let u: URL;
@@ -693,6 +702,85 @@ export function EnvSettingsPage() {
       }
       if (!modelIDs.has(defaultModel)) throw new Error('default_model must be listed in models when models is set.');
     }
+  };
+
+  const refreshAIProviderKeyStatus = async (providerIDs: string[]) => {
+    const ids = Array.from(
+      new Set(
+        (Array.isArray(providerIDs) ? providerIDs : [])
+          .map((x) => String(x ?? '').trim())
+          .filter((x) => !!x),
+      ),
+    );
+    if (ids.length === 0) {
+      setAiProviderKeySet({});
+      return;
+    }
+    try {
+      const resp = await fetchGatewayJSON<{ provider_api_key_set: Record<string, boolean> }>('/_redeven_proxy/api/ai/provider_keys/status', {
+        method: 'POST',
+        body: JSON.stringify({ provider_ids: ids }),
+      });
+      setAiProviderKeySet(resp?.provider_api_key_set ?? {});
+    } catch (e) {
+      // Best-effort only: the AI config UI should still work even if key status is unavailable.
+    }
+  };
+
+  const updateAIProviderKey = async (providerID: string, apiKey: string | null) => {
+    const id = String(providerID ?? '').trim();
+    if (!id) {
+      notify.error('Invalid provider', 'Provider id is required.');
+      return;
+    }
+    if (!canAdmin()) {
+      notify.error('Permission denied', 'Admin permission required.');
+      return;
+    }
+
+    setAiProviderKeySaving((prev) => ({ ...prev, [id]: true }));
+    try {
+      const body = { patches: [{ provider_id: id, api_key: apiKey }] };
+      const resp = await fetchGatewayJSON<{ provider_api_key_set: Record<string, boolean> }>('/_redeven_proxy/api/ai/provider_keys', {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+
+      const next = resp?.provider_api_key_set ?? {};
+      setAiProviderKeySet((prev) => ({ ...prev, ...next }));
+      setAiProviderKeyDraft((prev) => ({ ...prev, [id]: '' }));
+
+      if (apiKey) notify.success('Saved', `API key saved for provider "${id}".`);
+      else notify.success('Cleared', `API key cleared for provider "${id}".`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Save failed', msg || 'Request failed.');
+    } finally {
+      setAiProviderKeySaving((prev) => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const saveAIProviderKey = (providerID: string) => {
+    const id = String(providerID ?? '').trim();
+    if (!id) {
+      notify.error('Invalid provider', 'Provider id is required.');
+      return;
+    }
+    const key = String(aiProviderKeyDraft()?.[id] ?? '').trim();
+    if (!key) {
+      notify.error('Missing API key', 'Please paste an API key first.');
+      return;
+    }
+    void updateAIProviderKey(id, key);
+  };
+
+  const clearAIProviderKey = (providerID: string) => {
+    const id = String(providerID ?? '').trim();
+    if (!id) {
+      notify.error('Invalid provider', 'Provider id is required.');
+      return;
+    }
+    void updateAIProviderKey(id, null);
   };
 
   // Reset local state when settings are loaded (but do not overwrite user edits).
@@ -744,7 +832,7 @@ export function EnvSettingsPage() {
           id: String(p.id ?? ''),
           type: p.type,
           base_url: String(p.base_url ?? ''),
-          api_key_env: String(p.api_key_env ?? ''),
+          api_key_env: AI_API_KEY_ENV,
         })),
       );
 
@@ -753,6 +841,10 @@ export function EnvSettingsPage() {
       setAiModels(models.map((m) => ({ id: String(m.id ?? ''), label: String(m.label ?? '') })));
 
       setAiJSON(JSON.stringify(a, null, 2));
+
+      const keySet = s.ai_secrets?.provider_api_key_set;
+      if (keySet && typeof keySet === 'object') setAiProviderKeySet(keySet);
+      void refreshAIProviderKeyStatus((a.providers ?? []).map((p) => String(p.id ?? '')));
     }
   });
 
@@ -912,9 +1004,10 @@ export function EnvSettingsPage() {
           id: String(p?.id ?? ''),
           type: String(p?.type ?? '') as AIProviderType,
           base_url: String(p?.base_url ?? ''),
-          api_key_env: String(p?.api_key_env ?? ''),
+          api_key_env: AI_API_KEY_ENV,
         })),
       );
+      void refreshAIProviderKeyStatus(providersRaw.map((p) => String(p?.id ?? '')));
 
       const models = Array.isArray(modelsRaw) ? modelsRaw : [];
       setAiUseModelList(models.length > 0);
@@ -1104,10 +1197,11 @@ export function EnvSettingsPage() {
     setAiError(null);
     const d = defaultAIConfig();
     setAiDefaultModel(d.default_model);
-    setAiProviders(d.providers.map((p) => ({ id: p.id, type: p.type, base_url: String(p.base_url ?? ''), api_key_env: p.api_key_env })));
+    setAiProviders(d.providers.map((p) => ({ id: p.id, type: p.type, base_url: String(p.base_url ?? ''), api_key_env: AI_API_KEY_ENV })));
     setAiUseModelList(false);
     setAiModels([]);
     setAiDirty(true);
+    void refreshAIProviderKeyStatus(d.providers.map((p) => String(p.id ?? '')));
     if (aiView() === 'json') setAiJSON(JSON.stringify(d, null, 2));
   };
 
@@ -1743,7 +1837,7 @@ export function EnvSettingsPage() {
           <SettingsCard
             icon={Bot}
             title="AI"
-            description="Configure AI providers and models. API keys are never stored."
+            description="Configure AI providers and models. API keys are stored locally and never sent to the control-plane."
             badge={aiEnabled() ? 'Enabled' : 'Disabled'}
             badgeVariant={aiEnabled() ? 'success' : 'default'}
             error={aiError()}
@@ -1812,7 +1906,7 @@ export function EnvSettingsPage() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        setAiProviders((prev) => [...prev, { id: '', type: 'openai', base_url: '', api_key_env: '' }]);
+                        setAiProviders((prev) => [...prev, { id: '', type: 'openai', base_url: '', api_key_env: AI_API_KEY_ENV }]);
                         setAiDirty(true);
                       }}
                       disabled={!canInteract()}
@@ -1897,18 +1991,61 @@ export function EnvSettingsPage() {
                               <div class="flex items-center gap-2">
                                 <Key class="w-4 h-4 text-muted-foreground flex-shrink-0" />
                                 <Input
-                                  value={p.api_key_env}
-                                  onInput={(e) => {
-                                    const v = e.currentTarget.value;
-                                    setAiProviders((prev) => prev.map((it, i) => (i === idx() ? { ...it, api_key_env: v } : it)));
-                                    setAiDirty(true);
-                                  }}
-                                  placeholder="OPENAI_API_KEY"
+                                  value={AI_API_KEY_ENV}
                                   size="sm"
                                   class="w-full font-mono"
-                                  disabled={!canInteract()}
+                                  disabled
                                 />
                               </div>
+                            </div>
+
+                            <div class="md:col-span-2 space-y-2">
+                              <FieldLabel hint="stored locally, never shown again">api_key</FieldLabel>
+                              <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                                <div
+                                  class={
+                                    'text-xs px-2 py-1 rounded-md border ' +
+                                    (aiProviderKeySet()?.[String(p.id ?? '').trim()]
+                                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                                      : 'bg-muted/40 border-border text-muted-foreground')
+                                  }
+                                >
+                                  {aiProviderKeySet()?.[String(p.id ?? '').trim()] ? 'Key set' : 'Key not set'}
+                                </div>
+                                <Input
+                                  type="password"
+                                  value={aiProviderKeyDraft()?.[String(p.id ?? '').trim()] ?? ''}
+                                  onInput={(e) => {
+                                    const id = String(p.id ?? '').trim();
+                                    const v = e.currentTarget.value;
+                                    if (!id) return;
+                                    setAiProviderKeyDraft((prev) => ({ ...prev, [id]: v }));
+                                  }}
+                                  placeholder="Paste API key"
+                                  size="sm"
+                                  class="w-full"
+                                  disabled={!canInteract() || !canAdmin() || !String(p.id ?? '').trim()}
+                                />
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => saveAIProviderKey(String(p.id ?? '').trim())}
+                                  loading={!!aiProviderKeySaving()?.[String(p.id ?? '').trim()]}
+                                  disabled={!canInteract() || !canAdmin() || !String(p.id ?? '').trim()}
+                                >
+                                  Save key
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  class="text-muted-foreground hover:text-destructive"
+                                  onClick={() => clearAIProviderKey(String(p.id ?? '').trim())}
+                                  disabled={!canInteract() || !canAdmin() || !String(p.id ?? '').trim()}
+                                >
+                                  Clear
+                                </Button>
+                              </div>
+                              <p class="text-xs text-muted-foreground">Keys are saved in a separate local secrets file and are never written to config.json.</p>
                             </div>
                           </div>
                         </div>

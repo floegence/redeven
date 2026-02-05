@@ -94,7 +94,7 @@ func (p *sidecarProcess) recv() (*sidecarInbound, error) {
 	return &msg, nil
 }
 
-func startSidecar(ctx context.Context, log *slog.Logger, stateDir string) (*sidecarProcess, error) {
+func startSidecar(ctx context.Context, log *slog.Logger, stateDir string, env []string) (*sidecarProcess, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -108,6 +108,9 @@ func startSidecar(ctx context.Context, log *slog.Logger, stateDir string) (*side
 	}
 
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
+	if len(env) > 0 {
+		cmd.Env = env
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err

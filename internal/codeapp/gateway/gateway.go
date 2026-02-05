@@ -17,6 +17,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/portforward"
 	pfregistry "github.com/floegence/redeven-agent/internal/portforward/registry"
 	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven-agent/internal/settings"
 )
 
 type Options struct {
@@ -43,6 +45,10 @@ type Options struct {
 	// ConfigPath is the absolute path to the agent config file.
 	// It is used to read and persist settings updates initiated from the Env App UI.
 	ConfigPath string
+
+	// SecretsStore holds user-managed secrets (such as AI provider API keys).
+	// If nil, the gateway will derive a default secrets path from ConfigPath.
+	SecretsStore *settings.SecretsStore
 }
 
 type Backend interface {
@@ -102,6 +108,7 @@ type Gateway struct {
 
 	configPath string
 	configMu   sync.Mutex
+	secrets    *settings.SecretsStore
 
 	distFS fs.FS
 	dist   http.Handler
@@ -139,6 +146,13 @@ func New(opts Options) (*Gateway, error) {
 	// leading "/" (avoids FileServer canonicalization redirects).
 	dist := http.StripPrefix("/_redeven_proxy", http.FileServer(http.FS(opts.DistFS)))
 
+	secrets := opts.SecretsStore
+	if secrets == nil {
+		// Keep user-managed secrets in the same state dir as config.json.
+		dir := filepath.Dir(strings.TrimSpace(opts.ConfigPath))
+		secrets = settings.NewSecretsStore(filepath.Join(dir, "secrets.json"))
+	}
+
 	return &Gateway{
 		log:                     logger,
 		backend:                 opts.Backend,
@@ -148,6 +162,7 @@ func New(opts Options) (*Gateway, error) {
 		resolveSessionMeta:      opts.ResolveSessionMeta,
 		resolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
 		configPath:              strings.TrimSpace(opts.ConfigPath),
+		secrets:                 secrets,
 		distFS:                  opts.DistFS,
 		dist:                    dist,
 		addr:                    addr,
@@ -296,6 +311,11 @@ type settingsView struct {
 
 	PermissionPolicy *config.PermissionPolicy `json:"permission_policy"`
 	AI               *config.AIConfig         `json:"ai"`
+	AISecrets        *settingsAISecretsView   `json:"ai_secrets,omitempty"`
+}
+
+type settingsAISecretsView struct {
+	ProviderAPIKeySet map[string]bool `json:"provider_api_key_set"`
 }
 
 type settingsConnectionView struct {
@@ -334,7 +354,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func toSettingsView(cfg *config.Config, configPath string) settingsView {
+func toSettingsView(cfg *config.Config, configPath string, secrets *settings.SecretsStore) settingsView {
 	var direct settingsDirectView
 	if cfg != nil && cfg.Direct != nil {
 		direct = settingsDirectView{
@@ -369,6 +389,22 @@ func toSettingsView(cfg *config.Config, configPath string) settingsView {
 		}
 		out.PermissionPolicy = cfg.PermissionPolicy
 		out.AI = cfg.AI
+
+		if secrets != nil && cfg.AI != nil && len(cfg.AI.Providers) > 0 {
+			ids := make([]string, 0, len(cfg.AI.Providers))
+			for i := range cfg.AI.Providers {
+				id := strings.TrimSpace(cfg.AI.Providers[i].ID)
+				if id == "" {
+					continue
+				}
+				ids = append(ids, id)
+			}
+			if len(ids) > 0 {
+				if set, err := secrets.GetAIProviderAPIKeySet(ids); err == nil {
+					out.AISecrets = &settingsAISecretsView{ProviderAPIKeySet: set}
+				}
+			}
+		}
 	}
 	return out
 }
@@ -580,7 +616,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: toSettingsView(cfg, g.configPath)})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: toSettingsView(cfg, g.configPath, g.secrets)})
 		return
 
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/settings":
@@ -753,7 +789,96 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 
 		g.appendAudit(meta, "settings_update", "success", auditDetail, nil)
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: toSettingsView(updated, g.configPath)})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: toSettingsView(updated, g.configPath, g.secrets)})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/provider_keys/status":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		type reqBody struct {
+			ProviderIDs []string `json:"provider_ids"`
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body reqBody
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		set, err := g.secrets.GetAIProviderAPIKeySet(body.ProviderIDs)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "failed to load ai provider key status"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"provider_api_key_set": set}})
+		return
+
+	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/provider_keys":
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return
+		}
+		type patch struct {
+			ProviderID string  `json:"provider_id"`
+			APIKey     *string `json:"api_key"`
+		}
+		type reqBody struct {
+			Patches []patch `json:"patches"`
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body reqBody
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if len(body.Patches) == 0 {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing patches"})
+			return
+		}
+
+		converted := make([]settings.AIProviderAPIKeyPatch, 0, len(body.Patches))
+		touched := make([]string, 0, len(body.Patches))
+		for i := range body.Patches {
+			p := body.Patches[i]
+			id := strings.TrimSpace(p.ProviderID)
+			if id == "" {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid provider_id"})
+				return
+			}
+			var key *string
+			if p.APIKey != nil {
+				v := strings.TrimSpace(*p.APIKey)
+				key = &v
+			}
+			converted = append(converted, settings.AIProviderAPIKeyPatch{ProviderID: id, APIKey: key})
+			touched = append(touched, id)
+		}
+
+		if err := g.secrets.ApplyAIProviderAPIKeyPatches(converted); err != nil {
+			g.appendAudit(meta, "ai_provider_key_update", "failure", map[string]any{"providers": touched}, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+
+		set, err := g.secrets.GetAIProviderAPIKeySet(touched)
+		if err != nil {
+			g.appendAudit(meta, "ai_provider_key_update", "failure", map[string]any{"providers": touched}, err)
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "failed to load ai provider key status"})
+			return
+		}
+
+		g.appendAudit(meta, "ai_provider_key_update", "success", map[string]any{"providers": touched}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"provider_api_key_set": set}})
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/models":

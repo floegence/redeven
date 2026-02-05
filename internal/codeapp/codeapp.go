@@ -21,6 +21,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/portforward"
 	pfregistry "github.com/floegence/redeven-agent/internal/portforward/registry"
 	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven-agent/internal/settings"
 )
 
 const (
@@ -144,6 +145,8 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		runner:      runner,
 	}
 
+	secrets := settings.NewSecretsStore(filepath.Join(stateAbs, "secrets.json"))
+
 	aiSvc, err := ai.NewService(ai.Options{
 		Logger:             logger,
 		StateDir:           stateAbs,
@@ -151,6 +154,9 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		Shell:              strings.TrimSpace(opts.Shell),
 		Config:             opts.AIConfig,
 		ResolveSessionMeta: opts.ResolveSessionMeta,
+		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
+			return secrets.GetAIProviderAPIKey(providerID)
+		},
 	})
 	if err != nil {
 		_ = reg.Close()
@@ -168,6 +174,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ResolveSessionMeta:      opts.ResolveSessionMeta,
 		ResolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
 		ConfigPath:              strings.TrimSpace(opts.ConfigPath),
+		SecretsStore:            secrets,
 		ListenAddr:              "127.0.0.1:0",
 	})
 	if err != nil {

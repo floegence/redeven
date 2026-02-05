@@ -36,6 +36,11 @@ type Options struct {
 	Config *config.AIConfig
 
 	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
+
+	// ResolveProviderAPIKey returns the API key for the given provider id.
+	//
+	// It should read from a local secrets store, not from config.json.
+	ResolveProviderAPIKey func(providerID string) (string, bool, error)
 }
 
 type Service struct {
@@ -48,6 +53,7 @@ type Service struct {
 	cfg *config.AIConfig
 
 	resolveSessionMeta func(channelID string) (*session.Meta, bool)
+	resolveProviderKey func(providerID string) (string, bool, error)
 
 	mu              sync.Mutex
 	activeRunByChan map[string]string // channel_id -> run_id
@@ -82,6 +88,11 @@ func NewService(opts Options) (*Service, error) {
 		return nil, err
 	}
 
+	resolveProviderKey := opts.ResolveProviderAPIKey
+	if resolveProviderKey == nil {
+		resolveProviderKey = func(string) (string, bool, error) { return "", false, nil }
+	}
+
 	return &Service{
 		log:                logger,
 		stateDir:           strings.TrimSpace(opts.StateDir),
@@ -89,6 +100,7 @@ func NewService(opts Options) (*Service, error) {
 		shell:              strings.TrimSpace(opts.Shell),
 		cfg:                opts.Config,
 		resolveSessionMeta: opts.ResolveSessionMeta,
+		resolveProviderKey: resolveProviderKey,
 		activeRunByChan:    make(map[string]string),
 		activeRunByTh:      make(map[string]string),
 		runs:               make(map[string]*run),
@@ -321,6 +333,7 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		Shell:              s.shell,
 		AIConfig:           cfg,
 		ResolveSessionMeta: s.resolveSessionMeta,
+		ResolveProviderKey: s.resolveProviderKey,
 		RunID:              runID,
 		ChannelID:          channelID,
 		MessageID:          messageID,

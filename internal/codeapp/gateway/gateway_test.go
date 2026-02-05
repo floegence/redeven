@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
 	"encoding/base32"
 	"encoding/json"
@@ -89,6 +90,38 @@ func writeTestConfig(t *testing.T) string {
     "e2ee_psk_b64u": "secret",
     "channel_init_expire_at_unix_s": 0,
     "default_suite": 1
+  }
+}
+`
+
+	if err := os.WriteFile(p, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return p
+}
+
+func writeTestConfigWithAI(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	p := filepath.Join(dir, "config.json")
+
+	raw := `{
+  "controlplane_base_url": "https://example.com",
+  "environment_id": "env_123",
+  "agent_instance_id": "agent_123",
+  "direct": {
+    "ws_url": "wss://example.com/ws",
+    "channel_id": "ch_123",
+    "e2ee_psk_b64u": "secret",
+    "channel_init_expire_at_unix_s": 0,
+    "default_suite": 1
+  },
+  "ai": {
+    "default_model": "openai/gpt-5-mini",
+    "providers": [
+      { "id": "openai", "type": "openai", "base_url": "https://api.openai.com/v1", "api_key_env": "REDEVEN_API_KEY" }
+    ]
   }
 }
 `
@@ -625,6 +658,178 @@ func TestGateway_Settings_RedactsSecrets(t *testing.T) {
 		gw.serveHTTP(rr, req)
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("cs origin status = %d, want %d", rr.Code, http.StatusNotFound)
+		}
+	}
+}
+
+func TestGateway_AIProviderKeys_StatusAndUpdate(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+
+	cfgPath := writeTestConfig(t)
+	channelID := "ch_test_keys_1"
+	envOrigin := envOriginWithChannel(channelID)
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         cfgPath,
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanAdmin: true}),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// status: initially missing
+	{
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/provider_keys/status", bytes.NewBufferString(`{"provider_ids":["openai","anthropic"]}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		data, _ := resp["data"].(map[string]any)
+		set, _ := data["provider_api_key_set"].(map[string]any)
+		if set["openai"] != false {
+			t.Fatalf("openai set=%v, want=false", set["openai"])
+		}
+		if set["anthropic"] != false {
+			t.Fatalf("anthropic set=%v, want=false", set["anthropic"])
+		}
+	}
+
+	// set key
+	{
+		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/provider_keys", bytes.NewBufferString(`{"patches":[{"provider_id":"openai","api_key":"sk-test"}]}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("set key code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		data, _ := resp["data"].(map[string]any)
+		set, _ := data["provider_api_key_set"].(map[string]any)
+		if set["openai"] != true {
+			t.Fatalf("openai set=%v, want=true", set["openai"])
+		}
+	}
+
+	// status: openai should be set now
+	{
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/provider_keys/status", bytes.NewBufferString(`{"provider_ids":["openai"]}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		data, _ := resp["data"].(map[string]any)
+		set, _ := data["provider_api_key_set"].(map[string]any)
+		if set["openai"] != true {
+			t.Fatalf("openai set=%v, want=true", set["openai"])
+		}
+	}
+
+	// clear key
+	{
+		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/provider_keys", bytes.NewBufferString(`{"patches":[{"provider_id":"openai","api_key":null}]}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("clear key code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		data, _ := resp["data"].(map[string]any)
+		set, _ := data["provider_api_key_set"].(map[string]any)
+		if set["openai"] != false {
+			t.Fatalf("openai set=%v, want=false", set["openai"])
+		}
+	}
+}
+
+func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+
+	cfgPath := writeTestConfigWithAI(t)
+	channelID := "ch_test_keys_2"
+	envOrigin := envOriginWithChannel(channelID)
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         cfgPath,
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanAdmin: true}),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Set key first.
+	{
+		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/provider_keys", bytes.NewBufferString(`{"patches":[{"provider_id":"openai","api_key":"sk-test"}]}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("set key code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+	}
+
+	// Settings should include ai_secrets.provider_api_key_set without leaking secrets.
+	{
+		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil)
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("settings status = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		data, _ := resp["data"].(map[string]any)
+		aiSecrets, _ := data["ai_secrets"].(map[string]any)
+		keySet, _ := aiSecrets["provider_api_key_set"].(map[string]any)
+		if keySet["openai"] != true {
+			t.Fatalf("openai set=%v, want=true", keySet["openai"])
+		}
+
+		conn, _ := data["connection"].(map[string]any)
+		direct, _ := conn["direct"].(map[string]any)
+		if _, ok := direct["e2ee_psk_b64u"]; ok {
+			t.Fatalf("secret leaked: e2ee_psk_b64u must not be returned")
 		}
 	}
 }
