@@ -1,4 +1,4 @@
-import { Show, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
+import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import { type FloeComponent, useCommand, useLayout, useNotification, useTheme, useWidgetRegistry } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
 import {
@@ -315,7 +315,10 @@ export function EnvAppShell() {
       }
       return layout.isMobile() ? 'terminal' : 'deck';
     })();
+    // Mobile downgrade: keep "deck" as the persisted preference while opening "terminal".
+    if (layout.isMobile() && preferred === 'deck' && initial === 'terminal') skipPersistOnce = true;
     layout.setSidebarActiveTab(initial, { openSidebar: initial === 'ai' });
+    setPersistReady(true);
     void connect();
   });
 
@@ -402,27 +405,55 @@ export function EnvAppShell() {
     { id: 'settings', name: 'Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } },
   ];
 
+  const [persistReady, setPersistReady] = createSignal(false);
+  let skipPersistOnce = false;
+
   const goTab = (tab: EnvNavTab) => {
     // Persist the user's preference; the runtime may downgrade it on mobile (deck -> terminal).
     persistActiveTab(tab);
     let next = tab;
     if (layout.isMobile() && next === 'deck') next = 'terminal';
+    // Prevent the downgraded "terminal" tab from overriding the user's persisted preference ("deck").
+    if (layout.isMobile() && tab === 'deck' && next === 'terminal') skipPersistOnce = true;
     layout.setSidebarActiveTab(next, { openSidebar: next === 'ai' });
   };
+
+  // Keep a global (cross-env) active tab preference, independent from FloeProvider's per-env storage namespace.
+  // NOTE: On mobile, the "deck" tab is downgraded to "terminal"; skip persisting that one downgrade.
+  createEffect(() => {
+    if (!persistReady()) return;
+    const id = layout.sidebarActiveTab();
+    if (
+      id !== 'deck' &&
+      id !== 'terminal' &&
+      id !== 'monitor' &&
+      id !== 'files' &&
+      id !== 'codespaces' &&
+      id !== 'ports' &&
+      id !== 'ai'
+    ) {
+      return;
+    }
+    if (skipPersistOnce) {
+      skipPersistOnce = false;
+      return;
+    }
+    persistActiveTab(id as EnvNavTab);
+  });
 
   const activityItems = (): ActivityBarItem[] => {
     const items: ActivityBarItem[] = [];
 
     if (!layout.isMobile()) {
-      items.push({ id: 'deck', icon: LayoutDashboard, label: 'Deck', onClick: () => goTab('deck') });
+      items.push({ id: 'deck', icon: LayoutDashboard, label: 'Deck', collapseBehavior: 'preserve' });
     }
     items.push(
-      { id: 'terminal', icon: Terminal, label: 'Terminal', onClick: () => goTab('terminal') },
-      { id: 'monitor', icon: Activity, label: 'Monitoring', onClick: () => goTab('monitor') },
-      { id: 'files', icon: Files, label: 'File Browser', onClick: () => goTab('files') },
-      { id: 'codespaces', icon: Code, label: 'Codespaces', onClick: () => goTab('codespaces') },
-      { id: 'ports', icon: Globe, label: 'Ports', onClick: () => goTab('ports') },
-      { id: 'ai', icon: Sparkles, label: 'AI', onClick: () => goTab('ai') },
+      { id: 'terminal', icon: Terminal, label: 'Terminal', collapseBehavior: 'preserve' },
+      { id: 'monitor', icon: Activity, label: 'Monitoring', collapseBehavior: 'preserve' },
+      { id: 'files', icon: Files, label: 'File Browser', collapseBehavior: 'preserve' },
+      { id: 'codespaces', icon: Code, label: 'Codespaces', collapseBehavior: 'preserve' },
+      { id: 'ports', icon: Globe, label: 'Ports', collapseBehavior: 'preserve' },
+      { id: 'ai', icon: Sparkles, label: 'AI', collapseBehavior: 'toggle' },
     );
     return items;
   };
