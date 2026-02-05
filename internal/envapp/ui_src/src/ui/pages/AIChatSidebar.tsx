@@ -130,7 +130,9 @@ export function AIChatSidebar() {
                           <span class="truncate">{t.title?.trim() || 'New chat'}</span>
                           <div class="flex items-center gap-1.5 shrink-0">
                             <span class="text-[10px] text-muted-foreground">{fmtRelativeTime(t.updated_at_unix_ms)}</span>
-                            <Tooltip content="Delete chat" placement="bottom" delay={0}>
+                            {/* SidebarItem wraps children in a `truncate` span (overflow-hidden).
+                                Use an inward placement to avoid the tooltip being clipped. */}
+                            <Tooltip content="Delete chat" placement="left" delay={0}>
                               <Button
                                 size="icon"
                                 variant="ghost"
