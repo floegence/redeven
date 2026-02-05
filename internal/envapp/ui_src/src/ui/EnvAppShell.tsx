@@ -35,7 +35,7 @@ import { EnvAIPage } from './pages/EnvAIPage';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
 import { redevenDeckWidgets } from './deck/redevenDeckWidgets';
 import { useRedevenRpc } from './protocol/redeven_v1';
-import { GrantAuditDialog } from './widgets/GrantAuditDialog';
+import { AuditLogDialog } from './widgets/AuditLogDialog';
 import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
 import {
   channelInitEntry,
@@ -103,6 +103,7 @@ export function EnvAppShell() {
 
   const [manualError, setManualError] = createSignal<string | null>(null);
   const [auditOpen, setAuditOpen] = createSignal(false);
+  const canViewAudit = createMemo(() => Boolean(env()?.permissions?.can_admin));
 
   const [aiInjectionSeq, setAiInjectionSeq] = createSignal(0);
   const [aiInjectionMarkdown, setAiInjectionMarkdown] = createSignal<string | null>(null);
@@ -674,7 +675,14 @@ export function EnvAppShell() {
               </div>
               <div class="flex items-center gap-2">
                 <StatusIndicator status={status()} />
-                <BottomBarItem onClick={() => setAuditOpen(true)}>Audit log</BottomBarItem>
+                <Tooltip content={canViewAudit() ? 'Audit log' : 'Admin required'} placement="top" delay={0}>
+                  <BottomBarItem
+                    onClick={canViewAudit() ? () => setAuditOpen(true) : undefined}
+                    class={canViewAudit() ? undefined : 'opacity-60 pointer-events-none'}
+                  >
+                    Audit log
+                  </BottomBarItem>
+                </Tooltip>
                 <BottomBarItem
                   onClick={connecting() ? undefined : () => void reconnect()}
                   class={connecting() ? 'opacity-60 pointer-events-none' : undefined}
@@ -700,7 +708,7 @@ export function EnvAppShell() {
             </div>
           </div>
 
-          <GrantAuditDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
+          <AuditLogDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
         </Shell>
       </FloeRegistryRuntime>
     </EnvContext.Provider>

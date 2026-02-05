@@ -16,11 +16,13 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/floegence/redeven-agent/internal/ai"
+	"github.com/floegence/redeven-agent/internal/auditlog"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/portforward"
 	pfregistry "github.com/floegence/redeven-agent/internal/portforward/registry"
@@ -28,13 +30,15 @@ import (
 )
 
 type Options struct {
-	Logger             *slog.Logger
-	ListenAddr         string
-	DistFS             fs.FS
-	Backend            Backend
-	PortForward        PortForwardBackend
-	AI                 *ai.Service
-	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
+	Logger                  *slog.Logger
+	ListenAddr              string
+	DistFS                  fs.FS
+	Backend                 Backend
+	PortForward             PortForwardBackend
+	AI                      *ai.Service
+	Audit                   *auditlog.Store
+	ResolveSessionMeta      func(channelID string) (*session.Meta, bool)
+	ResolveSessionTunnelURL func(channelID string) (string, bool)
 	// ConfigPath is the absolute path to the agent config file.
 	// It is used to read and persist settings updates initiated from the Env App UI.
 	ConfigPath string
@@ -90,8 +94,10 @@ type Gateway struct {
 	backend Backend
 	pf      PortForwardBackend
 	ai      *ai.Service
+	audit   *auditlog.Store
 
-	resolveSessionMeta func(channelID string) (*session.Meta, bool)
+	resolveSessionMeta      func(channelID string) (*session.Meta, bool)
+	resolveSessionTunnelURL func(channelID string) (string, bool)
 
 	configPath string
 	configMu   sync.Mutex
@@ -133,15 +139,17 @@ func New(opts Options) (*Gateway, error) {
 	dist := http.StripPrefix("/_redeven_proxy", http.FileServer(http.FS(opts.DistFS)))
 
 	return &Gateway{
-		log:                logger,
-		backend:            opts.Backend,
-		pf:                 opts.PortForward,
-		ai:                 opts.AI,
-		resolveSessionMeta: opts.ResolveSessionMeta,
-		configPath:         strings.TrimSpace(opts.ConfigPath),
-		distFS:             opts.DistFS,
-		dist:               dist,
-		addr:               addr,
+		log:                     logger,
+		backend:                 opts.Backend,
+		pf:                      opts.PortForward,
+		ai:                      opts.AI,
+		audit:                   opts.Audit,
+		resolveSessionMeta:      opts.ResolveSessionMeta,
+		resolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
+		configPath:              strings.TrimSpace(opts.ConfigPath),
+		distFS:                  opts.DistFS,
+		dist:                    dist,
+		addr:                    addr,
 	}, nil
 }
 
@@ -462,8 +470,106 @@ func (g *Gateway) requirePermission(w http.ResponseWriter, r *http.Request, perm
 	return meta, true
 }
 
+func sanitizeAuditError(err error) string {
+	if err == nil {
+		return ""
+	}
+	s := strings.TrimSpace(err.Error())
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	if len(s) > 240 {
+		s = s[:240] + "..."
+	}
+	return s
+}
+
+func truncateString(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	v := strings.TrimSpace(s)
+	if len(v) <= max {
+		return v
+	}
+	return v[:max] + "..."
+}
+
+func auditURLHost(raw string) (scheme string, host string) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u == nil {
+		return "", ""
+	}
+	return strings.TrimSpace(u.Scheme), strings.TrimSpace(u.Host)
+}
+
+func (g *Gateway) appendAudit(meta *session.Meta, action string, status string, detail map[string]any, err error) {
+	if g == nil || g.audit == nil || meta == nil {
+		return
+	}
+	a := strings.TrimSpace(action)
+	if a == "" {
+		return
+	}
+	st := strings.TrimSpace(status)
+	if st == "" {
+		st = "success"
+	}
+
+	tunnelURL := ""
+	if g.resolveSessionTunnelURL != nil {
+		if v, ok := g.resolveSessionTunnelURL(strings.TrimSpace(meta.ChannelID)); ok {
+			tunnelURL = strings.TrimSpace(v)
+		}
+	}
+
+	g.audit.Append(auditlog.Entry{
+		Action:    a,
+		Status:    st,
+		Error:     sanitizeAuditError(err),
+		ChannelID: strings.TrimSpace(meta.ChannelID),
+
+		EnvPublicID:       strings.TrimSpace(meta.EndpointID),
+		NamespacePublicID: strings.TrimSpace(meta.NamespacePublicID),
+
+		UserPublicID: strings.TrimSpace(meta.UserPublicID),
+		UserEmail:    strings.TrimSpace(meta.UserEmail),
+
+		FloeApp:       strings.TrimSpace(meta.FloeApp),
+		SessionKind:   strings.TrimSpace(meta.SessionKind),
+		CodeSpaceID:   strings.TrimSpace(meta.CodeSpaceID),
+		TunnelURL:     tunnelURL,
+		CanReadFiles:  meta.CanReadFiles,
+		CanWriteFiles: meta.CanWriteFiles,
+		CanExecute:    meta.CanExecute,
+		CanAdmin:      meta.CanAdmin,
+		Detail:        detail,
+	})
+}
+
 func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/audit/logs":
+		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			return
+		}
+		if g.audit == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "audit log not configured"})
+			return
+		}
+		limit := 200
+		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+			if v, err := strconv.Atoi(raw); err == nil {
+				limit = v
+			}
+		}
+		entries, err := g.audit.List(limit)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "failed to read audit log"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"entries": entries}})
+		return
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/settings":
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return
@@ -477,7 +583,8 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/settings":
-		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
 			return
 		}
 		type settingsUpdateReq struct {
@@ -560,6 +667,33 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		auditDetail := map[string]any{}
+		if body.RootDir != nil {
+			auditDetail["root_dir"] = strings.TrimSpace(*body.RootDir)
+		}
+		if body.Shell != nil {
+			auditDetail["shell"] = strings.TrimSpace(*body.Shell)
+		}
+		if body.LogFormat != nil {
+			auditDetail["log_format"] = strings.TrimSpace(*body.LogFormat)
+		}
+		if body.LogLevel != nil {
+			auditDetail["log_level"] = strings.TrimSpace(*body.LogLevel)
+		}
+		if body.CodeServerPortMin != nil {
+			auditDetail["code_server_port_min"] = *body.CodeServerPortMin
+		}
+		if body.CodeServerPortMax != nil {
+			auditDetail["code_server_port_max"] = *body.CodeServerPortMax
+		}
+		if len(body.PermissionPolicy) > 0 {
+			auditDetail["permission_policy_updated"] = true
+		}
+		if len(body.AI) > 0 {
+			// Do NOT log any AI config details (may include secrets).
+			auditDetail["ai_updated"] = true
+		}
+
 		var updated *config.Config
 		persist := func() error {
 			cfg, err := g.updateConfigLocked(func(c *config.Config) error {
@@ -599,6 +733,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		var err error
 		if len(body.AI) > 0 {
 			if g.ai == nil {
+				g.appendAudit(meta, "settings_update", "failure", auditDetail, errors.New("ai service not ready"))
 				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
 				return
 			}
@@ -607,6 +742,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			err = persist()
 		}
 		if err != nil {
+			g.appendAudit(meta, "settings_update", "failure", auditDetail, err)
 			status := http.StatusBadRequest
 			if errors.Is(err, ai.ErrConfigLocked) {
 				status = http.StatusConflict
@@ -615,6 +751,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		g.appendAudit(meta, "settings_update", "success", auditDetail, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: toSettingsView(updated, g.configPath)})
 		return
 
@@ -635,16 +772,17 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/runs":
-		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok {
 			return
 		}
 		if g.ai == nil || !g.ai.Enabled() {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
-		channelID, err := channelIDFromRequest(r)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+		channelID := strings.TrimSpace(meta.ChannelID)
+		if channelID == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid session"})
 			return
 		}
 		if g.ai.HasActiveRun(channelID) {
@@ -678,22 +816,33 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 
 		// Block until the run completes (or the client disconnects).
-		if err := g.ai.StartRun(r.Context(), channelID, runID, req, w); err != nil {
-			g.log.Warn("ai run failed", "channel_id", channelID, "run_id", runID, "error", err)
+		startedAt := time.Now()
+		runErr := g.ai.StartRun(r.Context(), channelID, runID, req, w)
+		auditDetail := map[string]any{
+			"run_id":      runID,
+			"model":       strings.TrimSpace(req.Model),
+			"duration_ms": time.Since(startedAt).Milliseconds(),
 		}
+		if runErr != nil {
+			g.log.Warn("ai run failed", "channel_id", channelID, "run_id", runID, "error", runErr)
+			g.appendAudit(meta, "ai_run", "failure", auditDetail, runErr)
+			return
+		}
+		g.appendAudit(meta, "ai_run", "success", auditDetail, nil)
 		return
 
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/runs/"):
-		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok {
 			return
 		}
 		if g.ai == nil || !g.ai.Enabled() {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
-		channelID, err := channelIDFromRequest(r)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+		channelID := strings.TrimSpace(meta.ChannelID)
+		if channelID == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid session"})
 			return
 		}
 
@@ -712,9 +861,11 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method == http.MethodPost && action == "cancel" {
 			if err := g.ai.CancelRun(channelID, runID); err != nil {
+				g.appendAudit(meta, "ai_run_cancel", "failure", map[string]any{"run_id": runID}, err)
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
 			}
+			g.appendAudit(meta, "ai_run_cancel", "success", map[string]any{"run_id": runID}, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true})
 			return
 		}
@@ -730,9 +881,19 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if err := g.ai.ApproveTool(channelID, runID, body.ToolID, body.Approved); err != nil {
+				g.appendAudit(meta, "ai_tool_approval", "failure", map[string]any{
+					"run_id":   runID,
+					"tool_id":  strings.TrimSpace(body.ToolID),
+					"approved": body.Approved,
+				}, err)
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
 			}
+			g.appendAudit(meta, "ai_tool_approval", "success", map[string]any{
+				"run_id":   runID,
+				"tool_id":  strings.TrimSpace(body.ToolID),
+				"approved": body.Approved,
+			}, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true})
 			return
 		}
@@ -741,7 +902,8 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/uploads":
-		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok {
 			return
 		}
 		if g.ai == nil || !g.ai.Enabled() {
@@ -769,9 +931,29 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 		out, err := g.ai.SaveUpload(f, name, mimeType, 10<<20)
 		if err != nil {
+			g.appendAudit(meta, "ai_upload", "failure", map[string]any{
+				"name":      strings.TrimSpace(name),
+				"mime_type": strings.TrimSpace(mimeType),
+			}, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
+		uploadID := ""
+		if out != nil {
+			u := strings.TrimSpace(out.URL)
+			if u != "" {
+				u = strings.TrimSuffix(u, "/")
+				if i := strings.LastIndex(u, "/"); i >= 0 {
+					uploadID = strings.TrimSpace(u[i+1:])
+				}
+			}
+		}
+		g.appendAudit(meta, "ai_upload", "success", map[string]any{
+			"upload_id": uploadID,
+			"name":      strings.TrimSpace(out.Name),
+			"mime_type": strings.TrimSpace(out.MimeType),
+			"size":      out.Size,
+		}, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
 		return
 
@@ -876,10 +1058,12 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/forwards":
-		if _, ok := g.requirePermission(w, r, requiredPermissionExecute); !ok {
+		meta, ok := g.requirePermission(w, r, requiredPermissionExecute)
+		if !ok {
 			return
 		}
 		if g.pf == nil {
+			g.appendAudit(meta, "port_forward_create", "failure", nil, errors.New("portforward not ready"))
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "portforward not ready"})
 			return
 		}
@@ -888,15 +1072,25 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
+		scheme, host := auditURLHost(req.Target)
+		auditDetail := map[string]any{
+			"target_scheme":        scheme,
+			"target_host":          host,
+			"name":                 truncateString(req.Name, 80),
+			"insecure_skip_verify": req.InsecureSkipVerify,
+		}
 		f, err := g.pf.CreateForward(r.Context(), req)
 		if err != nil {
+			g.appendAudit(meta, "port_forward_create", "failure", auditDetail, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
 		if f == nil {
+			g.appendAudit(meta, "port_forward_create", "failure", auditDetail, errors.New("failed to create forward"))
 			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "failed to create forward"})
 			return
 		}
+		auditDetail["forward_id"] = f.ForwardID
 		view := portForwardView{
 			ForwardID:          f.ForwardID,
 			TargetURL:          f.TargetURL,
@@ -909,11 +1103,13 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			LastOpenedAtUnixMs: f.LastOpenedAtUnixMs,
 			Health:             probePortForwardHealth(r.Context(), f.TargetURL),
 		}
+		g.appendAudit(meta, "port_forward_create", "success", auditDetail, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/spaces":
-		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
 			return
 		}
 		var req CreateSpaceRequest
@@ -921,17 +1117,29 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
+		auditDetail := map[string]any{
+			"path":        truncateString(req.Path, 160),
+			"name":        truncateString(req.Name, 80),
+			"description": truncateString(req.Description, 160),
+		}
 		s, err := g.backend.CreateSpace(r.Context(), req)
 		if err != nil {
+			g.appendAudit(meta, "codespace_create", "failure", auditDetail, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
+		if s != nil {
+			auditDetail["code_space_id"] = s.CodeSpaceID
+			auditDetail["workspace_path"] = truncateString(s.WorkspacePath, 160)
+		}
+		g.appendAudit(meta, "codespace_create", "success", auditDetail, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: s})
 		return
 
 	default:
 		if strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/forwards/") {
-			if _, ok := g.requirePermission(w, r, requiredPermissionExecute); !ok {
+			meta, ok := g.requirePermission(w, r, requiredPermissionExecute)
+			if !ok {
 				return
 			}
 			if g.pf == nil {
@@ -955,9 +1163,11 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 			if r.Method == http.MethodDelete && action == "" {
 				if err := g.pf.DeleteForward(r.Context(), id); err != nil {
+					g.appendAudit(meta, "port_forward_delete", "failure", map[string]any{"forward_id": id}, err)
 					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 					return
 				}
+				g.appendAudit(meta, "port_forward_delete", "success", map[string]any{"forward_id": id}, nil)
 				writeJSON(w, http.StatusOK, apiResp{OK: true})
 				return
 			}
@@ -972,12 +1182,26 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 					return
 				}
+				auditDetail := map[string]any{"forward_id": id}
+				if req.Target != nil {
+					scheme, host := auditURLHost(*req.Target)
+					auditDetail["target_scheme"] = scheme
+					auditDetail["target_host"] = host
+				}
+				if req.Name != nil {
+					auditDetail["name"] = truncateString(*req.Name, 80)
+				}
+				if req.InsecureSkipVerify != nil {
+					auditDetail["insecure_skip_verify"] = *req.InsecureSkipVerify
+				}
 				f, err := g.pf.UpdateForward(r.Context(), id, req)
 				if err != nil {
+					g.appendAudit(meta, "port_forward_update", "failure", auditDetail, err)
 					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 					return
 				}
 				if f == nil {
+					g.appendAudit(meta, "port_forward_update", "failure", auditDetail, errors.New("not found"))
 					writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 					return
 				}
@@ -993,6 +1217,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 					LastOpenedAtUnixMs: f.LastOpenedAtUnixMs,
 					Health:             probePortForwardHealth(r.Context(), f.TargetURL),
 				}
+				g.appendAudit(meta, "port_forward_update", "success", auditDetail, nil)
 				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 				return
 			}
@@ -1000,13 +1225,21 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodPost && action == "touch" {
 				f, err := g.pf.TouchLastOpened(r.Context(), id)
 				if err != nil {
+					g.appendAudit(meta, "port_forward_open", "failure", map[string]any{"forward_id": id}, err)
 					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 					return
 				}
 				if f == nil {
+					g.appendAudit(meta, "port_forward_open", "failure", map[string]any{"forward_id": id}, errors.New("not found"))
 					writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 					return
 				}
+				scheme, host := auditURLHost(f.TargetURL)
+				g.appendAudit(meta, "port_forward_open", "success", map[string]any{
+					"forward_id":    f.ForwardID,
+					"target_scheme": scheme,
+					"target_host":   host,
+				}, nil)
 				view := portForwardView{
 					ForwardID:          f.ForwardID,
 					TargetURL:          f.TargetURL,
@@ -1047,18 +1280,22 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if r.Method == http.MethodDelete && action == "" {
-			if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+			if !ok {
 				return
 			}
 			if err := g.backend.DeleteSpace(r.Context(), id); err != nil {
+				g.appendAudit(meta, "codespace_delete", "failure", map[string]any{"code_space_id": id}, err)
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
 			}
+			g.appendAudit(meta, "codespace_delete", "success", map[string]any{"code_space_id": id}, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true})
 			return
 		}
 		if r.Method == http.MethodPatch && action == "" {
-			if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+			if !ok {
 				return
 			}
 			var req UpdateSpaceRequest
@@ -1070,34 +1307,53 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 				return
 			}
+			auditDetail := map[string]any{"code_space_id": id}
+			if req.Name != nil {
+				auditDetail["name"] = truncateString(*req.Name, 80)
+			}
+			if req.Description != nil {
+				auditDetail["description"] = truncateString(*req.Description, 160)
+			}
 			s, err := g.backend.UpdateSpace(r.Context(), id, req)
 			if err != nil {
+				g.appendAudit(meta, "codespace_update", "failure", auditDetail, err)
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
 			}
+			g.appendAudit(meta, "codespace_update", "success", auditDetail, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: s})
 			return
 		}
 		if r.Method == http.MethodPost && action == "start" {
-			if _, ok := g.requirePermission(w, r, requiredPermissionExecute); !ok {
+			meta, ok := g.requirePermission(w, r, requiredPermissionExecute)
+			if !ok {
 				return
 			}
 			s, err := g.backend.StartSpace(r.Context(), id)
 			if err != nil {
+				g.appendAudit(meta, "codespace_start", "failure", map[string]any{"code_space_id": id}, err)
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
 			}
+			auditDetail := map[string]any{"code_space_id": id}
+			if s != nil {
+				auditDetail["code_port"] = s.CodePort
+			}
+			g.appendAudit(meta, "codespace_start", "success", auditDetail, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: s})
 			return
 		}
 		if r.Method == http.MethodPost && action == "stop" {
-			if _, ok := g.requirePermission(w, r, requiredPermissionExecute); !ok {
+			meta, ok := g.requirePermission(w, r, requiredPermissionExecute)
+			if !ok {
 				return
 			}
 			if err := g.backend.StopSpace(r.Context(), id); err != nil {
+				g.appendAudit(meta, "codespace_stop", "failure", map[string]any{"code_space_id": id}, err)
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
 			}
+			g.appendAudit(meta, "codespace_stop", "success", map[string]any{"code_space_id": id}, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true})
 			return
 		}

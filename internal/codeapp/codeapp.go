@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/floegence/redeven-agent/internal/ai"
+	"github.com/floegence/redeven-agent/internal/auditlog"
 	"github.com/floegence/redeven-agent/internal/codeapp/codeserver"
 	"github.com/floegence/redeven-agent/internal/codeapp/gateway"
 	"github.com/floegence/redeven-agent/internal/codeapp/registry"
@@ -43,8 +44,10 @@ type Options struct {
 	FSRoot string
 	Shell  string
 
-	AIConfig           *config.AIConfig
-	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
+	AIConfig                *config.AIConfig
+	Audit                   *auditlog.Store
+	ResolveSessionMeta      func(channelID string) (*session.Meta, bool)
+	ResolveSessionTunnelURL func(channelID string) (string, bool)
 }
 
 type Service struct {
@@ -155,14 +158,16 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	gw, err := gateway.New(gateway.Options{
-		Logger:             logger,
-		DistFS:             mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
-		Backend:            svc,
-		PortForward:        pfSvc,
-		AI:                 aiSvc,
-		ResolveSessionMeta: opts.ResolveSessionMeta,
-		ConfigPath:         strings.TrimSpace(opts.ConfigPath),
-		ListenAddr:         "127.0.0.1:0",
+		Logger:                  logger,
+		DistFS:                  mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
+		Backend:                 svc,
+		PortForward:             pfSvc,
+		AI:                      aiSvc,
+		Audit:                   opts.Audit,
+		ResolveSessionMeta:      opts.ResolveSessionMeta,
+		ResolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
+		ConfigPath:              strings.TrimSpace(opts.ConfigPath),
+		ListenAddr:              "127.0.0.1:0",
 	})
 	if err != nil {
 		_ = reg.Close()
