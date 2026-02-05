@@ -32,15 +32,6 @@ export type AgentLatestVersion = {
   message?: string;
 };
 
-export type EnvFloeApp = {
-  app_id: string;
-  app_slug: string;
-  display_name: string;
-  description?: string;
-  is_official: boolean;
-  enabled: boolean;
-};
-
 const SESSION_STORAGE_KEYS = {
   envPublicID: 'redeven_env_public_id',
   brokerToken: 'redeven_broker_token',
@@ -123,43 +114,6 @@ export async function getAgentLatestVersion(envId: string): Promise<AgentLatestV
     bearerToken: brokerToken,
   });
   return out ?? null;
-}
-
-export async function getEnvironmentFloeApps(envId: string): Promise<EnvFloeApp[]> {
-  const id = envId.trim();
-  if (!id) throw new Error('Invalid envId');
-
-  const brokerToken = getBrokerTokenFromSession();
-  if (!brokerToken) {
-    throw new Error('Missing broker token. Please reopen from the Redeven Portal.');
-  }
-
-  const out = await fetchJSON<{ apps: EnvFloeApp[] }>(`/api/srv/v1/floeproxy/environments/${encodeURIComponent(id)}/floe-apps`, {
-    method: 'GET',
-    bearerToken: brokerToken,
-  });
-  return Array.isArray(out?.apps) ? out.apps : [];
-}
-
-export async function setEnvironmentFloeAppEnabled(envId: string, appId: string, enabled: boolean): Promise<EnvFloeApp[]> {
-  const id = envId.trim();
-  const aid = appId.trim();
-  if (!id || !aid) throw new Error('Invalid request');
-
-  const brokerToken = getBrokerTokenFromSession();
-  if (!brokerToken) {
-    throw new Error('Missing broker token. Please reopen from the Redeven Portal.');
-  }
-
-  const out = await fetchJSON<{ apps: EnvFloeApp[] }>(
-    `/api/srv/v1/floeproxy/environments/${encodeURIComponent(id)}/floe-apps/${encodeURIComponent(aid)}`,
-    {
-      method: 'PUT',
-      bearerToken: brokerToken,
-      body: JSON.stringify({ enabled }),
-    },
-  );
-  return Array.isArray(out?.apps) ? out.apps : [];
 }
 
 export async function exchangeBrokerToEntryTicket(args: {

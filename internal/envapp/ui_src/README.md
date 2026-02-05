@@ -10,7 +10,7 @@ This folder contains the **source code** for the agent-bundled Env App UI:
 Notes:
 
 - The Region Portal (environment list) stays in the `redeven/` repo (`frontend/region/`).
-- This Env App contains the **env details** features (Deck/Terminal/Monitor/File Browser/Market/Codespaces).
+- This Env App contains the **env details** features (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/AI).
 
 ## Build
 
