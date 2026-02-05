@@ -109,6 +109,7 @@ func bootstrapCmd(args []string) {
 func runCmd(args []string) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	cfgPath := fs.String("config", config.DefaultConfigPath(), "Config file path")
+	localUI := fs.Bool("local-ui", false, "Enable unauthenticated local UI on loopback (HTTP)")
 	_ = fs.Parse(args)
 
 	cfgPathClean := filepath.Clean(*cfgPath)
@@ -130,12 +131,22 @@ func runCmd(args []string) {
 		os.Exit(1)
 	}
 
+	announce := func() {
+		printWelcomeBanner(os.Stderr, welcomeBannerOptions{
+			Version:             Version,
+			ControlplaneBaseURL: cfg.ControlplaneBaseURL,
+			EnvironmentID:       cfg.EnvironmentID,
+			LocalUIEnabled:      *localUI,
+		})
+	}
+
 	a, err := agent.New(agent.Options{
-		Config:     cfg,
-		ConfigPath: cfgPathClean,
-		Version:    Version,
-		Commit:     Commit,
-		BuildTime:  BuildTime,
+		Config:             cfg,
+		ConfigPath:         cfgPathClean,
+		Version:            Version,
+		Commit:             Commit,
+		BuildTime:          BuildTime,
+		OnControlConnected: announce,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to init agent: %v\n", err)

@@ -64,6 +64,13 @@ type Options struct {
 	Version   string
 	Commit    string
 	BuildTime string
+
+	// OnControlConnected is called once after the agent successfully connects to the
+	// control plane control channel and completes the initial register call.
+	//
+	// This hook is intended for CLI UX (e.g., printing the environment access URL)
+	// and must not be used for authorization decisions.
+	OnControlConnected func()
 }
 
 type Agent struct {
@@ -87,6 +94,9 @@ type Agent struct {
 
 	mu       sync.Mutex
 	sessions map[string]*activeSession // channel_id -> session
+
+	controlConnectedOnce sync.Once
+	onControlConnected   func()
 }
 
 // activeSession represents a server-side Flowersec channel session handled by the agent.
@@ -144,15 +154,16 @@ func New(opts Options) (*Agent, error) {
 	stateDir := filepath.Dir(cfgPathAbs)
 
 	a := &Agent{
-		cfg:       opts.Config,
-		log:       logger,
-		version:   strings.TrimSpace(opts.Version),
-		commit:    strings.TrimSpace(opts.Commit),
-		buildTime: strings.TrimSpace(opts.BuildTime),
-		fsRoot:    rootAbs,
-		term:      terminal.NewManager(shell, rootAbs, logger),
-		mon:       monitor.NewService(logger),
-		sessions:  make(map[string]*activeSession),
+		cfg:                opts.Config,
+		log:                logger,
+		version:            strings.TrimSpace(opts.Version),
+		commit:             strings.TrimSpace(opts.Commit),
+		buildTime:          strings.TrimSpace(opts.BuildTime),
+		fsRoot:             rootAbs,
+		term:               terminal.NewManager(shell, rootAbs, logger),
+		mon:                monitor.NewService(logger),
+		sessions:           make(map[string]*activeSession),
+		onControlConnected: opts.OnControlConnected,
 	}
 
 	auditStore, err := auditlog.New(auditlog.Options{Logger: logger, StateDir: stateDir})
@@ -312,6 +323,12 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	a.controlConnectedOnce.Do(func() {
+		if a.onControlConnected != nil {
+			a.onControlConnected()
+		}
+	})
 
 	// Heartbeat loop.
 	t := time.NewTicker(10 * time.Second)
