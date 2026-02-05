@@ -459,7 +459,6 @@ export function EnvAppShell() {
   };
 
   const activityBottomItems = (): ActivityBarItem[] => {
-    if (layout.isMobile()) return [];
     return [{ id: 'settings', icon: Settings, label: 'Settings', onClick: () => openSettings() }];
   };
 
@@ -656,20 +655,9 @@ export function EnvAppShell() {
           }
           activityItems={activityItems()}
           activityBottomItems={activityBottomItems()}
+          activityBottomItemsMobileMode="topBar"
           topBarActions={
             <div class="flex items-center gap-1">
-              <Show when={layout.isMobile()}>
-                <Tooltip content="Settings" placement="bottom" delay={0}>
-                  <button
-                    type="button"
-                    class="flex items-center justify-center w-8 h-8 rounded cursor-pointer hover:bg-muted/60 transition-colors"
-                    onClick={() => openSettings()}
-                    aria-label="Settings"
-                  >
-                    <Settings class="w-4 h-4" />
-                  </button>
-                </Tooltip>
-              </Show>
               <Tooltip content="Command palette" placement="bottom" delay={0}>
                 <button
                   type="button"
