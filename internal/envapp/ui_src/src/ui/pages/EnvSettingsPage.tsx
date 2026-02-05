@@ -15,7 +15,7 @@ import {
   Zap,
 } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
-import { Button, Card, ConfirmDialog, Input } from '@floegence/floe-webapp-core/ui';
+import { Button, Card, Checkbox, ConfirmDialog, Input, Select } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import { fetchGatewayJSON } from '../services/gatewayApi';
@@ -245,47 +245,7 @@ function CodeBadge(props: { children: string }) {
   return <code class="px-1.5 py-0.5 text-xs font-mono bg-muted rounded">{props.children}</code>;
 }
 
-interface CheckboxFieldProps {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  disabled?: boolean;
-  label: string;
-}
 
-function CheckboxField(props: CheckboxFieldProps) {
-  return (
-    <label class="inline-flex items-center gap-2 text-xs cursor-pointer select-none">
-      <input
-        type="checkbox"
-        checked={props.checked}
-        onChange={(e) => props.onChange(e.currentTarget.checked)}
-        disabled={props.disabled}
-        class="w-4 h-4 rounded border-border text-primary focus:ring-primary/20 disabled:opacity-50"
-      />
-      <span class={props.disabled ? 'text-muted-foreground' : 'text-foreground'}>{props.label}</span>
-    </label>
-  );
-}
-
-interface SelectFieldProps {
-  value: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-  options: Array<{ value: string; label: string }>;
-}
-
-function SelectField(props: SelectFieldProps) {
-  return (
-    <select
-      class="w-full text-sm border border-border rounded-md px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-50 disabled:bg-muted/50"
-      value={props.value}
-      onChange={(e) => props.onChange(e.currentTarget.value)}
-      disabled={props.disabled}
-    >
-      <For each={props.options}>{(opt) => <option value={opt.value}>{opt.label}</option>}</For>
-    </select>
-  );
-}
 
 function JSONEditor(props: { value: string; onChange: (v: string) => void; disabled?: boolean; rows?: number }) {
   return (
@@ -1382,7 +1342,7 @@ export function EnvSettingsPage() {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <FieldLabel>log_format</FieldLabel>
-                <SelectField
+                <Select
                   value={logFormat()}
                   onChange={(v) => {
                     setLogFormat(v);
@@ -1394,11 +1354,12 @@ export function EnvSettingsPage() {
                     { value: 'json', label: 'json' },
                     { value: 'text', label: 'text' },
                   ]}
+                  class="w-full"
                 />
               </div>
               <div>
                 <FieldLabel>log_level</FieldLabel>
-                <SelectField
+                <Select
                   value={logLevel()}
                   onChange={(v) => {
                     setLogLevel(v);
@@ -1412,6 +1373,7 @@ export function EnvSettingsPage() {
                     { value: 'warn', label: 'warn' },
                     { value: 'error', label: 'error' },
                   ]}
+                  class="w-full"
                 />
               </div>
             </div>
@@ -1466,7 +1428,7 @@ export function EnvSettingsPage() {
                 </div>
               </div>
 
-              <CheckboxField
+              <Checkbox
                 checked={useDefaultCodePorts()}
                 onChange={(v) => {
                   setUseDefaultCodePorts(v);
@@ -1474,6 +1436,7 @@ export function EnvSettingsPage() {
                 }}
                 disabled={!canInteract()}
                 label="Use default port range"
+                size="sm"
               />
 
               <Show when={!useDefaultCodePorts()}>
@@ -1558,7 +1521,7 @@ export function EnvSettingsPage() {
               <div class="space-y-3">
                 <div class="text-sm font-medium text-foreground">local_max</div>
                 <div class="flex flex-wrap gap-6">
-                  <CheckboxField
+                  <Checkbox
                     checked={policyLocalRead()}
                     onChange={(v) => {
                       setPolicyLocalRead(v);
@@ -1566,8 +1529,9 @@ export function EnvSettingsPage() {
                     }}
                     disabled={!canInteract()}
                     label="read"
+                    size="sm"
                   />
-                  <CheckboxField
+                  <Checkbox
                     checked={policyLocalWrite()}
                     onChange={(v) => {
                       setPolicyLocalWrite(v);
@@ -1575,8 +1539,9 @@ export function EnvSettingsPage() {
                     }}
                     disabled={!canInteract()}
                     label="write"
+                    size="sm"
                   />
-                  <CheckboxField
+                  <Checkbox
                     checked={policyLocalExecute()}
                     onChange={(v) => {
                       setPolicyLocalExecute(v);
@@ -1584,6 +1549,7 @@ export function EnvSettingsPage() {
                     }}
                     disabled={!canInteract()}
                     label="execute"
+                    size="sm"
                   />
                 </div>
                 <p class="text-xs text-muted-foreground">User and app rules are AND-ed with local_max.</p>
@@ -1641,7 +1607,7 @@ export function EnvSettingsPage() {
                             </Button>
                           </div>
                           <div class="flex flex-wrap gap-6">
-                            <CheckboxField
+                            <Checkbox
                               checked={row.read}
                               onChange={(v) => {
                                 setPolicyByUser((prev) => prev.map((it, i) => (i === idx() ? { ...it, read: v } : it)));
@@ -1649,8 +1615,9 @@ export function EnvSettingsPage() {
                               }}
                               disabled={!canInteract() || !policyLocalRead()}
                               label="read"
+                              size="sm"
                             />
-                            <CheckboxField
+                            <Checkbox
                               checked={row.write}
                               onChange={(v) => {
                                 setPolicyByUser((prev) => prev.map((it, i) => (i === idx() ? { ...it, write: v } : it)));
@@ -1658,8 +1625,9 @@ export function EnvSettingsPage() {
                               }}
                               disabled={!canInteract() || !policyLocalWrite()}
                               label="write"
+                              size="sm"
                             />
-                            <CheckboxField
+                            <Checkbox
                               checked={row.execute}
                               onChange={(v) => {
                                 setPolicyByUser((prev) => prev.map((it, i) => (i === idx() ? { ...it, execute: v } : it)));
@@ -1667,6 +1635,7 @@ export function EnvSettingsPage() {
                               }}
                               disabled={!canInteract() || !policyLocalExecute()}
                               label="execute"
+                              size="sm"
                             />
                           </div>
                         </div>
@@ -1728,7 +1697,7 @@ export function EnvSettingsPage() {
                             </Button>
                           </div>
                           <div class="flex flex-wrap gap-6">
-                            <CheckboxField
+                            <Checkbox
                               checked={row.read}
                               onChange={(v) => {
                                 setPolicyByApp((prev) => prev.map((it, i) => (i === idx() ? { ...it, read: v } : it)));
@@ -1736,8 +1705,9 @@ export function EnvSettingsPage() {
                               }}
                               disabled={!canInteract() || !policyLocalRead()}
                               label="read"
+                              size="sm"
                             />
-                            <CheckboxField
+                            <Checkbox
                               checked={row.write}
                               onChange={(v) => {
                                 setPolicyByApp((prev) => prev.map((it, i) => (i === idx() ? { ...it, write: v } : it)));
@@ -1745,8 +1715,9 @@ export function EnvSettingsPage() {
                               }}
                               disabled={!canInteract() || !policyLocalWrite()}
                               label="write"
+                              size="sm"
                             />
-                            <CheckboxField
+                            <Checkbox
                               checked={row.execute}
                               onChange={(v) => {
                                 setPolicyByApp((prev) => prev.map((it, i) => (i === idx() ? { ...it, execute: v } : it)));
@@ -1754,6 +1725,7 @@ export function EnvSettingsPage() {
                               }}
                               disabled={!canInteract() || !policyLocalExecute()}
                               label="execute"
+                              size="sm"
                             />
                           </div>
                         </div>
@@ -1890,7 +1862,7 @@ export function EnvSettingsPage() {
                             </div>
                             <div>
                               <FieldLabel>type</FieldLabel>
-                              <SelectField
+                              <Select
                                 value={p.type}
                                 onChange={(v) => {
                                   setAiProviders((prev) => prev.map((it, i) => (i === idx() ? { ...it, type: v as AIProviderType } : it)));
@@ -1902,6 +1874,7 @@ export function EnvSettingsPage() {
                                   { value: 'anthropic', label: 'anthropic' },
                                   { value: 'openai_compatible', label: 'openai_compatible' },
                                 ]}
+                                class="w-full"
                               />
                             </div>
                             <div class="md:col-span-2">
@@ -1951,7 +1924,7 @@ export function EnvSettingsPage() {
                       <div class="text-sm font-medium text-foreground">Models Allow-list</div>
                       <p class="text-xs text-muted-foreground mt-0.5">When disabled, only default_model will be exposed.</p>
                     </div>
-                    <CheckboxField
+                    <Checkbox
                       checked={aiUseModelList()}
                       onChange={(v) => {
                         setAiUseModelList(v);
@@ -1959,6 +1932,7 @@ export function EnvSettingsPage() {
                       }}
                       disabled={!canInteract()}
                       label="Enable allow-list"
+                      size="sm"
                     />
                   </div>
 
