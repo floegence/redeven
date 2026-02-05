@@ -21,6 +21,58 @@ type ModelsResponse struct {
 	Models       []Model `json:"models"`
 }
 
+type ThreadView struct {
+	ThreadID            string `json:"thread_id"`
+	Title               string `json:"title"`
+	CreatedAtUnixMs     int64  `json:"created_at_unix_ms"`
+	UpdatedAtUnixMs     int64  `json:"updated_at_unix_ms"`
+	LastMessageAtUnixMs int64  `json:"last_message_at_unix_ms"`
+	LastMessagePreview  string `json:"last_message_preview"`
+}
+
+type ListThreadsResponse struct {
+	Threads    []ThreadView `json:"threads"`
+	NextCursor string       `json:"next_cursor,omitempty"`
+}
+
+type CreateThreadRequest struct {
+	Title string `json:"title"`
+}
+
+type CreateThreadResponse struct {
+	Thread ThreadView `json:"thread"`
+}
+
+type PatchThreadRequest struct {
+	Title *string `json:"title,omitempty"`
+}
+
+type ListThreadMessagesResponse struct {
+	Messages      []any `json:"messages"`
+	NextBeforeID  int64 `json:"next_before_id,omitempty"`
+	HasMore       bool  `json:"has_more,omitempty"`
+	TotalReturned int   `json:"total_returned,omitempty"`
+}
+
+type AppendThreadMessageRequest struct {
+	Role   string `json:"role"`
+	Text   string `json:"text"`
+	Format string `json:"format,omitempty"` // "markdown"|"text" (defaults to markdown for now)
+}
+
+// RunStartRequest is the HTTP request body for starting an AI run.
+//
+// Notes:
+// - thread_id is mandatory; the agent builds history from the persisted thread store.
+// - history must NOT be provided by clients (agent is the source of truth).
+type RunStartRequest struct {
+	ThreadID string     `json:"thread_id"`
+	Model    string     `json:"model"`
+	Input    RunInput   `json:"input"`
+	Options  RunOptions `json:"options"`
+}
+
+// RunRequest is the internal run request passed to the sidecar (includes history).
 type RunRequest struct {
 	Model   string          `json:"model"`
 	History []RunHistoryMsg `json:"history"`

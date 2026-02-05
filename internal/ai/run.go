@@ -72,6 +72,9 @@ type run struct {
 	nextBlockIndex        int
 	currentTextBlockIndex int
 	needNewTextBlock      bool
+
+	assistantCreatedAtUnixMs int64
+	assistantBlocks          []any
 }
 
 func newRun(opts runOptions) *run {
@@ -148,12 +151,14 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 	defer r.cancel()
 
 	// Initial assistant message + first markdown block.
+	r.assistantCreatedAtUnixMs = time.Now().UnixMilli()
 	if err := r.stream.send(streamEventMessageStart{Type: "message-start", MessageID: r.messageID}); err != nil {
 		return err
 	}
 	if err := r.stream.send(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"}); err != nil {
 		return err
 	}
+	r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: ""}}
 	r.nextBlockIndex = 1
 	r.currentTextBlockIndex = 0
 	r.needNewTextBlock = false
@@ -283,10 +288,12 @@ func (r *run) appendTextDelta(delta string) error {
 		if err := r.stream.send(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "markdown"}); err != nil {
 			return err
 		}
+		r.persistSetMarkdownBlock(idx)
 		r.currentTextBlockIndex = idx
 		r.nextBlockIndex++
 		r.needNewTextBlock = false
 	}
+	r.persistAppendMarkdownDelta(r.currentTextBlockIndex, delta)
 	return r.stream.send(streamEventBlockDelta{
 		Type:       "block-delta",
 		MessageID:  r.messageID,
@@ -346,6 +353,7 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 	}
 
 	_ = r.stream.send(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+	r.persistSetToolBlock(idx, block)
 
 	// Permission enforcement uses authoritative session_meta.
 	if r.resolveSessionMeta == nil {
@@ -379,6 +387,7 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 			block.Status = ToolCallStatusError
 			block.Error = "Rejected by user"
 			_ = r.stream.send(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+			r.persistSetToolBlock(idx, block)
 			return r.sendToolResult(sc, toolID, false, nil, "rejected by user")
 		}
 
@@ -388,20 +397,102 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 	// Execute.
 	block.Status = ToolCallStatusRunning
 	_ = r.stream.send(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+	r.persistSetToolBlock(idx, block)
 
 	result, toolErr := r.execTool(ctx, meta, toolName, args)
 	if toolErr != nil {
 		block.Status = ToolCallStatusError
 		block.Error = toolErr.Error()
 		_ = r.stream.send(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+		r.persistSetToolBlock(idx, block)
 		return r.sendToolResult(sc, toolID, false, nil, toolErr.Error())
 	}
 
 	block.Status = ToolCallStatusSuccess
 	block.Result = result
 	_ = r.stream.send(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+	r.persistSetToolBlock(idx, block)
 
 	return r.sendToolResult(sc, toolID, true, result, "")
+}
+
+func (r *run) persistEnsureIndex(idx int) {
+	if r == nil || idx < 0 {
+		return
+	}
+	for len(r.assistantBlocks) <= idx {
+		r.assistantBlocks = append(r.assistantBlocks, nil)
+	}
+}
+
+func (r *run) persistSetMarkdownBlock(idx int) {
+	if r == nil || idx < 0 {
+		return
+	}
+	r.persistEnsureIndex(idx)
+	r.assistantBlocks[idx] = &persistedMarkdownBlock{Type: "markdown", Content: ""}
+}
+
+func (r *run) persistAppendMarkdownDelta(idx int, delta string) {
+	if r == nil || idx < 0 || delta == "" {
+		return
+	}
+	if idx >= len(r.assistantBlocks) {
+		return
+	}
+	if b, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock); ok && b != nil {
+		b.Content += delta
+	}
+}
+
+func (r *run) persistSetToolBlock(idx int, block ToolCallBlock) {
+	if r == nil || idx < 0 {
+		return
+	}
+	r.persistEnsureIndex(idx)
+	r.assistantBlocks[idx] = block
+}
+
+func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
+	if r == nil {
+		return "", "", 0, errors.New("nil run")
+	}
+	if strings.TrimSpace(r.messageID) == "" {
+		return "", "", 0, errors.New("missing message_id")
+	}
+	if len(r.assistantBlocks) == 0 {
+		return "", "", 0, errors.New("assistant blocks unavailable")
+	}
+
+	msg := persistedMessage{
+		ID:        r.messageID,
+		Role:      "assistant",
+		Blocks:    r.assistantBlocks,
+		Status:    "complete",
+		Timestamp: r.assistantCreatedAtUnixMs,
+	}
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return "", "", 0, err
+	}
+
+	// Text for history: concatenate markdown blocks.
+	var sb strings.Builder
+	for _, blk := range r.assistantBlocks {
+		bm, ok := blk.(*persistedMarkdownBlock)
+		if !ok || bm == nil {
+			continue
+		}
+		if strings.TrimSpace(bm.Content) == "" {
+			continue
+		}
+		if sb.Len() > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(bm.Content)
+	}
+
+	return string(b), strings.TrimSpace(sb.String()), r.assistantCreatedAtUnixMs, nil
 }
 
 func (r *run) sendToolResult(sc *sidecarProcess, toolID string, ok bool, result any, errMsg string) error {

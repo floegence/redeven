@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"database/sql"
 	"encoding/base32"
 	"encoding/json"
 	"errors"
@@ -771,6 +772,233 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: models})
 		return
 
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/threads":
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok {
+			return
+		}
+		if g.ai == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			return
+		}
+
+		limit := 50
+		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+			if v, err := strconv.Atoi(raw); err == nil {
+				limit = v
+			}
+		}
+		cursor := strings.TrimSpace(r.URL.Query().Get("cursor"))
+
+		out, err := g.ai.ListThreads(r.Context(), meta, limit, cursor)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/threads":
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok {
+			return
+		}
+		if g.ai == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			return
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body ai.CreateThreadRequest
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+
+		th, err := g.ai.CreateThread(r.Context(), meta, body.Title)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: ai.CreateThreadResponse{Thread: *th}})
+		return
+
+	case strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/threads/"):
+		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/threads/")
+		rest = strings.TrimPrefix(rest, "/")
+		if rest == "" {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+		parts := strings.Split(rest, "/")
+		threadID := strings.TrimSpace(parts[0])
+		action := ""
+		if len(parts) > 1 {
+			action = strings.TrimSpace(parts[1])
+		}
+
+		if threadID == "" {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+
+		switch {
+		case action == "" && r.Method == http.MethodGet:
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			th, err := g.ai.GetThread(r.Context(), meta, threadID)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			if th == nil {
+				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "thread not found"})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"thread": th}})
+			return
+
+		case action == "" && r.Method == http.MethodPatch:
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body ai.PatchThreadRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+
+			if body.Title == nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
+				return
+			}
+			if err := g.ai.RenameThread(r.Context(), meta, threadID, *body.Title); err != nil {
+				status := http.StatusBadRequest
+				if errors.Is(err, sql.ErrNoRows) {
+					status = http.StatusNotFound
+				}
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			th, err := g.ai.GetThread(r.Context(), meta, threadID)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			if th == nil {
+				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "thread not found"})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"thread": th}})
+			return
+
+		case action == "" && r.Method == http.MethodDelete:
+			meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			if err := g.ai.DeleteThread(r.Context(), meta, threadID); err != nil {
+				status := http.StatusBadRequest
+				if errors.Is(err, ai.ErrThreadBusy) {
+					status = http.StatusConflict
+				} else if errors.Is(err, sql.ErrNoRows) {
+					status = http.StatusNotFound
+				}
+				g.appendAudit(meta, "ai_thread_delete", "failure", map[string]any{"thread_id": threadID}, err)
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			g.appendAudit(meta, "ai_thread_delete", "success", map[string]any{"thread_id": threadID}, nil)
+			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
+
+		case action == "messages" && r.Method == http.MethodGet:
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+
+			limit := 200
+			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+				if v, err := strconv.Atoi(raw); err == nil {
+					limit = v
+				}
+			}
+			var beforeID int64
+			if raw := strings.TrimSpace(r.URL.Query().Get("before_id")); raw != "" {
+				if v, err := strconv.ParseInt(raw, 10, 64); err == nil {
+					beforeID = v
+				}
+			}
+
+			out, err := g.ai.ListThreadMessages(r.Context(), meta, threadID, limit, beforeID)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+			return
+
+		case action == "messages" && r.Method == http.MethodPost:
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body ai.AppendThreadMessageRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := g.ai.AppendThreadMessage(r.Context(), meta, threadID, body.Role, body.Text, body.Format); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
+		}
+
+		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+		return
+
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/runs":
 		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 		if !ok {
@@ -790,11 +1018,36 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var req ai.RunRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var req ai.RunStartRequest
+		if err := dec.Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+
+		if strings.TrimSpace(req.ThreadID) == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing thread_id"})
+			return
+		}
+		if g.ai.HasActiveThread(strings.TrimSpace(req.ThreadID)) {
+			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "thread already active"})
+			return
+		}
+		th, err := g.ai.GetThread(r.Context(), meta, strings.TrimSpace(req.ThreadID))
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		if th == nil {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "thread not found"})
+			return
+		}
+
 		if strings.TrimSpace(req.Model) == "" {
 			models, err := g.ai.ListModels()
 			if err != nil {
@@ -817,9 +1070,10 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 		// Block until the run completes (or the client disconnects).
 		startedAt := time.Now()
-		runErr := g.ai.StartRun(r.Context(), channelID, runID, req, w)
+		runErr := g.ai.StartRun(r.Context(), meta, runID, req, w)
 		auditDetail := map[string]any{
 			"run_id":      runID,
+			"thread_id":   strings.TrimSpace(req.ThreadID),
 			"model":       strings.TrimSpace(req.Model),
 			"duration_ms": time.Since(startedAt).Milliseconds(),
 		}

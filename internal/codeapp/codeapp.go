@@ -64,6 +64,7 @@ type Service struct {
 	reg    *registry.Registry
 	pf     *portforward.Service
 	runner *codeserver.Runner
+	ai     *ai.Service
 	gw     *gateway.Gateway
 }
 
@@ -172,14 +173,17 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	if err != nil {
 		_ = reg.Close()
 		_ = pfSvc.Close()
+		_ = aiSvc.Close()
 		return nil, err
 	}
 	if err := gw.Start(ctx); err != nil {
 		_ = reg.Close()
 		_ = pfSvc.Close()
+		_ = aiSvc.Close()
 		return nil, err
 	}
 	svc.gw = gw
+	svc.ai = aiSvc
 
 	return svc, nil
 }
@@ -199,6 +203,9 @@ func (s *Service) Close() error {
 	}
 	if s.pf != nil {
 		_ = s.pf.Close()
+	}
+	if s.ai != nil {
+		_ = s.ai.Close()
 	}
 	return nil
 }
