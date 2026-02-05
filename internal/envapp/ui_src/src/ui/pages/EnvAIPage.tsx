@@ -210,9 +210,10 @@ export function EnvAIPage() {
   let abortCtrl: AbortController | null = null;
   let assistantText = '';
   let lastMessagesReq = 0;
+  let skipNextThreadLoad = false;
 
   const canInteract = createMemo(
-    () => protocol.status() === 'connected' && !ai.running() && ai.aiEnabled() && ai.modelsReady() && !!ai.activeThreadId(),
+    () => protocol.status() === 'connected' && !ai.running() && ai.aiEnabled() && ai.modelsReady(),
   );
 
   const loadThreadMessages = async (threadId: string): Promise<void> => {
@@ -265,6 +266,12 @@ export function EnvAIPage() {
 
     const tid = ai.activeThreadId();
 
+    // Draft -> thread promotion: keep the optimistic user message rendered by ChatProvider.
+    if (skipNextThreadLoad && tid) {
+      skipNextThreadLoad = false;
+      return;
+    }
+
     // Cancel running state without re-tracking `running` signal
     if (untrack(ai.running)) {
       cancelRun();
@@ -283,9 +290,6 @@ export function EnvAIPage() {
     if (!chatReady()) return;
     if (protocol.status() !== 'connected' || !ai.aiEnabled()) return;
 
-    const tid = ai.activeThreadId();
-    if (!tid) return;
-
     const seq = env.aiInjectionSeq();
     if (!seq || seq === lastInjectionSeq) return;
     lastInjectionSeq = seq;
@@ -293,10 +297,16 @@ export function EnvAIPage() {
     const md = env.aiInjectionMarkdown();
     if (!md || !md.trim()) return;
 
-    chat?.addMessage(createUserMarkdownMessage(md));
-    setHasMessages(true);
-
     void (async () => {
+      let tid = ai.activeThreadId();
+      if (!tid) {
+        tid = await ai.ensureThreadForSend();
+      }
+      if (!tid) return;
+
+      chat?.addMessage(createUserMarkdownMessage(md));
+      setHasMessages(true);
+
       try {
         await fetchGatewayJSON<void>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/messages`, {
           method: 'POST',
@@ -398,14 +408,14 @@ export function EnvAIPage() {
       return;
     }
 
+    // ChatProvider already rendered the optimistic user message; ensure the message list is visible.
+    setHasMessages(true);
+
     let tid = ai.activeThreadId();
     if (!tid) {
-      try {
-        await ai.createNewChat();
-        tid = ai.activeThreadId();
-      } catch {
-        return;
-      }
+      skipNextThreadLoad = true;
+      tid = await ai.ensureThreadForSend();
+      skipNextThreadLoad = false;
     }
     if (!tid) return;
 
@@ -418,7 +428,6 @@ export function EnvAIPage() {
 
     assistantText = '';
     ai.setRunning(true);
-    setHasMessages(true);
 
     const userText = String(content ?? '').trim();
 
@@ -568,7 +577,8 @@ export function EnvAIPage() {
     try {
       await fetchGatewayJSON<void>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, { method: 'DELETE' });
       setDeleteOpen(false);
-      ai.setActiveThreadId(null);
+      ai.clearActiveThreadPersistence();
+      ai.enterDraftChat();
       chat?.clearMessages();
       setHasMessages(false);
       ai.bumpThreadsSeq();

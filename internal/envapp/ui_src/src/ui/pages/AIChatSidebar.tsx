@@ -1,10 +1,12 @@
-import { For, Show } from 'solid-js';
-import { MessageSquare, Plus } from '@floegence/floe-webapp-core/icons';
+import { For, Show, createSignal } from 'solid-js';
+import { MessageSquare, Plus, Trash } from '@floegence/floe-webapp-core/icons';
+import { useNotification } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { SidebarContent, SidebarSection, SidebarItem, SidebarItemList } from '@floegence/floe-webapp-core/layout';
-import { Button, Tooltip } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, Tooltip } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useAIChatContext } from './AIChatContext';
+import { fetchGatewayJSON } from '../services/gatewayApi';
 
 // Format a unix-ms timestamp as a relative time string.
 function fmtRelativeTime(ms: number): string {
@@ -33,6 +35,42 @@ function fmtRelativeTime(ms: number): string {
 export function AIChatSidebar() {
   const ctx = useAIChatContext();
   const protocol = useProtocol();
+  const notify = useNotification();
+
+  const [deleteOpen, setDeleteOpen] = createSignal(false);
+  const [deleteThreadId, setDeleteThreadId] = createSignal<string | null>(null);
+  const [deleteThreadTitle, setDeleteThreadTitle] = createSignal('');
+  const [deleting, setDeleting] = createSignal(false);
+
+  const openDelete = (threadId: string, title: string) => {
+    setDeleteThreadId(threadId);
+    setDeleteThreadTitle(String(title ?? '').trim() || 'New chat');
+    setDeleteOpen(true);
+  };
+
+  const doDelete = async () => {
+    const tid = deleteThreadId();
+    if (!tid) return;
+
+    setDeleting(true);
+    try {
+      await fetchGatewayJSON<void>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, { method: 'DELETE' });
+      setDeleteOpen(false);
+      setDeleteThreadId(null);
+
+      if (tid === ctx.activeThreadId()) {
+        ctx.clearActiveThreadPersistence();
+        ctx.enterDraftChat();
+      }
+
+      ctx.bumpThreadsSeq();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Failed to delete chat', msg || 'Request failed.');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <SidebarContent>
@@ -44,8 +82,8 @@ export function AIChatSidebar() {
               size="icon"
               variant="ghost"
               icon={Plus}
-              onClick={() => void ctx.createNewChat()}
-              disabled={ctx.creatingThread() || protocol.status() !== 'connected'}
+              onClick={() => ctx.enterDraftChat()}
+              disabled={protocol.status() !== 'connected'}
               class="w-6 h-6"
               aria-label="New chat"
             />
@@ -85,12 +123,28 @@ export function AIChatSidebar() {
                     <SidebarItem
                       icon={<MessageSquare class="w-4 h-4" />}
                       active={t.thread_id === ctx.activeThreadId()}
-                      onClick={() => ctx.setActiveThreadId(t.thread_id)}
+                      onClick={() => ctx.selectThreadId(t.thread_id)}
                     >
                       <div class="flex flex-col gap-0.5 min-w-0 w-full">
                         <div class="flex items-center justify-between gap-2">
                           <span class="truncate">{t.title?.trim() || 'New chat'}</span>
-                          <span class="text-[10px] text-muted-foreground shrink-0">{fmtRelativeTime(t.updated_at_unix_ms)}</span>
+                          <div class="flex items-center gap-1.5 shrink-0">
+                            <span class="text-[10px] text-muted-foreground">{fmtRelativeTime(t.updated_at_unix_ms)}</span>
+                            <Tooltip content="Delete chat" placement="bottom" delay={0}>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                icon={Trash}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openDelete(t.thread_id, t.title);
+                                }}
+                                disabled={protocol.status() !== 'connected' || (t.thread_id === ctx.activeThreadId() && ctx.running())}
+                                class="w-6 h-6 text-muted-foreground hover:text-error hover:bg-error/10"
+                                aria-label="Delete chat"
+                              />
+                            </Tooltip>
+                          </div>
                         </div>
                         <Show when={!!t.last_message_preview?.trim()}>
                           <span class="text-[11px] text-muted-foreground/70 truncate">{t.last_message_preview}</span>
@@ -104,6 +158,31 @@ export function AIChatSidebar() {
           </Show>
         </Show>
       </SidebarSection>
+
+      <ConfirmDialog
+        open={deleteOpen()}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteOpen(false);
+            setDeleteThreadId(null);
+            setDeleteThreadTitle('');
+            return;
+          }
+          setDeleteOpen(true);
+        }}
+        title="Delete Chat"
+        confirmText="Delete"
+        variant="destructive"
+        loading={deleting()}
+        onConfirm={() => void doDelete()}
+      >
+        <div class="space-y-2">
+          <p class="text-sm">
+            Delete <span class="font-semibold">"{deleteThreadTitle()}"</span>?
+          </p>
+          <p class="text-xs text-muted-foreground">This cannot be undone.</p>
+        </div>
+      </ConfirmDialog>
     </SidebarContent>
   );
 }

@@ -61,6 +61,14 @@ function persistActiveThreadId(threadId: string): void {
   }
 }
 
+function clearPersistedActiveThreadId(): void {
+  try {
+    localStorage.removeItem(ACTIVE_THREAD_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 // ---- Context value type ----
 
 export interface AIChatContextValue {
@@ -79,13 +87,15 @@ export interface AIChatContextValue {
   threads: Resource<ListThreadsResponse | null>;
   bumpThreadsSeq: () => void;
   activeThreadId: Accessor<string | null>;
-  setActiveThreadId: Setter<string | null>;
+  selectThreadId: (threadId: string) => void;
+  enterDraftChat: () => void;
+  clearActiveThreadPersistence: () => void;
   activeThread: Accessor<ThreadView | null>;
   activeThreadTitle: Accessor<string>;
 
-  // Thread creation
+  // Thread creation (only create on-demand; never create an empty thread on navigation)
   creatingThread: Accessor<boolean>;
-  createNewChat: () => Promise<void>;
+  ensureThreadForSend: () => Promise<string | null>;
 
   // Run state (set by EnvAIPage, read by sidebar)
   running: Accessor<boolean>;
@@ -175,6 +185,24 @@ export function createAIChatContextValue(): AIChatContextValue {
 
   // Active thread
   const [activeThreadId, setActiveThreadId] = createSignal<string | null>(null);
+  const [draftMode, setDraftMode] = createSignal(false);
+
+  const selectThreadId = (threadId: string) => {
+    const id = String(threadId ?? '').trim();
+    if (!id) return;
+    setDraftMode(false);
+    setActiveThreadId(id);
+  };
+
+  const enterDraftChat = () => {
+    setDraftMode(true);
+    setActiveThreadId(null);
+  };
+
+  const clearActiveThreadPersistence = () => {
+    clearPersistedActiveThreadId();
+  };
+
   const activeThread = createMemo<ThreadView | null>(() => {
     const list = threads();
     const id = activeThreadId();
@@ -207,33 +235,42 @@ export function createAIChatContextValue(): AIChatContextValue {
     return resp.thread;
   };
 
-  const createNewChat = async () => {
+  const ensureThreadForSend = async (): Promise<string | null> => {
     if (protocol.status() !== 'connected') {
       notify.error('Not connected', 'Connecting to agent...');
-      return;
+      return null;
     }
     if (!aiEnabled()) {
       notify.error('AI not configured', 'Open Settings to enable AI.');
-      return;
+      return null;
+    }
+
+    const existing = activeThreadId();
+    if (existing) {
+      setDraftMode(false);
+      return existing;
     }
 
     setCreatingThread(true);
     try {
       const th = await createThread();
       bumpThreadsSeq();
-      setActiveThreadId(th.thread_id);
+      selectThreadId(th.thread_id);
+      return th.thread_id;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Failed to create chat', msg || 'Request failed.');
+      return null;
     } finally {
       setCreatingThread(false);
     }
   };
 
-  // Ensure we always have an active thread when AI is enabled.
-  let initInFlight = false;
+  // On initial load: pick the last-used thread (localStorage) or the most recent thread.
+  // Do NOT create an empty thread automatically.
   createEffect(() => {
     if (protocol.status() !== 'connected' || !aiEnabled()) {
+      setDraftMode(false);
       setActiveThreadId(null);
       return;
     }
@@ -243,30 +280,23 @@ export function createAIChatContextValue(): AIChatContextValue {
     const current = activeThreadId();
     if (current && list.threads.some((t) => t.thread_id === current)) return;
 
+    if (draftMode()) {
+      // User explicitly stays in draft chat; do not auto-select a thread.
+      return;
+    }
+
     const persisted = readPersistedActiveThreadId();
     const picked =
       (persisted && list.threads.some((t) => t.thread_id === persisted) ? persisted : null) ||
       (list.threads[0]?.thread_id ? String(list.threads[0].thread_id) : null);
 
     if (picked) {
-      setActiveThreadId(picked);
+      selectThreadId(picked);
       return;
     }
 
-    if (initInFlight) return;
-    initInFlight = true;
-    void (async () => {
-      try {
-        const th = await createThread();
-        bumpThreadsSeq();
-        setActiveThreadId(th.thread_id);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        notify.error('Failed to create chat', msg || 'Request failed.');
-      } finally {
-        initInFlight = false;
-      }
-    })();
+    // No threads yet -> stay in draft chat.
+    setActiveThreadId(null);
   });
 
   return {
@@ -280,11 +310,13 @@ export function createAIChatContextValue(): AIChatContextValue {
     threads,
     bumpThreadsSeq,
     activeThreadId,
-    setActiveThreadId,
+    selectThreadId,
+    enterDraftChat,
+    clearActiveThreadPersistence,
     activeThread,
     activeThreadTitle,
     creatingThread,
-    createNewChat,
+    ensureThreadForSend,
     running,
     setRunning,
   };
