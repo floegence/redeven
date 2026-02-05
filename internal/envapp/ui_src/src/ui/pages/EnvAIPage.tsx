@@ -14,6 +14,7 @@ import {
   Zap,
 } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay, SnakeLoader } from '@floegence/floe-webapp-core/loading';
+import { Sidebar, SidebarContent, SidebarSection, SidebarItem, SidebarItemList } from '@floegence/floe-webapp-core/layout';
 import { Button, ConfirmDialog, Dialog, Input, Select, Tooltip } from '@floegence/floe-webapp-core/ui';
 import {
   ChatInput,
@@ -253,51 +254,6 @@ const MessageListWithEmptyState: Component<MessageListWithEmptyStateProps> = (pr
         />
       </Show>
     </div>
-  );
-};
-
-// Thread item component for better visual hierarchy
-interface ThreadItemProps {
-  thread: ThreadView;
-  isActive: boolean;
-  onClick: () => void;
-}
-
-const ThreadItem: Component<ThreadItemProps> = (props) => {
-  return (
-    <button
-      type="button"
-      class={cn(
-        'w-full text-left px-3 py-2.5 transition-all duration-150',
-        'hover:bg-accent/50',
-        props.isActive && 'bg-accent/60 border-l-2 border-primary',
-        !props.isActive && 'border-l-2 border-transparent',
-      )}
-      onClick={props.onClick}
-    >
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-2 min-w-0 flex-1">
-          <MessageSquare class={cn(
-            'w-3.5 h-3.5 shrink-0',
-            props.isActive ? 'text-primary' : 'text-muted-foreground',
-          )} />
-          <div class={cn(
-            'text-xs font-medium truncate',
-            props.isActive ? 'text-foreground' : 'text-foreground/80',
-          )}>
-            {props.thread.title?.trim() || 'New chat'}
-          </div>
-        </div>
-        <div class="text-[10px] text-muted-foreground shrink-0">
-          {fmtRelativeTime(props.thread.updated_at_unix_ms)}
-        </div>
-      </div>
-      <Show when={!!props.thread.last_message_preview?.trim()}>
-        <div class="mt-1 ml-5.5 text-[11px] text-muted-foreground/70 truncate leading-relaxed">
-          {props.thread.last_message_preview}
-        </div>
-      </Show>
-    </button>
   );
 };
 
@@ -905,72 +861,79 @@ export function EnvAIPage() {
           <div class="flex h-full min-h-0 overflow-hidden">
             {/* Thread sidebar */}
             <Show when={aiEnabled()}>
-              <div class="w-[260px] shrink-0 border-r border-border bg-sidebar flex flex-col min-h-0">
-                {/* Sidebar header */}
-                <div class="px-3 py-3 border-b border-sidebar-border flex items-center justify-between gap-2">
-                  <div class="flex items-center gap-2">
-                    <Sparkles class="w-4 h-4 text-primary" />
-                    <span class="text-sm font-semibold text-sidebar-foreground">AI Chats</span>
-                  </div>
-                  <Tooltip content="New chat" placement="bottom" delay={0}>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      icon={Plus}
-                      onClick={() => void createNewChat()}
-                      disabled={creatingThread() || protocol.status() !== 'connected'}
-                      class="w-7 h-7"
-                      aria-label="New chat"
-                    >
-                      <Show when={creatingThread()}>
-                        <InlineButtonSnakeLoading />
-                      </Show>
-                    </Button>
-                  </Tooltip>
-                </div>
-
-                {/* Thread list */}
-                <div class="flex-1 min-h-0 overflow-auto">
-                  <Show when={!threads.loading} fallback={
-                    <div class="p-4 text-xs text-muted-foreground flex items-center gap-2">
-                      <SnakeLoader size="sm" />
-                      <span>Loading chats...</span>
-                    </div>
-                  }>
-                    <Show
-                      when={!threads.error}
-                      fallback={
-                        <div class="p-4 text-xs text-error">
-                          {threads.error instanceof Error ? threads.error.message : String(threads.error)}
-                        </div>
-                      }
-                    >
+              <Sidebar width={260}>
+                <SidebarContent>
+                  <SidebarSection
+                    title="AI Chats"
+                    actions={
+                      <Tooltip content="New chat" placement="bottom" delay={0}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          icon={Plus}
+                          onClick={() => void createNewChat()}
+                          disabled={creatingThread() || protocol.status() !== 'connected'}
+                          class="w-6 h-6"
+                          aria-label="New chat"
+                        >
+                          <Show when={creatingThread()}>
+                            <InlineButtonSnakeLoading />
+                          </Show>
+                        </Button>
+                      </Tooltip>
+                    }
+                  >
+                    <Show when={!threads.loading} fallback={
+                      <div class="px-2.5 py-2 text-xs text-muted-foreground flex items-center gap-2">
+                        <SnakeLoader size="sm" />
+                        <span>Loading chats...</span>
+                      </div>
+                    }>
                       <Show
-                        when={(threads()?.threads?.length ?? 0) > 0}
+                        when={!threads.error}
                         fallback={
-                          <div class="p-4 text-xs text-muted-foreground text-center">
-                            <MessageSquare class="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
-                            <div>No chats yet</div>
-                            <div class="mt-1 text-[11px]">Start a new conversation</div>
+                          <div class="px-2.5 py-2 text-xs text-error">
+                            {threads.error instanceof Error ? threads.error.message : String(threads.error)}
                           </div>
                         }
                       >
-                        <div class="py-1">
-                          <For each={threads()?.threads ?? []}>
-                            {(t) => (
-                              <ThreadItem
-                                thread={t}
-                                isActive={t.thread_id === activeThreadId()}
-                                onClick={() => void selectThread(t.thread_id)}
-                              />
-                            )}
-                          </For>
-                        </div>
+                        <Show
+                          when={(threads()?.threads?.length ?? 0) > 0}
+                          fallback={
+                            <div class="px-2.5 py-4 text-xs text-muted-foreground text-center">
+                              <MessageSquare class="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+                              <div>No chats yet</div>
+                              <div class="mt-1 text-[11px]">Start a new conversation</div>
+                            </div>
+                          }
+                        >
+                          <SidebarItemList>
+                            <For each={threads()?.threads ?? []}>
+                              {(t) => (
+                                <SidebarItem
+                                  icon={<MessageSquare class="w-4 h-4" />}
+                                  active={t.thread_id === activeThreadId()}
+                                  onClick={() => void selectThread(t.thread_id)}
+                                >
+                                  <div class="flex flex-col gap-0.5 min-w-0 w-full">
+                                    <div class="flex items-center justify-between gap-2">
+                                      <span class="truncate">{t.title?.trim() || 'New chat'}</span>
+                                      <span class="text-[10px] text-muted-foreground shrink-0">{fmtRelativeTime(t.updated_at_unix_ms)}</span>
+                                    </div>
+                                    <Show when={!!t.last_message_preview?.trim()}>
+                                      <span class="text-[11px] text-muted-foreground/70 truncate">{t.last_message_preview}</span>
+                                    </Show>
+                                  </div>
+                                </SidebarItem>
+                              )}
+                            </For>
+                          </SidebarItemList>
+                        </Show>
                       </Show>
                     </Show>
-                  </Show>
-                </div>
-              </div>
+                  </SidebarSection>
+                </SidebarContent>
+              </Sidebar>
             </Show>
 
             {/* Chat area */}
