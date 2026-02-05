@@ -25,6 +25,7 @@ import (
 	fsproxy "github.com/floegence/flowersec/flowersec-go/proxy"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
+	"github.com/floegence/redeven-agent/internal/auditlog"
 	"github.com/floegence/redeven-agent/internal/codeapp"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/fs"
@@ -68,6 +69,8 @@ type Options struct {
 type Agent struct {
 	cfg *config.Config
 	log *slog.Logger
+
+	audit *auditlog.Store
 
 	version   string
 	commit    string
@@ -151,6 +154,14 @@ func New(opts Options) (*Agent, error) {
 		mon:       monitor.NewService(logger),
 		sessions:  make(map[string]*activeSession),
 	}
+
+	auditStore, err := auditlog.New(auditlog.Options{Logger: logger, StateDir: stateDir})
+	if err != nil {
+		// Best-effort: agent must keep running even if audit logging is unavailable.
+		logger.Warn("audit log init failed", "error", err)
+	} else {
+		a.audit = auditStore
+	}
 	a.sys = syssvc.NewService(syssvc.Options{
 		AgentInstanceID: opts.Config.AgentInstanceID,
 		Version:         opts.Version,
@@ -170,6 +181,7 @@ func New(opts Options) (*Agent, error) {
 		FSRoot:              rootAbs,
 		Shell:               shell,
 		AIConfig:            opts.Config.AI,
+		Audit:               auditStore,
 		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
 			if a == nil {
 				return nil, false
@@ -189,6 +201,26 @@ func New(opts Options) (*Agent, error) {
 				return nil, false
 			}
 			return &meta, true
+		},
+		ResolveSessionTunnelURL: func(channelID string) (string, bool) {
+			if a == nil {
+				return "", false
+			}
+			channelID = strings.TrimSpace(channelID)
+			if channelID == "" {
+				return "", false
+			}
+			a.mu.Lock()
+			s := a.sessions[channelID]
+			var tunnelURL string
+			if s != nil {
+				tunnelURL = s.tunnelURL
+			}
+			a.mu.Unlock()
+			if s == nil {
+				return "", false
+			}
+			return strings.TrimSpace(tunnelURL), true
 		},
 	})
 	if err != nil {
@@ -447,12 +479,14 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 
 	opened := false
 	startedAt := time.Now()
+	connectedAtUnixMs := int64(0)
 	channelID := strings.TrimSpace(meta.ChannelID)
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	floeApp := strings.TrimSpace(meta.FloeApp)
 	codeSpaceID := strings.TrimSpace(meta.CodeSpaceID)
 	userPublicID := strings.TrimSpace(meta.UserPublicID)
 	userEmail := strings.TrimSpace(meta.UserEmail)
+	tunnelURL := strings.TrimSpace(grant.TunnelUrl)
 	defer func() {
 		reason := "eof"
 		if !opened {
@@ -477,9 +511,61 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 		}
 		if reason == "error" {
 			a.log.Warn("data session closed", append(attrs, "error", err)...)
-			return
+		} else {
+			a.log.Info("data session closed", attrs...)
 		}
-		a.log.Info("data session closed", attrs...)
+
+		if a != nil && a.audit != nil {
+			status := "success"
+			if reason == "error" || reason == "connect_failed" {
+				status = "failure"
+			}
+			action := "session_closed"
+			if !opened {
+				if reason == "canceled" {
+					action = "session_open_canceled"
+				} else {
+					action = "session_open_failed"
+				}
+			}
+			errText := ""
+			if status == "failure" && err != nil {
+				errText = strings.TrimSpace(err.Error())
+				errText = strings.ReplaceAll(errText, "\r", " ")
+				errText = strings.ReplaceAll(errText, "\n", " ")
+				if len(errText) > 240 {
+					errText = errText[:240] + "..."
+				}
+			}
+
+			detail := map[string]any{
+				"reason":      reason,
+				"duration_ms": time.Since(startedAt).Milliseconds(),
+			}
+			if connectedAtUnixMs > 0 {
+				detail["connected_at_unix_ms"] = connectedAtUnixMs
+			}
+
+			a.audit.Append(auditlog.Entry{
+				Action:            action,
+				Status:            status,
+				Error:             errText,
+				ChannelID:         channelID,
+				EnvPublicID:       endpointID,
+				NamespacePublicID: strings.TrimSpace(meta.NamespacePublicID),
+				UserPublicID:      userPublicID,
+				UserEmail:         userEmail,
+				FloeApp:           floeApp,
+				SessionKind:       strings.TrimSpace(meta.SessionKind),
+				CodeSpaceID:       codeSpaceID,
+				TunnelURL:         tunnelURL,
+				CanReadFiles:      meta.CanReadFiles,
+				CanWriteFiles:     meta.CanWriteFiles,
+				CanExecute:        meta.CanExecute,
+				CanAdmin:          meta.CanAdmin,
+				Detail:            detail,
+			})
+		}
 	}()
 
 	origin, err := origin.ForTunnel(grant.TunnelUrl, a.cfg.ControlplaneBaseURL)
@@ -495,7 +581,7 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 	}
 	opened = true
 
-	connectedAtUnixMs := time.Now().UnixMilli()
+	connectedAtUnixMs = time.Now().UnixMilli()
 	a.markSessionConnected(channelID, connectedAtUnixMs)
 
 	a.log.Info("data session opened",
@@ -507,6 +593,29 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 		"user_email", userEmail,
 		"connected_at_unix_ms", connectedAtUnixMs,
 	)
+
+	if a != nil && a.audit != nil {
+		a.audit.Append(auditlog.Entry{
+			Action:            "session_opened",
+			Status:            "success",
+			ChannelID:         channelID,
+			EnvPublicID:       endpointID,
+			NamespacePublicID: strings.TrimSpace(meta.NamespacePublicID),
+			UserPublicID:      userPublicID,
+			UserEmail:         userEmail,
+			FloeApp:           floeApp,
+			SessionKind:       strings.TrimSpace(meta.SessionKind),
+			CodeSpaceID:       codeSpaceID,
+			TunnelURL:         tunnelURL,
+			CanReadFiles:      meta.CanReadFiles,
+			CanWriteFiles:     meta.CanWriteFiles,
+			CanExecute:        meta.CanExecute,
+			CanAdmin:          meta.CanAdmin,
+			Detail: map[string]any{
+				"connected_at_unix_ms": connectedAtUnixMs,
+			},
+		})
+	}
 	defer sess.Close()
 
 	switch strings.TrimSpace(meta.FloeApp) {

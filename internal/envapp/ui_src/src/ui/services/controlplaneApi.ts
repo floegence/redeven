@@ -41,26 +41,6 @@ export type EnvFloeApp = {
   enabled: boolean;
 };
 
-export type GrantAuditEntry = {
-  created_at: string;
-  channel_id: string;
-  env_public_id: string;
-  namespace_public_id: string;
-  user_public_id: string;
-  user_email?: string;
-  floe_app: string;
-  session_kind?: string;
-  code_space_id?: string;
-  can_read_files: boolean;
-  can_write_files: boolean;
-  can_execute: boolean;
-  tunnel_url?: string;
-  client_ip?: string;
-  user_agent?: string;
-  status: string;
-  error_code?: string;
-};
-
 const SESSION_STORAGE_KEYS = {
   envPublicID: 'redeven_env_public_id',
   brokerToken: 'redeven_broker_token',
@@ -159,23 +139,6 @@ export async function getEnvironmentFloeApps(envId: string): Promise<EnvFloeApp[
     bearerToken: brokerToken,
   });
   return Array.isArray(out?.apps) ? out.apps : [];
-}
-
-export async function getGrantAudits(envId: string, limit = 50): Promise<GrantAuditEntry[]> {
-  const id = envId.trim();
-  if (!id) throw new Error('Invalid envId');
-
-  const brokerToken = getBrokerTokenFromSession();
-  if (!brokerToken) {
-    throw new Error('Missing broker token. Please reopen from the Redeven Portal.');
-  }
-
-  const q = typeof limit === 'number' && limit > 0 ? `?limit=${encodeURIComponent(String(limit))}` : '';
-  const out = await fetchJSON<{ entries: GrantAuditEntry[] }>(`/api/srv/v1/floeproxy/environments/${encodeURIComponent(id)}/grant-audits${q}`, {
-    method: 'GET',
-    bearerToken: brokerToken,
-  });
-  return Array.isArray(out?.entries) ? out.entries : [];
 }
 
 export async function setEnvironmentFloeAppEnabled(envId: string, appId: string, enabled: boolean): Promise<EnvFloeApp[]> {

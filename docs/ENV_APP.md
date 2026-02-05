@@ -33,11 +33,26 @@ the sandbox origin `sessionStorage`.
 - `GET /api/srv/v1/floeproxy/environments/:envId/floe-apps`
 - `PUT /api/srv/v1/floeproxy/environments/:envId/floe-apps/:appId`
 - `POST /api/srv/v1/floeproxy/environments/:envId/entry` (Env App launcher; mint one-time entry_ticket for target apps)
-- `GET /api/srv/v1/floeproxy/environments/:envId/grant-audits` (audit log; env admin)
 
 All requests are `credentials: 'omit'` and include:
 
 - `Authorization: Bearer <broker_token>`
+
+## Audit log
+
+There are **two** audit log sources:
+
+1) Region-side grant audit log (control plane): recorded by control plane at `/v1/channel/init*`.
+   - This is **not** shown in the Env App.
+   - It is surfaced in the Console Dashboard environments list (env admin only).
+
+2) Agent-local audit log (user operations): recorded and persisted by the agent.
+   - Env App reads it via the local gateway API (env admin only):
+     - `GET /_redeven_proxy/api/audit/logs?limit=<n>`
+   - Storage (JSONL + rotation):
+     - `<state_dir>/audit/events.jsonl`
+     - `state_dir` is the directory of the agent config file (default: `~/.redeven-agent/`)
+   - The log is metadata-only and must not contain secrets (PSK/attach token/AI secrets/file contents).
 
 ## Codespaces (code-server) management
 
