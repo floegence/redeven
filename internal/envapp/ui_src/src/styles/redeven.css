@@ -6,6 +6,7 @@
 *,
 *::before,
 *::after {
+  border-width: 0;
   --tw-border-style: solid;
   border-style: solid;
 }
