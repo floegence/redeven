@@ -13,3 +13,7 @@
 node_modules
 npm-debug.log*
 
+# Generated build artifacts (embedded into the agent binary)
+internal/envapp/ui/dist/
+internal/codeapp/ui/dist/
+internal/ai/sidecar/dist/

@@ -12,7 +12,7 @@ import (
 //
 // To update dist, edit `internal/envapp/ui_src/` and run:
 //
-//	pnpm install && pnpm build
+//	pnpm install --frozen-lockfile && pnpm build
 //
 //go:embed all:dist
 var embeddedDist embed.FS
