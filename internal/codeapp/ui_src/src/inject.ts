@@ -20,6 +20,7 @@ const ERR_SW_REGISTER_DISABLED = "service worker register is disabled by flowers
 //   registration to avoid noisy user-facing errors.
 const CODE_SERVER_WEBVIEW_SW_SUFFIX = "/out/vs/workbench/contrib/webview/browser/pre/service-worker.js";
 const CODE_SERVER_PWA_SW_SUFFIX = "/out/browser/serviceWorker.js";
+const REDEVEN_PROXY_SW_SUFFIX = "/_redeven_sw.js";
 
 // Redeven patches the code-server webview pre Service Worker script (served from code-server)
 // to add a fallback proxy path: if the upstream SW does not call respondWith, it asks
@@ -148,6 +149,67 @@ function patchServiceWorkerRegisterForCodeServer(): void {
   }
 }
 
+function isServiceWorkerScriptPathSuffix(raw: string, suffix: string): boolean {
+  const v = String(raw ?? "").trim();
+  if (!v) return false;
+  try {
+    const u = new URL(v);
+    return u.pathname.endsWith(suffix);
+  } catch {
+    return v.endsWith(suffix);
+  }
+}
+
+async function uninstallConflictingServiceWorkersBestEffort(): Promise<void> {
+  // code-server's PWA service worker registers at scope "/" (see productConfiguration.serviceWorker)
+  // and can take control away from Redeven's proxy SW. Uninstall it if it's present from a
+  // previous browser session so the E2EE/runtime proxy remains stable.
+  try {
+    const sw = globalThis.navigator?.serviceWorker;
+    if (!sw) return;
+
+    const controllerScriptURL = String(sw.controller?.scriptURL ?? "").trim();
+    const controllerIsCodeServerPwa = isServiceWorkerScriptPathSuffix(controllerScriptURL, CODE_SERVER_PWA_SW_SUFFIX);
+    const controllerIsRedevenProxy = isServiceWorkerScriptPathSuffix(controllerScriptURL, REDEVEN_PROXY_SW_SUFFIX);
+    if (!controllerIsCodeServerPwa || controllerIsRedevenProxy) {
+      // Either we're already on the correct controller or the controller is unrelated.
+      // Still try to uninstall stale code-server registrations below.
+    }
+
+    const regs = typeof sw.getRegistrations === "function" ? await sw.getRegistrations() : [];
+    let uninstalled = false;
+    for (const reg of regs) {
+      const script = String(reg?.active?.scriptURL ?? reg?.waiting?.scriptURL ?? reg?.installing?.scriptURL ?? "").trim();
+      if (!isServiceWorkerScriptPathSuffix(script, CODE_SERVER_PWA_SW_SUFFIX)) continue;
+      try {
+        const ok = await reg.unregister();
+        uninstalled = uninstalled || ok;
+      } catch {
+        // ignore
+      }
+    }
+
+    // If code-server's PWA SW was controlling this page, a reload is required for the proxy SW
+    // to take control (unregister does not immediately change the active controller).
+    if (uninstalled && controllerIsCodeServerPwa && !controllerIsRedevenProxy) {
+      try {
+        const key = "redeven_sw_cleanup_ts";
+        const last = Number(sessionStorage.getItem(key) ?? "0");
+        const now = Date.now();
+        // Avoid reload loops: allow at most one cleanup-triggered reload per 10s.
+        if (!Number.isFinite(last) || now-last > 10_000) {
+          sessionStorage.setItem(key, String(now));
+          window.top?.location.reload();
+        }
+      } catch {
+        // ignore
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function getProxyRuntime(): ProxyRuntime | null {
   const top = window.top as unknown as Record<string, unknown> | null;
   if (!top) return null;
@@ -157,6 +219,7 @@ function getProxyRuntime(): ProxyRuntime | null {
 }
 
 try {
+  void uninstallConflictingServiceWorkersBestEffort();
   const rt = getProxyRuntime();
   if (rt) {
     patchServiceWorkerRegisterForCodeServer();
