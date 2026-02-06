@@ -54,7 +54,7 @@ type Entry struct {
 
 type Options struct {
 	Logger *slog.Logger
-	// StateDir is the agent state directory (e.g. ~/.redeven-agent).
+	// StateDir is the agent state directory (e.g. ~/.redeven).
 	StateDir string
 
 	// MaxBytes limits the size of a single audit log file (rotation threshold).

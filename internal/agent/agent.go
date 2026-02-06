@@ -67,7 +67,7 @@ type Options struct {
 	Config *config.Config
 	// ConfigPath is the path used to load the config file (used to derive state_dir).
 	ConfigPath string
-	// LocalUIEnabled indicates `redeven-agent run --local-ui` is enabled.
+	// LocalUIEnabled indicates Local UI is enabled (e.g. `redeven run --mode hybrid|local`).
 	//
 	// When enabled, the agent is allowed to start even without a full bootstrap config.
 	LocalUIEnabled bool
@@ -75,6 +75,10 @@ type Options struct {
 	// It is forwarded to internal gateways (e.g. /_redeven_proxy/* hardening) so the Local UI works
 	// without affecting Standard Mode origin checks.
 	LocalUIAllowedOrigins []string
+	// ControlChannelEnabled indicates whether the agent should connect to the control plane control channel.
+	//
+	// In Local mode, this should be false even when the config is fully bootstrapped.
+	ControlChannelEnabled bool
 
 	Version   string
 	Commit    string
@@ -113,8 +117,9 @@ type Agent struct {
 	controlConnectedOnce sync.Once
 	onControlConnected   func()
 
-	localUIEnabled       bool
-	localUIAllowedOrigin []string
+	localUIEnabled        bool
+	localUIAllowedOrigin  []string
+	controlChannelEnabled bool
 }
 
 // activeSession represents a server-side Flowersec channel session handled by the agent.
@@ -172,17 +177,18 @@ func New(opts Options) (*Agent, error) {
 	stateDir := filepath.Dir(cfgPathAbs)
 
 	a := &Agent{
-		cfg:                opts.Config,
-		log:                logger,
-		version:            strings.TrimSpace(opts.Version),
-		commit:             strings.TrimSpace(opts.Commit),
-		buildTime:          strings.TrimSpace(opts.BuildTime),
-		fsRoot:             rootAbs,
-		term:               terminal.NewManager(shell, rootAbs, logger),
-		mon:                monitor.NewService(logger),
-		sessions:           make(map[string]*activeSession),
-		onControlConnected: opts.OnControlConnected,
-		localUIEnabled:     opts.LocalUIEnabled,
+		cfg:                   opts.Config,
+		log:                   logger,
+		version:               strings.TrimSpace(opts.Version),
+		commit:                strings.TrimSpace(opts.Commit),
+		buildTime:             strings.TrimSpace(opts.BuildTime),
+		fsRoot:                rootAbs,
+		term:                  terminal.NewManager(shell, rootAbs, logger),
+		mon:                   monitor.NewService(logger),
+		sessions:              make(map[string]*activeSession),
+		onControlConnected:    opts.OnControlConnected,
+		localUIEnabled:        opts.LocalUIEnabled,
+		controlChannelEnabled: opts.ControlChannelEnabled,
 		localUIAllowedOrigin: func() []string {
 			var out []string
 			for _, o := range opts.LocalUIAllowedOrigins {
@@ -291,23 +297,18 @@ func (a *Agent) Run(ctx context.Context) error {
 		"goarch", runtime.GOARCH,
 	)
 
-	remoteErr := error(nil)
-	if a.cfg == nil {
-		remoteErr = errors.New("missing config")
-	} else {
-		remoteErr = a.cfg.ValidateRemoteStrict()
-	}
-
-	// Local UI mode must be able to run without a bootstrap config. In that case, we keep the
-	// agent services alive (codeapp gateway, FS, terminal, AI sidecars) but skip the control channel.
-	if remoteErr != nil {
-		if !a.localUIEnabled {
-			return remoteErr
-		}
-		a.log.Info("control channel disabled (agent not bootstrapped); running in local-only mode", "error", remoteErr)
+	if !a.controlChannelEnabled {
+		a.log.Info("control channel disabled; running without remote connection")
 		<-ctx.Done()
 		a.stopAllSessions()
 		return ctx.Err()
+	}
+
+	if a.cfg == nil {
+		return errors.New("missing config")
+	}
+	if err := a.cfg.ValidateRemoteStrict(); err != nil {
+		return err
 	}
 
 	backoff := newBackoff()

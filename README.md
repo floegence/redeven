@@ -1,4 +1,4 @@
-# redeven-agent
+# Redeven Agent
 
 Redeven Agent is the **endpoint** in the Redeven + Flowersec E2EE architecture.
 
@@ -40,7 +40,7 @@ Build:
 
 ```bash
 ./scripts/build_assets.sh
-go build -o redeven-agent ./cmd/redeven-agent
+go build -o redeven ./cmd/redeven
 ```
 
 Note: `internal/**/dist/` are generated build artifacts (embedded via Go `embed`) and are not checked into git.
@@ -50,19 +50,19 @@ Note: `internal/**/dist/` are generated build artifacts (embedded via Go `embed`
 1) Bootstrap (exchange env token for direct control-channel credentials):
 
 ```bash
-./redeven-agent bootstrap \
+./redeven bootstrap \
   --controlplane https://<region>.<base-domain> \
   --env-id <env_public_id> \
-  --env-token <env_token> \
-  --permission-policy execute_read
+  --env-token <env_token>
 ```
 
-This writes a local config file (default: `~/.redeven-agent/config.json`).
+This writes a local config file (default: `~/.redeven/config.json`).
+By default, the local permission cap is `execute_read_write`. You can override it via `--permission-policy`.
 
 2) Run:
 
 ```bash
-./redeven-agent run
+./redeven run
 ```
 
 ## Security notes

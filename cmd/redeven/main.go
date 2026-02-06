@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -26,6 +27,8 @@ var (
 )
 
 func main() {
+	cleanupLegacyHomeDir()
+
 	if len(os.Args) < 2 {
 		printUsage()
 		os.Exit(2)
@@ -37,20 +40,31 @@ func main() {
 	case "run":
 		runCmd(os.Args[2:])
 	case "version":
-		fmt.Printf("redeven-agent %s (%s) %s\n", Version, Commit, BuildTime)
+		fmt.Printf("redeven %s (%s) %s\n", Version, Commit, BuildTime)
 	default:
 		printUsage()
 		os.Exit(2)
 	}
 }
 
+func cleanupLegacyHomeDir() {
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return
+	}
+
+	// NOTE: We renamed the default config/state directory from ~/.redeven-agent to ~/.redeven.
+	// During development, remove the legacy directory proactively to avoid stale state surprises.
+	_ = os.RemoveAll(filepath.Join(home, ".redeven-agent"))
+}
+
 func printUsage() {
-	fmt.Fprintf(os.Stderr, `redeven-agent
+	fmt.Fprintf(os.Stderr, `redeven
 
 Usage:
-  redeven-agent bootstrap [flags]
-  redeven-agent run [flags]
-  redeven-agent version
+  redeven bootstrap [flags]
+  redeven run [flags]
+  redeven version
 
 Commands:
   bootstrap   Exchange an environment token for Flowersec direct control-channel credentials and write config.
@@ -65,13 +79,13 @@ func bootstrapCmd(args []string) {
 
 	controlplane := fs.String("controlplane", "", "Controlplane base URL (e.g. https://sg.example.invalid)")
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
-	envToken := fs.String("env-token", "", "Environment token (raw; do not include 'Bearer ' prefix)")
+	envToken := fs.String("env-token", "", "Environment token (raw token; 'Bearer <token>' is also accepted)")
 	cfgPath := fs.String("config", config.DefaultConfigPath(), "Config file path")
 
 	rootDir := fs.String("root-dir", "", "Filesystem root dir (default: user home dir)")
 	shell := fs.String("shell", "", "Shell command (default: $SHELL or /bin/bash)")
 
-	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read|read_only|execute_read_write (empty: keep existing; default: execute_read)")
+	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read|read_only|execute_read_write (empty: keep existing; default: execute_read_write)")
 
 	logFormat := fs.String("log-format", "json", "Log format: json|text")
 	logLevel := fs.String("log-level", "info", "Log level: debug|info|warn|error")
@@ -110,9 +124,16 @@ func bootstrapCmd(args []string) {
 func runCmd(args []string) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	cfgPath := fs.String("config", config.DefaultConfigPath(), "Config file path")
-	localUI := fs.Bool("local-ui", false, "Enable unauthenticated local UI on loopback (HTTP)")
+	modeRaw := fs.String("mode", "remote", "Run mode: remote|hybrid|local")
 	localUIPort := fs.Int("local-ui-port", defaultLocalUIPort, "Local UI port (default: 23998)")
 	_ = fs.Parse(args)
+
+	mode, err := parseRunMode(*modeRaw)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid --mode: %v\n\n", err)
+		fs.Usage()
+		os.Exit(2)
+	}
 
 	cfgPathClean := filepath.Clean(*cfgPath)
 
@@ -129,8 +150,8 @@ func runCmd(args []string) {
 
 	cfg, err := config.Load(cfgPathClean)
 	if err != nil {
-		// Local UI mode must be able to start from a clean machine (no bootstrap yet).
-		if *localUI && os.IsNotExist(err) {
+		// Local mode must be able to start from a clean machine (no bootstrap yet).
+		if mode == runModeLocal && os.IsNotExist(err) {
 			p, _ := config.ParsePermissionPolicyPreset("")
 			cfg = &config.Config{
 				PermissionPolicy: p,
@@ -150,12 +171,13 @@ func runCmd(args []string) {
 	remoteErr := cfg.ValidateRemoteStrict()
 	remoteEnabled := remoteErr == nil
 
-	if !*localUI {
-		if !remoteEnabled {
-			fmt.Fprintf(os.Stderr, "agent not bootstrapped: %v\n", remoteErr)
-			fmt.Fprintf(os.Stderr, "Hint: run `redeven-agent bootstrap` first.\n")
-			os.Exit(1)
-		}
+	controlChannelEnabled := mode != runModeLocal
+	localUIEnabled := mode != runModeRemote
+
+	if controlChannelEnabled && !remoteEnabled {
+		fmt.Fprintf(os.Stderr, "agent not bootstrapped: %v\n", remoteErr)
+		fmt.Fprintf(os.Stderr, "Hint: run `redeven bootstrap` first.\n")
+		os.Exit(1)
 	}
 
 	localPort := *localUIPort
@@ -164,21 +186,22 @@ func runCmd(args []string) {
 			Version:             Version,
 			ControlplaneBaseURL: cfg.ControlplaneBaseURL,
 			EnvironmentID:       cfg.EnvironmentID,
-			LocalUIEnabled:      *localUI,
+			LocalUIEnabled:      localUIEnabled,
 			LocalUIPort:         localPort,
 		})
 	}
 
 	var allowedOrigins []string
-	if *localUI {
+	if localUIEnabled {
 		allowedOrigins = localui.AllowedOriginsForPort(*localUIPort)
 	}
 
 	a, err := agent.New(agent.Options{
 		Config:                cfg,
 		ConfigPath:            cfgPathClean,
-		LocalUIEnabled:        *localUI,
+		LocalUIEnabled:        localUIEnabled,
 		LocalUIAllowedOrigins: allowedOrigins,
+		ControlChannelEnabled: controlChannelEnabled,
 		Version:               Version,
 		Commit:                Commit,
 		BuildTime:             BuildTime,
@@ -201,8 +224,8 @@ func runCmd(args []string) {
 	}()
 
 	// Start the Local UI server before running the control channel loop so users can open
-	// the local page immediately (Local-only mode does not require a control plane).
-	if *localUI {
+	// the local page immediately.
+	if localUIEnabled {
 		cfgPathAbs, err := filepath.Abs(cfgPathClean)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to resolve config path: %v\n", err)
@@ -233,10 +256,9 @@ func runCmd(args []string) {
 		// Keep the port accurate in the banner (srv.Port() is the bound port).
 		localPort = srv.Port()
 
-		// Avoid printing the welcome banner twice in Hybrid Mode:
-		// - When Standard Mode is enabled, print once after the control channel connects.
-		// - Otherwise (Local-only mode), print once after the Local UI is ready.
-		if !remoteEnabled {
+		// In local mode, print after the Local UI is ready.
+		// In hybrid mode, print after the control channel connects (so URL is accurate).
+		if mode == runModeLocal {
 			announce()
 		}
 	}
@@ -244,5 +266,27 @@ func runCmd(args []string) {
 	if err := a.Run(ctx); err != nil && ctx.Err() == nil {
 		fmt.Fprintf(os.Stderr, "agent exited with error: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+type runMode string
+
+const (
+	runModeRemote runMode = "remote"
+	runModeHybrid runMode = "hybrid"
+	runModeLocal  runMode = "local"
+)
+
+func parseRunMode(raw string) (runMode, error) {
+	v := strings.ToLower(strings.TrimSpace(raw))
+	switch v {
+	case string(runModeRemote):
+		return runModeRemote, nil
+	case string(runModeHybrid):
+		return runModeHybrid, nil
+	case string(runModeLocal):
+		return runModeLocal, nil
+	default:
+		return "", fmt.Errorf("want remote|hybrid|local, got %q", raw)
 	}
 }

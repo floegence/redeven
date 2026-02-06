@@ -1,6 +1,6 @@
 # AI Settings & Secrets (Recommended Design)
 
-This document describes the recommended, stable design for **AI configuration management** in `redeven-agent`.
+This document describes the recommended, stable design for **AI configuration management** in the Redeven agent.
 
 Goals:
 
@@ -20,13 +20,13 @@ Non-goals:
 
 We deliberately split configuration into two local files:
 
-1) `~/.redeven-agent/config.json` (non-secret settings)
+1) `~/.redeven/config.json` (non-secret settings)
 
 - Control-plane bootstrap fields + local preferences.
 - Contains AI provider registry and allowed models.
 - Must **never** contain provider API keys.
 
-2) `~/.redeven-agent/secrets.json` (user-provided secrets, chmod `0600`)
+2) `~/.redeven/secrets.json` (user-provided secrets, chmod `0600`)
 
 - Stores AI provider API keys (and future user secrets).
 - Never returned in plaintext; UI only gets derived status (e.g. `key_set=true/false`).
@@ -137,4 +137,3 @@ This achieves both an intuitive UX and stable runtime behavior.
 - Editing settings or updating keys: requires `admin` permission (local endpoint owner / admin only).
 
 This keeps usage accessible while protecting local secret writes.
-

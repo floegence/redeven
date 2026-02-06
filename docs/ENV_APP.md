@@ -1,6 +1,6 @@
 # Env App (env details UI over Flowersec E2EE)
 
-This document describes the **Env App** implementation in `redeven-agent`.
+This document describes the **Env App** implementation in the Redeven agent.
 
 Key points:
 
@@ -49,7 +49,7 @@ There are **two** audit log sources:
      - `GET /_redeven_proxy/api/audit/logs?limit=<n>`
    - Storage (JSONL + rotation):
      - `<state_dir>/audit/events.jsonl`
-     - `state_dir` is the directory of the agent config file (default: `~/.redeven-agent/`)
+     - `state_dir` is the directory of the agent config file (default: `~/.redeven/`)
    - The log is metadata-only and must not contain secrets (PSK/attach token/AI secrets/file contents).
 
 ## Codespaces (code-server) management
