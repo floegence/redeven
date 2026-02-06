@@ -140,6 +140,78 @@ setInterval(() => {}, 1000);
 	}
 }
 
+func TestRun_PersistOpTimeout_DoesNotExpireAcrossRun(t *testing.T) {
+	t.Parallel()
+
+	// The sidecar delays completion to ensure the run lasts longer than the per-op persistence timeout.
+	// Persist operations must still succeed because they use fresh contexts per DB call.
+	script := writeTestSidecarScript(t, `
+import { createInterface } from 'node:readline';
+
+function send(method, params) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+}
+
+const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+rl.on('line', (line) => {
+  const msg = JSON.parse(String(line || '').trim() || '{}');
+  if (msg.method === 'run.start') {
+    const runId = String(msg.params?.run_id || '').trim();
+    setTimeout(() => {
+      send('run.end', { run_id: runId });
+      process.exit(0);
+    }, 200);
+  }
+});
+
+setInterval(() => {}, 1000);
+`)
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_a",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+	svc := newTestService(t, script, map[string]session.Meta{"ch_a": meta}, func(o *Options) {
+		o.PersistOpTimeout = 50 * time.Millisecond
+		o.RunIdleTimeout = 2 * time.Second
+		o.RunMaxWallTime = 2 * time.Second
+	})
+
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "hello")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, "run_test_persist_1", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "hi"},
+		Options:  RunOptions{MaxSteps: 1},
+	}, rr); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if view == nil {
+		t.Fatalf("thread missing after run")
+	}
+	if strings.TrimSpace(view.LastMessagePreview) != "No response." {
+		t.Fatalf("last_message_preview=%q, want %q", view.LastMessagePreview, "No response.")
+	}
+}
+
 func TestRun_CancelRun_ByDifferentChannel_SucceedsAndReleasesLock(t *testing.T) {
 	t.Parallel()
 

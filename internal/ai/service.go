@@ -35,6 +35,13 @@ type Options struct {
 
 	Config *config.AIConfig
 
+	// PersistOpTimeout is the per-operation timeout for threadstore persistence
+	// (SQLite reads/writes). It must NOT be tied to a run's overall lifetime, since
+	// runs can take much longer than persistence should ever be allowed to block.
+	//
+	// When zero, it defaults to 10 seconds.
+	PersistOpTimeout time.Duration
+
 	// SidecarScriptPath overrides the embedded sidecar bundle path.
 	//
 	// When empty, the embedded bundle is materialized under <stateDir>/ai/sidecar/sidecar.mjs.
@@ -75,6 +82,8 @@ type Service struct {
 
 	cfg *config.AIConfig
 
+	persistOpTO time.Duration
+
 	sidecarScriptPath string
 	runMaxWallTime    time.Duration
 	runIdleTimeout    time.Duration
@@ -94,10 +103,11 @@ type Service struct {
 }
 
 const (
-	defaultRunMaxWallTime = 15 * time.Minute
-	defaultRunIdleTimeout = 2 * time.Minute
-	defaultToolApprovalTO = 10 * time.Minute
-	defaultStreamWriteTO  = 5 * time.Second
+	defaultPersistOpTimeout = 10 * time.Second
+	defaultRunMaxWallTime   = 15 * time.Minute
+	defaultRunIdleTimeout   = 2 * time.Minute
+	defaultToolApprovalTO   = 10 * time.Minute
+	defaultStreamWriteTO    = 5 * time.Second
 )
 
 func runThreadKey(endpointID string, threadID string) string {
@@ -156,12 +166,18 @@ func NewService(opts Options) (*Service, error) {
 		streamWTO = defaultStreamWriteTO
 	}
 
+	persistTO := opts.PersistOpTimeout
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+
 	return &Service{
 		log:                logger,
 		stateDir:           strings.TrimSpace(opts.StateDir),
 		fsRoot:             strings.TrimSpace(opts.FSRoot),
 		shell:              strings.TrimSpace(opts.Shell),
 		cfg:                opts.Config,
+		persistOpTO:        persistTO,
 		sidecarScriptPath:  strings.TrimSpace(opts.SidecarScriptPath),
 		runMaxWallTime:     maxWall,
 		runIdleTimeout:     idleTO,
@@ -401,11 +417,10 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		return errors.New("missing endpoint_id")
 	}
 
-	// Persisting a thread and its messages should not depend on the request lifetime:
-	// - the browser may disconnect early (e.g. Stop/refresh)
-	// - we still want to keep the user message and thread metadata stable
-	persistCtx, cancelPersist := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancelPersist()
+	persistTO := s.persistOpTO
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
 
 	// Ensure the thread exists before starting the run.
 	s.mu.Lock()
@@ -414,7 +429,9 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
-	th, err := db.GetThread(persistCtx, endpointID, threadID)
+	pctx, cancelPersist := context.WithTimeout(context.Background(), persistTO)
+	th, err := db.GetThread(pctx, endpointID, threadID)
+	cancelPersist()
 	if err != nil {
 		return err
 	}
@@ -488,7 +505,9 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	}()
 
 	// Build history snapshot from persisted messages (exclude the current input).
-	historyLite, err := db.ListHistoryLite(persistCtx, endpointID, threadID, 120)
+	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
+	historyLite, err := db.ListHistoryLite(pctx, endpointID, threadID, 120)
+	cancelPersist()
 	if err != nil {
 		return err
 	}
@@ -519,7 +538,8 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	if err != nil {
 		return err
 	}
-	_, err = db.AppendMessage(persistCtx, endpointID, threadID, threadstore.Message{
+	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
+	_, err = db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
 		ThreadID:           threadID,
 		EndpointID:         endpointID,
 		MessageID:          userMsgID,
@@ -532,6 +552,7 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		TextContent:        userText,
 		MessageJSON:        userJSON,
 	}, meta.UserPublicID, meta.UserEmail)
+	cancelPersist()
 	if err != nil {
 		return err
 	}
@@ -569,7 +590,8 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	if strings.TrimSpace(assistantJSON) == "" {
 		return errors.New("missing assistant message")
 	}
-	_, err = db.AppendMessage(persistCtx, endpointID, threadID, threadstore.Message{
+	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
+	_, err = db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
 		ThreadID:        threadID,
 		EndpointID:      endpointID,
 		MessageID:       messageID,
@@ -580,6 +602,7 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		TextContent:     assistantText,
 		MessageJSON:     assistantJSON,
 	}, meta.UserPublicID, meta.UserEmail)
+	cancelPersist()
 	return err
 }
 

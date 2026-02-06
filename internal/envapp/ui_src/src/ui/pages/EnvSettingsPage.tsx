@@ -2029,19 +2029,13 @@ export function EnvSettingsPage() {
 
 	                          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 	                            <div>
-	                              <FieldLabel hint="optional">name</FieldLabel>
+                              <FieldLabel hint="optional">name</FieldLabel>
                               <Input
-                                id={`redeven-ai-provider-name-${String(p().id ?? '').trim()}`}
                                 value={p().name}
                                 onInput={(e) => {
                                   const v = e.currentTarget.value;
                                   setAiProviders((prev) => prev.map((it, i) => (i === idx ? { ...it, name: v } : it)));
                                   setAiDirty(true);
-                                  const id = `redeven-ai-provider-name-${String(p().id ?? '').trim()}`;
-                                  queueMicrotask(() => {
-                                    const el = document.getElementById(id);
-                                    if (el && document.activeElement !== el) (el as HTMLInputElement).focus();
-                                  });
                                 }}
                                 placeholder="OpenAI"
                                 size="sm"
