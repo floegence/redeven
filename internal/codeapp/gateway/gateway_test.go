@@ -920,6 +920,64 @@ func TestGateway_CodeServerProxy_RewritesHostAndStripsForwardedHeaders(t *testin
 	}
 }
 
+func TestGateway_CodeServerProxy_ServesVSDAWebShim(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+	b := &stubBackend{
+		resolveCodeServerPort: func(ctx context.Context, codeSpaceID string) (int, error) {
+			return 0, errors.New("should not be called")
+		},
+	}
+	gw, err := New(Options{
+		Backend:            b,
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// JS shim
+	{
+		req := httptest.NewRequest(http.MethodGet, "http://ignored.local/stable-dev/static/node_modules/vsda/rust/web/vsda.js", nil)
+		req.Header.Set("Origin", "https://cs-abc.example.com")
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("vsda.js status = %d, want %d, body=%q", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		if ct := rr.Header().Get("Content-Type"); !strings.Contains(ct, "text/javascript") {
+			t.Fatalf("vsda.js Content-Type = %q, want javascript", ct)
+		}
+		if !bytes.Contains(rr.Body.Bytes(), []byte("vsda_web")) {
+			t.Fatalf("vsda.js body does not contain vsda_web")
+		}
+	}
+
+	// WASM shim
+	{
+		req := httptest.NewRequest(http.MethodGet, "http://ignored.local/stable-dev/static/node_modules/vsda/rust/web/vsda_bg.wasm", nil)
+		req.Header.Set("Origin", "https://cs-abc.example.com")
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("vsda_bg.wasm status = %d, want %d, body=%q", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		if ct := rr.Header().Get("Content-Type"); !strings.Contains(ct, "application/wasm") {
+			t.Fatalf("vsda_bg.wasm Content-Type = %q, want wasm", ct)
+		}
+		if rr.Body.Len() == 0 {
+			t.Fatalf("vsda_bg.wasm body is empty")
+		}
+	}
+}
+
 func TestGateway_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder(t *testing.T) {
 	t.Parallel()
 

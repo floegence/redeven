@@ -1932,6 +1932,19 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Gateway) handleCodeServerProxy(w http.ResponseWriter, r *http.Request) {
+	// VS Code Web uses `vsda` (WASM) for signing during the remote connection handshake.
+	//
+	// In Redeven, code-server is an external dependency and some distributions do not ship
+	// the `vsda` web artifacts under /static/node_modules/vsda/..., which results in 404s
+	// and delays during startup/reconnect loops.
+	//
+	// To keep codespace UX deterministic, we serve a minimal, compatible shim here.
+	// Security note: this does not provide real signing; it matches the current behavior
+	// when vsda is missing (the client falls back to no-op signing).
+	if maybeServeVSDAWebShim(w, r) {
+		return
+	}
+
 	extScheme, extHost, err := externalOriginFromRequest(r)
 	if err != nil {
 		http.Error(w, "missing external origin", http.StatusBadRequest)
@@ -1971,6 +1984,66 @@ func (g *Gateway) handleCodeServerProxy(w http.ResponseWriter, r *http.Request) 
 		},
 	}
 	proxy.ServeHTTP(w, r)
+}
+
+const (
+	vsdaWebJSSuffix   = "/static/node_modules/vsda/rust/web/vsda.js"
+	vsdaWebWasmSuffix = "/static/node_modules/vsda/rust/web/vsda_bg.wasm"
+)
+
+var (
+	vsdaWebShimJS = []byte(`(function () {
+  // Minimal shim for VS Code web SignService.
+  // It intentionally implements a no-op validator to avoid hard failures when vsda is not shipped.
+  if (typeof globalThis === "undefined") return;
+  if (typeof globalThis.vsda_web !== "undefined") return;
+
+  function Validator() {}
+  Validator.prototype.free = function () {};
+  Validator.prototype.createNewMessage = function (original) { return String(original ?? ""); };
+  Validator.prototype.validate = function () { return "ok"; };
+
+  globalThis.vsda_web = {
+    default: async function () {},
+    sign: function (salted_message) { return String(salted_message ?? ""); },
+    validator: Validator
+  };
+})();`)
+
+	// The shim does not use the WASM bytes, but VS Code still fetches them.
+	// Keep it non-empty so response.arrayBuffer() is stable across environments.
+	vsdaWebShimWasm = []byte{0x00}
+)
+
+func maybeServeVSDAWebShim(w http.ResponseWriter, r *http.Request) bool {
+	if w == nil || r == nil || r.URL == nil {
+		return false
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+
+	p := r.URL.Path
+	switch {
+	case strings.HasSuffix(p, vsdaWebJSSuffix):
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodHead {
+			return true
+		}
+		_, _ = w.Write(vsdaWebShimJS)
+		return true
+	case strings.HasSuffix(p, vsdaWebWasmSuffix):
+		w.Header().Set("Content-Type", "application/wasm")
+		w.WriteHeader(http.StatusOK)
+		if r.Method == http.MethodHead {
+			return true
+		}
+		_, _ = w.Write(vsdaWebShimWasm)
+		return true
+	default:
+		return false
+	}
 }
 
 type portForwardHealth struct {
