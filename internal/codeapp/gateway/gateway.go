@@ -1202,6 +1202,24 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"thread": th}})
 			return
 
+		case action == "cancel" && r.Method == http.MethodPost:
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			if err := g.ai.CancelThread(meta, threadID); err != nil {
+				g.appendAudit(meta, "ai_thread_cancel", "failure", map[string]any{"thread_id": threadID}, err)
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			g.appendAudit(meta, "ai_thread_cancel", "success", map[string]any{"thread_id": threadID}, nil)
+			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
+
 		case action == "" && r.Method == http.MethodDelete:
 			meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
 			if !ok {
@@ -1211,7 +1229,13 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
 				return
 			}
-			if err := g.ai.DeleteThread(r.Context(), meta, threadID); err != nil {
+			force := false
+			if raw := strings.TrimSpace(r.URL.Query().Get("force")); raw != "" {
+				if raw == "1" || strings.EqualFold(raw, "true") {
+					force = true
+				}
+			}
+			if err := g.ai.DeleteThread(r.Context(), meta, threadID, force); err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, ai.ErrThreadBusy) {
 					status = http.StatusConflict
@@ -1323,7 +1347,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing thread_id"})
 			return
 		}
-		if g.ai.HasActiveThread(strings.TrimSpace(req.ThreadID)) {
+		if g.ai.HasActiveThreadForEndpoint(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(req.ThreadID)) {
 			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "thread already active"})
 			return
 		}
@@ -1403,7 +1427,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if r.Method == http.MethodPost && action == "cancel" {
-			if err := g.ai.CancelRun(channelID, runID); err != nil {
+			if err := g.ai.CancelRun(meta, runID); err != nil {
 				g.appendAudit(meta, "ai_run_cancel", "failure", map[string]any{"run_id": runID}, err)
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
@@ -1423,7 +1447,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing tool_id"})
 				return
 			}
-			if err := g.ai.ApproveTool(channelID, runID, body.ToolID, body.Approved); err != nil {
+			if err := g.ai.ApproveTool(meta, runID, body.ToolID, body.Approved); err != nil {
 				g.appendAudit(meta, "ai_tool_approval", "failure", map[string]any{
 					"run_id":   runID,
 					"tool_id":  strings.TrimSpace(body.ToolID),

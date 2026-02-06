@@ -171,7 +171,7 @@ func (s *Service) RenameThread(ctx context.Context, meta *session.Meta, threadID
 	return db.RenameThread(ctx, meta.EndpointID, threadID, title, meta.UserPublicID, meta.UserEmail)
 }
 
-func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID string) error {
+func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
@@ -182,18 +182,77 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	if threadID == "" {
 		return errors.New("missing thread_id")
 	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if endpointID == "" {
+		return errors.New("invalid request")
+	}
 
 	s.mu.Lock()
-	if existing := s.activeRunByTh[threadID]; existing != "" {
-		s.mu.Unlock()
-		return ErrThreadBusy
+	runID := strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)])
+	r := s.runs[runID]
+	s.mu.Unlock()
+	if runID == "" || r == nil {
+		return nil
 	}
+	if strings.TrimSpace(r.endpointID) != endpointID {
+		return errors.New("run not found")
+	}
+	r.requestCancel("canceled")
+	return nil
+}
+
+func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID string, force bool) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if meta == nil {
+		return errors.New("missing session metadata")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return errors.New("missing thread_id")
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if endpointID == "" {
+		return errors.New("invalid request")
+	}
+
+	s.mu.Lock()
+	runID := strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)])
+	r := s.runs[runID]
 	db := s.threadsDB
 	s.mu.Unlock()
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
-	return db.DeleteThread(ctx, meta.EndpointID, threadID)
+
+	if runID != "" {
+		if !force {
+			return ErrThreadBusy
+		}
+		if r == nil || strings.TrimSpace(r.endpointID) != endpointID {
+			return ErrThreadBusy
+		}
+
+		// Cancel first, then wait for the run to fully exit so we don't race with message persistence.
+		r.requestCancel("canceled")
+		wctx := ctx
+		if wctx == nil {
+			wctx = context.Background()
+		}
+		if _, ok := wctx.Deadline(); !ok {
+			var cancel context.CancelFunc
+			wctx, cancel = context.WithTimeout(wctx, 10*time.Second)
+			defer cancel()
+		}
+		select {
+		case <-r.doneCh:
+		case <-wctx.Done():
+			return ErrThreadBusy
+		}
+	}
+
+	return db.DeleteThread(ctx, endpointID, threadID)
 }
 
 func (s *Service) ListThreadMessages(ctx context.Context, meta *session.Meta, threadID string, limit int, beforeID int64) (*ListThreadMessagesResponse, error) {

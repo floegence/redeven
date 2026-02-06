@@ -34,9 +34,18 @@ type runOptions struct {
 	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
 	ResolveProviderKey func(providerID string) (string, bool, error)
 
-	RunID     string
-	ChannelID string
-	MessageID string
+	RunID        string
+	ChannelID    string
+	EndpointID   string
+	ThreadID     string
+	UserPublicID string
+	MessageID    string
+
+	SidecarScriptPath   string
+	MaxWallTime         time.Duration
+	IdleTimeout         time.Duration
+	ToolApprovalTimeout time.Duration
+	StreamWriteTimeout  time.Duration
 
 	UploadsDir string
 
@@ -54,9 +63,22 @@ type run struct {
 	resolveSessionMeta func(channelID string) (*session.Meta, bool)
 	resolveProviderKey func(providerID string) (string, bool, error)
 
-	id        string
-	channelID string
-	messageID string
+	id           string
+	channelID    string
+	endpointID   string
+	threadID     string
+	userPublicID string
+	messageID    string
+
+	sidecarScriptPath string
+	maxWallTime       time.Duration
+	idleTimeout       time.Duration
+	toolApprovalTO    time.Duration
+	doneCh            chan struct{}
+
+	muCancel     sync.Mutex
+	cancelReason string // "canceled"|"timed_out"|""
+	endReason    string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
 
 	uploadsDir string
 
@@ -66,10 +88,11 @@ type run struct {
 	cancelOnce sync.Once
 	cancelFn   context.CancelFunc
 
-	mu             sync.Mutex
-	sidecar        *sidecarProcess
-	toolApprovals  map[string]chan bool // tool_id -> decision channel
-	toolBlockIndex map[string]int       // tool_id -> blockIndex
+	mu              sync.Mutex
+	sidecar         *sidecarProcess
+	toolApprovals   map[string]chan bool // tool_id -> decision channel
+	toolBlockIndex  map[string]int       // tool_id -> blockIndex
+	waitingApproval bool
 
 	nextBlockIndex        int
 	currentTextBlockIndex int
@@ -97,14 +120,66 @@ func newRun(opts runOptions) *run {
 		resolveProviderKey: opts.ResolveProviderKey,
 		id:                 strings.TrimSpace(opts.RunID),
 		channelID:          strings.TrimSpace(opts.ChannelID),
+		endpointID:         strings.TrimSpace(opts.EndpointID),
+		threadID:           strings.TrimSpace(opts.ThreadID),
+		userPublicID:       strings.TrimSpace(opts.UserPublicID),
 		messageID:          strings.TrimSpace(opts.MessageID),
 		uploadsDir:         strings.TrimSpace(opts.UploadsDir),
 		w:                  opts.Writer,
 		toolApprovals:      make(map[string]chan bool),
 		toolBlockIndex:     make(map[string]int),
+		sidecarScriptPath:  strings.TrimSpace(opts.SidecarScriptPath),
+		maxWallTime:        opts.MaxWallTime,
+		idleTimeout:        opts.IdleTimeout,
+		toolApprovalTO:     opts.ToolApprovalTimeout,
+		doneCh:             make(chan struct{}),
 	}
-	r.stream = newNDJSONStream(r.w)
+	r.stream = newNDJSONStream(r.w, opts.StreamWriteTimeout)
 	return r
+}
+
+func (r *run) requestCancel(reason string) {
+	if r == nil {
+		return
+	}
+	reason = strings.TrimSpace(reason)
+	if reason != "" {
+		r.muCancel.Lock()
+		if r.cancelReason == "" {
+			r.cancelReason = reason
+		}
+		r.muCancel.Unlock()
+	}
+	r.cancel()
+}
+
+func (r *run) getCancelReason() string {
+	if r == nil {
+		return ""
+	}
+	r.muCancel.Lock()
+	v := strings.TrimSpace(r.cancelReason)
+	r.muCancel.Unlock()
+	return v
+}
+
+func (r *run) setEndReason(reason string) {
+	if r == nil {
+		return
+	}
+	r.muCancel.Lock()
+	r.endReason = strings.TrimSpace(reason)
+	r.muCancel.Unlock()
+}
+
+func (r *run) getEndReason() string {
+	if r == nil {
+		return ""
+	}
+	r.muCancel.Lock()
+	v := strings.TrimSpace(r.endReason)
+	r.muCancel.Unlock()
+	return v
 }
 
 func (r *run) cancel() {
@@ -119,7 +194,10 @@ func (r *run) cancel() {
 		sc := r.sidecar
 		r.mu.Unlock()
 		if sc != nil {
-			_ = sc.send("run.cancel", map[string]any{"run_id": r.id})
+			// Best-effort: never block cancel on a stuck sidecar stdin pipe.
+			go func() {
+				_ = sc.send("run.cancel", map[string]any{"run_id": r.id})
+			}()
 		}
 	})
 }
@@ -159,19 +237,30 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 	ctx, cancel := context.WithCancel(ctx)
 	r.cancelFn = cancel
 	defer r.cancel()
+	if r.stream != nil {
+		defer r.stream.close()
+	}
 
 	// Initial assistant message + first markdown block.
 	r.assistantCreatedAtUnixMs = time.Now().UnixMilli()
-	if err := r.stream.send(streamEventMessageStart{Type: "message-start", MessageID: r.messageID}); err != nil {
-		return err
-	}
-	if err := r.stream.send(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"}); err != nil {
-		return err
-	}
 	r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: ""}}
 	r.nextBlockIndex = 1
 	r.currentTextBlockIndex = 0
 	r.needNewTextBlock = false
+
+	if err := r.stream.send(streamEventMessageStart{Type: "message-start", MessageID: r.messageID}); err != nil {
+		// Client is likely disconnected. Persist a terminal notice and exit without starting sidecar.
+		r.finalizeNotice("disconnected")
+		r.setEndReason("disconnected")
+		return nil
+	}
+	if err := r.stream.send(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"}); err != nil {
+		r.finalizeNotice("disconnected")
+		r.setEndReason("disconnected")
+		return nil
+	}
+	// Note: timeouts are enforced via an out-of-band goroutine (after sidecar starts) so the run
+	// still cancels even when blocked in sc.recv().
 
 	// Resolve provider key for this run, then inject it into the sidecar env.
 	modelID := strings.TrimSpace(req.Model)
@@ -238,7 +327,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 	}
 	env = append(env, prefix+strings.TrimSpace(apiKey))
 
-	sc, err := startSidecar(ctx, r.log, r.stateDir, env)
+	sc, err := startSidecar(ctx, r.log, r.stateDir, env, r.sidecarScriptPath)
 	if err != nil {
 		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI sidecar unavailable"})
 		return err
@@ -247,6 +336,11 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 	r.sidecar = sc
 	r.mu.Unlock()
 	defer sc.close()
+	go func() {
+		<-ctx.Done()
+		// Ensure recv() unblocks even when sidecar never emits a terminal event.
+		sc.close()
+	}()
 
 	// Initialize + start.
 	providers := make([]sidecarProvider, 0, len(r.cfg.Providers))
@@ -293,30 +387,132 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 		return err
 	}
 
+	activityCh := make(chan struct{}, 1)
+	signalActivity := func() {
+		select {
+		case activityCh <- struct{}{}:
+		default:
+		}
+	}
+	signalActivity()
+
+	if r.maxWallTime > 0 || r.idleTimeout > 0 {
+		go func() {
+			var wallTimer *time.Timer
+			var idleTimer *time.Timer
+			var wallC <-chan time.Time
+			var idleC <-chan time.Time
+			if r.maxWallTime > 0 {
+				wallTimer = time.NewTimer(r.maxWallTime)
+				wallC = wallTimer.C
+			}
+			if r.idleTimeout > 0 {
+				idleTimer = time.NewTimer(r.idleTimeout)
+				idleC = idleTimer.C
+			}
+			defer func() {
+				if wallTimer != nil {
+					wallTimer.Stop()
+				}
+				if idleTimer != nil {
+					idleTimer.Stop()
+				}
+			}()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-activityCh:
+					if idleTimer == nil {
+						continue
+					}
+					if !idleTimer.Stop() {
+						select {
+						case <-idleTimer.C:
+						default:
+						}
+					}
+					idleTimer.Reset(r.idleTimeout)
+				case <-wallC:
+					r.requestCancel("timed_out")
+					return
+				case <-idleC:
+					// While waiting for a tool approval, idle timeout is confusing. Approval timeout is enforced separately.
+					r.mu.Lock()
+					waiting := r.waitingApproval
+					r.mu.Unlock()
+					if waiting {
+						if idleTimer != nil {
+							idleTimer.Reset(r.idleTimeout)
+						}
+						continue
+					}
+					r.requestCancel("timed_out")
+					return
+				}
+			}
+		}()
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
-			_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "Canceled"})
-			return ctx.Err()
+			reason := r.getCancelReason()
+			switch reason {
+			case "canceled":
+				r.finalizeNotice("canceled")
+				r.setEndReason("canceled")
+				_ = r.stream.send(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+				return nil
+			case "timed_out":
+				r.finalizeNotice("timed_out")
+				r.setEndReason("timed_out")
+				_ = r.stream.send(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+				return nil
+			default:
+				// Parent context canceled (browser disconnect).
+				r.finalizeNotice("disconnected")
+				r.setEndReason("disconnected")
+				_ = r.stream.send(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+				return nil
+			}
 		default:
 		}
 
 		msg, err := sc.recv()
 		if err != nil {
+			// If the context was canceled, treat the EOF as a normal terminal path (canceled/timed out/disconnected).
+			select {
+			case <-ctx.Done():
+				continue
+			default:
+			}
 			if errors.Is(err, io.EOF) {
-				_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI sidecar disconnected"})
-				return err
+				r.finalizeNotice("disconnected")
+				r.setEndReason("disconnected")
+				_ = r.stream.send(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+				return nil
 			}
 			_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI sidecar error"})
+			r.setEndReason("error")
 			return err
 		}
 		if msg == nil {
 			continue
 		}
+		// If a cancel was requested, ignore any late frames from sidecar (it may emit run.error on abort).
+		select {
+		case <-ctx.Done():
+			continue
+		default:
+		}
 		if msg.Error != nil && msg.Method == "" {
 			// initialize response etc; ignore for now.
 			continue
 		}
+
+		signalActivity()
 
 		switch strings.TrimSpace(msg.Method) {
 		case "run.delta":
@@ -329,7 +525,9 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 				continue
 			}
 			if err := r.appendTextDelta(p.Delta); err != nil {
-				return err
+				// Stop the run early if the client can't consume the stream.
+				r.requestCancel("disconnected")
+				continue
 			}
 
 		case "tool.call":
@@ -349,6 +547,8 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 			}
 
 		case "run.end":
+			r.ensureNonEmptyAssistant()
+			r.setEndReason("complete")
 			_ = r.stream.send(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 			return nil
 
@@ -366,6 +566,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 				msgErr = "AI error"
 			}
 			_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: msgErr})
+			r.setEndReason("error")
 			return errors.New(msgErr)
 		}
 	}
@@ -389,6 +590,56 @@ func (r *run) appendTextDelta(delta string) error {
 		BlockIndex: r.currentTextBlockIndex,
 		Delta:      delta,
 	})
+}
+
+func (r *run) hasNonEmptyAssistantText() bool {
+	if r == nil {
+		return false
+	}
+	for _, blk := range r.assistantBlocks {
+		bm, ok := blk.(*persistedMarkdownBlock)
+		if !ok || bm == nil {
+			continue
+		}
+		if strings.TrimSpace(bm.Content) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *run) ensureNonEmptyAssistant() {
+	if r == nil {
+		return
+	}
+	if r.hasNonEmptyAssistantText() {
+		return
+	}
+	// Product decision: empty successful completion becomes a stable, visible assistant message.
+	_ = r.appendTextDelta("No response.")
+}
+
+func (r *run) finalizeNotice(kind string) {
+	if r == nil {
+		return
+	}
+	kind = strings.TrimSpace(kind)
+	notice := ""
+	switch kind {
+	case "canceled":
+		notice = "Canceled."
+	case "disconnected":
+		notice = "Disconnected."
+	case "timed_out":
+		notice = "Timed out."
+	default:
+		return
+	}
+	prefix := ""
+	if r.hasNonEmptyAssistantText() {
+		prefix = "\n\n"
+	}
+	_ = r.appendTextDelta(prefix + notice)
 }
 
 func requiresApproval(toolName string) bool {
@@ -458,19 +709,42 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		ch := make(chan bool, 1)
 		r.mu.Lock()
 		r.toolApprovals[toolID] = ch
+		r.waitingApproval = true
 		r.mu.Unlock()
 
 		approved := false
+		timedOut := false
+		waitErr := ""
+		to := r.toolApprovalTO
+		if to <= 0 {
+			to = 10 * time.Minute
+		}
+		timer := time.NewTimer(to)
+		defer timer.Stop()
 		select {
 		case approved = <-ch:
 		case <-ctx.Done():
-			return r.sendToolResult(sc, toolID, false, nil, "canceled")
+			waitErr = "canceled"
+		case <-timer.C:
+			timedOut = true
 		}
 
 		r.mu.Lock()
 		delete(r.toolApprovals, toolID)
+		r.waitingApproval = false
 		r.mu.Unlock()
 
+		if waitErr != "" {
+			return r.sendToolResult(sc, toolID, false, nil, waitErr)
+		}
+		if timedOut {
+			block.ApprovalState = "rejected"
+			block.Status = ToolCallStatusError
+			block.Error = "Approval timed out"
+			_ = r.stream.send(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+			r.persistSetToolBlock(idx, block)
+			return r.sendToolResult(sc, toolID, false, nil, "approval timed out")
+		}
 		if !approved {
 			block.ApprovalState = "rejected"
 			block.Status = ToolCallStatusError

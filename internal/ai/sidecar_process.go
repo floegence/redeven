@@ -14,12 +14,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	sidecarfs "github.com/floegence/redeven-agent/internal/ai/sidecar"
 )
 
 type sidecarProcess struct {
 	log *slog.Logger
+
+	closeOnce sync.Once
 
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
@@ -34,19 +37,21 @@ func (p *sidecarProcess) close() {
 	if p == nil {
 		return
 	}
-	if p.stdin != nil {
-		_ = p.stdin.Close()
-	}
-	if p.stdout != nil {
-		_ = p.stdout.Close()
-	}
-	if p.stderr != nil {
-		_ = p.stderr.Close()
-	}
-	if p.cmd != nil && p.cmd.Process != nil {
-		_ = p.cmd.Process.Kill()
-		_, _ = p.cmd.Process.Wait()
-	}
+	p.closeOnce.Do(func() {
+		if p.stdin != nil {
+			_ = p.stdin.Close()
+		}
+		if p.stdout != nil {
+			_ = p.stdout.Close()
+		}
+		if p.stderr != nil {
+			_ = p.stderr.Close()
+		}
+		if p.cmd != nil && p.cmd.Process != nil {
+			_ = p.cmd.Process.Kill()
+			_, _ = p.cmd.Process.Wait()
+		}
+	})
 }
 
 func (p *sidecarProcess) send(method string, params any) error {
@@ -94,7 +99,7 @@ func (p *sidecarProcess) recv() (*sidecarInbound, error) {
 	return &msg, nil
 }
 
-func startSidecar(ctx context.Context, log *slog.Logger, stateDir string, env []string) (*sidecarProcess, error) {
+func startSidecar(ctx context.Context, log *slog.Logger, stateDir string, env []string, scriptPathOverride string) (*sidecarProcess, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -102,9 +107,13 @@ func startSidecar(ctx context.Context, log *slog.Logger, stateDir string, env []
 		log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
 
-	scriptPath, err := materializeSidecar(stateDir)
-	if err != nil {
-		return nil, err
+	scriptPath := strings.TrimSpace(scriptPathOverride)
+	if scriptPath == "" {
+		var err error
+		scriptPath, err = materializeSidecar(stateDir)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	cmd := exec.CommandContext(ctx, "node", scriptPath)

@@ -35,6 +35,29 @@ type Options struct {
 
 	Config *config.AIConfig
 
+	// SidecarScriptPath overrides the embedded sidecar bundle path.
+	//
+	// When empty, the embedded bundle is materialized under <stateDir>/ai/sidecar/sidecar.mjs.
+	// This is intended for tests only.
+	SidecarScriptPath string
+
+	// RunMaxWallTime is the hard cap for a single run's lifetime.
+	//
+	// When zero, it defaults to 15 minutes.
+	RunMaxWallTime time.Duration
+	// RunIdleTimeout cancels a run if no sidecar event is received for the duration.
+	//
+	// When zero, it defaults to 2 minutes.
+	RunIdleTimeout time.Duration
+	// ToolApprovalTimeout is the max time a run waits for user approval for high-risk tools.
+	//
+	// When zero, it defaults to 10 minutes.
+	ToolApprovalTimeout time.Duration
+	// StreamWriteTimeout is the best-effort per-frame write deadline for the NDJSON stream.
+	//
+	// When zero, it defaults to 5 seconds.
+	StreamWriteTimeout time.Duration
+
 	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
 
 	// ResolveProviderAPIKey returns the API key for the given provider id.
@@ -52,16 +75,39 @@ type Service struct {
 
 	cfg *config.AIConfig
 
+	sidecarScriptPath string
+	runMaxWallTime    time.Duration
+	runIdleTimeout    time.Duration
+	approvalTimeout   time.Duration
+	streamWriteTO     time.Duration
+
 	resolveSessionMeta func(channelID string) (*session.Meta, bool)
 	resolveProviderKey func(providerID string) (string, bool, error)
 
 	mu              sync.Mutex
 	activeRunByChan map[string]string // channel_id -> run_id
-	activeRunByTh   map[string]string // thread_id -> run_id
+	activeRunByTh   map[string]string // <endpoint_id>:<thread_id> -> run_id
 	runs            map[string]*run
 
 	uploadsDir string
 	threadsDB  *threadstore.Store
+}
+
+const (
+	defaultRunMaxWallTime = 15 * time.Minute
+	defaultRunIdleTimeout = 2 * time.Minute
+	defaultToolApprovalTO = 10 * time.Minute
+	defaultStreamWriteTO  = 5 * time.Second
+)
+
+func runThreadKey(endpointID string, threadID string) string {
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return ""
+	}
+	// endpoint_id is an env public id; ":" is safe as a delimiter.
+	return endpointID + ":" + threadID
 }
 
 func NewService(opts Options) (*Service, error) {
@@ -93,12 +139,34 @@ func NewService(opts Options) (*Service, error) {
 		resolveProviderKey = func(string) (string, bool, error) { return "", false, nil }
 	}
 
+	maxWall := opts.RunMaxWallTime
+	if maxWall <= 0 {
+		maxWall = defaultRunMaxWallTime
+	}
+	idleTO := opts.RunIdleTimeout
+	if idleTO <= 0 {
+		idleTO = defaultRunIdleTimeout
+	}
+	approvalTO := opts.ToolApprovalTimeout
+	if approvalTO <= 0 {
+		approvalTO = defaultToolApprovalTO
+	}
+	streamWTO := opts.StreamWriteTimeout
+	if streamWTO <= 0 {
+		streamWTO = defaultStreamWriteTO
+	}
+
 	return &Service{
 		log:                logger,
 		stateDir:           strings.TrimSpace(opts.StateDir),
 		fsRoot:             strings.TrimSpace(opts.FSRoot),
 		shell:              strings.TrimSpace(opts.Shell),
 		cfg:                opts.Config,
+		sidecarScriptPath:  strings.TrimSpace(opts.SidecarScriptPath),
+		runMaxWallTime:     maxWall,
+		runIdleTimeout:     idleTO,
+		approvalTimeout:    approvalTO,
+		streamWriteTO:      streamWTO,
 		resolveSessionMeta: opts.ResolveSessionMeta,
 		resolveProviderKey: resolveProviderKey,
 		activeRunByChan:    make(map[string]string),
@@ -188,7 +256,26 @@ func (s *Service) HasActiveThread(threadID string) bool {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return strings.TrimSpace(s.activeRunByTh[threadID]) != ""
+	// Deprecated: callers should use HasActiveThreadForEndpoint for correctness.
+	for k := range s.activeRunByTh {
+		if strings.HasSuffix(k, ":"+threadID) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Service) HasActiveThreadForEndpoint(endpointID string, threadID string) bool {
+	if s == nil {
+		return false
+	}
+	k := runThreadKey(endpointID, threadID)
+	if k == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return strings.TrimSpace(s.activeRunByTh[k]) != ""
 }
 
 func (s *Service) ListModels() (*ModelsResponse, error) {
@@ -345,7 +432,12 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		s.mu.Unlock()
 		return ErrRunActive
 	}
-	if existing := s.activeRunByTh[threadID]; existing != "" {
+	thKey := runThreadKey(endpointID, threadID)
+	if thKey == "" {
+		s.mu.Unlock()
+		return errors.New("invalid request")
+	}
+	if existing := s.activeRunByTh[thKey]; existing != "" {
 		s.mu.Unlock()
 		return ErrThreadBusy
 	}
@@ -358,21 +450,29 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		return err
 	}
 	r := newRun(runOptions{
-		Log:                s.log,
-		StateDir:           s.stateDir,
-		FSRoot:             s.fsRoot,
-		Shell:              s.shell,
-		AIConfig:           cfg,
-		ResolveSessionMeta: s.resolveSessionMeta,
-		ResolveProviderKey: s.resolveProviderKey,
-		RunID:              runID,
-		ChannelID:          channelID,
-		MessageID:          messageID,
-		UploadsDir:         s.uploadsDir,
-		Writer:             w,
+		Log:                 s.log,
+		StateDir:            s.stateDir,
+		FSRoot:              s.fsRoot,
+		Shell:               s.shell,
+		AIConfig:            cfg,
+		ResolveSessionMeta:  s.resolveSessionMeta,
+		ResolveProviderKey:  s.resolveProviderKey,
+		RunID:               runID,
+		ChannelID:           channelID,
+		EndpointID:          endpointID,
+		ThreadID:            threadID,
+		SidecarScriptPath:   s.sidecarScriptPath,
+		MaxWallTime:         s.runMaxWallTime,
+		IdleTimeout:         s.runIdleTimeout,
+		ToolApprovalTimeout: s.approvalTimeout,
+		StreamWriteTimeout:  s.streamWriteTO,
+		UserPublicID:        strings.TrimSpace(meta.UserPublicID),
+		MessageID:           messageID,
+		UploadsDir:          s.uploadsDir,
+		Writer:              w,
 	})
 	s.activeRunByChan[channelID] = runID
-	s.activeRunByTh[threadID] = runID
+	s.activeRunByTh[thKey] = runID
 	s.runs[runID] = r
 	s.mu.Unlock()
 
@@ -380,8 +480,11 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		s.mu.Lock()
 		delete(s.runs, runID)
 		delete(s.activeRunByChan, channelID)
-		delete(s.activeRunByTh, threadID)
+		delete(s.activeRunByTh, thKey)
 		s.mu.Unlock()
+		if r != nil && r.doneCh != nil {
+			close(r.doneCh)
+		}
 	}()
 
 	// Build history snapshot from persisted messages (exclude the current input).
@@ -501,41 +604,53 @@ func capHistoryByChars(in []RunHistoryMsg, maxChars int) []RunHistoryMsg {
 	return in
 }
 
-func (s *Service) CancelRun(channelID string, runID string) error {
+func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
-	channelID = strings.TrimSpace(channelID)
+	if meta == nil {
+		return errors.New("missing session metadata")
+	}
 	runID = strings.TrimSpace(runID)
-	if channelID == "" || runID == "" {
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if endpointID == "" || runID == "" {
 		return errors.New("invalid request")
 	}
 
 	s.mu.Lock()
 	r := s.runs[runID]
 	s.mu.Unlock()
-	if r == nil || r.channelID != channelID {
-		return errors.New("run not found")
+	// Cancel is best-effort and idempotent. Do not leak run existence cross-session.
+	if r == nil || strings.TrimSpace(r.endpointID) != endpointID {
+		return nil
 	}
-	r.cancel()
+	r.requestCancel("canceled")
 	return nil
 }
 
-func (s *Service) ApproveTool(channelID string, runID string, toolID string, approved bool) error {
+func (s *Service) ApproveTool(meta *session.Meta, runID string, toolID string, approved bool) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
-	channelID = strings.TrimSpace(channelID)
+	if meta == nil {
+		return errors.New("missing session metadata")
+	}
 	runID = strings.TrimSpace(runID)
 	toolID = strings.TrimSpace(toolID)
-	if channelID == "" || runID == "" || toolID == "" {
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	userID := strings.TrimSpace(meta.UserPublicID)
+	if endpointID == "" || userID == "" || runID == "" || toolID == "" {
 		return errors.New("invalid request")
 	}
 
 	s.mu.Lock()
 	r := s.runs[runID]
 	s.mu.Unlock()
-	if r == nil || r.channelID != channelID {
+	if r == nil || strings.TrimSpace(r.endpointID) != endpointID {
+		return errors.New("run not found")
+	}
+	// Approvals are restricted to the run starter to avoid cross-user privilege confusion.
+	if strings.TrimSpace(r.userPublicID) != userID {
 		return errors.New("run not found")
 	}
 	if err := r.approveTool(toolID, approved); err != nil {
