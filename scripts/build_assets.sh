@@ -97,7 +97,7 @@ build_ai_sidecar() {
 }
 
 main() {
-  log "Building redeven-agent embedded assets..."
+  log "Building redeven embedded assets..."
   log "ROOT_DIR: $ROOT_DIR"
   if [ "${REDEVEN_AGENT_FORCE_INSTALL:-}" = "1" ]; then
     log "REDEVEN_AGENT_FORCE_INSTALL=1 (dependency reinstall enabled)"
@@ -112,4 +112,3 @@ main() {
 }
 
 main "$@"
-

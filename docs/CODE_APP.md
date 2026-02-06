@@ -1,6 +1,6 @@
 # Code App (code-server over Flowersec E2EE)
 
-This document describes the **Code App** implementation in `redeven-agent`:
+This document describes the **Code App** implementation in the Redeven agent:
 
 - `floe_app = com.floegence.redeven.code`
 - Browser ↔ Agent traffic is end-to-end encrypted (E2EE) via **Flowersec tunnel**
@@ -24,14 +24,14 @@ This document describes the **Code App** implementation in `redeven-agent`:
 
 The Code App stores all code space data on the user's machine (not in control plane).
 
-By default, the agent config is `~/.redeven-agent/config.json`, so the state directory is:
+By default, the agent config is `~/.redeven/config.json`, so the state directory is:
 
-- `state_dir = ~/.redeven-agent/`
+- `state_dir = ~/.redeven/`
 
 Code App data:
 
 ```
-~/.redeven-agent/
+~/.redeven/
   config.json
   apps/
     code/

@@ -15,7 +15,7 @@ High-level design:
 
 ## Configuration
 
-Enable the feature by adding an `ai` section to the agent config file (default: `~/.redeven-agent/config.json`).
+Enable the feature by adding an `ai` section to the agent config file (default: `~/.redeven/config.json`).
 
 Notes:
 
@@ -25,7 +25,7 @@ Notes:
 
 API keys:
 
-- Keys are stored in `~/.redeven-agent/secrets.json` (chmod `0600`) and never returned in plaintext.
+- Keys are stored in `~/.redeven/secrets.json` (chmod `0600`) and never returned in plaintext.
 - You can configure keys from the Env App UI: Settings → AI → Provider → API key.
 - Multiple provider keys can be stored at the same time (keyed by `providers[].id`).
 - Keys are injected into the sidecar process env as `REDEVEN_API_KEY` (fixed).

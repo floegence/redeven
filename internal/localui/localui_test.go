@@ -37,4 +37,3 @@ func TestServer_handleLogo_redirect(t *testing.T) {
 		t.Fatalf("location = %q, want %q", loc, "/_redeven_proxy/env/logo.png")
 	}
 }
-

@@ -11,7 +11,7 @@ import (
 	directv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/direct/v1"
 )
 
-// Config is the on-disk configuration for redeven-agent.
+// Config is the on-disk configuration for the Redeven agent.
 //
 // NOTE: This file contains secrets (PSK). Always keep it chmod 0600.
 type Config struct {
@@ -48,7 +48,7 @@ type Config struct {
 
 // ValidateLocalMinimal validates config fields required to start the agent in local-only mode.
 //
-// Local-only mode is enabled by `redeven-agent run --local-ui` and must work even when the
+// Local-only mode is enabled by `redeven run --mode local` and must work even when the
 // controlplane credentials are missing (no bootstrap yet).
 func (c *Config) ValidateLocalMinimal() error {
 	if c == nil {
@@ -98,13 +98,13 @@ func (c *Config) ValidateRemoteStrict() error {
 
 // DefaultConfigPath returns the default config path:
 //
-//	~/.redeven-agent/config.json
+//	~/.redeven/config.json
 func DefaultConfigPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil || strings.TrimSpace(home) == "" {
-		return "redeven-agent.config.json"
+		return "redeven.config.json"
 	}
-	return filepath.Join(home, ".redeven-agent", "config.json")
+	return filepath.Join(home, ".redeven", "config.json")
 }
 
 func Load(path string) (*Config, error) {

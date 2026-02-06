@@ -38,8 +38,10 @@ func (p PermissionSet) Intersect(other PermissionSet) PermissionSet {
 }
 
 func defaultPermissionSet() PermissionSet {
-	// Default: allow terminal + file browsing, but do not allow filesystem mutations.
-	return PermissionSet{Read: true, Write: false, Execute: true}
+	// Default: allow all RWX capabilities out of the box.
+	//
+	// NOTE: This is a local cap only. The effective permissions are still clamped by the control-plane grant.
+	return PermissionSet{Read: true, Write: true, Execute: true}
 }
 
 func defaultPermissionPolicy() *PermissionPolicy {
@@ -97,8 +99,11 @@ func ParsePermissionPolicyPreset(preset string) (*PermissionPolicy, error) {
 	p = strings.ReplaceAll(p, "-", "_")
 
 	switch p {
-	case "", "execute_read":
+	case "":
 		return defaultPermissionPolicy(), nil
+	case "execute_read":
+		s := PermissionSet{Read: true, Write: false, Execute: true}
+		return &PermissionPolicy{SchemaVersion: permissionPolicySchemaVersionV1, LocalMax: &s}, nil
 	case "read_only":
 		s := PermissionSet{Read: true, Write: false, Execute: false}
 		return &PermissionPolicy{SchemaVersion: permissionPolicySchemaVersionV1, LocalMax: &s}, nil

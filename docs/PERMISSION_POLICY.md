@@ -27,7 +27,7 @@ Notes:
 
 ## Config Schema
 
-`~/.redeven-agent/config.json`:
+`~/.redeven/config.json`:
 
 ```json
 {
@@ -35,14 +35,14 @@ Notes:
     "schema_version": 1,
     "local_max": {
       "read": true,
-      "write": false,
+      "write": true,
       "execute": true
     },
     "by_user": {
       "user_xxx": { "read": true, "write": false, "execute": false }
     },
     "by_app": {
-      "com.floegence.redeven.agent": { "read": true, "write": false, "execute": true }
+      "com.floegence.redeven.agent": { "read": true, "write": true, "execute": true }
     }
   }
 }
@@ -58,32 +58,31 @@ If `permission_policy` is missing, the recommended default local cap is:
 
 - `execute = true`
 - `read = true`
-- `write = false`
+- `write = true`
 
 Rationale:
-- Terminal requires `execute` and is the core feature.
-- File browsing requires `read` and should work out of the box.
-- Filesystem mutations are high risk and should be explicitly enabled.
+- Redeven is a full remote development environment. Most users expect terminal, file editing, codespaces, and port forwarding to work out of the box.
+- The local cap is still only a cap: the effective permissions are always clamped by the control-plane grant.
 
 Security note:
-- `write=false` only disables FS write-style RPCs (and some destructive gateway actions). If `execute=true`, terminal commands can still mutate files. Use the `read_only` preset for strict read-only (`execute=false, read=true, write=false`).
+- `execute=true` means terminal commands can mutate files even if `write=false`. Use the `read_only` preset for strict read-only (`execute=false, read=true, write=false`).
 
 ## Bootstrap CLI
 
-`redeven-agent bootstrap` can write `permission_policy` into the config file.
+`redeven bootstrap` can write `permission_policy` into the config file.
 
 Recommended usage (presets):
 
 ```bash
-redeven-agent bootstrap ... --permission-policy execute_read
-redeven-agent bootstrap ... --permission-policy read_only
-redeven-agent bootstrap ... --permission-policy execute_read_write
+redeven bootstrap ... --permission-policy execute_read
+redeven bootstrap ... --permission-policy read_only
+redeven bootstrap ... --permission-policy execute_read_write
 ```
 
 Preset meaning:
-- `execute_read` (default): `execute=true, read=true, write=false`
+- `execute_read_write` (default): `execute=true, read=true, write=true`
+- `execute_read`: `execute=true, read=true, write=false`
 - `read_only`: `execute=false, read=true, write=false`
-- `execute_read_write`: `execute=true, read=true, write=true`
 
 ## Relation to Capabilities
 
