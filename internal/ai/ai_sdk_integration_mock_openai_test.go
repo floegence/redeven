@@ -23,6 +23,85 @@ type openAIMock struct {
 	mu           sync.Mutex
 	sawResponses bool
 	sawChat      bool
+
+	chatToolNames    []string
+	chatInvalidTools []string
+}
+
+func isValidOpenAIToolName(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '_' || r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func extractOpenAIToolNames(req map[string]any) []string {
+	if req == nil {
+		return nil
+	}
+
+	// Chat Completions: tools: [{ type: "function", function: { name } }]
+	if raw, ok := req["tools"]; ok {
+		list, ok := raw.([]any)
+		if !ok {
+			return nil
+		}
+		out := make([]string, 0, len(list))
+		for _, it := range list {
+			m, ok := it.(map[string]any)
+			if !ok || m == nil {
+				continue
+			}
+			if n, ok := m["name"].(string); ok && strings.TrimSpace(n) != "" {
+				out = append(out, strings.TrimSpace(n))
+				continue
+			}
+			fn, ok := m["function"].(map[string]any)
+			if !ok || fn == nil {
+				continue
+			}
+			n, _ := fn["name"].(string)
+			n = strings.TrimSpace(n)
+			if n != "" {
+				out = append(out, n)
+			}
+		}
+		return out
+	}
+
+	// Legacy: functions: [{ name }]
+	if raw, ok := req["functions"]; ok {
+		list, ok := raw.([]any)
+		if !ok {
+			return nil
+		}
+		out := make([]string, 0, len(list))
+		for _, it := range list {
+			m, ok := it.(map[string]any)
+			if !ok || m == nil {
+				continue
+			}
+			n, _ := m["name"].(string)
+			n = strings.TrimSpace(n)
+			if n != "" {
+				out = append(out, n)
+			}
+		}
+		return out
+	}
+
+	return nil
 }
 
 func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
@@ -90,6 +169,13 @@ func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(path, "/chat/completions"):
 		m.mu.Lock()
 		m.sawChat = true
+		m.chatToolNames = extractOpenAIToolNames(req)
+		m.chatInvalidTools = m.chatInvalidTools[:0]
+		for _, n := range m.chatToolNames {
+			if !isValidOpenAIToolName(n) {
+				m.chatInvalidTools = append(m.chatInvalidTools, n)
+			}
+		}
 		m.mu.Unlock()
 
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -144,6 +230,22 @@ func (m *openAIMock) didSeeChat() bool {
 	v := m.sawChat
 	m.mu.Unlock()
 	return v
+}
+
+func (m *openAIMock) chatInvalidToolNames() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]string, 0, len(m.chatInvalidTools))
+	out = append(out, m.chatInvalidTools...)
+	return out
+}
+
+func (m *openAIMock) chatToolNamesSnapshot() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]string, 0, len(m.chatToolNames))
+	out = append(out, m.chatToolNames...)
+	return out
 }
 
 func writeSSEJSON(w io.Writer, f http.Flusher, v any) {
@@ -255,6 +357,12 @@ func TestIntegration_AISDK_OpenAI_ChatCompletionsStream_GPT5_Succeeds(t *testing
 	if !mock.didSeeChat() {
 		t.Fatalf("expected OpenAI Chat Completions API call (/chat/completions)")
 	}
+	if names := mock.chatToolNamesSnapshot(); len(names) == 0 {
+		t.Fatalf("expected OpenAI request to include tool definitions")
+	}
+	if bad := mock.chatInvalidToolNames(); len(bad) > 0 {
+		t.Fatalf("invalid OpenAI tool names: %+v", bad)
+	}
 }
 
 func TestIntegration_AISDK_OpenAI_ChatCompletionsStream_GPT4o_Succeeds(t *testing.T) {
@@ -354,5 +462,11 @@ func TestIntegration_AISDK_OpenAI_ChatCompletionsStream_GPT4o_Succeeds(t *testin
 
 	if !mock.didSeeChat() {
 		t.Fatalf("expected OpenAI Chat Completions API call (/chat/completions)")
+	}
+	if names := mock.chatToolNamesSnapshot(); len(names) == 0 {
+		t.Fatalf("expected OpenAI request to include tool definitions")
+	}
+	if bad := mock.chatInvalidToolNames(); len(bad) > 0 {
+		t.Fatalf("invalid OpenAI tool names: %+v", bad)
 	}
 }

@@ -6,7 +6,6 @@ import { SidebarContent, SidebarSection, SidebarItem, SidebarItemList } from '@f
 import { Button, ConfirmDialog, Tooltip } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useAIChatContext } from './AIChatContext';
-import { fetchGatewayJSON } from '../services/gatewayApi';
 
 // Format a unix-ms timestamp as a relative time string.
 function fmtRelativeTime(ms: number): string {
@@ -40,11 +39,13 @@ export function AIChatSidebar() {
   const [deleteOpen, setDeleteOpen] = createSignal(false);
   const [deleteThreadId, setDeleteThreadId] = createSignal<string | null>(null);
   const [deleteThreadTitle, setDeleteThreadTitle] = createSignal('');
+  const [deleteForce, setDeleteForce] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
 
   const openDelete = (threadId: string, title: string) => {
     setDeleteThreadId(threadId);
     setDeleteThreadTitle(String(title ?? '').trim() || 'New chat');
+    setDeleteForce(false);
     setDeleteOpen(true);
   };
 
@@ -54,9 +55,28 @@ export function AIChatSidebar() {
 
     setDeleting(true);
     try {
-      await fetchGatewayJSON<void>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, { method: 'DELETE' });
+      const force = deleteForce();
+      const url = `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}${force ? '?force=true' : ''}`;
+      const resp = await fetch(url, { method: 'DELETE', credentials: 'omit', cache: 'no-store' });
+      const text = await resp.text();
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        // ignore
+      }
+      if (!resp.ok) {
+        if (resp.status === 409 && !force) {
+          setDeleteForce(true);
+          return;
+        }
+        throw new Error(String(data?.error ?? `HTTP ${resp.status}`));
+      }
+      if (data?.ok === false) throw new Error(String(data?.error ?? 'Request failed'));
+
       setDeleteOpen(false);
       setDeleteThreadId(null);
+      setDeleteForce(false);
 
       if (tid === ctx.activeThreadId()) {
         ctx.clearActiveThreadPersistence();
@@ -168,12 +188,13 @@ export function AIChatSidebar() {
             setDeleteOpen(false);
             setDeleteThreadId(null);
             setDeleteThreadTitle('');
+            setDeleteForce(false);
             return;
           }
           setDeleteOpen(true);
         }}
         title="Delete Chat"
-        confirmText="Delete"
+        confirmText={deleteForce() ? 'Force Delete' : 'Delete'}
         variant="destructive"
         loading={deleting()}
         onConfirm={() => void doDelete()}
@@ -182,6 +203,11 @@ export function AIChatSidebar() {
           <p class="text-sm">
             Delete <span class="font-semibold">"{deleteThreadTitle()}"</span>?
           </p>
+          <Show when={deleteForce()}>
+            <p class="text-xs text-muted-foreground">
+              This chat is running. Deleting will stop the run and delete the thread.
+            </p>
+          </Show>
           <p class="text-xs text-muted-foreground">This cannot be undone.</p>
         </div>
       </ConfirmDialog>

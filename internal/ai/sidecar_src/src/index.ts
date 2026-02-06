@@ -210,17 +210,20 @@ async function runAgent(params: RunStartParams): Promise<void> {
     messages.push({ role: 'user', content: userText });
 
     const tools = {
-      'fs.list_dir': tool({
+      // NOTE: OpenAI tool/function names must match `^[a-zA-Z0-9_-]+$` (no dots).
+      // Keep the Go-side tool names stable (e.g. "fs.list_dir") and only sanitize the
+      // OpenAI-exposed function names here.
+      fs_list_dir: tool({
         description: 'List directory entries.',
         parameters: z.object({ path: z.string() }),
         execute: async (a: any) => callTool(runId, 'fs.list_dir', a),
       }),
-      'fs.stat': tool({
+      fs_stat: tool({
         description: 'Get file/directory metadata (size, mtime, sha256).',
         parameters: z.object({ path: z.string() }),
         execute: async (a: any) => callTool(runId, 'fs.stat', a),
       }),
-      'fs.read_file': tool({
+      fs_read_file: tool({
         description: 'Read a UTF-8 text file (with offset and size cap).',
         parameters: z.object({
           path: z.string(),
@@ -229,7 +232,7 @@ async function runAgent(params: RunStartParams): Promise<void> {
         }),
         execute: async (a: any) => callTool(runId, 'fs.read_file', a),
       }),
-      'fs.write_file': tool({
+      fs_write_file: tool({
         description: 'Write a UTF-8 text file (requires explicit user approval).',
         parameters: z.object({
           path: z.string(),
@@ -239,7 +242,7 @@ async function runAgent(params: RunStartParams): Promise<void> {
         }),
         execute: async (a: any) => callTool(runId, 'fs.write_file', a),
       }),
-      'terminal.exec': tool({
+      terminal_exec: tool({
         description: 'Execute a shell command (requires explicit user approval).',
         parameters: z.object({
           command: z.string(),
