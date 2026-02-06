@@ -90,10 +90,25 @@ async function fetchJSON<T>(input: RequestInfo | URL, init: RequestInit & { bear
   return (data?.data ?? data) as T;
 }
 
+function isLoopbackOriginBestEffort(): boolean {
+  try {
+    const host = String(window.location.hostname ?? '').trim().toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
 let cachedLocalRuntime: LocalRuntimeInfo | null | undefined = undefined;
 
 export async function getLocalRuntime(): Promise<LocalRuntimeInfo | null> {
   if (cachedLocalRuntime !== undefined) return cachedLocalRuntime;
+
+  // Local UI mode is loopback-only. Avoid probing /api/local/* on sandbox domains (404 noise).
+  if (!isLoopbackOriginBestEffort()) {
+    cachedLocalRuntime = null;
+    return null;
+  }
 
   try {
     const out = await fetchJSON<LocalRuntimeInfo>('/api/local/runtime', { method: 'GET' });
