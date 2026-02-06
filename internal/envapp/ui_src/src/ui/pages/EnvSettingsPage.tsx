@@ -1994,28 +1994,28 @@ export function EnvSettingsPage() {
 	                  </div>
 
 	                  <div class="space-y-3">
-	                    <Index each={aiProviders()}>
-	                      {(p, idx) => (
-	                        <div class="p-4 rounded-lg border border-border bg-muted/20 space-y-4">
-	                          <div class="flex items-center justify-between">
-	                            <div class="flex items-center gap-2">
-	                              <Layers class="w-4 h-4 text-muted-foreground" />
-		                              <span class="text-sm font-medium">Provider {idx + 1}</span>
-	                            </div>
-	                            <Button
-	                              size="sm"
-	                              variant="ghost"
-	                              class="text-muted-foreground hover:text-destructive"
-	                              onClick={() => {
-	                                const removedID = String(p().id ?? '').trim();
-	                                setAiProviders((prev) => {
-		                                  const next = prev.filter((_, i) => i !== idx);
-	                                  if (removedID && String(aiDefaultProviderID() ?? '').trim() === removedID) {
-	                                    const nextID = String(next?.[0]?.id ?? '').trim();
-	                                    setAiDefaultProviderID(nextID);
-	                                  }
-	                                  return next;
-	                                });
+                    <Index each={aiProviders()}>
+                      {(p, idx) => (
+                        <div class="p-4 rounded-lg border border-border bg-muted/20 space-y-4">
+                          <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                              <Layers class="w-4 h-4 text-muted-foreground" />
+                              <span class="text-sm font-medium">Provider {idx + 1}</span>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              class="text-muted-foreground hover:text-destructive"
+                              onClick={() => {
+                                const removedID = String(p().id ?? '').trim();
+                                setAiProviders((prev) => {
+                                  const next = prev.filter((_, i) => i !== idx);
+                                  if (removedID && String(aiDefaultProviderID() ?? '').trim() === removedID) {
+                                    const nextID = String(next?.[0]?.id ?? '').trim();
+                                    setAiDefaultProviderID(nextID);
+                                  }
+                                  return next;
+                                });
 	                                if (removedID) {
 	                                  setAiModels((prev) => prev.filter((m) => String(m.provider_id ?? '').trim() !== removedID));
 	                                }
@@ -2030,30 +2030,36 @@ export function EnvSettingsPage() {
 	                          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 	                            <div>
 	                              <FieldLabel hint="optional">name</FieldLabel>
-	                              <Input
-	                                value={p().name}
-	                                onInput={(e) => {
-	                                  const v = e.currentTarget.value;
-		                                  setAiProviders((prev) => prev.map((it, i) => (i === idx ? { ...it, name: v } : it)));
-	                                  setAiDirty(true);
-	                                }}
-	                                placeholder="OpenAI"
-	                                size="sm"
-	                                class="w-full"
-	                                disabled={!canInteract()}
-	                              />
-	                            </div>
-	                            <div>
-	                              <FieldLabel>type</FieldLabel>
-	                              <Select
-	                                value={p().type}
-	                                onChange={(v) => {
-		                                  setAiProviders((prev) => prev.map((it, i) => (i === idx ? { ...it, type: v as AIProviderType } : it)));
-	                                  setAiDirty(true);
-	                                }}
-	                                disabled={!canInteract()}
-	                                options={[
-	                                  { value: 'openai', label: 'openai' },
+                              <Input
+                                id={`redeven-ai-provider-name-${String(p().id ?? '').trim()}`}
+                                value={p().name}
+                                onInput={(e) => {
+                                  const v = e.currentTarget.value;
+                                  setAiProviders((prev) => prev.map((it, i) => (i === idx ? { ...it, name: v } : it)));
+                                  setAiDirty(true);
+                                  const id = `redeven-ai-provider-name-${String(p().id ?? '').trim()}`;
+                                  queueMicrotask(() => {
+                                    const el = document.getElementById(id);
+                                    if (el && document.activeElement !== el) (el as HTMLInputElement).focus();
+                                  });
+                                }}
+                                placeholder="OpenAI"
+                                size="sm"
+                                class="w-full"
+                                disabled={!canInteract()}
+                              />
+                            </div>
+                            <div>
+                              <FieldLabel>type</FieldLabel>
+                              <Select
+                                value={p().type}
+                                onChange={(v) => {
+                                  setAiProviders((prev) => prev.map((it, i) => (i === idx ? { ...it, type: v as AIProviderType } : it)));
+                                  setAiDirty(true);
+                                }}
+                                disabled={!canInteract()}
+                                options={[
+                                  { value: 'openai', label: 'openai' },
 	                                  { value: 'anthropic', label: 'anthropic' },
 	                                  { value: 'openai_compatible', label: 'openai_compatible' },
 	                                ]}
@@ -2066,18 +2072,18 @@ export function EnvSettingsPage() {
 	                            </div>
 	                            <div class="md:col-span-2">
 	                              <FieldLabel hint={p().type === 'openai_compatible' ? 'required' : 'optional'}>base_url</FieldLabel>
-	                              <Input
-	                                value={p().base_url}
-	                                onInput={(e) => {
-	                                  const v = e.currentTarget.value;
-		                                  setAiProviders((prev) => prev.map((it, i) => (i === idx ? { ...it, base_url: v } : it)));
-	                                  setAiDirty(true);
-	                                }}
-	                                placeholder={p().type === 'openai_compatible' ? 'https://api.example.com/v1' : 'https://api.openai.com/v1'}
-	                                size="sm"
-	                                class="w-full"
-	                                disabled={!canInteract()}
-	                              />
+                              <Input
+                                value={p().base_url}
+                                onInput={(e) => {
+                                  const v = e.currentTarget.value;
+                                  setAiProviders((prev) => prev.map((it, i) => (i === idx ? { ...it, base_url: v } : it)));
+                                  setAiDirty(true);
+                                }}
+                                placeholder={p().type === 'openai_compatible' ? 'https://api.example.com/v1' : 'https://api.openai.com/v1'}
+                                size="sm"
+                                class="w-full"
+                                disabled={!canInteract()}
+                              />
 	                            </div>
 
 	                            <div class="md:col-span-2 space-y-2">
@@ -2187,37 +2193,37 @@ export function EnvSettingsPage() {
 
 	                      <Show when={aiModels().length > 0} fallback={<p class="text-xs text-muted-foreground">No models configured.</p>}>
 	                        <div class="space-y-3">
-	                          <Index each={aiModels()}>
-	                            {(m, idx) => (
-	                              <div class="p-4 rounded-lg border border-border bg-muted/20 space-y-3">
-	                                <div class="flex items-center justify-between">
-		                                  <span class="text-sm font-medium">Model {idx + 1}</span>
-	                                  <Button
-	                                    size="sm"
-	                                    variant="ghost"
-	                                    class="text-muted-foreground hover:text-destructive"
-	                                    onClick={() => {
-		                                      setAiModels((prev) => prev.filter((_, i) => i !== idx));
-	                                      setAiDirty(true);
-	                                    }}
-	                                    disabled={!canInteract()}
-	                                  >
+                          <Index each={aiModels()}>
+                            {(m, idx) => (
+                              <div class="p-4 rounded-lg border border-border bg-muted/20 space-y-3">
+                                <div class="flex items-center justify-between">
+                                  <span class="text-sm font-medium">Model {idx + 1}</span>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    class="text-muted-foreground hover:text-destructive"
+                                    onClick={() => {
+                                      setAiModels((prev) => prev.filter((_, i) => i !== idx));
+                                      setAiDirty(true);
+                                    }}
+                                    disabled={!canInteract()}
+                                  >
 	                                    Remove
 	                                  </Button>
 	                                </div>
 	                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 	                                  <div>
 	                                    <FieldLabel hint="required">provider_id</FieldLabel>
-	                                    <Select
-	                                      value={String(m().provider_id ?? '').trim()}
-	                                      onChange={(v) => {
-	                                        const pid = String(v ?? '').trim();
-		                                        setAiModels((prev) => prev.map((it, i) => (i === idx ? { ...it, provider_id: pid } : it)));
-	                                        setAiDirty(true);
-	                                      }}
-	                                      disabled={!canInteract()}
-	                                      options={aiProviders()
-	                                        .map((p) => {
+                                    <Select
+                                      value={String(m().provider_id ?? '').trim()}
+                                      onChange={(v) => {
+                                        const pid = String(v ?? '').trim();
+                                        setAiModels((prev) => prev.map((it, i) => (i === idx ? { ...it, provider_id: pid } : it)));
+                                        setAiDirty(true);
+                                      }}
+                                      disabled={!canInteract()}
+                                      options={aiProviders()
+                                        .map((p) => {
 	                                          const id = String(p.id ?? '').trim();
 	                                          const name = String(p.name ?? '').trim();
 	                                          if (!id) return null;
@@ -2229,30 +2235,30 @@ export function EnvSettingsPage() {
 	                                  </div>
 	                                  <div>
 	                                    <FieldLabel hint="required">model_name</FieldLabel>
-	                                    <Input
-	                                      value={m().model_name}
-	                                      onInput={(e) => {
-	                                        const v = e.currentTarget.value;
-		                                        setAiModels((prev) => prev.map((it, i) => (i === idx ? { ...it, model_name: v } : it)));
-	                                        setAiDirty(true);
-	                                      }}
-	                                      placeholder="gpt-5-mini"
-	                                      size="sm"
+                                      <Input
+                                        value={m().model_name}
+                                        onInput={(e) => {
+                                          const v = e.currentTarget.value;
+                                          setAiModels((prev) => prev.map((it, i) => (i === idx ? { ...it, model_name: v } : it)));
+                                          setAiDirty(true);
+                                        }}
+                                        placeholder="gpt-5-mini"
+                                        size="sm"
 	                                      class="w-full"
 	                                      disabled={!canInteract()}
 	                                    />
 	                                  </div>
 	                                  <div class="md:col-span-2">
 	                                    <FieldLabel hint="optional">label</FieldLabel>
-	                                    <Input
-	                                      value={m().label}
-	                                      onInput={(e) => {
-	                                        const v = e.currentTarget.value;
-		                                        setAiModels((prev) => prev.map((it, i) => (i === idx ? { ...it, label: v } : it)));
-	                                        setAiDirty(true);
-	                                      }}
-	                                      placeholder="GPT-5 Mini"
-	                                      size="sm"
+                                      <Input
+                                        value={m().label}
+                                        onInput={(e) => {
+                                          const v = e.currentTarget.value;
+                                          setAiModels((prev) => prev.map((it, i) => (i === idx ? { ...it, label: v } : it)));
+                                          setAiDirty(true);
+                                        }}
+                                        placeholder="GPT-5 Mini"
+                                        size="sm"
 	                                      class="w-full"
 	                                      disabled={!canInteract()}
 	                                    />

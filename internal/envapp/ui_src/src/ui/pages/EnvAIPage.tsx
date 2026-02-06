@@ -29,6 +29,11 @@ import { useEnvContext } from './EnvContext';
 import { useAIChatContext, type ListThreadMessagesResponse } from './AIChatContext';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 
+const RUN_IDLE_TIMEOUT_MS = 120_000;
+const RUN_MAX_WALL_TIME_MS = 15 * 60_000;
+const RUN_WATCHDOG_TICK_MS = 2_000;
+const STOP_FALLBACK_MS = 2_000;
+
 function createUserMarkdownMessage(markdown: string): Message {
   return {
     id: crypto.randomUUID(),
@@ -197,6 +202,7 @@ export function EnvAIPage() {
   const [renaming, setRenaming] = createSignal(false);
 
   const [deleteOpen, setDeleteOpen] = createSignal(false);
+  const [deleteForce, setDeleteForce] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
 
   const [messagesLoading, setMessagesLoading] = createSignal(false);
@@ -211,10 +217,57 @@ export function EnvAIPage() {
   let assistantText = '';
   let lastMessagesReq = 0;
   let skipNextThreadLoad = false;
+  let runThreadId: string | null = null;
+  let runStartedAtMs = 0;
+  let lastStreamAtMs = 0;
+  let watchdogToken = 0;
+  let watchdogTimer: number | null = null;
+  let stopFallbackTimer: number | null = null;
 
   const canInteract = createMemo(
     () => protocol.status() === 'connected' && !ai.running() && ai.aiEnabled() && ai.modelsReady(),
   );
+
+  const stopWatchdog = () => {
+    watchdogToken++;
+    if (watchdogTimer != null) {
+      window.clearTimeout(watchdogTimer);
+      watchdogTimer = null;
+    }
+    if (stopFallbackTimer != null) {
+      window.clearTimeout(stopFallbackTimer);
+      stopFallbackTimer = null;
+    }
+  };
+
+  const touchWatchdog = () => {
+    lastStreamAtMs = Date.now();
+  };
+
+  const startWatchdog = () => {
+    stopWatchdog();
+    const token = ++watchdogToken;
+    runStartedAtMs = Date.now();
+    lastStreamAtMs = runStartedAtMs;
+
+    const tick = () => {
+      if (token !== watchdogToken) return;
+      if (!untrack(ai.running)) return;
+
+      const now = Date.now();
+      if (now - runStartedAtMs > RUN_MAX_WALL_TIME_MS) {
+        void forceEndRun('Timed out.', { cancelServer: true });
+        return;
+      }
+      if (now - lastStreamAtMs > RUN_IDLE_TIMEOUT_MS) {
+        void forceEndRun('Disconnected.', { cancelServer: true });
+        return;
+      }
+      watchdogTimer = window.setTimeout(tick, RUN_WATCHDOG_TICK_MS);
+    };
+
+    watchdogTimer = window.setTimeout(tick, RUN_WATCHDOG_TICK_MS);
+  };
 
   const loadThreadMessages = async (threadId: string): Promise<void> => {
     if (!chat) return;
@@ -240,17 +293,70 @@ export function EnvAIPage() {
     }
   };
 
-  // Cancel any ongoing run (synchronous abort + best-effort server cancel).
-  const cancelRun = () => {
+  const requestServerCancel = (rid: string | null, tid: string | null) => {
+    const run = String(rid ?? '').trim();
+    const thread = String(tid ?? '').trim();
+    if (run) {
+      void fetchGatewayJSON<void>(`/_redeven_proxy/api/ai/runs/${encodeURIComponent(run)}/cancel`, { method: 'POST' }).catch(() => {});
+      return;
+    }
+    if (thread) {
+      void fetchGatewayJSON<void>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(thread)}/cancel`, { method: 'POST' }).catch(() => {});
+    }
+  };
+
+  const abortLocalRun = (opts?: { cancelServer?: boolean }) => {
+    stopWatchdog();
+    if (opts?.cancelServer) {
+      requestServerCancel(runId(), runThreadId);
+    }
     abortCtrl?.abort();
     abortCtrl = null;
+    assistantText = '';
+    runThreadId = null;
     ai.setRunning(false);
-
-    const rid = runId();
     setRunId(null);
-    if (rid) {
-      void fetchGatewayJSON<void>(`/_redeven_proxy/api/ai/runs/${encodeURIComponent(rid)}/cancel`, { method: 'POST' }).catch(() => {});
+  };
+
+  const forceEndRun = async (notice: string, opts?: { cancelServer?: boolean }) => {
+    stopWatchdog();
+    if (opts?.cancelServer) {
+      requestServerCancel(runId(), runThreadId || ai.activeThreadId());
     }
+    abortCtrl?.abort();
+    abortCtrl = null;
+
+    const mid = chat?.streamingMessageId?.() ?? null;
+    if (mid) {
+      const prefix = assistantText.trim() ? '\n\n' : '';
+      handleStreamEvent({ type: 'block-delta', messageId: mid, blockIndex: 0, delta: `${prefix}${notice}` } as any);
+      handleStreamEvent({ type: 'message-end', messageId: mid } as any);
+      return;
+    }
+
+    // Fallback when we don't have a streaming message id (e.g. request failed before message-start).
+    chat?.addMessage({
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      blocks: [{ type: 'markdown', content: notice }],
+      status: 'complete',
+      timestamp: Date.now(),
+    } as any);
+    setHasMessages(true);
+    assistantText = '';
+    runThreadId = null;
+    ai.setRunning(false);
+    setRunId(null);
+    ai.bumpThreadsSeq();
+  };
+
+  const stopRun = () => {
+    requestServerCancel(runId(), runThreadId || ai.activeThreadId());
+    if (stopFallbackTimer != null) window.clearTimeout(stopFallbackTimer);
+    stopFallbackTimer = window.setTimeout(() => {
+      if (!untrack(ai.running)) return;
+      void forceEndRun('Canceled.', { cancelServer: false });
+    }, STOP_FALLBACK_MS);
   };
 
   // Load messages when the active thread changes (or on initial selection).
@@ -274,7 +380,7 @@ export function EnvAIPage() {
 
     // Cancel running state without re-tracking `running` signal
     if (untrack(ai.running)) {
-      cancelRun();
+      abortLocalRun({ cancelServer: true });
     }
 
     assistantText = '';
@@ -357,6 +463,7 @@ export function EnvAIPage() {
   };
 
   const handleStreamEvent = (ev: StreamEvent) => {
+    touchWatchdog();
     chat?.handleStreamEvent(ev);
 
     if (ev.type === 'block-delta' && typeof (ev as any).delta === 'string') {
@@ -364,7 +471,9 @@ export function EnvAIPage() {
       return;
     }
     if (ev.type === 'message-end') {
+      stopWatchdog();
       assistantText = '';
+      runThreadId = null;
       ai.setRunning(false);
       setRunId(null);
       abortCtrl = null;
@@ -373,9 +482,11 @@ export function EnvAIPage() {
       return;
     }
     if (ev.type === 'error') {
+      stopWatchdog();
       const msg = String((ev as any).error ?? 'AI error');
       notify.error('AI failed', msg);
       assistantText = '';
+      runThreadId = null;
       ai.setRunning(false);
       setRunId(null);
       abortCtrl = null;
@@ -427,7 +538,10 @@ export function EnvAIPage() {
     }));
 
     assistantText = '';
+    runThreadId = tid;
+    setRunId(null);
     ai.setRunning(true);
+    startWatchdog();
 
     const userText = String(content ?? '').trim();
 
@@ -494,35 +608,42 @@ export function EnvAIPage() {
           }
         }
       }
-
-      // If the stream ended without a terminal event, mark the current message as errored to avoid a stuck UI.
-      if (ai.running()) {
-        const streamingMessageId = chat.streamingMessageId?.() ?? null;
-        if (streamingMessageId) {
-          handleStreamEvent({ type: 'error', messageId: streamingMessageId, error: 'AI connection closed.' } as any);
-        } else {
-          notify.error('AI failed', 'AI connection closed.');
-          ai.setRunning(false);
-          setRunId(null);
-          abortCtrl = null;
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        // Best-effort: handle a trailing frame without a newline.
+        const tail = buffer.trim();
+        buffer = '';
+        try {
+          handleStreamEvent(JSON.parse(tail) as StreamEvent);
+        } catch {
+          // ignore
         }
+      }
+
+      // If the stream ended without a terminal event, end locally to avoid a stuck UI.
+      if (ai.running()) {
+        await forceEndRun('Disconnected.', { cancelServer: true });
       }
     } catch (e) {
       // Abort is a normal control flow when the user clicks "Stop".
       if (e && typeof e === 'object' && (e as any).name === 'AbortError') {
+        stopWatchdog();
         ai.setRunning(false);
         setRunId(null);
         abortCtrl = null;
         assistantText = '';
+        runThreadId = null;
         return;
       }
 
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('AI failed', msg || 'Request failed.');
+      stopWatchdog();
       ai.setRunning(false);
       setRunId(null);
       abortCtrl = null;
       assistantText = '';
+      runThreadId = null;
     }
   };
 
@@ -572,11 +693,35 @@ export function EnvAIPage() {
   const doDelete = async () => {
     const tid = ai.activeThreadId();
     if (!tid) return;
+    const force = deleteForce();
 
     setDeleting(true);
     try {
-      await fetchGatewayJSON<void>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, { method: 'DELETE' });
+      if (force && untrack(ai.running)) {
+        // We'll delete the thread anyway; stop the local stream immediately.
+        abortLocalRun({ cancelServer: false });
+      }
+
+      const url = `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}${force ? '?force=true' : ''}`;
+      const resp = await fetch(url, { method: 'DELETE', credentials: 'omit', cache: 'no-store' });
+      const text = await resp.text();
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        // ignore
+      }
+      if (!resp.ok) {
+        if (resp.status === 409 && !force) {
+          setDeleteForce(true);
+          return;
+        }
+        throw new Error(String(data?.error ?? `HTTP ${resp.status}`));
+      }
+      if (data?.ok === false) throw new Error(String(data?.error ?? 'Request failed'));
+
       setDeleteOpen(false);
+      setDeleteForce(false);
       ai.clearActiveThreadPersistence();
       ai.enterDraftChat();
       chat?.clearMessages();
@@ -643,7 +788,7 @@ export function EnvAIPage() {
                       size="sm"
                       variant="outline"
                       icon={Stop}
-                      onClick={() => cancelRun()}
+                      onClick={() => stopRun()}
                       class="h-7 px-2 text-error border-error/30 hover:bg-error/10 hover:text-error"
                     >
                       Stop
@@ -672,9 +817,12 @@ export function EnvAIPage() {
                     size="icon"
                     variant="ghost"
                     icon={Trash}
-                    onClick={() => setDeleteOpen(true)}
+                    onClick={() => {
+                      setDeleteForce(untrack(ai.running));
+                      setDeleteOpen(true);
+                    }}
                     aria-label="Delete"
-                    disabled={!ai.activeThreadId() || ai.running()}
+                    disabled={!ai.activeThreadId()}
                     class="w-7 h-7 text-muted-foreground hover:text-error hover:bg-error/10"
                   />
                 </Tooltip>
@@ -804,9 +952,12 @@ export function EnvAIPage() {
         {/* Delete confirmation dialog */}
         <ConfirmDialog
           open={deleteOpen()}
-          onOpenChange={setDeleteOpen}
+          onOpenChange={(open) => {
+            setDeleteOpen(open);
+            if (!open) setDeleteForce(false);
+          }}
           title="Delete Chat"
-          confirmText="Delete"
+          confirmText={deleteForce() ? 'Force Delete' : 'Delete'}
           variant="destructive"
           loading={deleting()}
           onConfirm={() => void doDelete()}
@@ -815,6 +966,11 @@ export function EnvAIPage() {
             <p class="text-sm">
               Delete <span class="font-semibold">"{ai.activeThreadTitle()}"</span>?
             </p>
+            <Show when={deleteForce()}>
+              <p class="text-xs text-muted-foreground">
+                This chat is running. Deleting will stop the run and delete the thread.
+              </p>
+            </Show>
             <p class="text-xs text-muted-foreground">This cannot be undone.</p>
           </div>
         </ConfirmDialog>
