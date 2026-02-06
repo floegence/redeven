@@ -80,3 +80,11 @@ Env App UI sources:
 Build output (embedded by Go `embed`):
 
 - `internal/envapp/ui/dist/env/*`
+
+Build (recommended):
+
+```bash
+./scripts/build_assets.sh
+```
+
+Note: `internal/envapp/ui/dist/` is generated and not checked into git.

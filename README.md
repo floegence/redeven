@@ -32,12 +32,18 @@ Not implemented yet (planned):
 Requirements:
 
 - Go `1.25.6`
+- Node.js `20` (to build embedded UI/sidecar assets)
+- npm (comes with Node.js)
+- pnpm (or Node.js `corepack`)
 
 Build:
 
 ```bash
+./scripts/build_assets.sh
 go build -o redeven-agent ./cmd/redeven-agent
 ```
+
+Note: `internal/**/dist/` are generated build artifacts (embedded via Go `embed`) and are not checked into git.
 
 ## Quick start
 
