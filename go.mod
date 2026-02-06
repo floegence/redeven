@@ -1,10 +1,10 @@
 module github.com/floegence/redeven-agent
 
-go 1.25.6
+go 1.25.7
 
 require (
 	github.com/floegence/floeterm/terminal-go v0.0.0-20260128115438-ef5c50e18031
-	github.com/floegence/flowersec/flowersec-go v0.9.0
+	github.com/floegence/flowersec/flowersec-go v0.10.1
 	github.com/shirou/gopsutil/v3 v3.24.5
 	golang.org/x/sys v0.31.0
 	golang.org/x/term v0.30.0

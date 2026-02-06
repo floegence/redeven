@@ -31,7 +31,7 @@ Not implemented yet (planned):
 
 Requirements:
 
-- Go `1.25.6`
+- Go `1.25.7`
 - Node.js `20` (to build embedded UI/sidecar assets)
 - npm (comes with Node.js)
 - pnpm (or Node.js `corepack`)
