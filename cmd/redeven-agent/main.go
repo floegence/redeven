@@ -147,21 +147,25 @@ func runCmd(args []string) {
 		}
 	}
 
+	remoteErr := cfg.ValidateRemoteStrict()
+	remoteEnabled := remoteErr == nil
+
 	if !*localUI {
-		if err := cfg.ValidateRemoteStrict(); err != nil {
-			fmt.Fprintf(os.Stderr, "agent not bootstrapped: %v\n", err)
+		if !remoteEnabled {
+			fmt.Fprintf(os.Stderr, "agent not bootstrapped: %v\n", remoteErr)
 			fmt.Fprintf(os.Stderr, "Hint: run `redeven-agent bootstrap` first.\n")
 			os.Exit(1)
 		}
 	}
 
+	localPort := *localUIPort
 	announce := func() {
 		printWelcomeBanner(os.Stderr, welcomeBannerOptions{
 			Version:             Version,
 			ControlplaneBaseURL: cfg.ControlplaneBaseURL,
 			EnvironmentID:       cfg.EnvironmentID,
 			LocalUIEnabled:      *localUI,
-			LocalUIPort:         *localUIPort,
+			LocalUIPort:         localPort,
 		})
 	}
 
@@ -226,12 +230,15 @@ func runCmd(args []string) {
 			os.Exit(1)
 		}
 
-		// Print the local URL immediately, even when Standard Mode is not available.
-		printWelcomeBanner(os.Stderr, welcomeBannerOptions{
-			Version:        Version,
-			LocalUIEnabled: true,
-			LocalUIPort:    srv.Port(),
-		})
+		// Keep the port accurate in the banner (srv.Port() is the bound port).
+		localPort = srv.Port()
+
+		// Avoid printing the welcome banner twice in Hybrid Mode:
+		// - When Standard Mode is enabled, print once after the control channel connects.
+		// - Otherwise (Local-only mode), print once after the Local UI is ready.
+		if !remoteEnabled {
+			announce()
+		}
 	}
 
 	if err := a.Run(ctx); err != nil && ctx.Err() == nil {
