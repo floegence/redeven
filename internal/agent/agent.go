@@ -732,8 +732,9 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess endpoint.Session, 
 	}
 
 	if err := fsproxy.Register(srv, fsproxy.Options{
-		Upstream:       up,
-		UpstreamOrigin: origin,
+		Upstream:        up,
+		UpstreamOrigin:  origin,
+		MaxWSFrameBytes: 10 * 1024 * 1024,
 	}); err != nil {
 		return err
 	}
@@ -783,8 +784,9 @@ func (a *Agent) servePortForwardSession(ctx context.Context, sess endpoint.Sessi
 	}
 
 	if err := fsproxy.Register(srv, fsproxy.Options{
-		Upstream:       up,
-		UpstreamOrigin: origin,
+		Upstream:        up,
+		UpstreamOrigin:  origin,
+		MaxWSFrameBytes: 10 * 1024 * 1024,
 	}); err != nil {
 		return err
 	}
@@ -847,8 +849,9 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 			return err
 		}
 		if err := fsproxy.Register(srv, fsproxy.Options{
-			Upstream:       up,
-			UpstreamOrigin: origin,
+			Upstream:        up,
+			UpstreamOrigin:  origin,
+			MaxWSFrameBytes: 10 * 1024 * 1024,
 		}); err != nil {
 			return err
 		}
