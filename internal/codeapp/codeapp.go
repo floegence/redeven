@@ -68,8 +68,11 @@ type Service struct {
 	reg    *registry.Registry
 	pf     *portforward.Service
 	runner *codeserver.Runner
+	entry  *localEntryProxyManager
 	ai     *ai.Service
 	gw     *gateway.Gateway
+
+	localUIEnabled bool
 }
 
 func New(ctx context.Context, opts Options) (*Service, error) {
@@ -137,15 +140,19 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	})
 
 	svc := &Service{
-		log:         logger,
-		stateDir:    stateAbs,
-		cpScheme:    cpScheme,
-		cpHost:      cpHost,
-		codePortMin: portMin,
-		codePortMax: portMax,
-		reg:         reg,
-		pf:          pfSvc,
-		runner:      runner,
+		log:            logger,
+		stateDir:       stateAbs,
+		cpScheme:       cpScheme,
+		cpHost:         cpHost,
+		codePortMin:    portMin,
+		codePortMax:    portMax,
+		reg:            reg,
+		pf:             pfSvc,
+		runner:         runner,
+		localUIEnabled: len(opts.LocalUIAllowedOrigins) > 0,
+	}
+	if svc.localUIEnabled {
+		svc.entry = newLocalEntryProxyManager(logger)
 	}
 
 	secrets := settings.NewSecretsStore(filepath.Join(stateAbs, "secrets.json"))
@@ -205,6 +212,9 @@ func (s *Service) Close() error {
 	}
 	if s.gw != nil {
 		_ = s.gw.Close()
+	}
+	if s.entry != nil {
+		_ = s.entry.StopAll()
 	}
 	if s.runner != nil {
 		_ = s.runner.StopAll()

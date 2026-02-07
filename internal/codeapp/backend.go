@@ -32,6 +32,22 @@ func (s *Service) ListSpaces(ctx context.Context) ([]gateway.SpaceStatus, error)
 			running = true
 			pid = ins.PID
 			port = ins.Port
+			if s.localUIEnabled && s.entry != nil {
+				entryPort, ok := s.entry.Port(sp.CodeSpaceID)
+				if ok {
+					port = entryPort
+				} else {
+					ep, err := s.entry.Ensure(ctx, sp.CodeSpaceID, ins.Port)
+					if err != nil {
+						if s.log != nil {
+							s.log.Warn("ensure local entry proxy failed", "code_space_id", sp.CodeSpaceID, "backend_port", ins.Port, "error", err)
+						}
+						port = 0
+					} else {
+						port = ep
+					}
+				}
+			}
 		}
 		out = append(out, gateway.SpaceStatus{
 			CodeSpaceID:        sp.CodeSpaceID,
@@ -138,6 +154,9 @@ func (s *Service) DeleteSpace(ctx context.Context, codeSpaceID string) error {
 	}
 
 	_ = s.runner.Stop(id)
+	if s.entry != nil {
+		_ = s.entry.Stop(id)
+	}
 	if err := s.reg.DeleteSpace(ctx, id); err != nil {
 		return err
 	}
@@ -168,6 +187,14 @@ func (s *Service) StartSpace(ctx context.Context, codeSpaceID string) (*gateway.
 	if err != nil {
 		return nil, err
 	}
+	accessPort := port
+	if s.localUIEnabled && s.entry != nil {
+		ep, err := s.entry.Ensure(ctx, id, port)
+		if err != nil {
+			return nil, err
+		}
+		accessPort = ep
+	}
 
 	sp, err := s.reg.GetSpace(ctx, id)
 	if err != nil {
@@ -189,7 +216,7 @@ func (s *Service) StartSpace(ctx context.Context, codeSpaceID string) (*gateway.
 		WorkspacePath:      sp.WorkspacePath,
 		Name:               sp.Name,
 		Description:        sp.Description,
-		CodePort:           port,
+		CodePort:           accessPort,
 		CreatedAtUnixMs:    sp.CreatedAtUnixMs,
 		UpdatedAtUnixMs:    sp.UpdatedAtUnixMs,
 		LastOpenedAtUnixMs: sp.LastOpenedAtUnixMs,
@@ -210,6 +237,9 @@ func (s *Service) StopSpace(ctx context.Context, codeSpaceID string) error {
 	id := strings.TrimSpace(codeSpaceID)
 	if !IsValidCodeSpaceID(id) {
 		return errors.New("invalid code_space_id")
+	}
+	if s.entry != nil {
+		_ = s.entry.Stop(id)
 	}
 	return s.runner.Stop(id)
 }
