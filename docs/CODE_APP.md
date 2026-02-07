@@ -95,6 +95,7 @@ code-server keeps disconnected extension-host sessions alive for a grace period 
 
 - In Local UI mode, Redeven sets a shorter default: **30s**.
   - Rationale: localhost links are stable, and multi-hour grace windows mainly accumulate stale extension-host locks after refresh/reopen.
+  - Implementation detail: Redeven passes `--reconnection-grace-time` to code-server.
 - In non-Local-UI mode, Redeven keeps code-server upstream defaults.
 
 You can override the grace window with:

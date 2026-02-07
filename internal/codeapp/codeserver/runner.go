@@ -271,8 +271,12 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 		"--user-data-dir", userDataDir,
 		"--extensions-dir", extensionsDir,
 		"--session-socket", sessionSocketPath,
-		workspacePath,
 	)
+	if reconnectionGrace > 0 {
+		// code-server reads this from CLI args and then propagates it to extension hosts.
+		args = append(args, "--reconnection-grace-time", formatReconnectionGraceCLISeconds(reconnectionGrace))
+	}
+	args = append(args, workspacePath)
 	cmd := exec.Command(execPath, args...)
 	cmd.Dir = workspacePath
 	if stdout != nil {
@@ -288,9 +292,6 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 		"XDG_CACHE_HOME="+xdgCacheDir,
 		"XDG_DATA_HOME="+xdgDataDir,
 	)
-	if reconnectionGrace > 0 {
-		env = append(env, "VSCODE_RECONNECTION_GRACE_TIME="+formatReconnectionGrace(reconnectionGrace))
-	}
 	cmd.Env = env
 
 	attrs := []any{
@@ -300,7 +301,7 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 		"session_socket", sessionSocketPath,
 	}
 	if reconnectionGrace > 0 {
-		attrs = append(attrs, "reconnection_grace", formatReconnectionGrace(reconnectionGrace))
+		attrs = append(attrs, "reconnection_grace", formatReconnectionGraceMilliseconds(reconnectionGrace))
 	}
 	r.log.Info("starting code-server", attrs...)
 	// Put the child in its own process group so we can reliably stop code-server and its children.
@@ -339,7 +340,7 @@ func normalizePositiveDuration(v time.Duration) time.Duration {
 	return v
 }
 
-func formatReconnectionGrace(v time.Duration) string {
+func formatReconnectionGraceMilliseconds(v time.Duration) string {
 	d := normalizePositiveDuration(v)
 	if d <= 0 {
 		return ""
@@ -349,6 +350,22 @@ func formatReconnectionGrace(v time.Duration) string {
 		ms = 1
 	}
 	return fmt.Sprintf("%dms", ms)
+}
+
+func formatReconnectionGraceCLISeconds(v time.Duration) string {
+	d := normalizePositiveDuration(v)
+	if d <= 0 {
+		return ""
+	}
+	ms := d.Milliseconds()
+	if ms <= 0 {
+		ms = 1
+	}
+	if ms%1000 == 0 {
+		return fmt.Sprintf("%d", ms/1000)
+	}
+	seconds := float64(ms) / 1000
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.3f", seconds), "0"), ".")
 }
 
 func (r *Runner) resolveReconnectionGrace() time.Duration {

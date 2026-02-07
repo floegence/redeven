@@ -41,11 +41,26 @@ func TestResolveReconnectionGraceNonPositiveEnvFallsBack(t *testing.T) {
 	}
 }
 
-func TestFormatReconnectionGrace(t *testing.T) {
-	if got := formatReconnectionGrace(1500 * time.Millisecond); got != "1500ms" {
-		t.Fatalf("formatReconnectionGrace() = %q, want %q", got, "1500ms")
+func TestFormatReconnectionGraceMilliseconds(t *testing.T) {
+	if got := formatReconnectionGraceMilliseconds(1500 * time.Millisecond); got != "1500ms" {
+		t.Fatalf("formatReconnectionGraceMilliseconds() = %q, want %q", got, "1500ms")
 	}
-	if got := formatReconnectionGrace(0); got != "" {
-		t.Fatalf("formatReconnectionGrace() = %q, want empty", got)
+	if got := formatReconnectionGraceMilliseconds(0); got != "" {
+		t.Fatalf("formatReconnectionGraceMilliseconds() = %q, want empty", got)
+	}
+}
+
+func TestFormatReconnectionGraceCLISeconds(t *testing.T) {
+	if got := formatReconnectionGraceCLISeconds(30 * time.Second); got != "30" {
+		t.Fatalf("formatReconnectionGraceCLISeconds() = %q, want %q", got, "30")
+	}
+	if got := formatReconnectionGraceCLISeconds(1500 * time.Millisecond); got != "1.5" {
+		t.Fatalf("formatReconnectionGraceCLISeconds() = %q, want %q", got, "1.5")
+	}
+	if got := formatReconnectionGraceCLISeconds(10 * time.Millisecond); got != "0.01" {
+		t.Fatalf("formatReconnectionGraceCLISeconds() = %q, want %q", got, "0.01")
+	}
+	if got := formatReconnectionGraceCLISeconds(0); got != "" {
+		t.Fatalf("formatReconnectionGraceCLISeconds() = %q, want empty", got)
 	}
 }
