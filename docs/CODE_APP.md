@@ -81,6 +81,14 @@ If your `node` is not available in `PATH`, you can override it with:
 
 - `REDEVEN_CODE_SERVER_NODE_BIN=/absolute/path/to/node`
 
+## Startup timeout
+
+By default, the agent waits up to **20s** for `code-server` to start listening on its localhost port.
+
+You can override this with:
+
+- `REDEVEN_CODE_SERVER_STARTUP_TIMEOUT=30s` (any Go `time.ParseDuration` value)
+
 ## Permissions
 
 For MVP, the agent requires **all three** permissions before serving Code App sessions:
@@ -98,6 +106,14 @@ This is conservative: code-server is not designed to enforce a partial permissio
 
 - "code-server binary not found":
   - Install code-server on your machine or set `REDEVEN_CODE_SERVER_BIN` to an absolute path.
+
+- "code-server did not start listening on 127.0.0.1:PORT":
+  - Check the per-codespace logs under:
+    - `~/.redeven/apps/code/spaces/<code_space_id>/codeserver/stdout.log`
+    - `~/.redeven/apps/code/spaces/<code_space_id>/codeserver/stderr.log`
+  - Verify `code-server` runs on your machine (`code-server --version`).
+  - If Homebrew installs `code-server` as a Node.js script, ensure `node` works, or set `REDEVEN_CODE_SERVER_NODE_BIN`.
+  - If startup is slow on your machine (first launch, heavy extensions, slow disk), increase `REDEVEN_CODE_SERVER_STARTUP_TIMEOUT`.
 
 - "Handshake timed out":
   - Ensure the sandbox subdomain can load `/_redeven_boot/` and `/_redeven_sw.js`.

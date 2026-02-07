@@ -203,6 +203,16 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 	if err != nil {
 		return nil, err
 	}
+	startupTimeout := 20 * time.Second
+	if v := strings.TrimSpace(os.Getenv("REDEVEN_CODE_SERVER_STARTUP_TIMEOUT")); v != "" {
+		if d, err := time.ParseDuration(v); err != nil {
+			r.log.Warn("invalid REDEVEN_CODE_SERVER_STARTUP_TIMEOUT; using default", "value", v, "err", err)
+		} else if d <= 0 {
+			r.log.Warn("invalid REDEVEN_CODE_SERVER_STARTUP_TIMEOUT; using default", "value", v)
+		} else {
+			startupTimeout = d
+		}
+	}
 
 	spaceDir := filepath.Join(strings.TrimSpace(r.stateDir), "apps", "code", "spaces", codeSpaceID, "codeserver")
 	userDataDir := filepath.Join(spaceDir, "user-data")
@@ -282,10 +292,10 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 		_ = stderr.Close()
 	}
 
-	if err := waitForPort("127.0.0.1", port, 2*time.Second); err != nil {
+	if err := waitForPort("127.0.0.1", port, startupTimeout); err != nil {
 		_ = killCmdProcessGroup(cmd)
 		_, _ = cmd.Process.Wait()
-		return nil, err
+		return nil, enrichStartError(err, stdoutPath, stderrPath, execPath, prefixArgs)
 	}
 
 	return &Instance{
@@ -325,7 +335,7 @@ func waitForPort(host string, port int, timeout time.Duration) error {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	return fmt.Errorf("code-server did not start listening on %s:%d", host, port)
+	return fmt.Errorf("code-server did not start listening on %s:%d (waited %s)", host, port, timeout)
 }
 
 func resolveCodeServerExec(bin string) (execPath string, prefixArgs []string, err error) {
@@ -386,4 +396,99 @@ func resolveCodeServerExec(bin string) (execPath string, prefixArgs []string, er
 	}
 
 	return nodeBin, []string{bin}, nil
+}
+
+func enrichStartError(startErr error, stdoutPath string, stderrPath string, execPath string, prefixArgs []string) error {
+	msg := strings.TrimSpace(startErr.Error())
+
+	stderrTail, _ := tailFile(stderrPath, 8*1024)
+	stdoutTail, _ := tailFile(stdoutPath, 8*1024)
+
+	var b strings.Builder
+	b.WriteString(msg)
+	b.WriteString("\n")
+	b.WriteString("Check logs:\n")
+	b.WriteString("- stdout: ")
+	b.WriteString(stdoutPath)
+	b.WriteString("\n")
+	b.WriteString("- stderr: ")
+	b.WriteString(stderrPath)
+	b.WriteString("\n")
+
+	// If code-server was a Node.js script, a broken/missing node binary is a common cause.
+	if len(prefixArgs) > 0 {
+		b.WriteString("\n")
+		b.WriteString("Hint: your code-server looks like a Node.js script. Ensure `node` works, or set REDEVEN_CODE_SERVER_NODE_BIN to a working node binary.\n")
+	}
+
+	// Include a small tail snippet to surface common failures (unknown flags, missing libs, etc.)
+	if stderrTail != "" {
+		b.WriteString("\n")
+		b.WriteString("stderr (tail):\n")
+		b.WriteString(stderrTail)
+		b.WriteString("\n")
+	}
+	if stdoutTail != "" {
+		b.WriteString("\n")
+		b.WriteString("stdout (tail):\n")
+		b.WriteString(stdoutTail)
+		b.WriteString("\n")
+	}
+
+	// Provide the resolved entrypoint to help debugging wrapper scripts.
+	execPath = strings.TrimSpace(execPath)
+	if execPath != "" {
+		b.WriteString("\n")
+		b.WriteString("Entrypoint: ")
+		b.WriteString(execPath)
+		b.WriteString("\n")
+	}
+
+	return errors.New(strings.TrimSpace(b.String()))
+}
+
+func tailFile(path string, maxBytes int64) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", errors.New("empty path")
+	}
+	if maxBytes <= 0 {
+		maxBytes = 4 * 1024
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	st, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+	size := st.Size()
+	if size <= 0 {
+		return "", nil
+	}
+
+	start := int64(0)
+	if size > maxBytes {
+		start = size - maxBytes
+	}
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
+		return "", err
+	}
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return "", err
+	}
+
+	s := string(b)
+	// If we started in the middle of a line, skip until the first newline.
+	if start > 0 {
+		if i := strings.IndexByte(s, '\n'); i >= 0 && i+1 < len(s) {
+			s = s[i+1:]
+		}
+	}
+	return strings.TrimSpace(s), nil
 }
