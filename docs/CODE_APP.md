@@ -130,6 +130,7 @@ This is conservative: code-server is not designed to enforce a partial permissio
 
 - Frequent "Extension Host reconnect" loops:
   - Redeven now cleans up stale code-server processes for the same codespace session socket before start/stop.
+  - Redeven also removes stale `User/workspaceStorage/*/vscode.lock` files before each start.
   - In Local UI mode, Redeven also shortens extension-host reconnection grace to 30s by default to reduce long-lived stale locks.
   - You can tune this per machine via `REDEVEN_CODE_SERVER_RECONNECTION_GRACE_TIME`.
   - If reconnect loops persist, inspect `remoteagent.log` and `exthost*/remoteexthost.log` under:

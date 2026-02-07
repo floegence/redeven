@@ -1,6 +1,8 @@
 package codeserver
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -50,17 +52,35 @@ func TestFormatReconnectionGraceMilliseconds(t *testing.T) {
 	}
 }
 
-func TestFormatReconnectionGraceCLISeconds(t *testing.T) {
-	if got := formatReconnectionGraceCLISeconds(30 * time.Second); got != "30" {
-		t.Fatalf("formatReconnectionGraceCLISeconds() = %q, want %q", got, "30")
+func TestCleanupWorkspaceStorageLocks(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	wsRoot := filepath.Join(root, "User", "workspaceStorage")
+	if err := os.MkdirAll(filepath.Join(wsRoot, "a"), 0o700); err != nil {
+		t.Fatalf("mkdir a: %v", err)
 	}
-	if got := formatReconnectionGraceCLISeconds(1500 * time.Millisecond); got != "1.5" {
-		t.Fatalf("formatReconnectionGraceCLISeconds() = %q, want %q", got, "1.5")
+	if err := os.MkdirAll(filepath.Join(wsRoot, "b"), 0o700); err != nil {
+		t.Fatalf("mkdir b: %v", err)
 	}
-	if got := formatReconnectionGraceCLISeconds(10 * time.Millisecond); got != "0.01" {
-		t.Fatalf("formatReconnectionGraceCLISeconds() = %q, want %q", got, "0.01")
+	if err := os.WriteFile(filepath.Join(wsRoot, "a", "vscode.lock"), []byte("x"), 0o600); err != nil {
+		t.Fatalf("write lock: %v", err)
 	}
-	if got := formatReconnectionGraceCLISeconds(0); got != "" {
-		t.Fatalf("formatReconnectionGraceCLISeconds() = %q, want empty", got)
+
+	removed, err := cleanupWorkspaceStorageLocks(wsRoot)
+	if err != nil {
+		t.Fatalf("cleanupWorkspaceStorageLocks() error = %v", err)
+	}
+	if removed != 1 {
+		t.Fatalf("cleanupWorkspaceStorageLocks() removed = %d, want 1", removed)
+	}
+	if _, err := os.Stat(filepath.Join(wsRoot, "a", "vscode.lock")); !os.IsNotExist(err) {
+		t.Fatalf("lock should be removed, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(wsRoot, "b")); err != nil {
+		t.Fatalf("workspace folder should be kept, err = %v", err)
+	}
+	if removed, err := cleanupWorkspaceStorageLocks(filepath.Join(root, "not-exist")); err != nil || removed != 0 {
+		t.Fatalf("cleanup missing dir = (%d, %v), want (0, nil)", removed, err)
 	}
 }

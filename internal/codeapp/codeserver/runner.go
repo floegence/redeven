@@ -255,6 +255,12 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 	} else if killed > 0 {
 		r.log.Warn("killed stale code-server process(es)", "code_space_id", codeSpaceID, "session_socket", sessionSocketPath, "count", killed)
 	}
+	workspaceStoragePath := filepath.Join(userDataDir, "User", "workspaceStorage")
+	if removed, err := cleanupWorkspaceStorageLocks(workspaceStoragePath); err != nil {
+		r.log.Warn("failed to cleanup workspace storage locks", "code_space_id", codeSpaceID, "path", workspaceStoragePath, "error", err)
+	} else if removed > 0 {
+		r.log.Info("cleaned workspace storage lock(s)", "code_space_id", codeSpaceID, "path", workspaceStoragePath, "count", removed)
+	}
 
 	stdoutPath := filepath.Join(spaceDir, "stdout.log")
 	stderrPath := filepath.Join(spaceDir, "stderr.log")
@@ -271,12 +277,8 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 		"--user-data-dir", userDataDir,
 		"--extensions-dir", extensionsDir,
 		"--session-socket", sessionSocketPath,
+		workspacePath,
 	)
-	if reconnectionGrace > 0 {
-		// code-server reads this from CLI args and then propagates it to extension hosts.
-		args = append(args, "--reconnection-grace-time", formatReconnectionGraceCLISeconds(reconnectionGrace))
-	}
-	args = append(args, workspacePath)
 	cmd := exec.Command(execPath, args...)
 	cmd.Dir = workspacePath
 	if stdout != nil {
@@ -292,6 +294,9 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 		"XDG_CACHE_HOME="+xdgCacheDir,
 		"XDG_DATA_HOME="+xdgDataDir,
 	)
+	if reconnectionGrace > 0 {
+		env = append(env, "VSCODE_RECONNECTION_GRACE_TIME="+formatReconnectionGraceMilliseconds(reconnectionGrace))
+	}
 	cmd.Env = env
 
 	attrs := []any{
@@ -352,22 +357,6 @@ func formatReconnectionGraceMilliseconds(v time.Duration) string {
 	return fmt.Sprintf("%dms", ms)
 }
 
-func formatReconnectionGraceCLISeconds(v time.Duration) string {
-	d := normalizePositiveDuration(v)
-	if d <= 0 {
-		return ""
-	}
-	ms := d.Milliseconds()
-	if ms <= 0 {
-		ms = 1
-	}
-	if ms%1000 == 0 {
-		return fmt.Sprintf("%d", ms/1000)
-	}
-	seconds := float64(ms) / 1000
-	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.3f", seconds), "0"), ".")
-}
-
 func (r *Runner) resolveReconnectionGrace() time.Duration {
 	grace := normalizePositiveDuration(r.reconnectionGrace)
 	raw := strings.TrimSpace(os.Getenv("REDEVEN_CODE_SERVER_RECONNECTION_GRACE_TIME"))
@@ -390,6 +379,38 @@ func (r *Runner) resolveReconnectionGrace() time.Duration {
 		return grace
 	}
 	return v
+}
+
+func cleanupWorkspaceStorageLocks(workspaceStorageDir string) (int, error) {
+	root := strings.TrimSpace(workspaceStorageDir)
+	if root == "" {
+		return 0, nil
+	}
+
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	removed := 0
+	for _, entry := range entries {
+		if entry == nil || !entry.IsDir() {
+			continue
+		}
+		lockPath := filepath.Join(root, entry.Name(), "vscode.lock")
+		if err := os.Remove(lockPath); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return removed, err
+		}
+		removed++
+	}
+
+	return removed, nil
 }
 
 func validateWorkspacePath(p string) error {
