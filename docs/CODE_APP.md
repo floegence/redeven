@@ -77,6 +77,12 @@ To make the agent more robust, the Code App detects a Node.js shebang and execut
 
 - `node <code-server-script> ...`
 
+Interpreter resolution order for Node.js shebang scripts:
+
+1) `REDEVEN_CODE_SERVER_NODE_BIN` (if set)
+2) shebang interpreter path (if executable)
+3) `PATH` lookup (`node`)
+
 If your `node` is not available in `PATH`, you can override it with:
 
 - `REDEVEN_CODE_SERVER_NODE_BIN=/absolute/path/to/node`

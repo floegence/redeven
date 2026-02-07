@@ -488,6 +488,11 @@ func resolveCodeServerExec(bin string) (execPath string, prefixArgs []string, er
 
 	nodeBin := strings.TrimSpace(os.Getenv("REDEVEN_CODE_SERVER_NODE_BIN"))
 	if nodeBin == "" {
+		if inferred, ok := resolveNodeFromShebangFields(fields); ok {
+			nodeBin = inferred
+		}
+	}
+	if nodeBin == "" {
 		p, err := exec.LookPath("node")
 		if err != nil {
 			return "", nil, errors.New("code-server is a node script but node is not found in PATH (set REDEVEN_CODE_SERVER_NODE_BIN)")
@@ -501,6 +506,58 @@ func resolveCodeServerExec(bin string) (execPath string, prefixArgs []string, er
 	}
 
 	return nodeBin, []string{bin}, nil
+}
+
+func resolveNodeFromShebangFields(fields []string) (string, bool) {
+	if len(fields) == 0 {
+		return "", false
+	}
+	interp := strings.TrimSpace(fields[0])
+	if interp == "" {
+		return "", false
+	}
+
+	interpBase := strings.ToLower(filepath.Base(interp))
+	if interpBase == "env" {
+		if len(fields) < 2 {
+			return "", false
+		}
+		candidate := strings.TrimSpace(fields[1])
+		if candidate == "" || strings.HasPrefix(candidate, "-") {
+			return "", false
+		}
+		if filepath.IsAbs(candidate) {
+			if isExecutableFile(candidate) {
+				return candidate, true
+			}
+			return "", false
+		}
+		p, err := exec.LookPath(candidate)
+		if err != nil {
+			return "", false
+		}
+		return p, true
+	}
+
+	if filepath.IsAbs(interp) {
+		if isExecutableFile(interp) {
+			return interp, true
+		}
+		return "", false
+	}
+	p, err := exec.LookPath(interp)
+	if err != nil {
+		return "", false
+	}
+	return p, true
+}
+
+func isExecutableFile(path string) bool {
+	fi, err := os.Stat(path)
+	if err != nil || fi == nil || fi.IsDir() {
+		return false
+	}
+	return fi.Mode()&0o111 != 0
 }
 
 func enrichStartError(startErr error, stdoutPath string, stderrPath string, execPath string, prefixArgs []string) error {
