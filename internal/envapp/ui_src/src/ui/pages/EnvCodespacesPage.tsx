@@ -775,21 +775,21 @@ export function EnvCodespacesPage() {
               </div>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
-              <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={spaces.loading}>
-                <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={spaces.loading} aria-label="Refresh" title="Refresh">
+                <svg class="w-3.5 h-3.5 sm:mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path
                     stroke-linecap="round"
                     stroke-linejoin="round"
                     d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
                   />
                 </svg>
-                Refresh
+                <span class="hidden sm:inline">Refresh</span>
               </Button>
-              <Button size="sm" variant="default" onClick={() => setCreateDialogOpen(true)}>
-                <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <Button size="sm" variant="default" onClick={() => setCreateDialogOpen(true)} aria-label="New Codespace" title="New Codespace">
+                <svg class="w-3.5 h-3.5 sm:mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
-                New Codespace
+                <span class="hidden sm:inline">New Codespace</span>
               </Button>
             </div>
           </div>

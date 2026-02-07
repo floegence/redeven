@@ -613,18 +613,20 @@ export function EnvPortForwardsPage() {
               </div>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
-              <Button size="sm" variant="outline" onClick={bumpRefresh} disabled={!!busyID() || forwards.loading}>
-                <RefreshIcon class="w-3.5 h-3.5 mr-1" />
-                Refresh
+              <Button size="sm" variant="outline" onClick={bumpRefresh} disabled={!!busyID() || forwards.loading} aria-label="Refresh" title="Refresh">
+                <RefreshIcon class="w-3.5 h-3.5 sm:mr-1" />
+                <span class="hidden sm:inline">Refresh</span>
               </Button>
               <Button
                 size="sm"
                 variant="default"
                 onClick={() => setCreateOpen(true)}
                 disabled={!!busyID() || (permissionReady() && !canExecute())}
+                aria-label="New Forward"
+                title="New Forward"
               >
-                <PlusIcon class="w-3.5 h-3.5 mr-1" />
-                New Forward
+                <PlusIcon class="w-3.5 h-3.5 sm:mr-1" />
+                <span class="hidden sm:inline">New Forward</span>
               </Button>
             </div>
           </div>
