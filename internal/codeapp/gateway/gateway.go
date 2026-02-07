@@ -1994,25 +1994,48 @@ const (
 var (
 	vsdaWebShimJS = []byte(`(function () {
   // Minimal shim for VS Code web SignService.
-  // It intentionally implements a no-op validator to avoid hard failures when vsda is not shipped.
+  //
+  // It implements:
+  // - globalThis.vsda_web (what VS Code checks for)
+  // - a best-effort AMD define() call to avoid loader warnings
+  //
+  // Security note: this does not provide real signing; it matches the no-op behavior
+  // when vsda is unavailable.
   if (typeof globalThis === "undefined") return;
-  if (typeof globalThis.vsda_web !== "undefined") return;
 
   function Validator() {}
   Validator.prototype.free = function () {};
   Validator.prototype.createNewMessage = function (original) { return String(original ?? ""); };
   Validator.prototype.validate = function () { return "ok"; };
 
-  globalThis.vsda_web = {
+  const impl = {
     default: async function () {},
     sign: function (salted_message) { return String(salted_message ?? ""); },
     validator: Validator
   };
+
+  // VS Code checks this global directly (see signService.ts).
+  if (typeof globalThis.vsda_web === "undefined") {
+    globalThis.vsda_web = impl;
+  }
+
+  // VS Code's AMD loader expects a define() call; provide one to avoid warnings.
+  try {
+    const d = globalThis.define;
+    if (typeof d === "function" && d.amd) {
+      d([], function () { return impl; });
+    }
+  } catch {
+    // ignore
+  }
 })();`)
 
 	// The shim does not use the WASM bytes, but VS Code still fetches them.
 	// Keep it non-empty so response.arrayBuffer() is stable across environments.
-	vsdaWebShimWasm = []byte{0x00}
+	vsdaWebShimWasm = []byte{
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	}
 )
 
 func maybeServeVSDAWebShim(w http.ResponseWriter, r *http.Request) bool {

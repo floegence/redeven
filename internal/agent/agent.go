@@ -63,6 +63,10 @@ var (
 	proxyMaxTimeout     = 30 * time.Minute
 )
 
+// proxyMaxWSFrameBytes caps a single WS frame payload for flowersec-proxy/ws.
+// Keep it in sync with the browser runtime maxWsFrameBytes (Region sandbox bootstrap).
+const proxyMaxWSFrameBytes = 32 * 1024 * 1024
+
 type Options struct {
 	Config *config.Config
 	// ConfigPath is the path used to load the config file (used to derive state_dir).
@@ -742,7 +746,7 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess endpoint.Session, 
 	if err := fsproxy.Register(srv, fsproxy.Options{
 		Upstream:        up,
 		UpstreamOrigin:  origin,
-		MaxWSFrameBytes: 10 * 1024 * 1024,
+		MaxWSFrameBytes: proxyMaxWSFrameBytes,
 		DefaultTimeout:  &proxyDefaultTimeout,
 		MaxTimeout:      &proxyMaxTimeout,
 	}); err != nil {
@@ -796,7 +800,7 @@ func (a *Agent) servePortForwardSession(ctx context.Context, sess endpoint.Sessi
 	if err := fsproxy.Register(srv, fsproxy.Options{
 		Upstream:        up,
 		UpstreamOrigin:  origin,
-		MaxWSFrameBytes: 10 * 1024 * 1024,
+		MaxWSFrameBytes: proxyMaxWSFrameBytes,
 		DefaultTimeout:  &proxyDefaultTimeout,
 		MaxTimeout:      &proxyMaxTimeout,
 	}); err != nil {
@@ -863,7 +867,7 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 		if err := fsproxy.Register(srv, fsproxy.Options{
 			Upstream:        up,
 			UpstreamOrigin:  origin,
-			MaxWSFrameBytes: 10 * 1024 * 1024,
+			MaxWSFrameBytes: proxyMaxWSFrameBytes,
 			DefaultTimeout:  &proxyDefaultTimeout,
 			MaxTimeout:      &proxyMaxTimeout,
 		}); err != nil {

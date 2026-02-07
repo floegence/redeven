@@ -958,6 +958,9 @@ func TestGateway_CodeServerProxy_ServesVSDAWebShim(t *testing.T) {
 		if !bytes.Contains(rr.Body.Bytes(), []byte("vsda_web")) {
 			t.Fatalf("vsda.js body does not contain vsda_web")
 		}
+		if !bytes.Contains(rr.Body.Bytes(), []byte("define")) {
+			t.Fatalf("vsda.js body does not contain define (AMD shim)")
+		}
 	}
 
 	// WASM shim
@@ -974,6 +977,10 @@ func TestGateway_CodeServerProxy_ServesVSDAWebShim(t *testing.T) {
 		}
 		if rr.Body.Len() == 0 {
 			t.Fatalf("vsda_bg.wasm body is empty")
+		}
+		// Keep it a multiple of 16 so VS Code's AES-CBC decrypt loop doesn't immediately error.
+		if rr.Body.Len()%16 != 0 {
+			t.Fatalf("vsda_bg.wasm body len = %d, want multiple of 16", rr.Body.Len())
 		}
 	}
 }

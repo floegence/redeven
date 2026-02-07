@@ -240,6 +240,10 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 	args = append(args,
 		"--bind-addr", fmt.Sprintf("127.0.0.1:%d", port),
 		"--auth", "none",
+		// The codespace is only reachable via the agent gateway (localhost) and/or Flowersec E2EE proxy.
+		// Disable the VS Code server connection token to avoid cookie/Service Worker edge cases in sandbox origins.
+		// (code-server itself documents this flag as safe when the connection is secured by other means.)
+		"--without-connection-token",
 		"--disable-telemetry",
 		"--disable-update-check",
 		"--user-data-dir", userDataDir,
