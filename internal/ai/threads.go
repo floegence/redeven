@@ -31,6 +31,46 @@ func newUserMessageID() (string, error) {
 	return "u_ai_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+func normalizeThreadRunState(status string, runError string) (string, string) {
+	status = strings.TrimSpace(status)
+	runError = strings.TrimSpace(runError)
+	switch status {
+	case "running", "success", "failed", "canceled":
+	default:
+		status = "idle"
+	}
+	if status != "failed" {
+		runError = ""
+	}
+	return status, runError
+}
+
+func (s *Service) activeThreadRunSet(endpointID string) map[string]struct{} {
+	endpointID = strings.TrimSpace(endpointID)
+	if endpointID == "" || s == nil {
+		return map[string]struct{}{}
+	}
+	prefix := endpointID + ":"
+	out := make(map[string]struct{})
+	s.mu.Lock()
+	for key, runID := range s.activeRunByTh {
+		if strings.TrimSpace(runID) == "" {
+			continue
+		}
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		tid := strings.TrimPrefix(key, prefix)
+		tid = strings.TrimSpace(tid)
+		if tid == "" {
+			continue
+		}
+		out[tid] = struct{}{}
+	}
+	s.mu.Unlock()
+	return out
+}
+
 func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID string) (*ThreadView, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
@@ -57,9 +97,18 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 		return nil, nil
 	}
 
+	runStatus, runError := normalizeThreadRunState(th.RunStatus, th.RunError)
+	if s.HasActiveThreadForEndpoint(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(th.ThreadID)) {
+		runStatus = "running"
+		runError = ""
+	}
+
 	return &ThreadView{
 		ThreadID:            strings.TrimSpace(th.ThreadID),
 		Title:               strings.TrimSpace(th.Title),
+		RunStatus:           runStatus,
+		RunUpdatedAtUnixMs:  th.RunUpdatedAtUnixMs,
+		RunError:            runError,
 		CreatedAtUnixMs:     th.CreatedAtUnixMs,
 		UpdatedAtUnixMs:     th.UpdatedAtUnixMs,
 		LastMessageAtUnixMs: th.LastMessageAtUnixMs,
@@ -90,11 +139,20 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	if err != nil {
 		return nil, err
 	}
+	activeThreads := s.activeThreadRunSet(strings.TrimSpace(meta.EndpointID))
 	out := &ListThreadsResponse{Threads: make([]ThreadView, 0, len(list)), NextCursor: strings.TrimSpace(next)}
 	for _, t := range list {
+		runStatus, runError := normalizeThreadRunState(t.RunStatus, t.RunError)
+		if _, ok := activeThreads[strings.TrimSpace(t.ThreadID)]; ok {
+			runStatus = "running"
+			runError = ""
+		}
 		out.Threads = append(out.Threads, ThreadView{
 			ThreadID:            strings.TrimSpace(t.ThreadID),
 			Title:               strings.TrimSpace(t.Title),
+			RunStatus:           runStatus,
+			RunUpdatedAtUnixMs:  t.RunUpdatedAtUnixMs,
+			RunError:            runError,
 			CreatedAtUnixMs:     t.CreatedAtUnixMs,
 			UpdatedAtUnixMs:     t.UpdatedAtUnixMs,
 			LastMessageAtUnixMs: t.LastMessageAtUnixMs,
@@ -129,6 +187,9 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 		EndpointID:            strings.TrimSpace(meta.EndpointID),
 		NamespacePublicID:     strings.TrimSpace(meta.NamespacePublicID),
 		Title:                 strings.TrimSpace(title),
+		RunStatus:             "idle",
+		RunUpdatedAtUnixMs:    0,
+		RunError:              "",
 		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),
 		CreatedByUserEmail:    strings.TrimSpace(meta.UserEmail),
 		UpdatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),
@@ -145,6 +206,9 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 	return &ThreadView{
 		ThreadID:            id,
 		Title:               strings.TrimSpace(t.Title),
+		RunStatus:           "idle",
+		RunUpdatedAtUnixMs:  0,
+		RunError:            "",
 		CreatedAtUnixMs:     t.CreatedAtUnixMs,
 		UpdatedAtUnixMs:     t.UpdatedAtUnixMs,
 		LastMessageAtUnixMs: 0,

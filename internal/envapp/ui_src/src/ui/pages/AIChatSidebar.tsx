@@ -1,11 +1,11 @@
 import { For, Show, createSignal } from 'solid-js';
-import { MessageSquare, Plus, Trash } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, CheckCircle, Loader2, MessageSquare, Plus, Trash, XCircle } from '@floegence/floe-webapp-core/icons';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { SidebarContent, SidebarSection, SidebarItem, SidebarItemList } from '@floegence/floe-webapp-core/layout';
 import { Button, ConfirmDialog, Tooltip } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { useAIChatContext } from './AIChatContext';
+import { useAIChatContext, type ThreadRunStatus } from './AIChatContext';
 
 // Format a unix-ms timestamp as a relative time string.
 function fmtRelativeTime(ms: number): string {
@@ -24,6 +24,43 @@ function fmtRelativeTime(ms: number): string {
     return 'Just now';
   } catch {
     return String(ms);
+  }
+}
+
+type StatusView = {
+  text: string;
+  className: string;
+  icon: any;
+};
+
+function statusView(status: ThreadRunStatus): StatusView | null {
+  switch (status) {
+    case 'running':
+      return {
+        text: 'Running',
+        className: 'text-primary',
+        icon: Loader2,
+      };
+    case 'success':
+      return {
+        text: 'Done',
+        className: 'text-emerald-500',
+        icon: CheckCircle,
+      };
+    case 'failed':
+      return {
+        text: 'Failed',
+        className: 'text-error',
+        icon: AlertCircle,
+      };
+    case 'canceled':
+      return {
+        text: 'Canceled',
+        className: 'text-muted-foreground',
+        icon: XCircle,
+      };
+    default:
+      return null;
   }
 }
 
@@ -139,41 +176,78 @@ export function AIChatSidebar() {
             >
               <SidebarItemList>
                 <For each={ctx.threads()?.threads ?? []}>
-                  {(t) => (
-                    <SidebarItem
-                      icon={<MessageSquare class="w-4 h-4" />}
-                      active={t.thread_id === ctx.activeThreadId()}
-                      onClick={() => ctx.selectThreadId(t.thread_id)}
-                    >
-                      <div class="flex flex-col gap-0.5 min-w-0 w-full">
-                        <div class="flex items-center justify-between gap-2">
-                          <span class="truncate">{t.title?.trim() || 'New chat'}</span>
-                          <div class="flex items-center gap-1.5 shrink-0">
-                            <span class="text-[10px] text-muted-foreground">{fmtRelativeTime(t.updated_at_unix_ms)}</span>
-                            {/* SidebarItem wraps children in a `truncate` span (overflow-hidden).
-                                Use an inward placement to avoid the tooltip being clipped. */}
-                            <Tooltip content="Delete chat" placement="left" delay={0}>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                icon={Trash}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openDelete(t.thread_id, t.title);
-                                }}
-                                disabled={protocol.status() !== 'connected' || (t.thread_id === ctx.activeThreadId() && ctx.running())}
-                                class="w-6 h-6 text-muted-foreground hover:text-error hover:bg-error/10"
-                                aria-label="Delete chat"
-                              />
-                            </Tooltip>
+                  {(t) => {
+                    const status = (): ThreadRunStatus => {
+                      if (ctx.isThreadRunning(t.thread_id)) return 'running';
+                      const raw = String(t.run_status ?? '').trim().toLowerCase();
+                      if (raw === 'running' || raw === 'success' || raw === 'failed' || raw === 'canceled') {
+                        return raw as ThreadRunStatus;
+                      }
+                      return 'idle';
+                    };
+                    const statusUI = () => statusView(status());
+                    const statusUpdatedAt = () => Number(t.run_updated_at_unix_ms ?? t.updated_at_unix_ms ?? 0);
+                    const statusError = () => String(t.run_error ?? '').trim();
+                    const isBackgroundRunning = () => status() === 'running' && ctx.activeThreadId() !== t.thread_id;
+                    return (
+                      <SidebarItem
+                        icon={<MessageSquare class="w-4 h-4" />}
+                        active={t.thread_id === ctx.activeThreadId()}
+                        onClick={() => ctx.selectThreadId(t.thread_id)}
+                      >
+                        <div class="flex flex-col gap-0.5 min-w-0 w-full">
+                          <div class="flex items-center justify-between gap-2">
+                            <span class="truncate">{t.title?.trim() || 'New chat'}</span>
+                            <div class="flex items-center gap-1.5 shrink-0">
+                              <span class="text-[10px] text-muted-foreground">{fmtRelativeTime(t.updated_at_unix_ms)}</span>
+                              {/* SidebarItem wraps children in a `truncate` span (overflow-hidden).
+                                  Use an inward placement to avoid the tooltip being clipped. */}
+                              <Tooltip content="Delete chat" placement="left" delay={0}>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  icon={Trash}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openDelete(t.thread_id, t.title);
+                                  }}
+                                  disabled={protocol.status() !== 'connected'}
+                                  class="w-6 h-6 text-muted-foreground hover:text-error hover:bg-error/10"
+                                  aria-label="Delete chat"
+                                />
+                              </Tooltip>
+                            </div>
                           </div>
+
+                          <Show when={statusUI()}>
+                            {(ui) => {
+                              const Icon = ui().icon;
+                              return (
+                                <Tooltip
+                                  content={
+                                    status() === 'failed' && statusError()
+                                      ? `${statusError()} (${fmtRelativeTime(statusUpdatedAt())})`
+                                      : `${ui().text} (${fmtRelativeTime(statusUpdatedAt())})`
+                                  }
+                                  placement="left"
+                                  delay={0}
+                                >
+                                  <span class={`inline-flex items-center gap-1 text-[10px] ${ui().className}`}>
+                                    <Icon class={`w-3 h-3 ${status() === 'running' ? 'animate-spin' : ''}`} />
+                                    <span>{isBackgroundRunning() ? 'Running in background' : ui().text}</span>
+                                  </span>
+                                </Tooltip>
+                              );
+                            }}
+                          </Show>
+
+                          <Show when={!!t.last_message_preview?.trim()}>
+                            <span class="text-[11px] text-muted-foreground/70 truncate">{t.last_message_preview}</span>
+                          </Show>
                         </div>
-                        <Show when={!!t.last_message_preview?.trim()}>
-                          <span class="text-[11px] text-muted-foreground/70 truncate">{t.last_message_preview}</span>
-                        </Show>
-                      </div>
-                    </SidebarItem>
-                  )}
+                      </SidebarItem>
+                    );
+                  }}
                 </For>
               </SidebarItemList>
             </Show>

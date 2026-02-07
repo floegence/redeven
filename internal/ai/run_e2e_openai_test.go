@@ -40,6 +40,9 @@ func TestE2E_OpenAICompatibleBaseURL_StreamText(t *testing.T) {
 
 	cfg := &config.AIConfig{
 		DefaultModel: config.AIModelRef{ProviderID: "openai", ModelName: modelName},
+		Models: []config.AIModel{
+			{ProviderID: "openai", ModelName: modelName, Label: modelName},
+		},
 		Providers: []config.AIProvider{
 			{
 				ID:      "openai",

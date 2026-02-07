@@ -1,0 +1,108 @@
+package ai
+
+import (
+	"context"
+	"errors"
+	"reflect"
+	"testing"
+
+	"github.com/floegence/redeven-agent/internal/config"
+)
+
+func TestService_ListModels_DefaultFirstAndDedup(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{
+		cfg: &config.AIConfig{
+			DefaultModel: config.AIModelRef{ProviderID: "openai", ModelName: "gpt-5-mini"},
+			Models: []config.AIModel{
+				{ProviderID: "openai", ModelName: "gpt-5-mini", Label: ""},
+				{ProviderID: "openai", ModelName: "gpt-4o-mini", Label: "Fast"},
+				{ProviderID: "anthropic", ModelName: "claude-sonnet-4-5", Label: ""},
+			},
+			Providers: []config.AIProvider{
+				{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: "https://api.openai.com/v1"},
+				{ID: "anthropic", Name: "Anthropic", Type: "anthropic", BaseURL: "https://api.anthropic.com"},
+			},
+		},
+	}
+
+	out, err := svc.ListModels()
+	if err != nil {
+		t.Fatalf("ListModels: %v", err)
+	}
+	if out == nil {
+		t.Fatalf("ListModels returned nil")
+	}
+
+	if out.DefaultModel != "openai/gpt-5-mini" {
+		t.Fatalf("DefaultModel=%q, want %q", out.DefaultModel, "openai/gpt-5-mini")
+	}
+
+	gotIDs := make([]string, 0, len(out.Models))
+	for _, m := range out.Models {
+		gotIDs = append(gotIDs, m.ID)
+	}
+	wantIDs := []string{"openai/gpt-5-mini", "openai/gpt-4o-mini", "anthropic/claude-sonnet-4-5"}
+	if !reflect.DeepEqual(gotIDs, wantIDs) {
+		t.Fatalf("model ids=%v, want %v", gotIDs, wantIDs)
+	}
+
+	if out.Models[0].Label != "OpenAI / gpt-5-mini" {
+		t.Fatalf("default label=%q", out.Models[0].Label)
+	}
+	if out.Models[1].Label != "Fast" {
+		t.Fatalf("second label=%q", out.Models[1].Label)
+	}
+	if out.Models[2].Label != "Anthropic / claude-sonnet-4-5" {
+		t.Fatalf("third label=%q", out.Models[2].Label)
+	}
+}
+
+func TestService_ListModels_RequiresModels(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{
+		cfg: &config.AIConfig{
+			DefaultModel: config.AIModelRef{ProviderID: "openai", ModelName: "gpt-5-mini"},
+			Providers: []config.AIProvider{
+				{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: "https://api.openai.com/v1"},
+			},
+		},
+	}
+
+	_, err := svc.ListModels()
+	if err == nil {
+		t.Fatalf("expected error for missing models")
+	}
+}
+
+func TestDeriveThreadRunState(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		endReason string
+		err       error
+		wantState string
+		wantMsg   string
+	}{
+		{name: "success", endReason: "complete", err: nil, wantState: "success", wantMsg: ""},
+		{name: "canceled", endReason: "canceled", err: nil, wantState: "canceled", wantMsg: ""},
+		{name: "timed out", endReason: "timed_out", err: nil, wantState: "failed", wantMsg: "Timed out."},
+		{name: "disconnected", endReason: "disconnected", err: nil, wantState: "failed", wantMsg: "Disconnected."},
+		{name: "explicit error", endReason: "error", err: errors.New("boom"), wantState: "failed", wantMsg: "boom"},
+		{name: "context canceled", endReason: "", err: context.Canceled, wantState: "failed", wantMsg: "Disconnected."},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			state, msg := deriveThreadRunState(tc.endReason, tc.err)
+			if state != tc.wantState || msg != tc.wantMsg {
+				t.Fatalf("deriveThreadRunState(%q, %v)=(%q,%q), want (%q,%q)", tc.endReason, tc.err, state, msg, tc.wantState, tc.wantMsg)
+			}
+		})
+	}
+}

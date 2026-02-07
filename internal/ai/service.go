@@ -329,16 +329,34 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		return nil, errors.New("invalid ai config: missing default_model")
 	}
 
-	if len(cfg.Models) == 0 {
-		label := out.DefaultModel
-		if pn := strings.TrimSpace(providerNameByID[defaultProviderID]); pn != "" {
-			label = pn + " / " + defaultModelName
-		}
-		out.Models = []Model{{ID: out.DefaultModel, Label: label}}
-		return out, nil
+	defaultLabel := out.DefaultModel
+	if pn := strings.TrimSpace(providerNameByID[defaultProviderID]); pn != "" {
+		defaultLabel = pn + " / " + defaultModelName
 	}
 
-	out.Models = make([]Model, 0, len(cfg.Models))
+	seen := make(map[string]struct{})
+	appendModel := func(id string, label string) {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		label = strings.TrimSpace(label)
+		if label == "" {
+			label = id
+		}
+		out.Models = append(out.Models, Model{ID: id, Label: label})
+	}
+
+	appendModel(out.DefaultModel, defaultLabel)
+
+	if len(cfg.Models) == 0 {
+		return nil, errors.New("invalid ai config: missing models")
+	}
+
 	for _, m := range cfg.Models {
 		providerID := strings.TrimSpace(m.ProviderID)
 		modelName := strings.TrimSpace(m.ModelName)
@@ -350,19 +368,11 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		if label == "" {
 			if pn := strings.TrimSpace(providerNameByID[providerID]); pn != "" {
 				label = pn + " / " + modelName
-			} else {
-				label = id
 			}
 		}
-		out.Models = append(out.Models, Model{ID: id, Label: label})
+		appendModel(id, label)
 	}
-	if len(out.Models) == 0 {
-		label := out.DefaultModel
-		if pn := strings.TrimSpace(providerNameByID[defaultProviderID]); pn != "" {
-			label = pn + " / " + defaultModelName
-		}
-		out.Models = []Model{{ID: out.DefaultModel, Label: label}}
-	}
+
 	return out, nil
 }
 
@@ -391,7 +401,7 @@ func newToolID() (string, error) {
 	return "tool_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter) error {
+func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter) (retErr error) {
 	if s == nil {
 		return errors.New("nil service")
 	}
@@ -439,7 +449,7 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		return errors.New("thread not found")
 	}
 
-	// Ensure at most one active run per channel.
+	// Ensure at most one active run per channel/thread.
 	s.mu.Lock()
 	if s.cfg == nil {
 		s.mu.Unlock()
@@ -493,6 +503,21 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	s.runs[runID] = r
 	s.mu.Unlock()
 
+	updateThreadRunState := func(status string, runErr string) {
+		if db == nil {
+			return
+		}
+		status = strings.TrimSpace(status)
+		if status == "" {
+			status = "failed"
+		}
+		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
+		defer cancel()
+		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, status, runErr, meta.UserPublicID, meta.UserEmail)
+	}
+
+	updateThreadRunState("running", "")
+
 	defer func() {
 		s.mu.Lock()
 		delete(s.runs, runID)
@@ -502,6 +527,9 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		if r != nil && r.doneCh != nil {
 			close(r.doneCh)
 		}
+
+		runStatus, runStatusErr := deriveThreadRunState(r.getEndReason(), retErr)
+		updateThreadRunState(runStatus, runStatusErr)
 	}()
 
 	// Build history snapshot from persisted messages (exclude the current input).
@@ -604,6 +632,46 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	}, meta.UserPublicID, meta.UserEmail)
 	cancelPersist()
 	return err
+}
+
+func deriveThreadRunState(endReason string, runErr error) (string, string) {
+	endReason = strings.TrimSpace(endReason)
+	switch endReason {
+	case "complete":
+		if runErr == nil {
+			return "success", ""
+		}
+		msg := strings.TrimSpace(runErr.Error())
+		if msg == "" {
+			msg = "AI failed."
+		}
+		return "failed", msg
+	case "canceled":
+		return "canceled", ""
+	case "timed_out":
+		return "failed", "Timed out."
+	case "disconnected":
+		return "failed", "Disconnected."
+	case "error":
+		if runErr != nil {
+			msg := strings.TrimSpace(runErr.Error())
+			if msg != "" {
+				return "failed", msg
+			}
+		}
+		return "failed", "AI failed."
+	default:
+		if runErr != nil {
+			if errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
+				return "failed", "Disconnected."
+			}
+			msg := strings.TrimSpace(runErr.Error())
+			if msg != "" {
+				return "failed", msg
+			}
+		}
+		return "failed", "AI run ended unexpectedly."
+	}
 }
 
 func capHistoryByChars(in []RunHistoryMsg, maxChars int) []RunHistoryMsg {

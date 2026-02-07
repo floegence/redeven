@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type Component } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, untrack, type Component } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import {
   Code,
@@ -217,15 +217,22 @@ export function EnvAIPage() {
   let assistantText = '';
   let lastMessagesReq = 0;
   let skipNextThreadLoad = false;
-  let runThreadId: string | null = null;
   let runStartedAtMs = 0;
   let lastStreamAtMs = 0;
   let watchdogToken = 0;
   let watchdogTimer: number | null = null;
   let stopFallbackTimer: number | null = null;
 
+  const runningThreadId = createMemo(() => String(ai.runningThreadId() ?? '').trim() || null);
+  const viewingRunningThread = createMemo(() => {
+    const rid = runningThreadId();
+    const active = String(ai.activeThreadId() ?? '').trim() || null;
+    return !!rid && rid === active;
+  });
+  const activeThreadRunning = createMemo(() => ai.isThreadRunning(ai.activeThreadId()));
+
   const canInteract = createMemo(
-    () => protocol.status() === 'connected' && !ai.running() && ai.aiEnabled() && ai.modelsReady(),
+    () => protocol.status() === 'connected' && !ai.running() && !activeThreadRunning() && ai.aiEnabled() && ai.modelsReady(),
   );
 
   const stopWatchdog = () => {
@@ -308,25 +315,33 @@ export function EnvAIPage() {
   const abortLocalRun = (opts?: { cancelServer?: boolean }) => {
     stopWatchdog();
     if (opts?.cancelServer) {
-      requestServerCancel(runId(), runThreadId);
+      requestServerCancel(runId(), runningThreadId());
     }
     abortCtrl?.abort();
     abortCtrl = null;
+
+    const mid = viewingRunningThread() ? chat?.streamingMessageId?.() ?? null : null;
+    if (mid) {
+      chat?.handleStreamEvent({ type: 'message-end', messageId: mid } as any);
+    }
+
     assistantText = '';
-    runThreadId = null;
+    ai.setRunningThreadId(null);
     ai.setRunning(false);
     setRunId(null);
+    ai.bumpThreadsSeq();
   };
 
   const forceEndRun = async (notice: string, opts?: { cancelServer?: boolean }) => {
     stopWatchdog();
     if (opts?.cancelServer) {
-      requestServerCancel(runId(), runThreadId || ai.activeThreadId());
+      requestServerCancel(runId(), runningThreadId() || ai.activeThreadId());
     }
     abortCtrl?.abort();
     abortCtrl = null;
 
-    const mid = chat?.streamingMessageId?.() ?? null;
+    const shouldRender = !!viewingRunningThread();
+    const mid = shouldRender ? chat?.streamingMessageId?.() ?? null : null;
     if (mid) {
       const prefix = assistantText.trim() ? '\n\n' : '';
       handleStreamEvent({ type: 'block-delta', messageId: mid, blockIndex: 0, delta: `${prefix}${notice}` } as any);
@@ -334,24 +349,27 @@ export function EnvAIPage() {
       return;
     }
 
-    // Fallback when we don't have a streaming message id (e.g. request failed before message-start).
-    chat?.addMessage({
-      id: crypto.randomUUID(),
-      role: 'assistant',
-      blocks: [{ type: 'markdown', content: notice }],
-      status: 'complete',
-      timestamp: Date.now(),
-    } as any);
-    setHasMessages(true);
+    if (shouldRender) {
+      // Fallback when we don't have a streaming message id (e.g. request failed before message-start).
+      chat?.addMessage({
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        blocks: [{ type: 'markdown', content: notice }],
+        status: 'complete',
+        timestamp: Date.now(),
+      } as any);
+      setHasMessages(true);
+    }
+
     assistantText = '';
-    runThreadId = null;
+    ai.setRunningThreadId(null);
     ai.setRunning(false);
     setRunId(null);
     ai.bumpThreadsSeq();
   };
 
   const stopRun = () => {
-    requestServerCancel(runId(), runThreadId || ai.activeThreadId());
+    requestServerCancel(runId(), runningThreadId() || ai.activeThreadId());
     if (stopFallbackTimer != null) window.clearTimeout(stopFallbackTimer);
     stopFallbackTimer = window.setTimeout(() => {
       if (!untrack(ai.running)) return;
@@ -360,7 +378,7 @@ export function EnvAIPage() {
   };
 
   // Load messages when the active thread changes (or on initial selection).
-  // If a run is in progress, cancel it first before switching.
+  // Keep the current run alive when switching threads.
   createEffect(() => {
     if (!chatReady()) return;
 
@@ -378,10 +396,6 @@ export function EnvAIPage() {
       return;
     }
 
-    // Cancel running state without re-tracking `running` signal
-    if (untrack(ai.running)) {
-      abortLocalRun({ cancelServer: true });
-    }
 
     assistantText = '';
     chat?.clearMessages();
@@ -464,7 +478,11 @@ export function EnvAIPage() {
 
   const handleStreamEvent = (ev: StreamEvent) => {
     touchWatchdog();
-    chat?.handleStreamEvent(ev);
+
+    const shouldRender = !!viewingRunningThread();
+    if (shouldRender) {
+      chat?.handleStreamEvent(ev);
+    }
 
     if (ev.type === 'block-delta' && typeof (ev as any).delta === 'string') {
       assistantText += String((ev as any).delta);
@@ -473,12 +491,14 @@ export function EnvAIPage() {
     if (ev.type === 'message-end') {
       stopWatchdog();
       assistantText = '';
-      runThreadId = null;
+      ai.setRunningThreadId(null);
       ai.setRunning(false);
       setRunId(null);
       abortCtrl = null;
       ai.bumpThreadsSeq();
-      setHasMessages(true);
+      if (shouldRender) {
+        setHasMessages(true);
+      }
       return;
     }
     if (ev.type === 'error') {
@@ -486,7 +506,7 @@ export function EnvAIPage() {
       const msg = String((ev as any).error ?? 'AI error');
       notify.error('AI failed', msg);
       assistantText = '';
-      runThreadId = null;
+      ai.setRunningThreadId(null);
       ai.setRunning(false);
       setRunId(null);
       abortCtrl = null;
@@ -538,7 +558,7 @@ export function EnvAIPage() {
     }));
 
     assistantText = '';
-    runThreadId = tid;
+    ai.setRunningThreadId(tid);
     setRunId(null);
     ai.setRunning(true);
     startWatchdog();
@@ -628,11 +648,16 @@ export function EnvAIPage() {
       // Abort is a normal control flow when the user clicks "Stop".
       if (e && typeof e === 'object' && (e as any).name === 'AbortError') {
         stopWatchdog();
+        const mid = viewingRunningThread() ? chat?.streamingMessageId?.() ?? null : null;
+        if (mid) {
+          chat?.handleStreamEvent({ type: 'message-end', messageId: mid } as any);
+        }
         ai.setRunning(false);
         setRunId(null);
         abortCtrl = null;
         assistantText = '';
-        runThreadId = null;
+        ai.setRunningThreadId(null);
+        ai.bumpThreadsSeq();
         return;
       }
 
@@ -643,7 +668,8 @@ export function EnvAIPage() {
       setRunId(null);
       abortCtrl = null;
       assistantText = '';
-      runThreadId = null;
+      ai.setRunningThreadId(null);
+      ai.bumpThreadsSeq();
     }
   };
 
@@ -658,11 +684,6 @@ export function EnvAIPage() {
     onUploadAttachment: uploadAttachment,
     onToolApproval: sendToolApproval,
   };
-
-  onCleanup(() => {
-    abortCtrl?.abort();
-    abortCtrl = null;
-  });
 
   const openRename = () => {
     const t = ai.activeThread();
@@ -697,8 +718,8 @@ export function EnvAIPage() {
 
     setDeleting(true);
     try {
-      if (force && untrack(ai.running)) {
-        // We'll delete the thread anyway; stop the local stream immediately.
+      if (force && untrack(ai.running) && String(ai.runningThreadId() ?? '').trim() === tid) {
+        // We'll delete the running thread anyway; stop the local stream immediately.
         abortLocalRun({ cancelServer: false });
       }
 
@@ -776,13 +797,13 @@ export function EnvAIPage() {
                     onChange={ai.setSelectedModel}
                     options={ai.modelOptions()}
                     placeholder="Select model..."
-                    disabled={ai.models.loading || !!ai.models.error || ai.running()}
+                    disabled={ai.models.loading || !!ai.models.error || ai.running() || activeThreadRunning()}
                     class="min-w-[140px] max-w-[200px] h-7 text-[11px]"
                   />
                 </Show>
 
                 {/* Stop button */}
-                <Show when={ai.running()}>
+                <Show when={activeThreadRunning()}>
                   <Tooltip content="Stop generation" placement="bottom" delay={0}>
                     <Button
                       size="sm"
@@ -806,7 +827,7 @@ export function EnvAIPage() {
                     icon={Pencil}
                     onClick={() => openRename()}
                     aria-label="Rename"
-                    disabled={!ai.activeThreadId() || ai.running()}
+                    disabled={!ai.activeThreadId() || activeThreadRunning()}
                     class="w-7 h-7"
                   />
                 </Tooltip>
@@ -818,7 +839,7 @@ export function EnvAIPage() {
                     variant="ghost"
                     icon={Trash}
                     onClick={() => {
-                      setDeleteForce(untrack(ai.running));
+                      setDeleteForce(activeThreadRunning());
                       setDeleteOpen(true);
                     }}
                     aria-label="Delete"

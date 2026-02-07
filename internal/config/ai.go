@@ -17,7 +17,8 @@ type AIConfig struct {
 	// DefaultModel is the default model reference used by the UI when starting a run.
 	DefaultModel AIModelRef `json:"default_model"`
 
-	// Models is an explicit allow-list. If empty, the agent will expose only default_model.
+	// Models is the explicit selectable model list shown by the UI.
+	// It must contain default_model.
 	Models []AIModel `json:"models,omitempty"`
 
 	// Providers is the provider registry available to the sidecar.
@@ -116,38 +117,35 @@ func (c *AIConfig) Validate() error {
 	}
 
 	// Validate models list.
-	if len(c.Models) > 0 {
-		modelIDs := make(map[string]struct{}, len(c.Models))
-		for i := range c.Models {
-			m := c.Models[i]
-			providerID := strings.TrimSpace(m.ProviderID)
-			modelName := strings.TrimSpace(m.ModelName)
-			if providerID == "" || modelName == "" {
-				return fmt.Errorf("models[%d]: missing provider_id/model_name", i)
-			}
-			if strings.Contains(providerID, "/") || strings.Contains(modelName, "/") {
-				return fmt.Errorf("models[%d]: invalid provider_id/model_name (must not contain '/')", i)
-			}
-
-			if _, ok := seen[providerID]; !ok {
-				return fmt.Errorf("models[%d]: unknown provider %q", i, providerID)
-			}
-
-			id := providerID + "/" + modelName
-			if _, ok := modelIDs[id]; ok {
-				return fmt.Errorf("models[%d]: duplicate model %q", i, id)
-			}
-			modelIDs[id] = struct{}{}
+	if len(c.Models) == 0 {
+		return errors.New("missing models")
+	}
+	modelIDs := make(map[string]struct{}, len(c.Models))
+	for i := range c.Models {
+		m := c.Models[i]
+		providerID := strings.TrimSpace(m.ProviderID)
+		modelName := strings.TrimSpace(m.ModelName)
+		if providerID == "" || modelName == "" {
+			return fmt.Errorf("models[%d]: missing provider_id/model_name", i)
+		}
+		if strings.Contains(providerID, "/") || strings.Contains(modelName, "/") {
+			return fmt.Errorf("models[%d]: invalid provider_id/model_name (must not contain '/')", i)
 		}
 
-		defaultID := defaultProviderID + "/" + defaultModelName
-		if _, ok := modelIDs[defaultID]; !ok {
-			return fmt.Errorf("default_model %q must be listed in models when models is set", defaultID)
+		if _, ok := seen[providerID]; !ok {
+			return fmt.Errorf("models[%d]: unknown provider %q", i, providerID)
 		}
-	} else {
-		if _, ok := seen[defaultProviderID]; !ok {
-			return fmt.Errorf("default_model references unknown provider %q", defaultProviderID)
+
+		id := providerID + "/" + modelName
+		if _, ok := modelIDs[id]; ok {
+			return fmt.Errorf("models[%d]: duplicate model %q", i, id)
 		}
+		modelIDs[id] = struct{}{}
+	}
+
+	defaultID := defaultProviderID + "/" + defaultModelName
+	if _, ok := modelIDs[defaultID]; !ok {
+		return fmt.Errorf("default_model %q must be listed in models", defaultID)
 	}
 
 	return nil

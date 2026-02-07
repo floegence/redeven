@@ -172,6 +172,16 @@ func (r *run) setEndReason(reason string) {
 	r.muCancel.Unlock()
 }
 
+func (r *run) getEndReason() string {
+	if r == nil {
+		return ""
+	}
+	r.muCancel.Lock()
+	v := strings.TrimSpace(r.endReason)
+	r.muCancel.Unlock()
+	return v
+}
+
 func (r *run) cancel() {
 	if r == nil {
 		return

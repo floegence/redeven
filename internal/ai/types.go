@@ -24,6 +24,9 @@ type ModelsResponse struct {
 type ThreadView struct {
 	ThreadID            string `json:"thread_id"`
 	Title               string `json:"title"`
+	RunStatus           string `json:"run_status"`
+	RunUpdatedAtUnixMs  int64  `json:"run_updated_at_unix_ms"`
+	RunError            string `json:"run_error,omitempty"`
 	CreatedAtUnixMs     int64  `json:"created_at_unix_ms"`
 	UpdatedAtUnixMs     int64  `json:"updated_at_unix_ms"`
 	LastMessageAtUnixMs int64  `json:"last_message_at_unix_ms"`

@@ -92,6 +92,9 @@ func TestGateway_AI_Run_UsesAISDKAndPersistsAssistantMessage(t *testing.T) {
 
 	cfg := &config.AIConfig{
 		DefaultModel: config.AIModelRef{ProviderID: "openai", ModelName: "gpt-5-mini"},
+		Models: []config.AIModel{
+			{ProviderID: "openai", ModelName: "gpt-5-mini", Label: "GPT-5 Mini"},
+		},
 		Providers: []config.AIProvider{
 			{ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: strings.TrimSuffix(openaiSrv.URL, "/") + "/v1"},
 		},

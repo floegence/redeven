@@ -56,10 +56,13 @@ func (s *Store) Close() error {
 }
 
 type Thread struct {
-	ThreadID          string `json:"thread_id"`
-	EndpointID        string `json:"endpoint_id"`
-	NamespacePublicID string `json:"namespace_public_id"`
-	Title             string `json:"title"`
+	ThreadID           string `json:"thread_id"`
+	EndpointID         string `json:"endpoint_id"`
+	NamespacePublicID  string `json:"namespace_public_id"`
+	Title              string `json:"title"`
+	RunStatus          string `json:"run_status"`
+	RunUpdatedAtUnixMs int64  `json:"run_updated_at_unix_ms"`
+	RunError           string `json:"run_error"`
 
 	CreatedByUserPublicID string `json:"created_by_user_public_id"`
 	CreatedByUserEmail    string `json:"created_by_user_email"`
@@ -167,6 +170,7 @@ func (s *Store) ListThreads(ctx context.Context, endpointID string, limit int, c
 	q := fmt.Sprintf(`
 SELECT
   thread_id, endpoint_id, namespace_public_id, title,
+  run_status, run_updated_at_unix_ms, run_error,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
@@ -191,6 +195,9 @@ LIMIT ?
 			&t.EndpointID,
 			&t.NamespacePublicID,
 			&t.Title,
+			&t.RunStatus,
+			&t.RunUpdatedAtUnixMs,
+			&t.RunError,
 			&t.CreatedByUserPublicID,
 			&t.CreatedByUserEmail,
 			&t.UpdatedByUserPublicID,
@@ -232,6 +239,7 @@ func (s *Store) GetThread(ctx context.Context, endpointID string, threadID strin
 	err := s.db.QueryRowContext(ctx, `
 SELECT
   thread_id, endpoint_id, namespace_public_id, title,
+  run_status, run_updated_at_unix_ms, run_error,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
@@ -242,6 +250,9 @@ WHERE endpoint_id = ? AND thread_id = ?
 		&t.EndpointID,
 		&t.NamespacePublicID,
 		&t.Title,
+		&t.RunStatus,
+		&t.RunUpdatedAtUnixMs,
+		&t.RunError,
 		&t.CreatedByUserPublicID,
 		&t.CreatedByUserEmail,
 		&t.UpdatedByUserPublicID,
@@ -272,6 +283,8 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	t.EndpointID = strings.TrimSpace(t.EndpointID)
 	t.NamespacePublicID = strings.TrimSpace(t.NamespacePublicID)
 	t.Title = strings.TrimSpace(t.Title)
+	t.RunStatus = normalizeRunStatus(t.RunStatus)
+	t.RunError = strings.TrimSpace(t.RunError)
 	t.CreatedByUserPublicID = strings.TrimSpace(t.CreatedByUserPublicID)
 	t.CreatedByUserEmail = strings.TrimSpace(t.CreatedByUserEmail)
 	t.UpdatedByUserPublicID = strings.TrimSpace(t.UpdatedByUserPublicID)
@@ -288,20 +301,27 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	if t.UpdatedAtUnixMs <= 0 {
 		t.UpdatedAtUnixMs = t.CreatedAtUnixMs
 	}
+	if t.RunUpdatedAtUnixMs < 0 {
+		t.RunUpdatedAtUnixMs = 0
+	}
 
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO ai_threads(
   thread_id, endpoint_id, namespace_public_id, title,
+  run_status, run_updated_at_unix_ms, run_error,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms,
   last_message_at_unix_ms, last_message_preview
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `,
 		t.ThreadID,
 		t.EndpointID,
 		t.NamespacePublicID,
 		t.Title,
+		t.RunStatus,
+		t.RunUpdatedAtUnixMs,
+		t.RunError,
 		t.CreatedByUserPublicID,
 		t.CreatedByUserEmail,
 		t.UpdatedByUserPublicID,
@@ -337,6 +357,59 @@ UPDATE ai_threads
 SET title = ?, updated_at_unix_ms = ?, updated_by_user_public_id = ?, updated_by_user_email = ?
 WHERE endpoint_id = ? AND thread_id = ?
 `, title, now, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func normalizeRunStatus(status string) string {
+	status = strings.TrimSpace(status)
+	switch status {
+	case "idle", "running", "success", "failed", "canceled":
+		return status
+	default:
+		return "idle"
+	}
+}
+
+func (s *Store) UpdateThreadRunState(ctx context.Context, endpointID string, threadID string, runStatus string, runError string, updatedByID string, updatedByEmail string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid request")
+	}
+
+	runStatus = normalizeRunStatus(runStatus)
+	runError = strings.TrimSpace(runError)
+	if runStatus != "failed" {
+		runError = ""
+	}
+	if len(runError) > 600 {
+		runError = truncateRunes(runError, 600)
+	}
+
+	now := time.Now().UnixMilli()
+	res, err := s.db.ExecContext(ctx, `
+UPDATE ai_threads
+SET run_status = ?,
+    run_updated_at_unix_ms = ?,
+    run_error = ?,
+    updated_at_unix_ms = ?,
+    updated_by_user_public_id = ?,
+    updated_by_user_email = ?
+WHERE endpoint_id = ? AND thread_id = ?
+`, runStatus, now, runError, now, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
 	if err != nil {
 		return err
 	}
@@ -664,7 +737,7 @@ func migrateSchema(db *sql.DB) error {
 	if db == nil {
 		return errors.New("nil db")
 	}
-	const targetVersion = 1
+	const targetVersion = 2
 
 	var v int
 	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
@@ -680,7 +753,7 @@ func migrateSchema(db *sql.DB) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Fresh DB: create v1 directly.
+	// Fresh DB: create the latest schema directly.
 	var exists int
 	if err := tx.QueryRow(`
 SELECT COUNT(1)
@@ -696,6 +769,9 @@ CREATE TABLE IF NOT EXISTS ai_threads (
   endpoint_id TEXT NOT NULL,
   namespace_public_id TEXT NOT NULL DEFAULT '',
   title TEXT NOT NULL DEFAULT '',
+  run_status TEXT NOT NULL DEFAULT 'idle',
+  run_updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  run_error TEXT NOT NULL DEFAULT '',
   created_by_user_public_id TEXT NOT NULL DEFAULT '',
   created_by_user_email TEXT NOT NULL DEFAULT '',
   updated_by_user_public_id TEXT NOT NULL DEFAULT '',
@@ -707,6 +783,28 @@ CREATE TABLE IF NOT EXISTS ai_threads (
 );
 CREATE INDEX IF NOT EXISTS idx_ai_threads_endpoint_updated ON ai_threads(endpoint_id, updated_at_unix_ms DESC, thread_id DESC);
 `); err != nil {
+			return err
+		}
+	}
+
+	if has, err := columnExists(tx, "ai_threads", "run_status"); err != nil {
+		return err
+	} else if !has {
+		if _, err := tx.Exec(`ALTER TABLE ai_threads ADD COLUMN run_status TEXT NOT NULL DEFAULT 'idle'`); err != nil {
+			return err
+		}
+	}
+	if has, err := columnExists(tx, "ai_threads", "run_updated_at_unix_ms"); err != nil {
+		return err
+	} else if !has {
+		if _, err := tx.Exec(`ALTER TABLE ai_threads ADD COLUMN run_updated_at_unix_ms INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if has, err := columnExists(tx, "ai_threads", "run_error"); err != nil {
+		return err
+	} else if !has {
+		if _, err := tx.Exec(`ALTER TABLE ai_threads ADD COLUMN run_error TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
@@ -746,6 +844,39 @@ CREATE INDEX IF NOT EXISTS idx_ai_messages_thread_id ON ai_messages(endpoint_id,
 		return err
 	}
 	return tx.Commit()
+}
+
+func columnExists(tx *sql.Tx, tableName string, colName string) (bool, error) {
+	tableName = strings.TrimSpace(tableName)
+	colName = strings.TrimSpace(colName)
+	if tableName == "" || colName == "" {
+		return false, errors.New("invalid table/column")
+	}
+
+	rows, err := tx.Query(`PRAGMA table_info(` + tableName + `)`)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name string
+		var ctype string
+		var notNull int
+		var defaultValue sql.NullString
+		var primaryKey int
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &defaultValue, &primaryKey); err != nil {
+			return false, err
+		}
+		if strings.EqualFold(strings.TrimSpace(name), colName) {
+			return true, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 func buildPreview(role string, text string) string {

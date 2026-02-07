@@ -1,4 +1,15 @@
-import { createContext, createEffect, createMemo, createResource, createSignal, useContext, type Accessor, type Resource, type Setter } from 'solid-js';
+import {
+  createContext,
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  onCleanup,
+  useContext,
+  type Accessor,
+  type Resource,
+  type Setter,
+} from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
@@ -15,9 +26,14 @@ export type SettingsResponse = Readonly<{
   ai: any | null;
 }>;
 
+export type ThreadRunStatus = 'idle' | 'running' | 'success' | 'failed' | 'canceled';
+
 export type ThreadView = Readonly<{
   thread_id: string;
   title: string;
+  run_status?: ThreadRunStatus;
+  run_updated_at_unix_ms?: number;
+  run_error?: string;
   created_at_unix_ms: number;
   updated_at_unix_ms: number;
   last_message_at_unix_ms: number;
@@ -69,6 +85,14 @@ function clearPersistedActiveThreadId(): void {
   }
 }
 
+function normalizeThreadRunStatus(raw: string | null | undefined): ThreadRunStatus {
+  const status = String(raw ?? '').trim().toLowerCase();
+  if (status === 'running' || status === 'success' || status === 'failed' || status === 'canceled') {
+    return status;
+  }
+  return 'idle';
+}
+
 // ---- Context value type ----
 
 export interface AIChatContextValue {
@@ -97,9 +121,12 @@ export interface AIChatContextValue {
   creatingThread: Accessor<boolean>;
   ensureThreadForSend: () => Promise<string | null>;
 
-  // Run state (set by EnvAIPage, read by sidebar)
+  // Run state (owned by EnvAIPage but shared to sidebar)
   running: Accessor<boolean>;
   setRunning: Setter<boolean>;
+  runningThreadId: Accessor<string | null>;
+  setRunningThreadId: Setter<string | null>;
+  isThreadRunning: (threadId: string | null | undefined) => boolean;
 }
 
 // ---- Context ----
@@ -144,14 +171,35 @@ export function createAIChatContextValue(): AIChatContextValue {
   const modelsReady = createMemo(() => !!models() && !models.loading && !models.error);
 
   const [selectedModel, setSelectedModel] = createSignal('');
+  let lastModelVersion: number | null = null;
 
   createEffect(() => {
     const m = models();
-    if (!m) return;
+    const version = modelsKey();
+    if (!m || version == null) return;
+
+    const modelIDs = new Set(m.models.map((it) => String(it.id ?? '').trim()).filter((it) => !!it));
     const current = selectedModel().trim();
-    if (!current && m.default_model) {
-      setSelectedModel(m.default_model);
+    const defaultModel = String(m.default_model ?? '').trim();
+    const fallback = m.models[0]?.id ? String(m.models[0].id).trim() : '';
+
+    if (lastModelVersion !== version) {
+      lastModelVersion = version;
+      if (defaultModel && modelIDs.has(defaultModel)) {
+        setSelectedModel(defaultModel);
+        return;
+      }
+      setSelectedModel(fallback || '');
+      return;
     }
+
+    if (current && modelIDs.has(current)) return;
+
+    if (defaultModel && modelIDs.has(defaultModel)) {
+      setSelectedModel(defaultModel);
+      return;
+    }
+    setSelectedModel(fallback || '');
   });
 
   const modelOptions = createMemo(() => {
@@ -182,6 +230,64 @@ export function createAIChatContextValue(): AIChatContextValue {
             method: 'GET',
           }),
   );
+
+  const [running, setRunning] = createSignal(false);
+  const [runningThreadId, setRunningThreadId] = createSignal<string | null>(null);
+
+  const isThreadRunning = (threadId: string | null | undefined): boolean => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return false;
+
+    if (running() && String(runningThreadId() ?? '').trim() === tid) {
+      return true;
+    }
+
+    const list = threads()?.threads ?? [];
+    const th = list.find((it) => String(it.thread_id ?? '').trim() === tid);
+    return normalizeThreadRunStatus(th?.run_status) === 'running';
+  };
+
+  // Poll thread list while there is any active run so sidebar status stays fresh.
+  createEffect(() => {
+    if (protocol.status() !== 'connected' || !aiEnabled()) return;
+    const hasRunningThread = running() || (threads()?.threads ?? []).some((t) => normalizeThreadRunStatus(t.run_status) === 'running');
+    if (!hasRunningThread) return;
+
+    const timer = window.setInterval(() => {
+      bumpThreadsSeq();
+    }, 1500);
+    onCleanup(() => window.clearInterval(timer));
+  });
+
+  // Reconcile local running flag with persisted thread state to avoid stale "Working..." UI.
+  createEffect(() => {
+    if (protocol.status() !== 'connected') return;
+
+    const localRunning = running();
+    const localThreadID = String(runningThreadId() ?? '').trim();
+
+    if (!localRunning) {
+      if (localThreadID) setRunningThreadId(null);
+      return;
+    }
+    if (!localThreadID) {
+      setRunning(false);
+      return;
+    }
+
+    const th = (threads()?.threads ?? []).find((it) => String(it.thread_id ?? '').trim() === localThreadID);
+    if (!th) return;
+    if (normalizeThreadRunStatus(th.run_status) === 'running') return;
+
+    setRunning(false);
+    setRunningThreadId(null);
+  });
+
+  createEffect(() => {
+    if (protocol.status() === 'connected') return;
+    setRunning(false);
+    setRunningThreadId(null);
+  });
 
   // Active thread
   const [activeThreadId, setActiveThreadId] = createSignal<string | null>(null);
@@ -220,9 +326,6 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (!id) return;
     persistActiveThreadId(id);
   });
-
-  // Run state (owned by EnvAIPage but exposed for sidebar to read)
-  const [running, setRunning] = createSignal(false);
 
   // Thread creation
   const [creatingThread, setCreatingThread] = createSignal(false);
@@ -319,5 +422,8 @@ export function createAIChatContextValue(): AIChatContextValue {
     ensureThreadForSend,
     running,
     setRunning,
+    runningThreadId,
+    setRunningThreadId,
+    isThreadRunning,
   };
 }
