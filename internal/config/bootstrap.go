@@ -85,6 +85,26 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 		}
 	}
 
+	rootDir := strings.TrimSpace(args.RootDir)
+	if rootDir == "" && prev != nil {
+		rootDir = strings.TrimSpace(prev.RootDir)
+	}
+
+	shell := strings.TrimSpace(args.Shell)
+	if shell == "" && prev != nil {
+		shell = strings.TrimSpace(prev.Shell)
+	}
+
+	logFormat := strings.TrimSpace(args.LogFormat)
+	if logFormat == "" && prev != nil {
+		logFormat = strings.TrimSpace(prev.LogFormat)
+	}
+
+	logLevel := strings.TrimSpace(args.LogLevel)
+	if logLevel == "" && prev != nil {
+		logLevel = strings.TrimSpace(prev.LogLevel)
+	}
+
 	cfg := &Config{
 		ControlplaneBaseURL: baseURL,
 		EnvironmentID:       envID,
@@ -92,10 +112,10 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 		Direct:              direct,
 		AI:                  nil,
 		PermissionPolicy:    nil,
-		RootDir:             strings.TrimSpace(args.RootDir),
-		Shell:               strings.TrimSpace(args.Shell),
-		LogFormat:           strings.TrimSpace(args.LogFormat),
-		LogLevel:            strings.TrimSpace(args.LogLevel),
+		RootDir:             rootDir,
+		Shell:               shell,
+		LogFormat:           logFormat,
+		LogLevel:            logLevel,
 	}
 
 	// Write permission_policy explicitly so users can audit what is enabled locally.
@@ -115,6 +135,12 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 	// Preserve AI config when bootstrapping, so users don't accidentally lose their local model/provider setup.
 	if prev != nil && prev.AI != nil {
 		cfg.AI = prev.AI
+	}
+
+	// Preserve Code App port range tweaks (Settings UI).
+	if prev != nil {
+		cfg.CodeServerPortMin = prev.CodeServerPortMin
+		cfg.CodeServerPortMax = prev.CodeServerPortMax
 	}
 
 	if err := Save(cfgPath, cfg); err != nil {

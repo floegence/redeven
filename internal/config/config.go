@@ -107,6 +107,46 @@ func DefaultConfigPath() string {
 	return filepath.Join(home, ".redeven", "config.json")
 }
 
+// EnvConfigPath returns a per-environment config path:
+//
+//	~/.redeven/envs/<env_public_id>/config.json
+//
+// This is intended for running multiple agent instances on a single machine without sharing
+// local state (lock file, logs, secrets, and app state).
+func EnvConfigPath(envID string) string {
+	id := strings.TrimSpace(envID)
+	if id == "" {
+		return DefaultConfigPath()
+	}
+
+	// Keep the directory name safe even if the input is malformed.
+	// env ids are expected to look like "env_...", but the CLI should not trust inputs.
+	var b strings.Builder
+	b.Grow(len(id))
+	for i := 0; i < len(id); i++ {
+		c := id[i]
+		switch {
+		case c >= 'a' && c <= 'z':
+			b.WriteByte(c)
+		case c >= 'A' && c <= 'Z':
+			b.WriteByte(c)
+		case c >= '0' && c <= '9':
+			b.WriteByte(c)
+		case c == '_' || c == '-' || c == '.':
+			b.WriteByte(c)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	safeID := b.String()
+
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return filepath.Join("redeven.envs", safeID, "config.json")
+	}
+	return filepath.Join(home, ".redeven", "envs", safeID, "config.json")
+}
+
 func Load(path string) (*Config, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {

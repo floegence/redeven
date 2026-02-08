@@ -68,7 +68,7 @@ Usage:
 
 Commands:
   bootstrap   Exchange an environment token for Flowersec direct control-channel credentials and write config.
-  run         Run the agent using the local config file.
+  run         Run the agent (uses local config by default; can also bootstrap via flags).
   version     Print build information.
 
 `)
@@ -80,15 +80,14 @@ func bootstrapCmd(args []string) {
 	controlplane := fs.String("controlplane", "", "Controlplane base URL (e.g. https://sg.example.invalid)")
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
 	envToken := fs.String("env-token", "", "Environment token (raw token; 'Bearer <token>' is also accepted)")
-	cfgPath := fs.String("config", config.DefaultConfigPath(), "Config file path")
 
 	rootDir := fs.String("root-dir", "", "Filesystem root dir (default: user home dir)")
 	shell := fs.String("shell", "", "Shell command (default: $SHELL or /bin/bash)")
 
 	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read|read_only|execute_read_write (empty: keep existing; default: execute_read_write)")
 
-	logFormat := fs.String("log-format", "json", "Log format: json|text")
-	logLevel := fs.String("log-level", "info", "Log level: debug|info|warn|error")
+	logFormat := fs.String("log-format", "", "Log format: json|text (empty: default json)")
+	logLevel := fs.String("log-level", "", "Log level: debug|info|warn|error (empty: default info)")
 
 	timeout := fs.Duration("timeout", 15*time.Second, "Bootstrap request timeout")
 
@@ -106,7 +105,6 @@ func bootstrapCmd(args []string) {
 		ControlplaneBaseURL:    *controlplane,
 		EnvironmentID:          *envID,
 		EnvironmentToken:       *envToken,
-		ConfigPath:             *cfgPath,
 		RootDir:                *rootDir,
 		Shell:                  *shell,
 		LogFormat:              *logFormat,
@@ -118,12 +116,16 @@ func bootstrapCmd(args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Config written: %s\n", filepath.Clean(out))
+	_ = out
+	fmt.Printf("Bootstrap complete. Run `redeven run`.\n")
 }
 
 func runCmd(args []string) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	cfgPath := fs.String("config", config.DefaultConfigPath(), "Config file path")
+	controlplane := fs.String("controlplane", "", "Controlplane base URL (optional; when set, bootstraps into an isolated per-environment state dir)")
+	envID := fs.String("env-id", "", "Environment public ID (env_...)")
+	envToken := fs.String("env-token", "", "Environment token (required when --controlplane/--env-id is set)")
+	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read|read_only|execute_read_write (optional; applies when bootstrapping)")
 	modeRaw := fs.String("mode", "remote", "Run mode: remote|hybrid|local")
 	localUIPort := fs.Int("local-ui-port", defaultLocalUIPort, "Local UI port (default: 23998)")
 	_ = fs.Parse(args)
@@ -135,7 +137,31 @@ func runCmd(args []string) {
 		os.Exit(2)
 	}
 
-	cfgPathClean := filepath.Clean(*cfgPath)
+	// Default: use the global config path. This is the recommended single-environment setup:
+	//
+	//	redeven bootstrap ... && redeven run
+	cfgPathClean := filepath.Clean(config.DefaultConfigPath())
+
+	// Multi-environment mode: bootstrap & run using an isolated state directory per env.
+	// This avoids overwriting the global ~/.redeven/config.json.
+	bootstrapViaFlags := strings.TrimSpace(*controlplane) != "" ||
+		strings.TrimSpace(*envID) != "" ||
+		strings.TrimSpace(*envToken) != ""
+	if bootstrapViaFlags {
+		if strings.TrimSpace(*controlplane) == "" || strings.TrimSpace(*envID) == "" || strings.TrimSpace(*envToken) == "" {
+			fs.Usage()
+			os.Exit(2)
+		}
+		cfgPathClean = filepath.Clean(config.EnvConfigPath(*envID))
+	}
+
+	// Ensure the state/config directory exists before taking the lock.
+	// Local mode must work on a clean machine (no bootstrap yet).
+	cfgDir := filepath.Dir(cfgPathClean)
+	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to init state dir: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Prevent multiple agent processes from managing the same local state directory.
 	// This avoids control-plane flapping and data-plane races when users start the agent twice.
@@ -147,6 +173,23 @@ func runCmd(args []string) {
 		os.Exit(1)
 	}
 	defer func() { _ = lk.Release() }()
+
+	if bootstrapViaFlags {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		_, err := config.BootstrapConfig(ctx, config.BootstrapArgs{
+			ControlplaneBaseURL:    *controlplane,
+			EnvironmentID:          *envID,
+			EnvironmentToken:       *envToken,
+			ConfigPath:             cfgPathClean,
+			PermissionPolicyPreset: *permissionPolicy,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "bootstrap failed: %v\n", err)
+			os.Exit(1)
+		}
+	}
 
 	cfg, err := config.Load(cfgPathClean)
 	if err != nil {
