@@ -289,6 +289,8 @@ export function EnvAIPage() {
 
   const [messagesLoading, setMessagesLoading] = createSignal(false);
   const [hasMessages, setHasMessages] = createSignal(false);
+  // 发送消息后立即为 true，在 ai.setRunning(true) 接管前提供即时反馈
+  const [sendPending, setSendPending] = createSignal(false);
 
   const [runId, setRunId] = createSignal<string | null>(null);
 
@@ -641,6 +643,7 @@ export function EnvAIPage() {
 
     // ChatProvider already rendered the optimistic user message; ensure the message list is visible.
     setHasMessages(true);
+    setSendPending(true);
 
     // 发送消息后立即滚动到底部，确保 working 指示器可见
     requestAnimationFrame(() => {
@@ -654,7 +657,10 @@ export function EnvAIPage() {
       tid = await ai.ensureThreadForSend();
       skipNextThreadLoad = false;
     }
-    if (!tid) return;
+    if (!tid) {
+      setSendPending(false);
+      return;
+    }
 
     const uploaded = attachments.filter((a) => a.status === 'uploaded' && !!String(a.url ?? '').trim());
     const attIn = uploaded.map((a) => ({
@@ -668,6 +674,7 @@ export function EnvAIPage() {
     ai.setRunningThreadId(tid);
     setRunId(null);
     ai.setRunning(true);
+    setSendPending(false);
     startWatchdog();
 
     const userText = String(content ?? '').trim();
@@ -760,6 +767,7 @@ export function EnvAIPage() {
           chat?.handleStreamEvent({ type: 'message-end', messageId: mid } as any);
         }
         ai.setRunning(false);
+        setSendPending(false);
         setRunId(null);
         abortCtrl = null;
         assistantText = '';
@@ -773,6 +781,7 @@ export function EnvAIPage() {
       notify.error('AI failed', msg || 'Request failed.');
       stopWatchdog();
       ai.setRunning(false);
+      setSendPending(false);
       setRunId(null);
       abortCtrl = null;
       assistantText = '';
@@ -871,10 +880,10 @@ export function EnvAIPage() {
     void startRun(prompt, []);
   };
 
-  // 自定义 Working 指示器显示条件：run 进行中且尚未收到流式消息
+  // 自定义 Working 指示器显示条件：sendPending（即时）或 run 进行中，且尚未收到流式消息
   const showWorkingIndicator = () => {
     if (!chatReady()) return false;
-    if (!ai.running() && !activeThreadRunning()) return false;
+    if (!sendPending() && !ai.running() && !activeThreadRunning()) return false;
     if (chat?.streamingMessageId?.()) return false;
     return true;
   };
