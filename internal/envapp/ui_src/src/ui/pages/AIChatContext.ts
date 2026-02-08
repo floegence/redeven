@@ -266,6 +266,33 @@ export function createAIChatContextValue(): AIChatContextValue {
   const [running, setRunning] = createSignal(false);
   const [runningThreadId, setRunningThreadId] = createSignal<string | null>(null);
 
+  // Track when the current local run started so we don't "reconcile" it away based on a stale threads list snapshot.
+  //
+  // Without this guard, the UI can drop stream events right after a run starts (threads list still says "idle"),
+  // causing missing "Working..." state and missing assistant output in the chat view.
+  let localRunStartedAtUnixMs = 0;
+  let localRunThreadID = '';
+  createEffect(() => {
+    const isRunning = running();
+    const tid = String(runningThreadId() ?? '').trim();
+
+    if (!isRunning) {
+      localRunStartedAtUnixMs = 0;
+      localRunThreadID = '';
+      return;
+    }
+    if (!tid) return;
+
+    if (localRunThreadID !== tid) {
+      localRunThreadID = tid;
+      localRunStartedAtUnixMs = Date.now();
+      return;
+    }
+    if (localRunStartedAtUnixMs <= 0) {
+      localRunStartedAtUnixMs = Date.now();
+    }
+  });
+
   const isThreadRunning = (threadId: string | null | undefined): boolean => {
     const tid = String(threadId ?? '').trim();
     if (!tid) return false;
@@ -310,6 +337,11 @@ export function createAIChatContextValue(): AIChatContextValue {
     const th = (threads()?.threads ?? []).find((it) => String(it.thread_id ?? '').trim() === localThreadID);
     if (!th) return;
     if (normalizeThreadRunStatus(th.run_status) === 'running') return;
+
+    // If the server state is older than the current local run, treat it as stale and do not clear local state.
+    const serverUpdatedAt = Number(th.run_updated_at_unix_ms ?? 0);
+    if (!Number.isFinite(serverUpdatedAt) || serverUpdatedAt <= 0) return;
+    if (localRunStartedAtUnixMs > 0 && serverUpdatedAt < localRunStartedAtUnixMs - 250) return;
 
     setRunning(false);
     setRunningThreadId(null);
