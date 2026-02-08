@@ -10,3 +10,8 @@
   --tw-border-style: solid;
   border-style: solid;
 }
+
+/* 隐藏 VirtualMessageList 内置的 Working... 指示器，使用自定义 Neural+Waveform 组件替代 */
+.chat-working-indicator-wrapper {
+  display: none !important;
+}
