@@ -547,6 +547,36 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 
 	updateThreadRunState("running", "")
 
+	// Always close the run stream to avoid goroutine leaks on early returns.
+	// Also wait for the writer goroutine to finish so we never write to the ResponseWriter after handler return.
+	defer func() {
+		if r != nil && r.stream != nil {
+			r.stream.close()
+			r.stream.wait()
+		}
+	}()
+
+	// Best-effort: when we fail before r.run() starts streaming, emit a terminal error message so the browser
+	// doesn't see a confusing "200 OK" with an empty response body.
+	streamEarlyError := func(err error) error {
+		if err == nil {
+			return nil
+		}
+		if r == nil || r.stream == nil {
+			return err
+		}
+		msg := strings.TrimSpace(err.Error())
+		if msg == "" {
+			msg = "AI failed."
+		}
+		_ = r.stream.send(streamEventMessageStart{Type: "message-start", MessageID: messageID})
+		_ = r.stream.send(streamEventBlockStart{Type: "block-start", MessageID: messageID, BlockIndex: 0, BlockType: "markdown"})
+		_ = r.stream.send(streamEventBlockDelta{Type: "block-delta", MessageID: messageID, BlockIndex: 0, Delta: msg})
+		_ = r.stream.send(streamEventError{Type: "error", MessageID: messageID, Error: msg})
+		r.setEndReason("error")
+		return err
+	}
+
 	defer func() {
 		s.mu.Lock()
 		delete(s.runs, runID)
@@ -566,7 +596,7 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	historyLite, err := db.ListHistoryLite(pctx, endpointID, threadID, 120)
 	cancelPersist()
 	if err != nil {
-		return err
+		return streamEarlyError(err)
 	}
 	history := make([]RunHistoryMsg, 0, len(historyLite))
 	for _, m := range historyLite {
@@ -588,12 +618,12 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	// Persist the user message to the thread store before starting the run.
 	userMsgID, err := newUserMessageID()
 	if err != nil {
-		return err
+		return streamEarlyError(err)
 	}
 	now := time.Now().UnixMilli()
 	userJSON, userText, err := buildUserMessageJSON(userMsgID, req.Input, uploadsDir, now)
 	if err != nil {
-		return err
+		return streamEarlyError(err)
 	}
 	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
 	_, err = db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
@@ -611,7 +641,7 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	}, meta.UserPublicID, meta.UserEmail)
 	cancelPersist()
 	if err != nil {
-		return err
+		return streamEarlyError(err)
 	}
 
 	// If the client disconnected after we persisted the user message, abort before starting the sidecar run.
@@ -631,14 +661,14 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		}
 	}
 	if model == "" {
-		return errors.New("missing model")
+		return streamEarlyError(errors.New("missing model"))
 	}
 	if _, _, ok := strings.Cut(model, "/"); !ok {
-		return errors.New("invalid model")
+		return streamEarlyError(errors.New("invalid model"))
 	}
 	// Enforce allow-list: model must exist in providers[].models[].
 	if !cfg.IsAllowedModelID(model) {
-		return fmt.Errorf("model not allowed: %s", model)
+		return streamEarlyError(fmt.Errorf("model not allowed: %s", model))
 	}
 
 	// Persist thread model selection without touching updated_at (avoid reordering sidebar).

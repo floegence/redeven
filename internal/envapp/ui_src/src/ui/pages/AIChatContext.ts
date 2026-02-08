@@ -270,6 +270,10 @@ export function createAIChatContextValue(): AIChatContextValue {
   //
   // Without this guard, the UI can drop stream events right after a run starts (threads list still says "idle"),
   // causing missing "Working..." state and missing assistant output in the chat view.
+  //
+  // IMPORTANT: Do not compare browser timestamps with agent timestamps here. In Standard Mode, the agent and
+  // browser can be on different machines and clocks can drift. Use a local grace window instead.
+  const LOCAL_RUN_RECONCILE_GRACE_MS = 5_000;
   let localRunStartedAtUnixMs = 0;
   let localRunThreadID = '';
   createEffect(() => {
@@ -334,14 +338,15 @@ export function createAIChatContextValue(): AIChatContextValue {
       return;
     }
 
+    // Do not clear a freshly started local run. The threads list can lag behind the run start,
+    // and cross-device clocks are not comparable.
+    if (localRunStartedAtUnixMs > 0 && Date.now() - localRunStartedAtUnixMs < LOCAL_RUN_RECONCILE_GRACE_MS) {
+      return;
+    }
+
     const th = (threads()?.threads ?? []).find((it) => String(it.thread_id ?? '').trim() === localThreadID);
     if (!th) return;
     if (normalizeThreadRunStatus(th.run_status) === 'running') return;
-
-    // If the server state is older than the current local run, treat it as stale and do not clear local state.
-    const serverUpdatedAt = Number(th.run_updated_at_unix_ms ?? 0);
-    if (!Number.isFinite(serverUpdatedAt) || serverUpdatedAt <= 0) return;
-    if (localRunStartedAtUnixMs > 0 && serverUpdatedAt < localRunStartedAtUnixMs - 250) return;
 
     setRunning(false);
     setRunningThreadId(null);

@@ -20,6 +20,7 @@ type ndjsonStream struct {
 
 	ch     chan []byte
 	closed bool
+	done   chan struct{}
 }
 
 func newNDJSONStream(w http.ResponseWriter, writeTimeout time.Duration) *ndjsonStream {
@@ -38,6 +39,7 @@ func newNDJSONStream(w http.ResponseWriter, writeTimeout time.Duration) *ndjsonS
 	if w != nil {
 		s.ctrl = http.NewResponseController(w)
 		s.ch = make(chan []byte, 256)
+		s.done = make(chan struct{})
 		go s.writerLoop()
 	}
 	return s
@@ -61,9 +63,19 @@ func (s *ndjsonStream) close() {
 	s.mu.Unlock()
 }
 
+func (s *ndjsonStream) wait() {
+	if s == nil || s.done == nil {
+		return
+	}
+	<-s.done
+}
+
 func (s *ndjsonStream) writerLoop() {
 	if s == nil {
 		return
+	}
+	if s.done != nil {
+		defer close(s.done)
 	}
 	for frame := range s.ch {
 		if s.writeTO > 0 && s.ctrl != nil {
