@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, untrack, type Component } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
+import { Motion } from 'solid-motionone';
 import {
   Code,
   FileText,
@@ -105,12 +106,17 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
   return (
     <div class="flex-1 flex flex-col items-center justify-center p-8 overflow-auto">
       {/* Welcome section */}
-      <div class="text-center mb-8 max-w-lg">
+      <Motion.div
+        class="text-center mb-8 max-w-lg"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, easing: 'ease-out' }}
+      >
         {/* Animated sparkles icon */}
         <div class="relative inline-flex items-center justify-center mb-6">
-          <div class="absolute inset-0 rounded-full bg-primary/20 animate-[pulse_3s_ease-in-out_infinite]" />
-          <div class="relative w-20 h-20 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center border border-primary/20">
-            <Sparkles class="w-10 h-10 text-primary" />
+          <div class="absolute -inset-2 rounded-2xl bg-primary/10 animate-[pulse_3s_ease-in-out_infinite]" />
+          <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/25 to-primary/5 flex items-center justify-center border border-primary/20 shadow-sm">
+            <Sparkles class="w-8 h-8 text-primary" />
           </div>
         </div>
 
@@ -121,24 +127,27 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
           I'm your AI assistant. I can help you with code, files, commands, and more.
           Just type a message below or choose from the suggestions.
         </p>
-      </div>
+      </Motion.div>
 
       {/* Suggestions grid */}
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl">
         <For each={SUGGESTIONS}>
-          {(item) => (
-            <button
+          {(item, i) => (
+            <Motion.button
               type="button"
               onClick={() => props.onSuggestionClick(item.prompt)}
               disabled={props.disabled}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.15 + i() * 0.08, easing: 'ease-out' }}
               class={cn(
                 'group flex items-start gap-3 p-4 rounded-xl border border-border/50',
-                'bg-card/50 hover:bg-card hover:border-primary/30 hover:shadow-sm',
-                'text-left transition-all duration-200',
+                'bg-card/50 hover:bg-card hover:border-primary/30 hover:shadow-md hover:shadow-primary/5',
+                'text-left transition-all duration-200 active:scale-[0.98]',
                 'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-card/50 disabled:hover:border-border/50',
               )}
             >
-              <div class="shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+              <div class="shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-200">
                 <item.icon class="w-5 h-5 text-primary" />
               </div>
               <div class="min-w-0 flex-1">
@@ -149,16 +158,27 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
                   {item.description}
                 </div>
               </div>
-            </button>
+            </Motion.button>
           )}
         </For>
       </div>
 
       {/* Keyboard hint */}
-      <div class="mt-8 text-xs text-muted-foreground/70 flex items-center gap-2">
-        <span class="px-1.5 py-0.5 rounded bg-muted/50 font-mono text-[10px]">Enter</span>
-        <span>to send a message</span>
-      </div>
+      <Motion.div
+        class="mt-8 text-xs text-muted-foreground/60 flex items-center gap-4"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.6 }}
+      >
+        <span class="flex items-center gap-1.5">
+          <kbd class="px-1.5 py-0.5 rounded bg-muted/50 font-mono text-[10px] border border-border/50">Enter</kbd>
+          <span>send</span>
+        </span>
+        <span class="flex items-center gap-1.5">
+          <kbd class="px-1.5 py-0.5 rounded bg-muted/50 font-mono text-[10px] border border-border/50">Shift+Enter</kbd>
+          <span>newline</span>
+        </span>
+      </Motion.div>
     </div>
   );
 };
@@ -807,7 +827,9 @@ export function EnvAIPage() {
             {/* Header */}
             <div class="chat-header border-b border-border bg-background/95 backdrop-blur-sm">
               <div class="chat-header-title flex items-center gap-2 min-w-0">
-                <Sparkles class="w-4 h-4 text-primary shrink-0" />
+                <div class="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Sparkles class="w-4 h-4 text-primary" />
+                </div>
                 <span class="truncate font-medium">{ai.activeThreadTitle()}</span>
               </div>
               <div class="flex items-center gap-1.5">
@@ -885,12 +907,16 @@ export function EnvAIPage() {
 
             {/* Error banner: Settings unavailable */}
             <Show when={ai.settings.error}>
-              <div class="px-4 py-3 text-xs border-b border-border bg-error/5">
+              <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-lg bg-error/5 border border-error/20">
                 <div class="flex items-center gap-2 font-medium text-error">
-                  <span class="w-1.5 h-1.5 rounded-full bg-error" />
+                  <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
                   Settings are not available
                 </div>
-                <div class="mt-1 text-muted-foreground">
+                <div class="mt-1 text-muted-foreground pl-6">
                   {ai.settings.error instanceof Error ? ai.settings.error.message : String(ai.settings.error)}
                 </div>
               </div>
@@ -898,12 +924,16 @@ export function EnvAIPage() {
 
             {/* Error banner: Models unavailable */}
             <Show when={ai.models.error && ai.aiEnabled()}>
-              <div class="px-4 py-3 text-xs border-b border-border bg-error/5">
+              <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-lg bg-error/5 border border-error/20">
                 <div class="flex items-center gap-2 font-medium text-error">
-                  <span class="w-1.5 h-1.5 rounded-full bg-error" />
+                  <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
                   AI is not available
                 </div>
-                <div class="mt-1 text-muted-foreground">
+                <div class="mt-1 text-muted-foreground pl-6">
                   {ai.models.error instanceof Error ? ai.models.error.message : String(ai.models.error)}
                 </div>
               </div>
@@ -919,7 +949,6 @@ export function EnvAIPage() {
 
             {/* Input area */}
             <ChatInput
-              class="chat-container-input border-t border-border"
               disabled={!canInteract()}
               placeholder={ai.aiEnabled() ? 'Type a message...' : 'Configure AI in settings to start...'}
             />
@@ -928,11 +957,16 @@ export function EnvAIPage() {
 
         {/* Empty state: AI not configured */}
         <Show when={ai.settings() && !ai.aiEnabled() && !ai.settings.error && !ai.settings.loading}>
-          <div class="flex flex-col items-center justify-center h-full p-8 text-center">
+          <Motion.div
+            class="flex flex-col items-center justify-center h-full p-8 text-center"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4, easing: 'ease-out' }}
+          >
             <div class="relative inline-flex items-center justify-center mb-6">
-              <div class="absolute inset-0 rounded-full bg-primary/20 animate-[pulse_3s_ease-in-out_infinite]" />
-              <div class="relative w-20 h-20 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center border border-primary/20">
-                <Sparkles class="w-10 h-10 text-primary" />
+              <div class="absolute -inset-2 rounded-2xl bg-primary/10 animate-[pulse_3s_ease-in-out_infinite]" />
+              <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/25 to-primary/5 flex items-center justify-center border border-primary/20 shadow-sm">
+                <Sparkles class="w-8 h-8 text-primary" />
               </div>
             </div>
             <div class="text-lg font-semibold text-foreground mb-2">AI is not configured</div>
@@ -943,7 +977,7 @@ export function EnvAIPage() {
               <Settings class="w-4 h-4 mr-2" />
               Open Settings
             </Button>
-          </div>
+          </Motion.div>
         </Show>
 
         {/* Rename dialog */}

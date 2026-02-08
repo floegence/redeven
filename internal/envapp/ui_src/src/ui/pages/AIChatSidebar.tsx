@@ -168,9 +168,11 @@ export function AIChatSidebar() {
               when={(ctx.threads()?.threads?.length ?? 0) > 0}
               fallback={
                 <div class="px-2.5 py-4 text-xs text-muted-foreground text-center">
-                  <MessageSquare class="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+                  <div class="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center mx-auto mb-2">
+                    <MessageSquare class="w-6 h-6 text-muted-foreground/50" />
+                  </div>
                   <div>No chats yet</div>
-                  <div class="mt-1 text-[11px]">Start a new conversation</div>
+                  <div class="mt-1 text-[11px]">Click <span class="font-medium">+</span> to start a conversation</div>
                 </div>
               }
             >
@@ -232,7 +234,7 @@ export function AIChatSidebar() {
                                   placement="left"
                                   delay={0}
                                 >
-                                  <span class={`inline-flex items-center gap-1 text-[10px] ${ui().className}`}>
+                                  <span class={`inline-flex items-center gap-1 text-[10px] rounded-full px-1.5 py-0.5 bg-current/5 ${ui().className}`}>
                                     <Icon class={`w-3 h-3 ${status() === 'running' ? 'animate-spin' : ''}`} />
                                     <span>{isBackgroundRunning() ? 'Running in background' : ui().text}</span>
                                   </span>
