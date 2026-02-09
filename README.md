@@ -29,6 +29,20 @@ Not implemented yet (planned):
 
 - Release process and artifact verification: [`docs/RELEASE.md`](docs/RELEASE.md)
 
+## Install Script and external delivery Worker
+
+- Installer source: `scripts/install.sh` (this repo)
+- Worker source template: `deployment/private-delivery/workers/install-agent/generate-worker.js`
+- Worker config: `deployment/private-delivery/workers/install-agent/wrangler.toml`
+- Auto deploy workflow: `.github/workflows/deploy-install-worker.yml`
+
+When `scripts/install.sh` (or worker files) changes on `main`, GitHub Actions deploys the Worker route `example.invalid/install.sh` automatically.
+
+Required GitHub repository secrets:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
 ## Build
 
 Requirements:
