@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"syscall"
@@ -21,8 +22,24 @@ const (
 	upgradeTimeout          = 10 * time.Minute
 )
 
+var releaseTagPattern = regexp.MustCompile(`^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+
 type sysUpgrader struct {
 	a *Agent
+}
+
+func normalizeTargetVersion(req *syssvc.UpgradeRequest) (string, error) {
+	if req == nil {
+		return "", nil
+	}
+	v := strings.TrimSpace(req.TargetVersion)
+	if v == "" {
+		return "", nil
+	}
+	if !releaseTagPattern.MatchString(v) {
+		return "", &rpc.Error{Code: 400, Message: "invalid target_version (expected release tag like v1.2.3)"}
+	}
+	return v, nil
 }
 
 func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req *syssvc.UpgradeRequest) (*syssvc.UpgradeResponse, error) {
@@ -37,6 +54,11 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 
 	if req != nil && req.DryRun != nil && *req.DryRun {
 		return &syssvc.UpgradeResponse{OK: true, Message: "Dry run ok."}, nil
+	}
+
+	targetVersion, err := normalizeTargetVersion(req)
+	if err != nil {
+		return nil, err
 	}
 
 	exePath, installDir, err := resolveSelfExecPaths()
@@ -68,14 +90,16 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 		"channel_id", channelID,
 		"exe_path", exePath,
 		"install_dir", installDir,
+		"target_version", targetVersion,
 	)
 
-	go a.runSelfUpgrade(exePath, installDir, userPublicID, channelID)
+	go a.runSelfUpgrade(exePath, installDir, userPublicID, channelID, targetVersion)
 
-	return &syssvc.UpgradeResponse{
-		OK:      true,
-		Message: "Upgrade started. The agent will restart shortly.",
-	}, nil
+	msg := "Upgrade started. The agent will restart shortly."
+	if targetVersion != "" {
+		msg = "Upgrade started for " + targetVersion + ". The agent will restart shortly."
+	}
+	return &syssvc.UpgradeResponse{OK: true, Message: msg}, nil
 }
 
 func resolveSelfExecPaths() (exePath string, installDir string, err error) {
@@ -98,7 +122,7 @@ func resolveSelfExecPaths() (exePath string, installDir string, err error) {
 	return exePath, installDir, nil
 }
 
-func (a *Agent) runSelfUpgrade(exePath string, installDir string, userPublicID string, channelID string) {
+func (a *Agent) runSelfUpgrade(exePath string, installDir string, userPublicID string, channelID string, targetVersion string) {
 	// Allow the RPC response to flush before we potentially break active streams.
 	time.Sleep(200 * time.Millisecond)
 
@@ -108,10 +132,14 @@ func (a *Agent) runSelfUpgrade(exePath string, installDir string, userPublicID s
 	// Run the official install.sh in upgrade mode, forcing the install directory to the
 	// currently running executable directory so we restart into the new binary path.
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", "curl -fsSL "+upgradeInstallScriptURL+" | sh")
-	cmd.Env = append(os.Environ(),
+	env := append(os.Environ(),
 		"REDEVEN_INSTALL_MODE=upgrade",
 		"REDEVEN_INSTALL_DIR="+installDir,
 	)
+	if targetVersion != "" {
+		env = append(env, "REDEVEN_VERSION="+targetVersion)
+	}
+	cmd.Env = env
 
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -121,6 +149,7 @@ func (a *Agent) runSelfUpgrade(exePath string, installDir string, userPublicID s
 		a.log.Error("sys_upgrade: install failed",
 			"user_public_id", userPublicID,
 			"channel_id", channelID,
+			"target_version", targetVersion,
 			"error", err,
 			"output_len", out.Len(),
 			"output_snippet", truncateForLog(out.String(), 8_000),
@@ -132,6 +161,7 @@ func (a *Agent) runSelfUpgrade(exePath string, installDir string, userPublicID s
 	a.log.Info("sys_upgrade: install completed",
 		"user_public_id", userPublicID,
 		"channel_id", channelID,
+		"target_version", targetVersion,
 		"output_len", out.Len(),
 	)
 

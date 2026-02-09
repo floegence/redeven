@@ -27,6 +27,10 @@ export type EnvironmentDetail = Environment & {
 
 export type AgentLatestVersion = {
   latest_version: string;
+  recommended_version?: string;
+  manifest_etag?: string;
+  source?: string;
+  stale?: boolean;
   fetched_at_ms?: number;
   cache_ttl_ms?: number;
   message?: string;

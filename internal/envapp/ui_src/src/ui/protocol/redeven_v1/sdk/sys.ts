@@ -8,6 +8,7 @@ export type SysPingResponse = {
 
 export type SysUpgradeRequest = {
   dryRun?: boolean;
+  targetVersion?: string;
 };
 
 export type SysUpgradeResponse = {

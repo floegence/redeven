@@ -32,7 +32,8 @@ type Upgrader interface {
 }
 
 type UpgradeRequest struct {
-	DryRun *bool `json:"dry_run,omitempty"`
+	DryRun        *bool  `json:"dry_run,omitempty"`
+	TargetVersion string `json:"target_version,omitempty"`
 }
 
 type UpgradeResponse struct {

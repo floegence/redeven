@@ -13,8 +13,10 @@ export function fromWireSysPingResponse(resp: wire_sys_ping_resp): SysPingRespon
 
 export function toWireSysUpgradeRequest(req?: SysUpgradeRequest): wire_sys_upgrade_req {
   const dryRun = req && typeof req.dryRun === 'boolean' ? req.dryRun : undefined;
+  const targetVersion = req?.targetVersion ? String(req.targetVersion).trim() : '';
   return {
     dry_run: dryRun,
+    target_version: targetVersion || undefined,
   };
 }
 

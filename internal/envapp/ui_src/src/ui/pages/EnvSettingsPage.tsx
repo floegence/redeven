@@ -76,6 +76,19 @@ type AIProviderRow = { id: string; name: string; type: AIProviderType; base_url:
 const DEFAULT_CODE_SERVER_PORT_MIN = 20000;
 const DEFAULT_CODE_SERVER_PORT_MAX = 21000;
 const AI_API_KEY_ENV = 'REDEVEN_API_KEY';
+const RELEASE_VERSION_RE = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
+function isReleaseVersion(raw: string): boolean {
+  const v = String(raw ?? '').trim();
+  if (!v) return false;
+  return RELEASE_VERSION_RE.test(v);
+}
+
+function formatUnknownError(err: unknown): string {
+  if (err instanceof Error) return String(err.message || '').trim();
+  if (typeof err === 'string') return String(err).trim();
+  return '';
+}
 
 function newProviderID(): string {
   // Provider ids are stable primary keys. Generate them once and never ask users to edit them.
@@ -326,6 +339,25 @@ export function EnvSettingsPage() {
     async (id) => (id ? await getAgentLatestVersion(id) : null),
   );
 
+  const [targetVersionInput, setTargetVersionInput] = createSignal('');
+  const preferredUpgradeVersion = createMemo(() => {
+    const v = latestVersion();
+    if (!v) return '';
+    const preferred = v.recommended_version ? String(v.recommended_version).trim() : '';
+    if (preferred) return preferred;
+    return v.latest_version ? String(v.latest_version).trim() : '';
+  });
+  const targetUpgradeVersion = createMemo(() => String(targetVersionInput() ?? '').trim());
+  const targetUpgradeVersionValid = createMemo(() => isReleaseVersion(targetUpgradeVersion()));
+  const latestVersionError = createMemo(() => formatUnknownError(latestVersion.error));
+
+  createEffect(() => {
+    const preferred = preferredUpgradeVersion();
+    if (!preferred) return;
+    if (String(targetVersionInput() ?? '').trim()) return;
+    setTargetVersionInput(preferred);
+  });
+
   const [upgradeOpen, setUpgradeOpen] = createSignal(false);
   const [restartOpen, setRestartOpen] = createSignal(false);
 
@@ -366,6 +398,9 @@ export function EnvSettingsPage() {
   const canStartUpgrade = createMemo(() => {
     if (maintaining()) return false;
     if (protocol.status() !== 'connected') return false;
+    if (latestVersion.loading) return false;
+    if (latestVersionError()) return false;
+    if (!targetUpgradeVersionValid()) return false;
     if (!canAdmin()) return false;
     return controlplaneStatus() === 'online';
   });
@@ -417,13 +452,38 @@ export function EnvSettingsPage() {
       return;
     }
 
+    const requestedVersion = kind === 'upgrade' ? targetUpgradeVersion() : '';
+    if (kind === 'upgrade') {
+      if (latestVersion.loading) {
+        const msg = 'Latest version metadata is still loading.';
+        setMaintenanceError(msg);
+        notify.error('Update failed', msg);
+        return;
+      }
+      if (latestVersionError()) {
+        const msg = 'Latest version metadata is unavailable. Please retry after refresh.';
+        setMaintenanceError(msg);
+        notify.error('Update failed', msg);
+        return;
+      }
+      if (!isReleaseVersion(requestedVersion)) {
+        const msg = 'Target version must be a valid release tag (for example: v1.2.3).';
+        setMaintenanceError(msg);
+        notify.error('Update failed', msg);
+        return;
+      }
+    }
+
     setMaintenanceKind(kind);
 
     const beforeVersion = kind === 'upgrade' && agentPing()?.version ? String(agentPing()!.version) : '';
 
     let started = false;
     try {
-      const resp = kind === 'upgrade' ? await rpc.sys.upgrade({}) : await rpc.sys.restart();
+      const resp =
+        kind === 'upgrade'
+          ? await rpc.sys.upgrade({ targetVersion: requestedVersion })
+          : await rpc.sys.restart();
       if (!resp?.ok) {
         const msg = resp?.message ? String(resp.message) : kind === 'upgrade' ? 'Upgrade rejected.' : 'Restart rejected.';
         setMaintenanceError(msg);
@@ -434,10 +494,14 @@ export function EnvSettingsPage() {
       started = true;
       notify.success(
         kind === 'upgrade' ? 'Update started' : 'Restart started',
-        resp?.message ? String(resp.message) : 'The agent will restart shortly.',
+        kind === 'upgrade'
+          ? `Target version: ${requestedVersion}`
+          : resp?.message
+            ? String(resp.message)
+            : 'The agent will restart shortly.',
       );
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = formatUnknownError(e);
       // If the call fails due to a disconnect, assume the upgrade has started.
       if (protocol.status() !== 'connected') {
         started = true;
@@ -1394,8 +1458,34 @@ export function EnvSettingsPage() {
         >
           <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-1 divide-y md:divide-y-0 divide-border">
             <InfoRow label="Current" value={agentPing()?.version ? String(agentPing()!.version) : '—'} mono />
-            <InfoRow label="Latest" value={latestVersion()?.latest_version ? String(latestVersion()!.latest_version) : '—'} mono />
+            <InfoRow label="Latest" value={latestVersion()?.latest_version ? String(latestVersion()!.latest_version) : latestVersion.loading ? 'Loading…' : '—'} mono />
             <InfoRow label="Status" value={displayedStatus()} />
+          </div>
+
+          <div class="mt-3 space-y-2">
+            <div>
+              <FieldLabel>Target version</FieldLabel>
+              <Input
+                value={targetVersionInput()}
+                onInput={(e) => setTargetVersionInput(e.currentTarget.value)}
+                placeholder="v1.2.3"
+                size="sm"
+                class="w-full"
+                disabled={maintaining() || latestVersion.loading}
+              />
+            </div>
+            <Show when={targetUpgradeVersion() && !targetUpgradeVersionValid()}>
+              <div class="text-xs text-destructive">Use a valid release tag, for example: v1.2.3.</div>
+            </Show>
+            <Show when={latestVersionError()}>
+              <div class="text-xs text-destructive">Latest version metadata is unavailable: {latestVersionError()}</div>
+            </Show>
+            <Show when={latestVersion()?.stale}>
+              <div class="text-xs text-muted-foreground">Using stale version metadata from cache. Please retry refresh if possible.</div>
+            </Show>
+            <Show when={latestVersion()?.manifest_etag}>
+              <div class="text-[11px] text-muted-foreground">Manifest ETag: <span class="font-mono">{String(latestVersion()!.manifest_etag)}</span></div>
+            </Show>
           </div>
 
           <Show when={!canAdmin()}>
@@ -2297,6 +2387,12 @@ export function EnvSettingsPage() {
         <div class="space-y-3">
           <p class="text-sm">This will restart the agent and terminate all running activities. Continue?</p>
           <p class="text-xs text-muted-foreground">You will reconnect automatically after the agent comes back online.</p>
+          <p class="text-xs text-muted-foreground">
+            Target version: <span class="font-mono">{targetUpgradeVersion() || '—'}</span>
+          </p>
+          <Show when={targetUpgradeVersion() && !targetUpgradeVersionValid()}>
+            <p class="text-xs text-destructive">Target version is invalid. Please use a release tag like v1.2.3.</p>
+          </Show>
         </div>
       </ConfirmDialog>
 

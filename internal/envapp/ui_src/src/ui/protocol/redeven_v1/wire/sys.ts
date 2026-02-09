@@ -10,6 +10,7 @@ export type wire_sys_ping_resp = {
 
 export type wire_sys_upgrade_req = {
   dry_run?: boolean;
+  target_version?: string;
 };
 
 export type wire_sys_upgrade_resp = {

@@ -27,6 +27,8 @@ Not implemented yet (planned):
 
 - `floe_app = ...` (rebrowser, 3rd-party apps, etc)
 
+- Release process and artifact verification: [`docs/RELEASE.md`](docs/RELEASE.md)
+
 ## Build
 
 Requirements:
