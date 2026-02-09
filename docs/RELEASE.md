@@ -77,10 +77,16 @@ Worker files:
 Configure the Worker build in external delivery Dashboard:
 
 1. Connect repository: `floegence/redeven-agent`.
-2. Set production branch to `release/install-worker`.
+2. Set production branch to `release`.
 3. Set project root to `deployment/private-delivery/workers/install-agent`.
 4. Build command: `node generate-worker.js`.
 5. Deploy command: `npx wrangler deploy --config wrangler.toml`.
+
+Also ensure `release` branch exists on origin (run once if needed):
+
+```bash
+git push origin origin/main:refs/heads/release
+```
 
 This setup ensures that merges into `main` do not trigger install-worker deployment.
 
@@ -92,7 +98,7 @@ downstream deployment automation deploys on branch updates. To deploy by release
 ./scripts/publish_delivery_branch.sh vX.Y.Z
 ```
 
-This command force-updates `release/install-worker` to the commit behind the tag. external delivery then builds and deploys that exact tagged commit.
+This command force-updates `release` to the commit behind the tag. external delivery then builds and deploys that exact tagged commit.
 
 ## Operational notes
 
