@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
@@ -98,6 +99,10 @@ type Service struct {
 	activeRunByTh   map[string]string // <endpoint_id>:<thread_id> -> run_id
 	runs            map[string]*run
 
+	realtimeWriters       map[*rpc.Server]*aiSinkWriter
+	realtimeByEndpoint    map[string]map[*rpc.Server]struct{}
+	realtimeEndpointBySRV map[*rpc.Server]string
+
 	uploadsDir string
 	threadsDB  *threadstore.Store
 }
@@ -172,24 +177,27 @@ func NewService(opts Options) (*Service, error) {
 	}
 
 	return &Service{
-		log:                logger,
-		stateDir:           strings.TrimSpace(opts.StateDir),
-		fsRoot:             strings.TrimSpace(opts.FSRoot),
-		shell:              strings.TrimSpace(opts.Shell),
-		cfg:                opts.Config,
-		persistOpTO:        persistTO,
-		sidecarScriptPath:  strings.TrimSpace(opts.SidecarScriptPath),
-		runMaxWallTime:     maxWall,
-		runIdleTimeout:     idleTO,
-		approvalTimeout:    approvalTO,
-		streamWriteTO:      streamWTO,
-		resolveSessionMeta: opts.ResolveSessionMeta,
-		resolveProviderKey: resolveProviderKey,
-		activeRunByChan:    make(map[string]string),
-		activeRunByTh:      make(map[string]string),
-		runs:               make(map[string]*run),
-		uploadsDir:         uploadsDir,
-		threadsDB:          ts,
+		log:                   logger,
+		stateDir:              strings.TrimSpace(opts.StateDir),
+		fsRoot:                strings.TrimSpace(opts.FSRoot),
+		shell:                 strings.TrimSpace(opts.Shell),
+		cfg:                   opts.Config,
+		persistOpTO:           persistTO,
+		sidecarScriptPath:     strings.TrimSpace(opts.SidecarScriptPath),
+		runMaxWallTime:        maxWall,
+		runIdleTimeout:        idleTO,
+		approvalTimeout:       approvalTO,
+		streamWriteTO:         streamWTO,
+		resolveSessionMeta:    opts.ResolveSessionMeta,
+		resolveProviderKey:    resolveProviderKey,
+		activeRunByChan:       make(map[string]string),
+		activeRunByTh:         make(map[string]string),
+		runs:                  make(map[string]*run),
+		realtimeWriters:       make(map[*rpc.Server]*aiSinkWriter),
+		realtimeByEndpoint:    make(map[string]map[*rpc.Server]struct{}),
+		realtimeEndpointBySRV: make(map[*rpc.Server]string),
+		uploadsDir:            uploadsDir,
+		threadsDB:             ts,
 	}, nil
 }
 
@@ -200,7 +208,21 @@ func (s *Service) Close() error {
 	s.mu.Lock()
 	ts := s.threadsDB
 	s.threadsDB = nil
+	writers := make([]*aiSinkWriter, 0, len(s.realtimeWriters))
+	for srv, w := range s.realtimeWriters {
+		if w == nil {
+			continue
+		}
+		writers = append(writers, w)
+		delete(s.realtimeWriters, srv)
+	}
+	s.realtimeByEndpoint = make(map[string]map[*rpc.Server]struct{})
+	s.realtimeEndpointBySRV = make(map[*rpc.Server]string)
 	s.mu.Unlock()
+
+	for _, w := range writers {
+		w.Close()
+	}
 	if ts != nil {
 		return ts.Close()
 	}
@@ -430,72 +452,116 @@ func newToolID() (string, error) {
 	return "tool_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter) (retErr error) {
-	if s == nil {
-		return errors.New("nil service")
-	}
+type preparedRun struct {
+	meta                 *session.Meta
+	req                  RunStartRequest
+	runID                string
+	channelID            string
+	endpointID           string
+	threadID             string
+	thKey                string
+	threadModelID        string
+	cfg                  *config.AIConfig
+	uploadsDir           string
+	persistTO            time.Duration
+	db                   *threadstore.Store
+	messageID            string
+	r                    *run
+	updateThreadRunState func(status string, runErr string)
+}
+
+func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	prepared, err := s.prepareRun(meta, runID, req, w)
+	if err != nil {
+		return err
+	}
+	return s.executePreparedRun(ctx, prepared)
+}
+
+func (s *Service) StartRunDetached(meta *session.Meta, runID string, req RunStartRequest) error {
+	prepared, err := s.prepareRun(meta, runID, req, nil)
+	if err != nil {
+		return err
+	}
+	go func() {
+		if err := s.executePreparedRun(context.Background(), prepared); err != nil {
+			if s.log != nil {
+				s.log.Warn("ai detached run failed", "run_id", runID, "thread_id", strings.TrimSpace(req.ThreadID), "error", err)
+			}
+		}
+	}()
+	return nil
+}
+
+func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter) (*preparedRun, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
 	if meta == nil {
-		return errors.New("missing session metadata")
+		return nil, errors.New("missing session metadata")
 	}
-	if strings.TrimSpace(runID) == "" {
-		return errors.New("missing run_id")
-	}
-	channelID := strings.TrimSpace(meta.ChannelID)
-	if channelID == "" {
-		return errors.New("missing channel_id")
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return nil, errors.New("missing run_id")
 	}
 	threadID := strings.TrimSpace(req.ThreadID)
 	if threadID == "" {
-		return errors.New("missing thread_id")
+		return nil, errors.New("missing thread_id")
+	}
+	channelID := strings.TrimSpace(meta.ChannelID)
+	if channelID == "" {
+		return nil, errors.New("missing channel_id")
 	}
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	if endpointID == "" {
-		return errors.New("missing endpoint_id")
+		return nil, errors.New("missing endpoint_id")
 	}
+
+	metaCopy := *meta
+	metaRef := &metaCopy
 
 	persistTO := s.persistOpTO
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
 	}
 
-	// Ensure the thread exists before starting the run.
 	s.mu.Lock()
 	db := s.threadsDB
 	s.mu.Unlock()
 	if db == nil {
-		return errors.New("threads store not ready")
+		return nil, errors.New("threads store not ready")
 	}
+
 	pctx, cancelPersist := context.WithTimeout(context.Background(), persistTO)
 	th, err := db.GetThread(pctx, endpointID, threadID)
 	cancelPersist()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if th == nil {
-		return errors.New("thread not found")
+		return nil, errors.New("thread not found")
 	}
 
-	// Ensure at most one active run per channel/thread.
 	s.mu.Lock()
 	if s.cfg == nil {
 		s.mu.Unlock()
-		return ErrNotConfigured
+		return nil, ErrNotConfigured
 	}
-	if existing := s.activeRunByChan[channelID]; existing != "" {
+	if existing := strings.TrimSpace(s.activeRunByChan[channelID]); existing != "" {
 		s.mu.Unlock()
-		return ErrRunActive
+		return nil, ErrRunActive
 	}
 	thKey := runThreadKey(endpointID, threadID)
 	if thKey == "" {
 		s.mu.Unlock()
-		return errors.New("invalid request")
+		return nil, errors.New("invalid request")
 	}
-	if existing := s.activeRunByTh[thKey]; existing != "" {
+	if existing := strings.TrimSpace(s.activeRunByTh[thKey]); existing != "" {
 		s.mu.Unlock()
-		return ErrThreadBusy
+		return nil, ErrThreadBusy
 	}
 	cfg := s.cfg
 	uploadsDir := s.uploadsDir
@@ -503,7 +569,7 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	messageID, err := newMessageID()
 	if err != nil {
 		s.mu.Unlock()
-		return err
+		return nil, err
 	}
 	r := newRun(runOptions{
 		Log:                 s.log,
@@ -522,10 +588,13 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		IdleTimeout:         s.runIdleTimeout,
 		ToolApprovalTimeout: s.approvalTimeout,
 		StreamWriteTimeout:  s.streamWriteTO,
-		UserPublicID:        strings.TrimSpace(meta.UserPublicID),
+		UserPublicID:        strings.TrimSpace(metaRef.UserPublicID),
 		MessageID:           messageID,
-		UploadsDir:          s.uploadsDir,
-		Writer:              w,
+		UploadsDir:          uploadsDir,
+		OnStreamEvent: func(ev any) {
+			s.broadcastStreamEvent(endpointID, threadID, runID, ev)
+		},
+		Writer: w,
 	})
 	s.activeRunByChan[channelID] = runID
 	s.activeRunByTh[thKey] = runID
@@ -542,37 +611,76 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		}
 		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
 		defer cancel()
-		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, status, runErr, meta.UserPublicID, meta.UserEmail)
+		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, status, runErr, metaRef.UserPublicID, metaRef.UserEmail)
 	}
 
 	updateThreadRunState("running", "")
+	s.broadcastThreadState(endpointID, threadID, runID, "running", "")
+
+	return &preparedRun{
+		meta:                 metaRef,
+		req:                  req,
+		runID:                runID,
+		channelID:            channelID,
+		endpointID:           endpointID,
+		threadID:             threadID,
+		thKey:                thKey,
+		threadModelID:        strings.TrimSpace(th.ModelID),
+		cfg:                  cfg,
+		uploadsDir:           uploadsDir,
+		persistTO:            persistTO,
+		db:                   db,
+		messageID:            messageID,
+		r:                    r,
+		updateThreadRunState: updateThreadRunState,
+	}, nil
+}
+
+func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun) (retErr error) {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if prepared == nil || prepared.r == nil || prepared.meta == nil {
+		return errors.New("invalid prepared run")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	r := prepared.r
+	runID := strings.TrimSpace(prepared.runID)
+	channelID := strings.TrimSpace(prepared.channelID)
+	endpointID := strings.TrimSpace(prepared.endpointID)
+	threadID := strings.TrimSpace(prepared.threadID)
+	thKey := strings.TrimSpace(prepared.thKey)
+	db := prepared.db
+	persistTO := prepared.persistTO
+	cfg := prepared.cfg
+	meta := prepared.meta
+	messageID := strings.TrimSpace(prepared.messageID)
+	req := prepared.req
 
 	// Always close the run stream to avoid goroutine leaks on early returns.
 	// Also wait for the writer goroutine to finish so we never write to the ResponseWriter after handler return.
 	defer func() {
-		if r != nil && r.stream != nil {
+		if r.stream != nil {
 			r.stream.close()
 			r.stream.wait()
 		}
 	}()
 
-	// Best-effort: when we fail before r.run() starts streaming, emit a terminal error message so the browser
-	// doesn't see a confusing "200 OK" with an empty response body.
 	streamEarlyError := func(err error) error {
 		if err == nil {
 			return nil
-		}
-		if r == nil || r.stream == nil {
-			return err
 		}
 		msg := strings.TrimSpace(err.Error())
 		if msg == "" {
 			msg = "AI failed."
 		}
-		_ = r.stream.send(streamEventMessageStart{Type: "message-start", MessageID: messageID})
-		_ = r.stream.send(streamEventBlockStart{Type: "block-start", MessageID: messageID, BlockIndex: 0, BlockType: "markdown"})
-		_ = r.stream.send(streamEventBlockDelta{Type: "block-delta", MessageID: messageID, BlockIndex: 0, Delta: msg})
-		_ = r.stream.send(streamEventError{Type: "error", MessageID: messageID, Error: msg})
+		r.sendStreamEvent(streamEventMessageStart{Type: "message-start", MessageID: messageID})
+		r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: messageID, BlockIndex: 0, BlockType: "markdown"})
+		r.sendStreamEvent(streamEventBlockDelta{Type: "block-delta", MessageID: messageID, BlockIndex: 0, Delta: msg})
+		r.sendStreamEvent(streamEventError{Type: "error", MessageID: messageID, Error: msg})
 		r.setEndReason("error")
 		return err
 	}
@@ -583,16 +691,18 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		delete(s.activeRunByChan, channelID)
 		delete(s.activeRunByTh, thKey)
 		s.mu.Unlock()
-		if r != nil && r.doneCh != nil {
+		if r.doneCh != nil {
 			close(r.doneCh)
 		}
 
 		runStatus, runStatusErr := deriveThreadRunState(r.getEndReason(), retErr)
-		updateThreadRunState(runStatus, runStatusErr)
+		if prepared.updateThreadRunState != nil {
+			prepared.updateThreadRunState(runStatus, runStatusErr)
+		}
+		s.broadcastThreadState(endpointID, threadID, runID, runStatus, runStatusErr)
 	}()
 
-	// Build history snapshot from persisted messages (exclude the current input).
-	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
+	pctx, cancelPersist := context.WithTimeout(context.Background(), persistTO)
 	historyLite, err := db.ListHistoryLite(pctx, endpointID, threadID, 120)
 	cancelPersist()
 	if err != nil {
@@ -615,13 +725,12 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	}
 	history = capHistoryByChars(history, 60_000)
 
-	// Persist the user message to the thread store before starting the run.
 	userMsgID, err := newUserMessageID()
 	if err != nil {
 		return streamEarlyError(err)
 	}
 	now := time.Now().UnixMilli()
-	userJSON, userText, err := buildUserMessageJSON(userMsgID, req.Input, uploadsDir, now)
+	userJSON, userText, err := buildUserMessageJSON(userMsgID, req.Input, prepared.uploadsDir, now)
 	if err != nil {
 		return streamEarlyError(err)
 	}
@@ -644,16 +753,28 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		return streamEarlyError(err)
 	}
 
-	// If the client disconnected after we persisted the user message, abort before starting the sidecar run.
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		switch strings.TrimSpace(r.getCancelReason()) {
+		case "canceled":
+			r.finalizeNotice("canceled")
+			r.setEndReason("canceled")
+			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: messageID})
+			return nil
+		case "timed_out":
+			r.finalizeNotice("timed_out")
+			r.setEndReason("timed_out")
+			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: messageID})
+			return nil
+		default:
+			return ctx.Err()
+		}
 	default:
 	}
 
 	model := strings.TrimSpace(req.Model)
 	if model == "" {
-		model = strings.TrimSpace(th.ModelID)
+		model = strings.TrimSpace(prepared.threadModelID)
 	}
 	if model == "" {
 		if id, ok := cfg.DefaultModelID(); ok {
@@ -666,12 +787,10 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	if _, _, ok := strings.Cut(model, "/"); !ok {
 		return streamEarlyError(errors.New("invalid model"))
 	}
-	// Enforce allow-list: model must exist in providers[].models[].
 	if !cfg.IsAllowedModelID(model) {
 		return streamEarlyError(fmt.Errorf("model not allowed: %s", model))
 	}
 
-	// Persist thread model selection without touching updated_at (avoid reordering sidebar).
 	{
 		pctx, cancel := context.WithTimeout(context.Background(), persistTO)
 		_ = db.UpdateThreadModelID(pctx, endpointID, threadID, model)
@@ -684,11 +803,29 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 		Input:   req.Input,
 		Options: req.Options,
 	}
-	if err := r.run(ctx, runReq); err != nil {
-		return err
+	runErr := r.run(ctx, runReq)
+	if runErr != nil {
+		handledCancel := false
+		reason := strings.TrimSpace(r.getCancelReason())
+		if errors.Is(runErr, context.Canceled) {
+			switch reason {
+			case "canceled":
+				r.finalizeNotice("canceled")
+				r.setEndReason("canceled")
+				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: messageID})
+				handledCancel = true
+			case "timed_out":
+				r.finalizeNotice("timed_out")
+				r.setEndReason("timed_out")
+				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: messageID})
+				handledCancel = true
+			}
+		}
+		if !handledCancel {
+			return runErr
+		}
 	}
 
-	// Persist assistant message on successful completion only.
 	assistantJSON, assistantText, assistantAt, err := r.snapshotAssistantMessageJSON()
 	if err != nil {
 		return err

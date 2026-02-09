@@ -27,6 +27,13 @@ export const redevenV1TypeIds = {
   monitor: {
     sysMonitor: 3001,
   },
+  ai: {
+    runStart: 6001,
+    runCancel: 6002,
+    subscribe: 6003,
+    event: 6004, // notify (agent -> client)
+    toolApproval: 6005,
+  },
   sessions: {
     listActive: 5001,
   },

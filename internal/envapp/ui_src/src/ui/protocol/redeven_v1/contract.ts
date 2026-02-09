@@ -1,15 +1,18 @@
 import type { ProtocolContract, RpcHelpers } from '@floegence/floe-webapp-protocol';
 import { redevenV1TypeIds } from './typeIds';
+import type { AIRealtimeEvent, AICancelRunRequest, AICancelRunResponse, AIStartRunRequest, AIStartRunResponse, AISubscribeResponse, AIToolApprovalRequest, AIToolApprovalResponse } from './sdk/ai';
 import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsGetHomeResponse, FsListRequest, FsListResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
 import type { SysMonitorRequest, SysMonitorSnapshot } from './sdk/monitor';
 import type { SessionsListActiveResponse } from './sdk/sessions';
 import type { SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgradeResponse } from './sdk/sys';
 import type { TerminalClearRequest, TerminalClearResponse, TerminalHistoryRequest, TerminalHistoryResponse, TerminalNameUpdateEvent, TerminalOutputEvent, TerminalSessionAttachRequest, TerminalSessionAttachResponse, TerminalSessionCreateRequest, TerminalSessionCreateResponse, TerminalSessionDeleteRequest, TerminalSessionDeleteResponse, TerminalSessionInfo, TerminalSessionStatsRequest, TerminalSessionStatsResponse, TerminalSessionsChangedEvent } from './sdk/terminal';
+import { fromWireAIEventNotify, fromWireAICancelRunResponse, fromWireAIStartRunResponse, fromWireAISubscribeResponse, fromWireAIToolApprovalResponse, toWireAICancelRunRequest, toWireAIStartRunRequest, toWireAIToolApprovalRequest } from './codec/ai';
 import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsGetHomeResponse, fromWireFsListResponse, fromWireFsReadFileResponse, fromWireFsRenameResponse, fromWireFsWriteFileResponse, toWireFsCopyRequest, toWireFsDeleteRequest, toWireFsListRequest, toWireFsReadFileRequest, toWireFsRenameRequest, toWireFsWriteFileRequest } from './codec/fs';
 import { fromWireSysMonitorResponse, toWireSysMonitorRequest } from './codec/monitor';
 import { fromWireSessionsListActiveResponse } from './codec/sessions';
 import { fromWireSysPingResponse, fromWireSysRestartResponse, fromWireSysUpgradeResponse, toWireSysRestartRequest, toWireSysUpgradeRequest } from './codec/sys';
 import { fromWireTerminalNameUpdateNotify, fromWireTerminalOutputNotify, fromWireTerminalSessionAttachResponse, fromWireTerminalSessionCreateResponse, fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionListResponse, fromWireTerminalSessionStatsResponse, fromWireTerminalHistoryResponse, toWireTerminalInputNotify, toWireTerminalResizeNotify, toWireTerminalSessionAttachRequest, toWireTerminalSessionCreateRequest, toWireTerminalSessionDeleteRequest, toWireTerminalSessionStatsRequest, toWireTerminalHistoryRequest, toWireTerminalClearRequest, fromWireTerminalClearResponse, fromWireTerminalSessionsChangedNotify } from './codec/terminal';
+import type { wire_ai_cancel_run_req, wire_ai_cancel_run_resp, wire_ai_event_notify, wire_ai_start_run_req, wire_ai_start_run_resp, wire_ai_subscribe_resp, wire_ai_tool_approval_req, wire_ai_tool_approval_resp } from './wire/ai';
 import type { wire_fs_copy_req, wire_fs_copy_resp, wire_fs_delete_req, wire_fs_delete_resp, wire_fs_get_home_resp, wire_fs_list_req, wire_fs_list_resp, wire_fs_read_file_req, wire_fs_read_file_resp, wire_fs_rename_req, wire_fs_rename_resp, wire_fs_write_file_req, wire_fs_write_file_resp } from './wire/fs';
 import type { wire_sys_monitor_req, wire_sys_monitor_resp } from './wire/monitor';
 import type { wire_sessions_list_active_resp } from './wire/sessions';
@@ -40,6 +43,13 @@ export type RedevenV1Rpc = {
     onOutput: (handler: (event: TerminalOutputEvent) => void) => () => void;
     onNameUpdate: (handler: (event: TerminalNameUpdateEvent) => void) => () => void;
     onSessionsChanged: (handler: (event: TerminalSessionsChangedEvent) => void) => () => void;
+  };
+  ai: {
+    startRun: (req: AIStartRunRequest) => Promise<AIStartRunResponse>;
+    cancelRun: (req: AICancelRunRequest) => Promise<AICancelRunResponse>;
+    subscribe: () => Promise<AISubscribeResponse>;
+    approveTool: (req: AIToolApprovalRequest) => Promise<AIToolApprovalResponse>;
+    onEvent: (handler: (event: AIRealtimeEvent) => void) => () => void;
   };
   monitor: {
     getSysMonitor: (req?: SysMonitorRequest) => Promise<SysMonitorSnapshot>;
@@ -165,6 +175,32 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
       onSessionsChanged: (handler) =>
         onNotify<wire_terminal_sessions_changed_notify>(redevenV1TypeIds.terminal.sessionsChanged, (payload) => {
           const ev = fromWireTerminalSessionsChangedNotify(payload);
+          if (ev) handler(ev);
+        }),
+    },
+    ai: {
+      startRun: async (req) => {
+        const payload = toWireAIStartRunRequest(req);
+        const resp = await call<wire_ai_start_run_req, wire_ai_start_run_resp>(redevenV1TypeIds.ai.runStart, payload);
+        return fromWireAIStartRunResponse(resp);
+      },
+      cancelRun: async (req) => {
+        const payload = toWireAICancelRunRequest(req);
+        const resp = await call<wire_ai_cancel_run_req, wire_ai_cancel_run_resp>(redevenV1TypeIds.ai.runCancel, payload);
+        return fromWireAICancelRunResponse(resp);
+      },
+      subscribe: async () => {
+        const resp = await call<Record<string, never>, wire_ai_subscribe_resp>(redevenV1TypeIds.ai.subscribe, {});
+        return fromWireAISubscribeResponse(resp);
+      },
+      approveTool: async (req) => {
+        const payload = toWireAIToolApprovalRequest(req);
+        const resp = await call<wire_ai_tool_approval_req, wire_ai_tool_approval_resp>(redevenV1TypeIds.ai.toolApproval, payload);
+        return fromWireAIToolApprovalResponse(resp);
+      },
+      onEvent: (handler) =>
+        onNotify<wire_ai_event_notify>(redevenV1TypeIds.ai.event, (payload) => {
+          const ev = fromWireAIEventNotify(payload);
           if (ev) handler(ev);
         }),
     },

@@ -182,3 +182,32 @@ type ToolCallBlock struct {
 	Collapsed        *bool          `json:"collapsed,omitempty"`
 	StartedAt        *time.Time     `json:"-"`
 }
+
+// RealtimeEventType defines the high-level AI event category sent over Flowersec RPC notify.
+type RealtimeEventType string
+
+const (
+	RealtimeEventTypeStream      RealtimeEventType = "stream_event"
+	RealtimeEventTypeThreadState RealtimeEventType = "thread_state"
+)
+
+// RealtimeEvent is emitted by the agent for cross-session AI chat collaboration.
+//
+// JSON fields use snake_case because this payload is transported over Redeven RPC wire.
+type RealtimeEvent struct {
+	EventType   RealtimeEventType `json:"event_type"`
+	EndpointID  string            `json:"endpoint_id"`
+	ThreadID    string            `json:"thread_id"`
+	RunID       string            `json:"run_id"`
+	AtUnixMs    int64             `json:"at_unix_ms"`
+	StreamEvent any               `json:"stream_event,omitempty"`
+	RunStatus   string            `json:"run_status,omitempty"`
+	RunError    string            `json:"run_error,omitempty"`
+}
+
+// ActiveThreadRun is returned in subscribe snapshots so late subscribers can discover
+// currently running threads before live events arrive.
+type ActiveThreadRun struct {
+	ThreadID string `json:"thread_id"`
+	RunID    string `json:"run_id"`
+}

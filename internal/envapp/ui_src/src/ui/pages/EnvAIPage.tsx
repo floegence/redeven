@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, untrack, type Component } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Component } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { Motion } from 'solid-motionone';
 import {
@@ -23,17 +23,12 @@ import {
   type ChatCallbacks,
   type ChatContextValue,
   type Message,
-  type StreamEvent,
 } from '@floegence/floe-webapp-core/chat';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
 import { useAIChatContext, type ListThreadMessagesResponse } from './AIChatContext';
+import { useRedevenRpc } from '../protocol/redeven_v1';
 import { fetchGatewayJSON } from '../services/gatewayApi';
-
-const RUN_IDLE_TIMEOUT_MS = 120_000;
-const RUN_MAX_WALL_TIME_MS = 15 * 60_000;
-const RUN_WATCHDOG_TICK_MS = 2_000;
-const STOP_FALLBACK_MS = 2_000;
 
 function createUserMarkdownMessage(markdown: string): Message {
   return {
@@ -61,11 +56,11 @@ function InlineButtonSnakeLoading() {
   );
 }
 
-// 自定义 Working 指示器 — Neural 网络动画 + Minimal 波形条
+// Custom working indicator — neural animation + minimal waveform bars
 function ChatWorkingIndicator() {
   const uid = `neural-${Math.random().toString(36).slice(2, 8)}`;
 
-  // 使用 innerHTML 注入 SVG，避免 TypeScript 对 SMIL 元素（animateMotion）的类型问题
+  // Inject SVG via innerHTML to avoid TypeScript SMIL typing friction (animateMotion).
   const svgContent = `
     <defs>
       <filter id="${uid}">
@@ -104,13 +99,13 @@ function ChatWorkingIndicator() {
   return (
     <div class="px-4 py-1.5 shrink-0">
       <div class="inline-flex items-center gap-2.5 px-3 py-2 rounded-xl bg-primary/[0.04] border border-primary/10">
-        {/* Neural 网络 SVG 动画 */}
+        {/* Neural SVG animation */}
         <svg class="w-7 h-7 shrink-0" viewBox="0 0 40 40" fill="none" innerHTML={svgContent} />
 
-        {/* 状态文字（shimmer 效果） */}
+        {/* Status text (shimmer) */}
         <span class="text-xs text-muted-foreground processing-text-shimmer">Working</span>
 
-        {/* 波形条（Minimal variant style） */}
+        {/* Waveform bars (minimal style) */}
         <div class="flex items-end gap-[2px] h-3.5">
           <div class="w-[3px] bg-primary/70 rounded-full processing-bar" style="animation-delay:0ms" />
           <div class="w-[3px] bg-primary/70 rounded-full processing-bar" style="animation-delay:100ms" />
@@ -276,6 +271,7 @@ const MessageListWithEmptyState: Component<MessageListWithEmptyStateProps> = (pr
 export function EnvAIPage() {
   const env = useEnvContext();
   const protocol = useProtocol();
+  const rpc = useRedevenRpc();
   const notify = useNotification();
   const ai = useAIChatContext();
 
@@ -289,187 +285,93 @@ export function EnvAIPage() {
 
   const [messagesLoading, setMessagesLoading] = createSignal(false);
   const [hasMessages, setHasMessages] = createSignal(false);
-  // 发送消息后立即为 true，在 ai.setRunning(true) 接管前提供即时反馈
+  // Turns true immediately after send to keep instant feedback before run state events arrive.
   const [sendPending, setSendPending] = createSignal(false);
-
-  const [runId, setRunId] = createSignal<string | null>(null);
 
   let chat: ChatContextValue | null = null;
   const [chatReady, setChatReady] = createSignal(false);
 
-  let abortCtrl: AbortController | null = null;
-  let assistantText = '';
   let lastMessagesReq = 0;
   let skipNextThreadLoad = false;
-  let runStartedAtMs = 0;
-  let lastStreamAtMs = 0;
-  let watchdogToken = 0;
-  let watchdogTimer: number | null = null;
-  let stopFallbackTimer: number | null = null;
-  let currentRunThreadId: string | null = null;
+  const replayAppliedByThread = new Map<string, number>();
+  const failureNotifiedRuns = new Set<string>();
 
-  const runningThreadId = createMemo(() => String(ai.runningThreadId() ?? '').trim() || null);
   const activeThreadRunning = createMemo(() => ai.isThreadRunning(ai.activeThreadId()));
-
-  const shouldRenderRunningThread = () => {
-    const runTid = String(currentRunThreadId ?? runningThreadId() ?? '').trim();
-    if (!runTid) return false;
-    const activeTid = String(ai.activeThreadId() ?? '').trim();
-    // Keep rendering while active thread is transiently empty.
-    if (!activeTid) return true;
-    return activeTid === runTid;
-  };
-
   const canInteract = createMemo(
-    () => protocol.status() === 'connected' && !ai.running() && !activeThreadRunning() && ai.aiEnabled() && ai.modelsReady(),
+    () => protocol.status() === 'connected' && !activeThreadRunning() && ai.aiEnabled() && ai.modelsReady(),
   );
 
-  const stopWatchdog = () => {
-    watchdogToken++;
-    if (watchdogTimer != null) {
-      window.clearTimeout(watchdogTimer);
-      watchdogTimer = null;
+  const syncThreadReplay = (threadId: string, opts?: { reset?: boolean }) => {
+    if (!chat) return;
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return;
+
+    if (opts?.reset) {
+      replayAppliedByThread.set(tid, 0);
     }
-    if (stopFallbackTimer != null) {
-      window.clearTimeout(stopFallbackTimer);
-      stopFallbackTimer = null;
+
+    const events = ai.threadReplayEvents(tid);
+    let applied = replayAppliedByThread.get(tid) ?? 0;
+    if (applied < 0 || applied > events.length) {
+      applied = 0;
     }
-  };
 
-  const touchWatchdog = () => {
-    lastStreamAtMs = Date.now();
-  };
+    for (let i = applied; i < events.length; i += 1) {
+      chat.handleStreamEvent(events[i] as any);
+    }
+    replayAppliedByThread.set(tid, events.length);
 
-  const startWatchdog = () => {
-    stopWatchdog();
-    const token = ++watchdogToken;
-    runStartedAtMs = Date.now();
-    lastStreamAtMs = runStartedAtMs;
-
-    const tick = () => {
-      if (token !== watchdogToken) return;
-      if (!untrack(ai.running)) return;
-
-      const now = Date.now();
-      if (now - runStartedAtMs > RUN_MAX_WALL_TIME_MS) {
-        void forceEndRun('Timed out.', { cancelServer: true });
-        return;
-      }
-      if (now - lastStreamAtMs > RUN_IDLE_TIMEOUT_MS) {
-        void forceEndRun('Disconnected.', { cancelServer: true });
-        return;
-      }
-      watchdogTimer = window.setTimeout(tick, RUN_WATCHDOG_TICK_MS);
-    };
-
-    watchdogTimer = window.setTimeout(tick, RUN_WATCHDOG_TICK_MS);
+    if (events.length > 0) {
+      setHasMessages(true);
+    }
   };
 
   const loadThreadMessages = async (threadId: string): Promise<void> => {
     if (!chat) return;
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return;
+
     const reqNo = ++lastMessagesReq;
     setMessagesLoading(true);
     try {
       const resp = await fetchGatewayJSON<ListThreadMessagesResponse>(
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadId)}/messages?limit=500`,
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/messages?limit=500`,
         { method: 'GET' },
       );
       if (reqNo !== lastMessagesReq) return;
+
       const messages = resp.messages || [];
       chat.setMessages(messages);
       setHasMessages(messages.length > 0);
+      syncThreadReplay(tid, { reset: true });
     } catch (e) {
       if (reqNo !== lastMessagesReq) return;
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Failed to load chat', msg || 'Request failed.');
       chat.clearMessages();
       setHasMessages(false);
+      replayAppliedByThread.delete(tid);
     } finally {
-      if (reqNo === lastMessagesReq) setMessagesLoading(false);
+      if (reqNo === lastMessagesReq) {
+        setMessagesLoading(false);
+      }
     }
-  };
-
-  const requestServerCancel = (rid: string | null, tid: string | null) => {
-    const run = String(rid ?? '').trim();
-    const thread = String(tid ?? '').trim();
-    if (run) {
-      void fetchGatewayJSON<void>(`/_redeven_proxy/api/ai/runs/${encodeURIComponent(run)}/cancel`, { method: 'POST' }).catch(() => {});
-      return;
-    }
-    if (thread) {
-      void fetchGatewayJSON<void>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(thread)}/cancel`, { method: 'POST' }).catch(() => {});
-    }
-  };
-
-  const abortLocalRun = (opts?: { cancelServer?: boolean }) => {
-    stopWatchdog();
-    if (opts?.cancelServer) {
-      requestServerCancel(runId(), currentRunThreadId || runningThreadId());
-    }
-    abortCtrl?.abort();
-    abortCtrl = null;
-
-    const mid = shouldRenderRunningThread() ? chat?.streamingMessageId?.() ?? null : null;
-    if (mid) {
-      chat?.handleStreamEvent({ type: 'message-end', messageId: mid } as any);
-    }
-
-    assistantText = '';
-    currentRunThreadId = null;
-    ai.setRunningThreadId(null);
-    ai.setRunning(false);
-    setRunId(null);
-    ai.bumpThreadsSeq();
-  };
-
-  const forceEndRun = async (notice: string, opts?: { cancelServer?: boolean }) => {
-    stopWatchdog();
-    if (opts?.cancelServer) {
-      requestServerCancel(runId(), currentRunThreadId || runningThreadId() || ai.activeThreadId());
-    }
-    abortCtrl?.abort();
-    abortCtrl = null;
-
-    const shouldRender = shouldRenderRunningThread();
-    const mid = shouldRender ? chat?.streamingMessageId?.() ?? null : null;
-    if (mid) {
-      const prefix = assistantText.trim() ? '\n\n' : '';
-      handleStreamEvent({ type: 'block-delta', messageId: mid, blockIndex: 0, delta: `${prefix}${notice}` } as any);
-      handleStreamEvent({ type: 'message-end', messageId: mid } as any);
-      return;
-    }
-
-    if (shouldRender) {
-      // Fallback when we don't have a streaming message id (e.g. request failed before message-start).
-      chat?.addMessage({
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        blocks: [{ type: 'markdown', content: notice }],
-        status: 'complete',
-        timestamp: Date.now(),
-      } as any);
-      setHasMessages(true);
-    }
-
-    assistantText = '';
-    currentRunThreadId = null;
-    ai.setRunningThreadId(null);
-    ai.setRunning(false);
-    setRunId(null);
-    ai.bumpThreadsSeq();
   };
 
   const stopRun = () => {
-    requestServerCancel(runId(), currentRunThreadId || runningThreadId() || ai.activeThreadId());
-    if (stopFallbackTimer != null) window.clearTimeout(stopFallbackTimer);
-    stopFallbackTimer = window.setTimeout(() => {
-      if (!untrack(ai.running)) return;
-      void forceEndRun('Canceled.', { cancelServer: false });
-    }, STOP_FALLBACK_MS);
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    const rid = String(ai.runIdForThread(tid) ?? '').trim();
+    if (!tid && !rid) return;
+
+    void rpc.ai
+      .cancelRun({ runId: rid || undefined, threadId: rid ? undefined : tid || undefined })
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        notify.error('Failed to stop run', msg || 'Request failed.');
+      });
   };
 
   // Load messages when the active thread changes (or on initial selection).
-  // Keep the current run alive when switching threads.
   createEffect(() => {
     if (!chatReady()) return;
 
@@ -480,7 +382,6 @@ export function EnvAIPage() {
     }
 
     const tid = ai.activeThreadId();
-    const runTid = String(currentRunThreadId ?? untrack(() => runningThreadId()) ?? '').trim();
 
     // Draft -> thread promotion: keep the optimistic user message rendered by ChatProvider.
     if (skipNextThreadLoad && tid) {
@@ -489,19 +390,52 @@ export function EnvAIPage() {
     }
 
     if (!tid) {
-      // Keep current rendering when local run is alive and thread selection is
-      // still reconciling.
-      if (untrack(ai.running) && !!runTid) return;
-      assistantText = '';
       chat?.clearMessages();
       setHasMessages(false);
       return;
     }
 
-    assistantText = '';
     chat?.clearMessages();
     setHasMessages(false);
+    replayAppliedByThread.delete(String(tid ?? '').trim());
     void loadThreadMessages(tid);
+  });
+
+  createEffect(() => {
+    if (!chatReady()) return;
+
+    const unsub = ai.onRealtimeEvent((event) => {
+      const tid = String(event.threadId ?? '').trim();
+      if (!tid) return;
+
+      if (event.eventType === 'stream_event') {
+        if (tid === String(ai.activeThreadId() ?? '').trim()) {
+          syncThreadReplay(tid);
+        }
+        return;
+      }
+
+      const status = String(event.runStatus ?? '').trim().toLowerCase();
+      if (status === 'running') {
+        return;
+      }
+
+      replayAppliedByThread.delete(tid);
+      if (tid === String(ai.activeThreadId() ?? '').trim()) {
+        void loadThreadMessages(tid);
+      }
+
+      const runId = String(event.runId ?? '').trim();
+      const runError = String(event.runError ?? '').trim();
+      if (status === 'failed' && runError && runId && !failureNotifiedRuns.has(runId)) {
+        failureNotifiedRuns.add(runId);
+        notify.error('AI failed', runError);
+      }
+    });
+
+    onCleanup(() => {
+      unsub();
+    });
   });
 
   // FileBrowser -> AI context injection (persist into the active thread).
@@ -568,81 +502,44 @@ export function EnvAIPage() {
   };
 
   const sendToolApproval = async (_messageId: string, toolId: string, approved: boolean) => {
-    const id = runId();
-    if (!id) return;
-    await fetchGatewayJSON<void>(`/_redeven_proxy/api/ai/runs/${encodeURIComponent(id)}/tool_approvals`, {
-      method: 'POST',
-      body: JSON.stringify({ tool_id: toolId, approved }),
-    });
-  };
-
-  const handleStreamEvent = (ev: StreamEvent) => {
-    touchWatchdog();
-
-    const shouldRender = shouldRenderRunningThread();
-    if (shouldRender) {
-      chat?.handleStreamEvent(ev);
-    }
-
-    if (ev.type === 'block-delta' && typeof (ev as any).delta === 'string') {
-      assistantText += String((ev as any).delta);
-      return;
-    }
-    if (ev.type === 'message-end') {
-      stopWatchdog();
-      assistantText = '';
-      currentRunThreadId = null;
-      ai.setRunningThreadId(null);
-      ai.setRunning(false);
-      setRunId(null);
-      abortCtrl = null;
-      ai.bumpThreadsSeq();
-      if (shouldRender) {
-        setHasMessages(true);
-      }
-      return;
-    }
-    if (ev.type === 'error') {
-      stopWatchdog();
-      const msg = String((ev as any).error ?? 'AI error');
-      notify.error('AI failed', msg);
-      assistantText = '';
-      currentRunThreadId = null;
-      ai.setRunningThreadId(null);
-      ai.setRunning(false);
-      setRunId(null);
-      abortCtrl = null;
-      ai.bumpThreadsSeq();
-      return;
-    }
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    const rid = String(ai.runIdForThread(tid) ?? '').trim();
+    if (!rid) return;
+    await rpc.ai.approveTool({ runId: rid, toolId, approved });
   };
 
   const startRun = async (content: string, attachments: Attachment[]) => {
     if (!chat) {
       notify.error('AI unavailable', 'Chat is not ready.');
+      setSendPending(false);
       return;
     }
-    if (ai.running()) {
+    if (activeThreadRunning()) {
       notify.info('AI is busy', 'Please wait for the current run to finish.');
+      setSendPending(false);
       return;
     }
     if (!ai.aiEnabled()) {
       notify.error('AI not configured', 'Open Settings to enable AI.');
+      setSendPending(false);
       return;
     }
     if (ai.models.error) {
       const msg = ai.models.error instanceof Error ? ai.models.error.message : String(ai.models.error);
       notify.error('AI unavailable', msg || 'Failed to load models.');
+      setSendPending(false);
       return;
     }
+
     const model = ai.selectedModel().trim();
     if (!model) {
       notify.error('Missing model', 'Please select a model.');
+      setSendPending(false);
       return;
     }
 
     // ChatProvider already rendered the optimistic user message; ensure the message list is visible.
-    // sendPending 通常已由 capture-phase 监听器提前设置，这里作为兜底（如附件-only 发送等场景）。
+    // sendPending is usually raised by onWillSend, this call keeps attachment-only flows responsive.
     setHasMessages(true);
     setSendPending(true);
 
@@ -657,139 +554,47 @@ export function EnvAIPage() {
       return;
     }
 
+    const userText = String(content ?? '').trim();
     const uploaded = attachments.filter((a) => a.status === 'uploaded' && !!String(a.url ?? '').trim());
     const attIn = uploaded.map((a) => ({
       name: a.file.name,
-      mime_type: a.file.type,
+      mimeType: a.file.type,
       url: String(a.url ?? '').trim(),
     }));
 
-    assistantText = '';
-    currentRunThreadId = tid;
-    ai.setRunningThreadId(tid);
-    setRunId(null);
-    ai.setRunning(true);
-    setSendPending(false);
-    startWatchdog();
-
-    const userText = String(content ?? '').trim();
-
-    const ac = new AbortController();
-    abortCtrl = ac;
+    ai.clearThreadReplay(tid);
+    ai.markThreadPendingRun(tid);
+    replayAppliedByThread.delete(String(tid ?? '').trim());
 
     try {
-      const body = JSON.stringify({
-        thread_id: tid,
+      const resp = await rpc.ai.startRun({
+        threadId: tid,
         model,
-        input: { text: userText, attachments: attIn },
-        options: { max_steps: 10 },
+        input: {
+          text: userText,
+          attachments: attIn,
+        },
+        options: { maxSteps: 10 },
       });
 
-      const resp = await fetch('/_redeven_proxy/api/ai/runs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-        signal: ac.signal,
-        credentials: 'omit',
-        cache: 'no-store',
-      });
-
-      if (!resp.ok) {
-        const raw = await resp.text();
-        let msg = raw;
-        try {
-          const data = raw ? JSON.parse(raw) : null;
-          msg = String(data?.error ?? data?.message ?? raw);
-        } catch {
-          // ignore
-        }
-        throw new Error(msg || `HTTP ${resp.status}`);
+      const rid = String(resp.runId ?? '').trim();
+      if (rid) {
+        ai.confirmThreadRun(tid, rid);
       }
-
-      const rid = String(resp.headers.get('X-Redeven-AI-Run-ID') ?? '').trim();
-      if (rid) setRunId(rid);
-
-      // Thread metadata (title/preview) is updated server-side on each persisted message.
       ai.bumpThreadsSeq();
-
-      const stream = resp.body;
-      if (!stream) throw new Error('Missing response body');
-
-      const reader = stream.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let buffer = '';
-
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        for (;;) {
-          const idx = buffer.indexOf('\n');
-          if (idx < 0) break;
-          const line = buffer.slice(0, idx).trim();
-          buffer = buffer.slice(idx + 1);
-          if (!line) continue;
-          try {
-            handleStreamEvent(JSON.parse(line) as StreamEvent);
-          } catch {
-            // ignore invalid frames
-          }
-        }
-      }
-      buffer += decoder.decode();
-      if (buffer.trim()) {
-        // Best-effort: handle a trailing frame without a newline.
-        const tail = buffer.trim();
-        buffer = '';
-        try {
-          handleStreamEvent(JSON.parse(tail) as StreamEvent);
-        } catch {
-          // ignore
-        }
-      }
-
-      // If the stream ended without a terminal event, end locally to avoid a stuck UI.
-      if (ai.running()) {
-        await forceEndRun('Disconnected.', { cancelServer: true });
-      }
     } catch (e) {
-      // Abort is a normal control flow when the user clicks "Stop".
-      if (e && typeof e === 'object' && (e as any).name === 'AbortError') {
-        stopWatchdog();
-        const mid = shouldRenderRunningThread() ? chat?.streamingMessageId?.() ?? null : null;
-        if (mid) {
-          chat?.handleStreamEvent({ type: 'message-end', messageId: mid } as any);
-        }
-        ai.setRunning(false);
-        setSendPending(false);
-        setRunId(null);
-        abortCtrl = null;
-        assistantText = '';
-        currentRunThreadId = null;
-        ai.setRunningThreadId(null);
-        ai.bumpThreadsSeq();
-        return;
-      }
-
+      ai.clearThreadPendingRun(tid);
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('AI failed', msg || 'Request failed.');
-      stopWatchdog();
-      ai.setRunning(false);
+    } finally {
       setSendPending(false);
-      setRunId(null);
-      abortCtrl = null;
-      assistantText = '';
-      currentRunThreadId = null;
-      ai.setRunningThreadId(null);
-      ai.bumpThreadsSeq();
     }
   };
 
   const callbacks: ChatCallbacks = {
     onWillSend: () => {
-      // 同步钩子：ChatProvider 渲染乐观消息后立即调用，在 deferNonBlocking 之前。
-      // 此处设置 sendPending 保证 Working 指示器在同一帧内出现。
+      // Synchronous hook: called right after ChatProvider renders the optimistic user message.
+      // Raising sendPending here makes the working indicator appear in the same frame.
       if (import.meta.env.DEV) console.debug('[AI Chat] onWillSend fired at', performance.now().toFixed(1), 'ms');
       setSendPending(true);
       setHasMessages(true);
@@ -842,11 +647,6 @@ export function EnvAIPage() {
 
     setDeleting(true);
     try {
-      if (force && untrack(ai.running) && String(ai.runningThreadId() ?? '').trim() === tid) {
-        // We'll delete the running thread anyway; stop the local stream immediately.
-        abortLocalRun({ cancelServer: false });
-      }
-
       const url = `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}${force ? '?force=true' : ''}`;
       const resp = await fetch(url, { method: 'DELETE', credentials: 'omit', cache: 'no-store' });
       const text = await resp.text();
@@ -886,11 +686,10 @@ export function EnvAIPage() {
     void startRun(prompt, []);
   };
 
-  // 自定义 Working 指示器显示条件：sendPending（即时）或 run 进行中，且尚未收到流式消息
+  // Keep the custom working indicator visible from send start until the run fully ends.
   const showWorkingIndicator = () => {
     if (!chatReady()) return false;
-    if (!sendPending() && !ai.running() && !activeThreadRunning()) return false;
-    if (chat?.streamingMessageId?.()) return false;
+    if (!sendPending() && !activeThreadRunning()) return false;
     return true;
   };
 
@@ -1039,8 +838,7 @@ export function EnvAIPage() {
               class="flex-1 min-h-0"
             />
 
-            {/* 自定义 Working 指示器（Neural + Waveform）— 始终在 DOM 中，通过 display 切换可见性，
-                避免 <Show> 每次切换时重新创建 DOM 带来的延迟 */}
+            {/* Keep indicator mounted and toggle visibility via display to avoid mount/unmount jitter. */}
             <div style={{ display: showWorkingIndicator() ? '' : 'none' }}>
               <ChatWorkingIndicator />
             </div>
@@ -1153,10 +951,10 @@ export function EnvAIPage() {
       <LoadingOverlay visible={protocol.status() !== 'connected'} message="Connecting to agent..." />
       <LoadingOverlay visible={ai.settings.loading && protocol.status() === 'connected'} message="Loading settings..." />
       <LoadingOverlay visible={ai.models.loading && ai.aiEnabled()} message="Loading models..." />
-      {/* 仅在初次加载（无缓存数据）时展示全局 loading，bumpThreadsSeq 触发的后台刷新不显示遮罩 */}
+      {/* Show global loading only on first load (no cached data); hide it for background refreshes. */}
       <LoadingOverlay visible={ai.threads.loading && ai.aiEnabled() && !ai.threads()} message="Loading chats..." />
-      {/* run 进行中不显示 messages loading 遮罩，避免 working 状态下闪现全局 loading */}
-      <LoadingOverlay visible={messagesLoading() && ai.aiEnabled() && !ai.running()} message="Loading chat..." />
+      {/* Do not show message loading overlay while a run is active to avoid flicker. */}
+      <LoadingOverlay visible={messagesLoading() && ai.aiEnabled() && !activeThreadRunning()} message="Loading chat..." />
     </div>
   );
 }

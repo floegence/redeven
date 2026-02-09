@@ -49,7 +49,8 @@ type runOptions struct {
 
 	UploadsDir string
 
-	Writer http.ResponseWriter
+	OnStreamEvent func(any)
+	Writer        http.ResponseWriter
 }
 
 type run struct {
@@ -76,17 +77,17 @@ type run struct {
 	toolApprovalTO    time.Duration
 	doneCh            chan struct{}
 
-	muCancel     sync.Mutex
-	cancelReason string // "canceled"|"timed_out"|""
-	endReason    string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
+	muCancel        sync.Mutex
+	cancelReason    string // "canceled"|"timed_out"|""
+	endReason       string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
+	cancelRequested bool
+	cancelFn        context.CancelFunc
 
 	uploadsDir string
 
-	w      http.ResponseWriter
-	stream *ndjsonStream
-
-	cancelOnce sync.Once
-	cancelFn   context.CancelFunc
+	onStreamEvent func(any)
+	w             http.ResponseWriter
+	stream        *ndjsonStream
 
 	mu              sync.Mutex
 	sidecar         *sidecarProcess
@@ -98,6 +99,7 @@ type run struct {
 	currentTextBlockIndex int
 	needNewTextBlock      bool
 
+	muAssistant              sync.Mutex
 	assistantCreatedAtUnixMs int64
 	assistantBlocks          []any
 }
@@ -125,6 +127,7 @@ func newRun(opts runOptions) *run {
 		userPublicID:       strings.TrimSpace(opts.UserPublicID),
 		messageID:          strings.TrimSpace(opts.MessageID),
 		uploadsDir:         strings.TrimSpace(opts.UploadsDir),
+		onStreamEvent:      opts.OnStreamEvent,
 		w:                  opts.Writer,
 		toolApprovals:      make(map[string]chan bool),
 		toolBlockIndex:     make(map[string]int),
@@ -134,7 +137,9 @@ func newRun(opts runOptions) *run {
 		toolApprovalTO:     opts.ToolApprovalTimeout,
 		doneCh:             make(chan struct{}),
 	}
-	r.stream = newNDJSONStream(r.w, opts.StreamWriteTimeout)
+	if opts.Writer != nil {
+		r.stream = newNDJSONStream(r.w, opts.StreamWriteTimeout)
+	}
 	return r
 }
 
@@ -186,20 +191,42 @@ func (r *run) cancel() {
 	if r == nil {
 		return
 	}
-	r.cancelOnce.Do(func() {
-		if r.cancelFn != nil {
-			r.cancelFn()
+
+	r.muCancel.Lock()
+	r.cancelRequested = true
+	cancelFn := r.cancelFn
+	r.muCancel.Unlock()
+
+	if cancelFn != nil {
+		cancelFn()
+	}
+
+	r.mu.Lock()
+	sc := r.sidecar
+	r.mu.Unlock()
+	if sc != nil {
+		// Best-effort: never block cancel on a stuck sidecar stdin pipe.
+		go func() {
+			_ = sc.send("run.cancel", map[string]any{"run_id": r.id})
+		}()
+	}
+}
+
+func (r *run) sendStreamEvent(ev any) {
+	if r == nil || ev == nil {
+		return
+	}
+	if r.onStreamEvent != nil {
+		r.onStreamEvent(ev)
+	}
+	if r.stream == nil {
+		return
+	}
+	if err := r.stream.send(ev); err != nil {
+		if r.log != nil {
+			r.log.Debug("ai stream sink write failed", "run_id", r.id, "error", err)
 		}
-		r.mu.Lock()
-		sc := r.sidecar
-		r.mu.Unlock()
-		if sc != nil {
-			// Best-effort: never block cancel on a stuck sidecar stdin pipe.
-			go func() {
-				_ = sc.send("run.cancel", map[string]any{"run_id": r.id})
-			}()
-		}
-	})
+	}
 }
 
 func (r *run) approveTool(toolID string, approved bool) error {
@@ -235,30 +262,29 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 		ctx = context.Background()
 	}
 	ctx, cancel := context.WithCancel(ctx)
+	r.muCancel.Lock()
 	r.cancelFn = cancel
+	alreadyCanceled := r.cancelRequested
+	r.muCancel.Unlock()
+	if alreadyCanceled {
+		cancel()
+	}
 	defer r.cancel()
 	if r.stream != nil {
 		defer r.stream.close()
 	}
 
 	// Initial assistant message + first markdown block.
+	r.muAssistant.Lock()
 	r.assistantCreatedAtUnixMs = time.Now().UnixMilli()
 	r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: ""}}
+	r.muAssistant.Unlock()
 	r.nextBlockIndex = 1
 	r.currentTextBlockIndex = 0
 	r.needNewTextBlock = false
 
-	if err := r.stream.send(streamEventMessageStart{Type: "message-start", MessageID: r.messageID}); err != nil {
-		// Client is likely disconnected. Persist a terminal notice and exit without starting sidecar.
-		r.finalizeNotice("disconnected")
-		r.setEndReason("disconnected")
-		return nil
-	}
-	if err := r.stream.send(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"}); err != nil {
-		r.finalizeNotice("disconnected")
-		r.setEndReason("disconnected")
-		return nil
-	}
+	r.sendStreamEvent(streamEventMessageStart{Type: "message-start", MessageID: r.messageID})
+	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"})
 	// Note: timeouts are enforced via an out-of-band goroutine (after sidecar starts) so the run
 	// still cancels even when blocked in sc.recv().
 
@@ -267,11 +293,11 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 	providerID, _, ok := strings.Cut(modelID, "/")
 	providerID = strings.TrimSpace(providerID)
 	if !ok || providerID == "" {
-		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "Invalid model id"})
+		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Invalid model id"})
 		return fmt.Errorf("invalid model id %q", modelID)
 	}
 	if r.cfg == nil {
-		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI not configured"})
+		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI not configured"})
 		return errors.New("ai not configured")
 	}
 	knownProvider := false
@@ -282,7 +308,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 		}
 	}
 	if !knownProvider {
-		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "Unknown AI provider"})
+		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Unknown AI provider"})
 		return fmt.Errorf("unknown provider %q", providerID)
 	}
 
@@ -298,16 +324,16 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 	}
 
 	if r.resolveProviderKey == nil {
-		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI provider key resolver not configured"})
+		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI provider key resolver not configured"})
 		return errors.New("missing provider key resolver")
 	}
 	apiKey, ok, err := r.resolveProviderKey(providerID)
 	if err != nil {
-		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "Failed to load AI provider key"})
+		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Failed to load AI provider key"})
 		return err
 	}
 	if !ok || strings.TrimSpace(apiKey) == "" {
-		_ = r.stream.send(streamEventError{
+		r.sendStreamEvent(streamEventError{
 			Type:      "error",
 			MessageID: r.messageID,
 			Error:     fmt.Sprintf("AI provider %q is missing API key. Open Settings to configure it.", providerDisplay),
@@ -329,7 +355,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 
 	sc, err := startSidecar(ctx, r.log, r.stateDir, env, r.sidecarScriptPath)
 	if err != nil {
-		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI sidecar unavailable"})
+		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI sidecar unavailable"})
 		return err
 	}
 	r.mu.Lock()
@@ -383,7 +409,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 		},
 		"options": req.Options,
 	}); err != nil {
-		_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "Failed to start AI run"})
+		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Failed to start AI run"})
 		return err
 	}
 
@@ -463,18 +489,18 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 			case "canceled":
 				r.finalizeNotice("canceled")
 				r.setEndReason("canceled")
-				_ = r.stream.send(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 				return nil
 			case "timed_out":
 				r.finalizeNotice("timed_out")
 				r.setEndReason("timed_out")
-				_ = r.stream.send(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 				return nil
 			default:
 				// Parent context canceled (browser disconnect).
 				r.finalizeNotice("disconnected")
 				r.setEndReason("disconnected")
-				_ = r.stream.send(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 				return nil
 			}
 		default:
@@ -491,10 +517,10 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 			if errors.Is(err, io.EOF) {
 				r.finalizeNotice("disconnected")
 				r.setEndReason("disconnected")
-				_ = r.stream.send(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 				return nil
 			}
-			_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI sidecar error"})
+			r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI sidecar error"})
 			r.setEndReason("error")
 			return err
 		}
@@ -524,11 +550,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 			if strings.TrimSpace(p.RunID) != r.id || p.Delta == "" {
 				continue
 			}
-			if err := r.appendTextDelta(p.Delta); err != nil {
-				// Stop the run early if the client can't consume the stream.
-				r.requestCancel("disconnected")
-				continue
-			}
+			_ = r.appendTextDelta(p.Delta)
 
 		case "tool.call":
 			var p struct {
@@ -549,7 +571,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 		case "run.end":
 			r.ensureNonEmptyAssistant()
 			r.setEndReason("complete")
-			_ = r.stream.send(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 			return nil
 
 		case "run.error":
@@ -565,7 +587,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 			if msgErr == "" {
 				msgErr = "AI error"
 			}
-			_ = r.stream.send(streamEventError{Type: "error", MessageID: r.messageID, Error: msgErr})
+			r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: msgErr})
 			r.setEndReason("error")
 			return errors.New(msgErr)
 		}
@@ -575,27 +597,28 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 func (r *run) appendTextDelta(delta string) error {
 	if r.needNewTextBlock {
 		idx := r.nextBlockIndex
-		if err := r.stream.send(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "markdown"}); err != nil {
-			return err
-		}
+		r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "markdown"})
 		r.persistSetMarkdownBlock(idx)
 		r.currentTextBlockIndex = idx
 		r.nextBlockIndex++
 		r.needNewTextBlock = false
 	}
 	r.persistAppendMarkdownDelta(r.currentTextBlockIndex, delta)
-	return r.stream.send(streamEventBlockDelta{
+	r.sendStreamEvent(streamEventBlockDelta{
 		Type:       "block-delta",
 		MessageID:  r.messageID,
 		BlockIndex: r.currentTextBlockIndex,
 		Delta:      delta,
 	})
+	return nil
 }
 
 func (r *run) hasNonEmptyAssistantText() bool {
 	if r == nil {
 		return false
 	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
 	for _, blk := range r.assistantBlocks {
 		bm, ok := blk.(*persistedMarkdownBlock)
 		if !ok || bm == nil {
@@ -677,7 +700,7 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 	r.toolBlockIndex[toolID] = idx
 	r.mu.Unlock()
 
-	_ = r.stream.send(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "tool-call"})
+	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "tool-call"})
 
 	block := ToolCallBlock{
 		Type:     "tool-call",
@@ -692,7 +715,7 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		block.ApprovalState = "required"
 	}
 
-	_ = r.stream.send(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 	r.persistSetToolBlock(idx, block)
 
 	// Permission enforcement uses authoritative session_meta.
@@ -741,7 +764,7 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 			block.ApprovalState = "rejected"
 			block.Status = ToolCallStatusError
 			block.Error = "Approval timed out"
-			_ = r.stream.send(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+			r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 			r.persistSetToolBlock(idx, block)
 			return r.sendToolResult(sc, toolID, false, nil, "approval timed out")
 		}
@@ -749,7 +772,7 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 			block.ApprovalState = "rejected"
 			block.Status = ToolCallStatusError
 			block.Error = "Rejected by user"
-			_ = r.stream.send(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+			r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 			r.persistSetToolBlock(idx, block)
 			return r.sendToolResult(sc, toolID, false, nil, "rejected by user")
 		}
@@ -759,21 +782,21 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 
 	// Execute.
 	block.Status = ToolCallStatusRunning
-	_ = r.stream.send(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 	r.persistSetToolBlock(idx, block)
 
 	result, toolErr := r.execTool(ctx, meta, toolName, args)
 	if toolErr != nil {
 		block.Status = ToolCallStatusError
 		block.Error = toolErr.Error()
-		_ = r.stream.send(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+		r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 		r.persistSetToolBlock(idx, block)
 		return r.sendToolResult(sc, toolID, false, nil, toolErr.Error())
 	}
 
 	block.Status = ToolCallStatusSuccess
 	block.Result = result
-	_ = r.stream.send(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 	r.persistSetToolBlock(idx, block)
 
 	return r.sendToolResult(sc, toolID, true, result, "")
@@ -792,6 +815,8 @@ func (r *run) persistSetMarkdownBlock(idx int) {
 	if r == nil || idx < 0 {
 		return
 	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
 	r.persistEnsureIndex(idx)
 	r.assistantBlocks[idx] = &persistedMarkdownBlock{Type: "markdown", Content: ""}
 }
@@ -800,6 +825,8 @@ func (r *run) persistAppendMarkdownDelta(idx int, delta string) {
 	if r == nil || idx < 0 || delta == "" {
 		return
 	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
 	if idx >= len(r.assistantBlocks) {
 		return
 	}
@@ -812,6 +839,8 @@ func (r *run) persistSetToolBlock(idx int, block ToolCallBlock) {
 	if r == nil || idx < 0 {
 		return
 	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
 	r.persistEnsureIndex(idx)
 	r.assistantBlocks[idx] = block
 }
@@ -823,16 +852,35 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 	if strings.TrimSpace(r.messageID) == "" {
 		return "", "", 0, errors.New("missing message_id")
 	}
+
+	r.muAssistant.Lock()
 	if len(r.assistantBlocks) == 0 {
+		r.muAssistant.Unlock()
 		return "", "", 0, errors.New("assistant blocks unavailable")
 	}
+	blocks := make([]any, 0, len(r.assistantBlocks))
+	for _, blk := range r.assistantBlocks {
+		switch v := blk.(type) {
+		case *persistedMarkdownBlock:
+			if v == nil {
+				blocks = append(blocks, (*persistedMarkdownBlock)(nil))
+				continue
+			}
+			cp := *v
+			blocks = append(blocks, &cp)
+		default:
+			blocks = append(blocks, v)
+		}
+	}
+	assistantAt := r.assistantCreatedAtUnixMs
+	r.muAssistant.Unlock()
 
 	msg := persistedMessage{
 		ID:        r.messageID,
 		Role:      "assistant",
-		Blocks:    r.assistantBlocks,
+		Blocks:    blocks,
 		Status:    "complete",
-		Timestamp: r.assistantCreatedAtUnixMs,
+		Timestamp: assistantAt,
 	}
 	b, err := json.Marshal(msg)
 	if err != nil {
@@ -841,7 +889,7 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 
 	// Text for history: concatenate markdown blocks.
 	var sb strings.Builder
-	for _, blk := range r.assistantBlocks {
+	for _, blk := range blocks {
 		bm, ok := blk.(*persistedMarkdownBlock)
 		if !ok || bm == nil {
 			continue
@@ -855,7 +903,7 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 		sb.WriteString(bm.Content)
 	}
 
-	return string(b), strings.TrimSpace(sb.String()), r.assistantCreatedAtUnixMs, nil
+	return string(b), strings.TrimSpace(sb.String()), assistantAt, nil
 }
 
 func (r *run) sendToolResult(sc *sidecarProcess, toolID string, ok bool, result any, errMsg string) error {

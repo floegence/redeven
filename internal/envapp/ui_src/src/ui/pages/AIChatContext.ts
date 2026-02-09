@@ -8,10 +8,11 @@ import {
   useContext,
   type Accessor,
   type Resource,
-  type Setter,
 } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
+import type { StreamEvent } from '@floegence/floe-webapp-core/chat';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
+import { useRedevenRpc, type AIRealtimeEvent } from '../protocol/redeven_v1';
 import { useEnvContext } from './EnvContext';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 
@@ -142,12 +143,15 @@ export interface AIChatContextValue {
   creatingThread: Accessor<boolean>;
   ensureThreadForSend: () => Promise<string | null>;
 
-  // Run state (owned by EnvAIPage but shared to sidebar)
-  running: Accessor<boolean>;
-  setRunning: Setter<boolean>;
-  runningThreadId: Accessor<string | null>;
-  setRunningThreadId: Setter<string | null>;
+  // Run state (global realtime source of truth)
+  runIdForThread: (threadId: string | null | undefined) => string | null;
+  markThreadPendingRun: (threadId: string) => void;
+  confirmThreadRun: (threadId: string, runId: string) => void;
+  clearThreadPendingRun: (threadId: string) => void;
+  clearThreadReplay: (threadId: string | null | undefined) => void;
+  threadReplayEvents: (threadId: string | null | undefined) => StreamEvent[];
   isThreadRunning: (threadId: string | null | undefined) => boolean;
+  onRealtimeEvent: (handler: (event: AIRealtimeEvent) => void) => () => void;
 }
 
 // ---- Context ----
@@ -167,6 +171,7 @@ export function useAIChatContext(): AIChatContextValue {
 export function createAIChatContextValue(): AIChatContextValue {
   const env = useEnvContext();
   const protocol = useProtocol();
+  const rpc = useRedevenRpc();
   const notify = useNotification();
 
   // Settings resource
@@ -263,57 +268,196 @@ export function createAIChatContextValue(): AIChatContextValue {
           }),
   );
 
-  const [running, setRunning] = createSignal(false);
-  const [runningThreadId, setRunningThreadId] = createSignal<string | null>(null);
+  const [activeRunByThread, setActiveRunByThread] = createSignal<Record<string, string>>({});
+  const [pendingRunByThread, setPendingRunByThread] = createSignal<Record<string, true>>({});
+  const [replayByThread, setReplayByThread] = createSignal<Record<string, StreamEvent[]>>({});
 
-  // Track when the current local run started so we don't "reconcile" it away based on a stale threads list snapshot.
-  //
-  // Without this guard, the UI can drop stream events right after a run starts (threads list still says "idle"),
-  // causing missing "Working..." state and missing assistant output in the chat view.
-  //
-  // IMPORTANT: Do not compare browser timestamps with agent timestamps here. In Standard Mode, the agent and
-  // browser can be on different machines and clocks can drift. Use a local grace window instead.
-  const LOCAL_RUN_RECONCILE_GRACE_MS = 5_000;
-  let localRunStartedAtUnixMs = 0;
-  let localRunThreadID = '';
-  createEffect(() => {
-    const isRunning = running();
-    const tid = String(runningThreadId() ?? '').trim();
+  const realtimeListeners = new Set<(event: AIRealtimeEvent) => void>();
 
-    if (!isRunning) {
-      localRunStartedAtUnixMs = 0;
-      localRunThreadID = '';
-      return;
+  const emitRealtimeEvent = (event: AIRealtimeEvent) => {
+    for (const handler of realtimeListeners) {
+      try {
+        handler(event);
+      } catch {
+        // ignore listener errors
+      }
     }
+  };
+
+  const runIdForThread = (threadId: string | null | undefined): string | null => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return null;
+    const runId = String(activeRunByThread()[tid] ?? '').trim();
+    return runId || null;
+  };
+
+  const markThreadPendingRun = (threadId: string) => {
+    const tid = String(threadId ?? '').trim();
     if (!tid) return;
+    setPendingRunByThread((prev) => ({ ...prev, [tid]: true }));
+  };
 
-    if (localRunThreadID !== tid) {
-      localRunThreadID = tid;
-      localRunStartedAtUnixMs = Date.now();
-      return;
-    }
-    if (localRunStartedAtUnixMs <= 0) {
-      localRunStartedAtUnixMs = Date.now();
-    }
-  });
+  const confirmThreadRun = (threadId: string, runId: string) => {
+    const tid = String(threadId ?? '').trim();
+    const rid = String(runId ?? '').trim();
+    if (!tid || !rid) return;
+    setActiveRunByThread((prev) => ({ ...prev, [tid]: rid }));
+    setPendingRunByThread((prev) => {
+      if (!prev[tid]) return prev;
+      const next = { ...prev };
+      delete next[tid];
+      return next;
+    });
+  };
+
+  const clearThreadPendingRun = (threadId: string) => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return;
+    setPendingRunByThread((prev) => {
+      if (!prev[tid]) return prev;
+      const next = { ...prev };
+      delete next[tid];
+      return next;
+    });
+  };
+
+  const clearThreadReplay = (threadId: string | null | undefined) => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return;
+    setReplayByThread((prev) => {
+      if (!prev[tid]) return prev;
+      const next = { ...prev };
+      delete next[tid];
+      return next;
+    });
+  };
+
+  const threadReplayEvents = (threadId: string | null | undefined): StreamEvent[] => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return [];
+    return replayByThread()[tid] ?? [];
+  };
 
   const isThreadRunning = (threadId: string | null | undefined): boolean => {
     const tid = String(threadId ?? '').trim();
     if (!tid) return false;
 
-    if (running() && String(runningThreadId() ?? '').trim() === tid) {
-      return true;
-    }
+    if (pendingRunByThread()[tid]) return true;
+    if (String(activeRunByThread()[tid] ?? '').trim()) return true;
 
     const list = threads()?.threads ?? [];
     const th = list.find((it) => String(it.thread_id ?? '').trim() === tid);
     return normalizeThreadRunStatus(th?.run_status) === 'running';
   };
 
+  const onRealtimeEvent = (handler: (event: AIRealtimeEvent) => void) => {
+    realtimeListeners.add(handler);
+    return () => {
+      realtimeListeners.delete(handler);
+    };
+  };
+
+  const appendReplayEvent = (threadId: string, streamEvent: StreamEvent) => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return;
+    setReplayByThread((prev) => {
+      const next = { ...prev };
+      const arr = Array.isArray(next[tid]) ? [...next[tid]] : [];
+      arr.push(streamEvent);
+      if (arr.length > 1200) {
+        arr.splice(0, arr.length - 1200);
+      }
+      next[tid] = arr;
+      return next;
+    });
+  };
+
+  const applyRealtimeEvent = (event: AIRealtimeEvent) => {
+    const tid = String(event.threadId ?? '').trim();
+    const rid = String(event.runId ?? '').trim();
+    if (!tid || !rid) return;
+
+    if (event.eventType === 'stream_event') {
+      const streamEvent = event.streamEvent as StreamEvent | undefined;
+      if (streamEvent) {
+        appendReplayEvent(tid, streamEvent);
+      }
+      emitRealtimeEvent(event);
+      return;
+    }
+
+    const nextStatus = normalizeThreadRunStatus(event.runStatus);
+    if (nextStatus === 'running') {
+      setActiveRunByThread((prev) => ({ ...prev, [tid]: rid }));
+      clearThreadPendingRun(tid);
+    } else {
+      setActiveRunByThread((prev) => {
+        if (!prev[tid]) return prev;
+        const next = { ...prev };
+        delete next[tid];
+        return next;
+      });
+      clearThreadPendingRun(tid);
+      clearThreadReplay(tid);
+    }
+
+    bumpThreadsSeq();
+    emitRealtimeEvent(event);
+  };
+
+  createEffect(() => {
+    const client = protocol.client();
+    if (!client || !aiEnabled()) return;
+
+    let disposed = false;
+
+    const unsub = rpc.ai.onEvent((event) => {
+      if (disposed) return;
+      applyRealtimeEvent(event);
+    });
+
+    void rpc.ai
+      .subscribe()
+      .then((resp) => {
+        if (disposed) return;
+        const nextRuns: Record<string, string> = {};
+        for (const run of resp.activeRuns ?? []) {
+          const tid = String(run.threadId ?? '').trim();
+          const rid = String(run.runId ?? '').trim();
+          if (!tid || !rid) continue;
+          nextRuns[tid] = rid;
+        }
+        setActiveRunByThread(nextRuns);
+        setPendingRunByThread((prev) => {
+          if (Object.keys(prev).length === 0) return prev;
+          const next = { ...prev };
+          for (const tid of Object.keys(nextRuns)) {
+            delete next[tid];
+          }
+          return next;
+        });
+        bumpThreadsSeq();
+      })
+      .catch(() => {
+        // Best effort: reconnect flow will retry subscription.
+      });
+
+    onCleanup(() => {
+      disposed = true;
+      unsub();
+      setActiveRunByThread({});
+      setPendingRunByThread({});
+      setReplayByThread({});
+    });
+  });
+
   // Poll thread list while there is any active run so sidebar status stays fresh.
   createEffect(() => {
     if (protocol.status() !== 'connected' || !aiEnabled()) return;
-    const hasRunningThread = running() || (threads()?.threads ?? []).some((t) => normalizeThreadRunStatus(t.run_status) === 'running');
+    const hasRunningThread =
+      Object.keys(activeRunByThread()).length > 0 ||
+      Object.keys(pendingRunByThread()).length > 0 ||
+      (threads()?.threads ?? []).some((t) => normalizeThreadRunStatus(t.run_status) === 'running');
     if (!hasRunningThread) return;
 
     const timer = window.setInterval(() => {
@@ -322,40 +466,11 @@ export function createAIChatContextValue(): AIChatContextValue {
     onCleanup(() => window.clearInterval(timer));
   });
 
-  // Reconcile local running flag with persisted thread state to avoid stale "Working..." UI.
-  createEffect(() => {
-    if (protocol.status() !== 'connected') return;
-
-    const localRunning = running();
-    const localThreadID = String(runningThreadId() ?? '').trim();
-
-    if (!localRunning) {
-      if (localThreadID) setRunningThreadId(null);
-      return;
-    }
-    if (!localThreadID) {
-      setRunning(false);
-      return;
-    }
-
-    // Do not clear a freshly started local run. The threads list can lag behind the run start,
-    // and cross-device clocks are not comparable.
-    if (localRunStartedAtUnixMs > 0 && Date.now() - localRunStartedAtUnixMs < LOCAL_RUN_RECONCILE_GRACE_MS) {
-      return;
-    }
-
-    const th = (threads()?.threads ?? []).find((it) => String(it.thread_id ?? '').trim() === localThreadID);
-    if (!th) return;
-    if (normalizeThreadRunStatus(th.run_status) === 'running') return;
-
-    setRunning(false);
-    setRunningThreadId(null);
-  });
-
   createEffect(() => {
     if (protocol.status() === 'connected') return;
-    setRunning(false);
-    setRunningThreadId(null);
+    setActiveRunByThread({});
+    setPendingRunByThread({});
+    setReplayByThread({});
   });
 
   // Active thread
@@ -631,10 +746,13 @@ export function createAIChatContextValue(): AIChatContextValue {
     activeThreadTitle,
     creatingThread,
     ensureThreadForSend,
-    running,
-    setRunning,
-    runningThreadId,
-    setRunningThreadId,
+    runIdForThread,
+    markThreadPendingRun,
+    confirmThreadRun,
+    clearThreadPendingRun,
+    clearThreadReplay,
+    threadReplayEvents,
     isThreadRunning,
+    onRealtimeEvent,
   };
 }

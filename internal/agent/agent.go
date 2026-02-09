@@ -895,6 +895,13 @@ func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, m
 	// Monitor domain
 	a.mon.Register(router, meta)
 
+	if a.code != nil {
+		if aiSvc := a.code.AI(); aiSvc != nil {
+			defer aiSvc.DetachRealtimeSink(srv)
+			aiSvc.RegisterRPC(router, meta, srv)
+		}
+	}
+
 	// Sessions domain (active Flowersec channel sessions).
 	a.registerSessionsRPC(router, meta)
 

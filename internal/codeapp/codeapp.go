@@ -243,6 +243,13 @@ func (s *Service) Gateway() *gateway.Gateway {
 	return s.gw
 }
 
+func (s *Service) AI() *ai.Service {
+	if s == nil {
+		return nil
+	}
+	return s.ai
+}
+
 func (s *Service) ExternalOriginForCodeSpace(codeSpaceID string) (string, error) {
 	if s == nil {
 		return "", errors.New("nil service")
