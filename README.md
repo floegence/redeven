@@ -34,14 +34,15 @@ Not implemented yet (planned):
 - Installer source: `scripts/install.sh` (this repo)
 - Worker source template: `deployment/private-delivery/workers/install-agent/generate-worker.js`
 - Worker config: `deployment/private-delivery/workers/install-agent/wrangler.toml`
-- external delivery production branch: `release/install-worker`
+- external delivery production branch: `release`
 
 Deployment model:
 
 - downstream deployment automation is connected directly to this GitHub repository.
 - GitHub Actions is **not** used for external delivery deployment.
-- Deployments are tag-driven via `./scripts/publish_delivery_branch.sh <tag>`, which moves `release/install-worker` to the release tag commit.
+- Deployments are tag-driven via `./scripts/publish_delivery_branch.sh <tag>`, which moves `release` to the release tag commit.
 - `main` merges do not deploy the installer wrapper.
+- Ensure `release` exists on origin before first external delivery rollout: `git push origin origin/main:refs/heads/release`.
 
 See release operations: [`docs/RELEASE.md`](docs/RELEASE.md).
 
