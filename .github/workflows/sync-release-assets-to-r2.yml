@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: sync-release-assets-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
+  group: sync-release-assets-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.event.release.tag_name }}
   cancel-in-progress: false
 
 jobs:
@@ -27,8 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RELEASE_REPO: floegence/redeven-agent
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
-      RECOMMENDED_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.recommended || '' }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.event.release.tag_name }}
+      RECOMMENDED_VERSION: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.recommended || '' }}
 
       # R2 object storage endpoint (for example: https://<accountid>.r2.external deliverystorage.com)
       R2_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_ENDPOINT }}
