@@ -291,6 +291,25 @@ export function EnvAIPage() {
   let chat: ChatContextValue | null = null;
   const [chatReady, setChatReady] = createSignal(false);
 
+  const forceScrollToLatest = () => {
+    const scrollBottom = () => {
+      const el =
+        document.querySelector<HTMLElement>('.chat-message-list-scroll') ??
+        document.querySelector<HTMLElement>('.chat-message-list');
+      if (!el) return false;
+      el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+      return true;
+    };
+
+    if (scrollBottom()) return;
+    requestAnimationFrame(() => {
+      if (scrollBottom()) return;
+      requestAnimationFrame(() => {
+        void scrollBottom();
+      });
+    });
+  };
+
   let lastMessagesReq = 0;
   let skipNextThreadLoad = false;
   const replayAppliedByThread = new Map<string, number>();
@@ -542,6 +561,7 @@ export function EnvAIPage() {
     // sendPending is usually raised by onWillSend, this call keeps attachment-only flows responsive.
     setHasMessages(true);
     setSendPending(true);
+    forceScrollToLatest();
 
     let tid = ai.activeThreadId();
     if (!tid) {
@@ -598,10 +618,7 @@ export function EnvAIPage() {
       if (import.meta.env.DEV) console.debug('[AI Chat] onWillSend fired at', performance.now().toFixed(1), 'ms');
       setSendPending(true);
       setHasMessages(true);
-      requestAnimationFrame(() => {
-        const el = document.querySelector('.chat-message-list');
-        if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-      });
+      forceScrollToLatest();
     },
     onSendMessage: async (content, attachments, _addMessage) => {
       if (protocol.status() !== 'connected') {
@@ -698,6 +715,7 @@ export function EnvAIPage() {
       <ChatProvider
         config={{
           placeholder: 'Describe what you want to do...',
+          assistantAvatar: '/logo.png',
           allowAttachments: true,
           maxAttachments: 5,
           maxAttachmentSize: 10 * 1024 * 1024,
