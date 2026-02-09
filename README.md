@@ -34,14 +34,16 @@ Not implemented yet (planned):
 - Installer source: `scripts/install.sh` (this repo)
 - Worker source template: `deployment/private-delivery/workers/install-agent/generate-worker.js`
 - Worker config: `deployment/private-delivery/workers/install-agent/wrangler.toml`
-- Auto deploy workflow: `.github/workflows/deploy-install-worker.yml`
+- external delivery production branch: `release/install-worker`
 
-When `scripts/install.sh` (or worker files) changes on `main`, GitHub Actions deploys the Worker route `example.invalid/install.sh` automatically.
+Deployment model:
 
-Required GitHub repository secrets:
+- downstream deployment automation is connected directly to this GitHub repository.
+- GitHub Actions is **not** used for external delivery deployment.
+- Deployments are tag-driven via `./scripts/publish_delivery_branch.sh <tag>`, which moves `release/install-worker` to the release tag commit.
+- `main` merges do not deploy the installer wrapper.
 
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
+See release operations: [`docs/RELEASE.md`](docs/RELEASE.md).
 
 ## Build
 

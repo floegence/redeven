@@ -64,13 +64,7 @@ The installer script source of truth is in this repository:
 
 - `scripts/install.sh`
 
-external delivery Worker deployment is handled by `.github/workflows/deploy-install-worker.yml`.
-
-Trigger conditions:
-
-- push to `main` with changes under `scripts/install.sh` or `deployment/private-delivery/workers/install-agent/**`
-- published release
-- manual dispatch
+external delivery Worker deployment is managed by **downstream deployment automation** (GitHub integration), not by GitHub Actions.
 
 Worker files:
 
@@ -78,10 +72,27 @@ Worker files:
 - generated bundle: `deployment/private-delivery/workers/install-agent/dist/install-worker.mjs`
 - wrangler config: `deployment/private-delivery/workers/install-agent/wrangler.toml`
 
-Required repository secrets:
+### One-time external delivery setup
 
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
+Configure the Worker build in external delivery Dashboard:
+
+1. Connect repository: `floegence/redeven-agent`.
+2. Set production branch to `release/install-worker`.
+3. Set project root to `deployment/private-delivery/workers/install-agent`.
+4. Build command: `node generate-worker.js`.
+5. Deploy command: `npx wrangler deploy --config wrangler.toml`.
+
+This setup ensures that merges into `main` do not trigger install-worker deployment.
+
+### Tag-driven publish flow
+
+downstream deployment automation deploys on branch updates. To deploy by release tag (instead of every `main` merge), publish the release tag commit to the dedicated external delivery production branch:
+
+```bash
+./scripts/publish_delivery_branch.sh vX.Y.Z
+```
+
+This command force-updates `release/install-worker` to the commit behind the tag. external delivery then builds and deploys that exact tagged commit.
 
 ## Operational notes
 
