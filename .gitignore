@@ -17,3 +17,6 @@ npm-debug.log*
 internal/envapp/ui/dist/
 internal/codeapp/ui/dist/
 internal/ai/sidecar/dist/
+
+# external delivery Wrangler
+.wrangler
