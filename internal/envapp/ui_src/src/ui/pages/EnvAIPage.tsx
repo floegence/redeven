@@ -733,14 +733,14 @@ export function EnvAIPage() {
           {/* Chat area — sidebar is managed by Shell */}
           <div class="flex-1 min-w-0 flex flex-col h-full">
             {/* Header */}
-            <div class="chat-header border-b border-border bg-background/95 backdrop-blur-sm">
-              <div class="chat-header-title flex items-center gap-2 min-w-0">
+            <div class="chat-header border-b border-border bg-background/95 backdrop-blur-sm max-sm:flex-col max-sm:items-stretch max-sm:gap-2">
+              <div class="chat-header-title flex items-center gap-2 min-w-0 w-full sm:w-auto">
                 <div class="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                   <Sparkles class="w-4 h-4 text-primary" />
                 </div>
                 <span class="truncate font-medium">{ai.activeThreadTitle()}</span>
               </div>
-              <div class="flex items-center gap-1.5">
+              <div class="w-full sm:w-auto flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
                 {/* Model selector */}
                 <Show when={ai.aiEnabled() && ai.modelOptions().length > 0}>
                   <Select
@@ -749,7 +749,7 @@ export function EnvAIPage() {
                     options={ai.modelOptions()}
                     placeholder="Select model..."
                     disabled={ai.models.loading || !!ai.models.error || activeThreadRunning()}
-                    class="min-w-[140px] max-w-[200px] h-7 text-[11px]"
+                    class="min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
                   />
                 </Show>
 
