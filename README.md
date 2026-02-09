@@ -29,20 +29,22 @@ Not implemented yet (planned):
 
 - Release process and artifact verification: [`docs/RELEASE.md`](docs/RELEASE.md)
 
-## Install Script and external delivery Worker
+## Install Distribution and external delivery Delivery
 
 - Installer source: `scripts/install.sh` (this repo)
-- Worker source template: `deployment/private-delivery/workers/install-agent/generate-worker.js`
-- Worker config: `deployment/private-delivery/workers/install-agent/wrangler.toml`
-- external delivery production branch: `release`
+- Release mirror workflow: `.github/workflows/sync-release-assets-to-r2.yml`
+- Sync script: `scripts/sync_release_assets.sh`
+- Installer wrapper source template: `deployment/private-delivery/workers/install-agent/generate-worker.js`
+- Installer wrapper config: `deployment/private-delivery/workers/install-agent/wrangler.toml`
+- external delivery production branch for installer wrapper: `release`
 
-Deployment model:
+Delivery model:
 
-- downstream deployment automation is connected directly to this GitHub repository.
-- GitHub Actions is **not** used for external delivery deployment.
-- Deployments are tag-driven via `./scripts/publish_delivery_branch.sh <tag>`, which moves `release` to the release tag commit.
-- `main` merges do not deploy the installer wrapper.
-- Ensure `release` exists on origin before first external delivery rollout: `git push origin origin/main:refs/heads/release`.
+- GitHub Release is the single source of truth for binaries and checksum files.
+- On `release: published`, GitHub Actions mirrors release assets to package mirror (`agent.package.example.invalid/release-assets/<tag>/...`) and updates `version.agent.example.invalid/v1/manifest.json`.
+- Manifest is updated only after mirror verification succeeds.
+- `install.sh` keeps GitHub as primary download source and external delivery as fallback.
+- `main` merges do not deploy the installer wrapper. Use `./scripts/publish_delivery_branch.sh <tag>` only when installer/worker sources change.
 
 See release operations: [`docs/RELEASE.md`](docs/RELEASE.md).
 

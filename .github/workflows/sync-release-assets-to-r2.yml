@@ -1,0 +1,74 @@
+name: Sync Release Assets to package mirror
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to sync (for example: v0.1.12)
+        required: true
+        type: string
+      recommended:
+        description: Optional recommended version override (defaults to tag)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-release-assets-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_REPO: floegence/redeven-agent
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.event.release.tag_name }}
+      RECOMMENDED_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.recommended || '' }}
+
+      # R2 object storage endpoint (for example: https://<accountid>.r2.external deliverystorage.com)
+      R2_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_ENDPOINT }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+      AWS_REGION: auto
+
+      # Package mirror destination
+      R2_PACKAGE_BUCKET: ${{ secrets.CLOUDFLARE_AGENT_PACKAGE_BUCKET }}
+      R2_PACKAGE_PREFIX: release-assets
+
+      # Version manifest destination
+      R2_MANIFEST_BUCKET: ${{ secrets.CLOUDFLARE_AGENT_VERSION_BUCKET }}
+      MANIFEST_OBJECT_KEY: v1/manifest.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          REQUIRED=(
+            R2_ENDPOINT
+            AWS_ACCESS_KEY_ID
+            AWS_SECRET_ACCESS_KEY
+            R2_PACKAGE_BUCKET
+            R2_MANIFEST_BUCKET
+          )
+          for key in "${REQUIRED[@]}"; do
+            if [ -z "${!key}" ]; then
+              echo "::error::Missing required repository secret mapping: $key"
+              exit 1
+            fi
+          done
+
+      - name: Sync release assets and update manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/sync_release_assets.sh

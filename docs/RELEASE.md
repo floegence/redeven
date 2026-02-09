@@ -7,14 +7,15 @@ This document defines the release process for `redeven-agent`.
 - Deterministic versioned artifacts (`vX.Y.Z`)
 - Verifiable supply chain (`SHA256SUMS` + signature)
 - Keyless signing (GitHub OIDC + Cosign)
+- external delivery package mirror parity with GitHub Release artifacts
 
-## Trigger
+## Release trigger
 
-The release workflow is `.github/workflows/release.yml`.
+The binary release workflow is `.github/workflows/release.yml`.
 
 It runs automatically when a tag that matches `v*` is pushed.
 
-## Artifacts
+## GitHub Release artifacts
 
 For each release tag, the workflow publishes:
 
@@ -38,7 +39,98 @@ Verification is bound to:
 - Workflow identity regex:
   `^https://github.com/floegence/redeven-agent/.github/workflows/release\.yml@refs/tags/v.*$`
 
-This is the same identity constraint used by `redeven` install/upgrade scripts.
+This is the same identity constraint used by `install.sh`.
+
+## external delivery package mirror (automatic)
+
+The mirror workflow is `.github/workflows/sync-release-assets-to-r2.yml`.
+
+Trigger conditions:
+
+- `release` event with type `published`
+- `workflow_dispatch` for manual re-sync
+
+What it does:
+
+1. Download release assets from GitHub Release.
+2. Verify `SHA256SUMS` and Cosign signature.
+3. Upload verified assets to package mirror path:
+   - `release-assets/<tag>/...`
+4. Re-download uploaded files and verify SHA256 parity.
+5. Update manifest object `v1/manifest.json` only after mirror verification succeeds.
+
+Manifest fields updated by the workflow:
+
+- `latest`
+- `recommended`
+- `updated_at`
+- `source_release_tag`
+- `mirror_complete`
+
+### Required repository secrets
+
+- `CLOUDFLARE_R2_ENDPOINT`
+- `CLOUDFLARE_R2_ACCESS_KEY_ID`
+- `CLOUDFLARE_R2_SECRET_ACCESS_KEY`
+- `CLOUDFLARE_AGENT_PACKAGE_BUCKET`
+- `CLOUDFLARE_AGENT_VERSION_BUCKET`
+
+### Failure handling
+
+If mirror/upload/manifest update fails:
+
+- Workflow is marked failed.
+- Existing manifest remains unchanged.
+- GitHub Release tag and assets remain intact.
+
+## Install script delivery
+
+The installer script source of truth is in this repository:
+
+- `scripts/install.sh`
+
+`install.sh` download strategy:
+
+- Primary: GitHub Release assets
+- Fallback: external delivery package mirror (`agent.package.example.invalid`)
+
+## Installer wrapper deployment (separate from package mirror)
+
+external delivery Worker deployment is managed by **downstream deployment automation** (GitHub integration), not by GitHub Actions.
+
+Worker files:
+
+- generator: `deployment/private-delivery/workers/install-agent/generate-worker.js`
+- generated bundle: `deployment/private-delivery/workers/install-agent/dist/install-worker.mjs`
+- wrangler config: `deployment/private-delivery/workers/install-agent/wrangler.toml`
+
+### One-time external delivery setup (worker)
+
+Configure the Worker build in external delivery Dashboard:
+
+1. Connect repository: `floegence/redeven-agent`.
+2. Set production branch to `release`.
+3. Set project root to `deployment/private-delivery/workers/install-agent`.
+4. Build command: `node generate-worker.js`.
+5. Deploy command: `npx wrangler deploy --config wrangler.toml`.
+
+Also ensure `release` branch exists on origin (run once if needed):
+
+```bash
+git push origin origin/main:refs/heads/release
+```
+
+This setup ensures merges into `main` do not deploy the installer wrapper.
+
+### Tag-driven worker rollout (when installer changed)
+
+Use this only when installer/worker source changes need rollout:
+
+```bash
+./scripts/publish_delivery_branch.sh vX.Y.Z
+```
+
+This force-updates `release` to the tag commit and triggers downstream deployment automation.
 
 ## Local verification example
 
@@ -58,52 +150,11 @@ cosign verify-blob \
 sha256sum -c SHA256SUMS
 ```
 
-## Install script deployment
-
-The installer script source of truth is in this repository:
-
-- `scripts/install.sh`
-
-external delivery Worker deployment is managed by **downstream deployment automation** (GitHub integration), not by GitHub Actions.
-
-Worker files:
-
-- generator: `deployment/private-delivery/workers/install-agent/generate-worker.js`
-- generated bundle: `deployment/private-delivery/workers/install-agent/dist/install-worker.mjs`
-- wrangler config: `deployment/private-delivery/workers/install-agent/wrangler.toml`
-
-### One-time external delivery setup
-
-Configure the Worker build in external delivery Dashboard:
-
-1. Connect repository: `floegence/redeven-agent`.
-2. Set production branch to `release`.
-3. Set project root to `deployment/private-delivery/workers/install-agent`.
-4. Build command: `node generate-worker.js`.
-5. Deploy command: `npx wrangler deploy --config wrangler.toml`.
-
-Also ensure `release` branch exists on origin (run once if needed):
-
-```bash
-git push origin origin/main:refs/heads/release
-```
-
-This setup ensures that merges into `main` do not trigger install-worker deployment.
-
-### Tag-driven publish flow
-
-downstream deployment automation deploys on branch updates. To deploy by release tag (instead of every `main` merge), publish the release tag commit to the dedicated external delivery production branch:
-
-```bash
-./scripts/publish_delivery_branch.sh vX.Y.Z
-```
-
-This command force-updates `release` to the commit behind the tag. external delivery then builds and deploys that exact tagged commit.
-
 ## Operational notes
 
 - Keep release tags immutable.
 - If a release is bad, publish a new patch tag; do not overwrite existing assets.
 - If the workflow identity changes (repo/path/workflow name), update the identity regex in:
   - `docs/RELEASE.md`
-  - `scripts/install.sh` (this repo)
+  - `scripts/install.sh`
+  - `scripts/sync_release_assets.sh`
