@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, untrack, type Component } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type Component } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { Motion } from 'solid-motionone';
 import {
@@ -307,6 +307,7 @@ export function EnvAIPage() {
   let watchdogTimer: number | null = null;
   let stopFallbackTimer: number | null = null;
   let currentRunThreadId: string | null = null;
+  let inputWrapperRef: HTMLDivElement | undefined;
 
   const runningThreadId = createMemo(() => String(ai.runningThreadId() ?? '').trim() || null);
   const activeThreadRunning = createMemo(() => ai.isThreadRunning(ai.activeThreadId()));
@@ -642,14 +643,9 @@ export function EnvAIPage() {
     }
 
     // ChatProvider already rendered the optimistic user message; ensure the message list is visible.
+    // sendPending 通常已由 capture-phase 监听器提前设置，这里作为兜底（如附件-only 发送等场景）。
     setHasMessages(true);
     setSendPending(true);
-
-    // 发送消息后立即滚动到底部，确保 working 指示器可见
-    requestAnimationFrame(() => {
-      const el = document.querySelector('.chat-message-list');
-      if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-    });
 
     let tid = ai.activeThreadId();
     if (!tid) {
@@ -888,6 +884,54 @@ export function EnvAIPage() {
     return true;
   };
 
+  // Capture-phase 监听器：在 ChatProvider 处理之前检测用户发送意图，立即展示 Working 指示器。
+  // ChatProvider.sendMessage 使用 deferNonBlocking（setTimeout 0）延迟调用 onSendMessage 回调，
+  // 导致 startRun 中的 setSendPending(true) 延迟一个宏任务。capture-phase 在 ChatInput
+  // 的事件处理器之前触发，此时 textarea 仍有内容，可以判断用户即将发送消息。
+  let sendPendingSafetyTimer: number | null = null;
+  createEffect(() => {
+    if (!chatReady()) return;
+    const wrapper = inputWrapperRef;
+    if (!wrapper) return;
+
+    const triggerSendPending = () => {
+      setSendPending(true);
+      setHasMessages(true);
+      // 滚动到底部，确保 Working 指示器可见
+      requestAnimationFrame(() => {
+        const el = document.querySelector('.chat-message-list');
+        if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      });
+      // 安全兜底：如果 onSendMessage 回调因异常未触发，3 秒后自动清除
+      if (sendPendingSafetyTimer != null) window.clearTimeout(sendPendingSafetyTimer);
+      sendPendingSafetyTimer = window.setTimeout(() => {
+        if (sendPending() && !ai.running()) setSendPending(false);
+      }, 3000);
+    };
+
+    const onKeyDownCapture = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+      const textarea = wrapper.querySelector('textarea');
+      if (!textarea || !(textarea as HTMLTextAreaElement).value.trim()) return;
+      triggerSendPending();
+    };
+
+    const onClickCapture = (e: MouseEvent) => {
+      const btn = (e.target as HTMLElement)?.closest('.chat-input-send-btn');
+      if (!btn || (btn as HTMLButtonElement).disabled) return;
+      triggerSendPending();
+    };
+
+    wrapper.addEventListener('keydown', onKeyDownCapture, { capture: true });
+    wrapper.addEventListener('click', onClickCapture, { capture: true });
+
+    onCleanup(() => {
+      wrapper.removeEventListener('keydown', onKeyDownCapture, { capture: true });
+      wrapper.removeEventListener('click', onClickCapture, { capture: true });
+      if (sendPendingSafetyTimer != null) window.clearTimeout(sendPendingSafetyTimer);
+    });
+  });
+
   return (
     <div class="h-full min-h-0 overflow-hidden relative">
       <ChatProvider
@@ -1038,11 +1082,13 @@ export function EnvAIPage() {
               <ChatWorkingIndicator />
             </Show>
 
-            {/* Input area */}
-            <ChatInput
-              disabled={!canInteract()}
-              placeholder={ai.aiEnabled() ? 'Type a message...' : 'Configure AI in settings to start...'}
-            />
+            {/* Input area — wrapper 用于 capture-phase 事件监听，提前检测发送意图 */}
+            <div ref={inputWrapperRef}>
+              <ChatInput
+                disabled={!canInteract()}
+                placeholder={ai.aiEnabled() ? 'Type a message...' : 'Configure AI in settings to start...'}
+              />
+            </div>
           </div>
         </Show>
 
