@@ -740,76 +740,80 @@ export function EnvAIPage() {
                 </div>
                 <span class="truncate font-medium">{ai.activeThreadTitle()}</span>
               </div>
-              <div class="w-full sm:w-auto flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
-                {/* Model selector */}
-                <Show when={ai.aiEnabled() && ai.modelOptions().length > 0}>
-                  <Select
-                    value={ai.selectedModel()}
-                    onChange={(v) => ai.selectModel(String(v ?? '').trim())}
-                    options={ai.modelOptions()}
-                    placeholder="Select model..."
-                    disabled={ai.models.loading || !!ai.models.error || activeThreadRunning()}
-                    class="min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
-                  />
-                </Show>
+              <div class="w-full sm:w-auto flex items-center justify-between gap-2 sm:justify-start sm:gap-1.5">
+                <div class="min-w-0 flex items-center gap-1.5">
+                  {/* Model selector */}
+                  <Show when={ai.aiEnabled() && ai.modelOptions().length > 0}>
+                    <Select
+                      value={ai.selectedModel()}
+                      onChange={(v) => ai.selectModel(String(v ?? '').trim())}
+                      options={ai.modelOptions()}
+                      placeholder="Select model..."
+                      disabled={ai.models.loading || !!ai.models.error || activeThreadRunning()}
+                      class="min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
+                    />
+                  </Show>
 
-                {/* Stop button */}
-                <Show when={activeThreadRunning()}>
-                  <Tooltip content="Stop generation" placement="bottom" delay={0}>
+                  {/* Stop button */}
+                  <Show when={activeThreadRunning()}>
+                    <Tooltip content="Stop generation" placement="bottom" delay={0}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        icon={Stop}
+                        onClick={() => stopRun()}
+                        class="h-7 px-2 max-sm:w-7 max-sm:px-0 text-error border-error/30 hover:bg-error/10 hover:text-error"
+                      >
+                        <span class="max-sm:hidden">Stop</span>
+                      </Button>
+                    </Tooltip>
+                  </Show>
+                </div>
+
+                <div class="shrink-0 flex items-center gap-1.5">
+                  <div class="hidden sm:block w-px h-5 bg-border mx-1" />
+
+                  {/* Rename */}
+                  <Tooltip content="Rename chat" placement="bottom" delay={0}>
                     <Button
-                      size="sm"
-                      variant="outline"
-                      icon={Stop}
-                      onClick={() => stopRun()}
-                      class="h-7 px-2 text-error border-error/30 hover:bg-error/10 hover:text-error"
-                    >
-                      Stop
-                    </Button>
+                      size="icon"
+                      variant="ghost"
+                      icon={Pencil}
+                      onClick={() => openRename()}
+                      aria-label="Rename"
+                      disabled={!ai.activeThreadId() || activeThreadRunning()}
+                      class="w-7 h-7"
+                    />
                   </Tooltip>
-                </Show>
 
-                <div class="w-px h-5 bg-border mx-1" />
+                  {/* Delete */}
+                  <Tooltip content="Delete chat" placement="bottom" delay={0}>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      icon={Trash}
+                      onClick={() => {
+                        setDeleteForce(activeThreadRunning());
+                        setDeleteOpen(true);
+                      }}
+                      aria-label="Delete"
+                      disabled={!ai.activeThreadId()}
+                      class="w-7 h-7 text-muted-foreground hover:text-error hover:bg-error/10"
+                    />
+                  </Tooltip>
 
-                {/* Rename */}
-                <Tooltip content="Rename chat" placement="bottom" delay={0}>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    icon={Pencil}
-                    onClick={() => openRename()}
-                    aria-label="Rename"
-                    disabled={!ai.activeThreadId() || activeThreadRunning()}
-                    class="w-7 h-7"
-                  />
-                </Tooltip>
-
-                {/* Delete */}
-                <Tooltip content="Delete chat" placement="bottom" delay={0}>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    icon={Trash}
-                    onClick={() => {
-                      setDeleteForce(activeThreadRunning());
-                      setDeleteOpen(true);
-                    }}
-                    aria-label="Delete"
-                    disabled={!ai.activeThreadId()}
-                    class="w-7 h-7 text-muted-foreground hover:text-error hover:bg-error/10"
-                  />
-                </Tooltip>
-
-                {/* Settings button */}
-                <Tooltip content="AI Settings" placement="bottom" delay={0}>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    icon={Settings}
-                    onClick={() => env.openSettings('ai')}
-                    aria-label="Settings"
-                    class="w-7 h-7"
-                  />
-                </Tooltip>
+                  {/* Settings button */}
+                  <Tooltip content="AI Settings" placement="bottom" delay={0}>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      icon={Settings}
+                      onClick={() => env.openSettings('ai')}
+                      aria-label="Settings"
+                      class="w-7 h-7"
+                    />
+                  </Tooltip>
+                </div>
               </div>
             </div>
 
