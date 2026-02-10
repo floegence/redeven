@@ -1500,4 +1500,7 @@ setInterval(() => {}, 1000);
 	if strings.Contains(strings.ToLower(view.LastMessagePreview), "loop budget") {
 		t.Fatalf("last_message_preview unexpectedly leaked loop budget wording: %q", view.LastMessagePreview)
 	}
+	if strings.Contains(rr.Body.String(), `"block":{"type":"markdown","content":""}`) {
+		t.Fatalf("stream unexpectedly rewrote markdown content during auto-continue: %q", rr.Body.String())
+	}
 }

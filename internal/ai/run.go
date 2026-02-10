@@ -1042,7 +1042,8 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				}
 				if errors.Is(err, io.EOF) {
 					hasToolContext := r.totalToolCalls > 0 || r.hasAssistantToolError()
-					hasAssistantText := r.hasNonEmptyAssistantText()
+					attemptRawText := attemptText.String()
+					hasAssistantText := r.hasNonEmptyAssistantText() || strings.TrimSpace(attemptRawText) != ""
 					if hasToolContext || (hasAssistantText && !r.requiresTools) {
 						r.debug("ai.run.sidecar.eof.partial_output", "tool_calls", r.totalToolCalls, "has_tool_error", r.hasAssistantToolError(), "has_text", hasAssistantText)
 						r.ensureNonEmptyAssistant()
@@ -1279,7 +1280,6 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 						"steps_used", r.recoveryState.RecoverySteps,
 						"budget_left", budgetLeft,
 					)
-					r.discardAttemptAssistantText(attemptRawText)
 					attemptHistory = appendHistoryForRetry(attemptHistory, req.Input.Text, attemptSummary.AssistantText)
 					attemptInput = RunInput{Text: decision.NextPrompt}
 					continueAttempt = true
@@ -1338,7 +1338,6 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 						"attempt_tool_success":  attemptSummary.ToolSuccesses,
 						"attempt_tool_failures": len(attemptSummary.ToolFailures),
 					})
-					r.discardAttemptAssistantText(attemptRawText)
 					attemptHistory = appendHistoryForRetry(attemptHistory, req.Input.Text, attemptSummary.AssistantText)
 					attemptInput = RunInput{Text: completionDecision.NextPrompt}
 					continueAttempt = true
@@ -1374,7 +1373,6 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 						"attempt_tool_success":  attemptSummary.ToolSuccesses,
 						"attempt_tool_failures": len(attemptSummary.ToolFailures),
 					})
-					r.discardAttemptAssistantText(attemptRawText)
 					attemptHistory = appendHistoryForRetry(attemptHistory, req.Input.Text, attemptSummary.AssistantText)
 					attemptInput = RunInput{Text: taskDecision.NextPrompt}
 					continueAttempt = true
@@ -1515,38 +1513,6 @@ func (r *run) appendTextDelta(delta string) error {
 		Delta:      delta,
 	})
 	return nil
-}
-
-func (r *run) discardAttemptAssistantText(attemptText string) {
-	if r == nil || len(attemptText) == 0 {
-		return
-	}
-
-	r.muAssistant.Lock()
-	idx := r.currentTextBlockIndex
-	if idx < 0 || idx >= len(r.assistantBlocks) {
-		r.muAssistant.Unlock()
-		return
-	}
-	b, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
-	if !ok || b == nil {
-		r.muAssistant.Unlock()
-		return
-	}
-	if !strings.HasSuffix(b.Content, attemptText) {
-		r.muAssistant.Unlock()
-		return
-	}
-	b.Content = strings.TrimSuffix(b.Content, attemptText)
-	updated := *b
-	r.muAssistant.Unlock()
-
-	r.sendStreamEvent(streamEventBlockSet{
-		Type:       "block-set",
-		MessageID:  r.messageID,
-		BlockIndex: idx,
-		Block:      updated,
-	})
 }
 
 func (r *run) hasNonEmptyAssistantText() bool {

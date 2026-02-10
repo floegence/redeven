@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -534,7 +535,7 @@ func (s *Store) AppendMessage(ctx context.Context, endpointID string, threadID s
 		m.UpdatedAtUnixMs = m.CreatedAtUnixMs
 	}
 
-	preview := buildPreview(m.Role, m.TextContent)
+	preview := buildPreview(m.Role, m.TextContent, m.MessageJSON)
 	titleCandidate := ""
 	if m.Role == "user" {
 		titleCandidate = buildTitleCandidate(m.TextContent)
@@ -1355,9 +1356,14 @@ func columnExists(tx *sql.Tx, tableName string, colName string) (bool, error) {
 	return false, nil
 }
 
-func buildPreview(role string, text string) string {
+func buildPreview(role string, text string, messageJSON string) string {
 	role = strings.TrimSpace(role)
 	text = strings.TrimSpace(text)
+	if role == "assistant" {
+		if latest := latestAssistantMarkdown(messageJSON); latest != "" {
+			text = latest
+		}
+	}
 	if text == "" {
 		if role == "user" {
 			return "(no text)"
@@ -1369,6 +1375,45 @@ func buildPreview(role string, text string) string {
 	text = strings.ReplaceAll(text, "\r", " ")
 	text = strings.TrimSpace(text)
 	return truncateRunes(text, 160)
+}
+
+func latestAssistantMarkdown(messageJSON string) string {
+	raw := strings.TrimSpace(messageJSON)
+	if raw == "" {
+		return ""
+	}
+
+	var payload struct {
+		Blocks []json.RawMessage `json:"blocks"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return ""
+	}
+	for i := len(payload.Blocks) - 1; i >= 0; i-- {
+		blk := payload.Blocks[i]
+		if len(blk) == 0 {
+			continue
+		}
+		var meta struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(blk, &meta); err != nil {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(meta.Type), "markdown") {
+			continue
+		}
+		var md struct {
+			Content string `json:"content"`
+		}
+		if err := json.Unmarshal(blk, &md); err != nil {
+			continue
+		}
+		if content := strings.TrimSpace(md.Content); content != "" {
+			return content
+		}
+	}
+	return ""
 }
 
 func buildTitleCandidate(text string) string {

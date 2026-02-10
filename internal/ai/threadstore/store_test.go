@@ -329,3 +329,28 @@ func TestStore_ListRecentThreadToolCalls(t *testing.T) {
 		t.Fatalf("latestOnly[0]=%+v, want run_b/tool_b", latestOnly[0])
 	}
 }
+
+func TestBuildPreview_AssistantUsesLatestMarkdownBlock(t *testing.T) {
+	t.Parallel()
+
+	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"markdown","content":"我先扫一遍项目结构。"},{"type":"tool-call","toolName":"fs.list_dir"},{"type":"markdown","content":"Findings:\n- Has clear module boundaries.\nEvidence:\n- README.md defines run steps."}],"status":"complete","timestamp":1}`
+	text := "我先扫一遍项目结构。\nFindings:\n- Has clear module boundaries.\nEvidence:\n- README.md defines run steps."
+
+	preview := buildPreview("assistant", text, messageJSON)
+	if !strings.Contains(preview, "Findings:") {
+		t.Fatalf("preview=%q, want latest markdown content", preview)
+	}
+	if strings.Contains(preview, "我先扫一遍项目结构") {
+		t.Fatalf("preview=%q, should not start from earlier attempt preamble", preview)
+	}
+}
+
+func TestBuildPreview_AssistantFallsBackWhenMessageJSONInvalid(t *testing.T) {
+	t.Parallel()
+
+	text := "Fallback preview text"
+	preview := buildPreview("assistant", text, "{invalid json")
+	if preview != text {
+		t.Fatalf("preview=%q, want %q", preview, text)
+	}
+}

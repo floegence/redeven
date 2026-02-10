@@ -437,6 +437,9 @@ export function EnvAIPage() {
     () => protocol.status() === 'connected' && !activeThreadRunning() && ai.aiEnabled() && ai.modelsReady(),
   );
 
+  const isTerminalRunStatus = (status: string) =>
+    status === 'success' || status === 'failed' || status === 'canceled' || status === 'timed_out';
+
   const syncThreadReplay = (threadId: string, opts?: { reset?: boolean }) => {
     if (!chat) return;
     const tid = String(threadId ?? '').trim();
@@ -554,7 +557,7 @@ export function EnvAIPage() {
       }
 
       const status = String(event.runStatus ?? '').trim().toLowerCase();
-      if (status === 'running') {
+      if (!isTerminalRunStatus(status)) {
         return;
       }
 
