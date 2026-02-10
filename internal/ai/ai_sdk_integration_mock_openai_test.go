@@ -24,8 +24,8 @@ type openAIMock struct {
 	sawResponses bool
 	sawChat      bool
 
-	chatToolNames    []string
-	chatInvalidTools []string
+	requestToolNames    []string
+	requestInvalidTools []string
 }
 
 func isValidOpenAIToolName(name string) bool {
@@ -130,6 +130,13 @@ func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(path, "/responses"):
 		m.mu.Lock()
 		m.sawResponses = true
+		m.requestToolNames = extractOpenAIToolNames(req)
+		m.requestInvalidTools = m.requestInvalidTools[:0]
+		for _, n := range m.requestToolNames {
+			if !isValidOpenAIToolName(n) {
+				m.requestInvalidTools = append(m.requestInvalidTools, n)
+			}
+		}
 		m.mu.Unlock()
 
 		if strings.TrimSpace(fmt.Sprint(req["model"])) == "" {
@@ -146,6 +153,7 @@ func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		itemID := "msg_test_1"
 		created := map[string]any{
 			"type": "response.created",
 			"response": map[string]any{
@@ -155,11 +163,34 @@ func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 		writeSSEJSON(w, f, created)
-		writeSSEJSON(w, f, map[string]any{"type": "response.output_text.delta", "delta": m.token})
+		writeSSEJSON(w, f, map[string]any{
+			"type":         "response.output_item.added",
+			"output_index": 0,
+			"item": map[string]any{
+				"type": "message",
+				"id":   itemID,
+			},
+		})
+		writeSSEJSON(w, f, map[string]any{
+			"type":    "response.output_text.delta",
+			"item_id": itemID,
+			"delta":   m.token,
+		})
+		writeSSEJSON(w, f, map[string]any{
+			"type":         "response.output_item.done",
+			"output_index": 0,
+			"item": map[string]any{
+				"type": "message",
+				"id":   itemID,
+			},
+		})
 		writeSSEJSON(w, f, map[string]any{
 			"type": "response.completed",
 			"response": map[string]any{
-				"usage": map[string]any{"input_tokens": 1, "output_tokens": 1},
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+				},
 			},
 		})
 		_, _ = io.WriteString(w, "data: [DONE]\n\n")
@@ -169,11 +200,11 @@ func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(path, "/chat/completions"):
 		m.mu.Lock()
 		m.sawChat = true
-		m.chatToolNames = extractOpenAIToolNames(req)
-		m.chatInvalidTools = m.chatInvalidTools[:0]
-		for _, n := range m.chatToolNames {
+		m.requestToolNames = extractOpenAIToolNames(req)
+		m.requestInvalidTools = m.requestInvalidTools[:0]
+		for _, n := range m.requestToolNames {
 			if !isValidOpenAIToolName(n) {
-				m.chatInvalidTools = append(m.chatInvalidTools, n)
+				m.requestInvalidTools = append(m.requestInvalidTools, n)
 			}
 		}
 		m.mu.Unlock()
@@ -232,19 +263,26 @@ func (m *openAIMock) didSeeChat() bool {
 	return v
 }
 
-func (m *openAIMock) chatInvalidToolNames() []string {
+func (m *openAIMock) didSeeResponses() bool {
+	m.mu.Lock()
+	v := m.sawResponses
+	m.mu.Unlock()
+	return v
+}
+
+func (m *openAIMock) invalidToolNames() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make([]string, 0, len(m.chatInvalidTools))
-	out = append(out, m.chatInvalidTools...)
+	out := make([]string, 0, len(m.requestInvalidTools))
+	out = append(out, m.requestInvalidTools...)
 	return out
 }
 
-func (m *openAIMock) chatToolNamesSnapshot() []string {
+func (m *openAIMock) toolNamesSnapshot() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make([]string, 0, len(m.chatToolNames))
-	out = append(out, m.chatToolNames...)
+	out := make([]string, 0, len(m.requestToolNames))
+	out = append(out, m.requestToolNames...)
 	return out
 }
 
@@ -256,7 +294,7 @@ func writeSSEJSON(w io.Writer, f http.Flusher, v any) {
 	f.Flush()
 }
 
-func TestIntegration_AISDK_OpenAI_ChatCompletionsStream_GPT5_Succeeds(t *testing.T) {
+func TestIntegration_AISDK_OpenAI_ResponsesStream_GPT5_Succeeds(t *testing.T) {
 	t.Parallel()
 
 	token := "MOCK_OK_RESPONSES"
@@ -351,18 +389,21 @@ func TestIntegration_AISDK_OpenAI_ChatCompletionsStream_GPT5_Succeeds(t *testing
 		t.Fatalf("last_message_preview=%q, want token %q", view.LastMessagePreview, token)
 	}
 
-	if !mock.didSeeChat() {
-		t.Fatalf("expected OpenAI Chat Completions API call (/chat/completions)")
+	if !mock.didSeeResponses() {
+		t.Fatalf("expected OpenAI Responses API call (/responses)")
 	}
-	if names := mock.chatToolNamesSnapshot(); len(names) == 0 {
+	if mock.didSeeChat() {
+		t.Fatalf("unexpected OpenAI Chat Completions API call (/chat/completions)")
+	}
+	if names := mock.toolNamesSnapshot(); len(names) == 0 {
 		t.Fatalf("expected OpenAI request to include tool definitions")
 	}
-	if bad := mock.chatInvalidToolNames(); len(bad) > 0 {
+	if bad := mock.invalidToolNames(); len(bad) > 0 {
 		t.Fatalf("invalid OpenAI tool names: %+v", bad)
 	}
 }
 
-func TestIntegration_AISDK_OpenAI_ChatCompletionsStream_GPT4o_Succeeds(t *testing.T) {
+func TestIntegration_AISDK_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testing.T) {
 	t.Parallel()
 
 	token := "MOCK_OK_CHAT"
@@ -454,13 +495,16 @@ func TestIntegration_AISDK_OpenAI_ChatCompletionsStream_GPT4o_Succeeds(t *testin
 		t.Fatalf("last_message_preview=%q, want token %q", view.LastMessagePreview, token)
 	}
 
-	if !mock.didSeeChat() {
-		t.Fatalf("expected OpenAI Chat Completions API call (/chat/completions)")
+	if !mock.didSeeResponses() {
+		t.Fatalf("expected OpenAI Responses API call (/responses)")
 	}
-	if names := mock.chatToolNamesSnapshot(); len(names) == 0 {
+	if mock.didSeeChat() {
+		t.Fatalf("unexpected OpenAI Chat Completions API call (/chat/completions)")
+	}
+	if names := mock.toolNamesSnapshot(); len(names) == 0 {
 		t.Fatalf("expected OpenAI request to include tool definitions")
 	}
-	if bad := mock.chatInvalidToolNames(); len(bad) > 0 {
+	if bad := mock.invalidToolNames(); len(bad) > 0 {
 		t.Fatalf("invalid OpenAI tool names: %+v", bad)
 	}
 }

@@ -22,7 +22,7 @@ func TestGateway_AI_Run_UsesAISDKAndPersistsAssistantMessage(t *testing.T) {
 
 	token := "MOCK_OK_GATEWAY"
 
-	// Minimal OpenAI Chat Completions streaming mock (SSE).
+	// Minimal OpenAI Responses streaming mock (SSE).
 	openaiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r == nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
@@ -36,7 +36,7 @@ func TestGateway_AI_Run_UsesAISDKAndPersistsAssistantMessage(t *testing.T) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/chat/completions") {
+		if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/responses") {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
@@ -59,26 +59,42 @@ func TestGateway_AI_Run_UsesAISDKAndPersistsAssistantMessage(t *testing.T) {
 		}
 
 		now := time.Now().Unix()
+		itemID := "msg_gateway_1"
 		write(map[string]any{
-			"id":      "chatcmpl_test_1",
-			"created": now,
-			"model":   "gpt-5-mini",
-			"choices": []any{
-				map[string]any{
-					"index": 0,
-					"delta": map[string]any{"role": "assistant", "content": token},
-				},
+			"type": "response.created",
+			"response": map[string]any{
+				"id":         "resp_gateway_1",
+				"created_at": now,
+				"model":      "gpt-5-mini",
 			},
 		})
 		write(map[string]any{
-			"id":      "chatcmpl_test_1",
-			"created": now,
-			"model":   "gpt-5-mini",
-			"choices": []any{
-				map[string]any{
-					"index":         0,
-					"delta":         map[string]any{},
-					"finish_reason": "stop",
+			"type":         "response.output_item.added",
+			"output_index": 0,
+			"item": map[string]any{
+				"type": "message",
+				"id":   itemID,
+			},
+		})
+		write(map[string]any{
+			"type":    "response.output_text.delta",
+			"item_id": itemID,
+			"delta":   token,
+		})
+		write(map[string]any{
+			"type":         "response.output_item.done",
+			"output_index": 0,
+			"item": map[string]any{
+				"type": "message",
+				"id":   itemID,
+			},
+		})
+		write(map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
 				},
 			},
 		})

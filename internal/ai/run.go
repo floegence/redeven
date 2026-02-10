@@ -361,6 +361,9 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 
 	sc, err := startSidecar(ctx, r.log, r.stateDir, env, r.sidecarScriptPath)
 	if err != nil {
+		if r.finalizeIfContextCanceled(ctx) {
+			return nil
+		}
 		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI sidecar unavailable"})
 		return err
 	}
@@ -389,11 +392,17 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 		providers = append(providers, out)
 	}
 
-	_ = sc.send("initialize", map[string]any{
+	if err := sc.send("initialize", map[string]any{
 		"v":         1,
 		"run_id":    r.id,
 		"providers": providers,
-	})
+	}); err != nil {
+		if r.finalizeIfContextCanceled(ctx) {
+			return nil
+		}
+		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Failed to initialize AI sidecar"})
+		return err
+	}
 
 	// Resolve attachments (best-effort).
 	sidecarAttachments := make([]map[string]any, 0, len(req.Input.Attachments))
@@ -415,6 +424,9 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 		},
 		"options": req.Options,
 	}); err != nil {
+		if r.finalizeIfContextCanceled(ctx) {
+			return nil
+		}
 		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Failed to start AI run"})
 		return err
 	}
@@ -658,6 +670,146 @@ func (r *run) hasAssistantToolError() bool {
 	return false
 }
 
+func (r *run) lastSuccessfulToolBlock() (ToolCallBlock, bool) {
+	if r == nil {
+		return ToolCallBlock{}, false
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	for i := len(r.assistantBlocks) - 1; i >= 0; i-- {
+		blk := r.assistantBlocks[i]
+		switch b := blk.(type) {
+		case ToolCallBlock:
+			if b.Status == ToolCallStatusSuccess {
+				return b, true
+			}
+		case *ToolCallBlock:
+			if b != nil && b.Status == ToolCallStatusSuccess {
+				return *b, true
+			}
+		}
+	}
+	return ToolCallBlock{}, false
+}
+
+func truncateRunes(s string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	rs := []rune(s)
+	if len(rs) <= maxRunes {
+		return s
+	}
+	return string(rs[:maxRunes]) + "\n... (truncated)"
+}
+
+func anyToString(v any) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	case []byte:
+		return string(x)
+	default:
+		return ""
+	}
+}
+
+func anyToInt(v any) int {
+	switch x := v.(type) {
+	case int:
+		return x
+	case int8:
+		return int(x)
+	case int16:
+		return int(x)
+	case int32:
+		return int(x)
+	case int64:
+		return int(x)
+	case uint:
+		return int(x)
+	case uint8:
+		return int(x)
+	case uint16:
+		return int(x)
+	case uint32:
+		return int(x)
+	case uint64:
+		return int(x)
+	case float32:
+		return int(x)
+	case float64:
+		return int(x)
+	default:
+		return 0
+	}
+}
+
+func (r *run) fallbackTextFromSuccessfulTool() string {
+	block, ok := r.lastSuccessfulToolBlock()
+	if !ok {
+		return ""
+	}
+
+	toolName := strings.TrimSpace(block.ToolName)
+	resultMap, _ := block.Result.(map[string]any)
+
+	switch toolName {
+	case "terminal.exec":
+		stdout := strings.TrimSpace(anyToString(resultMap["stdout"]))
+		stderr := strings.TrimSpace(anyToString(resultMap["stderr"]))
+		exitCode := anyToInt(resultMap["exit_code"])
+		if stdout != "" {
+			return "Command output:\n\n```\n" + truncateRunes(stdout, 4000) + "\n```"
+		}
+		if stderr != "" {
+			return fmt.Sprintf("Command finished with exit code %d and stderr:\n\n```\n%s\n```", exitCode, truncateRunes(stderr, 2000))
+		}
+		return fmt.Sprintf("Command finished with exit code %d.", exitCode)
+
+	case "fs.read_file":
+		content := strings.TrimSpace(anyToString(resultMap["content_utf8"]))
+		if content == "" {
+			return "File read completed."
+		}
+		return "File content:\n\n```\n" + truncateRunes(content, 4000) + "\n```"
+
+	case "fs.list_dir":
+		entries, _ := resultMap["entries"].([]any)
+		return fmt.Sprintf("Directory listed successfully (%d entries).", len(entries))
+
+	case "fs.stat":
+		pathValue := strings.TrimSpace(anyToString(resultMap["path"]))
+		isDir, _ := resultMap["is_dir"].(bool)
+		if pathValue == "" {
+			if isDir {
+				return "Path metadata loaded (directory)."
+			}
+			return "Path metadata loaded."
+		}
+		if isDir {
+			return fmt.Sprintf("Path metadata loaded for %s (directory).", pathValue)
+		}
+		return fmt.Sprintf("Path metadata loaded for %s.", pathValue)
+
+	case "fs.write_file":
+		bytesWritten := anyToInt(resultMap["bytes_written"])
+		if bytesWritten > 0 {
+			return fmt.Sprintf("File written successfully (%d bytes).", bytesWritten)
+		}
+		return "File written successfully."
+	}
+
+	if block.Result == nil {
+		return "Tool call completed successfully."
+	}
+	b, err := json.Marshal(block.Result)
+	if err != nil || len(b) == 0 {
+		return "Tool call completed successfully."
+	}
+	return "Tool result:\n\n```json\n" + truncateRunes(string(b), 4000) + "\n```"
+}
+
 func (r *run) sessionMetaForTool() (*session.Meta, error) {
 	if r == nil {
 		return nil, errors.New("nil run")
@@ -676,12 +828,38 @@ func (r *run) ensureNonEmptyAssistant() {
 	if r.hasNonEmptyAssistantText() {
 		return
 	}
+	if toolFallback := strings.TrimSpace(r.fallbackTextFromSuccessfulTool()); toolFallback != "" {
+		_ = r.appendTextDelta(toolFallback)
+		return
+	}
 	if r.hasAssistantToolError() {
 		_ = r.appendTextDelta("Tool call failed.")
 		return
 	}
 	// Product decision: empty successful completion becomes a stable, visible assistant message.
 	_ = r.appendTextDelta("No response.")
+}
+
+func (r *run) finalizeIfContextCanceled(ctx context.Context) bool {
+	if r == nil || ctx == nil {
+		return false
+	}
+	if ctx.Err() == nil {
+		return false
+	}
+	switch r.getCancelReason() {
+	case "canceled":
+		r.finalizeNotice("canceled")
+		r.setEndReason("canceled")
+	case "timed_out":
+		r.finalizeNotice("timed_out")
+		r.setEndReason("timed_out")
+	default:
+		r.finalizeNotice("disconnected")
+		r.setEndReason("disconnected")
+	}
+	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+	return true
 }
 
 func (r *run) finalizeNotice(kind string) {

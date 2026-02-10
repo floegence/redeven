@@ -215,17 +215,17 @@ async function runAgent(params: RunStartParams): Promise<void> {
       // OpenAI-exposed function names here.
       fs_list_dir: tool({
         description: 'List directory entries.',
-        parameters: z.object({ path: z.string() }),
+        inputSchema: z.object({ path: z.string() }),
         execute: async (a: any) => callTool(runId, 'fs.list_dir', a),
       }),
       fs_stat: tool({
         description: 'Get file/directory metadata (size, mtime, sha256).',
-        parameters: z.object({ path: z.string() }),
+        inputSchema: z.object({ path: z.string() }),
         execute: async (a: any) => callTool(runId, 'fs.stat', a),
       }),
       fs_read_file: tool({
         description: 'Read a UTF-8 text file (with offset and size cap).',
-        parameters: z.object({
+        inputSchema: z.object({
           path: z.string(),
           offset: z.number().int().nonnegative().default(0),
           max_bytes: z.number().int().positive().max(200_000).default(200_000),
@@ -234,7 +234,7 @@ async function runAgent(params: RunStartParams): Promise<void> {
       }),
       fs_write_file: tool({
         description: 'Write a UTF-8 text file (requires explicit user approval).',
-        parameters: z.object({
+        inputSchema: z.object({
           path: z.string(),
           content_utf8: z.string(),
           create: z.boolean().default(false),
@@ -244,9 +244,9 @@ async function runAgent(params: RunStartParams): Promise<void> {
       }),
       terminal_exec: tool({
         description: 'Execute a shell command (requires explicit user approval).',
-        parameters: z.object({
+        inputSchema: z.object({
           command: z.string(),
-          cwd: z.string(),
+          cwd: z.string().default('/'),
           timeout_ms: z.number().int().positive().max(60_000).default(60_000),
         }),
         execute: async (a: any) => callTool(runId, 'terminal.exec', a),

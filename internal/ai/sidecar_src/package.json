@@ -8,10 +8,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.0.0",
-    "@ai-sdk/openai": "^1.0.0",
-    "@ai-sdk/openai-compatible": "^1.0.0",
-    "ai": "^4.0.0",
+    "@ai-sdk/anthropic": "^2.0.60",
+    "@ai-sdk/openai": "^2.0.89",
+    "@ai-sdk/openai-compatible": "^1",
+    "ai": "^5.0.129",
     "zod": "^3.25.76"
   },
   "devDependencies": {

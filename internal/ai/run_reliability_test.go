@@ -492,3 +492,113 @@ setInterval(() => {}, 1000);
 		t.Fatalf("last_message_preview=%q, want %q", view.LastMessagePreview, "Tool call failed.")
 	}
 }
+
+func TestRun_ToolSuccessWithoutAssistantText_UsesToolFallback(t *testing.T) {
+	t.Parallel()
+
+	script := writeTestSidecarScript(t, `
+import { createInterface } from 'node:readline';
+
+function send(method, params) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+}
+
+const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+let runId = '';
+rl.on('line', (line) => {
+  const msg = JSON.parse(String(line || '').trim() || '{}');
+  const method = String(msg.method || '').trim();
+
+  if (method === 'run.start') {
+    runId = String(msg.params?.run_id || '').trim();
+    send('tool.call', {
+      run_id: runId,
+      tool_id: 'tool_pwd_1',
+      tool_name: 'terminal.exec',
+      args: { command: 'pwd', cwd: '/', timeout_ms: 5000 },
+    });
+    return;
+  }
+
+  if (method === 'tool.result') {
+    send('run.end', { run_id: runId });
+    process.exit(0);
+  }
+});
+
+setInterval(() => {}, 1000);
+`)
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_tool_success",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc := newTestService(t, script, func(o *Options) {
+		o.ToolApprovalTimeout = 2 * time.Second
+		o.RunIdleTimeout = 4 * time.Second
+		o.RunMaxWallTime = 4 * time.Second
+	})
+
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "hello", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_tool_success_fallback_1"
+	done := make(chan error, 1)
+	go func() {
+		rr := httptest.NewRecorder()
+		done <- svc.StartRun(ctx, &meta, runID, RunStartRequest{
+			ThreadID: th.ThreadID,
+			Model:    "openai/gpt-5-mini",
+			Input:    RunInput{Text: "run pwd"},
+			Options:  RunOptions{MaxSteps: 1},
+		}, rr)
+	}()
+
+	approved := false
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		err := svc.ApproveTool(&meta, runID, "tool_pwd_1", true)
+		if err == nil {
+			approved = true
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !approved {
+		t.Fatalf("failed to approve tool call before deadline")
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("StartRun: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("StartRun did not finish")
+	}
+
+	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if view == nil {
+		t.Fatalf("thread missing after run")
+	}
+	if !strings.Contains(view.LastMessagePreview, "Command output:") {
+		t.Fatalf("last_message_preview=%q, want tool fallback summary", view.LastMessagePreview)
+	}
+	if strings.Contains(view.LastMessagePreview, "No response.") {
+		t.Fatalf("last_message_preview unexpectedly fell back to No response: %q", view.LastMessagePreview)
+	}
+}
