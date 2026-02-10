@@ -216,14 +216,14 @@ function SettingsCard(props: SettingsCardProps) {
 
   return (
     <Card class="overflow-hidden">
-      <div class="border-b border-border bg-muted/20 px-5 py-4">
-        <div class="flex items-start justify-between gap-4">
-          <div class="flex items-start gap-3">
+      <div class="border-b border-border bg-muted/20 px-4 py-4 sm:px-5">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div class="flex min-w-0 items-start gap-3">
             <div class="flex-shrink-0 w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
               <props.icon class="w-4.5 h-4.5 text-primary" />
             </div>
-            <div>
-              <div class="flex items-center gap-2">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-2">
                 <h3 class="text-sm font-semibold text-foreground">{props.title}</h3>
                 <Show when={props.badge}>
                   <span class={`text-[10px] font-medium px-2 py-0.5 rounded-full ${badgeColors[props.badgeVariant ?? 'default']}`}>
@@ -231,16 +231,16 @@ function SettingsCard(props: SettingsCardProps) {
                   </span>
                 </Show>
               </div>
-              <p class="text-xs text-muted-foreground mt-0.5">{props.description}</p>
+              <p class="mt-0.5 text-xs text-muted-foreground break-words">{props.description}</p>
             </div>
           </div>
           <Show when={props.actions}>
-            <div class="flex items-center gap-2 flex-shrink-0">{props.actions}</div>
+            <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">{props.actions}</div>
           </Show>
         </div>
       </div>
 
-      <div class="p-5 space-y-4">
+      <div class="p-4 space-y-4 sm:p-5">
         <Show when={props.error}>
           <div class="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
             <div class="text-xs text-destructive break-words">{props.error}</div>
@@ -1380,16 +1380,16 @@ export function EnvSettingsPage() {
 
   return (
     <div class="h-full min-h-0 overflow-auto bg-background">
-      <div class="max-w-4xl mx-auto p-6 space-y-6">
+      <div class="max-w-4xl mx-auto p-4 space-y-6 sm:p-6">
         {/* Page Header */}
-        <div class="flex items-start justify-between gap-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 class="text-xl font-semibold text-foreground tracking-tight">Settings</h1>
             <p class="text-sm text-muted-foreground mt-1">
               Configure your agent. AI changes apply immediately; other changes require a restart.
             </p>
           </div>
-          <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={settings.loading} class="gap-1.5">
+          <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={settings.loading} class="gap-1.5 self-start">
             <RefreshIcon class="w-3.5 h-3.5" />
             <span>Refresh</span>
           </Button>
@@ -1446,14 +1446,28 @@ export function EnvSettingsPage() {
           badgeVariant={agentCardBadgeVariant()}
           error={maintenanceError()}
           actions={
-            <div class="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setRestartOpen(true)} loading={isRestarting()} disabled={!canStartRestart()}>
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                class="w-full sm:w-auto"
+                onClick={() => setRestartOpen(true)}
+                loading={isRestarting()}
+                disabled={!canStartRestart()}
+              >
                 Restart agent
               </Button>
-              <Button size="sm" variant="default" onClick={() => setUpgradeOpen(true)} loading={isUpgrading()} disabled={!canStartUpgrade()}>
+              <Button
+                size="sm"
+                variant="default"
+                class="w-full sm:w-auto"
+                onClick={() => setUpgradeOpen(true)}
+                loading={isUpgrading()}
+                disabled={!canStartUpgrade()}
+              >
                 Update agent
               </Button>
-            </div>
+            </>
           }
         >
           <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-1 divide-y md:divide-y-0 divide-border">
@@ -1674,7 +1688,7 @@ export function EnvSettingsPage() {
             }
           >
             <div class="space-y-4">
-              <div class="flex items-center gap-4 p-3 rounded-lg bg-muted/30 border border-border">
+              <div class="flex flex-col items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:gap-4">
                 <div class="flex-1">
                   <div class="text-xs text-muted-foreground">Effective port range</div>
                   <div class="text-sm font-mono mt-0.5">
@@ -1816,7 +1830,7 @@ export function EnvSettingsPage() {
 
               {/* by_user */}
               <div class="space-y-3">
-                <div class="flex items-center justify-between">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div class="text-sm font-medium text-foreground">by_user</div>
                   <Button
                     size="sm"
@@ -1836,7 +1850,7 @@ export function EnvSettingsPage() {
                     <For each={policyByUser()}>
                       {(row, idx) => (
                         <div class="p-4 rounded-lg border border-border bg-muted/20 space-y-3">
-                          <div class="flex items-start justify-between gap-3">
+                          <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                             <div class="flex-1">
                               <FieldLabel>user_public_id</FieldLabel>
                               <Input
@@ -1906,7 +1920,7 @@ export function EnvSettingsPage() {
 
               {/* by_app */}
               <div class="space-y-3">
-                <div class="flex items-center justify-between">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div class="text-sm font-medium text-foreground">by_app</div>
                   <Button
                     size="sm"
@@ -1926,7 +1940,7 @@ export function EnvSettingsPage() {
                     <For each={policyByApp()}>
                       {(row, idx) => (
                         <div class="p-4 rounded-lg border border-border bg-muted/20 space-y-3">
-                          <div class="flex items-start justify-between gap-3">
+                          <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                             <div class="flex-1">
                               <FieldLabel>floe_app</FieldLabel>
                               <Input
@@ -2049,7 +2063,7 @@ export function EnvSettingsPage() {
               <div class="space-y-6">
                 {/* Providers */}
                 <div class="space-y-3">
-                  <div class="flex items-center justify-between">
+                  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div class="text-sm font-medium text-foreground">Providers</div>
                       <p class="text-xs text-muted-foreground mt-0.5">
@@ -2085,8 +2099,8 @@ export function EnvSettingsPage() {
                     <Index each={aiProviders()}>
                       {(p, idx) => (
                         <div class="p-4 rounded-lg border border-border bg-muted/20 space-y-4">
-                          <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
+                          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex flex-wrap items-center gap-2">
                               <Layers class="w-4 h-4 text-muted-foreground" />
                               <span class="text-sm font-medium">Provider {idx + 1}</span>
                             </div>
@@ -2211,7 +2225,7 @@ export function EnvSettingsPage() {
 
                                 {/* Models */}
                                 <div class="md:col-span-2 space-y-3">
-                                  <div class="flex items-center justify-between">
+                                  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
                                       <div class="text-sm font-medium text-foreground">Models</div>
                                       <p class="text-xs text-muted-foreground mt-0.5">
@@ -2243,8 +2257,8 @@ export function EnvSettingsPage() {
                                     <Index each={p().models}>
                                       {(m, midx) => (
                                         <div class="p-4 rounded-lg border border-border bg-background/40 space-y-3">
-                                          <div class="flex items-center justify-between gap-3">
-                                            <div class="flex items-center gap-2">
+                                          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                                            <div class="flex flex-wrap items-center gap-2">
                                               <span class="text-sm font-medium">Model {midx + 1}</span>
                                               <Show
                                                 when={m().is_default}
