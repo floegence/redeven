@@ -1368,3 +1368,136 @@ setInterval(() => {}, 1000);
 		t.Fatalf("last_message_preview=%q, want resumed goal text", view.LastMessagePreview)
 	}
 }
+
+func TestRun_TaskLoopAutoContinuesForProjectAnalysis(t *testing.T) {
+	t.Parallel()
+
+	script := writeTestSidecarScript(t, `
+import { createInterface } from 'node:readline';
+
+function send(method, params) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+}
+
+let runId = '';
+let attempt = 0;
+const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+rl.on('line', (line) => {
+  const msg = JSON.parse(String(line || '').trim() || '{}');
+  const method = String(msg.method || '').trim();
+
+  if (method === 'run.start') {
+    runId = String(msg.params?.run_id || '').trim();
+    attempt = Number(msg.params?.recovery?.attempt_index || 0);
+    const inputText = String(msg.params?.input?.text || '').trim();
+
+    if (attempt === 0) {
+      send('tool.call', {
+        run_id: runId,
+        tool_id: 'tool_list_1',
+        tool_name: 'fs.list_dir',
+        args: { path: '/' },
+      });
+      return;
+    }
+
+    if (attempt === 1) {
+      if (!inputText.includes('Collect concrete evidence')) {
+        send('run.error', { run_id: runId, error: 'missing task evidence follow-up prompt' });
+        return;
+      }
+      send('tool.call', {
+        run_id: runId,
+        tool_id: 'tool_readme_1',
+        tool_name: 'fs.read_file',
+        args: { path: '/README.md', offset: 0, max_bytes: 4096 },
+      });
+      return;
+    }
+
+    send('run.error', { run_id: runId, error: 'unexpected extra attempt' });
+    return;
+  }
+
+  if (method === 'tool.result') {
+    if (attempt === 0) {
+      send('run.delta', {
+        run_id: runId,
+        delta: 'This repository appears modular with multiple service directories and deployment assets. The structure indicates organized engineering practices across backend, frontend, and infrastructure concerns. This initial scan is useful, but it does not yet include file-level evidence.',
+      });
+      send('run.end', { run_id: runId });
+      return;
+    }
+
+    if (attempt === 1) {
+      if (String(msg.params?.status || '') !== 'success') {
+        send('run.error', { run_id: runId, error: 'expected read_file success on evidence attempt' });
+        return;
+      }
+      send('run.delta', {
+        run_id: runId,
+        delta: 'Findings:\n- The project is a Go-based agent with sidecar orchestration.\nEvidence:\n- README.md confirms setup and run commands.\nNext steps:\n- Inspect internal/ai and scripts for operational details.',
+      });
+      send('run.end', { run_id: runId });
+      process.exit(0);
+      return;
+    }
+  }
+});
+
+setInterval(() => {}, 1000);
+`)
+
+	fsRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fsRoot, "README.md"), []byte("# test readme\n"), 0o600); err != nil {
+		t.Fatalf("write README.md: %v", err)
+	}
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_task_loop_analysis",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc := newTestService(t, script, func(o *Options) {
+		o.FSRoot = fsRoot
+		o.RunIdleTimeout = 4 * time.Second
+		o.RunMaxWallTime = 6 * time.Second
+	})
+
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "hello", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, "run_task_loop_analysis_1", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "帮我分析一下~/Downloads/code/redeven这个项目"},
+		Options:  RunOptions{MaxSteps: 2},
+	}, rr); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if view == nil {
+		t.Fatalf("thread missing after run")
+	}
+	if !strings.Contains(view.LastMessagePreview, "Evidence:") {
+		t.Fatalf("last_message_preview=%q, want evidence-based final answer", view.LastMessagePreview)
+	}
+	if strings.Contains(strings.ToLower(view.LastMessagePreview), "loop budget") {
+		t.Fatalf("last_message_preview unexpectedly leaked loop budget wording: %q", view.LastMessagePreview)
+	}
+}

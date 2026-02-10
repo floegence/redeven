@@ -59,7 +59,7 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 	normalized := normalizeArgs(inv)
 	if len(normalized) > 0 {
 		out.NormalizedArgs = normalized
-		if out.Code == ErrorCodeInvalidPath || out.Code == ErrorCodeOutsideWorkspace {
+		if out.Code == ErrorCodeInvalidPath || out.Code == ErrorCodeOutsideWorkspace || out.Code == ErrorCodeNotFound {
 			out.Retryable = true
 			out.SuggestedFixes = append(out.SuggestedFixes, "Retry using normalized_args from the tool error payload.")
 		}
@@ -140,6 +140,61 @@ func virtualPathFromReal(root string, real string) string {
 	return v
 }
 
+func bestEffortVirtualPathFromAbsoluteCandidate(root string, candidateAbs string) (string, bool) {
+	root = filepath.Clean(root)
+	candidateAbs = filepath.Clean(candidateAbs)
+	if root == "" || candidateAbs == "" {
+		return "", false
+	}
+
+	rootSeg := strings.Split(strings.Trim(filepath.ToSlash(root), "/"), "/")
+	candidateSeg := strings.Split(strings.Trim(filepath.ToSlash(candidateAbs), "/"), "/")
+	if len(rootSeg) == 0 || len(candidateSeg) == 0 {
+		return "", false
+	}
+
+	maxOverlap := len(rootSeg)
+	if len(candidateSeg) < maxOverlap {
+		maxOverlap = len(candidateSeg)
+	}
+	best := 0
+	for k := maxOverlap; k >= 1; k-- {
+		rootTail := rootSeg[len(rootSeg)-k:]
+		candidateHead := candidateSeg[:k]
+		match := true
+		for i := 0; i < k; i++ {
+			if !strings.EqualFold(rootTail[i], candidateHead[i]) {
+				match = false
+				break
+			}
+		}
+		if match {
+			best = k
+			break
+		}
+	}
+	if best == 0 {
+		return "", false
+	}
+
+	remainder := candidateSeg[best:]
+	virtualPath := "/"
+	if len(remainder) > 0 {
+		virtualPath = "/" + strings.Join(remainder, "/")
+	}
+	virtualPath = path.Clean(virtualPath)
+	if virtualPath == "." || virtualPath == "" {
+		virtualPath = "/"
+	}
+
+	realAbs := filepath.Clean(filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(virtualPath, "/"))))
+	ok, err := isWithinRoot(realAbs, root)
+	if err != nil || !ok {
+		return "", false
+	}
+	return virtualPath, true
+}
+
 func normalizePathValue(raw string, root string) (string, bool) {
 	if raw == "" || root == "" {
 		return "", false
@@ -160,6 +215,9 @@ func normalizePathValue(raw string, root string) (string, bool) {
 		ok, err := isWithinRoot(cleanAbs, root)
 		if err == nil && ok {
 			return virtualPathFromReal(root, cleanAbs), true
+		}
+		if guessed, guessedOK := bestEffortVirtualPathFromAbsoluteCandidate(root, cleanAbs); guessedOK {
+			return guessed, true
 		}
 		candidate = filepath.ToSlash(cleanAbs)
 	}
@@ -234,7 +292,7 @@ func ShouldRetryWithNormalizedArgs(toolErr *ToolError) bool {
 		return false
 	}
 	switch toolErr.Code {
-	case ErrorCodeInvalidPath, ErrorCodeOutsideWorkspace:
+	case ErrorCodeInvalidPath, ErrorCodeOutsideWorkspace, ErrorCodeNotFound:
 		return true
 	default:
 		return false
