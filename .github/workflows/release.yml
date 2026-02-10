@@ -80,6 +80,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download all package artifacts
         uses: actions/download-artifact@v4
         with:
@@ -104,9 +109,13 @@ jobs:
             --output-certificate dist/SHA256SUMS.pem \
             dist/SHA256SUMS
 
+      - name: Generate release notes preface
+        run: ./scripts/generate_release_notes.sh "${GITHUB_REF_NAME}" dist/RELEASE_NOTES.md
+
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
+          body_path: dist/RELEASE_NOTES.md
           generate_release_notes: true
           files: |
             dist/redeven_*.tar.gz

@@ -15,6 +15,20 @@ The binary release workflow is `.github/workflows/release.yml`.
 
 It runs automatically when a tag that matches `v*` is pushed.
 
+## GitHub Release notes quality baseline
+
+Each GitHub Release must include both:
+
+1. A curated operator-facing preface (install/upgrade commands, asset list, verification snippet, mirror context).
+2. The GitHub auto-generated change list (PR and commit summary).
+
+Implementation in this repository:
+
+- Notes preface generator: `scripts/generate_release_notes.sh`
+- Workflow integration: `.github/workflows/release.yml` (`body_path` + `generate_release_notes: true`)
+
+This keeps every release self-service for operators while preserving a complete change history for open source transparency.
+
 ## GitHub Release artifacts
 
 For each release tag, the workflow publishes:
