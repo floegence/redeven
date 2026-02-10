@@ -30,7 +30,15 @@
   text-align: left;
 }
 
-/* Keep the assistant avatar as a clean icon without a border. */
+/* Keep the assistant avatar as a plain logo without the rounded card wrapper. */
 .chat-message-avatar-assistant {
+  background: transparent !important;
   border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.chat-message-avatar-assistant .chat-message-avatar-image {
+  border-radius: 0 !important;
+  object-fit: contain !important;
 }

@@ -7,6 +7,7 @@ import {
   Pencil,
   Settings,
   Sparkles,
+  MessageSquare,
   Stop,
   Terminal,
   Trash,
@@ -775,7 +776,7 @@ export function EnvAIPage() {
             <div class="chat-header border-b border-border bg-background/95 backdrop-blur-sm max-sm:flex-col max-sm:items-stretch max-sm:gap-2">
               <div class="chat-header-title flex items-center gap-2 min-w-0 w-full sm:w-auto">
                 <div class="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <Sparkles class="w-4 h-4 text-primary" />
+                  <MessageSquare class="w-4 h-4 text-primary" />
                 </div>
                 <span class="truncate font-medium">{ai.activeThreadTitle()}</span>
               </div>
