@@ -77,7 +77,7 @@ func TestDeriveThreadRunState(t *testing.T) {
 	}{
 		{name: "success", endReason: "complete", err: nil, wantState: "success", wantMsg: ""},
 		{name: "canceled", endReason: "canceled", err: nil, wantState: "canceled", wantMsg: ""},
-		{name: "timed out", endReason: "timed_out", err: nil, wantState: "failed", wantMsg: "Timed out."},
+		{name: "timed out", endReason: "timed_out", err: nil, wantState: "timed_out", wantMsg: "Timed out."},
 		{name: "disconnected", endReason: "disconnected", err: nil, wantState: "failed", wantMsg: "Disconnected."},
 		{name: "explicit error", endReason: "error", err: errors.New("boom"), wantState: "failed", wantMsg: "boom"},
 		{name: "context canceled", endReason: "", err: context.Canceled, wantState: "failed", wantMsg: "Disconnected."},

@@ -2,7 +2,7 @@ import type { StreamEvent } from '@floegence/floe-webapp-core/chat';
 
 export type AIRealtimeEventType = 'stream_event' | 'thread_state';
 
-export type AIThreadRunStatus = 'idle' | 'running' | 'success' | 'failed' | 'canceled';
+export type AIThreadRunStatus = 'idle' | 'accepted' | 'running' | 'waiting_approval' | 'recovering' | 'success' | 'failed' | 'canceled' | 'timed_out';
 
 export type AIActiveRun = {
   threadId: string;
@@ -58,6 +58,9 @@ export type AIRealtimeEvent = {
   threadId: string;
   runId: string;
   atUnixMs: number;
+  streamKind?: 'lifecycle' | 'assistant' | 'tool';
+  phase?: 'start' | 'state_change' | 'end' | 'error';
+  diag?: Record<string, any>;
   streamEvent?: StreamEvent;
   runStatus?: AIThreadRunStatus;
   runError?: string;

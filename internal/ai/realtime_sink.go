@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"sort"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
+	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 )
 
 func (s *Service) ListActiveThreadRuns(endpointID string) []ActiveThreadRun {
@@ -114,6 +116,52 @@ func (s *Service) DetachRealtimeSink(streamServer *rpc.Server) {
 	}
 }
 
+func shouldPersistRealtimeEvent(ev RealtimeEvent) bool {
+	if ev.EventType == RealtimeEventTypeThreadState {
+		return true
+	}
+	// Skip noisy assistant delta frames; keep lifecycle/tool/terminal events.
+	switch ev.StreamEvent.(type) {
+	case streamEventBlockDelta:
+		return false
+	default:
+		return true
+	}
+}
+
+func (s *Service) persistRealtimeEvent(ev RealtimeEvent) {
+	if s == nil || s.threadsDB == nil {
+		return
+	}
+	if !shouldPersistRealtimeEvent(ev) {
+		return
+	}
+	payload := map[string]any{
+		"event_type":   ev.EventType,
+		"stream_kind":  ev.StreamKind,
+		"phase":        ev.Phase,
+		"diag":         ev.Diag,
+		"run_status":   ev.RunStatus,
+		"run_error":    ev.RunError,
+		"stream_event": ev.StreamEvent,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), s.persistOpTO)
+	defer cancel()
+	_ = s.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
+		EndpointID:  ev.EndpointID,
+		ThreadID:    ev.ThreadID,
+		RunID:       ev.RunID,
+		StreamKind:  string(ev.StreamKind),
+		EventType:   string(ev.EventType),
+		PayloadJSON: truncateRunes(string(b), 6000),
+		AtUnixMs:    ev.AtUnixMs,
+	})
+}
+
 func (s *Service) broadcastRealtimeEvent(ev RealtimeEvent) {
 	if s == nil {
 		return
@@ -127,6 +175,7 @@ func (s *Service) broadcastRealtimeEvent(ev RealtimeEvent) {
 	if ev.AtUnixMs <= 0 {
 		ev.AtUnixMs = time.Now().UnixMilli()
 	}
+	s.persistRealtimeEvent(ev)
 
 	payload, err := json.Marshal(ev)
 	if err != nil || len(payload) == 0 {
@@ -155,15 +204,71 @@ func (s *Service) broadcastRealtimeEvent(ev RealtimeEvent) {
 	}
 }
 
+func lifecyclePhaseForStatus(status string, runErr string) RealtimeLifecyclePhase {
+	s := NormalizeRunState(status)
+	runErr = strings.TrimSpace(runErr)
+	switch s {
+	case RunStateAccepted, RunStateRunning, RunStateWaitingApproval, RunStateRecovering:
+		if s == RunStateAccepted || s == RunStateRunning {
+			return RealtimePhaseStart
+		}
+		return RealtimePhaseStateChange
+	case RunStateSuccess, RunStateCanceled:
+		return RealtimePhaseEnd
+	case RunStateFailed, RunStateTimedOut:
+		if runErr != "" {
+			return RealtimePhaseError
+		}
+		return RealtimePhaseEnd
+	default:
+		return RealtimePhaseStateChange
+	}
+}
+
+func classifyStreamKind(streamEvent any) RealtimeStreamKind {
+	switch ev := streamEvent.(type) {
+	case streamEventError:
+		return RealtimeStreamKindLifecycle
+	case streamEventBlockStart:
+		if strings.TrimSpace(strings.ToLower(ev.BlockType)) == "tool-call" {
+			return RealtimeStreamKindTool
+		}
+		return RealtimeStreamKindAssistant
+	case streamEventBlockSet:
+		blockMap, ok := ev.Block.(map[string]any)
+		if ok {
+			if t, _ := blockMap["type"].(string); strings.TrimSpace(strings.ToLower(t)) == "tool-call" {
+				return RealtimeStreamKindTool
+			}
+		}
+		if _, ok := ev.Block.(ToolCallBlock); ok {
+			return RealtimeStreamKindTool
+		}
+		if _, ok := ev.Block.(*ToolCallBlock); ok {
+			return RealtimeStreamKindTool
+		}
+		return RealtimeStreamKindAssistant
+	default:
+		return RealtimeStreamKindAssistant
+	}
+}
+
 func (s *Service) broadcastThreadState(endpointID string, threadID string, runID string, runStatus string, runErr string) {
+	runStatus = strings.TrimSpace(runStatus)
+	runErr = strings.TrimSpace(runErr)
 	ev := RealtimeEvent{
 		EventType:  RealtimeEventTypeThreadState,
 		EndpointID: strings.TrimSpace(endpointID),
 		ThreadID:   strings.TrimSpace(threadID),
 		RunID:      strings.TrimSpace(runID),
 		AtUnixMs:   time.Now().UnixMilli(),
-		RunStatus:  strings.TrimSpace(runStatus),
-		RunError:   strings.TrimSpace(runErr),
+		StreamKind: RealtimeStreamKindLifecycle,
+		Phase:      lifecyclePhaseForStatus(runStatus, runErr),
+		Diag: map[string]any{
+			"run_status": runStatus,
+		},
+		RunStatus: runStatus,
+		RunError:  runErr,
 	}
 	s.broadcastRealtimeEvent(ev)
 }
@@ -175,6 +280,7 @@ func (s *Service) broadcastStreamEvent(endpointID string, threadID string, runID
 		ThreadID:    strings.TrimSpace(threadID),
 		RunID:       strings.TrimSpace(runID),
 		AtUnixMs:    time.Now().UnixMilli(),
+		StreamKind:  classifyStreamKind(streamEvent),
 		StreamEvent: streamEvent,
 	}
 	s.broadcastRealtimeEvent(ev)

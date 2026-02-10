@@ -234,12 +234,14 @@ rl.on('line', (line) => {
     return;
   }
   if (method === 'tool.result') {
-    const ok = Boolean(msg.params?.ok);
+    const status = String(msg.params?.status || '').trim().toLowerCase();
+    const ok = status === 'success' || Boolean(msg.params?.ok);
     if (ok) {
       const content = String(msg.params?.result?.content_utf8 || '').trim();
       send('run.delta', { run_id: runId, delta: 'Tool read: ' + content });
     } else {
-      send('run.delta', { run_id: runId, delta: 'Tool failed: ' + String(msg.params?.error || '') });
+      const errMsg = String(msg.params?.error?.message || msg.params?.error || '').trim();
+      send('run.delta', { run_id: runId, delta: 'Tool failed: ' + errMsg });
     }
     send('run.end', { run_id: runId });
     process.exit(0);
@@ -359,7 +361,7 @@ setInterval(() => {}, 1000);
 		if strings.Contains(stream, "missing session metadata") || strings.Contains(stream, "missing session resolver") {
 			t.Fatalf("stream still contains resolver error, body=%q", stream)
 		}
-		if strings.Contains(stream, "No response.") {
+		if strings.Contains(stream, "Assistant finished without a visible response.") {
 			t.Fatalf("stream unexpectedly fell back to no response, body=%q", stream)
 		}
 	}

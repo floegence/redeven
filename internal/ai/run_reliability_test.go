@@ -132,8 +132,8 @@ setInterval(() => {}, 1000);
 	if view == nil {
 		t.Fatalf("thread missing after run")
 	}
-	if strings.TrimSpace(view.LastMessagePreview) != "No response." {
-		t.Fatalf("last_message_preview=%q, want %q", view.LastMessagePreview, "No response.")
+	if strings.TrimSpace(view.LastMessagePreview) != "Assistant finished without a visible response." {
+		t.Fatalf("last_message_preview=%q, want %q", view.LastMessagePreview, "Assistant finished without a visible response.")
 	}
 }
 
@@ -204,8 +204,8 @@ setInterval(() => {}, 1000);
 	if view == nil {
 		t.Fatalf("thread missing after run")
 	}
-	if strings.TrimSpace(view.LastMessagePreview) != "No response." {
-		t.Fatalf("last_message_preview=%q, want %q", view.LastMessagePreview, "No response.")
+	if strings.TrimSpace(view.LastMessagePreview) != "Assistant finished without a visible response." {
+		t.Fatalf("last_message_preview=%q, want %q", view.LastMessagePreview, "Assistant finished without a visible response.")
 	}
 }
 
@@ -603,7 +603,7 @@ setInterval(() => {}, 1000);
 	if !strings.Contains(view.LastMessagePreview, "Command output:") {
 		t.Fatalf("last_message_preview=%q, want tool fallback summary", view.LastMessagePreview)
 	}
-	if strings.Contains(view.LastMessagePreview, "No response.") {
+	if strings.Contains(view.LastMessagePreview, "Assistant finished without a visible response.") {
 		t.Fatalf("last_message_preview unexpectedly fell back to No response: %q", view.LastMessagePreview)
 	}
 }

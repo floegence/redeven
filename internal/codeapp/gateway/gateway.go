@@ -1414,7 +1414,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		g.appendAudit(meta, "ai_run", "success", auditDetail, nil)
 		return
 
-	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/runs/"):
+	case (r.Method == http.MethodPost || r.Method == http.MethodGet) && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/runs/"):
 		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 		if !ok {
 			return
@@ -1450,6 +1450,22 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			g.appendAudit(meta, "ai_run_cancel", "success", map[string]any{"run_id": runID}, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
+		}
+
+		if r.Method == http.MethodGet && action == "events" {
+			limit := 300
+			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+				if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+					limit = v
+				}
+			}
+			out, err := g.ai.ListRunEvents(r.Context(), meta, runID, limit)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
 			return
 		}
 
