@@ -109,6 +109,49 @@ func TestDecideTurnRecovery_ToolFailureTriggersContinuation(t *testing.T) {
 	}
 }
 
+func TestDecideTurnRecovery_ApprovalDeniedToolCanFallback(t *testing.T) {
+	t.Parallel()
+
+	cfg := turnRecoveryConfig{
+		Enabled:                        true,
+		MaxSteps:                       2,
+		AllowPathRewrite:               true,
+		AllowProbeTools:                true,
+		FailOnRepeatedFailureSignature: true,
+		RequiresTools:                  true,
+	}
+	state := turnRecoveryState{FailureSignatures: map[string]int{}}
+	summary := turnAttemptSummary{
+		AttemptIndex:  0,
+		ToolCalls:     1,
+		ToolSuccesses: 0,
+		ToolFailures: []turnToolFailure{
+			{
+				ToolName: "terminal.exec",
+				Error: &aitools.ToolError{
+					Code:      aitools.ErrorCodePermissionDenied,
+					Message:   "Rejected by user",
+					Retryable: false,
+				},
+			},
+		},
+	}
+
+	decision := decideTurnRecovery(cfg, summary, &state, "帮我分析一下~/Downloads/code/redeven这个项目")
+	if !decision.Continue {
+		t.Fatalf("expected continuation for approval denied tool, got %+v", decision)
+	}
+	if decision.FailRun {
+		t.Fatalf("unexpected fail decision: %+v", decision)
+	}
+	if decision.Action != recoveryActionRetryAlternative {
+		t.Fatalf("action=%q, want=%q", decision.Action, recoveryActionRetryAlternative)
+	}
+	if state.RecoverySteps != 1 {
+		t.Fatalf("recovery_steps=%d, want=1", state.RecoverySteps)
+	}
+}
+
 func TestDecideTurnRecovery_RepeatedSignatureFailsFast(t *testing.T) {
 	t.Parallel()
 

@@ -355,7 +355,7 @@ setInterval(() => {}, 1000);
 		if !strings.Contains(stream, `"status":"success"`) {
 			t.Fatalf("stream missing successful tool status, body=%q", stream)
 		}
-		if !strings.Contains(stream, "Tool read: hello-local-ui") {
+		if !strings.Contains(stream, "hello-local-ui") {
 			t.Fatalf("stream missing tool output text, body=%q", stream)
 		}
 		if strings.Contains(stream, "missing session metadata") || strings.Contains(stream, "missing session resolver") {

@@ -100,6 +100,11 @@ type run struct {
 	toolBlockIndex  map[string]int       // tool_id -> blockIndex
 	waitingApproval bool
 
+	muLifecycle         sync.Mutex
+	lastLifecyclePhase  string
+	lastLifecycleAt     time.Time
+	lifecycleMinEmitGap time.Duration
+
 	nextBlockIndex        int
 	currentTextBlockIndex int
 	needNewTextBlock      bool
@@ -182,8 +187,9 @@ func newRun(opts runOptions) *run {
 		recoveryState: turnRecoveryState{
 			FailureSignatures: map[string]int{},
 		},
-		taskLoopCfg:   defaultTaskLoopConfig(),
-		taskLoopState: newTaskLoopState(""),
+		taskLoopCfg:         defaultTaskLoopConfig(),
+		taskLoopState:       newTaskLoopState(""),
+		lifecycleMinEmitGap: 600 * time.Millisecond,
 	}
 	if opts.Writer != nil {
 		r.stream = newNDJSONStream(r.w, opts.StreamWriteTimeout)
@@ -313,6 +319,74 @@ func (r *run) debug(event string, attrs ...any) {
 	}
 	base = append(base, attrs...)
 	r.log.Debug("ai run", base...)
+}
+
+func normalizeLifecyclePhase(raw string) string {
+	phase := strings.TrimSpace(strings.ToLower(raw))
+	switch phase {
+	case "start", "planning":
+		return "planning"
+	case "tool_call", "tool", "executing_tools":
+		return "executing_tools"
+	case "synthesis", "synthesizing":
+		return "synthesizing"
+	case "end", "finalizing", "finish":
+		return "finalizing"
+	default:
+		if phase == "" {
+			return ""
+		}
+		return phase
+	}
+}
+
+func (r *run) emitLifecyclePhase(raw string, diag map[string]any) {
+	if r == nil {
+		return
+	}
+	phase := normalizeLifecyclePhase(raw)
+	if phase == "" {
+		return
+	}
+	now := time.Now()
+	r.muLifecycle.Lock()
+	if strings.EqualFold(strings.TrimSpace(r.lastLifecyclePhase), phase) && r.lifecycleMinEmitGap > 0 && !r.lastLifecycleAt.IsZero() {
+		if now.Sub(r.lastLifecycleAt) < r.lifecycleMinEmitGap {
+			r.muLifecycle.Unlock()
+			return
+		}
+	}
+	r.lastLifecyclePhase = phase
+	r.lastLifecycleAt = now
+	r.muLifecycle.Unlock()
+
+	eventDiag := map[string]any{"phase": phase}
+	for k, v := range diag {
+		eventDiag[k] = v
+	}
+	r.sendStreamEvent(streamEventLifecyclePhase{
+		Type:      "lifecycle-phase",
+		MessageID: strings.TrimSpace(r.messageID),
+		Phase:     phase,
+		Diag:      eventDiag,
+	})
+}
+
+func shouldCommitAttemptAssistantText(summary turnAttemptSummary) bool {
+	text := strings.TrimSpace(summary.AssistantText)
+	if text == "" {
+		return false
+	}
+	hasTools := summary.ToolCalls > 0 || summary.OutcomeToolCalls > 0 || summary.OutcomeLastStepToolCalls > 0
+	if hasTools {
+		if !hasSubstantiveAssistantAnswer(text) || looksInterimAssistantText(text) {
+			return false
+		}
+	}
+	if hasUnfulfilledActionCommitment(text) && !hasSubstantiveAssistantAnswer(text) {
+		return false
+	}
+	return true
 }
 
 func errorString(err error) string {
@@ -639,6 +713,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 
 	r.sendStreamEvent(streamEventMessageStart{Type: "message-start", MessageID: r.messageID})
 	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"})
+	r.emitLifecyclePhase("planning", nil)
 	// Note: timeouts are enforced via an out-of-band goroutine (after sidecar starts) so the run
 	// still cancels even when blocked in sc.recv().
 
@@ -1011,31 +1086,10 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		for {
 			select {
 			case <-ctx.Done():
-				reason := r.getCancelReason()
-				switch reason {
-				case "canceled":
-					r.debug("ai.run.context_done", "reason", "canceled")
-					r.finalizeNotice("canceled")
-					r.setFinalizationReason("canceled")
-					r.setEndReason("canceled")
-					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-					return nil
-				case "timed_out":
-					r.debug("ai.run.context_done", "reason", "timed_out")
-					r.finalizeNotice("timed_out")
-					r.setFinalizationReason("timed_out")
-					r.setEndReason("timed_out")
-					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-					return nil
-				default:
-					// Parent context canceled (browser disconnect).
-					r.debug("ai.run.context_done", "reason", "disconnected")
-					r.finalizeNotice("disconnected")
-					r.setFinalizationReason("disconnected")
-					r.setEndReason("disconnected")
-					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+				if r.finalizeIfContextCanceled(ctx) {
 					return nil
 				}
+				return ctx.Err()
 			default:
 			}
 
@@ -1053,6 +1107,10 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 					hasAssistantText := r.hasNonEmptyAssistantText() || strings.TrimSpace(attemptRawText) != ""
 					if hasToolContext || (hasAssistantText && !r.requiresTools) {
 						r.debug("ai.run.sidecar.eof.partial_output", "tool_calls", r.totalToolCalls, "has_tool_error", r.hasAssistantToolError(), "has_text", hasAssistantText)
+						attemptSummary.AssistantText = strings.TrimSpace(attemptRawText)
+						if shouldCommitAttemptAssistantText(attemptSummary) {
+							_ = r.appendTextDelta(attemptSummary.AssistantText)
+						}
 						r.ensureNonEmptyAssistant()
 						if strings.TrimSpace(r.getFinalizationReason()) == "" {
 							r.setFinalizationReason("sidecar_eof")
@@ -1100,7 +1158,6 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 					continue
 				}
 				r.debug("ai.run.delta.received", "delta_len", utf8.RuneCountInString(p.Delta))
-				_ = r.appendTextDelta(p.Delta)
 				attemptText.WriteString(p.Delta)
 
 			case "tool.call":
@@ -1136,6 +1193,9 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				}
 				if outcome.Success {
 					attemptSummary.ToolSuccesses++
+					if successName := strings.TrimSpace(strings.ToLower(outcome.ToolName)); successName != "" {
+						attemptSummary.ToolSuccessNames = append(attemptSummary.ToolSuccessNames, successName)
+					}
 					continue
 				}
 				attemptSummary.ToolFailures = append(attemptSummary.ToolFailures, turnToolFailure{
@@ -1155,7 +1215,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				if strings.TrimSpace(p.RunID) != r.id {
 					continue
 				}
-				phase := strings.TrimSpace(strings.ToLower(p.Phase))
+				phase := normalizeLifecyclePhase(p.Phase)
 				if phase == "" {
 					continue
 				}
@@ -1164,6 +1224,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 					payload["diag"] = p.Diag
 				}
 				r.persistRunEvent("turn.phase."+phase, RealtimeStreamKindLifecycle, payload)
+				r.emitLifecyclePhase(phase, p.Diag)
 
 			case "run.outcome":
 				var p struct {
@@ -1250,6 +1311,28 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 			case "run.end":
 				attemptRawText := attemptText.String()
 				attemptSummary.AssistantText = strings.TrimSpace(attemptRawText)
+				committedAttemptText := false
+				commitAttemptText := func(force bool) {
+					if committedAttemptText {
+						return
+					}
+					text := strings.TrimSpace(attemptSummary.AssistantText)
+					if text == "" {
+						return
+					}
+					if !force && !shouldCommitAttemptAssistantText(attemptSummary) {
+						return
+					}
+					if r.hasNonEmptyAssistantText() {
+						_ = r.appendTextDelta("\n\n" + text)
+					} else {
+						_ = r.appendTextDelta(text)
+					}
+					committedAttemptText = true
+				}
+				if r.finalizeIfContextCanceled(ctx) {
+					return nil
+				}
 				decision := decideTurnRecovery(turnRecoveryConfig{
 					Enabled:                        r.recoveryEnabled,
 					MaxSteps:                       r.recoveryMaxSteps,
@@ -1313,6 +1396,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 						"attempt_index", attemptIdx,
 						"steps_used", r.recoveryState.RecoverySteps,
 					)
+					commitAttemptText(false)
 					failureMsg := strings.TrimSpace(decision.FailureMessage)
 					if failureMsg != "" {
 						prefix := ""
@@ -1399,6 +1483,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 						"attempt_tool_success":  attemptSummary.ToolSuccesses,
 						"attempt_tool_failures": len(attemptSummary.ToolFailures),
 					})
+					commitAttemptText(false)
 					failureMsg := strings.TrimSpace(taskDecision.FailureMessage)
 					if failureMsg != "" {
 						prefix := ""
@@ -1415,6 +1500,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				}
 
 				if completionFailed {
+					commitAttemptText(false)
 					if completionFailureMessage != "" {
 						prefix := ""
 						if r.hasNonEmptyAssistantText() {
@@ -1445,7 +1531,9 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 					"attempt_tool_success":  attemptSummary.ToolSuccesses,
 					"attempt_tool_failures": len(attemptSummary.ToolFailures),
 				})
+				commitAttemptText(false)
 				r.ensureNonEmptyAssistant()
+				r.emitLifecyclePhase("ended", map[string]any{"attempt_index": attemptIdx, "reason": "complete_answered"})
 				r.setFinalizationReason("complete_answered")
 				r.setEndReason("complete")
 				r.debug("ai.run.complete")
@@ -1465,6 +1553,16 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				if msgErr == "" {
 					msgErr = "AI error"
 				}
+				attemptSummary.AssistantText = strings.TrimSpace(attemptText.String())
+				if text := strings.TrimSpace(attemptSummary.AssistantText); text != "" {
+					if shouldCommitAttemptAssistantText(attemptSummary) || attemptSummary.ToolCalls == 0 {
+						if r.hasNonEmptyAssistantText() {
+							_ = r.appendTextDelta("\n\n" + text)
+						} else {
+							_ = r.appendTextDelta(text)
+						}
+					}
+				}
 				r.debug("ai.run.error", "error", sanitizeLogText(msgErr, 256))
 				r.setFinalizationReason("sidecar_error")
 				return r.failRun(msgErr, nil)
@@ -1483,7 +1581,9 @@ func appendHistoryForRetry(history []RunHistoryMsg, userText string, assistantTe
 		out = append(out, RunHistoryMsg{Role: "user", Text: txt})
 	}
 	if txt := strings.TrimSpace(assistantText); txt != "" {
-		out = append(out, RunHistoryMsg{Role: "assistant", Text: txt})
+		if hasSubstantiveAssistantAnswer(txt) || !looksInterimAssistantText(txt) {
+			out = append(out, RunHistoryMsg{Role: "assistant", Text: txt})
+		}
 	}
 	return out
 }
@@ -1852,6 +1952,7 @@ func (r *run) failRun(errMsg string, cause error) error {
 	}
 	r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: msg})
 	r.setEndReason("error")
+	r.emitLifecyclePhase("ended", map[string]any{"reason": "error"})
 	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 
 	if cause != nil {
@@ -1885,6 +1986,7 @@ func (r *run) finalizeIfContextCanceled(ctx context.Context) bool {
 		r.setEndReason("disconnected")
 	}
 	r.debug("ai.run.context_canceled_before_send", "reason", reason)
+	r.emitLifecyclePhase("ended", map[string]any{"reason": reason})
 	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 	return true
 }

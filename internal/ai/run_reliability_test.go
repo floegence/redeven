@@ -1525,3 +1525,135 @@ setInterval(() => {}, 1000);
 		t.Fatalf("stream unexpectedly rewrote markdown content during auto-continue: %q", rr.Body.String())
 	}
 }
+
+func TestRun_RecoveryFallsBackAfterApprovalDeniedTool(t *testing.T) {
+	t.Parallel()
+
+	script := writeTestSidecarScript(t, `
+import { createInterface } from 'node:readline';
+
+function send(method, params) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+}
+
+let runId = '';
+let attempt = 0;
+const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+rl.on('line', (line) => {
+  const msg = JSON.parse(String(line || '').trim() || '{}');
+  const method = String(msg.method || '').trim();
+
+  if (method === 'run.start') {
+    runId = String(msg.params?.run_id || '').trim();
+    attempt = Number(msg.params?.recovery?.attempt_index || 0);
+    const workingDir = String(msg.params?.working_dir_abs || '').trim();
+
+    if (attempt === 0) {
+      send('tool.call', {
+        run_id: runId,
+        tool_id: 'tool_exec_1',
+        tool_name: 'terminal.exec',
+        args: { command: 'pwd', cwd: workingDir, timeout_ms: 2000 },
+      });
+      return;
+    }
+
+    const sep = workingDir.endsWith('/') ? '' : '/';
+    send('tool.call', {
+      run_id: runId,
+      tool_id: 'tool_readme_1',
+      tool_name: 'fs.read_file',
+      args: { path: workingDir + sep + 'README.md', offset: 0, max_bytes: 2048 },
+    });
+    return;
+  }
+
+  if (method === 'tool.result') {
+    if (attempt === 0) {
+      if (String(msg.params?.status || '').trim().toLowerCase() !== 'error') {
+        send('run.error', { run_id: runId, error: 'expected approval denied error on first attempt' });
+        process.exit(1);
+        return;
+      }
+      const code = String(msg.params?.error?.code || '').trim().toUpperCase();
+      if (code !== 'TIMEOUT' && code !== 'PERMISSION_DENIED') {
+        send('run.error', { run_id: runId, error: 'unexpected approval error code: ' + code });
+        process.exit(1);
+        return;
+      }
+      send('run.end', { run_id: runId });
+      return;
+    }
+
+    if (String(msg.params?.status || '').trim().toLowerCase() !== 'success') {
+      send('run.error', { run_id: runId, error: 'expected fs.read_file success on fallback attempt' });
+      process.exit(1);
+      return;
+    }
+
+    send('run.delta', {
+      run_id: runId,
+      delta: 'Recovered after approval denial by switching to fs.read_file evidence.',
+    });
+    send('run.end', { run_id: runId });
+    process.exit(0);
+  }
+});
+
+setInterval(() => {}, 1000);
+`)
+
+	fsRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fsRoot, "README.md"), []byte("# fallback evidence\n"), 0o600); err != nil {
+		t.Fatalf("write README.md: %v", err)
+	}
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_recovery_approval_denied",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc := newTestService(t, script, func(o *Options) {
+		o.FSRoot = fsRoot
+		o.ToolApprovalTimeout = 80 * time.Millisecond
+		o.RunIdleTimeout = 4 * time.Second
+		o.RunMaxWallTime = 6 * time.Second
+	})
+
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "hello", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, "run_recovery_approval_denied_1", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "帮我分析一下~/Downloads/code/redeven这个项目"},
+		Options:  RunOptions{MaxSteps: 3},
+	}, rr); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if view == nil {
+		t.Fatalf("thread missing after run")
+	}
+	if !strings.Contains(view.LastMessagePreview, "Recovered after approval denial") {
+		t.Fatalf("last_message_preview=%q, want fallback recovery completion text", view.LastMessagePreview)
+	}
+	if strings.Contains(view.LastMessagePreview, "Tool workflow failed") {
+		t.Fatalf("last_message_preview unexpectedly ended at tool failure: %q", view.LastMessagePreview)
+	}
+}

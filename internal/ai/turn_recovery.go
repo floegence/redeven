@@ -50,6 +50,7 @@ type turnAttemptSummary struct {
 	ToolFailures                  []turnToolFailure
 	ToolCallNames                 []string
 	ToolCallSignatures            []string
+	ToolSuccessNames              []string
 	AssistantText                 string
 	OutcomeHasText                bool
 	OutcomeTextChars              int
@@ -314,7 +315,42 @@ func isRuntimeRecoverableFailure(cfg turnRecoveryConfig, failure *turnToolFailur
 	if isPathFailure(failure) {
 		return true
 	}
+	if failure.Error == nil {
+		return false
+	}
+	failure.Error.Normalize()
+	if failure.Error.Retryable {
+		toolName := strings.TrimSpace(strings.ToLower(failure.ToolName))
+		if !cfg.RequiresTools && aitools.RequiresApproval(toolName) {
+			return false
+		}
+		return true
+	}
+	if isApprovalDeniedRecoverable(cfg, failure) {
+		return true
+	}
+	if cfg.AllowProbeTools && len(failure.Error.SuggestedFixes) > 0 {
+		return true
+	}
 	return false
+}
+
+func isApprovalDeniedRecoverable(cfg turnRecoveryConfig, failure *turnToolFailure) bool {
+	if failure == nil || failure.Error == nil {
+		return false
+	}
+	failure.Error.Normalize()
+	if failure.Error.Code != aitools.ErrorCodePermissionDenied {
+		return false
+	}
+	if !cfg.AllowProbeTools || !cfg.RequiresTools {
+		return false
+	}
+	toolName := strings.TrimSpace(strings.ToLower(failure.ToolName))
+	if toolName == "" {
+		return false
+	}
+	return aitools.RequiresApproval(toolName)
 }
 
 func isPathFailure(failure *turnToolFailure) bool {

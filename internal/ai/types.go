@@ -240,6 +240,13 @@ type streamEventError struct {
 	Error     string `json:"error"`
 }
 
+type streamEventLifecyclePhase struct {
+	Type      string         `json:"type"`
+	MessageID string         `json:"messageId,omitempty"`
+	Phase     string         `json:"phase"`
+	Diag      map[string]any `json:"diag,omitempty"`
+}
+
 // Convenience helpers for tool-call blocks (MessageBlock).
 
 type ToolCallStatus string

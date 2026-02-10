@@ -334,8 +334,11 @@ function mergeToolArgs(args: any, normalizedArgs: Record<string, any> | undefine
 
 async function callTool(runId: string, toolName: string, args: any): Promise<ToolCallResult> {
   const toolId = `tc_${randomUUID()}`;
-  runToolCallCount.set(runId, (runToolCallCount.get(runId) ?? 0) + 1);
-  notify('run.phase', { run_id: runId, phase: 'tool_call', diag: { tool_name: toolName } });
+  const nextToolCallCount = (runToolCallCount.get(runId) ?? 0) + 1;
+  runToolCallCount.set(runId, nextToolCallCount);
+  if (nextToolCallCount === 1) {
+    notify('run.phase', { run_id: runId, phase: 'executing_tools', diag: { tool_name: toolName } });
+  }
   logEvent('ai.sidecar.tool.call.emit', {
     run_id: runId,
     tool_id: toolId,
@@ -502,7 +505,7 @@ async function runAgent(params: RunStartParams): Promise<void> {
   runToolCallCount.set(runId, 0);
   notify('run.phase', {
     run_id: runId,
-    phase: 'start',
+    phase: 'planning',
     diag: {
       attempt_index: recoveryAttemptIndex,
       recovery_steps_used: recoveryStepsUsed,
@@ -551,6 +554,8 @@ async function runAgent(params: RunStartParams): Promise<void> {
       modeInstruction + ' ' +
       workspaceScopeInstruction +
       ' Always finish each run with a concrete user-facing answer. Do not stop after only a preamble or only tool calls.' +
+      ' Prefer approval-free read tools (fs_list_dir/fs_stat/fs_read_file) before approval-required tools whenever they can solve the task.' +
+      ' If an approval-required tool is denied, switch to an alternative allowed tool strategy before giving up.' +
       ' If a tool fails and the payload includes suggested_fixes or normalized_args, you must follow them and retry once when safe before giving up.';
 
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
@@ -789,7 +794,7 @@ ${workingDirAbs}
     });
     notify('run.phase', {
       run_id: runId,
-      phase: 'end',
+      phase: 'finalizing',
       diag: {
         tool_calls: toolCalls,
         has_text: hasVisibleText,

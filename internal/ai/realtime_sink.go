@@ -229,6 +229,8 @@ func classifyStreamKind(streamEvent any) RealtimeStreamKind {
 	switch ev := streamEvent.(type) {
 	case streamEventError:
 		return RealtimeStreamKindLifecycle
+	case streamEventLifecyclePhase:
+		return RealtimeStreamKindLifecycle
 	case streamEventBlockStart:
 		if strings.TrimSpace(strings.ToLower(ev.BlockType)) == "tool-call" {
 			return RealtimeStreamKindTool

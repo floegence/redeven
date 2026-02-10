@@ -35,6 +35,33 @@ func TestDecideTaskLoop_AnalysisRequiresEvidence(t *testing.T) {
 	}
 }
 
+func TestDecideTaskLoop_AnalysisRequiresSuccessfulEvidenceTool(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultTaskLoopConfig()
+	state := newTaskLoopState("帮我分析一下~/Downloads/code/redeven这个项目")
+	summary := turnAttemptSummary{
+		AttemptIndex:       0,
+		ToolCalls:          1,
+		ToolSuccesses:      0,
+		ToolCallNames:      []string{"terminal.exec"},
+		ToolCallSignatures: []string{"terminal.exec|command=pwd|cwd=/Users/tangjianyin"},
+		AssistantText:      strings.Repeat("这是一个工程化很强的项目。", 20),
+		OutcomeHasText:     true,
+	}
+
+	decision := decideTaskLoop(cfg, &state, summary, "帮我分析一下~/Downloads/code/redeven这个项目")
+	if !decision.Continue {
+		t.Fatalf("expected continue decision when evidence tool did not succeed, got %+v", decision)
+	}
+	if decision.FailRun {
+		t.Fatalf("unexpected fail decision: %+v", decision)
+	}
+	if decision.Reason != "analysis_requires_more_evidence" {
+		t.Fatalf("reason=%q, want analysis_requires_more_evidence", decision.Reason)
+	}
+}
+
 func TestDecideTaskLoop_RepeatedSignatureFailsAfterNoProgress(t *testing.T) {
 	t.Parallel()
 

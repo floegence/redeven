@@ -114,7 +114,11 @@ func decideTaskLoop(cfg taskLoopConfig, state *taskLoopState, summary turnAttemp
 	}
 	analysisIntent := isAnalysisIntent(objective, userInput)
 	analysisRequiresEvidence := hasPathHint(strings.ToLower(strings.TrimSpace(objective + "\n" + userInput)))
-	hasEvidenceTool := toolCallsContain(summary.ToolCallNames, "fs.read_file") || toolCallsContain(summary.ToolCallNames, "terminal.exec")
+	evidenceToolNames := summary.ToolSuccessNames
+	if len(evidenceToolNames) == 0 && summary.ToolSuccesses > 0 {
+		evidenceToolNames = summary.ToolCallNames
+	}
+	hasEvidenceTool := toolCallsContain(evidenceToolNames, "fs.read_file") || toolCallsContain(evidenceToolNames, "terminal.exec")
 
 	if sigHit >= cfg.MaxRepeatedSignatures {
 		if state.NoProgressTurn >= cfg.MaxNoProgressTurns-1 || state.TurnsUsed >= cfg.MaxTurns {

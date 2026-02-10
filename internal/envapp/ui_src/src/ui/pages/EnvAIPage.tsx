@@ -58,7 +58,7 @@ function InlineButtonSnakeLoading() {
 }
 
 // Custom working indicator — neural animation + minimal waveform bars
-function ChatWorkingIndicator() {
+function ChatWorkingIndicator(props: { phaseLabel?: string }) {
   const uid = `neural-${Math.random().toString(36).slice(2, 8)}`;
 
   const baseNodes = [
@@ -185,7 +185,7 @@ function ChatWorkingIndicator() {
         </svg>
 
         {/* Status text (shimmer) */}
-        <span class="text-xs text-muted-foreground processing-text-shimmer">Working</span>
+        <span class="text-xs text-muted-foreground processing-text-shimmer">{String(props.phaseLabel ?? "").trim() || "Working"}</span>
 
         {/* Waveform bars (minimal style) */}
         <div class="flex items-end gap-[2px] h-3.5">
@@ -431,6 +431,45 @@ export function EnvAIPage() {
   let skipNextThreadLoad = false;
   const replayAppliedByThread = new Map<string, number>();
   const failureNotifiedRuns = new Set<string>();
+  const [runPhaseLabel, setRunPhaseLabel] = createSignal('Working');
+
+  const normalizeLifecyclePhase = (raw: unknown): string => {
+    const v = String(raw ?? '').trim().toLowerCase();
+    switch (v) {
+      case 'planning':
+      case 'start':
+        return 'planning';
+      case 'executing_tools':
+      case 'tool_call':
+      case 'tool':
+        return 'executing_tools';
+      case 'synthesizing':
+      case 'synthesis':
+        return 'synthesizing';
+      case 'finalizing':
+      case 'end':
+      case 'finish':
+      case 'ended':
+        return 'finalizing';
+      default:
+        return '';
+    }
+  };
+
+  const lifecyclePhaseLabel = (phase: string): string => {
+    switch (phase) {
+      case 'planning':
+        return 'Planning...';
+      case 'executing_tools':
+        return 'Executing tools...';
+      case 'synthesizing':
+        return 'Synthesizing answer...';
+      case 'finalizing':
+        return 'Finalizing...';
+      default:
+        return 'Working';
+    }
+  };
 
   const activeThreadRunning = createMemo(() => ai.isThreadRunning(ai.activeThreadId()));
   const canInteract = createMemo(
@@ -517,6 +556,7 @@ export function EnvAIPage() {
     if (protocol.status() !== 'connected' || !ai.aiEnabled()) {
       chat?.clearMessages();
       setHasMessages(false);
+      setRunPhaseLabel('Working');
       return;
     }
 
@@ -532,11 +572,13 @@ export function EnvAIPage() {
     if (!tid) {
       chat?.clearMessages();
       setHasMessages(false);
+      setRunPhaseLabel('Working');
       return;
     }
 
     chat?.clearMessages();
     setHasMessages(false);
+    setRunPhaseLabel('Working');
     replayAppliedByThread.delete(String(tid ?? '').trim());
     void loadThreadMessages(tid);
   });
@@ -549,6 +591,17 @@ export function EnvAIPage() {
       if (!tid) return;
 
       if (event.eventType === 'stream_event') {
+        const streamEvent = event.streamEvent as any;
+        const streamType = String(streamEvent?.type ?? '').trim().toLowerCase();
+        if (streamType === 'lifecycle-phase') {
+          if (tid === String(ai.activeThreadId() ?? '').trim()) {
+            const normalizedPhase = normalizeLifecyclePhase(streamEvent?.phase ?? event.diag?.phase);
+            if (normalizedPhase) {
+              setRunPhaseLabel(lifecyclePhaseLabel(normalizedPhase));
+            }
+          }
+          return;
+        }
         if (tid === String(ai.activeThreadId() ?? '').trim()) {
           syncThreadReplay(tid);
           scheduleFollowScrollToLatest();
@@ -563,6 +616,7 @@ export function EnvAIPage() {
 
       replayAppliedByThread.delete(tid);
       if (tid === String(ai.activeThreadId() ?? '').trim()) {
+        setRunPhaseLabel('Working');
         void loadThreadMessages(tid);
       }
 
@@ -683,6 +737,7 @@ export function EnvAIPage() {
     // sendPending is usually raised by onWillSend, this call keeps attachment-only flows responsive.
     setHasMessages(true);
     setSendPending(true);
+    setRunPhaseLabel('Planning...');
     enableAutoFollow();
     forceScrollToLatest();
 
@@ -741,6 +796,7 @@ export function EnvAIPage() {
       if (import.meta.env.DEV) console.debug('[AI Chat] onWillSend fired at', performance.now().toFixed(1), 'ms');
       setSendPending(true);
       setHasMessages(true);
+      setRunPhaseLabel('Planning...');
       enableAutoFollow();
       forceScrollToLatest();
     },
@@ -986,7 +1042,7 @@ export function EnvAIPage() {
 
             {/* Keep indicator mounted and toggle visibility via display to avoid mount/unmount jitter. */}
             <div style={{ display: showWorkingIndicator() ? '' : 'none' }}>
-              <ChatWorkingIndicator />
+              <ChatWorkingIndicator phaseLabel={runPhaseLabel()} />
             </div>
 
             {/* Input area */}

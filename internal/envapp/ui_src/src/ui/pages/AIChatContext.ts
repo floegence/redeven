@@ -392,7 +392,8 @@ export function createAIChatContextValue(): AIChatContextValue {
 
     if (event.eventType === 'stream_event') {
       const streamEvent = event.streamEvent as StreamEvent | undefined;
-      if (streamEvent) {
+      const streamType = String((streamEvent as any)?.type ?? '').trim().toLowerCase();
+      if (streamEvent && streamType !== 'lifecycle-phase') {
         appendReplayEvent(tid, streamEvent);
       }
       emitRealtimeEvent(event);
