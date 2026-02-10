@@ -1244,6 +1244,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             onAdd={createSession}
             showAdd={connected() && !creating()}
             closable
+            features={{
+              indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true },
+              closeButton: { enabledByDefault: true, dangerHover: true },
+              addButton: { enabled: connected() && !creating() },
+            }}
             class="flex-1 min-w-0"
           />
         </Show>
