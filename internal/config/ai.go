@@ -28,19 +28,27 @@ type AIConfig struct {
 	// - "plan": non-mutating analysis mode
 	Mode string `json:"mode,omitempty"`
 
-	// GuardEnabled controls the turn commitment guard.
+	// ToolRecoveryEnabled controls runtime-level recovery orchestration.
 	//
-	// When enabled, the runtime prevents turns from ending with pure preamble text when
-	// the user intent requires real tool execution.
-	//
-	// Defaults to true.
-	GuardEnabled *bool `json:"guard_enabled,omitempty"`
+	// When enabled, the Go runtime can continue attempts after recoverable tool failures
+	// instead of ending the turn immediately.
+	ToolRecoveryEnabled *bool `json:"tool_recovery_enabled,omitempty"`
 
-	// GuardAutoContinueMax controls how many automatic continuation attempts are allowed
-	// when the commitment guard is triggered.
+	// ToolRecoveryMaxSteps limits how many recovery continuations can happen in one run.
 	//
-	// Defaults to 1.
-	GuardAutoContinueMax *int `json:"guard_auto_continue_max,omitempty"`
+	// Defaults to 3.
+	ToolRecoveryMaxSteps *int `json:"tool_recovery_max_steps,omitempty"`
+
+	// ToolRecoveryAllowPathRewrite controls deterministic path normalization/rewrite strategies.
+	ToolRecoveryAllowPathRewrite *bool `json:"tool_recovery_allow_path_rewrite,omitempty"`
+
+	// ToolRecoveryAllowProbeTools controls whether runtime recovery can request probe-first retries
+	// (for example, list workspace root before retrying a target path).
+	ToolRecoveryAllowProbeTools *bool `json:"tool_recovery_allow_probe_tools,omitempty"`
+
+	// ToolRecoveryFailOnRepeatedSignature controls fail-fast behavior when the same failure signature
+	// repeats across recovery attempts.
+	ToolRecoveryFailOnRepeatedSignature *bool `json:"tool_recovery_fail_on_repeated_signature,omitempty"`
 
 	// ToolRequiredIntents is an optional list of intent hint substrings.
 	//
@@ -89,8 +97,11 @@ const (
 )
 
 const (
-	defaultAIGuardEnabled         = true
-	defaultAIGuardAutoContinueMax = 1
+	defaultAIToolRecoveryEnabled                 = true
+	defaultAIToolRecoveryMaxSteps                = 3
+	defaultAIToolRecoveryAllowPathRewrite        = true
+	defaultAIToolRecoveryAllowProbeTools         = true
+	defaultAIToolRecoveryFailOnRepeatedSignature = true
 )
 
 var defaultToolRequiredIntents = []string{
@@ -130,9 +141,9 @@ func (c *AIConfig) Validate() error {
 		return fmt.Errorf("invalid ai mode %q", c.Mode)
 	}
 
-	if c.GuardAutoContinueMax != nil {
-		if *c.GuardAutoContinueMax < 0 || *c.GuardAutoContinueMax > 5 {
-			return fmt.Errorf("invalid guard_auto_continue_max %d (must be in [0,5])", *c.GuardAutoContinueMax)
+	if c.ToolRecoveryMaxSteps != nil {
+		if *c.ToolRecoveryMaxSteps < 0 || *c.ToolRecoveryMaxSteps > 8 {
+			return fmt.Errorf("invalid tool_recovery_max_steps %d (must be in [0,8])", *c.ToolRecoveryMaxSteps)
 		}
 	}
 
@@ -287,25 +298,46 @@ func (c *AIConfig) EffectiveMode() string {
 	}
 }
 
-func (c *AIConfig) EffectiveGuardEnabled() bool {
-	if c == nil || c.GuardEnabled == nil {
-		return defaultAIGuardEnabled
+func (c *AIConfig) EffectiveToolRecoveryEnabled() bool {
+	if c == nil || c.ToolRecoveryEnabled == nil {
+		return defaultAIToolRecoveryEnabled
 	}
-	return *c.GuardEnabled
+	return *c.ToolRecoveryEnabled
 }
 
-func (c *AIConfig) EffectiveGuardAutoContinueMax() int {
-	if c == nil || c.GuardAutoContinueMax == nil {
-		return defaultAIGuardAutoContinueMax
+func (c *AIConfig) EffectiveToolRecoveryMaxSteps() int {
+	if c == nil || c.ToolRecoveryMaxSteps == nil {
+		return defaultAIToolRecoveryMaxSteps
 	}
-	v := *c.GuardAutoContinueMax
+	v := *c.ToolRecoveryMaxSteps
 	if v < 0 {
-		return defaultAIGuardAutoContinueMax
+		return defaultAIToolRecoveryMaxSteps
 	}
-	if v > 5 {
-		return 5
+	if v > 8 {
+		return 8
 	}
 	return v
+}
+
+func (c *AIConfig) EffectiveToolRecoveryAllowPathRewrite() bool {
+	if c == nil || c.ToolRecoveryAllowPathRewrite == nil {
+		return defaultAIToolRecoveryAllowPathRewrite
+	}
+	return *c.ToolRecoveryAllowPathRewrite
+}
+
+func (c *AIConfig) EffectiveToolRecoveryAllowProbeTools() bool {
+	if c == nil || c.ToolRecoveryAllowProbeTools == nil {
+		return defaultAIToolRecoveryAllowProbeTools
+	}
+	return *c.ToolRecoveryAllowProbeTools
+}
+
+func (c *AIConfig) EffectiveToolRecoveryFailOnRepeatedSignature() bool {
+	if c == nil || c.ToolRecoveryFailOnRepeatedSignature == nil {
+		return defaultAIToolRecoveryFailOnRepeatedSignature
+	}
+	return *c.ToolRecoveryFailOnRepeatedSignature
 }
 
 func (c *AIConfig) EffectiveToolRequiredIntents() []string {

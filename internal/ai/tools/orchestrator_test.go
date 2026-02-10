@@ -27,7 +27,7 @@ func TestClassifyError_InvalidPathProducesNormalizedArgs(t *testing.T) {
 	if !err.Retryable {
 		t.Fatalf("retryable=false, want true")
 	}
-	if got := err.NormalizedArgs["path"]; got != filepath.Clean("/tmp/workspace/docs") {
+	if got := err.NormalizedArgs["path"]; got != "/docs" {
 		t.Fatalf("normalized path=%v", got)
 	}
 }

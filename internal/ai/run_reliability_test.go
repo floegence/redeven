@@ -488,8 +488,12 @@ setInterval(() => {}, 1000);
 	if view == nil {
 		t.Fatalf("thread missing after run")
 	}
-	if strings.TrimSpace(view.LastMessagePreview) != "Tool call failed." {
-		t.Fatalf("last_message_preview=%q, want %q", view.LastMessagePreview, "Tool call failed.")
+	preview := strings.TrimSpace(view.LastMessagePreview)
+	if preview == "" {
+		t.Fatalf("last_message_preview should not be empty")
+	}
+	if !strings.Contains(strings.ToLower(preview), "tool workflow failed") {
+		t.Fatalf("last_message_preview=%q, want contains tool workflow failed", view.LastMessagePreview)
 	}
 }
 
@@ -608,7 +612,7 @@ setInterval(() => {}, 1000);
 	}
 }
 
-func TestRun_GuardAutoContinuesWhenAssistantOnlyPreamble(t *testing.T) {
+func TestRun_RecoveryAutoContinuesWhenAssistantOnlyPreamble(t *testing.T) {
 	t.Parallel()
 
 	script := writeTestSidecarScript(t, `
@@ -627,7 +631,7 @@ rl.on('line', (line) => {
 
   if (method === 'run.start') {
     runId = String(msg.params?.run_id || '').trim();
-    const attempt = Number(msg.params?.guard?.attempt_index || 0);
+    const attempt = Number(msg.params?.recovery?.attempt_index || 0);
     const workspaceRoot = String(msg.params?.workspace_root_abs || '').trim();
 
     if (attempt === 0) {
@@ -659,7 +663,7 @@ setInterval(() => {}, 1000);
 	meta := session.Meta{
 		EndpointID:        "env_test",
 		NamespacePublicID: "ns_test",
-		ChannelID:         "ch_guard_retry",
+		ChannelID:         "ch_recovery_retry",
 		UserPublicID:      "u_test",
 		UserEmail:         "u_test@example.com",
 		CanRead:           true,
@@ -680,7 +684,7 @@ setInterval(() => {}, 1000);
 	}
 
 	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, "run_guard_retry_1", RunStartRequest{
+	if err := svc.StartRun(ctx, &meta, "run_recovery_retry_1", RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "帮我分析一下这个项目结构"},
@@ -697,7 +701,7 @@ setInterval(() => {}, 1000);
 		t.Fatalf("thread missing after run")
 	}
 	if !strings.Contains(view.LastMessagePreview, "Listed workspace") {
-		t.Fatalf("last_message_preview=%q, want guard-retry completion text, stream=%q", view.LastMessagePreview, rr.Body.String())
+		t.Fatalf("last_message_preview=%q, want recovery completion text, stream=%q", view.LastMessagePreview, rr.Body.String())
 	}
 	if strings.Contains(view.LastMessagePreview, "Assistant finished without a visible response.") {
 		t.Fatalf("last_message_preview unexpectedly fell back to no response: %q", view.LastMessagePreview)
@@ -779,5 +783,201 @@ setInterval(() => {}, 1000);
 	}
 	if msgs == nil || len(msgs.Messages) < 2 {
 		t.Fatalf("expected persisted assistant message after run.error, got %+v", msgs)
+	}
+}
+
+func TestRun_RecoveryContinuesAfterToolErrorUntilSuccess(t *testing.T) {
+	t.Parallel()
+
+	script := writeTestSidecarScript(t, `
+import { createInterface } from 'node:readline';
+
+function send(method, params) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+}
+
+let runId = '';
+let attempt = 0;
+const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+rl.on('line', (line) => {
+  const msg = JSON.parse(String(line || '').trim() || '{}');
+  const method = String(msg.method || '').trim();
+
+  if (method === 'run.start') {
+    runId = String(msg.params?.run_id || '').trim();
+    attempt = Number(msg.params?.recovery?.attempt_index || 0);
+    if (attempt === 0) {
+      send('tool.call', {
+        run_id: runId,
+        tool_id: 'tool_stat_1',
+        tool_name: 'fs.stat',
+        args: { path: '/missing-target' },
+      });
+      return;
+    }
+
+    send('tool.call', {
+      run_id: runId,
+      tool_id: 'tool_stat_2',
+      tool_name: 'fs.stat',
+      args: { path: '/' },
+    });
+    return;
+  }
+
+  if (method === 'tool.result') {
+    if (attempt === 0) {
+      send('run.end', { run_id: runId });
+      return;
+    }
+
+    if (String(msg.params?.status || '') === 'success') {
+      send('run.delta', { run_id: runId, delta: 'Recovered after tool failure and continued successfully.' });
+      send('run.end', { run_id: runId });
+      process.exit(0);
+      return;
+    }
+
+    send('run.error', { run_id: runId, error: 'expected success on recovery attempt' });
+    process.exit(1);
+  }
+});
+
+setInterval(() => {}, 1000);
+`)
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_recovery_tool_error",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc := newTestService(t, script, func(o *Options) {
+		o.RunIdleTimeout = 4 * time.Second
+		o.RunMaxWallTime = 4 * time.Second
+	})
+
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "hello", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, "run_recovery_after_tool_error_1", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "Call fs.stat for '/' and report whether it is a directory."},
+		Options:  RunOptions{MaxSteps: 2},
+	}, rr); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if view == nil {
+		t.Fatalf("thread missing after run")
+	}
+	if !strings.Contains(view.LastMessagePreview, "Recovered after tool failure") {
+		t.Fatalf("last_message_preview=%q, want recovery completion text", view.LastMessagePreview)
+	}
+	if strings.Contains(view.LastMessagePreview, "Tool workflow failed") {
+		t.Fatalf("last_message_preview unexpectedly ended at tool failure: %q", view.LastMessagePreview)
+	}
+}
+
+func TestRun_FSStatVirtualRootSlashReturnsDirectory(t *testing.T) {
+	t.Parallel()
+
+	script := writeTestSidecarScript(t, `
+import { createInterface } from 'node:readline';
+
+function send(method, params) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+}
+
+let runId = '';
+const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+rl.on('line', (line) => {
+  const msg = JSON.parse(String(line || '').trim() || '{}');
+  const method = String(msg.method || '').trim();
+
+  if (method === 'run.start') {
+    runId = String(msg.params?.run_id || '').trim();
+    send('tool.call', {
+      run_id: runId,
+      tool_id: 'tool_stat_root_1',
+      tool_name: 'fs.stat',
+      args: { path: '/' },
+    });
+    return;
+  }
+
+  if (method === 'tool.result') {
+    if (String(msg.params?.status || '') !== 'success') {
+      send('run.error', { run_id: runId, error: 'expected fs.stat root success' });
+      process.exit(1);
+      return;
+    }
+    const isDir = Boolean(msg.params?.result?.is_dir);
+    send('run.delta', { run_id: runId, delta: isDir ? 'It is a directory.' : 'It is not a directory.' });
+    send('run.end', { run_id: runId });
+    process.exit(0);
+  }
+});
+
+setInterval(() => {}, 1000);
+`)
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_stat_root",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc := newTestService(t, script)
+
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "hello", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, "run_stat_root_slash_1", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "Call fs.stat for '/'. Then output whether it is directory."},
+		Options:  RunOptions{MaxSteps: 1},
+	}, rr); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if view == nil {
+		t.Fatalf("thread missing after run")
+	}
+	if !strings.Contains(strings.ToLower(view.LastMessagePreview), "directory") {
+		t.Fatalf("last_message_preview=%q, want directory conclusion", view.LastMessagePreview)
+	}
+	if strings.Contains(view.LastMessagePreview, "Tool workflow failed") {
+		t.Fatalf("last_message_preview should not be tool failure: %q", view.LastMessagePreview)
 	}
 }

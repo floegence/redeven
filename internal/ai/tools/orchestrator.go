@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -117,27 +118,69 @@ func normalizeArgs(inv Invocation) map[string]any {
 	return clone
 }
 
+func virtualPathFromReal(root string, real string) string {
+	root = filepath.Clean(root)
+	real = filepath.Clean(real)
+	rel, err := filepath.Rel(root, real)
+	if err != nil {
+		return "/"
+	}
+	rel = filepath.Clean(rel)
+	if rel == "." {
+		return "/"
+	}
+	v := "/" + strings.TrimPrefix(filepath.ToSlash(rel), "/")
+	v = path.Clean(v)
+	if v == "." || v == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(v, "/") {
+		v = "/" + v
+	}
+	return v
+}
+
 func normalizePathValue(raw string, root string) (string, bool) {
 	if raw == "" || root == "" {
 		return "", false
 	}
-	candidate := raw
+
+	candidate := strings.TrimSpace(raw)
+	if candidate == "" {
+		return "", false
+	}
+	candidate = strings.ReplaceAll(candidate, "\\", "/")
 
 	if strings.HasPrefix(candidate, "~/") {
-		home, err := os.UserHomeDir()
-		if err == nil && strings.TrimSpace(home) != "" {
-			candidate = filepath.Join(home, strings.TrimPrefix(candidate, "~/"))
+		candidate = "/" + strings.TrimPrefix(candidate, "~/")
+	}
+
+	if filepath.IsAbs(candidate) {
+		cleanAbs := filepath.Clean(candidate)
+		ok, err := isWithinRoot(cleanAbs, root)
+		if err == nil && ok {
+			return virtualPathFromReal(root, cleanAbs), true
 		}
+		candidate = filepath.ToSlash(cleanAbs)
 	}
-	if !filepath.IsAbs(candidate) {
-		candidate = filepath.Join(root, candidate)
+
+	if !strings.HasPrefix(candidate, "/") {
+		candidate = "/" + candidate
 	}
-	candidate = filepath.Clean(candidate)
-	ok, err := isWithinRoot(candidate, root)
+	virtualPath := path.Clean(candidate)
+	if virtualPath == "." || virtualPath == "" {
+		virtualPath = "/"
+	}
+	if !strings.HasPrefix(virtualPath, "/") {
+		virtualPath = "/" + virtualPath
+	}
+
+	realAbs := filepath.Clean(filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(virtualPath, "/"))))
+	ok, err := isWithinRoot(realAbs, root)
 	if err != nil || !ok {
 		return "", false
 	}
-	return candidate, true
+	return virtualPath, true
 }
 
 func isWithinRoot(path string, root string) (bool, error) {

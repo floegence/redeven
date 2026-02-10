@@ -42,11 +42,17 @@ type RunStartParams = {
     }>;
   };
   options: { max_steps: number };
-  guard?: {
+  recovery?: {
     enabled?: boolean;
-    auto_continue_max?: number;
+    max_steps?: number;
     requires_tools?: boolean;
     attempt_index?: number;
+    steps_used?: number;
+    budget_left?: number;
+    reason?: string;
+    action?: string;
+    last_error_code?: string;
+    last_error_message?: string;
   };
 };
 
@@ -72,40 +78,6 @@ let currentRun: {
   abort?: AbortController;
 } | null = null;
 
-const commitmentPhrases = [
-  'let me',
-  'i will',
-  "i'll",
-  'i am going to',
-  "i'm going to",
-  'first i',
-  '我先',
-  '我会',
-  '我将',
-  '先',
-  '开始',
-];
-
-const actionPhrases = [
-  'scan',
-  'inspect',
-  'read',
-  'list',
-  'check',
-  'execute',
-  'run',
-  'explore',
-  '分析',
-  '扫描',
-  '查看',
-  '读取',
-  '执行',
-  '检查',
-  '排查',
-  '命令',
-  '目录',
-  '文件',
-];
 
 function writeLogLine(parts: string[]) {
   process.stderr.write(`[ai-sidecar] ${parts.join(' ')}\n`);
@@ -376,8 +348,22 @@ async function executeTool(runId: string, toolName: string, args: any): Promise<
   }
 
   const firstError = normalizeToolErrorPayload(first.error);
+  notify('tool.error.classified', {
+    run_id: runId,
+    tool_name: toolName,
+    code: firstError.code,
+    retryable: Boolean(firstError.retryable),
+    has_normalized_args: Boolean(firstError.normalized_args && typeof firstError.normalized_args === 'object'),
+  });
+
   if (shouldRetryWithNormalizedArgs(toolName, firstError)) {
     const recoveryArgs = mergeToolArgs(args, firstError.normalized_args);
+    notify('tool.recovery.hint', {
+      run_id: runId,
+      tool_name: toolName,
+      action: 'retry_with_normalized_args',
+      code: firstError.code,
+    });
     logEvent('ai.sidecar.tool.call.recovering', {
       run_id: runId,
       tool_name: toolName,
@@ -391,6 +377,13 @@ async function executeTool(runId: string, toolName: string, args: any): Promise<
     }
 
     const retryError = normalizeToolErrorPayload(retry.error);
+    notify('tool.error.classified', {
+      run_id: runId,
+      tool_name: toolName,
+      code: retryError.code,
+      retryable: Boolean(retryError.retryable),
+      has_normalized_args: Boolean(retryError.normalized_args && typeof retryError.normalized_args === 'object'),
+    });
     return {
       status: 'error',
       error: retryError,
@@ -404,32 +397,6 @@ async function executeTool(runId: string, toolName: string, args: any): Promise<
     status: 'error',
     error: firstError,
   };
-}
-
-function containsAny(text: string, hints: string[]): boolean {
-  if (!text || !Array.isArray(hints) || hints.length === 0) return false;
-  for (const raw of hints) {
-    const hint = String(raw ?? '').trim().toLowerCase();
-    if (!hint) continue;
-    if (text.includes(hint)) return true;
-  }
-  return false;
-}
-
-function hasPathHint(text: string): boolean {
-  if (!text) return false;
-  if (text.includes('~/') || text.includes('../') || text.includes('./')) return true;
-  if (text.includes('/') || text.includes('\\')) return true;
-  return containsAny(text, ['.go', '.ts', '.md', '.json', '.yaml', '.yml', 'package.json', 'go.mod', 'readme']);
-}
-
-function hasUnfulfilledActionCommitment(text: string): boolean {
-  const normalized = String(text ?? '').trim().toLowerCase();
-  if (!normalized) return false;
-  if (!containsAny(normalized, commitmentPhrases)) return false;
-  if (containsAny(normalized, actionPhrases)) return true;
-  if (hasPathHint(normalized)) return true;
-  return false;
 }
 
 function buildUserContent(text: string, atts: RunStartParams['input']['attachments']): string {
@@ -463,17 +430,35 @@ async function runAgent(params: RunStartParams): Promise<void> {
   const abort = new AbortController();
   currentRun = { runId, abort };
   const workspaceRootAbs = String(params?.workspace_root_abs ?? '').trim();
-  const guardEnabled = Boolean(params?.guard?.enabled);
-  const guardRequiresTools = Boolean(params?.guard?.requires_tools);
-  const guardAttemptIndex = Number.isFinite(Number(params?.guard?.attempt_index))
-    ? Number(params?.guard?.attempt_index)
+  const recoveryEnabled = Boolean(params?.recovery?.enabled);
+  const recoveryRequiresTools = Boolean(params?.recovery?.requires_tools);
+  const recoveryAttemptIndex = Number.isFinite(Number(params?.recovery?.attempt_index))
+    ? Number(params?.recovery?.attempt_index)
     : 0;
-  const guardAutoContinueMax = Number.isFinite(Number(params?.guard?.auto_continue_max))
-    ? Number(params?.guard?.auto_continue_max)
+  const recoveryMaxSteps = Number.isFinite(Number(params?.recovery?.max_steps))
+    ? Number(params?.recovery?.max_steps)
     : 0;
+  const recoveryStepsUsed = Number.isFinite(Number(params?.recovery?.steps_used))
+    ? Number(params?.recovery?.steps_used)
+    : 0;
+  const recoveryBudgetLeft = Number.isFinite(Number(params?.recovery?.budget_left))
+    ? Number(params?.recovery?.budget_left)
+    : 0;
+  const recoveryReason = String(params?.recovery?.reason ?? '').trim();
+  const recoveryAction = String(params?.recovery?.action ?? '').trim();
+  const recoveryLastErrorCode = String(params?.recovery?.last_error_code ?? '').trim();
+  const recoveryLastErrorMessage = String(params?.recovery?.last_error_message ?? '').trim();
 
   runToolCallCount.set(runId, 0);
-  notify('run.phase', { run_id: runId, phase: 'start', diag: { attempt_index: guardAttemptIndex } });
+  notify('run.phase', {
+    run_id: runId,
+    phase: 'start',
+    diag: {
+      attempt_index: recoveryAttemptIndex,
+      recovery_steps_used: recoveryStepsUsed,
+      recovery_budget_left: recoveryBudgetLeft,
+    },
+  });
   logEvent('ai.sidecar.run.start', {
     run_id: runId,
     model: String(params?.model ?? '').trim(),
@@ -482,10 +467,16 @@ async function runAgent(params: RunStartParams): Promise<void> {
     attachment_count: Array.isArray(params?.input?.attachments) ? params.input.attachments.length : 0,
     input_chars: String(params?.input?.text ?? '').trim().length,
     workspace_root_abs: workspaceRootAbs,
-    guard_enabled: guardEnabled,
-    guard_requires_tools: guardRequiresTools,
-    guard_attempt_index: guardAttemptIndex,
-    guard_auto_continue_max: guardAutoContinueMax,
+    recovery_enabled: recoveryEnabled,
+    recovery_requires_tools: recoveryRequiresTools,
+    recovery_attempt_index: recoveryAttemptIndex,
+    recovery_max_steps: recoveryMaxSteps,
+    recovery_steps_used: recoveryStepsUsed,
+    recovery_budget_left: recoveryBudgetLeft,
+    recovery_reason: recoveryReason,
+    recovery_action: recoveryAction,
+    recovery_last_error_code: recoveryLastErrorCode,
+    recovery_last_error_message: recoveryLastErrorMessage,
   });
 
   try {
@@ -494,8 +485,8 @@ async function runAgent(params: RunStartParams): Promise<void> {
 
     const mode = String(params?.mode ?? 'build').trim().toLowerCase() === 'plan' ? 'plan' : 'build';
     const workspaceScopeInstruction = workspaceRootAbs
-      ? `Workspace root is ${workspaceRootAbs}. Only use absolute paths inside this root for fs.* and terminal_exec.cwd.`
-      : 'Workspace root is not provided. Use absolute paths for fs.* and terminal_exec.cwd, and avoid paths outside workspace.';
+      ? `Workspace real root is ${workspaceRootAbs}. For fs.* tools use virtual absolute paths where '/' maps to workspace root. For terminal_exec.cwd use '/' for workspace root.`
+      : "Workspace root is not provided. For fs.* and terminal_exec.cwd use virtual absolute paths and keep everything under '/'.";
     const modeInstruction =
       mode === 'plan'
         ? 'You are running in PLAN mode. Do not request mutating tools such as fs_write_file or terminal_exec.'
@@ -527,17 +518,17 @@ async function runAgent(params: RunStartParams): Promise<void> {
       // Keep the Go-side tool names stable (e.g. "fs.list_dir") and only sanitize the
       // OpenAI-exposed function names here.
       fs_list_dir: tool({
-        description: 'List directory entries for an absolute path inside workspace root.',
+        description: "List directory entries using a virtual absolute path where '/' maps to workspace root.",
         inputSchema: z.object({ path: z.string() }),
         execute: async (a: any) => executeTool(runId, 'fs.list_dir', a),
       }),
       fs_stat: tool({
-        description: 'Get file/directory metadata for an absolute path inside workspace root.',
+        description: "Get file/directory metadata using a virtual absolute path where '/' maps to workspace root.",
         inputSchema: z.object({ path: z.string() }),
         execute: async (a: any) => executeTool(runId, 'fs.stat', a),
       }),
       fs_read_file: tool({
-        description: 'Read a UTF-8 text file using an absolute path inside workspace root.',
+        description: "Read a UTF-8 text file using a virtual absolute path where '/' maps to workspace root.",
         inputSchema: z.object({
           path: z.string(),
           offset: z.number().int().nonnegative().default(0),
@@ -546,7 +537,7 @@ async function runAgent(params: RunStartParams): Promise<void> {
         execute: async (a: any) => executeTool(runId, 'fs.read_file', a),
       }),
       fs_write_file: tool({
-        description: 'Write a UTF-8 text file to an absolute path inside workspace root (requires explicit user approval).',
+        description: "Write a UTF-8 text file to a virtual absolute path where '/' maps to workspace root (requires explicit user approval).",
         inputSchema: z.object({
           path: z.string(),
           content_utf8: z.string(),
@@ -556,10 +547,10 @@ async function runAgent(params: RunStartParams): Promise<void> {
         execute: async (a: any) => executeTool(runId, 'fs.write_file', a),
       }),
       terminal_exec: tool({
-        description: 'Execute a shell command (requires explicit user approval) with cwd as an absolute path inside workspace root.',
+        description: "Execute a shell command (requires explicit user approval) with cwd as a virtual absolute path where '/' maps to workspace root.",
         inputSchema: z.object({
           command: z.string(),
-          cwd: z.string().default(workspaceRootAbs || '/'),
+          cwd: z.string().default('/'),
           timeout_ms: z.number().int().positive().max(60_000).default(60_000),
         }),
         execute: async (a: any) => executeTool(runId, 'terminal.exec', a),
@@ -605,44 +596,24 @@ async function runAgent(params: RunStartParams): Promise<void> {
     }
 
     const toolCalls = runToolCallCount.get(runId) ?? 0;
-    const synthesizedText = (typeof finalText === 'string' && finalText.trim()) ? finalText : emitted;
-    if (guardEnabled) {
-      let guardStatus = 'pass';
-      let guardReason = '';
-      if (toolCalls === 0) {
-        if (guardRequiresTools) {
-          guardStatus = 'triggered';
-          guardReason = 'tool_required_intent_without_tool_call';
-        } else if (hasUnfulfilledActionCommitment(synthesizedText)) {
-          guardStatus = 'triggered';
-          guardReason = 'assistant_promised_action_without_tool_call';
-        }
-      }
-      notify('turn.guard', {
-        run_id: runId,
-        status: guardStatus,
-        reason: guardReason,
-        attempt: guardAttemptIndex,
-        diag: {
-          tool_calls: toolCalls,
-          requires_tools: guardRequiresTools,
-        },
-      });
-      logEvent('ai.sidecar.guard', {
-        run_id: runId,
-        status: guardStatus,
-        reason: guardReason,
+    notify('run.phase', {
+      run_id: runId,
+      phase: 'end',
+      diag: {
         tool_calls: toolCalls,
-        attempt_index: guardAttemptIndex,
-      });
-    }
-
-    notify('run.phase', { run_id: runId, phase: 'end', diag: { tool_calls: toolCalls } });
+        attempt_index: recoveryAttemptIndex,
+        recovery_steps_used: recoveryStepsUsed,
+        recovery_budget_left: recoveryBudgetLeft,
+      },
+    });
     logEvent('ai.sidecar.run.end', {
       run_id: runId,
       emitted_chars: emitted.length,
       delta_count: deltaCount,
       tool_calls: toolCalls,
+      recovery_attempt_index: recoveryAttemptIndex,
+      recovery_steps_used: recoveryStepsUsed,
+      recovery_budget_left: recoveryBudgetLeft,
     });
     notify('run.end', { run_id: runId });
   } catch (e) {
@@ -693,12 +664,6 @@ function handleToolResult(params: any) {
     return;
   }
 
-  // Backward compatibility for older Go-side payloads during rolling rebuild.
-  const ok = Boolean(params?.ok);
-  if (ok) {
-    waiter.resolve({ status: 'success', result: params?.result });
-    return;
-  }
   const errMsg = String(params?.error ?? 'Tool failed').trim() || 'Tool failed';
   waiter.resolve({
     status: 'error',

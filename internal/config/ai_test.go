@@ -125,35 +125,66 @@ func TestAIConfig_EffectiveMode_DefaultsBuild(t *testing.T) {
 func boolPtr(v bool) *bool { return &v }
 func intPtr(v int) *int    { return &v }
 
-func TestAIConfig_EffectiveGuardDefaults(t *testing.T) {
+func TestAIConfig_EffectiveToolRecoveryDefaults(t *testing.T) {
 	t.Parallel()
 
-	if got := ((*AIConfig)(nil)).EffectiveGuardEnabled(); !got {
-		t.Fatalf("EffectiveGuardEnabled nil=%v, want true", got)
+	nilCfg := (*AIConfig)(nil)
+	if got := nilCfg.EffectiveToolRecoveryEnabled(); !got {
+		t.Fatalf("EffectiveToolRecoveryEnabled nil=%v, want true", got)
 	}
-	if got := ((*AIConfig)(nil)).EffectiveGuardAutoContinueMax(); got != 1 {
-		t.Fatalf("EffectiveGuardAutoContinueMax nil=%d, want 1", got)
+	if got := nilCfg.EffectiveToolRecoveryMaxSteps(); got != 3 {
+		t.Fatalf("EffectiveToolRecoveryMaxSteps nil=%d, want 3", got)
+	}
+	if got := nilCfg.EffectiveToolRecoveryAllowPathRewrite(); !got {
+		t.Fatalf("EffectiveToolRecoveryAllowPathRewrite nil=%v, want true", got)
+	}
+	if got := nilCfg.EffectiveToolRecoveryAllowProbeTools(); !got {
+		t.Fatalf("EffectiveToolRecoveryAllowProbeTools nil=%v, want true", got)
+	}
+	if got := nilCfg.EffectiveToolRecoveryFailOnRepeatedSignature(); !got {
+		t.Fatalf("EffectiveToolRecoveryFailOnRepeatedSignature nil=%v, want true", got)
 	}
 
 	cfg := &AIConfig{}
-	if got := cfg.EffectiveGuardEnabled(); !got {
-		t.Fatalf("EffectiveGuardEnabled empty=%v, want true", got)
+	if got := cfg.EffectiveToolRecoveryEnabled(); !got {
+		t.Fatalf("EffectiveToolRecoveryEnabled empty=%v, want true", got)
 	}
-	if got := cfg.EffectiveGuardAutoContinueMax(); got != 1 {
-		t.Fatalf("EffectiveGuardAutoContinueMax empty=%d, want 1", got)
+	if got := cfg.EffectiveToolRecoveryMaxSteps(); got != 3 {
+		t.Fatalf("EffectiveToolRecoveryMaxSteps empty=%d, want 3", got)
+	}
+	if got := cfg.EffectiveToolRecoveryAllowPathRewrite(); !got {
+		t.Fatalf("EffectiveToolRecoveryAllowPathRewrite empty=%v, want true", got)
+	}
+	if got := cfg.EffectiveToolRecoveryAllowProbeTools(); !got {
+		t.Fatalf("EffectiveToolRecoveryAllowProbeTools empty=%v, want true", got)
+	}
+	if got := cfg.EffectiveToolRecoveryFailOnRepeatedSignature(); !got {
+		t.Fatalf("EffectiveToolRecoveryFailOnRepeatedSignature empty=%v, want true", got)
 	}
 
-	cfg.GuardEnabled = boolPtr(false)
-	cfg.GuardAutoContinueMax = intPtr(0)
-	if got := cfg.EffectiveGuardEnabled(); got {
-		t.Fatalf("EffectiveGuardEnabled false=%v, want false", got)
+	cfg.ToolRecoveryEnabled = boolPtr(false)
+	cfg.ToolRecoveryMaxSteps = intPtr(0)
+	cfg.ToolRecoveryAllowPathRewrite = boolPtr(false)
+	cfg.ToolRecoveryAllowProbeTools = boolPtr(false)
+	cfg.ToolRecoveryFailOnRepeatedSignature = boolPtr(false)
+	if got := cfg.EffectiveToolRecoveryEnabled(); got {
+		t.Fatalf("EffectiveToolRecoveryEnabled explicit=%v, want false", got)
 	}
-	if got := cfg.EffectiveGuardAutoContinueMax(); got != 0 {
-		t.Fatalf("EffectiveGuardAutoContinueMax explicit0=%d, want 0", got)
+	if got := cfg.EffectiveToolRecoveryMaxSteps(); got != 0 {
+		t.Fatalf("EffectiveToolRecoveryMaxSteps explicit=%d, want 0", got)
+	}
+	if got := cfg.EffectiveToolRecoveryAllowPathRewrite(); got {
+		t.Fatalf("EffectiveToolRecoveryAllowPathRewrite explicit=%v, want false", got)
+	}
+	if got := cfg.EffectiveToolRecoveryAllowProbeTools(); got {
+		t.Fatalf("EffectiveToolRecoveryAllowProbeTools explicit=%v, want false", got)
+	}
+	if got := cfg.EffectiveToolRecoveryFailOnRepeatedSignature(); got {
+		t.Fatalf("EffectiveToolRecoveryFailOnRepeatedSignature explicit=%v, want false", got)
 	}
 }
 
-func TestAIConfigValidate_RejectsInvalidGuardAutoContinueMax(t *testing.T) {
+func TestAIConfigValidate_RejectsInvalidToolRecoveryMaxSteps(t *testing.T) {
 	t.Parallel()
 
 	base := AIConfig{
@@ -169,15 +200,15 @@ func TestAIConfigValidate_RejectsInvalidGuardAutoContinueMax(t *testing.T) {
 	}
 
 	cfg1 := base
-	cfg1.GuardAutoContinueMax = intPtr(-1)
+	cfg1.ToolRecoveryMaxSteps = intPtr(-1)
 	if err := cfg1.Validate(); err == nil {
-		t.Fatalf("expected validation error for guard_auto_continue_max=-1")
+		t.Fatalf("expected validation error for tool_recovery_max_steps=-1")
 	}
 
 	cfg2 := base
-	cfg2.GuardAutoContinueMax = intPtr(6)
+	cfg2.ToolRecoveryMaxSteps = intPtr(9)
 	if err := cfg2.Validate(); err == nil {
-		t.Fatalf("expected validation error for guard_auto_continue_max=6")
+		t.Fatalf("expected validation error for tool_recovery_max_steps=9")
 	}
 }
 
