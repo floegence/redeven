@@ -47,7 +47,8 @@ The mirror workflow is `.github/workflows/sync-release-assets-to-r2.yml`.
 
 Trigger conditions:
 
-- `release` event with type `published`
+- `workflow_run` when `Release Agent` completes successfully on `v*` tag pushes (primary auto chain)
+- `release` event with type `published` (fallback for externally published releases)
 - `workflow_dispatch` for manual re-sync
 
 What it does:
