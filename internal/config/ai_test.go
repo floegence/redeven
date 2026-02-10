@@ -82,3 +82,42 @@ func TestAIConfigValidate_OK(t *testing.T) {
 		t.Fatalf("Validate: %v", err)
 	}
 }
+
+func TestAIConfigValidate_RejectsInvalidMode(t *testing.T) {
+	t.Parallel()
+
+	cfg := &AIConfig{
+		Mode: "oops",
+		Providers: []AIProvider{
+			{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: "https://api.openai.com/v1",
+				Models:  []AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+			},
+		},
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Fatalf("expected validation error for invalid mode")
+	}
+}
+
+func TestAIConfig_EffectiveMode_DefaultsBuild(t *testing.T) {
+	t.Parallel()
+
+	if got := ((*AIConfig)(nil)).EffectiveMode(); got != AIModeBuild {
+		t.Fatalf("EffectiveMode nil=%q, want %q", got, AIModeBuild)
+	}
+
+	cfg := &AIConfig{}
+	if got := cfg.EffectiveMode(); got != AIModeBuild {
+		t.Fatalf("EffectiveMode empty=%q, want %q", got, AIModeBuild)
+	}
+
+	cfg.Mode = AIModePlan
+	if got := cfg.EffectiveMode(); got != AIModePlan {
+		t.Fatalf("EffectiveMode plan=%q, want %q", got, AIModePlan)
+	}
+}

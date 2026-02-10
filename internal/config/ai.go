@@ -20,6 +20,13 @@ type AIConfig struct {
 	// - Providers own their allowed model list (provider + model are always configured together).
 	// - Exactly one provider model must be marked as default via models[].is_default.
 	Providers []AIProvider `json:"providers,omitempty"`
+
+	// Mode controls the AI runtime behavior.
+	//
+	// Supported values:
+	// - "build": full tool execution flow (default)
+	// - "plan": non-mutating analysis mode
+	Mode string `json:"mode,omitempty"`
 }
 
 type AIProvider struct {
@@ -54,9 +61,24 @@ type AIProviderModel struct {
 // It is intentionally Redeven-specific to avoid collisions with other local tools.
 const AIProviderAPIKeyEnvFixed = "REDEVEN_API_KEY"
 
+const (
+	AIModeBuild = "build"
+	AIModePlan  = "plan"
+)
+
 func (c *AIConfig) Validate() error {
 	if c == nil {
 		return errors.New("nil config")
+	}
+
+	mode := strings.TrimSpace(strings.ToLower(c.Mode))
+	if mode == "" {
+		mode = AIModeBuild
+	}
+	switch mode {
+	case AIModeBuild, AIModePlan:
+	default:
+		return fmt.Errorf("invalid ai mode %q", c.Mode)
 	}
 
 	// Validate providers.
@@ -188,4 +210,17 @@ func (c *AIConfig) IsAllowedModelID(modelID string) bool {
 		return false
 	}
 	return false
+}
+
+func (c *AIConfig) EffectiveMode() string {
+	if c == nil {
+		return AIModeBuild
+	}
+	mode := strings.TrimSpace(strings.ToLower(c.Mode))
+	switch mode {
+	case AIModePlan:
+		return AIModePlan
+	default:
+		return AIModeBuild
+	}
 }

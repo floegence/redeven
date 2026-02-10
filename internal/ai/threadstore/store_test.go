@@ -164,12 +164,26 @@ PRAGMA user_version=1;
 		}
 	}
 
+	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events"} {
+		var exists int
+		if err := s.db.QueryRowContext(ctx, `
+SELECT COUNT(1)
+FROM sqlite_master
+WHERE type = 'table' AND name = ?
+`, table).Scan(&exists); err != nil {
+			t.Fatalf("check table %s: %v", table, err)
+		}
+		if exists == 0 {
+			t.Fatalf("missing migrated table %q", table)
+		}
+	}
+
 	var version int
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 3 {
-		t.Fatalf("user_version=%d, want 3", version)
+	if version != 4 {
+		t.Fatalf("user_version=%d, want 4", version)
 	}
 }
 

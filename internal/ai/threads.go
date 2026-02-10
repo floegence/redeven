@@ -32,17 +32,16 @@ func newUserMessageID() (string, error) {
 }
 
 func normalizeThreadRunState(status string, runError string) (string, string) {
-	status = strings.TrimSpace(status)
+	s := NormalizeRunState(status)
 	runError = strings.TrimSpace(runError)
-	switch status {
-	case "running", "success", "failed", "canceled":
+	switch s {
+	case RunStateFailed, RunStateTimedOut:
+		return string(s), runError
+	case RunStateAccepted, RunStateRunning, RunStateWaitingApproval, RunStateRecovering, RunStateSuccess, RunStateCanceled:
+		return string(s), ""
 	default:
-		status = "idle"
+		return string(RunStateIdle), ""
 	}
-	if status != "failed" {
-		runError = ""
-	}
-	return status, runError
 }
 
 func (s *Service) activeThreadRunSet(endpointID string) map[string]struct{} {
@@ -494,4 +493,47 @@ func (s *Service) AppendThreadMessage(ctx context.Context, meta *session.Meta, t
 		MessageJSON:        string(b),
 	}, meta.UserPublicID, meta.UserEmail)
 	return err
+}
+
+func (s *Service) ListRunEvents(ctx context.Context, meta *session.Meta, runID string, limit int) (*ListRunEventsResponse, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	if meta == nil {
+		return nil, errors.New("missing session metadata")
+	}
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return nil, errors.New("missing run_id")
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+
+	recs, err := db.ListRunEvents(ctx, strings.TrimSpace(meta.EndpointID), runID, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := &ListRunEventsResponse{Events: make([]RunEventView, 0, len(recs))}
+	for _, rec := range recs {
+		payload := any(nil)
+		if raw := strings.TrimSpace(rec.PayloadJSON); raw != "" {
+			var obj any
+			if err := json.Unmarshal([]byte(raw), &obj); err == nil {
+				payload = obj
+			}
+		}
+		out.Events = append(out.Events, RunEventView{
+			RunID:      strings.TrimSpace(rec.RunID),
+			ThreadID:   strings.TrimSpace(rec.ThreadID),
+			StreamKind: strings.TrimSpace(rec.StreamKind),
+			EventType:  strings.TrimSpace(rec.EventType),
+			AtUnixMs:   rec.AtUnixMs,
+			Payload:    payload,
+		})
+	}
+	return out, nil
 }

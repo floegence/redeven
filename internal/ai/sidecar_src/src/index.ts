@@ -26,6 +26,7 @@ type ProviderConfig = {
 type RunStartParams = {
   run_id: string;
   model: string;
+  mode?: 'build' | 'plan';
   history: Array<{ role: 'user' | 'assistant'; text: string }>;
   workspace_root_abs?: string;
   input: {
@@ -43,9 +44,18 @@ type RunStartParams = {
   options: { max_steps: number };
 };
 
+type ToolErrorPayload = {
+  code: string;
+  message: string;
+  retryable?: boolean;
+  suggested_fixes?: string[];
+  normalized_args?: Record<string, any>;
+  meta?: Record<string, any>;
+};
+
 type ToolCallResult =
-  | { ok: true; result: any }
-  | { ok: false; error: string; retryable?: boolean };
+  | { status: 'success'; result: any }
+  | { status: 'error' | 'recovering'; error: ToolErrorPayload };
 
 const providers: ProviderConfig[] = [];
 const toolWaiters = new Map<string, { resolve: (v: ToolCallResult) => void }>();
@@ -242,6 +252,49 @@ function createModel(modelId: string, runId = "") {
   }
 }
 
+function normalizeToolErrorPayload(raw: any): ToolErrorPayload {
+  const code = String(raw?.code ?? 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
+  const message = String(raw?.message ?? 'Tool failed').trim() || 'Tool failed';
+  const retryable = Boolean(raw?.retryable);
+  const suggestedFixes = Array.isArray(raw?.suggested_fixes)
+    ? raw.suggested_fixes.map((it: any) => String(it ?? '').trim()).filter(Boolean)
+    : undefined;
+  const normalizedArgs = raw?.normalized_args && typeof raw.normalized_args === 'object'
+    ? (raw.normalized_args as Record<string, any>)
+    : undefined;
+  const meta = raw?.meta && typeof raw.meta === 'object' ? (raw.meta as Record<string, any>) : undefined;
+  return {
+    code,
+    message,
+    retryable,
+    suggested_fixes: suggestedFixes,
+    normalized_args: normalizedArgs,
+    meta,
+  };
+}
+
+function shouldRetryWithNormalizedArgs(toolName: string, err: ToolErrorPayload): boolean {
+  if (!err?.retryable) return false;
+  if (!err?.normalized_args || typeof err.normalized_args !== 'object') return false;
+  const code = String(err.code ?? '').toUpperCase();
+  if (code !== 'INVALID_PATH' && code !== 'OUTSIDE_WORKSPACE') return false;
+  if (toolName === 'terminal.exec') {
+    return typeof err.normalized_args.cwd === 'string' && String(err.normalized_args.cwd).trim() !== '';
+  }
+  return typeof err.normalized_args.path === 'string' && String(err.normalized_args.path).trim() !== '';
+}
+
+function mergeToolArgs(args: any, normalizedArgs: Record<string, any> | undefined): any {
+  if (!normalizedArgs || typeof normalizedArgs !== 'object') {
+    return args;
+  }
+  const base = args && typeof args === 'object' ? { ...args } : {};
+  for (const [k, v] of Object.entries(normalizedArgs)) {
+    base[k] = v;
+  }
+  return base;
+}
+
 async function callTool(runId: string, toolName: string, args: any): Promise<ToolCallResult> {
   const toolId = `tc_${randomUUID()}`;
   logEvent('ai.sidecar.tool.call.emit', {
@@ -260,20 +313,52 @@ async function callTool(runId: string, toolName: string, args: any): Promise<Too
       if (!w) return;
       toolWaiters.delete(toolId);
       logEvent('ai.sidecar.tool.call.timeout', { run_id: runId, tool_id: toolId, tool_name: toolName });
-      resolve({ ok: false, error: 'Tool call timed out', retryable: true });
+      resolve({
+        status: 'error',
+        error: {
+          code: 'TIMEOUT',
+          message: 'Tool call timed out',
+          retryable: true,
+        },
+      });
     }, 10 * 60 * 1000);
   });
 }
 
 async function executeTool(runId: string, toolName: string, args: any): Promise<any> {
-  const out = await callTool(runId, toolName, args);
-  if (out.ok) {
-    return out.result;
+  const first = await callTool(runId, toolName, args);
+  if (first.status === 'success') {
+    return first.result;
   }
+
+  const firstError = normalizeToolErrorPayload(first.error);
+  if (shouldRetryWithNormalizedArgs(toolName, firstError)) {
+    const recoveryArgs = mergeToolArgs(args, firstError.normalized_args);
+    logEvent('ai.sidecar.tool.call.recovering', {
+      run_id: runId,
+      tool_name: toolName,
+      error_code: firstError.code,
+      recovery_args_preview: previewForLog(redactForLog('recovery_args', recoveryArgs), 320),
+    });
+
+    const retry = await callTool(runId, toolName, recoveryArgs);
+    if (retry.status === 'success') {
+      return retry.result;
+    }
+
+    const retryError = normalizeToolErrorPayload(retry.error);
+    return {
+      status: 'error',
+      error: retryError,
+      recovery_attempted: true,
+      first_error: firstError,
+      recovery_args: recoveryArgs,
+    };
+  }
+
   return {
-    ok: false,
-    error: String(out.error ?? 'Tool failed').trim() || 'Tool failed',
-    retryable: Boolean(out.retryable),
+    status: 'error',
+    error: firstError,
   };
 }
 
@@ -311,6 +396,7 @@ async function runAgent(params: RunStartParams): Promise<void> {
   logEvent('ai.sidecar.run.start', {
     run_id: runId,
     model: String(params?.model ?? '').trim(),
+    mode: String(params?.mode ?? 'build').trim() || 'build',
     history_count: Array.isArray(params?.history) ? params.history.length : 0,
     attachment_count: Array.isArray(params?.input?.attachments) ? params.input.attachments.length : 0,
     input_chars: String(params?.input?.text ?? '').trim().length,
@@ -321,14 +407,20 @@ async function runAgent(params: RunStartParams): Promise<void> {
     const model = createModel(String(params.model ?? '').trim(), runId);
     const maxSteps = Math.max(1, Math.min(50, Number(params?.options?.max_steps ?? 10)));
 
+    const mode = String(params?.mode ?? 'build').trim().toLowerCase() === 'plan' ? 'plan' : 'build';
     const workspaceScopeInstruction = workspaceRootAbs
       ? `Workspace root is ${workspaceRootAbs}. Only use absolute paths inside this root for fs.* and terminal_exec.cwd.`
       : 'Workspace root is not provided. Use absolute paths for fs.* and terminal_exec.cwd, and avoid paths outside workspace.';
+    const modeInstruction =
+      mode === 'plan'
+        ? 'You are running in PLAN mode. Do not request mutating tools such as fs_write_file or terminal_exec.'
+        : 'You are running in BUILD mode. When the user asks to inspect files or run shell commands, you must call tools instead of guessing.';
     const systemPrompt =
       'You are an AI agent inside the Redeven Env App. ' +
-      'Use tools only when necessary, respect permissions, and never exfiltrate secrets. ' +
+      'Respect permissions and never exfiltrate secrets. ' +
+      modeInstruction + ' ' +
       workspaceScopeInstruction +
-      ' If a tool returns an error, analyze the error and try a different valid approach before giving up.';
+      ' If a tool fails and the payload includes suggested_fixes or normalized_args, you must follow them and retry once when safe before giving up.';
 
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       { role: 'system', content: systemPrompt },
@@ -445,20 +537,47 @@ function handleToolResult(params: any) {
   }
   toolWaiters.delete(toolId);
 
-  const ok = Boolean(params?.ok);
-  const errMsg = String(params?.error ?? 'Tool failed').trim() || 'Tool failed';
-  logEvent('ai.sidecar.tool.result.recv', {
-    run_id: String(params?.run_id ?? currentRun?.runId ?? '').trim(),
-    tool_id: toolId,
-    ok,
-    error: ok ? '' : errMsg,
-    result_preview: ok ? previewForLog(redactForLog('result', params?.result), 280) : '',
-  });
-  if (ok) {
-    waiter.resolve({ ok: true, result: params?.result });
+  const status = String(params?.status ?? '').trim().toLowerCase();
+  if (status === 'success') {
+    logEvent('ai.sidecar.tool.result.recv', {
+      run_id: String(params?.run_id ?? currentRun?.runId ?? '').trim(),
+      tool_id: toolId,
+      status,
+      result_preview: previewForLog(redactForLog('result', params?.result), 280),
+    });
+    waiter.resolve({ status: 'success', result: params?.result });
     return;
   }
-  waiter.resolve({ ok: false, error: errMsg });
+
+  if (status === 'error' || status === 'recovering') {
+    const err = normalizeToolErrorPayload(params?.error ?? {});
+    logEvent('ai.sidecar.tool.result.recv', {
+      run_id: String(params?.run_id ?? currentRun?.runId ?? '').trim(),
+      tool_id: toolId,
+      status,
+      error_code: err.code,
+      error: err.message,
+      normalized_args_preview: previewForLog(redactForLog('normalized_args', err.normalized_args), 200),
+    });
+    waiter.resolve({ status: status as 'error' | 'recovering', error: err });
+    return;
+  }
+
+  // Backward compatibility for older Go-side payloads during rolling rebuild.
+  const ok = Boolean(params?.ok);
+  if (ok) {
+    waiter.resolve({ status: 'success', result: params?.result });
+    return;
+  }
+  const errMsg = String(params?.error ?? 'Tool failed').trim() || 'Tool failed';
+  waiter.resolve({
+    status: 'error',
+    error: {
+      code: 'UNKNOWN',
+      message: errMsg,
+      retryable: false,
+    },
+  });
 }
 
 function handleCancel(params: any) {

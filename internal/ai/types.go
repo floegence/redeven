@@ -3,11 +3,16 @@ package ai
 // This package defines the Go-side implementation of the Env App AI feature.
 //
 // Design notes:
-// - The browser talks to the agent via the existing local gateway (`/_redeven_proxy/api/ai/*`) over Flowersec E2EE proxy.
+// - The browser talks to the agent via the existing local gateway (/_redeven_proxy/api/ai/*) over Flowersec E2EE proxy.
 // - The agent enforces permissions using authoritative session_meta (direct control channel), not browser-claimed flags.
 // - The LLM orchestration runs in a TS sidecar process; the Go agent is the only authority that can execute tools.
 
-import "time"
+import (
+	"strings"
+	"time"
+
+	aitools "github.com/floegence/redeven-agent/internal/ai/tools"
+)
 
 type Model struct {
 	ID    string `json:"id"`
@@ -63,7 +68,7 @@ type ListThreadMessagesResponse struct {
 type AppendThreadMessageRequest struct {
 	Role   string `json:"role"`
 	Text   string `json:"text"`
-	Format string `json:"format,omitempty"` // "markdown"|"text" (defaults to markdown for now)
+	Format string `json:"format,omitempty"` // markdown|text (defaults to markdown for now)
 }
 
 // RunStartRequest is the HTTP request body for starting an AI run.
@@ -118,6 +123,54 @@ type UploadResponse struct {
 	MimeType string `json:"mime_type"`
 }
 
+type RunEventView struct {
+	RunID      string `json:"run_id"`
+	ThreadID   string `json:"thread_id"`
+	StreamKind string `json:"stream_kind,omitempty"`
+	EventType  string `json:"event_type"`
+	AtUnixMs   int64  `json:"at_unix_ms"`
+	Payload    any    `json:"payload,omitempty"`
+}
+
+type ListRunEventsResponse struct {
+	Events []RunEventView `json:"events"`
+}
+
+// RunState is the normalized state machine for a single AI run.
+type RunState string
+
+const (
+	RunStateIdle            RunState = "idle"
+	RunStateAccepted        RunState = "accepted"
+	RunStateRunning         RunState = "running"
+	RunStateWaitingApproval RunState = "waiting_approval"
+	RunStateRecovering      RunState = "recovering"
+	RunStateSuccess         RunState = "success"
+	RunStateFailed          RunState = "failed"
+	RunStateCanceled        RunState = "canceled"
+	RunStateTimedOut        RunState = "timed_out"
+)
+
+func NormalizeRunState(raw string) RunState {
+	v := strings.TrimSpace(strings.ToLower(raw))
+	switch RunState(v) {
+	case RunStateAccepted, RunStateRunning, RunStateWaitingApproval, RunStateRecovering, RunStateSuccess, RunStateFailed, RunStateCanceled, RunStateTimedOut:
+		return RunState(v)
+	default:
+		return RunStateIdle
+	}
+}
+
+func IsActiveRunState(raw string) bool {
+	s := NormalizeRunState(raw)
+	switch s {
+	case RunStateAccepted, RunStateRunning, RunStateWaitingApproval, RunStateRecovering:
+		return true
+	default:
+		return false
+	}
+}
+
 // --- StreamEvent types (camelCase, aligned with @floegence/floe-webapp-core) ---
 
 type streamEventMessageStart struct {
@@ -162,25 +215,27 @@ type streamEventError struct {
 type ToolCallStatus string
 
 const (
-	ToolCallStatusPending ToolCallStatus = "pending"
-	ToolCallStatusRunning ToolCallStatus = "running"
-	ToolCallStatusSuccess ToolCallStatus = "success"
-	ToolCallStatusError   ToolCallStatus = "error"
+	ToolCallStatusPending    ToolCallStatus = "pending"
+	ToolCallStatusRunning    ToolCallStatus = "running"
+	ToolCallStatusRecovering ToolCallStatus = "recovering"
+	ToolCallStatusSuccess    ToolCallStatus = "success"
+	ToolCallStatusError      ToolCallStatus = "error"
 )
 
 type ToolCallBlock struct {
-	Type             string         `json:"type"` // "tool-call"
-	ToolName         string         `json:"toolName"`
-	ToolID           string         `json:"toolId"`
-	Args             map[string]any `json:"args"`
-	RequiresApproval bool           `json:"requiresApproval,omitempty"`
-	ApprovalState    string         `json:"approvalState,omitempty"` // "required"|"approved"|"rejected"
-	Status           ToolCallStatus `json:"status"`
-	Result           any            `json:"result,omitempty"`
-	Error            string         `json:"error,omitempty"`
-	Children         []any          `json:"children,omitempty"`
-	Collapsed        *bool          `json:"collapsed,omitempty"`
-	StartedAt        *time.Time     `json:"-"`
+	Type             string             `json:"type"` // tool-call
+	ToolName         string             `json:"toolName"`
+	ToolID           string             `json:"toolId"`
+	Args             map[string]any     `json:"args"`
+	RequiresApproval bool               `json:"requiresApproval,omitempty"`
+	ApprovalState    string             `json:"approvalState,omitempty"` // required|approved|rejected
+	Status           ToolCallStatus     `json:"status"`
+	Result           any                `json:"result,omitempty"`
+	Error            string             `json:"error,omitempty"`
+	ErrorDetails     *aitools.ToolError `json:"errorDetails,omitempty"`
+	Children         []any              `json:"children,omitempty"`
+	Collapsed        *bool              `json:"collapsed,omitempty"`
+	StartedAt        *time.Time         `json:"-"`
 }
 
 // RealtimeEventType defines the high-level AI event category sent over Flowersec RPC notify.
@@ -191,18 +246,40 @@ const (
 	RealtimeEventTypeThreadState RealtimeEventType = "thread_state"
 )
 
+// RealtimeStreamKind is a low-cardinality stream category for diagnostics/UI routing.
+type RealtimeStreamKind string
+
+const (
+	RealtimeStreamKindLifecycle RealtimeStreamKind = "lifecycle"
+	RealtimeStreamKindAssistant RealtimeStreamKind = "assistant"
+	RealtimeStreamKindTool      RealtimeStreamKind = "tool"
+)
+
+// RealtimeLifecyclePhase marks lifecycle transitions.
+type RealtimeLifecyclePhase string
+
+const (
+	RealtimePhaseStart       RealtimeLifecyclePhase = "start"
+	RealtimePhaseStateChange RealtimeLifecyclePhase = "state_change"
+	RealtimePhaseEnd         RealtimeLifecyclePhase = "end"
+	RealtimePhaseError       RealtimeLifecyclePhase = "error"
+)
+
 // RealtimeEvent is emitted by the agent for cross-session AI chat collaboration.
 //
 // JSON fields use snake_case because this payload is transported over Redeven RPC wire.
 type RealtimeEvent struct {
-	EventType   RealtimeEventType `json:"event_type"`
-	EndpointID  string            `json:"endpoint_id"`
-	ThreadID    string            `json:"thread_id"`
-	RunID       string            `json:"run_id"`
-	AtUnixMs    int64             `json:"at_unix_ms"`
-	StreamEvent any               `json:"stream_event,omitempty"`
-	RunStatus   string            `json:"run_status,omitempty"`
-	RunError    string            `json:"run_error,omitempty"`
+	EventType   RealtimeEventType      `json:"event_type"`
+	EndpointID  string                 `json:"endpoint_id"`
+	ThreadID    string                 `json:"thread_id"`
+	RunID       string                 `json:"run_id"`
+	AtUnixMs    int64                  `json:"at_unix_ms"`
+	StreamKind  RealtimeStreamKind     `json:"stream_kind,omitempty"`
+	Phase       RealtimeLifecyclePhase `json:"phase,omitempty"`
+	Diag        map[string]any         `json:"diag,omitempty"`
+	StreamEvent any                    `json:"stream_event,omitempty"`
+	RunStatus   string                 `json:"run_status,omitempty"`
+	RunError    string                 `json:"run_error,omitempty"`
 }
 
 // ActiveThreadRun is returned in subscribe snapshots so late subscribers can discover

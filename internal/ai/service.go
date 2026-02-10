@@ -587,6 +587,8 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		UserPublicID:        strings.TrimSpace(metaRef.UserPublicID),
 		MessageID:           messageID,
 		UploadsDir:          uploadsDir,
+		ThreadsDB:           db,
+		PersistOpTimeout:    persistTO,
 		OnStreamEvent: func(ev any) {
 			s.broadcastStreamEvent(endpointID, threadID, runID, ev)
 		},
@@ -860,7 +862,7 @@ func deriveThreadRunState(endReason string, runErr error) (string, string) {
 	case "canceled":
 		return "canceled", ""
 	case "timed_out":
-		return "failed", "Timed out."
+		return "timed_out", "Timed out."
 	case "disconnected":
 		return "failed", "Disconnected."
 	case "error":

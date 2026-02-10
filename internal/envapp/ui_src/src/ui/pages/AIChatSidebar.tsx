@@ -75,11 +75,17 @@ function groupThreadsByDate(threads: ThreadView[]): { group: TimeGroup; threads:
 // 状态圆点颜色映射
 function statusDotClass(status: ThreadRunStatus): string {
   switch (status) {
+    case 'accepted':
     case 'running':
       return 'bg-primary';
+    case 'waiting_approval':
+      return 'bg-amber-500';
+    case 'recovering':
+      return 'bg-sky-500';
     case 'success':
       return 'bg-emerald-500';
     case 'failed':
+    case 'timed_out':
       return 'bg-error';
     case 'canceled':
       return 'bg-muted-foreground/50';
@@ -91,9 +97,13 @@ function statusDotClass(status: ThreadRunStatus): string {
 // 状态文字用于 tooltip
 function statusLabel(status: ThreadRunStatus): string {
   switch (status) {
+    case 'accepted': return 'Queued';
     case 'running': return 'Running';
+    case 'waiting_approval': return 'Waiting Approval';
+    case 'recovering': return 'Recovering';
     case 'success': return 'Done';
     case 'failed': return 'Failed';
+    case 'timed_out': return 'Timed Out';
     case 'canceled': return 'Canceled';
     default: return '';
   }
@@ -288,7 +298,16 @@ function ThreadCard(props: {
   const status = (): ThreadRunStatus => {
     if (props.isRunning) return 'running';
     const raw = String(props.thread.run_status ?? '').trim().toLowerCase();
-    if (raw === 'running' || raw === 'success' || raw === 'failed' || raw === 'canceled') {
+    if (
+      raw === 'accepted' ||
+      raw === 'running' ||
+      raw === 'waiting_approval' ||
+      raw === 'recovering' ||
+      raw === 'success' ||
+      raw === 'failed' ||
+      raw === 'canceled' ||
+      raw === 'timed_out'
+    ) {
       return raw as ThreadRunStatus;
     }
     return 'idle';

@@ -405,9 +405,9 @@ WHERE endpoint_id = ? AND thread_id = ?
 }
 
 func normalizeRunStatus(status string) string {
-	status = strings.TrimSpace(status)
+	status = strings.TrimSpace(strings.ToLower(status))
 	switch status {
-	case "idle", "running", "success", "failed", "canceled":
+	case "idle", "accepted", "running", "waiting_approval", "recovering", "success", "failed", "canceled", "timed_out":
 		return status
 	default:
 		return "idle"
@@ -429,7 +429,7 @@ func (s *Store) UpdateThreadRunState(ctx context.Context, endpointID string, thr
 
 	runStatus = normalizeRunStatus(runStatus)
 	runError = strings.TrimSpace(runError)
-	if runStatus != "failed" {
+	if runStatus != "failed" && runStatus != "timed_out" {
 		runError = ""
 	}
 	if len(runError) > 600 {
@@ -757,6 +757,221 @@ LIMIT ?
 	return out, nil
 }
 
+type RunRecord struct {
+	RunID           string `json:"run_id"`
+	EndpointID      string `json:"endpoint_id"`
+	ThreadID        string `json:"thread_id"`
+	MessageID       string `json:"message_id"`
+	State           string `json:"state"`
+	ErrorCode       string `json:"error_code"`
+	ErrorMessage    string `json:"error_message"`
+	AttemptCount    int    `json:"attempt_count"`
+	StartedAtUnixMs int64  `json:"started_at_unix_ms"`
+	EndedAtUnixMs   int64  `json:"ended_at_unix_ms"`
+	UpdatedAtUnixMs int64  `json:"updated_at_unix_ms"`
+}
+
+type ToolCallRecord struct {
+	RunID           string `json:"run_id"`
+	ToolID          string `json:"tool_id"`
+	ToolName        string `json:"tool_name"`
+	Status          string `json:"status"`
+	ArgsJSON        string `json:"args_json"`
+	ResultJSON      string `json:"result_json"`
+	ErrorCode       string `json:"error_code"`
+	ErrorMessage    string `json:"error_message"`
+	Retryable       bool   `json:"retryable"`
+	RecoveryAction  string `json:"recovery_action"`
+	StartedAtUnixMs int64  `json:"started_at_unix_ms"`
+	EndedAtUnixMs   int64  `json:"ended_at_unix_ms"`
+	LatencyMS       int64  `json:"latency_ms"`
+}
+
+type RunEventRecord struct {
+	EndpointID  string `json:"endpoint_id"`
+	ThreadID    string `json:"thread_id"`
+	RunID       string `json:"run_id"`
+	StreamKind  string `json:"stream_kind"`
+	EventType   string `json:"event_type"`
+	PayloadJSON string `json:"payload_json"`
+	AtUnixMs    int64  `json:"at_unix_ms"`
+}
+
+func (s *Store) UpsertRun(ctx context.Context, rec RunRecord) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rec.RunID = strings.TrimSpace(rec.RunID)
+	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
+	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
+	rec.MessageID = strings.TrimSpace(rec.MessageID)
+	rec.State = normalizeRunStatus(rec.State)
+	rec.ErrorCode = strings.TrimSpace(rec.ErrorCode)
+	rec.ErrorMessage = strings.TrimSpace(rec.ErrorMessage)
+	if rec.RunID == "" || rec.EndpointID == "" || rec.ThreadID == "" {
+		return errors.New("invalid run record")
+	}
+	now := time.Now().UnixMilli()
+	if rec.UpdatedAtUnixMs <= 0 {
+		rec.UpdatedAtUnixMs = now
+	}
+	if rec.StartedAtUnixMs <= 0 {
+		rec.StartedAtUnixMs = now
+	}
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO ai_runs(
+  run_id, endpoint_id, thread_id, message_id,
+  state, error_code, error_message, attempt_count,
+  started_at_unix_ms, ended_at_unix_ms, updated_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(run_id) DO UPDATE SET
+  endpoint_id=excluded.endpoint_id,
+  thread_id=excluded.thread_id,
+  message_id=excluded.message_id,
+  state=excluded.state,
+  error_code=excluded.error_code,
+  error_message=excluded.error_message,
+  attempt_count=excluded.attempt_count,
+  started_at_unix_ms=excluded.started_at_unix_ms,
+  ended_at_unix_ms=excluded.ended_at_unix_ms,
+  updated_at_unix_ms=excluded.updated_at_unix_ms
+`, rec.RunID, rec.EndpointID, rec.ThreadID, rec.MessageID, rec.State, rec.ErrorCode, rec.ErrorMessage, rec.AttemptCount, rec.StartedAtUnixMs, rec.EndedAtUnixMs, rec.UpdatedAtUnixMs)
+	return err
+}
+
+func (s *Store) UpsertToolCall(ctx context.Context, rec ToolCallRecord) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rec.RunID = strings.TrimSpace(rec.RunID)
+	rec.ToolID = strings.TrimSpace(rec.ToolID)
+	rec.ToolName = strings.TrimSpace(rec.ToolName)
+	rec.Status = strings.TrimSpace(rec.Status)
+	rec.ArgsJSON = strings.TrimSpace(rec.ArgsJSON)
+	rec.ResultJSON = strings.TrimSpace(rec.ResultJSON)
+	rec.ErrorCode = strings.TrimSpace(rec.ErrorCode)
+	rec.ErrorMessage = strings.TrimSpace(rec.ErrorMessage)
+	rec.RecoveryAction = strings.TrimSpace(rec.RecoveryAction)
+	if rec.RunID == "" || rec.ToolID == "" || rec.ToolName == "" || rec.Status == "" {
+		return errors.New("invalid tool call record")
+	}
+	if rec.ArgsJSON == "" {
+		rec.ArgsJSON = "{}"
+	}
+	now := time.Now().UnixMilli()
+	if rec.StartedAtUnixMs <= 0 {
+		rec.StartedAtUnixMs = now
+	}
+	if rec.EndedAtUnixMs > 0 && rec.LatencyMS <= 0 && rec.EndedAtUnixMs >= rec.StartedAtUnixMs {
+		rec.LatencyMS = rec.EndedAtUnixMs - rec.StartedAtUnixMs
+	}
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO ai_tool_calls(
+  run_id, tool_id, tool_name, status,
+  args_json, result_json, error_code, error_message,
+  retryable, recovery_action, started_at_unix_ms, ended_at_unix_ms, latency_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(run_id, tool_id) DO UPDATE SET
+  tool_name=excluded.tool_name,
+  status=excluded.status,
+  args_json=excluded.args_json,
+  result_json=excluded.result_json,
+  error_code=excluded.error_code,
+  error_message=excluded.error_message,
+  retryable=excluded.retryable,
+  recovery_action=excluded.recovery_action,
+  started_at_unix_ms=excluded.started_at_unix_ms,
+  ended_at_unix_ms=excluded.ended_at_unix_ms,
+  latency_ms=excluded.latency_ms
+`, rec.RunID, rec.ToolID, rec.ToolName, rec.Status, rec.ArgsJSON, rec.ResultJSON, rec.ErrorCode, rec.ErrorMessage, boolToInt(rec.Retryable), rec.RecoveryAction, rec.StartedAtUnixMs, rec.EndedAtUnixMs, rec.LatencyMS)
+	return err
+}
+
+func (s *Store) AppendRunEvent(ctx context.Context, rec RunEventRecord) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
+	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
+	rec.RunID = strings.TrimSpace(rec.RunID)
+	rec.StreamKind = strings.TrimSpace(rec.StreamKind)
+	rec.EventType = strings.TrimSpace(rec.EventType)
+	rec.PayloadJSON = strings.TrimSpace(rec.PayloadJSON)
+	if rec.EndpointID == "" || rec.ThreadID == "" || rec.RunID == "" || rec.EventType == "" {
+		return errors.New("invalid run event")
+	}
+	if rec.PayloadJSON == "" {
+		rec.PayloadJSON = "{}"
+	}
+	if rec.AtUnixMs <= 0 {
+		rec.AtUnixMs = time.Now().UnixMilli()
+	}
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO ai_run_events(endpoint_id, thread_id, run_id, stream_kind, event_type, payload_json, at_unix_ms)
+VALUES(?, ?, ?, ?, ?, ?, ?)
+`, rec.EndpointID, rec.ThreadID, rec.RunID, rec.StreamKind, rec.EventType, rec.PayloadJSON, rec.AtUnixMs)
+	return err
+}
+
+func (s *Store) ListRunEvents(ctx context.Context, endpointID string, runID string, limit int) ([]RunEventRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	runID = strings.TrimSpace(runID)
+	if endpointID == "" || runID == "" {
+		return nil, errors.New("invalid request")
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 2000 {
+		limit = 2000
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT endpoint_id, thread_id, run_id, stream_kind, event_type, payload_json, at_unix_ms
+FROM ai_run_events
+WHERE endpoint_id = ? AND run_id = ?
+ORDER BY id ASC
+LIMIT ?
+`, endpointID, runID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]RunEventRecord, 0, limit)
+	for rows.Next() {
+		var rec RunEventRecord
+		if err := rows.Scan(&rec.EndpointID, &rec.ThreadID, &rec.RunID, &rec.StreamKind, &rec.EventType, &rec.PayloadJSON, &rec.AtUnixMs); err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
 func initSchema(db *sql.DB) error {
 	if db == nil {
 		return errors.New("nil db")
@@ -774,7 +989,7 @@ func migrateSchema(db *sql.DB) error {
 	if db == nil {
 		return errors.New("nil db")
 	}
-	const targetVersion = 3
+	const targetVersion = 4
 
 	var v int
 	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
@@ -884,6 +1099,57 @@ CREATE INDEX IF NOT EXISTS idx_ai_messages_thread_id ON ai_messages(endpoint_id,
 `); err != nil {
 			return err
 		}
+	}
+
+	if _, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS ai_runs (
+  run_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  message_id TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT 'accepted',
+  error_code TEXT NOT NULL DEFAULT '',
+  error_message TEXT NOT NULL DEFAULT '',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  started_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  ended_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_ai_runs_endpoint_thread_updated ON ai_runs(endpoint_id, thread_id, updated_at_unix_ms DESC);
+
+CREATE TABLE IF NOT EXISTS ai_tool_calls (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  tool_id TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  args_json TEXT NOT NULL DEFAULT '{}',
+  result_json TEXT NOT NULL DEFAULT '',
+  error_code TEXT NOT NULL DEFAULT '',
+  error_message TEXT NOT NULL DEFAULT '',
+  retryable INTEGER NOT NULL DEFAULT 0,
+  recovery_action TEXT NOT NULL DEFAULT '',
+  started_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  ended_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  latency_ms INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(run_id, tool_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_tool_calls_run_id ON ai_tool_calls(run_id, id ASC);
+
+CREATE TABLE IF NOT EXISTS ai_run_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  stream_kind TEXT NOT NULL DEFAULT '',
+  event_type TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_ai_run_events_run_id ON ai_run_events(run_id, id ASC);
+CREATE INDEX IF NOT EXISTS idx_ai_run_events_endpoint_thread ON ai_run_events(endpoint_id, thread_id, id ASC);
+`); err != nil {
+		return err
 	}
 
 	if _, err := tx.Exec(fmt.Sprintf(`PRAGMA user_version=%d;`, targetVersion)); err != nil {

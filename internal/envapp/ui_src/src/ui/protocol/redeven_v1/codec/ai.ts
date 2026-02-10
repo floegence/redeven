@@ -105,8 +105,28 @@ export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtime
   const atUnixMs = Number(payload?.at_unix_ms ?? 0);
   const rawStatus = typeof payload?.run_status === 'string' ? payload.run_status.trim().toLowerCase() : '';
   const runStatus =
-    rawStatus === 'idle' || rawStatus === 'running' || rawStatus === 'success' || rawStatus === 'failed' || rawStatus === 'canceled'
+    rawStatus === 'idle' ||
+    rawStatus === 'accepted' ||
+    rawStatus === 'running' ||
+    rawStatus === 'waiting_approval' ||
+    rawStatus === 'recovering' ||
+    rawStatus === 'success' ||
+    rawStatus === 'failed' ||
+    rawStatus === 'canceled' ||
+    rawStatus === 'timed_out'
       ? (rawStatus as AIThreadRunStatus)
+      : undefined;
+
+  const streamKindRaw = String(payload?.stream_kind ?? '').trim().toLowerCase();
+  const streamKind =
+    streamKindRaw === 'lifecycle' || streamKindRaw === 'assistant' || streamKindRaw === 'tool'
+      ? (streamKindRaw as 'lifecycle' | 'assistant' | 'tool')
+      : undefined;
+
+  const phaseRaw = String(payload?.phase ?? '').trim().toLowerCase();
+  const phase =
+    phaseRaw === 'start' || phaseRaw === 'state_change' || phaseRaw === 'end' || phaseRaw === 'error'
+      ? (phaseRaw as 'start' | 'state_change' | 'end' | 'error')
       : undefined;
 
   return {
@@ -115,6 +135,9 @@ export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtime
     threadId,
     runId,
     atUnixMs: Number.isFinite(atUnixMs) && atUnixMs > 0 ? atUnixMs : Date.now(),
+    streamKind,
+    phase,
+    diag: payload?.diag && typeof payload.diag === 'object' ? (payload.diag as Record<string, any>) : undefined,
     streamEvent: eventType === 'stream_event' ? (payload?.stream_event as any) : undefined,
     runStatus,
     runError: typeof payload?.run_error === 'string' ? payload.run_error : undefined,

@@ -18,6 +18,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/floegence/redeven-agent/internal/ai/threadstore"
+	aitools "github.com/floegence/redeven-agent/internal/ai/tools"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
 )
@@ -46,7 +48,9 @@ type runOptions struct {
 	ToolApprovalTimeout time.Duration
 	StreamWriteTimeout  time.Duration
 
-	UploadsDir string
+	UploadsDir       string
+	ThreadsDB        *threadstore.Store
+	PersistOpTimeout time.Duration
 
 	OnStreamEvent func(any)
 	Writer        http.ResponseWriter
@@ -82,7 +86,9 @@ type run struct {
 	cancelRequested bool
 	cancelFn        context.CancelFunc
 
-	uploadsDir string
+	uploadsDir       string
+	threadsDB        *threadstore.Store
+	persistOpTimeout time.Duration
 
 	onStreamEvent func(any)
 	w             http.ResponseWriter
@@ -132,6 +138,8 @@ func newRun(opts runOptions) *run {
 		userPublicID:       strings.TrimSpace(opts.UserPublicID),
 		messageID:          strings.TrimSpace(opts.MessageID),
 		uploadsDir:         strings.TrimSpace(opts.UploadsDir),
+		threadsDB:          opts.ThreadsDB,
+		persistOpTimeout:   opts.PersistOpTimeout,
 		onStreamEvent:      opts.OnStreamEvent,
 		w:                  opts.Writer,
 		toolApprovals:      make(map[string]chan bool),
@@ -258,6 +266,77 @@ func errorString(err error) string {
 		return ""
 	}
 	return strings.TrimSpace(err.Error())
+}
+
+func (r *run) persistTimeout() time.Duration {
+	if r == nil {
+		return 0
+	}
+	if r.persistOpTimeout > 0 {
+		return r.persistOpTimeout
+	}
+	return 10 * time.Second
+}
+
+func (r *run) persistRunRecord(state RunState, errCode string, errMessage string, startedAt int64, endedAt int64) {
+	if r == nil || r.threadsDB == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
+	defer cancel()
+	now := time.Now().UnixMilli()
+	state = NormalizeRunState(string(state))
+	rec := threadstore.RunRecord{
+		RunID:           strings.TrimSpace(r.id),
+		EndpointID:      strings.TrimSpace(r.endpointID),
+		ThreadID:        strings.TrimSpace(r.threadID),
+		MessageID:       strings.TrimSpace(r.messageID),
+		State:           string(state),
+		ErrorCode:       strings.TrimSpace(errCode),
+		ErrorMessage:    strings.TrimSpace(errMessage),
+		AttemptCount:    1,
+		StartedAtUnixMs: startedAt,
+		EndedAtUnixMs:   endedAt,
+		UpdatedAtUnixMs: now,
+	}
+	_ = r.threadsDB.UpsertRun(ctx, rec)
+}
+
+func (r *run) persistRunEvent(eventType string, streamKind RealtimeStreamKind, payload map[string]any) {
+	if r == nil || r.threadsDB == nil {
+		return
+	}
+	eventType = strings.TrimSpace(eventType)
+	if eventType == "" {
+		return
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
+	defer cancel()
+	_ = r.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
+		EndpointID:  strings.TrimSpace(r.endpointID),
+		ThreadID:    strings.TrimSpace(r.threadID),
+		RunID:       strings.TrimSpace(r.id),
+		StreamKind:  string(streamKind),
+		EventType:   eventType,
+		PayloadJSON: truncateRunes(string(b), 6000),
+		AtUnixMs:    time.Now().UnixMilli(),
+	})
+}
+
+func (r *run) persistToolCall(rec threadstore.ToolCallRecord) {
+	if r == nil || r.threadsDB == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
+	defer cancel()
+	_ = r.threadsDB.UpsertToolCall(ctx, rec)
 }
 
 func sanitizeLogText(raw string, maxRunes int) string {
@@ -413,6 +492,10 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		ctx = context.Background()
 	}
 	startedAt := time.Now()
+	r.persistRunRecord(RunStateRunning, "", "", startedAt.UnixMilli(), 0)
+	r.persistRunEvent("run.start", RealtimeStreamKindLifecycle, map[string]any{
+		"model": strings.TrimSpace(req.Model),
+	})
 	defer func() {
 		endReason := strings.TrimSpace(r.getEndReason())
 		if endReason == "" {
@@ -422,11 +505,49 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				endReason = "complete"
 			}
 		}
+		state := RunStateFailed
+		errCode := string(aitools.ErrorCodeUnknown)
+		errMsg := strings.TrimSpace(errorString(retErr))
+		eventType := "run.error"
+		switch endReason {
+		case "complete":
+			state = RunStateSuccess
+			errCode = ""
+			errMsg = ""
+			eventType = "run.end"
+		case "canceled":
+			state = RunStateCanceled
+			errCode = ""
+			errMsg = ""
+			eventType = "run.end"
+		case "timed_out":
+			state = RunStateTimedOut
+			errCode = string(aitools.ErrorCodeTimeout)
+			if errMsg == "" {
+				errMsg = "Timed out"
+			}
+		case "disconnected":
+			state = RunStateFailed
+			errCode = string(aitools.ErrorCodeUnknown)
+			if errMsg == "" {
+				errMsg = "Disconnected"
+			}
+		case "error":
+			state = RunStateFailed
+			errCode = string(aitools.ErrorCodeUnknown)
+		}
+		r.persistRunRecord(state, errCode, errMsg, startedAt.UnixMilli(), time.Now().UnixMilli())
+		r.persistRunEvent(eventType, RealtimeStreamKindLifecycle, map[string]any{
+			"state":      string(state),
+			"error_code": errCode,
+			"error":      errMsg,
+		})
 		r.debug("ai.run.end",
 			"end_reason", endReason,
 			"cancel_reason", strings.TrimSpace(r.getCancelReason()),
 			"duration_ms", time.Since(startedAt).Milliseconds(),
-			"error", sanitizeLogText(errorString(retErr), 256),
+			"state", string(state),
+			"error", sanitizeLogText(errMsg, 256),
 		)
 	}()
 	ctx, cancel := context.WithCancel(ctx)
@@ -594,6 +715,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	if err := sc.send("run.start", map[string]any{
 		"run_id":             r.id,
 		"model":              req.Model,
+		"mode":               r.cfg.EffectiveMode(),
 		"history":            req.History,
 		"workspace_root_abs": workspaceRootAbs,
 		"input": map[string]any{
@@ -1028,7 +1150,7 @@ func (r *run) ensureNonEmptyAssistant() {
 	}
 	// Product decision: empty successful completion becomes a stable, visible assistant message.
 	r.debug("ai.run.ensure_non_empty_assistant", "reason", "no_response")
-	_ = r.appendTextDelta("No response.")
+	_ = r.appendTextDelta("Assistant finished without a visible response.")
 }
 
 func (r *run) finalizeIfContextCanceled(ctx context.Context) bool {
@@ -1081,12 +1203,58 @@ func (r *run) finalizeNotice(kind string) {
 }
 
 func requiresApproval(toolName string) bool {
-	switch strings.TrimSpace(toolName) {
-	case "fs.write_file", "terminal.exec":
-		return true
-	default:
-		return false
+	return aitools.RequiresApproval(toolName)
+}
+
+func marshalPersistJSON(v any, maxRunes int) string {
+	b, err := json.Marshal(v)
+	if err != nil || len(b) == 0 {
+		return "{}"
 	}
+	out := strings.TrimSpace(string(b))
+	if out == "" {
+		return "{}"
+	}
+	if maxRunes > 0 {
+		out = truncateRunes(out, maxRunes)
+	}
+	return out
+}
+
+func (r *run) persistToolCallSnapshot(toolID string, toolName string, status ToolCallStatus, args map[string]any, result any, toolErr *aitools.ToolError, recoveryAction string, startedAt time.Time, endedAt time.Time) {
+	if r == nil {
+		return
+	}
+	argsPersist := marshalPersistJSON(redactAnyForLog("args", args, 0), 4000)
+	resultPersist := ""
+	if result != nil {
+		resultPersist = marshalPersistJSON(redactAnyForLog("result", result, 0), 4000)
+	}
+	errCode := ""
+	errMsg := ""
+	retryable := false
+	if toolErr != nil {
+		toolErr.Normalize()
+		errCode = string(toolErr.Code)
+		errMsg = toolErr.Message
+		retryable = toolErr.Retryable
+	}
+	rec := threadstore.ToolCallRecord{
+		RunID:           strings.TrimSpace(r.id),
+		ToolID:          strings.TrimSpace(toolID),
+		ToolName:        strings.TrimSpace(toolName),
+		Status:          strings.TrimSpace(string(status)),
+		ArgsJSON:        argsPersist,
+		ResultJSON:      resultPersist,
+		ErrorCode:       errCode,
+		ErrorMessage:    errMsg,
+		Retryable:       retryable,
+		RecoveryAction:  strings.TrimSpace(recoveryAction),
+		StartedAtUnixMs: startedAt.UnixMilli(),
+		EndedAtUnixMs:   endedAt.UnixMilli(),
+		LatencyMS:       endedAt.Sub(startedAt).Milliseconds(),
+	}
+	r.persistToolCall(rec)
 }
 
 func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID string, toolName string, args map[string]any) error {
@@ -1106,6 +1274,13 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		args = map[string]any{}
 	}
 
+	toolStartedAt := time.Now()
+	r.persistRunEvent("tool.call", RealtimeStreamKindTool, map[string]any{
+		"tool_id":   toolID,
+		"tool_name": toolName,
+		"args":      redactAnyForLog("args", args, 0),
+	})
+
 	r.debug("ai.run.tool.call",
 		"tool_id", toolID,
 		"tool_name", toolName,
@@ -1113,7 +1288,6 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		"args_preview", previewAnyForLog(redactToolArgsForLog(toolName, args), 512),
 	)
 
-	// Insert a tool-call block.
 	idx := r.nextBlockIndex
 	r.nextBlockIndex++
 	r.needNewTextBlock = true
@@ -1139,17 +1313,19 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 
 	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 	r.persistSetToolBlock(idx, block)
+	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, nil, nil, "", toolStartedAt, time.Now())
 
-	setToolError := func(errMsg string) {
-		msg := strings.TrimSpace(errMsg)
-		if msg == "" {
-			msg = "Tool failed"
+	setToolError := func(toolErr *aitools.ToolError, recoveryAction string) {
+		if toolErr == nil {
+			toolErr = &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "Tool failed"}
 		}
+		toolErr.Normalize()
 		r.debug("ai.run.tool.result",
 			"tool_id", toolID,
 			"tool_name", toolName,
 			"status", "error",
-			"error", sanitizeLogText(msg, 256),
+			"error_code", string(toolErr.Code),
+			"error", sanitizeLogText(toolErr.Message, 256),
 		)
 		if r.log != nil {
 			r.log.Warn("ai tool call failed",
@@ -1159,29 +1335,52 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 				"endpoint_id", r.endpointID,
 				"tool_id", toolID,
 				"tool_name", toolName,
-				"error", msg,
+				"error_code", string(toolErr.Code),
+				"error", toolErr.Message,
 			)
 		}
 		block.Status = ToolCallStatusError
-		block.Error = msg
+		block.Error = toolErr.Message
+		block.ErrorDetails = toolErr
 		r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 		r.persistSetToolBlock(idx, block)
+		r.persistToolCallSnapshot(toolID, toolName, block.Status, args, nil, toolErr, recoveryAction, toolStartedAt, time.Now())
+		r.persistRunEvent("tool.error", RealtimeStreamKindTool, map[string]any{
+			"tool_id":   toolID,
+			"tool_name": toolName,
+			"error":     toolErr,
+		})
 	}
 
-	// Tool execution permissions are frozen at run start to avoid runtime session lookup drift.
+	if r.cfg != nil && r.cfg.EffectiveMode() == config.AIModePlan && aitools.IsMutating(toolName) {
+		toolErr := &aitools.ToolError{
+			Code:      aitools.ErrorCodePermissionDenied,
+			Message:   "Tool is disabled in plan mode",
+			Retryable: false,
+			SuggestedFixes: []string{
+				"Switch AI mode to build to enable mutating tools.",
+			},
+		}
+		setToolError(toolErr, "")
+		env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusError, Error: toolErr}
+		return r.sendToolResult(sc, env)
+	}
+
 	meta, err := r.sessionMetaForTool()
 	if err != nil {
-		setToolError(err.Error())
-		return r.sendToolResult(sc, toolID, false, nil, err.Error())
+		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, FSRoot: r.fsRoot}, err)
+		setToolError(toolErr, "")
+		env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusError, Error: toolErr}
+		return r.sendToolResult(sc, env)
 	}
 
-	// Approval gating for high-risk tools.
 	if block.RequiresApproval {
 		ch := make(chan bool, 1)
 		r.mu.Lock()
 		r.toolApprovals[toolID] = ch
 		r.waitingApproval = true
 		r.mu.Unlock()
+		r.persistRunEvent("tool.approval.requested", RealtimeStreamKindLifecycle, map[string]any{"tool_id": toolID, "tool_name": toolName})
 		r.debug("ai.run.tool.approval.requested", "tool_id", toolID, "tool_name", toolName)
 
 		approved := false
@@ -1207,48 +1406,61 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		r.mu.Unlock()
 
 		if waitErr != "" {
-			r.debug("ai.run.tool.approval.canceled", "tool_id", toolID, "tool_name", toolName, "reason", sanitizeLogText(waitErr, 128))
-			return r.sendToolResult(sc, toolID, false, nil, waitErr)
+			toolErr := &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: waitErr, Retryable: false}
+			setToolError(toolErr, "")
+			env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusError, Error: toolErr}
+			return r.sendToolResult(sc, env)
 		}
 		if timedOut {
-			r.debug("ai.run.tool.approval.timeout", "tool_id", toolID, "tool_name", toolName)
+			toolErr := &aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Approval timed out", Retryable: true}
 			block.ApprovalState = "rejected"
-			block.Status = ToolCallStatusError
-			block.Error = "Approval timed out"
-			r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
-			r.persistSetToolBlock(idx, block)
-			return r.sendToolResult(sc, toolID, false, nil, "approval timed out")
+			setToolError(toolErr, "")
+			env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusError, Error: toolErr}
+			return r.sendToolResult(sc, env)
 		}
 		if !approved {
-			r.debug("ai.run.tool.approval.rejected", "tool_id", toolID, "tool_name", toolName)
+			toolErr := &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "Rejected by user", Retryable: false}
 			block.ApprovalState = "rejected"
-			block.Status = ToolCallStatusError
-			block.Error = "Rejected by user"
-			r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
-			r.persistSetToolBlock(idx, block)
-			return r.sendToolResult(sc, toolID, false, nil, "rejected by user")
+			setToolError(toolErr, "")
+			env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusError, Error: toolErr}
+			return r.sendToolResult(sc, env)
 		}
 
 		block.ApprovalState = "approved"
+		r.persistRunEvent("tool.approval.approved", RealtimeStreamKindLifecycle, map[string]any{"tool_id": toolID, "tool_name": toolName})
 		r.debug("ai.run.tool.approval.approved", "tool_id", toolID, "tool_name", toolName)
 	}
 
-	// Execute.
 	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", toolName)
 	block.Status = ToolCallStatusRunning
 	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 	r.persistSetToolBlock(idx, block)
+	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, nil, nil, "", toolStartedAt, time.Now())
 
-	result, toolErr := r.execTool(ctx, meta, toolName, args)
-	if toolErr != nil {
-		setToolError(toolErr.Error())
-		return r.sendToolResult(sc, toolID, false, nil, toolErr.Error())
+	result, toolErrRaw := r.execTool(ctx, meta, toolName, args)
+	if toolErrRaw != nil {
+		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, FSRoot: r.fsRoot}, toolErrRaw)
+		recoveryAction := ""
+		if aitools.ShouldRetryWithNormalizedArgs(toolErr) {
+			recoveryAction = "retry_with_normalized_args"
+		}
+		setToolError(toolErr, recoveryAction)
+		env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusError, Error: toolErr}
+		return r.sendToolResult(sc, env)
 	}
 
 	block.Status = ToolCallStatusSuccess
 	block.Result = result
+	block.Error = ""
+	block.ErrorDetails = nil
 	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 	r.persistSetToolBlock(idx, block)
+	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, result, nil, "", toolStartedAt, time.Now())
+	r.persistRunEvent("tool.result", RealtimeStreamKindTool, map[string]any{
+		"tool_id":   toolID,
+		"tool_name": toolName,
+		"status":    "success",
+	})
 	r.debug("ai.run.tool.result",
 		"tool_id", toolID,
 		"tool_name", toolName,
@@ -1256,7 +1468,8 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		"result_preview", previewAnyForLog(redactAnyForLog("", result, 0), 512),
 	)
 
-	return r.sendToolResult(sc, toolID, true, result, "")
+	env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusSuccess, Result: result}
+	return r.sendToolResult(sc, env)
 }
 
 func (r *run) persistEnsureIndex(idx int) {
@@ -1363,30 +1576,23 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 	return string(b), strings.TrimSpace(sb.String()), assistantAt, nil
 }
 
-func (r *run) sendToolResult(sc *sidecarProcess, toolID string, ok bool, result any, errMsg string) error {
+func (r *run) sendToolResult(sc *sidecarProcess, envelope aitools.ToolResultEnvelope) error {
 	if sc == nil {
 		return errors.New("sidecar not ready")
 	}
-	errMsg = strings.TrimSpace(errMsg)
-	params := map[string]any{
-		"run_id":  r.id,
-		"tool_id": toolID,
-		"ok":      ok,
-	}
-	if ok {
-		params["result"] = result
-	} else {
-		params["error"] = errMsg
+	envelope.Normalize()
+	if envelope.RunID == "" {
+		envelope.RunID = strings.TrimSpace(r.id)
 	}
 	preview := ""
-	if ok {
-		preview = previewAnyForLog(redactAnyForLog("", result, 0), 512)
-	} else {
-		preview = sanitizeLogText(errMsg, 256)
+	if envelope.Status == aitools.ResultStatusSuccess {
+		preview = previewAnyForLog(redactAnyForLog("", envelope.Result, 0), 512)
+	} else if envelope.Error != nil {
+		preview = sanitizeLogText(envelope.Error.Message, 256)
 	}
-	r.debug("ai.run.tool.result.forwarded", "tool_id", toolID, "ok", ok, "preview", preview)
-	if err := sc.send("tool.result", params); err != nil {
-		r.debug("ai.run.tool.result.forward_failed", "tool_id", toolID, "error", sanitizeLogText(err.Error(), 256))
+	r.debug("ai.run.tool.result.forwarded", "tool_id", envelope.ToolID, "status", string(envelope.Status), "preview", preview)
+	if err := sc.send("tool.result", envelope); err != nil {
+		r.debug("ai.run.tool.result.forward_failed", "tool_id", envelope.ToolID, "error", sanitizeLogText(err.Error(), 256))
 		return err
 	}
 	return nil

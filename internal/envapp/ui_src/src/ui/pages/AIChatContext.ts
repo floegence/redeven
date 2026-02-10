@@ -27,7 +27,7 @@ export type SettingsResponse = Readonly<{
   ai: any | null;
 }>;
 
-export type ThreadRunStatus = 'idle' | 'running' | 'success' | 'failed' | 'canceled';
+export type ThreadRunStatus = 'idle' | 'accepted' | 'running' | 'waiting_approval' | 'recovering' | 'success' | 'failed' | 'canceled' | 'timed_out';
 
 export type ThreadView = Readonly<{
   thread_id: string;
@@ -109,10 +109,23 @@ function persistDraftModelId(modelId: string): void {
 
 function normalizeThreadRunStatus(raw: string | null | undefined): ThreadRunStatus {
   const status = String(raw ?? '').trim().toLowerCase();
-  if (status === 'running' || status === 'success' || status === 'failed' || status === 'canceled') {
+  if (
+    status === 'accepted' ||
+    status === 'running' ||
+    status === 'waiting_approval' ||
+    status === 'recovering' ||
+    status === 'success' ||
+    status === 'failed' ||
+    status === 'canceled' ||
+    status === 'timed_out'
+  ) {
     return status;
   }
   return 'idle';
+}
+
+function isActiveRunStatus(status: ThreadRunStatus): boolean {
+  return status === 'accepted' || status === 'running' || status === 'waiting_approval' || status === 'recovering';
 }
 
 // ---- Context value type ----
@@ -347,7 +360,7 @@ export function createAIChatContextValue(): AIChatContextValue {
 
     const list = threads()?.threads ?? [];
     const th = list.find((it) => String(it.thread_id ?? '').trim() === tid);
-    return normalizeThreadRunStatus(th?.run_status) === 'running';
+    return isActiveRunStatus(normalizeThreadRunStatus(th?.run_status));
   };
 
   const onRealtimeEvent = (handler: (event: AIRealtimeEvent) => void) => {
@@ -387,7 +400,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     }
 
     const nextStatus = normalizeThreadRunStatus(event.runStatus);
-    if (nextStatus === 'running') {
+    if (isActiveRunStatus(nextStatus)) {
       setActiveRunByThread((prev) => ({ ...prev, [tid]: rid }));
       clearThreadPendingRun(tid);
     } else {
@@ -457,7 +470,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const hasRunningThread =
       Object.keys(activeRunByThread()).length > 0 ||
       Object.keys(pendingRunByThread()).length > 0 ||
-      (threads()?.threads ?? []).some((t) => normalizeThreadRunStatus(t.run_status) === 'running');
+      (threads()?.threads ?? []).some((t) => isActiveRunStatus(normalizeThreadRunStatus(t.run_status)));
     if (!hasRunningThread) return;
 
     const timer = window.setInterval(() => {
