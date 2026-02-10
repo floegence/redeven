@@ -41,7 +41,7 @@ Verification is bound to:
 
 This is the same identity constraint used by `install.sh`.
 
-## external delivery package mirror (automatic)
+## external delivery package mirror + version endpoint (automatic)
 
 The mirror workflow is `.github/workflows/sync-release-assets-to-r2.yml`.
 
@@ -57,9 +57,15 @@ What it does:
 3. Upload verified assets to package mirror path:
    - `release-assets/<tag>/...`
 4. Re-download uploaded files and verify SHA256 parity.
-5. Update manifest object `v1/manifest.json` only after mirror verification succeeds.
+5. Deploy the version-manifest Worker after package mirror verification succeeds.
 
-Manifest fields updated by the workflow:
+Manifest endpoint served by Worker:
+
+- URL: `https://version.agent.example.invalid/v1/manifest.json`
+- Worker source: `deployment/private-delivery/workers/version-manifest/src/worker.mjs`
+- Worker config: `deployment/private-delivery/workers/version-manifest/wrangler.toml`
+
+Manifest fields returned by Worker:
 
 - `latest`
 - `recommended`
@@ -73,14 +79,15 @@ Manifest fields updated by the workflow:
 - `CLOUDFLARE_R2_ACCESS_KEY_ID`
 - `CLOUDFLARE_R2_SECRET_ACCESS_KEY`
 - `CLOUDFLARE_AGENT_PACKAGE_BUCKET`
-- `CLOUDFLARE_AGENT_VERSION_BUCKET`
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
 
 ### Failure handling
 
-If mirror/upload/manifest update fails:
+If mirror/upload/worker deploy fails:
 
 - Workflow is marked failed.
-- Existing manifest remains unchanged.
+- Existing manifest Worker deployment remains unchanged.
 - GitHub Release tag and assets remain intact.
 
 ## Install script delivery
@@ -96,7 +103,7 @@ The installer script source of truth is in this repository:
 
 ## Installer wrapper deployment (separate from package mirror)
 
-external delivery Worker deployment is managed by **downstream deployment automation** (GitHub integration), not by GitHub Actions.
+external delivery Worker deployment for `example.invalid/install.sh` is managed by **downstream deployment automation** (GitHub integration), not by GitHub Actions.
 
 Worker files:
 
@@ -104,7 +111,7 @@ Worker files:
 - generated bundle: `deployment/private-delivery/workers/install-agent/dist/install-worker.mjs`
 - wrangler config: `deployment/private-delivery/workers/install-agent/wrangler.toml`
 
-### One-time external delivery setup (worker)
+### One-time external delivery setup (installer wrapper)
 
 Configure the Worker build in external delivery Dashboard:
 
@@ -122,7 +129,7 @@ git push origin origin/main:refs/heads/release
 
 This setup ensures merges into `main` do not deploy the installer wrapper.
 
-### Tag-driven worker rollout (when installer changed)
+### Tag-driven installer wrapper rollout (when installer changed)
 
 Use this only when installer/worker source changes need rollout:
 
