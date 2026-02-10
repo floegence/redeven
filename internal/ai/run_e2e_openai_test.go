@@ -72,14 +72,6 @@ func TestE2E_OpenAICompatibleBaseURL_StreamText(t *testing.T) {
 		RunMaxWallTime:      2 * time.Minute,
 		RunIdleTimeout:      90 * time.Second,
 		ToolApprovalTimeout: 30 * time.Second,
-		ResolveSessionMeta: func(ch string) (*session.Meta, bool) {
-			if strings.TrimSpace(ch) != channelID {
-				return nil, false
-			}
-			m := meta
-			m.ChannelID = channelID
-			return &m, true
-		},
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			if strings.TrimSpace(providerID) != "openai" {
 				return "", false, nil

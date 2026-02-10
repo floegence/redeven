@@ -66,8 +66,6 @@ type Options struct {
 	// When zero, it defaults to 5 seconds.
 	StreamWriteTimeout time.Duration
 
-	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
-
 	// ResolveProviderAPIKey returns the API key for the given provider id.
 	//
 	// It should read from a local secrets store, not from config.json.
@@ -91,7 +89,6 @@ type Service struct {
 	approvalTimeout   time.Duration
 	streamWriteTO     time.Duration
 
-	resolveSessionMeta func(channelID string) (*session.Meta, bool)
 	resolveProviderKey func(providerID string) (string, bool, error)
 
 	mu              sync.Mutex
@@ -188,7 +185,6 @@ func NewService(opts Options) (*Service, error) {
 		runIdleTimeout:        idleTO,
 		approvalTimeout:       approvalTO,
 		streamWriteTO:         streamWTO,
-		resolveSessionMeta:    opts.ResolveSessionMeta,
 		resolveProviderKey:    resolveProviderKey,
 		activeRunByChan:       make(map[string]string),
 		activeRunByTh:         make(map[string]string),
@@ -577,7 +573,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		FSRoot:              s.fsRoot,
 		Shell:               s.shell,
 		AIConfig:            cfg,
-		ResolveSessionMeta:  s.resolveSessionMeta,
+		SessionMeta:         metaRef,
 		ResolveProviderKey:  s.resolveProviderKey,
 		RunID:               runID,
 		ChannelID:           channelID,

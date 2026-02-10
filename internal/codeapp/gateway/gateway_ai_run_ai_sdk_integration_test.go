@@ -125,7 +125,6 @@ func TestGateway_AI_Run_UsesAISDKAndPersistsAssistantMessage(t *testing.T) {
 		RunMaxWallTime:      30 * time.Second,
 		RunIdleTimeout:      10 * time.Second,
 		ToolApprovalTimeout: 5 * time.Second,
-		ResolveSessionMeta:  resolveMeta,
 		ResolveProviderAPIKey: func(string) (string, bool, error) {
 			return "sk-test", true, nil
 		},

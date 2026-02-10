@@ -159,12 +159,11 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	secrets := settings.NewSecretsStore(filepath.Join(stateAbs, "secrets.json"))
 
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:             logger,
-		StateDir:           stateAbs,
-		FSRoot:             strings.TrimSpace(opts.FSRoot),
-		Shell:              strings.TrimSpace(opts.Shell),
-		Config:             opts.AIConfig,
-		ResolveSessionMeta: opts.ResolveSessionMeta,
+		Logger:   logger,
+		StateDir: stateAbs,
+		FSRoot:   strings.TrimSpace(opts.FSRoot),
+		Shell:    strings.TrimSpace(opts.Shell),
+		Config:   opts.AIConfig,
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			return secrets.GetAIProviderAPIKey(providerID)
 		},

@@ -50,14 +50,13 @@ func TestGateway_AI_Run_InvalidModelStillStreamsError(t *testing.T) {
 	resolveMeta := resolveMetaForTest(channelID, meta)
 
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:             logger,
-		StateDir:           stateDir,
-		FSRoot:             stateDir,
-		Shell:              "bash",
-		Config:             cfg,
-		RunMaxWallTime:     30 * time.Second,
-		RunIdleTimeout:     10 * time.Second,
-		ResolveSessionMeta: resolveMeta,
+		Logger:         logger,
+		StateDir:       stateDir,
+		FSRoot:         stateDir,
+		Shell:          "bash",
+		Config:         cfg,
+		RunMaxWallTime: 30 * time.Second,
+		RunIdleTimeout: 10 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) {
 			return "sk-test", true, nil
 		},
@@ -143,4 +142,3 @@ func TestGateway_AI_Run_InvalidModelStillStreamsError(t *testing.T) {
 		}
 	}
 }
-
