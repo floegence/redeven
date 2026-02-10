@@ -107,6 +107,12 @@ type run struct {
 	muAssistant              sync.Mutex
 	assistantCreatedAtUnixMs int64
 	assistantBlocks          []any
+
+	guardEnabled         bool
+	guardAutoContinueMax int
+	requiresTools        bool
+	guardRetries         int
+	totalToolCalls       int
 }
 
 type sidecarProvider struct {
@@ -123,32 +129,41 @@ func newRun(opts runOptions) *run {
 		runMeta = &metaCopy
 	}
 
+	guardEnabled := true
+	guardAutoContinueMax := 1
+	if opts.AIConfig != nil {
+		guardEnabled = opts.AIConfig.EffectiveGuardEnabled()
+		guardAutoContinueMax = opts.AIConfig.EffectiveGuardAutoContinueMax()
+	}
+
 	r := &run{
-		log:                opts.Log,
-		stateDir:           strings.TrimSpace(opts.StateDir),
-		fsRoot:             strings.TrimSpace(opts.FSRoot),
-		shell:              strings.TrimSpace(opts.Shell),
-		cfg:                opts.AIConfig,
-		sessionMeta:        runMeta,
-		resolveProviderKey: opts.ResolveProviderKey,
-		id:                 strings.TrimSpace(opts.RunID),
-		channelID:          strings.TrimSpace(opts.ChannelID),
-		endpointID:         strings.TrimSpace(opts.EndpointID),
-		threadID:           strings.TrimSpace(opts.ThreadID),
-		userPublicID:       strings.TrimSpace(opts.UserPublicID),
-		messageID:          strings.TrimSpace(opts.MessageID),
-		uploadsDir:         strings.TrimSpace(opts.UploadsDir),
-		threadsDB:          opts.ThreadsDB,
-		persistOpTimeout:   opts.PersistOpTimeout,
-		onStreamEvent:      opts.OnStreamEvent,
-		w:                  opts.Writer,
-		toolApprovals:      make(map[string]chan bool),
-		toolBlockIndex:     make(map[string]int),
-		sidecarScriptPath:  strings.TrimSpace(opts.SidecarScriptPath),
-		maxWallTime:        opts.MaxWallTime,
-		idleTimeout:        opts.IdleTimeout,
-		toolApprovalTO:     opts.ToolApprovalTimeout,
-		doneCh:             make(chan struct{}),
+		log:                  opts.Log,
+		stateDir:             strings.TrimSpace(opts.StateDir),
+		fsRoot:               strings.TrimSpace(opts.FSRoot),
+		shell:                strings.TrimSpace(opts.Shell),
+		cfg:                  opts.AIConfig,
+		sessionMeta:          runMeta,
+		resolveProviderKey:   opts.ResolveProviderKey,
+		id:                   strings.TrimSpace(opts.RunID),
+		channelID:            strings.TrimSpace(opts.ChannelID),
+		endpointID:           strings.TrimSpace(opts.EndpointID),
+		threadID:             strings.TrimSpace(opts.ThreadID),
+		userPublicID:         strings.TrimSpace(opts.UserPublicID),
+		messageID:            strings.TrimSpace(opts.MessageID),
+		uploadsDir:           strings.TrimSpace(opts.UploadsDir),
+		threadsDB:            opts.ThreadsDB,
+		persistOpTimeout:     opts.PersistOpTimeout,
+		onStreamEvent:        opts.OnStreamEvent,
+		w:                    opts.Writer,
+		toolApprovals:        make(map[string]chan bool),
+		toolBlockIndex:       make(map[string]int),
+		sidecarScriptPath:    strings.TrimSpace(opts.SidecarScriptPath),
+		maxWallTime:          opts.MaxWallTime,
+		idleTimeout:          opts.IdleTimeout,
+		toolApprovalTO:       opts.ToolApprovalTimeout,
+		doneCh:               make(chan struct{}),
+		guardEnabled:         guardEnabled,
+		guardAutoContinueMax: guardAutoContinueMax,
 	}
 	if opts.Writer != nil {
 		r.stream = newNDJSONStream(r.w, opts.StreamWriteTimeout)
@@ -583,9 +598,10 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	providerID = strings.TrimSpace(providerID)
 	workspaceRootAbs, rootErr := r.workspaceRootAbs()
 	if rootErr != nil {
-		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI workspace not configured"})
-		return rootErr
+		return r.failRun("AI workspace not configured", rootErr)
 	}
+	toolRequiredIntents := r.cfg.EffectiveToolRequiredIntents()
+	r.requiresTools = shouldRequireToolExecution(req.Input.Text, toolRequiredIntents)
 	r.debug("ai.run.start",
 		"model", modelID,
 		"max_steps", req.Options.MaxSteps,
@@ -593,14 +609,15 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		"attachment_count", len(req.Input.Attachments),
 		"input_chars", utf8.RuneCountInString(strings.TrimSpace(req.Input.Text)),
 		"workspace_root_abs", sanitizeLogText(workspaceRootAbs, 200),
+		"guard_enabled", r.guardEnabled,
+		"guard_auto_continue_max", r.guardAutoContinueMax,
+		"requires_tools", r.requiresTools,
 	)
 	if !ok || providerID == "" {
-		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Invalid model id"})
-		return fmt.Errorf("invalid model id %q", modelID)
+		return r.failRun("Invalid model id", fmt.Errorf("invalid model id %q", modelID))
 	}
 	if r.cfg == nil {
-		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI not configured"})
-		return errors.New("ai not configured")
+		return r.failRun("AI not configured", errors.New("ai not configured"))
 	}
 	knownProvider := false
 	for _, p := range r.cfg.Providers {
@@ -610,8 +627,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		}
 	}
 	if !knownProvider {
-		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Unknown AI provider"})
-		return fmt.Errorf("unknown provider %q", providerID)
+		return r.failRun("Unknown AI provider", fmt.Errorf("unknown provider %q", providerID))
 	}
 
 	providerDisplay := providerID
@@ -626,21 +642,17 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	}
 
 	if r.resolveProviderKey == nil {
-		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI provider key resolver not configured"})
-		return errors.New("missing provider key resolver")
+		return r.failRun("AI provider key resolver not configured", errors.New("missing provider key resolver"))
 	}
 	apiKey, ok, err := r.resolveProviderKey(providerID)
 	if err != nil {
-		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Failed to load AI provider key"})
-		return err
+		return r.failRun("Failed to load AI provider key", err)
 	}
 	if !ok || strings.TrimSpace(apiKey) == "" {
-		r.sendStreamEvent(streamEventError{
-			Type:      "error",
-			MessageID: r.messageID,
-			Error:     fmt.Sprintf("AI provider %q is missing API key. Open Settings to configure it.", providerDisplay),
-		})
-		return fmt.Errorf("missing api key for provider %q", providerID)
+		return r.failRun(
+			fmt.Sprintf("AI provider %q is missing API key. Open Settings to configure it.", providerDisplay),
+			fmt.Errorf("missing api key for provider %q", providerID),
+		)
 	}
 
 	// Filter out any inherited var with the same name to keep behavior deterministic.
@@ -660,8 +672,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		if r.finalizeIfContextCanceled(ctx) {
 			return nil
 		}
-		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI sidecar unavailable"})
-		return err
+		return r.failRun("AI sidecar unavailable", err)
 	}
 	r.mu.Lock()
 	r.sidecar = sc
@@ -697,8 +708,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		if r.finalizeIfContextCanceled(ctx) {
 			return nil
 		}
-		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Failed to initialize AI sidecar"})
-		return err
+		return r.failRun("Failed to initialize AI sidecar", err)
 	}
 	r.debug("ai.run.sidecar.initialized", "provider_count", len(providers))
 
@@ -712,25 +722,42 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		sidecarAttachments = append(sidecarAttachments, att)
 	}
 
-	if err := sc.send("run.start", map[string]any{
-		"run_id":             r.id,
-		"model":              req.Model,
-		"mode":               r.cfg.EffectiveMode(),
-		"history":            req.History,
-		"workspace_root_abs": workspaceRootAbs,
-		"input": map[string]any{
-			"text":        req.Input.Text,
-			"attachments": sidecarAttachments,
-		},
-		"options": req.Options,
-	}); err != nil {
-		if r.finalizeIfContextCanceled(ctx) {
-			return nil
+	sendRunStart := func(attemptIdx int, history []RunHistoryMsg, input RunInput, includeAttachments bool) error {
+		attachments := []map[string]any{}
+		if includeAttachments {
+			attachments = sidecarAttachments
 		}
-		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Failed to start AI run"})
-		return err
+		if err := sc.send("run.start", map[string]any{
+			"run_id":             r.id,
+			"model":              req.Model,
+			"mode":               r.cfg.EffectiveMode(),
+			"history":            history,
+			"workspace_root_abs": workspaceRootAbs,
+			"input": map[string]any{
+				"text":        input.Text,
+				"attachments": attachments,
+			},
+			"options": req.Options,
+			"guard": map[string]any{
+				"enabled":           r.guardEnabled,
+				"auto_continue_max": r.guardAutoContinueMax,
+				"requires_tools":    r.requiresTools,
+				"attempt_index":     attemptIdx,
+			},
+		}); err != nil {
+			if r.finalizeIfContextCanceled(ctx) {
+				return nil
+			}
+			return r.failRun("Failed to start AI run", err)
+		}
+		r.debug("ai.run.sidecar.run_start_sent",
+			"attempt_index", attemptIdx,
+			"attachment_count", len(attachments),
+			"history_count", len(history),
+			"input_chars", utf8.RuneCountInString(strings.TrimSpace(input.Text)),
+		)
+		return nil
 	}
-	r.debug("ai.run.sidecar.run_start_sent", "attachment_count", len(sidecarAttachments))
 
 	activityCh := make(chan struct{}, 1)
 	signalActivity := func() {
@@ -800,125 +827,293 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		}()
 	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			reason := r.getCancelReason()
-			switch reason {
-			case "canceled":
-				r.debug("ai.run.context_done", "reason", "canceled")
-				r.finalizeNotice("canceled")
-				r.setEndReason("canceled")
-				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-				return nil
-			case "timed_out":
-				r.debug("ai.run.context_done", "reason", "timed_out")
-				r.finalizeNotice("timed_out")
-				r.setEndReason("timed_out")
-				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-				return nil
-			default:
-				// Parent context canceled (browser disconnect).
-				r.debug("ai.run.context_done", "reason", "disconnected")
-				r.finalizeNotice("disconnected")
-				r.setEndReason("disconnected")
-				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-				return nil
-			}
-		default:
-		}
+	baseHistory := append([]RunHistoryMsg(nil), req.History...)
+	attemptHistory := append([]RunHistoryMsg(nil), baseHistory...)
+	attemptInput := req.Input
+	r.guardRetries = 0
+	r.totalToolCalls = 0
+	maxGuardRetry := 0
+	if r.guardEnabled {
+		maxGuardRetry = r.guardAutoContinueMax
+	}
+	r.persistRunEvent("turn.guard.config", RealtimeStreamKindLifecycle, map[string]any{
+		"enabled":             r.guardEnabled,
+		"max_auto_continue":   maxGuardRetry,
+		"requires_tools":      r.requiresTools,
+		"tool_required_hints": toolRequiredIntents,
+	})
 
-		msg, err := sc.recv()
-		if err != nil {
-			// If the context was canceled, treat the EOF as a normal terminal path (canceled/timed out/disconnected).
+	for attemptIdx := 0; ; attemptIdx++ {
+		if attemptIdx > 0 {
+			r.needNewTextBlock = true
+			r.persistRunEvent("turn.guard.continuation", RealtimeStreamKindLifecycle, map[string]any{
+				"attempt_index": attemptIdx,
+				"guard_retry":   r.guardRetries,
+			})
+		}
+		if err := sendRunStart(attemptIdx, attemptHistory, attemptInput, attemptIdx == 0); err != nil {
+			return err
+		}
+		r.persistRunEvent("turn.attempt.started", RealtimeStreamKindLifecycle, map[string]any{
+			"attempt_index":           attemptIdx,
+			"history_count":           len(attemptHistory),
+			"input_chars":             utf8.RuneCountInString(strings.TrimSpace(attemptInput.Text)),
+			"requires_tools":          r.requiresTools,
+			"remaining_retries":       maxGuardRetry - r.guardRetries,
+			"total_tool_calls_so_far": r.totalToolCalls,
+		})
+		continueAttempt := false
+		attemptToolCalls := 0
+		var attemptText strings.Builder
+
+	attemptLoop:
+		for {
+			select {
+			case <-ctx.Done():
+				reason := r.getCancelReason()
+				switch reason {
+				case "canceled":
+					r.debug("ai.run.context_done", "reason", "canceled")
+					r.finalizeNotice("canceled")
+					r.setEndReason("canceled")
+					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+					return nil
+				case "timed_out":
+					r.debug("ai.run.context_done", "reason", "timed_out")
+					r.finalizeNotice("timed_out")
+					r.setEndReason("timed_out")
+					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+					return nil
+				default:
+					// Parent context canceled (browser disconnect).
+					r.debug("ai.run.context_done", "reason", "disconnected")
+					r.finalizeNotice("disconnected")
+					r.setEndReason("disconnected")
+					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+					return nil
+				}
+			default:
+			}
+
+			msg, err := sc.recv()
+			if err != nil {
+				// If the context was canceled, treat the EOF as a normal terminal path (canceled/timed out/disconnected).
+				select {
+				case <-ctx.Done():
+					continue
+				default:
+				}
+				if errors.Is(err, io.EOF) {
+					r.debug("ai.run.sidecar.eof")
+					r.finalizeNotice("disconnected")
+					r.setEndReason("disconnected")
+					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+					return nil
+				}
+				errMsg := "AI sidecar error"
+				r.debug("ai.run.sidecar.recv_error", "error", sanitizeLogText(err.Error(), 256))
+				return r.failRun(errMsg, err)
+			}
+			if msg == nil {
+				continue
+			}
+			// If a cancel was requested, ignore any late frames from sidecar (it may emit run.error on abort).
 			select {
 			case <-ctx.Done():
 				continue
 			default:
 			}
-			if errors.Is(err, io.EOF) {
-				r.debug("ai.run.sidecar.eof")
-				r.finalizeNotice("disconnected")
-				r.setEndReason("disconnected")
+			if msg.Error != nil && msg.Method == "" {
+				// initialize response etc; ignore for now.
+				continue
+			}
+
+			signalActivity()
+
+			switch strings.TrimSpace(msg.Method) {
+			case "run.delta":
+				var p struct {
+					RunID string `json:"run_id"`
+					Delta string `json:"delta"`
+				}
+				_ = json.Unmarshal(msg.Params, &p)
+				if strings.TrimSpace(p.RunID) != r.id || p.Delta == "" {
+					continue
+				}
+				r.debug("ai.run.delta.received", "delta_len", utf8.RuneCountInString(p.Delta))
+				_ = r.appendTextDelta(p.Delta)
+				attemptText.WriteString(p.Delta)
+
+			case "tool.call":
+				var p struct {
+					RunID    string         `json:"run_id"`
+					ToolID   string         `json:"tool_id"`
+					ToolName string         `json:"tool_name"`
+					Args     map[string]any `json:"args"`
+				}
+				_ = json.Unmarshal(msg.Params, &p)
+				if strings.TrimSpace(p.RunID) != r.id {
+					continue
+				}
+				attemptToolCalls++
+				r.totalToolCalls++
+				if err := r.handleToolCall(ctx, sc, p.ToolID, p.ToolName, p.Args); err != nil {
+					// tool errors are reported to the model; do not crash the whole run.
+					continue
+				}
+
+			case "run.phase":
+				var p struct {
+					RunID string         `json:"run_id"`
+					Phase string         `json:"phase"`
+					Diag  map[string]any `json:"diag"`
+				}
+				_ = json.Unmarshal(msg.Params, &p)
+				if strings.TrimSpace(p.RunID) != r.id {
+					continue
+				}
+				phase := strings.TrimSpace(strings.ToLower(p.Phase))
+				if phase == "" {
+					continue
+				}
+				payload := map[string]any{"phase": phase}
+				if p.Diag != nil {
+					payload["diag"] = p.Diag
+				}
+				r.persistRunEvent("turn.phase."+phase, RealtimeStreamKindLifecycle, payload)
+
+			case "turn.guard":
+				var p struct {
+					RunID   string         `json:"run_id"`
+					Status  string         `json:"status"`
+					Reason  string         `json:"reason"`
+					Attempt int            `json:"attempt"`
+					Diag    map[string]any `json:"diag"`
+				}
+				_ = json.Unmarshal(msg.Params, &p)
+				if strings.TrimSpace(p.RunID) != r.id {
+					continue
+				}
+				status := strings.TrimSpace(strings.ToLower(p.Status))
+				if status == "" {
+					status = "unknown"
+				}
+				payload := map[string]any{
+					"status":  status,
+					"reason":  strings.TrimSpace(p.Reason),
+					"attempt": p.Attempt,
+				}
+				if p.Diag != nil {
+					payload["diag"] = p.Diag
+				}
+				r.persistRunEvent("turn.guard."+status, RealtimeStreamKindLifecycle, payload)
+
+			case "run.end":
+				attemptAssistantText := strings.TrimSpace(attemptText.String())
+				triggerGuard, guardReason := r.shouldTriggerCommitmentGuard(attemptToolCalls, attemptAssistantText)
+				if triggerGuard {
+					if r.guardRetries >= maxGuardRetry {
+						errMsg := "Assistant finished without executing required tools."
+						r.persistRunEvent("turn.guard.failed", RealtimeStreamKindLifecycle, map[string]any{
+							"reason":             guardReason,
+							"attempt_index":      attemptIdx,
+							"guard_retries":      r.guardRetries,
+							"max_guard_retries":  maxGuardRetry,
+							"attempt_tool_calls": attemptToolCalls,
+						})
+						r.debug("ai.run.guard.failed",
+							"reason", guardReason,
+							"attempt_index", attemptIdx,
+							"guard_retries", r.guardRetries,
+							"max_guard_retries", maxGuardRetry,
+						)
+						return r.failRun(errMsg, nil)
+					}
+					r.guardRetries++
+					remaining := maxGuardRetry - r.guardRetries
+					retryPrompt := buildGuardRetryPrompt(req.Input.Text, attemptIdx, r.requiresTools)
+					r.persistRunEvent("turn.guard.triggered", RealtimeStreamKindLifecycle, map[string]any{
+						"reason":             guardReason,
+						"attempt_index":      attemptIdx,
+						"guard_retry":        r.guardRetries,
+						"remaining_retries":  remaining,
+						"attempt_tool_calls": attemptToolCalls,
+						"total_tool_calls":   r.totalToolCalls,
+					})
+					r.debug("ai.run.guard.triggered",
+						"reason", guardReason,
+						"attempt_index", attemptIdx,
+						"guard_retry", r.guardRetries,
+						"remaining_retries", remaining,
+					)
+					attemptHistory = appendHistoryForRetry(attemptHistory, attemptInput.Text, attemptAssistantText)
+					attemptInput = RunInput{Text: retryPrompt}
+					continueAttempt = true
+					break attemptLoop
+				}
+				if r.guardRetries > 0 {
+					r.persistRunEvent("turn.guard.recovered", RealtimeStreamKindLifecycle, map[string]any{
+						"attempt_index":      attemptIdx,
+						"guard_retries":      r.guardRetries,
+						"total_tool_calls":   r.totalToolCalls,
+						"attempt_tool_calls": attemptToolCalls,
+					})
+				}
+				r.ensureNonEmptyAssistant()
+				r.setEndReason("complete")
+				r.debug("ai.run.complete")
 				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 				return nil
+
+			case "run.error":
+				var p struct {
+					RunID string `json:"run_id"`
+					Error string `json:"error"`
+				}
+				_ = json.Unmarshal(msg.Params, &p)
+				if strings.TrimSpace(p.RunID) != r.id {
+					continue
+				}
+				msgErr := strings.TrimSpace(p.Error)
+				if msgErr == "" {
+					msgErr = "AI error"
+				}
+				r.debug("ai.run.error", "error", sanitizeLogText(msgErr, 256))
+				return r.failRun(msgErr, nil)
 			}
-			r.debug("ai.run.sidecar.recv_error", "error", sanitizeLogText(err.Error(), 256))
-			r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI sidecar error"})
-			r.setEndReason("error")
-			return err
 		}
-		if msg == nil {
+
+		if continueAttempt {
 			continue
-		}
-		// If a cancel was requested, ignore any late frames from sidecar (it may emit run.error on abort).
-		select {
-		case <-ctx.Done():
-			continue
-		default:
-		}
-		if msg.Error != nil && msg.Method == "" {
-			// initialize response etc; ignore for now.
-			continue
-		}
-
-		signalActivity()
-
-		switch strings.TrimSpace(msg.Method) {
-		case "run.delta":
-			var p struct {
-				RunID string `json:"run_id"`
-				Delta string `json:"delta"`
-			}
-			_ = json.Unmarshal(msg.Params, &p)
-			if strings.TrimSpace(p.RunID) != r.id || p.Delta == "" {
-				continue
-			}
-			r.debug("ai.run.delta.received", "delta_len", utf8.RuneCountInString(p.Delta))
-			_ = r.appendTextDelta(p.Delta)
-
-		case "tool.call":
-			var p struct {
-				RunID    string         `json:"run_id"`
-				ToolID   string         `json:"tool_id"`
-				ToolName string         `json:"tool_name"`
-				Args     map[string]any `json:"args"`
-			}
-			_ = json.Unmarshal(msg.Params, &p)
-			if strings.TrimSpace(p.RunID) != r.id {
-				continue
-			}
-			if err := r.handleToolCall(ctx, sc, p.ToolID, p.ToolName, p.Args); err != nil {
-				// tool errors are reported to the model; do not crash the whole run.
-				continue
-			}
-
-		case "run.end":
-			r.ensureNonEmptyAssistant()
-			r.setEndReason("complete")
-			r.debug("ai.run.complete")
-			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-			return nil
-
-		case "run.error":
-			var p struct {
-				RunID string `json:"run_id"`
-				Error string `json:"error"`
-			}
-			_ = json.Unmarshal(msg.Params, &p)
-			if strings.TrimSpace(p.RunID) != r.id {
-				continue
-			}
-			msgErr := strings.TrimSpace(p.Error)
-			if msgErr == "" {
-				msgErr = "AI error"
-			}
-			r.debug("ai.run.error", "error", sanitizeLogText(msgErr, 256))
-			r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: msgErr})
-			r.setEndReason("error")
-			return errors.New(msgErr)
 		}
 	}
+}
+
+func (r *run) shouldTriggerCommitmentGuard(attemptToolCalls int, attemptAssistantText string) (bool, string) {
+	if r == nil || !r.guardEnabled {
+		return false, ""
+	}
+	if attemptToolCalls > 0 || r.totalToolCalls > 0 {
+		return false, ""
+	}
+	if r.requiresTools {
+		return true, "tool_required_intent_without_tool_call"
+	}
+	if hasUnfulfilledActionCommitment(attemptAssistantText) {
+		return true, "assistant_promised_action_without_tool_call"
+	}
+	return false, ""
+}
+
+func appendHistoryForRetry(history []RunHistoryMsg, userText string, assistantText string) []RunHistoryMsg {
+	out := append([]RunHistoryMsg(nil), history...)
+	if txt := strings.TrimSpace(userText); txt != "" {
+		out = append(out, RunHistoryMsg{Role: "user", Text: txt})
+	}
+	if txt := strings.TrimSpace(assistantText); txt != "" {
+		out = append(out, RunHistoryMsg{Role: "assistant", Text: txt})
+	}
+	return out
 }
 
 func (r *run) appendTextDelta(delta string) error {
@@ -1151,6 +1346,55 @@ func (r *run) ensureNonEmptyAssistant() {
 	// Product decision: empty successful completion becomes a stable, visible assistant message.
 	r.debug("ai.run.ensure_non_empty_assistant", "reason", "no_response")
 	_ = r.appendTextDelta("Assistant finished without a visible response.")
+}
+
+func (r *run) ensureAssistantErrorMessage(errMsg string) {
+	if r == nil {
+		return
+	}
+	if r.hasNonEmptyAssistantText() {
+		return
+	}
+	if r.hasAssistantToolError() {
+		_ = r.appendTextDelta("Tool call failed.")
+		return
+	}
+	msg := strings.TrimSpace(errMsg)
+	if msg == "" {
+		msg = "AI run failed."
+	}
+	_ = r.appendTextDelta("Run failed: " + msg)
+}
+
+func (r *run) failRun(errMsg string, cause error) error {
+	if r == nil {
+		if cause != nil {
+			return cause
+		}
+		msg := strings.TrimSpace(errMsg)
+		if msg == "" {
+			msg = "AI error"
+		}
+		return errors.New(msg)
+	}
+
+	msg := strings.TrimSpace(errMsg)
+	if msg == "" && cause != nil {
+		msg = strings.TrimSpace(cause.Error())
+	}
+	if msg == "" {
+		msg = "AI error"
+	}
+
+	r.ensureAssistantErrorMessage(msg)
+	r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: msg})
+	r.setEndReason("error")
+	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+
+	if cause != nil {
+		return cause
+	}
+	return errors.New(msg)
 }
 
 func (r *run) finalizeIfContextCanceled(ctx context.Context) bool {

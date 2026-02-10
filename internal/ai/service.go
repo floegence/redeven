@@ -802,6 +802,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		Options: req.Options,
 	}
 	runErr := r.run(ctx, runReq)
+	finalErr := runErr
 	if runErr != nil {
 		handledCancel := false
 		reason := strings.TrimSpace(r.getCancelReason())
@@ -819,17 +820,24 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 				handledCancel = true
 			}
 		}
-		if !handledCancel {
-			return runErr
+		if handledCancel {
+			finalErr = nil
 		}
 	}
 
 	assistantJSON, assistantText, assistantAt, err := r.snapshotAssistantMessageJSON()
 	if err != nil {
+		if finalErr != nil {
+			return errors.Join(finalErr, err)
+		}
 		return err
 	}
 	if strings.TrimSpace(assistantJSON) == "" {
-		return errors.New("missing assistant message")
+		err = errors.New("missing assistant message")
+		if finalErr != nil {
+			return errors.Join(finalErr, err)
+		}
+		return err
 	}
 	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
 	_, err = db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
@@ -844,7 +852,13 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		MessageJSON:     assistantJSON,
 	}, meta.UserPublicID, meta.UserEmail)
 	cancelPersist()
-	return err
+	if err != nil {
+		if finalErr != nil {
+			return errors.Join(finalErr, err)
+		}
+		return err
+	}
+	return finalErr
 }
 
 func deriveThreadRunState(endReason string, runErr error) (string, string) {

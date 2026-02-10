@@ -607,3 +607,177 @@ setInterval(() => {}, 1000);
 		t.Fatalf("last_message_preview unexpectedly fell back to No response: %q", view.LastMessagePreview)
 	}
 }
+
+func TestRun_GuardAutoContinuesWhenAssistantOnlyPreamble(t *testing.T) {
+	t.Parallel()
+
+	script := writeTestSidecarScript(t, `
+import { createInterface } from 'node:readline';
+
+function send(method, params) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+}
+
+let runId = '';
+let phase = 0;
+const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+rl.on('line', (line) => {
+  const msg = JSON.parse(String(line || '').trim() || '{}');
+  const method = String(msg.method || '').trim();
+
+  if (method === 'run.start') {
+    runId = String(msg.params?.run_id || '').trim();
+    const attempt = Number(msg.params?.guard?.attempt_index || 0);
+    const workspaceRoot = String(msg.params?.workspace_root_abs || '').trim();
+
+    if (attempt === 0) {
+      send('run.delta', { run_id: runId, delta: '我先快速扫一遍项目结构和关键配置，然后给你结论。' });
+      send('run.end', { run_id: runId });
+      return;
+    }
+
+    phase = 1;
+    send('tool.call', {
+      run_id: runId,
+      tool_id: 'tool_ls_1',
+      tool_name: 'fs.list_dir',
+      args: { path: workspaceRoot },
+    });
+    return;
+  }
+
+  if (method === 'tool.result' && phase === 1) {
+    send('run.delta', { run_id: runId, delta: 'Listed workspace and finished analysis.' });
+    send('run.end', { run_id: runId });
+    process.exit(0);
+  }
+});
+
+setInterval(() => {}, 1000);
+`)
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_guard_retry",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc := newTestService(t, script, func(o *Options) {
+		o.RunIdleTimeout = 4 * time.Second
+		o.RunMaxWallTime = 4 * time.Second
+	})
+
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "hello", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, "run_guard_retry_1", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "帮我分析一下这个项目结构"},
+		Options:  RunOptions{MaxSteps: 2},
+	}, rr); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if view == nil {
+		t.Fatalf("thread missing after run")
+	}
+	if !strings.Contains(view.LastMessagePreview, "Listed workspace") {
+		t.Fatalf("last_message_preview=%q, want guard-retry completion text, stream=%q", view.LastMessagePreview, rr.Body.String())
+	}
+	if strings.Contains(view.LastMessagePreview, "Assistant finished without a visible response.") {
+		t.Fatalf("last_message_preview unexpectedly fell back to no response: %q", view.LastMessagePreview)
+	}
+}
+
+func TestRun_RunErrorAfterPreamble_PersistsAssistantMessage(t *testing.T) {
+	t.Parallel()
+
+	script := writeTestSidecarScript(t, `
+import { createInterface } from 'node:readline';
+
+function send(method, params) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+}
+
+const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+rl.on('line', (line) => {
+  const msg = JSON.parse(String(line || '').trim() || '{}');
+  if (msg.method === 'run.start') {
+    const runId = String(msg.params?.run_id || '').trim();
+    send('run.delta', { run_id: runId, delta: 'I will inspect the repository first.' });
+    send('run.error', { run_id: runId, error: 'mock sidecar failure' });
+    process.exit(0);
+  }
+});
+
+setInterval(() => {}, 1000);
+`)
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_run_error",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc := newTestService(t, script)
+
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "hello", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	err = svc.StartRun(ctx, &meta, "run_error_persist_1", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "scan project"},
+		Options:  RunOptions{MaxSteps: 1},
+	}, rr)
+	if err == nil {
+		t.Fatalf("expected StartRun error when sidecar emits run.error")
+	}
+
+	view, getErr := svc.GetThread(ctx, &meta, th.ThreadID)
+	if getErr != nil {
+		t.Fatalf("GetThread: %v", getErr)
+	}
+	if view == nil {
+		t.Fatalf("thread missing after run")
+	}
+	if strings.TrimSpace(view.LastMessagePreview) == "" {
+		t.Fatalf("last_message_preview should not be empty after streamed preamble")
+	}
+	if !strings.Contains(view.LastMessagePreview, "inspect the repository") {
+		t.Fatalf("last_message_preview=%q, want streamed preamble", view.LastMessagePreview)
+	}
+
+	msgs, listErr := svc.ListThreadMessages(ctx, &meta, th.ThreadID, 50, 0)
+	if listErr != nil {
+		t.Fatalf("ListThreadMessages: %v", listErr)
+	}
+	if msgs == nil || len(msgs.Messages) < 2 {
+		t.Fatalf("expected persisted assistant message after run.error, got %+v", msgs)
+	}
+}

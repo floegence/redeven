@@ -42,6 +42,12 @@ type RunStartParams = {
     }>;
   };
   options: { max_steps: number };
+  guard?: {
+    enabled?: boolean;
+    auto_continue_max?: number;
+    requires_tools?: boolean;
+    attempt_index?: number;
+  };
 };
 
 type ToolErrorPayload = {
@@ -59,11 +65,47 @@ type ToolCallResult =
 
 const providers: ProviderConfig[] = [];
 const toolWaiters = new Map<string, { resolve: (v: ToolCallResult) => void }>();
+const runToolCallCount = new Map<string, number>();
 
 let currentRun: {
   runId: string;
   abort?: AbortController;
 } | null = null;
+
+const commitmentPhrases = [
+  'let me',
+  'i will',
+  "i'll",
+  'i am going to',
+  "i'm going to",
+  'first i',
+  '我先',
+  '我会',
+  '我将',
+  '先',
+  '开始',
+];
+
+const actionPhrases = [
+  'scan',
+  'inspect',
+  'read',
+  'list',
+  'check',
+  'execute',
+  'run',
+  'explore',
+  '分析',
+  '扫描',
+  '查看',
+  '读取',
+  '执行',
+  '检查',
+  '排查',
+  '命令',
+  '目录',
+  '文件',
+];
 
 function writeLogLine(parts: string[]) {
   process.stderr.write(`[ai-sidecar] ${parts.join(' ')}\n`);
@@ -297,6 +339,8 @@ function mergeToolArgs(args: any, normalizedArgs: Record<string, any> | undefine
 
 async function callTool(runId: string, toolName: string, args: any): Promise<ToolCallResult> {
   const toolId = `tc_${randomUUID()}`;
+  runToolCallCount.set(runId, (runToolCallCount.get(runId) ?? 0) + 1);
+  notify('run.phase', { run_id: runId, phase: 'tool_call', diag: { tool_name: toolName } });
   logEvent('ai.sidecar.tool.call.emit', {
     run_id: runId,
     tool_id: toolId,
@@ -362,6 +406,32 @@ async function executeTool(runId: string, toolName: string, args: any): Promise<
   };
 }
 
+function containsAny(text: string, hints: string[]): boolean {
+  if (!text || !Array.isArray(hints) || hints.length === 0) return false;
+  for (const raw of hints) {
+    const hint = String(raw ?? '').trim().toLowerCase();
+    if (!hint) continue;
+    if (text.includes(hint)) return true;
+  }
+  return false;
+}
+
+function hasPathHint(text: string): boolean {
+  if (!text) return false;
+  if (text.includes('~/') || text.includes('../') || text.includes('./')) return true;
+  if (text.includes('/') || text.includes('\\')) return true;
+  return containsAny(text, ['.go', '.ts', '.md', '.json', '.yaml', '.yml', 'package.json', 'go.mod', 'readme']);
+}
+
+function hasUnfulfilledActionCommitment(text: string): boolean {
+  const normalized = String(text ?? '').trim().toLowerCase();
+  if (!normalized) return false;
+  if (!containsAny(normalized, commitmentPhrases)) return false;
+  if (containsAny(normalized, actionPhrases)) return true;
+  if (hasPathHint(normalized)) return true;
+  return false;
+}
+
 function buildUserContent(text: string, atts: RunStartParams['input']['attachments']): string {
   const t = String(text ?? '').trim();
   const parts: string[] = [];
@@ -393,6 +463,17 @@ async function runAgent(params: RunStartParams): Promise<void> {
   const abort = new AbortController();
   currentRun = { runId, abort };
   const workspaceRootAbs = String(params?.workspace_root_abs ?? '').trim();
+  const guardEnabled = Boolean(params?.guard?.enabled);
+  const guardRequiresTools = Boolean(params?.guard?.requires_tools);
+  const guardAttemptIndex = Number.isFinite(Number(params?.guard?.attempt_index))
+    ? Number(params?.guard?.attempt_index)
+    : 0;
+  const guardAutoContinueMax = Number.isFinite(Number(params?.guard?.auto_continue_max))
+    ? Number(params?.guard?.auto_continue_max)
+    : 0;
+
+  runToolCallCount.set(runId, 0);
+  notify('run.phase', { run_id: runId, phase: 'start', diag: { attempt_index: guardAttemptIndex } });
   logEvent('ai.sidecar.run.start', {
     run_id: runId,
     model: String(params?.model ?? '').trim(),
@@ -401,6 +482,10 @@ async function runAgent(params: RunStartParams): Promise<void> {
     attachment_count: Array.isArray(params?.input?.attachments) ? params.input.attachments.length : 0,
     input_chars: String(params?.input?.text ?? '').trim().length,
     workspace_root_abs: workspaceRootAbs,
+    guard_enabled: guardEnabled,
+    guard_requires_tools: guardRequiresTools,
+    guard_attempt_index: guardAttemptIndex,
+    guard_auto_continue_max: guardAutoContinueMax,
   });
 
   try {
@@ -481,6 +566,8 @@ async function runAgent(params: RunStartParams): Promise<void> {
       }),
     };
 
+    notify('run.phase', { run_id: runId, phase: 'planning' });
+
     const result = await streamText({
       model,
       messages,
@@ -503,6 +590,8 @@ async function runAgent(params: RunStartParams): Promise<void> {
       emitTextDelta(runId, delta);
     }
 
+    notify('run.phase', { run_id: runId, phase: 'synthesis' });
+
     // Some providers/models may not produce any streaming chunks but still return a final text.
     const finalText = await result.text;
     if (typeof finalText === 'string' && finalText) {
@@ -515,14 +604,55 @@ async function runAgent(params: RunStartParams): Promise<void> {
       }
     }
 
-    logEvent('ai.sidecar.run.end', { run_id: runId, emitted_chars: emitted.length, delta_count: deltaCount });
+    const toolCalls = runToolCallCount.get(runId) ?? 0;
+    const synthesizedText = (typeof finalText === 'string' && finalText.trim()) ? finalText : emitted;
+    if (guardEnabled) {
+      let guardStatus = 'pass';
+      let guardReason = '';
+      if (toolCalls === 0) {
+        if (guardRequiresTools) {
+          guardStatus = 'triggered';
+          guardReason = 'tool_required_intent_without_tool_call';
+        } else if (hasUnfulfilledActionCommitment(synthesizedText)) {
+          guardStatus = 'triggered';
+          guardReason = 'assistant_promised_action_without_tool_call';
+        }
+      }
+      notify('turn.guard', {
+        run_id: runId,
+        status: guardStatus,
+        reason: guardReason,
+        attempt: guardAttemptIndex,
+        diag: {
+          tool_calls: toolCalls,
+          requires_tools: guardRequiresTools,
+        },
+      });
+      logEvent('ai.sidecar.guard', {
+        run_id: runId,
+        status: guardStatus,
+        reason: guardReason,
+        tool_calls: toolCalls,
+        attempt_index: guardAttemptIndex,
+      });
+    }
+
+    notify('run.phase', { run_id: runId, phase: 'end', diag: { tool_calls: toolCalls } });
+    logEvent('ai.sidecar.run.end', {
+      run_id: runId,
+      emitted_chars: emitted.length,
+      delta_count: deltaCount,
+      tool_calls: toolCalls,
+    });
     notify('run.end', { run_id: runId });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    notify('run.phase', { run_id: runId, phase: 'error', diag: { error: msg } });
     logEvent('ai.sidecar.run.error', { run_id: runId, error: msg });
     notify('run.error', { run_id: runId, error: msg });
   } finally {
     currentRun = null;
+    runToolCallCount.delete(runId);
   }
 }
 

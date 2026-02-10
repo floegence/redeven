@@ -27,6 +27,28 @@ type AIConfig struct {
 	// - "build": full tool execution flow (default)
 	// - "plan": non-mutating analysis mode
 	Mode string `json:"mode,omitempty"`
+
+	// GuardEnabled controls the turn commitment guard.
+	//
+	// When enabled, the runtime prevents turns from ending with pure preamble text when
+	// the user intent requires real tool execution.
+	//
+	// Defaults to true.
+	GuardEnabled *bool `json:"guard_enabled,omitempty"`
+
+	// GuardAutoContinueMax controls how many automatic continuation attempts are allowed
+	// when the commitment guard is triggered.
+	//
+	// Defaults to 1.
+	GuardAutoContinueMax *int `json:"guard_auto_continue_max,omitempty"`
+
+	// ToolRequiredIntents is an optional list of intent hint substrings.
+	//
+	// When the user input contains one of these substrings, the runtime treats the turn as
+	// requiring at least one tool call before completion.
+	//
+	// When empty, built-in defaults are used.
+	ToolRequiredIntents []string `json:"tool_required_intents,omitempty"`
 }
 
 type AIProvider struct {
@@ -66,6 +88,33 @@ const (
 	AIModePlan  = "plan"
 )
 
+const (
+	defaultAIGuardEnabled         = true
+	defaultAIGuardAutoContinueMax = 1
+)
+
+var defaultToolRequiredIntents = []string{
+	"analy",
+	"scan",
+	"inspect",
+	"read file",
+	"list dir",
+	"check config",
+	"run command",
+	"execute",
+	"pwd",
+	"ls",
+	"cat",
+	"grep",
+	"rg",
+	"分析",
+	"扫描",
+	"读取",
+	"查看目录",
+	"执行命令",
+	"检查配置",
+}
+
 func (c *AIConfig) Validate() error {
 	if c == nil {
 		return errors.New("nil config")
@@ -81,6 +130,19 @@ func (c *AIConfig) Validate() error {
 		return fmt.Errorf("invalid ai mode %q", c.Mode)
 	}
 
+	if c.GuardAutoContinueMax != nil {
+		if *c.GuardAutoContinueMax < 0 || *c.GuardAutoContinueMax > 5 {
+			return fmt.Errorf("invalid guard_auto_continue_max %d (must be in [0,5])", *c.GuardAutoContinueMax)
+		}
+	}
+
+	for i, it := range c.ToolRequiredIntents {
+		v := strings.TrimSpace(it)
+		if v == "" {
+			return fmt.Errorf("tool_required_intents[%d]: empty value", i)
+		}
+	}
+
 	// Validate providers.
 	if len(c.Providers) == 0 {
 		return errors.New("missing providers")
@@ -94,7 +156,7 @@ func (c *AIConfig) Validate() error {
 			return fmt.Errorf("providers[%d]: missing id", i)
 		}
 		if strings.Contains(id, "/") {
-			return fmt.Errorf("providers[%d]: invalid id %q (must not contain '/')", i, id)
+			return fmt.Errorf("providers[%d]: invalid id %q (must not contain /)", i, id)
 		}
 		if _, ok := seen[id]; ok {
 			return fmt.Errorf("providers[%d]: duplicate id %q", i, id)
@@ -138,7 +200,7 @@ func (c *AIConfig) Validate() error {
 				return fmt.Errorf("providers[%d].models[%d]: missing model_name", i, j)
 			}
 			if strings.Contains(name, "/") {
-				return fmt.Errorf("providers[%d].models[%d]: invalid model_name %q (must not contain '/')", i, j, name)
+				return fmt.Errorf("providers[%d].models[%d]: invalid model_name %q (must not contain /)", i, j, name)
 			}
 			if _, ok := modelNames[name]; ok {
 				return fmt.Errorf("providers[%d].models[%d]: duplicate model_name %q", i, j, name)
@@ -223,4 +285,48 @@ func (c *AIConfig) EffectiveMode() string {
 	default:
 		return AIModeBuild
 	}
+}
+
+func (c *AIConfig) EffectiveGuardEnabled() bool {
+	if c == nil || c.GuardEnabled == nil {
+		return defaultAIGuardEnabled
+	}
+	return *c.GuardEnabled
+}
+
+func (c *AIConfig) EffectiveGuardAutoContinueMax() int {
+	if c == nil || c.GuardAutoContinueMax == nil {
+		return defaultAIGuardAutoContinueMax
+	}
+	v := *c.GuardAutoContinueMax
+	if v < 0 {
+		return defaultAIGuardAutoContinueMax
+	}
+	if v > 5 {
+		return 5
+	}
+	return v
+}
+
+func (c *AIConfig) EffectiveToolRequiredIntents() []string {
+	if c == nil || len(c.ToolRequiredIntents) == 0 {
+		return append([]string(nil), defaultToolRequiredIntents...)
+	}
+	out := make([]string, 0, len(c.ToolRequiredIntents))
+	seen := make(map[string]struct{}, len(c.ToolRequiredIntents))
+	for _, it := range c.ToolRequiredIntents {
+		v := strings.ToLower(strings.TrimSpace(it))
+		if v == "" {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	if len(out) == 0 {
+		return append([]string(nil), defaultToolRequiredIntents...)
+	}
+	return out
 }
