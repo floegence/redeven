@@ -85,6 +85,7 @@ What bootstrap writes by default:
 - Monitor RPC (CPU/network/process snapshots)
 - Agent-bundled Env App UI assets
 - Optional AI Agent (TypeScript sidecar + Go executor)
+- Installer-managed Node.js runtime bootstrap for AI sidecar (`node >= 20`)
 
 Details:
 

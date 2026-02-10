@@ -17,7 +17,8 @@
 #    - Primary: GitHub releases
 #    - Fallback: external delivery CDN (agent.package.example.invalid)
 # 4. Verify checksum + signature before extraction
-# 5. Install to /usr/local/bin/redeven (or ~/.redeven/bin/redeven)
+# 5. Ensure Node.js >= 20 for AI sidecar (auto-bootstrap static Node if needed)
+# 6. Install to /usr/local/bin/redeven (or ~/.redeven/bin/redeven)
 
 set -e
 
@@ -54,6 +55,20 @@ COSIGN_CERT_OIDC_ISSUER='https://token.actions.githubusercontent.com'
 
 # Installation directories
 INSTALL_DIR="${REDEVEN_HOME}/bin"
+
+# Optional AI sidecar Node runtime bootstrap settings.
+AI_NODE_MIN_MAJOR=20
+AI_NODE_DIST_URL="${REDEVEN_NODE_DIST_BASE_URL:-https://nodejs.org/dist/latest-v20.x}"
+AI_NODE_BOOTSTRAP_SKIP="${REDEVEN_SKIP_AI_NODE_BOOTSTRAP:-}"
+AI_NODE_RUNTIME_ROOT="${REDEVEN_HOME}/runtime/node"
+AI_NODE_CURRENT_LINK="${AI_NODE_RUNTIME_ROOT}/current"
+AI_NODE_STATIC_BIN="${AI_NODE_CURRENT_LINK}/bin/node"
+
+AI_NODE_READY=0
+AI_NODE_SOURCE="none"
+AI_NODE_BIN_PATH=""
+AI_NODE_VERSION=""
+AI_NODE_NOTE=""
 
 # Logging functions
 log_info() {
@@ -125,7 +140,7 @@ check_environment() {
     fi
 
     # Check for required commands
-    for cmd in curl uname tar grep sed awk; do
+    for cmd in curl uname tar grep sed awk mktemp; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             log_error "Required command not found: $cmd"
             exit 1
@@ -190,6 +205,271 @@ detect_platform() {
     PACKAGE_NAME="${BINARY_NAME}_${PLATFORM}.tar.gz"
     log_info "Detected platform: $PLATFORM"
 }
+
+node_major_from_version() {
+    version_input=$(printf '%s' "$1" | tr -d '\r\n')
+    version_major=$(printf '%s' "$version_input" | sed -E 's/^v?([0-9]+).*/\1/' || true)
+    case "$version_major" in
+        ''|*[!0-9]*)
+            printf ''
+            ;;
+        *)
+            printf '%s' "$version_major"
+            ;;
+    esac
+}
+
+read_node_version() {
+    node_bin_candidate="$1"
+    if [ -z "$node_bin_candidate" ] || [ ! -x "$node_bin_candidate" ]; then
+        printf ''
+        return 0
+    fi
+    node_ver_output=$("$node_bin_candidate" -v 2>/dev/null || true)
+    printf '%s' "$(printf '%s' "$node_ver_output" | tr -d '\r\n')"
+}
+
+node_is_qualified() {
+    node_bin_candidate="$1"
+    required_major="$2"
+
+    node_ver_candidate=$(read_node_version "$node_bin_candidate")
+    if [ -z "$node_ver_candidate" ]; then
+        return 1
+    fi
+
+    node_major_candidate=$(node_major_from_version "$node_ver_candidate")
+    if [ -z "$node_major_candidate" ]; then
+        return 1
+    fi
+
+    if [ "$node_major_candidate" -lt "$required_major" ]; then
+        return 1
+    fi
+
+    return 0
+}
+
+set_ai_node_state_ready() {
+    AI_NODE_READY=1
+    AI_NODE_SOURCE="$1"
+    AI_NODE_BIN_PATH="$2"
+    AI_NODE_VERSION="$3"
+    AI_NODE_NOTE=""
+}
+
+set_ai_node_state_degraded() {
+    AI_NODE_READY=0
+    AI_NODE_SOURCE="degraded"
+    AI_NODE_BIN_PATH=""
+    AI_NODE_VERSION=""
+    AI_NODE_NOTE="$1"
+}
+
+cleanup_dir_if_exists() {
+    dir_to_remove="$1"
+    if [ -n "$dir_to_remove" ] && [ -d "$dir_to_remove" ]; then
+        rm -rf "$dir_to_remove"
+    fi
+}
+
+resolve_ai_node_archive_platform() {
+    case "${OS}:${ARCH}" in
+        linux:amd64)
+            printf 'linux-x64'
+            ;;
+        linux:arm64)
+            printf 'linux-arm64'
+            ;;
+        darwin:amd64)
+            printf 'darwin-x64'
+            ;;
+        darwin:arm64)
+            printf 'darwin-arm64'
+            ;;
+        *)
+            printf ''
+            ;;
+    esac
+}
+
+extract_node_version_from_archive() {
+    archive_name="$1"
+    printf '%s' "$archive_name" | sed -E 's/^node-(v[0-9]+\.[0-9]+\.[0-9]+)-.*$/\1/'
+}
+
+bootstrap_static_ai_node() {
+    node_archive_platform=$(resolve_ai_node_archive_platform)
+    if [ -z "$node_archive_platform" ]; then
+        log_warn "Static Node bootstrap is not supported on ${OS}/${ARCH}"
+        return 1
+    fi
+
+    node_tmp_dir=$(mktemp -d)
+    if [ -z "$node_tmp_dir" ] || [ ! -d "$node_tmp_dir" ]; then
+        log_warn "Failed to create temporary directory for Node bootstrap"
+        return 1
+    fi
+
+    node_shasums_path="$node_tmp_dir/SHASUMS256.txt"
+    if ! curl -fsSL "$AI_NODE_DIST_URL/SHASUMS256.txt" -o "$node_shasums_path"; then
+        log_warn "Failed to download SHASUMS256.txt from $AI_NODE_DIST_URL"
+        cleanup_dir_if_exists "$node_tmp_dir"
+        return 1
+    fi
+
+    node_archive_name=$(awk '$2 ~ /^node-v[0-9]+\.[0-9]+\.[0-9]+-'"$node_archive_platform"'\.tar\.gz$/ {print $2; exit}' "$node_shasums_path")
+    if [ -z "$node_archive_name" ]; then
+        log_warn "Failed to resolve static Node archive for platform ${node_archive_platform}"
+        cleanup_dir_if_exists "$node_tmp_dir"
+        return 1
+    fi
+
+    node_expected_sha=$(awk -v f="$node_archive_name" '$2 == f {print $1; exit}' "$node_shasums_path" | tr -d '\r\n')
+    if [ -z "$node_expected_sha" ]; then
+        log_warn "Failed to resolve expected SHA256 for ${node_archive_name}"
+        cleanup_dir_if_exists "$node_tmp_dir"
+        return 1
+    fi
+
+    node_archive_path="$node_tmp_dir/$node_archive_name"
+    if ! curl -fsSL "$AI_NODE_DIST_URL/$node_archive_name" -o "$node_archive_path"; then
+        log_warn "Failed to download static Node archive: $AI_NODE_DIST_URL/$node_archive_name"
+        cleanup_dir_if_exists "$node_tmp_dir"
+        return 1
+    fi
+
+    node_actual_sha=$(sha256_file "$node_archive_path" | tr -d '\r\n')
+    if [ "$node_actual_sha" != "$node_expected_sha" ]; then
+        log_warn "Static Node archive checksum mismatch for $node_archive_name"
+        cleanup_dir_if_exists "$node_tmp_dir"
+        return 1
+    fi
+
+    node_extract_dir="$node_tmp_dir/extract"
+    mkdir -p "$node_extract_dir"
+    if ! tar -xzf "$node_archive_path" -C "$node_extract_dir"; then
+        log_warn "Failed to extract static Node archive: $node_archive_name"
+        cleanup_dir_if_exists "$node_tmp_dir"
+        return 1
+    fi
+
+    node_source_dir="$node_extract_dir/${node_archive_name%.tar.gz}"
+    node_source_bin="$node_source_dir/bin/node"
+    if [ ! -x "$node_source_bin" ]; then
+        log_warn "Extracted static Node archive is missing bin/node"
+        cleanup_dir_if_exists "$node_tmp_dir"
+        return 1
+    fi
+
+    node_source_version=$(read_node_version "$node_source_bin")
+    node_source_major=$(node_major_from_version "$node_source_version")
+    if [ -z "$node_source_major" ] || [ "$node_source_major" -lt "$AI_NODE_MIN_MAJOR" ]; then
+        log_warn "Downloaded static Node is invalid for AI sidecar: ${node_source_version:-unknown}"
+        cleanup_dir_if_exists "$node_tmp_dir"
+        return 1
+    fi
+
+    node_target_version=$(extract_node_version_from_archive "$node_archive_name")
+    if [ -z "$node_target_version" ] || [ "$node_target_version" = "$node_archive_name" ]; then
+        node_target_version="$node_source_version"
+    fi
+    if [ -z "$node_target_version" ]; then
+        node_target_version="v${node_source_major}"
+    fi
+
+    node_target_dir="${AI_NODE_RUNTIME_ROOT}/${node_target_version}"
+    node_staging_dir="${node_target_dir}.tmp.$$"
+
+    mkdir -p "$AI_NODE_RUNTIME_ROOT"
+    cleanup_dir_if_exists "$node_staging_dir"
+    mkdir -p "$node_staging_dir"
+
+    if ! cp -R "$node_source_dir/." "$node_staging_dir/"; then
+        log_warn "Failed to prepare static Node runtime staging directory"
+        cleanup_dir_if_exists "$node_tmp_dir"
+        cleanup_dir_if_exists "$node_staging_dir"
+        return 1
+    fi
+
+    cleanup_dir_if_exists "$node_target_dir"
+    if ! mv "$node_staging_dir" "$node_target_dir"; then
+        log_warn "Failed to install static Node runtime into $node_target_dir"
+        cleanup_dir_if_exists "$node_tmp_dir"
+        cleanup_dir_if_exists "$node_staging_dir"
+        return 1
+    fi
+
+    if ! ln -sfn "$node_target_dir" "$AI_NODE_CURRENT_LINK"; then
+        log_warn "Failed to update static Node current link: $AI_NODE_CURRENT_LINK"
+        cleanup_dir_if_exists "$node_tmp_dir"
+        return 1
+    fi
+
+    AI_NODE_STATIC_BIN="${AI_NODE_CURRENT_LINK}/bin/node"
+    if ! node_is_qualified "$AI_NODE_STATIC_BIN" "$AI_NODE_MIN_MAJOR"; then
+        log_warn "Installed static Node runtime is not usable: $AI_NODE_STATIC_BIN"
+        cleanup_dir_if_exists "$node_tmp_dir"
+        return 1
+    fi
+
+    ai_node_static_version=$(read_node_version "$AI_NODE_STATIC_BIN")
+    set_ai_node_state_ready "static" "$AI_NODE_STATIC_BIN" "$ai_node_static_version"
+    log_info "Installed static Node runtime for AI sidecar: ${ai_node_static_version:-unknown} ($AI_NODE_STATIC_BIN)"
+
+    cleanup_dir_if_exists "$node_tmp_dir"
+    return 0
+}
+
+ensure_ai_node_runtime() {
+    log_info "Checking AI sidecar Node runtime (requires node >= ${AI_NODE_MIN_MAJOR})..."
+
+    host_node_bin=""
+    if command -v node >/dev/null 2>&1; then
+        host_node_bin=$(command -v node || true)
+    fi
+
+    if [ -n "$host_node_bin" ] && node_is_qualified "$host_node_bin" "$AI_NODE_MIN_MAJOR"; then
+        host_node_version=$(read_node_version "$host_node_bin")
+        set_ai_node_state_ready "system" "$host_node_bin" "$host_node_version"
+        log_info "Host Node is compatible for AI sidecar: ${host_node_version:-unknown} ($host_node_bin)"
+        return 0
+    fi
+
+    if [ -n "$host_node_bin" ]; then
+        host_node_version=$(read_node_version "$host_node_bin")
+        if [ -n "$host_node_version" ]; then
+            log_warn "Host Node is too old for AI sidecar: $host_node_version (requires >= ${AI_NODE_MIN_MAJOR})"
+        else
+            log_warn "Host node was found but version probe failed: $host_node_bin"
+        fi
+    else
+        log_warn "Host Node was not found on PATH"
+    fi
+
+    if node_is_qualified "$AI_NODE_STATIC_BIN" "$AI_NODE_MIN_MAJOR"; then
+        existing_static_version=$(read_node_version "$AI_NODE_STATIC_BIN")
+        set_ai_node_state_ready "static" "$AI_NODE_STATIC_BIN" "$existing_static_version"
+        log_info "Using existing static Node runtime for AI sidecar: ${existing_static_version:-unknown} ($AI_NODE_STATIC_BIN)"
+        return 0
+    fi
+
+    if [ -n "$AI_NODE_BOOTSTRAP_SKIP" ] && [ "$AI_NODE_BOOTSTRAP_SKIP" != "0" ]; then
+        set_ai_node_state_degraded "Node bootstrap is skipped by REDEVEN_SKIP_AI_NODE_BOOTSTRAP; AI sidecar may be unavailable."
+        log_warn "$AI_NODE_NOTE"
+        return 0
+    fi
+
+    log_info "Bootstrapping static Node runtime from: $AI_NODE_DIST_URL"
+    if bootstrap_static_ai_node; then
+        return 0
+    fi
+
+    set_ai_node_state_degraded "Failed to bootstrap Node runtime from $AI_NODE_DIST_URL; installation continues, but AI sidecar may be unavailable."
+    log_warn "$AI_NODE_NOTE"
+    return 0
+}
+
 
 resolve_version_from_manifest() {
     log_info "Fetching latest version metadata..."
@@ -518,6 +798,15 @@ print_summary() {
     log_info "  Binary: $INSTALL_DIR/$BINARY_NAME"
     log_info "  Version: $LATEST_VERSION"
     log_info "  Version source: $VERSION_SOURCE"
+    if [ "$AI_NODE_READY" = "1" ]; then
+        log_info "  AI sidecar node: ${AI_NODE_VERSION:-unknown} ($AI_NODE_SOURCE)"
+        log_info "  AI sidecar node path: $AI_NODE_BIN_PATH"
+    else
+        log_warn "  AI sidecar node: unavailable (AI features may be degraded)"
+        if [ -n "$AI_NODE_NOTE" ]; then
+            log_warn "  AI sidecar note: $AI_NODE_NOTE"
+        fi
+    fi
     echo ""
 
     # Test the binary immediately using full path
@@ -611,6 +900,9 @@ main() {
     # Install redeven
     install_redeven
 
+    # Ensure AI sidecar Node runtime
+    ensure_ai_node_runtime
+
     # Setup PATH + onboarding summary (skip in upgrade mode)
     if [ "$REDEVEN_INSTALL_MODE" != "upgrade" ]; then
         setup_path
@@ -620,6 +912,15 @@ main() {
         log_info "Binary: $INSTALL_DIR/$BINARY_NAME"
         log_info "Version: $LATEST_VERSION"
         log_info "Version source: $VERSION_SOURCE"
+        if [ "$AI_NODE_READY" = "1" ]; then
+            log_info "AI sidecar node: ${AI_NODE_VERSION:-unknown} ($AI_NODE_SOURCE)"
+            log_info "AI sidecar node path: $AI_NODE_BIN_PATH"
+        else
+            log_warn "AI sidecar node unavailable; AI features may be degraded"
+            if [ -n "$AI_NODE_NOTE" ]; then
+                log_warn "AI sidecar note: $AI_NODE_NOTE"
+            fi
+        fi
     fi
 }
 

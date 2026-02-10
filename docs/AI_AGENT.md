@@ -10,8 +10,21 @@ High-level design:
 
 ## Requirements
 
-- Node.js `>= 20` available on `PATH` as `node` (the agent spawns the sidecar as `node sidecar.mjs`).
+- AI sidecar needs Node.js `>= 20`.
+- `install.sh` automatically checks host `node` and bootstraps a static runtime from `https://nodejs.org/dist/latest-v20.x` when host Node is missing or too old.
+- If Node bootstrap fails, agent installation still succeeds, but AI sidecar features are degraded until a compatible Node runtime is available.
 - Provider API keys are stored locally in a separate secrets file (never store secrets in `config.json`).
+
+Runtime node resolution order:
+
+1. `REDEVEN_AI_NODE_BIN` (when set and compatible)
+2. `node` from `PATH` (when compatible)
+3. static runtime under `~/.redeven/runtime/node/current/bin/node`
+
+Installer bootstrap controls:
+
+- `REDEVEN_NODE_DIST_BASE_URL` (override the Node distribution base URL)
+- `REDEVEN_SKIP_AI_NODE_BOOTSTRAP=1` (skip static Node bootstrap)
 
 ## Configuration
 

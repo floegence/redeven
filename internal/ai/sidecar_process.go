@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -99,6 +100,140 @@ func (p *sidecarProcess) recv() (*sidecarInbound, error) {
 	return &msg, nil
 }
 
+const (
+	aiSidecarNodeEnvVar   = "REDEVEN_AI_NODE_BIN"
+	aiSidecarNodeMinMajor = 20
+)
+
+func resolveAISidecarNodeBin(stateDir string) (string, error) {
+	candidates := aiSidecarNodeCandidates(stateDir)
+	failures := make([]string, 0, len(candidates))
+
+	for _, candidate := range candidates {
+		raw := strings.TrimSpace(candidate)
+		if raw == "" {
+			continue
+		}
+
+		resolved := raw
+		if !filepath.IsAbs(resolved) {
+			p, err := exec.LookPath(resolved)
+			if err != nil {
+				failures = append(failures, fmt.Sprintf("%s: not found", raw))
+				continue
+			}
+			resolved = p
+		}
+
+		version, major, err := probeNodeVersionMajor(resolved)
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", resolved, err))
+			continue
+		}
+		if major < aiSidecarNodeMinMajor {
+			failures = append(failures, fmt.Sprintf("%s: unsupported version %s", resolved, version))
+			continue
+		}
+		return resolved, nil
+	}
+
+	detail := "no node candidate found"
+	if len(failures) > 0 {
+		detail = strings.Join(failures, "; ")
+	}
+	return "", fmt.Errorf("node >= %d is required for AI sidecar (%s)", aiSidecarNodeMinMajor, detail)
+}
+
+func aiSidecarNodeCandidates(stateDir string) []string {
+	out := make([]string, 0, 6)
+	seen := make(map[string]struct{}, 6)
+	appendUnique := func(path string) {
+		p := strings.TrimSpace(path)
+		if p == "" {
+			return
+		}
+		if _, ok := seen[p]; ok {
+			return
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+
+	appendUnique(os.Getenv(aiSidecarNodeEnvVar))
+
+	if p, err := exec.LookPath("node"); err == nil {
+		appendUnique(p)
+	}
+
+	trimmedStateDir := strings.TrimSpace(stateDir)
+	if trimmedStateDir != "" {
+		appendUnique(filepath.Join(trimmedStateDir, "runtime", "node", "current", "bin", "node"))
+
+		parent := filepath.Dir(trimmedStateDir)
+		if filepath.Base(parent) == "envs" {
+			rootStateDir := filepath.Dir(parent)
+			appendUnique(filepath.Join(rootStateDir, "runtime", "node", "current", "bin", "node"))
+		}
+	}
+
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		appendUnique(filepath.Join(home, ".redeven", "runtime", "node", "current", "bin", "node"))
+	}
+
+	return out
+}
+
+func probeNodeVersionMajor(nodeBin string) (string, int, error) {
+	trimmed := strings.TrimSpace(nodeBin)
+	if trimmed == "" {
+		return "", 0, errors.New("empty node path")
+	}
+
+	st, err := os.Stat(trimmed)
+	if err != nil {
+		return "", 0, err
+	}
+	if st.IsDir() {
+		return "", 0, errors.New("path is a directory")
+	}
+	if st.Mode()&0o111 == 0 {
+		return "", 0, errors.New("path is not executable")
+	}
+
+	out, err := exec.Command(trimmed, "-v").Output()
+	if err != nil {
+		return "", 0, fmt.Errorf("probe failed: %w", err)
+	}
+	version := strings.TrimSpace(string(out))
+	major, ok := parseNodeMajor(version)
+	if !ok {
+		return "", 0, fmt.Errorf("invalid version output %q", version)
+	}
+	return version, major, nil
+}
+
+func parseNodeMajor(version string) (int, bool) {
+	trimmed := strings.TrimSpace(version)
+	if trimmed == "" {
+		return 0, false
+	}
+	trimmed = strings.TrimPrefix(trimmed, "v")
+
+	majorPart := trimmed
+	if idx := strings.IndexByte(trimmed, '.'); idx >= 0 {
+		majorPart = trimmed[:idx]
+	}
+	if majorPart == "" {
+		return 0, false
+	}
+
+	major, err := strconv.Atoi(majorPart)
+	if err != nil || major <= 0 {
+		return 0, false
+	}
+	return major, true
+}
+
 func startSidecar(ctx context.Context, log *slog.Logger, stateDir string, env []string, scriptPathOverride string) (*sidecarProcess, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -116,7 +251,13 @@ func startSidecar(ctx context.Context, log *slog.Logger, stateDir string, env []
 		}
 	}
 
-	cmd := exec.CommandContext(ctx, "node", scriptPath)
+	nodeBin, err := resolveAISidecarNodeBin(stateDir)
+	if err != nil {
+		return nil, err
+	}
+	log.Debug("ai sidecar node resolved", "component", "ai_sidecar", "node_bin", nodeBin)
+
+	cmd := exec.CommandContext(ctx, nodeBin, scriptPath)
 	if len(env) > 0 {
 		cmd.Env = env
 	}
