@@ -70,11 +70,26 @@ function ChatWorkingIndicator() {
       </filter>
     </defs>
     <g stroke="var(--primary)" stroke-width="0.8" fill="none">
-      <line x1="20" y1="8" x2="20" y2="20" class="processing-neural-line"/>
-      <line x1="8" y1="20" x2="20" y2="20" class="processing-neural-line" style="animation-delay:150ms"/>
-      <line x1="32" y1="20" x2="20" y2="20" class="processing-neural-line" style="animation-delay:300ms"/>
-      <line x1="14" y1="32" x2="20" y2="20" class="processing-neural-line" style="animation-delay:450ms"/>
-      <line x1="26" y1="32" x2="20" y2="20" class="processing-neural-line" style="animation-delay:600ms"/>
+      <line x1="20" y1="8" x2="20" y2="20" stroke-dasharray="12" stroke-dashoffset="12">
+        <animate attributeName="stroke-dashoffset" values="12;0;0;12" keyTimes="0;0.4;0.6;1" dur="1.5s" begin="0s" repeatCount="indefinite"/>
+        <animate attributeName="stroke-opacity" values="0.2;0.7;0.7;0.2" keyTimes="0;0.4;0.6;1" dur="1.5s" begin="0s" repeatCount="indefinite"/>
+      </line>
+      <line x1="8" y1="20" x2="20" y2="20" stroke-dasharray="12" stroke-dashoffset="12">
+        <animate attributeName="stroke-dashoffset" values="12;0;0;12" keyTimes="0;0.4;0.6;1" dur="1.5s" begin="0.3s" repeatCount="indefinite"/>
+        <animate attributeName="stroke-opacity" values="0.2;0.7;0.7;0.2" keyTimes="0;0.4;0.6;1" dur="1.5s" begin="0.3s" repeatCount="indefinite"/>
+      </line>
+      <line x1="32" y1="20" x2="20" y2="20" stroke-dasharray="12" stroke-dashoffset="12">
+        <animate attributeName="stroke-dashoffset" values="12;0;0;12" keyTimes="0;0.4;0.6;1" dur="1.5s" begin="0.6s" repeatCount="indefinite"/>
+        <animate attributeName="stroke-opacity" values="0.2;0.7;0.7;0.2" keyTimes="0;0.4;0.6;1" dur="1.5s" begin="0.6s" repeatCount="indefinite"/>
+      </line>
+      <line x1="14" y1="32" x2="20" y2="20" stroke-dasharray="13.42" stroke-dashoffset="13.42">
+        <animate attributeName="stroke-dashoffset" values="13.42;0;0;13.42" keyTimes="0;0.4;0.6;1" dur="1.5s" begin="0.9s" repeatCount="indefinite"/>
+        <animate attributeName="stroke-opacity" values="0.2;0.7;0.7;0.2" keyTimes="0;0.4;0.6;1" dur="1.5s" begin="0.9s" repeatCount="indefinite"/>
+      </line>
+      <line x1="26" y1="32" x2="20" y2="20" stroke-dasharray="13.42" stroke-dashoffset="13.42">
+        <animate attributeName="stroke-dashoffset" values="13.42;0;0;13.42" keyTimes="0;0.4;0.6;1" dur="1.5s" begin="1.2s" repeatCount="indefinite"/>
+        <animate attributeName="stroke-opacity" values="0.2;0.7;0.7;0.2" keyTimes="0;0.4;0.6;1" dur="1.5s" begin="1.2s" repeatCount="indefinite"/>
+      </line>
       <line x1="20" y1="8" x2="8" y2="20" class="processing-neural-line" style="animation-delay:200ms"/>
       <line x1="20" y1="8" x2="32" y2="20" class="processing-neural-line" style="animation-delay:350ms"/>
       <line x1="8" y1="20" x2="14" y2="32" class="processing-neural-line" style="animation-delay:500ms"/>
