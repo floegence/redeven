@@ -165,6 +165,9 @@ func hasSubstantiveAssistantAnswer(text string) bool {
 	if text == "" {
 		return false
 	}
+	if isConciseFinalAnswer(text) {
+		return true
+	}
 	runes := utf8.RuneCountInString(text)
 	if runes >= 220 {
 		return true
@@ -188,10 +191,33 @@ func hasSubstantiveAssistantAnswer(text string) bool {
 	return false
 }
 
+func isConciseFinalAnswer(text string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	if normalized == "" {
+		return false
+	}
+	if hasUnfulfilledActionCommitment(normalized) {
+		return false
+	}
+	runes := utf8.RuneCountInString(normalized)
+	if runes < 12 || runes > 200 {
+		return false
+	}
+	finalHints := []string{
+		"final answer", "conclusion", "result", "completed", "done", "finished", "recovered",
+		"is a directory", "is not a directory", "not a directory", "root path is",
+		"结论", "结果", "已完成", "完成分析", "是目录", "不是目录",
+	}
+	return containsAny(normalized, finalHints)
+}
+
 func looksInterimAssistantText(text string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(text))
 	if normalized == "" {
 		return true
+	}
+	if isConciseFinalAnswer(normalized) {
+		return false
 	}
 	if hasUnfulfilledActionCommitment(normalized) {
 		return true

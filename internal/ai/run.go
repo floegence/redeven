@@ -117,6 +117,8 @@ type run struct {
 	requiresTools                   bool
 	totalToolCalls                  int
 	recoveryState                   turnRecoveryState
+	taskLoopCfg                     taskLoopConfig
+	taskLoopState                   taskLoopState
 	finalizationReason              string
 }
 
@@ -181,6 +183,8 @@ func newRun(opts runOptions) *run {
 		recoveryState: turnRecoveryState{
 			FailureSignatures: map[string]int{},
 		},
+		taskLoopCfg:   defaultTaskLoopConfig(),
+		taskLoopState: newTaskLoopState(""),
 	}
 	if opts.Writer != nil {
 		r.stream = newNDJSONStream(r.w, opts.StreamWriteTimeout)
@@ -652,6 +656,20 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	}
 	toolRequiredIntents := r.cfg.EffectiveToolRequiredIntents()
 	r.requiresTools = shouldRequireToolExecution(req.Input.Text, toolRequiredIntents)
+	taskObjective := strings.TrimSpace(req.Input.Text)
+	if req.ContextPackage != nil {
+		if v := strings.TrimSpace(req.ContextPackage.TaskObjective); v != "" {
+			taskObjective = v
+		}
+		if v := strings.TrimSpace(req.ContextPackage.OpenGoal); v != "" {
+			taskObjective = v
+		}
+		req.ContextPackage.TaskObjective = taskObjective
+		if len(req.ContextPackage.TaskSteps) == 0 {
+			req.ContextPackage.TaskSteps = buildTaskStepSketch(taskObjective)
+		}
+	}
+	r.taskLoopState = newTaskLoopState(taskObjective)
 	r.debug("ai.run.start",
 		"model", modelID,
 		"max_steps", req.Options.MaxSteps,
@@ -786,6 +804,12 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		if budgetLeft < 0 {
 			budgetLeft = 0
 		}
+		if req.ContextPackage != nil {
+			req.ContextPackage.TaskProgressDigest = truncateProgressDigest(r.taskLoopState.LastDigest, 320)
+			if strings.TrimSpace(req.ContextPackage.TaskObjective) == "" {
+				req.ContextPackage.TaskObjective = strings.TrimSpace(r.taskLoopState.Objective)
+			}
+		}
 		if err := sc.send("run.start", map[string]any{
 			"run_id":             r.id,
 			"model":              req.Model,
@@ -904,6 +928,8 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	r.recoveryState.CompletionSteps = 0
 	r.recoveryState.NoProgressStreak = 0
 	r.recoveryState.LastAssistantDigest = ""
+	r.recoveryState.AnyToolCallSeen = false
+	r.taskLoopState = newTaskLoopState(taskObjective)
 	r.persistRunEvent("turn.recovery.config", RealtimeStreamKindLifecycle, map[string]any{
 		"enabled":                            r.recoveryEnabled,
 		"max_steps":                          r.recoveryMaxSteps,
@@ -912,14 +938,21 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		"fail_on_repeated_failure_signature": r.recoveryFailOnRepeatedSignature,
 		"requires_tools":                     r.requiresTools,
 		"tool_required_hints":                toolRequiredIntents,
+		"task_max_turns":                     r.taskLoopCfg.MaxTurns,
+		"task_max_no_progress":               r.taskLoopCfg.MaxNoProgressTurns,
+		"task_max_repeated_signature":        r.taskLoopCfg.MaxRepeatedSignatures,
+		"task_objective":                     sanitizeLogText(taskObjective, 240),
 	})
 
-	maxAttemptLoops := r.recoveryMaxSteps + 4
-	if maxAttemptLoops < 4 {
-		maxAttemptLoops = 4
+	maxAttemptLoops := r.taskLoopCfg.MaxTurns
+	if maxAttemptLoops < r.recoveryMaxSteps+4 {
+		maxAttemptLoops = r.recoveryMaxSteps + 4
 	}
-	if maxAttemptLoops > 12 {
-		maxAttemptLoops = 12
+	if maxAttemptLoops < 6 {
+		maxAttemptLoops = 6
+	}
+	if maxAttemptLoops > 32 {
+		maxAttemptLoops = 32
 	}
 
 	for attemptIdx := 0; ; attemptIdx++ {
@@ -928,8 +961,8 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				"max_attempts": maxAttemptLoops,
 				"steps_used":   r.recoveryState.RecoverySteps,
 			})
-			_ = r.appendTextDelta("I could not finish within the current loop budget. Send 'continue' and I will resume from current progress.")
-			r.setFinalizationReason("loop_budget_exhausted")
+			_ = r.appendTextDelta("I have reached the current automatic loop limit. I summarized all collected progress. Reply with one concrete next step and I will continue immediately.")
+			r.setFinalizationReason("task_turn_limit_reached")
 			r.setEndReason("complete")
 			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 			return nil
@@ -1074,6 +1107,13 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 					continue
 				}
 				attemptSummary.ToolCalls++
+				normalizedToolName := strings.TrimSpace(strings.ToLower(p.ToolName))
+				if normalizedToolName != "" {
+					attemptSummary.ToolCallNames = append(attemptSummary.ToolCallNames, normalizedToolName)
+				}
+				if sig := buildToolCallSignature(p.ToolName, p.Args); sig != "" {
+					attemptSummary.ToolCallSignatures = append(attemptSummary.ToolCallSignatures, sig)
+				}
 				r.totalToolCalls++
 				outcome, err := r.handleToolCall(ctx, sc, p.ToolID, p.ToolName, p.Args)
 				if err != nil {
@@ -1126,6 +1166,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 					LastStepTextChars     int    `json:"last_step_text_chars"`
 					LastStepToolCalls     int    `json:"last_step_tool_calls"`
 					HasTextAfterToolCalls *bool  `json:"has_text_after_tool_calls"`
+					NeedsFollowUpHint     *bool  `json:"needs_follow_up_hint"`
 				}
 				_ = json.Unmarshal(msg.Params, &p)
 				if strings.TrimSpace(p.RunID) != r.id {
@@ -1143,6 +1184,9 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				if p.HasTextAfterToolCalls != nil {
 					attemptSummary.OutcomeHasTextAfterToolCalls = *p.HasTextAfterToolCalls
 				}
+				if p.NeedsFollowUpHint != nil {
+					attemptSummary.OutcomeNeedsFollowUpHint = *p.NeedsFollowUpHint
+				}
 				r.persistRunEvent("turn.outcome", RealtimeStreamKindLifecycle, map[string]any{
 					"has_text":                  p.HasText,
 					"text_chars":                p.TextChars,
@@ -1153,6 +1197,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 					"last_step_text_chars":      p.LastStepTextChars,
 					"last_step_tool_calls":      p.LastStepToolCalls,
 					"has_text_after_tool_calls": p.HasTextAfterToolCalls,
+					"needs_follow_up_hint":      p.NeedsFollowUpHint,
 				})
 
 			case "tool.error.classified":
@@ -1192,7 +1237,8 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				})
 
 			case "run.end":
-				attemptSummary.AssistantText = strings.TrimSpace(attemptText.String())
+				attemptRawText := attemptText.String()
+				attemptSummary.AssistantText = strings.TrimSpace(attemptRawText)
 				decision := decideTurnRecovery(turnRecoveryConfig{
 					Enabled:                        r.recoveryEnabled,
 					MaxSteps:                       r.recoveryMaxSteps,
@@ -1233,6 +1279,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 						"steps_used", r.recoveryState.RecoverySteps,
 						"budget_left", budgetLeft,
 					)
+					r.discardAttemptAssistantText(attemptRawText)
 					attemptHistory = appendHistoryForRetry(attemptHistory, req.Input.Text, attemptSummary.AssistantText)
 					attemptInput = RunInput{Text: decision.NextPrompt}
 					continueAttempt = true
@@ -1291,12 +1338,16 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 						"attempt_tool_success":  attemptSummary.ToolSuccesses,
 						"attempt_tool_failures": len(attemptSummary.ToolFailures),
 					})
+					r.discardAttemptAssistantText(attemptRawText)
 					attemptHistory = appendHistoryForRetry(attemptHistory, req.Input.Text, attemptSummary.AssistantText)
 					attemptInput = RunInput{Text: completionDecision.NextPrompt}
 					continueAttempt = true
 					break attemptLoop
 				}
 
+				completionFailed := false
+				completionFailureReason := ""
+				completionFailureMessage := ""
 				if completionDecision.FailRun {
 					r.persistRunEvent("turn.completion.failed", RealtimeStreamKindLifecycle, map[string]any{
 						"reason":                completionDecision.Reason,
@@ -1307,7 +1358,40 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 						"attempt_tool_success":  attemptSummary.ToolSuccesses,
 						"attempt_tool_failures": len(attemptSummary.ToolFailures),
 					})
-					failureMsg := strings.TrimSpace(completionDecision.FailureMessage)
+					completionFailed = true
+					completionFailureReason = strings.TrimSpace(completionDecision.Reason)
+					completionFailureMessage = strings.TrimSpace(completionDecision.FailureMessage)
+				}
+
+				taskDecision := decideTaskLoop(r.taskLoopCfg, &r.taskLoopState, attemptSummary, req.Input.Text)
+				if taskDecision.Continue {
+					r.persistRunEvent("task.loop.continue", RealtimeStreamKindLifecycle, map[string]any{
+						"reason":                taskDecision.Reason,
+						"attempt_index":         attemptIdx,
+						"task_turns_used":       r.taskLoopState.TurnsUsed,
+						"task_no_progress_turn": r.taskLoopState.NoProgressTurn,
+						"attempt_tool_calls":    attemptSummary.ToolCalls,
+						"attempt_tool_success":  attemptSummary.ToolSuccesses,
+						"attempt_tool_failures": len(attemptSummary.ToolFailures),
+					})
+					r.discardAttemptAssistantText(attemptRawText)
+					attemptHistory = appendHistoryForRetry(attemptHistory, req.Input.Text, attemptSummary.AssistantText)
+					attemptInput = RunInput{Text: taskDecision.NextPrompt}
+					continueAttempt = true
+					break attemptLoop
+				}
+
+				if taskDecision.FailRun {
+					r.persistRunEvent("task.loop.failed", RealtimeStreamKindLifecycle, map[string]any{
+						"reason":                taskDecision.Reason,
+						"attempt_index":         attemptIdx,
+						"task_turns_used":       r.taskLoopState.TurnsUsed,
+						"task_no_progress_turn": r.taskLoopState.NoProgressTurn,
+						"attempt_tool_calls":    attemptSummary.ToolCalls,
+						"attempt_tool_success":  attemptSummary.ToolSuccesses,
+						"attempt_tool_failures": len(attemptSummary.ToolFailures),
+					})
+					failureMsg := strings.TrimSpace(taskDecision.FailureMessage)
 					if failureMsg != "" {
 						prefix := ""
 						if r.hasNonEmptyAssistantText() {
@@ -1316,7 +1400,22 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 						_ = r.appendTextDelta(prefix + failureMsg)
 					}
 					r.ensureNonEmptyAssistant()
-					r.setFinalizationReason(completionDecision.Reason)
+					r.setFinalizationReason(taskDecision.Reason)
+					r.setEndReason("complete")
+					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+					return nil
+				}
+
+				if completionFailed {
+					if completionFailureMessage != "" {
+						prefix := ""
+						if r.hasNonEmptyAssistantText() {
+							prefix = "\n\n"
+						}
+						_ = r.appendTextDelta(prefix + completionFailureMessage)
+					}
+					r.ensureNonEmptyAssistant()
+					r.setFinalizationReason(completionFailureReason)
 					r.setEndReason("complete")
 					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 					return nil
@@ -1381,6 +1480,24 @@ func appendHistoryForRetry(history []RunHistoryMsg, userText string, assistantTe
 	return out
 }
 
+func buildToolCallSignature(toolName string, args map[string]any) string {
+	name := strings.TrimSpace(strings.ToLower(toolName))
+	if name == "" {
+		return ""
+	}
+	parts := []string{name}
+	if pathHint := strings.TrimSpace(anyToString(args["path"])); pathHint != "" {
+		parts = append(parts, "path="+normalizeFailureText(pathHint))
+	}
+	if cwdHint := strings.TrimSpace(anyToString(args["cwd"])); cwdHint != "" {
+		parts = append(parts, "cwd="+normalizeFailureText(cwdHint))
+	}
+	if cmdHint := strings.TrimSpace(anyToString(args["command"])); cmdHint != "" {
+		parts = append(parts, "cmd="+normalizeFailureText(cmdHint))
+	}
+	return strings.Join(parts, "|")
+}
+
 func (r *run) appendTextDelta(delta string) error {
 	if r.needNewTextBlock {
 		idx := r.nextBlockIndex
@@ -1398,6 +1515,38 @@ func (r *run) appendTextDelta(delta string) error {
 		Delta:      delta,
 	})
 	return nil
+}
+
+func (r *run) discardAttemptAssistantText(attemptText string) {
+	if r == nil || len(attemptText) == 0 {
+		return
+	}
+
+	r.muAssistant.Lock()
+	idx := r.currentTextBlockIndex
+	if idx < 0 || idx >= len(r.assistantBlocks) {
+		r.muAssistant.Unlock()
+		return
+	}
+	b, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
+	if !ok || b == nil {
+		r.muAssistant.Unlock()
+		return
+	}
+	if !strings.HasSuffix(b.Content, attemptText) {
+		r.muAssistant.Unlock()
+		return
+	}
+	b.Content = strings.TrimSuffix(b.Content, attemptText)
+	updated := *b
+	r.muAssistant.Unlock()
+
+	r.sendStreamEvent(streamEventBlockSet{
+		Type:       "block-set",
+		MessageID:  r.messageID,
+		BlockIndex: idx,
+		Block:      updated,
+	})
 }
 
 func (r *run) hasNonEmptyAssistantText() bool {

@@ -28,13 +28,19 @@ type runContextBuildResult struct {
 func buildRunContext(history []RunHistoryMsg, userInput string, openGoal string, toolMemories []RunToolMemory) runContextBuildResult {
 	normalized := normalizeHistoryMessages(history)
 	normalizedTools := normalizeRunToolMemories(toolMemories)
+	taskObjective := strings.TrimSpace(openGoal)
+	if taskObjective == "" {
+		taskObjective = strings.TrimSpace(userInput)
+	}
 	res := runContextBuildResult{
 		History: append([]RunHistoryMsg(nil), normalized...),
 		Pkg: &RunContextPackage{
-			OpenGoal:     strings.TrimSpace(openGoal),
-			ToolMemories: normalizedTools,
-			Stats:        map[string]int{},
-			Meta:         map[string]string{},
+			OpenGoal:      strings.TrimSpace(openGoal),
+			ToolMemories:  normalizedTools,
+			TaskObjective: taskObjective,
+			TaskSteps:     buildTaskStepSketch(taskObjective),
+			Stats:         map[string]int{},
+			Meta:          map[string]string{},
 		},
 	}
 
@@ -52,6 +58,7 @@ func buildRunContext(history []RunHistoryMsg, userInput string, openGoal string,
 		res.Pkg.Stats["history_messages_sent"] = len(normalized)
 		res.Pkg.Stats["history_chars_sent"] = totalChars
 		res.Pkg.Anchors = extractHistoryAnchors(normalized, normalizedTools, userInput, openGoal)
+		res.Pkg.TaskProgressDigest = truncateProgressDigest(summarizeHistoryMessages(normalized), 320)
 		res.Pkg.Meta["compression"] = "none"
 		return res
 	}
@@ -96,6 +103,7 @@ func buildRunContext(history []RunHistoryMsg, userInput string, openGoal string,
 	res.History = compressed
 	res.Pkg.HistorySummary = summary
 	res.Pkg.Anchors = extractHistoryAnchors(normalized, normalizedTools, userInput, openGoal)
+	res.Pkg.TaskProgressDigest = truncateProgressDigest(summary, 320)
 	res.Pkg.Stats["history_messages_sent"] = len(compressed)
 	res.Pkg.Stats["history_chars_sent"] = sentChars
 	res.Pkg.Stats["history_messages_compacted"] = len(older)

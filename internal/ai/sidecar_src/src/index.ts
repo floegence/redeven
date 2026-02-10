@@ -41,6 +41,12 @@ type RunStartParams = {
       error_code?: string;
       error_message?: string;
     }>;
+    task_objective?: string;
+    task_steps?: Array<{
+      title?: string;
+      status?: string;
+    }>;
+    task_progress_digest?: string;
     stats?: Record<string, number>;
     meta?: Record<string, string>;
   };
@@ -307,7 +313,7 @@ function shouldRetryWithNormalizedArgs(toolName: string, err: ToolErrorPayload):
   if (!err?.retryable) return false;
   if (!err?.normalized_args || typeof err.normalized_args !== 'object') return false;
   const code = String(err.code ?? '').toUpperCase();
-  if (code !== 'INVALID_PATH' && code !== 'OUTSIDE_WORKSPACE') return false;
+  if (code !== 'INVALID_PATH' && code !== 'OUTSIDE_WORKSPACE' && code !== 'NOT_FOUND') return false;
   if (toolName === 'terminal.exec') {
     return typeof err.normalized_args.cwd === 'string' && String(err.normalized_args.cwd).trim() !== '';
   }
@@ -549,6 +555,19 @@ async function runAgent(params: RunStartParams): Promise<void> {
     const contextPkg = params?.context_package;
     const openGoal = String(contextPkg?.open_goal ?? '').trim();
     const historySummary = String(contextPkg?.history_summary ?? '').trim();
+    const taskObjective = String(contextPkg?.task_objective ?? '').trim();
+    const taskProgressDigest = String(contextPkg?.task_progress_digest ?? '').trim();
+    const taskSteps = Array.isArray(contextPkg?.task_steps)
+      ? contextPkg.task_steps
+          .map((it) => {
+            const title = String(it?.title ?? '').trim();
+            const status = String(it?.status ?? '').trim().toLowerCase();
+            if (!title) return '';
+            return `- [${status || 'pending'}] ${title}`;
+          })
+          .filter((it) => it.length > 0)
+          .slice(0, 10)
+      : [];
     const anchors = Array.isArray(contextPkg?.anchors)
       ? contextPkg?.anchors
           .map((it) => String(it ?? '').trim())
@@ -571,6 +590,21 @@ ${openGoal}
       contextLines.push(`<history_summary>
 ${historySummary}
 </history_summary>`);
+    }
+    if (taskObjective) {
+      contextLines.push(`<task_objective>
+${taskObjective}
+</task_objective>`);
+    }
+    if (taskSteps.length > 0) {
+      contextLines.push(`<task_steps>
+${taskSteps.join('\n')}
+</task_steps>`);
+    }
+    if (taskProgressDigest) {
+      contextLines.push(`<task_progress_digest>
+${taskProgressDigest}
+</task_progress_digest>`);
     }
     if (anchors.length > 0) {
       contextLines.push(`<anchors>
@@ -726,6 +760,11 @@ ${toolMemories.join('\n')}
 
     const toolCalls = runToolCallCount.get(runId) ?? 0;
     const hasVisibleText = emitted.trim().length > 0;
+    const needsFollowUpHint =
+      (!hasVisibleText && toolCalls > 0) ||
+      finishReason === 'tool-calls' ||
+      (toolCalls > 0 && hasTextAfterToolCalls === false);
+
     notify('run.outcome', {
       run_id: runId,
       has_text: hasVisibleText,
@@ -737,6 +776,7 @@ ${toolMemories.join('\n')}
       last_step_text_chars: lastStepTextChars,
       last_step_tool_calls: lastStepToolCalls,
       has_text_after_tool_calls: hasTextAfterToolCalls,
+      needs_follow_up_hint: needsFollowUpHint,
     });
     notify('run.phase', {
       run_id: runId,
@@ -751,6 +791,7 @@ ${toolMemories.join('\n')}
         last_step_text_chars: lastStepTextChars,
         last_step_tool_calls: lastStepToolCalls,
         has_text_after_tool_calls: hasTextAfterToolCalls,
+        needs_follow_up_hint: needsFollowUpHint,
         attempt_index: recoveryAttemptIndex,
         recovery_steps_used: recoveryStepsUsed,
         recovery_budget_left: recoveryBudgetLeft,
@@ -768,6 +809,7 @@ ${toolMemories.join('\n')}
       last_step_text_chars: lastStepTextChars,
       last_step_tool_calls: lastStepToolCalls,
       has_text_after_tool_calls: hasTextAfterToolCalls,
+      needs_follow_up_hint: needsFollowUpHint,
       recovery_attempt_index: recoveryAttemptIndex,
       recovery_steps_used: recoveryStepsUsed,
       recovery_budget_left: recoveryBudgetLeft,

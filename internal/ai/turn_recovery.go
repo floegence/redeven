@@ -34,6 +34,7 @@ type turnRecoveryState struct {
 	CompletionSteps     int
 	NoProgressStreak    int
 	LastAssistantDigest string
+	AnyToolCallSeen     bool
 }
 
 type turnToolFailure struct {
@@ -48,6 +49,8 @@ type turnAttemptSummary struct {
 	ToolCalls                     int
 	ToolSuccesses                 int
 	ToolFailures                  []turnToolFailure
+	ToolCallNames                 []string
+	ToolCallSignatures            []string
 	AssistantText                 string
 	OutcomeHasText                bool
 	OutcomeTextChars              int
@@ -59,6 +62,7 @@ type turnAttemptSummary struct {
 	OutcomeLastStepToolCalls      int
 	OutcomeHasTextAfterToolCalls  bool
 	OutcomeHasTextAfterToolsKnown bool
+	OutcomeNeedsFollowUpHint      bool
 }
 
 type turnRecoveryDecision struct {
@@ -123,6 +127,9 @@ var toolRecoveryCommitmentPhrases = []string{
 func shouldRequireToolExecution(userInput string, intentHints []string) bool {
 	text := strings.ToLower(strings.TrimSpace(userInput))
 	if text == "" {
+		return false
+	}
+	if strings.Contains(text, "continue the unfinished goal from previous turn.") && strings.Contains(text, "open goal:") {
 		return false
 	}
 	if containsAny(text, intentHints) {
@@ -195,8 +202,12 @@ func decideTurnRecovery(cfg turnRecoveryConfig, summary turnAttemptSummary, stat
 		decision.LastErrorCode = string(lastFailure.Error.Code)
 	}
 
+	if summary.ToolCalls > 0 {
+		state.AnyToolCallSeen = true
+	}
+
 	missingRequiredTools := false
-	if cfg.RequiresTools && summary.ToolCalls == 0 {
+	if cfg.RequiresTools && !state.AnyToolCallSeen {
 		// If tool execution is required for this turn, a pure preamble or empty answer
 		// is never enough to finish.
 		missingRequiredTools = strings.TrimSpace(summary.AssistantText) == "" || hasUnfulfilledActionCommitment(summary.AssistantText)
@@ -214,7 +225,7 @@ func decideTurnRecovery(cfg turnRecoveryConfig, summary turnAttemptSummary, stat
 		if missingRequiredTools {
 			decision.Reason = "recovery_disabled_missing_tools"
 			decision.Action = recoveryActionForceToolCall
-			decision.FailureMessage = "Tool workflow failed: required tool calls were not executed for this request."
+			decision.FailureMessage = "I still need to run at least one tool call to finish this request, but runtime recovery is disabled."
 			return decision
 		}
 		decision.Reason = "recovery_disabled_after_tool_failure"
@@ -232,13 +243,14 @@ func decideTurnRecovery(cfg turnRecoveryConfig, summary turnAttemptSummary, stat
 	}
 
 	if remaining <= 0 {
-		decision.FailRun = true
 		if missingRequiredTools {
-			decision.Reason = "recovery_budget_exhausted_missing_tools"
+			decision.Continue = true
+			decision.Reason = "missing_required_tool_calls"
 			decision.Action = recoveryActionForceToolCall
-			decision.FailureMessage = "Tool workflow failed: recovery budget exhausted before any required tool call succeeded."
+			decision.NextPrompt = buildRecoveryRetryPrompt(userInput, summary, lastFailure, decision.Action, state.RecoverySteps+1, state.RecoverySteps+1)
 			return decision
 		}
+		decision.FailRun = true
 		decision.Reason = "recovery_budget_exhausted_after_tool_failure"
 		decision.Action = recoveryActionRetryAlternative
 		decision.FailureMessage = buildRecoveryFailureMessage(lastFailure, decision.Reason)
@@ -447,7 +459,7 @@ func buildRecoveryRetryPrompt(userInput string, summary turnAttemptSummary, fail
 
 func buildRecoveryFailureMessage(failure *turnToolFailure, reason string) string {
 	if failure == nil {
-		return "Tool workflow failed: no successful tool result was produced."
+		return "Tool workflow failed before any tool could return a usable result."
 	}
 	toolName := strings.TrimSpace(failure.ToolName)
 	if toolName == "" {
@@ -468,7 +480,7 @@ func buildRecoveryFailureMessage(failure *turnToolFailure, reason string) string
 	if reason == "" {
 		reason = "recovery stopped"
 	}
-	return fmt.Sprintf("Tool workflow failed at %s: [%s] %s (%s).", toolName, code, msg, reason)
+	return fmt.Sprintf("Tool workflow failed because %s failed: [%s] %s (%s).", toolName, code, msg, reason)
 }
 
 func containsAny(text string, hints []string) bool {
