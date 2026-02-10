@@ -64,7 +64,12 @@ type RunStartParams = {
       truncated?: boolean;
     }>;
   };
-  options: { max_steps: number };
+  options: {
+    max_steps: number;
+    prompt_profile?: string;
+    loop_profile?: string;
+    eval_tag?: string;
+  };
   recovery?: {
     enabled?: boolean;
     max_steps?: number;
@@ -101,6 +106,53 @@ let currentRun: {
   abort?: AbortController;
 } | null = null;
 
+type PromptProfile = {
+  id: string;
+  instruction: string;
+};
+
+const defaultPromptProfileID = 'natural_evidence_v2';
+
+const promptProfiles: Record<string, PromptProfile> = {
+  natural_evidence_v2: {
+    id: 'natural_evidence_v2',
+    instruction:
+      'Keep the tone natural and concise. Give a brief progress note only when necessary, and always finish with a concrete answer grounded in tool evidence.',
+  },
+  concise_direct_v1: {
+    id: 'concise_direct_v1',
+    instruction:
+      'Avoid long preambles. Start with action, then deliver a concise final answer with only the most important evidence.',
+  },
+  strict_no_preamble_v1: {
+    id: 'strict_no_preamble_v1',
+    instruction:
+      'Do not output preparatory narration. If tools are needed, call them first, then provide a final answer immediately.',
+  },
+  evidence_sections_v1: {
+    id: 'evidence_sections_v1',
+    instruction:
+      'When analysis is requested, structure the final answer with sections: Findings, Evidence, Next Steps.',
+  },
+  recovery_heavy_v1: {
+    id: 'recovery_heavy_v1',
+    instruction:
+      'When a tool fails, switch strategy quickly and keep going. Do not end with a failure unless no safe alternative exists.',
+  },
+  minimal_progress_v1: {
+    id: 'minimal_progress_v1',
+    instruction:
+      'Use at most one short progress sentence in the whole run. Prioritize final, user-ready conclusions over intermediate narration.',
+  },
+};
+
+function resolvePromptProfile(raw: unknown): PromptProfile {
+  const key = String(raw ?? '').trim().toLowerCase();
+  if (key && promptProfiles[key]) {
+    return promptProfiles[key];
+  }
+  return promptProfiles[defaultPromptProfileID];
+}
 
 function writeLogLine(parts: string[]) {
   process.stderr.write(`[ai-sidecar] ${parts.join(' ')}\n`);
@@ -501,6 +553,9 @@ async function runAgent(params: RunStartParams): Promise<void> {
   const recoveryAction = String(params?.recovery?.action ?? '').trim();
   const recoveryLastErrorCode = String(params?.recovery?.last_error_code ?? '').trim();
   const recoveryLastErrorMessage = String(params?.recovery?.last_error_message ?? '').trim();
+  const promptProfile = resolvePromptProfile(params?.options?.prompt_profile);
+  const loopProfile = String(params?.options?.loop_profile ?? '').trim().toLowerCase();
+  const evalTag = String(params?.options?.eval_tag ?? '').trim();
 
   runToolCallCount.set(runId, 0);
   notify('run.phase', {
@@ -510,6 +565,9 @@ async function runAgent(params: RunStartParams): Promise<void> {
       attempt_index: recoveryAttemptIndex,
       recovery_steps_used: recoveryStepsUsed,
       recovery_budget_left: recoveryBudgetLeft,
+      prompt_profile: promptProfile.id,
+      loop_profile: loopProfile,
+      eval_tag: evalTag,
     },
   });
   logEvent('ai.sidecar.run.start', {
@@ -530,6 +588,9 @@ async function runAgent(params: RunStartParams): Promise<void> {
     recovery_action: recoveryAction,
     recovery_last_error_code: recoveryLastErrorCode,
     recovery_last_error_message: recoveryLastErrorMessage,
+    prompt_profile: promptProfile.id,
+    loop_profile: loopProfile,
+    eval_tag: evalTag,
   });
 
   try {
@@ -556,7 +617,9 @@ async function runAgent(params: RunStartParams): Promise<void> {
       ' Always finish each run with a concrete user-facing answer. Do not stop after only a preamble or only tool calls.' +
       ' Prefer approval-free read tools (fs_list_dir/fs_stat/fs_read_file) before approval-required tools whenever they can solve the task.' +
       ' If an approval-required tool is denied, switch to an alternative allowed tool strategy before giving up.' +
-      ' If a tool fails and the payload includes suggested_fixes or normalized_args, you must follow them and retry once when safe before giving up.';
+      ' If a tool fails and the payload includes suggested_fixes or normalized_args, you must follow them and retry once when safe before giving up.' +
+      ' Prompt profile: ' + promptProfile.id + '. ' +
+      promptProfile.instruction;
 
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
       { role: 'system', content: systemPrompt },

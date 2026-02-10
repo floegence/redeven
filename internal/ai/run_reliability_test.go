@@ -1593,7 +1593,7 @@ rl.on('line', (line) => {
 
     send('run.delta', {
       run_id: runId,
-      delta: 'Recovered after approval denial by switching to fs.read_file evidence.',
+      delta: 'Recovered after approval denial by switching to fs.read_file evidence from README.md.',
     });
     send('run.end', { run_id: runId });
     process.exit(0);

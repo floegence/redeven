@@ -299,6 +299,11 @@ func startSidecar(ctx context.Context, log *slog.Logger, stateDir string, env []
 			log.Debug("ai sidecar", attrs...)
 		}
 		if err := r.Err(); err != nil {
+			errText := strings.ToLower(strings.TrimSpace(err.Error()))
+			if errors.Is(err, os.ErrClosed) || strings.Contains(errText, "file already closed") {
+				log.Debug("ai sidecar stderr closed", "component", "ai_sidecar", "error", err)
+				return
+			}
 			log.Warn("ai sidecar stderr scan failed", "component", "ai_sidecar", "error", err)
 		}
 	}()

@@ -122,6 +122,7 @@ type run struct {
 	totalToolCalls                  int
 	recoveryState                   turnRecoveryState
 	taskLoopCfg                     taskLoopConfig
+	taskLoopProfile                 string
 	taskLoopState                   taskLoopState
 	finalizationReason              string
 }
@@ -132,6 +133,8 @@ type sidecarProvider struct {
 	BaseURL   string `json:"base_url,omitempty"`
 	APIKeyEnv string `json:"api_key_env"`
 }
+
+const defaultPromptProfileID = "natural_evidence_v2"
 
 func newRun(opts runOptions) *run {
 	var runMeta *session.Meta
@@ -188,6 +191,7 @@ func newRun(opts runOptions) *run {
 			FailureSignatures: map[string]int{},
 		},
 		taskLoopCfg:         defaultTaskLoopConfig(),
+		taskLoopProfile:     defaultTaskLoopProfileID,
 		taskLoopState:       newTaskLoopState(""),
 		lifecycleMinEmitGap: 600 * time.Millisecond,
 	}
@@ -619,6 +623,12 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if strings.TrimSpace(req.Options.PromptProfile) == "" {
+		req.Options.PromptProfile = defaultPromptProfileID
+	}
+	if profileID, _ := resolveTaskLoopConfigProfile(req.Options.LoopProfile); strings.TrimSpace(req.Options.LoopProfile) == "" {
+		req.Options.LoopProfile = profileID
+	}
 	r.setFinalizationReason("")
 	startedAt := time.Now()
 	r.persistRunRecord(RunStateRunning, "", "", startedAt.UnixMilli(), 0)
@@ -631,6 +641,9 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		runStartPayload["context_anchor_count"] = len(req.ContextPackage.Anchors)
 		runStartPayload["context_summary_chars"] = utf8.RuneCountInString(strings.TrimSpace(req.ContextPackage.HistorySummary))
 	}
+	runStartPayload["prompt_profile"] = strings.TrimSpace(req.Options.PromptProfile)
+	runStartPayload["loop_profile"] = strings.TrimSpace(req.Options.LoopProfile)
+	runStartPayload["eval_tag"] = strings.TrimSpace(req.Options.EvalTag)
 	r.persistRunEvent("run.start", RealtimeStreamKindLifecycle, runStartPayload)
 	defer func() {
 		endReason := strings.TrimSpace(r.getEndReason())
@@ -730,6 +743,11 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	}
 	toolRequiredIntents := r.cfg.EffectiveToolRequiredIntents()
 	r.requiresTools = shouldRequireToolExecution(req.Input.Text, toolRequiredIntents)
+	r.taskLoopProfile, r.taskLoopCfg = resolveTaskLoopConfigProfile(req.Options.LoopProfile)
+	req.Options.LoopProfile = r.taskLoopProfile
+	if strings.TrimSpace(req.Options.PromptProfile) == "" {
+		req.Options.PromptProfile = defaultPromptProfileID
+	}
 	taskObjective := strings.TrimSpace(req.Input.Text)
 	if req.ContextPackage != nil {
 		if v := strings.TrimSpace(req.ContextPackage.TaskObjective); v != "" {
@@ -747,6 +765,9 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	r.debug("ai.run.start",
 		"model", modelID,
 		"max_steps", req.Options.MaxSteps,
+		"prompt_profile", strings.TrimSpace(req.Options.PromptProfile),
+		"loop_profile", strings.TrimSpace(r.taskLoopProfile),
+		"eval_tag", strings.TrimSpace(req.Options.EvalTag),
 		"history_count", len(req.History),
 		"attachment_count", len(req.Input.Attachments),
 		"input_chars", utf8.RuneCountInString(strings.TrimSpace(req.Input.Text)),
@@ -1965,7 +1986,8 @@ func (r *run) finalizeIfContextCanceled(ctx context.Context) bool {
 	if r == nil || ctx == nil {
 		return false
 	}
-	if ctx.Err() == nil {
+	ctxErr := ctx.Err()
+	if ctxErr == nil {
 		return false
 	}
 	reason := "disconnected"
@@ -1981,9 +2003,16 @@ func (r *run) finalizeIfContextCanceled(ctx context.Context) bool {
 		r.setFinalizationReason("timed_out")
 		r.setEndReason("timed_out")
 	default:
-		r.finalizeNotice("disconnected")
-		r.setFinalizationReason("disconnected")
-		r.setEndReason("disconnected")
+		if errors.Is(ctxErr, context.DeadlineExceeded) {
+			reason = "timed_out"
+			r.finalizeNotice("timed_out")
+			r.setFinalizationReason("timed_out")
+			r.setEndReason("timed_out")
+		} else {
+			r.finalizeNotice("disconnected")
+			r.setFinalizationReason("disconnected")
+			r.setEndReason("disconnected")
+		}
 	}
 	r.debug("ai.run.context_canceled_before_send", "reason", reason)
 	r.emitLifecyclePhase("ended", map[string]any{"reason": reason})

@@ -62,6 +62,59 @@ func TestDecideTaskLoop_AnalysisRequiresSuccessfulEvidenceTool(t *testing.T) {
 	}
 }
 
+func TestDecideTaskLoop_AnalysisMissingEvidenceCitation(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultTaskLoopConfig()
+	state := newTaskLoopState("帮我分析一下~/Downloads/code/redeven这个项目")
+	summary := turnAttemptSummary{
+		AttemptIndex:       1,
+		ToolCalls:          2,
+		ToolSuccesses:      2,
+		ToolCallNames:      []string{"fs.list_dir", "fs.read_file"},
+		ToolSuccessNames:   []string{"fs.list_dir", "fs.read_file"},
+		ToolCallSignatures: []string{"fs.list_dir|path=/Users/tangjianyin/Downloads/code/redeven", "fs.read_file|path=/Users/tangjianyin/Downloads/code/redeven/README.md"},
+		AssistantText:      "这个项目整体结构清晰，我先给你总体判断，再继续展开。",
+		OutcomeHasText:     true,
+	}
+
+	decision := decideTaskLoop(cfg, &state, summary, "帮我分析一下~/Downloads/code/redeven这个项目")
+	if !decision.Continue {
+		t.Fatalf("expected continue decision, got %+v", decision)
+	}
+	if decision.Reason != "analysis_missing_evidence_citation" {
+		t.Fatalf("reason=%q, want analysis_missing_evidence_citation", decision.Reason)
+	}
+	if !strings.Contains(decision.NextPrompt, "Evidence") {
+		t.Fatalf("next_prompt=%q, want evidence citation hint", decision.NextPrompt)
+	}
+}
+
+func TestDecideTaskLoop_AnalysisCitationSatisfiedCompletes(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultTaskLoopConfig()
+	state := newTaskLoopState("帮我分析一下~/Downloads/code/redeven这个项目")
+	summary := turnAttemptSummary{
+		AttemptIndex:       1,
+		ToolCalls:          2,
+		ToolSuccesses:      2,
+		ToolCallNames:      []string{"fs.list_dir", "fs.read_file"},
+		ToolSuccessNames:   []string{"fs.read_file"},
+		ToolCallSignatures: []string{"fs.read_file|path=/Users/tangjianyin/Downloads/code/redeven/README.md"},
+		AssistantText:      "Findings: 项目结构清晰。Evidence: /Users/tangjianyin/Downloads/code/redeven/README.md。Next steps: 深入 internal/ai。",
+		OutcomeHasText:     true,
+	}
+
+	decision := decideTaskLoop(cfg, &state, summary, "帮我分析一下~/Downloads/code/redeven这个项目")
+	if decision.Continue || decision.FailRun {
+		t.Fatalf("expected completion decision, got %+v", decision)
+	}
+	if decision.Reason != "complete" {
+		t.Fatalf("reason=%q, want complete", decision.Reason)
+	}
+}
+
 func TestDecideTaskLoop_RepeatedSignatureFailsAfterNoProgress(t *testing.T) {
 	t.Parallel()
 

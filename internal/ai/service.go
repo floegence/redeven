@@ -1030,6 +1030,9 @@ func deriveThreadRunState(endReason string, runErr error) (string, string) {
 		if runErr == nil {
 			return "success", ""
 		}
+		if errors.Is(runErr, context.DeadlineExceeded) {
+			return "timed_out", "Timed out."
+		}
 		msg := strings.TrimSpace(runErr.Error())
 		if msg == "" {
 			msg = "AI failed."
@@ -1051,7 +1054,10 @@ func deriveThreadRunState(endReason string, runErr error) (string, string) {
 		return "failed", "AI failed."
 	default:
 		if runErr != nil {
-			if errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
+			if errors.Is(runErr, context.DeadlineExceeded) {
+				return "timed_out", "Timed out."
+			}
+			if errors.Is(runErr, context.Canceled) {
 				return "failed", "Disconnected."
 			}
 			msg := strings.TrimSpace(runErr.Error())

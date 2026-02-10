@@ -2,6 +2,7 @@ package ai
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -30,13 +31,57 @@ type taskLoopDecision struct {
 	FailureMessage string
 }
 
-func defaultTaskLoopConfig() taskLoopConfig {
-	return taskLoopConfig{
+const defaultTaskLoopProfileID = "fast_exit_v1"
+
+var taskLoopProfiles = map[string]taskLoopConfig{
+	"adaptive_default_v2": {
 		MaxTurns:               24,
 		MaxNoProgressTurns:     3,
 		MaxRepeatedSignatures:  3,
 		AnalysisRequireSignals: 2,
+	},
+	"fast_exit_v1": {
+		MaxTurns:               14,
+		MaxNoProgressTurns:     2,
+		MaxRepeatedSignatures:  2,
+		AnalysisRequireSignals: 1,
+	},
+	"deep_analysis_v1": {
+		MaxTurns:               28,
+		MaxNoProgressTurns:     4,
+		MaxRepeatedSignatures:  4,
+		AnalysisRequireSignals: 3,
+	},
+	"conservative_recovery_v1": {
+		MaxTurns:               20,
+		MaxNoProgressTurns:     2,
+		MaxRepeatedSignatures:  2,
+		AnalysisRequireSignals: 2,
+	},
+}
+
+func defaultTaskLoopConfig() taskLoopConfig {
+	cfg, ok := taskLoopProfiles[defaultTaskLoopProfileID]
+	if !ok {
+		return taskLoopConfig{
+			MaxTurns:               24,
+			MaxNoProgressTurns:     3,
+			MaxRepeatedSignatures:  3,
+			AnalysisRequireSignals: 2,
+		}
 	}
+	return cfg
+}
+
+func resolveTaskLoopConfigProfile(raw string) (string, taskLoopConfig) {
+	key := strings.TrimSpace(strings.ToLower(raw))
+	if key == "" {
+		return defaultTaskLoopProfileID, defaultTaskLoopConfig()
+	}
+	if cfg, ok := taskLoopProfiles[key]; ok {
+		return key, cfg
+	}
+	return defaultTaskLoopProfileID, defaultTaskLoopConfig()
 }
 
 func newTaskLoopState(objective string) taskLoopState {
@@ -159,6 +204,22 @@ func decideTaskLoop(cfg taskLoopConfig, state *taskLoopState, summary turnAttemp
 		return decision
 	}
 
+	if analysisIntent && analysisRequiresEvidence && hasEvidenceTool {
+		evidenceHints := extractEvidencePathHints(summary)
+		if !assistantMentionsEvidence(assistantText, evidenceHints) {
+			if state.TurnsUsed >= cfg.MaxTurns {
+				decision.FailRun = true
+				decision.Reason = "analysis_evidence_citation_limit_reached"
+				decision.FailureMessage = "I gathered tool evidence but still failed to provide a grounded citation-based answer within the loop limit. Please send one concrete file path to continue."
+				return decision
+			}
+			decision.Continue = true
+			decision.Reason = "analysis_missing_evidence_citation"
+			decision.NextPrompt = buildTaskEvidenceCitationPrompt(objective, summary, state, evidenceHints)
+			return decision
+		}
+	}
+
 	return decision
 }
 
@@ -216,6 +277,87 @@ func buildTaskEvidencePrompt(objective string, summary turnAttemptSummary, state
 		steps = append(steps, "Previous response preview: "+truncateRunes(txt, 260))
 	}
 	return strings.Join(steps, "\n")
+}
+
+func buildTaskEvidenceCitationPrompt(objective string, summary turnAttemptSummary, state *taskLoopState, evidenceHints []string) string {
+	steps := []string{
+		"Task orchestrator quality gate: current answer is missing concrete evidence citation.",
+		fmt.Sprintf("Turn progress: %d turns used.", state.TurnsUsed),
+		"Do not repeat a preamble.",
+		"Use existing successful tool outputs first.",
+		"Now produce a final answer with sections: Findings, Evidence, Next steps.",
+		"In Evidence, cite concrete absolute file paths or command outputs from this run.",
+	}
+	if goal := strings.TrimSpace(objective); goal != "" {
+		steps = append(steps, "Objective: "+goal)
+	}
+	if len(evidenceHints) > 0 {
+		steps = append(steps, "Available evidence paths: "+strings.Join(evidenceHints, ", "))
+	}
+	if len(summary.ToolCallNames) > 0 {
+		steps = append(steps, "Recent tool sequence: "+strings.Join(uniqueToolNames(summary.ToolCallNames), " -> "))
+	}
+	if txt := strings.TrimSpace(summary.AssistantText); txt != "" {
+		steps = append(steps, "Previous response preview: "+truncateRunes(txt, 260))
+	}
+	return strings.Join(steps, "\n")
+}
+
+func extractEvidencePathHints(summary turnAttemptSummary) []string {
+	if len(summary.ToolCallSignatures) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(summary.ToolCallSignatures))
+	for _, sig := range summary.ToolCallSignatures {
+		parts := strings.Split(strings.TrimSpace(sig), "|")
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			value := ""
+			if strings.HasPrefix(part, "path=") {
+				value = strings.TrimSpace(part[len("path="):])
+			} else if strings.HasPrefix(part, "cwd=") {
+				value = strings.TrimSpace(part[len("cwd="):])
+			}
+			if value == "" {
+				continue
+			}
+			key := strings.ToLower(value)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, value)
+			if len(out) >= 8 {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+func assistantMentionsEvidence(text string, pathHints []string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	if normalized == "" {
+		return false
+	}
+	if len(pathHints) == 0 {
+		return containsAny(normalized, []string{"evidence", "findings", "readme", "package.json", "go.mod", "/"})
+	}
+	for _, hint := range pathHints {
+		h := strings.ToLower(strings.TrimSpace(hint))
+		if h == "" {
+			continue
+		}
+		if strings.Contains(normalized, h) {
+			return true
+		}
+		base := strings.ToLower(strings.TrimSpace(filepath.Base(h)))
+		if base != "" && base != "." && base != "/" && strings.Contains(normalized, base) {
+			return true
+		}
+	}
+	return false
 }
 
 func buildTaskSynthesisPrompt(objective string, summary turnAttemptSummary, state *taskLoopState) string {

@@ -139,6 +139,13 @@ type RunAttachmentIn struct {
 
 type RunOptions struct {
 	MaxSteps int `json:"max_steps"`
+
+	// PromptProfile selects the sidecar prompt strategy.
+	PromptProfile string `json:"prompt_profile,omitempty"`
+	// LoopProfile selects the Go-side task-loop strategy.
+	LoopProfile string `json:"loop_profile,omitempty"`
+	// EvalTag is an optional experiment tag for diagnostics/evaluation only.
+	EvalTag string `json:"eval_tag,omitempty"`
 }
 
 type ToolApprovalRequest struct {
