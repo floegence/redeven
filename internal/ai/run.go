@@ -235,6 +235,152 @@ func (r *run) sendStreamEvent(ev any) {
 	}
 }
 
+func (r *run) debug(event string, attrs ...any) {
+	if r == nil || r.log == nil {
+		return
+	}
+	event = strings.TrimSpace(event)
+	if event == "" {
+		event = "ai.run"
+	}
+	base := []any{
+		"event", event,
+		"run_id", strings.TrimSpace(r.id),
+		"thread_id", strings.TrimSpace(r.threadID),
+		"endpoint_id", strings.TrimSpace(r.endpointID),
+		"channel_id", strings.TrimSpace(r.channelID),
+	}
+	base = append(base, attrs...)
+	r.log.Debug("ai run", base...)
+}
+
+func errorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return strings.TrimSpace(err.Error())
+}
+
+func sanitizeLogText(raw string, maxRunes int) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	cleaned := strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n', r == '\r', r == '\t':
+			return ' '
+		case r < 0x20 || r == 0x7f:
+			return ' '
+		default:
+			return r
+		}
+	}, raw)
+	cleaned = strings.Join(strings.Fields(cleaned), " ")
+	if maxRunes > 0 {
+		rs := []rune(cleaned)
+		if len(rs) > maxRunes {
+			return string(rs[:maxRunes]) + "... (truncated)"
+		}
+	}
+	return cleaned
+}
+
+func isSensitiveLogKey(key string) bool {
+	k := strings.ToLower(strings.TrimSpace(key))
+	if k == "" {
+		return false
+	}
+	direct := map[string]struct{}{
+		"content_utf8":   {},
+		"content_base64": {},
+		"api_key":        {},
+		"apikey":         {},
+		"authorization":  {},
+		"cookie":         {},
+		"set_cookie":     {},
+		"password":       {},
+		"secret":         {},
+		"token":          {},
+	}
+	if _, ok := direct[k]; ok {
+		return true
+	}
+	return strings.Contains(k, "token") || strings.Contains(k, "secret") || strings.Contains(k, "password") || strings.Contains(k, "api_key")
+}
+
+func redactAnyForLog(key string, in any, depth int) any {
+	if depth > 4 {
+		return "[omitted]"
+	}
+	if isSensitiveLogKey(key) {
+		switch v := in.(type) {
+		case string:
+			return fmt.Sprintf("[redacted:%d chars]", utf8.RuneCountInString(v))
+		case []byte:
+			return fmt.Sprintf("[redacted:%d bytes]", len(v))
+		default:
+			return "[redacted]"
+		}
+	}
+	switch v := in.(type) {
+	case string:
+		return sanitizeLogText(v, 200)
+	case []byte:
+		return fmt.Sprintf("[bytes:%d]", len(v))
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, vv := range v {
+			out[k] = redactAnyForLog(k, vv, depth+1)
+		}
+		return out
+	case []any:
+		limit := len(v)
+		if limit > 8 {
+			limit = 8
+		}
+		out := make([]any, 0, limit+1)
+		for i := 0; i < limit; i++ {
+			out = append(out, redactAnyForLog("", v[i], depth+1))
+		}
+		if len(v) > limit {
+			out = append(out, fmt.Sprintf("[... %d more items]", len(v)-limit))
+		}
+		return out
+	default:
+		return in
+	}
+}
+
+func redactToolArgsForLog(toolName string, args map[string]any) map[string]any {
+	_ = toolName
+	if args == nil {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(args))
+	for k, v := range args {
+		out[k] = redactAnyForLog(k, v, 0)
+	}
+	return out
+}
+
+func previewAnyForLog(v any, maxRunes int) string {
+	if maxRunes <= 0 {
+		maxRunes = 512
+	}
+	switch x := v.(type) {
+	case string:
+		return sanitizeLogText(x, maxRunes)
+	case []byte:
+		return sanitizeLogText(string(x), maxRunes)
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return sanitizeLogText(fmt.Sprintf("<marshal_error:%v>", err), maxRunes)
+	}
+	return sanitizeLogText(string(b), maxRunes)
+}
+
 func (r *run) approveTool(toolID string, approved bool) error {
 	if r == nil {
 		return errors.New("nil run")
@@ -260,13 +406,30 @@ func (r *run) approveTool(toolID string, approved bool) error {
 	}
 }
 
-func (r *run) run(ctx context.Context, req RunRequest) error {
+func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	if r == nil {
 		return errors.New("nil run")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	startedAt := time.Now()
+	defer func() {
+		endReason := strings.TrimSpace(r.getEndReason())
+		if endReason == "" {
+			if retErr != nil {
+				endReason = "error"
+			} else {
+				endReason = "complete"
+			}
+		}
+		r.debug("ai.run.end",
+			"end_reason", endReason,
+			"cancel_reason", strings.TrimSpace(r.getCancelReason()),
+			"duration_ms", time.Since(startedAt).Milliseconds(),
+			"error", sanitizeLogText(errorString(retErr), 256),
+		)
+	}()
 	ctx, cancel := context.WithCancel(ctx)
 	r.muCancel.Lock()
 	r.cancelFn = cancel
@@ -298,6 +461,13 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 	modelID := strings.TrimSpace(req.Model)
 	providerID, _, ok := strings.Cut(modelID, "/")
 	providerID = strings.TrimSpace(providerID)
+	r.debug("ai.run.start",
+		"model", modelID,
+		"max_steps", req.Options.MaxSteps,
+		"history_count", len(req.History),
+		"attachment_count", len(req.Input.Attachments),
+		"input_chars", utf8.RuneCountInString(strings.TrimSpace(req.Input.Text)),
+	)
 	if !ok || providerID == "" {
 		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Invalid model id"})
 		return fmt.Errorf("invalid model id %q", modelID)
@@ -370,6 +540,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 	r.mu.Lock()
 	r.sidecar = sc
 	r.mu.Unlock()
+	r.debug("ai.run.sidecar.started", "script_path", sanitizeLogText(r.sidecarScriptPath, 256))
 	defer sc.close()
 	go func() {
 		<-ctx.Done()
@@ -403,6 +574,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Failed to initialize AI sidecar"})
 		return err
 	}
+	r.debug("ai.run.sidecar.initialized", "provider_count", len(providers))
 
 	// Resolve attachments (best-effort).
 	sidecarAttachments := make([]map[string]any, 0, len(req.Input.Attachments))
@@ -430,6 +602,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 		r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "Failed to start AI run"})
 		return err
 	}
+	r.debug("ai.run.sidecar.run_start_sent", "attachment_count", len(sidecarAttachments))
 
 	activityCh := make(chan struct{}, 1)
 	signalActivity := func() {
@@ -505,17 +678,20 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 			reason := r.getCancelReason()
 			switch reason {
 			case "canceled":
+				r.debug("ai.run.context_done", "reason", "canceled")
 				r.finalizeNotice("canceled")
 				r.setEndReason("canceled")
 				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 				return nil
 			case "timed_out":
+				r.debug("ai.run.context_done", "reason", "timed_out")
 				r.finalizeNotice("timed_out")
 				r.setEndReason("timed_out")
 				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 				return nil
 			default:
 				// Parent context canceled (browser disconnect).
+				r.debug("ai.run.context_done", "reason", "disconnected")
 				r.finalizeNotice("disconnected")
 				r.setEndReason("disconnected")
 				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
@@ -533,11 +709,13 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 			default:
 			}
 			if errors.Is(err, io.EOF) {
+				r.debug("ai.run.sidecar.eof")
 				r.finalizeNotice("disconnected")
 				r.setEndReason("disconnected")
 				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 				return nil
 			}
+			r.debug("ai.run.sidecar.recv_error", "error", sanitizeLogText(err.Error(), 256))
 			r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: "AI sidecar error"})
 			r.setEndReason("error")
 			return err
@@ -568,6 +746,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 			if strings.TrimSpace(p.RunID) != r.id || p.Delta == "" {
 				continue
 			}
+			r.debug("ai.run.delta.received", "delta_len", utf8.RuneCountInString(p.Delta))
 			_ = r.appendTextDelta(p.Delta)
 
 		case "tool.call":
@@ -589,6 +768,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 		case "run.end":
 			r.ensureNonEmptyAssistant()
 			r.setEndReason("complete")
+			r.debug("ai.run.complete")
 			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 			return nil
 
@@ -605,6 +785,7 @@ func (r *run) run(ctx context.Context, req RunRequest) error {
 			if msgErr == "" {
 				msgErr = "AI error"
 			}
+			r.debug("ai.run.error", "error", sanitizeLogText(msgErr, 256))
 			r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: msgErr})
 			r.setEndReason("error")
 			return errors.New(msgErr)
@@ -826,17 +1007,21 @@ func (r *run) ensureNonEmptyAssistant() {
 		return
 	}
 	if r.hasNonEmptyAssistantText() {
+		r.debug("ai.run.ensure_non_empty_assistant", "reason", "assistant_text_exists")
 		return
 	}
 	if toolFallback := strings.TrimSpace(r.fallbackTextFromSuccessfulTool()); toolFallback != "" {
+		r.debug("ai.run.ensure_non_empty_assistant", "reason", "tool_fallback", "preview", sanitizeLogText(toolFallback, 160))
 		_ = r.appendTextDelta(toolFallback)
 		return
 	}
 	if r.hasAssistantToolError() {
+		r.debug("ai.run.ensure_non_empty_assistant", "reason", "tool_error")
 		_ = r.appendTextDelta("Tool call failed.")
 		return
 	}
 	// Product decision: empty successful completion becomes a stable, visible assistant message.
+	r.debug("ai.run.ensure_non_empty_assistant", "reason", "no_response")
 	_ = r.appendTextDelta("No response.")
 }
 
@@ -847,17 +1032,21 @@ func (r *run) finalizeIfContextCanceled(ctx context.Context) bool {
 	if ctx.Err() == nil {
 		return false
 	}
+	reason := "disconnected"
 	switch r.getCancelReason() {
 	case "canceled":
+		reason = "canceled"
 		r.finalizeNotice("canceled")
 		r.setEndReason("canceled")
 	case "timed_out":
+		reason = "timed_out"
 		r.finalizeNotice("timed_out")
 		r.setEndReason("timed_out")
 	default:
 		r.finalizeNotice("disconnected")
 		r.setEndReason("disconnected")
 	}
+	r.debug("ai.run.context_canceled_before_send", "reason", reason)
 	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 	return true
 }
@@ -911,6 +1100,13 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		args = map[string]any{}
 	}
 
+	r.debug("ai.run.tool.call",
+		"tool_id", toolID,
+		"tool_name", toolName,
+		"requires_approval", requiresApproval(toolName),
+		"args_preview", previewAnyForLog(redactToolArgsForLog(toolName, args), 512),
+	)
+
 	// Insert a tool-call block.
 	idx := r.nextBlockIndex
 	r.nextBlockIndex++
@@ -943,6 +1139,12 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		if msg == "" {
 			msg = "Tool failed"
 		}
+		r.debug("ai.run.tool.result",
+			"tool_id", toolID,
+			"tool_name", toolName,
+			"status", "error",
+			"error", sanitizeLogText(msg, 256),
+		)
 		if r.log != nil {
 			r.log.Warn("ai tool call failed",
 				"run_id", r.id,
@@ -974,6 +1176,7 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		r.toolApprovals[toolID] = ch
 		r.waitingApproval = true
 		r.mu.Unlock()
+		r.debug("ai.run.tool.approval.requested", "tool_id", toolID, "tool_name", toolName)
 
 		approved := false
 		timedOut := false
@@ -998,9 +1201,11 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		r.mu.Unlock()
 
 		if waitErr != "" {
+			r.debug("ai.run.tool.approval.canceled", "tool_id", toolID, "tool_name", toolName, "reason", sanitizeLogText(waitErr, 128))
 			return r.sendToolResult(sc, toolID, false, nil, waitErr)
 		}
 		if timedOut {
+			r.debug("ai.run.tool.approval.timeout", "tool_id", toolID, "tool_name", toolName)
 			block.ApprovalState = "rejected"
 			block.Status = ToolCallStatusError
 			block.Error = "Approval timed out"
@@ -1009,6 +1214,7 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 			return r.sendToolResult(sc, toolID, false, nil, "approval timed out")
 		}
 		if !approved {
+			r.debug("ai.run.tool.approval.rejected", "tool_id", toolID, "tool_name", toolName)
 			block.ApprovalState = "rejected"
 			block.Status = ToolCallStatusError
 			block.Error = "Rejected by user"
@@ -1018,9 +1224,11 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		}
 
 		block.ApprovalState = "approved"
+		r.debug("ai.run.tool.approval.approved", "tool_id", toolID, "tool_name", toolName)
 	}
 
 	// Execute.
+	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", toolName)
 	block.Status = ToolCallStatusRunning
 	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 	r.persistSetToolBlock(idx, block)
@@ -1035,6 +1243,12 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 	block.Result = result
 	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 	r.persistSetToolBlock(idx, block)
+	r.debug("ai.run.tool.result",
+		"tool_id", toolID,
+		"tool_name", toolName,
+		"status", "success",
+		"result_preview", previewAnyForLog(redactAnyForLog("", result, 0), 512),
+	)
 
 	return r.sendToolResult(sc, toolID, true, result, "")
 }
@@ -1147,6 +1361,7 @@ func (r *run) sendToolResult(sc *sidecarProcess, toolID string, ok bool, result 
 	if sc == nil {
 		return errors.New("sidecar not ready")
 	}
+	errMsg = strings.TrimSpace(errMsg)
 	params := map[string]any{
 		"run_id":  r.id,
 		"tool_id": toolID,
@@ -1155,9 +1370,20 @@ func (r *run) sendToolResult(sc *sidecarProcess, toolID string, ok bool, result 
 	if ok {
 		params["result"] = result
 	} else {
-		params["error"] = strings.TrimSpace(errMsg)
+		params["error"] = errMsg
 	}
-	return sc.send("tool.result", params)
+	preview := ""
+	if ok {
+		preview = previewAnyForLog(redactAnyForLog("", result, 0), 512)
+	} else {
+		preview = sanitizeLogText(errMsg, 256)
+	}
+	r.debug("ai.run.tool.result.forwarded", "tool_id", toolID, "ok", ok, "preview", preview)
+	if err := sc.send("tool.result", params); err != nil {
+		r.debug("ai.run.tool.result.forward_failed", "tool_id", toolID, "error", sanitizeLogText(err.Error(), 256))
+		return err
+	}
+	return nil
 }
 
 func (r *run) execTool(ctx context.Context, meta *session.Meta, toolName string, args map[string]any) (any, error) {

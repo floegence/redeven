@@ -151,7 +151,14 @@ func startSidecar(ctx context.Context, log *slog.Logger, stateDir string, env []
 			if line == "" {
 				continue
 			}
-			log.Debug("ai sidecar", "line", line)
+			attrs := []any{"component", "ai_sidecar", "line", line}
+			if runID := parseRunIDFromSidecarLog(line); runID != "" {
+				attrs = append(attrs, "run_id", runID)
+			}
+			log.Debug("ai sidecar", attrs...)
+		}
+		if err := r.Err(); err != nil {
+			log.Warn("ai sidecar stderr scan failed", "component", "ai_sidecar", "error", err)
 		}
 	}()
 
@@ -171,6 +178,32 @@ func startSidecar(ctx context.Context, log *slog.Logger, stateDir string, env []
 		scanner: sc,
 		enc:     enc,
 	}, nil
+}
+
+func parseRunIDFromSidecarLog(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ""
+	}
+	const key = "run_id="
+	idx := strings.Index(line, key)
+	if idx < 0 {
+		return ""
+	}
+	rest := line[idx+len(key):]
+	if rest == "" {
+		return ""
+	}
+	end := len(rest)
+	for i, r := range rest {
+		switch r {
+		case ' ', '\t', ',', ';', '"', '\'', ']':
+			end = i
+			goto DONE
+		}
+	}
+DONE:
+	return strings.TrimSpace(rest[:end])
 }
 
 func materializeSidecar(stateDir string) (string, error) {

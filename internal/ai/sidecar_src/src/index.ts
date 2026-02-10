@@ -50,8 +50,99 @@ let currentRun: {
   abort?: AbortController;
 } | null = null;
 
-function log(...args: any[]) {
-  process.stderr.write(`[ai-sidecar] ${args.map(String).join(' ')}\n`);
+function writeLogLine(parts: string[]) {
+  process.stderr.write(`[ai-sidecar] ${parts.join(' ')}\n`);
+}
+
+function sanitizeLogText(input: unknown, maxChars = 240): string {
+  const raw = String(input ?? '').trim();
+  if (!raw) return '';
+  const cleaned = raw
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  if (maxChars > 0 && cleaned.length > maxChars) {
+    return `${cleaned.slice(0, maxChars)}... (truncated)`;
+  }
+  return cleaned;
+}
+
+function isSensitiveLogKey(key: string): boolean {
+  const k = String(key ?? '').trim().toLowerCase();
+  if (!k) return false;
+  const direct = new Set([
+    'content_utf8',
+    'content_base64',
+    'api_key',
+    'apikey',
+    'authorization',
+    'cookie',
+    'set_cookie',
+    'token',
+    'password',
+    'secret',
+  ]);
+  if (direct.has(k)) return true;
+  return k.includes('token') || k.includes('secret') || k.includes('password') || k.includes('api_key');
+}
+
+function redactForLog(key: string, value: any, depth = 0): any {
+  if (depth > 4) return '[omitted]';
+  if (isSensitiveLogKey(key)) {
+    if (typeof value === 'string') return `[redacted:${value.length} chars]`;
+    if (value instanceof Uint8Array) return `[redacted:${value.byteLength} bytes]`;
+    return '[redacted]';
+  }
+  if (typeof value === 'string') return sanitizeLogText(value, 200);
+  if (value instanceof Uint8Array) return `[bytes:${value.byteLength}]`;
+  if (Array.isArray(value)) {
+    const limit = Math.min(value.length, 8);
+    const out = [] as any[];
+    for (let i = 0; i < limit; i++) {
+      out.push(redactForLog('', value[i], depth + 1));
+    }
+    if (value.length > limit) {
+      out.push(`[... ${value.length - limit} more items]`);
+    }
+    return out;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = redactForLog(k, v, depth + 1);
+    }
+    return out;
+  }
+  return value;
+}
+
+function previewForLog(value: unknown, maxChars = 280): string {
+  try {
+    if (typeof value === 'string') {
+      return sanitizeLogText(value, maxChars);
+    }
+    return sanitizeLogText(JSON.stringify(value), maxChars);
+  } catch (e) {
+    return sanitizeLogText(String(e), maxChars);
+  }
+}
+
+function logEvent(event: string, fields: Record<string, unknown> = {}) {
+  const parts = [`event=${sanitizeLogText(event, 80)}`];
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined || v === null) continue;
+    const key = sanitizeLogText(k, 40);
+    if (!key) continue;
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+      const value = sanitizeLogText(v, 240);
+      if (!value && typeof v === 'string') continue;
+      parts.push(`${key}=${value}`);
+      continue;
+    }
+    parts.push(`${key}=${previewForLog(redactForLog(key, v), 280)}`);
+  }
+  writeLogLine(parts);
 }
 
 function send(msg: JSONRPCEnvelope) {
@@ -109,9 +200,16 @@ function getProvider(providerId: string): ProviderConfig {
   return p;
 }
 
-function createModel(modelId: string) {
+function createModel(modelId: string, runId = "") {
   const { providerId, modelName } = parseModel(modelId);
   const p = getProvider(providerId);
+  logEvent('ai.sidecar.model.selected', {
+    run_id: runId,
+    provider_id: providerId,
+    provider_type: p.type,
+    model_name: modelName,
+    has_base_url: Boolean(String(p.base_url ?? '').trim()),
+  });
   const apiKey = String(process.env[String(p.api_key_env ?? '').trim()] ?? '').trim();
   if (!apiKey) throw new Error(`Missing API key env: ${p.api_key_env}`);
 
@@ -141,6 +239,12 @@ function createModel(modelId: string) {
 
 async function callTool(runId: string, toolName: string, args: any): Promise<any> {
   const toolId = `tc_${randomUUID()}`;
+  logEvent('ai.sidecar.tool.call.emit', {
+    run_id: runId,
+    tool_id: toolId,
+    tool_name: toolName,
+    args_preview: previewForLog(redactForLog('args', args), 320),
+  });
   notify('tool.call', { run_id: runId, tool_id: toolId, tool_name: toolName, args });
 
   return await new Promise<any>((resolve, reject) => {
@@ -150,6 +254,7 @@ async function callTool(runId: string, toolName: string, args: any): Promise<any
       const w = toolWaiters.get(toolId);
       if (!w) return;
       toolWaiters.delete(toolId);
+      logEvent('ai.sidecar.tool.call.timeout', { run_id: runId, tool_id: toolId, tool_name: toolName });
       reject(new Error('Tool call timed out'));
     }, 10 * 60 * 1000);
   });
@@ -185,9 +290,16 @@ async function runAgent(params: RunStartParams): Promise<void> {
 
   const abort = new AbortController();
   currentRun = { runId, abort };
+  logEvent('ai.sidecar.run.start', {
+    run_id: runId,
+    model: String(params?.model ?? '').trim(),
+    history_count: Array.isArray(params?.history) ? params.history.length : 0,
+    attachment_count: Array.isArray(params?.input?.attachments) ? params.input.attachments.length : 0,
+    input_chars: String(params?.input?.text ?? '').trim().length,
+  });
 
   try {
-    const model = createModel(String(params.model ?? '').trim());
+    const model = createModel(String(params.model ?? '').trim(), runId);
     const maxSteps = Math.max(1, Math.min(50, Number(params?.options?.max_steps ?? 10)));
 
     const systemPrompt =
@@ -262,13 +374,16 @@ async function runAgent(params: RunStartParams): Promise<void> {
     } as any);
 
     let emitted = '';
+    let deltaCount = 0;
     for await (const delta of result.textStream) {
       if (typeof delta !== 'string') {
-        log('unexpected textStream delta type', typeof delta);
+        logEvent('ai.sidecar.stream.delta.unexpected_type', { run_id: runId, delta_type: typeof delta });
         continue;
       }
       if (!delta) continue;
       emitted += delta;
+      deltaCount += 1;
+      logEvent('ai.sidecar.stream.delta', { run_id: runId, delta_len: delta.length, delta_count: deltaCount });
       emitTextDelta(runId, delta);
     }
 
@@ -280,13 +395,15 @@ async function runAgent(params: RunStartParams): Promise<void> {
       } else if (finalText.length > emitted.length && finalText.startsWith(emitted)) {
         emitTextDelta(runId, finalText.slice(emitted.length));
       } else if (!finalText.startsWith(emitted)) {
-        log('stream mismatch: emitted text is not a prefix of final text; skipping fallback');
+        logEvent('ai.sidecar.stream.mismatch', { run_id: runId, emitted_chars: emitted.length, final_chars: finalText.length });
       }
     }
 
+    logEvent('ai.sidecar.run.end', { run_id: runId, emitted_chars: emitted.length, delta_count: deltaCount });
     notify('run.end', { run_id: runId });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    logEvent('ai.sidecar.run.error', { run_id: runId, error: msg });
     notify('run.error', { run_id: runId, error: msg });
   } finally {
     currentRun = null;
@@ -298,10 +415,20 @@ function handleToolResult(params: any) {
   if (!toolId) return;
 
   const waiter = toolWaiters.get(toolId);
-  if (!waiter) return;
+  if (!waiter) {
+    logEvent('ai.sidecar.tool.result.orphan', { run_id: String(params?.run_id ?? currentRun?.runId ?? '').trim(), tool_id: toolId });
+    return;
+  }
   toolWaiters.delete(toolId);
 
   const ok = Boolean(params?.ok);
+  logEvent('ai.sidecar.tool.result.recv', {
+    run_id: String(params?.run_id ?? currentRun?.runId ?? '').trim(),
+    tool_id: toolId,
+    ok,
+    error: ok ? '' : String(params?.error ?? 'Tool failed'),
+    result_preview: ok ? previewForLog(redactForLog('result', params?.result), 280) : '',
+  });
   if (ok) {
     waiter.resolve(params?.result);
     return;
@@ -313,6 +440,7 @@ function handleToolResult(params: any) {
 function handleCancel(params: any) {
   const runId = String(params?.run_id ?? '').trim();
   if (!currentRun || currentRun.runId !== runId) return;
+  logEvent('ai.sidecar.run.cancel', { run_id: runId });
   currentRun.abort?.abort();
 }
 
@@ -325,7 +453,7 @@ rl.on('line', (line) => {
   try {
     msg = JSON.parse(raw);
   } catch (e) {
-    log('invalid json frame', String(e));
+    logEvent('ai.sidecar.rpc.invalid_json', { error: String(e) });
     return;
   }
   const method = String(msg?.method ?? '').trim();
@@ -336,9 +464,13 @@ rl.on('line', (line) => {
   if (method === 'initialize') {
     const list = Array.isArray(params?.providers) ? params.providers : [];
     providers.splice(0, providers.length, ...list);
+    logEvent('ai.sidecar.initialize', { provider_count: list.length });
     return;
   }
   if (method === 'run.start') {
+    logEvent('ai.sidecar.run.start.received', {
+      run_id: String((params as any)?.run_id ?? '').trim(),
+    });
     void runAgent(params as RunStartParams);
     return;
   }
@@ -354,7 +486,7 @@ rl.on('line', (line) => {
 
 process.on('uncaughtException', (e) => {
   const msg = e instanceof Error ? e.stack || e.message : String(e);
-  log('uncaughtException', msg);
+  logEvent('ai.sidecar.uncaught_exception', { run_id: String(currentRun?.runId ?? '').trim(), error: msg });
 
   // Best-effort: report a terminal error to the Go agent so the UI does not hang on EOF.
   const runId = String(currentRun?.runId ?? '').trim();
@@ -371,7 +503,7 @@ process.on('uncaughtException', (e) => {
 
 process.on('unhandledRejection', (e) => {
   const msg = e instanceof Error ? e.stack || e.message : String(e);
-  log('unhandledRejection', msg);
+  logEvent('ai.sidecar.unhandled_rejection', { run_id: String(currentRun?.runId ?? '').trim(), error: msg });
 
   // Best-effort: report a terminal error to the Go agent so the UI does not hang on EOF.
   const runId = String(currentRun?.runId ?? '').trim();
