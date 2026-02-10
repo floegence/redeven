@@ -71,19 +71,19 @@ function ChatWorkingIndicator() {
   ];
 
   const nodeAnimParams = [
-    { ax: 1.3, ay: 1.1, fx: 1.1, fy: 0.8, px: 0, py: 0.4 },
-    { ax: 1.2, ay: 1.3, fx: 0.9, fy: 1.1, px: 0.7, py: 0.2 },
-    { ax: 1.2, ay: 1.3, fx: 0.9, fy: 1.1, px: 1.9, py: 0.5 },
-    { ax: 1.3, ay: 1.1, fx: 1.05, fy: 0.85, px: 0.4, py: 1.1 },
-    { ax: 1.3, ay: 1.1, fx: 1.05, fy: 0.85, px: 1.3, py: 0.9 },
+    { ax: 2.6, ay: 2.2, fx: 1.55, fy: 1.35, px: 0, py: 0.4 },
+    { ax: 2.3, ay: 2.6, fx: 1.4, fy: 1.6, px: 0.7, py: 0.2 },
+    { ax: 2.3, ay: 2.6, fx: 1.4, fy: 1.6, px: 1.9, py: 0.5 },
+    { ax: 2.6, ay: 2.2, fx: 1.55, fy: 1.35, px: 0.4, py: 1.1 },
+    { ax: 2.6, ay: 2.2, fx: 1.55, fy: 1.35, px: 1.3, py: 0.9 },
     { ax: 0, ay: 0, fx: 0, fy: 0, px: 0, py: 0 },
   ];
 
   const toCenterConnections: Array<[number, number]> = [[0, 5], [1, 5], [2, 5], [3, 5], [4, 5]];
-  const toCenterDelays = [0, 0.3, 0.6, 0.9, 1.2];
+  const toCenterDelays = [0, 0.22, 0.44, 0.66, 0.88];
 
   const sideConnections: Array<[number, number]> = [[0, 1], [0, 2], [1, 3], [2, 4], [3, 4]];
-  const sideDelays = [200, 350, 500, 250, 400];
+  const sideDelays = [120, 210, 300, 150, 240];
 
   const [nodePositions, setNodePositions] = createSignal(baseNodes.map((n) => ({ x: n.x, y: n.y })));
 
@@ -135,7 +135,7 @@ function ChatWorkingIndicator() {
                   pathLength="1"
                   stroke-dasharray="1"
                   stroke-dashoffset="1"
-                  style={{ animation: `${uid}-draw 1.5s linear ${toCenterDelays[i()]}s infinite` }}
+                  style={{ animation: `${uid}-draw 1.15s linear ${toCenterDelays[i()]}s infinite` }}
                 />
               )}
             </For>
@@ -158,7 +158,7 @@ function ChatWorkingIndicator() {
               {([from, to], i) => (
                 <circle r="1.2" fill="var(--primary)" opacity="0.8">
                   <animateMotion
-                    dur="1.5s"
+                    dur="1.05s"
                     repeatCount="indefinite"
                     begin={`${toCenterDelays[i()]}s`}
                     path={`M${nodePositions()[from].x},${nodePositions()[from].y} L${nodePositions()[to].x},${nodePositions()[to].y}`}
