@@ -7,9 +7,8 @@ import (
 )
 
 type turnCompletionConfig struct {
-	Enabled       bool
-	RequiresTools bool
-	MaxSteps      int
+	Enabled  bool
+	MaxSteps int
 }
 
 type turnCompletionDecision struct {
@@ -62,7 +61,7 @@ func decideTurnCompletion(cfg turnCompletionConfig, summary turnAttemptSummary, 
 	text := strings.TrimSpace(summary.AssistantText)
 	substantive := hasSubstantiveAssistantAnswer(text)
 	interim := looksInterimAssistantText(text)
-	hasToolCalls := summary.ToolCalls > 0
+	hasToolCalls := summary.ToolCalls > 0 || summary.OutcomeToolCalls > 0 || summary.OutcomeLastStepToolCalls > 0
 
 	digest := buildTurnProgressDigest(summary, text)
 	if digest != "" {
@@ -74,11 +73,30 @@ func decideTurnCompletion(cfg turnCompletionConfig, summary turnAttemptSummary, 
 		}
 	}
 
-	missingSynthesis := hasToolCalls && (!substantive || interim)
-	if hasToolCalls && summary.OutcomeToolCalls > 0 && !summary.OutcomeHasText {
-		missingSynthesis = true
+	outcomeFinishReason := strings.TrimSpace(strings.ToLower(summary.OutcomeFinishReason))
+	lastStepFinishReason := strings.TrimSpace(strings.ToLower(summary.OutcomeLastStepFinishReason))
+
+	missingSynthesis := false
+	if hasToolCalls {
+		missingSynthesis = !substantive || interim
+		if summary.OutcomeHasTextAfterToolsKnown {
+			if !summary.OutcomeHasTextAfterToolCalls {
+				missingSynthesis = true
+			} else if substantive && !interim {
+				missingSynthesis = false
+			}
+		} else if summary.OutcomeToolCalls > 0 && !summary.OutcomeHasText {
+			missingSynthesis = true
+		}
+
+		if outcomeFinishReason == "tool-calls" || lastStepFinishReason == "tool-calls" {
+			missingSynthesis = true
+		}
+		if outcomeFinishReason == "length" && summary.OutcomeLastStepToolCalls > 0 {
+			missingSynthesis = true
+		}
 	}
-	if cfg.RequiresTools && hasToolCalls && missingSynthesis {
+	if hasToolCalls && missingSynthesis {
 		if state.CompletionSteps >= cfg.MaxSteps {
 			decision.FailRun = true
 			decision.Reason = "completion_budget_exhausted_after_tool_calls"
@@ -126,6 +144,12 @@ func buildCompletionRetryPrompt(userInput string, summary turnAttemptSummary, st
 	}
 	if summary.ToolCalls > 0 {
 		lines = append(lines, fmt.Sprintf("Previous attempt tool calls: %d (success: %d, failures: %d).", summary.ToolCalls, summary.ToolSuccesses, len(summary.ToolFailures)))
+	}
+	if finishReason := strings.TrimSpace(summary.OutcomeFinishReason); finishReason != "" {
+		lines = append(lines, "Previous attempt finish reason: "+finishReason)
+	}
+	if summary.OutcomeHasTextAfterToolsKnown {
+		lines = append(lines, fmt.Sprintf("Previous attempt had text after tool calls: %t.", summary.OutcomeHasTextAfterToolCalls))
 	}
 	if txt := strings.TrimSpace(summary.AssistantText); txt != "" {
 		lines = append(lines, "Previous partial answer preview: "+truncateRunes(txt, 220))

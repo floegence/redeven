@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven-agent/internal/ai/threadstore"
@@ -732,6 +734,9 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	} else if threadState != nil {
 		openGoal = strings.TrimSpace(threadState.OpenGoal)
 	}
+	if continueRequest && openGoal == "" {
+		openGoal = deriveOpenGoalFromHistory(history)
+	}
 
 	effectiveInput := req.Input
 	if continueRequest && openGoal != "" {
@@ -740,7 +745,17 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		openGoal = rawUserInputText
 	}
 
-	contextBuilt := buildRunContext(history, effectiveInput.Text, openGoal)
+	toolMemories := make([]RunToolMemory, 0, 12)
+	toolCtx, cancelToolCtx := context.WithTimeout(context.Background(), persistTO)
+	recentToolCalls, toolErr := db.ListRecentThreadToolCalls(toolCtx, endpointID, threadID, 20)
+	cancelToolCtx()
+	if toolErr != nil {
+		r.log.Warn("load recent tool calls failed", "thread_id", threadID, "error", toolErr)
+	} else {
+		toolMemories = buildRunToolMemories(recentToolCalls)
+	}
+
+	contextBuilt := buildRunContext(history, effectiveInput.Text, openGoal, toolMemories)
 	historyForRun := contextBuilt.History
 
 	userMsgID, err := newUserMessageID()
@@ -882,7 +897,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 
 	finalReason := strings.TrimSpace(r.getFinalizationReason())
 	stateCtx, cancelState := context.WithTimeout(context.Background(), persistTO)
-	if finalReason == "complete" {
+	if shouldClearThreadState(finalReason) {
 		_ = db.ClearThreadState(stateCtx, endpointID, threadID)
 	} else {
 		goalForState := strings.TrimSpace(openGoal)
@@ -932,6 +947,80 @@ func buildContinueInputText(openGoal string) string {
 		"Do not repeat preamble.",
 		"Use existing tool results first, then continue with the next concrete step and provide a progress update.",
 	}, "\n")
+}
+
+func shouldClearThreadState(finalReason string) bool {
+	return strings.TrimSpace(finalReason) == "complete_answered"
+}
+
+func deriveOpenGoalFromHistory(history []RunHistoryMsg) string {
+	for i := len(history) - 1; i >= 0; i-- {
+		msg := history[i]
+		if strings.TrimSpace(strings.ToLower(msg.Role)) != "user" {
+			continue
+		}
+		text := strings.TrimSpace(msg.Text)
+		if text == "" {
+			continue
+		}
+		if isContinueRequestText(text) {
+			continue
+		}
+		return clampGoalText(text, 600)
+	}
+	return ""
+}
+
+func buildRunToolMemories(records []threadstore.ToolCallRecord) []RunToolMemory {
+	if len(records) == 0 {
+		return nil
+	}
+	out := make([]RunToolMemory, 0, len(records))
+	for _, rec := range records {
+		name := strings.TrimSpace(rec.ToolName)
+		if name == "" {
+			continue
+		}
+		out = append(out, RunToolMemory{
+			RunID:         strings.TrimSpace(rec.RunID),
+			ToolName:      name,
+			Status:        strings.TrimSpace(strings.ToLower(rec.Status)),
+			ArgsPreview:   compactJSONString(rec.ArgsJSON, 220),
+			ResultPreview: compactJSONString(rec.ResultJSON, 260),
+			ErrorCode:     strings.TrimSpace(strings.ToUpper(rec.ErrorCode)),
+			ErrorMessage:  clampGoalText(strings.TrimSpace(rec.ErrorMessage), 220),
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func compactJSONString(raw string, maxRunes int) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "{}" || raw == "null" {
+		return ""
+	}
+	var v any
+	if err := json.Unmarshal([]byte(raw), &v); err == nil {
+		if b, err := json.Marshal(v); err == nil {
+			raw = string(b)
+		}
+	}
+	raw = strings.Join(strings.Fields(raw), " ")
+	return clampGoalText(raw, maxRunes)
+}
+
+func clampGoalText(text string, maxRunes int) string {
+	text = strings.TrimSpace(text)
+	if text == "" || maxRunes <= 0 {
+		return ""
+	}
+	if utf8.RuneCountInString(text) <= maxRunes {
+		return text
+	}
+	return string([]rune(text)[:maxRunes]) + "..."
 }
 
 func deriveThreadRunState(endReason string, runErr error) (string, string) {

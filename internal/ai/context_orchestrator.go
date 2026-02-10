@@ -14,6 +14,8 @@ const (
 	historySummaryMessageLimit   = 16
 	historySummaryMaxChars       = 3_200
 	historyAssistantPreviewRunes = 180
+	historyToolMemoryKeep        = 12
+	historyToolMemoryPreview     = 280
 )
 
 var historyAnchorPattern = regexp.MustCompile(`(?:~?/[^\s"'` + "`" + `]+|\.{1,2}/[^\s"'` + "`" + `]+|\b(?:pwd|ls|cat|rg|grep|tree|go test|npm run|pnpm)\b)`)
@@ -23,14 +25,16 @@ type runContextBuildResult struct {
 	Pkg     *RunContextPackage
 }
 
-func buildRunContext(history []RunHistoryMsg, userInput string, openGoal string) runContextBuildResult {
+func buildRunContext(history []RunHistoryMsg, userInput string, openGoal string, toolMemories []RunToolMemory) runContextBuildResult {
 	normalized := normalizeHistoryMessages(history)
+	normalizedTools := normalizeRunToolMemories(toolMemories)
 	res := runContextBuildResult{
 		History: append([]RunHistoryMsg(nil), normalized...),
 		Pkg: &RunContextPackage{
-			OpenGoal: strings.TrimSpace(openGoal),
-			Stats:    map[string]int{},
-			Meta:     map[string]string{},
+			OpenGoal:     strings.TrimSpace(openGoal),
+			ToolMemories: normalizedTools,
+			Stats:        map[string]int{},
+			Meta:         map[string]string{},
 		},
 	}
 
@@ -41,12 +45,13 @@ func buildRunContext(history []RunHistoryMsg, userInput string, openGoal string)
 
 	res.Pkg.Stats["history_messages_original"] = len(normalized)
 	res.Pkg.Stats["history_chars_original"] = totalChars
+	res.Pkg.Stats["tool_memories_sent"] = len(normalizedTools)
 
 	keep := historyRecentMessageKeep
 	if len(normalized) <= keep && totalChars <= historySoftCharBudget {
 		res.Pkg.Stats["history_messages_sent"] = len(normalized)
 		res.Pkg.Stats["history_chars_sent"] = totalChars
-		res.Pkg.Anchors = extractHistoryAnchors(normalized, userInput, openGoal)
+		res.Pkg.Anchors = extractHistoryAnchors(normalized, normalizedTools, userInput, openGoal)
 		res.Pkg.Meta["compression"] = "none"
 		return res
 	}
@@ -90,7 +95,7 @@ func buildRunContext(history []RunHistoryMsg, userInput string, openGoal string)
 
 	res.History = compressed
 	res.Pkg.HistorySummary = summary
-	res.Pkg.Anchors = extractHistoryAnchors(normalized, userInput, openGoal)
+	res.Pkg.Anchors = extractHistoryAnchors(normalized, normalizedTools, userInput, openGoal)
 	res.Pkg.Stats["history_messages_sent"] = len(compressed)
 	res.Pkg.Stats["history_chars_sent"] = sentChars
 	res.Pkg.Stats["history_messages_compacted"] = len(older)
@@ -110,6 +115,40 @@ func normalizeHistoryMessages(history []RunHistoryMsg) []RunHistoryMsg {
 			continue
 		}
 		out = append(out, RunHistoryMsg{Role: role, Text: text})
+	}
+	return out
+}
+
+func normalizeRunToolMemories(in []RunToolMemory) []RunToolMemory {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]RunToolMemory, 0, len(in))
+	start := 0
+	if len(in) > historyToolMemoryKeep {
+		start = len(in) - historyToolMemoryKeep
+	}
+	for i := start; i < len(in); i++ {
+		it := in[i]
+		item := RunToolMemory{
+			RunID:         strings.TrimSpace(it.RunID),
+			ToolName:      strings.TrimSpace(it.ToolName),
+			Status:        strings.TrimSpace(strings.ToLower(it.Status)),
+			ArgsPreview:   clampRunes(strings.TrimSpace(it.ArgsPreview), historyToolMemoryPreview),
+			ResultPreview: clampRunes(strings.TrimSpace(it.ResultPreview), historyToolMemoryPreview),
+			ErrorCode:     strings.TrimSpace(strings.ToUpper(it.ErrorCode)),
+			ErrorMessage:  clampRunes(strings.TrimSpace(it.ErrorMessage), historyToolMemoryPreview),
+		}
+		if item.ToolName == "" {
+			continue
+		}
+		if item.Status == "" {
+			item.Status = "unknown"
+		}
+		out = append(out, item)
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
@@ -142,13 +181,24 @@ func summarizeHistoryMessages(history []RunHistoryMsg) string {
 	return msg
 }
 
-func extractHistoryAnchors(history []RunHistoryMsg, userInput string, openGoal string) []string {
-	textParts := make([]string, 0, len(history)+2)
+func extractHistoryAnchors(history []RunHistoryMsg, toolMemories []RunToolMemory, userInput string, openGoal string) []string {
+	textParts := make([]string, 0, len(history)+len(toolMemories)+2)
 	for _, it := range history {
 		if strings.TrimSpace(it.Text) == "" {
 			continue
 		}
 		textParts = append(textParts, it.Text)
+	}
+	for _, it := range toolMemories {
+		if v := strings.TrimSpace(it.ArgsPreview); v != "" {
+			textParts = append(textParts, v)
+		}
+		if v := strings.TrimSpace(it.ResultPreview); v != "" {
+			textParts = append(textParts, v)
+		}
+		if v := strings.TrimSpace(it.ErrorMessage); v != "" {
+			textParts = append(textParts, v)
+		}
 	}
 	if strings.TrimSpace(userInput) != "" {
 		textParts = append(textParts, userInput)
@@ -183,4 +233,18 @@ func extractHistoryAnchors(history []RunHistoryMsg, userInput string, openGoal s
 	}
 	sort.Strings(anchors)
 	return anchors
+}
+
+func clampRunes(text string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	if utf8.RuneCountInString(text) <= maxRunes {
+		return text
+	}
+	return string([]rune(text)[:maxRunes]) + "..."
 }

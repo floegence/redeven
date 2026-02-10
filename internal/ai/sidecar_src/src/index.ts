@@ -32,6 +32,15 @@ type RunStartParams = {
     open_goal?: string;
     history_summary?: string;
     anchors?: string[];
+    tool_memories?: Array<{
+      run_id?: string;
+      tool_name?: string;
+      status?: string;
+      args_preview?: string;
+      result_preview?: string;
+      error_code?: string;
+      error_message?: string;
+    }>;
     stats?: Record<string, number>;
     meta?: Record<string, string>;
   };
@@ -426,6 +435,33 @@ function buildUserContent(text: string, atts: RunStartParams['input']['attachmen
   return parts.join('');
 }
 
+function clampPromptText(input: unknown, maxChars: number): string {
+  const raw = String(input ?? '').trim();
+  if (!raw) return '';
+  if (maxChars > 0 && raw.length > maxChars) {
+    return `${raw.slice(0, maxChars)}...`;
+  }
+  return raw;
+}
+
+function formatToolMemoryForPrompt(item: any): string {
+  const toolName = clampPromptText(item?.tool_name, 64) || 'tool';
+  const status = clampPromptText(item?.status, 32).toLowerCase() || 'unknown';
+  const argsPreview = clampPromptText(item?.args_preview, 180);
+  const resultPreview = clampPromptText(item?.result_preview, 220);
+  const errorCode = clampPromptText(item?.error_code, 48);
+  const errorMessage = clampPromptText(item?.error_message, 180);
+
+  const parts: string[] = [`- [${status}] ${toolName}`];
+  if (argsPreview) parts.push(`args=${argsPreview}`);
+  if (resultPreview) parts.push(`result=${resultPreview}`);
+  if (errorCode || errorMessage) {
+    const err = [errorCode, errorMessage].filter(Boolean).join(': ');
+    parts.push(`error=${err}`);
+  }
+  return parts.join(' | ');
+}
+
 async function runAgent(params: RunStartParams): Promise<void> {
   const runId = String(params?.run_id ?? '').trim();
   if (!runId) throw new Error('Missing run_id');
@@ -519,15 +555,32 @@ async function runAgent(params: RunStartParams): Promise<void> {
           .filter((it) => it.length > 0)
           .slice(0, 12)
       : [];
+    const toolMemories = Array.isArray(contextPkg?.tool_memories)
+      ? contextPkg.tool_memories
+          .map((it) => formatToolMemoryForPrompt(it))
+          .filter((it) => it.length > 0)
+          .slice(0, 12)
+      : [];
     const contextLines: string[] = [];
     if (openGoal) {
-      contextLines.push(`<open_goal>\n${openGoal}\n</open_goal>`);
+      contextLines.push(`<open_goal>
+${openGoal}
+</open_goal>`);
     }
     if (historySummary) {
-      contextLines.push(`<history_summary>\n${historySummary}\n</history_summary>`);
+      contextLines.push(`<history_summary>
+${historySummary}
+</history_summary>`);
     }
     if (anchors.length > 0) {
-      contextLines.push(`<anchors>\n${anchors.join('\n')}\n</anchors>`);
+      contextLines.push(`<anchors>
+${anchors.join('\n')}
+</anchors>`);
+    }
+    if (toolMemories.length > 0) {
+      contextLines.push(`<recent_tool_results>
+${toolMemories.join('\n')}
+</recent_tool_results>`);
     }
     if (contextLines.length > 0) {
       messages.push({
@@ -623,10 +676,51 @@ async function runAgent(params: RunStartParams): Promise<void> {
     if (typeof finalText === 'string' && finalText) {
       if (!emitted) {
         emitTextDelta(runId, finalText);
+        emitted = finalText;
       } else if (finalText.length > emitted.length && finalText.startsWith(emitted)) {
         emitTextDelta(runId, finalText.slice(emitted.length));
+        emitted = finalText;
       } else if (!finalText.startsWith(emitted)) {
         logEvent('ai.sidecar.stream.mismatch', { run_id: runId, emitted_chars: emitted.length, final_chars: finalText.length });
+      }
+    }
+
+    const finishReasonRaw = await result.finishReason;
+    const finishReason = String(finishReasonRaw ?? '').trim().toLowerCase() || 'unknown';
+    const steps = await result.steps;
+    const stepList = Array.isArray(steps) ? steps : [];
+    const stepCount = stepList.length;
+
+    let lastStepFinishReason = '';
+    let lastStepTextChars = 0;
+    let lastStepToolCalls = 0;
+    if (stepCount > 0) {
+      const lastStep: any = stepList[stepCount - 1];
+      lastStepFinishReason = String(lastStep?.finishReason ?? '').trim().toLowerCase();
+      const lastStepText = String(lastStep?.text ?? '').trim();
+      lastStepTextChars = lastStepText.length;
+      lastStepToolCalls = Array.isArray(lastStep?.toolCalls) ? lastStep.toolCalls.length : 0;
+    }
+
+    let lastToolStepIndex = -1;
+    for (let i = 0; i < stepCount; i++) {
+      const step: any = stepList[i];
+      const toolCallCount = Array.isArray(step?.toolCalls) ? step.toolCalls.length : 0;
+      if (toolCallCount > 0) {
+        lastToolStepIndex = i;
+      }
+    }
+
+    let hasTextAfterToolCalls = true;
+    if (lastToolStepIndex >= 0) {
+      hasTextAfterToolCalls = false;
+      for (let i = lastToolStepIndex + 1; i < stepCount; i++) {
+        const step: any = stepList[i];
+        const textAfter = String(step?.text ?? '').trim();
+        if (textAfter.length > 0) {
+          hasTextAfterToolCalls = true;
+          break;
+        }
       }
     }
 
@@ -637,6 +731,12 @@ async function runAgent(params: RunStartParams): Promise<void> {
       has_text: hasVisibleText,
       text_chars: emitted.length,
       tool_calls: toolCalls,
+      finish_reason: finishReason,
+      step_count: stepCount,
+      last_step_finish_reason: lastStepFinishReason,
+      last_step_text_chars: lastStepTextChars,
+      last_step_tool_calls: lastStepToolCalls,
+      has_text_after_tool_calls: hasTextAfterToolCalls,
     });
     notify('run.phase', {
       run_id: runId,
@@ -645,6 +745,12 @@ async function runAgent(params: RunStartParams): Promise<void> {
         tool_calls: toolCalls,
         has_text: hasVisibleText,
         text_chars: emitted.length,
+        finish_reason: finishReason,
+        step_count: stepCount,
+        last_step_finish_reason: lastStepFinishReason,
+        last_step_text_chars: lastStepTextChars,
+        last_step_tool_calls: lastStepToolCalls,
+        has_text_after_tool_calls: hasTextAfterToolCalls,
         attempt_index: recoveryAttemptIndex,
         recovery_steps_used: recoveryStepsUsed,
         recovery_budget_left: recoveryBudgetLeft,
@@ -656,6 +762,12 @@ async function runAgent(params: RunStartParams): Promise<void> {
       has_text: hasVisibleText,
       delta_count: deltaCount,
       tool_calls: toolCalls,
+      finish_reason: finishReason,
+      step_count: stepCount,
+      last_step_finish_reason: lastStepFinishReason,
+      last_step_text_chars: lastStepTextChars,
+      last_step_tool_calls: lastStepToolCalls,
+      has_text_after_tool_calls: hasTextAfterToolCalls,
       recovery_attempt_index: recoveryAttemptIndex,
       recovery_steps_used: recoveryStepsUsed,
       recovery_budget_left: recoveryBudgetLeft,

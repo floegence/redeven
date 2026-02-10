@@ -1077,6 +1077,207 @@ setInterval(() => {}, 1000);
 	}
 }
 
+func TestRun_CompletionAutoContinuesAfterToolCallsWithoutRequiresToolsHint(t *testing.T) {
+	script := writeTestSidecarScript(t, `
+import { createInterface } from 'node:readline';
+
+function send(method, params) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+}
+
+let runId = '';
+let stage = 0;
+const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+rl.on('line', (line) => {
+  const msg = JSON.parse(String(line || '').trim() || '{}');
+  const method = String(msg.method || '').trim();
+
+  if (method === 'run.start') {
+    runId = String(msg.params?.run_id || '').trim();
+    const attempt = Number(msg.params?.recovery?.attempt_index || 0);
+    if (attempt === 0) {
+      stage = 1;
+      send('tool.call', {
+        run_id: runId,
+        tool_id: 'tool_stat_1',
+        tool_name: 'fs.stat',
+        args: { path: '/' },
+      });
+      return;
+    }
+
+    send('run.delta', { run_id: runId, delta: 'Synthesized answer after completion retry.' });
+    send('run.end', { run_id: runId });
+    process.exit(0);
+    return;
+  }
+
+  if (method === 'tool.result' && stage === 1) {
+    stage = 2;
+    send('run.end', { run_id: runId });
+    return;
+  }
+});
+
+setInterval(() => {}, 1000);
+`)
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_completion_without_requires_tools",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc := newTestService(t, script, func(o *Options) {
+		o.RunIdleTimeout = 4 * time.Second
+		o.RunMaxWallTime = 4 * time.Second
+	})
+
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "hello", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, "run_completion_without_requires_tools_1", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "continue"},
+		Options:  RunOptions{MaxSteps: 2},
+	}, rr); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if view == nil {
+		t.Fatalf("thread missing after run")
+	}
+	if !strings.Contains(view.LastMessagePreview, "Synthesized answer after completion retry") {
+		t.Fatalf("last_message_preview=%q, want synthesized completion text", view.LastMessagePreview)
+	}
+}
+
+func TestRun_ContinueDerivesGoalFromHistoryAndToolMemory(t *testing.T) {
+	script := writeTestSidecarScript(t, `
+import { createInterface } from 'node:readline';
+
+function send(method, params) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+}
+
+let runId = '';
+let stage = 0;
+const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+rl.on('line', (line) => {
+  const msg = JSON.parse(String(line || '').trim() || '{}');
+  const method = String(msg.method || '').trim();
+
+  if (method === 'run.start') {
+    runId = String(msg.params?.run_id || '').trim();
+    const inputText = String(msg.params?.input?.text || '').trim();
+    const openGoal = String(msg.params?.context_package?.open_goal || '').trim();
+    const toolMemories = Array.isArray(msg.params?.context_package?.tool_memories)
+      ? msg.params.context_package.tool_memories
+      : [];
+
+    if (inputText.includes('continue')) {
+      if (!openGoal.includes('Remember this objective for later')) {
+        send('run.error', { run_id: runId, error: 'missing open goal fallback from history' });
+        return;
+      }
+      if (!toolMemories.some((it) => String(it?.tool_name || '').trim() === 'fs.stat')) {
+        send('run.error', { run_id: runId, error: 'missing tool memory in context package' });
+        return;
+      }
+      send('run.delta', { run_id: runId, delta: 'Continue resumed with remembered goal and tool memory.' });
+      send('run.end', { run_id: runId });
+      process.exit(0);
+      return;
+    }
+
+    stage = 1;
+    send('tool.call', {
+      run_id: runId,
+      tool_id: 'tool_stat_1',
+      tool_name: 'fs.stat',
+      args: { path: '/' },
+    });
+    return;
+  }
+
+  if (method === 'tool.result' && stage === 1) {
+    stage = 2;
+    send('run.delta', { run_id: runId, delta: 'Workspace stat captured successfully.\n- Root maps to workspace directory.\n- Objective recorded and this turn is complete.' });
+    send('run.end', { run_id: runId });
+    return;
+  }
+});
+
+setInterval(() => {}, 1000);
+`)
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_continue_goal_tool_memory",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc := newTestService(t, script)
+
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "hello", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	rr1 := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, "run_continue_goal_tool_memory_1", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "Remember this objective for later"},
+		Options:  RunOptions{MaxSteps: 2},
+	}, rr1); err != nil {
+		t.Fatalf("StartRun first attempt: %v", err)
+	}
+
+	rr2 := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, "run_continue_goal_tool_memory_2", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "continue"},
+		Options:  RunOptions{MaxSteps: 2},
+	}, rr2); err != nil {
+		t.Fatalf("StartRun continue: %v", err)
+	}
+
+	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if view == nil {
+		t.Fatalf("thread missing after continue run")
+	}
+	if !strings.Contains(view.LastMessagePreview, "Continue resumed with remembered goal") {
+		t.Fatalf("last_message_preview=%q, want resumed goal and tool memory text", view.LastMessagePreview)
+	}
+}
+
 func TestRun_ContinueUsesOpenGoalState(t *testing.T) {
 	t.Parallel()
 

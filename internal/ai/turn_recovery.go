@@ -44,14 +44,21 @@ type turnToolFailure struct {
 }
 
 type turnAttemptSummary struct {
-	AttemptIndex     int
-	ToolCalls        int
-	ToolSuccesses    int
-	ToolFailures     []turnToolFailure
-	AssistantText    string
-	OutcomeHasText   bool
-	OutcomeTextChars int
-	OutcomeToolCalls int
+	AttemptIndex                  int
+	ToolCalls                     int
+	ToolSuccesses                 int
+	ToolFailures                  []turnToolFailure
+	AssistantText                 string
+	OutcomeHasText                bool
+	OutcomeTextChars              int
+	OutcomeToolCalls              int
+	OutcomeFinishReason           string
+	OutcomeStepCount              int
+	OutcomeLastStepFinishReason   string
+	OutcomeLastStepTextChars      int
+	OutcomeLastStepToolCalls      int
+	OutcomeHasTextAfterToolCalls  bool
+	OutcomeHasTextAfterToolsKnown bool
 }
 
 type turnRecoveryDecision struct {

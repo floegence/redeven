@@ -101,8 +101,20 @@ type RunContextPackage struct {
 	OpenGoal       string            `json:"open_goal,omitempty"`
 	HistorySummary string            `json:"history_summary,omitempty"`
 	Anchors        []string          `json:"anchors,omitempty"`
+	ToolMemories   []RunToolMemory   `json:"tool_memories,omitempty"`
 	Stats          map[string]int    `json:"stats,omitempty"`
 	Meta           map[string]string `json:"meta,omitempty"`
+}
+
+// RunToolMemory is a compact cross-attempt tool execution memory item used by context orchestration.
+type RunToolMemory struct {
+	RunID         string `json:"run_id,omitempty"`
+	ToolName      string `json:"tool_name,omitempty"`
+	Status        string `json:"status,omitempty"`
+	ArgsPreview   string `json:"args_preview,omitempty"`
+	ResultPreview string `json:"result_preview,omitempty"`
+	ErrorCode     string `json:"error_code,omitempty"`
+	ErrorMessage  string `json:"error_message,omitempty"`
 }
 
 type RunInput struct {

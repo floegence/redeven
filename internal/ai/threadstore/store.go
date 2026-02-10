@@ -977,6 +977,77 @@ ON CONFLICT(run_id, tool_id) DO UPDATE SET
 	return err
 }
 
+func (s *Store) ListRecentThreadToolCalls(ctx context.Context, endpointID string, threadID string, limit int) ([]ToolCallRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return nil, errors.New("invalid request")
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+SELECT tc.run_id, tc.tool_id, tc.tool_name, tc.status,
+       tc.args_json, tc.result_json, tc.error_code, tc.error_message,
+       tc.retryable, tc.recovery_action,
+       tc.started_at_unix_ms, tc.ended_at_unix_ms, tc.latency_ms
+FROM ai_tool_calls tc
+JOIN ai_runs r ON r.run_id = tc.run_id
+WHERE r.endpoint_id = ? AND r.thread_id = ?
+ORDER BY tc.id DESC
+LIMIT ?
+`, endpointID, threadID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	tmp := make([]ToolCallRecord, 0, limit)
+	for rows.Next() {
+		var rec ToolCallRecord
+		var retryableInt int
+		if err := rows.Scan(
+			&rec.RunID,
+			&rec.ToolID,
+			&rec.ToolName,
+			&rec.Status,
+			&rec.ArgsJSON,
+			&rec.ResultJSON,
+			&rec.ErrorCode,
+			&rec.ErrorMessage,
+			&retryableInt,
+			&rec.RecoveryAction,
+			&rec.StartedAtUnixMs,
+			&rec.EndedAtUnixMs,
+			&rec.LatencyMS,
+		); err != nil {
+			return nil, err
+		}
+		rec.Retryable = retryableInt != 0
+		tmp = append(tmp, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Reverse to ASC for stable chronological context.
+	out := make([]ToolCallRecord, 0, len(tmp))
+	for i := len(tmp) - 1; i >= 0; i-- {
+		out = append(out, tmp[i])
+	}
+	return out, nil
+}
+
 func (s *Store) AppendRunEvent(ctx context.Context, rec RunEventRecord) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")

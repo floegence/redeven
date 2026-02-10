@@ -1116,10 +1116,16 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 
 			case "run.outcome":
 				var p struct {
-					RunID     string `json:"run_id"`
-					HasText   bool   `json:"has_text"`
-					TextChars int    `json:"text_chars"`
-					ToolCalls int    `json:"tool_calls"`
+					RunID                 string `json:"run_id"`
+					HasText               bool   `json:"has_text"`
+					TextChars             int    `json:"text_chars"`
+					ToolCalls             int    `json:"tool_calls"`
+					FinishReason          string `json:"finish_reason"`
+					StepCount             int    `json:"step_count"`
+					LastStepFinishReason  string `json:"last_step_finish_reason"`
+					LastStepTextChars     int    `json:"last_step_text_chars"`
+					LastStepToolCalls     int    `json:"last_step_tool_calls"`
+					HasTextAfterToolCalls *bool  `json:"has_text_after_tool_calls"`
 				}
 				_ = json.Unmarshal(msg.Params, &p)
 				if strings.TrimSpace(p.RunID) != r.id {
@@ -1128,10 +1134,25 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				attemptSummary.OutcomeHasText = p.HasText
 				attemptSummary.OutcomeTextChars = p.TextChars
 				attemptSummary.OutcomeToolCalls = p.ToolCalls
+				attemptSummary.OutcomeFinishReason = strings.TrimSpace(strings.ToLower(p.FinishReason))
+				attemptSummary.OutcomeStepCount = p.StepCount
+				attemptSummary.OutcomeLastStepFinishReason = strings.TrimSpace(strings.ToLower(p.LastStepFinishReason))
+				attemptSummary.OutcomeLastStepTextChars = p.LastStepTextChars
+				attemptSummary.OutcomeLastStepToolCalls = p.LastStepToolCalls
+				attemptSummary.OutcomeHasTextAfterToolsKnown = p.HasTextAfterToolCalls != nil
+				if p.HasTextAfterToolCalls != nil {
+					attemptSummary.OutcomeHasTextAfterToolCalls = *p.HasTextAfterToolCalls
+				}
 				r.persistRunEvent("turn.outcome", RealtimeStreamKindLifecycle, map[string]any{
-					"has_text":   p.HasText,
-					"text_chars": p.TextChars,
-					"tool_calls": p.ToolCalls,
+					"has_text":                  p.HasText,
+					"text_chars":                p.TextChars,
+					"tool_calls":                p.ToolCalls,
+					"finish_reason":             attemptSummary.OutcomeFinishReason,
+					"step_count":                p.StepCount,
+					"last_step_finish_reason":   attemptSummary.OutcomeLastStepFinishReason,
+					"last_step_text_chars":      p.LastStepTextChars,
+					"last_step_tool_calls":      p.LastStepToolCalls,
+					"has_text_after_tool_calls": p.HasTextAfterToolCalls,
 				})
 
 			case "tool.error.classified":
@@ -1251,9 +1272,8 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				}
 
 				completionDecision := decideTurnCompletion(turnCompletionConfig{
-					Enabled:       true,
-					RequiresTools: r.requiresTools,
-					MaxSteps:      r.recoveryMaxSteps + 1,
+					Enabled:  true,
+					MaxSteps: r.recoveryMaxSteps + 1,
 				}, attemptSummary, &r.recoveryState, req.Input.Text)
 
 				if completionDecision.Continue {
@@ -1319,7 +1339,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 					"attempt_tool_failures": len(attemptSummary.ToolFailures),
 				})
 				r.ensureNonEmptyAssistant()
-				r.setFinalizationReason("complete")
+				r.setFinalizationReason("complete_answered")
 				r.setEndReason("complete")
 				r.debug("ai.run.complete")
 				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})

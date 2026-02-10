@@ -231,3 +231,101 @@ func TestStore_UpdateThreadModelID_DoesNotTouchUpdatedAt(t *testing.T) {
 		t.Fatalf("UpdatedAtUnixMs changed: got=%d want=%d", th.UpdatedAtUnixMs, updatedAt)
 	}
 }
+
+func TestStore_ListRecentThreadToolCalls(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+
+	if err := s.UpsertRun(ctx, RunRecord{
+		RunID:      "run_a",
+		EndpointID: "env_1",
+		ThreadID:   "th_1",
+		MessageID:  "msg_a",
+		State:      "running",
+	}); err != nil {
+		t.Fatalf("UpsertRun run_a: %v", err)
+	}
+	if err := s.UpsertToolCall(ctx, ToolCallRecord{
+		RunID:      "run_a",
+		ToolID:     "tool_a",
+		ToolName:   "fs.stat",
+		Status:     "success",
+		ArgsJSON:   `{"path":"/"}`,
+		ResultJSON: `{"path":"/","is_dir":true}`,
+	}); err != nil {
+		t.Fatalf("UpsertToolCall tool_a: %v", err)
+	}
+
+	if err := s.UpsertRun(ctx, RunRecord{
+		RunID:      "run_b",
+		EndpointID: "env_1",
+		ThreadID:   "th_1",
+		MessageID:  "msg_b",
+		State:      "running",
+	}); err != nil {
+		t.Fatalf("UpsertRun run_b: %v", err)
+	}
+	if err := s.UpsertToolCall(ctx, ToolCallRecord{
+		RunID:        "run_b",
+		ToolID:       "tool_b",
+		ToolName:     "fs.list_dir",
+		Status:       "error",
+		ArgsJSON:     `{"path":"/tmp"}`,
+		ErrorCode:    "OUTSIDE_WORKSPACE",
+		ErrorMessage: "path outside workspace root",
+	}); err != nil {
+		t.Fatalf("UpsertToolCall tool_b: %v", err)
+	}
+
+	if err := s.UpsertRun(ctx, RunRecord{
+		RunID:      "run_other",
+		EndpointID: "env_1",
+		ThreadID:   "th_other",
+		MessageID:  "msg_other",
+		State:      "running",
+	}); err != nil {
+		t.Fatalf("UpsertRun run_other: %v", err)
+	}
+	if err := s.UpsertToolCall(ctx, ToolCallRecord{
+		RunID:    "run_other",
+		ToolID:   "tool_other",
+		ToolName: "fs.read_file",
+		Status:   "success",
+		ArgsJSON: `{"path":"/README.md"}`,
+	}); err != nil {
+		t.Fatalf("UpsertToolCall tool_other: %v", err)
+	}
+
+	recs, err := s.ListRecentThreadToolCalls(ctx, "env_1", "th_1", 10)
+	if err != nil {
+		t.Fatalf("ListRecentThreadToolCalls: %v", err)
+	}
+	if len(recs) != 2 {
+		t.Fatalf("len(recs)=%d, want 2", len(recs))
+	}
+	if recs[0].RunID != "run_a" || recs[0].ToolID != "tool_a" {
+		t.Fatalf("recs[0]=%+v, want run_a/tool_a", recs[0])
+	}
+	if recs[1].RunID != "run_b" || recs[1].ToolID != "tool_b" {
+		t.Fatalf("recs[1]=%+v, want run_b/tool_b", recs[1])
+	}
+
+	latestOnly, err := s.ListRecentThreadToolCalls(ctx, "env_1", "th_1", 1)
+	if err != nil {
+		t.Fatalf("ListRecentThreadToolCalls latest: %v", err)
+	}
+	if len(latestOnly) != 1 {
+		t.Fatalf("len(latestOnly)=%d, want 1", len(latestOnly))
+	}
+	if latestOnly[0].RunID != "run_b" || latestOnly[0].ToolID != "tool_b" {
+		t.Fatalf("latestOnly[0]=%+v, want run_b/tool_b", latestOnly[0])
+	}
+}
