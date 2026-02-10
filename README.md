@@ -134,7 +134,7 @@ Multi-environment mode uses isolated state per environment:
 ## Operations and Release
 
 - GitHub Release is the source of truth for versioned binaries and checksums.
-- On `release: published`, `.github/workflows/sync-release-assets-to-r2.yml` mirrors release assets to package mirror (`release-assets/<tag>/...`).
+- On `v*` tag push, `Release Agent` publishes GitHub Release assets, then `.github/workflows/sync-release-assets-to-r2.yml` auto-runs via `workflow_run` and mirrors assets to package mirror (`release-assets/<tag>/...`).
 - After mirror integrity verification succeeds, the workflow deploys the version-manifest Worker for `https://version.agent.example.invalid/v1/manifest.json` (no manifest bucket required).
 - `install.sh` downloads from GitHub first, then falls back to external delivery mirror.
 - Installer worker deployment (`example.invalid/install.sh`) stays on downstream deployment automation and is triggered only via the `release` branch flow.
