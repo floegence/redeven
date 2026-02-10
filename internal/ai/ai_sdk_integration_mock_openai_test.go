@@ -303,14 +303,6 @@ func TestIntegration_AISDK_OpenAI_ChatCompletionsStream_GPT5_Succeeds(t *testing
 		RunMaxWallTime:      30 * time.Second,
 		RunIdleTimeout:      10 * time.Second,
 		ToolApprovalTimeout: 5 * time.Second,
-		ResolveSessionMeta: func(ch string) (*session.Meta, bool) {
-			if strings.TrimSpace(ch) != channelID {
-				return nil, false
-			}
-			m := meta
-			m.ChannelID = channelID
-			return &m, true
-		},
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			if strings.TrimSpace(providerID) != "openai" {
 				return "", false, nil
@@ -417,14 +409,6 @@ func TestIntegration_AISDK_OpenAI_ChatCompletionsStream_GPT4o_Succeeds(t *testin
 		RunMaxWallTime:      30 * time.Second,
 		RunIdleTimeout:      10 * time.Second,
 		ToolApprovalTimeout: 5 * time.Second,
-		ResolveSessionMeta: func(ch string) (*session.Meta, bool) {
-			if strings.TrimSpace(ch) != channelID {
-				return nil, false
-			}
-			m := meta
-			m.ChannelID = channelID
-			return &m, true
-		},
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			if strings.TrimSpace(providerID) != "openai" {
 				return "", false, nil

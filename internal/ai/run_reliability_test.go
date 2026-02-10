@@ -27,7 +27,7 @@ func writeTestSidecarScript(t *testing.T, js string) string {
 	return p
 }
 
-func newTestService(t *testing.T, scriptPath string, metaByChannel map[string]session.Meta, opts ...func(*Options)) *Service {
+func newTestService(t *testing.T, scriptPath string, opts ...func(*Options)) *Service {
 	t.Helper()
 
 	stateDir := t.TempDir()
@@ -54,14 +54,6 @@ func newTestService(t *testing.T, scriptPath string, metaByChannel map[string]se
 		Shell:             "bash",
 		Config:            cfg,
 		SidecarScriptPath: strings.TrimSpace(scriptPath),
-		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
-			m, ok := metaByChannel[strings.TrimSpace(channelID)]
-			if !ok {
-				return nil, false
-			}
-			m.ChannelID = strings.TrimSpace(channelID)
-			return &m, true
-		},
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			// Tests must never use real keys; the sidecar scripts are fully offline.
 			return "sk-test", true, nil
@@ -115,7 +107,7 @@ setInterval(() => {}, 1000);
 		CanExecute:        true,
 		CanAdmin:          true,
 	}
-	svc := newTestService(t, script, map[string]session.Meta{"ch_a": meta})
+	svc := newTestService(t, script)
 
 	ctx := context.Background()
 	th, err := svc.CreateThread(ctx, &meta, "hello", "")
@@ -183,7 +175,7 @@ setInterval(() => {}, 1000);
 		CanExecute:        true,
 		CanAdmin:          true,
 	}
-	svc := newTestService(t, script, map[string]session.Meta{"ch_a": meta}, func(o *Options) {
+	svc := newTestService(t, script, func(o *Options) {
 		o.PersistOpTimeout = 50 * time.Millisecond
 		o.RunIdleTimeout = 2 * time.Second
 		o.RunMaxWallTime = 2 * time.Second
@@ -247,7 +239,7 @@ setInterval(() => {}, 1000);
 		UserEmail:         "u_b@example.com",
 		CanRead:           true,
 	}
-	svc := newTestService(t, script, map[string]session.Meta{"ch_a": metaA, "ch_b": metaB})
+	svc := newTestService(t, script)
 
 	ctx := context.Background()
 	th, err := svc.CreateThread(ctx, &metaA, "hello", "")
@@ -332,7 +324,7 @@ setInterval(() => {}, 1000);
 		CanExecute:        true,
 		CanAdmin:          true,
 	}
-	svc := newTestService(t, script, map[string]session.Meta{"ch_a": meta})
+	svc := newTestService(t, script)
 
 	ctx := context.Background()
 	th, err := svc.CreateThread(ctx, &meta, "hello", "")
@@ -434,7 +426,7 @@ setInterval(() => {}, 1000);
 		CanExecute:        true,
 		CanAdmin:          true,
 	}
-	svc := newTestService(t, script, map[string]session.Meta{"ch_a": meta}, func(o *Options) {
+	svc := newTestService(t, script, func(o *Options) {
 		o.ToolApprovalTimeout = 80 * time.Millisecond
 		o.RunIdleTimeout = 2 * time.Second
 		o.RunMaxWallTime = 2 * time.Second
@@ -487,5 +479,16 @@ setInterval(() => {}, 1000);
 	}
 	if !found {
 		t.Fatalf("missing tool-call error block in assistant message: %s", string(raw))
+	}
+
+	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if view == nil {
+		t.Fatalf("thread missing after run")
+	}
+	if strings.TrimSpace(view.LastMessagePreview) != "Tool call failed." {
+		t.Fatalf("last_message_preview=%q, want %q", view.LastMessagePreview, "Tool call failed.")
 	}
 }

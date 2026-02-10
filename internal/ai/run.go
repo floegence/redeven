@@ -31,7 +31,7 @@ type runOptions struct {
 
 	AIConfig *config.AIConfig
 
-	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
+	SessionMeta        *session.Meta
 	ResolveProviderKey func(providerID string) (string, bool, error)
 
 	RunID        string
@@ -61,7 +61,7 @@ type run struct {
 	shell    string
 	cfg      *config.AIConfig
 
-	resolveSessionMeta func(channelID string) (*session.Meta, bool)
+	sessionMeta        *session.Meta
 	resolveProviderKey func(providerID string) (string, bool, error)
 
 	id           string
@@ -112,13 +112,19 @@ type sidecarProvider struct {
 }
 
 func newRun(opts runOptions) *run {
+	var runMeta *session.Meta
+	if opts.SessionMeta != nil {
+		metaCopy := *opts.SessionMeta
+		runMeta = &metaCopy
+	}
+
 	r := &run{
 		log:                opts.Log,
 		stateDir:           strings.TrimSpace(opts.StateDir),
 		fsRoot:             strings.TrimSpace(opts.FSRoot),
 		shell:              strings.TrimSpace(opts.Shell),
 		cfg:                opts.AIConfig,
-		resolveSessionMeta: opts.ResolveSessionMeta,
+		sessionMeta:        runMeta,
 		resolveProviderKey: opts.ResolveProviderKey,
 		id:                 strings.TrimSpace(opts.RunID),
 		channelID:          strings.TrimSpace(opts.ChannelID),
@@ -631,11 +637,47 @@ func (r *run) hasNonEmptyAssistantText() bool {
 	return false
 }
 
+func (r *run) hasAssistantToolError() bool {
+	if r == nil {
+		return false
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	for _, blk := range r.assistantBlocks {
+		switch b := blk.(type) {
+		case ToolCallBlock:
+			if b.Status == ToolCallStatusError {
+				return true
+			}
+		case *ToolCallBlock:
+			if b != nil && b.Status == ToolCallStatusError {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (r *run) sessionMetaForTool() (*session.Meta, error) {
+	if r == nil {
+		return nil, errors.New("nil run")
+	}
+	if r.sessionMeta == nil {
+		return nil, errors.New("missing run session metadata")
+	}
+	metaCopy := *r.sessionMeta
+	return &metaCopy, nil
+}
+
 func (r *run) ensureNonEmptyAssistant() {
 	if r == nil {
 		return
 	}
 	if r.hasNonEmptyAssistantText() {
+		return
+	}
+	if r.hasAssistantToolError() {
+		_ = r.appendTextDelta("Tool call failed.")
 		return
 	}
 	// Product decision: empty successful completion becomes a stable, visible assistant message.
@@ -718,13 +760,33 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 	r.persistSetToolBlock(idx, block)
 
-	// Permission enforcement uses authoritative session_meta.
-	if r.resolveSessionMeta == nil {
-		return r.sendToolResult(sc, toolID, false, nil, "missing session resolver")
+	setToolError := func(errMsg string) {
+		msg := strings.TrimSpace(errMsg)
+		if msg == "" {
+			msg = "Tool failed"
+		}
+		if r.log != nil {
+			r.log.Warn("ai tool call failed",
+				"run_id", r.id,
+				"thread_id", r.threadID,
+				"channel_id", r.channelID,
+				"endpoint_id", r.endpointID,
+				"tool_id", toolID,
+				"tool_name", toolName,
+				"error", msg,
+			)
+		}
+		block.Status = ToolCallStatusError
+		block.Error = msg
+		r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+		r.persistSetToolBlock(idx, block)
 	}
-	meta, ok := r.resolveSessionMeta(r.channelID)
-	if !ok || meta == nil {
-		return r.sendToolResult(sc, toolID, false, nil, "missing session metadata")
+
+	// Tool execution permissions are frozen at run start to avoid runtime session lookup drift.
+	meta, err := r.sessionMetaForTool()
+	if err != nil {
+		setToolError(err.Error())
+		return r.sendToolResult(sc, toolID, false, nil, err.Error())
 	}
 
 	// Approval gating for high-risk tools.
@@ -787,10 +849,7 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 
 	result, toolErr := r.execTool(ctx, meta, toolName, args)
 	if toolErr != nil {
-		block.Status = ToolCallStatusError
-		block.Error = toolErr.Error()
-		r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
-		r.persistSetToolBlock(idx, block)
+		setToolError(toolErr.Error())
 		return r.sendToolResult(sc, toolID, false, nil, toolErr.Error())
 	}
 

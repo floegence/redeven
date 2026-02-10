@@ -46,7 +46,7 @@ setInterval(() => {}, 1000);
 		CanExecute:        true,
 		CanAdmin:          true,
 	}
-	svc := newTestService(t, script, map[string]session.Meta{"ch_a": meta})
+	svc := newTestService(t, script)
 
 	ctx := context.Background()
 	th, err := svc.CreateThread(ctx, &meta, "hello", "")
@@ -115,7 +115,7 @@ setInterval(() => {}, 1000);
 		CanExecute:        true,
 		CanAdmin:          true,
 	}
-	svc := newTestService(t, script, map[string]session.Meta{"ch_a": meta})
+	svc := newTestService(t, script)
 
 	ctx := context.Background()
 	th, err := svc.CreateThread(ctx, &meta, "hello", "")

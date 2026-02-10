@@ -70,15 +70,14 @@ setInterval(() => {}, 1000);
 	resolveMeta := resolveMetaForTest(channelID, meta)
 
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:             logger,
-		StateDir:           stateDir,
-		FSRoot:             stateDir,
-		Shell:              "bash",
-		Config:             cfg,
-		SidecarScriptPath:  script,
-		RunMaxWallTime:     5 * time.Second,
-		RunIdleTimeout:     5 * time.Second,
-		ResolveSessionMeta: resolveMeta,
+		Logger:            logger,
+		StateDir:          stateDir,
+		FSRoot:            stateDir,
+		Shell:             "bash",
+		Config:            cfg,
+		SidecarScriptPath: script,
+		RunMaxWallTime:    5 * time.Second,
+		RunIdleTimeout:    5 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) {
 			return "sk-test", true, nil
 		},
@@ -198,6 +197,163 @@ setInterval(() => {}, 1000);
 		gw.serveHTTP(rr, req)
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("get thread status=%d, want=%d body=%s", rr.Code, http.StatusNotFound, rr.Body.String())
+		}
+	}
+}
+
+func TestGateway_AI_Run_LocalUI_ToolCallUsesRunSessionMeta(t *testing.T) {
+	t.Parallel()
+
+	script := writeTestSidecarScript(t, `
+import { createInterface } from 'node:readline';
+
+function send(method, params) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n');
+}
+
+let runId = '';
+const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+rl.on('line', (line) => {
+  const msg = JSON.parse(String(line || '').trim() || '{}');
+  const method = String(msg.method || '').trim();
+  if (method === 'run.start') {
+    runId = String(msg.params?.run_id || '').trim();
+    send('tool.call', {
+      run_id: runId,
+      tool_id: 'tool_local_1',
+      tool_name: 'fs.read_file',
+      args: { path: '/note.txt', offset: 0, max_bytes: 1024 },
+    });
+    return;
+  }
+  if (method === 'tool.result') {
+    const ok = Boolean(msg.params?.ok);
+    if (ok) {
+      const content = String(msg.params?.result?.content_utf8 || '').trim();
+      send('run.delta', { run_id: runId, delta: 'Tool read: ' + content });
+    } else {
+      send('run.delta', { run_id: runId, delta: 'Tool failed: ' + String(msg.params?.error || '') });
+    }
+    send('run.end', { run_id: runId });
+    process.exit(0);
+  }
+});
+
+setInterval(() => {}, 1000);
+`)
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	stateDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(stateDir, "note.txt"), []byte("hello-local-ui"), 0o600); err != nil {
+		t.Fatalf("write note file: %v", err)
+	}
+	cfg := &config.AIConfig{
+		Providers: []config.AIProvider{
+			{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: "https://api.openai.com/v1",
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", Label: "GPT-5 Mini", IsDefault: true}},
+			},
+		},
+	}
+
+	aiSvc, err := ai.NewService(ai.Options{
+		Logger:            logger,
+		StateDir:          stateDir,
+		FSRoot:            stateDir,
+		Shell:             "bash",
+		Config:            cfg,
+		SidecarScriptPath: script,
+		RunMaxWallTime:    5 * time.Second,
+		RunIdleTimeout:    5 * time.Second,
+		ResolveProviderAPIKey: func(string) (string, bool, error) {
+			return "sk-test", true, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("ai.NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = aiSvc.Close() })
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+	localOrigin := "http://127.0.0.1:4310"
+	gw, err := New(Options{
+		Logger:     logger,
+		Backend:    &stubBackend{},
+		DistFS:     dist,
+		ListenAddr: "127.0.0.1:0",
+		ConfigPath: writeTestConfigWithAI(t),
+		AI:         aiSvc,
+		ResolveSessionMeta: func(string) (*session.Meta, bool) {
+			return nil, false
+		},
+		LocalUIAllowedOrigins: []string{localOrigin},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	var threadID string
+	{
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads", bytes.NewBufferString(`{"title":"hello"}`))
+		req.Header.Set("Origin", localOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("create thread status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var resp struct {
+			OK   bool `json:"ok"`
+			Data struct {
+				Thread struct {
+					ThreadID string `json:"thread_id"`
+				} `json:"thread"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal create thread: %v", err)
+		}
+		threadID = strings.TrimSpace(resp.Data.Thread.ThreadID)
+		if !resp.OK || threadID == "" {
+			t.Fatalf("unexpected create thread response: %s", rr.Body.String())
+		}
+	}
+
+	{
+		body := map[string]any{
+			"thread_id": threadID,
+			"model":     "openai/gpt-5-mini",
+			"input":     map[string]any{"text": "read local file", "attachments": []any{}},
+			"options":   map[string]any{"max_steps": 1},
+		}
+		b, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/runs", bytes.NewBuffer(b))
+		req.Header.Set("Origin", localOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("run status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		stream := rr.Body.String()
+		if !strings.Contains(stream, `"toolName":"fs.read_file"`) {
+			t.Fatalf("stream missing fs.read_file tool call, body=%q", stream)
+		}
+		if !strings.Contains(stream, `"status":"success"`) {
+			t.Fatalf("stream missing successful tool status, body=%q", stream)
+		}
+		if !strings.Contains(stream, "Tool read: hello-local-ui") {
+			t.Fatalf("stream missing tool output text, body=%q", stream)
+		}
+		if strings.Contains(stream, "missing session metadata") || strings.Contains(stream, "missing session resolver") {
+			t.Fatalf("stream still contains resolver error, body=%q", stream)
+		}
+		if strings.Contains(stream, "No response.") {
+			t.Fatalf("stream unexpectedly fell back to no response, body=%q", stream)
 		}
 	}
 }
