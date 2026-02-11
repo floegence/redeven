@@ -66,10 +66,11 @@ func TestShouldCommitAttemptAssistantText(t *testing.T) {
 	t.Parallel()
 
 	summary := turnAttemptSummary{
-		ToolCalls:      1,
-		ToolSuccesses:  1,
-		AssistantText:  "我先快速扫一遍项目结构和关键配置，然后给你结论。",
-		OutcomeHasText: true,
+		ToolCalls:                1,
+		ToolSuccesses:            1,
+		AssistantText:            "我先快速扫一遍项目结构和关键配置，然后给你结论。",
+		OutcomeHasText:           true,
+		OutcomeNeedsFollowUpHint: true,
 	}
 	if shouldCommitAttemptAssistantText(summary) {
 		t.Fatalf("expected interim tool result text to be filtered")

@@ -382,6 +382,9 @@ func shouldCommitAttemptAssistantText(summary turnAttemptSummary) bool {
 		return false
 	}
 	hasTools := summary.ToolCalls > 0 || summary.OutcomeToolCalls > 0 || summary.OutcomeLastStepToolCalls > 0
+	if hasTools && summary.OutcomeHasText && !summary.OutcomeNeedsFollowUpHint {
+		return true
+	}
 	if hasTools {
 		if !hasSubstantiveAssistantAnswer(text) || looksInterimAssistantText(text) {
 			return false
@@ -1064,11 +1067,27 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				"max_attempts": maxAttemptLoops,
 				"steps_used":   r.recoveryState.RecoverySteps,
 			})
-			_ = r.appendTextDelta("I have reached the current automatic loop limit. I summarized all collected progress. Reply with one concrete next step and I will continue immediately.")
+			_ = r.appendTextDelta(r.loopExhaustionFallbackText(taskObjective, maxAttemptLoops))
 			r.setFinalizationReason("task_turn_limit_reached")
 			r.setEndReason("complete")
 			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 			return nil
+		}
+		if deadline, ok := ctx.Deadline(); ok {
+			remaining := time.Until(deadline)
+			if remaining <= 6*time.Second {
+				r.persistRunEvent("turn.deadline.guard", RealtimeStreamKindLifecycle, map[string]any{
+					"attempt_index":       attemptIdx,
+					"remaining_ms":        remaining.Milliseconds(),
+					"max_attempts":        maxAttemptLoops,
+					"recovery_steps_used": r.recoveryState.RecoverySteps,
+				})
+				_ = r.appendTextDelta(r.loopExhaustionFallbackText(taskObjective, maxAttemptLoops))
+				r.setFinalizationReason("deadline_guard")
+				r.setEndReason("complete")
+				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+				return nil
+			}
 		}
 		if attemptIdx > 0 {
 			r.needNewTextBlock = true
@@ -1435,10 +1454,14 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 
 				completionDecision := decideTurnCompletion(turnCompletionConfig{
 					Enabled:  true,
-					MaxSteps: r.recoveryMaxSteps + 1,
+					MaxSteps: 2,
 				}, attemptSummary, &r.recoveryState, req.Input.Text)
 
 				if completionDecision.Continue {
+					lastRecoveryReason = strings.TrimSpace(completionDecision.Reason)
+					lastRecoveryAction = strings.TrimSpace(string(completionDecision.Action))
+					lastRecoveryErrorCode = ""
+					lastRecoveryErrorMessage = ""
 					budgetLeft := r.recoveryMaxSteps - r.recoveryState.RecoverySteps
 					if budgetLeft < 0 {
 						budgetLeft = 0
@@ -1463,6 +1486,10 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				completionFailureReason := ""
 				completionFailureMessage := ""
 				if completionDecision.FailRun {
+					lastRecoveryReason = strings.TrimSpace(completionDecision.Reason)
+					lastRecoveryAction = strings.TrimSpace(string(completionDecision.Action))
+					lastRecoveryErrorCode = ""
+					lastRecoveryErrorMessage = ""
 					r.persistRunEvent("turn.completion.failed", RealtimeStreamKindLifecycle, map[string]any{
 						"reason":                completionDecision.Reason,
 						"action":                string(completionDecision.Action),
@@ -1479,6 +1506,10 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 
 				taskDecision := decideTaskLoop(r.taskLoopCfg, &r.taskLoopState, attemptSummary, req.Input.Text)
 				if taskDecision.Continue {
+					lastRecoveryReason = strings.TrimSpace(taskDecision.Reason)
+					lastRecoveryAction = strings.TrimSpace(string(taskDecision.Action))
+					lastRecoveryErrorCode = ""
+					lastRecoveryErrorMessage = ""
 					r.persistRunEvent("task.loop.continue", RealtimeStreamKindLifecycle, map[string]any{
 						"reason":                taskDecision.Reason,
 						"attempt_index":         attemptIdx,
@@ -1495,6 +1526,10 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				}
 
 				if taskDecision.FailRun {
+					lastRecoveryReason = strings.TrimSpace(taskDecision.Reason)
+					lastRecoveryAction = strings.TrimSpace(string(taskDecision.Action))
+					lastRecoveryErrorCode = ""
+					lastRecoveryErrorMessage = ""
 					r.persistRunEvent("task.loop.failed", RealtimeStreamKindLifecycle, map[string]any{
 						"reason":                taskDecision.Reason,
 						"attempt_index":         attemptIdx,
@@ -1904,6 +1939,25 @@ func (r *run) sessionMetaForTool() (*session.Meta, error) {
 	}
 	metaCopy := *r.sessionMeta
 	return &metaCopy, nil
+}
+
+func (r *run) loopExhaustionFallbackText(objective string, maxAttempts int) string {
+	lines := []string{
+		"I paused automatic execution to avoid a repeated tool loop.",
+	}
+	if maxAttempts > 0 {
+		lines = append(lines, fmt.Sprintf("Attempts used: %d.", maxAttempts))
+	}
+	if goal := strings.TrimSpace(objective); goal != "" {
+		lines = append(lines, "Open goal: "+truncateRunes(goal, 220))
+	}
+	if toolSummary := strings.TrimSpace(r.fallbackTextFromSuccessfulTool()); toolSummary != "" {
+		lines = append(lines, "Latest verified evidence:\n\n"+toolSummary)
+	} else if toolErr := strings.TrimSpace(r.toolErrorFallbackText()); toolErr != "" {
+		lines = append(lines, "Latest tool issue: "+toolErr)
+	}
+	lines = append(lines, "Send a concrete next step (for example, one file path) and I will continue from current progress.")
+	return strings.Join(lines, "\n\n")
 }
 
 func (r *run) ensureNonEmptyAssistant() {

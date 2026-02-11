@@ -16,17 +16,21 @@ type taskLoopConfig struct {
 }
 
 type taskLoopState struct {
-	Objective      string
-	TurnsUsed      int
-	NoProgressTurn int
-	LastDigest     string
-	Signatures     map[string]int
+	Objective         string
+	TurnsUsed         int
+	NoProgressTurn    int
+	LastDigest        string
+	Signatures        map[string]int
+	EvidenceToolSeen  bool
+	EvidencePathSet   map[string]struct{}
+	EvidencePathHints []string
 }
 
 type taskLoopDecision struct {
 	Continue       bool
 	FailRun        bool
 	Reason         string
+	Action         recoveryAction
 	NextPrompt     string
 	FailureMessage string
 }
@@ -35,25 +39,25 @@ const defaultTaskLoopProfileID = "fast_exit_v1"
 
 var taskLoopProfiles = map[string]taskLoopConfig{
 	"adaptive_default_v2": {
-		MaxTurns:               24,
-		MaxNoProgressTurns:     3,
+		MaxTurns:               12,
+		MaxNoProgressTurns:     2,
 		MaxRepeatedSignatures:  3,
 		AnalysisRequireSignals: 2,
 	},
 	"fast_exit_v1": {
-		MaxTurns:               14,
+		MaxTurns:               8,
 		MaxNoProgressTurns:     2,
 		MaxRepeatedSignatures:  2,
 		AnalysisRequireSignals: 1,
 	},
 	"deep_analysis_v1": {
-		MaxTurns:               28,
-		MaxNoProgressTurns:     4,
+		MaxTurns:               16,
+		MaxNoProgressTurns:     3,
 		MaxRepeatedSignatures:  4,
 		AnalysisRequireSignals: 3,
 	},
 	"conservative_recovery_v1": {
-		MaxTurns:               20,
+		MaxTurns:               10,
 		MaxNoProgressTurns:     2,
 		MaxRepeatedSignatures:  2,
 		AnalysisRequireSignals: 2,
@@ -86,19 +90,23 @@ func resolveTaskLoopConfigProfile(raw string) (string, taskLoopConfig) {
 
 func newTaskLoopState(objective string) taskLoopState {
 	return taskLoopState{
-		Objective:  strings.TrimSpace(objective),
-		Signatures: map[string]int{},
+		Objective:       strings.TrimSpace(objective),
+		Signatures:      map[string]int{},
+		EvidencePathSet: map[string]struct{}{},
 	}
 }
 
 func decideTaskLoop(cfg taskLoopConfig, state *taskLoopState, summary turnAttemptSummary, userInput string) taskLoopDecision {
-	decision := taskLoopDecision{Reason: "complete"}
+	decision := taskLoopDecision{Reason: "complete", Action: recoveryActionNone}
 	if state == nil {
 		tmp := newTaskLoopState("")
 		state = &tmp
 	}
 	if state.Signatures == nil {
 		state.Signatures = map[string]int{}
+	}
+	if state.EvidencePathSet == nil {
+		state.EvidencePathSet = map[string]struct{}{}
 	}
 	if cfg.MaxTurns <= 0 {
 		cfg.MaxTurns = 24
@@ -157,23 +165,22 @@ func decideTaskLoop(cfg taskLoopConfig, state *taskLoopState, summary turnAttemp
 	if objective == "" {
 		objective = strings.TrimSpace(userInput)
 	}
-	analysisIntent := isAnalysisIntent(objective, userInput)
-	analysisRequiresEvidence := hasPathHint(strings.ToLower(strings.TrimSpace(objective + "\n" + userInput)))
-	evidenceToolNames := summary.ToolSuccessNames
-	if len(evidenceToolNames) == 0 && summary.ToolSuccesses > 0 {
-		evidenceToolNames = summary.ToolCallNames
+	attemptEvidenceHints := extractEvidencePathHints(summary)
+	if len(attemptEvidenceHints) > 0 {
+		mergeTaskEvidenceHints(state, attemptEvidenceHints)
 	}
-	hasEvidenceTool := toolCallsContain(evidenceToolNames, "fs.read_file") || toolCallsContain(evidenceToolNames, "terminal.exec")
 
 	if sigHit >= cfg.MaxRepeatedSignatures {
 		if state.NoProgressTurn >= cfg.MaxNoProgressTurns-1 || state.TurnsUsed >= cfg.MaxTurns {
 			decision.FailRun = true
 			decision.Reason = "loop_guard_repeated_signature"
+			decision.Action = recoveryActionStopAfterRepeatedErr
 			decision.FailureMessage = buildLoopGuardFailureMessage(signature, summary)
 			return decision
 		}
 		decision.Continue = true
 		decision.Reason = "loop_guard_switch_strategy"
+		decision.Action = recoveryActionRetryAlternative
 		decision.NextPrompt = buildLoopGuardRetryPrompt(objective, signature, summary, state)
 		return decision
 	}
@@ -182,42 +189,15 @@ func decideTaskLoop(cfg taskLoopConfig, state *taskLoopState, summary turnAttemp
 		if state.TurnsUsed >= cfg.MaxTurns {
 			decision.FailRun = true
 			decision.Reason = "outcome_followup_limit_reached"
+			decision.Action = recoveryActionSynthesizeFinal
 			decision.FailureMessage = "I still have pending follow-up work after tool calls, but the automatic loop reached its turn limit. Send a concrete next step and I will continue immediately."
 			return decision
 		}
 		decision.Continue = true
 		decision.Reason = "outcome_requires_followup"
+		decision.Action = recoveryActionSynthesizeFinal
 		decision.NextPrompt = buildTaskSynthesisPrompt(objective, summary, state)
 		return decision
-	}
-
-	if analysisIntent && analysisRequiresEvidence && !hasEvidenceTool {
-		if state.TurnsUsed >= cfg.MaxTurns {
-			decision.FailRun = true
-			decision.Reason = "analysis_signal_limit_reached"
-			decision.FailureMessage = "I cannot gather enough code-level evidence within the current automatic loop. Please provide one concrete entry file or module path to continue."
-			return decision
-		}
-		decision.Continue = true
-		decision.Reason = "analysis_requires_more_evidence"
-		decision.NextPrompt = buildTaskEvidencePrompt(objective, summary, state)
-		return decision
-	}
-
-	if analysisIntent && analysisRequiresEvidence && hasEvidenceTool {
-		evidenceHints := extractEvidencePathHints(summary)
-		if !assistantMentionsEvidence(assistantText, evidenceHints) {
-			if state.TurnsUsed >= cfg.MaxTurns {
-				decision.FailRun = true
-				decision.Reason = "analysis_evidence_citation_limit_reached"
-				decision.FailureMessage = "I gathered tool evidence but still failed to provide a grounded citation-based answer within the loop limit. Please send one concrete file path to continue."
-				return decision
-			}
-			decision.Continue = true
-			decision.Reason = "analysis_missing_evidence_citation"
-			decision.NextPrompt = buildTaskEvidenceCitationPrompt(objective, summary, state, evidenceHints)
-			return decision
-		}
 	}
 
 	return decision
@@ -233,19 +213,6 @@ func latestTaskSignature(summary turnAttemptSummary) string {
 	return ""
 }
 
-func toolCallsContain(names []string, target string) bool {
-	t := strings.TrimSpace(strings.ToLower(target))
-	if t == "" {
-		return false
-	}
-	for _, name := range names {
-		if strings.TrimSpace(strings.ToLower(name)) == t {
-			return true
-		}
-	}
-	return false
-}
-
 func isAnalysisIntent(objective string, userInput string) bool {
 	merged := strings.ToLower(strings.TrimSpace(objective + "\n" + userInput))
 	if merged == "" {
@@ -256,51 +223,6 @@ func isAnalysisIntent(objective string, userInput string) bool {
 		"分析", "排查", "项目", "代码", "结构", "目录", "评审", "深入",
 	}
 	return containsAny(merged, analysisHints)
-}
-
-func buildTaskEvidencePrompt(objective string, summary turnAttemptSummary, state *taskLoopState) string {
-	steps := []string{
-		"Task orchestrator: keep working on the same objective.",
-		fmt.Sprintf("Turn progress: %d turns used.", state.TurnsUsed),
-		"Do not repeat a preamble.",
-		"Collect concrete evidence from real files or commands before concluding.",
-		"You must execute at least one fs.read_file or one terminal.exec (read-only) in this turn.",
-		"After tool calls, provide a structured answer with sections: Findings, Evidence, Next steps.",
-	}
-	if goal := strings.TrimSpace(objective); goal != "" {
-		steps = append(steps, "Objective: "+goal)
-	}
-	if len(summary.ToolCallNames) > 0 {
-		steps = append(steps, "Recent tool sequence: "+strings.Join(uniqueToolNames(summary.ToolCallNames), " -> "))
-	}
-	if txt := strings.TrimSpace(summary.AssistantText); txt != "" {
-		steps = append(steps, "Previous response preview: "+truncateRunes(txt, 260))
-	}
-	return strings.Join(steps, "\n")
-}
-
-func buildTaskEvidenceCitationPrompt(objective string, summary turnAttemptSummary, state *taskLoopState, evidenceHints []string) string {
-	steps := []string{
-		"Task orchestrator quality gate: current answer is missing concrete evidence citation.",
-		fmt.Sprintf("Turn progress: %d turns used.", state.TurnsUsed),
-		"Do not repeat a preamble.",
-		"Use existing successful tool outputs first.",
-		"Now produce a final answer with sections: Findings, Evidence, Next steps.",
-		"In Evidence, cite concrete absolute file paths or command outputs from this run.",
-	}
-	if goal := strings.TrimSpace(objective); goal != "" {
-		steps = append(steps, "Objective: "+goal)
-	}
-	if len(evidenceHints) > 0 {
-		steps = append(steps, "Available evidence paths: "+strings.Join(evidenceHints, ", "))
-	}
-	if len(summary.ToolCallNames) > 0 {
-		steps = append(steps, "Recent tool sequence: "+strings.Join(uniqueToolNames(summary.ToolCallNames), " -> "))
-	}
-	if txt := strings.TrimSpace(summary.AssistantText); txt != "" {
-		steps = append(steps, "Previous response preview: "+truncateRunes(txt, 260))
-	}
-	return strings.Join(steps, "\n")
 }
 
 func extractEvidencePathHints(summary turnAttemptSummary) []string {
@@ -407,6 +329,32 @@ func buildLoopGuardFailureMessage(signature string, summary turnAttemptSummary) 
 		sig = " Signature: " + sig + "."
 	}
 	return "I tried multiple automatic recovery strategies but got stuck in a repeated tool pattern." + toolPart + sig + " Please provide one concrete path or command to continue."
+}
+
+func mergeTaskEvidenceHints(state *taskLoopState, hints []string) {
+	if state == nil || len(hints) == 0 {
+		return
+	}
+	if state.EvidencePathSet == nil {
+		state.EvidencePathSet = map[string]struct{}{}
+	}
+	for _, hint := range hints {
+		trimmed := strings.TrimSpace(hint)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := state.EvidencePathSet[key]; ok {
+			continue
+		}
+		state.EvidencePathSet[key] = struct{}{}
+		state.EvidencePathHints = append(state.EvidencePathHints, trimmed)
+		if len(state.EvidencePathHints) > 12 {
+			drop := state.EvidencePathHints[0]
+			delete(state.EvidencePathSet, strings.ToLower(strings.TrimSpace(drop)))
+			state.EvidencePathHints = append([]string(nil), state.EvidencePathHints[1:]...)
+		}
+	}
 }
 
 func uniqueToolNames(names []string) []string {

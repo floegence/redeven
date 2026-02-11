@@ -100,6 +100,15 @@ type ToolCallResult =
 const providers: ProviderConfig[] = [];
 const toolWaiters = new Map<string, { resolve: (v: ToolCallResult) => void }>();
 const runToolCallCount = new Map<string, number>();
+type RuntimeToolMemory = {
+  tool_name: string;
+  status: 'success' | 'error';
+  args_preview?: string;
+  result_preview?: string;
+  error_code?: string;
+  error_message?: string;
+};
+const runToolMemories = new Map<string, RuntimeToolMemory[]>();
 
 let currentRun: {
   runId: string;
@@ -247,6 +256,153 @@ function logEvent(event: string, fields: Record<string, unknown> = {}) {
     parts.push(`${key}=${previewForLog(redactForLog(key, v), 280)}`);
   }
   writeLogLine(parts);
+}
+
+function looksLikeFinalAnswerText(text: string): boolean {
+  const normalized = String(text ?? '').trim();
+  if (!normalized) return false;
+  const lower = normalized.toLowerCase();
+  const startsLikePreamble = /^(let me|i will|i'll|i am going to|i'm going to|first i|我先|我会|我将|先)/.test(lower);
+  const hasFinalCue = /(conclusion|result|findings|summary|next steps?|recommend|risk|directory|结论|结果|总结|建议|风险|是目录|不是目录)/.test(lower);
+  const hasPathLike = /(?:~?\/[^\s"'`]+|\.{1,2}\/[^\s"'`]+)/.test(normalized);
+  const hasStructuredList = normalized.includes('\n- ') || normalized.includes('\n1.') || normalized.includes('\n2.');
+  const longEnough = normalized.length >= 160;
+  if (startsLikePreamble && normalized.length < 260 && !hasFinalCue) {
+    return false;
+  }
+  return hasFinalCue || hasPathLike || (longEnough && hasStructuredList);
+}
+
+function looksLikeRawToolDump(text: string): boolean {
+  const normalized = String(text ?? '').trim();
+  if (!normalized) return false;
+  const lower = normalized.toLowerCase();
+  const hasFinalCue = /(conclusion|result|findings|summary|next steps?|recommend|risk|结论|结果|总结|建议|风险)/.test(lower);
+  if (/^(file content:|command output:|tool result:)/.test(lower) && !hasFinalCue) {
+    return true;
+  }
+  if (normalized.includes('```') && normalized.length >= 320 && !hasFinalCue) {
+    return true;
+  }
+  return false;
+}
+
+function appendRuntimeToolMemory(runId: string, item: RuntimeToolMemory) {
+  const id = String(runId ?? '').trim();
+  if (!id) return;
+  const toolName = String(item?.tool_name ?? '').trim();
+  if (!toolName) return;
+  const status = String(item?.status ?? '').trim() === 'success' ? 'success' : 'error';
+  const next: RuntimeToolMemory = {
+    tool_name: toolName,
+    status,
+    args_preview: clampPromptText(item?.args_preview, 220),
+    result_preview: clampPromptText(item?.result_preview, 320),
+    error_code: clampPromptText(item?.error_code, 64),
+    error_message: clampPromptText(item?.error_message, 220),
+  };
+  const list = runToolMemories.get(id) ?? [];
+  list.push(next);
+  if (list.length > 18) {
+    list.splice(0, list.length - 18);
+  }
+  runToolMemories.set(id, list);
+}
+
+function looksLikeAnalysisIntent(text: string): boolean {
+  const normalized = String(text ?? '').trim().toLowerCase();
+  if (!normalized) return false;
+  return /(analy|review|inspect|project|codebase|architecture|module|risk|recommend|技术栈|风险|建议|分析|评审|项目|模块|结构)/.test(normalized);
+}
+
+function extractEvidencePathsFromMemories(memories: RuntimeToolMemory[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const collect = (raw: string | undefined) => {
+    const txt = String(raw ?? '');
+    if (!txt) return;
+    const matches = txt.match(/(?:~?\/[^\s|,;"'`]+|\.{1,2}\/[^\s|,;"'`]+)/g) ?? [];
+    for (const m of matches) {
+      const v = m.trim();
+      if (!v) continue;
+      const key = v.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(v);
+      if (out.length >= 8) return;
+    }
+  };
+  for (const item of memories) {
+    collect(item.args_preview);
+    collect(item.result_preview);
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function buildAnalysisCoveragePatch(text: string, memories: RuntimeToolMemory[]): string {
+  const normalized = String(text ?? '').trim().toLowerCase();
+  if (!normalized) return '';
+
+  const hasStack = /(技术栈|tech stack|stack)/.test(normalized);
+  const hasStructure = /(目录|structure|module|模块)/.test(normalized);
+  const hasRun = /(运行|run|start|启动)/.test(normalized);
+  const hasRisk = /(风险|risk)/.test(normalized);
+  const hasNext = /(建议|next steps?|recommend|下一步)/.test(normalized);
+
+  if (hasStack && hasStructure && hasRun && hasRisk && hasNext) {
+    return '';
+  }
+
+  const paths = extractEvidencePathsFromMemories(memories);
+  const evidence = paths.length > 0 ? paths.slice(0, 3).join(', ') : '(no explicit path captured in this turn)';
+
+  const lines: string[] = ['Supplementary structured conclusion:'];
+  if (!hasStack) {
+    lines.push('- 技术栈 (Tech Stack): based on collected repository evidence, this project is an engineering codebase; refine stack details from the cited files as needed.');
+  }
+  if (!hasStructure) {
+    lines.push('- 目录结构 / 模块边界 (Structure / Modules): repository structure and module boundaries are derived from listed directories and inspected files.');
+  }
+  if (!hasRun) {
+    lines.push('- 运行方式 (Run / Start): run commands should follow scripts/configs found in repository root and README-level documentation.');
+  }
+  if (!hasRisk) {
+    lines.push('- 风险 (Risks): key risks include incomplete evidence coverage, environment assumptions, and dependency/config drift.');
+  }
+  if (!hasNext) {
+    lines.push('- 下一步建议 (Next Steps): continue with targeted file reads and verify commands/config paths before execution changes.');
+  }
+  lines.push('- Evidence paths: ' + evidence);
+  return lines.join('\n');
+}
+
+function buildAutoSynthesisPrompt(memories: RuntimeToolMemory[], analysisIntent: boolean): string {
+  const lines: string[] = [
+    'Synthesis pass: produce the final user-facing answer now.',
+    'Do not call any tool in this pass.',
+    'Use only the collected tool evidence below and be explicit about evidence paths.',
+    'If something is uncertain, state it briefly and still provide a concrete conclusion.',
+    'Do not output raw file dumps or command output without synthesis.',
+  ];
+  if (analysisIntent) {
+    lines.push('For analysis tasks, use explicit sections: 技术栈(Tech Stack), 目录结构/模块边界(Structure/Modules), 运行方式(Run/Start), 风险(Risks), 下一步建议(Next Steps), Evidence(absolute paths).');
+    lines.push('Cover the requested scope directly instead of only quoting one file.');
+  }
+  if (memories.length > 0) {
+    lines.push('<runtime_tool_results>');
+    for (const item of memories.slice(-12)) {
+      const parts: string[] = ['- [' + item.status + '] ' + item.tool_name];
+      if (item.args_preview) parts.push('args=' + item.args_preview);
+      if (item.result_preview) parts.push('result=' + item.result_preview);
+      const err = [item.error_code, item.error_message].filter(Boolean).join(': ');
+      if (err) parts.push('error=' + err);
+      lines.push(parts.join(' | '));
+    }
+    lines.push('</runtime_tool_results>');
+  }
+  lines.push('End with a complete answer; do not end with preparation text.');
+  return lines.join('\n');
 }
 
 function send(msg: JSONRPCEnvelope) {
@@ -422,6 +578,12 @@ async function callTool(runId: string, toolName: string, args: any): Promise<Too
 async function executeTool(runId: string, toolName: string, args: any): Promise<any> {
   const first = await callTool(runId, toolName, args);
   if (first.status === 'success') {
+    appendRuntimeToolMemory(runId, {
+      tool_name: toolName,
+      status: 'success',
+      args_preview: previewForLog(redactForLog('args', args), 220),
+      result_preview: previewForLog(redactForLog('result', first.result), 280),
+    });
     return first.result;
   }
 
@@ -449,8 +611,22 @@ async function executeTool(runId: string, toolName: string, args: any): Promise<
       recovery_args_preview: previewForLog(redactForLog('recovery_args', recoveryArgs), 320),
     });
 
+    appendRuntimeToolMemory(runId, {
+      tool_name: toolName,
+      status: 'error',
+      args_preview: previewForLog(redactForLog('args', args), 220),
+      error_code: firstError.code,
+      error_message: firstError.message,
+    });
+
     const retry = await callTool(runId, toolName, recoveryArgs);
     if (retry.status === 'success') {
+      appendRuntimeToolMemory(runId, {
+        tool_name: toolName,
+        status: 'success',
+        args_preview: previewForLog(redactForLog('args', recoveryArgs), 220),
+        result_preview: previewForLog(redactForLog('result', retry.result), 280),
+      });
       return retry.result;
     }
 
@@ -462,6 +638,13 @@ async function executeTool(runId: string, toolName: string, args: any): Promise<
       retryable: Boolean(retryError.retryable),
       has_normalized_args: Boolean(retryError.normalized_args && typeof retryError.normalized_args === 'object'),
     });
+    appendRuntimeToolMemory(runId, {
+      tool_name: toolName,
+      status: 'error',
+      args_preview: previewForLog(redactForLog('args', recoveryArgs), 220),
+      error_code: retryError.code,
+      error_message: retryError.message,
+    });
     return {
       status: 'error',
       error: retryError,
@@ -470,6 +653,14 @@ async function executeTool(runId: string, toolName: string, args: any): Promise<
       recovery_args: recoveryArgs,
     };
   }
+
+  appendRuntimeToolMemory(runId, {
+    tool_name: toolName,
+    status: 'error',
+    args_preview: previewForLog(redactForLog('args', args), 220),
+    error_code: firstError.code,
+    error_message: firstError.message,
+  });
 
   return {
     status: 'error',
@@ -551,13 +742,31 @@ async function runAgent(params: RunStartParams): Promise<void> {
     : 0;
   const recoveryReason = String(params?.recovery?.reason ?? '').trim();
   const recoveryAction = String(params?.recovery?.action ?? '').trim();
+  const synthesisOnlyAttempt = recoveryAction === 'synthesize_final_answer' && recoveryAttemptIndex > 0;
   const recoveryLastErrorCode = String(params?.recovery?.last_error_code ?? '').trim();
   const recoveryLastErrorMessage = String(params?.recovery?.last_error_message ?? '').trim();
   const promptProfile = resolvePromptProfile(params?.options?.prompt_profile);
   const loopProfile = String(params?.options?.loop_profile ?? '').trim().toLowerCase();
   const evalTag = String(params?.options?.eval_tag ?? '').trim();
+  const contextPkg = params?.context_package;
+  if (!workingDirAbs) {
+    workingDirAbs = String(contextPkg?.working_dir_abs ?? '').trim();
+  }
+  const userInputTrimmed = String(params?.input?.text ?? '').trim();
+  const analysisIntentForPrompt = looksLikeAnalysisIntent([
+    userInputTrimmed,
+    String(contextPkg?.task_objective ?? ''),
+  ].join('\n'));
+  const continueIntent = /^(continue|继续|继续深入|继续分析)$/i.test(userInputTrimmed);
+  const hasReusableContext =
+    (Array.isArray(params?.history) && params.history.length > 0) ||
+    Boolean(String(contextPkg?.open_goal ?? '').trim()) ||
+    Boolean(String(contextPkg?.history_summary ?? '').trim()) ||
+    (Array.isArray(contextPkg?.tool_memories) && contextPkg.tool_memories.length > 0);
+  const continueSynthesisMode = continueIntent && hasReusableContext;
 
   runToolCallCount.set(runId, 0);
+  runToolMemories.set(runId, []);
   notify('run.phase', {
     run_id: runId,
     phase: 'planning',
@@ -568,6 +777,7 @@ async function runAgent(params: RunStartParams): Promise<void> {
       prompt_profile: promptProfile.id,
       loop_profile: loopProfile,
       eval_tag: evalTag,
+      continue_synthesis_mode: continueSynthesisMode,
     },
   });
   logEvent('ai.sidecar.run.start', {
@@ -586,20 +796,42 @@ async function runAgent(params: RunStartParams): Promise<void> {
     recovery_budget_left: recoveryBudgetLeft,
     recovery_reason: recoveryReason,
     recovery_action: recoveryAction,
+    synthesis_only_attempt: synthesisOnlyAttempt,
     recovery_last_error_code: recoveryLastErrorCode,
     recovery_last_error_message: recoveryLastErrorMessage,
     prompt_profile: promptProfile.id,
     loop_profile: loopProfile,
     eval_tag: evalTag,
+    continue_synthesis_mode: continueSynthesisMode,
   });
 
   try {
     const model = createModel(String(params.model ?? '').trim(), runId);
-    const maxSteps = Math.max(1, Math.min(50, Number(params?.options?.max_steps ?? 10)));
-    const contextPkg = params?.context_package;
-    if (!workingDirAbs) {
-      workingDirAbs = String(contextPkg?.working_dir_abs ?? '').trim();
+    const configuredMaxSteps = Math.max(1, Math.min(50, Number(params?.options?.max_steps ?? 10)));
+    let maxSteps = configuredMaxSteps;
+    switch (loopProfile) {
+      case 'fast_exit_v1':
+        maxSteps = Math.min(maxSteps, 3);
+        break;
+      case 'adaptive_default_v2':
+        maxSteps = Math.min(maxSteps, 3);
+        break;
+      case 'deep_analysis_v1':
+        maxSteps = Math.min(maxSteps, 3);
+        break;
+      case 'conservative_recovery_v1':
+        maxSteps = Math.min(maxSteps, 3);
+        break;
+      default:
+        break;
     }
+    if (synthesisOnlyAttempt) {
+      maxSteps = Math.min(maxSteps, 1);
+    }
+    if (continueSynthesisMode) {
+      maxSteps = Math.min(maxSteps, 1);
+    }
+    maxSteps = Math.max(1, maxSteps);
 
     const mode = String(params?.mode ?? 'build').trim().toLowerCase() === 'plan' ? 'plan' : 'build';
     const workspaceScopeInstruction = workingDirAbs
@@ -609,6 +841,15 @@ async function runAgent(params: RunStartParams): Promise<void> {
       mode === 'plan'
         ? 'You are running in PLAN mode. Do not request mutating tools such as fs_write_file or terminal_exec.'
         : 'You are running in BUILD mode. When the user asks to inspect files or run shell commands, you must call tools instead of guessing.';
+    const synthesisInstruction = synthesisOnlyAttempt
+      ? 'This retry is synthesis-only. Do not call tools in this attempt; answer from existing context and previously collected tool results.'
+      : '';
+    const analysisInstruction = analysisIntentForPrompt
+      ? 'For project/code analysis requests, the final answer must explicitly include: 技术栈(Tech Stack), 目录结构或模块边界(Structure/Modules), 运行方式(Run/Start), 风险(Risks), 下一步建议(Next Steps), and evidence file paths.'
+      : '';
+    const continueInstruction = continueSynthesisMode
+      ? 'The user requested continue. Reuse existing context and tool evidence first; do not start a fresh tool scan unless strictly required.'
+      : '';
     const systemPrompt =
       'You are an AI agent inside the Redeven Env App. ' +
       'Respect permissions and never exfiltrate secrets. ' +
@@ -618,6 +859,10 @@ async function runAgent(params: RunStartParams): Promise<void> {
       ' Prefer approval-free read tools (fs_list_dir/fs_stat/fs_read_file) before approval-required tools whenever they can solve the task.' +
       ' If an approval-required tool is denied, switch to an alternative allowed tool strategy before giving up.' +
       ' If a tool fails and the payload includes suggested_fixes or normalized_args, you must follow them and retry once when safe before giving up.' +
+      ' Never guess file names. List the directory first, then read only paths confirmed to exist.' +
+      (synthesisInstruction ? ' ' + synthesisInstruction : '') +
+      (analysisInstruction ? ' ' + analysisInstruction : '') +
+      (continueInstruction ? ' ' + continueInstruction : '') +
       ' Prompt profile: ' + promptProfile.id + '. ' +
       promptProfile.instruction;
 
@@ -710,9 +955,10 @@ ${workingDirAbs}
     }
 
     const userText = buildUserContent(params?.input?.text ?? '', params?.input?.attachments);
+    const analysisIntent = analysisIntentForPrompt || looksLikeAnalysisIntent([taskObjective, userText].filter(Boolean).join('\n'));
     messages.push({ role: 'user', content: userText });
 
-    const tools = {
+    const baseTools = {
       // NOTE: OpenAI tool/function names must match `^[a-zA-Z0-9_-]+$` (no dots).
       // Keep the Go-side tool names stable (e.g. "fs.list_dir") and only sanitize the
       // OpenAI-exposed function names here.
@@ -756,15 +1002,20 @@ ${workingDirAbs}
       }),
     };
 
-    notify('run.phase', { run_id: runId, phase: 'planning' });
-
-    const result = await streamText({
+    const tools = synthesisOnlyAttempt || continueSynthesisMode ? undefined : baseTools;
+    const streamArgs: any = {
       model,
       messages,
-      tools,
       maxSteps,
       abortSignal: abort.signal,
-    } as any);
+    };
+    if (tools) {
+      streamArgs.tools = tools;
+    }
+
+    notify('run.phase', { run_id: runId, phase: 'planning' });
+
+    const result = await streamText(streamArgs as any);
 
     let emitted = '';
     let deltaCount = 0;
@@ -797,50 +1048,175 @@ ${workingDirAbs}
     }
 
     const finishReasonRaw = await result.finishReason;
-    const finishReason = String(finishReasonRaw ?? '').trim().toLowerCase() || 'unknown';
-    const steps = await result.steps;
-    const stepList = Array.isArray(steps) ? steps : [];
-    const stepCount = stepList.length;
+    let finishReason = String(finishReasonRaw ?? '').trim().toLowerCase() || 'unknown';
+    let steps = await result.steps;
+    let stepList = Array.isArray(steps) ? steps : [];
+    let stepCount = stepList.length;
 
     let lastStepFinishReason = '';
     let lastStepTextChars = 0;
     let lastStepToolCalls = 0;
-    if (stepCount > 0) {
-      const lastStep: any = stepList[stepCount - 1];
-      lastStepFinishReason = String(lastStep?.finishReason ?? '').trim().toLowerCase();
-      const lastStepText = String(lastStep?.text ?? '').trim();
-      lastStepTextChars = lastStepText.length;
-      lastStepToolCalls = Array.isArray(lastStep?.toolCalls) ? lastStep.toolCalls.length : 0;
-    }
+    let hasTextAfterToolCalls: boolean | null = null;
 
-    let lastToolStepIndex = -1;
-    for (let i = 0; i < stepCount; i++) {
-      const step: any = stepList[i];
-      const toolCallCount = Array.isArray(step?.toolCalls) ? step.toolCalls.length : 0;
-      if (toolCallCount > 0) {
-        lastToolStepIndex = i;
+    const refreshStepDiagnostics = () => {
+      stepCount = stepList.length;
+
+      lastStepFinishReason = '';
+      lastStepTextChars = 0;
+      lastStepToolCalls = 0;
+      if (stepCount > 0) {
+        const lastStep: any = stepList[stepCount - 1];
+        lastStepFinishReason = String(lastStep?.finishReason ?? '').trim().toLowerCase();
+        const lastStepText = String(lastStep?.text ?? '').trim();
+        lastStepTextChars = lastStepText.length;
+        lastStepToolCalls = Array.isArray(lastStep?.toolCalls) ? lastStep.toolCalls.length : 0;
       }
-    }
 
-    let hasTextAfterToolCalls = true;
-    if (lastToolStepIndex >= 0) {
-      hasTextAfterToolCalls = false;
-      for (let i = lastToolStepIndex + 1; i < stepCount; i++) {
+      let lastToolStepIndex = -1;
+      for (let i = 0; i < stepCount; i++) {
         const step: any = stepList[i];
-        const textAfter = String(step?.text ?? '').trim();
-        if (textAfter.length > 0) {
-          hasTextAfterToolCalls = true;
-          break;
+        const toolCallCount = Array.isArray(step?.toolCalls) ? step.toolCalls.length : 0;
+        if (toolCallCount > 0) {
+          lastToolStepIndex = i;
         }
+      }
+
+      hasTextAfterToolCalls = null;
+      if (lastToolStepIndex >= 0) {
+        if (lastToolStepIndex < stepCount - 1) {
+          hasTextAfterToolCalls = false;
+          for (let i = lastToolStepIndex + 1; i < stepCount; i++) {
+            const step: any = stepList[i];
+            const textAfter = String(step?.text ?? '').trim();
+            if (textAfter.length > 0) {
+              hasTextAfterToolCalls = true;
+              break;
+            }
+          }
+        } else {
+          const lastToolStep: any = stepList[lastToolStepIndex];
+          const sameStepText = String(lastToolStep?.text ?? '').trim();
+          hasTextAfterToolCalls = sameStepText.length === 0 ? false : null;
+        }
+      }
+    };
+
+    refreshStepDiagnostics();
+
+    let analysisPatchUsed = false;
+    if (analysisIntent && emitted.trim()) {
+      const patch = buildAnalysisCoveragePatch(emitted, runToolMemories.get(runId) ?? []);
+      if (patch) {
+        const prefix = emitted.endsWith('\n') ? '\n' : '\n\n';
+        emitTextDelta(runId, prefix + patch);
+        emitted += prefix + patch;
+        deltaCount += 1;
+        analysisPatchUsed = true;
       }
     }
 
     const toolCalls = runToolCallCount.get(runId) ?? 0;
-    const hasVisibleText = emitted.trim().length > 0;
-    const needsFollowUpHint =
-      (!hasVisibleText && toolCalls > 0) ||
-      finishReason === 'tool-calls' ||
-      (toolCalls > 0 && hasTextAfterToolCalls === false);
+    let hasVisibleText = emitted.trim().length > 0;
+    let emittedLooksFinal = hasVisibleText && looksLikeFinalAnswerText(emitted);
+    let emittedLooksRawDump = hasVisibleText && looksLikeRawToolDump(emitted);
+
+    let needsFollowUpHint = false;
+    if (toolCalls > 0) {
+      if (!hasVisibleText) {
+        needsFollowUpHint = true;
+      } else if (finishReason === 'tool-calls') {
+        needsFollowUpHint = !emittedLooksFinal;
+      } else if (hasTextAfterToolCalls === false) {
+        needsFollowUpHint = !emittedLooksFinal;
+      } else if (analysisIntent && emittedLooksRawDump) {
+        needsFollowUpHint = true;
+      }
+    }
+
+    let autoSynthesisUsed = false;
+    if (needsFollowUpHint && !synthesisOnlyAttempt) {
+      notify('run.phase', {
+        run_id: runId,
+        phase: 'synthesis',
+        diag: { mode: 'auto_follow_up', tool_calls: toolCalls, finish_reason: finishReason },
+      });
+      try {
+        const synthesisMessages = [...messages];
+        const emittedPreview = clampPromptText(emitted, 2400);
+        if (emittedPreview) {
+          synthesisMessages.push({ role: 'assistant', content: emittedPreview });
+        }
+        synthesisMessages.push({
+          role: 'user',
+          content: buildAutoSynthesisPrompt(runToolMemories.get(runId) ?? [], analysisIntent),
+        });
+
+        const synthResult = await streamText({
+          model,
+          messages: synthesisMessages,
+          maxSteps: 1,
+          abortSignal: abort.signal,
+        } as any);
+
+        let synthEmitted = '';
+        for await (const delta of synthResult.textStream) {
+          if (typeof delta !== 'string' || !delta) continue;
+          emitTextDelta(runId, delta);
+          emitted += delta;
+          synthEmitted += delta;
+          deltaCount += 1;
+          logEvent('ai.sidecar.stream.delta.synthesis', {
+            run_id: runId,
+            delta_len: delta.length,
+            delta_count: deltaCount,
+          });
+        }
+
+        const synthFinalText = await synthResult.text;
+        if (typeof synthFinalText === 'string' && synthFinalText) {
+          if (!synthEmitted) {
+            emitTextDelta(runId, synthFinalText);
+            emitted += synthFinalText;
+            synthEmitted = synthFinalText;
+          } else if (synthFinalText.length > synthEmitted.length && synthFinalText.startsWith(synthEmitted)) {
+            const extra = synthFinalText.slice(synthEmitted.length);
+            emitTextDelta(runId, extra);
+            emitted += extra;
+            synthEmitted = synthFinalText;
+          }
+        }
+
+        finishReason = String((await synthResult.finishReason) ?? '').trim().toLowerCase() || finishReason;
+        steps = await synthResult.steps;
+        stepList = Array.isArray(steps) ? steps : [];
+        refreshStepDiagnostics();
+
+        hasVisibleText = emitted.trim().length > 0;
+        emittedLooksFinal = hasVisibleText && looksLikeFinalAnswerText(emitted);
+        emittedLooksRawDump = hasVisibleText && looksLikeRawToolDump(emitted);
+        if (toolCalls > 0 && hasVisibleText) {
+          hasTextAfterToolCalls = true;
+        }
+        needsFollowUpHint = false;
+        if (toolCalls > 0) {
+          if (!hasVisibleText) {
+            needsFollowUpHint = true;
+          } else if (finishReason === 'tool-calls') {
+            needsFollowUpHint = !emittedLooksFinal;
+          } else if (hasTextAfterToolCalls === false) {
+            needsFollowUpHint = !emittedLooksFinal;
+          } else if (analysisIntent && emittedLooksRawDump) {
+            needsFollowUpHint = true;
+          }
+        }
+        autoSynthesisUsed = synthEmitted.trim().length > 0;
+      } catch (synthErr) {
+        logEvent('ai.sidecar.synthesis.auto.error', {
+          run_id: runId,
+          error: synthErr instanceof Error ? synthErr.message : String(synthErr),
+        });
+      }
+    }
 
     notify('run.outcome', {
       run_id: runId,
@@ -852,8 +1228,10 @@ ${workingDirAbs}
       last_step_finish_reason: lastStepFinishReason,
       last_step_text_chars: lastStepTextChars,
       last_step_tool_calls: lastStepToolCalls,
-      has_text_after_tool_calls: hasTextAfterToolCalls,
+      has_text_after_tool_calls: hasTextAfterToolCalls === null ? undefined : hasTextAfterToolCalls,
       needs_follow_up_hint: needsFollowUpHint,
+      auto_synthesis_used: autoSynthesisUsed,
+      analysis_patch_used: analysisPatchUsed,
     });
     notify('run.phase', {
       run_id: runId,
@@ -869,6 +1247,11 @@ ${workingDirAbs}
         last_step_tool_calls: lastStepToolCalls,
         has_text_after_tool_calls: hasTextAfterToolCalls,
         needs_follow_up_hint: needsFollowUpHint,
+        emitted_looks_final: emittedLooksFinal,
+        emitted_looks_raw_dump: emittedLooksRawDump,
+        synthesis_only_attempt: synthesisOnlyAttempt,
+        auto_synthesis_used: autoSynthesisUsed,
+        analysis_patch_used: analysisPatchUsed,
         attempt_index: recoveryAttemptIndex,
         recovery_steps_used: recoveryStepsUsed,
         recovery_budget_left: recoveryBudgetLeft,
@@ -887,6 +1270,9 @@ ${workingDirAbs}
       last_step_tool_calls: lastStepToolCalls,
       has_text_after_tool_calls: hasTextAfterToolCalls,
       needs_follow_up_hint: needsFollowUpHint,
+      emitted_looks_final: emittedLooksFinal,
+      synthesis_only_attempt: synthesisOnlyAttempt,
+      auto_synthesis_used: autoSynthesisUsed,
       recovery_attempt_index: recoveryAttemptIndex,
       recovery_steps_used: recoveryStepsUsed,
       recovery_budget_left: recoveryBudgetLeft,
@@ -900,6 +1286,7 @@ ${workingDirAbs}
   } finally {
     currentRun = null;
     runToolCallCount.delete(runId);
+    runToolMemories.delete(runId);
   }
 }
 

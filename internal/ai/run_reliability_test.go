@@ -520,16 +520,34 @@ rl.on('line', (line) => {
       send('run.error', { run_id: runId, error: 'missing working_dir_abs' });
       return;
     }
+    const sep = workingDir.endsWith('/') ? '' : '/';
     send('tool.call', {
       run_id: runId,
-      tool_id: 'tool_pwd_1',
-      tool_name: 'terminal.exec',
-      args: { command: 'pwd', cwd: workingDir, timeout_ms: 5000 },
+      tool_id: 'tool_readme_1',
+      tool_name: 'fs.read_file',
+      args: { path: workingDir + sep + 'README.md', offset: 0, max_bytes: 2048 },
     });
     return;
   }
 
   if (method === 'tool.result') {
+    if (String(msg.params?.status || '').trim().toLowerCase() !== 'success') {
+      send('run.error', { run_id: runId, error: 'expected fs.read_file success' });
+      return;
+    }
+    send('run.outcome', {
+      run_id: runId,
+      has_text: true,
+      text_chars: 96,
+      tool_calls: 1,
+      finish_reason: 'stop',
+      step_count: 2,
+      last_step_finish_reason: 'stop',
+      last_step_text_chars: 96,
+      last_step_tool_calls: 0,
+      has_text_after_tool_calls: true,
+      needs_follow_up_hint: false,
+    });
     send('run.end', { run_id: runId });
     process.exit(0);
   }
@@ -537,6 +555,11 @@ rl.on('line', (line) => {
 
 setInterval(() => {}, 1000);
 `)
+
+	fsRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fsRoot, "README.md"), []byte("fallback evidence\nline2\n"), 0o600); err != nil {
+		t.Fatalf("write README.md: %v", err)
+	}
 
 	meta := session.Meta{
 		EndpointID:        "env_test",
@@ -551,7 +574,7 @@ setInterval(() => {}, 1000);
 	}
 
 	svc := newTestService(t, script, func(o *Options) {
-		o.ToolApprovalTimeout = 2 * time.Second
+		o.FSRoot = fsRoot
 		o.RunIdleTimeout = 4 * time.Second
 		o.RunMaxWallTime = 4 * time.Second
 	})
@@ -562,39 +585,14 @@ setInterval(() => {}, 1000);
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	runID := "run_tool_success_fallback_1"
-	done := make(chan error, 1)
-	go func() {
-		rr := httptest.NewRecorder()
-		done <- svc.StartRun(ctx, &meta, runID, RunStartRequest{
-			ThreadID: th.ThreadID,
-			Model:    "openai/gpt-5-mini",
-			Input:    RunInput{Text: "run pwd"},
-			Options:  RunOptions{MaxSteps: 1},
-		}, rr)
-	}()
-
-	approved := false
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		err := svc.ApproveTool(&meta, runID, "tool_pwd_1", true)
-		if err == nil {
-			approved = true
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if !approved {
-		t.Fatalf("failed to approve tool call before deadline")
-	}
-
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("StartRun: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatalf("StartRun did not finish")
+	rr := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, "run_tool_success_fallback_1", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "read readme"},
+		Options:  RunOptions{MaxSteps: 1},
+	}, rr); err != nil {
+		t.Fatalf("StartRun: %v", err)
 	}
 
 	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
@@ -604,14 +602,13 @@ setInterval(() => {}, 1000);
 	if view == nil {
 		t.Fatalf("thread missing after run")
 	}
-	if !strings.Contains(view.LastMessagePreview, "Command output:") {
+	if !strings.Contains(view.LastMessagePreview, "File content:") {
 		t.Fatalf("last_message_preview=%q, want tool fallback summary", view.LastMessagePreview)
 	}
 	if strings.Contains(view.LastMessagePreview, "Assistant finished without a visible response.") {
 		t.Fatalf("last_message_preview unexpectedly fell back to No response: %q", view.LastMessagePreview)
 	}
 }
-
 func TestRun_RecoveryAutoContinuesWhenAssistantOnlyPreamble(t *testing.T) {
 	t.Parallel()
 
@@ -1373,7 +1370,7 @@ setInterval(() => {}, 1000);
 	}
 }
 
-func TestRun_TaskLoopAutoContinuesForProjectAnalysis(t *testing.T) {
+func TestRun_ProjectAnalysisCompletesWithoutTaskLoopContinuation(t *testing.T) {
 	t.Parallel()
 
 	script := writeTestSidecarScript(t, `
@@ -1393,76 +1390,31 @@ rl.on('line', (line) => {
   if (method === 'run.start') {
     runId = String(msg.params?.run_id || '').trim();
     attempt = Number(msg.params?.recovery?.attempt_index || 0);
-    const inputText = String(msg.params?.input?.text || '').trim();
-    const workingDir = String(msg.params?.working_dir_abs || '').trim();
-
-    if (attempt === 0) {
-      send('tool.call', {
-        run_id: runId,
-        tool_id: 'tool_list_1',
-        tool_name: 'fs.list_dir',
-        args: { path: '/' },
-      });
+    if (attempt > 0) {
+      send('run.error', { run_id: runId, error: 'unexpected extra attempt' });
       return;
     }
-
-    if (attempt === 1) {
-      if (!inputText.includes('Collect concrete evidence')) {
-        send('run.error', { run_id: runId, error: 'missing task evidence follow-up prompt' });
-        return;
-      }
-      const toolMemories = Array.isArray(msg.params?.context_package?.tool_memories)
-        ? msg.params.context_package.tool_memories
-        : [];
-      const hasListEvidence = toolMemories.some((it) =>
-        String(it?.tool_name || '').trim() === 'fs.list_dir' &&
-        String(it?.status || '').trim().toLowerCase() === 'success'
-      );
-      if (!hasListEvidence) {
-        send('run.error', { run_id: runId, error: 'missing previous tool memory for follow-up attempt' });
-        return;
-      }
-      if (!workingDir) {
-        send('run.error', { run_id: runId, error: 'missing working_dir_abs for evidence attempt' });
-        return;
-      }
-      const sep = workingDir.endsWith('/') ? '' : '/';
-      send('tool.call', {
-        run_id: runId,
-        tool_id: 'tool_readme_1',
-        tool_name: 'fs.read_file',
-        args: { path: workingDir + sep + 'README.md', offset: 0, max_bytes: 4096 },
-      });
-      return;
-    }
-
-    send('run.error', { run_id: runId, error: 'unexpected extra attempt' });
+    send('tool.call', {
+      run_id: runId,
+      tool_id: 'tool_list_1',
+      tool_name: 'fs.list_dir',
+      args: { path: '/' },
+    });
     return;
   }
 
   if (method === 'tool.result') {
-    if (attempt === 0) {
-      send('run.delta', {
-        run_id: runId,
-        delta: 'This repository appears modular with multiple service directories and deployment assets. The structure indicates organized engineering practices across backend, frontend, and infrastructure concerns. This initial scan is useful, but it does not yet include file-level evidence.',
-      });
-      send('run.end', { run_id: runId });
+    if (String(msg.params?.status || '').trim() !== 'success') {
+      send('run.error', { run_id: runId, error: 'expected list_dir success on first attempt' });
       return;
     }
-
-    if (attempt === 1) {
-      if (String(msg.params?.status || '') !== 'success') {
-        send('run.error', { run_id: runId, error: 'expected read_file success on evidence attempt' });
-        return;
-      }
-      send('run.delta', {
-        run_id: runId,
-        delta: 'Findings:\n- The project is a Go-based agent with sidecar orchestration.\nEvidence:\n- README.md confirms setup and run commands.\nNext steps:\n- Inspect internal/ai and scripts for operational details.',
-      });
-      send('run.end', { run_id: runId });
-      process.exit(0);
-      return;
-    }
+    send('run.delta', {
+      run_id: runId,
+      delta: 'Findings:\n- The project uses Go services and an AI sidecar runtime.\nEvidence:\n- fs.list_dir on / returned real directory entries.\nNext steps:\n- Inspect internal/ai and scripts for operational details.',
+    });
+    send('run.end', { run_id: runId });
+    process.exit(0);
+    return;
   }
 });
 
@@ -1470,9 +1422,6 @@ setInterval(() => {}, 1000);
 `)
 
 	fsRoot := t.TempDir()
-	if err := os.WriteFile(filepath.Join(fsRoot, "README.md"), []byte("# test readme\n"), 0o600); err != nil {
-		t.Fatalf("write README.md: %v", err)
-	}
 
 	meta := session.Meta{
 		EndpointID:        "env_test",
@@ -1525,7 +1474,6 @@ setInterval(() => {}, 1000);
 		t.Fatalf("stream unexpectedly rewrote markdown content during auto-continue: %q", rr.Body.String())
 	}
 }
-
 func TestRun_RecoveryFallsBackAfterApprovalDeniedTool(t *testing.T) {
 	t.Parallel()
 

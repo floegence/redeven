@@ -33,7 +33,7 @@ func TestResolveTaskLoopConfigProfile_FastExit(t *testing.T) {
 	if profile != "fast_exit_v1" {
 		t.Fatalf("profile=%q, want fast_exit_v1", profile)
 	}
-	if cfg.MaxTurns != 14 || cfg.MaxNoProgressTurns != 2 || cfg.MaxRepeatedSignatures != 2 {
+	if cfg.MaxTurns != 8 || cfg.MaxNoProgressTurns != 2 || cfg.MaxRepeatedSignatures != 2 {
 		t.Fatalf("cfg=%+v, want fast exit profile", cfg)
 	}
 }

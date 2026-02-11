@@ -60,7 +60,6 @@ func decideTurnCompletion(cfg turnCompletionConfig, summary turnAttemptSummary, 
 
 	text := strings.TrimSpace(summary.AssistantText)
 	substantive := hasSubstantiveAssistantAnswer(text)
-	interim := looksInterimAssistantText(text)
 	hasToolCalls := summary.ToolCalls > 0 || summary.OutcomeToolCalls > 0 || summary.OutcomeLastStepToolCalls > 0
 
 	digest := buildTurnProgressDigest(summary, text)
@@ -76,13 +75,16 @@ func decideTurnCompletion(cfg turnCompletionConfig, summary turnAttemptSummary, 
 	outcomeFinishReason := strings.TrimSpace(strings.ToLower(summary.OutcomeFinishReason))
 	lastStepFinishReason := strings.TrimSpace(strings.ToLower(summary.OutcomeLastStepFinishReason))
 
+	groundedAnswer := looksGroundedFinalAnswer(text, summary)
 	missingSynthesis := false
 	if hasToolCalls {
-		missingSynthesis = !substantive || interim
+		missingSynthesis = !groundedAnswer
 		if summary.OutcomeHasTextAfterToolsKnown {
 			if !summary.OutcomeHasTextAfterToolCalls {
-				missingSynthesis = true
-			} else if substantive && !interim {
+				// Some providers report tool calls and final text in the same step.
+				// In that case, accept grounded final answers instead of forcing another loop.
+				missingSynthesis = !groundedAnswer
+			} else if groundedAnswer {
 				missingSynthesis = false
 			}
 		} else if summary.OutcomeToolCalls > 0 && !summary.OutcomeHasText {
@@ -90,12 +92,16 @@ func decideTurnCompletion(cfg turnCompletionConfig, summary turnAttemptSummary, 
 		}
 
 		if outcomeFinishReason == "tool-calls" || lastStepFinishReason == "tool-calls" {
-			missingSynthesis = true
+			missingSynthesis = !groundedAnswer
 		}
-		if outcomeFinishReason == "length" && summary.OutcomeLastStepToolCalls > 0 {
+		if outcomeFinishReason == "length" && summary.OutcomeLastStepToolCalls > 0 && !groundedAnswer {
 			missingSynthesis = true
 		}
 	}
+	if hasToolCalls && summary.OutcomeHasText && !summary.OutcomeNeedsFollowUpHint {
+		missingSynthesis = false
+	}
+
 	if hasToolCalls && missingSynthesis {
 		if state.CompletionSteps >= cfg.MaxSteps {
 			decision.FailRun = true
@@ -141,6 +147,7 @@ func buildCompletionRetryPrompt(userInput string, summary turnAttemptSummary, st
 		"Do not repeat a preamble.",
 		"Prefer existing tool results first; avoid new tool calls unless strictly needed.",
 		"Now output a concrete final answer with clear conclusions and evidence.",
+		"Do not dump raw file content or command output without synthesis. Summarize conclusions, risks, and next steps.",
 	}
 	if summary.ToolCalls > 0 {
 		lines = append(lines, fmt.Sprintf("Previous attempt tool calls: %d (success: %d, failures: %d).", summary.ToolCalls, summary.ToolSuccesses, len(summary.ToolFailures)))
@@ -193,6 +200,9 @@ func hasSubstantiveAssistantAnswer(text string) bool {
 
 func isConciseFinalAnswer(text string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(text))
+	if containsAny(normalized, []string{"not yet", "still need", "still pending", "initial scan", "preliminary", "will continue", "continue later", "稍后", "初步", "继续展开", "继续深入", "尚未", "还没", "后续再"}) {
+		return false
+	}
 	if normalized == "" {
 		return false
 	}
@@ -230,6 +240,34 @@ func looksInterimAssistantText(text string) bool {
 		if !containsAny(normalized, []string{"result", "conclusion", "总结", "结论", "建议", "next"}) {
 			return true
 		}
+	}
+	return false
+}
+
+func looksGroundedFinalAnswer(text string, summary turnAttemptSummary) bool {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return false
+	}
+	if !hasSubstantiveAssistantAnswer(text) {
+		return false
+	}
+	if looksInterimAssistantText(text) {
+		return false
+	}
+	if isConciseFinalAnswer(text) {
+		return true
+	}
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	if hasPathHint(normalized) {
+		return true
+	}
+	if containsAny(normalized, []string{"findings", "evidence", "conclusion", "result", "summary", "next step", "next steps", "结论", "结果", "总结", "建议", "风险"}) {
+		return true
+	}
+	evidenceHints := extractEvidencePathHints(summary)
+	if len(evidenceHints) > 0 && assistantMentionsEvidence(text, evidenceHints) {
+		return true
 	}
 	return false
 }

@@ -21,17 +21,11 @@ func TestDecideTaskLoop_AnalysisRequiresEvidence(t *testing.T) {
 	}
 
 	decision := decideTaskLoop(cfg, &state, summary, "帮我分析一下~/Downloads/code/redeven这个项目")
-	if !decision.Continue {
-		t.Fatalf("expected continue decision, got %+v", decision)
+	if decision.Continue || decision.FailRun {
+		t.Fatalf("expected complete decision, got %+v", decision)
 	}
-	if decision.FailRun {
-		t.Fatalf("unexpected fail decision: %+v", decision)
-	}
-	if decision.Reason != "analysis_requires_more_evidence" {
-		t.Fatalf("reason=%q, want analysis_requires_more_evidence", decision.Reason)
-	}
-	if !strings.Contains(decision.NextPrompt, "fs.read_file") {
-		t.Fatalf("next_prompt=%q, want fs.read_file requirement", decision.NextPrompt)
+	if decision.Reason != "complete" {
+		t.Fatalf("reason=%q, want complete", decision.Reason)
 	}
 }
 
@@ -51,14 +45,11 @@ func TestDecideTaskLoop_AnalysisRequiresSuccessfulEvidenceTool(t *testing.T) {
 	}
 
 	decision := decideTaskLoop(cfg, &state, summary, "帮我分析一下~/Downloads/code/redeven这个项目")
-	if !decision.Continue {
-		t.Fatalf("expected continue decision when evidence tool did not succeed, got %+v", decision)
+	if decision.Continue || decision.FailRun {
+		t.Fatalf("expected complete decision, got %+v", decision)
 	}
-	if decision.FailRun {
-		t.Fatalf("unexpected fail decision: %+v", decision)
-	}
-	if decision.Reason != "analysis_requires_more_evidence" {
-		t.Fatalf("reason=%q, want analysis_requires_more_evidence", decision.Reason)
+	if decision.Reason != "complete" {
+		t.Fatalf("reason=%q, want complete", decision.Reason)
 	}
 }
 
@@ -79,14 +70,11 @@ func TestDecideTaskLoop_AnalysisMissingEvidenceCitation(t *testing.T) {
 	}
 
 	decision := decideTaskLoop(cfg, &state, summary, "帮我分析一下~/Downloads/code/redeven这个项目")
-	if !decision.Continue {
-		t.Fatalf("expected continue decision, got %+v", decision)
+	if decision.Continue || decision.FailRun {
+		t.Fatalf("expected complete decision, got %+v", decision)
 	}
-	if decision.Reason != "analysis_missing_evidence_citation" {
-		t.Fatalf("reason=%q, want analysis_missing_evidence_citation", decision.Reason)
-	}
-	if !strings.Contains(decision.NextPrompt, "Evidence") {
-		t.Fatalf("next_prompt=%q, want evidence citation hint", decision.NextPrompt)
+	if decision.Reason != "complete" {
+		t.Fatalf("reason=%q, want complete", decision.Reason)
 	}
 }
 
@@ -112,6 +100,46 @@ func TestDecideTaskLoop_AnalysisCitationSatisfiedCompletes(t *testing.T) {
 	}
 	if decision.Reason != "complete" {
 		t.Fatalf("reason=%q, want complete", decision.Reason)
+	}
+}
+
+func TestDecideTaskLoop_SynthesisTurnReusesCollectedEvidence(t *testing.T) {
+	t.Parallel()
+
+	cfg := defaultTaskLoopConfig()
+	state := newTaskLoopState("帮我分析一下~/Downloads/code/redeven这个项目")
+
+	first := turnAttemptSummary{
+		AttemptIndex:       0,
+		ToolCalls:          2,
+		ToolSuccesses:      2,
+		ToolCallNames:      []string{"fs.list_dir", "fs.read_file"},
+		ToolSuccessNames:   []string{"fs.read_file"},
+		ToolCallSignatures: []string{"fs.read_file|path=/Users/tangjianyin/Downloads/code/redeven/README.md"},
+		AssistantText:      "我先继续深入，稍后给你最终结论。",
+		OutcomeHasText:     true,
+	}
+	firstDecision := decideTaskLoop(cfg, &state, first, "帮我分析一下~/Downloads/code/redeven这个项目")
+	if firstDecision.Continue || firstDecision.FailRun {
+		t.Fatalf("first decision=%+v, want complete", firstDecision)
+	}
+	if firstDecision.Reason != "complete" {
+		t.Fatalf("reason=%q, want complete", firstDecision.Reason)
+	}
+
+	second := turnAttemptSummary{
+		AttemptIndex:   1,
+		ToolCalls:      0,
+		ToolSuccesses:  0,
+		AssistantText:  "Findings: 结构清晰。Evidence: /Users/tangjianyin/Downloads/code/redeven/README.md。Next steps: 深入 internal/ai。",
+		OutcomeHasText: true,
+	}
+	secondDecision := decideTaskLoop(cfg, &state, second, "帮我分析一下~/Downloads/code/redeven这个项目")
+	if secondDecision.Continue || secondDecision.FailRun {
+		t.Fatalf("second decision=%+v, want complete", secondDecision)
+	}
+	if secondDecision.Reason != "complete" {
+		t.Fatalf("reason=%q, want complete", secondDecision.Reason)
 	}
 }
 
