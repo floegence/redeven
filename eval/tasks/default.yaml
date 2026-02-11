@@ -1,0 +1,103 @@
+version: v1
+tasks:
+  - id: project_brief
+    title: Project brief analysis
+    stage: screen
+    category: failure_real
+    turns:
+      - "请基于真实文件快速分析 ${workspace} 项目，输出技术栈、目录结构、运行方式。必须引用至少2个证据文件绝对路径。"
+    max_steps: 4
+    timeout_seconds: 35
+    require_evidence: true
+    must_contain:
+      - "技术栈|tech stack|stack"
+      - "目录|structure|module"
+      - "运行|run|start"
+    forbidden:
+      - "Tool workflow failed"
+      - "Assistant finished without a visible response"
+      - "No response"
+    hard_fail_events:
+      - "turn.loop.exhausted"
+      - "turn.completion.continue"
+      - "task.loop.continue"
+    must_not_end_with_fallback: true
+
+  - id: root_stat
+    title: Root stat synthesis
+    stage: screen
+    category: generic
+    turns:
+      - "Call fs.stat for /. Then output whether it is directory."
+    max_steps: 3
+    timeout_seconds: 20
+    require_evidence: false
+    must_contain:
+      - "directory|目录"
+    forbidden:
+      - "Tool workflow failed"
+      - "No response"
+    hard_fail_events:
+      - "turn.loop.exhausted"
+    must_not_end_with_fallback: true
+
+  - id: approval_fallback
+    title: Approval denied fallback
+    stage: screen
+    category: failure_real
+    turns:
+      - "先尝试用 terminal.exec 执行 pwd（cwd=${workspace}），如果审批失败或被拒绝，立刻改用 fs.list_dir/fs.read_file 给出可用结论，不要停在失败。"
+    max_steps: 5
+    timeout_seconds: 35
+    require_evidence: true
+    must_contain:
+      - "结论|conclusion|result"
+    forbidden:
+      - "Tool workflow failed"
+      - "No response"
+    hard_fail_events:
+      - "turn.loop.exhausted"
+      - "task.loop.continue"
+    must_not_end_with_fallback: true
+
+  - id: project_deep
+    title: Project deep analysis
+    stage: deep
+    category: generic
+    turns:
+      - "请深度分析 ${workspace} 项目：技术栈、模块边界、运行方式、风险清单、下一步建议。必须引用至少3个证据文件绝对路径。"
+    max_steps: 6
+    timeout_seconds: 45
+    require_evidence: true
+    must_contain:
+      - "技术栈|tech stack|stack"
+      - "风险|risk"
+      - "建议|next steps|recommend"
+    forbidden:
+      - "Tool workflow failed"
+      - "No response"
+    hard_fail_events:
+      - "turn.loop.exhausted"
+      - "task.loop.continue"
+    must_not_end_with_fallback: true
+
+  - id: continue_context
+    title: Continue context follow-up
+    stage: deep
+    category: failure_real
+    turns:
+      - "先基于真实文件分析 ${workspace}，给出初步结论（至少2个证据路径），最后明确写“可以继续深入”。"
+      - "continue"
+    max_steps: 5
+    timeout_seconds: 40
+    require_evidence: true
+    must_contain:
+      - "继续|continue"
+      - "结论|summary|findings"
+    forbidden:
+      - "Tool workflow failed"
+      - "No response"
+    hard_fail_events:
+      - "turn.loop.exhausted"
+      - "task.loop.continue"
+    must_not_end_with_fallback: true

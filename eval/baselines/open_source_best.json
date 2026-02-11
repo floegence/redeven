@@ -1,0 +1,25 @@
+{
+  "sources": {
+    "codex": {
+      "pass_rate": 0.88,
+      "loop_safety_rate": 0.97,
+      "recovery_success_rate": 0.9,
+      "fallback_free_rate": 0.98,
+      "average_accuracy": 86
+    },
+    "cline": {
+      "pass_rate": 0.85,
+      "loop_safety_rate": 0.95,
+      "recovery_success_rate": 0.87,
+      "fallback_free_rate": 0.96,
+      "average_accuracy": 82
+    },
+    "opencode": {
+      "pass_rate": 0.86,
+      "loop_safety_rate": 0.96,
+      "recovery_success_rate": 0.88,
+      "fallback_free_rate": 0.97,
+      "average_accuracy": 84
+    }
+  }
+}

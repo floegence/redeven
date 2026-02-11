@@ -29,29 +29,37 @@ type evalVariant struct {
 }
 
 type evalTask struct {
-	ID              string        `json:"id"`
-	Title           string        `json:"title"`
-	Stage           string        `json:"stage"`
-	Turns           []string      `json:"turns"`
-	MaxSteps        int           `json:"max_steps"`
-	TimeoutPerTurn  time.Duration `json:"timeout_per_turn"`
-	RequireEvidence bool          `json:"require_evidence"`
-	MustContain     []string      `json:"must_contain"`
-	Forbidden       []string      `json:"forbidden"`
+	ID                     string        `json:"id"`
+	Title                  string        `json:"title"`
+	Stage                  string        `json:"stage"`
+	Category               string        `json:"category,omitempty"`
+	Turns                  []string      `json:"turns"`
+	MaxSteps               int           `json:"max_steps"`
+	TimeoutPerTurn         time.Duration `json:"timeout_per_turn"`
+	RequireEvidence        bool          `json:"require_evidence"`
+	MustContain            []string      `json:"must_contain"`
+	Forbidden              []string      `json:"forbidden"`
+	HardFailEvents         []string      `json:"hard_fail_events,omitempty"`
+	MustNotEndWithFallback bool          `json:"must_not_end_with_fallback"`
 }
 
 type turnMetrics struct {
-	RunID            string        `json:"run_id"`
-	Duration         time.Duration `json:"-"`
-	DurationMS       int64         `json:"duration_ms"`
-	AttemptCount     int           `json:"attempt_count"`
-	ToolCallCount    int           `json:"tool_call_count"`
-	ToolErrorCount   int           `json:"tool_error_count"`
-	RecoveryCount    int           `json:"recovery_count"`
-	CompletionRetrys int           `json:"completion_retries"`
-	TaskLoopContinue int           `json:"task_loop_continue"`
-	MonitorAbort     string        `json:"monitor_abort,omitempty"`
-	RunError         string        `json:"run_error,omitempty"`
+	RunID                string        `json:"run_id"`
+	Duration             time.Duration `json:"-"`
+	DurationMS           int64         `json:"duration_ms"`
+	AttemptCount         int           `json:"attempt_count"`
+	ToolCallCount        int           `json:"tool_call_count"`
+	ToolErrorCount       int           `json:"tool_error_count"`
+	RecoveryCount        int           `json:"recovery_count"`
+	CompletionRetrys     int           `json:"completion_retries"`
+	TaskLoopContinue     int           `json:"task_loop_continue"`
+	LoopExhausted        bool          `json:"loop_exhausted"`
+	PhasePingPong        bool          `json:"phase_pingpong"`
+	FinalizationReason   string        `json:"finalization_reason,omitempty"`
+	EndState             string        `json:"end_state,omitempty"`
+	MonitorAbort         string        `json:"monitor_abort,omitempty"`
+	RunError             string        `json:"run_error,omitempty"`
+	CompletionReasonFlow []string      `json:"completion_reason_flow,omitempty"`
 }
 
 type taskResult struct {
@@ -61,6 +69,8 @@ type taskResult struct {
 	FinalText       string         `json:"final_text"`
 	DurationTotalMS int64          `json:"duration_total_ms"`
 	Score           scoreBreakdown `json:"score"`
+	Outcome         taskOutcome    `json:"outcome"`
+	WorkspacePath   string         `json:"workspace_path"`
 }
 
 type scoreBreakdown struct {
@@ -79,16 +89,18 @@ type variantSummary struct {
 }
 
 type evalReport struct {
-	GeneratedAt       time.Time        `json:"generated_at"`
-	ModelID           string           `json:"model_id"`
-	WorkspacePath     string           `json:"workspace_path"`
-	VariantCount      int              `json:"variant_count"`
-	Stage1TaskIDs     []string         `json:"stage1_task_ids"`
-	Stage2TaskIDs     []string         `json:"stage2_task_ids"`
-	Results           []taskResult     `json:"results"`
-	Summaries         []variantSummary `json:"summaries"`
-	Recommended       evalVariant      `json:"recommended"`
-	RecommendedReason string           `json:"recommended_reason"`
+	GeneratedAt       time.Time                 `json:"generated_at"`
+	ModelID           string                    `json:"model_id"`
+	WorkspacePath     string                    `json:"workspace_path"`
+	VariantCount      int                       `json:"variant_count"`
+	Stage1TaskIDs     []string                  `json:"stage1_task_ids"`
+	Stage2TaskIDs     []string                  `json:"stage2_task_ids"`
+	Results           []taskResult              `json:"results"`
+	Summaries         []variantSummary          `json:"summaries"`
+	Recommended       evalVariant               `json:"recommended"`
+	RecommendedReason string                    `json:"recommended_reason"`
+	Gate              gateReport                `json:"gate"`
+	VariantMetrics    map[string]variantMetrics `json:"variant_metrics"`
 }
 
 type monitoredResponseWriter struct {
@@ -270,29 +282,36 @@ func (m *streamMonitor) abortState() string {
 func main() {
 	workspace := flag.String("workspace", "/Users/tangjianyin/Downloads/code/openclaw", "workspace absolute path for evaluation tasks")
 	reportDir := flag.String("report-dir", "", "output directory for reports (default: ~/.redeven/ai/evals/<timestamp>)")
+	taskSpecPath := flag.String("task-spec", filepath.Clean("eval/tasks/default.yaml"), "task specification yaml path")
+	baselinePath := flag.String("baseline", filepath.Clean("eval/baselines/open_source_best.json"), "benchmark baseline json path")
 	topK := flag.Int("top-k", 6, "top variants promoted from stage1 to stage2")
 	maxVariants := flag.Int("max-variants", 0, "optional cap of evaluated variants (0 = all)")
+	enforceGate := flag.Bool("enforce-gate", false, "enforce hard gate against open-source benchmark baselines")
+	minPassRate := flag.Float64("min-pass-rate", 0.8, "hard gate minimum pass rate")
+	minLoopSafetyRate := flag.Float64("min-loop-safety-rate", 0.95, "hard gate minimum loop safety rate")
+	minFallbackFreeRate := flag.Float64("min-fallback-free-rate", 0.98, "hard gate minimum fallback-free rate")
+	minAverageAccuracy := flag.Float64("min-accuracy", 80, "hard gate minimum average accuracy")
 	flag.Parse()
 
 	workspacePath := strings.TrimSpace(*workspace)
 	if workspacePath == "" || !filepath.IsAbs(workspacePath) {
-		fatalf("workspace 必须是绝对路径")
+		fatalf("workspace must be an absolute path")
 	}
 	if st, err := os.Stat(workspacePath); err != nil || !st.IsDir() {
-		fatalf("workspace 不存在或不是目录: %s", workspacePath)
+		fatalf("workspace does not exist or is not a directory: %s", workspacePath)
 	}
 
 	cfgPath := config.DefaultConfigPath()
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
-		fatalf("加载配置失败: %v", err)
+		fatalf("failed to load config: %v", err)
 	}
 	if cfg.AI == nil {
-		fatalf("当前配置未启用 AI")
+		fatalf("ai config is not enabled")
 	}
 	modelID, ok := cfg.AI.DefaultModelID()
 	if !ok {
-		fatalf("AI 配置缺少默认模型")
+		fatalf("missing default model in AI config")
 	}
 	secretsPath := filepath.Join(filepath.Dir(cfgPath), "secrets.json")
 	secretsStore := settings.NewSecretsStore(secretsPath)
@@ -308,12 +327,12 @@ func main() {
 		outDir = filepath.Join(home, ".redeven", "ai", "evals", timestamp)
 	}
 	if err := os.MkdirAll(outDir, 0o700); err != nil {
-		fatalf("创建输出目录失败: %v", err)
+		fatalf("failed to create output dir: %v", err)
 	}
 
 	stateDir := filepath.Join(outDir, "state")
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
-		fatalf("创建状态目录失败: %v", err)
+		fatalf("failed to create state dir: %v", err)
 	}
 
 	service, err := ai.NewService(ai.Options{
@@ -328,7 +347,7 @@ func main() {
 		ResolveProviderAPIKey: resolver,
 	})
 	if err != nil {
-		fatalf("初始化 AI service 失败: %v", err)
+		fatalf("failed to init AI service: %v", err)
 	}
 	defer func() { _ = service.Close() }()
 
@@ -337,14 +356,17 @@ func main() {
 		variants = variants[:*maxVariants]
 	}
 	if len(variants) < 20 && *maxVariants == 0 {
-		fatalf("变体数量不足 20，当前=%d", len(variants))
+		fatalf("variant count must be at least 20, current=%d", len(variants))
 	}
 
-	tasks := buildTasks(workspacePath)
+	tasks, loadErr := loadTaskSpecs(strings.TrimSpace(*taskSpecPath), workspacePath)
+	if loadErr != nil {
+		fatalf("failed to load task specs: %v", loadErr)
+	}
 	stage1Tasks := filterTasksByStage(tasks, "screen")
 	stage2Tasks := filterTasksByStage(tasks, "deep")
 	if len(stage1Tasks) == 0 || len(stage2Tasks) == 0 {
-		fatalf("任务分层配置错误")
+		fatalf("task stage configuration invalid")
 	}
 
 	fmt.Printf("[ai-loop-eval] model=%s variants=%d stage1_tasks=%d stage2_tasks=%d\n", modelID, len(variants), len(stage1Tasks), len(stage2Tasks))
@@ -373,9 +395,43 @@ func main() {
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].FinalOverall > summaries[j].FinalOverall
 	})
-	recommended := summaries[0].Variant
-	reason := fmt.Sprintf("stage1=%.2f, stage2=%.2f, final=%.2f", summaries[0].Stage1Avg, summaries[0].Stage2Avg, summaries[0].FinalOverall)
 
+	variantMetricsMap := aggregateVariantMetrics(results)
+	thresholds := gateThresholds{
+		MinPassRate:         clamp01(*minPassRate),
+		MinLoopSafetyRate:   clamp01(*minLoopSafetyRate),
+		MinFallbackFreeRate: clamp01(*minFallbackFreeRate),
+		MinAverageAccuracy:  clampScore(*minAverageAccuracy),
+	}
+	gate := gateReport{
+		Enabled:          false,
+		Thresholds:       thresholds,
+		Status:           "skipped",
+		VariantDecisions: nil,
+	}
+
+	recommended := summaries[0].Variant
+	if baseline := strings.TrimSpace(*baselinePath); baseline != "" {
+		baselines, loadErr := loadBenchmarkBaselines(baseline)
+		if loadErr != nil {
+			if *enforceGate {
+				fatalf("failed to load baseline while enforce-gate=true: %v", loadErr)
+			}
+			fmt.Printf("[ai-loop-eval] baseline skipped: %v\n", loadErr)
+		} else {
+			gate = evaluateGate(variants, variantMetricsMap, baselines, thresholds, recommended)
+			gate.Enabled = true
+			gate.BaselinePath = filepath.Clean(baseline)
+			if gate.Status == "pass" {
+				if v, ok := pickBestPassedVariant(summaries, gate.PassedVariantIDs); ok {
+					recommended = v
+					gate.RecommendedVariantID = v.ID
+				}
+			}
+		}
+	}
+
+	reason := buildRecommendReason(summaries, recommended, gate)
 	report := evalReport{
 		GeneratedAt:       time.Now(),
 		ModelID:           modelID,
@@ -387,19 +443,36 @@ func main() {
 		Summaries:         summaries,
 		Recommended:       recommended,
 		RecommendedReason: reason,
+		Gate:              gate,
+		VariantMetrics:    variantMetricsMap,
 	}
 
 	jsonPath := filepath.Join(outDir, "report.json")
 	if err := writeJSON(jsonPath, report); err != nil {
-		fatalf("写入 report.json 失败: %v", err)
+		fatalf("failed to write report.json: %v", err)
 	}
 	mdPath := filepath.Join(outDir, "report.md")
 	if err := writeMarkdown(mdPath, report); err != nil {
-		fatalf("写入 report.md 失败: %v", err)
+		fatalf("failed to write report.md: %v", err)
 	}
 
-	fmt.Printf("[ai-loop-eval] 推荐方案 prompt=%s loop=%s (%s)\n", recommended.PromptProfile, recommended.LoopProfile, reason)
-	fmt.Printf("[ai-loop-eval] 报告输出: %s\n", outDir)
+	fmt.Printf("[ai-loop-eval] recommended prompt=%s loop=%s (%s)\n", recommended.PromptProfile, recommended.LoopProfile, reason)
+	fmt.Printf("[ai-loop-eval] report dir: %s\n", outDir)
+	if gate.Enabled {
+		fmt.Printf("[ai-loop-eval] gate status: %s\n", gate.Status)
+		if len(gate.FailReasons) > 0 {
+			fmt.Printf("[ai-loop-eval] gate reasons: %s\n", strings.Join(gate.FailReasons, "; "))
+		}
+	}
+
+	if *enforceGate {
+		if !gate.Enabled {
+			fatalf("enforce-gate=true but gate is not enabled")
+		}
+		if gate.Status != "pass" {
+			fatalf("hard gate rejected this evaluation")
+		}
+	}
 }
 
 func buildVariants() []evalVariant {
@@ -425,70 +498,6 @@ func buildVariants() []evalVariant {
 		}
 	}
 	return out
-}
-
-func buildTasks(workspacePath string) []evalTask {
-	workspacePath = filepath.Clean(workspacePath)
-	return []evalTask{
-		{
-			ID:              "openclaw_brief",
-			Title:           "openclaw 简介",
-			Stage:           "screen",
-			Turns:           []string{fmt.Sprintf("请基于真实文件快速分析 %s 项目，输出技术栈、目录结构、运行方式。必须引用至少2个证据文件绝对路径。", workspacePath)},
-			MaxSteps:        4,
-			TimeoutPerTurn:  35 * time.Second,
-			RequireEvidence: true,
-			MustContain:     []string{"技术栈|tech stack|stack", "目录|structure|module", "运行|run|start"},
-			Forbidden:       []string{"Tool workflow failed", "Assistant finished without a visible response", "No response"},
-		},
-		{
-			ID:              "root_stat",
-			Title:           "根目录 stat 合成",
-			Stage:           "screen",
-			Turns:           []string{"Call fs.stat for '/'. Then output whether it is directory."},
-			MaxSteps:        3,
-			TimeoutPerTurn:  20 * time.Second,
-			RequireEvidence: false,
-			MustContain:     []string{"directory|目录"},
-			Forbidden:       []string{"Tool workflow failed", "No response"},
-		},
-		{
-			ID:              "approval_fallback",
-			Title:           "审批拒绝后的降级",
-			Stage:           "screen",
-			Turns:           []string{fmt.Sprintf("先尝试用 terminal.exec 执行 pwd（cwd=%s），如果审批失败或被拒绝，立刻改用 fs.list_dir/fs.read_file 给出可用结论，不要停在失败。", workspacePath)},
-			MaxSteps:        5,
-			TimeoutPerTurn:  35 * time.Second,
-			RequireEvidence: true,
-			MustContain:     []string{"结论|conclusion|result"},
-			Forbidden:       []string{"Tool workflow failed", "No response"},
-		},
-		{
-			ID:              "openclaw_deep",
-			Title:           "openclaw 深度介绍",
-			Stage:           "deep",
-			Turns:           []string{fmt.Sprintf("请深度分析 %s 项目：技术栈、模块边界、运行方式、风险清单、下一步建议。必须引用至少3个证据文件绝对路径。", workspacePath)},
-			MaxSteps:        6,
-			TimeoutPerTurn:  45 * time.Second,
-			RequireEvidence: true,
-			MustContain:     []string{"技术栈|tech stack|stack", "风险|risk", "建议|next steps|recommend"},
-			Forbidden:       []string{"Tool workflow failed", "No response"},
-		},
-		{
-			ID:    "openclaw_continue",
-			Title: "continue 上下文续写",
-			Stage: "deep",
-			Turns: []string{
-				fmt.Sprintf("先基于真实文件分析 %s，给出初步结论（至少2个证据路径），最后明确写“可以继续深入”。", workspacePath),
-				"continue",
-			},
-			MaxSteps:        5,
-			TimeoutPerTurn:  40 * time.Second,
-			RequireEvidence: true,
-			MustContain:     []string{"继续|continue", "结论|summary|findings"},
-			Forbidden:       []string{"Tool workflow failed", "No response"},
-		},
-	}
 }
 
 func runVariantTasks(ctx context.Context, svc *ai.Service, modelID string, workspacePath string, variant evalVariant, tasks []evalTask) (float64, []taskResult) {
@@ -559,10 +568,12 @@ func runTask(ctx context.Context, svc *ai.Service, modelID string, workspacePath
 		if runErr != nil {
 			metrics.RunError = runErr.Error()
 		}
-		events, evErr := svc.ListRunEvents(context.Background(), meta, runID, 800)
+		reasonFlow := make([]string, 0, 12)
+		events, evErr := svc.ListRunEvents(context.Background(), meta, runID, 1200)
 		if evErr == nil {
 			for _, ev := range events.Events {
-				switch strings.TrimSpace(ev.EventType) {
+				eventType := strings.TrimSpace(strings.ToLower(ev.EventType))
+				switch eventType {
 				case "turn.attempt.started":
 					metrics.AttemptCount++
 				case "tool.call":
@@ -573,10 +584,26 @@ func runTask(ctx context.Context, svc *ai.Service, modelID string, workspacePath
 					metrics.RecoveryCount++
 				case "turn.completion.continue":
 					metrics.CompletionRetrys++
+					if reason := extractReasonFromPayload(ev.Payload); reason != "" {
+						reasonFlow = append(reasonFlow, "completion:"+reason)
+					}
 				case "task.loop.continue":
 					metrics.TaskLoopContinue++
+					if reason := extractReasonFromPayload(ev.Payload); reason != "" {
+						reasonFlow = append(reasonFlow, "task:"+reason)
+					}
+				case "turn.loop.exhausted":
+					metrics.LoopExhausted = true
+				case "run.end":
+					metrics.FinalizationReason = payloadFieldString(ev.Payload, "finalization_reason")
+					metrics.EndState = payloadFieldString(ev.Payload, "state")
 				}
 			}
+		}
+		metrics.CompletionReasonFlow = reasonFlow
+		metrics.PhasePingPong = detectPhasePingPong(reasonFlow)
+		if strings.TrimSpace(strings.ToLower(metrics.FinalizationReason)) == "task_turn_limit_reached" {
+			metrics.LoopExhausted = true
 		}
 		if metrics.AttemptCount == 0 {
 			metrics.AttemptCount = 1
@@ -587,15 +614,17 @@ func runTask(ctx context.Context, svc *ai.Service, modelID string, workspacePath
 	finalText := extractLatestAssistantText(ctx, svc, meta, thread.ThreadID)
 	totalDur := time.Since(started)
 	score := evaluateScore(task, workspacePath, finalText, turns)
-
-	return taskResult{
+	result := taskResult{
 		Variant:         variant,
 		Task:            task,
 		Turns:           turns,
 		FinalText:       finalText,
 		DurationTotalMS: totalDur.Milliseconds(),
 		Score:           score,
+		WorkspacePath:   workspacePath,
 	}
+	result.Outcome = assessTaskOutcome(task, result)
+	return result
 }
 
 func evaluateScore(task evalTask, workspacePath string, finalText string, turns []turnMetrics) scoreBreakdown {
@@ -625,6 +654,13 @@ func evaluateScore(task evalTask, workspacePath string, finalText string, turns 
 	if looksPreambleOnly(finalText) {
 		natural -= 35
 	}
+	for _, phrase := range fallbackFinalPhrases {
+		if strings.Contains(lower, phrase) {
+			accuracy -= 40
+			natural -= 25
+			break
+		}
+	}
 	natural -= float64(repetitionPenalty(finalText))
 
 	totalSeconds := 0.0
@@ -640,6 +676,16 @@ func evaluateScore(task evalTask, workspacePath string, finalText string, turns 
 			accuracy -= 20
 			natural -= 20
 			efficiency -= 25
+		}
+		if turn.LoopExhausted {
+			accuracy -= 35
+			natural -= 20
+			efficiency -= 25
+		}
+		if turn.PhasePingPong {
+			accuracy -= 28
+			natural -= 20
+			efficiency -= 18
 		}
 		if strings.TrimSpace(turn.RunError) != "" {
 			accuracy -= 18
@@ -982,6 +1028,85 @@ func sanitizeID(in string) string {
 	return out
 }
 
+func clamp01(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
+func pickBestPassedVariant(summaries []variantSummary, passedIDs []string) (evalVariant, bool) {
+	if len(summaries) == 0 || len(passedIDs) == 0 {
+		return evalVariant{}, false
+	}
+	allowed := make(map[string]struct{}, len(passedIDs))
+	for _, id := range passedIDs {
+		allowed[strings.TrimSpace(id)] = struct{}{}
+	}
+	for _, summary := range summaries {
+		if _, ok := allowed[summary.Variant.ID]; ok {
+			return summary.Variant, true
+		}
+	}
+	return evalVariant{}, false
+}
+
+func buildRecommendReason(summaries []variantSummary, recommended evalVariant, gate gateReport) string {
+	stage1 := 0.0
+	stage2 := 0.0
+	final := 0.0
+	for _, summary := range summaries {
+		if summary.Variant.ID != recommended.ID {
+			continue
+		}
+		stage1 = summary.Stage1Avg
+		stage2 = summary.Stage2Avg
+		final = summary.FinalOverall
+		break
+	}
+	reason := fmt.Sprintf("stage1=%.2f, stage2=%.2f, final=%.2f", stage1, stage2, final)
+	if gate.Enabled {
+		reason += ", gate=" + strings.TrimSpace(strings.ToLower(gate.Status))
+	}
+	return reason
+}
+
+func payloadFieldString(payload any, key string) string {
+	obj, ok := payload.(map[string]any)
+	if !ok || obj == nil {
+		return ""
+	}
+	return strings.TrimSpace(anyToString(obj[key]))
+}
+
+func extractReasonFromPayload(payload any) string {
+	reason := strings.TrimSpace(strings.ToLower(payloadFieldString(payload, "reason")))
+	if reason == "" {
+		return ""
+	}
+	return reason
+}
+
+func detectPhasePingPong(flow []string) bool {
+	if len(flow) < 4 {
+		return false
+	}
+	const completionNeed = "completion:needs_synthesis_after_tool_calls"
+	const taskNeed = "task:analysis_requires_more_evidence"
+	pairs := 0
+	for i := 1; i < len(flow); i++ {
+		prev := strings.TrimSpace(strings.ToLower(flow[i-1]))
+		curr := strings.TrimSpace(strings.ToLower(flow[i]))
+		if (prev == completionNeed && curr == taskNeed) || (prev == taskNeed && curr == completionNeed) {
+			pairs++
+		}
+	}
+	return pairs >= 3
+}
+
 func writeJSON(path string, v any) error {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
@@ -996,32 +1121,84 @@ func writeMarkdown(path string, report evalReport) error {
 		return errors.New("empty summary")
 	}
 	var b strings.Builder
-	b.WriteString("# AI Loop 方案评测报告\n\n")
-	b.WriteString(fmt.Sprintf("- 生成时间: %s\n", report.GeneratedAt.Format(time.RFC3339)))
-	b.WriteString(fmt.Sprintf("- 模型: `%s`\n", report.ModelID))
-	b.WriteString(fmt.Sprintf("- 工作区: `%s`\n", report.WorkspacePath))
-	b.WriteString(fmt.Sprintf("- 方案数: %d\n", report.VariantCount))
-	b.WriteString("\n## 推荐方案\n\n")
-	b.WriteString(fmt.Sprintf("- Prompt Profile: `%s`\n", report.Recommended.PromptProfile))
-	b.WriteString(fmt.Sprintf("- Loop Profile: `%s`\n", report.Recommended.LoopProfile))
-	b.WriteString(fmt.Sprintf("- 依据: %s\n", report.RecommendedReason))
-	b.WriteString("\n## 排名\n\n")
+	b.WriteString("# AI Loop Evaluation Report\n\n")
+	b.WriteString(fmt.Sprintf("- Generated at: %s\n", report.GeneratedAt.Format(time.RFC3339)))
+	b.WriteString(fmt.Sprintf("- Model: `%s`\n", report.ModelID))
+	b.WriteString(fmt.Sprintf("- Workspace: `%s`\n", report.WorkspacePath))
+	b.WriteString(fmt.Sprintf("- Variant count: %d\n", report.VariantCount))
+	b.WriteString("\n## Recommended Variant\n\n")
+	b.WriteString(fmt.Sprintf("- Prompt profile: `%s`\n", report.Recommended.PromptProfile))
+	b.WriteString(fmt.Sprintf("- Loop profile: `%s`\n", report.Recommended.LoopProfile))
+	b.WriteString(fmt.Sprintf("- Reason: %s\n", report.RecommendedReason))
+
+	if report.Gate.Enabled {
+		b.WriteString("\n## Gate Status\n\n")
+		b.WriteString(fmt.Sprintf("- Status: `%s`\n", report.Gate.Status))
+		b.WriteString(fmt.Sprintf("- Baseline: `%s`\n", report.Gate.BaselinePath))
+		b.WriteString(fmt.Sprintf("- Thresholds: pass>=%.2f loop_safe>=%.2f fallback_free>=%.2f accuracy>=%.2f\n",
+			report.Gate.Thresholds.MinPassRate,
+			report.Gate.Thresholds.MinLoopSafetyRate,
+			report.Gate.Thresholds.MinFallbackFreeRate,
+			report.Gate.Thresholds.MinAverageAccuracy,
+		))
+		b.WriteString(fmt.Sprintf("- Best reference: pass=%.2f loop_safe=%.2f recovery=%.2f fallback_free=%.2f accuracy=%.2f\n",
+			report.Gate.ReferenceBest.PassRate,
+			report.Gate.ReferenceBest.LoopSafetyRate,
+			report.Gate.ReferenceBest.RecoverySuccessRate,
+			report.Gate.ReferenceBest.FallbackFreeRate,
+			report.Gate.ReferenceBest.AverageAccuracy,
+		))
+		if len(report.Gate.FailReasons) > 0 {
+			b.WriteString("- Fail reasons: " + strings.Join(report.Gate.FailReasons, "; ") + "\n")
+		}
+	}
+
+	b.WriteString("\n## Ranking\n\n")
 	b.WriteString("| Rank | Variant | Stage1 | Stage2 | Final |\n")
 	b.WriteString("|---:|---|---:|---:|---:|\n")
-	for i, s := range report.Summaries {
-		b.WriteString(fmt.Sprintf("| %d | `%s` | %.2f | %.2f | %.2f |\n", i+1, s.Variant.ID, s.Stage1Avg, s.Stage2Avg, s.FinalOverall))
+	for i, summary := range report.Summaries {
+		b.WriteString(fmt.Sprintf("| %d | `%s` | %.2f | %.2f | %.2f |\n", i+1, summary.Variant.ID, summary.Stage1Avg, summary.Stage2Avg, summary.FinalOverall))
 	}
-	b.WriteString("\n## 任务结果\n\n")
-	for _, r := range report.Results {
-		b.WriteString(fmt.Sprintf("### %s / %s\n\n", r.Variant.ID, r.Task.ID))
-		b.WriteString(fmt.Sprintf("- 综合: %.2f (acc %.2f / nat %.2f / eff %.2f)\n", r.Score.Overall, r.Score.Accuracy, r.Score.Natural, r.Score.Efficiency))
-		b.WriteString(fmt.Sprintf("- 总耗时: %d ms\n", r.DurationTotalMS))
-		if txt := strings.TrimSpace(r.FinalText); txt != "" {
+
+	if report.Gate.Enabled && len(report.Gate.VariantDecisions) > 0 {
+		b.WriteString("\n## Gate Decisions\n\n")
+		b.WriteString("| Variant | Pass | PassRate | LoopSafe | Recovery | FallbackFree | Accuracy |\n")
+		b.WriteString("|---|---:|---:|---:|---:|---:|---:|\n")
+		for _, decision := range report.Gate.VariantDecisions {
+			b.WriteString(fmt.Sprintf(
+				"| `%s` | %t | %.2f | %.2f | %.2f | %.2f | %.2f |\n",
+				decision.Variant.ID,
+				decision.Passed,
+				decision.Metrics.PassRate,
+				decision.Metrics.LoopSafetyRate,
+				decision.Metrics.RecoverySuccessRate,
+				decision.Metrics.FallbackFreeRate,
+				decision.Metrics.AverageAccuracy,
+			))
+		}
+	}
+
+	b.WriteString("\n## Task Results\n\n")
+	for _, result := range report.Results {
+		b.WriteString(fmt.Sprintf("### %s / %s\n\n", result.Variant.ID, result.Task.ID))
+		b.WriteString(fmt.Sprintf("- Score: %.2f (acc %.2f / nat %.2f / eff %.2f)\n", result.Score.Overall, result.Score.Accuracy, result.Score.Natural, result.Score.Efficiency))
+		b.WriteString(fmt.Sprintf("- Outcome: passed=%t loop_safe=%t fallback=%t recovery_candidate=%t recovery_succeeded=%t\n",
+			result.Outcome.Passed,
+			result.Outcome.LoopSafe,
+			result.Outcome.FallbackFinal,
+			result.Outcome.RecoveryCandidate,
+			result.Outcome.RecoverySucceeded,
+		))
+		b.WriteString(fmt.Sprintf("- Duration: %d ms\n", result.DurationTotalMS))
+		if len(result.Outcome.HardFailReasons) > 0 {
+			b.WriteString("- Hard fail reasons: " + strings.Join(result.Outcome.HardFailReasons, ", ") + "\n")
+		}
+		if txt := strings.TrimSpace(result.FinalText); txt != "" {
 			preview := txt
 			if utf8.RuneCountInString(preview) > 260 {
 				preview = string([]rune(preview)[:260]) + "..."
 			}
-			b.WriteString(fmt.Sprintf("- 输出预览: %s\n", strings.ReplaceAll(preview, "\n", " ")))
+			b.WriteString(fmt.Sprintf("- Output preview: %s\n", strings.ReplaceAll(preview, "\n", " ")))
 		}
 		b.WriteString("\n")
 	}

@@ -8,6 +8,7 @@ require (
 	github.com/shirou/gopsutil/v3 v3.24.5
 	golang.org/x/sys v0.31.0
 	golang.org/x/term v0.30.0
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.37.0
 )
 

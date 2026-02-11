@@ -1,29 +1,47 @@
 # AI Loop Evaluation Workflow
 
-This document defines the runtime evaluation workflow for Redeven Agent:
+This document defines the validation workflow for Redeven Agent loop/profile selection.
 
-1. evaluate multiple loop/prompt combinations with real model + real tools,
-2. score outcomes with consistent metrics,
-3. converge to one default runtime profile.
+The workflow is gate-first:
 
-## Goals
+1. replay known failure trajectories,
+2. evaluate matrix variants with real model + real tools,
+3. compare against open-source baselines (`codex`, `cline`, `opencode`),
+4. block recommendation when hard gates are not met.
 
-- Evaluate at least 20 profile combinations under real tool execution.
-- Compare accuracy, naturalness, and efficiency using repeatable tasks.
-- Keep evaluation safe: no write operations, no manual approval dependency.
+## Entry Points
 
-## Entry Point
+### Matrix evaluation (ranking only)
 
 ```bash
 ./scripts/eval_ai_loop_matrix.sh /Users/tangjianyin/Downloads/code/openclaw
 ```
 
-Optional inputs:
+### Full hard gate workflow (recommended for default promotion)
 
-- arg1: workspace absolute path.
-- arg2: report output directory.
-- env `TOP_K`: number of variants promoted from stage1 to stage2 (default `6`).
-- env `MAX_VARIANTS`: cap evaluated variants (`0` means all variants).
+```bash
+./scripts/eval_gate.sh /Users/tangjianyin/Downloads/code/openclaw
+```
+
+## Inputs
+
+Environment variables:
+
+- `TOP_K`: number of variants promoted from stage1 to stage2 (default `6`)
+- `MAX_VARIANTS`: cap evaluated variants (`0` means all variants)
+- `TASK_SPEC_PATH`: task spec yaml path (default `eval/tasks/default.yaml`)
+- `BASELINE_PATH`: baseline json path (default `eval/baselines/open_source_best.json`)
+- `ENFORCE_GATE`: set `1` to fail command when hard gate rejects
+
+CLI flags (`cmd/ai-loop-eval`):
+
+- `--task-spec`
+- `--baseline`
+- `--enforce-gate`
+- `--min-pass-rate`
+- `--min-loop-safety-rate`
+- `--min-fallback-free-rate`
+- `--min-accuracy`
 
 ## Variant Matrix
 
@@ -45,38 +63,48 @@ Loop profiles (`4`):
 
 Total variants: `6 x 4 = 24`.
 
-## Task Set
+## Task Specs
 
-Stage1 (screen):
+Tasks are loaded from YAML (`eval/tasks/default.yaml`) and support:
 
-- `openclaw_brief`
-- `root_stat`
-- `approval_fallback`
+- stage (`screen` / `deep`)
+- category (`failure_real` / `generic`)
+- required evidence, required keywords, forbidden phrases
+- hard fail events (for example `turn.loop.exhausted`)
 
-Stage2 (deep):
+## Hard Gate
 
-- `openclaw_deep`
-- `openclaw_continue`
+Hard gate compares each variant against:
 
-## Safety Rules
+1. absolute thresholds,
+2. best metrics across open-source baseline sources.
 
-- Session permissions are fixed: `CanRead=true`, `CanWrite=false`, `CanExecute=true`.
-- When approval is requested (for example `terminal.exec`), evaluator auto-rejects to avoid deadlock.
-- Stream monitor cancels abnormal runs when either condition is hit:
-  - repeated text delta loop,
-  - repeated identical tool-call signature loop.
+Gate metrics:
 
-## Scoring
+- `pass_rate`
+- `loop_safety_rate`
+- `recovery_success_rate`
+- `fallback_free_rate`
+- `average_accuracy`
 
-Each task emits three scores:
+Gate output is written into `report.json` under `gate` and `variant_metrics`.
 
-- `Accuracy`: task requirement coverage + evidence + no failure phrasing.
-- `Natural`: low preamble noise + low repetition + readable completion.
-- `Efficiency`: runtime, retries, loop churn, tool error cost.
+If `--enforce-gate` is enabled:
 
-Final score:
+- no passing variant => command exits non-zero,
+- recommended variant failing gate => command exits non-zero.
 
-- `Overall = 0.5 * Accuracy + 0.3 * Natural + 0.2 * Efficiency`
+## Replay Validation
+
+`cmd/ai-loop-replay` replays message logs and fails on known anti-patterns:
+
+- fallback final text (`loop limit`, `No response`, etc.),
+- tool-heavy runs without concrete conclusion.
+
+Fixtures:
+
+- `eval/replay_cases/loop_exhausted_fail.message.log.json`
+- `eval/replay_cases/normal_pass.message.log.json`
 
 ## Outputs
 
@@ -86,21 +114,13 @@ Default output directory:
 
 Artifacts:
 
-- `report.json`: structured full results.
-- `report.md`: ranking + per-task summary.
-- `state/`: temporary AI runtime state for this evaluation run.
+- `report.json`: full structured results, gate decisions, per-variant metrics.
+- `report.md`: human-readable ranking + gate summary.
+- `state/`: temporary runtime state for this evaluation run.
 
-## Convergence Rule
-
-- prioritize stage2 quality while keeping stage1 non-regressive;
-- break ties by higher `Accuracy`;
-- once a winner is selected, set prompt/loop defaults in runtime.
-
-## Current Default (after evaluation)
-
-Runtime default profiles are:
+## Current Runtime Default
 
 - Prompt profile: `natural_evidence_v2`
 - Loop profile: `fast_exit_v1`
 
-The default pair is chosen from the full matrix run and then validated with smoke reruns.
+Any future default update should be done only after `scripts/eval_gate.sh` passes.

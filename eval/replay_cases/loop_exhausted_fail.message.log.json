@@ -1,0 +1,73 @@
+{
+  "ok": true,
+  "data": {
+    "messages": [
+      {
+        "id": "u_1",
+        "role": "user",
+        "blocks": [
+          {
+            "type": "text",
+            "content": "帮我分析项目"
+          }
+        ],
+        "status": "complete"
+      },
+      {
+        "id": "a_1",
+        "role": "assistant",
+        "blocks": [
+          {
+            "type": "markdown",
+            "content": ""
+          },
+          {
+            "type": "tool-call",
+            "toolName": "fs.list_dir",
+            "status": "success"
+          },
+          {
+            "type": "tool-call",
+            "toolName": "fs.read_file",
+            "status": "success"
+          },
+          {
+            "type": "tool-call",
+            "toolName": "terminal.exec",
+            "status": "success"
+          },
+          {
+            "type": "tool-call",
+            "toolName": "terminal.exec",
+            "status": "success"
+          },
+          {
+            "type": "tool-call",
+            "toolName": "terminal.exec",
+            "status": "success"
+          },
+          {
+            "type": "tool-call",
+            "toolName": "fs.list_dir",
+            "status": "success"
+          },
+          {
+            "type": "tool-call",
+            "toolName": "fs.stat",
+            "status": "success"
+          },
+          {
+            "type": "tool-call",
+            "toolName": "fs.read_file",
+            "status": "success"
+          },
+          {
+            "type": "markdown",
+            "content": "I have reached the current automatic loop limit. I summarized all collected progress. Reply with one concrete next step and I will continue immediately."
+          }
+        ],
+        "status": "complete"
+      }
+    ]
+  }
+}

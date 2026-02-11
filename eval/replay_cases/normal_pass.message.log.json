@@ -1,0 +1,39 @@
+{
+  "ok": true,
+  "data": {
+    "messages": [
+      {
+        "id": "u_1",
+        "role": "user",
+        "blocks": [
+          {
+            "type": "text",
+            "content": "Analyze workspace"
+          }
+        ],
+        "status": "complete"
+      },
+      {
+        "id": "a_1",
+        "role": "assistant",
+        "blocks": [
+          {
+            "type": "tool-call",
+            "toolName": "fs.list_dir",
+            "status": "success"
+          },
+          {
+            "type": "tool-call",
+            "toolName": "fs.read_file",
+            "status": "success"
+          },
+          {
+            "type": "markdown",
+            "content": "Findings: core services are split by module. Evidence: /workspace/README.md and /workspace/go.mod. Conclusion: this project can be started via documented scripts."
+          }
+        ],
+        "status": "complete"
+      }
+    ]
+  }
+}
