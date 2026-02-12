@@ -294,7 +294,7 @@ func writeSSEJSON(w io.Writer, f http.Flusher, v any) {
 	f.Flush()
 }
 
-func TestIntegration_AISDK_OpenAI_ResponsesStream_GPT5_Succeeds(t *testing.T) {
+func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT5_Succeeds(t *testing.T) {
 	t.Parallel()
 
 	token := "MOCK_OK_RESPONSES"
@@ -319,7 +319,7 @@ func TestIntegration_AISDK_OpenAI_ResponsesStream_GPT5_Succeeds(t *testing.T) {
 		},
 	}
 
-	channelID := "ch_test_ai_sdk_1"
+	channelID := "ch_test_native_sdk_1"
 	meta := session.Meta{
 		EndpointID:        "env_test",
 		NamespacePublicID: "ns_test",
@@ -362,7 +362,7 @@ func TestIntegration_AISDK_OpenAI_ResponsesStream_GPT5_Succeeds(t *testing.T) {
 	}
 
 	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, "run_test_ai_sdk_1", RunStartRequest{
+	if err := svc.StartRun(ctx, &meta, "run_test_native_sdk_1", RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "Say hello"},
@@ -403,7 +403,7 @@ func TestIntegration_AISDK_OpenAI_ResponsesStream_GPT5_Succeeds(t *testing.T) {
 	}
 }
 
-func TestIntegration_AISDK_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testing.T) {
+func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testing.T) {
 	t.Parallel()
 
 	token := "MOCK_OK_CHAT"
@@ -428,7 +428,7 @@ func TestIntegration_AISDK_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testing.T) {
 		},
 	}
 
-	channelID := "ch_test_ai_sdk_2"
+	channelID := "ch_test_native_sdk_2"
 	meta := session.Meta{
 		EndpointID:        "env_test",
 		NamespacePublicID: "ns_test",
@@ -471,7 +471,7 @@ func TestIntegration_AISDK_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testing.T) {
 	}
 
 	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, "run_test_ai_sdk_2", RunStartRequest{
+	if err := svc.StartRun(ctx, &meta, "run_test_native_sdk_2", RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-4o-mini",
 		Input:    RunInput{Text: "Say hello"},

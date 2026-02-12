@@ -20,7 +20,7 @@ type Config struct {
 	AgentInstanceID     string                      `json:"agent_instance_id"`
 	Direct              *directv1.DirectConnectInfo `json:"direct"`
 
-	// AI config controls the optional TS sidecar-based agent features.
+	// AI config controls optional native AI agent features.
 	AI *AIConfig `json:"ai,omitempty"`
 
 	// PermissionPolicy is the local permission cap applied on the endpoint.

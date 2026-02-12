@@ -555,10 +555,8 @@ func runTask(ctx context.Context, svc *ai.Service, modelID string, workspacePath
 			Model:    modelID,
 			Input:    ai.RunInput{Text: turnText},
 			Options: ai.RunOptions{
-				MaxSteps:      task.MaxSteps,
-				PromptProfile: variant.PromptProfile,
-				LoopProfile:   variant.LoopProfile,
-				EvalTag:       variant.ID + ":" + task.ID,
+				MaxSteps: task.MaxSteps,
+				Mode:     strings.TrimSpace(variant.LoopProfile),
 			},
 		}, writer)
 		dur := time.Since(oneStart)

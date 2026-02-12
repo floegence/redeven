@@ -5,7 +5,7 @@ package ai
 // Design notes:
 // - The browser talks to the agent via the existing local gateway (/_redeven_proxy/api/ai/*) over Flowersec E2EE proxy.
 // - The agent enforces permissions using authoritative session_meta (direct control channel), not browser-claimed flags.
-// - The LLM orchestration runs in a TS sidecar process; the Go agent is the only authority that can execute tools.
+// - The LLM orchestration runs inside Go runtime; the Go agent is the only authority that can execute tools.
 
 import (
 	"strings"
@@ -83,47 +83,18 @@ type RunStartRequest struct {
 	Options  RunOptions `json:"options"`
 }
 
-// RunRequest is the internal run request passed to the sidecar (includes history).
+// RunRequest is the internal run request for Go runtime execution (includes history).
 type RunRequest struct {
-	Model          string             `json:"model"`
-	History        []RunHistoryMsg    `json:"history"`
-	Input          RunInput           `json:"input"`
-	Options        RunOptions         `json:"options"`
-	ContextPackage *RunContextPackage `json:"context_package,omitempty"`
+	Model     string          `json:"model"`
+	Objective string          `json:"objective,omitempty"`
+	History   []RunHistoryMsg `json:"history"`
+	Input     RunInput        `json:"input"`
+	Options   RunOptions      `json:"options"`
 }
 
 type RunHistoryMsg struct {
 	Role string `json:"role"`
 	Text string `json:"text"`
-}
-
-type RunContextPackage struct {
-	OpenGoal           string            `json:"open_goal,omitempty"`
-	HistorySummary     string            `json:"history_summary,omitempty"`
-	Anchors            []string          `json:"anchors,omitempty"`
-	ToolMemories       []RunToolMemory   `json:"tool_memories,omitempty"`
-	WorkingDirAbs      string            `json:"working_dir_abs,omitempty"`
-	TaskObjective      string            `json:"task_objective,omitempty"`
-	TaskSteps          []RunTaskStep     `json:"task_steps,omitempty"`
-	TaskProgressDigest string            `json:"task_progress_digest,omitempty"`
-	Stats              map[string]int    `json:"stats,omitempty"`
-	Meta               map[string]string `json:"meta,omitempty"`
-}
-
-// RunToolMemory is a compact cross-attempt tool execution memory item used by context orchestration.
-type RunToolMemory struct {
-	RunID         string `json:"run_id,omitempty"`
-	ToolName      string `json:"tool_name,omitempty"`
-	Status        string `json:"status,omitempty"`
-	ArgsPreview   string `json:"args_preview,omitempty"`
-	ResultPreview string `json:"result_preview,omitempty"`
-	ErrorCode     string `json:"error_code,omitempty"`
-	ErrorMessage  string `json:"error_message,omitempty"`
-}
-
-type RunTaskStep struct {
-	Title  string `json:"title"`
-	Status string `json:"status"`
 }
 
 type RunInput struct {
@@ -140,12 +111,30 @@ type RunAttachmentIn struct {
 type RunOptions struct {
 	MaxSteps int `json:"max_steps"`
 
-	// PromptProfile selects the sidecar prompt strategy.
-	PromptProfile string `json:"prompt_profile,omitempty"`
-	// LoopProfile selects the Go-side task-loop strategy.
-	LoopProfile string `json:"loop_profile,omitempty"`
-	// EvalTag is an optional experiment tag for diagnostics/evaluation only.
-	EvalTag string `json:"eval_tag,omitempty"`
+	// MaxNoToolRounds controls no-tool backpressure rounds before implicit completion.
+	// Default: 3.
+	MaxNoToolRounds int `json:"max_no_tool_rounds,omitempty"`
+
+	// ReasoningOnly disables no-tool backpressure and lets hard budgets/stop conditions decide completion.
+	ReasoningOnly bool `json:"reasoning_only,omitempty"`
+
+	// RequireUserConfirmOnTaskComplete forces explicit user confirmation when model emits task_complete.
+	RequireUserConfirmOnTaskComplete bool `json:"require_user_confirm_on_task_complete,omitempty"`
+
+	// Mode overrides runtime mode for this run (build|plan).
+	Mode string `json:"mode,omitempty"`
+
+	// Provider controls.
+	ThinkingBudgetTokens int      `json:"thinking_budget_tokens,omitempty"`
+	CacheControl         string   `json:"cache_control,omitempty"`
+	ResponseFormat       string   `json:"response_format,omitempty"`
+	Temperature          *float64 `json:"temperature,omitempty"`
+	TopP                 *float64 `json:"top_p,omitempty"`
+
+	// Optional hard budgets (0 means unset).
+	MaxInputTokens  int     `json:"max_input_tokens,omitempty"`
+	MaxOutputTokens int     `json:"max_output_tokens,omitempty"`
+	MaxCostUSD      float64 `json:"max_cost_usd,omitempty"`
 }
 
 type ToolApprovalRequest struct {
