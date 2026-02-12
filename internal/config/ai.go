@@ -7,14 +7,13 @@ import (
 	"strings"
 )
 
-// AIConfig configures the optional AI Agent feature (TS sidecar + Go executor).
+// AIConfig configures the optional AI Agent feature (Go Native runtime).
 //
 // Notes:
-//   - Secrets (api keys) must never be stored in this config. Keys are managed via a separate local secrets file
-//     and injected into the AI sidecar process env at run start.
+//   - Secrets (api keys) must never be stored in this config. Keys are managed via a separate local secrets file.
 //   - Field names are snake_case to match the rest of the agent config surface.
 type AIConfig struct {
-	// Providers is the provider registry available to the sidecar and UI.
+	// Providers is the provider registry available to the runtime and UI.
 	//
 	// Notes:
 	// - Providers own their allowed model list (provider + model are always configured together).
@@ -48,14 +47,6 @@ type AIConfig struct {
 	// ToolRecoveryFailOnRepeatedSignature controls fail-fast behavior when the same failure signature
 	// repeats across recovery attempts.
 	ToolRecoveryFailOnRepeatedSignature *bool `json:"tool_recovery_fail_on_repeated_signature,omitempty"`
-
-	// ToolRequiredIntents is an optional list of intent hint substrings.
-	//
-	// When the user input contains one of these substrings, the runtime treats the turn as
-	// requiring at least one tool call before completion.
-	//
-	// When empty, built-in defaults are used.
-	ToolRequiredIntents []string `json:"tool_required_intents,omitempty"`
 }
 
 type AIProvider struct {
@@ -85,11 +76,6 @@ type AIProviderModel struct {
 	IsDefault bool `json:"is_default,omitempty"`
 }
 
-// AIProviderAPIKeyEnvFixed is the fixed environment variable name injected into the AI sidecar process.
-//
-// It is intentionally Redeven-specific to avoid collisions with other local tools.
-const AIProviderAPIKeyEnvFixed = "REDEVEN_API_KEY"
-
 const (
 	AIModeBuild = "build"
 	AIModePlan  = "plan"
@@ -102,28 +88,6 @@ const (
 	defaultAIToolRecoveryAllowProbeTools         = true
 	defaultAIToolRecoveryFailOnRepeatedSignature = true
 )
-
-var defaultToolRequiredIntents = []string{
-	"analy",
-	"scan",
-	"inspect",
-	"read file",
-	"list dir",
-	"check config",
-	"run command",
-	"execute",
-	"analysis",
-	"project",
-	"codebase",
-	"分析",
-	"扫描",
-	"读取",
-	"查看目录",
-	"执行命令",
-	"检查配置",
-	"项目",
-	"代码",
-}
 
 func (c *AIConfig) Validate() error {
 	if c == nil {
@@ -145,14 +109,6 @@ func (c *AIConfig) Validate() error {
 			return fmt.Errorf("invalid tool_recovery_max_steps %d (must be in [0,8])", *c.ToolRecoveryMaxSteps)
 		}
 	}
-
-	for i, it := range c.ToolRequiredIntents {
-		v := strings.TrimSpace(it)
-		if v == "" {
-			return fmt.Errorf("tool_required_intents[%d]: empty value", i)
-		}
-	}
-
 	// Validate providers.
 	if len(c.Providers) == 0 {
 		return errors.New("missing providers")
@@ -337,27 +293,4 @@ func (c *AIConfig) EffectiveToolRecoveryFailOnRepeatedSignature() bool {
 		return defaultAIToolRecoveryFailOnRepeatedSignature
 	}
 	return *c.ToolRecoveryFailOnRepeatedSignature
-}
-
-func (c *AIConfig) EffectiveToolRequiredIntents() []string {
-	if c == nil || len(c.ToolRequiredIntents) == 0 {
-		return append([]string(nil), defaultToolRequiredIntents...)
-	}
-	out := make([]string, 0, len(c.ToolRequiredIntents))
-	seen := make(map[string]struct{}, len(c.ToolRequiredIntents))
-	for _, it := range c.ToolRequiredIntents {
-		v := strings.ToLower(strings.TrimSpace(it))
-		if v == "" {
-			continue
-		}
-		if _, ok := seen[v]; ok {
-			continue
-		}
-		seen[v] = struct{}{}
-		out = append(out, v)
-	}
-	if len(out) == 0 {
-		return append([]string(nil), defaultToolRequiredIntents...)
-	}
-	return out
 }

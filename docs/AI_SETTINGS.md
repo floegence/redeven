@@ -6,9 +6,9 @@ Goals:
 
 - Intuitive UI: users **paste API keys directly**, never configure env var names.
 - Safe storage: secrets are stored locally, never written to `config.json`, never returned to the UI.
-- Deterministic runtime: the effective API key injected into the AI sidecar is always the one configured in the local secrets store.
+- Deterministic runtime: the effective API key is always the one configured in the local secrets store.
 - Multi-provider: configure multiple providers and their keys at the same time.
-- Low-risk integration: keep the TypeScript sidecar + Vercel AI SDK call path stable (wire model id stays `<provider_id>/<model_name>`).
+- Native SDK runtime: OpenAI/Anthropic calls are executed by Go provider adapters (wire model id stays `<provider_id>/<model_name>`).
 
 Non-goals:
 
@@ -66,7 +66,7 @@ Notes:
 
 - `type` is one of: `openai` | `anthropic` | `openai_compatible`
 - `base_url` is optional for `openai`/`anthropic`, and required for `openai_compatible`
-- The API key env var name is intentionally **not configurable** in config or UI
+- Provider auth env var names are intentionally **not configurable** in config or UI
 
 ---
 
@@ -97,7 +97,7 @@ Rules:
 - `providers[].models[]` is the allow-list shown in the Chat UI.
 - Exactly one `providers[].models[].is_default` must be true across all providers (default for new chats).
 - `model_name` must not contain `/` (wire id uses `/` as a delimiter).
-- The agent derives the wire id as `provider.id + "/" + model_name` when talking to the sidecar and when returning `/api/ai/models`.
+- The agent derives the wire id as `provider.id + "/" + model_name` when talking to runtime providers and when returning `/api/ai/models`.
 
 Thread-level selection:
 
@@ -107,18 +107,15 @@ Thread-level selection:
 
 ---
 
-## 4. API Key Handling (Fixed Env Var: `REDEVEN_API_KEY`)
+## 4. API Key Handling (Go Native Runtime)
 
 Key points:
 
-- The sidecar reads the provider API key from a **single** env var: `REDEVEN_API_KEY`.
 - The UI never asks users to pick an env var name.
-- When starting a run, the Go agent:
-  1) resolves the key from `secrets.json` by `provider_id`
-  2) injects it into the sidecar process environment as `REDEVEN_API_KEY=<key>`
-  3) strips any inherited `REDEVEN_API_KEY` from the parent process env to keep behavior deterministic
-
-This achieves both an intuitive UX and stable runtime behavior.
+- For each run, the Go runtime:
+  1) resolves key by `provider_id` from `secrets.json`
+  2) initializes provider SDK client with that key (`openai-go` / `anthropic-sdk-go`)
+  3) never writes key back to `config.json` or API responses
 
 ---
 

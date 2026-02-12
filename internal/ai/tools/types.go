@@ -2,7 +2,7 @@ package tools
 
 import "strings"
 
-// ResultStatus is the normalized status returned by the Go tool runtime to the sidecar.
+// ResultStatus is the normalized status returned by the Go tool runtime.
 type ResultStatus string
 
 const (
@@ -19,6 +19,7 @@ const (
 	ErrorCodeInvalidPath      ErrorCode = "INVALID_PATH"
 	ErrorCodePermissionDenied ErrorCode = "PERMISSION_DENIED"
 	ErrorCodeTimeout          ErrorCode = "TIMEOUT"
+	ErrorCodeCanceled         ErrorCode = "CANCELED"
 	ErrorCodeUnknown          ErrorCode = "UNKNOWN"
 )
 
@@ -67,7 +68,7 @@ func (e *ToolError) Normalize() {
 	}
 }
 
-// ToolResultEnvelope is the normalized payload returned to the sidecar via tool.result.
+// ToolResultEnvelope is the normalized payload for tool call completion.
 type ToolResultEnvelope struct {
 	RunID  string       `json:"run_id"`
 	ToolID string       `json:"tool_id"`

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -17,6 +18,23 @@ type Invocation struct {
 func ClassifyError(inv Invocation, err error) *ToolError {
 	if err == nil {
 		return nil
+	}
+
+	// 优先使用错误类型判断，避免依赖字符串匹配。
+	if errors.Is(err, context.Canceled) {
+		out := &ToolError{Code: ErrorCodeCanceled, Message: "Canceled", Retryable: false}
+		out.Normalize()
+		return out
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		out := &ToolError{
+			Code:           ErrorCodeTimeout,
+			Message:        "Timed out",
+			Retryable:      true,
+			SuggestedFixes: []string{"Retry with a smaller scope.", "Increase timeout when safe."},
+		}
+		out.Normalize()
+		return out
 	}
 
 	msg := strings.TrimSpace(err.Error())

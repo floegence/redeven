@@ -211,22 +211,3 @@ func TestAIConfigValidate_RejectsInvalidToolRecoveryMaxSteps(t *testing.T) {
 		t.Fatalf("expected validation error for tool_recovery_max_steps=9")
 	}
 }
-
-func TestAIConfig_EffectiveToolRequiredIntents_DefaultAndDedupe(t *testing.T) {
-	t.Parallel()
-
-	cfg := &AIConfig{ToolRequiredIntents: []string{"  execute  ", "execute", "scan"}}
-	got := cfg.EffectiveToolRequiredIntents()
-	if len(got) != 2 {
-		t.Fatalf("EffectiveToolRequiredIntents len=%d, want 2 (%v)", len(got), got)
-	}
-	if got[0] != "execute" || got[1] != "scan" {
-		t.Fatalf("EffectiveToolRequiredIntents=%v, want [execute scan]", got)
-	}
-
-	nilCfg := (*AIConfig)(nil)
-	defaults := nilCfg.EffectiveToolRequiredIntents()
-	if len(defaults) == 0 {
-		t.Fatalf("default intents should not be empty")
-	}
-}

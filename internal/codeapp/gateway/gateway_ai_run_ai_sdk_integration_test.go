@@ -17,7 +17,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
-func TestGateway_AI_Run_UsesAISDKAndPersistsAssistantMessage(t *testing.T) {
+func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 	t.Parallel()
 
 	token := "MOCK_OK_GATEWAY"

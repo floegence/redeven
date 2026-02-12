@@ -17,7 +17,7 @@ import (
 func TestE2E_OpenAICompatibleBaseURL_StreamText(t *testing.T) {
 	t.Parallel()
 
-	// This is an opt-in e2e test that hits a real OpenAI-compatible endpoint via the TS sidecar.
+	// This is an opt-in e2e test that hits a real OpenAI-compatible endpoint via Go native runtime.
 	//
 	// It is intentionally skipped by default to avoid leaking secrets and creating flaky CI.
 	if strings.TrimSpace(os.Getenv("REDEVEN_AI_E2E")) != "1" {

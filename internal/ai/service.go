@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven-agent/internal/ai/threadstore"
@@ -45,17 +43,11 @@ type Options struct {
 	// When zero, it defaults to 10 seconds.
 	PersistOpTimeout time.Duration
 
-	// SidecarScriptPath overrides the embedded sidecar bundle path.
-	//
-	// When empty, the embedded bundle is materialized under <stateDir>/ai/sidecar/sidecar.mjs.
-	// This is intended for tests only.
-	SidecarScriptPath string
-
 	// RunMaxWallTime is the hard cap for a single run's lifetime.
 	//
 	// When zero, it defaults to 15 minutes.
 	RunMaxWallTime time.Duration
-	// RunIdleTimeout cancels a run if no sidecar event is received for the duration.
+	// RunIdleTimeout cancels a run if no runtime stream activity is observed for the duration.
 	//
 	// When zero, it defaults to 2 minutes.
 	RunIdleTimeout time.Duration
@@ -85,11 +77,10 @@ type Service struct {
 
 	persistOpTO time.Duration
 
-	sidecarScriptPath string
-	runMaxWallTime    time.Duration
-	runIdleTimeout    time.Duration
-	approvalTimeout   time.Duration
-	streamWriteTO     time.Duration
+	runMaxWallTime  time.Duration
+	runIdleTimeout  time.Duration
+	approvalTimeout time.Duration
+	streamWriteTO   time.Duration
 
 	resolveProviderKey func(providerID string) (string, bool, error)
 
@@ -182,7 +173,6 @@ func NewService(opts Options) (*Service, error) {
 		shell:                 strings.TrimSpace(opts.Shell),
 		cfg:                   opts.Config,
 		persistOpTO:           persistTO,
-		sidecarScriptPath:     strings.TrimSpace(opts.SidecarScriptPath),
 		runMaxWallTime:        maxWall,
 		runIdleTimeout:        idleTO,
 		approvalTimeout:       approvalTO,
@@ -581,7 +571,6 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		ChannelID:           channelID,
 		EndpointID:          endpointID,
 		ThreadID:            threadID,
-		SidecarScriptPath:   s.sidecarScriptPath,
 		MaxWallTime:         s.runMaxWallTime,
 		IdleTimeout:         s.runIdleTimeout,
 		ToolApprovalTimeout: s.approvalTimeout,
@@ -691,9 +680,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		delete(s.activeRunByChan, channelID)
 		delete(s.activeRunByTh, thKey)
 		s.mu.Unlock()
-		if r.doneCh != nil {
-			close(r.doneCh)
-		}
+		r.markDone()
 
 		runStatus, runStatusErr := deriveThreadRunState(r.getEndReason(), retErr)
 		if prepared.updateThreadRunState != nil {
@@ -724,39 +711,22 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		history = append(history, RunHistoryMsg{Role: role, Text: text})
 	}
 	rawUserInputText := strings.TrimSpace(req.Input.Text)
-	continueRequest := isContinueRequestText(rawUserInputText)
-	openGoal := ""
+
+	// open_goal is persisted per-thread and updated only from explicit user input,
+	// never from keyword heuristics like "continue".
+	openGoal := strings.TrimSpace(rawUserInputText)
 	stateLoadCtx, cancelStateLoad := context.WithTimeout(context.Background(), persistTO)
 	threadState, stateErr := db.GetThreadState(stateLoadCtx, endpointID, threadID)
 	cancelStateLoad()
 	if stateErr != nil {
 		r.log.Warn("load thread state failed", "thread_id", threadID, "error", stateErr)
 	} else if threadState != nil {
-		openGoal = strings.TrimSpace(threadState.OpenGoal)
+		if openGoal == "" {
+			openGoal = strings.TrimSpace(threadState.OpenGoal)
+		}
 	}
-	if continueRequest && openGoal == "" {
-		openGoal = deriveOpenGoalFromHistory(history)
-	}
-
 	effectiveInput := req.Input
-	if continueRequest && openGoal != "" {
-		effectiveInput.Text = buildContinueInputText(openGoal)
-	} else if rawUserInputText != "" {
-		openGoal = rawUserInputText
-	}
-
-	toolMemories := make([]RunToolMemory, 0, 12)
-	toolCtx, cancelToolCtx := context.WithTimeout(context.Background(), persistTO)
-	recentToolCalls, toolErr := db.ListRecentThreadToolCalls(toolCtx, endpointID, threadID, 20)
-	cancelToolCtx()
-	if toolErr != nil {
-		r.log.Warn("load recent tool calls failed", "thread_id", threadID, "error", toolErr)
-	} else {
-		toolMemories = buildRunToolMemories(recentToolCalls)
-	}
-
-	contextBuilt := buildRunContext(history, effectiveInput.Text, openGoal, s.fsRoot, toolMemories)
-	historyForRun := contextBuilt.History
+	historyForRun := history
 
 	userMsgID, err := newUserMessageID()
 	if err != nil {
@@ -790,12 +760,10 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	case <-ctx.Done():
 		switch strings.TrimSpace(r.getCancelReason()) {
 		case "canceled":
-			r.finalizeNotice("canceled")
 			r.setEndReason("canceled")
 			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: messageID})
 			return nil
 		case "timed_out":
-			r.finalizeNotice("timed_out")
 			r.setEndReason("timed_out")
 			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: messageID})
 			return nil
@@ -831,11 +799,11 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}
 
 	runReq := RunRequest{
-		Model:          model,
-		History:        historyForRun,
-		Input:          effectiveInput,
-		Options:        req.Options,
-		ContextPackage: contextBuilt.Pkg,
+		Model:     model,
+		Objective: strings.TrimSpace(openGoal),
+		History:   historyForRun,
+		Input:     effectiveInput,
+		Options:   req.Options,
 	}
 	runErr := r.run(ctx, runReq)
 	finalErr := runErr
@@ -845,12 +813,10 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		if errors.Is(runErr, context.Canceled) {
 			switch reason {
 			case "canceled":
-				r.finalizeNotice("canceled")
 				r.setEndReason("canceled")
 				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: messageID})
 				handledCancel = true
 			case "timed_out":
-				r.finalizeNotice("timed_out")
 				r.setEndReason("timed_out")
 				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: messageID})
 				handledCancel = true
@@ -900,22 +866,15 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	if shouldClearThreadState(finalReason) {
 		_ = db.ClearThreadState(stateCtx, endpointID, threadID)
 	} else {
-		goalForState := strings.TrimSpace(openGoal)
-		if goalForState == "" && !continueRequest {
-			goalForState = rawUserInputText
-		}
-		if goalForState != "" {
+		if strings.TrimSpace(openGoal) != "" {
 			assistantSummary := strings.TrimSpace(assistantText)
-			if assistantSummary == "" && contextBuilt.Pkg != nil {
-				assistantSummary = strings.TrimSpace(contextBuilt.Pkg.HistorySummary)
-			}
 			if len([]rune(assistantSummary)) > 600 {
 				assistantSummary = string([]rune(assistantSummary)[:600])
 			}
 			_ = db.UpsertThreadState(stateCtx, threadstore.ThreadState{
 				EndpointID:           endpointID,
 				ThreadID:             threadID,
-				OpenGoal:             goalForState,
+				OpenGoal:             strings.TrimSpace(openGoal),
 				LastAssistantSummary: assistantSummary,
 				UpdatedAtUnixMs:      time.Now().UnixMilli(),
 			})
@@ -926,101 +885,13 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	return finalErr
 }
 
-func isContinueRequestText(text string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(text))
-	switch normalized {
-	case "continue", "please continue", "继续", "继续吧", "请继续", "继续执行", "继续分析":
+func shouldClearThreadState(finalReason string) bool {
+	switch strings.TrimSpace(finalReason) {
+	case "task_complete", "implicit_complete_backpressure", "implicit_complete_reasoning_only":
 		return true
 	default:
 		return false
 	}
-}
-
-func buildContinueInputText(openGoal string) string {
-	goal := strings.TrimSpace(openGoal)
-	if goal == "" {
-		return "continue"
-	}
-	return strings.Join([]string{
-		"Continue the unfinished goal from previous turn.",
-		"Open goal: " + goal,
-		"Do not repeat preamble.",
-		"Use existing tool results first, then continue with the next concrete step and provide a progress update.",
-	}, "\n")
-}
-
-func shouldClearThreadState(finalReason string) bool {
-	return strings.TrimSpace(finalReason) == "complete_answered"
-}
-
-func deriveOpenGoalFromHistory(history []RunHistoryMsg) string {
-	for i := len(history) - 1; i >= 0; i-- {
-		msg := history[i]
-		if strings.TrimSpace(strings.ToLower(msg.Role)) != "user" {
-			continue
-		}
-		text := strings.TrimSpace(msg.Text)
-		if text == "" {
-			continue
-		}
-		if isContinueRequestText(text) {
-			continue
-		}
-		return clampGoalText(text, 600)
-	}
-	return ""
-}
-
-func buildRunToolMemories(records []threadstore.ToolCallRecord) []RunToolMemory {
-	if len(records) == 0 {
-		return nil
-	}
-	out := make([]RunToolMemory, 0, len(records))
-	for _, rec := range records {
-		name := strings.TrimSpace(rec.ToolName)
-		if name == "" {
-			continue
-		}
-		out = append(out, RunToolMemory{
-			RunID:         strings.TrimSpace(rec.RunID),
-			ToolName:      name,
-			Status:        strings.TrimSpace(strings.ToLower(rec.Status)),
-			ArgsPreview:   compactJSONString(rec.ArgsJSON, 220),
-			ResultPreview: compactJSONString(rec.ResultJSON, 260),
-			ErrorCode:     strings.TrimSpace(strings.ToUpper(rec.ErrorCode)),
-			ErrorMessage:  clampGoalText(strings.TrimSpace(rec.ErrorMessage), 220),
-		})
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func compactJSONString(raw string, maxRunes int) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" || raw == "{}" || raw == "null" {
-		return ""
-	}
-	var v any
-	if err := json.Unmarshal([]byte(raw), &v); err == nil {
-		if b, err := json.Marshal(v); err == nil {
-			raw = string(b)
-		}
-	}
-	raw = strings.Join(strings.Fields(raw), " ")
-	return clampGoalText(raw, maxRunes)
-}
-
-func clampGoalText(text string, maxRunes int) string {
-	text = strings.TrimSpace(text)
-	if text == "" || maxRunes <= 0 {
-		return ""
-	}
-	if utf8.RuneCountInString(text) <= maxRunes {
-		return text
-	}
-	return string([]rune(text)[:maxRunes]) + "..."
 }
 
 func deriveThreadRunState(endReason string, runErr error) (string, string) {

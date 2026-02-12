@@ -42,7 +42,6 @@ type runOptions struct {
 	UserPublicID string
 	MessageID    string
 
-	SidecarScriptPath   string
 	MaxWallTime         time.Duration
 	IdleTimeout         time.Duration
 	ToolApprovalTimeout time.Duration
@@ -54,6 +53,10 @@ type runOptions struct {
 
 	OnStreamEvent func(any)
 	Writer        http.ResponseWriter
+
+	SubagentDepth         int
+	AllowSubagentDelegate bool
+	ToolAllowlist         []string
 }
 
 type run struct {
@@ -63,6 +66,7 @@ type run struct {
 	fsRoot   string
 	shell    string
 	cfg      *config.AIConfig
+	runMode  string
 
 	sessionMeta        *session.Meta
 	resolveProviderKey func(providerID string) (string, bool, error)
@@ -74,11 +78,11 @@ type run struct {
 	userPublicID string
 	messageID    string
 
-	sidecarScriptPath string
-	maxWallTime       time.Duration
-	idleTimeout       time.Duration
-	toolApprovalTO    time.Duration
-	doneCh            chan struct{}
+	maxWallTime    time.Duration
+	idleTimeout    time.Duration
+	toolApprovalTO time.Duration
+	doneCh         chan struct{}
+	doneOnce       sync.Once
 
 	muCancel        sync.Mutex
 	cancelReason    string // "canceled"|"timed_out"|""
@@ -95,7 +99,6 @@ type run struct {
 	stream        *ndjsonStream
 
 	mu              sync.Mutex
-	sidecar         *sidecarProcess
 	toolApprovals   map[string]chan bool // tool_id -> decision channel
 	toolBlockIndex  map[string]int       // tool_id -> blockIndex
 	waitingApproval bool
@@ -113,28 +116,16 @@ type run struct {
 	assistantCreatedAtUnixMs int64
 	assistantBlocks          []any
 
-	recoveryEnabled                 bool
-	recoveryMaxSteps                int
-	recoveryAllowPathRewrite        bool
-	recoveryAllowProbeTools         bool
-	recoveryFailOnRepeatedSignature bool
-	requiresTools                   bool
-	totalToolCalls                  int
-	recoveryState                   turnRecoveryState
-	taskLoopCfg                     taskLoopConfig
-	taskLoopProfile                 string
-	taskLoopState                   taskLoopState
-	finalizationReason              string
-}
+	finalizationReason string
+	currentModelID     string
 
-type sidecarProvider struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	BaseURL   string `json:"base_url,omitempty"`
-	APIKeyEnv string `json:"api_key_env"`
-}
+	subagentDepth         int
+	allowSubagentDelegate bool
+	toolAllowlist         map[string]struct{}
 
-const defaultPromptProfileID = "natural_evidence_v2"
+	skillManager    *skillManager
+	subagentManager *subagentManager
+}
 
 func newRun(opts runOptions) *run {
 	var runMeta *session.Meta
@@ -143,57 +134,49 @@ func newRun(opts runOptions) *run {
 		runMeta = &metaCopy
 	}
 
-	recoveryEnabled := true
-	recoveryMaxSteps := 3
-	recoveryAllowPathRewrite := true
-	recoveryAllowProbeTools := true
-	recoveryFailOnRepeatedSignature := true
-	if opts.AIConfig != nil {
-		recoveryEnabled = opts.AIConfig.EffectiveToolRecoveryEnabled()
-		recoveryMaxSteps = opts.AIConfig.EffectiveToolRecoveryMaxSteps()
-		recoveryAllowPathRewrite = opts.AIConfig.EffectiveToolRecoveryAllowPathRewrite()
-		recoveryAllowProbeTools = opts.AIConfig.EffectiveToolRecoveryAllowProbeTools()
-		recoveryFailOnRepeatedSignature = opts.AIConfig.EffectiveToolRecoveryFailOnRepeatedSignature()
-	}
-
 	r := &run{
-		log:                             opts.Log,
-		stateDir:                        strings.TrimSpace(opts.StateDir),
-		fsRoot:                          strings.TrimSpace(opts.FSRoot),
-		shell:                           strings.TrimSpace(opts.Shell),
-		cfg:                             opts.AIConfig,
-		sessionMeta:                     runMeta,
-		resolveProviderKey:              opts.ResolveProviderKey,
-		id:                              strings.TrimSpace(opts.RunID),
-		channelID:                       strings.TrimSpace(opts.ChannelID),
-		endpointID:                      strings.TrimSpace(opts.EndpointID),
-		threadID:                        strings.TrimSpace(opts.ThreadID),
-		userPublicID:                    strings.TrimSpace(opts.UserPublicID),
-		messageID:                       strings.TrimSpace(opts.MessageID),
-		uploadsDir:                      strings.TrimSpace(opts.UploadsDir),
-		threadsDB:                       opts.ThreadsDB,
-		persistOpTimeout:                opts.PersistOpTimeout,
-		onStreamEvent:                   opts.OnStreamEvent,
-		w:                               opts.Writer,
-		toolApprovals:                   make(map[string]chan bool),
-		toolBlockIndex:                  make(map[string]int),
-		sidecarScriptPath:               strings.TrimSpace(opts.SidecarScriptPath),
-		maxWallTime:                     opts.MaxWallTime,
-		idleTimeout:                     opts.IdleTimeout,
-		toolApprovalTO:                  opts.ToolApprovalTimeout,
-		doneCh:                          make(chan struct{}),
-		recoveryEnabled:                 recoveryEnabled,
-		recoveryMaxSteps:                recoveryMaxSteps,
-		recoveryAllowPathRewrite:        recoveryAllowPathRewrite,
-		recoveryAllowProbeTools:         recoveryAllowProbeTools,
-		recoveryFailOnRepeatedSignature: recoveryFailOnRepeatedSignature,
-		recoveryState: turnRecoveryState{
-			FailureSignatures: map[string]int{},
-		},
-		taskLoopCfg:         defaultTaskLoopConfig(),
-		taskLoopProfile:     defaultTaskLoopProfileID,
-		taskLoopState:       newTaskLoopState(""),
+		log:                 opts.Log,
+		stateDir:            strings.TrimSpace(opts.StateDir),
+		fsRoot:              strings.TrimSpace(opts.FSRoot),
+		shell:               strings.TrimSpace(opts.Shell),
+		cfg:                 opts.AIConfig,
+		sessionMeta:         runMeta,
+		resolveProviderKey:  opts.ResolveProviderKey,
+		id:                  strings.TrimSpace(opts.RunID),
+		channelID:           strings.TrimSpace(opts.ChannelID),
+		endpointID:          strings.TrimSpace(opts.EndpointID),
+		threadID:            strings.TrimSpace(opts.ThreadID),
+		userPublicID:        strings.TrimSpace(opts.UserPublicID),
+		messageID:           strings.TrimSpace(opts.MessageID),
+		uploadsDir:          strings.TrimSpace(opts.UploadsDir),
+		threadsDB:           opts.ThreadsDB,
+		persistOpTimeout:    opts.PersistOpTimeout,
+		onStreamEvent:       opts.OnStreamEvent,
+		w:                   opts.Writer,
+		toolApprovals:       make(map[string]chan bool),
+		toolBlockIndex:      make(map[string]int),
+		maxWallTime:         opts.MaxWallTime,
+		idleTimeout:         opts.IdleTimeout,
+		toolApprovalTO:      opts.ToolApprovalTimeout,
+		doneCh:              make(chan struct{}),
 		lifecycleMinEmitGap: 600 * time.Millisecond,
+		subagentDepth:       opts.SubagentDepth,
+		allowSubagentDelegate: func() bool {
+			if opts.AllowSubagentDelegate {
+				return true
+			}
+			return opts.SubagentDepth <= 0
+		}(),
+	}
+	if len(opts.ToolAllowlist) > 0 {
+		r.toolAllowlist = make(map[string]struct{}, len(opts.ToolAllowlist))
+		for _, name := range opts.ToolAllowlist {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			r.toolAllowlist[name] = struct{}{}
+		}
 	}
 	if opts.Writer != nil {
 		r.stream = newNDJSONStream(r.w, opts.StreamWriteTimeout)
@@ -206,14 +189,38 @@ func (r *run) requestCancel(reason string) {
 		return
 	}
 	reason = strings.TrimSpace(reason)
-	if reason != "" {
-		r.muCancel.Lock()
-		if r.cancelReason == "" {
-			r.cancelReason = reason
-		}
-		r.muCancel.Unlock()
+	r.muCancel.Lock()
+	if reason != "" && r.cancelReason == "" {
+		r.cancelReason = reason
 	}
-	r.cancel()
+	alreadyRequested := r.cancelRequested
+	r.cancelRequested = true
+	cancelFn := r.cancelFn
+	r.muCancel.Unlock()
+	if alreadyRequested || cancelFn == nil {
+		if r.subagentManager != nil {
+			r.subagentManager.closeAll()
+		}
+		return
+	}
+
+	// Cancel is a hard instruction:
+	// - signal: cancel context immediately to stop new sampling/tool dispatch
+	// - grace/force: re-signal after a short delay in case something is stuck
+	cancelFn()
+	if r.subagentManager != nil {
+		r.subagentManager.closeAll()
+	}
+	go func() {
+		timer := time.NewTimer(500 * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-r.doneCh:
+			return
+		case <-timer.C:
+			cancelFn()
+		}
+	}()
 }
 
 func (r *run) getCancelReason() string {
@@ -277,16 +284,10 @@ func (r *run) cancel() {
 	if cancelFn != nil {
 		cancelFn()
 	}
-
-	r.mu.Lock()
-	sc := r.sidecar
-	r.mu.Unlock()
-	if sc != nil {
-		// Best-effort: never block cancel on a stuck sidecar stdin pipe.
-		go func() {
-			_ = sc.send("run.cancel", map[string]any{"run_id": r.id})
-		}()
+	if r.subagentManager != nil {
+		r.subagentManager.closeAll()
 	}
+
 }
 
 func (r *run) sendStreamEvent(ev any) {
@@ -304,6 +305,15 @@ func (r *run) sendStreamEvent(ev any) {
 			r.log.Debug("ai stream sink write failed", "run_id", r.id, "error", err)
 		}
 	}
+}
+
+func (r *run) markDone() {
+	if r == nil || r.doneCh == nil {
+		return
+	}
+	r.doneOnce.Do(func() {
+		close(r.doneCh)
+	})
 }
 
 func (r *run) debug(event string, attrs ...any) {
@@ -374,26 +384,6 @@ func (r *run) emitLifecyclePhase(raw string, diag map[string]any) {
 		Phase:     phase,
 		Diag:      eventDiag,
 	})
-}
-
-func shouldCommitAttemptAssistantText(summary turnAttemptSummary) bool {
-	text := strings.TrimSpace(summary.AssistantText)
-	if text == "" {
-		return false
-	}
-	hasTools := summary.ToolCalls > 0 || summary.OutcomeToolCalls > 0 || summary.OutcomeLastStepToolCalls > 0
-	if hasTools && summary.OutcomeHasText && !summary.OutcomeNeedsFollowUpHint {
-		return true
-	}
-	if hasTools {
-		if !hasSubstantiveAssistantAnswer(text) || looksInterimAssistantText(text) {
-			return false
-		}
-	}
-	if hasUnfulfilledActionCommitment(text) && !hasSubstantiveAssistantAnswer(text) {
-		return false
-	}
-	return true
 }
 
 func errorString(err error) string {
@@ -620,17 +610,12 @@ func (r *run) approveTool(toolID string, approved bool) error {
 }
 
 func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
+	defer r.markDone()
 	if r == nil {
 		return errors.New("nil run")
 	}
 	if ctx == nil {
 		ctx = context.Background()
-	}
-	if strings.TrimSpace(req.Options.PromptProfile) == "" {
-		req.Options.PromptProfile = defaultPromptProfileID
-	}
-	if profileID, _ := resolveTaskLoopConfigProfile(req.Options.LoopProfile); strings.TrimSpace(req.Options.LoopProfile) == "" {
-		req.Options.LoopProfile = profileID
 	}
 	r.setFinalizationReason("")
 	startedAt := time.Now()
@@ -639,14 +624,6 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		"model":         strings.TrimSpace(req.Model),
 		"history_count": len(req.History),
 	}
-	if req.ContextPackage != nil {
-		runStartPayload["context_open_goal"] = strings.TrimSpace(req.ContextPackage.OpenGoal)
-		runStartPayload["context_anchor_count"] = len(req.ContextPackage.Anchors)
-		runStartPayload["context_summary_chars"] = utf8.RuneCountInString(strings.TrimSpace(req.ContextPackage.HistorySummary))
-	}
-	runStartPayload["prompt_profile"] = strings.TrimSpace(req.Options.PromptProfile)
-	runStartPayload["loop_profile"] = strings.TrimSpace(req.Options.LoopProfile)
-	runStartPayload["eval_tag"] = strings.TrimSpace(req.Options.EvalTag)
 	r.persistRunEvent("run.start", RealtimeStreamKindLifecycle, runStartPayload)
 	defer func() {
 		endReason := strings.TrimSpace(r.getEndReason())
@@ -730,11 +707,9 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	r.sendStreamEvent(streamEventMessageStart{Type: "message-start", MessageID: r.messageID})
 	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"})
 	r.emitLifecyclePhase("planning", nil)
-	// Note: timeouts are enforced via an out-of-band goroutine (after sidecar starts) so the run
-	// still cancels even when blocked in sc.recv().
 
-	// Resolve provider key for this run, then inject it into the sidecar env.
 	modelID := strings.TrimSpace(req.Model)
+	r.currentModelID = modelID
 	providerID, _, ok := strings.Cut(modelID, "/")
 	providerID = strings.TrimSpace(providerID)
 	if r.cfg == nil {
@@ -744,67 +719,38 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	if rootErr != nil {
 		return r.failRun("AI working directory not configured", rootErr)
 	}
-	toolRequiredIntents := r.cfg.EffectiveToolRequiredIntents()
-	r.requiresTools = shouldRequireToolExecution(req.Input.Text, toolRequiredIntents)
-	r.taskLoopProfile, r.taskLoopCfg = resolveTaskLoopConfigProfile(req.Options.LoopProfile)
-	req.Options.LoopProfile = r.taskLoopProfile
-	if strings.TrimSpace(req.Options.PromptProfile) == "" {
-		req.Options.PromptProfile = defaultPromptProfileID
+	taskObjective := strings.TrimSpace(req.Objective)
+	if taskObjective == "" {
+		taskObjective = strings.TrimSpace(req.Input.Text)
 	}
-	taskObjective := strings.TrimSpace(req.Input.Text)
-	if req.ContextPackage != nil {
-		if v := strings.TrimSpace(req.ContextPackage.TaskObjective); v != "" {
-			taskObjective = v
-		}
-		if v := strings.TrimSpace(req.ContextPackage.OpenGoal); v != "" {
-			taskObjective = v
-		}
-		req.ContextPackage.TaskObjective = taskObjective
-		if len(req.ContextPackage.TaskSteps) == 0 {
-			req.ContextPackage.TaskSteps = buildTaskStepSketch(taskObjective)
-		}
-	}
-	r.taskLoopState = newTaskLoopState(taskObjective)
 	r.debug("ai.run.start",
 		"model", modelID,
 		"max_steps", req.Options.MaxSteps,
-		"prompt_profile", strings.TrimSpace(req.Options.PromptProfile),
-		"loop_profile", strings.TrimSpace(r.taskLoopProfile),
-		"eval_tag", strings.TrimSpace(req.Options.EvalTag),
 		"history_count", len(req.History),
 		"attachment_count", len(req.Input.Attachments),
 		"input_chars", utf8.RuneCountInString(strings.TrimSpace(req.Input.Text)),
+		"objective_chars", utf8.RuneCountInString(strings.TrimSpace(taskObjective)),
 		"working_dir_abs", sanitizeLogText(workingDirAbs, 200),
-		"recovery_enabled", r.recoveryEnabled,
-		"recovery_max_steps", r.recoveryMaxSteps,
-		"recovery_allow_path_rewrite", r.recoveryAllowPathRewrite,
-		"recovery_allow_probe_tools", r.recoveryAllowProbeTools,
-		"recovery_fail_on_repeated_signature", r.recoveryFailOnRepeatedSignature,
-		"requires_tools", r.requiresTools,
 	)
 	if !ok || providerID == "" {
 		return r.failRun("Invalid model id", fmt.Errorf("invalid model id %q", modelID))
 	}
-	knownProvider := false
-	for _, p := range r.cfg.Providers {
-		if strings.TrimSpace(p.ID) == providerID {
-			knownProvider = true
-			break
+	var providerCfg *config.AIProvider
+	for i := range r.cfg.Providers {
+		p := &r.cfg.Providers[i]
+		if strings.TrimSpace(p.ID) != providerID {
+			continue
 		}
+		providerCfg = p
+		break
 	}
-	if !knownProvider {
+	if providerCfg == nil {
 		return r.failRun("Unknown AI provider", fmt.Errorf("unknown provider %q", providerID))
 	}
 
 	providerDisplay := providerID
-	for _, p := range r.cfg.Providers {
-		if strings.TrimSpace(p.ID) != providerID {
-			continue
-		}
-		if n := strings.TrimSpace(p.Name); n != "" {
-			providerDisplay = n + " (" + providerID + ")"
-		}
-		break
+	if n := strings.TrimSpace(providerCfg.Name); n != "" {
+		providerDisplay = n + " (" + providerID + ")"
 	}
 
 	if r.resolveProviderKey == nil {
@@ -821,915 +767,26 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		)
 	}
 
-	// Filter out any inherited var with the same name to keep behavior deterministic.
-	// The effective key must always come from the local secrets store.
-	env := make([]string, 0, len(os.Environ())+1)
-	prefix := config.AIProviderAPIKeyEnvFixed + "="
-	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, prefix) {
-			continue
-		}
-		env = append(env, kv)
+	if !r.shouldUseNativeRuntime(providerCfg) {
+		return r.failRun("Unsupported AI provider type", fmt.Errorf("unsupported provider type %q", strings.TrimSpace(providerCfg.Type)))
 	}
-	env = append(env, prefix+strings.TrimSpace(apiKey))
-
-	sc, err := startSidecar(ctx, r.log, r.stateDir, env, r.sidecarScriptPath)
-	if err != nil {
-		if r.finalizeIfContextCanceled(ctx) {
-			return nil
-		}
-		return r.failRun("AI sidecar unavailable", err)
-	}
-	r.mu.Lock()
-	r.sidecar = sc
-	r.mu.Unlock()
-	r.debug("ai.run.sidecar.started", "script_path", sanitizeLogText(r.sidecarScriptPath, 256))
-	defer sc.close()
-	go func() {
-		<-ctx.Done()
-		// Ensure recv() unblocks even when sidecar never emits a terminal event.
-		sc.close()
-	}()
-
-	// Initialize + start.
-	providers := make([]sidecarProvider, 0, len(r.cfg.Providers))
-	for _, p := range r.cfg.Providers {
-		out := sidecarProvider{
-			ID:        strings.TrimSpace(p.ID),
-			Type:      strings.TrimSpace(p.Type),
-			BaseURL:   strings.TrimSpace(p.BaseURL),
-			APIKeyEnv: config.AIProviderAPIKeyEnvFixed,
-		}
-		if out.ID == "" || out.Type == "" {
-			continue
-		}
-		providers = append(providers, out)
-	}
-
-	if err := sc.send("initialize", map[string]any{
-		"v":         1,
-		"run_id":    r.id,
-		"providers": providers,
-	}); err != nil {
-		if r.finalizeIfContextCanceled(ctx) {
-			return nil
-		}
-		return r.failRun("Failed to initialize AI sidecar", err)
-	}
-	r.debug("ai.run.sidecar.initialized", "provider_count", len(providers))
-
-	// Resolve attachments (best-effort).
-	sidecarAttachments := make([]map[string]any, 0, len(req.Input.Attachments))
-	for _, a := range req.Input.Attachments {
-		att, err := r.loadAttachmentForSidecar(a)
-		if err != nil || att == nil {
-			continue
-		}
-		sidecarAttachments = append(sidecarAttachments, att)
-	}
-
-	lastRecoveryReason := ""
-	lastRecoveryAction := ""
-	lastRecoveryErrorCode := ""
-	lastRecoveryErrorMessage := ""
-
-	attemptToolMemories := []RunToolMemory{}
-	if req.ContextPackage != nil {
-		attemptToolMemories = append(attemptToolMemories, req.ContextPackage.ToolMemories...)
-	}
-
-	sendRunStart := func(attemptIdx int, history []RunHistoryMsg, input RunInput, includeAttachments bool) error {
-		attachments := []map[string]any{}
-		if includeAttachments {
-			attachments = sidecarAttachments
-		}
-		budgetLeft := r.recoveryMaxSteps - r.recoveryState.RecoverySteps
-		if budgetLeft < 0 {
-			budgetLeft = 0
-		}
-		if req.ContextPackage == nil {
-			req.ContextPackage = &RunContextPackage{}
-		}
-		req.ContextPackage.WorkingDirAbs = workingDirAbs
-		req.ContextPackage.ToolMemories = tailRunToolMemories(attemptToolMemories, historyToolMemoryKeep)
-		req.ContextPackage.TaskProgressDigest = truncateProgressDigest(r.taskLoopState.LastDigest, 320)
-		if strings.TrimSpace(req.ContextPackage.TaskObjective) == "" {
-			req.ContextPackage.TaskObjective = strings.TrimSpace(r.taskLoopState.Objective)
-		}
-		if err := sc.send("run.start", map[string]any{
-			"run_id":          r.id,
-			"model":           req.Model,
-			"mode":            r.cfg.EffectiveMode(),
-			"history":         history,
-			"context_package": req.ContextPackage,
-			"working_dir_abs": workingDirAbs,
-			"input": map[string]any{
-				"text":        input.Text,
-				"attachments": attachments,
-			},
-			"options": req.Options,
-			"recovery": map[string]any{
-				"enabled":            r.recoveryEnabled,
-				"max_steps":          r.recoveryMaxSteps,
-				"requires_tools":     r.requiresTools,
-				"attempt_index":      attemptIdx,
-				"steps_used":         r.recoveryState.RecoverySteps,
-				"budget_left":        budgetLeft,
-				"reason":             lastRecoveryReason,
-				"action":             lastRecoveryAction,
-				"last_error_code":    lastRecoveryErrorCode,
-				"last_error_message": lastRecoveryErrorMessage,
-			},
-		}); err != nil {
-			if r.finalizeIfContextCanceled(ctx) {
-				return nil
-			}
-			return r.failRun("Failed to start AI run", err)
-		}
-		r.debug("ai.run.sidecar.run_start_sent",
-			"attempt_index", attemptIdx,
-			"attachment_count", len(attachments),
-			"history_count", len(history),
-			"input_chars", utf8.RuneCountInString(strings.TrimSpace(input.Text)),
-			"recovery_steps_used", r.recoveryState.RecoverySteps,
-			"recovery_budget_left", budgetLeft,
-		)
-		return nil
-	}
-
-	activityCh := make(chan struct{}, 1)
-	signalActivity := func() {
-		select {
-		case activityCh <- struct{}{}:
-		default:
-		}
-	}
-	signalActivity()
-
-	if r.maxWallTime > 0 || r.idleTimeout > 0 {
-		go func() {
-			var wallTimer *time.Timer
-			var idleTimer *time.Timer
-			var wallC <-chan time.Time
-			var idleC <-chan time.Time
-			if r.maxWallTime > 0 {
-				wallTimer = time.NewTimer(r.maxWallTime)
-				wallC = wallTimer.C
-			}
-			if r.idleTimeout > 0 {
-				idleTimer = time.NewTimer(r.idleTimeout)
-				idleC = idleTimer.C
-			}
-			defer func() {
-				if wallTimer != nil {
-					wallTimer.Stop()
-				}
-				if idleTimer != nil {
-					idleTimer.Stop()
-				}
-			}()
-
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-activityCh:
-					if idleTimer == nil {
-						continue
-					}
-					if !idleTimer.Stop() {
-						select {
-						case <-idleTimer.C:
-						default:
-						}
-					}
-					idleTimer.Reset(r.idleTimeout)
-				case <-wallC:
-					r.requestCancel("timed_out")
-					return
-				case <-idleC:
-					// While waiting for a tool approval, idle timeout is confusing. Approval timeout is enforced separately.
-					r.mu.Lock()
-					waiting := r.waitingApproval
-					r.mu.Unlock()
-					if waiting {
-						if idleTimer != nil {
-							idleTimer.Reset(r.idleTimeout)
-						}
-						continue
-					}
-					r.requestCancel("timed_out")
-					return
-				}
-			}
-		}()
-	}
-
-	baseHistory := append([]RunHistoryMsg(nil), req.History...)
-	attemptHistory := append([]RunHistoryMsg(nil), baseHistory...)
-	attemptInput := req.Input
-	r.totalToolCalls = 0
-	r.recoveryState.RecoverySteps = 0
-	r.recoveryState.FailureSignatures = map[string]int{}
-	r.recoveryState.CompletionSteps = 0
-	r.recoveryState.NoProgressStreak = 0
-	r.recoveryState.LastAssistantDigest = ""
-	r.recoveryState.AnyToolCallSeen = false
-	r.taskLoopState = newTaskLoopState(taskObjective)
-	r.persistRunEvent("turn.recovery.config", RealtimeStreamKindLifecycle, map[string]any{
-		"enabled":                            r.recoveryEnabled,
-		"max_steps":                          r.recoveryMaxSteps,
-		"allow_path_rewrite":                 r.recoveryAllowPathRewrite,
-		"allow_probe_tools":                  r.recoveryAllowProbeTools,
-		"fail_on_repeated_failure_signature": r.recoveryFailOnRepeatedSignature,
-		"requires_tools":                     r.requiresTools,
-		"tool_required_hints":                toolRequiredIntents,
-		"task_max_turns":                     r.taskLoopCfg.MaxTurns,
-		"task_max_no_progress":               r.taskLoopCfg.MaxNoProgressTurns,
-		"task_max_repeated_signature":        r.taskLoopCfg.MaxRepeatedSignatures,
-		"task_objective":                     sanitizeLogText(taskObjective, 240),
-	})
-
-	maxAttemptLoops := r.taskLoopCfg.MaxTurns
-	if maxAttemptLoops < r.recoveryMaxSteps+4 {
-		maxAttemptLoops = r.recoveryMaxSteps + 4
-	}
-	if maxAttemptLoops < 6 {
-		maxAttemptLoops = 6
-	}
-	if maxAttemptLoops > 32 {
-		maxAttemptLoops = 32
-	}
-
-	for attemptIdx := 0; ; attemptIdx++ {
-		if attemptIdx >= maxAttemptLoops {
-			r.persistRunEvent("turn.loop.exhausted", RealtimeStreamKindLifecycle, map[string]any{
-				"max_attempts": maxAttemptLoops,
-				"steps_used":   r.recoveryState.RecoverySteps,
-			})
-			_ = r.appendTextDelta(r.loopExhaustionFallbackText(taskObjective, maxAttemptLoops))
-			r.setFinalizationReason("task_turn_limit_reached")
-			r.setEndReason("complete")
-			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-			return nil
-		}
-		if deadline, ok := ctx.Deadline(); ok {
-			remaining := time.Until(deadline)
-			if remaining <= 6*time.Second {
-				r.persistRunEvent("turn.deadline.guard", RealtimeStreamKindLifecycle, map[string]any{
-					"attempt_index":       attemptIdx,
-					"remaining_ms":        remaining.Milliseconds(),
-					"max_attempts":        maxAttemptLoops,
-					"recovery_steps_used": r.recoveryState.RecoverySteps,
-				})
-				_ = r.appendTextDelta(r.loopExhaustionFallbackText(taskObjective, maxAttemptLoops))
-				r.setFinalizationReason("deadline_guard")
-				r.setEndReason("complete")
-				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-				return nil
-			}
-		}
-		if attemptIdx > 0 {
-			r.needNewTextBlock = true
-			budgetLeft := r.recoveryMaxSteps - r.recoveryState.RecoverySteps
-			if budgetLeft < 0 {
-				budgetLeft = 0
-			}
-			r.persistRunEvent("turn.recovery.continuation", RealtimeStreamKindLifecycle, map[string]any{
-				"attempt_index":        attemptIdx,
-				"steps_used":           r.recoveryState.RecoverySteps,
-				"recovery_budget_left": budgetLeft,
-			})
-		}
-		if err := sendRunStart(attemptIdx, attemptHistory, attemptInput, attemptIdx == 0); err != nil {
-			return err
-		}
-		budgetLeft := r.recoveryMaxSteps - r.recoveryState.RecoverySteps
-		if budgetLeft < 0 {
-			budgetLeft = 0
-		}
-		r.persistRunEvent("turn.attempt.started", RealtimeStreamKindLifecycle, map[string]any{
-			"attempt_index":           attemptIdx,
-			"history_count":           len(attemptHistory),
-			"input_chars":             utf8.RuneCountInString(strings.TrimSpace(attemptInput.Text)),
-			"requires_tools":          r.requiresTools,
-			"recovery_enabled":        r.recoveryEnabled,
-			"recovery_steps_used":     r.recoveryState.RecoverySteps,
-			"recovery_budget_left":    budgetLeft,
-			"total_tool_calls_so_far": r.totalToolCalls,
-		})
-		continueAttempt := false
-		attemptSummary := turnAttemptSummary{AttemptIndex: attemptIdx}
-		var attemptText strings.Builder
-
-	attemptLoop:
-		for {
-			select {
-			case <-ctx.Done():
-				if r.finalizeIfContextCanceled(ctx) {
-					return nil
-				}
-				return ctx.Err()
-			default:
-			}
-
-			msg, err := sc.recv()
-			if err != nil {
-				// If the context was canceled, treat the EOF as a normal terminal path (canceled/timed out/disconnected).
-				select {
-				case <-ctx.Done():
-					continue
-				default:
-				}
-				if errors.Is(err, io.EOF) {
-					hasToolContext := r.totalToolCalls > 0 || r.hasAssistantToolError()
-					attemptRawText := attemptText.String()
-					hasAssistantText := r.hasNonEmptyAssistantText() || strings.TrimSpace(attemptRawText) != ""
-					if hasToolContext || (hasAssistantText && !r.requiresTools) {
-						r.debug("ai.run.sidecar.eof.partial_output", "tool_calls", r.totalToolCalls, "has_tool_error", r.hasAssistantToolError(), "has_text", hasAssistantText)
-						attemptSummary.AssistantText = strings.TrimSpace(attemptRawText)
-						if shouldCommitAttemptAssistantText(attemptSummary) {
-							_ = r.appendTextDelta(attemptSummary.AssistantText)
-						}
-						r.ensureNonEmptyAssistant()
-						if strings.TrimSpace(r.getFinalizationReason()) == "" {
-							r.setFinalizationReason("sidecar_eof")
-						}
-						r.setEndReason("complete")
-						r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-						return nil
-					}
-					r.debug("ai.run.sidecar.eof")
-					r.finalizeNotice("disconnected")
-					r.setFinalizationReason("disconnected")
-					r.setEndReason("disconnected")
-					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-					return nil
-				}
-				errMsg := "AI sidecar error"
-				r.debug("ai.run.sidecar.recv_error", "error", sanitizeLogText(err.Error(), 256))
-				r.setFinalizationReason("sidecar_error")
-				return r.failRun(errMsg, err)
-			}
-			if msg == nil {
-				continue
-			}
-			// If a cancel was requested, ignore any late frames from sidecar (it may emit run.error on abort).
-			select {
-			case <-ctx.Done():
-				continue
-			default:
-			}
-			if msg.Error != nil && msg.Method == "" {
-				// initialize response etc; ignore for now.
-				continue
-			}
-
-			signalActivity()
-
-			switch strings.TrimSpace(msg.Method) {
-			case "run.delta":
-				var p struct {
-					RunID string `json:"run_id"`
-					Delta string `json:"delta"`
-				}
-				_ = json.Unmarshal(msg.Params, &p)
-				if strings.TrimSpace(p.RunID) != r.id || p.Delta == "" {
-					continue
-				}
-				r.debug("ai.run.delta.received", "delta_len", utf8.RuneCountInString(p.Delta))
-				attemptText.WriteString(p.Delta)
-
-			case "tool.call":
-				var p struct {
-					RunID    string         `json:"run_id"`
-					ToolID   string         `json:"tool_id"`
-					ToolName string         `json:"tool_name"`
-					Args     map[string]any `json:"args"`
-				}
-				_ = json.Unmarshal(msg.Params, &p)
-				if strings.TrimSpace(p.RunID) != r.id {
-					continue
-				}
-				attemptSummary.ToolCalls++
-				normalizedToolName := strings.TrimSpace(strings.ToLower(p.ToolName))
-				if normalizedToolName != "" {
-					attemptSummary.ToolCallNames = append(attemptSummary.ToolCallNames, normalizedToolName)
-				}
-				if sig := buildToolCallSignature(p.ToolName, p.Args); sig != "" {
-					attemptSummary.ToolCallSignatures = append(attemptSummary.ToolCallSignatures, sig)
-				}
-				r.totalToolCalls++
-				outcome, err := r.handleToolCall(ctx, sc, p.ToolID, p.ToolName, p.Args)
-				if err != nil {
-					// tool errors are reported to the model; do not crash the whole run.
-					continue
-				}
-				if outcome == nil {
-					continue
-				}
-				if memory, ok := buildRunToolMemoryFromOutcome(r.id, outcome); ok {
-					attemptToolMemories = appendRunToolMemory(attemptToolMemories, memory)
-				}
-				if outcome.Success {
-					attemptSummary.ToolSuccesses++
-					if successName := strings.TrimSpace(strings.ToLower(outcome.ToolName)); successName != "" {
-						attemptSummary.ToolSuccessNames = append(attemptSummary.ToolSuccessNames, successName)
-					}
-					continue
-				}
-				attemptSummary.ToolFailures = append(attemptSummary.ToolFailures, turnToolFailure{
-					ToolName:       outcome.ToolName,
-					Error:          outcome.ToolError,
-					RecoveryAction: outcome.RecoveryAction,
-					Args:           outcome.Args,
-				})
-
-			case "run.phase":
-				var p struct {
-					RunID string         `json:"run_id"`
-					Phase string         `json:"phase"`
-					Diag  map[string]any `json:"diag"`
-				}
-				_ = json.Unmarshal(msg.Params, &p)
-				if strings.TrimSpace(p.RunID) != r.id {
-					continue
-				}
-				phase := normalizeLifecyclePhase(p.Phase)
-				if phase == "" {
-					continue
-				}
-				payload := map[string]any{"phase": phase}
-				if p.Diag != nil {
-					payload["diag"] = p.Diag
-				}
-				r.persistRunEvent("turn.phase."+phase, RealtimeStreamKindLifecycle, payload)
-				r.emitLifecyclePhase(phase, p.Diag)
-
-			case "run.outcome":
-				var p struct {
-					RunID                 string `json:"run_id"`
-					HasText               bool   `json:"has_text"`
-					TextChars             int    `json:"text_chars"`
-					ToolCalls             int    `json:"tool_calls"`
-					FinishReason          string `json:"finish_reason"`
-					StepCount             int    `json:"step_count"`
-					LastStepFinishReason  string `json:"last_step_finish_reason"`
-					LastStepTextChars     int    `json:"last_step_text_chars"`
-					LastStepToolCalls     int    `json:"last_step_tool_calls"`
-					HasTextAfterToolCalls *bool  `json:"has_text_after_tool_calls"`
-					NeedsFollowUpHint     *bool  `json:"needs_follow_up_hint"`
-				}
-				_ = json.Unmarshal(msg.Params, &p)
-				if strings.TrimSpace(p.RunID) != r.id {
-					continue
-				}
-				attemptSummary.OutcomeHasText = p.HasText
-				attemptSummary.OutcomeTextChars = p.TextChars
-				attemptSummary.OutcomeToolCalls = p.ToolCalls
-				attemptSummary.OutcomeFinishReason = strings.TrimSpace(strings.ToLower(p.FinishReason))
-				attemptSummary.OutcomeStepCount = p.StepCount
-				attemptSummary.OutcomeLastStepFinishReason = strings.TrimSpace(strings.ToLower(p.LastStepFinishReason))
-				attemptSummary.OutcomeLastStepTextChars = p.LastStepTextChars
-				attemptSummary.OutcomeLastStepToolCalls = p.LastStepToolCalls
-				attemptSummary.OutcomeHasTextAfterToolsKnown = p.HasTextAfterToolCalls != nil
-				if p.HasTextAfterToolCalls != nil {
-					attemptSummary.OutcomeHasTextAfterToolCalls = *p.HasTextAfterToolCalls
-				}
-				if p.NeedsFollowUpHint != nil {
-					attemptSummary.OutcomeNeedsFollowUpHint = *p.NeedsFollowUpHint
-				}
-				r.persistRunEvent("turn.outcome", RealtimeStreamKindLifecycle, map[string]any{
-					"has_text":                  p.HasText,
-					"text_chars":                p.TextChars,
-					"tool_calls":                p.ToolCalls,
-					"finish_reason":             attemptSummary.OutcomeFinishReason,
-					"step_count":                p.StepCount,
-					"last_step_finish_reason":   attemptSummary.OutcomeLastStepFinishReason,
-					"last_step_text_chars":      p.LastStepTextChars,
-					"last_step_tool_calls":      p.LastStepToolCalls,
-					"has_text_after_tool_calls": p.HasTextAfterToolCalls,
-					"needs_follow_up_hint":      p.NeedsFollowUpHint,
-				})
-
-			case "tool.error.classified":
-				var p struct {
-					RunID             string `json:"run_id"`
-					ToolName          string `json:"tool_name"`
-					Code              string `json:"code"`
-					Retryable         bool   `json:"retryable"`
-					HasNormalizedArgs bool   `json:"has_normalized_args"`
-				}
-				_ = json.Unmarshal(msg.Params, &p)
-				if strings.TrimSpace(p.RunID) != r.id {
-					continue
-				}
-				r.persistRunEvent("tool.error.classified", RealtimeStreamKindTool, map[string]any{
-					"tool_name":           strings.TrimSpace(p.ToolName),
-					"code":                strings.TrimSpace(strings.ToUpper(p.Code)),
-					"retryable":           p.Retryable,
-					"has_normalized_args": p.HasNormalizedArgs,
-				})
-
-			case "tool.recovery.hint":
-				var p struct {
-					RunID    string `json:"run_id"`
-					ToolName string `json:"tool_name"`
-					Action   string `json:"action"`
-					Code     string `json:"code"`
-				}
-				_ = json.Unmarshal(msg.Params, &p)
-				if strings.TrimSpace(p.RunID) != r.id {
-					continue
-				}
-				r.persistRunEvent("tool.recovery.hint", RealtimeStreamKindTool, map[string]any{
-					"tool_name": strings.TrimSpace(p.ToolName),
-					"action":    strings.TrimSpace(strings.ToLower(p.Action)),
-					"code":      strings.TrimSpace(strings.ToUpper(p.Code)),
-				})
-
-			case "run.end":
-				attemptRawText := attemptText.String()
-				attemptSummary.AssistantText = strings.TrimSpace(attemptRawText)
-				committedAttemptText := false
-				commitAttemptText := func(force bool) {
-					if committedAttemptText {
-						return
-					}
-					text := strings.TrimSpace(attemptSummary.AssistantText)
-					if text == "" {
-						return
-					}
-					if !force && !shouldCommitAttemptAssistantText(attemptSummary) {
-						return
-					}
-					if r.hasNonEmptyAssistantText() {
-						_ = r.appendTextDelta("\n\n" + text)
-					} else {
-						_ = r.appendTextDelta(text)
-					}
-					committedAttemptText = true
-				}
-				if r.finalizeIfContextCanceled(ctx) {
-					return nil
-				}
-				decision := decideTurnRecovery(turnRecoveryConfig{
-					Enabled:                        r.recoveryEnabled,
-					MaxSteps:                       r.recoveryMaxSteps,
-					AllowPathRewrite:               r.recoveryAllowPathRewrite,
-					AllowProbeTools:                r.recoveryAllowProbeTools,
-					FailOnRepeatedFailureSignature: r.recoveryFailOnRepeatedSignature,
-					RequiresTools:                  r.requiresTools,
-				}, attemptSummary, &r.recoveryState, req.Input.Text)
-				lastRecoveryReason = strings.TrimSpace(decision.Reason)
-				lastRecoveryAction = strings.TrimSpace(string(decision.Action))
-				lastRecoveryErrorCode = strings.TrimSpace(decision.LastErrorCode)
-				lastRecoveryErrorMessage = ""
-				if lf := latestToolFailure(attemptSummary); lf != nil && lf.Error != nil {
-					lf.Error.Normalize()
-					lastRecoveryErrorMessage = strings.TrimSpace(lf.Error.Message)
-				}
-
-				if decision.Continue {
-					budgetLeft := r.recoveryMaxSteps - r.recoveryState.RecoverySteps
-					if budgetLeft < 0 {
-						budgetLeft = 0
-					}
-					r.persistRunEvent("turn.recovery.triggered", RealtimeStreamKindLifecycle, map[string]any{
-						"reason":                decision.Reason,
-						"action":                string(decision.Action),
-						"attempt_index":         attemptIdx,
-						"steps_used":            r.recoveryState.RecoverySteps,
-						"recovery_budget_left":  budgetLeft,
-						"attempt_tool_calls":    attemptSummary.ToolCalls,
-						"attempt_tool_success":  attemptSummary.ToolSuccesses,
-						"attempt_tool_failures": len(attemptSummary.ToolFailures),
-						"last_error_code":       decision.LastErrorCode,
-					})
-					r.debug("ai.run.recovery.triggered",
-						"reason", decision.Reason,
-						"action", string(decision.Action),
-						"attempt_index", attemptIdx,
-						"steps_used", r.recoveryState.RecoverySteps,
-						"budget_left", budgetLeft,
-					)
-					attemptHistory = appendHistoryForRetry(attemptHistory, req.Input.Text, attemptSummary.AssistantText)
-					attemptInput = RunInput{Text: decision.NextPrompt}
-					continueAttempt = true
-					break attemptLoop
-				}
-
-				if decision.FailRun {
-					r.persistRunEvent("turn.recovery.failed", RealtimeStreamKindLifecycle, map[string]any{
-						"reason":                decision.Reason,
-						"action":                string(decision.Action),
-						"attempt_index":         attemptIdx,
-						"steps_used":            r.recoveryState.RecoverySteps,
-						"attempt_tool_calls":    attemptSummary.ToolCalls,
-						"attempt_tool_success":  attemptSummary.ToolSuccesses,
-						"attempt_tool_failures": len(attemptSummary.ToolFailures),
-						"last_error_code":       decision.LastErrorCode,
-					})
-					r.debug("ai.run.recovery.failed",
-						"reason", decision.Reason,
-						"action", string(decision.Action),
-						"attempt_index", attemptIdx,
-						"steps_used", r.recoveryState.RecoverySteps,
-					)
-					commitAttemptText(false)
-					failureMsg := strings.TrimSpace(decision.FailureMessage)
-					if failureMsg != "" {
-						prefix := ""
-						if r.hasNonEmptyAssistantText() {
-							prefix = "\n\n"
-						}
-						_ = r.appendTextDelta(prefix + failureMsg)
-					}
-					r.ensureNonEmptyAssistant()
-					r.setFinalizationReason(decision.Reason)
-					r.setEndReason("complete")
-					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-					return nil
-				}
-
-				completionDecision := decideTurnCompletion(turnCompletionConfig{
-					Enabled:  true,
-					MaxSteps: 2,
-				}, attemptSummary, &r.recoveryState, req.Input.Text)
-
-				if completionDecision.Continue {
-					lastRecoveryReason = strings.TrimSpace(completionDecision.Reason)
-					lastRecoveryAction = strings.TrimSpace(string(completionDecision.Action))
-					lastRecoveryErrorCode = ""
-					lastRecoveryErrorMessage = ""
-					budgetLeft := r.recoveryMaxSteps - r.recoveryState.RecoverySteps
-					if budgetLeft < 0 {
-						budgetLeft = 0
-					}
-					r.persistRunEvent("turn.completion.continue", RealtimeStreamKindLifecycle, map[string]any{
-						"reason":                completionDecision.Reason,
-						"action":                string(completionDecision.Action),
-						"attempt_index":         attemptIdx,
-						"completion_steps_used": r.recoveryState.CompletionSteps,
-						"recovery_budget_left":  budgetLeft,
-						"attempt_tool_calls":    attemptSummary.ToolCalls,
-						"attempt_tool_success":  attemptSummary.ToolSuccesses,
-						"attempt_tool_failures": len(attemptSummary.ToolFailures),
-					})
-					attemptHistory = appendHistoryForRetry(attemptHistory, req.Input.Text, attemptSummary.AssistantText)
-					attemptInput = RunInput{Text: completionDecision.NextPrompt}
-					continueAttempt = true
-					break attemptLoop
-				}
-
-				completionFailed := false
-				completionFailureReason := ""
-				completionFailureMessage := ""
-				if completionDecision.FailRun {
-					lastRecoveryReason = strings.TrimSpace(completionDecision.Reason)
-					lastRecoveryAction = strings.TrimSpace(string(completionDecision.Action))
-					lastRecoveryErrorCode = ""
-					lastRecoveryErrorMessage = ""
-					r.persistRunEvent("turn.completion.failed", RealtimeStreamKindLifecycle, map[string]any{
-						"reason":                completionDecision.Reason,
-						"action":                string(completionDecision.Action),
-						"attempt_index":         attemptIdx,
-						"completion_steps_used": r.recoveryState.CompletionSteps,
-						"attempt_tool_calls":    attemptSummary.ToolCalls,
-						"attempt_tool_success":  attemptSummary.ToolSuccesses,
-						"attempt_tool_failures": len(attemptSummary.ToolFailures),
-					})
-					completionFailed = true
-					completionFailureReason = strings.TrimSpace(completionDecision.Reason)
-					completionFailureMessage = strings.TrimSpace(completionDecision.FailureMessage)
-				}
-
-				taskDecision := decideTaskLoop(r.taskLoopCfg, &r.taskLoopState, attemptSummary, req.Input.Text)
-				if taskDecision.Continue {
-					lastRecoveryReason = strings.TrimSpace(taskDecision.Reason)
-					lastRecoveryAction = strings.TrimSpace(string(taskDecision.Action))
-					lastRecoveryErrorCode = ""
-					lastRecoveryErrorMessage = ""
-					r.persistRunEvent("task.loop.continue", RealtimeStreamKindLifecycle, map[string]any{
-						"reason":                taskDecision.Reason,
-						"attempt_index":         attemptIdx,
-						"task_turns_used":       r.taskLoopState.TurnsUsed,
-						"task_no_progress_turn": r.taskLoopState.NoProgressTurn,
-						"attempt_tool_calls":    attemptSummary.ToolCalls,
-						"attempt_tool_success":  attemptSummary.ToolSuccesses,
-						"attempt_tool_failures": len(attemptSummary.ToolFailures),
-					})
-					attemptHistory = appendHistoryForRetry(attemptHistory, req.Input.Text, attemptSummary.AssistantText)
-					attemptInput = RunInput{Text: taskDecision.NextPrompt}
-					continueAttempt = true
-					break attemptLoop
-				}
-
-				if taskDecision.FailRun {
-					lastRecoveryReason = strings.TrimSpace(taskDecision.Reason)
-					lastRecoveryAction = strings.TrimSpace(string(taskDecision.Action))
-					lastRecoveryErrorCode = ""
-					lastRecoveryErrorMessage = ""
-					r.persistRunEvent("task.loop.failed", RealtimeStreamKindLifecycle, map[string]any{
-						"reason":                taskDecision.Reason,
-						"attempt_index":         attemptIdx,
-						"task_turns_used":       r.taskLoopState.TurnsUsed,
-						"task_no_progress_turn": r.taskLoopState.NoProgressTurn,
-						"attempt_tool_calls":    attemptSummary.ToolCalls,
-						"attempt_tool_success":  attemptSummary.ToolSuccesses,
-						"attempt_tool_failures": len(attemptSummary.ToolFailures),
-					})
-					commitAttemptText(false)
-					failureMsg := strings.TrimSpace(taskDecision.FailureMessage)
-					if failureMsg != "" {
-						prefix := ""
-						if r.hasNonEmptyAssistantText() {
-							prefix = "\n\n"
-						}
-						_ = r.appendTextDelta(prefix + failureMsg)
-					}
-					r.ensureNonEmptyAssistant()
-					r.setFinalizationReason(taskDecision.Reason)
-					r.setEndReason("complete")
-					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-					return nil
-				}
-
-				if completionFailed {
-					commitAttemptText(false)
-					if completionFailureMessage != "" {
-						prefix := ""
-						if r.hasNonEmptyAssistantText() {
-							prefix = "\n\n"
-						}
-						_ = r.appendTextDelta(prefix + completionFailureMessage)
-					}
-					r.ensureNonEmptyAssistant()
-					r.setFinalizationReason(completionFailureReason)
-					r.setEndReason("complete")
-					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-					return nil
-				}
-
-				if r.recoveryState.RecoverySteps > 0 {
-					r.persistRunEvent("turn.recovery.recovered", RealtimeStreamKindLifecycle, map[string]any{
-						"attempt_index":         attemptIdx,
-						"steps_used":            r.recoveryState.RecoverySteps,
-						"total_tool_calls":      r.totalToolCalls,
-						"attempt_tool_calls":    attemptSummary.ToolCalls,
-						"attempt_tool_success":  attemptSummary.ToolSuccesses,
-						"attempt_tool_failures": len(attemptSummary.ToolFailures),
-					})
-				}
-				r.persistRunEvent("turn.completion.done", RealtimeStreamKindLifecycle, map[string]any{
-					"attempt_index":         attemptIdx,
-					"attempt_tool_calls":    attemptSummary.ToolCalls,
-					"attempt_tool_success":  attemptSummary.ToolSuccesses,
-					"attempt_tool_failures": len(attemptSummary.ToolFailures),
-				})
-				commitAttemptText(false)
-				r.ensureNonEmptyAssistant()
-				r.emitLifecyclePhase("ended", map[string]any{"attempt_index": attemptIdx, "reason": "complete_answered"})
-				r.setFinalizationReason("complete_answered")
-				r.setEndReason("complete")
-				r.debug("ai.run.complete")
-				r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-				return nil
-
-			case "run.error":
-				var p struct {
-					RunID string `json:"run_id"`
-					Error string `json:"error"`
-				}
-				_ = json.Unmarshal(msg.Params, &p)
-				if strings.TrimSpace(p.RunID) != r.id {
-					continue
-				}
-				msgErr := strings.TrimSpace(p.Error)
-				if msgErr == "" {
-					msgErr = "AI error"
-				}
-				attemptSummary.AssistantText = strings.TrimSpace(attemptText.String())
-				if text := strings.TrimSpace(attemptSummary.AssistantText); text != "" {
-					if shouldCommitAttemptAssistantText(attemptSummary) || attemptSummary.ToolCalls == 0 {
-						if r.hasNonEmptyAssistantText() {
-							_ = r.appendTextDelta("\n\n" + text)
-						} else {
-							_ = r.appendTextDelta(text)
-						}
-					}
-				}
-				r.debug("ai.run.error", "error", sanitizeLogText(msgErr, 256))
-				r.setFinalizationReason("sidecar_error")
-				return r.failRun(msgErr, nil)
-			}
-		}
-
-		if continueAttempt {
-			continue
-		}
-	}
-}
-
-func appendHistoryForRetry(history []RunHistoryMsg, userText string, assistantText string) []RunHistoryMsg {
-	out := append([]RunHistoryMsg(nil), history...)
-	if txt := strings.TrimSpace(userText); txt != "" {
-		out = append(out, RunHistoryMsg{Role: "user", Text: txt})
-	}
-	if txt := strings.TrimSpace(assistantText); txt != "" {
-		if hasSubstantiveAssistantAnswer(txt) || !looksInterimAssistantText(txt) {
-			out = append(out, RunHistoryMsg{Role: "assistant", Text: txt})
-		}
-	}
-	return out
-}
-
-func appendRunToolMemory(memories []RunToolMemory, item RunToolMemory) []RunToolMemory {
-	if strings.TrimSpace(item.ToolName) == "" {
-		return memories
-	}
-	out := append(memories, item)
-	if len(out) > 48 {
-		out = append([]RunToolMemory(nil), out[len(out)-48:]...)
-	}
-	return out
-}
-
-func tailRunToolMemories(memories []RunToolMemory, keep int) []RunToolMemory {
-	if keep <= 0 {
-		keep = historyToolMemoryKeep
-	}
-	normalized := normalizeRunToolMemories(memories)
-	if len(normalized) <= keep {
-		return normalized
-	}
-	start := len(normalized) - keep
-	return append([]RunToolMemory(nil), normalized[start:]...)
-}
-
-func buildRunToolMemoryFromOutcome(runID string, outcome *toolCallOutcome) (RunToolMemory, bool) {
-	if outcome == nil || strings.TrimSpace(outcome.ToolName) == "" {
-		return RunToolMemory{}, false
-	}
-	status := "error"
-	if outcome.Success {
-		status = "success"
-	}
-	item := RunToolMemory{
-		RunID:         strings.TrimSpace(runID),
-		ToolName:      strings.TrimSpace(outcome.ToolName),
-		Status:        status,
-		ArgsPreview:   previewAnyForLog(redactToolArgsForLog(outcome.ToolName, outcome.Args), historyToolMemoryPreview),
-		ResultPreview: "",
-		ErrorCode:     "",
-		ErrorMessage:  "",
-	}
-	if outcome.Success {
-		item.ResultPreview = previewAnyForLog(redactAnyForLog("", outcome.Result, 0), historyToolMemoryPreview)
-		return item, true
-	}
-	if outcome.ToolError != nil {
-		outcome.ToolError.Normalize()
-		item.ErrorCode = strings.TrimSpace(strings.ToUpper(string(outcome.ToolError.Code)))
-		item.ErrorMessage = strings.TrimSpace(outcome.ToolError.Message)
-	}
-	return item, true
-}
-
-func buildToolCallSignature(toolName string, args map[string]any) string {
-	name := strings.TrimSpace(strings.ToLower(toolName))
-	if name == "" {
-		return ""
-	}
-	parts := []string{name}
-	if pathHint := strings.TrimSpace(anyToString(args["path"])); pathHint != "" {
-		parts = append(parts, "path="+normalizeFailureText(pathHint))
-	}
-	if cwdHint := strings.TrimSpace(anyToString(args["cwd"])); cwdHint != "" {
-		parts = append(parts, "cwd="+normalizeFailureText(cwdHint))
-	}
-	if cmdHint := strings.TrimSpace(anyToString(args["command"])); cmdHint != "" {
-		parts = append(parts, "cmd="+normalizeFailureText(cmdHint))
-	}
-	return strings.Join(parts, "|")
+	return r.runNative(ctx, req, *providerCfg, strings.TrimSpace(apiKey), strings.TrimSpace(taskObjective))
 }
 
 func (r *run) appendTextDelta(delta string) error {
+	if r == nil || delta == "" {
+		return nil
+	}
 	if r.needNewTextBlock {
 		idx := r.nextBlockIndex
+		r.nextBlockIndex++
+		r.currentTextBlockIndex = idx
+		r.needNewTextBlock = false
 		r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "markdown"})
 		r.persistSetMarkdownBlock(idx)
-		r.currentTextBlockIndex = idx
-		r.nextBlockIndex++
-		r.needNewTextBlock = false
 	}
 	r.persistAppendMarkdownDelta(r.currentTextBlockIndex, delta)
-	r.sendStreamEvent(streamEventBlockDelta{
-		Type:       "block-delta",
-		MessageID:  r.messageID,
-		BlockIndex: r.currentTextBlockIndex,
-		Delta:      delta,
-	})
+	r.sendStreamEvent(streamEventBlockDelta{Type: "block-delta", MessageID: r.messageID, BlockIndex: r.currentTextBlockIndex, Delta: delta})
 	return nil
 }
 
@@ -1740,194 +797,15 @@ func (r *run) hasNonEmptyAssistantText() bool {
 	r.muAssistant.Lock()
 	defer r.muAssistant.Unlock()
 	for _, blk := range r.assistantBlocks {
-		bm, ok := blk.(*persistedMarkdownBlock)
-		if !ok || bm == nil {
+		b, ok := blk.(*persistedMarkdownBlock)
+		if !ok || b == nil {
 			continue
 		}
-		if strings.TrimSpace(bm.Content) != "" {
+		if strings.TrimSpace(b.Content) != "" {
 			return true
 		}
 	}
 	return false
-}
-
-func (r *run) hasAssistantToolError() bool {
-	_, ok := r.lastFailedToolBlock()
-	return ok
-}
-
-func (r *run) lastFailedToolBlock() (ToolCallBlock, bool) {
-	if r == nil {
-		return ToolCallBlock{}, false
-	}
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	for i := len(r.assistantBlocks) - 1; i >= 0; i-- {
-		blk := r.assistantBlocks[i]
-		switch b := blk.(type) {
-		case ToolCallBlock:
-			if b.Status == ToolCallStatusError {
-				return b, true
-			}
-		case *ToolCallBlock:
-			if b != nil && b.Status == ToolCallStatusError {
-				return *b, true
-			}
-		}
-	}
-	return ToolCallBlock{}, false
-}
-
-func (r *run) toolErrorFallbackText() string {
-	block, ok := r.lastFailedToolBlock()
-	if !ok {
-		return ""
-	}
-	toolName := strings.TrimSpace(block.ToolName)
-	errCode := "UNKNOWN"
-	errMessage := strings.TrimSpace(block.Error)
-	if block.ErrorDetails != nil {
-		block.ErrorDetails.Normalize()
-		errCode = string(block.ErrorDetails.Code)
-		if msg := strings.TrimSpace(block.ErrorDetails.Message); msg != "" {
-			errMessage = msg
-		}
-	}
-	if errMessage == "" {
-		errMessage = "Tool execution failed"
-	}
-	if toolName == "" {
-		return fmt.Sprintf("Tool workflow failed: [%s] %s", errCode, errMessage)
-	}
-	return fmt.Sprintf("Tool workflow failed at %s: [%s] %s", toolName, errCode, errMessage)
-}
-
-func (r *run) lastSuccessfulToolBlock() (ToolCallBlock, bool) {
-	if r == nil {
-		return ToolCallBlock{}, false
-	}
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	for i := len(r.assistantBlocks) - 1; i >= 0; i-- {
-		blk := r.assistantBlocks[i]
-		switch b := blk.(type) {
-		case ToolCallBlock:
-			if b.Status == ToolCallStatusSuccess {
-				return b, true
-			}
-		case *ToolCallBlock:
-			if b != nil && b.Status == ToolCallStatusSuccess {
-				return *b, true
-			}
-		}
-	}
-	return ToolCallBlock{}, false
-}
-
-func truncateRunes(s string, maxRunes int) string {
-	if maxRunes <= 0 {
-		return ""
-	}
-	rs := []rune(s)
-	if len(rs) <= maxRunes {
-		return s
-	}
-	return string(rs[:maxRunes]) + "\n... (truncated)"
-}
-
-func anyToString(v any) string {
-	switch x := v.(type) {
-	case string:
-		return x
-	case []byte:
-		return string(x)
-	default:
-		return ""
-	}
-}
-
-func anyToInt(v any) int {
-	switch x := v.(type) {
-	case int:
-		return x
-	case int8:
-		return int(x)
-	case int16:
-		return int(x)
-	case int32:
-		return int(x)
-	case int64:
-		return int(x)
-	case uint:
-		return int(x)
-	case uint8:
-		return int(x)
-	case uint16:
-		return int(x)
-	case uint32:
-		return int(x)
-	case uint64:
-		return int(x)
-	case float32:
-		return int(x)
-	case float64:
-		return int(x)
-	default:
-		return 0
-	}
-}
-
-func (r *run) fallbackTextFromSuccessfulTool() string {
-	block, ok := r.lastSuccessfulToolBlock()
-	if !ok {
-		return ""
-	}
-
-	toolName := strings.TrimSpace(block.ToolName)
-	resultMap, _ := block.Result.(map[string]any)
-
-	switch toolName {
-	case "terminal.exec":
-		stdout := strings.TrimSpace(anyToString(resultMap["stdout"]))
-		stderr := strings.TrimSpace(anyToString(resultMap["stderr"]))
-		exitCode := anyToInt(resultMap["exit_code"])
-		if stdout != "" {
-			return "Command output:\n\n```\n" + truncateRunes(stdout, 4000) + "\n```"
-		}
-		if stderr != "" {
-			return fmt.Sprintf("Command finished with exit code %d and stderr:\n\n```\n%s\n```", exitCode, truncateRunes(stderr, 2000))
-		}
-		return fmt.Sprintf("Command finished with exit code %d.", exitCode)
-
-	case "fs.read_file":
-		content := strings.TrimSpace(anyToString(resultMap["content_utf8"]))
-		if content == "" {
-			return "File read completed."
-		}
-		return "File content:\n\n```\n" + truncateRunes(content, 4000) + "\n```"
-
-	case "fs.list_dir":
-		return ""
-
-	case "fs.stat":
-		return ""
-
-	case "fs.write_file":
-		bytesWritten := anyToInt(resultMap["bytes_written"])
-		if bytesWritten > 0 {
-			return fmt.Sprintf("File written successfully (%d bytes).", bytesWritten)
-		}
-		return "File written successfully."
-	}
-
-	if block.Result == nil {
-		return "Tool call completed successfully."
-	}
-	b, err := json.Marshal(block.Result)
-	if err != nil || len(b) == 0 {
-		return "Tool call completed successfully."
-	}
-	return "Tool result:\n\n```json\n" + truncateRunes(string(b), 4000) + "\n```"
 }
 
 func (r *run) sessionMetaForTool() (*session.Meta, error) {
@@ -1941,57 +819,11 @@ func (r *run) sessionMetaForTool() (*session.Meta, error) {
 	return &metaCopy, nil
 }
 
-func (r *run) loopExhaustionFallbackText(objective string, maxAttempts int) string {
-	lines := []string{
-		"I paused automatic execution to avoid a repeated tool loop.",
-	}
-	if maxAttempts > 0 {
-		lines = append(lines, fmt.Sprintf("Attempts used: %d.", maxAttempts))
-	}
-	if goal := strings.TrimSpace(objective); goal != "" {
-		lines = append(lines, "Open goal: "+truncateRunes(goal, 220))
-	}
-	if toolSummary := strings.TrimSpace(r.fallbackTextFromSuccessfulTool()); toolSummary != "" {
-		lines = append(lines, "Latest verified evidence:\n\n"+toolSummary)
-	} else if toolErr := strings.TrimSpace(r.toolErrorFallbackText()); toolErr != "" {
-		lines = append(lines, "Latest tool issue: "+toolErr)
-	}
-	lines = append(lines, "Send a concrete next step (for example, one file path) and I will continue from current progress.")
-	return strings.Join(lines, "\n\n")
-}
-
-func (r *run) ensureNonEmptyAssistant() {
-	if r == nil {
-		return
-	}
-	if r.hasNonEmptyAssistantText() {
-		r.debug("ai.run.ensure_non_empty_assistant", "reason", "assistant_text_exists")
-		return
-	}
-	if toolFallback := strings.TrimSpace(r.fallbackTextFromSuccessfulTool()); toolFallback != "" {
-		r.debug("ai.run.ensure_non_empty_assistant", "reason", "tool_fallback", "preview", sanitizeLogText(toolFallback, 160))
-		_ = r.appendTextDelta(toolFallback)
-		return
-	}
-	if toolErrFallback := strings.TrimSpace(r.toolErrorFallbackText()); toolErrFallback != "" {
-		r.debug("ai.run.ensure_non_empty_assistant", "reason", "tool_error", "preview", sanitizeLogText(toolErrFallback, 200))
-		_ = r.appendTextDelta(toolErrFallback)
-		return
-	}
-	// Product decision: empty successful completion becomes a stable, visible assistant message.
-	r.debug("ai.run.ensure_non_empty_assistant", "reason", "no_response")
-	_ = r.appendTextDelta("Assistant finished without a visible response.")
-}
-
 func (r *run) ensureAssistantErrorMessage(errMsg string) {
 	if r == nil {
 		return
 	}
 	if r.hasNonEmptyAssistantText() {
-		return
-	}
-	if toolErrFallback := strings.TrimSpace(r.toolErrorFallbackText()); toolErrFallback != "" {
-		_ = r.appendTextDelta(toolErrFallback)
 		return
 	}
 	msg := strings.TrimSpace(errMsg)
@@ -2048,22 +880,18 @@ func (r *run) finalizeIfContextCanceled(ctx context.Context) bool {
 	switch r.getCancelReason() {
 	case "canceled":
 		reason = "canceled"
-		r.finalizeNotice("canceled")
 		r.setFinalizationReason("canceled")
 		r.setEndReason("canceled")
 	case "timed_out":
 		reason = "timed_out"
-		r.finalizeNotice("timed_out")
 		r.setFinalizationReason("timed_out")
 		r.setEndReason("timed_out")
 	default:
 		if errors.Is(ctxErr, context.DeadlineExceeded) {
 			reason = "timed_out"
-			r.finalizeNotice("timed_out")
 			r.setFinalizationReason("timed_out")
 			r.setEndReason("timed_out")
 		} else {
-			r.finalizeNotice("disconnected")
 			r.setFinalizationReason("disconnected")
 			r.setEndReason("disconnected")
 		}
@@ -2072,29 +900,6 @@ func (r *run) finalizeIfContextCanceled(ctx context.Context) bool {
 	r.emitLifecyclePhase("ended", map[string]any{"reason": reason})
 	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 	return true
-}
-
-func (r *run) finalizeNotice(kind string) {
-	if r == nil {
-		return
-	}
-	kind = strings.TrimSpace(kind)
-	notice := ""
-	switch kind {
-	case "canceled":
-		notice = "Canceled."
-	case "disconnected":
-		notice = "Disconnected."
-	case "timed_out":
-		notice = "Timed out."
-	default:
-		return
-	}
-	prefix := ""
-	if r.hasNonEmptyAssistantText() {
-		prefix = "\n\n"
-	}
-	_ = r.appendTextDelta(prefix + notice)
 }
 
 func requiresApproval(toolName string) bool {
@@ -2172,7 +977,7 @@ func cloneAnyMap(in map[string]any) map[string]any {
 	return out
 }
 
-func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID string, toolName string, args map[string]any) (*toolCallOutcome, error) {
+func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string, args map[string]any) (*toolCallOutcome, error) {
 	toolID = strings.TrimSpace(toolID)
 	if toolID == "" {
 		var err error
@@ -2211,11 +1016,10 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		"args_preview", previewAnyForLog(redactToolArgsForLog(toolName, args), 512),
 	)
 
+	r.mu.Lock()
 	idx := r.nextBlockIndex
 	r.nextBlockIndex++
 	r.needNewTextBlock = true
-
-	r.mu.Lock()
 	r.toolBlockIndex[toolID] = idx
 	r.mu.Unlock()
 
@@ -2278,7 +1082,7 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		})
 	}
 
-	if r.cfg != nil && r.cfg.EffectiveMode() == config.AIModePlan && aitools.IsMutating(toolName) {
+	if strings.TrimSpace(r.runMode) == config.AIModePlan && aitools.IsMutating(toolName) {
 		toolErr := &aitools.ToolError{
 			Code:      aitools.ErrorCodePermissionDenied,
 			Message:   "Tool is disabled in plan mode",
@@ -2288,16 +1092,14 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 			},
 		}
 		setToolError(toolErr, "")
-		env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusError, Error: toolErr}
-		return outcome, r.sendToolResult(sc, env)
+		return outcome, nil
 	}
 
 	meta, err := r.sessionMetaForTool()
 	if err != nil {
 		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.fsRoot}, err)
 		setToolError(toolErr, "")
-		env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusError, Error: toolErr}
-		return outcome, r.sendToolResult(sc, env)
+		return outcome, nil
 	}
 
 	if block.RequiresApproval {
@@ -2332,24 +1134,25 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 		r.mu.Unlock()
 
 		if waitErr != "" {
-			toolErr := &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: waitErr, Retryable: false}
+			block.ApprovalState = "rejected"
+			toolErr := &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Canceled", Retryable: false}
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				toolErr = &aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Timed out", Retryable: true}
+			}
 			setToolError(toolErr, "")
-			env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusError, Error: toolErr}
-			return outcome, r.sendToolResult(sc, env)
+			return outcome, nil
 		}
 		if timedOut {
 			toolErr := &aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Approval timed out", Retryable: true}
 			block.ApprovalState = "rejected"
 			setToolError(toolErr, "")
-			env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusError, Error: toolErr}
-			return outcome, r.sendToolResult(sc, env)
+			return outcome, nil
 		}
 		if !approved {
 			toolErr := &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "Rejected by user", Retryable: false}
 			block.ApprovalState = "rejected"
 			setToolError(toolErr, "")
-			env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusError, Error: toolErr}
-			return outcome, r.sendToolResult(sc, env)
+			return outcome, nil
 		}
 
 		block.ApprovalState = "approved"
@@ -2365,14 +1168,21 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 
 	result, toolErrRaw := r.execTool(ctx, meta, toolName, args)
 	if toolErrRaw != nil {
+		if errors.Is(toolErrRaw, context.Canceled) {
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Canceled", Retryable: false}, "")
+			return outcome, nil
+		}
+		if errors.Is(toolErrRaw, context.DeadlineExceeded) {
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Tool execution timed out", Retryable: true}, "")
+			return outcome, nil
+		}
 		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.fsRoot}, toolErrRaw)
 		recoveryAction := ""
 		if aitools.ShouldRetryWithNormalizedArgs(toolErr) {
-			recoveryAction = string(recoveryActionRetryNormalizedArgs)
+			recoveryAction = "retry_with_normalized_args"
 		}
 		setToolError(toolErr, recoveryAction)
-		env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusError, Error: toolErr}
-		return outcome, r.sendToolResult(sc, env)
+		return outcome, nil
 	}
 
 	block.Status = ToolCallStatusSuccess
@@ -2398,8 +1208,7 @@ func (r *run) handleToolCall(ctx context.Context, sc *sidecarProcess, toolID str
 	outcome.Result = result
 	outcome.ToolError = nil
 	outcome.RecoveryAction = ""
-	env := aitools.ToolResultEnvelope{RunID: r.id, ToolID: toolID, Status: aitools.ResultStatusSuccess, Result: result}
-	return outcome, r.sendToolResult(sc, env)
+	return outcome, nil
 }
 
 func (r *run) persistEnsureIndex(idx int) {
@@ -2504,28 +1313,6 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 	}
 
 	return string(b), strings.TrimSpace(sb.String()), assistantAt, nil
-}
-
-func (r *run) sendToolResult(sc *sidecarProcess, envelope aitools.ToolResultEnvelope) error {
-	if sc == nil {
-		return errors.New("sidecar not ready")
-	}
-	envelope.Normalize()
-	if envelope.RunID == "" {
-		envelope.RunID = strings.TrimSpace(r.id)
-	}
-	preview := ""
-	if envelope.Status == aitools.ResultStatusSuccess {
-		preview = previewAnyForLog(redactAnyForLog("", envelope.Result, 0), 512)
-	} else if envelope.Error != nil {
-		preview = sanitizeLogText(envelope.Error.Message, 256)
-	}
-	r.debug("ai.run.tool.result.forwarded", "tool_id", envelope.ToolID, "status", string(envelope.Status), "preview", preview)
-	if err := sc.send("tool.result", envelope); err != nil {
-		r.debug("ai.run.tool.result.forward_failed", "tool_id", envelope.ToolID, "error", sanitizeLogText(err.Error(), 256))
-		return err
-	}
-	return nil
 }
 
 func (r *run) execTool(ctx context.Context, meta *session.Meta, toolName string, args map[string]any) (any, error) {

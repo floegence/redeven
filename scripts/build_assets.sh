@@ -109,25 +109,6 @@ build_codeapp_ui() {
   log "Code App UI: done."
 }
 
-build_ai_sidecar() {
-  local dir="$ROOT_DIR/internal/ai/sidecar_src"
-  if [ ! -d "$dir" ]; then
-    log "AI sidecar: skipped (missing: $dir)"
-    return 0
-  fi
-
-  log ""
-  log "AI sidecar: building..."
-  (
-    cd "$dir"
-    if need_install "$dir"; then
-      run_pnpm install --frozen-lockfile
-    fi
-    run_pnpm build
-  )
-  log "AI sidecar: done."
-}
-
 main() {
   log "Building redeven embedded assets..."
   log "ROOT_DIR: $ROOT_DIR"
@@ -137,7 +118,6 @@ main() {
 
   build_envapp_ui
   build_codeapp_ui
-  build_ai_sidecar
 
   log ""
   log "All embedded assets built."

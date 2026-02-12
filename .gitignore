@@ -16,7 +16,9 @@ npm-debug.log*
 # Generated build artifacts (embedded into the agent binary)
 internal/envapp/ui/dist/
 internal/codeapp/ui/dist/
-internal/ai/sidecar/dist/
 
 # external delivery Wrangler
 .wrangler
+
+# Local agent blueprint draft (do not commit)
+.agent.md

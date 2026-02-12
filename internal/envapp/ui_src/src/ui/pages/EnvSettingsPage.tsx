@@ -75,7 +75,6 @@ type AIProviderRow = { id: string; name: string; type: AIProviderType; base_url:
 
 const DEFAULT_CODE_SERVER_PORT_MIN = 20000;
 const DEFAULT_CODE_SERVER_PORT_MAX = 21000;
-const AI_API_KEY_ENV = 'REDEVEN_API_KEY';
 const RELEASE_VERSION_RE = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 function isReleaseVersion(raw: string): boolean {
@@ -2218,8 +2217,7 @@ export function EnvSettingsPage() {
 	                                </Button>
 	                              </div>
 		                              <p class="text-xs text-muted-foreground">
-		                                Keys are saved in a separate local secrets file and are never written to config.json. They are injected into the sidecar as{' '}
-		                                <span class="font-mono">{AI_API_KEY_ENV}</span>.
+		                                Keys are saved in a separate local secrets file and are never written to config.json. The Go AI runtime resolves them per run.
 		                              </p>
 		                            </div>
 
