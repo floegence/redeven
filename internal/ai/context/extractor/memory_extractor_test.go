@@ -46,7 +46,7 @@ func TestMemoryExtractor_ExtractFromExecutionSpans(t *testing.T) {
 		ThreadID:        "th_1",
 		RunID:           "run_1",
 		Kind:            "tool",
-		Name:            "fs.write_file",
+		Name:            "apply_patch",
 		Status:          "failed",
 		PayloadJSON:     `{"error":"permission denied"}`,
 		StartedAtUnixMs: now,

@@ -8,6 +8,18 @@ import (
 	"testing"
 )
 
+func canonicalPath(path string) string {
+	path = filepath.Clean(strings.TrimSpace(path))
+	if path == "" {
+		return ""
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil && strings.TrimSpace(resolved) != "" {
+		return filepath.Clean(resolved)
+	}
+	return path
+}
+
 func TestResolveToolPath(t *testing.T) {
 	t.Parallel()
 
@@ -56,56 +68,6 @@ func TestResolveToolPath(t *testing.T) {
 	})
 }
 
-func TestToolFSListDir_ReturnsAbsoluteEntryPaths(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	docsDir := filepath.Join(root, "docs")
-	if err := os.MkdirAll(docsDir, 0o755); err != nil {
-		t.Fatalf("mkdir docs: %v", err)
-	}
-
-	r := &run{fsRoot: root}
-	out, err := r.toolFSListDir(root)
-	if err != nil {
-		t.Fatalf("toolFSListDir: %v", err)
-	}
-	m, ok := out.(map[string]any)
-	if !ok {
-		t.Fatalf("unexpected result type: %T", out)
-	}
-	entriesAny := []map[string]any{}
-	if typed, ok := m["entries"].([]map[string]any); ok {
-		entriesAny = typed
-	} else if typed, ok := m["entries"].([]any); ok {
-		for _, item := range typed {
-			entry, _ := item.(map[string]any)
-			if entry != nil {
-				entriesAny = append(entriesAny, entry)
-			}
-		}
-	}
-	if len(entriesAny) == 0 {
-		t.Fatalf("expected at least one entry")
-	}
-
-	foundDocs := false
-	for _, entry := range entriesAny {
-		if strings.TrimSpace(anyToString(entry["name"])) != "docs" {
-			continue
-		}
-		gotPath := filepath.Clean(anyToString(entry["path"]))
-		if gotPath != filepath.Clean(docsDir) {
-			t.Fatalf("entry path=%q, want=%q", gotPath, docsDir)
-		}
-		foundDocs = true
-		break
-	}
-	if !foundDocs {
-		t.Fatalf("missing docs entry in list result")
-	}
-}
-
 func TestToolTerminalExec_CwdRules(t *testing.T) {
 	t.Parallel()
 
@@ -123,7 +85,7 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 			t.Fatalf("unexpected result type: %T", out)
 		}
 		stdout := strings.TrimSpace(anyToString(m["stdout"]))
-		if filepath.Clean(stdout) != filepath.Clean(workingDir) {
+		if canonicalPath(stdout) != canonicalPath(workingDir) {
 			t.Fatalf("stdout=%q, want cwd=%q", stdout, workingDir)
 		}
 	})
@@ -143,8 +105,65 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 			t.Fatalf("unexpected result type: %T", out)
 		}
 		stdout := strings.TrimSpace(anyToString(m["stdout"]))
-		if filepath.Clean(stdout) != filepath.Clean(subdir) {
+		if canonicalPath(stdout) != canonicalPath(subdir) {
 			t.Fatalf("stdout=%q, want cwd=%q", stdout, subdir)
 		}
 	})
+}
+
+func TestToolApplyPatch_CreatesFile(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	r := &run{fsRoot: workingDir}
+	patch := strings.Join([]string{
+		"diff --git a/note.txt b/note.txt",
+		"new file mode 100644",
+		"--- /dev/null",
+		"+++ b/note.txt",
+		"@@ -0,0 +1 @@",
+		"+hello patch",
+	}, "\n")
+	out, err := r.toolApplyPatch(context.Background(), patch)
+	if err != nil {
+		t.Fatalf("toolApplyPatch: %v", err)
+	}
+	m, ok := out.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected result type: %T", out)
+	}
+	if got := int(m["files_changed"].(int)); got != 1 {
+		t.Fatalf("files_changed=%d, want 1", got)
+	}
+	got, err := os.ReadFile(filepath.Join(workingDir, "note.txt"))
+	if err != nil {
+		t.Fatalf("read patched file: %v", err)
+	}
+	if strings.TrimSpace(string(got)) != "hello patch" {
+		t.Fatalf("content=%q, want %q", string(got), "hello patch")
+	}
+}
+
+func TestPrependRedevenBinToEnv_AddsPath(t *testing.T) {
+	t.Parallel()
+
+	home := filepath.Join(t.TempDir(), "home")
+	env := prependRedevenBinToEnv([]string{
+		"HOME=" + home,
+		"PATH=/usr/local/bin:/usr/bin",
+	})
+	pathVal := ""
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			pathVal = strings.TrimPrefix(kv, "PATH=")
+			break
+		}
+	}
+	if pathVal == "" {
+		t.Fatalf("PATH missing from env output")
+	}
+	wantPrefix := filepath.Join(home, ".redeven", "bin")
+	if !strings.HasPrefix(pathVal, wantPrefix+string(os.PathListSeparator)) {
+		t.Fatalf("PATH=%q, want prefix %q", pathVal, wantPrefix)
+	}
 }

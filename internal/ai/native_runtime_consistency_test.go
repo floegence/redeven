@@ -75,16 +75,15 @@ func TestBuiltInToolHandler_CanceledApproval_MapsToAborted(t *testing.T) {
 		Shell:       "bash",
 		SessionMeta: &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
 	})
-	h := &builtInToolHandler{r: r, toolName: "fs.write_file"}
+	h := &builtInToolHandler{r: r, toolName: "terminal.exec"}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	target := filepath.Join(fsRoot, "a.txt")
 	res, err := h.Execute(ctx, ToolCall{
 		ID:   "tool_1",
-		Name: "fs.write_file",
-		Args: map[string]any{"path": target, "content_utf8": "hi", "create": true},
+		Name: "terminal.exec",
+		Args: map[string]any{"command": "printf 'hi' > a.txt"},
 	})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
@@ -108,13 +107,12 @@ func TestBuiltInToolHandler_ApprovalTimeout_MapsToTimeout(t *testing.T) {
 		SessionMeta:         &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
 		ToolApprovalTimeout: 25 * time.Millisecond,
 	})
-	h := &builtInToolHandler{r: r, toolName: "fs.write_file"}
+	h := &builtInToolHandler{r: r, toolName: "terminal.exec"}
 
-	target := filepath.Join(fsRoot, "a.txt")
 	res, err := h.Execute(context.Background(), ToolCall{
 		ID:   "tool_1",
-		Name: "fs.write_file",
-		Args: map[string]any{"path": target, "content_utf8": "hi", "create": true},
+		Name: "terminal.exec",
+		Args: map[string]any{"command": "printf 'hi' > a.txt"},
 	})
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
@@ -182,8 +180,8 @@ func (m *openAIDoomLoopGuardMock) handle(w http.ResponseWriter, r *http.Request)
 						"type":      "function_call",
 						"id":        "fc_doom_1",
 						"call_id":   "call_doom_1",
-						"name":      "fs_list_dir",
-						"arguments": fmt.Sprintf(`{"path":%q}`, path),
+						"name":      "terminal_exec",
+						"arguments": fmt.Sprintf(`{"command":"pwd","cwd":%q}`, path),
 					},
 				},
 				"usage": map[string]any{
@@ -207,8 +205,8 @@ func (m *openAIDoomLoopGuardMock) handle(w http.ResponseWriter, r *http.Request)
 						"type":      "function_call",
 						"id":        "fc_doom_2",
 						"call_id":   "call_doom_2",
-						"name":      "fs_list_dir",
-						"arguments": fmt.Sprintf(`{"path":%q}`, path),
+						"name":      "terminal_exec",
+						"arguments": fmt.Sprintf(`{"command":"pwd","cwd":%q}`, path),
 					},
 				},
 				"usage": map[string]any{
@@ -343,8 +341,8 @@ func TestIntegration_NativeSDK_OpenAI_DoomLoopGuard_BlocksRepeat(t *testing.T) {
 	if len(toolCalls) != 1 {
 		t.Fatalf("tool call records=%d, want 1; records=%+v", len(toolCalls), toolCalls)
 	}
-	if toolCalls[0].ToolName != "fs.list_dir" {
-		t.Fatalf("tool_name=%q, want %q", toolCalls[0].ToolName, "fs.list_dir")
+	if toolCalls[0].ToolName != "terminal.exec" {
+		t.Fatalf("tool_name=%q, want %q", toolCalls[0].ToolName, "terminal.exec")
 	}
 
 	events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, runID, 2000)
@@ -423,8 +421,8 @@ func (m *openAILengthFinishReasonMock) handle(w http.ResponseWriter, r *http.Req
 						"type":      "function_call",
 						"id":        "fc_len_1",
 						"call_id":   "call_len_1",
-						"name":      "fs_list_dir",
-						"arguments": fmt.Sprintf(`{"path":%q}`, path),
+						"name":      "terminal_exec",
+						"arguments": fmt.Sprintf(`{"command":"pwd","cwd":%q}`, path),
 					},
 				},
 				"usage": map[string]any{

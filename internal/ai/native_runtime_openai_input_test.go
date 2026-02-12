@@ -11,8 +11,8 @@ func TestBuildToolCallMessages(t *testing.T) {
 	calls := []ToolCall{
 		{
 			ID:   "call_1",
-			Name: "fs.list_dir",
-			Args: map[string]any{"path": "/tmp"},
+			Name: "terminal.exec",
+			Args: map[string]any{"command": "pwd", "cwd": "/tmp"},
 		},
 	}
 
@@ -33,8 +33,8 @@ func TestBuildToolCallMessages(t *testing.T) {
 	if part.ToolCallID != "call_1" {
 		t.Fatalf("tool_call_id=%q, want call_1", part.ToolCallID)
 	}
-	if part.ToolName != "fs.list_dir" {
-		t.Fatalf("tool_name=%q, want fs.list_dir", part.ToolName)
+	if part.ToolName != "terminal.exec" {
+		t.Fatalf("tool_name=%q, want terminal.exec", part.ToolName)
 	}
 	if part.ArgsJSON == "" {
 		t.Fatalf("args_json must not be empty")
@@ -50,8 +50,8 @@ func TestBuildOpenAIInput_EncodesFunctionCallAndOutput(t *testing.T) {
 			Content: []ContentPart{{
 				Type:       "tool_call",
 				ToolCallID: "call_1",
-				ToolName:   "fs.list_dir",
-				ArgsJSON:   `{"path":"/tmp"}`,
+				ToolName:   "terminal.exec",
+				ArgsJSON:   `{"command":"pwd","cwd":"/tmp"}`,
 			}},
 		},
 		{
@@ -77,11 +77,11 @@ func TestBuildOpenAIInput_EncodesFunctionCallAndOutput(t *testing.T) {
 	if items[0].OfFunctionCall.CallID != "call_1" {
 		t.Fatalf("function_call call_id=%q, want call_1", items[0].OfFunctionCall.CallID)
 	}
-	if items[0].OfFunctionCall.Name != "fs_list_dir" {
-		t.Fatalf("function_call name=%q, want fs_list_dir", items[0].OfFunctionCall.Name)
+	if items[0].OfFunctionCall.Name != "terminal_exec" {
+		t.Fatalf("function_call name=%q, want terminal_exec", items[0].OfFunctionCall.Name)
 	}
-	if items[0].OfFunctionCall.Arguments != `{"path":"/tmp"}` {
-		t.Fatalf("function_call arguments=%q, want %q", items[0].OfFunctionCall.Arguments, `{"path":"/tmp"}`)
+	if items[0].OfFunctionCall.Arguments != `{"command":"pwd","cwd":"/tmp"}` {
+		t.Fatalf("function_call arguments=%q, want %q", items[0].OfFunctionCall.Arguments, `{"command":"pwd","cwd":"/tmp"}`)
 	}
 	if items[1].OfFunctionCallOutput == nil {
 		t.Fatalf("second item must be function_call_output")

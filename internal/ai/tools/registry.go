@@ -3,30 +3,15 @@ package tools
 import "strings"
 
 var builtinDefinitions = map[string]Definition{
-	"fs.list_dir": {
-		Name:             "fs.list_dir",
-		Mutating:         false,
-		RequiresApproval: false,
-	},
-	"fs.stat": {
-		Name:             "fs.stat",
-		Mutating:         false,
-		RequiresApproval: false,
-	},
-	"fs.read_file": {
-		Name:             "fs.read_file",
-		Mutating:         false,
-		RequiresApproval: false,
-	},
-	"fs.write_file": {
-		Name:             "fs.write_file",
+	"apply_patch": {
+		Name:             "apply_patch",
 		Mutating:         true,
 		RequiresApproval: true,
 	},
 	"terminal.exec": {
 		Name:             "terminal.exec",
-		Mutating:         true,
-		RequiresApproval: true,
+		Mutating:         false,
+		RequiresApproval: false,
 	},
 }
 
@@ -50,4 +35,39 @@ func RequiresApproval(toolName string) bool {
 func IsMutating(toolName string) bool {
 	def, ok := LookupDefinition(toolName)
 	return ok && def.Mutating
+}
+
+func RequiresApprovalForInvocation(toolName string, args map[string]any) bool {
+	name := strings.TrimSpace(toolName)
+	if name == "terminal.exec" {
+		risk := ClassifyTerminalCommandRisk(commandFromArgs(args))
+		return risk != TerminalCommandRiskReadonly
+	}
+	return RequiresApproval(name)
+}
+
+func IsMutatingForInvocation(toolName string, args map[string]any) bool {
+	name := strings.TrimSpace(toolName)
+	if name == "terminal.exec" {
+		risk := ClassifyTerminalCommandRisk(commandFromArgs(args))
+		return risk != TerminalCommandRiskReadonly
+	}
+	return IsMutating(name)
+}
+
+func IsDangerousInvocation(toolName string, args map[string]any) bool {
+	name := strings.TrimSpace(toolName)
+	if name != "terminal.exec" {
+		return false
+	}
+	risk := ClassifyTerminalCommandRisk(commandFromArgs(args))
+	return risk == TerminalCommandRiskDangerous
+}
+
+func InvocationRiskLabel(toolName string, args map[string]any) string {
+	name := strings.TrimSpace(toolName)
+	if name != "terminal.exec" {
+		return ""
+	}
+	return string(ClassifyTerminalCommandRisk(commandFromArgs(args)))
 }

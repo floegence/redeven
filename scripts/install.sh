@@ -34,8 +34,14 @@ GITHUB_RELEASES_URL="https://github.com/${GITHUB_REPO}/releases"
 # Binary name
 BINARY_NAME="redeven"
 
+# Shell-first tooling: pinned ripgrep distribution.
+RG_VERSION="14.1.1"
+RG_GITHUB_RELEASES_URL="https://github.com/BurntSushi/ripgrep/releases"
+RG_MIRROR_BASE_URL="https://agent.package.example.invalid/third-party/ripgrep"
+
 # Redeven home directory - config is written to ~/.redeven/config.json (default)
 REDEVEN_HOME="${HOME}/.redeven"
+REDEVEN_TOOLS_DIR="${REDEVEN_HOME}/tools"
 
 # Install mode:
 # - install (default): install flow (configure PATH, print onboarding)
@@ -54,6 +60,9 @@ COSIGN_CERT_OIDC_ISSUER='https://token.actions.githubusercontent.com'
 
 # Installation directories
 INSTALL_DIR="${REDEVEN_HOME}/bin"
+RG_TARGET=""
+RG_ARCHIVE_NAME=""
+RG_EXPECTED_SHA256=""
 
 # Logging functions
 log_info() {
@@ -188,6 +197,38 @@ detect_platform() {
 
     PLATFORM="${OS}_${ARCH}"
     PACKAGE_NAME="${BINARY_NAME}_${PLATFORM}.tar.gz"
+
+    case "${OS}_${ARCH}" in
+        linux_amd64)
+            RG_TARGET="x86_64-unknown-linux-musl"
+            ;;
+        linux_arm64)
+            RG_TARGET="aarch64-unknown-linux-gnu"
+            ;;
+        linux_arm)
+            RG_TARGET="armv7-unknown-linux-musleabihf"
+            ;;
+        linux_386)
+            RG_TARGET="i686-unknown-linux-gnu"
+            ;;
+        darwin_amd64)
+            RG_TARGET="x86_64-apple-darwin"
+            ;;
+        darwin_arm64)
+            RG_TARGET="aarch64-apple-darwin"
+            ;;
+        *)
+            log_error "Unsupported platform for ripgrep: ${OS}_${ARCH}"
+            exit 1
+            ;;
+    esac
+
+    RG_ARCHIVE_NAME="ripgrep-${RG_VERSION}-${RG_TARGET}.tar.gz"
+    if ! RG_EXPECTED_SHA256=$(resolve_rg_sha256 "$RG_TARGET"); then
+        log_error "No pinned checksum configured for ripgrep target: $RG_TARGET"
+        exit 1
+    fi
+
     log_info "Detected platform: $PLATFORM"
 }
 
@@ -219,6 +260,48 @@ sha256_file() {
     fi
     log_error "Neither sha256sum nor shasum is available for checksum verification"
     exit 1
+}
+
+resolve_rg_sha256() {
+    case "$1" in
+        x86_64-unknown-linux-musl)
+            printf '%s\n' '4cf9f2741e6c465ffdb7c26f38056a59e2a2544b51f7cc128ef28337eeae4d8e'
+            ;;
+        aarch64-unknown-linux-gnu)
+            printf '%s\n' 'c827481c4ff4ea10c9dc7a4022c8de5db34a5737cb74484d62eb94a95841ab2f'
+            ;;
+        armv7-unknown-linux-musleabihf)
+            printf '%s\n' 'ec568e3c82054933cf22eced8eaffc1c93d38efcd505cb04df905f95e85d03a6'
+            ;;
+        i686-unknown-linux-gnu)
+            printf '%s\n' '2ce1beccb27ce9ad8e26593be52b15e8da0ee7bf3e0e59d5553ab3333a087a4e'
+            ;;
+        x86_64-apple-darwin)
+            printf '%s\n' 'fc87e78f7cb3fea12d69072e7ef3b21509754717b746368fd40d88963630e2b3'
+            ;;
+        aarch64-apple-darwin)
+            printf '%s\n' '24ad76777745fbff131c8fbc466742b011f925bfa4fffa2ded6def23b5b937be'
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+verify_pinned_checksum() {
+    expected="$1"
+    archive_file="$2"
+    label="$3"
+
+    actual=$(sha256_file "$archive_file" | tr -d '\r\n')
+
+    if [ "$actual" != "$expected" ]; then
+        log_error "Checksum mismatch for $label"
+        log_error "Expected: $expected"
+        log_error "Actual:   $actual"
+        exit 1
+    fi
+    log_info "Checksum verification passed for $label"
 }
 
 verify_signature() {
@@ -388,6 +471,70 @@ install_redeven() {
     fi
 }
 
+install_ripgrep() {
+    log_info "Installing ripgrep ${RG_VERSION}..."
+
+    if [ -z "$RG_TARGET" ] || [ -z "$RG_ARCHIVE_NAME" ] || [ -z "$RG_EXPECTED_SHA256" ]; then
+        log_error "ripgrep target metadata is missing"
+        exit 1
+    fi
+
+    RG_GITHUB_URL="${RG_GITHUB_RELEASES_URL}/download/${RG_VERSION}/${RG_ARCHIVE_NAME}"
+    RG_FALLBACK_URL="${RG_MIRROR_BASE_URL}/v${RG_VERSION}/${RG_ARCHIVE_NAME}"
+
+    RG_TMP_DIR=$(mktemp -d)
+    RG_ARCHIVE_PATH="${RG_TMP_DIR}/${RG_ARCHIVE_NAME}"
+
+    log_info "Downloading ripgrep package from GitHub: $RG_GITHUB_URL"
+    if ! download_with_fallback "$RG_GITHUB_URL" "$RG_FALLBACK_URL" "$RG_ARCHIVE_PATH"; then
+        log_error "Failed to download ripgrep package"
+        log_error "GitHub URL: $RG_GITHUB_URL"
+        log_error "external delivery URL: $RG_FALLBACK_URL"
+        rm -rf "$RG_TMP_DIR"
+        exit 1
+    fi
+
+    verify_pinned_checksum "$RG_EXPECTED_SHA256" "$RG_ARCHIVE_PATH" "$RG_ARCHIVE_NAME"
+
+    if [ "$OS" = "linux" ]; then
+        if ! tar --warning=no-unknown-keyword -xzf "$RG_ARCHIVE_PATH" -C "$RG_TMP_DIR" 2>/dev/null; then
+            if ! tar -xzf "$RG_ARCHIVE_PATH" -C "$RG_TMP_DIR"; then
+                log_error "Failed to extract ripgrep package"
+                rm -rf "$RG_TMP_DIR"
+                exit 1
+            fi
+        fi
+    else
+        if ! tar -xzf "$RG_ARCHIVE_PATH" -C "$RG_TMP_DIR"; then
+            log_error "Failed to extract ripgrep package"
+            rm -rf "$RG_TMP_DIR"
+            exit 1
+        fi
+    fi
+
+    RG_EXTRACTED_BINARY="${RG_TMP_DIR}/ripgrep-${RG_VERSION}-${RG_TARGET}/rg"
+    if [ ! -f "$RG_EXTRACTED_BINARY" ]; then
+        log_error "ripgrep binary not found in package"
+        rm -rf "$RG_TMP_DIR"
+        exit 1
+    fi
+
+    RG_VERSION_DIR="${REDEVEN_TOOLS_DIR}/rg/${RG_VERSION}/${RG_TARGET}"
+    RG_BINARY_PATH="${RG_VERSION_DIR}/rg"
+    RG_LINK_PATH="${REDEVEN_HOME}/bin/rg"
+
+    mkdir -p "$RG_VERSION_DIR"
+    mkdir -p "${REDEVEN_HOME}/bin"
+    cp "$RG_EXTRACTED_BINARY" "$RG_BINARY_PATH"
+    chmod +x "$RG_BINARY_PATH"
+    ln -sf "$RG_BINARY_PATH" "$RG_LINK_PATH"
+
+    rm -rf "$RG_TMP_DIR"
+
+    log_info "ripgrep installed to: $RG_BINARY_PATH"
+    log_info "ripgrep symlink updated: $RG_LINK_PATH"
+}
+
 cleanup_legacy_home() {
     # Dev-stage breaking change: remove legacy ~/.redeven-agent to avoid stale state surprises.
     if [ -n "${HOME:-}" ] && [ -e "${HOME}/.redeven-agent" ]; then
@@ -488,6 +635,7 @@ print_summary() {
     log_info "  Binary: $INSTALL_DIR/$BINARY_NAME"
     log_info "  Version: $LATEST_VERSION"
     log_info "  Version source: $VERSION_SOURCE"
+    log_info "  ripgrep: ${REDEVEN_HOME}/bin/rg (v${RG_VERSION})"
     echo ""
 
     # Test the binary immediately using full path
@@ -581,6 +729,9 @@ main() {
     # Install redeven
     install_redeven
 
+    # Install pinned ripgrep used by shell-first AI workflow
+    install_ripgrep
+
     # Setup PATH + onboarding summary (skip in upgrade mode)
     if [ "$REDEVEN_INSTALL_MODE" != "upgrade" ]; then
         setup_path
@@ -590,6 +741,7 @@ main() {
         log_info "Binary: $INSTALL_DIR/$BINARY_NAME"
         log_info "Version: $LATEST_VERSION"
         log_info "Version source: $VERSION_SOURCE"
+        log_info "ripgrep: ${REDEVEN_HOME}/bin/rg (v${RG_VERSION})"
     fi
 }
 

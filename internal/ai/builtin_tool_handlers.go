@@ -330,20 +330,6 @@ func extractStringSlice(v any) []string {
 func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 	toolName = strings.TrimSpace(toolName)
 	switch toolName {
-	case "fs.read_file":
-		m, _ := payload.(map[string]any)
-		if m == nil {
-			return payload, false
-		}
-		if content, ok := m["content_utf8"].(string); ok {
-			trimmed, truncated := truncateByRunes(content, 4000)
-			m["content_utf8"] = trimmed
-			if truncated {
-				m["truncated"] = true
-				return m, true
-			}
-		}
-		return m, false
 	case "terminal.exec":
 		m, _ := payload.(map[string]any)
 		if m == nil {
@@ -398,53 +384,23 @@ func builtInToolDefinitions() []ToolDef {
 	}
 	defs := []ToolDef{
 		{
-			Name:         "fs.list_dir",
-			Description:  "List directory entries at an absolute host path. Use this to explore workspace structure, find relevant files, or verify paths exist.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}, "required": []string{"path"}, "additionalProperties": false}),
-			ParallelSafe: true,
-			Mutating:     false,
-			Source:       "builtin",
-			Namespace:    "builtin.fs",
-			Priority:     100,
-		},
-		{
-			Name:         "fs.stat",
-			Description:  "Get metadata for a file or directory.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}, "required": []string{"path"}, "additionalProperties": false}),
-			ParallelSafe: true,
-			Mutating:     false,
-			Source:       "builtin",
-			Namespace:    "builtin.fs",
-			Priority:     100,
-		},
-		{
-			Name:         "fs.read_file",
-			Description:  "Read UTF-8 text from a file. Always read files before modifying them to understand their current state.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}, "offset": map[string]any{"type": "integer", "minimum": 0}, "max_bytes": map[string]any{"type": "integer", "minimum": 1, "maximum": 200000}}, "required": []string{"path"}, "additionalProperties": false}),
-			ParallelSafe: true,
-			Mutating:     false,
-			Source:       "builtin",
-			Namespace:    "builtin.fs",
-			Priority:     100,
-		},
-		{
-			Name:             "fs.write_file",
-			Description:      "Write UTF-8 text to a file. Always read the file first to understand contents before overwriting.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}, "content_utf8": map[string]any{"type": "string"}, "create": map[string]any{"type": "boolean"}, "if_match_sha256": map[string]any{"type": "string"}}, "required": []string{"path", "content_utf8"}, "additionalProperties": false}),
+			Name:             "apply_patch",
+			Description:      "Apply a unified diff patch to files in the current workspace.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"patch": map[string]any{"type": "string"}}, "required": []string{"patch"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         true,
 			RequiresApproval: true,
 			Source:           "builtin",
-			Namespace:        "builtin.fs",
+			Namespace:        "builtin.text",
 			Priority:         100,
 		},
 		{
 			Name:             "terminal.exec",
-			Description:      "Execute shell command in workspace. Use for running builds, tests, git commands, or any CLI operation.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "cwd": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer", "minimum": 1, "maximum": 60000}}, "required": []string{"command"}, "additionalProperties": false}),
+			Description:      "Execute shell command in workspace. Prefer rg/sed/cat for investigation and use workdir instead of cd.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer", "minimum": 1, "maximum": 60000}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
 			ParallelSafe:     false,
-			Mutating:         true,
-			RequiresApproval: true,
+			Mutating:         false,
+			RequiresApproval: false,
 			Source:           "builtin",
 			Namespace:        "builtin.terminal",
 			Priority:         100,

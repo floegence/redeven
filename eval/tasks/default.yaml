@@ -28,7 +28,7 @@ tasks:
     stage: screen
     category: generic
     turns:
-      - "Call fs.stat for /. Then output whether it is directory."
+      - "Run terminal.exec with command `stat /` and then report whether / is a directory."
     max_steps: 3
     timeout_seconds: 20
     require_evidence: false
@@ -46,7 +46,7 @@ tasks:
     stage: screen
     category: failure_real
     turns:
-      - "First try terminal.exec with pwd (cwd=${workspace}). If approval fails or is denied, immediately switch to fs.list_dir/fs.read_file and still provide a usable conclusion. Do not stop at the failure."
+      - "First try terminal.exec with `printf test > denied.txt` (cwd=${workspace}). If approval fails or is denied, immediately switch to readonly terminal.exec commands (rg/sed/cat) and still provide a usable conclusion. Do not stop at the failure."
     max_steps: 5
     timeout_seconds: 35
     require_evidence: true

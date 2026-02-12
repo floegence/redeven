@@ -106,8 +106,8 @@ func (m *openAIToolLoopMock) handle(w http.ResponseWriter, r *http.Request) {
 						"type":      "function_call",
 						"id":        "fc_test_1",
 						"call_id":   "call_test_1",
-						"name":      "fs_list_dir",
-						"arguments": fmt.Sprintf(`{"path":%q}`, path),
+						"name":      "terminal_exec",
+						"arguments": fmt.Sprintf(`{"command":"pwd","cwd":%q}`, path),
 					},
 				},
 				"usage": map[string]any{
