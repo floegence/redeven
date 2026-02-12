@@ -10,9 +10,9 @@ func TestClassifyError_InvalidPathProducesNormalizedArgs(t *testing.T) {
 	t.Parallel()
 
 	inv := Invocation{
-		ToolName: "fs.list_dir",
+		ToolName: "terminal.exec",
 		Args: map[string]any{
-			"path": "/tmp/workspace/../workspace/docs/",
+			"cwd": "/tmp/workspace/../workspace/docs/",
 		},
 	}
 	toolErr := ClassifyError(inv, errors.New("invalid path"))
@@ -26,8 +26,8 @@ func TestClassifyError_InvalidPathProducesNormalizedArgs(t *testing.T) {
 		t.Fatalf("retryable=false, want true")
 	}
 	want := filepath.Clean("/tmp/workspace/docs")
-	if got := toolErr.NormalizedArgs["path"]; got != want {
-		t.Fatalf("normalized path=%v, want=%v", got, want)
+	if got := toolErr.NormalizedArgs["cwd"]; got != want {
+		t.Fatalf("normalized cwd=%v, want=%v", got, want)
 	}
 }
 
@@ -36,10 +36,10 @@ func TestClassifyError_InvalidPathNormalizesRelativePath(t *testing.T) {
 
 	root := t.TempDir()
 	inv := Invocation{
-		ToolName:   "fs.read_file",
+		ToolName:   "terminal.exec",
 		WorkingDir: root,
 		Args: map[string]any{
-			"path": "docs/readme.md",
+			"workdir": "docs/readme.md",
 		},
 	}
 	toolErr := ClassifyError(inv, errors.New("path must be absolute"))
@@ -50,15 +50,15 @@ func TestClassifyError_InvalidPathNormalizesRelativePath(t *testing.T) {
 		t.Fatalf("code=%q, want=%q", toolErr.Code, ErrorCodeInvalidPath)
 	}
 	want := filepath.Clean(filepath.Join(root, "docs/readme.md"))
-	if got := toolErr.NormalizedArgs["path"]; got != want {
-		t.Fatalf("normalized path=%v, want=%v", got, want)
+	if got := toolErr.NormalizedArgs["workdir"]; got != want {
+		t.Fatalf("normalized workdir=%v, want=%v", got, want)
 	}
 }
 
 func TestClassifyError_NotFound(t *testing.T) {
 	t.Parallel()
 
-	toolErr := ClassifyError(Invocation{ToolName: "fs.stat"}, errors.New("not found"))
+	toolErr := ClassifyError(Invocation{ToolName: "apply_patch"}, errors.New("not found"))
 	if toolErr == nil {
 		t.Fatalf("expected tool error")
 	}

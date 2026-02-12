@@ -34,10 +34,8 @@ func TestHandleToolCall_PlanModeBlocksMutatingTools(t *testing.T) {
 	})
 	r.runMode = config.AIModePlan
 
-	outcome, err := r.handleToolCall(context.Background(), "tool_plan_1", "fs.write_file", map[string]any{
-		"path":         target,
-		"content_utf8": "plan mode",
-		"create":       true,
+	outcome, err := r.handleToolCall(context.Background(), "tool_plan_1", "terminal.exec", map[string]any{
+		"command": "printf 'plan mode' > note.txt",
 	})
 	if err != nil {
 		t.Fatalf("handleToolCall returned error: %v", err)
@@ -94,10 +92,8 @@ func TestHandleToolCall_ActModeAllowsMutatingToolsAfterApproval(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		outcome, err := r.handleToolCall(context.Background(), "tool_act_1", "fs.write_file", map[string]any{
-			"path":         target,
-			"content_utf8": "act mode",
-			"create":       true,
+		outcome, err := r.handleToolCall(context.Background(), "tool_act_1", "terminal.exec", map[string]any{
+			"command": "printf 'act mode' > note.txt",
 		})
 		done <- result{outcome: outcome, err: err}
 	}()

@@ -256,10 +256,10 @@ func TestStore_ListRecentThreadToolCalls(t *testing.T) {
 	if err := s.UpsertToolCall(ctx, ToolCallRecord{
 		RunID:      "run_a",
 		ToolID:     "tool_a",
-		ToolName:   "fs.stat",
+		ToolName:   "terminal.exec",
 		Status:     "success",
-		ArgsJSON:   `{"path":"/"}`,
-		ResultJSON: `{"path":"/","is_dir":true}`,
+		ArgsJSON:   `{"command":"pwd","cwd":"/"}`,
+		ResultJSON: `{"stdout":"/\n","exit_code":0}`,
 	}); err != nil {
 		t.Fatalf("UpsertToolCall tool_a: %v", err)
 	}
@@ -276,9 +276,9 @@ func TestStore_ListRecentThreadToolCalls(t *testing.T) {
 	if err := s.UpsertToolCall(ctx, ToolCallRecord{
 		RunID:        "run_b",
 		ToolID:       "tool_b",
-		ToolName:     "fs.list_dir",
+		ToolName:     "terminal.exec",
 		Status:       "error",
-		ArgsJSON:     `{"path":"/tmp"}`,
+		ArgsJSON:     `{"command":"rg \"TODO\" .","cwd":"/tmp"}`,
 		ErrorCode:    "INVALID_PATH",
 		ErrorMessage: "path must be absolute",
 	}); err != nil {
@@ -297,9 +297,9 @@ func TestStore_ListRecentThreadToolCalls(t *testing.T) {
 	if err := s.UpsertToolCall(ctx, ToolCallRecord{
 		RunID:    "run_other",
 		ToolID:   "tool_other",
-		ToolName: "fs.read_file",
+		ToolName: "apply_patch",
 		Status:   "success",
-		ArgsJSON: `{"path":"/README.md"}`,
+		ArgsJSON: `{"patch":"diff --git a/a.txt b/a.txt"}`,
 	}); err != nil {
 		t.Fatalf("UpsertToolCall tool_other: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestStore_ListRecentThreadToolCalls(t *testing.T) {
 func TestBuildPreview_AssistantUsesLatestMarkdownBlock(t *testing.T) {
 	t.Parallel()
 
-	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"markdown","content":"I will quickly scan the project layout first."},{"type":"tool-call","toolName":"fs.list_dir"},{"type":"markdown","content":"Findings:\n- Has clear module boundaries.\nEvidence:\n- README.md defines run steps."}],"status":"complete","timestamp":1}`
+	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"markdown","content":"I will quickly scan the project layout first."},{"type":"tool-call","toolName":"terminal.exec"},{"type":"markdown","content":"Findings:\n- Has clear module boundaries.\nEvidence:\n- README.md defines run steps."}],"status":"complete","timestamp":1}`
 	text := "I will quickly scan the project layout first.\nFindings:\n- Has clear module boundaries.\nEvidence:\n- README.md defines run steps."
 
 	preview := buildPreview("assistant", text, messageJSON)

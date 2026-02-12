@@ -102,10 +102,9 @@ func normalizeArgs(inv Invocation) map[string]any {
 	}
 
 	switch strings.TrimSpace(inv.ToolName) {
-	case "fs.list_dir", "fs.stat", "fs.read_file", "fs.write_file":
-		tryNormalizePath("path")
 	case "terminal.exec":
 		tryNormalizePath("cwd")
+		tryNormalizePath("workdir")
 	default:
 		return nil
 	}

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -919,8 +918,16 @@ func (r *run) finalizeIfContextCanceled(ctx context.Context) bool {
 	return true
 }
 
-func requiresApproval(toolName string) bool {
-	return aitools.RequiresApproval(toolName)
+func requiresApproval(toolName string, args map[string]any) bool {
+	return aitools.RequiresApprovalForInvocation(toolName, args)
+}
+
+func isMutatingInvocation(toolName string, args map[string]any) bool {
+	return aitools.IsMutatingForInvocation(toolName, args)
+}
+
+func isDangerousInvocation(toolName string, args map[string]any) bool {
+	return aitools.IsDangerousInvocation(toolName, args)
 }
 
 func marshalPersistJSON(v any, maxRunes int) string {
@@ -1018,6 +1025,10 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		ToolError:      nil,
 		RecoveryAction: "",
 	}
+	needsApproval := requiresApproval(toolName, args)
+	mutating := isMutatingInvocation(toolName, args)
+	dangerous := isDangerousInvocation(toolName, args)
+	commandRisk := strings.TrimSpace(aitools.InvocationRiskLabel(toolName, args))
 
 	toolStartedAt := time.Now()
 	toolSpanID := executionSpanID(r.id, toolName, toolID)
@@ -1048,7 +1059,10 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	r.debug("ai.run.tool.call",
 		"tool_id", toolID,
 		"tool_name", toolName,
-		"requires_approval", requiresApproval(toolName),
+		"requires_approval", needsApproval,
+		"mutating", mutating,
+		"dangerous", dangerous,
+		"command_risk", commandRisk,
 		"args_preview", previewAnyForLog(redactToolArgsForLog(toolName, args), 512),
 	)
 
@@ -1069,7 +1083,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		Status:   ToolCallStatusPending,
 	}
 
-	if requiresApproval(toolName) {
+	if needsApproval {
 		block.RequiresApproval = true
 		block.ApprovalState = "required"
 	}
@@ -1138,7 +1152,21 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		})
 	}
 
-	if strings.TrimSpace(r.runMode) == config.AIModePlan && aitools.IsMutating(toolName) {
+	if dangerous {
+		toolErr := &aitools.ToolError{
+			Code:      aitools.ErrorCodePermissionDenied,
+			Message:   "Command blocked by terminal risk policy",
+			Retryable: false,
+			SuggestedFixes: []string{
+				"Use a readonly command for investigation.",
+				"Use apply_patch for file edits instead of destructive shell commands.",
+			},
+		}
+		setToolError(toolErr, "")
+		return outcome, nil
+	}
+
+	if strings.TrimSpace(r.runMode) == config.AIModePlan && mutating {
 		toolErr := &aitools.ToolError{
 			Code:      aitools.ErrorCodePermissionDenied,
 			Message:   "Tool is disabled in plan mode",
@@ -1392,84 +1420,47 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 
 func (r *run) execTool(ctx context.Context, meta *session.Meta, toolName string, args map[string]any) (any, error) {
 	switch toolName {
-	case "fs.list_dir":
-		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
-		}
-		var p struct {
-			Path string `json:"path"`
-		}
-		b, _ := json.Marshal(args)
-		if err := json.Unmarshal(b, &p); err != nil {
-			return nil, errors.New("invalid args")
-		}
-		return r.toolFSListDir(p.Path)
-
-	case "fs.stat":
-		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
-		}
-		var p struct {
-			Path string `json:"path"`
-		}
-		b, _ := json.Marshal(args)
-		if err := json.Unmarshal(b, &p); err != nil {
-			return nil, errors.New("invalid args")
-		}
-		return r.toolFSStat(p.Path)
-
-	case "fs.read_file":
-		if meta == nil || !meta.CanRead {
-			return nil, errors.New("read permission denied")
-		}
-		var p struct {
-			Path     string `json:"path"`
-			Offset   int64  `json:"offset"`
-			MaxBytes int64  `json:"max_bytes"`
-		}
-		b, _ := json.Marshal(args)
-		if err := json.Unmarshal(b, &p); err != nil {
-			return nil, errors.New("invalid args")
-		}
-		return r.toolFSReadFile(p.Path, p.Offset, p.MaxBytes)
-
-	case "fs.write_file":
+	case "apply_patch":
 		if meta == nil || !meta.CanWrite {
 			return nil, errors.New("write permission denied")
 		}
 		var p struct {
-			Path          string `json:"path"`
-			ContentUTF8   string `json:"content_utf8"`
-			Create        bool   `json:"create"`
-			IfMatchSHA256 string `json:"if_match_sha256"`
+			Patch string `json:"patch"`
 		}
 		b, _ := json.Marshal(args)
 		if err := json.Unmarshal(b, &p); err != nil {
 			return nil, errors.New("invalid args")
 		}
-		return r.toolFSWriteFile(p.Path, p.ContentUTF8, p.Create, p.IfMatchSHA256)
+		return r.toolApplyPatch(ctx, p.Patch)
 
 	case "terminal.exec":
 		if meta == nil || !meta.CanExecute {
 			return nil, errors.New("execute permission denied")
 		}
 		var p struct {
-			Command   string `json:"command"`
-			Cwd       string `json:"cwd"`
-			TimeoutMS int64  `json:"timeout_ms"`
+			Command     string `json:"command"`
+			Cwd         string `json:"cwd"`
+			Workdir     string `json:"workdir"`
+			TimeoutMS   int64  `json:"timeout_ms"`
+			Description string `json:"description"`
 		}
 		b, _ := json.Marshal(args)
 		if err := json.Unmarshal(b, &p); err != nil {
 			return nil, errors.New("invalid args")
 		}
-		return r.toolTerminalExec(ctx, p.Command, p.Cwd, p.TimeoutMS)
+		cwd := strings.TrimSpace(p.Cwd)
+		workdir := strings.TrimSpace(p.Workdir)
+		if cwd == "" {
+			cwd = workdir
+		} else if workdir != "" && filepath.Clean(cwd) != filepath.Clean(workdir) {
+			return nil, errors.New("invalid cwd")
+		}
+		return r.toolTerminalExec(ctx, p.Command, cwd, p.TimeoutMS)
 
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)
 	}
 }
-
-// --- FS tools ---
 
 var (
 	errEmptyWorkingDir      = errors.New("empty working_dir")
@@ -1532,17 +1523,6 @@ func resolveToolPath(raw string, workingDirAbs string) (string, error) {
 	return candidate, nil
 }
 
-func mapToolPathError(err error) error {
-	switch {
-	case err == nil:
-		return nil
-	case errors.Is(err, errToolPathMustAbsolute):
-		return errors.New("path must be absolute")
-	default:
-		return errors.New("invalid path")
-	}
-}
-
 func mapToolCwdError(err error) error {
 	switch {
 	case err == nil:
@@ -1554,187 +1534,91 @@ func mapToolCwdError(err error) error {
 	}
 }
 
-func (r *run) toolFSListDir(p string) (any, error) {
-	workingDirAbs, err := r.workingDirAbs()
-	if err != nil {
-		return nil, mapToolPathError(err)
-	}
-	abs, err := resolveToolPath(p, workingDirAbs)
-	if err != nil {
-		return nil, mapToolPathError(err)
-	}
-	ents, err := os.ReadDir(abs)
-	if err != nil {
-		return nil, errors.New("not found")
-	}
-	out := make([]map[string]any, 0, len(ents))
-	for _, e := range ents {
-		if e == nil {
-			continue
-		}
-		info, err := e.Info()
-		if err != nil || info == nil {
-			continue
-		}
-		name := e.Name()
-		fullPath := filepath.Clean(filepath.Join(abs, name))
-		mod := info.ModTime().UnixMilli()
-		out = append(out, map[string]any{
-			"path":                fullPath,
-			"name":                name,
-			"is_dir":              info.IsDir(),
-			"size":                info.Size(),
-			"modified_at_unix_ms": mod,
-		})
-	}
-	return map[string]any{"entries": out}, nil
-}
-
-func (r *run) toolFSStat(p string) (any, error) {
-	workingDirAbs, err := r.workingDirAbs()
-	if err != nil {
-		return nil, mapToolPathError(err)
-	}
-	abs, err := resolveToolPath(p, workingDirAbs)
-	if err != nil {
-		return nil, mapToolPathError(err)
-	}
-	info, err := os.Stat(abs)
-	if err != nil || info == nil {
-		return nil, errors.New("not found")
-	}
-	mod := info.ModTime().UnixMilli()
-	out := map[string]any{
-		"path":                abs,
-		"is_dir":              info.IsDir(),
-		"size":                info.Size(),
-		"modified_at_unix_ms": mod,
-		"sha256":              "",
-	}
-	if !info.IsDir() {
-		sum, err := sha256File(abs)
-		if err != nil {
-			return nil, err
-		}
-		out["sha256"] = sum
-	}
-	return out, nil
-}
-
-func (r *run) toolFSReadFile(p string, offset int64, maxBytes int64) (any, error) {
-	if maxBytes <= 0 {
-		maxBytes = 200_000
-	}
-	if maxBytes > 200_000 {
-		maxBytes = 200_000
-	}
-	if offset < 0 {
-		return nil, errors.New("offset must be >= 0")
+func (r *run) toolApplyPatch(ctx context.Context, patchText string) (any, error) {
+	patchText = strings.TrimSpace(patchText)
+	if patchText == "" {
+		return nil, errors.New("missing patch")
 	}
 
 	workingDirAbs, err := r.workingDirAbs()
 	if err != nil {
-		return nil, mapToolPathError(err)
+		return nil, mapToolCwdError(err)
 	}
-	abs, err := resolveToolPath(p, workingDirAbs)
+
+	tmpFile, err := os.CreateTemp("", "redeven-apply-patch-*.diff")
 	if err != nil {
-		return nil, mapToolPathError(err)
+		return nil, errors.New("cannot create temp patch file")
+	}
+	tmpPath := tmpFile.Name()
+	defer func() {
+		_ = os.Remove(tmpPath)
+	}()
+	if _, err := tmpFile.WriteString(patchText + "\n"); err != nil {
+		_ = tmpFile.Close()
+		return nil, errors.New("cannot write patch file")
+	}
+	if err := tmpFile.Close(); err != nil {
+		return nil, errors.New("cannot close patch file")
 	}
 
-	f, err := os.Open(abs)
-	if err != nil {
-		return nil, errors.New("not found")
-	}
-	defer f.Close()
-
-	info, err := f.Stat()
-	if err != nil || info == nil {
-		return nil, errors.New("not found")
-	}
-	size := info.Size()
-	if offset > size {
-		offset = size
-	}
-	if _, err := f.Seek(offset, 0); err != nil {
-		return nil, errors.New("invalid offset")
+	checkCmd := exec.CommandContext(ctx, "git", "apply", "--check", "--whitespace=nowarn", "--recount", tmpPath)
+	checkCmd.Dir = workingDirAbs
+	checkOut, checkErr := checkCmd.CombinedOutput()
+	if checkErr != nil {
+		msg := strings.TrimSpace(string(checkOut))
+		if msg == "" {
+			msg = "patch check failed"
+		}
+		return nil, errors.New(msg)
 	}
 
-	buf := make([]byte, maxBytes+1)
-	n, _ := io.ReadFull(f, buf)
-	read := buf[:n]
-	truncated := false
-	if int64(len(read)) > maxBytes {
-		truncated = true
-		read = read[:maxBytes]
+	applyCmd := exec.CommandContext(ctx, "git", "apply", "--whitespace=nowarn", "--recount", tmpPath)
+	applyCmd.Dir = workingDirAbs
+	applyOut, applyErr := applyCmd.CombinedOutput()
+	if applyErr != nil {
+		msg := strings.TrimSpace(string(applyOut))
+		if msg == "" {
+			msg = "patch apply failed"
+		}
+		return nil, errors.New(msg)
 	}
-	if !utf8.Valid(read) {
-		return nil, errors.New("binary file (not utf-8)")
-	}
+
+	filesChanged, hunks, additions, deletions := summarizeUnifiedDiff(patchText)
 	return map[string]any{
-		"content_utf8": string(read),
-		"file_size":    size,
-		"truncated":    truncated,
+		"files_changed": filesChanged,
+		"hunks":         hunks,
+		"additions":     additions,
+		"deletions":     deletions,
 	}, nil
 }
 
-func (r *run) toolFSWriteFile(p string, content string, create bool, ifMatch string) (any, error) {
-	workingDirAbs, err := r.workingDirAbs()
-	if err != nil {
-		return nil, mapToolPathError(err)
-	}
-	abs, err := resolveToolPath(p, workingDirAbs)
-	if err != nil {
-		return nil, mapToolPathError(err)
-	}
-
-	if create {
-		if _, err := os.Stat(abs); err == nil {
-			return nil, errors.New("file already exists")
-		}
-	} else {
-		info, err := os.Stat(abs)
-		if err != nil {
-			return nil, errors.New("not found")
-		}
-		if info.IsDir() {
-			return nil, errors.New("path is a directory")
-		}
-
-		expected := strings.TrimSpace(ifMatch)
-		if expected == "" {
-			return nil, errors.New("missing if_match_sha256")
-		}
-		cur, err := sha256File(abs)
-		if err != nil {
-			return nil, err
-		}
-		if !strings.EqualFold(cur, expected) {
-			return nil, errors.New("if_match_sha256 mismatch")
+func summarizeUnifiedDiff(patchText string) (filesChanged int, hunks int, additions int, deletions int) {
+	seenFile := make(map[string]struct{})
+	lines := strings.Split(patchText, "\n")
+	for _, line := range lines {
+		switch {
+		case strings.HasPrefix(line, "diff --git "):
+			parts := strings.Fields(line)
+			if len(parts) >= 4 {
+				file := strings.TrimSpace(parts[3])
+				if file != "" {
+					if _, ok := seenFile[file]; !ok {
+						seenFile[file] = struct{}{}
+						filesChanged++
+					}
+				}
+			}
+		case strings.HasPrefix(line, "@@"):
+			hunks++
+		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
+			continue
+		case strings.HasPrefix(line, "+"):
+			additions++
+		case strings.HasPrefix(line, "-"):
+			deletions++
 		}
 	}
-
-	data := []byte(content)
-	if err := os.WriteFile(abs, data, 0o644); err != nil {
-		return nil, errors.New("write failed")
-	}
-	sum := sha256.Sum256(data)
-	return map[string]any{
-		"bytes_written": len(data),
-		"sha256":        hex.EncodeToString(sum[:]),
-	}, nil
-}
-
-func sha256File(p string) (string, error) {
-	f, err := os.Open(p)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return filesChanged, hunks, additions, deletions
 }
 
 // --- terminal.exec ---
@@ -1777,6 +1661,7 @@ func (r *run) toolTerminalExec(ctx context.Context, command string, cwd string, 
 	}
 	cmd := exec.CommandContext(execCtx, shell, "-lc", command)
 	cmd.Dir = cwdAbs
+	cmd.Env = prependRedevenBinToEnv(os.Environ())
 
 	lim := newCombinedLimitedBuffers(200_000)
 	cmd.Stdout = lim.Stdout()
@@ -1784,10 +1669,13 @@ func (r *run) toolTerminalExec(ctx context.Context, command string, cwd string, 
 
 	runErr := cmd.Run()
 	durationMS := time.Since(started).Milliseconds()
+	timedOut := errors.Is(execCtx.Err(), context.DeadlineExceeded)
 
 	exitCode := 0
 	if runErr != nil {
-		if ee := (*exec.ExitError)(nil); errors.As(runErr, &ee) {
+		if timedOut {
+			exitCode = 124
+		} else if ee := (*exec.ExitError)(nil); errors.As(runErr, &ee) {
 			exitCode = ee.ExitCode()
 		} else {
 			return nil, runErr
@@ -1800,5 +1688,79 @@ func (r *run) toolTerminalExec(ctx context.Context, command string, cwd string, 
 		"exit_code":   exitCode,
 		"duration_ms": durationMS,
 		"truncated":   lim.Truncated(),
+		"timed_out":   timedOut,
 	}, nil
+}
+
+func prependRedevenBinToEnv(baseEnv []string) []string {
+	envMap := make(map[string]string, len(baseEnv))
+	order := make([]string, 0, len(baseEnv))
+	for _, kv := range baseEnv {
+		idx := strings.Index(kv, "=")
+		if idx <= 0 {
+			continue
+		}
+		key := kv[:idx]
+		val := kv[idx+1:]
+		if _, ok := envMap[key]; !ok {
+			order = append(order, key)
+		}
+		envMap[key] = val
+	}
+
+	home := strings.TrimSpace(envMap["HOME"])
+	if home == "" {
+		if h, err := os.UserHomeDir(); err == nil {
+			home = strings.TrimSpace(h)
+		}
+	}
+	if home != "" {
+		redevenBin := filepath.Join(home, ".redeven", "bin")
+		pathVal := strings.TrimSpace(envMap["PATH"])
+		parts := strings.Split(pathVal, string(os.PathListSeparator))
+		hasRedevenBin := false
+		for _, part := range parts {
+			if filepath.Clean(strings.TrimSpace(part)) == filepath.Clean(redevenBin) {
+				hasRedevenBin = true
+				break
+			}
+		}
+		if !hasRedevenBin {
+			if pathVal == "" {
+				envMap["PATH"] = redevenBin
+			} else {
+				envMap["PATH"] = redevenBin + string(os.PathListSeparator) + pathVal
+			}
+			if _, ok := envMap["PATH"]; ok {
+				found := false
+				for _, key := range order {
+					if key == "PATH" {
+						found = true
+						break
+					}
+				}
+				if !found {
+					order = append(order, "PATH")
+				}
+			}
+		}
+	}
+
+	out := make([]string, 0, len(order))
+	for _, key := range order {
+		out = append(out, key+"="+envMap[key])
+	}
+	if _, ok := envMap["PATH"]; ok {
+		pathSeen := false
+		for _, key := range order {
+			if key == "PATH" {
+				pathSeen = true
+				break
+			}
+		}
+		if !pathSeen {
+			out = append(out, "PATH="+envMap["PATH"])
+		}
+	}
+	return out
 }

@@ -1567,8 +1567,8 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 
 		if isFirstRound && step == 0 {
 			// First round produced text but no tool calls — nudge (not an error, don't burn recovery budget).
-			exceptionOverlay = "[RECOVERY] You must use tools on your first turn. Start by investigating: use fs.list_dir to explore the workspace, or fs.read_file to read relevant files. Do NOT respond with text only."
-			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "You must call a tool now. Use fs.list_dir or fs.read_file to start investigating."}}})
+			exceptionOverlay = "[RECOVERY] You must use tools on your first turn. Start by investigating with terminal.exec: use rg to search files and sed/cat to read relevant content. Do NOT respond with text only."
+			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "You must call a tool now. Use terminal.exec with rg/sed/cat to start investigating."}}})
 			isFirstRound = false
 			continue
 		}
@@ -2187,17 +2187,19 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int,
 		"",
 		"# Tool Usage Strategy",
 		"Follow this workflow for every task:",
-		"1. **Investigate** — Use fs.list_dir and fs.read_file to understand the workspace and gather context.",
+		"1. **Investigate** — Use terminal.exec with rg/sed/cat to understand the workspace and gather context.",
 		"2. **Plan** — Identify what needs to be done based on the information gathered.",
-		"3. **Act** — Use fs.write_file, terminal.exec, or other tools to make changes.",
-		"4. **Verify** — Read modified files or run tests/commands to confirm correctness.",
+		"3. **Act** — Use apply_patch for file edits; use terminal.exec for validated command actions.",
+		"4. **Verify** — Use terminal.exec to run checks (tests/lint/build) and confirm correctness.",
 		"5. **Iterate** — If verification fails, diagnose the issue and repeat from step 1.",
 		"",
 		"# Mandatory Rules",
 		"- ALWAYS prefer using tools over generating text responses.",
 		"- You MUST call task_complete with a detailed result summary when done. Never end without it.",
 		"- You MUST use tools to investigate before answering questions about files, code, or the workspace.",
-		"- If you can answer by reading a file, READ it first. If you can verify by running a command, RUN it first.",
+		"- If you can answer by reading files, use terminal.exec with rg/sed/cat first.",
+		"- Prefer apply_patch for file edits instead of shell redirection or ad-hoc overwrite commands.",
+		"- Use workdir/cwd fields on terminal.exec instead of running cd in the command string.",
 		"- Do NOT fabricate file contents, command outputs, or tool results. Always use tools to get real data.",
 		"- Do NOT produce an empty first turn. Your first action must be a tool call.",
 		"- If information is insufficient and tools cannot help, call ask_user.",
@@ -2209,10 +2211,14 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int,
 		"- Do NOT repeat the same tool call with identical arguments.",
 		"",
 		"# Common Workflows",
-		"- **File questions**: fs.list_dir → fs.read_file → analyze → task_complete",
-		"- **Code changes**: fs.read_file → fs.write_file → terminal.exec (verify) → task_complete",
-		"- **Shell tasks**: terminal.exec → check output → task_complete",
-		"- **Debugging**: fs.read_file → terminal.exec (reproduce) → fix → verify → task_complete",
+		"- **File questions**: terminal.exec (rg --files / rg pattern / sed -n) → analyze → task_complete",
+		"- **Code changes**: terminal.exec (inspect) → apply_patch → terminal.exec (verify) → task_complete",
+		"- **Shell tasks**: terminal.exec → inspect output → task_complete",
+		"- **Debugging**: terminal.exec (reproduce) → apply_patch fix → terminal.exec (verify) → task_complete",
+		"",
+		"# Search Template",
+		"- Default: `rg \"<PATTERN>\" . --hidden --glob '!.git'`",
+		"- If output is too large or slow, retry with: `rg \"<PATTERN>\" . --hidden --glob '!.git' --glob '!node_modules' --glob '!dist'`",
 	}
 	availableSkills := r.listSkills()
 	activeSkills := r.activeSkills()

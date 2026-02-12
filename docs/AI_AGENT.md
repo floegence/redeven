@@ -5,7 +5,8 @@ Redeven Agent can optionally enable an **AI Agent** feature inside the Env App U
 High-level design:
 
 - The browser UI calls the agent via the existing `/_redeven_proxy/api/ai/*` gateway routes (still over Flowersec E2EE proxy).
-- The **Go agent is the security boundary** and executes tools (filesystem, terminal) after validating authoritative `session_meta`.
+- The **Go agent is the security boundary** and executes tools after validating authoritative `session_meta`.
+- Tooling follows a shell-first workflow: `terminal.exec` for investigation and verification, `apply_patch` for file edits.
 - LLM orchestration runs in the **Go runtime** via native provider SDK adapters:
   - OpenAI: `openai-go` (Responses API)
   - Anthropic: `anthropic-sdk-go` (Messages API)
@@ -74,14 +75,25 @@ Example:
 }
 ```
 
-## Safety / Approvals
+## Tooling and approvals
 
-Some tools are high-risk and require explicit user approval **every time**:
+Built-in tools:
 
-- `fs.write_file`
 - `terminal.exec`
+- `apply_patch`
+
+Approval policy is server-enforced per invocation:
+
+- `terminal.exec` readonly commands (for example `rg`, `ls`, `cat`, `sed -n`, `git status`, `git diff`) run without approval.
+- `terminal.exec` mutating commands require approval.
+- Dangerous terminal commands are blocked by terminal risk policy.
+- `apply_patch` requires approval.
 
 The Env App UI will show an Approve/Reject prompt for each such tool call.
+
+Installer note:
+
+- `scripts/install.sh` installs pinned ripgrep binaries into `~/.redeven/tools/rg/<version>/<platform>/rg` and links `~/.redeven/bin/rg`, so shell-first search is available even when the system does not provide `rg`.
 
 See also:
 - `PERMISSION_POLICY.md` for how the local RWX cap works (and what it does not cap).
