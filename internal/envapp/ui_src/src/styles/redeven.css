@@ -42,3 +42,34 @@
   border-radius: 0 !important;
   object-fit: contain !important;
 }
+
+.chat-markdown-block .chat-terminal-exec-details {
+  margin-top: 0.375rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+  overflow: hidden;
+}
+
+.chat-markdown-block .chat-terminal-exec-summary {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--foreground);
+  user-select: none;
+}
+
+.chat-markdown-block .chat-terminal-exec-summary:hover {
+  background: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.chat-markdown-block .chat-terminal-exec-details[open] {
+  background: color-mix(in srgb, var(--card) 80%, transparent);
+}
+
+.chat-markdown-block .chat-terminal-exec-details[open] .chat-terminal-exec-summary {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}

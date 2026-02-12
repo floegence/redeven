@@ -30,6 +30,7 @@ import { useEnvContext } from './EnvContext';
 import { useAIChatContext, type ListThreadMessagesResponse } from './AIChatContext';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { fetchGatewayJSON } from '../services/gatewayApi';
+import { decorateMessageForTerminalExec, decorateStreamEventForTerminalExec } from './aiTerminalExecPresentation';
 
 function createUserMarkdownMessage(markdown: string): Message {
   return {
@@ -551,7 +552,7 @@ export function EnvAIPage() {
     }
 
     for (let i = applied; i < events.length; i += 1) {
-      chat.handleStreamEvent(events[i] as any);
+      chat.handleStreamEvent(decorateStreamEventForTerminalExec(events[i] as any) as any);
     }
     replayAppliedByThread.set(tid, events.length);
 
@@ -574,7 +575,7 @@ export function EnvAIPage() {
       );
       if (reqNo !== lastMessagesReq) return;
 
-      const messages = resp.messages || [];
+      const messages = (resp.messages || []).map((message) => decorateMessageForTerminalExec(message as Message));
       chat.setMessages(messages);
       setHasMessages(messages.length > 0);
       syncThreadReplay(tid, { reset: true });
