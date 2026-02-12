@@ -164,7 +164,7 @@ PRAGMA user_version=1;
 		}
 	}
 
-	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events"} {
+	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "context_snapshots", "provider_capabilities"} {
 		var exists int
 		if err := s.db.QueryRowContext(ctx, `
 SELECT COUNT(1)
@@ -182,8 +182,8 @@ WHERE type = 'table' AND name = ?
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 4 {
-		t.Fatalf("user_version=%d, want 4", version)
+	if version != 5 {
+		t.Fatalf("user_version=%d, want 5", version)
 	}
 }
 

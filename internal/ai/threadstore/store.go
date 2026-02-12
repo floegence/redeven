@@ -480,6 +480,24 @@ func (s *Store) DeleteThread(ctx context.Context, endpointID string, threadID st
 	if _, err := tx.ExecContext(ctx, `DELETE FROM ai_messages WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM conversation_turns WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM memory_items WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM context_snapshots WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM execution_spans WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ai_thread_state WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+		return err
+	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID)
 	if err != nil {
 		return err
@@ -558,7 +576,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 	}
 
 	res, err := tx.ExecContext(ctx, `
-INSERT INTO ai_messages(
+INSERT INTO transcript_messages(
   thread_id, endpoint_id, message_id, role,
   author_user_public_id, author_user_email,
   status, created_at_unix_ms, updated_at_unix_ms,
@@ -646,7 +664,7 @@ SELECT id, thread_id, endpoint_id, message_id, role,
        author_user_public_id, author_user_email,
        status, created_at_unix_ms, updated_at_unix_ms,
        text_content, message_json
-FROM ai_messages
+FROM transcript_messages
 WHERE endpoint_id = ? AND thread_id = ? AND id < ?
 ORDER BY id DESC
 LIMIT ?
@@ -695,7 +713,7 @@ LIMIT ?
 	var more int
 	if err := s.db.QueryRowContext(ctx, `
 SELECT COUNT(1)
-FROM ai_messages
+FROM transcript_messages
 WHERE endpoint_id = ? AND thread_id = ? AND id < ?
 `, endpointID, threadID, nextBeforeID).Scan(&more); err != nil {
 		// Best-effort: if this fails, just say no more.
@@ -728,7 +746,7 @@ func (s *Store) ListHistoryLite(ctx context.Context, endpointID string, threadID
 
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, role, status, text_content
-FROM ai_messages
+FROM transcript_messages
 WHERE endpoint_id = ? AND thread_id = ?
 ORDER BY id DESC
 LIMIT ?
@@ -1145,7 +1163,7 @@ func migrateSchema(db *sql.DB) error {
 	if db == nil {
 		return errors.New("nil db")
 	}
-	const targetVersion = 4
+	const targetVersion = 5
 
 	var v int
 	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
@@ -1313,6 +1331,116 @@ CREATE TABLE IF NOT EXISTS ai_thread_state (
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(endpoint_id, thread_id)
 );
+
+CREATE TABLE IF NOT EXISTS transcript_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  thread_id TEXT NOT NULL,
+  endpoint_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  author_user_public_id TEXT NOT NULL DEFAULT '',
+  author_user_email TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL,
+  text_content TEXT NOT NULL DEFAULT '',
+  message_json TEXT NOT NULL,
+  UNIQUE(thread_id, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_transcript_messages_thread_id ON transcript_messages(endpoint_id, thread_id, id ASC);
+
+CREATE TABLE IF NOT EXISTS conversation_turns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  turn_id TEXT NOT NULL UNIQUE,
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  run_id TEXT NOT NULL DEFAULT '',
+  user_message_id TEXT NOT NULL DEFAULT '',
+  assistant_message_id TEXT NOT NULL DEFAULT '',
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_conversation_turns_thread_id ON conversation_turns(endpoint_id, thread_id, id ASC);
+CREATE INDEX IF NOT EXISTS idx_conversation_turns_run_id ON conversation_turns(run_id, id ASC);
+
+CREATE TABLE IF NOT EXISTS execution_spans (
+  span_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'system',
+  name TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'running',
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  started_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  ended_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_execution_spans_thread_started ON execution_spans(endpoint_id, thread_id, started_at_unix_ms DESC, span_id DESC);
+CREATE INDEX IF NOT EXISTS idx_execution_spans_run_started ON execution_spans(endpoint_id, run_id, started_at_unix_ms ASC, span_id ASC);
+
+CREATE TABLE IF NOT EXISTS memory_items (
+  memory_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  scope TEXT NOT NULL DEFAULT 'episodic',
+  kind TEXT NOT NULL DEFAULT 'fact',
+  content TEXT NOT NULL DEFAULT '',
+  source_refs_json TEXT NOT NULL DEFAULT '[]',
+  importance REAL NOT NULL DEFAULT 0.5,
+  freshness REAL NOT NULL DEFAULT 0.5,
+  confidence REAL NOT NULL DEFAULT 0.6,
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_memory_items_thread_updated ON memory_items(endpoint_id, thread_id, updated_at_unix_ms DESC, memory_id DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_items_scope_kind ON memory_items(endpoint_id, thread_id, scope, kind, updated_at_unix_ms DESC);
+
+CREATE TABLE IF NOT EXISTS memory_embeddings (
+  memory_id TEXT NOT NULL,
+  embedding_model TEXT NOT NULL DEFAULT '',
+  vector_blob BLOB NOT NULL,
+  dim INTEGER NOT NULL DEFAULT 0,
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(memory_id, embedding_model)
+);
+
+CREATE TABLE IF NOT EXISTS context_snapshots (
+  snapshot_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  level TEXT NOT NULL DEFAULT 'turn',
+  summary_text TEXT NOT NULL DEFAULT '',
+  covers_turn_from_id INTEGER NOT NULL DEFAULT 0,
+  covers_turn_to_id INTEGER NOT NULL DEFAULT 0,
+  quality_score REAL NOT NULL DEFAULT 0.5,
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_context_snapshots_thread_level ON context_snapshots(endpoint_id, thread_id, level, created_at_unix_ms DESC);
+
+CREATE TABLE IF NOT EXISTS provider_capabilities (
+  provider_id TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  capability_json TEXT NOT NULL DEFAULT '{}',
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(provider_id, model_name)
+);
+`); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(`
+INSERT OR IGNORE INTO transcript_messages(
+  id, thread_id, endpoint_id, message_id, role,
+  author_user_public_id, author_user_email,
+  status, created_at_unix_ms, updated_at_unix_ms,
+  text_content, message_json
+)
+SELECT
+  id, thread_id, endpoint_id, message_id, role,
+  author_user_public_id, author_user_email,
+  status, created_at_unix_ms, updated_at_unix_ms,
+  text_content, message_json
+FROM ai_messages
 `); err != nil {
 		return err
 	}

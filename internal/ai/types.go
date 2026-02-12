@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	contextmodel "github.com/floegence/redeven-agent/internal/ai/context/model"
 	aitools "github.com/floegence/redeven-agent/internal/ai/tools"
 )
 
@@ -85,11 +86,13 @@ type RunStartRequest struct {
 
 // RunRequest is the internal run request for Go runtime execution (includes history).
 type RunRequest struct {
-	Model     string          `json:"model"`
-	Objective string          `json:"objective,omitempty"`
-	History   []RunHistoryMsg `json:"history"`
-	Input     RunInput        `json:"input"`
-	Options   RunOptions      `json:"options"`
+	Model           string                       `json:"model"`
+	Objective       string                       `json:"objective,omitempty"`
+	History         []RunHistoryMsg              `json:"history"`
+	Input           RunInput                     `json:"input"`
+	Options         RunOptions                   `json:"options"`
+	ContextPack     contextmodel.PromptPack      `json:"-"`
+	ModelCapability contextmodel.ModelCapability `json:"-"`
 }
 
 type RunHistoryMsg struct {

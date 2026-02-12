@@ -464,6 +464,23 @@ func (r *run) persistToolCall(rec threadstore.ToolCallRecord) {
 	_ = r.threadsDB.UpsertToolCall(ctx, rec)
 }
 
+func executionSpanID(runID string, name string, token string) string {
+	runID = strings.TrimSpace(runID)
+	name = strings.TrimSpace(name)
+	token = strings.TrimSpace(token)
+	sum := sha256.Sum256([]byte(runID + "|" + name + "|" + token))
+	return "span_" + hex.EncodeToString(sum[:12])
+}
+
+func (r *run) persistExecutionSpan(rec threadstore.ExecutionSpanRecord) {
+	if r == nil || r.threadsDB == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
+	defer cancel()
+	_ = r.threadsDB.UpsertExecutionSpan(ctx, rec)
+}
+
 func sanitizeLogText(raw string, maxRunes int) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -1003,10 +1020,29 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	}
 
 	toolStartedAt := time.Now()
+	toolSpanID := executionSpanID(r.id, toolName, toolID)
 	r.persistRunEvent("tool.call", RealtimeStreamKindTool, map[string]any{
 		"tool_id":   toolID,
 		"tool_name": toolName,
 		"args":      redactAnyForLog("args", args, 0),
+	})
+	toolCallPayload := map[string]any{
+		"tool_id":   toolID,
+		"tool_name": toolName,
+		"args":      redactAnyForLog("args", args, 0),
+	}
+	toolCallPayloadJSON := marshalPersistJSON(toolCallPayload, 6000)
+	r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
+		SpanID:          toolSpanID,
+		EndpointID:      strings.TrimSpace(r.endpointID),
+		ThreadID:        strings.TrimSpace(r.threadID),
+		RunID:           strings.TrimSpace(r.id),
+		Kind:            "tool",
+		Name:            toolName,
+		Status:          "started",
+		PayloadJSON:     toolCallPayloadJSON,
+		StartedAtUnixMs: toolStartedAt.UnixMilli(),
+		UpdatedAtUnixMs: toolStartedAt.UnixMilli(),
 	})
 
 	r.debug("ai.run.tool.call",
@@ -1079,6 +1115,26 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			"tool_id":   toolID,
 			"tool_name": toolName,
 			"error":     toolErr,
+		})
+		errPayload := map[string]any{
+			"tool_id":         toolID,
+			"tool_name":       toolName,
+			"status":          "failed",
+			"error":           toolErr,
+			"recovery_action": strings.TrimSpace(recoveryAction),
+		}
+		r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
+			SpanID:          toolSpanID,
+			EndpointID:      strings.TrimSpace(r.endpointID),
+			ThreadID:        strings.TrimSpace(r.threadID),
+			RunID:           strings.TrimSpace(r.id),
+			Kind:            "tool",
+			Name:            toolName,
+			Status:          "failed",
+			PayloadJSON:     marshalPersistJSON(errPayload, 6000),
+			StartedAtUnixMs: toolStartedAt.UnixMilli(),
+			EndedAtUnixMs:   time.Now().UnixMilli(),
+			UpdatedAtUnixMs: time.Now().UnixMilli(),
 		})
 	}
 
@@ -1196,6 +1252,25 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		"tool_id":   toolID,
 		"tool_name": toolName,
 		"status":    "success",
+	})
+	successPayload := map[string]any{
+		"tool_id":   toolID,
+		"tool_name": toolName,
+		"status":    "success",
+		"result":    redactAnyForLog("result", result, 0),
+	}
+	r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
+		SpanID:          toolSpanID,
+		EndpointID:      strings.TrimSpace(r.endpointID),
+		ThreadID:        strings.TrimSpace(r.threadID),
+		RunID:           strings.TrimSpace(r.id),
+		Kind:            "tool",
+		Name:            toolName,
+		Status:          "success",
+		PayloadJSON:     marshalPersistJSON(successPayload, 6000),
+		StartedAtUnixMs: toolStartedAt.UnixMilli(),
+		EndedAtUnixMs:   time.Now().UnixMilli(),
+		UpdatedAtUnixMs: time.Now().UnixMilli(),
 	})
 	r.debug("ai.run.tool.result",
 		"tool_id", toolID,

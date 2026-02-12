@@ -15,6 +15,8 @@ import (
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
+	contextcompactor "github.com/floegence/redeven-agent/internal/ai/context/compactor"
+	contextmodel "github.com/floegence/redeven-agent/internal/ai/context/model"
 	"github.com/floegence/redeven-agent/internal/config"
 	openai "github.com/openai/openai-go"
 	ooption "github.com/openai/openai-go/option"
@@ -1041,6 +1043,21 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if modelName == "" {
 		return r.failRun("Invalid model id", fmt.Errorf("invalid model id %q", strings.TrimSpace(req.Model)))
 	}
+	capability := contextmodel.NormalizeCapability(req.ModelCapability)
+	if capability.ModelName == "" {
+		capability.ModelName = modelName
+	}
+	if capability.ProviderID == "" {
+		providerID, _, _ := strings.Cut(strings.TrimSpace(req.Model), "/")
+		capability.ProviderID = strings.TrimSpace(providerID)
+	}
+	req.ModelCapability = capability
+	if !capability.SupportsReasoningTokens {
+		req.Options.ThinkingBudgetTokens = 0
+	}
+	if !capability.SupportsStrictJSONSchema && strings.EqualFold(strings.TrimSpace(req.Options.ResponseFormat), "json_schema") {
+		req.Options.ResponseFormat = "json_object"
+	}
 
 	maxSteps := req.Options.MaxSteps
 	if maxSteps <= 0 {
@@ -1167,16 +1184,16 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	}
 	_ = loop
 
-	state := newRuntimeState(taskObjective)
-	messages := buildInitialMessages(req.History, req.Input.Text)
-	if len(req.Input.Attachments) > 0 {
-		for _, it := range req.Input.Attachments {
-			if strings.TrimSpace(it.URL) == "" {
-				continue
-			}
-			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "file", FileURI: strings.TrimSpace(it.URL), MimeType: strings.TrimSpace(it.MimeType), Text: strings.TrimSpace(it.Name)}}})
-		}
+	if strings.TrimSpace(req.ContextPack.Objective) != "" {
+		taskObjective = strings.TrimSpace(req.ContextPack.Objective)
 	}
+	state := newRuntimeState(taskObjective)
+	messages := buildMessagesForRun(req)
+	contextLimit := nativeDefaultContextLimit
+	if req.ModelCapability.MaxContextTokens > 0 {
+		contextLimit = req.ModelCapability.MaxContextTokens
+	}
+	runtimeCompactor := contextcompactor.New(nil)
 
 	recoveryCount := 0
 	noToolRounds := 0
@@ -1247,9 +1264,23 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 
 		estimateTokens, estimateSource := estimateTurnTokens(providerType, turnReq)
 		state.EstimateSource = estimateSource
-		pressure := float64(estimateTokens) / float64(nativeDefaultContextLimit)
+		pressure := float64(estimateTokens) / float64(contextLimit)
 		if pressure >= nativeCompactThreshold {
-			messages = compactMessages(messages)
+			if req.ContextPack.ThreadID != "" {
+				targetTokens := req.Options.MaxInputTokens
+				if targetTokens <= 0 {
+					targetTokens = contextLimit
+				}
+				compressed, changed, _, compactErr := runtimeCompactor.CompactPromptPack(execCtx, strings.TrimSpace(r.endpointID), targetTokens, req.ContextPack)
+				if compactErr == nil && changed {
+					req.ContextPack = compressed
+					messages = buildMessagesFromPromptPack(req.ContextPack, req.Input.Text)
+				} else {
+					messages = compactMessages(messages)
+				}
+			} else {
+				messages = compactMessages(messages)
+			}
 			state = syncRuntimeStateAfterCompact(state, messages)
 			turnMessages = composeTurnMessages(systemPrompt, messages)
 			turnReq.Messages = turnMessages
@@ -1633,23 +1664,7 @@ func (r *run) runNativeSocial(
 	}
 
 	r.emitLifecyclePhase("synthesizing", map[string]any{"intent": RunIntentSocial})
-	messages := buildInitialMessages(req.History, req.Input.Text)
-	if len(req.Input.Attachments) > 0 {
-		for _, it := range req.Input.Attachments {
-			if strings.TrimSpace(it.URL) == "" {
-				continue
-			}
-			messages = append(messages, Message{
-				Role: "user",
-				Content: []ContentPart{{
-					Type:     "file",
-					FileURI:  strings.TrimSpace(it.URL),
-					MimeType: strings.TrimSpace(it.MimeType),
-					Text:     strings.TrimSpace(it.Name),
-				}},
-			})
-		}
-	}
+	messages := buildMessagesForRun(req)
 
 	systemPrompt := r.buildSocialSystemPrompt()
 	turnReq := TurnRequest{
@@ -1731,6 +1746,139 @@ func buildInitialMessages(history []RunHistoryMsg, userInput string) []Message {
 	return messages
 }
 
+func buildMessagesForRun(req RunRequest) []Message {
+	if strings.TrimSpace(req.ContextPack.ThreadID) != "" {
+		return buildMessagesFromPromptPack(req.ContextPack, req.Input.Text)
+	}
+	messages := buildInitialMessages(req.History, req.Input.Text)
+	if len(req.Input.Attachments) > 0 {
+		for _, it := range req.Input.Attachments {
+			if strings.TrimSpace(it.URL) == "" {
+				continue
+			}
+			messages = append(messages, Message{
+				Role: "user",
+				Content: []ContentPart{{
+					Type:     "file",
+					FileURI:  strings.TrimSpace(it.URL),
+					MimeType: strings.TrimSpace(it.MimeType),
+					Text:     strings.TrimSpace(it.Name),
+				}},
+			})
+		}
+	}
+	return messages
+}
+
+func buildMessagesFromPromptPack(pack contextmodel.PromptPack, currentUserInput string) []Message {
+	messages := make([]Message, 0, len(pack.RecentDialogue)*2+8)
+	if txt := strings.TrimSpace(pack.SystemContract); txt != "" {
+		messages = append(messages, Message{Role: "system", Content: []ContentPart{{Type: "text", Text: txt}}})
+	}
+
+	contextParts := make([]string, 0, 8)
+	if txt := strings.TrimSpace(pack.Objective); txt != "" {
+		contextParts = append(contextParts, "Objective: "+txt)
+	}
+	if len(pack.ActiveConstraints) > 0 {
+		contextParts = append(contextParts, "Active constraints:")
+		for _, c := range pack.ActiveConstraints {
+			c = strings.TrimSpace(c)
+			if c == "" {
+				continue
+			}
+			contextParts = append(contextParts, "- "+c)
+		}
+	}
+	if txt := strings.TrimSpace(pack.ThreadSnapshot); txt != "" {
+		contextParts = append(contextParts, "Thread snapshot:")
+		contextParts = append(contextParts, txt)
+	}
+	if len(contextParts) > 0 {
+		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: strings.Join(contextParts, "\n")}}})
+	}
+
+	for _, turn := range pack.RecentDialogue {
+		if txt := strings.TrimSpace(turn.UserText); txt != "" {
+			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: txt}}})
+		}
+		if txt := strings.TrimSpace(turn.AssistantText); txt != "" {
+			messages = append(messages, Message{Role: "assistant", Content: []ContentPart{{Type: "text", Text: txt}}})
+		}
+	}
+
+	if len(pack.ExecutionEvidence) > 0 {
+		parts := make([]string, 0, len(pack.ExecutionEvidence))
+		for _, ev := range pack.ExecutionEvidence {
+			line := strings.TrimSpace(ev.Summary)
+			if line == "" {
+				line = strings.TrimSpace(ev.Name)
+			}
+			if line == "" {
+				continue
+			}
+			parts = append(parts, "- "+line)
+		}
+		if len(parts) > 0 {
+			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "Execution evidence:\n" + strings.Join(parts, "\n")}}})
+		}
+	}
+
+	if len(pack.PendingTodos) > 0 {
+		parts := make([]string, 0, len(pack.PendingTodos))
+		for _, item := range pack.PendingTodos {
+			txt := strings.TrimSpace(item.Content)
+			if txt == "" {
+				continue
+			}
+			parts = append(parts, "- "+txt)
+		}
+		if len(parts) > 0 {
+			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "Pending todos:\n" + strings.Join(parts, "\n")}}})
+		}
+	}
+
+	if len(pack.RetrievedLongTermMemory) > 0 {
+		parts := make([]string, 0, len(pack.RetrievedLongTermMemory))
+		for _, item := range pack.RetrievedLongTermMemory {
+			txt := strings.TrimSpace(item.Content)
+			if txt == "" {
+				continue
+			}
+			parts = append(parts, "- "+txt)
+		}
+		if len(parts) > 0 {
+			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "Long-term memory:\n" + strings.Join(parts, "\n")}}})
+		}
+	}
+
+	for _, att := range pack.AttachmentsManifest {
+		url := strings.TrimSpace(att.URL)
+		if url == "" {
+			continue
+		}
+		mode := strings.ToLower(strings.TrimSpace(att.Mode))
+		if mode == "text_reference" {
+			reference := strings.TrimSpace(att.Name)
+			if reference == "" {
+				reference = url
+			}
+			msg := "Attachment reference: " + reference
+			if reference != url {
+				msg += " (" + url + ")"
+			}
+			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: msg}}})
+			continue
+		}
+		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "file", FileURI: url, MimeType: strings.TrimSpace(att.MimeType), Text: strings.TrimSpace(att.Name)}}})
+	}
+
+	if txt := strings.TrimSpace(currentUserInput); txt != "" {
+		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: txt}}})
+	}
+	return messages
+}
+
 func composeTurnMessages(systemPrompt string, history []Message) []Message {
 	messages := make([]Message, 0, len(history)+1)
 	if strings.TrimSpace(systemPrompt) != "" {
@@ -1767,26 +1915,64 @@ func estimateTurnTokens(providerType string, req TurnRequest) (int, string) {
 }
 
 func compactMessages(messages []Message) []Message {
-	if len(messages) <= 6 {
+	if len(messages) <= 12 {
 		return append([]Message(nil), messages...)
 	}
-	keepRecent := 6
+	keepRecent := 10
 	if keepRecent > len(messages) {
 		keepRecent = len(messages)
 	}
+	archived := messages[:len(messages)-keepRecent]
 	recent := append([]Message(nil), messages[len(messages)-keepRecent:]...)
+	summaryLines := make([]string, 0, len(archived))
+	for _, msg := range archived {
+		role := strings.ToLower(strings.TrimSpace(msg.Role))
+		if role != "user" && role != "assistant" && role != "tool" {
+			continue
+		}
+		txt := joinMessageText(msg)
+		if txt == "" {
+			for _, part := range msg.Content {
+				if strings.ToLower(strings.TrimSpace(part.Type)) == "tool_result" {
+					txt = strings.TrimSpace(part.Text)
+					break
+				}
+			}
+		}
+		if txt == "" {
+			continue
+		}
+		if len([]rune(txt)) > 100 {
+			txt = string([]rune(txt)[:100]) + " ..."
+		}
+		summaryLines = append(summaryLines, "- "+role+": "+txt)
+	}
+	compacted := make([]Message, 0, len(recent)+1)
+	if len(summaryLines) > 0 {
+		if len(summaryLines) > 12 {
+			summaryLines = summaryLines[len(summaryLines)-12:]
+		}
+		compacted = append(compacted, Message{
+			Role: "system",
+			Content: []ContentPart{{
+				Type: "text",
+				Text: "Compressed context summary:\n" + strings.Join(summaryLines, "\n"),
+			}},
+		})
+	}
 	for i := range recent {
 		for j := range recent[i].Content {
 			part := &recent[i].Content[j]
 			if strings.ToLower(strings.TrimSpace(part.Type)) == "tool_result" {
-				trimmed, truncated := truncateByRunes(part.Text, 600)
+				trimmed, truncated := truncateByRunes(part.Text, 500)
 				if truncated {
-					part.Text = "[tool_output_masked]\n" + trimmed
+					part.Text = trimmed + " ... [compressed]"
 				}
 			}
 		}
 	}
-	return recent
+	compacted = append(compacted, recent...)
+	return compacted
 }
 
 func syncRuntimeStateAfterCompact(state runtimeState, messages []Message) runtimeState {

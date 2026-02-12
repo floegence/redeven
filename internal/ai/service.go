@@ -15,6 +15,13 @@ import (
 	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
+	contextadapter "github.com/floegence/redeven-agent/internal/ai/context/adapter"
+	contextcompactor "github.com/floegence/redeven-agent/internal/ai/context/compactor"
+	contextextractor "github.com/floegence/redeven-agent/internal/ai/context/extractor"
+	contextmodel "github.com/floegence/redeven-agent/internal/ai/context/model"
+	contextpacker "github.com/floegence/redeven-agent/internal/ai/context/packer"
+	contextretriever "github.com/floegence/redeven-agent/internal/ai/context/retriever"
+	contextstore "github.com/floegence/redeven-agent/internal/ai/context/store"
 	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
@@ -95,6 +102,13 @@ type Service struct {
 
 	uploadsDir string
 	threadsDB  *threadstore.Store
+
+	contextRepo        *contextstore.Repository
+	contextRetriever   *contextretriever.Retriever
+	contextPacker      *contextpacker.Builder
+	memoryExtractor    *contextextractor.MemoryExtractor
+	snapshotCompactor  *contextcompactor.SnapshotCompactor
+	capabilityResolver *contextadapter.Resolver
 }
 
 const (
@@ -166,6 +180,13 @@ func NewService(opts Options) (*Service, error) {
 		persistTO = defaultPersistOpTimeout
 	}
 
+	contextRepo := contextstore.NewRepository(ts)
+	snapshotCompactor := contextcompactor.New(contextRepo)
+	contextRetriever := contextretriever.New(contextRepo)
+	contextPacker := contextpacker.New(contextRepo, contextRetriever, snapshotCompactor)
+	memoryExtractor := contextextractor.New(contextRepo)
+	capabilityResolver := contextadapter.NewResolver(contextRepo)
+
 	return &Service{
 		log:                   logger,
 		stateDir:              strings.TrimSpace(opts.StateDir),
@@ -186,6 +207,12 @@ func NewService(opts Options) (*Service, error) {
 		realtimeEndpointBySRV: make(map[*rpc.Server]string),
 		uploadsDir:            uploadsDir,
 		threadsDB:             ts,
+		contextRepo:           contextRepo,
+		contextRetriever:      contextRetriever,
+		contextPacker:         contextPacker,
+		memoryExtractor:       memoryExtractor,
+		snapshotCompactor:     snapshotCompactor,
+		capabilityResolver:    capabilityResolver,
 	}, nil
 }
 
@@ -690,36 +717,16 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}()
 
 	pctx, cancelPersist := context.WithTimeout(context.Background(), persistTO)
-	historyLite, err := db.ListHistoryLite(pctx, endpointID, threadID, 120)
-	cancelPersist()
-	if err != nil {
-		return streamEarlyError(err)
-	}
-	history := make([]RunHistoryMsg, 0, len(historyLite))
-	for _, m := range historyLite {
-		role := strings.TrimSpace(m.Role)
-		if role != "user" && role != "assistant" {
-			continue
-		}
-		if strings.TrimSpace(m.Status) != "complete" {
-			continue
-		}
-		text := strings.TrimSpace(m.TextContent)
-		if text == "" {
-			continue
-		}
-		history = append(history, RunHistoryMsg{Role: role, Text: text})
-	}
 	rawUserInputText := strings.TrimSpace(req.Input.Text)
 	existingOpenGoal := ""
-	stateLoadCtx, cancelStateLoad := context.WithTimeout(context.Background(), persistTO)
-	threadState, stateErr := db.GetThreadState(stateLoadCtx, endpointID, threadID)
-	cancelStateLoad()
-	if stateErr != nil {
-		r.log.Warn("load thread state failed", "thread_id", threadID, "error", stateErr)
-	} else if threadState != nil {
-		existingOpenGoal = strings.TrimSpace(threadState.OpenGoal)
+	if s.contextRepo != nil && s.contextRepo.Ready() {
+		goal, goalErr := s.contextRepo.GetOpenGoal(pctx, endpointID, threadID)
+		if goalErr != nil && r.log != nil {
+			r.log.Warn("load open goal failed", "thread_id", threadID, "error", goalErr)
+		}
+		existingOpenGoal = strings.TrimSpace(goal)
 	}
+	cancelPersist()
 
 	req.Options.Mode = normalizeRunMode(req.Options.Mode, cfg.EffectiveMode())
 	intentDecision := classifyRunIntent(rawUserInputText, req.Input.Attachments, existingOpenGoal)
@@ -751,7 +758,6 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		}
 	}
 	effectiveInput := req.Input
-	historyForRun := history
 
 	userMsgID, err := newUserMessageID()
 	if err != nil {
@@ -816,6 +822,25 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	if !cfg.IsAllowedModelID(model) {
 		return streamEarlyError(fmt.Errorf("model not allowed: %s", model))
 	}
+	providerID, modelName, _ := strings.Cut(model, "/")
+	providerID = strings.TrimSpace(providerID)
+	modelName = strings.TrimSpace(modelName)
+	providerCfg := config.AIProvider{ID: providerID, Type: providerID}
+	for i := range cfg.Providers {
+		if strings.TrimSpace(cfg.Providers[i].ID) != providerID {
+			continue
+		}
+		providerCfg = cfg.Providers[i]
+		break
+	}
+	modelCapability := defaultModelCapability(providerID, modelName)
+	if s.capabilityResolver != nil {
+		if capability, capErr := s.capabilityResolver.Resolve(ctx, providerCfg, model); capErr == nil {
+			modelCapability = capability
+		} else if r.log != nil {
+			r.log.Warn("resolve model capability failed", "model", model, "error", capErr)
+		}
+	}
 
 	{
 		pctx, cancel := context.WithTimeout(context.Background(), persistTO)
@@ -823,12 +848,50 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		cancel()
 	}
 
+	attachments := make([]contextmodel.AttachmentManifest, 0, len(req.Input.Attachments))
+	for _, att := range req.Input.Attachments {
+		attachments = append(attachments, contextmodel.AttachmentManifest{
+			Name:     strings.TrimSpace(att.Name),
+			MimeType: strings.TrimSpace(att.MimeType),
+			URL:      strings.TrimSpace(att.URL),
+		})
+	}
+	promptPack := contextmodel.PromptPack{
+		ThreadID:                  threadID,
+		RunID:                     runID,
+		Objective:                 strings.TrimSpace(openGoal),
+		AttachmentsManifest:       attachments,
+		ContextSectionsTokenUsage: map[string]int{},
+	}
+	if s.contextPacker != nil {
+		pack, packErr := s.contextPacker.BuildPromptPack(ctx, contextpacker.BuildInput{
+			EndpointID:     endpointID,
+			ThreadID:       threadID,
+			RunID:          runID,
+			Objective:      strings.TrimSpace(openGoal),
+			UserInput:      rawUserInputText,
+			Attachments:    attachments,
+			Capability:     modelCapability,
+			MaxInputTokens: req.Options.MaxInputTokens,
+		})
+		if packErr != nil {
+			if r.log != nil {
+				r.log.Warn("build prompt pack failed", "thread_id", threadID, "run_id", runID, "error", packErr)
+			}
+		} else {
+			promptPack = pack
+		}
+	}
+	historyForRun := promptPackToHistory(promptPack, rawUserInputText)
+
 	runReq := RunRequest{
-		Model:     model,
-		Objective: strings.TrimSpace(openGoal),
-		History:   historyForRun,
-		Input:     effectiveInput,
-		Options:   req.Options,
+		Model:           model,
+		Objective:       strings.TrimSpace(openGoal),
+		History:         historyForRun,
+		Input:           effectiveInput,
+		Options:         req.Options,
+		ContextPack:     promptPack,
+		ModelCapability: modelCapability,
 	}
 	runErr := r.run(ctx, runReq)
 	finalErr := runErr
@@ -885,27 +948,42 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		}
 		return err
 	}
+	if s.contextRepo != nil {
+		turnID := "turn_" + strings.TrimSpace(runID)
+		turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
+		_ = s.contextRepo.AppendTurn(turnCtx, endpointID, threadID, runID, turnID, userMsgID, messageID, assistantAt)
+		cancelTurn()
+	}
 
 	finalReason := strings.TrimSpace(r.getFinalizationReason())
-	stateCtx, cancelState := context.WithTimeout(context.Background(), persistTO)
-	if shouldClearThreadState(finalReason) {
-		_ = db.ClearThreadState(stateCtx, endpointID, threadID)
-	} else {
-		if req.Options.Intent == RunIntentTask && strings.TrimSpace(openGoal) != "" {
-			assistantSummary := strings.TrimSpace(assistantText)
-			if len([]rune(assistantSummary)) > 600 {
-				assistantSummary = string([]rune(assistantSummary)[:600])
-			}
-			_ = db.UpsertThreadState(stateCtx, threadstore.ThreadState{
-				EndpointID:           endpointID,
-				ThreadID:             threadID,
-				OpenGoal:             strings.TrimSpace(openGoal),
-				LastAssistantSummary: assistantSummary,
-				UpdatedAtUnixMs:      time.Now().UnixMilli(),
-			})
+	if s.contextRepo != nil {
+		stateCtx, cancelState := context.WithTimeout(context.Background(), persistTO)
+		if shouldClearThreadState(finalReason) {
+			_ = s.contextRepo.SetOpenGoal(stateCtx, endpointID, threadID, "")
+		} else if req.Options.Intent == RunIntentTask && strings.TrimSpace(openGoal) != "" {
+			_ = s.contextRepo.SetOpenGoal(stateCtx, endpointID, threadID, openGoal)
 		}
+		cancelState()
 	}
-	cancelState()
+	if s.memoryExtractor != nil {
+		extractCtx, cancelExtract := context.WithTimeout(context.Background(), persistTO)
+		_, _ = s.memoryExtractor.Extract(extractCtx, contextextractor.ExtractInput{
+			EndpointID:         endpointID,
+			ThreadID:           threadID,
+			RunID:              runID,
+			Objective:          strings.TrimSpace(openGoal),
+			AssistantText:      strings.TrimSpace(assistantText),
+			FinalizationReason: finalReason,
+		})
+		cancelExtract()
+	}
+	if s.snapshotCompactor != nil && s.contextRepo != nil {
+		compactCtx, cancelCompact := context.WithTimeout(context.Background(), persistTO)
+		if turns, turnsErr := s.contextRepo.ListRecentDialogueTurns(compactCtx, endpointID, threadID, 24); turnsErr == nil {
+			_, _ = s.snapshotCompactor.CompactThread(compactCtx, endpointID, threadID, turns, "turn")
+		}
+		cancelCompact()
+	}
 
 	return finalErr
 }
@@ -917,6 +995,45 @@ func shouldClearThreadState(finalReason string) bool {
 	default:
 		return false
 	}
+}
+
+func promptPackToHistory(pack contextmodel.PromptPack, currentUserInput string) []RunHistoryMsg {
+	history := make([]RunHistoryMsg, 0, len(pack.RecentDialogue)*2+1)
+	for _, turn := range pack.RecentDialogue {
+		if txt := strings.TrimSpace(turn.UserText); txt != "" {
+			history = append(history, RunHistoryMsg{Role: "user", Text: txt})
+		}
+		if txt := strings.TrimSpace(turn.AssistantText); txt != "" {
+			history = append(history, RunHistoryMsg{Role: "assistant", Text: txt})
+		}
+	}
+	if txt := strings.TrimSpace(currentUserInput); txt != "" {
+		history = append(history, RunHistoryMsg{Role: "user", Text: txt})
+	}
+	return history
+}
+
+func defaultModelCapability(providerID string, modelName string) contextmodel.ModelCapability {
+	providerID = strings.TrimSpace(providerID)
+	modelName = strings.TrimSpace(modelName)
+	cap := contextmodel.ModelCapability{
+		ProviderID:               providerID,
+		ModelName:                modelName,
+		SupportsTools:            true,
+		SupportsParallelTools:    false,
+		SupportsStrictJSONSchema: true,
+		SupportsImageInput:       true,
+		SupportsFileInput:        true,
+		SupportsReasoningTokens:  true,
+		MaxContextTokens:         128000,
+		MaxOutputTokens:          4096,
+		PreferredToolSchemaMode:  "json_schema",
+	}
+	if strings.Contains(strings.ToLower(modelName), "mini") {
+		cap.MaxContextTokens = 64000
+		cap.MaxOutputTokens = 4096
+	}
+	return contextmodel.NormalizeCapability(cap)
 }
 
 func deriveThreadRunState(endReason string, runErr error) (string, string) {
