@@ -53,6 +53,47 @@ func (m *openAIToolLoopMock) handle(w http.ResponseWriter, r *http.Request) {
 	_ = r.Body.Close()
 	var req map[string]any
 	_ = json.Unmarshal(body, &req)
+	if isIntentClassifierRequest(req) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		f, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+		model := strings.TrimSpace(fmt.Sprint(req["model"]))
+		if model == "" {
+			model = "gpt-5-mini"
+		}
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.created",
+			"response": map[string]any{
+				"id":         "resp_intent_tool_loop",
+				"created_at": time.Now().Unix(),
+				"model":      model,
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":  "response.output_text.delta",
+			"delta": classifyIntentResponseToken(req),
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_intent_tool_loop",
+				"model":  model,
+				"status": "completed",
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+				},
+			},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
+		return
+	}
 
 	m.mu.Lock()
 	m.sawResponses = true

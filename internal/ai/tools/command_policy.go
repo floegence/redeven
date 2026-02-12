@@ -56,19 +56,39 @@ var readonlyGitSubcommands = map[string]struct{}{
 	"tag":       {},
 }
 
-func ClassifyTerminalCommandRisk(command string) TerminalCommandRisk {
+func NormalizeTerminalCommand(command string) string {
 	trimmed := strings.TrimSpace(command)
 	if trimmed == "" {
+		return ""
+	}
+	current := trimmed
+	for i := 0; i < 4; i++ {
+		next, ok := unwrapShellCommandWrapper(current)
+		if !ok {
+			break
+		}
+		next = strings.TrimSpace(next)
+		if next == "" || next == current {
+			break
+		}
+		current = next
+	}
+	return strings.TrimSpace(current)
+}
+
+func ClassifyTerminalCommandRisk(command string) TerminalCommandRisk {
+	normalized := NormalizeTerminalCommand(command)
+	if normalized == "" {
 		return TerminalCommandRiskMutating
 	}
-	lower := strings.ToLower(trimmed)
+	lower := strings.ToLower(normalized)
 	for _, p := range dangerousCommandPatterns {
 		if p.MatchString(lower) {
 			return TerminalCommandRiskDangerous
 		}
 	}
 
-	segments := splitShellSegments(trimmed)
+	segments := splitShellSegments(normalized)
 	if len(segments) == 0 {
 		return TerminalCommandRiskMutating
 	}
@@ -143,6 +163,101 @@ func splitShellSegments(command string) []string {
 				i++
 				continue
 			}
+		}
+		sb.WriteRune(ch)
+	}
+	flush()
+	return out
+}
+
+func unwrapShellCommandWrapper(command string) (string, bool) {
+	fields := shellFields(command)
+	if len(fields) < 3 {
+		return "", false
+	}
+	idx := 0
+	for idx < len(fields) && isEnvAssignment(fields[idx]) {
+		idx++
+	}
+	if idx >= len(fields) {
+		return "", false
+	}
+
+	binary := strings.ToLower(strings.TrimSpace(fields[idx]))
+	switch binary {
+	case "bash", "sh", "zsh", "dash":
+	default:
+		return "", false
+	}
+	idx++
+	if idx >= len(fields) {
+		return "", false
+	}
+
+	scriptIndex := -1
+	for ; idx < len(fields); idx++ {
+		flag := strings.ToLower(strings.TrimSpace(fields[idx]))
+		switch flag {
+		case "-c", "--command":
+			scriptIndex = idx + 1
+			idx = len(fields)
+		case "-lc", "-cl":
+			scriptIndex = idx + 1
+			idx = len(fields)
+		case "-l", "--login", "-i", "--interactive", "--norc", "--noprofile":
+			continue
+		default:
+			return "", false
+		}
+	}
+	if scriptIndex < 0 || scriptIndex >= len(fields) {
+		return "", false
+	}
+	inner := strings.TrimSpace(fields[scriptIndex])
+	if inner == "" {
+		return "", false
+	}
+	return inner, true
+}
+
+func shellFields(command string) []string {
+	trimmed := strings.TrimSpace(command)
+	if trimmed == "" {
+		return nil
+	}
+	out := make([]string, 0, 8)
+	var sb strings.Builder
+	var quote rune
+	escaped := false
+	flush := func() {
+		if sb.Len() == 0 {
+			return
+		}
+		out = append(out, sb.String())
+		sb.Reset()
+	}
+	for _, ch := range trimmed {
+		if escaped {
+			sb.WriteRune(ch)
+			escaped = false
+			continue
+		}
+		if quote == 0 && ch == '\\' {
+			escaped = true
+			continue
+		}
+		if quote == 0 {
+			switch ch {
+			case '\'', '"':
+				quote = ch
+				continue
+			case ' ', '\t', '\n':
+				flush()
+				continue
+			}
+		} else if ch == quote {
+			quote = 0
+			continue
 		}
 		sb.WriteRune(ch)
 	}

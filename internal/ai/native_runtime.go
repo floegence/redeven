@@ -1565,14 +1565,6 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			return nil
 		}
 
-		if isFirstRound && step == 0 {
-			// First round produced text but no tool calls — nudge (not an error, don't burn recovery budget).
-			exceptionOverlay = "[RECOVERY] You must use tools on your first turn. Start by investigating with terminal.exec: use rg to search files and sed/cat to read relevant content. Do NOT respond with text only."
-			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "You must call a tool now. Use terminal.exec with rg/sed/cat to start investigating."}}})
-			isFirstRound = false
-			continue
-		}
-
 		noToolRounds++
 		if noToolRounds < maxNoToolRounds {
 			exceptionOverlay = fmt.Sprintf("[BACKPRESSURE] No tool call used (%d/%d). You MUST do one of: (1) Call task_complete if the task is done, (2) Use tools to continue investigating or making changes, (3) Call ask_user if you are stuck and need clarification.", noToolRounds, maxNoToolRounds)
@@ -2194,14 +2186,13 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int,
 		"5. **Iterate** — If verification fails, diagnose the issue and repeat from step 1.",
 		"",
 		"# Mandatory Rules",
-		"- ALWAYS prefer using tools over generating text responses.",
+		"- Use tools when they are needed for reliable evidence or actions.",
 		"- You MUST call task_complete with a detailed result summary when done. Never end without it.",
 		"- You MUST use tools to investigate before answering questions about files, code, or the workspace.",
 		"- If you can answer by reading files, use terminal.exec with rg/sed/cat first.",
 		"- Prefer apply_patch for file edits instead of shell redirection or ad-hoc overwrite commands.",
 		"- Use workdir/cwd fields on terminal.exec instead of running cd in the command string.",
 		"- Do NOT fabricate file contents, command outputs, or tool results. Always use tools to get real data.",
-		"- Do NOT produce an empty first turn. Your first action must be a tool call.",
 		"- If information is insufficient and tools cannot help, call ask_user.",
 		"",
 		"# Anti-Patterns (NEVER do these)",

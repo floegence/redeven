@@ -104,6 +104,109 @@ func extractOpenAIToolNames(req map[string]any) []string {
 	return nil
 }
 
+func isIntentClassifierRequest(req map[string]any) bool {
+	if req == nil {
+		return false
+	}
+	instructions, _ := req["instructions"].(string)
+	return strings.Contains(strings.TrimSpace(instructions), intentClassifierPromptMarker)
+}
+
+func classifyIntentResponseToken(req map[string]any) string {
+	userText := strings.ToLower(strings.TrimSpace(extractResponsesUserText(req)))
+	openGoalText, userMessage := extractIntentClassifierContext(userText)
+	if userText == "" {
+		return `{"intent":"task","confidence":0.60,"reason":"empty_input","objective_mode":"replace"}`
+	}
+	if strings.TrimSpace(openGoalText) != "" {
+		continuationSignals := []string{"continue", "go on", "keep going", "proceed"}
+		for _, signal := range continuationSignals {
+			if strings.Contains(userMessage, signal) {
+				return `{"intent":"task","confidence":0.94,"reason":"follow_up_to_open_goal","objective_mode":"continue"}`
+			}
+		}
+	}
+	taskSignals := []string{
+		"say ", "analyze", "analysis", "implement", "fix", "edit", "change", "review",
+		"debug", "test", "build", "run", "list", "summarize", "check", "inspect",
+	}
+	for _, signal := range taskSignals {
+		if strings.Contains(userText, signal) {
+			return `{"intent":"task","confidence":0.93,"reason":"actionable_request_detected","objective_mode":"replace"}`
+		}
+	}
+	socialSignals := []string{"hello", "hi", "hey", "thanks", "thank you", "你好", "谢谢"}
+	for _, signal := range socialSignals {
+		if strings.Contains(userText, signal) {
+			return `{"intent":"social","confidence":0.96,"reason":"small_talk_detected","objective_mode":"replace"}`
+		}
+	}
+	return `{"intent":"task","confidence":0.93,"reason":"actionable_request_detected","objective_mode":"replace"}`
+}
+
+func extractIntentClassifierContext(text string) (string, string) {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return "", ""
+	}
+	const goalPrefix = "current open goal:"
+	const userPrefix = "user message:"
+	goalIdx := strings.Index(trimmed, goalPrefix)
+	userIdx := strings.Index(trimmed, userPrefix)
+	if goalIdx < 0 || userIdx < 0 || userIdx <= goalIdx {
+		return "", trimmed
+	}
+	openGoal := strings.TrimSpace(trimmed[goalIdx+len(goalPrefix) : userIdx])
+	userMessage := strings.TrimSpace(trimmed[userIdx+len(userPrefix):])
+	if openGoal == "(none)" {
+		openGoal = ""
+	}
+	return openGoal, userMessage
+}
+
+func extractResponsesUserText(req map[string]any) string {
+	rawInput, ok := req["input"]
+	if !ok {
+		return ""
+	}
+	items, ok := rawInput.([]any)
+	if !ok {
+		return ""
+	}
+	for i := len(items) - 1; i >= 0; i-- {
+		msg, ok := items[i].(map[string]any)
+		if !ok || msg == nil {
+			continue
+		}
+		role := strings.ToLower(strings.TrimSpace(fmt.Sprint(msg["role"])))
+		if role != "user" {
+			continue
+		}
+		content, ok := msg["content"].([]any)
+		if !ok {
+			continue
+		}
+		parts := make([]string, 0, len(content))
+		for _, item := range content {
+			part, ok := item.(map[string]any)
+			if !ok || part == nil {
+				continue
+			}
+			if strings.ToLower(strings.TrimSpace(fmt.Sprint(part["type"]))) != "input_text" {
+				continue
+			}
+			txt := strings.TrimSpace(fmt.Sprint(part["text"]))
+			if txt != "" {
+				parts = append(parts, txt)
+			}
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, "\n")
+		}
+	}
+	return ""
+}
+
 func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
 	if r == nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -128,13 +231,20 @@ func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSpace(r.URL.Path)
 	switch {
 	case strings.HasSuffix(path, "/responses"):
+		isClassifier := isIntentClassifierRequest(req)
+		respToken := m.token
+		if isClassifier {
+			respToken = classifyIntentResponseToken(req)
+		}
 		m.mu.Lock()
 		m.sawResponses = true
-		m.requestToolNames = extractOpenAIToolNames(req)
-		m.requestInvalidTools = m.requestInvalidTools[:0]
-		for _, n := range m.requestToolNames {
-			if !isValidOpenAIToolName(n) {
-				m.requestInvalidTools = append(m.requestInvalidTools, n)
+		if !isClassifier {
+			m.requestToolNames = extractOpenAIToolNames(req)
+			m.requestInvalidTools = m.requestInvalidTools[:0]
+			for _, n := range m.requestToolNames {
+				if !isValidOpenAIToolName(n) {
+					m.requestInvalidTools = append(m.requestInvalidTools, n)
+				}
 			}
 		}
 		m.mu.Unlock()
@@ -174,7 +284,7 @@ func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
 		writeSSEJSON(w, f, map[string]any{
 			"type":    "response.output_text.delta",
 			"item_id": itemID,
-			"delta":   m.token,
+			"delta":   respToken,
 		})
 		writeSSEJSON(w, f, map[string]any{
 			"type":         "response.output_item.done",

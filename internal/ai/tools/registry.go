@@ -65,9 +65,15 @@ func IsDangerousInvocation(toolName string, args map[string]any) bool {
 }
 
 func InvocationRiskLabel(toolName string, args map[string]any) string {
+	risk, _ := InvocationRiskInfo(toolName, args)
+	return risk
+}
+
+func InvocationRiskInfo(toolName string, args map[string]any) (string, string) {
 	name := strings.TrimSpace(toolName)
 	if name != "terminal.exec" {
-		return ""
+		return "", ""
 	}
-	return string(ClassifyTerminalCommandRisk(commandFromArgs(args)))
+	command := commandFromArgs(args)
+	return string(ClassifyTerminalCommandRisk(command)), NormalizeTerminalCommand(command)
 }

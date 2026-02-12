@@ -1,9 +1,11 @@
 package ai
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/floegence/redeven-agent/internal/config"
 )
@@ -11,12 +13,23 @@ import (
 const (
 	RunIntentSocial = "social"
 	RunIntentTask   = "task"
+
+	RunIntentSourceModel                = "model"
+	RunIntentSourceDeterministic        = "deterministic_fallback"
+	intentClassifierPromptMarker        = "INTENT_CLASSIFIER_V1"
+	defaultIntentClassifierConfidence   = 0.5
+	defaultIntentModelFailureConfidence = 0.55
+
+	RunObjectiveModeReplace  = "replace"
+	RunObjectiveModeContinue = "continue"
 )
 
 type intentDecision struct {
-	Intent     string
-	Confidence float64
-	Reason     string
+	Intent        string
+	Confidence    float64
+	Reason        string
+	Source        string
+	ObjectiveMode string
 }
 
 func normalizeRunIntent(raw string) string {
@@ -42,184 +55,223 @@ func normalizeRunMode(raw string, fallback string) string {
 	return config.AIModeAct
 }
 
-func classifyRunIntent(userInput string, attachments []RunAttachmentIn, openGoal string) intentDecision {
-	text := strings.TrimSpace(userInput)
-	lower := strings.ToLower(text)
-	normalizedCompact := compactText(lower)
-	existingGoal := strings.TrimSpace(openGoal)
+type modelIntentClassifier func() (intentDecision, error)
 
-	if existingGoal != "" && isContinuationMessage(lower, normalizedCompact) {
-		return intentDecision{
-			Intent:     RunIntentTask,
-			Confidence: 0.99,
-			Reason:     "thread_has_open_goal_and_user_requests_continuation",
-		}
-	}
+func classifyRunIntent(userInput string, attachments []RunAttachmentIn, openGoal string, classifyByModel modelIntentClassifier) intentDecision {
 	if len(attachments) > 0 {
 		return intentDecision{
-			Intent:     RunIntentTask,
-			Confidence: 0.98,
-			Reason:     "attachments_present",
+			Intent:        RunIntentTask,
+			Confidence:    0.98,
+			Reason:        "attachments_present",
+			Source:        RunIntentSourceDeterministic,
+			ObjectiveMode: RunObjectiveModeReplace,
 		}
 	}
-	if hasTaskSignals(lower, text) {
-		return intentDecision{
-			Intent:     RunIntentTask,
-			Confidence: 0.95,
-			Reason:     "task_signal_detected",
-		}
-	}
-	if isSocialMessage(lower, normalizedCompact) {
-		return intentDecision{
-			Intent:     RunIntentSocial,
-			Confidence: 0.97,
-			Reason:     "small_talk_detected",
+	if classifyByModel != nil {
+		decision, err := classifyByModel()
+		if err == nil {
+			return normalizeModelIntentDecision(decision)
 		}
 	}
 	return intentDecision{
-		Intent:     RunIntentTask,
-		Confidence: 0.60,
-		Reason:     "default_to_task",
+		Intent:        RunIntentTask,
+		Confidence:    defaultIntentModelFailureConfidence,
+		Reason:        "model_classifier_failed",
+		Source:        RunIntentSourceDeterministic,
+		ObjectiveMode: RunObjectiveModeReplace,
 	}
 }
 
-func isContinuationMessage(lower string, compact string) bool {
-	if compact == "" {
-		return false
+func normalizeModelIntentDecision(decision intentDecision) intentDecision {
+	normalized := intentDecision{
+		Intent:        normalizeRunIntent(decision.Intent),
+		Confidence:    normalizeIntentConfidence(decision.Confidence),
+		Reason:        normalizeIntentReason(decision.Reason),
+		Source:        RunIntentSourceModel,
+		ObjectiveMode: normalizeObjectiveMode(decision.ObjectiveMode),
 	}
-	exact := map[string]struct{}{
-		"ok":           {},
-		"okay":         {},
-		"yes":          {},
-		"y":            {},
-		"sure":         {},
-		"continue":     {},
-		"goon":         {},
-		"goahead":      {},
-		"keepgoing":    {},
-		"carryon":      {},
-		"proceed":      {},
-		"soundsgood":   {},
-		"letsdothis":   {},
-		"letscontinue": {},
+	if strings.TrimSpace(normalized.Reason) == "" {
+		normalized.Reason = "model_classifier"
 	}
-	if _, ok := exact[compact]; ok {
-		return true
+	if normalized.Intent == RunIntentSocial {
+		normalized.ObjectiveMode = RunObjectiveModeReplace
 	}
-	prefixes := []string{
-		"go on", "continue", "please continue", "keep going", "carry on", "proceed", "go ahead",
-	}
-	for _, p := range prefixes {
-		if strings.HasPrefix(lower, p) {
-			return true
-		}
-	}
-	return isShortNonASCIIAck(compact)
+	return normalized
 }
 
-func hasTaskSignals(lower string, raw string) bool {
-	if lower == "" {
-		return false
+func normalizeObjectiveMode(mode string) string {
+	v := strings.ToLower(strings.TrimSpace(mode))
+	switch v {
+	case RunObjectiveModeContinue:
+		return RunObjectiveModeContinue
+	default:
+		return RunObjectiveModeReplace
 	}
-	if strings.Contains(lower, "```") {
-		return true
-	}
-	taskKeywords := []string{
-		"analyze", "analysis", "explain", "implement", "fix", "change", "edit", "modify", "refactor", "optimize",
-		"inspect", "check", "review", "debug", "run", "test", "compile", "build", "commit", "write", "generate", "create",
-	}
-	for _, kw := range taskKeywords {
-		if strings.Contains(lower, kw) {
-			return true
-		}
-	}
-	commandHints := []string{
-		"git ", "npm ", "pnpm ", "yarn ", "go test", "go build", "python ", "bash ", "ls ", "cat ", "rg ",
-		"sed ", "awk ", "make ", "docker ", "kubectl ", "curl ", "vim ", "vi ",
-	}
-	for _, hint := range commandHints {
-		if strings.Contains(lower, hint) {
-			return true
-		}
-	}
-	pathHints := []string{
-		"/", "\\", ".go", ".ts", ".tsx", ".js", ".jsx", ".json", ".md", ".yaml", ".yml", "package.json", "go.mod",
-	}
-	hasPathHint := false
-	for _, hint := range pathHints {
-		if strings.Contains(lower, hint) {
-			hasPathHint = true
-			break
-		}
-	}
-	if hasPathHint && utf8.RuneCountInString(strings.TrimSpace(raw)) >= 4 {
-		return true
-	}
-	return false
 }
 
-func isSocialMessage(lower string, compact string) bool {
-	if compact == "" {
-		return true
+func normalizeIntentConfidence(v float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return defaultIntentClassifierConfidence
 	}
-	if utf8.RuneCountInString(compact) > 24 {
-		return false
+	if v < 0 {
+		return 0
 	}
-	exact := map[string]struct{}{
-		"hello":            {},
-		"hi":               {},
-		"hey":              {},
-		"goodmorning":      {},
-		"goodevening":      {},
-		"goodafternoon":    {},
-		"thanks":           {},
-		"thankyou":         {},
-		"thankyouverymuch": {},
-		"bye":              {},
-		"goodbye":          {},
-		"seeyou":           {},
+	if v > 1 {
+		return 1
 	}
-	if _, ok := exact[compact]; ok {
-		return true
+	if v == 0 {
+		return defaultIntentClassifierConfidence
 	}
-	prefixes := []string{
-		"hello", "hi ", "hey ", "thanks", "thank you", "good morning", "good evening", "good afternoon",
-	}
-	for _, p := range prefixes {
-		if strings.HasPrefix(lower, p) {
-			return true
-		}
-	}
-	return false
+	return v
 }
 
-func compactText(in string) string {
-	v := strings.TrimSpace(strings.ToLower(in))
-	if v == "" {
+func normalizeIntentReason(reason string) string {
+	trimmed := strings.TrimSpace(reason)
+	if trimmed == "" {
 		return ""
 	}
-	var b strings.Builder
-	b.Grow(len(v))
-	for _, r := range v {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(r)
-		}
+	parts := strings.Fields(trimmed)
+	if len(parts) == 0 {
+		return ""
 	}
-	return b.String()
+	return strings.Join(parts, "_")
 }
 
-func isShortNonASCIIAck(compact string) bool {
-	if compact == "" {
-		return false
+func buildIntentClassifierMessages(userInput string, openGoal string) []Message {
+	system := strings.Join([]string{
+		intentClassifierPromptMarker,
+		"You classify whether a user message is social chat or a task request for a coding agent.",
+		"Return exactly one JSON object with keys: intent, confidence, reason, objective_mode.",
+		"intent must be one of: social, task.",
+		"confidence must be a number between 0 and 1.",
+		"reason must be a short snake_case phrase.",
+		"objective_mode must be one of: replace, continue.",
+		"Use objective_mode=continue only when there is an existing open goal and user message clearly continues it.",
+		"If there is no existing open goal, objective_mode must be replace.",
+		"social means greetings, thanks, casual chat, or no actionable request.",
+		"task means any actionable request about code, files, shell commands, debugging, or analysis.",
+		"Do not include markdown or extra text.",
+	}, "\n")
+	openGoalText := strings.TrimSpace(openGoal)
+	if openGoalText == "" {
+		openGoalText = "(none)"
 	}
-	runeCount := utf8.RuneCountInString(compact)
-	if runeCount == 0 || runeCount > 4 {
-		return false
+	user := strings.Join([]string{
+		"Current open goal:",
+		openGoalText,
+		"",
+		"User message:",
+		strings.TrimSpace(userInput),
+	}, "\n")
+	return []Message{
+		{Role: "system", Content: []ContentPart{{Type: "text", Text: system}}},
+		{Role: "user", Content: []ContentPart{{Type: "text", Text: user}}},
 	}
-	for _, r := range compact {
-		if r <= unicode.MaxASCII {
-			return false
+}
+
+func parseModelIntentDecision(raw string) (intentDecision, error) {
+	candidate := strings.TrimSpace(raw)
+	if candidate == "" {
+		return intentDecision{}, errors.New("empty model intent response")
+	}
+
+	// Common model outputs may wrap JSON in markdown code fences.
+	if strings.HasPrefix(candidate, "```") {
+		candidate = strings.TrimPrefix(candidate, "```json")
+		candidate = strings.TrimPrefix(candidate, "```JSON")
+		candidate = strings.TrimPrefix(candidate, "```")
+		candidate = strings.TrimSuffix(candidate, "```")
+		candidate = strings.TrimSpace(candidate)
+	}
+
+	type modelIntentPayload struct {
+		Intent        string  `json:"intent"`
+		Confidence    float64 `json:"confidence"`
+		Reason        string  `json:"reason"`
+		ObjectiveMode string  `json:"objective_mode"`
+	}
+	parse := func(text string) (modelIntentPayload, error) {
+		var payload modelIntentPayload
+		if err := json.Unmarshal([]byte(text), &payload); err != nil {
+			return modelIntentPayload{}, err
+		}
+		return payload, nil
+	}
+
+	payload, err := parse(candidate)
+	if err != nil {
+		embedded := extractFirstJSONObject(candidate)
+		if embedded == "" {
+			return intentDecision{}, fmt.Errorf("invalid model intent response: %w", err)
+		}
+		payload, err = parse(embedded)
+		if err != nil {
+			return intentDecision{}, fmt.Errorf("invalid model intent JSON payload: %w", err)
 		}
 	}
-	return true
+
+	intent := strings.ToLower(strings.TrimSpace(payload.Intent))
+	switch intent {
+	case RunIntentSocial, RunIntentTask:
+	default:
+		return intentDecision{}, fmt.Errorf("invalid model intent: %q", payload.Intent)
+	}
+
+	return normalizeModelIntentDecision(intentDecision{
+		Intent:        intent,
+		Confidence:    payload.Confidence,
+		Reason:        payload.Reason,
+		ObjectiveMode: payload.ObjectiveMode,
+	}), nil
+}
+
+func extractFirstJSONObject(raw string) string {
+	text := strings.TrimSpace(raw)
+	if text == "" {
+		return ""
+	}
+	runes := []rune(text)
+	start := -1
+	depth := 0
+	quote := rune(0)
+	escaped := false
+
+	for i, r := range runes {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if quote != 0 {
+			if r == '\\' {
+				escaped = true
+				continue
+			}
+			if r == quote {
+				quote = 0
+			}
+			continue
+		}
+
+		if r == '"' || r == '\'' {
+			quote = r
+			continue
+		}
+		if r == '{' {
+			if depth == 0 {
+				start = i
+			}
+			depth++
+			continue
+		}
+		if r == '}' {
+			if depth == 0 {
+				continue
+			}
+			depth--
+			if depth == 0 && start >= 0 {
+				return string(runes[start : i+1])
+			}
+		}
+	}
+	return ""
 }

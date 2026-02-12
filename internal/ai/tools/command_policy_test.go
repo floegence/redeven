@@ -20,6 +20,15 @@ func TestClassifyTerminalCommandRisk_GitReadonlyChain(t *testing.T) {
 	}
 }
 
+func TestClassifyTerminalCommandRisk_WrappedReadonly(t *testing.T) {
+	t.Parallel()
+
+	risk := ClassifyTerminalCommandRisk(`bash -lc 'pwd && rg --files | head -n 20'`)
+	if risk != TerminalCommandRiskReadonly {
+		t.Fatalf("risk=%q, want %q", risk, TerminalCommandRiskReadonly)
+	}
+}
+
 func TestClassifyTerminalCommandRisk_Mutating(t *testing.T) {
 	t.Parallel()
 
@@ -33,6 +42,15 @@ func TestClassifyTerminalCommandRisk_Dangerous(t *testing.T) {
 	t.Parallel()
 
 	risk := ClassifyTerminalCommandRisk("rm -rf /")
+	if risk != TerminalCommandRiskDangerous {
+		t.Fatalf("risk=%q, want %q", risk, TerminalCommandRiskDangerous)
+	}
+}
+
+func TestClassifyTerminalCommandRisk_WrappedDangerous(t *testing.T) {
+	t.Parallel()
+
+	risk := ClassifyTerminalCommandRisk(`sh -c "rm -rf /"`)
 	if risk != TerminalCommandRiskDangerous {
 		t.Fatalf("risk=%q, want %q", risk, TerminalCommandRiskDangerous)
 	}
@@ -70,5 +88,19 @@ func TestInvocationPolicies_TerminalExec(t *testing.T) {
 	}
 	if !IsDangerousInvocation("terminal.exec", dangerousArgs) {
 		t.Fatalf("dangerous command must be flagged")
+	}
+}
+
+func TestInvocationRiskInfo_NormalizedCommand(t *testing.T) {
+	t.Parallel()
+
+	risk, normalized := InvocationRiskInfo("terminal.exec", map[string]any{
+		"command": `bash -lc 'pwd && rg --files | head -n 20'`,
+	})
+	if risk != string(TerminalCommandRiskReadonly) {
+		t.Fatalf("risk=%q, want %q", risk, TerminalCommandRiskReadonly)
+	}
+	if normalized != "pwd && rg --files | head -n 20" {
+		t.Fatalf("normalized=%q, want %q", normalized, "pwd && rg --files | head -n 20")
 	}
 }

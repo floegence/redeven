@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -148,6 +149,35 @@ func (m *openAIDoomLoopGuardMock) handle(w http.ResponseWriter, r *http.Request)
 	}
 	if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/responses") {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	body, _ := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	var req map[string]any
+	_ = json.Unmarshal(body, &req)
+	if isIntentClassifierRequest(req) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		f, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":  "response.output_text.delta",
+			"delta": classifyIntentResponseToken(req),
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_doom_intent",
+				"model":  "gpt-5-mini",
+				"status": "completed",
+			},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
 		return
 	}
 
@@ -388,6 +418,35 @@ func (m *openAILengthFinishReasonMock) handle(w http.ResponseWriter, r *http.Req
 	}
 	if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/responses") {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	body, _ := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	var req map[string]any
+	_ = json.Unmarshal(body, &req)
+	if isIntentClassifierRequest(req) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		f, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":  "response.output_text.delta",
+			"delta": classifyIntentResponseToken(req),
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_len_intent",
+				"model":  "gpt-5-mini",
+				"status": "completed",
+			},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
 		return
 	}
 

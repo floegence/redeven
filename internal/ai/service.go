@@ -111,6 +111,14 @@ type Service struct {
 	capabilityResolver *contextadapter.Resolver
 }
 
+type resolvedRunModel struct {
+	ID         string
+	ProviderID string
+	ModelName  string
+	Provider   config.AIProvider
+	Capability contextmodel.ModelCapability
+}
+
 const (
 	defaultPersistOpTimeout = 10 * time.Second
 	defaultRunMaxWallTime   = 15 * time.Minute
@@ -729,13 +737,36 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	cancelPersist()
 
 	req.Options.Mode = normalizeRunMode(req.Options.Mode, cfg.EffectiveMode())
-	intentDecision := classifyRunIntent(rawUserInputText, req.Input.Attachments, existingOpenGoal)
+	resolvedModel, err := s.resolveRunModel(ctx, cfg, req.Model, prepared.threadModelID, r)
+	if err != nil {
+		return streamEarlyError(err)
+	}
+	model := resolvedModel.ID
+	modelCapability := resolvedModel.Capability
+
+	intentDecision := classifyRunIntent(rawUserInputText, req.Input.Attachments, existingOpenGoal, func() (intentDecision, error) {
+		decision, classifyErr := s.classifyRunIntentByModel(ctx, resolvedModel, rawUserInputText, existingOpenGoal)
+		if classifyErr != nil && r.log != nil {
+			r.log.Warn("model intent classification failed",
+				"thread_id", threadID,
+				"run_id", runID,
+				"model", model,
+				"error", classifyErr,
+			)
+		}
+		return decision, classifyErr
+	})
 	req.Options.Intent = intentDecision.Intent
 	r.persistRunEvent("intent.classified", RealtimeStreamKindLifecycle, map[string]any{
-		"intent":     intentDecision.Intent,
-		"confidence": intentDecision.Confidence,
-		"reason":     intentDecision.Reason,
-		"mode":       req.Options.Mode,
+		"intent":            intentDecision.Intent,
+		"confidence":        intentDecision.Confidence,
+		"reason":            intentDecision.Reason,
+		"source":            intentDecision.Source,
+		"objective_mode":    intentDecision.ObjectiveMode,
+		"intent_source":     intentDecision.Source,
+		"intent_confidence": intentDecision.Confidence,
+		"intent_reason":     intentDecision.Reason,
+		"mode":              req.Options.Mode,
 	})
 	if intentDecision.Intent == RunIntentSocial {
 		r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{
@@ -751,7 +782,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	// social intent keeps existing open_goal unchanged.
 	openGoal := strings.TrimSpace(existingOpenGoal)
 	if req.Options.Intent == RunIntentTask && rawUserInputText != "" {
-		if existingOpenGoal != "" && isContinuationMessage(strings.ToLower(rawUserInputText), compactText(rawUserInputText)) {
+		if existingOpenGoal != "" && strings.TrimSpace(intentDecision.ObjectiveMode) == RunObjectiveModeContinue {
 			openGoal = strings.TrimSpace(existingOpenGoal)
 		} else {
 			openGoal = rawUserInputText
@@ -802,44 +833,6 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			return ctx.Err()
 		}
 	default:
-	}
-
-	model := strings.TrimSpace(req.Model)
-	if model == "" {
-		model = strings.TrimSpace(prepared.threadModelID)
-	}
-	if model == "" {
-		if id, ok := cfg.DefaultModelID(); ok {
-			model = id
-		}
-	}
-	if model == "" {
-		return streamEarlyError(errors.New("missing model"))
-	}
-	if _, _, ok := strings.Cut(model, "/"); !ok {
-		return streamEarlyError(errors.New("invalid model"))
-	}
-	if !cfg.IsAllowedModelID(model) {
-		return streamEarlyError(fmt.Errorf("model not allowed: %s", model))
-	}
-	providerID, modelName, _ := strings.Cut(model, "/")
-	providerID = strings.TrimSpace(providerID)
-	modelName = strings.TrimSpace(modelName)
-	providerCfg := config.AIProvider{ID: providerID, Type: providerID}
-	for i := range cfg.Providers {
-		if strings.TrimSpace(cfg.Providers[i].ID) != providerID {
-			continue
-		}
-		providerCfg = cfg.Providers[i]
-		break
-	}
-	modelCapability := defaultModelCapability(providerID, modelName)
-	if s.capabilityResolver != nil {
-		if capability, capErr := s.capabilityResolver.Resolve(ctx, providerCfg, model); capErr == nil {
-			modelCapability = capability
-		} else if r.log != nil {
-			r.log.Warn("resolve model capability failed", "model", model, "error", capErr)
-		}
 	}
 
 	{
@@ -986,6 +979,104 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}
 
 	return finalErr
+}
+
+func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, requestedModel string, threadModelID string, r *run) (resolvedRunModel, error) {
+	model := strings.TrimSpace(requestedModel)
+	if model == "" {
+		model = strings.TrimSpace(threadModelID)
+	}
+	if model == "" {
+		if id, ok := cfg.DefaultModelID(); ok {
+			model = id
+		}
+	}
+	if model == "" {
+		return resolvedRunModel{}, errors.New("missing model")
+	}
+	providerID, modelName, ok := strings.Cut(model, "/")
+	if !ok {
+		return resolvedRunModel{}, errors.New("invalid model")
+	}
+	providerID = strings.TrimSpace(providerID)
+	modelName = strings.TrimSpace(modelName)
+	if providerID == "" || modelName == "" {
+		return resolvedRunModel{}, errors.New("invalid model")
+	}
+	if !cfg.IsAllowedModelID(model) {
+		return resolvedRunModel{}, fmt.Errorf("model not allowed: %s", model)
+	}
+
+	providerCfg := config.AIProvider{ID: providerID, Type: providerID}
+	for i := range cfg.Providers {
+		if strings.TrimSpace(cfg.Providers[i].ID) != providerID {
+			continue
+		}
+		providerCfg = cfg.Providers[i]
+		break
+	}
+
+	modelCapability := defaultModelCapability(providerID, modelName)
+	if s.capabilityResolver != nil {
+		if capability, capErr := s.capabilityResolver.Resolve(ctx, providerCfg, model); capErr == nil {
+			modelCapability = capability
+		} else if r != nil && r.log != nil {
+			r.log.Warn("resolve model capability failed", "model", model, "error", capErr)
+		}
+	}
+
+	return resolvedRunModel{
+		ID:         model,
+		ProviderID: providerID,
+		ModelName:  modelName,
+		Provider:   providerCfg,
+		Capability: modelCapability,
+	}, nil
+}
+
+func (s *Service) classifyRunIntentByModel(ctx context.Context, resolved resolvedRunModel, userInput string, openGoal string) (intentDecision, error) {
+	if s == nil {
+		return intentDecision{}, errors.New("nil service")
+	}
+	providerType := strings.ToLower(strings.TrimSpace(resolved.Provider.Type))
+	switch providerType {
+	case "openai", "openai_compatible", "anthropic":
+	default:
+		return intentDecision{}, fmt.Errorf("unsupported provider type %q", strings.TrimSpace(resolved.Provider.Type))
+	}
+	if s.resolveProviderKey == nil {
+		return intentDecision{}, errors.New("missing provider key resolver")
+	}
+	apiKey, ok, err := s.resolveProviderKey(resolved.ProviderID)
+	if err != nil {
+		return intentDecision{}, fmt.Errorf("resolve provider key failed: %w", err)
+	}
+	if !ok || strings.TrimSpace(apiKey) == "" {
+		return intentDecision{}, fmt.Errorf("missing api key for provider %q", resolved.ProviderID)
+	}
+	adapter, err := newProviderAdapter(providerType, strings.TrimSpace(resolved.Provider.BaseURL), strings.TrimSpace(apiKey))
+	if err != nil {
+		return intentDecision{}, fmt.Errorf("init provider adapter failed: %w", err)
+	}
+
+	intentCtx := ctx
+	cancel := func() {}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		intentCtx, cancel = context.WithTimeout(ctx, 12*time.Second)
+	}
+	defer cancel()
+
+	result, err := adapter.StreamTurn(intentCtx, TurnRequest{
+		Model:            strings.TrimSpace(resolved.ModelName),
+		Messages:         buildIntentClassifierMessages(userInput, openGoal),
+		Budgets:          TurnBudgets{MaxSteps: 1, MaxOutputToken: 120},
+		ModeFlags:        ModeFlags{Mode: config.AIModePlan},
+		ProviderControls: ProviderControls{ResponseFormat: "json_object"},
+	}, nil)
+	if err != nil {
+		return intentDecision{}, err
+	}
+	return parseModelIntentDecision(result.Text)
 }
 
 func shouldClearThreadState(finalReason string) bool {

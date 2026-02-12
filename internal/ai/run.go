@@ -1028,7 +1028,15 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	needsApproval := requiresApproval(toolName, args)
 	mutating := isMutatingInvocation(toolName, args)
 	dangerous := isDangerousInvocation(toolName, args)
-	commandRisk := strings.TrimSpace(aitools.InvocationRiskLabel(toolName, args))
+	commandRisk, normalizedCommand := aitools.InvocationRiskInfo(toolName, args)
+	commandRisk = strings.TrimSpace(commandRisk)
+	normalizedCommand = strings.TrimSpace(normalizedCommand)
+	policyDecision := "allow"
+	if dangerous || (strings.TrimSpace(r.runMode) == config.AIModePlan && mutating) {
+		policyDecision = "deny"
+	} else if needsApproval {
+		policyDecision = "ask"
+	}
 
 	toolStartedAt := time.Now()
 	toolSpanID := executionSpanID(r.id, toolName, toolID)
@@ -1037,6 +1045,15 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		"tool_name": toolName,
 		"args":      redactAnyForLog("args", args, 0),
 	})
+	if toolName == "terminal.exec" {
+		r.persistRunEvent("tool.policy", RealtimeStreamKindLifecycle, map[string]any{
+			"tool_id":            toolID,
+			"tool_name":          toolName,
+			"normalized_command": normalizedCommand,
+			"command_risk":       commandRisk,
+			"policy_decision":    policyDecision,
+		})
+	}
 	toolCallPayload := map[string]any{
 		"tool_id":   toolID,
 		"tool_name": toolName,
@@ -1063,6 +1080,8 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		"mutating", mutating,
 		"dangerous", dangerous,
 		"command_risk", commandRisk,
+		"normalized_command", normalizedCommand,
+		"policy_decision", policyDecision,
 		"args_preview", previewAnyForLog(redactToolArgsForLog(toolName, args), 512),
 	)
 

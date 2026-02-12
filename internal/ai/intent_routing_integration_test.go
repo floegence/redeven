@@ -129,6 +129,9 @@ func TestIntentRouting_SocialInputUsesSocialPathWithoutTools(t *testing.T) {
 	if got := strings.TrimSpace(fmt.Sprint(classified["intent"])); got != RunIntentSocial {
 		t.Fatalf("intent=%q, want %q", got, RunIntentSocial)
 	}
+	if got := strings.TrimSpace(fmt.Sprint(classified["intent_source"])); got != RunIntentSourceModel {
+		t.Fatalf("intent_source=%q, want %q", got, RunIntentSourceModel)
+	}
 	routed := findRunEventPayload(t, runEvents.Events, "intent.routed")
 	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != "social_responder" {
 		t.Fatalf("intent path=%q, want social_responder", got)
@@ -149,16 +152,11 @@ func TestIntentRouting_ContinuationWithOpenGoalStaysTask(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	firstRunID := "run_intent_task_seed_1"
-	firstRR := httptest.NewRecorder()
-	err = svc.StartRun(ctx, &meta, firstRunID, RunStartRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "openai/gpt-5-mini",
-		Input:    RunInput{Text: "Please analyze this repository structure."},
-		Options:  RunOptions{MaxSteps: 1, MaxNoToolRounds: 1, Mode: "plan"},
-	}, firstRR)
-	if err != nil {
-		t.Fatalf("StartRun seed task: %v", err)
+	if svc.contextRepo == nil {
+		t.Fatalf("context repository is not initialized")
+	}
+	if err := svc.contextRepo.SetOpenGoal(ctx, meta.EndpointID, thread.ThreadID, "fix startup failure"); err != nil {
+		t.Fatalf("SetOpenGoal: %v", err)
 	}
 
 	secondRunID := "run_intent_task_continue_1"
@@ -188,8 +186,11 @@ func TestIntentRouting_ContinuationWithOpenGoalStaysTask(t *testing.T) {
 	if got := strings.TrimSpace(fmt.Sprint(classified["intent"])); got != RunIntentTask {
 		t.Fatalf("intent=%q, want %q", got, RunIntentTask)
 	}
-	if got := strings.TrimSpace(fmt.Sprint(classified["reason"])); got != "thread_has_open_goal_and_user_requests_continuation" {
-		t.Fatalf("reason=%q, want thread_has_open_goal_and_user_requests_continuation", got)
+	if got := strings.TrimSpace(fmt.Sprint(classified["intent_source"])); got != RunIntentSourceModel {
+		t.Fatalf("intent_source=%q, want %q", got, RunIntentSourceModel)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(classified["objective_mode"])); got != RunObjectiveModeContinue {
+		t.Fatalf("objective_mode=%q, want %q", got, RunObjectiveModeContinue)
 	}
 	routed := findRunEventPayload(t, runEvents.Events, "intent.routed")
 	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != "task_engine" {
