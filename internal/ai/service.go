@@ -717,7 +717,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		s.mu.Unlock()
 		r.markDone()
 
-		runStatus, runStatusErr := deriveThreadRunState(r.getEndReason(), retErr)
+		runStatus, runStatusErr := deriveThreadRunState(r.getEndReason(), r.getFinalizationReason(), retErr)
 		if prepared.updateThreadRunState != nil {
 			prepared.updateThreadRunState(runStatus, runStatusErr)
 		}
@@ -1081,7 +1081,7 @@ func (s *Service) classifyRunIntentByModel(ctx context.Context, resolved resolve
 
 func shouldClearThreadState(finalReason string) bool {
 	switch strings.TrimSpace(finalReason) {
-	case "task_complete", "implicit_complete_backpressure", "implicit_complete_reasoning_only":
+	case "task_complete":
 		return true
 	default:
 		return false
@@ -1127,19 +1127,25 @@ func defaultModelCapability(providerID string, modelName string) contextmodel.Mo
 	return contextmodel.NormalizeCapability(cap)
 }
 
-func deriveThreadRunState(endReason string, runErr error) (string, string) {
+func deriveThreadRunState(endReason string, finalizationReason string, runErr error) (string, string) {
 	endReason = strings.TrimSpace(endReason)
 	switch endReason {
 	case "complete":
-		if runErr == nil {
+		switch classifyFinalizationReason(finalizationReason) {
+		case finalizationClassSuccess:
 			return "success", ""
+		case finalizationClassWaitingUser:
+			return "idle", ""
 		}
-		if errors.Is(runErr, context.DeadlineExceeded) {
-			return "timed_out", "Timed out."
+		msg := ""
+		if runErr != nil {
+			if errors.Is(runErr, context.DeadlineExceeded) {
+				return "timed_out", "Timed out."
+			}
+			msg = strings.TrimSpace(runErr.Error())
 		}
-		msg := strings.TrimSpace(runErr.Error())
 		if msg == "" {
-			msg = "AI failed."
+			msg = "Run ended without explicit completion."
 		}
 		return "failed", msg
 	case "canceled":

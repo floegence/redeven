@@ -31,8 +31,8 @@ const (
 	nativeCompactThreshold       = 0.70
 	nativeDefaultContextLimit    = 128000
 	// nativeHardMaxSteps is the absolute safety net for the task-driven loop.
-	// The loop is now driven by completion signals (task_complete, ask_user,
-	// implicit_complete), NOT by a step budget. This constant only prevents
+	// The loop is now driven by explicit completion signals (task_complete,
+	// ask_user), NOT by a step budget. This constant only prevents
 	// runaway loops caused by bugs.
 	nativeHardMaxSteps = 200
 )
@@ -1143,6 +1143,10 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if intent == RunIntentSocial {
 		return r.runNativeSocial(execCtx, adapter, providerType, modelName, mode, req)
 	}
+	r.persistRunEvent("completion.contract", RealtimeStreamKindLifecycle, map[string]any{
+		"contract": completionContractExplicitOnly,
+		"intent":   intent,
+	})
 
 	registry := NewInMemoryToolRegistry()
 	if err := registerBuiltInTools(registry, r); err != nil {
@@ -1239,9 +1243,8 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 
 	for step := 0; ; step++ {
 		// Safety net — absolute maximum to prevent infinite loop bugs.
-		// The loop is task-driven: it exits via task_complete, ask_user,
-		// or implicit_complete. This cap should never be reached in
-		// normal operation.
+		// The loop is task-driven: it exits via task_complete or ask_user.
+		// This cap should never be reached in normal operation.
 		if step >= nativeHardMaxSteps {
 			break
 		}
@@ -1286,10 +1289,12 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			turnReq.Messages = turnMessages
 		}
 
+		turnTextSeen := false
 		stepResult, stepErr := adapter.StreamTurn(execCtx, turnReq, func(event StreamEvent) {
 			switch event.Type {
 			case StreamEventTextDelta:
 				if strings.TrimSpace(event.Text) != "" {
+					turnTextSeen = true
 					touchActivity()
 					_ = r.appendTextDelta(event.Text)
 				}
@@ -1318,6 +1323,9 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		}
 		touchActivity()
 		exceptionOverlay = ""
+		if strings.TrimSpace(stepResult.Text) != "" {
+			turnTextSeen = true
+		}
 		r.persistRunEvent("native.turn.result", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index":    step,
 			"finish_reason": strings.TrimSpace(stepResult.FinishReason),
@@ -1513,6 +1521,20 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 					continue
 				}
 			}
+			gatePassed, gateReason := evaluateTaskCompletionGate(resultText, state)
+			r.persistRunEvent("completion.attempt", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":          step,
+				"attempt":             "task_complete",
+				"completion_contract": completionContractExplicitOnly,
+				"gate_passed":         gatePassed,
+				"gate_reason":         gateReason,
+			})
+			if !gatePassed {
+				messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "task_complete was rejected. Provide concrete completion evidence or call ask_user if blocked."}}})
+				exceptionOverlay = "[RECOVERY] task_complete rejected by completion gate. You must either provide explicit completion evidence and call task_complete again, or call ask_user."
+				isFirstRound = false
+				continue
+			}
 			if strings.TrimSpace(resultText) != "" && strings.TrimSpace(stepResult.Text) == "" {
 				_ = r.appendTextDelta(strings.TrimSpace(resultText))
 			}
@@ -1542,8 +1564,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			continue
 		}
 
-		hasVisibleText := strings.TrimSpace(stepResult.Text) != "" || r.hasNonEmptyAssistantText()
-		if !hasVisibleText {
+		if !turnTextSeen {
 			appendMistake(1)
 			if mistakeSum() >= 3 {
 				return endAskUser(step, "I am not getting usable output and cannot proceed safely. Please clarify the objective or provide more context.")
@@ -1557,14 +1578,6 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			continue
 		}
 
-		if req.Options.ReasoningOnly {
-			r.setFinalizationReason("implicit_complete_reasoning_only")
-			r.setEndReason("complete")
-			r.emitLifecyclePhase("ended", map[string]any{"reason": "implicit_complete_reasoning_only", "step_index": step})
-			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-			return nil
-		}
-
 		noToolRounds++
 		if noToolRounds < maxNoToolRounds {
 			exceptionOverlay = fmt.Sprintf("[BACKPRESSURE] No tool call used (%d/%d). You MUST do one of: (1) Call task_complete if the task is done, (2) Use tools to continue investigating or making changes, (3) Call ask_user if you are stuck and need clarification.", noToolRounds, maxNoToolRounds)
@@ -1572,17 +1585,20 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			isFirstRound = false
 			continue
 		}
-
-		r.setFinalizationReason("implicit_complete_backpressure")
-		r.setEndReason("complete")
-		r.emitLifecyclePhase("ended", map[string]any{"reason": "implicit_complete_backpressure", "step_index": step})
-		r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-		return nil
+		r.persistRunEvent("completion.attempt", RealtimeStreamKindLifecycle, map[string]any{
+			"step_index":          step,
+			"attempt":             "implicit",
+			"completion_contract": completionContractExplicitOnly,
+			"gate_passed":         false,
+			"gate_reason":         "missing_explicit_task_complete",
+			"no_progress_rounds":  noToolRounds,
+		})
+		return endAskUser(step, "I still do not have explicit completion. Please provide missing requirements, or ask me to continue with a specific next action.")
 	}
 
 	// Safety net reached (nativeHardMaxSteps). This should rarely happen in
-	// normal operation — the loop is task-driven and exits via task_complete,
-	// ask_user, or implicit_complete. Reaching here indicates a bug or a
+	// normal operation — the loop is task-driven and exits via task_complete
+	// or ask_user. Reaching here indicates a bug or a
 	// genuinely very long task.
 	r.persistRunEvent("guard.hard_max_steps", RealtimeStreamKindLifecycle, map[string]any{
 		"hard_max_steps": nativeHardMaxSteps,
@@ -1629,12 +1645,14 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		}
 	}
 
-	finReason := "exhausted_summary"
-	r.setFinalizationReason(finReason)
-	r.setEndReason("complete")
-	r.emitLifecyclePhase("ended", map[string]any{"reason": finReason})
-	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-	return nil
+	r.persistRunEvent("completion.attempt", RealtimeStreamKindLifecycle, map[string]any{
+		"step_index":          nativeHardMaxSteps,
+		"attempt":             "implicit",
+		"completion_contract": completionContractExplicitOnly,
+		"gate_passed":         false,
+		"gate_reason":         "hard_max_steps_reached",
+	})
+	return endAskUser(nativeHardMaxSteps, "I reached the hard step limit before explicit completion. Please provide guidance for the next step and I will continue.")
 }
 
 func (r *run) runNativeSocial(
@@ -2158,6 +2176,15 @@ func buildRecoveryOverlay(used int, max int, failure error, lastSignature string
 	return fmt.Sprintf("[RECOVERY] Step %d/%d\nLast failure: %s\nDo NOT repeat signature: %s\nYou MUST choose one action from: repair args | switch tool | ask_user | summarize safe status.", used, max, failureType, strings.TrimSpace(lastSignature))
 }
 
+func evaluateTaskCompletionGate(resultText string, state runtimeState) (bool, string) {
+	_ = state
+	text := strings.TrimSpace(resultText)
+	if text == "" {
+		return false, "empty_result"
+	}
+	return true, "ok"
+}
+
 func backoffDuration(attempt int) time.Duration {
 	switch attempt {
 	case 1:
@@ -2188,6 +2215,8 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int,
 		"# Mandatory Rules",
 		"- Use tools when they are needed for reliable evidence or actions.",
 		"- You MUST call task_complete with a detailed result summary when done. Never end without it.",
+		"- If you cannot complete safely, call ask_user. Do not stop silently.",
+		"- Task runs are explicit-completion only: no task_complete means the task is not complete.",
 		"- You MUST use tools to investigate before answering questions about files, code, or the workspace.",
 		"- If you can answer by reading files, use terminal.exec with rg/sed/cat first.",
 		"- Prefer apply_patch for file edits instead of shell redirection or ad-hoc overwrite commands.",

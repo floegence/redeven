@@ -114,11 +114,11 @@ type RunAttachmentIn struct {
 type RunOptions struct {
 	MaxSteps int `json:"max_steps"`
 
-	// MaxNoToolRounds controls no-tool backpressure rounds before implicit completion.
+	// MaxNoToolRounds controls no-tool backpressure rounds before forcing ask_user.
 	// Default: 3.
 	MaxNoToolRounds int `json:"max_no_tool_rounds,omitempty"`
 
-	// ReasoningOnly disables no-tool backpressure and lets hard budgets/stop conditions decide completion.
+	// ReasoningOnly relaxes tool-pressure heuristics, but task completion still requires explicit task_complete.
 	ReasoningOnly bool `json:"reasoning_only,omitempty"`
 
 	// RequireUserConfirmOnTaskComplete forces explicit user confirmation when model emits task_complete.

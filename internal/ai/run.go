@@ -654,12 +654,30 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		errCode := string(aitools.ErrorCodeUnknown)
 		errMsg := strings.TrimSpace(errorString(retErr))
 		eventType := "run.error"
+		finalizationReason := strings.TrimSpace(r.getFinalizationReason())
+		finalizationClass := classifyFinalizationReason(finalizationReason)
+		completionContract := completionContractForIntent(strings.TrimSpace(req.Options.Intent))
 		switch endReason {
 		case "complete":
-			state = RunStateSuccess
-			errCode = ""
-			errMsg = ""
-			eventType = "run.end"
+			switch finalizationClass {
+			case finalizationClassSuccess:
+				state = RunStateSuccess
+				errCode = ""
+				errMsg = ""
+				eventType = "run.end"
+			case finalizationClassWaitingUser:
+				state = RunStateIdle
+				errCode = ""
+				errMsg = ""
+				eventType = "run.end"
+			default:
+				state = RunStateFailed
+				errCode = string(aitools.ErrorCodeUnknown)
+				if errMsg == "" {
+					errMsg = "Run ended without explicit completion."
+				}
+				eventType = "run.error"
+			}
 		case "canceled":
 			state = RunStateCanceled
 			errCode = ""
@@ -682,16 +700,19 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 			errCode = string(aitools.ErrorCodeUnknown)
 		}
 		r.persistRunRecord(state, errCode, errMsg, startedAt.UnixMilli(), time.Now().UnixMilli())
-		finalizationReason := strings.TrimSpace(r.getFinalizationReason())
 		r.persistRunEvent(eventType, RealtimeStreamKindLifecycle, map[string]any{
 			"state":               string(state),
 			"error_code":          errCode,
 			"error":               errMsg,
 			"finalization_reason": finalizationReason,
+			"finalization_class":  finalizationClass,
+			"completion_contract": completionContract,
 		})
 		r.debug("ai.run.end",
 			"end_reason", endReason,
 			"finalization_reason", finalizationReason,
+			"finalization_class", finalizationClass,
+			"completion_contract", completionContract,
 			"cancel_reason", strings.TrimSpace(r.getCancelReason()),
 			"duration_ms", time.Since(startedAt).Milliseconds(),
 			"state", string(state),

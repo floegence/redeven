@@ -144,6 +144,15 @@ func (m *subagentOpenAISimpleMock) handle(w http.ResponseWriter, r *http.Request
 			"id":     "resp_subagent_1",
 			"model":  "gpt-5-mini",
 			"status": "completed",
+			"output": []any{
+				map[string]any{
+					"type":      "function_call",
+					"id":        "fc_subagent_complete_1",
+					"call_id":   "call_subagent_complete_1",
+					"name":      "task_complete",
+					"arguments": `{"result":"Subagent completed."}`,
+				},
+			},
 			"usage": map[string]any{
 				"input_tokens":  1,
 				"output_tokens": 1,

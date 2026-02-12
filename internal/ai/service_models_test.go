@@ -69,28 +69,32 @@ func TestDeriveThreadRunState(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name      string
-		endReason string
-		err       error
-		wantState string
-		wantMsg   string
+		name        string
+		endReason   string
+		finalReason string
+		err         error
+		wantState   string
+		wantMsg     string
 	}{
-		{name: "success", endReason: "complete", err: nil, wantState: "success", wantMsg: ""},
-		{name: "canceled", endReason: "canceled", err: nil, wantState: "canceled", wantMsg: ""},
-		{name: "timed out", endReason: "timed_out", err: nil, wantState: "timed_out", wantMsg: "Timed out."},
-		{name: "disconnected", endReason: "disconnected", err: nil, wantState: "failed", wantMsg: "Disconnected."},
-		{name: "explicit error", endReason: "error", err: errors.New("boom"), wantState: "failed", wantMsg: "boom"},
-		{name: "context canceled", endReason: "", err: context.Canceled, wantState: "failed", wantMsg: "Disconnected."},
-		{name: "context deadline", endReason: "", err: context.DeadlineExceeded, wantState: "timed_out", wantMsg: "Timed out."},
+		{name: "task complete success", endReason: "complete", finalReason: "task_complete", err: nil, wantState: "success", wantMsg: ""},
+		{name: "social reply success", endReason: "complete", finalReason: "social_reply", err: nil, wantState: "success", wantMsg: ""},
+		{name: "ask user waiting", endReason: "complete", finalReason: "ask_user_waiting", err: nil, wantState: "idle", wantMsg: ""},
+		{name: "implicit complete rejected", endReason: "complete", finalReason: "implicit_complete_backpressure", err: nil, wantState: "failed", wantMsg: "Run ended without explicit completion."},
+		{name: "canceled", endReason: "canceled", finalReason: "", err: nil, wantState: "canceled", wantMsg: ""},
+		{name: "timed out", endReason: "timed_out", finalReason: "", err: nil, wantState: "timed_out", wantMsg: "Timed out."},
+		{name: "disconnected", endReason: "disconnected", finalReason: "", err: nil, wantState: "failed", wantMsg: "Disconnected."},
+		{name: "explicit error", endReason: "error", finalReason: "", err: errors.New("boom"), wantState: "failed", wantMsg: "boom"},
+		{name: "context canceled", endReason: "", finalReason: "", err: context.Canceled, wantState: "failed", wantMsg: "Disconnected."},
+		{name: "context deadline", endReason: "", finalReason: "", err: context.DeadlineExceeded, wantState: "timed_out", wantMsg: "Timed out."},
 	}
 
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			state, msg := deriveThreadRunState(tc.endReason, tc.err)
+			state, msg := deriveThreadRunState(tc.endReason, tc.finalReason, tc.err)
 			if state != tc.wantState || msg != tc.wantMsg {
-				t.Fatalf("deriveThreadRunState(%q, %v)=(%q,%q), want (%q,%q)", tc.endReason, tc.err, state, msg, tc.wantState, tc.wantMsg)
+				t.Fatalf("deriveThreadRunState(%q, %q, %v)=(%q,%q), want (%q,%q)", tc.endReason, tc.finalReason, tc.err, state, msg, tc.wantState, tc.wantMsg)
 			}
 		})
 	}
