@@ -65,14 +65,14 @@ function normalizeExecutionMode(raw: unknown): ExecutionMode {
   const v = String(raw ?? '')
     .trim()
     .toLowerCase();
-  return v === 'act' ? 'act' : 'plan';
+  return v === 'plan' ? 'plan' : 'act';
 }
 
 function readPersistedExecutionMode(): ExecutionMode {
   try {
     return normalizeExecutionMode(localStorage.getItem(EXECUTION_MODE_STORAGE_KEY));
   } catch {
-    return 'plan';
+    return 'act';
   }
 }
 

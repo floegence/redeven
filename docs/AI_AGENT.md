@@ -107,6 +107,8 @@ Behavior summary:
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.
 - `task_complete` is rejected when todo tracking is active and open todos still exist.
+- `ask_user` is rejected when it delegates collectable work (for example asking users to run commands or paste logs that tools can fetch directly).
+- no-tool backpressure defaults to 3 rounds and inserts a completion-required nudge before falling back to `ask_user`.
 - `terminal.exec` output is rendered with structured shell blocks in the Env App (no markdown fallback conversion).
 
 Installer note:

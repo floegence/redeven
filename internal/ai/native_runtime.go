@@ -27,7 +27,7 @@ import (
 const (
 	nativeDefaultMaxSteps        = 24
 	nativeDefaultMaxOutputTokens = 4096
-	nativeDefaultNoToolRounds    = 2
+	nativeDefaultNoToolRounds    = 3
 	nativeCompactThreshold       = 0.70
 	nativeDefaultContextLimit    = 128000
 	// nativeHardMaxSteps is the absolute safety net for the task-driven loop.
@@ -1497,6 +1497,19 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 
 		if askUserCall != nil {
 			question := extractSignalText(*askUserCall, "question")
+			askPassed, askReason := evaluateAskUserGate(question, state)
+			r.persistRunEvent("ask_user.attempt", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":   step,
+				"gate_passed":  askPassed,
+				"gate_reason":  askReason,
+				"question_len": len([]rune(strings.TrimSpace(question))),
+			})
+			if !askPassed {
+				messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "ask_user was rejected. Continue autonomously: do NOT ask the user to run commands, gather logs, or paste outputs that tools can obtain directly. Use tools yourself and finish this task in the same run when possible."}}})
+				exceptionOverlay = "[RECOVERY] ask_user rejected by autonomy gate. Continue with tools and call task_complete when done."
+				isFirstRound = false
+				continue
+			}
 			return endAskUser(step, question, "model_signal")
 		}
 
@@ -1584,7 +1597,13 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		}
 
 		noToolRounds++
-		if noToolRounds < maxNoToolRounds {
+		if noToolRounds <= maxNoToolRounds {
+			if noToolRounds == maxNoToolRounds {
+				exceptionOverlay = fmt.Sprintf("[COMPLETION REQUIRED] You have produced no-tool rounds (%d/%d). Unless an external blocker exists, finalize with task_complete now after summarizing verified outcomes.", noToolRounds, maxNoToolRounds)
+				messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "Before asking the user, try to finish autonomously in this run. If done, call task_complete now with concrete evidence."}}})
+				isFirstRound = false
+				continue
+			}
 			exceptionOverlay = fmt.Sprintf("[BACKPRESSURE] No tool call used (%d/%d). You MUST do one of: (1) Call task_complete if the task is done, (2) Use tools to continue investigating or making changes, (3) Call ask_user if you are stuck and need clarification.", noToolRounds, maxNoToolRounds)
 			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "You must either call task_complete, use a tool, or call ask_user. Do not respond with text only."}}})
 			isFirstRound = false
@@ -2192,6 +2211,52 @@ func evaluateTaskCompletionGate(resultText string, state runtimeState) (bool, st
 	return true, "ok"
 }
 
+func evaluateAskUserGate(question string, state runtimeState) (bool, string) {
+	q := strings.TrimSpace(question)
+	if q == "" {
+		return false, "empty_question"
+	}
+	if asksUserToRunCollectableWork(q) {
+		return false, "delegated_collectable_work"
+	}
+	if state.TodoTrackingEnabled && state.TodoOpenCount > 0 && len(state.BlockedActionFacts) == 0 {
+		return false, "pending_todos_without_blocker"
+	}
+	return true, "ok"
+}
+
+func asksUserToRunCollectableWork(question string) bool {
+	raw := strings.TrimSpace(question)
+	if raw == "" {
+		return false
+	}
+	lower := strings.ToLower(raw)
+
+	containsAny := func(text string, parts []string) bool {
+		for _, part := range parts {
+			if strings.Contains(text, part) {
+				return true
+			}
+		}
+		return false
+	}
+
+	englishActions := []string{"run", "execute", "paste", "copy", "share", "provide", "send", "upload"}
+	englishTargets := []string{"command", "shell", "terminal", "output", "stdout", "stderr", "log", "logs", "screenshot"}
+	if containsAny(lower, englishActions) && containsAny(lower, englishTargets) {
+		return true
+	}
+	chineseActions := []string{"运行", "执行", "提供", "贴", "发送", "上传"}
+	chineseTargets := []string{"命令", "终端", "输出", "日志", "截图", "屏幕"}
+	if containsAny(raw, chineseActions) && containsAny(raw, chineseTargets) {
+		return true
+	}
+	if strings.Contains(raw, "命令输出") || strings.Contains(raw, "输出贴") || strings.Contains(raw, "贴上") || strings.Contains(lower, "paste the output") {
+		return true
+	}
+	return false
+}
+
 func updateTodoRuntimeState(state *runtimeState, calls []ToolCall, results []ToolResult, round int) {
 	if state == nil || len(results) == 0 {
 		return
@@ -2302,6 +2367,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int,
 	core := []string{
 		"# Identity & Mandate",
 		"You are Redeven Agent, an autonomous AI assistant that completes tasks by using tools.",
+		"Default behavior: finish the full task in one run whenever the available tools and permissions allow it.",
 		"Keep going until the user's task is completely resolved before ending your turn.",
 		"Only call task_complete when you are confident the problem is fully solved.",
 		"If you are unsure, use tools to verify your work before completing.",
@@ -2324,6 +2390,8 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int,
 		"- Prefer apply_patch for file edits instead of shell redirection or ad-hoc overwrite commands.",
 		"- Use workdir/cwd fields on terminal.exec instead of running cd in the command string.",
 		"- Do NOT fabricate file contents, command outputs, or tool results. Always use tools to get real data.",
+		"- Do NOT ask the user to run commands, gather logs, or paste outputs that tools can obtain directly.",
+		"- Prefer autonomous continuation over ask_user; ask_user is only for true external blockers.",
 		"- If information is insufficient and tools cannot help, call ask_user.",
 		"",
 		"# Todo Discipline",
@@ -2331,6 +2399,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int,
 		"- Skip write_todos for a single trivial step that can be completed immediately.",
 		"- Keep exactly one todo as in_progress at a time.",
 		"- Update write_todos immediately when you start, complete, cancel, or discover work.",
+		"- Finish all feasible todos in this run before asking the user.",
 		"- Before task_complete, ensure all todos are completed or cancelled.",
 		"",
 		"# Anti-Patterns (NEVER do these)",

@@ -395,7 +395,7 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 			Options: RunOptions{
 				Mode:            task.mode,
 				MaxSteps:        task.maxSteps,
-				MaxNoToolRounds: 2,
+				MaxNoToolRounds: nativeDefaultNoToolRounds,
 			},
 		}
 
