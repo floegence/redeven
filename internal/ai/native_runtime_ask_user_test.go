@@ -41,19 +41,23 @@ func TestAsksUserToRunCollectableWork(t *testing.T) {
 func TestEvaluateAskUserGate(t *testing.T) {
 	t.Parallel()
 
-	if pass, reason := evaluateAskUserGate("", runtimeState{}); pass || reason != "empty_question" {
+	if pass, reason := evaluateAskUserGate("", runtimeState{}, TaskComplexitySimple); pass || reason != "empty_question" {
 		t.Fatalf("empty question => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate("请执行命令并把输出贴上来。", runtimeState{}); pass || reason != "delegated_collectable_work" {
+	if pass, reason := evaluateAskUserGate("请执行命令并把输出贴上来。", runtimeState{}, TaskComplexitySimple); pass || reason != "delegated_collectable_work" {
 		t.Fatalf("delegated work => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", runtimeState{}, TaskComplexityComplex); pass || reason != "missing_todos_for_complex_task" {
+		t.Fatalf("complex task without todos => pass=%v reason=%q", pass, reason)
 	}
 
 	pendingTodos := runtimeState{
 		TodoTrackingEnabled: true,
 		TodoOpenCount:       2,
 	}
-	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", pendingTodos); pass || reason != "pending_todos_without_blocker" {
+	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", pendingTodos, TaskComplexityStandard); pass || reason != "pending_todos_without_blocker" {
 		t.Fatalf("pending todos without blocker => pass=%v reason=%q", pass, reason)
 	}
 
@@ -62,7 +66,7 @@ func TestEvaluateAskUserGate(t *testing.T) {
 		TodoOpenCount:       1,
 		BlockedActionFacts:  []string{"terminal.exec: permission denied"},
 	}
-	if pass, reason := evaluateAskUserGate("Need approval for a privileged command.", withBlocker); !pass || reason != "ok" {
+	if pass, reason := evaluateAskUserGate("Need approval for a privileged command.", withBlocker, TaskComplexityComplex); !pass || reason != "ok" {
 		t.Fatalf("pending todos with blocker => pass=%v reason=%q", pass, reason)
 	}
 }

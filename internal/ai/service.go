@@ -757,6 +757,13 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		return decision, classifyErr
 	})
 	req.Options.Intent = intentDecision.Intent
+	complexityDecision := classifyTaskComplexity(rawUserInputText, req.Input.Attachments, existingOpenGoal)
+	if req.Options.Intent != RunIntentTask {
+		complexityDecision.Level = TaskComplexitySimple
+		complexityDecision.Score = 0
+		complexityDecision.Reasons = []string{"non_task_intent"}
+	}
+	req.Options.Complexity = normalizeTaskComplexity(complexityDecision.Level)
 	r.persistRunEvent("intent.classified", RealtimeStreamKindLifecycle, map[string]any{
 		"intent":            intentDecision.Intent,
 		"confidence":        intentDecision.Confidence,
@@ -767,6 +774,12 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		"intent_confidence": intentDecision.Confidence,
 		"intent_reason":     intentDecision.Reason,
 		"mode":              req.Options.Mode,
+	})
+	r.persistRunEvent("complexity.classified", RealtimeStreamKindLifecycle, map[string]any{
+		"intent":     req.Options.Intent,
+		"complexity": req.Options.Complexity,
+		"score":      complexityDecision.Score,
+		"reasons":    append([]string(nil), complexityDecision.Reasons...),
 	})
 	if intentDecision.Intent == RunIntentSocial {
 		r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{

@@ -1076,6 +1076,8 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	r.runMode = mode
 	intent := normalizeRunIntent(req.Options.Intent)
 	req.Options.Intent = intent
+	taskComplexity := normalizeTaskComplexity(req.Options.Complexity)
+	req.Options.Complexity = taskComplexity
 
 	execCtx := ctx
 	var cancelMaxWall context.CancelFunc
@@ -1138,6 +1140,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		"max_steps":     maxSteps,
 		"mode":          mode,
 		"intent":        intent,
+		"complexity":    taskComplexity,
 	})
 
 	if intent == RunIntentSocial {
@@ -1201,6 +1204,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 
 	recoveryCount := 0
 	noToolRounds := 0
+	todoSetupNudges := 0
 	lastSignature := ""
 	signatureHits := map[string]int{}
 	failedSignatures := map[string]bool{}
@@ -1262,7 +1266,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		}
 
 		activeTools := scheduler.ActiveTools(mode)
-		systemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, step, maxSteps, isFirstRound, activeTools, state, exceptionOverlay)
+		systemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, taskComplexity, step, maxSteps, isFirstRound, activeTools, state, exceptionOverlay)
 		turnMessages := composeTurnMessages(systemPrompt, messages)
 		turnReq := TurnRequest{
 			Model:            modelName,
@@ -1346,6 +1350,16 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			"estimate_tokens": estimateTokens,
 			"estimate_source": estimateSource,
 		})
+		r.persistRunEvent("native.turn.checkpoint", RealtimeStreamKindLifecycle, map[string]any{
+			"step_index":         step,
+			"complexity":         taskComplexity,
+			"todo_tracking":      state.TodoTrackingEnabled,
+			"todo_open_count":    state.TodoOpenCount,
+			"todo_in_progress":   state.TodoInProgressCount,
+			"completed_facts":    len(state.CompletedActionFacts),
+			"blocked_facts":      len(state.BlockedActionFacts),
+			"pending_user_items": len(state.PendingUserInputQueue),
+		})
 
 		normalCalls, taskCompleteCall, askUserCall := splitSignalToolCalls(stepResult.ToolCalls)
 		for _, call := range normalCalls {
@@ -1417,6 +1431,21 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 				}
 			}
 			updateTodoRuntimeState(&state, normalCalls, toolResults, step)
+			if state.TodoTrackingEnabled {
+				todoSetupNudges = 0
+			}
+			nextComplexity := maybeEscalateTaskComplexity(taskComplexity, state, normalCalls, step)
+			if nextComplexity != taskComplexity {
+				r.persistRunEvent("complexity.escalated", RealtimeStreamKindLifecycle, map[string]any{
+					"step_index":      step,
+					"from_complexity": taskComplexity,
+					"to_complexity":   nextComplexity,
+					"normal_calls":    len(normalCalls),
+					"todo_tracking":   state.TodoTrackingEnabled,
+				})
+				taskComplexity = nextComplexity
+				req.Options.Complexity = taskComplexity
+			}
 
 			messages = append(messages, buildToolCallMessages(normalCalls)...)
 			messages = append(messages, buildToolResultMessages(toolResults, normalCalls)...)
@@ -1497,12 +1526,13 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 
 		if askUserCall != nil {
 			question := extractSignalText(*askUserCall, "question")
-			askPassed, askReason := evaluateAskUserGate(question, state)
+			askPassed, askReason := evaluateAskUserGate(question, state, taskComplexity)
 			r.persistRunEvent("ask_user.attempt", RealtimeStreamKindLifecycle, map[string]any{
 				"step_index":   step,
 				"gate_passed":  askPassed,
 				"gate_reason":  askReason,
 				"question_len": len([]rune(strings.TrimSpace(question))),
+				"complexity":   taskComplexity,
 			})
 			if !askPassed {
 				messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "ask_user was rejected. Continue autonomously: do NOT ask the user to run commands, gather logs, or paste outputs that tools can obtain directly. Use tools yourself and finish this task in the same run when possible."}}})
@@ -1533,13 +1563,14 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 					continue
 				}
 			}
-			gatePassed, gateReason := evaluateTaskCompletionGate(resultText, state)
+			gatePassed, gateReason := evaluateTaskCompletionGate(resultText, state, taskComplexity)
 			r.persistRunEvent("completion.attempt", RealtimeStreamKindLifecycle, map[string]any{
 				"step_index":          step,
 				"attempt":             "task_complete",
 				"completion_contract": completionContractExplicitOnly,
 				"gate_passed":         gatePassed,
 				"gate_reason":         gateReason,
+				"complexity":          taskComplexity,
 			})
 			if !gatePassed {
 				rejectionMsg := "task_complete was rejected. Provide concrete completion evidence or call ask_user if blocked."
@@ -1547,6 +1578,9 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 				if gateReason == "pending_todos" {
 					rejectionMsg = "task_complete was rejected because todos are still open. Update write_todos first, then call task_complete."
 					recoveryOverlay = "[RECOVERY] Completion blocked: todos still open. Update write_todos to close remaining items, then call task_complete."
+				} else if gateReason == "missing_todos_for_complex_task" {
+					rejectionMsg = "task_complete was rejected for a complex task without an active todo snapshot. Call write_todos first, then continue and complete."
+					recoveryOverlay = "[RECOVERY] Complex-task completion blocked: initialize and maintain todos with write_todos before calling task_complete."
 				}
 				messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: rejectionMsg}}})
 				exceptionOverlay = recoveryOverlay
@@ -1561,6 +1595,22 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			r.emitLifecyclePhase("ended", map[string]any{"reason": "task_complete", "step_index": step})
 			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 			return nil
+		}
+
+		if taskComplexity == TaskComplexityComplex && !state.TodoTrackingEnabled {
+			todoSetupNudges++
+			r.persistRunEvent("guard.todo_setup_required", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":    step,
+				"complexity":    taskComplexity,
+				"nudge_attempt": todoSetupNudges,
+			})
+			if todoSetupNudges > 3 {
+				return endAskUser(step, "I need a concrete task list to continue this complex request safely. Please confirm the top-level goals and I will continue.", "complex_task_missing_todos")
+			}
+			exceptionOverlay = fmt.Sprintf("[TODO REQUIRED] Complex task (%d/3). You MUST call write_todos now with actionable steps, keep exactly one in_progress item, then continue execution.", todoSetupNudges)
+			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "This is a complex task. Start by calling write_todos with 3-7 actionable steps before proceeding."}}})
+			isFirstRound = false
+			continue
 		}
 
 		finishReason := strings.ToLower(strings.TrimSpace(stepResult.FinishReason))
@@ -1616,6 +1666,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			"gate_passed":         false,
 			"gate_reason":         "missing_explicit_task_complete",
 			"no_progress_rounds":  noToolRounds,
+			"complexity":          taskComplexity,
 		})
 		return endAskUser(step, "I still do not have explicit completion. Please provide missing requirements, or ask me to continue with a specific next action.", "missing_explicit_completion")
 	}
@@ -1633,7 +1684,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	summaryMsg := "You have reached the absolute step limit. Summarize what you accomplished and what remains, then call task_complete."
 	messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: summaryMsg}}})
 	summaryOverlay := "[FINAL SUMMARY] You have exhausted the hard step limit. You MUST call task_complete now with a detailed summary of what was done and what remains."
-	summarySystemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, nativeHardMaxSteps, maxSteps, false, scheduler.ActiveTools(mode), state, summaryOverlay)
+	summarySystemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, taskComplexity, nativeHardMaxSteps, maxSteps, false, scheduler.ActiveTools(mode), state, summaryOverlay)
 	summaryTurnMessages := composeTurnMessages(summarySystemPrompt, messages)
 
 	signalOnlyTools := make([]ToolDef, 0, 1)
@@ -1675,6 +1726,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		"completion_contract": completionContractExplicitOnly,
 		"gate_passed":         false,
 		"gate_reason":         "hard_max_steps_reached",
+		"complexity":          taskComplexity,
 	})
 	return endAskUser(nativeHardMaxSteps, "I reached the hard step limit before explicit completion. Please provide guidance for the next step and I will continue.", "hard_max_steps")
 }
@@ -2200,10 +2252,14 @@ func buildRecoveryOverlay(used int, max int, failure error, lastSignature string
 	return fmt.Sprintf("[RECOVERY] Step %d/%d\nLast failure: %s\nDo NOT repeat signature: %s\nYou MUST choose one action from: repair args | switch tool | ask_user | summarize safe status.", used, max, failureType, strings.TrimSpace(lastSignature))
 }
 
-func evaluateTaskCompletionGate(resultText string, state runtimeState) (bool, string) {
+func evaluateTaskCompletionGate(resultText string, state runtimeState, complexity string) (bool, string) {
 	text := strings.TrimSpace(resultText)
 	if text == "" {
 		return false, "empty_result"
+	}
+	complexity = normalizeTaskComplexity(complexity)
+	if complexity == TaskComplexityComplex && !state.TodoTrackingEnabled {
+		return false, "missing_todos_for_complex_task"
 	}
 	if state.TodoTrackingEnabled && state.TodoOpenCount > 0 {
 		return false, "pending_todos"
@@ -2211,13 +2267,17 @@ func evaluateTaskCompletionGate(resultText string, state runtimeState) (bool, st
 	return true, "ok"
 }
 
-func evaluateAskUserGate(question string, state runtimeState) (bool, string) {
+func evaluateAskUserGate(question string, state runtimeState, complexity string) (bool, string) {
 	q := strings.TrimSpace(question)
 	if q == "" {
 		return false, "empty_question"
 	}
 	if asksUserToRunCollectableWork(q) {
 		return false, "delegated_collectable_work"
+	}
+	complexity = normalizeTaskComplexity(complexity)
+	if complexity == TaskComplexityComplex && !state.TodoTrackingEnabled && len(state.BlockedActionFacts) == 0 {
+		return false, "missing_todos_for_complex_task"
 	}
 	if state.TodoTrackingEnabled && state.TodoOpenCount > 0 && len(state.BlockedActionFacts) == 0 {
 		return false, "pending_todos_without_blocker"
@@ -2363,7 +2423,8 @@ func backoffDuration(attempt int) time.Duration {
 	}
 }
 
-func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int, maxSteps int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string) string {
+func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity string, round int, maxSteps int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string) string {
+	complexity = normalizeTaskComplexity(complexity)
 	core := []string{
 		"# Identity & Mandate",
 		"You are Redeven Agent, an autonomous AI assistant that completes tasks by using tools.",
@@ -2379,6 +2440,12 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int,
 		"3. **Act** — Use apply_patch for file edits; use terminal.exec for validated command actions.",
 		"4. **Verify** — Use terminal.exec to run checks (tests/lint/build) and confirm correctness.",
 		"5. **Iterate** — If verification fails, diagnose the issue and repeat from step 1.",
+		"",
+		"# Complexity Policy",
+		"- Classify the current request as simple, standard, or complex and adapt depth accordingly.",
+		"- simple: solve directly with minimal overhead; avoid unnecessary process.",
+		"- standard: keep a concise plan and checkpoint progress while executing.",
+		"- complex: establish and maintain todos with write_todos before completion.",
 		"",
 		"# Mandatory Rules",
 		"- Use tools when they are needed for reliable evidence or actions.",
@@ -2437,6 +2504,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int,
 		fmt.Sprintf("- Working directory: %s", cwd),
 		fmt.Sprintf("- Current round: %d (first_round=%t)", round+1, isFirstRound),
 		fmt.Sprintf("- Mode: %s", strings.TrimSpace(mode)),
+		fmt.Sprintf("- Task complexity: %s", complexity),
 		fmt.Sprintf("- Available tools: %s", toolNames),
 		fmt.Sprintf("- Objective: %s", strings.TrimSpace(objective)),
 		fmt.Sprintf("- Recent errors: %s", recentErrors),

@@ -105,7 +105,7 @@ This content should appear in overlay.`
 	if _, _, err := r.activateSkill(skillName); err != nil {
 		t.Fatalf("activate skill: %v", err)
 	}
-	prompt := r.buildLayeredSystemPrompt("objective", "build", 0, 8, true, nil, newRuntimeState("objective"), "")
+	prompt := r.buildLayeredSystemPrompt("objective", "build", TaskComplexityStandard, 0, 8, true, nil, newRuntimeState("objective"), "")
 	if !strings.Contains(prompt, "Available skills: prompt-skill") {
 		t.Fatalf("prompt missing skills catalog: %q", prompt)
 	}

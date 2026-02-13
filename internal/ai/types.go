@@ -131,6 +131,10 @@ type RunOptions struct {
 	// Clients should not set this field directly.
 	Intent string `json:"intent,omitempty"`
 
+	// Complexity is classified by the runtime (simple|standard|complex).
+	// Clients should not set this field directly.
+	Complexity string `json:"complexity,omitempty"`
+
 	// Provider controls.
 	ThinkingBudgetTokens int      `json:"thinking_budget_tokens,omitempty"`
 	CacheControl         string   `json:"cache_control,omitempty"`

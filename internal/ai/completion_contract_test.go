@@ -35,20 +35,24 @@ func TestClassifyFinalizationReason(t *testing.T) {
 func TestEvaluateTaskCompletionGate(t *testing.T) {
 	t.Parallel()
 
-	if pass, reason := evaluateTaskCompletionGate("", runtimeState{}); pass || reason != "empty_result" {
+	if pass, reason := evaluateTaskCompletionGate("", runtimeState{}, TaskComplexitySimple); pass || reason != "empty_result" {
 		t.Fatalf("empty result => pass=%v reason=%q", pass, reason)
 	}
 
 	if pass, reason := evaluateTaskCompletionGate("Task finished with final answer.", runtimeState{
 		CompletedActionFacts: []string{"terminal.exec: go test ./..."},
-	}); !pass || reason != "ok" {
+	}, TaskComplexitySimple); !pass || reason != "ok" {
 		t.Fatalf("non-empty result => pass=%v reason=%q", pass, reason)
 	}
 
 	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{
 		TodoTrackingEnabled: true,
 		TodoOpenCount:       1,
-	}); pass || reason != "pending_todos" {
+	}, TaskComplexityStandard); pass || reason != "pending_todos" {
 		t.Fatalf("pending todos => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{}, TaskComplexityComplex); pass || reason != "missing_todos_for_complex_task" {
+		t.Fatalf("complex task without todos => pass=%v reason=%q", pass, reason)
 	}
 }
