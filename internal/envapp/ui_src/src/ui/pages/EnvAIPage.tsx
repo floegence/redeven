@@ -336,7 +336,7 @@ function ExecutionModeToggle(props: {
   );
 }
 
-// 紧凑型任务摘要 — 折叠态为一个小芯片，展开态为一个绝对定位面板
+// Compact tasks summary — collapsed as a small chip, expanded as an absolutely positioned panel.
 function CompactTasksSummary(props: {
   todos: ThreadTodoItem[];
   unresolvedCount: number;
@@ -348,7 +348,7 @@ function CompactTasksSummary(props: {
   const [expanded, setExpanded] = createSignal(false);
   let containerRef: HTMLDivElement | undefined;
 
-  // 点击外部关闭
+  // Close the popover when clicking outside.
   createEffect(() => {
     if (!expanded()) return;
     const handler = (e: MouseEvent) => {
@@ -362,7 +362,7 @@ function CompactTasksSummary(props: {
 
   return (
     <div ref={containerRef} class="relative">
-      {/* 折叠态芯片 */}
+      {/* Collapsed chip */}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -379,7 +379,7 @@ function CompactTasksSummary(props: {
         <ChevronUp class={cn('w-3 h-3 transition-transform duration-200', expanded() ? '' : 'rotate-180')} />
       </button>
 
-      {/* 展开态面板 */}
+      {/* Expanded panel */}
       <Show when={expanded()}>
         <div class={cn(
           'absolute bottom-full left-0 mb-1.5 z-50',
@@ -619,6 +619,8 @@ export function EnvAIPage() {
   const FOLLOW_BOTTOM_THRESHOLD_PX = 24;
   let autoFollowEnabled = true;
   let followScrollRafPending = false;
+  let scrollerListenerEl: HTMLElement | null = null;
+  let scrollerListenerCleanup: (() => void) | null = null;
 
   const getMessageListScroller = () =>
     document.querySelector<HTMLElement>('.chat-message-list-scroll') ??
@@ -631,9 +633,49 @@ export function EnvAIPage() {
     autoFollowEnabled = true;
   };
 
+  const ensureMessageListScrollerListener = () => {
+    const el = getMessageListScroller();
+    if (!el) return null;
+    if (el === scrollerListenerEl) return el;
+
+    scrollerListenerCleanup?.();
+    scrollerListenerEl = el;
+
+    let lastScrollTop = el.scrollTop;
+    const onScroll = () => {
+      const nextScrollTop = el.scrollTop;
+      const prevScrollTop = lastScrollTop;
+      lastScrollTop = nextScrollTop;
+
+      if (isNearBottom(el)) {
+        autoFollowEnabled = true;
+        return;
+      }
+
+      // Only disable auto-follow when the user scrolls up (away from the bottom).
+      if (nextScrollTop < prevScrollTop) {
+        autoFollowEnabled = false;
+      }
+    };
+
+    el.addEventListener('scroll', onScroll, { passive: true });
+    scrollerListenerCleanup = () => {
+      el.removeEventListener('scroll', onScroll);
+    };
+
+    autoFollowEnabled = isNearBottom(el);
+    return el;
+  };
+
+  onCleanup(() => {
+    scrollerListenerCleanup?.();
+    scrollerListenerCleanup = null;
+    scrollerListenerEl = null;
+  });
+
   const forceScrollToLatest = () => {
     const scrollBottom = () => {
-      const el = getMessageListScroller();
+      const el = ensureMessageListScrollerListener();
       if (!el) return false;
       el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
       return true;
@@ -649,14 +691,7 @@ export function EnvAIPage() {
   };
 
   const scheduleFollowScrollToLatest = () => {
-    const scroller = getMessageListScroller();
-    if (scroller) {
-      if (isNearBottom(scroller)) {
-        autoFollowEnabled = true;
-      } else {
-        autoFollowEnabled = false;
-      }
-    }
+    ensureMessageListScrollerListener();
 
     if (!autoFollowEnabled || followScrollRafPending) {
       return;
@@ -669,6 +704,14 @@ export function EnvAIPage() {
       forceScrollToLatest();
     });
   };
+
+  createEffect(() => {
+    if (!chatReady()) return;
+    hasMessages();
+    requestAnimationFrame(() => {
+      ensureMessageListScrollerListener();
+    });
+  });
 
   let lastMessagesReq = 0;
   let lastTodosReq = 0;
