@@ -55,6 +55,18 @@ type AIConfig struct {
 	// - no plan-mode hard guard
 	// - no dangerous-command hard block
 	ExecutionPolicy *AIExecutionPolicy `json:"execution_policy,omitempty"`
+
+	// WebSearchProvider controls which web search backend is enabled for AI runs.
+	//
+	// Supported values:
+	// - "auto": prefer OpenAI built-in web search when using official OpenAI endpoints; otherwise use Brave (default)
+	// - "openai": enable OpenAI built-in web search only (OpenAI + official base_url required)
+	// - "brave": use Brave web search (requires a Brave Search API key)
+	// - "disabled": disable all web search tools
+	//
+	// Notes:
+	// - Secrets (API keys) must never be stored in config.json. Web search keys must live in secrets.json.
+	WebSearchProvider string `json:"web_search_provider,omitempty"`
 }
 
 type AIExecutionPolicy struct {
@@ -110,6 +122,8 @@ const (
 	defaultAIRequireUserApproval   = false
 	defaultAIEnforcePlanModeGuard  = false
 	defaultAIBlockDangerousCommand = false
+
+	defaultAIWebSearchProvider = "auto"
 )
 
 func (c *AIConfig) Validate() error {
@@ -125,6 +139,16 @@ func (c *AIConfig) Validate() error {
 	case AIModeAct, AIModePlan:
 	default:
 		return fmt.Errorf("invalid ai mode %q", c.Mode)
+	}
+
+	webSearchProvider := strings.TrimSpace(strings.ToLower(c.WebSearchProvider))
+	if webSearchProvider == "" {
+		webSearchProvider = defaultAIWebSearchProvider
+	}
+	switch webSearchProvider {
+	case "auto", "openai", "brave", "disabled":
+	default:
+		return fmt.Errorf("invalid web_search_provider %q", c.WebSearchProvider)
 	}
 
 	if c.ToolRecoveryMaxSteps != nil {
@@ -273,6 +297,22 @@ func (c *AIConfig) EffectiveMode() string {
 		return AIModePlan
 	default:
 		return AIModeAct
+	}
+}
+
+func (c *AIConfig) EffectiveWebSearchProvider() string {
+	if c == nil {
+		return defaultAIWebSearchProvider
+	}
+	v := strings.TrimSpace(strings.ToLower(c.WebSearchProvider))
+	if v == "" {
+		return defaultAIWebSearchProvider
+	}
+	switch v {
+	case "auto", "openai", "brave", "disabled":
+		return v
+	default:
+		return defaultAIWebSearchProvider
 	}
 }
 

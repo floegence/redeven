@@ -71,6 +71,11 @@ type Options struct {
 	//
 	// It should read from a local secrets store, not from config.json.
 	ResolveProviderAPIKey func(providerID string) (string, bool, error)
+
+	// ResolveWebSearchProviderAPIKey returns the API key for the given web search provider id.
+	//
+	// It should read from a local secrets store, not from config.json.
+	ResolveWebSearchProviderAPIKey func(providerID string) (string, bool, error)
 }
 
 type Service struct {
@@ -89,7 +94,8 @@ type Service struct {
 	approvalTimeout time.Duration
 	streamWriteTO   time.Duration
 
-	resolveProviderKey func(providerID string) (string, bool, error)
+	resolveProviderKey  func(providerID string) (string, bool, error)
+	resolveWebSearchKey func(providerID string) (string, bool, error)
 
 	mu              sync.Mutex
 	activeRunByChan map[string]string // channel_id -> run_id
@@ -165,6 +171,10 @@ func NewService(opts Options) (*Service, error) {
 	if resolveProviderKey == nil {
 		resolveProviderKey = func(string) (string, bool, error) { return "", false, nil }
 	}
+	resolveWebSearchKey := opts.ResolveWebSearchProviderAPIKey
+	if resolveWebSearchKey == nil {
+		resolveWebSearchKey = func(string) (string, bool, error) { return "", false, nil }
+	}
 
 	maxWall := opts.RunMaxWallTime
 	if maxWall <= 0 {
@@ -207,6 +217,7 @@ func NewService(opts Options) (*Service, error) {
 		approvalTimeout:       approvalTO,
 		streamWriteTO:         streamWTO,
 		resolveProviderKey:    resolveProviderKey,
+		resolveWebSearchKey:   resolveWebSearchKey,
 		activeRunByChan:       make(map[string]string),
 		activeRunByTh:         make(map[string]string),
 		runs:                  make(map[string]*run),
@@ -602,6 +613,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		AIConfig:            cfg,
 		SessionMeta:         metaRef,
 		ResolveProviderKey:  s.resolveProviderKey,
+		ResolveWebSearchKey: s.resolveWebSearchKey,
 		RunID:               runID,
 		ChannelID:           channelID,
 		EndpointID:          endpointID,

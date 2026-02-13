@@ -90,6 +90,9 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 		params.Instructions = openai.String(strings.TrimSpace(instructions))
 	}
 	tools, aliasToReal := buildOpenAITools(req.Tools, p.strictToolSchema)
+	if req.WebSearchEnabled && p.strictToolSchema {
+		tools = append(tools, oresponses.ToolParamOfWebSearchPreview(oresponses.WebSearchToolTypeWebSearchPreview))
+	}
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
@@ -264,6 +267,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 	result := TurnResult{
 		FinishReason: mapOpenAIStatus(completed.Status),
 		Text:         strings.TrimSpace(textBuf.String()),
+		Sources:      extractOpenAIURLSources(completed),
 		Usage: TurnUsage{
 			InputTokens:     completed.Usage.InputTokens,
 			OutputTokens:    completed.Usage.OutputTokens,
@@ -1134,6 +1138,37 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		return r.failRun("Failed to initialize provider adapter", err)
 	}
 
+	// Configure web search enablement once per run (tools are fixed for a given run).
+	// Default behavior: use OpenAI built-in web search when possible; otherwise fall back to Brave.
+	openAIStrict := shouldUseStrictOpenAIToolSchema(providerType, strings.TrimSpace(providerCfg.BaseURL))
+	webSearchProvider := r.cfg.EffectiveWebSearchProvider()
+	enableOpenAIWebSearch := false
+	enableWebSearchTool := false
+	switch webSearchProvider {
+	case "disabled":
+		// disabled
+	case "openai":
+		enableOpenAIWebSearch = providerType == "openai" && openAIStrict
+	case "brave":
+		enableWebSearchTool = true
+	default: // auto
+		if providerType == "openai" && openAIStrict {
+			enableOpenAIWebSearch = true
+		} else {
+			enableWebSearchTool = true
+		}
+	}
+	r.openAIWebSearchEnabled = enableOpenAIWebSearch
+	r.webSearchToolEnabled = enableWebSearchTool
+	r.persistRunEvent("web_search.config", RealtimeStreamKindLifecycle, map[string]any{
+		"provider":          webSearchProvider,
+		"openai_strict":     openAIStrict,
+		"openai_web_search": enableOpenAIWebSearch,
+		"web_search_tool":   enableWebSearchTool,
+		"provider_type":     providerType,
+		"provider_base_url": strings.TrimSpace(providerCfg.BaseURL),
+	})
+
 	r.persistRunEvent("native.runtime.start", RealtimeStreamKindLifecycle, map[string]any{
 		"provider_type": providerType,
 		"model":         modelName,
@@ -1336,6 +1371,7 @@ mainLoop:
 			Budgets:          TurnBudgets{MaxSteps: maxSteps, MaxInputTokens: req.Options.MaxInputTokens, MaxOutputToken: req.Options.MaxOutputTokens, MaxCostUSD: req.Options.MaxCostUSD},
 			ModeFlags:        ModeFlags{Mode: mode, ReasoningOnly: req.Options.ReasoningOnly},
 			ProviderControls: ProviderControls{ThinkingBudgetTokens: req.Options.ThinkingBudgetTokens, CacheControl: req.Options.CacheControl, ResponseFormat: req.Options.ResponseFormat, Temperature: req.Options.Temperature, TopP: req.Options.TopP},
+			WebSearchEnabled: r.openAIWebSearchEnabled,
 		}
 
 		estimateTokens, estimateSource := estimateTurnTokens(providerType, turnReq)
@@ -1403,6 +1439,9 @@ mainLoop:
 		}
 		touchActivity()
 		exceptionOverlay = ""
+		for _, src := range stepResult.Sources {
+			r.addWebSource(src.Title, src.URL)
+		}
 		if strings.TrimSpace(stepResult.Text) != "" {
 			turnTextSeen = true
 		}
@@ -1623,6 +1662,10 @@ mainLoop:
 			if resultText == "" {
 				resultText = strings.TrimSpace(stepResult.Text)
 			}
+			evidenceRefs := extractSignalStringList(*taskCompleteCall, "evidence_refs")
+			for _, ref := range evidenceRefs {
+				r.addWebSource("", ref)
+			}
 			if req.Options.RequireUserConfirmOnTaskComplete {
 				approved, approveErr := r.waitForTaskCompleteConfirm(execCtx, resultText)
 				if approveErr != nil {
@@ -1665,6 +1708,7 @@ mainLoop:
 			if strings.TrimSpace(resultText) != "" && strings.TrimSpace(stepResult.Text) == "" {
 				_ = r.appendTextDelta(strings.TrimSpace(resultText))
 			}
+			r.emitSourcesToolBlock("task_complete")
 			r.setFinalizationReason("task_complete")
 			r.setEndReason("complete")
 			r.emitLifecyclePhase("ended", map[string]any{"reason": "task_complete", "step_index": step})
@@ -2312,6 +2356,36 @@ func extractSignalText(call ToolCall, key string) string {
 		return strings.TrimSpace(s)
 	}
 	return ""
+}
+
+func extractSignalStringList(call ToolCall, key string) []string {
+	if call.Args == nil {
+		return nil
+	}
+	raw := call.Args[key]
+	switch v := raw.(type) {
+	case []string:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			s := strings.TrimSpace(item)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			s, _ := item.(string)
+			s = strings.TrimSpace(s)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func buildToolSignature(call ToolCall) string {
@@ -3007,6 +3081,36 @@ func extractOpenAIResponseText(resp oresponses.Response) string {
 		}
 	}
 	return sb.String()
+}
+
+func extractOpenAIURLSources(resp oresponses.Response) []SourceRef {
+	out := make([]SourceRef, 0, 8)
+	seen := make(map[string]struct{}, 8)
+	for _, item := range resp.Output {
+		if strings.TrimSpace(item.Type) != "message" {
+			continue
+		}
+		for _, part := range item.Content {
+			if strings.TrimSpace(part.Type) != "output_text" {
+				continue
+			}
+			for _, ann := range part.Annotations {
+				if strings.TrimSpace(ann.Type) != "url_citation" {
+					continue
+				}
+				u := strings.TrimSpace(ann.URL)
+				if u == "" {
+					continue
+				}
+				if _, ok := seen[u]; ok {
+					continue
+				}
+				seen[u] = struct{}{}
+				out = append(out, SourceRef{Title: strings.TrimSpace(ann.Title), URL: u})
+			}
+		}
+	}
+	return out
 }
 
 func mapOpenAIStatus(status oresponses.ResponseStatus) string {

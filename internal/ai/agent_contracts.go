@@ -86,6 +86,7 @@ type TurnRequest struct {
 	Budgets          TurnBudgets      `json:"budgets"`
 	ModeFlags        ModeFlags        `json:"mode_flags"`
 	ProviderControls ProviderControls `json:"provider_controls,omitempty"`
+	WebSearchEnabled bool             `json:"web_search_enabled,omitempty"`
 }
 
 type ToolCall struct {
@@ -106,6 +107,11 @@ type ToolResult struct {
 	ContentRef string             `json:"content_ref,omitempty"`
 }
 
+type SourceRef struct {
+	Title string `json:"title,omitempty"`
+	URL   string `json:"url"`
+}
+
 type TurnUsage struct {
 	InputTokens     int64 `json:"input_tokens,omitempty"`
 	OutputTokens    int64 `json:"output_tokens,omitempty"`
@@ -116,6 +122,7 @@ type TurnResult struct {
 	FinishReason    string         `json:"finish_reason"`
 	Text            string         `json:"text,omitempty"`
 	ToolCalls       []ToolCall     `json:"tool_calls,omitempty"`
+	Sources         []SourceRef    `json:"sources,omitempty"`
 	Usage           TurnUsage      `json:"usage,omitempty"`
 	RawProviderDiag map[string]any `json:"raw_provider_diag,omitempty"`
 	StreamEvents    []StreamEvent  `json:"stream_events,omitempty"`

@@ -13,6 +13,11 @@ var builtinDefinitions = map[string]Definition{
 		Mutating:         false,
 		RequiresApproval: false,
 	},
+	"web.search": {
+		Name:             "web.search",
+		Mutating:         false,
+		RequiresApproval: false,
+	},
 	"write_todos": {
 		Name:             "write_todos",
 		Mutating:         false,

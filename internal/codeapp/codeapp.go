@@ -167,6 +167,9 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			return secrets.GetAIProviderAPIKey(providerID)
 		},
+		ResolveWebSearchProviderAPIKey: func(providerID string) (string, bool, error) {
+			return secrets.GetWebSearchProviderAPIKey(providerID)
+		},
 	})
 	if err != nil {
 		_ = reg.Close()

@@ -34,11 +34,16 @@ func (s *SecretsStore) Path() string {
 }
 
 type secretsFile struct {
-	SchemaVersion int        `json:"schema_version"`
-	AI            *aiSecrets `json:"ai,omitempty"`
+	SchemaVersion int               `json:"schema_version"`
+	AI            *aiSecrets        `json:"ai,omitempty"`
+	WebSearch     *webSearchSecrets `json:"web_search,omitempty"`
 }
 
 type aiSecrets struct {
+	ProviderAPIKeys map[string]string `json:"provider_api_keys,omitempty"`
+}
+
+type webSearchSecrets struct {
 	ProviderAPIKeys map[string]string `json:"provider_api_keys,omitempty"`
 }
 
@@ -69,6 +74,33 @@ func (s *SecretsStore) getAIProviderKey(providerID string) (string, bool, error)
 	return v, true, nil
 }
 
+func (s *SecretsStore) getWebSearchProviderKey(providerID string) (string, bool, error) {
+	if s == nil {
+		return "", false, errors.New("nil secrets store")
+	}
+	providerID = strings.TrimSpace(providerID)
+	if providerID == "" {
+		return "", false, errors.New("missing provider id")
+	}
+
+	sf, err := s.loadLocked()
+	if err != nil {
+		return "", false, err
+	}
+	if sf == nil || sf.WebSearch == nil || len(sf.WebSearch.ProviderAPIKeys) == 0 {
+		return "", false, nil
+	}
+	v, ok := sf.WebSearch.ProviderAPIKeys[providerID]
+	if !ok {
+		return "", false, nil
+	}
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "", false, nil
+	}
+	return v, true, nil
+}
+
 func (s *SecretsStore) HasAIProviderAPIKey(providerID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -80,6 +112,19 @@ func (s *SecretsStore) GetAIProviderAPIKey(providerID string) (string, bool, err
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.getAIProviderKey(providerID)
+}
+
+func (s *SecretsStore) HasWebSearchProviderAPIKey(providerID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok, err := s.getWebSearchProviderKey(providerID)
+	return ok, err
+}
+
+func (s *SecretsStore) GetWebSearchProviderAPIKey(providerID string) (string, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.getWebSearchProviderKey(providerID)
 }
 
 func (s *SecretsStore) SetAIProviderAPIKey(providerID string, apiKey string) error {
@@ -111,6 +156,12 @@ func (s *SecretsStore) ClearAIProviderAPIKey(providerID string) error {
 }
 
 type AIProviderAPIKeyPatch struct {
+	ProviderID string
+	// APIKey is the new key to set. If nil, the key is cleared.
+	APIKey *string
+}
+
+type WebSearchProviderAPIKeyPatch struct {
 	ProviderID string
 	// APIKey is the new key to set. If nil, the key is cleared.
 	APIKey *string
@@ -167,6 +218,57 @@ func (s *SecretsStore) ApplyAIProviderAPIKeyPatches(patches []AIProviderAPIKeyPa
 	return s.saveLocked(sf)
 }
 
+func (s *SecretsStore) ApplyWebSearchProviderAPIKeyPatches(patches []WebSearchProviderAPIKeyPatch) error {
+	if s == nil {
+		return errors.New("nil secrets store")
+	}
+	if len(patches) == 0 {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sf, err := s.loadLocked()
+	if err != nil {
+		return err
+	}
+	if sf == nil {
+		sf = &secretsFile{SchemaVersion: 1}
+	}
+	if sf.SchemaVersion == 0 {
+		sf.SchemaVersion = 1
+	}
+	if sf.WebSearch == nil {
+		sf.WebSearch = &webSearchSecrets{}
+	}
+	if sf.WebSearch.ProviderAPIKeys == nil {
+		sf.WebSearch.ProviderAPIKeys = make(map[string]string)
+	}
+
+	for i := range patches {
+		p := patches[i]
+		providerID := strings.TrimSpace(p.ProviderID)
+		if providerID == "" {
+			return errors.New("missing provider id")
+		}
+		if p.APIKey == nil {
+			delete(sf.WebSearch.ProviderAPIKeys, providerID)
+			continue
+		}
+		key := strings.TrimSpace(*p.APIKey)
+		if key == "" {
+			return errors.New("missing api key")
+		}
+		sf.WebSearch.ProviderAPIKeys[providerID] = key
+	}
+
+	if len(sf.WebSearch.ProviderAPIKeys) == 0 {
+		sf.WebSearch.ProviderAPIKeys = nil
+	}
+	return s.saveLocked(sf)
+}
+
 func (s *SecretsStore) GetAIProviderAPIKeySet(providerIDs []string) (map[string]bool, error) {
 	if s == nil {
 		return nil, errors.New("nil secrets store")
@@ -183,6 +285,34 @@ func (s *SecretsStore) GetAIProviderAPIKeySet(providerIDs []string) (map[string]
 	var keys map[string]string
 	if sf != nil && sf.AI != nil {
 		keys = sf.AI.ProviderAPIKeys
+	}
+	for _, id := range providerIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		v := strings.TrimSpace(keys[id])
+		out[id] = v != ""
+	}
+	return out, nil
+}
+
+func (s *SecretsStore) GetWebSearchProviderAPIKeySet(providerIDs []string) (map[string]bool, error) {
+	if s == nil {
+		return nil, errors.New("nil secrets store")
+	}
+	out := make(map[string]bool, len(providerIDs))
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sf, err := s.loadLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	var keys map[string]string
+	if sf != nil && sf.WebSearch != nil {
+		keys = sf.WebSearch.ProviderAPIKeys
 	}
 	for _, id := range providerIDs {
 		id = strings.TrimSpace(id)

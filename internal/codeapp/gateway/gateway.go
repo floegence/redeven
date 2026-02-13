@@ -1045,6 +1045,95 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"provider_api_key_set": set}})
 		return
 
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/web_search_provider_keys/status":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		type reqBody struct {
+			ProviderIDs []string `json:"provider_ids"`
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body reqBody
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		set, err := g.secrets.GetWebSearchProviderAPIKeySet(body.ProviderIDs)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "failed to load web search provider key status"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"provider_api_key_set": set}})
+		return
+
+	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/web_search_provider_keys":
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return
+		}
+		type patch struct {
+			ProviderID string  `json:"provider_id"`
+			APIKey     *string `json:"api_key"`
+		}
+		type reqBody struct {
+			Patches []patch `json:"patches"`
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body reqBody
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if len(body.Patches) == 0 {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing patches"})
+			return
+		}
+
+		converted := make([]settings.WebSearchProviderAPIKeyPatch, 0, len(body.Patches))
+		touched := make([]string, 0, len(body.Patches))
+		for i := range body.Patches {
+			p := body.Patches[i]
+			id := strings.TrimSpace(p.ProviderID)
+			if id == "" {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid provider_id"})
+				return
+			}
+			var key *string
+			if p.APIKey != nil {
+				v := strings.TrimSpace(*p.APIKey)
+				key = &v
+			}
+			converted = append(converted, settings.WebSearchProviderAPIKeyPatch{ProviderID: id, APIKey: key})
+			touched = append(touched, id)
+		}
+
+		if err := g.secrets.ApplyWebSearchProviderAPIKeyPatches(converted); err != nil {
+			g.appendAudit(meta, "web_search_provider_key_update", "failure", map[string]any{"providers": touched}, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+
+		set, err := g.secrets.GetWebSearchProviderAPIKeySet(touched)
+		if err != nil {
+			g.appendAudit(meta, "web_search_provider_key_update", "failure", map[string]any{"providers": touched}, err)
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "failed to load web search provider key status"})
+			return
+		}
+
+		g.appendAudit(meta, "web_search_provider_key_update", "success", map[string]any{"providers": touched}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"provider_api_key_set": set}})
+		return
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/models":
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return

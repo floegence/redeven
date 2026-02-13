@@ -21,6 +21,7 @@ import (
 	aitools "github.com/floegence/redeven-agent/internal/ai/tools"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven-agent/internal/websearch"
 )
 
 type runOptions struct {
@@ -31,8 +32,9 @@ type runOptions struct {
 
 	AIConfig *config.AIConfig
 
-	SessionMeta        *session.Meta
-	ResolveProviderKey func(providerID string) (string, bool, error)
+	SessionMeta         *session.Meta
+	ResolveProviderKey  func(providerID string) (string, bool, error)
+	ResolveWebSearchKey func(providerID string) (string, bool, error)
 
 	RunID        string
 	ChannelID    string
@@ -67,8 +69,9 @@ type run struct {
 	cfg      *config.AIConfig
 	runMode  string
 
-	sessionMeta        *session.Meta
-	resolveProviderKey func(providerID string) (string, bool, error)
+	sessionMeta         *session.Meta
+	resolveProviderKey  func(providerID string) (string, bool, error)
+	resolveWebSearchKey func(providerID string) (string, bool, error)
 
 	id           string
 	channelID    string
@@ -118,6 +121,13 @@ type run struct {
 	finalizationReason string
 	currentModelID     string
 
+	webSearchToolEnabled   bool
+	openAIWebSearchEnabled bool
+
+	collectedWebSources        map[string]SourceRef // url -> source
+	collectedWebSourceOrder    []string
+	sourcesBlockAlreadyEmitted bool
+
 	subagentDepth         int
 	allowSubagentDelegate bool
 	toolAllowlist         map[string]struct{}
@@ -134,32 +144,35 @@ func newRun(opts runOptions) *run {
 	}
 
 	r := &run{
-		log:                 opts.Log,
-		stateDir:            strings.TrimSpace(opts.StateDir),
-		fsRoot:              strings.TrimSpace(opts.FSRoot),
-		shell:               strings.TrimSpace(opts.Shell),
-		cfg:                 opts.AIConfig,
-		sessionMeta:         runMeta,
-		resolveProviderKey:  opts.ResolveProviderKey,
-		id:                  strings.TrimSpace(opts.RunID),
-		channelID:           strings.TrimSpace(opts.ChannelID),
-		endpointID:          strings.TrimSpace(opts.EndpointID),
-		threadID:            strings.TrimSpace(opts.ThreadID),
-		userPublicID:        strings.TrimSpace(opts.UserPublicID),
-		messageID:           strings.TrimSpace(opts.MessageID),
-		uploadsDir:          strings.TrimSpace(opts.UploadsDir),
-		threadsDB:           opts.ThreadsDB,
-		persistOpTimeout:    opts.PersistOpTimeout,
-		onStreamEvent:       opts.OnStreamEvent,
-		w:                   opts.Writer,
-		toolApprovals:       make(map[string]chan bool),
-		toolBlockIndex:      make(map[string]int),
-		maxWallTime:         opts.MaxWallTime,
-		idleTimeout:         opts.IdleTimeout,
-		toolApprovalTO:      opts.ToolApprovalTimeout,
-		doneCh:              make(chan struct{}),
-		lifecycleMinEmitGap: 600 * time.Millisecond,
-		subagentDepth:       opts.SubagentDepth,
+		log:                     opts.Log,
+		stateDir:                strings.TrimSpace(opts.StateDir),
+		fsRoot:                  strings.TrimSpace(opts.FSRoot),
+		shell:                   strings.TrimSpace(opts.Shell),
+		cfg:                     opts.AIConfig,
+		sessionMeta:             runMeta,
+		resolveProviderKey:      opts.ResolveProviderKey,
+		resolveWebSearchKey:     opts.ResolveWebSearchKey,
+		id:                      strings.TrimSpace(opts.RunID),
+		channelID:               strings.TrimSpace(opts.ChannelID),
+		endpointID:              strings.TrimSpace(opts.EndpointID),
+		threadID:                strings.TrimSpace(opts.ThreadID),
+		userPublicID:            strings.TrimSpace(opts.UserPublicID),
+		messageID:               strings.TrimSpace(opts.MessageID),
+		uploadsDir:              strings.TrimSpace(opts.UploadsDir),
+		threadsDB:               opts.ThreadsDB,
+		persistOpTimeout:        opts.PersistOpTimeout,
+		onStreamEvent:           opts.OnStreamEvent,
+		w:                       opts.Writer,
+		toolApprovals:           make(map[string]chan bool),
+		toolBlockIndex:          make(map[string]int),
+		maxWallTime:             opts.MaxWallTime,
+		idleTimeout:             opts.IdleTimeout,
+		toolApprovalTO:          opts.ToolApprovalTimeout,
+		doneCh:                  make(chan struct{}),
+		lifecycleMinEmitGap:     600 * time.Millisecond,
+		collectedWebSources:     make(map[string]SourceRef),
+		collectedWebSourceOrder: make([]string, 0, 8),
+		subagentDepth:           opts.SubagentDepth,
 		allowSubagentDelegate: func() bool {
 			if opts.AllowSubagentDelegate {
 				return true
@@ -1336,6 +1349,17 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	block.Result = result
 	block.Error = ""
 	block.ErrorDetails = nil
+
+	if toolName == "web.search" {
+		if parsed, ok := parseWebSearchResult(result); ok {
+			r.recordWebSearchSources(parsed)
+			if md := formatWebSearchMarkdown(parsed); md != "" {
+				block.Children = []any{map[string]any{"type": "markdown", "content": md}}
+			}
+		}
+		expanded := false
+		block.Collapsed = &expanded
+	}
 	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 	r.persistSetToolBlock(idx, block)
 	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, result, nil, "", toolStartedAt, time.Now())
@@ -1481,6 +1505,213 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 	return string(b), strings.TrimSpace(sb.String()), assistantAt, nil
 }
 
+func parseWebSearchResult(result any) (websearch.SearchResult, bool) {
+	if result == nil {
+		return websearch.SearchResult{}, false
+	}
+	switch v := result.(type) {
+	case websearch.SearchResult:
+		return v, true
+	case *websearch.SearchResult:
+		if v == nil {
+			return websearch.SearchResult{}, false
+		}
+		return *v, true
+	default:
+		// Best-effort: tool outputs are persisted as JSON-compatible values.
+		b, err := json.Marshal(v)
+		if err != nil || len(b) == 0 {
+			return websearch.SearchResult{}, false
+		}
+		var out websearch.SearchResult
+		if err := json.Unmarshal(b, &out); err != nil {
+			return websearch.SearchResult{}, false
+		}
+		if strings.TrimSpace(out.Provider) == "" && strings.TrimSpace(out.Query) == "" && len(out.Results) == 0 && len(out.Sources) == 0 {
+			return websearch.SearchResult{}, false
+		}
+		return out, true
+	}
+}
+
+func escapeMarkdownLinkText(s string) string {
+	if s == "" {
+		return ""
+	}
+	s = strings.ReplaceAll(s, "[", "\\[")
+	s = strings.ReplaceAll(s, "]", "\\]")
+	return s
+}
+
+func formatWebSearchMarkdown(res websearch.SearchResult) string {
+	items := res.Results
+	if len(items) == 0 {
+		items = res.Sources
+	}
+	if len(items) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Top results:\n")
+	shown := 0
+	for _, item := range items {
+		rawURL := strings.TrimSpace(item.URL)
+		if rawURL == "" {
+			continue
+		}
+		title := strings.TrimSpace(item.Title)
+		if title == "" {
+			title = rawURL
+		}
+		title = escapeMarkdownLinkText(title)
+		snippet := strings.TrimSpace(item.Snippet)
+		snippet = strings.ReplaceAll(snippet, "\n", " ")
+		snippet = strings.ReplaceAll(snippet, "\r", " ")
+		snippet = strings.TrimSpace(snippet)
+
+		shown++
+		if snippet != "" {
+			sb.WriteString(fmt.Sprintf("%d. [%s](%s) - %s\n", shown, title, rawURL, snippet))
+		} else {
+			sb.WriteString(fmt.Sprintf("%d. [%s](%s)\n", shown, title, rawURL))
+		}
+		if shown >= 8 {
+			break
+		}
+	}
+	return strings.TrimSpace(sb.String())
+}
+
+func formatSourcesMarkdown(sources []SourceRef) string {
+	if len(sources) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("Sources:\n")
+	shown := 0
+	for _, src := range sources {
+		url := strings.TrimSpace(src.URL)
+		if url == "" {
+			continue
+		}
+		title := strings.TrimSpace(src.Title)
+		if title == "" {
+			title = url
+		}
+		title = escapeMarkdownLinkText(title)
+		shown++
+		sb.WriteString(fmt.Sprintf("%d. [%s](%s)\n", shown, title, url))
+		if shown >= 20 {
+			break
+		}
+	}
+	return strings.TrimSpace(sb.String())
+}
+
+func (r *run) addWebSource(title string, rawURL string) {
+	if r == nil {
+		return
+	}
+	url := strings.TrimSpace(rawURL)
+	if url == "" {
+		return
+	}
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = url
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.collectedWebSources == nil {
+		r.collectedWebSources = make(map[string]SourceRef)
+	}
+	if existing, ok := r.collectedWebSources[url]; ok {
+		if existing.Title == "" || existing.Title == existing.URL {
+			if title != url {
+				existing.Title = title
+				r.collectedWebSources[url] = existing
+			}
+		}
+		return
+	}
+	r.collectedWebSources[url] = SourceRef{Title: title, URL: url}
+	r.collectedWebSourceOrder = append(r.collectedWebSourceOrder, url)
+}
+
+func (r *run) recordWebSearchSources(res websearch.SearchResult) {
+	if r == nil {
+		return
+	}
+	// Prefer explicit sources, fall back to results.
+	items := res.Sources
+	if len(items) == 0 {
+		items = res.Results
+	}
+	for _, item := range items {
+		r.addWebSource(item.Title, item.URL)
+	}
+}
+
+func (r *run) emitSourcesToolBlock(source string) {
+	if r == nil {
+		return
+	}
+	source = strings.TrimSpace(source)
+
+	var sources []SourceRef
+	var idx int
+	r.mu.Lock()
+	if r.sourcesBlockAlreadyEmitted {
+		r.mu.Unlock()
+		return
+	}
+	if len(r.collectedWebSourceOrder) == 0 || len(r.collectedWebSources) == 0 {
+		r.mu.Unlock()
+		return
+	}
+	sources = make([]SourceRef, 0, len(r.collectedWebSourceOrder))
+	for _, url := range r.collectedWebSourceOrder {
+		if src, ok := r.collectedWebSources[url]; ok {
+			sources = append(sources, src)
+		}
+	}
+	if len(sources) == 0 {
+		r.mu.Unlock()
+		return
+	}
+	r.sourcesBlockAlreadyEmitted = true
+	idx = r.nextBlockIndex
+	r.nextBlockIndex++
+	r.needNewTextBlock = true
+	r.mu.Unlock()
+
+	toolID, err := newToolID()
+	if err != nil {
+		toolID = "tool_sources"
+	}
+
+	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "tool-call"})
+	expanded := false
+	block := ToolCallBlock{
+		Type:      "tool-call",
+		ToolName:  "sources",
+		ToolID:    toolID,
+		Args:      map[string]any{"source": source},
+		Status:    ToolCallStatusSuccess,
+		Result:    map[string]any{"sources": sources},
+		Children:  nil,
+		Collapsed: &expanded,
+	}
+	if md := formatSourcesMarkdown(sources); md != "" {
+		block.Children = []any{map[string]any{"type": "markdown", "content": md}}
+	}
+	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+	r.persistSetToolBlock(idx, block)
+}
+
 func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, toolName string, args map[string]any) (any, error) {
 	switch toolName {
 	case "apply_patch":
@@ -1519,6 +1750,64 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("invalid cwd")
 		}
 		return r.toolTerminalExec(ctx, p.Command, cwd, p.TimeoutMS)
+
+	case "web.search":
+		if meta == nil || !meta.CanExecute {
+			return nil, errors.New("execute permission denied")
+		}
+		var p struct {
+			Query     string `json:"query"`
+			Provider  string `json:"provider"`
+			Count     int    `json:"count"`
+			TimeoutMS int64  `json:"timeout_ms"`
+		}
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		query := strings.TrimSpace(p.Query)
+		if query == "" {
+			return nil, errors.New("missing query")
+		}
+		provider := strings.TrimSpace(strings.ToLower(p.Provider))
+		if provider == "" {
+			provider = websearch.ProviderBrave
+		}
+		timeoutMS := p.TimeoutMS
+		if timeoutMS <= 0 {
+			timeoutMS = 15_000
+		}
+		if timeoutMS > 60_000 {
+			timeoutMS = 60_000
+		}
+
+		key := ""
+		ok := false
+		if r.resolveWebSearchKey != nil {
+			var err error
+			key, ok, err = r.resolveWebSearchKey(provider)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if !ok || strings.TrimSpace(key) == "" {
+			// Env var overrides for quick local setup.
+			if provider == websearch.ProviderBrave {
+				key = strings.TrimSpace(os.Getenv("REDEVEN_BRAVE_API_KEY"))
+				if key == "" {
+					key = strings.TrimSpace(os.Getenv("BRAVE_API_KEY"))
+				}
+				ok = strings.TrimSpace(key) != ""
+			}
+		}
+		if !ok || strings.TrimSpace(key) == "" {
+			return nil, fmt.Errorf("missing web search api key for provider %q", provider)
+		}
+
+		ctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
+		defer cancel()
+
+		return websearch.Search(ctx, provider, key, websearch.SearchRequest{Query: query, Count: p.Count})
 
 	case "write_todos":
 		var p struct {

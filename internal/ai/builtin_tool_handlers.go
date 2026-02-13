@@ -406,6 +406,17 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:         100,
 		},
 		{
+			Name:             "web.search",
+			Description:      "Search the web and return sources (URLs) with titles/snippets.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "provider": map[string]any{"type": "string"}, "count": map[string]any{"type": "integer", "minimum": 1, "maximum": 10}, "timeout_ms": map[string]any{"type": "integer", "minimum": 1, "maximum": 60000}}, "required": []string{"query"}, "additionalProperties": false}),
+			ParallelSafe:     true,
+			Mutating:         false,
+			RequiresApproval: false,
+			Source:           "builtin",
+			Namespace:        "builtin.web",
+			Priority:         100,
+		},
+		{
 			Name:             "write_todos",
 			Description:      "Replace the current thread todo list snapshot. Keep at most one in_progress item.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"todos": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "status": map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "cancelled"}}, "note": map[string]any{"type": "string"}}, "required": []string{"content", "status"}, "additionalProperties": false}}, "expected_version": map[string]any{"type": "integer", "minimum": 0}, "explanation": map[string]any{"type": "string", "maxLength": 500}}, "required": []string{"todos"}, "additionalProperties": false}),
@@ -495,6 +506,9 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run) error {
 		return fmt.Errorf("nil tool registry")
 	}
 	for _, def := range builtInToolDefinitions() {
+		if def.Name == "web.search" && (r == nil || !r.webSearchToolEnabled) {
+			continue
+		}
 		if !r.allowSubagentDelegate {
 			switch def.Name {
 			case "delegate_task", "send_subagent_input", "wait_subagents", "close_subagent":

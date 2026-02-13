@@ -125,6 +125,30 @@ func TestAIConfig_EffectiveMode_DefaultsAct(t *testing.T) {
 func boolPtr(v bool) *bool { return &v }
 func intPtr(v int) *int    { return &v }
 
+func TestAIConfig_EffectiveWebSearchProvider_DefaultsAuto(t *testing.T) {
+	t.Parallel()
+
+	nilCfg := (*AIConfig)(nil)
+	if got := nilCfg.EffectiveWebSearchProvider(); got != "auto" {
+		t.Fatalf("EffectiveWebSearchProvider nil=%q, want %q", got, "auto")
+	}
+
+	cfg := &AIConfig{}
+	if got := cfg.EffectiveWebSearchProvider(); got != "auto" {
+		t.Fatalf("EffectiveWebSearchProvider empty=%q, want %q", got, "auto")
+	}
+
+	cfg.WebSearchProvider = "brave"
+	if got := cfg.EffectiveWebSearchProvider(); got != "brave" {
+		t.Fatalf("EffectiveWebSearchProvider brave=%q, want %q", got, "brave")
+	}
+
+	cfg.WebSearchProvider = "invalid"
+	if got := cfg.EffectiveWebSearchProvider(); got != "auto" {
+		t.Fatalf("EffectiveWebSearchProvider invalid=%q, want %q", got, "auto")
+	}
+}
+
 func TestAIConfig_EffectiveToolRecoveryDefaults(t *testing.T) {
 	t.Parallel()
 

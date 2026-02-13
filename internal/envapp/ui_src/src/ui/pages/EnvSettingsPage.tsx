@@ -48,6 +48,7 @@ type AIExecutionPolicy = Readonly<{
 type AIConfig = Readonly<{
   providers: AIProvider[];
   mode?: 'act' | 'plan';
+  web_search_provider?: 'auto' | 'openai' | 'brave' | 'disabled';
   tool_recovery_enabled?: boolean;
   tool_recovery_max_steps?: number;
   tool_recovery_allow_path_rewrite?: boolean;
@@ -138,6 +139,7 @@ function defaultPermissionPolicy(): PermissionPolicy {
 
 function defaultAIConfig(): AIConfig {
   return {
+    web_search_provider: 'auto',
     execution_policy: {
       require_user_approval: false,
       enforce_plan_mode_guard: false,
@@ -659,11 +661,17 @@ export function EnvSettingsPage() {
   const [aiRequireUserApproval, setAiRequireUserApproval] = createSignal(false);
   const [aiEnforcePlanModeGuard, setAiEnforcePlanModeGuard] = createSignal(false);
   const [aiBlockDangerousCommands, setAiBlockDangerousCommands] = createSignal(false);
+  const [aiWebSearchProvider, setAiWebSearchProvider] = createSignal<'auto' | 'openai' | 'brave' | 'disabled'>('auto');
 
   // AI provider keys (stored locally in secrets.json; never returned in plaintext).
   const [aiProviderKeySet, setAiProviderKeySet] = createSignal<Record<string, boolean>>({});
   const [aiProviderKeyDraft, setAiProviderKeyDraft] = createSignal<Record<string, string>>({});
   const [aiProviderKeySaving, setAiProviderKeySaving] = createSignal<Record<string, boolean>>({});
+
+  // Web search provider keys (stored locally in secrets.json; never returned in plaintext).
+  const [webSearchKeySet, setWebSearchKeySet] = createSignal<Record<string, boolean>>({});
+  const [webSearchKeyDraft, setWebSearchKeyDraft] = createSignal<Record<string, string>>({});
+  const [webSearchKeySaving, setWebSearchKeySaving] = createSignal<Record<string, boolean>>({});
 
   // JSON editor values
   const [runtimeJSON, setRuntimeJSON] = createSignal('');
@@ -765,7 +773,7 @@ export function EnvSettingsPage() {
     });
 
     const preserved = aiPreservedFields();
-    const out: any = { providers };
+    const out: any = { providers, web_search_provider: aiWebSearchProvider() };
     if (preserved.mode === 'act' || preserved.mode === 'plan') out.mode = preserved.mode;
     if (typeof preserved.tool_recovery_enabled === 'boolean') out.tool_recovery_enabled = preserved.tool_recovery_enabled;
     if (typeof preserved.tool_recovery_max_steps === 'number' && Number.isFinite(preserved.tool_recovery_max_steps)) {
@@ -791,6 +799,16 @@ export function EnvSettingsPage() {
   const validateAIValue = (cfg: AIConfig) => {
     const mode = String((cfg as any).mode ?? '').trim();
     if (mode && mode !== 'act' && mode !== 'plan') throw new Error(`Invalid AI mode: ${mode}`);
+    const webSearchProvider = (cfg as any).web_search_provider;
+    if (webSearchProvider !== undefined) {
+      if (typeof webSearchProvider !== 'string') throw new Error('web_search_provider must be a string.');
+      const normalized = String(webSearchProvider ?? '')
+        .trim()
+        .toLowerCase();
+      if (normalized && normalized !== 'auto' && normalized !== 'openai' && normalized !== 'brave' && normalized !== 'disabled') {
+        throw new Error(`Invalid web_search_provider: ${webSearchProvider}`);
+      }
+    }
     const trEnabled = (cfg as any).tool_recovery_enabled;
     if (trEnabled !== undefined && typeof trEnabled !== 'boolean') {
       throw new Error('tool_recovery_enabled must be a boolean.');
@@ -945,6 +963,16 @@ export function EnvSettingsPage() {
     return out;
   };
 
+  const normalizeWebSearchProvider = (raw: unknown): 'auto' | 'openai' | 'brave' | 'disabled' => {
+    const v = String(raw ?? '')
+      .trim()
+      .toLowerCase();
+    if (v === 'openai' || v === 'brave' || v === 'disabled') {
+      return v as 'openai' | 'brave' | 'disabled';
+    }
+    return 'auto';
+  };
+
   const refreshAIProviderKeyStatus = async (providerIDs: string[]) => {
     const ids = Array.from(
       new Set(
@@ -1024,6 +1052,85 @@ export function EnvSettingsPage() {
     void updateAIProviderKey(id, null);
   };
 
+  const refreshWebSearchKeyStatus = async (providerIDs: string[]) => {
+    const ids = Array.from(
+      new Set(
+        (Array.isArray(providerIDs) ? providerIDs : [])
+          .map((x) => String(x ?? '').trim())
+          .filter((x) => !!x),
+      ),
+    );
+    if (ids.length === 0) {
+      setWebSearchKeySet({});
+      return;
+    }
+    try {
+      const resp = await fetchGatewayJSON<{ provider_api_key_set: Record<string, boolean> }>('/_redeven_proxy/api/ai/web_search_provider_keys/status', {
+        method: 'POST',
+        body: JSON.stringify({ provider_ids: ids }),
+      });
+      setWebSearchKeySet(resp?.provider_api_key_set ?? {});
+    } catch (e) {
+      // Best-effort only.
+    }
+  };
+
+  const updateWebSearchKey = async (providerID: string, apiKey: string | null) => {
+    const id = String(providerID ?? '').trim();
+    if (!id) {
+      notify.error('Invalid provider', 'Provider id is required.');
+      return;
+    }
+    if (!canAdmin()) {
+      notify.error('Permission denied', 'Admin permission required.');
+      return;
+    }
+
+    setWebSearchKeySaving((prev) => ({ ...prev, [id]: true }));
+    try {
+      const body = { patches: [{ provider_id: id, api_key: apiKey }] };
+      const resp = await fetchGatewayJSON<{ provider_api_key_set: Record<string, boolean> }>('/_redeven_proxy/api/ai/web_search_provider_keys', {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      });
+
+      const next = resp?.provider_api_key_set ?? {};
+      setWebSearchKeySet((prev) => ({ ...prev, ...next }));
+      setWebSearchKeyDraft((prev) => ({ ...prev, [id]: '' }));
+
+      if (apiKey) notify.success('Saved', `API key saved for web search provider "${id}".`);
+      else notify.success('Cleared', `API key cleared for web search provider "${id}".`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Save failed', msg || 'Request failed.');
+    } finally {
+      setWebSearchKeySaving((prev) => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const saveWebSearchKey = (providerID: string) => {
+    const id = String(providerID ?? '').trim();
+    if (!id) {
+      notify.error('Invalid provider', 'Provider id is required.');
+      return;
+    }
+    const key = String(webSearchKeyDraft()?.[id] ?? '').trim();
+    if (!key) {
+      notify.error('Missing API key', 'Please paste an API key first.');
+      return;
+    }
+    void updateWebSearchKey(id, key);
+  };
+
+  const clearWebSearchKey = (providerID: string) => {
+    const id = String(providerID ?? '').trim();
+    if (!id) {
+      notify.error('Invalid provider', 'Provider id is required.');
+      return;
+    }
+    void updateWebSearchKey(id, null);
+  };
+
   // Reset local state when settings are loaded (but do not overwrite user edits).
   createEffect(() => {
     const s = settings();
@@ -1072,6 +1179,7 @@ export function EnvSettingsPage() {
       setAiEnforcePlanModeGuard(!!executionPolicy.enforce_plan_mode_guard);
       setAiBlockDangerousCommands(!!executionPolicy.block_dangerous_commands);
       setAiPreservedFields(readAIPreservedFields(a));
+      setAiWebSearchProvider(normalizeWebSearchProvider((a as any).web_search_provider));
       const rows: AIProviderRow[] = (a.providers ?? []).map((p) => ({
         id: String(p.id ?? ''),
         name: String(p.name ?? ''),
@@ -1102,6 +1210,7 @@ export function EnvSettingsPage() {
       const keySet = s.ai_secrets?.provider_api_key_set;
       if (keySet && typeof keySet === 'object') setAiProviderKeySet(keySet);
       void refreshAIProviderKeyStatus((a.providers ?? []).map((p) => String(p.id ?? '')));
+      void refreshWebSearchKeyStatus(['brave']);
     }
   });
 
@@ -1273,7 +1382,9 @@ export function EnvSettingsPage() {
       setAiEnforcePlanModeGuard(!!executionPolicy.enforce_plan_mode_guard);
       setAiBlockDangerousCommands(!!executionPolicy.block_dangerous_commands);
       setAiPreservedFields(readAIPreservedFields(v));
+      setAiWebSearchProvider(normalizeWebSearchProvider((v as any).web_search_provider));
       void refreshAIProviderKeyStatus(providersRaw.map((p) => String(p?.id ?? '')));
+      void refreshWebSearchKeyStatus(['brave']);
       setAiView('ui');
     } catch (e) {
       setAiError(e instanceof Error ? e.message : String(e));
@@ -1463,6 +1574,7 @@ export function EnvSettingsPage() {
     setAiEnforcePlanModeGuard(!!executionPolicy.enforce_plan_mode_guard);
     setAiBlockDangerousCommands(!!executionPolicy.block_dangerous_commands);
     setAiPreservedFields(readAIPreservedFields(d));
+    setAiWebSearchProvider(normalizeWebSearchProvider((d as any).web_search_provider));
     const rows: AIProviderRow[] = (d.providers ?? []).map((p) => ({
       id: String(p.id ?? ''),
       name: String(p.name ?? ''),
@@ -1477,6 +1589,7 @@ export function EnvSettingsPage() {
     setAiProviders(normalizeAIProviders(rows));
     setAiDirty(true);
     void refreshAIProviderKeyStatus(d.providers.map((p) => String(p.id ?? '')));
+    void refreshWebSearchKeyStatus(['brave']);
     if (aiView() === 'json') setAiJSON(JSON.stringify(d, null, 2));
   };
 
@@ -2245,6 +2358,93 @@ export function EnvSettingsPage() {
                       </div>
                     </div>
                   </Show>
+                </div>
+
+                {/* Web search */}
+                <div class="space-y-3">
+                  <div>
+                    <div class="text-sm font-medium text-foreground">Web search</div>
+                    <p class="text-xs text-muted-foreground mt-0.5">
+                      Configure which web search backend is available to the runtime and how sources/citations are collected.
+                    </p>
+                  </div>
+                  <div class="space-y-4 p-4 rounded-lg border border-border bg-muted/20">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <FieldLabel>provider</FieldLabel>
+                        <Select
+                          value={aiWebSearchProvider()}
+                          onChange={(v) => {
+                            setAiWebSearchProvider(normalizeWebSearchProvider(v));
+                            setAiDirty(true);
+                          }}
+                          disabled={!canInteract()}
+                          options={[
+                            { value: 'auto', label: 'auto (recommended)' },
+                            { value: 'openai', label: 'openai' },
+                            { value: 'brave', label: 'brave' },
+                            { value: 'disabled', label: 'disabled' },
+                          ]}
+                          class="w-full"
+                        />
+                        <p class="text-xs text-muted-foreground mt-1">
+                          Auto prefers OpenAI built-in web search when using the official OpenAI base_url; otherwise it falls back to Brave.
+                        </p>
+                      </div>
+                    </div>
+
+                    <Show when={aiWebSearchProvider() === 'auto' || aiWebSearchProvider() === 'brave'}>
+                      <div class="space-y-2">
+                        <FieldLabel hint="stored locally, never shown again">brave_api_key</FieldLabel>
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <div
+                            class={
+                              'text-xs px-2 py-1 rounded-md border ' +
+                              (webSearchKeySet()?.brave
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                                : 'bg-muted/40 border-border text-muted-foreground')
+                            }
+                          >
+                            {webSearchKeySet()?.brave ? 'Key set' : 'Key not set'}
+                          </div>
+                          <Input
+                            type="password"
+                            value={webSearchKeyDraft()?.brave ?? ''}
+                            onInput={(e) => {
+                              const v = e.currentTarget.value;
+                              setWebSearchKeyDraft((prev) => ({ ...prev, brave: v }));
+                            }}
+                            placeholder="Paste Brave API key"
+                            size="sm"
+                            class="w-full"
+                            disabled={!canInteract() || !canAdmin()}
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => saveWebSearchKey('brave')}
+                            loading={!!webSearchKeySaving()?.brave}
+                            disabled={!canInteract() || !canAdmin()}
+                          >
+                            Save key
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            class="text-muted-foreground hover:text-destructive"
+                            onClick={() => clearWebSearchKey('brave')}
+                            disabled={!canInteract() || !canAdmin()}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                        <p class="text-xs text-muted-foreground">
+                          Keys are saved in a separate local secrets file and are never written to config.json. You may also set{' '}
+                          <span class="font-mono">REDEVEN_BRAVE_API_KEY</span>. The same key is used by <span class="font-mono">redeven search</span>.
+                        </p>
+                      </div>
+                    </Show>
+                  </div>
                 </div>
 
                 {/* Providers */}
