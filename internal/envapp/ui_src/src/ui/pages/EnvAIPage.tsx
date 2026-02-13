@@ -2,6 +2,8 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Comp
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { Motion } from 'solid-motionone';
 import {
+  CheckCircle,
+  ChevronUp,
   Code,
   FileText,
   Pencil,
@@ -213,7 +215,7 @@ function ChatWorkingIndicator(props: { phaseLabel?: string }) {
 
   return (
     <div class="px-4 py-1.5 shrink-0">
-      <div class="inline-flex items-center gap-2.5 px-3 py-2 rounded-xl bg-primary/[0.04] border border-primary/10">
+      <div class="inline-flex items-center gap-2.5 px-3 py-2 rounded-xl bg-primary/[0.04] border border-primary/10 shadow-sm">
         {/* Neural SVG animation */}
         <svg class="w-7 h-7 shrink-0" viewBox="0 0 40 40" fill="none">
           <defs>
@@ -307,7 +309,7 @@ function ExecutionModeToggle(props: {
   onChange: (mode: ExecutionMode) => void;
 }) {
   const btnClass = (active: boolean) => {
-    const base = 'px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150';
+    const base = 'px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150 cursor-pointer';
     if (active) return `${base} bg-background text-foreground shadow-sm border border-border`;
     return `${base} text-muted-foreground hover:text-foreground hover:bg-muted/50`;
   };
@@ -330,6 +332,108 @@ function ExecutionModeToggle(props: {
       >
         Act
       </button>
+    </div>
+  );
+}
+
+// 紧凑型任务摘要 — 折叠态为一个小芯片，展开态为一个绝对定位面板
+function CompactTasksSummary(props: {
+  todos: ThreadTodoItem[];
+  unresolvedCount: number;
+  todosLoading: boolean;
+  todosError: string;
+  todosView: ThreadTodosView | null;
+  todoUpdatedLabel: string;
+}) {
+  const [expanded, setExpanded] = createSignal(false);
+  let containerRef: HTMLDivElement | undefined;
+
+  // 点击外部关闭
+  createEffect(() => {
+    if (!expanded()) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef && !containerRef.contains(e.target as Node)) {
+        setExpanded(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    onCleanup(() => document.removeEventListener('mousedown', handler));
+  });
+
+  return (
+    <div ref={containerRef} class="relative">
+      {/* 折叠态芯片 */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        class={cn(
+          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer',
+          'border transition-all duration-150',
+          expanded()
+            ? 'bg-primary/10 text-primary border-primary/30'
+            : 'bg-muted/50 text-muted-foreground border-border/60 hover:bg-muted hover:text-foreground',
+        )}
+      >
+        <CheckCircle class="w-3.5 h-3.5" />
+        <span>{props.unresolvedCount} open</span>
+        <ChevronUp class={cn('w-3 h-3 transition-transform duration-200', expanded() ? '' : 'rotate-180')} />
+      </button>
+
+      {/* 展开态面板 */}
+      <Show when={expanded()}>
+        <div class={cn(
+          'absolute bottom-full left-0 mb-1.5 z-50',
+          'w-80 max-sm:w-[calc(100vw-2rem)]',
+          'rounded-xl border border-border/70 bg-card shadow-lg shadow-black/10',
+          'backdrop-blur-md',
+        )}>
+          <div class="px-3 py-2.5">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <div class="text-xs font-medium text-foreground">Tasks</div>
+              <div class="text-[11px] text-muted-foreground">
+                {props.unresolvedCount} open
+              </div>
+            </div>
+
+            <Show when={!props.todosLoading || props.todos.length > 0} fallback={
+              <div class="text-[11px] text-muted-foreground py-2">Loading tasks...</div>
+            }>
+              <Show when={!props.todosError} fallback={
+                <div class="text-[11px] text-error py-2">{props.todosError}</div>
+              }>
+                <Show when={props.todos.length > 0} fallback={
+                  <div class="text-[11px] text-muted-foreground py-2">No tasks yet.</div>
+                }>
+                  <div class="space-y-1.5 max-h-52 overflow-auto pr-1">
+                    <For each={props.todos}>
+                      {(item) => (
+                        <div class="rounded-md border border-border/60 bg-background/70 px-2 py-1.5">
+                          <div class="flex items-center gap-2">
+                            <span class={cn('inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium shrink-0', todoStatusBadgeClass(item.status))}>
+                              {todoStatusLabel(item.status)}
+                            </span>
+                            <span class="text-xs text-foreground leading-relaxed break-words">{item.content}</span>
+                          </div>
+                          <Show when={item.note}>
+                            <div class="mt-1 text-[11px] text-muted-foreground leading-relaxed break-words">
+                              {item.note}
+                            </div>
+                          </Show>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+
+                <div class="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>Version {props.todosView?.version ?? 0}</span>
+                  <span>{props.todoUpdatedLabel ? `Updated ${props.todoUpdatedLabel}` : ''}</span>
+                </div>
+              </Show>
+            </Show>
+          </div>
+        </div>
+      </Show>
     </div>
   );
 }
@@ -415,9 +519,9 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
               transition={{ duration: 0.4, delay: 0.15 + i() * 0.08, easing: 'ease-out' }}
               class={cn(
                 'group flex items-start gap-3 p-4 rounded-xl border border-border/50',
-                'bg-card/50 hover:bg-card hover:border-primary/30 hover:shadow-md hover:shadow-primary/5',
+                'bg-card/40 backdrop-blur-sm hover:bg-card hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5',
                 'text-left transition-all duration-200 active:scale-[0.98]',
-                'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-card/50 disabled:hover:border-border/50',
+                'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-card/40 disabled:hover:border-border/50',
               )}
             >
               <div class="shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 group-hover:scale-110 transition-all duration-200">
@@ -1231,7 +1335,7 @@ export function EnvAIPage() {
           {/* Chat area — sidebar is managed by Shell */}
           <div class="flex-1 min-w-0 flex flex-col h-full">
             {/* Header */}
-            <div class="chat-header border-b border-border bg-background/95 backdrop-blur-sm max-sm:flex-col max-sm:items-stretch max-sm:gap-2">
+            <div class="chat-header border-b border-border/80 bg-background/95 backdrop-blur-md max-sm:flex-col max-sm:items-stretch max-sm:gap-2">
               <div class="chat-header-title flex items-center gap-2 min-w-0 w-full sm:w-auto">
                 <div class="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                   <MessageSquare class="w-4 h-4 text-primary" />
@@ -1317,7 +1421,7 @@ export function EnvAIPage() {
 
             {/* Error banner: Settings unavailable */}
             <Show when={ai.settings.error}>
-              <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-lg bg-error/5 border border-error/20">
+              <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-xl shadow-sm bg-error/5 border border-error/20">
                 <div class="flex items-center gap-2 font-medium text-error">
                   <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10" />
@@ -1334,7 +1438,7 @@ export function EnvAIPage() {
 
             {/* Error banner: Models unavailable */}
             <Show when={ai.models.error && ai.aiEnabled()}>
-              <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-lg bg-error/5 border border-error/20">
+              <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-xl shadow-sm bg-error/5 border border-error/20">
                 <div class="flex items-center gap-2 font-medium text-error">
                   <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10" />
@@ -1346,54 +1450,6 @@ export function EnvAIPage() {
                 <div class="mt-1 text-muted-foreground pl-6">
                   {ai.models.error instanceof Error ? ai.models.error.message : String(ai.models.error)}
                 </div>
-              </div>
-            </Show>
-
-            <Show when={ai.activeThreadId()}>
-              <div class="mx-3 mt-3 px-3 py-2.5 rounded-lg border border-border/70 bg-card/60">
-                <div class="flex items-center justify-between gap-2">
-                  <div class="text-xs font-medium text-foreground">Tasks</div>
-                  <div class="text-[11px] text-muted-foreground">
-                    {unresolvedTodoCount()} open
-                  </div>
-                </div>
-
-                <Show when={!todosLoading() || activeThreadTodos().length > 0} fallback={
-                  <div class="mt-2 text-[11px] text-muted-foreground">Loading tasks...</div>
-                }>
-                  <Show when={!todosError()} fallback={
-                    <div class="mt-2 text-[11px] text-error">{todosError()}</div>
-                  }>
-                    <Show when={activeThreadTodos().length > 0} fallback={
-                      <div class="mt-2 text-[11px] text-muted-foreground">No tasks yet. The agent can update tasks with `write_todos`.</div>
-                    }>
-                      <div class="mt-2 space-y-1.5 max-h-44 overflow-auto pr-1">
-                        <For each={activeThreadTodos()}>
-                          {(item) => (
-                            <div class="rounded-md border border-border/60 bg-background/70 px-2 py-1.5">
-                              <div class="flex items-center gap-2">
-                                <span class={cn('inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium', todoStatusBadgeClass(item.status))}>
-                                  {todoStatusLabel(item.status)}
-                                </span>
-                                <span class="text-xs text-foreground leading-relaxed break-words">{item.content}</span>
-                              </div>
-                              <Show when={item.note}>
-                                <div class="mt-1 text-[11px] text-muted-foreground leading-relaxed break-words">
-                                  {item.note}
-                                </div>
-                              </Show>
-                            </div>
-                          )}
-                        </For>
-                      </div>
-                    </Show>
-
-                    <div class="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
-                      <span>Version {threadTodos()?.version ?? 0}</span>
-                      <span>{todoUpdatedLabel() ? `Updated ${todoUpdatedLabel()}` : ''}</span>
-                    </div>
-                  </Show>
-                </Show>
               </div>
             </Show>
 
@@ -1411,13 +1467,27 @@ export function EnvAIPage() {
               <ChatWorkingIndicator phaseLabel={runPhaseLabel()} />
             </div>
 
-            <div class="px-4 pt-0.5 pb-2 flex items-center justify-between gap-3">
-              <span class="text-[11px] text-muted-foreground">Execution mode</span>
-              <ExecutionModeToggle
-                value={executionMode()}
-                disabled={activeThreadRunning()}
-                onChange={(mode) => updateExecutionMode(mode)}
-              />
+            {/* Toolbar: Tasks chip + Execution mode toggle */}
+            <div class="relative px-3 pt-1 pb-1.5 chat-toolbar-separator">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <Show when={ai.activeThreadId() && activeThreadTodos().length > 0} fallback={
+                  <span class="text-[11px] text-muted-foreground">Execution mode</span>
+                }>
+                  <CompactTasksSummary
+                    todos={activeThreadTodos()}
+                    unresolvedCount={unresolvedTodoCount()}
+                    todosLoading={todosLoading()}
+                    todosError={todosError()}
+                    todosView={threadTodos()}
+                    todoUpdatedLabel={todoUpdatedLabel()}
+                  />
+                </Show>
+                <ExecutionModeToggle
+                  value={executionMode()}
+                  disabled={activeThreadRunning()}
+                  onChange={(mode) => updateExecutionMode(mode)}
+                />
+              </div>
             </div>
 
             {/* Input area */}

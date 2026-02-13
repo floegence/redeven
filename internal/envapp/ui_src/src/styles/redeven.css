@@ -42,3 +42,8 @@
   border-radius: 0 !important;
   object-fit: contain !important;
 }
+
+/* Subtle top-edge fade above the input toolbar to separate it from the message list. */
+.chat-toolbar-separator {
+  box-shadow: 0 -1px 3px 0 rgba(0, 0, 0, 0.04);
+}
