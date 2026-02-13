@@ -630,3 +630,218 @@ func TestIntegration_NativeSDK_OpenAI_LengthFinishReason_ForcesRecovery(t *testi
 		t.Fatalf("expected at least 3 provider turns, got %d", mock.snapshotStep())
 	}
 }
+
+type openAINoToolTextOnlyMock struct {
+	mu sync.Mutex
+
+	step       int
+	replyToken string
+}
+
+func (m *openAINoToolTextOnlyMock) handle(w http.ResponseWriter, r *http.Request) {
+	if r == nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if strings.TrimSpace(r.Header.Get("Authorization")) != "Bearer sk-test" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/responses") {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	body, _ := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	var req map[string]any
+	_ = json.Unmarshal(body, &req)
+	if isIntentClassifierRequest(req) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		f, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":  "response.output_text.delta",
+			"delta": classifyIntentResponseToken(req),
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_no_tool_intent",
+				"model":  "gpt-5-mini",
+				"status": "completed",
+			},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
+		return
+	}
+
+	m.mu.Lock()
+	m.step++
+	step := m.step
+	token := m.replyToken
+	m.mu.Unlock()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	f, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	reply := token
+	if step > 1 {
+		reply = token + "_FOLLOWUP"
+	}
+	writeOpenAISSEJSON(w, f, map[string]any{
+		"type":  "response.output_text.delta",
+		"delta": reply,
+	})
+	writeOpenAISSEJSON(w, f, map[string]any{
+		"type": "response.completed",
+		"response": map[string]any{
+			"id":            fmt.Sprintf("resp_no_tool_%d", step),
+			"model":         "gpt-5-mini",
+			"status":        "completed",
+			"finish_reason": "stop",
+			"output": []any{
+				map[string]any{
+					"type": "output_text",
+					"text": reply,
+				},
+			},
+			"usage": map[string]any{
+				"input_tokens":  1,
+				"output_tokens": 1,
+			},
+		},
+	})
+	_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	f.Flush()
+}
+
+func TestIntegration_NativeSDK_OpenAI_MissingExplicitCompletionDoesNotPolluteAssistantText(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	stateDir := t.TempDir()
+	fsRoot := t.TempDir()
+
+	mock := &openAINoToolTextOnlyMock{
+		replyToken: "PRELIM_ANALYSIS_ONLY",
+	}
+	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
+	t.Cleanup(srv.Close)
+
+	baseURL := strings.TrimSuffix(srv.URL, "/") + "/v1"
+	cfg := &config.AIConfig{
+		Providers: []config.AIProvider{
+			{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: baseURL,
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+			},
+		},
+	}
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_test_missing_explicit_completion",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc, err := NewService(Options{
+		Logger:              logger,
+		StateDir:            stateDir,
+		FSRoot:              fsRoot,
+		Shell:               "bash",
+		Config:              cfg,
+		RunMaxWallTime:      30 * time.Second,
+		RunIdleTimeout:      10 * time.Second,
+		ToolApprovalTimeout: 5 * time.Second,
+		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
+			if strings.TrimSpace(providerID) != "openai" {
+				return "", false, nil
+			}
+			return "sk-test", true, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	th, err := svc.CreateThread(ctx, &meta, "hello", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_test_native_openai_missing_explicit_completion_1"
+	rr := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "analyze repository architecture"},
+		Options:  RunOptions{MaxSteps: 4, MaxNoToolRounds: 1},
+	}, rr); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	body := rr.Body.String()
+	if !strings.Contains(body, mock.replyToken) {
+		t.Fatalf("stream output missing reply token %q, body=%q", mock.replyToken, body)
+	}
+	fallbackText := "I still do not have explicit completion."
+	if strings.Contains(body, fallbackText) {
+		t.Fatalf("fallback ask_user text must not be appended to assistant output, body=%q", body)
+	}
+
+	events, err := svc.ListRunEvents(ctx, &meta, runID, 2000)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	foundAskUserWaiting := false
+	for _, ev := range events.Events {
+		if strings.TrimSpace(ev.EventType) != "ask_user.waiting" {
+			continue
+		}
+		payload, ok := ev.Payload.(map[string]any)
+		if !ok {
+			t.Fatalf("ask_user.waiting payload type=%T, want map[string]any", ev.Payload)
+		}
+		if source := strings.TrimSpace(fmt.Sprint(payload["source"])); source != "missing_explicit_completion" {
+			t.Fatalf("ask_user.waiting source=%q, want %q", source, "missing_explicit_completion")
+		}
+		appended, _ := payload["appended_to_message"].(bool)
+		if appended {
+			t.Fatalf("ask_user.waiting appended_to_message should be false when assistant already has text")
+		}
+		foundAskUserWaiting = true
+		break
+	}
+	if !foundAskUserWaiting {
+		t.Fatalf("missing ask_user.waiting event")
+	}
+}

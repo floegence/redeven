@@ -1224,16 +1224,24 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	resetMistakes := func() {
 		mistakeWindow = mistakeWindow[:0]
 	}
-	endAskUser := func(step int, question string) error {
+	endAskUser := func(step int, question string, source string) error {
 		question = strings.TrimSpace(question)
 		if question == "" {
 			question = "I need clarification to continue safely."
 		}
-		prefix := ""
-		if r.hasNonEmptyAssistantText() {
-			prefix = "\n\n"
+		appendToMessage := strings.TrimSpace(source) == "model_signal" || !r.hasNonEmptyAssistantText()
+		if appendToMessage {
+			prefix := ""
+			if r.hasNonEmptyAssistantText() {
+				prefix = "\n\n"
+			}
+			_ = r.appendTextDelta(prefix + question)
 		}
-		_ = r.appendTextDelta(prefix + question)
+		r.persistRunEvent("ask_user.waiting", RealtimeStreamKindLifecycle, map[string]any{
+			"question":            question,
+			"source":              strings.TrimSpace(source),
+			"appended_to_message": appendToMessage,
+		})
 		r.setFinalizationReason("ask_user_waiting")
 		r.setEndReason("complete")
 		r.emitLifecyclePhase("ended", map[string]any{"reason": "ask_user_waiting", "step_index": step})
@@ -1314,7 +1322,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 				return nil
 			}
 			if recoveryCount > 5 {
-				return endAskUser(step, fmt.Sprintf("I encountered repeated errors from the AI provider and cannot continue. Last error: %s", sanitizeLogText(stepErr.Error(), 200)))
+				return endAskUser(step, fmt.Sprintf("I encountered repeated errors from the AI provider and cannot continue. Last error: %s", sanitizeLogText(stepErr.Error(), 200)), "provider_repeated_error")
 			}
 			exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, stepErr, lastSignature)
 			state.RecentErrors = appendLimited(state.RecentErrors, sanitizeLogText(stepErr.Error(), 300), 6)
@@ -1369,7 +1377,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 						})
 					}
 					if hits >= 3 {
-						return endAskUser(step, fmt.Sprintf("The same tool call is repeating without progress (%s). Please clarify what should change or provide missing context.", strings.TrimSpace(call.Name)))
+						return endAskUser(step, fmt.Sprintf("The same tool call is repeating without progress (%s). Please clarify what should change or provide missing context.", strings.TrimSpace(call.Name)), "guard_doom_loop")
 					}
 					if hits == 2 {
 						guardedResults[strings.TrimSpace(call.ID)] = ToolResult{
@@ -1479,7 +1487,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 				}
 				appendMistake(stepMistake)
 				if mistakeSum() >= 3 {
-					return endAskUser(step, "I am not making progress due to repeated tool mistakes. Please clarify the objective or provide additional context to proceed.")
+					return endAskUser(step, "I am not making progress due to repeated tool mistakes. Please clarify the objective or provide additional context to proceed.", "tool_mistake_loop")
 				}
 			}
 			isFirstRound = false
@@ -1488,17 +1496,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 
 		if askUserCall != nil {
 			question := extractSignalText(*askUserCall, "question")
-			if question == "" {
-				question = "I need clarification to continue safely."
-			}
-			if strings.TrimSpace(stepResult.Text) == "" {
-				_ = r.appendTextDelta(question)
-			}
-			r.setFinalizationReason("ask_user_waiting")
-			r.setEndReason("complete")
-			r.emitLifecyclePhase("ended", map[string]any{"reason": "ask_user_waiting", "step_index": step})
-			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-			return nil
+			return endAskUser(step, question, "model_signal")
 		}
 
 		if taskCompleteCall != nil {
@@ -1567,11 +1565,11 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		if !turnTextSeen {
 			appendMistake(1)
 			if mistakeSum() >= 3 {
-				return endAskUser(step, "I am not getting usable output and cannot proceed safely. Please clarify the objective or provide more context.")
+				return endAskUser(step, "I am not getting usable output and cannot proceed safely. Please clarify the objective or provide more context.", "provider_empty_output")
 			}
 			recoveryCount++
 			if recoveryCount > 5 {
-				return endAskUser(step, "I have been unable to produce output after multiple attempts. Please check the AI provider configuration or try rephrasing your request.")
+				return endAskUser(step, "I have been unable to produce output after multiple attempts. Please check the AI provider configuration or try rephrasing your request.", "provider_empty_output_repeated")
 			}
 			exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, errors.New("empty output"), lastSignature)
 			isFirstRound = false
@@ -1593,7 +1591,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			"gate_reason":         "missing_explicit_task_complete",
 			"no_progress_rounds":  noToolRounds,
 		})
-		return endAskUser(step, "I still do not have explicit completion. Please provide missing requirements, or ask me to continue with a specific next action.")
+		return endAskUser(step, "I still do not have explicit completion. Please provide missing requirements, or ask me to continue with a specific next action.", "missing_explicit_completion")
 	}
 
 	// Safety net reached (nativeHardMaxSteps). This should rarely happen in
@@ -1641,7 +1639,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			if summaryErr != nil {
 				errMsg = fmt.Sprintf("The task reached the maximum step limit. Summary attempt failed: %s", sanitizeLogText(summaryErr.Error(), 200))
 			}
-			return endAskUser(nativeHardMaxSteps, errMsg)
+			return endAskUser(nativeHardMaxSteps, errMsg, "hard_max_summary_failed")
 		}
 	}
 
@@ -1652,7 +1650,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		"gate_passed":         false,
 		"gate_reason":         "hard_max_steps_reached",
 	})
-	return endAskUser(nativeHardMaxSteps, "I reached the hard step limit before explicit completion. Please provide guidance for the next step and I will continue.")
+	return endAskUser(nativeHardMaxSteps, "I reached the hard step limit before explicit completion. Please provide guidance for the next step and I will continue.", "hard_max_steps")
 }
 
 func (r *run) runNativeSocial(

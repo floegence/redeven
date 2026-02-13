@@ -29,6 +29,15 @@ func TestClassifyTerminalCommandRisk_WrappedReadonly(t *testing.T) {
 	}
 }
 
+func TestClassifyTerminalCommandRisk_FindPipeEgrepReadonly(t *testing.T) {
+	t.Parallel()
+
+	risk := ClassifyTerminalCommandRisk(`find . -type f | egrep "README|go.mod" | head -n 20`)
+	if risk != TerminalCommandRiskReadonly {
+		t.Fatalf("risk=%q, want %q", risk, TerminalCommandRiskReadonly)
+	}
+}
+
 func TestClassifyTerminalCommandRisk_Mutating(t *testing.T) {
 	t.Parallel()
 

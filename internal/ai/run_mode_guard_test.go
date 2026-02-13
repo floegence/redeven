@@ -145,3 +145,51 @@ func TestHandleToolCall_ActModeAllowsMutatingToolsAfterApproval(t *testing.T) {
 		t.Fatalf("file content=%q, want %q", string(got), "act mode")
 	}
 }
+
+func TestHandleToolCall_PlanModeAllowsReadonlyFindPipeEgrepWithoutApproval(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	target := filepath.Join(workspace, "note.txt")
+	if err := os.WriteFile(target, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write seed file: %v", err)
+	}
+
+	r := newRun(runOptions{
+		Log:    slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		FSRoot: workspace,
+		Shell:  "bash",
+		SessionMeta: &session.Meta{
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+			CanAdmin:   true,
+		},
+		MessageID: "msg_plan_readonly_guard",
+	})
+	r.runMode = config.AIModePlan
+
+	outcome, err := r.handleToolCall(context.Background(), "tool_plan_readonly_1", "terminal.exec", map[string]any{
+		"command": `find . -type f | egrep "note.txt" | head -n 20`,
+	})
+	if err != nil {
+		t.Fatalf("handleToolCall returned error: %v", err)
+	}
+	if outcome == nil {
+		t.Fatalf("missing tool call outcome")
+	}
+	if !outcome.Success {
+		if outcome.ToolError != nil {
+			t.Fatalf("readonly command failed: code=%q message=%q", outcome.ToolError.Code, outcome.ToolError.Message)
+		}
+		t.Fatalf("readonly command failed without tool error details")
+	}
+
+	r.mu.Lock()
+	_, pending := r.toolApprovals["tool_plan_readonly_1"]
+	waiting := r.waitingApproval
+	r.mu.Unlock()
+	if pending || waiting {
+		t.Fatalf("readonly command should not enter approval flow")
+	}
+}
