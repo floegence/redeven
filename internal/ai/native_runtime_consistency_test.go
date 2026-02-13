@@ -105,6 +105,7 @@ func TestBuiltInToolHandler_ApprovalTimeout_MapsToTimeout(t *testing.T) {
 		Log:                 slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		FSRoot:              fsRoot,
 		Shell:               "bash",
+		AIConfig:            &config.AIConfig{ExecutionPolicy: &config.AIExecutionPolicy{RequireUserApproval: true}},
 		SessionMeta:         &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
 		ToolApprovalTimeout: 25 * time.Millisecond,
 	})

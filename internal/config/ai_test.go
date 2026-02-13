@@ -211,3 +211,44 @@ func TestAIConfigValidate_RejectsInvalidToolRecoveryMaxSteps(t *testing.T) {
 		t.Fatalf("expected validation error for tool_recovery_max_steps=9")
 	}
 }
+
+func TestAIConfig_EffectiveExecutionPolicyDefaults(t *testing.T) {
+	t.Parallel()
+
+	nilCfg := (*AIConfig)(nil)
+	if got := nilCfg.EffectiveRequireUserApproval(); got {
+		t.Fatalf("EffectiveRequireUserApproval nil=%v, want false", got)
+	}
+	if got := nilCfg.EffectiveEnforcePlanModeGuard(); got {
+		t.Fatalf("EffectiveEnforcePlanModeGuard nil=%v, want false", got)
+	}
+	if got := nilCfg.EffectiveBlockDangerousCommands(); got {
+		t.Fatalf("EffectiveBlockDangerousCommands nil=%v, want false", got)
+	}
+
+	cfg := &AIConfig{}
+	if got := cfg.EffectiveRequireUserApproval(); got {
+		t.Fatalf("EffectiveRequireUserApproval empty=%v, want false", got)
+	}
+	if got := cfg.EffectiveEnforcePlanModeGuard(); got {
+		t.Fatalf("EffectiveEnforcePlanModeGuard empty=%v, want false", got)
+	}
+	if got := cfg.EffectiveBlockDangerousCommands(); got {
+		t.Fatalf("EffectiveBlockDangerousCommands empty=%v, want false", got)
+	}
+
+	cfg.ExecutionPolicy = &AIExecutionPolicy{
+		RequireUserApproval:    true,
+		EnforcePlanModeGuard:   true,
+		BlockDangerousCommands: true,
+	}
+	if got := cfg.EffectiveRequireUserApproval(); !got {
+		t.Fatalf("EffectiveRequireUserApproval explicit=%v, want true", got)
+	}
+	if got := cfg.EffectiveEnforcePlanModeGuard(); !got {
+		t.Fatalf("EffectiveEnforcePlanModeGuard explicit=%v, want true", got)
+	}
+	if got := cfg.EffectiveBlockDangerousCommands(); !got {
+		t.Fatalf("EffectiveBlockDangerousCommands explicit=%v, want true", got)
+	}
+}

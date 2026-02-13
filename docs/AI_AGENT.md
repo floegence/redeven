@@ -50,6 +50,11 @@ Example:
     "local_max": { "read": true, "write": true, "execute": true }
   },
   "ai": {
+    "execution_policy": {
+      "require_user_approval": false,
+      "enforce_plan_mode_guard": false,
+      "block_dangerous_commands": false
+    },
     "providers": [
       {
         "id": "openai",
@@ -75,21 +80,30 @@ Example:
 }
 ```
 
-## Tooling and approvals
+## Tooling and execution policy
 
 Built-in tools:
 
 - `terminal.exec`
 - `apply_patch`
 
-Approval policy is server-enforced per invocation:
+Hard guardrails are controlled by `ai.execution_policy`:
 
-- `terminal.exec` readonly commands (for example `rg`, `ls`, `cat`, `sed -n`, `git status`, `git diff`) run without approval.
-- `terminal.exec` mutating commands require approval.
-- Dangerous terminal commands are blocked by terminal risk policy.
-- `apply_patch` requires approval.
+- `require_user_approval`: when true, mutating tool calls require explicit user approval.
+- `enforce_plan_mode_guard`: when true, mutating tools are hard-blocked in `plan` mode.
+- `block_dangerous_commands`: when true, dangerous `terminal.exec` commands are hard-blocked.
 
-The Env App UI will show an Approve/Reject prompt for each such tool call.
+Default values are intentionally permissive:
+
+- `require_user_approval = false`
+- `enforce_plan_mode_guard = false`
+- `block_dangerous_commands = false`
+
+Behavior summary:
+
+- `act` mode executes tools directly by default.
+- `plan` mode uses prompt-level guidance (analysis-first), not a hard readonly lock by default.
+- The Env App shows approval prompts only when `require_user_approval` is enabled.
 
 Installer note:
 

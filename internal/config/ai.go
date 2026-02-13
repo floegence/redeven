@@ -24,7 +24,7 @@ type AIConfig struct {
 	//
 	// Supported values:
 	// - "act": full tool execution flow (default)
-	// - "plan": non-mutating analysis mode
+	// - "plan": planning-first mode (soft guidance by prompt)
 	Mode string `json:"mode,omitempty"`
 
 	// ToolRecoveryEnabled controls runtime-level recovery orchestration.
@@ -47,6 +47,25 @@ type AIConfig struct {
 	// ToolRecoveryFailOnRepeatedSignature controls fail-fast behavior when the same failure signature
 	// repeats across recovery attempts.
 	ToolRecoveryFailOnRepeatedSignature *bool `json:"tool_recovery_fail_on_repeated_signature,omitempty"`
+
+	// ExecutionPolicy controls runtime execution guardrails.
+	//
+	// Defaults are intentionally permissive:
+	// - no user approval requirement
+	// - no plan-mode hard guard
+	// - no dangerous-command hard block
+	ExecutionPolicy *AIExecutionPolicy `json:"execution_policy,omitempty"`
+}
+
+type AIExecutionPolicy struct {
+	// RequireUserApproval controls whether mutating tool invocations require user approval.
+	RequireUserApproval bool `json:"require_user_approval"`
+
+	// EnforcePlanModeGuard controls whether mutating actions are hard-blocked in plan mode.
+	EnforcePlanModeGuard bool `json:"enforce_plan_mode_guard"`
+
+	// BlockDangerousCommands controls whether dangerous terminal commands are hard-blocked.
+	BlockDangerousCommands bool `json:"block_dangerous_commands"`
 }
 
 type AIProvider struct {
@@ -87,6 +106,10 @@ const (
 	defaultAIToolRecoveryAllowPathRewrite        = true
 	defaultAIToolRecoveryAllowProbeTools         = true
 	defaultAIToolRecoveryFailOnRepeatedSignature = true
+
+	defaultAIRequireUserApproval   = false
+	defaultAIEnforcePlanModeGuard  = false
+	defaultAIBlockDangerousCommand = false
 )
 
 func (c *AIConfig) Validate() error {
@@ -293,4 +316,25 @@ func (c *AIConfig) EffectiveToolRecoveryFailOnRepeatedSignature() bool {
 		return defaultAIToolRecoveryFailOnRepeatedSignature
 	}
 	return *c.ToolRecoveryFailOnRepeatedSignature
+}
+
+func (c *AIConfig) EffectiveRequireUserApproval() bool {
+	if c == nil || c.ExecutionPolicy == nil {
+		return defaultAIRequireUserApproval
+	}
+	return c.ExecutionPolicy.RequireUserApproval
+}
+
+func (c *AIConfig) EffectiveEnforcePlanModeGuard() bool {
+	if c == nil || c.ExecutionPolicy == nil {
+		return defaultAIEnforcePlanModeGuard
+	}
+	return c.ExecutionPolicy.EnforcePlanModeGuard
+}
+
+func (c *AIConfig) EffectiveBlockDangerousCommands() bool {
+	if c == nil || c.ExecutionPolicy == nil {
+		return defaultAIBlockDangerousCommand
+	}
+	return c.ExecutionPolicy.BlockDangerousCommands
 }

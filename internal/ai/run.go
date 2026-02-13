@@ -1049,14 +1049,27 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	needsApproval := requiresApproval(toolName, args)
 	mutating := isMutatingInvocation(toolName, args)
 	dangerous := isDangerousInvocation(toolName, args)
+	requireUserApproval := r.cfg.EffectiveRequireUserApproval()
+	enforcePlanModeGuard := r.cfg.EffectiveEnforcePlanModeGuard()
+	blockDangerousCommands := r.cfg.EffectiveBlockDangerousCommands()
+	isPlanMode := strings.TrimSpace(strings.ToLower(r.runMode)) == config.AIModePlan
+	denyDangerous := blockDangerousCommands && dangerous
+	denyPlanMutating := enforcePlanModeGuard && isPlanMode && mutating
+	requireApprovalForInvocation := requireUserApproval && needsApproval
 	commandRisk, normalizedCommand := aitools.InvocationRiskInfo(toolName, args)
 	commandRisk = strings.TrimSpace(commandRisk)
 	normalizedCommand = strings.TrimSpace(normalizedCommand)
 	policyDecision := "allow"
-	if dangerous || (strings.TrimSpace(r.runMode) == config.AIModePlan && mutating) {
+	policyReason := "none"
+	if denyDangerous {
 		policyDecision = "deny"
-	} else if needsApproval {
+		policyReason = "dangerous_command_blocked"
+	} else if denyPlanMutating {
+		policyDecision = "deny"
+		policyReason = "plan_mode_guard_blocked"
+	} else if requireApprovalForInvocation {
 		policyDecision = "ask"
+		policyReason = "user_approval_required"
 	}
 
 	toolStartedAt := time.Now()
@@ -1068,11 +1081,15 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	})
 	if toolName == "terminal.exec" {
 		r.persistRunEvent("tool.policy", RealtimeStreamKindLifecycle, map[string]any{
-			"tool_id":            toolID,
-			"tool_name":          toolName,
-			"normalized_command": normalizedCommand,
-			"command_risk":       commandRisk,
-			"policy_decision":    policyDecision,
+			"tool_id":                         toolID,
+			"tool_name":                       toolName,
+			"normalized_command":              normalizedCommand,
+			"command_risk":                    commandRisk,
+			"policy_decision":                 policyDecision,
+			"policy_reason":                   policyReason,
+			"policy_require_user_approval":    requireUserApproval,
+			"policy_enforce_plan_mode_guard":  enforcePlanModeGuard,
+			"policy_block_dangerous_commands": blockDangerousCommands,
 		})
 	}
 	toolCallPayload := map[string]any{
@@ -1100,9 +1117,13 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		"requires_approval", needsApproval,
 		"mutating", mutating,
 		"dangerous", dangerous,
+		"policy_require_user_approval", requireUserApproval,
+		"policy_enforce_plan_mode_guard", enforcePlanModeGuard,
+		"policy_block_dangerous_commands", blockDangerousCommands,
 		"command_risk", commandRisk,
 		"normalized_command", normalizedCommand,
 		"policy_decision", policyDecision,
+		"policy_reason", policyReason,
 		"args_preview", previewAnyForLog(redactToolArgsForLog(toolName, args), 512),
 	)
 
@@ -1123,7 +1144,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		Status:   ToolCallStatusPending,
 	}
 
-	if needsApproval {
+	if requireApprovalForInvocation {
 		block.RequiresApproval = true
 		block.ApprovalState = "required"
 	}
@@ -1192,27 +1213,29 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		})
 	}
 
-	if dangerous {
+	if denyDangerous {
 		toolErr := &aitools.ToolError{
 			Code:      aitools.ErrorCodePermissionDenied,
-			Message:   "Command blocked by terminal risk policy",
+			Message:   "Command blocked by dangerous-command policy",
 			Retryable: false,
 			SuggestedFixes: []string{
 				"Use a readonly command for investigation.",
 				"Use apply_patch for file edits instead of destructive shell commands.",
+				"Disable block_dangerous_commands in Settings > AI > Execution policy only if you accept the risk.",
 			},
 		}
 		setToolError(toolErr, "")
 		return outcome, nil
 	}
 
-	if strings.TrimSpace(r.runMode) == config.AIModePlan && mutating {
+	if denyPlanMutating {
 		toolErr := &aitools.ToolError{
 			Code:      aitools.ErrorCodePermissionDenied,
-			Message:   "Tool is disabled in plan mode",
+			Message:   "Mutating tool call blocked by plan-mode guard policy",
 			Retryable: false,
 			SuggestedFixes: []string{
 				"Switch AI mode to act to enable mutating tools.",
+				"Disable enforce_plan_mode_guard in Settings > AI > Execution policy if you need plan-mode execution.",
 			},
 		}
 		setToolError(toolErr, "")

@@ -150,7 +150,9 @@ func (r *InMemoryToolRegistry) resolve(name string) (ToolDef, ToolHandler, bool)
 	return item.def, item.handler, true
 }
 
-type DefaultModeToolFilter struct{}
+type DefaultModeToolFilter struct {
+	EnforcePlanModeGuard bool
+}
 
 func (f DefaultModeToolFilter) FilterToolsForMode(mode string, all []ToolDef) []ToolDef {
 	mode = strings.ToLower(strings.TrimSpace(mode))
@@ -159,7 +161,7 @@ func (f DefaultModeToolFilter) FilterToolsForMode(mode string, all []ToolDef) []
 	}
 	out := make([]ToolDef, 0, len(all))
 	for _, tool := range all {
-		if mode == "plan" && tool.Mutating {
+		if f.EnforcePlanModeGuard && mode == "plan" && tool.Mutating {
 			continue
 		}
 		out = append(out, tool)

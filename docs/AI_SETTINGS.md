@@ -141,3 +141,31 @@ Key points:
 - Editing settings or updating keys: requires `admin` permission (local endpoint owner / admin only).
 
 This keeps usage accessible while protecting local secret writes.
+
+---
+
+## 7. Execution Policy (Runtime Guardrails)
+
+`ai.execution_policy` defines optional hard guardrails:
+
+```json
+{
+  "execution_policy": {
+    "require_user_approval": false,
+    "enforce_plan_mode_guard": false,
+    "block_dangerous_commands": false
+  }
+}
+```
+
+Default values are intentionally permissive (all `false`):
+
+- `require_user_approval`: when enabled, mutating tools require explicit approval.
+- `enforce_plan_mode_guard`: when enabled, mutating tools are hard-blocked in `plan` mode.
+- `block_dangerous_commands`: when enabled, dangerous `terminal.exec` commands are hard-blocked.
+
+Operational behavior:
+
+- `act` mode is direct execution by default.
+- `plan` mode is prompt-guided analysis by default (soft guidance, no hard readonly lock unless explicitly enabled).
+- Settings UI exposes these switches under **Settings → AI → Execution policy**.

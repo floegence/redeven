@@ -1,6 +1,16 @@
 package ai
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/floegence/redeven-agent/internal/config"
+)
+
+func newModeToolFilter(cfg *config.AIConfig) ModeToolFilter {
+	return DefaultModeToolFilter{
+		EnforcePlanModeGuard: cfg.EffectiveEnforcePlanModeGuard(),
+	}
+}
 
 type allowlistModeToolFilter struct {
 	base      ModeToolFilter

@@ -40,7 +40,21 @@ type PermissionPolicy = Readonly<{
 type AIProviderType = 'openai' | 'anthropic' | 'openai_compatible';
 type AIProviderModel = Readonly<{ model_name: string; label?: string; is_default?: boolean }>;
 type AIProvider = Readonly<{ id: string; name?: string; type: AIProviderType; base_url?: string; models: AIProviderModel[] }>;
-type AIConfig = Readonly<{ providers: AIProvider[] }>;
+type AIExecutionPolicy = Readonly<{
+  require_user_approval?: boolean;
+  enforce_plan_mode_guard?: boolean;
+  block_dangerous_commands?: boolean;
+}>;
+type AIConfig = Readonly<{
+  providers: AIProvider[];
+  mode?: 'act' | 'plan';
+  tool_recovery_enabled?: boolean;
+  tool_recovery_max_steps?: number;
+  tool_recovery_allow_path_rewrite?: boolean;
+  tool_recovery_allow_probe_tools?: boolean;
+  tool_recovery_fail_on_repeated_signature?: boolean;
+  execution_policy?: AIExecutionPolicy;
+}>;
 type AISecretsView = Readonly<{ provider_api_key_set: Record<string, boolean> }>;
 
 type SettingsResponse = Readonly<{
@@ -68,6 +82,14 @@ type SettingsResponse = Readonly<{
 type PermissionRow = { key: string; read: boolean; write: boolean; execute: boolean };
 type AIProviderModelRow = { model_name: string; label: string; is_default: boolean };
 type AIProviderRow = { id: string; name: string; type: AIProviderType; base_url: string; models: AIProviderModelRow[] };
+type AIPreservedUIFields = {
+  mode?: 'act' | 'plan';
+  tool_recovery_enabled?: boolean;
+  tool_recovery_max_steps?: number;
+  tool_recovery_allow_path_rewrite?: boolean;
+  tool_recovery_allow_probe_tools?: boolean;
+  tool_recovery_fail_on_repeated_signature?: boolean;
+};
 
 // ============================================================================
 // Constants & Helpers
@@ -116,6 +138,11 @@ function defaultPermissionPolicy(): PermissionPolicy {
 
 function defaultAIConfig(): AIConfig {
   return {
+    execution_policy: {
+      require_user_approval: false,
+      enforce_plan_mode_guard: false,
+      block_dangerous_commands: false,
+    },
     providers: [
       {
         id: 'openai',
@@ -628,6 +655,10 @@ export function EnvSettingsPage() {
       models: [{ model_name: 'gpt-5-mini', label: 'GPT-5 Mini', is_default: true }],
     },
   ]);
+  const [aiPreservedFields, setAiPreservedFields] = createSignal<AIPreservedUIFields>({});
+  const [aiRequireUserApproval, setAiRequireUserApproval] = createSignal(false);
+  const [aiEnforcePlanModeGuard, setAiEnforcePlanModeGuard] = createSignal(false);
+  const [aiBlockDangerousCommands, setAiBlockDangerousCommands] = createSignal(false);
 
   // AI provider keys (stored locally in secrets.json; never returned in plaintext).
   const [aiProviderKeySet, setAiProviderKeySet] = createSignal<Record<string, boolean>>({});
@@ -733,10 +764,71 @@ export function EnvSettingsPage() {
       return out as AIProvider;
     });
 
-    return { providers };
+    const preserved = aiPreservedFields();
+    const out: any = { providers };
+    if (preserved.mode === 'act' || preserved.mode === 'plan') out.mode = preserved.mode;
+    if (typeof preserved.tool_recovery_enabled === 'boolean') out.tool_recovery_enabled = preserved.tool_recovery_enabled;
+    if (typeof preserved.tool_recovery_max_steps === 'number' && Number.isFinite(preserved.tool_recovery_max_steps)) {
+      out.tool_recovery_max_steps = Math.trunc(preserved.tool_recovery_max_steps);
+    }
+    if (typeof preserved.tool_recovery_allow_path_rewrite === 'boolean') {
+      out.tool_recovery_allow_path_rewrite = preserved.tool_recovery_allow_path_rewrite;
+    }
+    if (typeof preserved.tool_recovery_allow_probe_tools === 'boolean') {
+      out.tool_recovery_allow_probe_tools = preserved.tool_recovery_allow_probe_tools;
+    }
+    if (typeof preserved.tool_recovery_fail_on_repeated_signature === 'boolean') {
+      out.tool_recovery_fail_on_repeated_signature = preserved.tool_recovery_fail_on_repeated_signature;
+    }
+    out.execution_policy = {
+      require_user_approval: !!aiRequireUserApproval(),
+      enforce_plan_mode_guard: !!aiEnforcePlanModeGuard(),
+      block_dangerous_commands: !!aiBlockDangerousCommands(),
+    };
+    return out as AIConfig;
   };
 
   const validateAIValue = (cfg: AIConfig) => {
+    const mode = String((cfg as any).mode ?? '').trim();
+    if (mode && mode !== 'act' && mode !== 'plan') throw new Error(`Invalid AI mode: ${mode}`);
+    const trEnabled = (cfg as any).tool_recovery_enabled;
+    if (trEnabled !== undefined && typeof trEnabled !== 'boolean') {
+      throw new Error('tool_recovery_enabled must be a boolean.');
+    }
+    const trMax = (cfg as any).tool_recovery_max_steps;
+    if (trMax !== undefined) {
+      if (typeof trMax !== 'number' || !Number.isFinite(trMax) || !Number.isInteger(trMax)) {
+        throw new Error('tool_recovery_max_steps must be an integer.');
+      }
+      if (trMax < 0 || trMax > 8) throw new Error('tool_recovery_max_steps must be in [0,8].');
+    }
+    const trPath = (cfg as any).tool_recovery_allow_path_rewrite;
+    if (trPath !== undefined && typeof trPath !== 'boolean') {
+      throw new Error('tool_recovery_allow_path_rewrite must be a boolean.');
+    }
+    const trProbe = (cfg as any).tool_recovery_allow_probe_tools;
+    if (trProbe !== undefined && typeof trProbe !== 'boolean') {
+      throw new Error('tool_recovery_allow_probe_tools must be a boolean.');
+    }
+    const trFail = (cfg as any).tool_recovery_fail_on_repeated_signature;
+    if (trFail !== undefined && typeof trFail !== 'boolean') {
+      throw new Error('tool_recovery_fail_on_repeated_signature must be a boolean.');
+    }
+
+    const ep = (cfg as any).execution_policy;
+    if (ep !== undefined && ep !== null) {
+      if (!isJSONObject(ep)) throw new Error('execution_policy must be an object.');
+      if ((ep as any).require_user_approval !== undefined && typeof (ep as any).require_user_approval !== 'boolean') {
+        throw new Error('execution_policy.require_user_approval must be a boolean.');
+      }
+      if ((ep as any).enforce_plan_mode_guard !== undefined && typeof (ep as any).enforce_plan_mode_guard !== 'boolean') {
+        throw new Error('execution_policy.enforce_plan_mode_guard must be a boolean.');
+      }
+      if ((ep as any).block_dangerous_commands !== undefined && typeof (ep as any).block_dangerous_commands !== 'boolean') {
+        throw new Error('execution_policy.block_dangerous_commands must be a boolean.');
+      }
+    }
+
     const providers = Array.isArray((cfg as any).providers) ? (cfg as any).providers : [];
     if (providers.length === 0) throw new Error('Missing providers.');
 
@@ -821,6 +913,36 @@ export function EnvSettingsPage() {
       list[0] = { ...list[0], models: [{ ...list[0].models[0], is_default: true }, ...list[0].models.slice(1)] };
     }
     return list;
+  };
+
+  const readAIExecutionPolicy = (cfg: unknown) => {
+    const raw = isJSONObject(cfg) ? (cfg as any).execution_policy : null;
+    return {
+      require_user_approval: !!(isJSONObject(raw) ? (raw as any).require_user_approval : false),
+      enforce_plan_mode_guard: !!(isJSONObject(raw) ? (raw as any).enforce_plan_mode_guard : false),
+      block_dangerous_commands: !!(isJSONObject(raw) ? (raw as any).block_dangerous_commands : false),
+    };
+  };
+
+  const readAIPreservedFields = (cfg: unknown): AIPreservedUIFields => {
+    if (!isJSONObject(cfg)) return {};
+    const modeRaw = String((cfg as any).mode ?? '').trim();
+    const out: AIPreservedUIFields = {};
+    if (modeRaw === 'act' || modeRaw === 'plan') out.mode = modeRaw as 'act' | 'plan';
+    if (typeof (cfg as any).tool_recovery_enabled === 'boolean') out.tool_recovery_enabled = !!(cfg as any).tool_recovery_enabled;
+    if (typeof (cfg as any).tool_recovery_max_steps === 'number' && Number.isFinite((cfg as any).tool_recovery_max_steps)) {
+      out.tool_recovery_max_steps = Math.trunc((cfg as any).tool_recovery_max_steps);
+    }
+    if (typeof (cfg as any).tool_recovery_allow_path_rewrite === 'boolean') {
+      out.tool_recovery_allow_path_rewrite = !!(cfg as any).tool_recovery_allow_path_rewrite;
+    }
+    if (typeof (cfg as any).tool_recovery_allow_probe_tools === 'boolean') {
+      out.tool_recovery_allow_probe_tools = !!(cfg as any).tool_recovery_allow_probe_tools;
+    }
+    if (typeof (cfg as any).tool_recovery_fail_on_repeated_signature === 'boolean') {
+      out.tool_recovery_fail_on_repeated_signature = !!(cfg as any).tool_recovery_fail_on_repeated_signature;
+    }
+    return out;
   };
 
   const refreshAIProviderKeyStatus = async (providerIDs: string[]) => {
@@ -945,6 +1067,11 @@ export function EnvSettingsPage() {
 
     if (!aiDirty()) {
       const a = s.ai ?? defaultAIConfig();
+      const executionPolicy = readAIExecutionPolicy(a);
+      setAiRequireUserApproval(!!executionPolicy.require_user_approval);
+      setAiEnforcePlanModeGuard(!!executionPolicy.enforce_plan_mode_guard);
+      setAiBlockDangerousCommands(!!executionPolicy.block_dangerous_commands);
+      setAiPreservedFields(readAIPreservedFields(a));
       const rows: AIProviderRow[] = (a.providers ?? []).map((p) => ({
         id: String(p.id ?? ''),
         name: String(p.name ?? ''),
@@ -1141,6 +1268,11 @@ export function EnvSettingsPage() {
         })),
         ),
       );
+      const executionPolicy = readAIExecutionPolicy(v);
+      setAiRequireUserApproval(!!executionPolicy.require_user_approval);
+      setAiEnforcePlanModeGuard(!!executionPolicy.enforce_plan_mode_guard);
+      setAiBlockDangerousCommands(!!executionPolicy.block_dangerous_commands);
+      setAiPreservedFields(readAIPreservedFields(v));
       void refreshAIProviderKeyStatus(providersRaw.map((p) => String(p?.id ?? '')));
       setAiView('ui');
     } catch (e) {
@@ -1326,6 +1458,11 @@ export function EnvSettingsPage() {
   const resetAI = () => {
     setAiError(null);
     const d = defaultAIConfig();
+    const executionPolicy = readAIExecutionPolicy(d);
+    setAiRequireUserApproval(!!executionPolicy.require_user_approval);
+    setAiEnforcePlanModeGuard(!!executionPolicy.enforce_plan_mode_guard);
+    setAiBlockDangerousCommands(!!executionPolicy.block_dangerous_commands);
+    setAiPreservedFields(readAIPreservedFields(d));
     const rows: AIProviderRow[] = (d.providers ?? []).map((p) => ({
       id: String(p.id ?? ''),
       name: String(p.name ?? ''),
@@ -2060,6 +2197,56 @@ export function EnvSettingsPage() {
               }
             >
               <div class="space-y-6">
+                {/* Execution policy */}
+                <div class="space-y-3">
+                  <div>
+                    <div class="text-sm font-medium text-foreground">Execution policy</div>
+                    <p class="text-xs text-muted-foreground mt-0.5">
+                      Configure runtime hard guardrails for approvals, plan-mode blocking, and dangerous commands.
+                    </p>
+                  </div>
+                  <div class="space-y-3 p-4 rounded-lg border border-border bg-muted/20">
+                    <Checkbox
+                      checked={aiRequireUserApproval()}
+                      onChange={(v) => {
+                        setAiRequireUserApproval(v);
+                        setAiDirty(true);
+                      }}
+                      disabled={!canInteract()}
+                      label="Require user approval for mutating tools"
+                      size="sm"
+                    />
+                    <Checkbox
+                      checked={aiEnforcePlanModeGuard()}
+                      onChange={(v) => {
+                        setAiEnforcePlanModeGuard(v);
+                        setAiDirty(true);
+                      }}
+                      disabled={!canInteract()}
+                      label="Enforce plan mode guard (block mutating tools in plan mode)"
+                      size="sm"
+                    />
+                    <Checkbox
+                      checked={aiBlockDangerousCommands()}
+                      onChange={(v) => {
+                        setAiBlockDangerousCommands(v);
+                        setAiDirty(true);
+                      }}
+                      disabled={!canInteract()}
+                      label="Block dangerous terminal commands"
+                      size="sm"
+                    />
+                  </div>
+                  <Show when={!aiBlockDangerousCommands()}>
+                    <div class="flex items-start gap-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10">
+                      <Shield class="w-4 h-4 mt-0.5 text-amber-600 dark:text-amber-300 shrink-0" />
+                      <div class="text-xs text-amber-700 dark:text-amber-200">
+                        Dangerous command blocking is disabled. The agent may execute high-risk commands directly.
+                      </div>
+                    </div>
+                  </Show>
+                </div>
+
                 {/* Providers */}
                 <div class="space-y-3">
                   <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

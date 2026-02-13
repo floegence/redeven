@@ -1152,7 +1152,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if err := registerBuiltInTools(registry, r); err != nil {
 		return r.failRun("Failed to initialize tool registry", err)
 	}
-	modeFilter := ModeToolFilter(DefaultModeToolFilter{})
+	modeFilter := newModeToolFilter(r.cfg)
 	if len(r.toolAllowlist) > 0 {
 		allow := make(map[string]struct{}, len(r.toolAllowlist))
 		for name := range r.toolAllowlist {
@@ -2262,6 +2262,14 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int,
 		runtime = append(runtime, fmt.Sprintf("- Available skills: %s", joinSkillNames(availableSkills)))
 	}
 	parts := []string{strings.Join(core, "\n"), strings.Join(runtime, "\n")}
+	if strings.TrimSpace(strings.ToLower(mode)) == config.AIModePlan {
+		parts = append(parts, strings.Join([]string{
+			"## Plan Mode Guidance",
+			"- Prioritize investigation, reasoning, and clear execution plans.",
+			"- Avoid mutating actions unless the user explicitly asks to execute changes now.",
+			"- If execution becomes necessary, state why and proceed with small verifiable steps.",
+		}, "\n"))
+	}
 	if len(availableSkills) > 0 {
 		parts = append(parts, buildSkillCatalogPrompt(availableSkills))
 	}

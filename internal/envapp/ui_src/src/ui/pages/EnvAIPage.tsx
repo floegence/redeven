@@ -240,10 +240,20 @@ function ExecutionModeToggle(props: {
 
   return (
     <div class={cn('inline-flex items-center gap-0.5 rounded-lg border border-border p-0.5 bg-muted/40', props.disabled && 'opacity-60 pointer-events-none')}>
-      <button type="button" class={btnClass(props.value === 'plan')} onClick={() => props.onChange('plan')} title="Read-only analysis mode">
+      <button
+        type="button"
+        class={btnClass(props.value === 'plan')}
+        onClick={() => props.onChange('plan')}
+        title="Planning-first mode with soft guidance; execution may still happen based on policy"
+      >
         Plan
       </button>
-      <button type="button" class={btnClass(props.value === 'act')} onClick={() => props.onChange('act')} title="Allow edits and command execution">
+      <button
+        type="button"
+        class={btnClass(props.value === 'act')}
+        onClick={() => props.onChange('act')}
+        title="Execution-first mode for direct tool actions"
+      >
         Act
       </button>
     </div>
