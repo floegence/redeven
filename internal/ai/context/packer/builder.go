@@ -90,12 +90,21 @@ func (b *Builder) BuildPromptPack(ctx context.Context, in BuildInput) (model.Pro
 		"- Cite concrete execution evidence before claiming completion.",
 	}, "\n")
 
+	pendingTodos := append([]model.MemoryItem(nil), retrieved.PendingTodos...)
+	if b.repo != nil && b.repo.Ready() {
+		threadPendingTodos, err := b.repo.ListThreadPendingTodos(ctx, in.EndpointID, in.ThreadID, 12)
+		if err != nil {
+			return model.PromptPack{}, err
+		}
+		pendingTodos = mergePendingTodos(threadPendingTodos, pendingTodos, 12)
+	}
+
 	pack.SystemContract = systemContract
 	pack.Objective = objective
 	pack.ActiveConstraints = append([]string(nil), retrieved.ActiveConstraints...)
 	pack.RecentDialogue = append([]model.DialogueTurn(nil), retrieved.RecentDialogue...)
 	pack.ExecutionEvidence = append([]model.ExecutionEvidence(nil), retrieved.ExecutionEvidence...)
-	pack.PendingTodos = append([]model.MemoryItem(nil), retrieved.PendingTodos...)
+	pack.PendingTodos = pendingTodos
 	pack.RetrievedLongTermMemory = append([]model.MemoryItem(nil), retrieved.LongTermMemory...)
 	pack.ThreadSnapshot = strings.TrimSpace(retrieved.ThreadSnapshot)
 	pack.AttachmentsManifest = adapter.AdaptAttachments(cap, in.Attachments)
@@ -189,6 +198,36 @@ func enforceSectionBudget(pack model.PromptPack, budget map[string]int) model.Pr
 	}
 	out.RetrievedLongTermMemory = longOut
 
+	return out
+}
+
+func mergePendingTodos(primary []model.MemoryItem, secondary []model.MemoryItem, limit int) []model.MemoryItem {
+	if limit <= 0 {
+		limit = 12
+	}
+	out := make([]model.MemoryItem, 0, limit)
+	seenByKey := map[string]struct{}{}
+	appendList := func(items []model.MemoryItem) {
+		for _, item := range items {
+			if len(out) >= limit {
+				return
+			}
+			content := strings.TrimSpace(item.Content)
+			if content == "" {
+				continue
+			}
+			memoryID := strings.TrimSpace(item.MemoryID)
+			key := strings.ToLower(strings.TrimSpace(memoryID + "::" + content))
+			if _, ok := seenByKey[key]; ok {
+				continue
+			}
+			seenByKey[key] = struct{}{}
+			item.Content = content
+			out = append(out, item)
+		}
+	}
+	appendList(primary)
+	appendList(secondary)
 	return out
 }
 

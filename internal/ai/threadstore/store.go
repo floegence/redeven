@@ -498,6 +498,9 @@ func (s *Store) DeleteThread(ctx context.Context, endpointID string, threadID st
 	if _, err := tx.ExecContext(ctx, `DELETE FROM ai_thread_state WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ai_thread_todos WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+		return err
+	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID)
 	if err != nil {
 		return err
@@ -1163,7 +1166,7 @@ func migrateSchema(db *sql.DB) error {
 	if db == nil {
 		return errors.New("nil db")
 	}
-	const targetVersion = 5
+	const targetVersion = 6
 
 	var v int
 	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
@@ -1331,6 +1334,18 @@ CREATE TABLE IF NOT EXISTS ai_thread_state (
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(endpoint_id, thread_id)
 );
+
+CREATE TABLE IF NOT EXISTS ai_thread_todos (
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 0,
+  todos_json TEXT NOT NULL DEFAULT '[]',
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  updated_by_run_id TEXT NOT NULL DEFAULT '',
+  updated_by_tool_id TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY(endpoint_id, thread_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_thread_todos_updated ON ai_thread_todos(endpoint_id, thread_id, updated_at_unix_ms DESC);
 
 CREATE TABLE IF NOT EXISTS transcript_messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

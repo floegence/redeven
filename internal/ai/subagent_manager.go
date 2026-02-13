@@ -601,7 +601,7 @@ func defaultSubagentToolAllowlist() []string {
 		if name == "" {
 			continue
 		}
-		if name == "delegate_task" || name == "send_subagent_input" || name == "wait_subagents" || name == "close_subagent" {
+		if name == "delegate_task" || name == "send_subagent_input" || name == "wait_subagents" || name == "close_subagent" || name == "write_todos" {
 			continue
 		}
 		out = append(out, name)

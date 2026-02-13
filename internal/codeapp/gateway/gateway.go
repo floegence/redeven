@@ -1262,6 +1262,27 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true})
 			return
 
+		case action == "todos" && r.Method == http.MethodGet:
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			out, err := g.ai.GetThreadTodos(r.Context(), meta, threadID)
+			if err != nil {
+				status := http.StatusBadRequest
+				if errors.Is(err, sql.ErrNoRows) {
+					status = http.StatusNotFound
+				}
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"todos": out}})
+			return
+
 		case action == "messages" && r.Method == http.MethodGet:
 			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
 			if !ok {

@@ -44,6 +44,21 @@ function createUserMarkdownMessage(markdown: string): Message {
 
 type ExecutionMode = 'act' | 'plan';
 
+type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+
+type ThreadTodoItem = Readonly<{
+  id: string;
+  content: string;
+  status: TodoStatus;
+  note?: string;
+}>;
+
+type ThreadTodosView = Readonly<{
+  version: number;
+  updated_at_unix_ms: number;
+  todos: ThreadTodoItem[];
+}>;
+
 const EXECUTION_MODE_STORAGE_KEY = 'redeven_ai_execution_mode';
 
 function normalizeExecutionMode(raw: unknown): ExecutionMode {
@@ -67,6 +82,65 @@ function persistExecutionMode(mode: ExecutionMode): void {
   } catch {
     // ignore
   }
+}
+
+function normalizeTodoStatus(raw: unknown): TodoStatus {
+  const value = String(raw ?? '').trim().toLowerCase();
+  if (value === 'in_progress' || value === 'completed' || value === 'cancelled') {
+    return value;
+  }
+  return 'pending';
+}
+
+function todoStatusLabel(status: TodoStatus): string {
+  switch (status) {
+    case 'in_progress':
+      return 'In progress';
+    case 'completed':
+      return 'Completed';
+    case 'cancelled':
+      return 'Cancelled';
+    default:
+      return 'Pending';
+  }
+}
+
+function todoStatusBadgeClass(status: TodoStatus): string {
+  switch (status) {
+    case 'in_progress':
+      return 'bg-primary/10 text-primary border-primary/20';
+    case 'completed':
+      return 'bg-success/10 text-success border-success/20';
+    case 'cancelled':
+      return 'bg-muted text-muted-foreground border-border';
+    default:
+      return 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20';
+  }
+}
+
+function normalizeThreadTodosView(raw: unknown): ThreadTodosView {
+  const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const listRaw = Array.isArray(source.todos) ? source.todos : [];
+  const todos: ThreadTodoItem[] = [];
+  listRaw.forEach((entry, index) => {
+    const item = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+    const content = String(item.content ?? '').trim();
+    if (!content) return;
+    const id = String(item.id ?? '').trim() || `todo_${index + 1}`;
+    const note = String(item.note ?? '').trim();
+    todos.push({
+      id,
+      content,
+      status: normalizeTodoStatus(item.status),
+      note: note || undefined,
+    });
+  });
+
+  return {
+    version: Math.max(0, Number(source.version ?? 0) || 0),
+    updated_at_unix_ms: Math.max(0, Number(source.updated_at_unix_ms ?? 0) || 0),
+    todos,
+  };
 }
 
 const ChatCapture: Component<{ onReady: (ctx: ChatContextValue) => void }> = (props) => {
@@ -427,6 +501,9 @@ export function EnvAIPage() {
   const [deleting, setDeleting] = createSignal(false);
 
   const [messagesLoading, setMessagesLoading] = createSignal(false);
+  const [todosLoading, setTodosLoading] = createSignal(false);
+  const [todosError, setTodosError] = createSignal('');
+  const [threadTodos, setThreadTodos] = createSignal<ThreadTodosView | null>(null);
   const [hasMessages, setHasMessages] = createSignal(false);
   // Turns true immediately after send to keep instant feedback before run state events arrive.
   const [sendPending, setSendPending] = createSignal(false);
@@ -490,10 +567,22 @@ export function EnvAIPage() {
   };
 
   let lastMessagesReq = 0;
+  let lastTodosReq = 0;
   let skipNextThreadLoad = false;
   const replayAppliedByThread = new Map<string, number>();
   const failureNotifiedRuns = new Set<string>();
   const [runPhaseLabel, setRunPhaseLabel] = createSignal('Working');
+  const activeThreadTodos = createMemo(() => threadTodos()?.todos ?? []);
+  const unresolvedTodoCount = createMemo(() =>
+    activeThreadTodos().filter((item) => item.status === 'pending' || item.status === 'in_progress').length,
+  );
+  const todoUpdatedLabel = createMemo(() => {
+    const updatedAt = Number(threadTodos()?.updated_at_unix_ms ?? 0);
+    if (!updatedAt) return '';
+    const date = new Date(updatedAt);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  });
 
   const normalizeLifecyclePhase = (raw: unknown): string => {
     const v = String(raw ?? '').trim().toLowerCase();
@@ -603,6 +692,47 @@ export function EnvAIPage() {
     }
   };
 
+  const loadThreadTodos = async (
+    threadId: string,
+    opts?: {
+      silent?: boolean;
+      notifyError?: boolean;
+    },
+  ): Promise<void> => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return;
+
+    const reqNo = ++lastTodosReq;
+    const silent = !!opts?.silent;
+    const notifyError = opts?.notifyError !== false;
+    if (!silent) {
+      setTodosLoading(true);
+    }
+
+    try {
+      const resp = await fetchGatewayJSON<{ todos: unknown }>(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/todos`,
+        { method: 'GET' },
+      );
+      if (reqNo !== lastTodosReq) return;
+
+      setThreadTodos(normalizeThreadTodosView(resp.todos));
+      setTodosError('');
+    } catch (e) {
+      if (reqNo !== lastTodosReq) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      setThreadTodos(null);
+      setTodosError(msg || 'Request failed.');
+      if (!silent && notifyError) {
+        notify.error('Failed to load tasks', msg || 'Request failed.');
+      }
+    } finally {
+      if (!silent) {
+        setTodosLoading(false);
+      }
+    }
+  };
+
   const stopRun = () => {
     const tid = String(ai.activeThreadId() ?? '').trim();
     const rid = String(ai.runIdForThread(tid) ?? '').trim();
@@ -624,6 +754,9 @@ export function EnvAIPage() {
       chat?.clearMessages();
       setHasMessages(false);
       setRunPhaseLabel('Working');
+      setThreadTodos(null);
+      setTodosError('');
+      setTodosLoading(false);
       return;
     }
 
@@ -633,6 +766,7 @@ export function EnvAIPage() {
     // Draft -> thread promotion: keep the optimistic user message rendered by ChatProvider.
     if (skipNextThreadLoad && tid) {
       skipNextThreadLoad = false;
+      void loadThreadTodos(tid, { silent: true, notifyError: false });
       return;
     }
 
@@ -640,14 +774,21 @@ export function EnvAIPage() {
       chat?.clearMessages();
       setHasMessages(false);
       setRunPhaseLabel('Working');
+      setThreadTodos(null);
+      setTodosError('');
+      setTodosLoading(false);
       return;
     }
 
     chat?.clearMessages();
     setHasMessages(false);
     setRunPhaseLabel('Working');
+    setThreadTodos(null);
+    setTodosError('');
+    setTodosLoading(true);
     replayAppliedByThread.delete(String(tid ?? '').trim());
     void loadThreadMessages(tid);
+    void loadThreadTodos(tid, { silent: false, notifyError: false });
   });
 
   createEffect(() => {
@@ -670,6 +811,15 @@ export function EnvAIPage() {
           return;
         }
         if (tid === String(ai.activeThreadId() ?? '').trim()) {
+          const block = streamEvent?.block as any;
+          const blockType = String(block?.type ?? '').trim().toLowerCase();
+          const toolName = String(block?.toolName ?? '').trim();
+          const toolStatus = String(block?.status ?? '').trim().toLowerCase();
+          if (streamType === 'block-set' && blockType === 'tool-call' && toolName === 'write_todos' && toolStatus === 'success') {
+            void loadThreadTodos(tid, { silent: true, notifyError: false });
+          }
+        }
+        if (tid === String(ai.activeThreadId() ?? '').trim()) {
           syncThreadReplay(tid);
           scheduleFollowScrollToLatest();
         }
@@ -685,6 +835,7 @@ export function EnvAIPage() {
       if (tid === String(ai.activeThreadId() ?? '').trim()) {
         setRunPhaseLabel('Working');
         void loadThreadMessages(tid);
+        void loadThreadTodos(tid, { silent: true, notifyError: false });
       }
 
       const runId = String(event.runId ?? '').trim();
@@ -697,6 +848,21 @@ export function EnvAIPage() {
 
     onCleanup(() => {
       unsub();
+    });
+  });
+
+  createEffect(() => {
+    if (!chatReady()) return;
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    if (!tid || !activeThreadRunning()) return;
+
+    void loadThreadTodos(tid, { silent: true, notifyError: false });
+    const timer = window.setInterval(() => {
+      void loadThreadTodos(tid, { silent: true, notifyError: false });
+    }, 1600);
+
+    onCleanup(() => {
+      window.clearInterval(timer);
     });
   });
 
@@ -1095,6 +1261,54 @@ export function EnvAIPage() {
                 <div class="mt-1 text-muted-foreground pl-6">
                   {ai.models.error instanceof Error ? ai.models.error.message : String(ai.models.error)}
                 </div>
+              </div>
+            </Show>
+
+            <Show when={ai.activeThreadId()}>
+              <div class="mx-3 mt-3 px-3 py-2.5 rounded-lg border border-border/70 bg-card/60">
+                <div class="flex items-center justify-between gap-2">
+                  <div class="text-xs font-medium text-foreground">Tasks</div>
+                  <div class="text-[11px] text-muted-foreground">
+                    {unresolvedTodoCount()} open
+                  </div>
+                </div>
+
+                <Show when={!todosLoading() || activeThreadTodos().length > 0} fallback={
+                  <div class="mt-2 text-[11px] text-muted-foreground">Loading tasks...</div>
+                }>
+                  <Show when={!todosError()} fallback={
+                    <div class="mt-2 text-[11px] text-error">{todosError()}</div>
+                  }>
+                    <Show when={activeThreadTodos().length > 0} fallback={
+                      <div class="mt-2 text-[11px] text-muted-foreground">No tasks yet. The agent can update tasks with `write_todos`.</div>
+                    }>
+                      <div class="mt-2 space-y-1.5 max-h-44 overflow-auto pr-1">
+                        <For each={activeThreadTodos()}>
+                          {(item) => (
+                            <div class="rounded-md border border-border/60 bg-background/70 px-2 py-1.5">
+                              <div class="flex items-center gap-2">
+                                <span class={cn('inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium', todoStatusBadgeClass(item.status))}>
+                                  {todoStatusLabel(item.status)}
+                                </span>
+                                <span class="text-xs text-foreground leading-relaxed break-words">{item.content}</span>
+                              </div>
+                              <Show when={item.note}>
+                                <div class="mt-1 text-[11px] text-muted-foreground leading-relaxed break-words">
+                                  {item.note}
+                                </div>
+                              </Show>
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
+
+                    <div class="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
+                      <span>Version {threadTodos()?.version ?? 0}</span>
+                      <span>{todoUpdatedLabel() ? `Updated ${todoUpdatedLabel()}` : ''}</span>
+                    </div>
+                  </Show>
+                </Show>
               </div>
             </Show>
 

@@ -13,6 +13,11 @@ var builtinDefinitions = map[string]Definition{
 		Mutating:         false,
 		RequiresApproval: false,
 	},
+	"write_todos": {
+		Name:             "write_todos",
+		Mutating:         false,
+		RequiresApproval: false,
+	},
 }
 
 func LookupDefinition(toolName string) (Definition, bool) {

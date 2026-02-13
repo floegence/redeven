@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -415,6 +416,50 @@ func (s *Service) ListThreadMessages(ctx context.Context, meta *session.Meta, th
 		out.Messages = append(out.Messages, json.RawMessage(raw))
 	}
 	return out, nil
+}
+
+func (s *Service) GetThreadTodos(ctx context.Context, meta *session.Meta, threadID string) (*ThreadTodosView, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	if meta == nil {
+		return nil, errors.New("missing session metadata")
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil, errors.New("missing thread_id")
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if endpointID == "" {
+		return nil, errors.New("invalid request")
+	}
+	th, err := db.GetThread(ctx, endpointID, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if th == nil {
+		return nil, sql.ErrNoRows
+	}
+
+	snapshot, err := db.GetThreadTodosSnapshot(ctx, endpointID, threadID)
+	if err != nil {
+		return nil, err
+	}
+	todos, err := decodeTodoItemsJSON(snapshot.TodosJSON)
+	if err != nil {
+		return nil, err
+	}
+	return &ThreadTodosView{
+		Version:         snapshot.Version,
+		UpdatedAtUnixMs: snapshot.UpdatedAtUnixMs,
+		Todos:           append([]TodoItem(nil), todos...),
+	}, nil
 }
 
 func (s *Service) AppendThreadMessage(ctx context.Context, meta *session.Meta, threadID string, role string, text string, format string) error {

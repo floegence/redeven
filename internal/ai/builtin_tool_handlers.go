@@ -406,6 +406,17 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:         100,
 		},
 		{
+			Name:             "write_todos",
+			Description:      "Replace the current thread todo list snapshot. Keep at most one in_progress item.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"todos": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "status": map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "cancelled"}}, "note": map[string]any{"type": "string"}}, "required": []string{"content", "status"}, "additionalProperties": false}}, "expected_version": map[string]any{"type": "integer", "minimum": 0}, "explanation": map[string]any{"type": "string", "maxLength": 500}}, "required": []string{"todos"}, "additionalProperties": false}),
+			ParallelSafe:     true,
+			Mutating:         false,
+			RequiresApproval: false,
+			Source:           "builtin",
+			Namespace:        "builtin.state",
+			Priority:         100,
+		},
+		{
 			Name:         "task_complete",
 			Description:  "You MUST call this tool when the task is done. Provide a detailed result summary describing what was accomplished.",
 			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"result": map[string]any{"type": "string"}, "evidence_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "remaining_risks": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "next_actions": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"result"}, "additionalProperties": false}),

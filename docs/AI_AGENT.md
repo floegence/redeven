@@ -86,6 +86,7 @@ Built-in tools:
 
 - `terminal.exec`
 - `apply_patch`
+- `write_todos`
 
 Hard guardrails are controlled by `ai.execution_policy`:
 
