@@ -20,16 +20,16 @@ func TestClassifyTaskComplexity(t *testing.T) {
 		},
 		{
 			name:      "standard_analysis_request",
-			userInput: "请先分析项目结构，然后给我一个实施计划。",
+			userInput: "Analyze the repository structure first, then provide an implementation plan.",
 			wantLevel: TaskComplexityStandard,
 		},
 		{
 			name:      "complex_multi_signal_request",
-			userInput: "请对这个仓库做全面深入分析，并且分阶段给出重构计划、执行步骤和验证方案，最终输出完整结论。",
+			userInput: "Provide a comprehensive deep-dive of this repository, then deliver a phased refactor plan, execution steps, verification strategy, and a final report.",
 			attach: []RunAttachmentIn{
 				{Name: "spec.md", MimeType: "text/markdown", URL: "file:///tmp/spec.md"},
 			},
-			openGoal:   "重构 agent loop",
+			openGoal:   "refactor the agent loop",
 			wantLevel:  TaskComplexityComplex,
 			wantReason: "attachments_present",
 		},
@@ -41,7 +41,7 @@ func TestClassifyTaskComplexity(t *testing.T) {
 			t.Parallel()
 			got := classifyTaskComplexity(tc.userInput, tc.attach, tc.openGoal)
 			if got.Level != tc.wantLevel {
-				t.Fatalf("classifyTaskComplexity level=%q, want %q (score=%d, reasons=%v)", got.Level, tc.wantLevel, got.Score, got.Reasons)
+				t.Fatalf("classifyTaskComplexity level=%q, want %q (reasons=%v)", got.Level, tc.wantLevel, got.Reasons)
 			}
 			if tc.wantReason != "" {
 				found := false

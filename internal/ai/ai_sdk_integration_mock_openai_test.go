@@ -116,13 +116,13 @@ func classifyIntentResponseToken(req map[string]any) string {
 	userText := strings.ToLower(strings.TrimSpace(extractResponsesUserText(req)))
 	openGoalText, userMessage := extractIntentClassifierContext(userText)
 	if userText == "" {
-		return `{"intent":"task","confidence":0.60,"reason":"empty_input","objective_mode":"replace"}`
+		return `{"intent":"task","reason":"empty_input","objective_mode":"replace"}`
 	}
 	if strings.TrimSpace(openGoalText) != "" {
 		continuationSignals := []string{"continue", "go on", "keep going", "proceed"}
 		for _, signal := range continuationSignals {
 			if strings.Contains(userMessage, signal) {
-				return `{"intent":"task","confidence":0.94,"reason":"follow_up_to_open_goal","objective_mode":"continue"}`
+				return `{"intent":"task","reason":"follow_up_to_open_goal","objective_mode":"continue"}`
 			}
 		}
 	}
@@ -132,16 +132,16 @@ func classifyIntentResponseToken(req map[string]any) string {
 	}
 	for _, signal := range taskSignals {
 		if strings.Contains(userText, signal) {
-			return `{"intent":"task","confidence":0.93,"reason":"actionable_request_detected","objective_mode":"replace"}`
+			return `{"intent":"task","reason":"actionable_request_detected","objective_mode":"replace"}`
 		}
 	}
 	socialSignals := []string{"hello", "hi", "hey", "thanks", "thank you", "你好", "谢谢"}
 	for _, signal := range socialSignals {
 		if strings.Contains(userText, signal) {
-			return `{"intent":"social","confidence":0.96,"reason":"small_talk_detected","objective_mode":"replace"}`
+			return `{"intent":"social","reason":"small_talk_detected","objective_mode":"replace"}`
 		}
 	}
-	return `{"intent":"task","confidence":0.93,"reason":"actionable_request_detected","objective_mode":"replace"}`
+	return `{"intent":"task","reason":"actionable_request_detected","objective_mode":"replace"}`
 }
 
 func extractIntentClassifierContext(text string) (string, string) {

@@ -12,7 +12,6 @@ func TestClassifyRunIntent_UsesModelDecision(t *testing.T) {
 	got := classifyRunIntent("hello", nil, "", func() (intentDecision, error) {
 		return intentDecision{
 			Intent:        RunIntentSocial,
-			Confidence:    0.92,
 			Reason:        "small_talk_detected_by_model",
 			Source:        RunIntentSourceModel,
 			ObjectiveMode: RunObjectiveModeReplace,
@@ -52,7 +51,6 @@ func TestClassifyRunIntent_ModelControlsContinuationObjectiveMode(t *testing.T) 
 	got := classifyRunIntent("continue", nil, "fix startup failure", func() (intentDecision, error) {
 		return intentDecision{
 			Intent:        RunIntentTask,
-			Confidence:    0.88,
 			Reason:        "follow_up_to_open_goal",
 			ObjectiveMode: RunObjectiveModeContinue,
 		}, nil
@@ -83,7 +81,7 @@ func TestClassifyRunIntent_TaskByAttachment(t *testing.T) {
 func TestParseModelIntentDecision_CodeFenceJSON(t *testing.T) {
 	t.Parallel()
 
-	got, err := parseModelIntentDecision("```json\n{\"intent\":\"social\",\"confidence\":0.85,\"reason\":\"casual_chat\"}\n```")
+	got, err := parseModelIntentDecision("```json\n{\"intent\":\"social\",\"reason\":\"casual_chat\",\"objective_mode\":\"replace\"}\n```")
 	if err != nil {
 		t.Fatalf("parseModelIntentDecision: %v", err)
 	}

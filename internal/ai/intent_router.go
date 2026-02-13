@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/floegence/redeven-agent/internal/config"
@@ -14,11 +13,9 @@ const (
 	RunIntentSocial = "social"
 	RunIntentTask   = "task"
 
-	RunIntentSourceModel                = "model"
-	RunIntentSourceDeterministic        = "deterministic_fallback"
-	intentClassifierPromptMarker        = "INTENT_CLASSIFIER_V1"
-	defaultIntentClassifierConfidence   = 0.5
-	defaultIntentModelFailureConfidence = 0.55
+	RunIntentSourceModel         = "model"
+	RunIntentSourceDeterministic = "deterministic_fallback"
+	intentClassifierPromptMarker = "INTENT_CLASSIFIER_V1"
 
 	RunObjectiveModeReplace  = "replace"
 	RunObjectiveModeContinue = "continue"
@@ -26,7 +23,6 @@ const (
 
 type intentDecision struct {
 	Intent        string
-	Confidence    float64
 	Reason        string
 	Source        string
 	ObjectiveMode string
@@ -61,7 +57,6 @@ func classifyRunIntent(userInput string, attachments []RunAttachmentIn, openGoal
 	if len(attachments) > 0 {
 		return intentDecision{
 			Intent:        RunIntentTask,
-			Confidence:    0.98,
 			Reason:        "attachments_present",
 			Source:        RunIntentSourceDeterministic,
 			ObjectiveMode: RunObjectiveModeReplace,
@@ -75,7 +70,6 @@ func classifyRunIntent(userInput string, attachments []RunAttachmentIn, openGoal
 	}
 	return intentDecision{
 		Intent:        RunIntentTask,
-		Confidence:    defaultIntentModelFailureConfidence,
 		Reason:        "model_classifier_failed",
 		Source:        RunIntentSourceDeterministic,
 		ObjectiveMode: RunObjectiveModeReplace,
@@ -85,7 +79,6 @@ func classifyRunIntent(userInput string, attachments []RunAttachmentIn, openGoal
 func normalizeModelIntentDecision(decision intentDecision) intentDecision {
 	normalized := intentDecision{
 		Intent:        normalizeRunIntent(decision.Intent),
-		Confidence:    normalizeIntentConfidence(decision.Confidence),
 		Reason:        normalizeIntentReason(decision.Reason),
 		Source:        RunIntentSourceModel,
 		ObjectiveMode: normalizeObjectiveMode(decision.ObjectiveMode),
@@ -109,22 +102,6 @@ func normalizeObjectiveMode(mode string) string {
 	}
 }
 
-func normalizeIntentConfidence(v float64) float64 {
-	if math.IsNaN(v) || math.IsInf(v, 0) {
-		return defaultIntentClassifierConfidence
-	}
-	if v < 0 {
-		return 0
-	}
-	if v > 1 {
-		return 1
-	}
-	if v == 0 {
-		return defaultIntentClassifierConfidence
-	}
-	return v
-}
-
 func normalizeIntentReason(reason string) string {
 	trimmed := strings.TrimSpace(reason)
 	if trimmed == "" {
@@ -141,10 +118,10 @@ func buildIntentClassifierMessages(userInput string, openGoal string) []Message 
 	system := strings.Join([]string{
 		intentClassifierPromptMarker,
 		"You classify whether a user message is social chat or a task request for a coding agent.",
-		"Return exactly one JSON object with keys: intent, confidence, reason, objective_mode.",
+		"Return exactly one JSON object with keys: intent, reason, objective_mode.",
 		"intent must be one of: social, task.",
-		"confidence must be a number between 0 and 1.",
-		"reason must be a short snake_case phrase.",
+		"Choose the intent category directly, based on the category definitions below.",
+		"reason must be a short snake_case phrase that explains why this category was selected.",
 		"objective_mode must be one of: replace, continue.",
 		"Use objective_mode=continue only when there is an existing open goal and user message clearly continues it.",
 		"If there is no existing open goal, objective_mode must be replace.",
@@ -185,10 +162,9 @@ func parseModelIntentDecision(raw string) (intentDecision, error) {
 	}
 
 	type modelIntentPayload struct {
-		Intent        string  `json:"intent"`
-		Confidence    float64 `json:"confidence"`
-		Reason        string  `json:"reason"`
-		ObjectiveMode string  `json:"objective_mode"`
+		Intent        string `json:"intent"`
+		Reason        string `json:"reason"`
+		ObjectiveMode string `json:"objective_mode"`
 	}
 	parse := func(text string) (modelIntentPayload, error) {
 		var payload modelIntentPayload
@@ -219,7 +195,6 @@ func parseModelIntentDecision(raw string) (intentDecision, error) {
 
 	return normalizeModelIntentDecision(intentDecision{
 		Intent:        intent,
-		Confidence:    payload.Confidence,
 		Reason:        payload.Reason,
 		ObjectiveMode: payload.ObjectiveMode,
 	}), nil

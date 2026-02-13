@@ -760,25 +760,21 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	complexityDecision := classifyTaskComplexity(rawUserInputText, req.Input.Attachments, existingOpenGoal)
 	if req.Options.Intent != RunIntentTask {
 		complexityDecision.Level = TaskComplexitySimple
-		complexityDecision.Score = 0
 		complexityDecision.Reasons = []string{"non_task_intent"}
 	}
 	req.Options.Complexity = normalizeTaskComplexity(complexityDecision.Level)
 	r.persistRunEvent("intent.classified", RealtimeStreamKindLifecycle, map[string]any{
-		"intent":            intentDecision.Intent,
-		"confidence":        intentDecision.Confidence,
-		"reason":            intentDecision.Reason,
-		"source":            intentDecision.Source,
-		"objective_mode":    intentDecision.ObjectiveMode,
-		"intent_source":     intentDecision.Source,
-		"intent_confidence": intentDecision.Confidence,
-		"intent_reason":     intentDecision.Reason,
-		"mode":              req.Options.Mode,
+		"intent":         intentDecision.Intent,
+		"reason":         intentDecision.Reason,
+		"source":         intentDecision.Source,
+		"objective_mode": intentDecision.ObjectiveMode,
+		"intent_source":  intentDecision.Source,
+		"intent_reason":  intentDecision.Reason,
+		"mode":           req.Options.Mode,
 	})
 	r.persistRunEvent("complexity.classified", RealtimeStreamKindLifecycle, map[string]any{
 		"intent":     req.Options.Intent,
 		"complexity": req.Options.Complexity,
-		"score":      complexityDecision.Score,
 		"reasons":    append([]string(nil), complexityDecision.Reasons...),
 	})
 	if intentDecision.Intent == RunIntentSocial {
