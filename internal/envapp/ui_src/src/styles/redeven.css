@@ -47,3 +47,15 @@
 .chat-toolbar-separator {
   box-shadow: 0 -1px 3px 0 rgba(0, 0, 0, 0.04);
 }
+
+/* Prevent scroll anchoring from fighting chat auto-follow while streaming. */
+.chat-message-list-scroll,
+.chat-message-list-inner,
+.chat-message-list-item {
+  overflow-anchor: none;
+}
+
+/* Keep the layout stable when the vertical scrollbar toggles. */
+.chat-message-list-scroll {
+  scrollbar-gutter: stable;
+}
