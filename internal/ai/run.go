@@ -1313,7 +1313,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	r.persistSetToolBlock(idx, block)
 	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, nil, nil, "", toolStartedAt, time.Now())
 
-	result, toolErrRaw := r.execTool(ctx, meta, toolName, args)
+	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	if toolErrRaw != nil {
 		if errors.Is(toolErrRaw, context.Canceled) {
 			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Canceled", Retryable: false}, "")
@@ -1481,7 +1481,7 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 	return string(b), strings.TrimSpace(sb.String()), assistantAt, nil
 }
 
-func (r *run) execTool(ctx context.Context, meta *session.Meta, toolName string, args map[string]any) (any, error) {
+func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, toolName string, args map[string]any) (any, error) {
 	switch toolName {
 	case "apply_patch":
 		if meta == nil || !meta.CanWrite {
@@ -1519,6 +1519,18 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolName string,
 			return nil, errors.New("invalid cwd")
 		}
 		return r.toolTerminalExec(ctx, p.Command, cwd, p.TimeoutMS)
+
+	case "write_todos":
+		var p struct {
+			Todos           []TodoItem `json:"todos"`
+			ExpectedVersion *int64     `json:"expected_version"`
+			Explanation     string     `json:"explanation"`
+		}
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return r.toolWriteTodos(ctx, toolID, p.Todos, p.ExpectedVersion, p.Explanation)
 
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)

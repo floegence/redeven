@@ -3,6 +3,8 @@ package threadstore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -164,7 +166,7 @@ PRAGMA user_version=1;
 		}
 	}
 
-	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "context_snapshots", "provider_capabilities"} {
+	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "ai_thread_todos", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "context_snapshots", "provider_capabilities"} {
 		var exists int
 		if err := s.db.QueryRowContext(ctx, `
 SELECT COUNT(1)
@@ -182,8 +184,8 @@ WHERE type = 'table' AND name = ?
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 5 {
-		t.Fatalf("user_version=%d, want 5", version)
+	if version != 6 {
+		t.Fatalf("user_version=%d, want 6", version)
 	}
 }
 
@@ -353,4 +355,99 @@ func TestBuildPreview_AssistantFallsBackWhenMessageJSONInvalid(t *testing.T) {
 	if preview != text {
 		t.Fatalf("preview=%q, want %q", preview, text)
 	}
+}
+
+func TestStore_ReplaceThreadTodosSnapshot(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	initial, err := s.GetThreadTodosSnapshot(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThreadTodosSnapshot initial: %v", err)
+	}
+	if initial.Version != 0 {
+		t.Fatalf("initial.Version=%d, want 0", initial.Version)
+	}
+	if initial.TodosJSON != "[]" {
+		t.Fatalf("initial.TodosJSON=%q, want []", initial.TodosJSON)
+	}
+
+	payload1 := `[{"id":"todo_1","content":"Inspect workspace","status":"in_progress"}]`
+	updated, err := s.ReplaceThreadTodosSnapshot(ctx, ThreadTodosSnapshot{
+		EndpointID:      "env_1",
+		ThreadID:        "th_1",
+		TodosJSON:       payload1,
+		UpdatedByRunID:  "run_1",
+		UpdatedByToolID: "tool_1",
+	}, nil)
+	if err != nil {
+		t.Fatalf("ReplaceThreadTodosSnapshot first: %v", err)
+	}
+	if updated.Version != 1 {
+		t.Fatalf("updated.Version=%d, want 1", updated.Version)
+	}
+
+	payload2 := `[{"id":"todo_1","content":"Inspect workspace","status":"completed"}]`
+	expectedV1 := int64(1)
+	updated, err = s.ReplaceThreadTodosSnapshot(ctx, ThreadTodosSnapshot{
+		EndpointID:      "env_1",
+		ThreadID:        "th_1",
+		TodosJSON:       payload2,
+		UpdatedByRunID:  "run_1",
+		UpdatedByToolID: "tool_2",
+	}, &expectedV1)
+	if err != nil {
+		t.Fatalf("ReplaceThreadTodosSnapshot second: %v", err)
+	}
+	if updated.Version != 2 {
+		t.Fatalf("updated.Version=%d, want 2", updated.Version)
+	}
+
+	latest, err := s.GetThreadTodosSnapshot(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThreadTodosSnapshot latest: %v", err)
+	}
+	if latest.Version != 2 {
+		t.Fatalf("latest.Version=%d, want 2", latest.Version)
+	}
+	var decoded []map[string]any
+	if err := json.Unmarshal([]byte(latest.TodosJSON), &decoded); err != nil {
+		t.Fatalf("decode latest todos: %v", err)
+	}
+	if len(decoded) != 1 {
+		t.Fatalf("len(decoded)=%d, want 1", len(decoded))
+	}
+	if got := strings.TrimSpace(anyToString(decoded[0]["status"])); got != "completed" {
+		t.Fatalf("status=%q, want completed", got)
+	}
+
+	stale := int64(1)
+	_, err = s.ReplaceThreadTodosSnapshot(ctx, ThreadTodosSnapshot{
+		EndpointID:      "env_1",
+		ThreadID:        "th_1",
+		TodosJSON:       payload1,
+		UpdatedByRunID:  "run_2",
+		UpdatedByToolID: "tool_3",
+	}, &stale)
+	if !errors.Is(err, ErrThreadTodosVersionConflict) {
+		t.Fatalf("stale replace err=%v, want %v", err, ErrThreadTodosVersionConflict)
+	}
+}
+
+func anyToString(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
 }

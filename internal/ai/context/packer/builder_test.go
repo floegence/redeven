@@ -128,6 +128,16 @@ func TestBuilder_BuildPromptPack(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertMemoryItem long_term: %v", err)
 	}
+	if _, err := db.ReplaceThreadTodosSnapshot(ctx, threadstore.ThreadTodosSnapshot{
+		EndpointID:      "env_1",
+		ThreadID:        "th_1",
+		TodosJSON:       `[{"id":"todo_runtime_1","content":"Inspect failing tests output","status":"in_progress","note":"collect the exact assertion failure"}]`,
+		UpdatedAtUnixMs: now + 2,
+		UpdatedByRunID:  "run_1",
+		UpdatedByToolID: "tool_1",
+	}, nil); err != nil {
+		t.Fatalf("ReplaceThreadTodosSnapshot: %v", err)
+	}
 
 	repo := contextstore.NewRepository(db)
 	r := retriever.New(repo)
@@ -157,6 +167,16 @@ func TestBuilder_BuildPromptPack(t *testing.T) {
 	}
 	if len(pack.PendingTodos) == 0 {
 		t.Fatalf("expected pending todos")
+	}
+	foundThreadTodo := false
+	for _, item := range pack.PendingTodos {
+		if item.MemoryID == "thread_todo::todo_runtime_1" {
+			foundThreadTodo = true
+			break
+		}
+	}
+	if !foundThreadTodo {
+		t.Fatalf("expected thread todo to be injected into pending_todos")
 	}
 	if pack.EstimatedInputTokens <= 0 {
 		t.Fatalf("expected EstimatedInputTokens > 0")

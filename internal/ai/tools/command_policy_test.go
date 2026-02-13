@@ -113,3 +113,25 @@ func TestInvocationRiskInfo_NormalizedCommand(t *testing.T) {
 		t.Fatalf("normalized=%q, want %q", normalized, "pwd && rg --files | head -n 20")
 	}
 }
+
+func TestInvocationPolicies_WriteTodos(t *testing.T) {
+	t.Parallel()
+
+	args := map[string]any{
+		"todos": []any{
+			map[string]any{
+				"content": "Inspect workspace",
+				"status":  "in_progress",
+			},
+		},
+	}
+	if RequiresApprovalForInvocation("write_todos", args) {
+		t.Fatalf("write_todos should not require approval")
+	}
+	if IsMutatingForInvocation("write_todos", args) {
+		t.Fatalf("write_todos should not be classified as mutating")
+	}
+	if IsDangerousInvocation("write_todos", args) {
+		t.Fatalf("write_todos should not be dangerous")
+	}
+}

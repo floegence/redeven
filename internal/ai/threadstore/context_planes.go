@@ -12,6 +12,8 @@ import (
 
 const openGoalMemoryPrefix = "open_goal::"
 
+var ErrThreadTodosVersionConflict = errors.New("thread todos version conflict")
+
 // ConversationTurn links transcript messages to one semantic turn.
 type ConversationTurn struct {
 	ID                 int64  `json:"id"`
@@ -74,6 +76,17 @@ type ProviderCapabilityRecord struct {
 	ModelName       string `json:"model_name"`
 	CapabilityJSON  string `json:"capability_json"`
 	UpdatedAtUnixMs int64  `json:"updated_at_unix_ms"`
+}
+
+// ThreadTodosSnapshot stores the thread-level todo list snapshot.
+type ThreadTodosSnapshot struct {
+	EndpointID      string `json:"endpoint_id"`
+	ThreadID        string `json:"thread_id"`
+	Version         int64  `json:"version"`
+	TodosJSON       string `json:"todos_json"`
+	UpdatedAtUnixMs int64  `json:"updated_at_unix_ms"`
+	UpdatedByRunID  string `json:"updated_by_run_id"`
+	UpdatedByToolID string `json:"updated_by_tool_id"`
 }
 
 func normalizeScope(scope string) string {
@@ -684,6 +697,142 @@ WHERE memory_id = ?
 		return "", err
 	}
 	return strings.TrimSpace(content), nil
+}
+
+func (s *Store) GetThreadTodosSnapshot(ctx context.Context, endpointID string, threadID string) (ThreadTodosSnapshot, error) {
+	out := ThreadTodosSnapshot{
+		EndpointID: strings.TrimSpace(endpointID),
+		ThreadID:   strings.TrimSpace(threadID),
+		Version:    0,
+		TodosJSON:  "[]",
+	}
+	if s == nil || s.db == nil {
+		return out, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if out.EndpointID == "" || out.ThreadID == "" {
+		return out, errors.New("invalid request")
+	}
+	err := s.db.QueryRowContext(ctx, `
+SELECT endpoint_id, thread_id, version, todos_json, updated_at_unix_ms, updated_by_run_id, updated_by_tool_id
+FROM ai_thread_todos
+WHERE endpoint_id = ? AND thread_id = ?
+`, out.EndpointID, out.ThreadID).Scan(
+		&out.EndpointID,
+		&out.ThreadID,
+		&out.Version,
+		&out.TodosJSON,
+		&out.UpdatedAtUnixMs,
+		&out.UpdatedByRunID,
+		&out.UpdatedByToolID,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return out, nil
+	}
+	if err != nil {
+		return out, err
+	}
+	out.EndpointID = strings.TrimSpace(out.EndpointID)
+	out.ThreadID = strings.TrimSpace(out.ThreadID)
+	out.TodosJSON = strings.TrimSpace(out.TodosJSON)
+	out.UpdatedByRunID = strings.TrimSpace(out.UpdatedByRunID)
+	out.UpdatedByToolID = strings.TrimSpace(out.UpdatedByToolID)
+	if out.TodosJSON == "" {
+		out.TodosJSON = "[]"
+	}
+	if out.Version < 0 {
+		out.Version = 0
+	}
+	return out, nil
+}
+
+func (s *Store) ReplaceThreadTodosSnapshot(ctx context.Context, rec ThreadTodosSnapshot, expectedVersion *int64) (ThreadTodosSnapshot, error) {
+	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
+	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
+	rec.TodosJSON = strings.TrimSpace(rec.TodosJSON)
+	rec.UpdatedByRunID = strings.TrimSpace(rec.UpdatedByRunID)
+	rec.UpdatedByToolID = strings.TrimSpace(rec.UpdatedByToolID)
+	if rec.TodosJSON == "" {
+		rec.TodosJSON = "[]"
+	}
+	if rec.EndpointID == "" || rec.ThreadID == "" {
+		return ThreadTodosSnapshot{}, errors.New("invalid request")
+	}
+	if expectedVersion != nil && *expectedVersion < 0 {
+		return ThreadTodosSnapshot{}, errors.New("invalid expected_version")
+	}
+	if s == nil || s.db == nil {
+		return ThreadTodosSnapshot{}, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if rec.UpdatedAtUnixMs <= 0 {
+		rec.UpdatedAtUnixMs = time.Now().UnixMilli()
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ThreadTodosSnapshot{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var currentVersion int64
+	rowErr := tx.QueryRowContext(ctx, `
+SELECT version
+FROM ai_thread_todos
+WHERE endpoint_id = ? AND thread_id = ?
+`, rec.EndpointID, rec.ThreadID).Scan(&currentVersion)
+
+	switch {
+	case errors.Is(rowErr, sql.ErrNoRows):
+		if expectedVersion != nil && *expectedVersion != 0 {
+			return ThreadTodosSnapshot{}, ErrThreadTodosVersionConflict
+		}
+		rec.Version = 1
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO ai_thread_todos(
+  endpoint_id, thread_id, version, todos_json,
+  updated_at_unix_ms, updated_by_run_id, updated_by_tool_id
+) VALUES(?, ?, ?, ?, ?, ?, ?)
+`, rec.EndpointID, rec.ThreadID, rec.Version, rec.TodosJSON, rec.UpdatedAtUnixMs, rec.UpdatedByRunID, rec.UpdatedByToolID); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "unique") {
+				return ThreadTodosSnapshot{}, ErrThreadTodosVersionConflict
+			}
+			return ThreadTodosSnapshot{}, err
+		}
+	case rowErr != nil:
+		return ThreadTodosSnapshot{}, rowErr
+	default:
+		if expectedVersion != nil && *expectedVersion != currentVersion {
+			return ThreadTodosSnapshot{}, ErrThreadTodosVersionConflict
+		}
+		nextVersion := currentVersion + 1
+		res, err := tx.ExecContext(ctx, `
+UPDATE ai_thread_todos
+SET version = ?,
+    todos_json = ?,
+    updated_at_unix_ms = ?,
+    updated_by_run_id = ?,
+    updated_by_tool_id = ?
+WHERE endpoint_id = ? AND thread_id = ? AND version = ?
+`, nextVersion, rec.TodosJSON, rec.UpdatedAtUnixMs, rec.UpdatedByRunID, rec.UpdatedByToolID, rec.EndpointID, rec.ThreadID, currentVersion)
+		if err != nil {
+			return ThreadTodosSnapshot{}, err
+		}
+		affected, _ := res.RowsAffected()
+		if affected == 0 {
+			return ThreadTodosSnapshot{}, ErrThreadTodosVersionConflict
+		}
+		rec.Version = nextVersion
+	}
+
+	if err := tx.Commit(); err != nil {
+		return ThreadTodosSnapshot{}, err
+	}
+	return rec, nil
 }
 
 func (s *Store) InsertContextSnapshot(ctx context.Context, rec ContextSnapshotRecord) error {

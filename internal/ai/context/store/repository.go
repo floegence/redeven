@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/floegence/redeven-agent/internal/ai/context/model"
@@ -261,6 +262,106 @@ func (r *Repository) ListRecentMemoryItems(ctx context.Context, endpointID strin
 			Confidence:     rec.Confidence,
 			CreatedAtUnix:  rec.CreatedAtUnixMs,
 			UpdatedAtUnix:  rec.UpdatedAtUnixMs,
+		})
+	}
+	return out, nil
+}
+
+type threadTodoItem struct {
+	ID      string `json:"id"`
+	Content string `json:"content"`
+	Status  string `json:"status"`
+	Note    string `json:"note"`
+}
+
+func normalizeThreadTodoStatus(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "pending":
+		return "pending"
+	case "in_progress":
+		return "in_progress"
+	case "completed":
+		return "completed"
+	case "cancelled":
+		return "cancelled"
+	default:
+		return ""
+	}
+}
+
+func (r *Repository) ListThreadPendingTodos(ctx context.Context, endpointID string, threadID string, limit int) ([]model.MemoryItem, error) {
+	if !r.Ready() {
+		return nil, errors.New("repository not ready")
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return nil, errors.New("invalid request")
+	}
+	if limit <= 0 {
+		limit = 8
+	}
+	if limit > 40 {
+		limit = 40
+	}
+
+	snapshot, err := r.db.GetThreadTodosSnapshot(ctx, endpointID, threadID)
+	if err != nil {
+		return nil, err
+	}
+	raw := strings.TrimSpace(snapshot.TodosJSON)
+	if raw == "" {
+		raw = "[]"
+	}
+	var todos []threadTodoItem
+	if err := json.Unmarshal([]byte(raw), &todos); err != nil {
+		return nil, err
+	}
+
+	out := make([]model.MemoryItem, 0, len(todos))
+	seen := make(map[string]struct{}, len(todos))
+	for i, item := range todos {
+		if len(out) >= limit {
+			break
+		}
+		content := strings.TrimSpace(item.Content)
+		if content == "" {
+			continue
+		}
+		status := normalizeThreadTodoStatus(item.Status)
+		if status != "pending" && status != "in_progress" {
+			continue
+		}
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			id = fmt.Sprintf("todo_%d", i+1)
+		}
+		memoryID := "thread_todo::" + id
+		if _, ok := seen[memoryID]; ok {
+			continue
+		}
+		seen[memoryID] = struct{}{}
+
+		normalizedContent := content
+		if status == "in_progress" {
+			normalizedContent = "[in_progress] " + normalizedContent
+		}
+		if note := strings.TrimSpace(item.Note); note != "" {
+			normalizedContent = normalizedContent + " (" + note + ")"
+		}
+
+		out = append(out, model.MemoryItem{
+			MemoryID:       memoryID,
+			ThreadID:       threadID,
+			Scope:          model.MemoryScopeWorking,
+			Kind:           model.MemoryKindTodo,
+			Content:        normalizedContent,
+			SourceRefsJSON: `["thread_todos"]`,
+			Importance:     0.85,
+			Freshness:      1,
+			Confidence:     0.95,
+			CreatedAtUnix:  snapshot.UpdatedAtUnixMs,
+			UpdatedAtUnix:  snapshot.UpdatedAtUnixMs,
 		})
 	}
 	return out, nil
