@@ -38,7 +38,7 @@ type PermissionPolicy = Readonly<{
 }>;
 
 type AIProviderType = 'openai' | 'anthropic' | 'openai_compatible';
-type AIProviderModel = Readonly<{ model_name: string; label?: string; is_default?: boolean }>;
+type AIProviderModel = Readonly<{ model_name: string; is_default?: boolean }>;
 type AIProvider = Readonly<{ id: string; name?: string; type: AIProviderType; base_url?: string; models: AIProviderModel[] }>;
 type AIExecutionPolicy = Readonly<{
   require_user_approval?: boolean;
@@ -81,7 +81,7 @@ type SettingsResponse = Readonly<{
 }>;
 
 type PermissionRow = { key: string; read: boolean; write: boolean; execute: boolean };
-type AIProviderModelRow = { model_name: string; label: string; is_default: boolean };
+type AIProviderModelRow = { model_name: string; is_default: boolean };
 type AIProviderRow = { id: string; name: string; type: AIProviderType; base_url: string; models: AIProviderModelRow[] };
 type AIPreservedUIFields = {
   mode?: 'act' | 'plan';
@@ -151,7 +151,7 @@ function defaultAIConfig(): AIConfig {
         name: 'OpenAI',
         type: 'openai',
         base_url: 'https://api.openai.com/v1',
-        models: [{ model_name: 'gpt-5-mini', label: 'GPT-5 Mini', is_default: true }],
+        models: [{ model_name: 'gpt-5-mini', is_default: true }],
       },
     ],
   };
@@ -654,7 +654,7 @@ export function EnvSettingsPage() {
       name: 'OpenAI',
       type: 'openai',
       base_url: 'https://api.openai.com/v1',
-      models: [{ model_name: 'gpt-5-mini', label: 'GPT-5 Mini', is_default: true }],
+      models: [{ model_name: 'gpt-5-mini', is_default: true }],
     },
   ]);
   const [aiPreservedFields, setAiPreservedFields] = createSignal<AIPreservedUIFields>({});
@@ -763,8 +763,6 @@ export function EnvSettingsPage() {
       if (baseURL) out.base_url = baseURL;
       out.models = (p.models ?? []).map((m) => {
         const mm: any = { model_name: String(m.model_name ?? '').trim() };
-        const label = String(m.label ?? '').trim();
-        if (label) mm.label = label;
         if (m.is_default) mm.is_default = true;
         return mm as AIProviderModel;
       });
@@ -886,6 +884,9 @@ export function EnvSettingsPage() {
       for (const m of models) {
         const mn = String((m as any).model_name ?? '').trim();
         const isDefault = !!(m as any).is_default;
+        if ((m as any).label !== undefined) {
+          throw new Error(`Provider "${id}" models[].label is not supported. Use model_name only.`);
+        }
         if (!mn) throw new Error(`Provider "${id}" has a model with missing model_name.`);
         if (mn.includes('/')) throw new Error(`Provider "${id}" model_name must not contain "/".`);
         if (modelNames.has(mn)) throw new Error(`Provider "${id}" has duplicate model_name: ${mn}`);
@@ -906,7 +907,6 @@ export function EnvSettingsPage() {
       base_url: String((p as any).base_url ?? ''),
       models: (Array.isArray((p as any).models) ? ((p as any).models as any[]) : []).map((m) => ({
         model_name: String(m?.model_name ?? ''),
-        label: String(m?.label ?? ''),
         is_default: !!m?.is_default,
       })),
     }));
@@ -916,7 +916,7 @@ export function EnvSettingsPage() {
       const p = list[i];
       const models = Array.isArray(p.models) ? p.models : [];
       if (models.length === 0) {
-        p.models = [{ model_name: '', label: '', is_default: false }];
+        p.models = [{ model_name: '', is_default: false }];
         continue;
       }
       p.models = models.map((m) => {
@@ -1187,7 +1187,6 @@ export function EnvSettingsPage() {
         base_url: String(p.base_url ?? ''),
         models: (p.models ?? []).map((m) => ({
           model_name: String(m.model_name ?? ''),
-          label: String(m.label ?? ''),
           is_default: !!m.is_default,
         })),
       }));
@@ -1199,7 +1198,6 @@ export function EnvSettingsPage() {
         base_url: String(p.base_url ?? ''),
         models: (p.models ?? []).map((m) => ({
           model_name: String(m.model_name ?? ''),
-          label: String(m.label ?? ''),
           is_default: !!m.is_default,
         })),
       }));
@@ -1370,7 +1368,6 @@ export function EnvSettingsPage() {
           models: Array.isArray(p?.models)
             ? (p.models as any[]).map((m) => ({
                 model_name: String(m?.model_name ?? ''),
-                label: String(m?.label ?? ''),
                 is_default: !!m?.is_default,
               }))
             : [],
@@ -1582,7 +1579,6 @@ export function EnvSettingsPage() {
       base_url: String(p.base_url ?? ''),
       models: (p.models ?? []).map((m) => ({
         model_name: String(m.model_name ?? ''),
-        label: String(m.label ?? ''),
         is_default: !!m.is_default,
       })),
     }));
@@ -2469,7 +2465,7 @@ export function EnvSettingsPage() {
                               name: '',
                               type: 'openai',
                               base_url: 'https://api.openai.com/v1',
-                              models: [{ model_name: '', label: '', is_default: false }],
+                              models: [{ model_name: '', is_default: false }],
                             },
                           ]),
                         );
@@ -2626,7 +2622,7 @@ export function EnvSettingsPage() {
                                             prev.map((it, i) => {
                                               if (i !== idx) return it;
                                               const models = Array.isArray(it.models) ? it.models : [];
-                                              return { ...it, models: [...models, { model_name: '', label: '', is_default: false }] };
+                                              return { ...it, models: [...models, { model_name: '', is_default: false }] };
                                             }),
                                           ),
                                         );
@@ -2687,7 +2683,7 @@ export function EnvSettingsPage() {
                                                     prev.map((it, i) => {
                                                       if (i !== idx) return it;
                                                       const models = (Array.isArray(it.models) ? it.models : []).filter((_, j) => j !== midx);
-                                                      return { ...it, models: models.length > 0 ? models : [{ model_name: '', label: '', is_default: false }] };
+                                                      return { ...it, models: models.length > 0 ? models : [{ model_name: '', is_default: false }] };
                                                     }),
                                                   ),
                                                 );
@@ -2700,7 +2696,7 @@ export function EnvSettingsPage() {
                                           </div>
 
                                           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
+                                            <div class="md:col-span-2">
                                               <FieldLabel hint="required">model_name</FieldLabel>
                                               <Input
                                                 value={m().model_name}
@@ -2721,32 +2717,6 @@ export function EnvSettingsPage() {
                                                   setAiDirty(true);
                                                 }}
                                                 placeholder="gpt-5-mini"
-                                                size="sm"
-                                                class="w-full"
-                                                disabled={!canInteract()}
-                                              />
-                                            </div>
-                                            <div>
-                                              <FieldLabel hint="optional">label</FieldLabel>
-                                              <Input
-                                                value={m().label}
-                                                onInput={(e) => {
-                                                  const v = e.currentTarget.value;
-                                                  setAiProviders((prev) =>
-                                                    prev.map((it, i) =>
-                                                      i !== idx
-                                                        ? it
-                                                        : {
-                                                            ...it,
-                                                            models: (Array.isArray(it.models) ? it.models : []).map((mm, j) =>
-                                                              j === midx ? { ...mm, label: v } : mm,
-                                                            ),
-                                                          },
-                                                    ),
-                                                  );
-                                                  setAiDirty(true);
-                                                }}
-                                                placeholder="GPT-5 Mini"
                                                 size="sm"
                                                 class="w-full"
                                                 disabled={!canInteract()}

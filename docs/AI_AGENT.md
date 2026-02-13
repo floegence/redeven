@@ -62,8 +62,8 @@ Example:
         "name": "OpenAI",
         "base_url": "https://api.openai.com/v1",
         "models": [
-          { "model_name": "gpt-5-mini", "label": "GPT-5 Mini", "is_default": true },
-          { "model_name": "gpt-5", "label": "GPT-5" }
+          { "model_name": "gpt-5-mini", "is_default": true },
+          { "model_name": "gpt-5" }
         ]
       },
       {
@@ -72,7 +72,7 @@ Example:
         "name": "Anthropic",
         "base_url": "https://api.anthropic.com/v1",
         "models": [
-          { "model_name": "claude-3-5-sonnet-latest", "label": "Claude Sonnet" }
+          { "model_name": "claude-3-5-sonnet-latest" }
         ]
       }
     ]

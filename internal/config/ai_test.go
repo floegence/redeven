@@ -66,14 +66,14 @@ func TestAIConfigValidate_OK(t *testing.T) {
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: "https://api.openai.com/v1",
-				Models:  []AIProviderModel{{ModelName: "gpt-5-mini", Label: "GPT-5 Mini", IsDefault: true}, {ModelName: "gpt-4o-mini", Label: "Fast"}},
+				Models:  []AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}, {ModelName: "gpt-4o-mini"}},
 			},
 			{
 				ID:      "anthropic",
 				Name:    "Anthropic",
 				Type:    "anthropic",
 				BaseURL: "https://api.anthropic.com",
-				Models:  []AIProviderModel{{ModelName: "claude-3-5-sonnet-latest", Label: "Claude Sonnet"}},
+				Models:  []AIProviderModel{{ModelName: "claude-3-5-sonnet-latest"}},
 			},
 		},
 	}

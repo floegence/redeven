@@ -125,7 +125,7 @@ func writeTestConfigWithAI(t *testing.T) string {
         "type": "openai",
         "base_url": "https://api.openai.com/v1",
         "models": [
-          { "model_name": "gpt-5-mini", "label": "GPT-5 Mini", "is_default": true }
+          { "model_name": "gpt-5-mini", "is_default": true }
         ]
       }
     ]

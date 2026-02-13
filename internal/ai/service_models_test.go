@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/floegence/redeven-agent/internal/config"
@@ -20,14 +21,14 @@ func TestService_ListModels_DefaultFirstAndDedup(t *testing.T) {
 					Name:    "OpenAI",
 					Type:    "openai",
 					BaseURL: "https://api.openai.com/v1",
-					Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", Label: "", IsDefault: true}, {ModelName: "gpt-4o-mini", Label: "Fast"}},
+					Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}, {ModelName: "gpt-4o-mini"}},
 				},
 				{
 					ID:      "anthropic",
 					Name:    "Anthropic",
 					Type:    "anthropic",
 					BaseURL: "https://api.anthropic.com",
-					Models:  []config.AIProviderModel{{ModelName: "claude-sonnet-4-5", Label: ""}},
+					Models:  []config.AIProviderModel{{ModelName: "claude-sonnet-4-5"}},
 				},
 			},
 		},
@@ -57,11 +58,44 @@ func TestService_ListModels_DefaultFirstAndDedup(t *testing.T) {
 	if out.Models[0].Label != "OpenAI / gpt-5-mini" {
 		t.Fatalf("default label=%q", out.Models[0].Label)
 	}
-	if out.Models[1].Label != "OpenAI / Fast" {
+	if out.Models[1].Label != "OpenAI / gpt-4o-mini" {
 		t.Fatalf("second label=%q", out.Models[1].Label)
 	}
 	if out.Models[2].Label != "Anthropic / claude-sonnet-4-5" {
 		t.Fatalf("third label=%q", out.Models[2].Label)
+	}
+}
+
+func TestService_ListModels_ProviderNameFallbackDoesNotExposeProviderID(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{
+		cfg: &config.AIConfig{
+			Providers: []config.AIProvider{
+				{
+					ID:      "prov_26f7c2a6-db3d-4691-8dcf-3f179b08b252",
+					Name:    "",
+					Type:    "openai",
+					BaseURL: "https://api.openai.com/v1",
+					Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				},
+			},
+		},
+	}
+
+	out, err := svc.ListModels()
+	if err != nil {
+		t.Fatalf("ListModels: %v", err)
+	}
+	if out == nil || len(out.Models) == 0 {
+		t.Fatalf("ListModels returned no models")
+	}
+
+	if got := out.Models[0].Label; got != "OpenAI / gpt-5-mini" {
+		t.Fatalf("label=%q, want %q", got, "OpenAI / gpt-5-mini")
+	}
+	if strings.Contains(out.Models[0].Label, "prov_") {
+		t.Fatalf("label should not contain provider id: %q", out.Models[0].Label)
 	}
 }
 

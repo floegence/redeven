@@ -86,8 +86,8 @@ But the config stores models under each provider (provider + model are always co
   "type": "openai",
   "name": "OpenAI",
   "models": [
-    { "model_name": "gpt-5-mini", "label": "GPT-5 Mini", "is_default": true },
-    { "model_name": "gpt-5", "label": "GPT-5" }
+    { "model_name": "gpt-5-mini", "is_default": true },
+    { "model_name": "gpt-5" }
   ]
 }
 ```
@@ -129,9 +129,9 @@ Key points:
   - Stored locally in `secrets.json`, never shown again.
   - UI shows `Key set / Key not set`, with `Save key` and `Clear`.
 - Models:
-  - Configured inside each provider as `models[]` (`model_name` + optional `label`).
+  - Configured inside each provider as `models[]` (`model_name` + optional `is_default`).
   - One model across all providers is marked **Default** (used for new chats).
-  - Chat header shows a single **Model** selector (no separate provider dropdown).
+  - Chat header shows a single **Model** selector (no separate provider dropdown), displayed as `<provider name> / <model_name>`.
 
 ---
 

@@ -30,7 +30,7 @@ func TestGateway_AI_Run_InvalidModelStillStreamsError(t *testing.T) {
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: "https://api.openai.com/v1",
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", Label: "GPT-5 Mini", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
 			},
 		},
 	}

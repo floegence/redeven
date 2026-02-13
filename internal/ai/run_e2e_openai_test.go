@@ -45,7 +45,7 @@ func TestE2E_OpenAICompatibleBaseURL_StreamText(t *testing.T) {
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: baseURL,
-				Models:  []config.AIProviderModel{{ModelName: modelName, Label: modelName, IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: modelName, IsDefault: true}},
 			},
 		},
 	}

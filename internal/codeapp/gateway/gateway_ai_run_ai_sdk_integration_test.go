@@ -113,7 +113,7 @@ func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: strings.TrimSuffix(openaiSrv.URL, "/") + "/v1",
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", Label: "GPT-5 Mini", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
 			},
 		},
 	}

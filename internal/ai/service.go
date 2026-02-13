@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -369,6 +370,27 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		}
 		name := strings.TrimSpace(p.Name)
 		if name == "" {
+			switch strings.ToLower(strings.TrimSpace(p.Type)) {
+			case "openai":
+				name = "OpenAI"
+			case "anthropic":
+				name = "Anthropic"
+			case "openai_compatible":
+				baseURL := strings.TrimSpace(p.BaseURL)
+				if baseURL != "" {
+					if u, err := url.Parse(baseURL); err == nil && u != nil {
+						if host := strings.TrimSpace(u.Host); host != "" {
+							name = host
+						}
+					}
+				}
+				if name == "" {
+					name = "OpenAI compatible"
+				}
+			}
+		}
+		if name == "" {
+			// Best-effort fallback: avoid surfacing an unreadable provider id when possible.
 			name = id
 		}
 		providerNameByID[id] = name
@@ -393,11 +415,7 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 			}
 			defaultProviderID = pid
 			defaultModelName = mn
-			display := strings.TrimSpace(m.Label)
-			if display == "" {
-				display = mn
-			}
-			defaultModelDisplayName = pn + " / " + display
+			defaultModelDisplayName = pn + " / " + mn
 		}
 	}
 	defaultModelID := strings.TrimSpace(defaultProviderID) + "/" + strings.TrimSpace(defaultModelName)
@@ -449,11 +467,7 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 				continue
 			}
 			id := providerID + "/" + modelName
-			display := strings.TrimSpace(m.Label)
-			if display == "" {
-				display = modelName
-			}
-			label := pn + " / " + display
+			label := pn + " / " + modelName
 			appendModel(id, label)
 		}
 	}

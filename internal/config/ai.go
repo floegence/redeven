@@ -100,7 +100,6 @@ type AIProvider struct {
 
 type AIProviderModel struct {
 	ModelName string `json:"model_name"`
-	Label     string `json:"label,omitempty"`
 
 	// IsDefault marks the single default model across all providers.
 	// Exactly one providers[].models[].is_default must be true.
