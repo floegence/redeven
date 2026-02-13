@@ -624,7 +624,7 @@ export function EnvAIPage() {
 
   const activeThreadRunning = createMemo(() => ai.isThreadRunning(ai.activeThreadId()));
   const canInteract = createMemo(
-    () => protocol.status() === 'connected' && !activeThreadRunning() && ai.aiEnabled() && ai.modelsReady(),
+    () => protocol.status() === 'connected' && ai.aiEnabled() && ai.modelsReady(),
   );
   const updateExecutionMode = (nextMode: ExecutionMode) => {
     const next = normalizeExecutionMode(nextMode);
@@ -733,17 +733,71 @@ export function EnvAIPage() {
     }
   };
 
-  const stopRun = () => {
-    const tid = String(ai.activeThreadId() ?? '').trim();
-    const rid = String(ai.runIdForThread(tid) ?? '').trim();
-    if (!tid && !rid) return;
+  const cancelRunForThread = async (threadId: string, opts?: { notifyOnError?: boolean }): Promise<boolean> => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return false;
 
-    void rpc.ai
-      .cancelRun({ runId: rid || undefined, threadId: rid ? undefined : tid || undefined })
-      .catch((e) => {
+    const rid = String(ai.runIdForThread(tid) ?? '').trim();
+    if (!rid && !ai.isThreadRunning(tid)) {
+      return true;
+    }
+
+    try {
+      await rpc.ai.cancelRun({ runId: rid || undefined, threadId: rid ? undefined : tid || undefined });
+      return true;
+    } catch (e) {
+      if (opts?.notifyOnError !== false) {
         const msg = e instanceof Error ? e.message : String(e);
         notify.error('Failed to stop run', msg || 'Request failed.');
+      }
+      return false;
+    }
+  };
+
+  const waitForThreadStop = (threadId: string, timeoutMs = 12_000): Promise<boolean> =>
+    new Promise((resolve) => {
+      const tid = String(threadId ?? '').trim();
+      if (!tid || !ai.isThreadRunning(tid)) {
+        resolve(true);
+        return;
+      }
+
+      const deadline = Date.now() + timeoutMs;
+      let settled = false;
+      let timer = 0;
+      let unsub: () => void = () => {};
+
+      const finish = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        window.clearInterval(timer);
+        unsub();
+        resolve(ok);
+      };
+
+      const check = () => {
+        if (!ai.isThreadRunning(tid)) {
+          finish(true);
+          return;
+        }
+        if (Date.now() >= deadline) {
+          finish(false);
+        }
+      };
+
+      unsub = ai.onRealtimeEvent((event) => {
+        if (String(event.threadId ?? '').trim() !== tid) return;
+        if (event.eventType !== 'thread_state') return;
+        check();
       });
+      timer = window.setInterval(check, 120);
+      check();
+    });
+
+  const stopRun = () => {
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    if (!tid) return;
+    void cancelRunForThread(tid, { notifyOnError: true });
   };
 
   // Load messages when the active thread changes (or on initial selection).
@@ -834,7 +888,9 @@ export function EnvAIPage() {
       replayAppliedByThread.delete(tid);
       if (tid === String(ai.activeThreadId() ?? '').trim()) {
         setRunPhaseLabel('Working');
-        void loadThreadMessages(tid);
+        if (!sendPending()) {
+          void loadThreadMessages(tid);
+        }
         void loadThreadTodos(tid, { silent: true, notifyError: false });
       }
 
@@ -942,11 +998,6 @@ export function EnvAIPage() {
       setSendPending(false);
       return;
     }
-    if (activeThreadRunning()) {
-      notify.info('AI is busy', 'Please wait for the current run to finish.');
-      setSendPending(false);
-      return;
-    }
     if (!ai.aiEnabled()) {
       notify.error('AI not configured', 'Open Settings to enable AI.');
       setSendPending(false);
@@ -975,6 +1026,25 @@ export function EnvAIPage() {
     forceScrollToLatest();
 
     let tid = ai.activeThreadId();
+    if (tid && ai.isThreadRunning(tid)) {
+      setRunPhaseLabel('Stopping previous run...');
+      const canceled = await cancelRunForThread(tid, { notifyOnError: false });
+      if (!canceled) {
+        notify.error('Failed to send message', 'Could not stop the current run.');
+        setSendPending(false);
+        setRunPhaseLabel('Working');
+        return;
+      }
+
+      const stopped = await waitForThreadStop(tid);
+      if (!stopped) {
+        notify.error('Failed to send message', 'Timed out waiting for the current run to stop.');
+        setSendPending(false);
+        setRunPhaseLabel('Working');
+        return;
+      }
+    }
+
     if (!tid) {
       skipNextThreadLoad = true;
       tid = await ai.ensureThreadForSend();
@@ -998,6 +1068,7 @@ export function EnvAIPage() {
     replayAppliedByThread.delete(String(tid ?? '').trim());
 
     try {
+      setRunPhaseLabel('Planning...');
       const resp = await rpc.ai.startRun({
         threadId: tid,
         model,
@@ -1017,9 +1088,18 @@ export function EnvAIPage() {
       ai.clearThreadPendingRun(tid);
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('AI failed', msg || 'Request failed.');
+      setRunPhaseLabel('Working');
+      void loadThreadMessages(tid);
     } finally {
       setSendPending(false);
     }
+  };
+
+  let startRunQueue: Promise<void> = Promise.resolve();
+  const enqueueStartRun = (content: string, attachments: Attachment[]) => {
+    const task = startRunQueue.then(() => startRun(content, attachments));
+    startRunQueue = task.catch(() => {});
+    return task;
   };
 
   const callbacks: ChatCallbacks = {
@@ -1038,7 +1118,7 @@ export function EnvAIPage() {
         notify.error('Not connected', 'Connecting to agent...');
         return;
       }
-      await startRun(content, attachments);
+      await enqueueStartRun(content, attachments);
     },
     onUploadAttachment: uploadAttachment,
     onToolApproval: sendToolApproval,
@@ -1113,7 +1193,7 @@ export function EnvAIPage() {
   // Handle suggestion click from empty state
   const handleSuggestionClick = (prompt: string) => {
     if (!canInteract()) return;
-    void startRun(prompt, []);
+    void enqueueStartRun(prompt, []);
   };
 
   // Keep the custom working indicator visible from send start until the run fully ends.
