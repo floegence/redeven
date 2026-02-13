@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
-import { Files, MessageSquare, Plus, Refresh, Sparkles, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { History, MessageSquare, Plus, Refresh, Sparkles, Trash, X } from '@floegence/floe-webapp-core/icons';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { SidebarContent, SidebarSection } from '@floegence/floe-webapp-core/layout';
@@ -140,6 +140,7 @@ function normalizeThreadStatus(raw: string | null | undefined): ThreadRunStatus 
     status === 'accepted' ||
     status === 'running' ||
     status === 'waiting_approval' ||
+    status === 'waiting_user' ||
     status === 'recovering' ||
     status === 'success' ||
     status === 'failed' ||
@@ -152,7 +153,7 @@ function normalizeThreadStatus(raw: string | null | undefined): ThreadRunStatus 
 }
 
 function isActiveThreadStatus(status: ThreadRunStatus): boolean {
-  return status === 'accepted' || status === 'running' || status === 'waiting_approval' || status === 'recovering';
+  return status === 'accepted' || status === 'running' || status === 'waiting_approval' || status === 'waiting_user' || status === 'recovering';
 }
 
 function normalizeThreadAgePreset(value: string): ThreadAgePreset {
@@ -510,7 +511,7 @@ export function AIChatSidebar() {
             disabled={protocol.status() !== 'connected'}
             aria-label="Manage chats"
           >
-            <Files class="w-3.5 h-3.5" />
+            <History class="w-3.5 h-3.5" />
           </Button>
         </Tooltip>
       </div>
@@ -578,7 +579,7 @@ export function AIChatSidebar() {
         }}
         title="Manage chats"
         description="View all conversations, filter by age, and delete in batches."
-        class="max-w-5xl"
+        class="max-w-5xl h-[78vh] max-h-[78vh]"
         footer={
           <div class="w-full flex flex-wrap items-center justify-between gap-2">
             <div class="text-xs text-muted-foreground">
@@ -607,7 +608,7 @@ export function AIChatSidebar() {
           </div>
         }
       >
-        <div class="space-y-3">
+        <div class="h-full min-h-0 flex flex-col gap-3">
           <div class="flex flex-wrap items-center gap-2">
             <SegmentedControl
               value={managerAgePreset()}
@@ -641,7 +642,7 @@ export function AIChatSidebar() {
             </div>
           </div>
 
-          <div class="rounded-md border border-border/70 overflow-hidden">
+          <div class="rounded-md border border-border/70 overflow-hidden flex-1 min-h-0">
             <Show
               when={!managerLoading()}
               fallback={
@@ -663,8 +664,8 @@ export function AIChatSidebar() {
                     when={managerFilteredThreads().length > 0}
                     fallback={<div class="px-3 py-6 text-xs text-muted-foreground">No chats match this filter.</div>}
                   >
-                    <div class="max-h-[56vh] overflow-auto">
-                      <table class="w-full text-xs">
+                    <div class="h-full overflow-auto">
+                      <table class="w-full table-fixed text-xs">
                         <thead class="sticky top-0 bg-card/95 backdrop-blur-sm text-muted-foreground">
                           <tr class="text-left border-b border-border/70">
                             <th class="w-10 py-2 pl-3 pr-2">
@@ -675,7 +676,7 @@ export function AIChatSidebar() {
                                 disabled={managerFilteredThreads().length === 0}
                               />
                             </th>
-                            <th class="py-2 pr-3">Title</th>
+                            <th class="w-[52%] py-2 pr-3">Title</th>
                             <th class="w-32 py-2 pr-3">Status</th>
                             <th class="w-44 py-2 pr-3">Updated</th>
                           </tr>
@@ -697,12 +698,12 @@ export function AIChatSidebar() {
                                       onChange={(checked) => setManagerThreadSelected(threadID, checked)}
                                     />
                                   </td>
-                                  <td class="py-2.5 pr-3 align-top">
-                                    <div class="min-w-0">
+                                  <td class="w-[52%] py-2.5 pr-3 align-top">
+                                    <div class="min-w-0 max-w-full">
                                       <div class="flex items-center gap-2 min-w-0">
                                         <button
                                           type="button"
-                                          class="text-xs font-medium truncate text-left hover:underline"
+                                          class="block w-full text-xs font-medium truncate text-left hover:underline"
                                           onClick={() => {
                                             ctx.selectThreadId(threadID);
                                             setManagerOpen(false);
