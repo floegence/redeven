@@ -81,7 +81,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 		// json_schema requires an explicit schema. Avoid implicit downgrade here and let upper layers drive structured output.
 	}
 
-	inputItems, instructions := buildOpenAIInput(req.Messages, p.strictToolSchema)
+	inputItems, instructions := buildOpenAIInput(req.Messages)
 	if len(inputItems) == 0 {
 		inputItems = append(inputItems, oresponses.ResponseInputItemParamOfMessage("Continue.", oresponses.EasyInputMessageRoleUser))
 	}
@@ -380,10 +380,9 @@ func buildOpenAITools(defs []ToolDef, strict bool) ([]oresponses.ToolUnionParam,
 	return out, aliasToReal
 }
 
-func buildOpenAIInput(messages []Message, includeAssistantOutputMessages bool) (oresponses.ResponseInputParam, string) {
+func buildOpenAIInput(messages []Message) (oresponses.ResponseInputParam, string) {
 	items := make(oresponses.ResponseInputParam, 0, len(messages)+2)
 	instructions := ""
-	assistantMsgSeq := 0
 	for _, msg := range messages {
 		role := strings.ToLower(strings.TrimSpace(msg.Role))
 		switch role {
@@ -442,56 +441,38 @@ func buildOpenAIInput(messages []Message, includeAssistantOutputMessages bool) (
 				}
 				items = append(items, oresponses.ResponseInputItemParamOfFunctionCall(argsRaw, callID, name))
 			}
-			if !includeAssistantOutputMessages {
-				for _, part := range msg.Content {
-					if strings.ToLower(strings.TrimSpace(part.Type)) != "tool_call" {
-						continue
-					}
-					appendFunctionCall(part)
-				}
-				continue
-			}
-
-			outputContent := make([]oresponses.ResponseOutputMessageContentUnionParam, 0, len(msg.Content))
-			appendOutputText := func(text string) {
+			var textBuf strings.Builder
+			appendAssistantText := func(text string) {
 				text = strings.TrimSpace(text)
 				if text == "" {
 					return
 				}
-				outputContent = append(outputContent, oresponses.ResponseOutputMessageContentUnionParam{
-					OfOutputText: &oresponses.ResponseOutputTextParam{
-						Text:        text,
-						Annotations: []oresponses.ResponseOutputTextAnnotationUnionParam{},
-					},
-				})
+				if textBuf.Len() > 0 {
+					textBuf.WriteString("\n")
+				}
+				textBuf.WriteString(text)
 			}
-			flushOutputMessage := func() {
-				if len(outputContent) == 0 {
+			flushAssistantText := func() {
+				txt := strings.TrimSpace(textBuf.String())
+				textBuf.Reset()
+				if txt == "" {
 					return
 				}
-				assistantMsgSeq++
-				// OpenAI Responses requires output message IDs to start with "msg_".
-				msgID := fmt.Sprintf("msg_hist%d", assistantMsgSeq)
-				items = append(items, oresponses.ResponseInputItemParamOfOutputMessage(
-					outputContent,
-					msgID,
-					oresponses.ResponseOutputMessageStatusCompleted,
-				))
-				outputContent = outputContent[:0]
+				items = append(items, oresponses.ResponseInputItemParamOfMessage(txt, oresponses.EasyInputMessageRoleAssistant))
 			}
 			for _, part := range msg.Content {
 				switch strings.ToLower(strings.TrimSpace(part.Type)) {
 				case "text":
-					appendOutputText(part.Text)
+					appendAssistantText(part.Text)
 				case "tool_call":
-					flushOutputMessage()
+					flushAssistantText()
 					appendFunctionCall(part)
 				}
 			}
-			if len(outputContent) == 0 {
-				appendOutputText(joinMessageText(msg))
+			if textBuf.Len() == 0 {
+				appendAssistantText(joinMessageText(msg))
 			}
-			flushOutputMessage()
+			flushAssistantText()
 		default:
 			uiRole := oresponses.EasyInputMessageRoleUser
 			content := make(oresponses.ResponseInputMessageContentListParam, 0, len(msg.Content))
@@ -1084,54 +1065,6 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	req.Options.Complexity = taskComplexity
 
 	execCtx := ctx
-	var cancelMaxWall context.CancelFunc
-	if r.maxWallTime > 0 {
-		execCtx, cancelMaxWall = context.WithTimeout(execCtx, r.maxWallTime)
-		defer cancelMaxWall()
-	}
-
-	touchActivity := func() {}
-	if r.idleTimeout > 0 {
-		idleCtx, cancelIdle := context.WithCancel(execCtx)
-		execCtx = idleCtx
-		activityCh := make(chan struct{}, 1)
-		idleDone := make(chan struct{})
-		defer close(idleDone)
-		defer cancelIdle()
-
-		touchActivity = func() {
-			select {
-			case activityCh <- struct{}{}:
-			default:
-			}
-		}
-
-		touchActivity()
-		go func() {
-			idleTimer := time.NewTimer(r.idleTimeout)
-			defer idleTimer.Stop()
-			for {
-				select {
-				case <-idleDone:
-					return
-				case <-idleCtx.Done():
-					return
-				case <-activityCh:
-					if !idleTimer.Stop() {
-						select {
-						case <-idleTimer.C:
-						default:
-						}
-					}
-					idleTimer.Reset(r.idleTimeout)
-				case <-idleTimer.C:
-					r.requestCancel("timed_out")
-					cancelIdle()
-					return
-				}
-			}
-		}()
-	}
 
 	adapter, err := newProviderAdapter(providerType, strings.TrimSpace(providerCfg.BaseURL), strings.TrimSpace(apiKey))
 	if err != nil {
@@ -1139,29 +1072,41 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	}
 
 	// Configure web search enablement once per run (tools are fixed for a given run).
-	// Default behavior: use OpenAI built-in web search when possible; otherwise fall back to Brave.
+	// prefer_openai: prefer OpenAI built-in web search when using official OpenAI endpoints; otherwise use Brave web.search.
 	openAIStrict := shouldUseStrictOpenAIToolSchema(providerType, strings.TrimSpace(providerCfg.BaseURL))
 	webSearchProvider := r.cfg.EffectiveWebSearchProvider()
+	resolvedWebSearch := "disabled"
+	webSearchReason := "explicit_disabled"
 	enableOpenAIWebSearch := false
 	enableWebSearchTool := false
 	switch webSearchProvider {
 	case "disabled":
-		// disabled
-	case "openai":
-		enableOpenAIWebSearch = providerType == "openai" && openAIStrict
+		// Keep defaults.
 	case "brave":
 		enableWebSearchTool = true
-	default: // auto
+		resolvedWebSearch = "brave_web_search"
+		webSearchReason = "explicit_brave"
+	default: // prefer_openai
 		if providerType == "openai" && openAIStrict {
 			enableOpenAIWebSearch = true
+			resolvedWebSearch = "openai_builtin"
+			webSearchReason = "openai_strict"
 		} else {
 			enableWebSearchTool = true
+			resolvedWebSearch = "brave_web_search"
+			if providerType != "openai" {
+				webSearchReason = "provider_not_openai"
+			} else {
+				webSearchReason = "openai_not_strict"
+			}
 		}
 	}
 	r.openAIWebSearchEnabled = enableOpenAIWebSearch
 	r.webSearchToolEnabled = enableWebSearchTool
 	r.persistRunEvent("web_search.config", RealtimeStreamKindLifecycle, map[string]any{
-		"provider":          webSearchProvider,
+		"requested":         webSearchProvider,
+		"resolved":          resolvedWebSearch,
+		"reason":            webSearchReason,
 		"openai_strict":     openAIStrict,
 		"openai_web_search": enableOpenAIWebSearch,
 		"web_search_tool":   enableWebSearchTool,
@@ -1375,7 +1320,7 @@ mainLoop:
 		if step >= nativeHardMaxSteps {
 			break
 		}
-		touchActivity()
+		r.touchActivity()
 		if r.finalizeIfContextCanceled(execCtx) {
 			return nil
 		}
@@ -1423,7 +1368,7 @@ mainLoop:
 			case StreamEventTextDelta:
 				if strings.TrimSpace(event.Text) != "" {
 					turnTextSeen = true
-					touchActivity()
+					r.touchActivity()
 					_ = r.appendTextDelta(event.Text)
 				}
 			case StreamEventThinkingDelta:
@@ -1456,7 +1401,7 @@ mainLoop:
 			time.Sleep(backoffDuration(recoveryCount))
 			continue
 		}
-		touchActivity()
+		r.touchActivity()
 		exceptionOverlay = ""
 		for _, src := range stepResult.Sources {
 			r.addWebSource(src.Title, src.URL)

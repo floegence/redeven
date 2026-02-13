@@ -8,6 +8,8 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { Motion } from 'solid-motionone';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { useAIChatContext, type ListThreadsResponse, type ThreadRunStatus, type ThreadView } from './AIChatContext';
+import { useEnvContext } from './EnvContext';
+import { hasRWXPermissions } from './aiPermissions';
 
 // Compact timestamp for the right side of each thread card.
 function fmtShortTime(ms: number): string {
@@ -234,8 +236,24 @@ async function loadAllThreads(): Promise<ThreadView[]> {
  */
 export function AIChatSidebar() {
   const ctx = useAIChatContext();
+  const env = useEnvContext();
   const protocol = useProtocol();
   const notify = useNotification();
+
+  const permissionReady = () => env.env.state === 'ready';
+  const canRWX = createMemo(() => hasRWXPermissions(env.env()));
+  const canManageChats = createMemo(() => permissionReady() && canRWX());
+  const ensureRWX = (): boolean => {
+    if (!permissionReady()) {
+      notify.error('Not ready', 'Loading environment permissions...');
+      return false;
+    }
+    if (!canRWX()) {
+      notify.error('Permission denied', 'Read/write/execute permission required.');
+      return false;
+    }
+    return true;
+  };
 
   // Single delete confirmation dialog state.
   const [deleteOpen, setDeleteOpen] = createSignal(false);
@@ -265,6 +283,7 @@ export function AIChatSidebar() {
   const doDelete = async () => {
     const tid = String(deleteThreadId() ?? '').trim();
     if (!tid) return;
+    if (!ensureRWX()) return;
 
     setDeleting(true);
     try {
@@ -424,6 +443,10 @@ export function AIChatSidebar() {
       setManagerDeleteConfirmOpen(false);
       return;
     }
+    if (!ensureRWX()) {
+      setManagerDeleteConfirmOpen(false);
+      return;
+    }
 
     setManagerDeleting(true);
     try {
@@ -498,7 +521,7 @@ export function AIChatSidebar() {
           class="flex-1 justify-start gap-2 h-8 border-sidebar-border/60 bg-sidebar hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground transition-all duration-150"
           icon={Plus}
           onClick={() => ctx.enterDraftChat()}
-          disabled={protocol.status() !== 'connected'}
+          disabled={protocol.status() !== 'connected' || !canManageChats()}
         >
           New Chat
         </Button>
@@ -508,7 +531,7 @@ export function AIChatSidebar() {
             size="icon"
             class="h-8 w-8 border-sidebar-border/60 bg-sidebar hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground transition-all duration-150"
             onClick={openManager}
-            disabled={protocol.status() !== 'connected'}
+            disabled={protocol.status() !== 'connected' || !canManageChats()}
             aria-label="Manage chats"
           >
             <History class="w-3.5 h-3.5" />
@@ -554,6 +577,7 @@ export function AIChatSidebar() {
                             active={t.thread_id === ctx.activeThreadId()}
                             isRunning={ctx.isThreadRunning(t.thread_id)}
                             connected={protocol.status() === 'connected'}
+                            canDelete={canManageChats()}
                             onClick={() => ctx.selectThreadId(t.thread_id)}
                             onDelete={() => openDelete(t.thread_id, t.title)}
                           />
@@ -820,6 +844,7 @@ function ThreadCard(props: {
   active: boolean;
   isRunning: boolean;
   connected: boolean;
+  canDelete: boolean;
   onClick: () => void;
   onDelete: () => void;
 }) {
@@ -880,27 +905,36 @@ function ThreadCard(props: {
           <span class="text-xs font-medium truncate flex-1">{title()}</span>
           {/* Timestamp / switches to delete button on hover (opacity avoids layout jump). */}
           <div class="shrink-0 w-5 h-5 flex items-center justify-center relative">
-            <span class="text-[10px] text-muted-foreground/60 transition-opacity duration-150 group-hover:opacity-0 pointer-events-none select-none">
-              {timeStr()}
-            </span>
-            <div
-              role="button"
-              tabIndex={0}
-              class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 rounded text-muted-foreground/60 hover:text-error hover:bg-error/10 transition-all duration-150 cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (props.connected) props.onDelete();
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+            <Show
+              when={props.canDelete}
+              fallback={
+                <span class="text-[10px] text-muted-foreground/60 pointer-events-none select-none">
+                  {timeStr()}
+                </span>
+              }
+            >
+              <span class="text-[10px] text-muted-foreground/60 transition-opacity duration-150 group-hover:opacity-0 pointer-events-none select-none">
+                {timeStr()}
+              </span>
+              <div
+                role="button"
+                tabIndex={0}
+                class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 rounded text-muted-foreground/60 hover:text-error hover:bg-error/10 transition-all duration-150 cursor-pointer"
+                onClick={(e) => {
                   e.stopPropagation();
                   if (props.connected) props.onDelete();
-                }
-              }}
-              title="Delete chat"
-            >
-              <X class="w-3.5 h-3.5" />
-            </div>
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation();
+                    if (props.connected) props.onDelete();
+                  }
+                }}
+                title="Delete chat"
+              >
+                <X class="w-3.5 h-3.5" />
+              </div>
+            </Show>
           </div>
         </div>
 

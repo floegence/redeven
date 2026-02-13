@@ -75,8 +75,8 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
-	if meta == nil {
-		return nil, errors.New("missing session metadata")
+	if err := requireRead(meta); err != nil {
+		return nil, err
 	}
 	s.mu.Lock()
 	db := s.threadsDB
@@ -121,8 +121,8 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
-	if meta == nil {
-		return nil, errors.New("missing session metadata")
+	if err := requireRead(meta); err != nil {
+		return nil, err
 	}
 	s.mu.Lock()
 	db := s.threadsDB
@@ -168,8 +168,8 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
-	if meta == nil {
-		return nil, errors.New("missing session metadata")
+	if err := requireRWX(meta); err != nil {
+		return nil, err
 	}
 	s.mu.Lock()
 	db := s.threadsDB
@@ -240,8 +240,8 @@ func (s *Service) RenameThread(ctx context.Context, meta *session.Meta, threadID
 	if s == nil {
 		return errors.New("nil service")
 	}
-	if meta == nil {
-		return errors.New("missing session metadata")
+	if err := requireRWX(meta); err != nil {
+		return err
 	}
 	s.mu.Lock()
 	db := s.threadsDB
@@ -259,8 +259,8 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	if s == nil {
 		return errors.New("nil service")
 	}
-	if meta == nil {
-		return errors.New("missing session metadata")
+	if err := requireRWX(meta); err != nil {
+		return err
 	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
@@ -300,8 +300,8 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
-	if meta == nil {
-		return errors.New("missing session metadata")
+	if err := requireRWX(meta); err != nil {
+		return err
 	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
@@ -330,8 +330,8 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	if s == nil {
 		return errors.New("nil service")
 	}
-	if meta == nil {
-		return errors.New("missing session metadata")
+	if err := requireRWX(meta); err != nil {
+		return err
 	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
@@ -384,8 +384,8 @@ func (s *Service) ListThreadMessages(ctx context.Context, meta *session.Meta, th
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
-	if meta == nil {
-		return nil, errors.New("missing session metadata")
+	if err := requireRead(meta); err != nil {
+		return nil, err
 	}
 	s.mu.Lock()
 	db := s.threadsDB
@@ -422,8 +422,8 @@ func (s *Service) GetThreadTodos(ctx context.Context, meta *session.Meta, thread
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
-	if meta == nil {
-		return nil, errors.New("missing session metadata")
+	if err := requireRead(meta); err != nil {
+		return nil, err
 	}
 	s.mu.Lock()
 	db := s.threadsDB
@@ -466,8 +466,8 @@ func (s *Service) AppendThreadMessage(ctx context.Context, meta *session.Meta, t
 	if s == nil {
 		return errors.New("nil service")
 	}
-	if meta == nil {
-		return errors.New("missing session metadata")
+	if err := requireRWX(meta); err != nil {
+		return err
 	}
 	s.mu.Lock()
 	db := s.threadsDB

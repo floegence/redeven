@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -260,6 +262,176 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 	finalStatus := strings.TrimSpace(anyToString(closed["status"]))
 	if finalStatus != subagentStatusCompleted {
 		t.Fatalf("unexpected close status=%q payload=%#v", finalStatus, closed)
+	}
+}
+
+type subagentWebSearchResolverMock struct {
+	mu   sync.Mutex
+	step int
+}
+
+func (m *subagentWebSearchResolverMock) handle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if strings.TrimSpace(r.Header.Get("Authorization")) != "Bearer sk-test" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/responses") {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	m.mu.Lock()
+	m.step++
+	step := m.step
+	m.mu.Unlock()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	f, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	switch step {
+	case 1:
+		writeOpenAISSEJSON(w, f, map[string]any{"type": "response.output_text.delta", "delta": "Searching..."})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_subagent_search_1",
+				"model":  "gpt-5-mini",
+				"status": "completed",
+				"output": []any{
+					map[string]any{
+						"type":      "function_call",
+						"id":        "fc_subagent_search_1",
+						"call_id":   "call_subagent_search_1",
+						"name":      "web_search",
+						"arguments": `{"query":"hello","provider":"dummy","count":1}`,
+					},
+				},
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+				},
+			},
+		})
+	default:
+		writeOpenAISSEJSON(w, f, map[string]any{"type": "response.output_text.delta", "delta": "Done."})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_subagent_search_2",
+				"model":  "gpt-5-mini",
+				"status": "completed",
+				"output": []any{
+					map[string]any{
+						"type":      "function_call",
+						"id":        "fc_subagent_complete_2",
+						"call_id":   "call_subagent_complete_2",
+						"name":      "task_complete",
+						"arguments": `{"result":"Subagent completed."}`,
+					},
+				},
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+				},
+			},
+		})
+	}
+
+	_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	f.Flush()
+}
+
+func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	mock := &subagentWebSearchResolverMock{}
+	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
+	t.Cleanup(srv.Close)
+
+	cfg := &config.AIConfig{
+		Providers: []config.AIProvider{{
+			ID:      "openai",
+			Type:    "openai",
+			BaseURL: strings.TrimSuffix(srv.URL, "/") + "/v1",
+			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+		}},
+	}
+
+	meta := &session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_test_subagent_websearch",
+		UserPublicID:      "u_test",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	var resolverCalled atomic.Bool
+	r := newRun(runOptions{
+		Log:         slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		FSRoot:      workspace,
+		Shell:       "bash",
+		AIConfig:    cfg,
+		SessionMeta: meta,
+		ResolveProviderKey: func(providerID string) (string, bool, error) {
+			if strings.TrimSpace(providerID) == "openai" {
+				return "sk-test", true, nil
+			}
+			return "", false, nil
+		},
+		ResolveWebSearchKey: func(providerID string) (string, bool, error) {
+			if strings.TrimSpace(strings.ToLower(providerID)) != "dummy" {
+				return "", false, nil
+			}
+			resolverCalled.Store(true)
+			return "dummy-key", true, nil
+		},
+		RunID:        "run_parent_websearch",
+		ChannelID:    meta.ChannelID,
+		EndpointID:   meta.EndpointID,
+		ThreadID:     "th_parent_websearch",
+		UserPublicID: meta.UserPublicID,
+		MessageID:    "m_parent_websearch",
+	})
+	r.currentModelID = "openai/gpt-5-mini"
+
+	created, err := r.delegateTask(context.Background(), map[string]any{
+		"objective": "Search the web and summarize the results.",
+		"mode":      "plan",
+		"budget": map[string]any{
+			"timeout_sec": 60,
+		},
+	})
+	if err != nil {
+		t.Fatalf("delegateTask: %v", err)
+	}
+	id := strings.TrimSpace(anyToString(created["subagent_id"]))
+	if id == "" {
+		t.Fatalf("missing subagent_id in result: %#v", created)
+	}
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	statuses, timedOut := r.waitSubagents(waitCtx, []string{id})
+	if timedOut {
+		t.Fatalf("wait timed out: %#v", statuses)
+	}
+
+	if !resolverCalled.Load() {
+		t.Fatalf("expected ResolveWebSearchKey to be called in subagent run")
 	}
 }
 

@@ -59,8 +59,7 @@ type AIConfig struct {
 	// WebSearchProvider controls which web search backend is enabled for AI runs.
 	//
 	// Supported values:
-	// - "auto": prefer OpenAI built-in web search when using official OpenAI endpoints; otherwise use Brave (default)
-	// - "openai": enable OpenAI built-in web search only (OpenAI + official base_url required)
+	// - "prefer_openai": prefer OpenAI built-in web search when using official OpenAI endpoints; otherwise use Brave (default)
 	// - "brave": use Brave web search (requires a Brave Search API key)
 	// - "disabled": disable all web search tools
 	//
@@ -122,7 +121,7 @@ const (
 	defaultAIEnforcePlanModeGuard  = false
 	defaultAIBlockDangerousCommand = false
 
-	defaultAIWebSearchProvider = "auto"
+	defaultAIWebSearchProvider = "prefer_openai"
 )
 
 func (c *AIConfig) Validate() error {
@@ -145,7 +144,7 @@ func (c *AIConfig) Validate() error {
 		webSearchProvider = defaultAIWebSearchProvider
 	}
 	switch webSearchProvider {
-	case "auto", "openai", "brave", "disabled":
+	case "prefer_openai", "brave", "disabled":
 	default:
 		return fmt.Errorf("invalid web_search_provider %q", c.WebSearchProvider)
 	}
@@ -308,7 +307,7 @@ func (c *AIConfig) EffectiveWebSearchProvider() string {
 		return defaultAIWebSearchProvider
 	}
 	switch v {
-	case "auto", "openai", "brave", "disabled":
+	case "prefer_openai", "brave", "disabled":
 		return v
 	default:
 		return defaultAIWebSearchProvider
