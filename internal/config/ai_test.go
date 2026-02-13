@@ -125,17 +125,17 @@ func TestAIConfig_EffectiveMode_DefaultsAct(t *testing.T) {
 func boolPtr(v bool) *bool { return &v }
 func intPtr(v int) *int    { return &v }
 
-func TestAIConfig_EffectiveWebSearchProvider_DefaultsAuto(t *testing.T) {
+func TestAIConfig_EffectiveWebSearchProvider_DefaultsPreferOpenAI(t *testing.T) {
 	t.Parallel()
 
 	nilCfg := (*AIConfig)(nil)
-	if got := nilCfg.EffectiveWebSearchProvider(); got != "auto" {
-		t.Fatalf("EffectiveWebSearchProvider nil=%q, want %q", got, "auto")
+	if got := nilCfg.EffectiveWebSearchProvider(); got != "prefer_openai" {
+		t.Fatalf("EffectiveWebSearchProvider nil=%q, want %q", got, "prefer_openai")
 	}
 
 	cfg := &AIConfig{}
-	if got := cfg.EffectiveWebSearchProvider(); got != "auto" {
-		t.Fatalf("EffectiveWebSearchProvider empty=%q, want %q", got, "auto")
+	if got := cfg.EffectiveWebSearchProvider(); got != "prefer_openai" {
+		t.Fatalf("EffectiveWebSearchProvider empty=%q, want %q", got, "prefer_openai")
 	}
 
 	cfg.WebSearchProvider = "brave"
@@ -144,8 +144,38 @@ func TestAIConfig_EffectiveWebSearchProvider_DefaultsAuto(t *testing.T) {
 	}
 
 	cfg.WebSearchProvider = "invalid"
-	if got := cfg.EffectiveWebSearchProvider(); got != "auto" {
-		t.Fatalf("EffectiveWebSearchProvider invalid=%q, want %q", got, "auto")
+	if got := cfg.EffectiveWebSearchProvider(); got != "prefer_openai" {
+		t.Fatalf("EffectiveWebSearchProvider invalid=%q, want %q", got, "prefer_openai")
+	}
+}
+
+func TestAIConfigValidate_RejectsLegacyWebSearchProviderValues(t *testing.T) {
+	t.Parallel()
+
+	cfg := &AIConfig{
+		WebSearchProvider: "auto",
+		Providers: []AIProvider{
+			{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: "https://api.openai.com/v1",
+				Models:  []AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+			},
+		},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatalf("expected validation error for legacy web_search_provider=auto")
+	}
+
+	cfg.WebSearchProvider = "openai"
+	if err := cfg.Validate(); err == nil {
+		t.Fatalf("expected validation error for legacy web_search_provider=openai")
+	}
+
+	cfg.WebSearchProvider = "prefer_openai"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate prefer_openai: %v", err)
 	}
 }
 

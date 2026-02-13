@@ -114,7 +114,7 @@ func (m *openAIWaitingUserTodosCloseoutMock) handle(w http.ResponseWriter, r *ht
 						"id":        "fc_waiting_user_todos_1",
 						"call_id":   "call_waiting_user_todos_1",
 						"name":      "terminal_exec",
-						"arguments": `{"command":"pwd"}`,
+						"arguments": `{"command":"false"}`,
 					},
 				},
 				"usage": map[string]any{
@@ -184,7 +184,7 @@ func TestIntegration_NativeSDK_OpenAI_AskUser_ClosesOpenTodosBeforeWaitingUser(t
 		},
 	}
 
-	// CanExecute=false ensures terminal.exec fails and creates a blocker fact.
+	// Use a failing command to create a blocker fact while keeping RWX enabled.
 	meta := session.Meta{
 		EndpointID:        "env_test",
 		NamespacePublicID: "ns_test",
@@ -193,7 +193,7 @@ func TestIntegration_NativeSDK_OpenAI_AskUser_ClosesOpenTodosBeforeWaitingUser(t
 		UserEmail:         "u_test@example.com",
 		CanRead:           true,
 		CanWrite:          true,
-		CanExecute:        false,
+		CanExecute:        true,
 		CanAdmin:          true,
 	}
 

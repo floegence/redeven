@@ -33,6 +33,7 @@ import { useAIChatContext, type ListThreadMessagesResponse } from './AIChatConte
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { decorateMessageForTerminalExec, decorateStreamEventForTerminalExec } from './aiTerminalExecPresentation';
+import { hasRWXPermissions } from './aiPermissions';
 
 function createUserMarkdownMessage(markdown: string): Message {
   return {
@@ -770,9 +771,35 @@ export function EnvAIPage() {
   };
 
   const activeThreadRunning = createMemo(() => ai.isThreadRunning(ai.activeThreadId()));
+  const permissionReady = () => env.env.state === 'ready';
+  const canRWX = createMemo(() => hasRWXPermissions(env.env()));
+  const canRWXReady = createMemo(() => permissionReady() && canRWX());
   const canInteract = createMemo(
-    () => protocol.status() === 'connected' && ai.aiEnabled() && ai.modelsReady(),
+    () => protocol.status() === 'connected' && ai.aiEnabled() && ai.modelsReady() && canRWXReady(),
   );
+  const ensureRWX = (): boolean => {
+    if (!permissionReady()) {
+      notify.error('Not ready', 'Loading environment permissions...');
+      return false;
+    }
+    if (!canRWX()) {
+      notify.error('Permission denied', 'Read/write/execute permission required.');
+      return false;
+    }
+    return true;
+  };
+  const chatInputPlaceholder = createMemo((): string => {
+    if (!ai.aiEnabled()) {
+      return 'Configure AI in settings to start...';
+    }
+    if (!permissionReady()) {
+      return 'Loading permissions...';
+    }
+    if (!canRWX()) {
+      return 'Read/write/execute permission required to send messages.';
+    }
+    return 'Type a message...';
+  });
   const updateExecutionMode = (nextMode: ExecutionMode) => {
     const next = normalizeExecutionMode(nextMode);
     setExecutionMode(next);
@@ -874,6 +901,7 @@ export function EnvAIPage() {
   const cancelRunForThread = async (threadId: string, opts?: { notifyOnError?: boolean }): Promise<boolean> => {
     const tid = String(threadId ?? '').trim();
     if (!tid) return false;
+    if (!ensureRWX()) return false;
 
     const rid = String(ai.runIdForThread(tid) ?? '').trim();
     if (!rid && !ai.isThreadRunning(tid)) {
@@ -1114,6 +1142,7 @@ export function EnvAIPage() {
   createEffect(() => {
     if (!chatReady()) return;
     if (protocol.status() !== 'connected' || !ai.aiEnabled()) return;
+    if (!canRWXReady()) return;
 
     const seq = env.aiInjectionSeq();
     if (!seq || seq === lastInjectionSeq) return;
@@ -1147,6 +1176,9 @@ export function EnvAIPage() {
   });
 
   const uploadAttachment = async (file: File): Promise<string> => {
+    if (!canRWXReady()) {
+      throw new Error('Read/write/execute permission required.');
+    }
     const form = new FormData();
     form.append('file', file);
 
@@ -1173,6 +1205,7 @@ export function EnvAIPage() {
   };
 
   const sendToolApproval = async (_messageId: string, toolId: string, approved: boolean) => {
+    if (!ensureRWX()) return;
     const tid = String(ai.activeThreadId() ?? '').trim();
     const rid = String(ai.runIdForThread(tid) ?? '').trim();
     if (!rid) return;
@@ -1183,6 +1216,11 @@ export function EnvAIPage() {
     if (!chat) {
       notify.error('AI unavailable', 'Chat is not ready.');
       setSendPending(false);
+      return;
+    }
+    if (!ensureRWX()) {
+      setSendPending(false);
+      setRunPhaseLabel('Working');
       return;
     }
     if (!ai.aiEnabled()) {
@@ -1293,6 +1331,7 @@ export function EnvAIPage() {
       // Synchronous hook: called right after ChatProvider renders the optimistic user message.
       // Raising sendPending here makes the working indicator appear in the same frame.
       if (import.meta.env.DEV) console.debug('[AI Chat] onWillSend fired at', performance.now().toFixed(1), 'ms');
+      if (!canInteract()) return;
       setSendPending(true);
       setHasMessages(true);
       setRunPhaseLabel('Planning...');
@@ -1302,6 +1341,13 @@ export function EnvAIPage() {
     onSendMessage: async (content, attachments, _addMessage) => {
       if (protocol.status() !== 'connected') {
         notify.error('Not connected', 'Connecting to agent...');
+        setSendPending(false);
+        setRunPhaseLabel('Working');
+        return;
+      }
+      if (!ensureRWX()) {
+        setSendPending(false);
+        setRunPhaseLabel('Working');
         return;
       }
       await enqueueStartRun(content, attachments);
@@ -1319,6 +1365,7 @@ export function EnvAIPage() {
   const doRename = async () => {
     const tid = ai.activeThreadId();
     if (!tid) return;
+    if (!ensureRWX()) return;
 
     setRenaming(true);
     try {
@@ -1339,6 +1386,7 @@ export function EnvAIPage() {
   const doDelete = async () => {
     const tid = ai.activeThreadId();
     if (!tid) return;
+    if (!ensureRWX()) return;
     const force = deleteForce();
 
     setDeleting(true);
@@ -1395,7 +1443,7 @@ export function EnvAIPage() {
         config={{
           placeholder: 'Describe what you want to do...',
           assistantAvatar: '/logo.png',
-          allowAttachments: true,
+          allowAttachments: canInteract(),
           maxAttachments: 5,
           maxAttachmentSize: 10 * 1024 * 1024,
         }}
@@ -1428,7 +1476,7 @@ export function EnvAIPage() {
                       onChange={(v) => ai.selectModel(String(v ?? '').trim())}
                       options={ai.modelOptions()}
                       placeholder="Select model..."
-                      disabled={ai.models.loading || !!ai.models.error || activeThreadRunning()}
+                      disabled={ai.models.loading || !!ai.models.error || activeThreadRunning() || !canRWXReady()}
                       class="ai-model-select-trigger min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
                     />
                   </Show>
@@ -1441,6 +1489,7 @@ export function EnvAIPage() {
                         variant="outline"
                         icon={Stop}
                         onClick={() => stopRun()}
+                        disabled={!canRWXReady()}
                         class="h-7 px-2 max-sm:w-7 max-sm:px-0 text-error border-error/30 hover:bg-error/10 hover:text-error"
                       >
                         <span class="max-sm:hidden">Stop</span>
@@ -1460,7 +1509,7 @@ export function EnvAIPage() {
                       icon={Pencil}
                       onClick={() => openRename()}
                       aria-label="Rename"
-                      disabled={!ai.activeThreadId() || activeThreadRunning()}
+                      disabled={!ai.activeThreadId() || activeThreadRunning() || !canRWXReady()}
                       class="w-7 h-7"
                     />
                   </Tooltip>
@@ -1476,7 +1525,7 @@ export function EnvAIPage() {
                         setDeleteOpen(true);
                       }}
                       aria-label="Delete"
-                      disabled={!ai.activeThreadId()}
+                      disabled={!ai.activeThreadId() || !canRWXReady()}
                       class="w-7 h-7 text-muted-foreground hover:text-error hover:bg-error/10"
                     />
                   </Tooltip>
@@ -1530,6 +1579,23 @@ export function EnvAIPage() {
               </div>
             </Show>
 
+            {/* Permission banner: read-only session */}
+            <Show when={permissionReady() && !canRWX()}>
+              <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-xl shadow-sm bg-amber-500/5 border border-amber-500/20">
+                <div class="flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300">
+                  <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  Read/write/execute permission required
+                </div>
+                <div class="mt-1 text-muted-foreground pl-6">
+                  You can view existing chats, but sending messages, starting runs, uploading files, and approving tools is disabled.
+                </div>
+              </div>
+            </Show>
+
             {/* Message list with empty state */}
             <MessageListWithEmptyState
               hasMessages={hasMessages()}
@@ -1570,7 +1636,7 @@ export function EnvAIPage() {
             {/* Input area */}
             <ChatInput
               disabled={!canInteract()}
-              placeholder={ai.aiEnabled() ? 'Type a message...' : 'Configure AI in settings to start...'}
+              placeholder={chatInputPlaceholder()}
             />
           </div>
         </Show>

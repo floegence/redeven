@@ -83,6 +83,7 @@ type run struct {
 	maxWallTime    time.Duration
 	idleTimeout    time.Duration
 	toolApprovalTO time.Duration
+	activityCh     chan struct{}
 	doneCh         chan struct{}
 	doneOnce       sync.Once
 
@@ -180,6 +181,9 @@ func newRun(opts runOptions) *run {
 			return opts.SubagentDepth <= 0
 		}(),
 	}
+	if r.idleTimeout > 0 {
+		r.activityCh = make(chan struct{}, 1)
+	}
 	if len(opts.ToolAllowlist) > 0 {
 		r.toolAllowlist = make(map[string]struct{}, len(opts.ToolAllowlist))
 		for _, name := range opts.ToolAllowlist {
@@ -194,6 +198,59 @@ func newRun(opts runOptions) *run {
 		r.stream = newNDJSONStream(r.w, opts.StreamWriteTimeout)
 	}
 	return r
+}
+
+func (r *run) touchActivity() {
+	if r == nil || r.activityCh == nil {
+		return
+	}
+	select {
+	case r.activityCh <- struct{}{}:
+	default:
+	}
+}
+
+func (r *run) isWaitingApproval() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	v := r.waitingApproval
+	r.mu.Unlock()
+	return v
+}
+
+func (r *run) runIdleWatchdog(ctx context.Context) {
+	if r == nil || ctx == nil || r.idleTimeout <= 0 || r.activityCh == nil {
+		return
+	}
+	idleTimer := time.NewTimer(r.idleTimeout)
+	defer idleTimer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-r.doneCh:
+			return
+		case <-r.activityCh:
+			if !idleTimer.Stop() {
+				select {
+				case <-idleTimer.C:
+				default:
+				}
+			}
+			idleTimer.Reset(r.idleTimeout)
+		case <-idleTimer.C:
+			// Waiting for the user is not an "idle" run. That lifecycle is bounded by the
+			// per-approval timeout (toolApprovalTO), plus the run's max wall time.
+			if r.isWaitingApproval() {
+				idleTimer.Reset(r.idleTimeout)
+				continue
+			}
+			r.requestCancel("timed_out")
+			return
+		}
+	}
 }
 
 func (r *run) requestCancel(reason string) {
@@ -306,6 +363,7 @@ func (r *run) sendStreamEvent(ev any) {
 	if r == nil || ev == nil {
 		return
 	}
+	r.touchActivity()
 	if r.onStreamEvent != nil {
 		r.onStreamEvent(ev)
 	}
@@ -829,6 +887,17 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		defer r.stream.close()
 	}
 
+	execCtx := ctx
+	var cancelMaxWall context.CancelFunc
+	if r.maxWallTime > 0 {
+		execCtx, cancelMaxWall = context.WithTimeout(execCtx, r.maxWallTime)
+		defer cancelMaxWall()
+	}
+	if r.idleTimeout > 0 && r.activityCh != nil {
+		r.touchActivity()
+		go r.runIdleWatchdog(execCtx)
+	}
+
 	// Initial assistant message + first markdown block.
 	r.muAssistant.Lock()
 	r.assistantCreatedAtUnixMs = time.Now().UnixMilli()
@@ -904,7 +973,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	if !r.shouldUseNativeRuntime(providerCfg) {
 		return r.failRun("Unsupported AI provider type", fmt.Errorf("unsupported provider type %q", strings.TrimSpace(providerCfg.Type)))
 	}
-	return r.runNative(ctx, req, *providerCfg, strings.TrimSpace(apiKey), strings.TrimSpace(taskObjective))
+	return r.runNative(execCtx, req, *providerCfg, strings.TrimSpace(apiKey), strings.TrimSpace(taskObjective))
 }
 
 func (r *run) appendTextDelta(delta string) error {

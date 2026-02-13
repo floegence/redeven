@@ -48,7 +48,7 @@ type AIExecutionPolicy = Readonly<{
 type AIConfig = Readonly<{
   providers: AIProvider[];
   mode?: 'act' | 'plan';
-  web_search_provider?: 'auto' | 'openai' | 'brave' | 'disabled';
+  web_search_provider?: 'prefer_openai' | 'brave' | 'disabled';
   tool_recovery_enabled?: boolean;
   tool_recovery_max_steps?: number;
   tool_recovery_allow_path_rewrite?: boolean;
@@ -139,7 +139,7 @@ function defaultPermissionPolicy(): PermissionPolicy {
 
 function defaultAIConfig(): AIConfig {
   return {
-    web_search_provider: 'auto',
+    web_search_provider: 'prefer_openai',
     execution_policy: {
       require_user_approval: false,
       enforce_plan_mode_guard: false,
@@ -661,7 +661,7 @@ export function EnvSettingsPage() {
   const [aiRequireUserApproval, setAiRequireUserApproval] = createSignal(false);
   const [aiEnforcePlanModeGuard, setAiEnforcePlanModeGuard] = createSignal(false);
   const [aiBlockDangerousCommands, setAiBlockDangerousCommands] = createSignal(false);
-  const [aiWebSearchProvider, setAiWebSearchProvider] = createSignal<'auto' | 'openai' | 'brave' | 'disabled'>('auto');
+  const [aiWebSearchProvider, setAiWebSearchProvider] = createSignal<'prefer_openai' | 'brave' | 'disabled'>('prefer_openai');
 
   // AI provider keys (stored locally in secrets.json; never returned in plaintext).
   const [aiProviderKeySet, setAiProviderKeySet] = createSignal<Record<string, boolean>>({});
@@ -803,7 +803,7 @@ export function EnvSettingsPage() {
       const normalized = String(webSearchProvider ?? '')
         .trim()
         .toLowerCase();
-      if (normalized && normalized !== 'auto' && normalized !== 'openai' && normalized !== 'brave' && normalized !== 'disabled') {
+      if (normalized && normalized !== 'prefer_openai' && normalized !== 'brave' && normalized !== 'disabled') {
         throw new Error(`Invalid web_search_provider: ${webSearchProvider}`);
       }
     }
@@ -963,14 +963,14 @@ export function EnvSettingsPage() {
     return out;
   };
 
-  const normalizeWebSearchProvider = (raw: unknown): 'auto' | 'openai' | 'brave' | 'disabled' => {
+  const normalizeWebSearchProvider = (raw: unknown): 'prefer_openai' | 'brave' | 'disabled' => {
     const v = String(raw ?? '')
       .trim()
       .toLowerCase();
-    if (v === 'openai' || v === 'brave' || v === 'disabled') {
-      return v as 'openai' | 'brave' | 'disabled';
+    if (v === 'prefer_openai' || v === 'brave' || v === 'disabled') {
+      return v as 'prefer_openai' | 'brave' | 'disabled';
     }
-    return 'auto';
+    return 'prefer_openai';
   };
 
   const refreshAIProviderKeyStatus = async (providerIDs: string[]) => {
@@ -2376,20 +2376,19 @@ export function EnvSettingsPage() {
                           }}
                           disabled={!canInteract()}
                           options={[
-                            { value: 'auto', label: 'auto (recommended)' },
-                            { value: 'openai', label: 'openai' },
+                            { value: 'prefer_openai', label: 'prefer_openai (recommended)' },
                             { value: 'brave', label: 'brave' },
                             { value: 'disabled', label: 'disabled' },
                           ]}
                           class="w-full"
                         />
                         <p class="text-xs text-muted-foreground mt-1">
-                          Auto prefers OpenAI built-in web search when using the official OpenAI base_url; otherwise it falls back to Brave.
+                          prefer_openai prefers OpenAI built-in web search when using the official OpenAI base_url; otherwise it falls back to Brave.
                         </p>
                       </div>
                     </div>
 
-                    <Show when={aiWebSearchProvider() === 'auto' || aiWebSearchProvider() === 'brave'}>
+                    <Show when={aiWebSearchProvider() === 'prefer_openai' || aiWebSearchProvider() === 'brave'}>
                       <div class="space-y-2">
                         <FieldLabel hint="stored locally, never shown again">brave_api_key</FieldLabel>
                         <div class="flex flex-col sm:flex-row sm:items-center gap-2">

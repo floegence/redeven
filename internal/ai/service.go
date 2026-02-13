@@ -548,8 +548,8 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
-	if meta == nil {
-		return nil, errors.New("missing session metadata")
+	if err := requireRWX(meta); err != nil {
+		return nil, err
 	}
 	runID = strings.TrimSpace(runID)
 	if runID == "" {
@@ -1218,8 +1218,8 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
-	if meta == nil {
-		return errors.New("missing session metadata")
+	if err := requireRWX(meta); err != nil {
+		return err
 	}
 	runID = strings.TrimSpace(runID)
 	endpointID := strings.TrimSpace(meta.EndpointID)
@@ -1242,8 +1242,8 @@ func (s *Service) ApproveTool(meta *session.Meta, runID string, toolID string, a
 	if s == nil {
 		return errors.New("nil service")
 	}
-	if meta == nil {
-		return errors.New("missing session metadata")
+	if err := requireRWX(meta); err != nil {
+		return err
 	}
 	runID = strings.TrimSpace(runID)
 	toolID = strings.TrimSpace(toolID)

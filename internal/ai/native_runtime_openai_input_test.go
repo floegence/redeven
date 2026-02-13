@@ -1,9 +1,6 @@
 package ai
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestBuildToolCallMessages(t *testing.T) {
 	t.Parallel()
@@ -64,7 +61,7 @@ func TestBuildOpenAIInput_EncodesFunctionCallAndOutput(t *testing.T) {
 		},
 	}
 
-	items, instructions := buildOpenAIInput(msgs, false)
+	items, instructions := buildOpenAIInput(msgs)
 	if instructions != "" {
 		t.Fatalf("instructions=%q, want empty", instructions)
 	}
@@ -104,27 +101,18 @@ func TestBuildOpenAIInput_AssistantHistoryUsesOutputText(t *testing.T) {
 		},
 	}
 
-	items, _ := buildOpenAIInput(msgs, true)
+	items, _ := buildOpenAIInput(msgs)
 	if len(items) != 1 {
 		t.Fatalf("items=%d, want 1", len(items))
 	}
-	if items[0].OfOutputMessage == nil {
-		t.Fatalf("assistant history must encode as output message")
+	if items[0].OfMessage == nil {
+		t.Fatalf("assistant history must encode as message item")
 	}
-	out := items[0].OfOutputMessage
-	if !strings.HasPrefix(out.ID, "msg_") {
-		t.Fatalf("id=%q, want prefix msg_", out.ID)
+	msg := items[0].OfMessage
+	if msg.Role != "assistant" {
+		t.Fatalf("role=%q, want assistant", msg.Role)
 	}
-	if out.Status != "completed" {
-		t.Fatalf("status=%q, want completed", out.Status)
-	}
-	if len(out.Content) != 1 {
-		t.Fatalf("output content len=%d, want 1", len(out.Content))
-	}
-	if out.Content[0].OfOutputText == nil {
-		t.Fatalf("output content must be output_text")
-	}
-	if out.Content[0].OfOutputText.Text != "previous assistant summary" {
-		t.Fatalf("text=%q, want previous assistant summary", out.Content[0].OfOutputText.Text)
+	if msg.Content.OfString.Value != "previous assistant summary" {
+		t.Fatalf("content=%q, want previous assistant summary", msg.Content.OfString.Value)
 	}
 }

@@ -1177,7 +1177,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/threads":
-		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
 		}
@@ -1247,7 +1247,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case action == "" && r.Method == http.MethodPatch:
-			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
 			}
@@ -1304,7 +1304,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case action == "cancel" && r.Method == http.MethodPost:
-			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
 			}
@@ -1322,7 +1322,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case action == "" && r.Method == http.MethodDelete:
-			meta, ok := g.requirePermission(w, r, requiredPermissionWrite)
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
 			}
@@ -1404,7 +1404,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 
 		case action == "messages" && r.Method == http.MethodPost:
-			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
 			}
@@ -1435,7 +1435,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/runs":
-		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
 		}
@@ -1553,6 +1553,10 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if r.Method == http.MethodPost && action == "cancel" {
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
 			if err := g.ai.CancelRun(meta, runID); err != nil {
 				g.appendAudit(meta, "ai_run_cancel", "failure", map[string]any{"run_id": runID}, err)
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
@@ -1580,6 +1584,10 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if r.Method == http.MethodPost && action == "tool_approvals" {
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
 			var body ai.ToolApprovalRequest
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
@@ -1611,7 +1619,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/uploads":
-		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
 		}

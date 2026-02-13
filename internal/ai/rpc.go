@@ -62,8 +62,8 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 	}
 
 	rpctyped.Register[aiRunStartReq, aiRunStartResp](r, TypeID_AI_RUN_START, func(_ context.Context, req *aiRunStartReq) (*aiRunStartResp, error) {
-		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
+			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if !s.Enabled() {
 			return nil, &rpc.Error{Code: 503, Message: "ai not configured"}
@@ -90,8 +90,8 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 	})
 
 	rpctyped.Register[aiRunCancelReq, aiRunCancelResp](r, TypeID_AI_RUN_CANCEL, func(_ context.Context, req *aiRunCancelReq) (*aiRunCancelResp, error) {
-		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
+			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
@@ -115,8 +115,8 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 	})
 
 	rpctyped.Register[aiToolApprovalReq, aiToolApprovalResp](r, TypeID_AI_TOOL_APPROVAL, func(_ context.Context, req *aiToolApprovalReq) (*aiToolApprovalResp, error) {
-		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
+			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
