@@ -1,12 +1,13 @@
-import { For, Show, createMemo, createSignal } from 'solid-js';
-import { MessageSquare, Plus, Sparkles, X } from '@floegence/floe-webapp-core/icons';
+import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { Files, MessageSquare, Plus, Refresh, Sparkles, Trash, X } from '@floegence/floe-webapp-core/icons';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { SidebarContent, SidebarSection } from '@floegence/floe-webapp-core/layout';
-import { Button, ConfirmDialog, ProcessingIndicator } from '@floegence/floe-webapp-core/ui';
+import { Button, Checkbox, ConfirmDialog, Dialog, ProcessingIndicator, SegmentedControl, Tooltip } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { Motion } from 'solid-motionone';
-import { useAIChatContext, type ThreadRunStatus, type ThreadView } from './AIChatContext';
+import { fetchGatewayJSON } from '../services/gatewayApi';
+import { useAIChatContext, type ListThreadsResponse, type ThreadRunStatus, type ThreadView } from './AIChatContext';
 
 // Compact timestamp for the right side of each thread card.
 function fmtShortTime(ms: number): string {
@@ -32,8 +33,21 @@ function fmtShortTime(ms: number): string {
   }
 }
 
+// Full timestamp used by the management dialog table.
+function fmtDetailTime(ms: number): string {
+  if (!ms) return '-';
+  try {
+    return new Date(ms).toLocaleString();
+  } catch {
+    return '-';
+  }
+}
+
 // Time group type.
 type TimeGroup = 'Today' | 'Yesterday' | 'This Week' | 'Older';
+
+type ThreadAgePreset = 'all' | 'older_1d' | 'older_1w' | 'older_1m';
+type DeleteThreadResult = 'deleted' | 'busy';
 
 // Group threads by date (only when total count >= 5).
 function groupThreadsByDate(threads: ThreadView[]): { group: TimeGroup; threads: ThreadView[] }[] {
@@ -56,7 +70,7 @@ function groupThreadsByDate(threads: ThreadView[]): { group: TimeGroup; threads:
   };
 
   for (const t of threads) {
-    const ts = t.updated_at_unix_ms || t.created_at_unix_ms || 0;
+    const ts = threadSortTime(t);
     if (ts >= todayStart) {
       groups['Today'].push(t);
     } else if (ts >= yesterdayStart) {
@@ -109,6 +123,107 @@ function statusLabel(status: ThreadRunStatus): string {
   }
 }
 
+function threadSortTime(thread: ThreadView): number {
+  const updated = Number(thread.updated_at_unix_ms || 0);
+  if (updated > 0) return updated;
+  const created = Number(thread.created_at_unix_ms || 0);
+  if (created > 0) return created;
+  return 0;
+}
+
+function normalizeThreadStatus(raw: string | null | undefined): ThreadRunStatus {
+  const status = String(raw ?? '').trim().toLowerCase();
+  if (
+    status === 'accepted' ||
+    status === 'running' ||
+    status === 'waiting_approval' ||
+    status === 'recovering' ||
+    status === 'success' ||
+    status === 'failed' ||
+    status === 'canceled' ||
+    status === 'timed_out'
+  ) {
+    return status as ThreadRunStatus;
+  }
+  return 'idle';
+}
+
+function isActiveThreadStatus(status: ThreadRunStatus): boolean {
+  return status === 'accepted' || status === 'running' || status === 'waiting_approval' || status === 'recovering';
+}
+
+function normalizeThreadAgePreset(value: string): ThreadAgePreset {
+  const v = String(value ?? '').trim();
+  if (v === 'older_1d' || v === 'older_1w' || v === 'older_1m') return v;
+  return 'all';
+}
+
+function threadMatchesAgePreset(thread: ThreadView, preset: ThreadAgePreset, nowUnixMs: number): boolean {
+  if (preset === 'all') return true;
+  const ts = threadSortTime(thread);
+  if (!ts) return false;
+  const ageMs = nowUnixMs - ts;
+  if (preset === 'older_1d') return ageMs >= 86400000;
+  if (preset === 'older_1w') return ageMs >= 7 * 86400000;
+  if (preset === 'older_1m') return ageMs >= 30 * 86400000;
+  return true;
+}
+
+async function requestDeleteThread(threadID: string, force: boolean): Promise<DeleteThreadResult> {
+  const tid = String(threadID ?? '').trim();
+  if (!tid) throw new Error('missing thread_id');
+
+  const url = `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}${force ? '?force=true' : ''}`;
+  const resp = await fetch(url, { method: 'DELETE', credentials: 'omit', cache: 'no-store' });
+  const text = await resp.text();
+  let data: any = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // ignore
+  }
+
+  if (!resp.ok) {
+    if (resp.status === 409 && !force) {
+      return 'busy';
+    }
+    throw new Error(String(data?.error ?? `HTTP ${resp.status}`));
+  }
+  if (data?.ok === false) {
+    throw new Error(String(data?.error ?? 'Request failed'));
+  }
+  return 'deleted';
+}
+
+async function loadAllThreads(): Promise<ThreadView[]> {
+  const out: ThreadView[] = [];
+  const seen = new Set<string>();
+  const pageLimit = 200;
+  let cursor = '';
+
+  for (let page = 0; page < 50; page += 1) {
+    const params = new URLSearchParams();
+    params.set('limit', String(pageLimit));
+    if (cursor) params.set('cursor', cursor);
+
+    const result = await fetchGatewayJSON<ListThreadsResponse>(`/_redeven_proxy/api/ai/threads?${params.toString()}`, { method: 'GET' });
+    const list = Array.isArray(result.threads) ? result.threads : [];
+
+    for (const thread of list) {
+      const tid = String(thread.thread_id ?? '').trim();
+      if (!tid || seen.has(tid)) continue;
+      seen.add(tid);
+      out.push(thread);
+    }
+
+    const nextCursor = String(result.next_cursor ?? '').trim();
+    if (!nextCursor || list.length < pageLimit || nextCursor === cursor) break;
+    cursor = nextCursor;
+  }
+
+  return out;
+}
+
 /**
  * AI chat sidebar thread list.
  * Uses floe-webapp SidebarContent as the container with custom thread card rendering.
@@ -118,12 +233,23 @@ export function AIChatSidebar() {
   const protocol = useProtocol();
   const notify = useNotification();
 
-  // Delete confirmation dialog state.
+  // Single delete confirmation dialog state.
   const [deleteOpen, setDeleteOpen] = createSignal(false);
   const [deleteThreadId, setDeleteThreadId] = createSignal<string | null>(null);
   const [deleteThreadTitle, setDeleteThreadTitle] = createSignal('');
   const [deleteForce, setDeleteForce] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
+
+  // Manager dialog state.
+  const [managerOpen, setManagerOpen] = createSignal(false);
+  const [managerLoading, setManagerLoading] = createSignal(false);
+  const [managerError, setManagerError] = createSignal('');
+  const [managerThreads, setManagerThreads] = createSignal<ThreadView[]>([]);
+  const [managerAgePreset, setManagerAgePreset] = createSignal<ThreadAgePreset>('all');
+  const [managerSelection, setManagerSelection] = createSignal<Record<string, true>>({});
+  const [managerDeleteConfirmOpen, setManagerDeleteConfirmOpen] = createSignal(false);
+  const [managerDeleting, setManagerDeleting] = createSignal(false);
+  let managerLoadVersion = 0;
 
   const openDelete = (threadId: string, title: string) => {
     setDeleteThreadId(threadId);
@@ -133,29 +259,17 @@ export function AIChatSidebar() {
   };
 
   const doDelete = async () => {
-    const tid = deleteThreadId();
+    const tid = String(deleteThreadId() ?? '').trim();
     if (!tid) return;
 
     setDeleting(true);
     try {
       const force = deleteForce();
-      const url = `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}${force ? '?force=true' : ''}`;
-      const resp = await fetch(url, { method: 'DELETE', credentials: 'omit', cache: 'no-store' });
-      const text = await resp.text();
-      let data: any = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        // ignore
+      const result = await requestDeleteThread(tid, force);
+      if (result === 'busy') {
+        setDeleteForce(true);
+        return;
       }
-      if (!resp.ok) {
-        if (resp.status === 409 && !force) {
-          setDeleteForce(true);
-          return;
-        }
-        throw new Error(String(data?.error ?? `HTTP ${resp.status}`));
-      }
-      if (data?.ok === false) throw new Error(String(data?.error ?? 'Request failed'));
 
       setDeleteOpen(false);
       setDeleteThreadId(null);
@@ -166,12 +280,200 @@ export function AIChatSidebar() {
         ctx.enterDraftChat();
       }
 
+      setManagerThreads((prev) => prev.filter((thread) => thread.thread_id !== tid));
+      setManagerSelection((prev) => {
+        if (!prev[tid]) return prev;
+        const next = { ...prev };
+        delete next[tid];
+        return next;
+      });
       ctx.bumpThreadsSeq();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Failed to delete chat', msg || 'Request failed.');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const loadManagerThreads = async () => {
+    const version = ++managerLoadVersion;
+    setManagerLoading(true);
+    setManagerError('');
+
+    try {
+      const list = await loadAllThreads();
+      if (version !== managerLoadVersion) return;
+
+      const sorted = [...list].sort((a, b) => threadSortTime(b) - threadSortTime(a));
+      setManagerThreads(sorted);
+      setManagerSelection((prev) => {
+        const valid = new Set(sorted.map((thread) => thread.thread_id));
+        const next: Record<string, true> = {};
+        for (const tid of Object.keys(prev)) {
+          if (valid.has(tid)) next[tid] = true;
+        }
+        return next;
+      });
+    } catch (e) {
+      if (version !== managerLoadVersion) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      setManagerError(msg || 'Request failed.');
+    } finally {
+      if (version === managerLoadVersion) {
+        setManagerLoading(false);
+      }
+    }
+  };
+
+  createEffect(() => {
+    if (!managerOpen()) return;
+    void loadManagerThreads();
+  });
+
+  const openManager = () => {
+    setManagerSelection({});
+    setManagerAgePreset('all');
+    setManagerError('');
+    setManagerOpen(true);
+  };
+
+  const managerStatusFor = (thread: ThreadView): ThreadRunStatus => {
+    if (ctx.isThreadRunning(thread.thread_id)) return 'running';
+    return normalizeThreadStatus(thread.run_status);
+  };
+
+  const managerFilteredThreads = createMemo(() => {
+    const preset = managerAgePreset();
+    const list = managerThreads();
+    if (preset === 'all') return list;
+    const now = Date.now();
+    return list.filter((thread) => threadMatchesAgePreset(thread, preset, now));
+  });
+
+  const managerSelectedThreads = createMemo(() => {
+    const selected = managerSelection();
+    return managerThreads().filter((thread) => !!selected[thread.thread_id]);
+  });
+
+  const managerSelectedCount = createMemo(() => managerSelectedThreads().length);
+  const managerFilteredSelectedCount = createMemo(() => {
+    const selected = managerSelection();
+    let count = 0;
+    for (const thread of managerFilteredThreads()) {
+      if (selected[thread.thread_id]) count += 1;
+    }
+    return count;
+  });
+  const managerHasFilteredSelection = createMemo(() => managerFilteredSelectedCount() > 0);
+  const managerAllFilteredSelected = createMemo(() => {
+    const visible = managerFilteredThreads();
+    if (visible.length === 0) return false;
+    return managerFilteredSelectedCount() === visible.length;
+  });
+  const managerSelectedRunningCount = createMemo(() => {
+    let count = 0;
+    for (const thread of managerSelectedThreads()) {
+      if (isActiveThreadStatus(managerStatusFor(thread))) count += 1;
+    }
+    return count;
+  });
+
+  const setManagerThreadSelected = (threadID: string, checked: boolean) => {
+    const tid = String(threadID ?? '').trim();
+    if (!tid) return;
+    setManagerSelection((prev) => {
+      const next = { ...prev };
+      if (checked) {
+        next[tid] = true;
+      } else {
+        delete next[tid];
+      }
+      return next;
+    });
+  };
+
+  const setFilteredThreadsSelected = (checked: boolean) => {
+    const visibleIDs = managerFilteredThreads().map((thread) => thread.thread_id);
+    if (visibleIDs.length === 0) return;
+
+    setManagerSelection((prev) => {
+      const next = { ...prev };
+      for (const tid of visibleIDs) {
+        if (checked) {
+          next[tid] = true;
+        } else {
+          delete next[tid];
+        }
+      }
+      return next;
+    });
+  };
+
+  const clearManagerSelection = () => {
+    setManagerSelection({});
+  };
+
+  const doBulkDelete = async () => {
+    const targets = managerSelectedThreads();
+    if (targets.length === 0) {
+      setManagerDeleteConfirmOpen(false);
+      return;
+    }
+
+    setManagerDeleting(true);
+    try {
+      let deleted = 0;
+      let forced = 0;
+      let failed = 0;
+      const deletedIDs = new Set<string>();
+
+      for (const thread of targets) {
+        const tid = String(thread.thread_id ?? '').trim();
+        if (!tid) continue;
+
+        try {
+          const result = await requestDeleteThread(tid, false);
+          if (result === 'busy') {
+            await requestDeleteThread(tid, true);
+            forced += 1;
+          }
+          deleted += 1;
+          deletedIDs.add(tid);
+        } catch {
+          failed += 1;
+        }
+      }
+
+      if (deletedIDs.size > 0) {
+        const activeID = String(ctx.activeThreadId() ?? '').trim();
+        if (activeID && deletedIDs.has(activeID)) {
+          ctx.clearActiveThreadPersistence();
+          ctx.enterDraftChat();
+        }
+
+        setManagerThreads((prev) => prev.filter((thread) => !deletedIDs.has(thread.thread_id)));
+        setManagerSelection((prev) => {
+          const next = { ...prev };
+          for (const tid of deletedIDs) {
+            delete next[tid];
+          }
+          return next;
+        });
+        ctx.bumpThreadsSeq();
+      }
+
+      if (failed === 0) {
+        const details = forced > 0
+          ? `Deleted ${deleted} chats. ${forced} running chats were force deleted.`
+          : `Deleted ${deleted} chats.`;
+        notify.success('Chats deleted', details);
+        setManagerDeleteConfirmOpen(false);
+      } else {
+        notify.error('Some chats were not deleted', `${deleted} deleted, ${failed} failed.`);
+      }
+    } finally {
+      setManagerDeleting(false);
     }
   };
 
@@ -184,18 +486,30 @@ export function AIChatSidebar() {
 
   return (
     <SidebarContent>
-      {/* Top New Chat button */}
-      <div class="px-1 pb-1">
+      {/* Top action buttons */}
+      <div class="px-1 pb-1 flex items-center gap-1">
         <Button
           variant="outline"
           size="sm"
-          class="w-full justify-start gap-2 h-8 border-sidebar-border/60 bg-sidebar hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground transition-all duration-150"
+          class="flex-1 justify-start gap-2 h-8 border-sidebar-border/60 bg-sidebar hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground transition-all duration-150"
           icon={Plus}
           onClick={() => ctx.enterDraftChat()}
           disabled={protocol.status() !== 'connected'}
         >
           New Chat
         </Button>
+        <Tooltip content="Manage chats" placement="bottom" delay={0}>
+          <Button
+            variant="outline"
+            size="icon"
+            class="h-8 w-8 border-sidebar-border/60 bg-sidebar hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground transition-all duration-150"
+            onClick={openManager}
+            disabled={protocol.status() !== 'connected'}
+            aria-label="Manage chats"
+          >
+            <Files class="w-3.5 h-3.5" />
+          </Button>
+        </Tooltip>
       </div>
 
       <Show
@@ -250,7 +564,217 @@ export function AIChatSidebar() {
         </Show>
       </Show>
 
-      {/* Delete confirmation dialog */}
+      {/* Chat manager dialog */}
+      <Dialog
+        open={managerOpen()}
+        onOpenChange={(open) => {
+          if (!open) {
+            setManagerDeleteConfirmOpen(false);
+          }
+          setManagerOpen(open);
+        }}
+        title="Manage chats"
+        description="View all conversations, filter by age, and delete in batches."
+        class="max-w-5xl"
+        footer={
+          <div class="w-full flex flex-wrap items-center justify-between gap-2">
+            <div class="text-xs text-muted-foreground">
+              {managerSelectedCount()} selected
+            </div>
+            <div class="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                icon={Refresh}
+                onClick={() => void loadManagerThreads()}
+                disabled={managerLoading() || managerDeleting()}
+              >
+                Refresh
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                icon={Trash}
+                onClick={() => setManagerDeleteConfirmOpen(true)}
+                disabled={managerSelectedCount() === 0 || managerDeleting() || protocol.status() !== 'connected'}
+              >
+                Delete Selected
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        <div class="space-y-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <SegmentedControl
+              value={managerAgePreset()}
+              onChange={(value) => setManagerAgePreset(normalizeThreadAgePreset(value))}
+              size="sm"
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'older_1d', label: '1d+' },
+                { value: 'older_1w', label: '1w+' },
+                { value: 'older_1m', label: '1m+' },
+              ]}
+            />
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => setFilteredThreadsSelected(true)}
+              disabled={managerFilteredThreads().length === 0 || managerLoading()}
+            >
+              Select Filtered
+            </Button>
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={clearManagerSelection}
+              disabled={managerSelectedCount() === 0}
+            >
+              Clear Selection
+            </Button>
+            <div class="ml-auto text-xs text-muted-foreground">
+              {managerFilteredThreads().length} shown / {managerThreads().length} total
+            </div>
+          </div>
+
+          <div class="rounded-md border border-border/70 overflow-hidden">
+            <Show
+              when={!managerLoading()}
+              fallback={
+                <div class="px-3 py-5 text-xs text-muted-foreground flex items-center gap-2">
+                  <SnakeLoader size="sm" />
+                  <span>Loading chats...</span>
+                </div>
+              }
+            >
+              <Show
+                when={!managerError()}
+                fallback={<div class="px-3 py-4 text-xs text-error break-words">{managerError()}</div>}
+              >
+                <Show
+                  when={managerThreads().length > 0}
+                  fallback={<div class="px-3 py-6 text-xs text-muted-foreground">No chats found.</div>}
+                >
+                  <Show
+                    when={managerFilteredThreads().length > 0}
+                    fallback={<div class="px-3 py-6 text-xs text-muted-foreground">No chats match this filter.</div>}
+                  >
+                    <div class="max-h-[56vh] overflow-auto">
+                      <table class="w-full text-xs">
+                        <thead class="sticky top-0 bg-card/95 backdrop-blur-sm text-muted-foreground">
+                          <tr class="text-left border-b border-border/70">
+                            <th class="w-10 py-2 pl-3 pr-2">
+                              <Checkbox
+                                checked={managerAllFilteredSelected()}
+                                indeterminate={!managerAllFilteredSelected() && managerHasFilteredSelection()}
+                                onChange={(checked) => setFilteredThreadsSelected(checked)}
+                                disabled={managerFilteredThreads().length === 0}
+                              />
+                            </th>
+                            <th class="py-2 pr-3">Title</th>
+                            <th class="w-32 py-2 pr-3">Status</th>
+                            <th class="w-44 py-2 pr-3">Updated</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <For each={managerFilteredThreads()}>
+                            {(thread) => {
+                              const threadID = thread.thread_id;
+                              const selected = () => !!managerSelection()[threadID];
+                              const status = () => managerStatusFor(thread);
+                              const title = () => thread.title?.trim() || 'New chat';
+                              const preview = () => thread.last_message_preview?.trim() || '';
+
+                              return (
+                                <tr class={`border-b border-border/50 last:border-b-0 ${selected() ? 'bg-muted/40' : ''}`}>
+                                  <td class="py-2.5 pl-3 pr-2 align-top">
+                                    <Checkbox
+                                      checked={selected()}
+                                      onChange={(checked) => setManagerThreadSelected(threadID, checked)}
+                                    />
+                                  </td>
+                                  <td class="py-2.5 pr-3 align-top">
+                                    <div class="min-w-0">
+                                      <div class="flex items-center gap-2 min-w-0">
+                                        <button
+                                          type="button"
+                                          class="text-xs font-medium truncate text-left hover:underline"
+                                          onClick={() => {
+                                            ctx.selectThreadId(threadID);
+                                            setManagerOpen(false);
+                                          }}
+                                          title={title()}
+                                        >
+                                          {title()}
+                                        </button>
+                                        <Show when={threadID === ctx.activeThreadId()}>
+                                          <span class="text-[10px] rounded border border-primary/30 bg-primary/10 text-primary px-1.5 py-0.5">
+                                            Active
+                                          </span>
+                                        </Show>
+                                      </div>
+                                      <Show when={!!preview()}>
+                                        <p class="text-[11px] text-muted-foreground/70 truncate mt-0.5">{preview()}</p>
+                                      </Show>
+                                    </div>
+                                  </td>
+                                  <td class="py-2.5 pr-3 align-top">
+                                    <div class="inline-flex items-center gap-1.5 text-muted-foreground">
+                                      <span class={`w-1.5 h-1.5 rounded-full ${statusDotClass(status())}`} />
+                                      <span>{statusLabel(status()) || 'Idle'}</span>
+                                    </div>
+                                  </td>
+                                  <td class="py-2.5 pr-3 align-top text-muted-foreground whitespace-nowrap">
+                                    {fmtDetailTime(threadSortTime(thread))}
+                                  </td>
+                                </tr>
+                              );
+                            }}
+                          </For>
+                        </tbody>
+                      </table>
+                    </div>
+                  </Show>
+                </Show>
+              </Show>
+            </Show>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Batch delete confirmation */}
+      <ConfirmDialog
+        open={managerDeleteConfirmOpen()}
+        onOpenChange={(open) => {
+          if (!open) {
+            setManagerDeleteConfirmOpen(false);
+            return;
+          }
+          if (managerSelectedCount() > 0) {
+            setManagerDeleteConfirmOpen(true);
+          }
+        }}
+        title="Delete Selected Chats"
+        confirmText={`Delete ${managerSelectedCount()} Chat${managerSelectedCount() === 1 ? '' : 's'}`}
+        variant="destructive"
+        loading={managerDeleting()}
+        onConfirm={() => void doBulkDelete()}
+      >
+        <div class="space-y-2">
+          <p class="text-sm">
+            Delete <span class="font-semibold">{managerSelectedCount()} selected chats</span>?
+          </p>
+          <Show when={managerSelectedRunningCount() > 0}>
+            <p class="text-xs text-muted-foreground">
+              {managerSelectedRunningCount()} running chats will be force deleted.
+            </p>
+          </Show>
+          <p class="text-xs text-muted-foreground">This cannot be undone.</p>
+        </div>
+      </ConfirmDialog>
+
+      {/* Single delete confirmation dialog */}
       <ConfirmDialog
         open={deleteOpen()}
         onOpenChange={(open) => {
