@@ -199,8 +199,28 @@ func (s *Service) broadcastRealtimeEvent(ev RealtimeEvent) {
 	}
 
 	msg := aiSinkMsg{TypeID: TypeID_AI_EVENT_NOTIFY, Payload: payload}
+	priority := classifyRealtimePriority(ev)
 	for _, w := range writers {
-		w.TrySend(msg)
+		w.TrySend(priority, msg)
+	}
+}
+
+type aiSinkPriority uint8
+
+const (
+	aiSinkPriorityHigh aiSinkPriority = iota
+	aiSinkPriorityLow
+)
+
+func classifyRealtimePriority(ev RealtimeEvent) aiSinkPriority {
+	if ev.EventType == RealtimeEventTypeThreadState {
+		return aiSinkPriorityHigh
+	}
+	switch ev.StreamEvent.(type) {
+	case streamEventBlockDelta:
+		return aiSinkPriorityLow
+	default:
+		return aiSinkPriorityHigh
 	}
 }
 
@@ -296,7 +316,9 @@ type aiSinkMsg struct {
 type aiSinkWriter struct {
 	srv *rpc.Server
 
-	ch   chan aiSinkMsg
+	hiCh chan aiSinkMsg
+	loCh chan aiSinkMsg
+	stop chan struct{}
 	once sync.Once
 	done chan struct{}
 }
@@ -304,7 +326,9 @@ type aiSinkWriter struct {
 func newAISinkWriter(srv *rpc.Server) *aiSinkWriter {
 	w := &aiSinkWriter{
 		srv:  srv,
-		ch:   make(chan aiSinkMsg, 256),
+		hiCh: make(chan aiSinkMsg, 1024),
+		loCh: make(chan aiSinkMsg, 256),
+		stop: make(chan struct{}),
 		done: make(chan struct{}),
 	}
 	go w.loop()
@@ -313,28 +337,62 @@ func newAISinkWriter(srv *rpc.Server) *aiSinkWriter {
 
 func (w *aiSinkWriter) loop() {
 	defer close(w.done)
-	for msg := range w.ch {
-		if w.srv == nil {
+	hiCh := w.hiCh
+	loCh := w.loCh
+	for hiCh != nil || loCh != nil {
+		// Drain high-priority queue first so terminal state events are never starved by delta floods.
+		select {
+		case <-w.stop:
 			return
+		case msg := <-hiCh:
+			if w.srv == nil {
+				return
+			}
+			if err := w.srv.Notify(msg.TypeID, msg.Payload); err != nil {
+				return
+			}
+			continue
+		default:
 		}
-		if err := w.srv.Notify(msg.TypeID, msg.Payload); err != nil {
+
+		select {
+		case <-w.stop:
 			return
+		case msg := <-hiCh:
+			if w.srv == nil {
+				return
+			}
+			if err := w.srv.Notify(msg.TypeID, msg.Payload); err != nil {
+				return
+			}
+		case msg := <-loCh:
+			if w.srv == nil {
+				return
+			}
+			if err := w.srv.Notify(msg.TypeID, msg.Payload); err != nil {
+				return
+			}
 		}
 	}
 }
 
-func (w *aiSinkWriter) TrySend(msg aiSinkMsg) {
+func (w *aiSinkWriter) TrySend(priority aiSinkPriority, msg aiSinkMsg) {
 	if w == nil {
 		return
 	}
 	select {
-	case <-w.done:
+	case <-w.stop:
 		return
 	default:
 	}
 
+	ch := w.loCh
+	if priority == aiSinkPriorityHigh {
+		ch = w.hiCh
+	}
+
 	select {
-	case w.ch <- msg:
+	case ch <- msg:
 	default:
 	}
 }
@@ -344,7 +402,7 @@ func (w *aiSinkWriter) Close() {
 		return
 	}
 	w.once.Do(func() {
-		close(w.ch)
+		close(w.stop)
 	})
 	<-w.done
 }

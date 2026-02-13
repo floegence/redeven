@@ -673,7 +673,7 @@ export function EnvAIPage() {
   let lastMessagesReq = 0;
   let lastTodosReq = 0;
   let skipNextThreadLoad = false;
-  const replayAppliedByThread = new Map<string, number>();
+  const messagesCacheByThread = new Map<string, Message[]>();
   const failureNotifiedRuns = new Set<string>();
   const [runPhaseLabel, setRunPhaseLabel] = createSignal('Working');
   const activeThreadTodos = createMemo(() => threadTodos()?.todos ?? []);
@@ -739,29 +739,15 @@ export function EnvAIPage() {
   const isTerminalRunStatus = (status: string) =>
     status === 'success' || status === 'failed' || status === 'canceled' || status === 'timed_out' || status === 'waiting_user';
 
-  const syncThreadReplay = (threadId: string, opts?: { reset?: boolean }) => {
-    if (!chat) return;
+  const mergeDraftAssistantMessage = (threadId: string, messages: Message[]): Message[] => {
     const tid = String(threadId ?? '').trim();
-    if (!tid) return;
-
-    if (opts?.reset) {
-      replayAppliedByThread.set(tid, 0);
-    }
-
-    const events = ai.threadReplayEvents(tid);
-    let applied = replayAppliedByThread.get(tid) ?? 0;
-    if (applied < 0 || applied > events.length) {
-      applied = 0;
-    }
-
-    for (let i = applied; i < events.length; i += 1) {
-      chat.handleStreamEvent(decorateStreamEventForTerminalExec(events[i] as any) as any);
-    }
-    replayAppliedByThread.set(tid, events.length);
-
-    if (events.length > 0) {
-      setHasMessages(true);
-    }
+    if (!tid) return messages;
+    const draft = ai.threadDraftAssistantMessage(tid);
+    if (!draft) return messages;
+    const draftId = String((draft as any)?.id ?? '').trim();
+    if (!draftId) return messages;
+    if (messages.some((m) => String((m as any)?.id ?? '').trim() === draftId)) return messages;
+    return [...messages, decorateMessageForTerminalExec(draft as Message)];
   };
 
   const loadThreadMessages = async (threadId: string, opts?: { scrollToBottom?: boolean }): Promise<void> => {
@@ -779,9 +765,10 @@ export function EnvAIPage() {
       if (reqNo !== lastMessagesReq) return;
 
       const messages = (resp.messages || []).map((message) => decorateMessageForTerminalExec(message as Message));
-      chat.setMessages(messages);
-      setHasMessages(messages.length > 0);
-      syncThreadReplay(tid, { reset: true });
+      messagesCacheByThread.set(tid, messages);
+      const merged = mergeDraftAssistantMessage(tid, messages);
+      chat.setMessages(merged);
+      setHasMessages(merged.length > 0);
       if (opts?.scrollToBottom) {
         // Switching threads should always land on the latest message.
         enableAutoFollow();
@@ -793,7 +780,6 @@ export function EnvAIPage() {
       notify.error('Failed to load chat', msg || 'Request failed.');
       chat.clearMessages();
       setHasMessages(false);
-      replayAppliedByThread.delete(tid);
     } finally {
       if (reqNo === lastMessagesReq) {
         setMessagesLoading(false);
@@ -853,6 +839,7 @@ export function EnvAIPage() {
 
     try {
       await rpc.ai.cancelRun({ runId: rid || undefined, threadId: rid ? undefined : tid || undefined });
+      ai.bumpThreadsSeq();
       return true;
     } catch (e) {
       if (opts?.notifyOnError !== false) {
@@ -906,7 +893,10 @@ export function EnvAIPage() {
   const stopRun = () => {
     const tid = String(ai.activeThreadId() ?? '').trim();
     if (!tid) return;
-    void cancelRunForThread(tid, { notifyOnError: true });
+    setRunPhaseLabel('Stopping...');
+    void cancelRunForThread(tid, { notifyOnError: true }).then((ok) => {
+      if (!ok) setRunPhaseLabel('Working');
+    });
   };
 
   // Load messages when the active thread changes (or on initial selection).
@@ -943,13 +933,20 @@ export function EnvAIPage() {
       return;
     }
 
-    chat?.clearMessages();
-    setHasMessages(false);
+    const tidStr = String(tid ?? '').trim();
+    const cached = messagesCacheByThread.get(tidStr);
+    const seedMessages = cached ? mergeDraftAssistantMessage(tidStr, [...cached]) : mergeDraftAssistantMessage(tidStr, []);
+    if (seedMessages.length > 0) {
+      chat?.setMessages(seedMessages);
+      setHasMessages(true);
+    } else {
+      chat?.clearMessages();
+      setHasMessages(false);
+    }
     setRunPhaseLabel('Working');
     setThreadTodos(null);
     setTodosError('');
     setTodosLoading(true);
-    replayAppliedByThread.delete(String(tid ?? '').trim());
     void loadThreadMessages(tid, { scrollToBottom: true });
     void loadThreadTodos(tid, { silent: false, notifyError: false });
   });
@@ -983,7 +980,8 @@ export function EnvAIPage() {
           }
         }
         if (tid === String(ai.activeThreadId() ?? '').trim()) {
-          syncThreadReplay(tid);
+          chat?.handleStreamEvent(decorateStreamEventForTerminalExec(streamEvent) as any);
+          setHasMessages(true);
           scheduleFollowScrollToLatest();
         }
         return;
@@ -994,12 +992,8 @@ export function EnvAIPage() {
         return;
       }
 
-      replayAppliedByThread.delete(tid);
       if (tid === String(ai.activeThreadId() ?? '').trim()) {
         setRunPhaseLabel('Working');
-        if (!sendPending()) {
-          void loadThreadMessages(tid);
-        }
         void loadThreadTodos(tid, { silent: true, notifyError: false });
       }
 
@@ -1014,6 +1008,47 @@ export function EnvAIPage() {
     onCleanup(() => {
       unsub();
     });
+  });
+
+  // When the active thread finishes a run, refresh persisted messages even if realtime terminal events were dropped.
+  let lastSeenRunningTid = '';
+  let lastSeenRunning = false;
+  let deferredReloadTid = '';
+  createEffect(() => {
+    if (!chatReady()) return;
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    const running = activeThreadRunning();
+
+    if (!tid) {
+      lastSeenRunningTid = '';
+      lastSeenRunning = false;
+      deferredReloadTid = '';
+      return;
+    }
+
+    if (lastSeenRunningTid !== tid) {
+      lastSeenRunningTid = tid;
+      lastSeenRunning = running;
+      deferredReloadTid = '';
+      return;
+    }
+
+    if (lastSeenRunning && !running) {
+      if (sendPending()) {
+        deferredReloadTid = tid;
+      } else {
+        deferredReloadTid = '';
+        void loadThreadMessages(tid);
+      }
+      void loadThreadTodos(tid, { silent: true, notifyError: false });
+    } else if (!running && !sendPending() && deferredReloadTid === tid) {
+      deferredReloadTid = '';
+      void loadThreadMessages(tid);
+      void loadThreadTodos(tid, { silent: true, notifyError: false });
+    }
+
+    lastSeenRunningTid = tid;
+    lastSeenRunning = running;
   });
 
   createEffect(() => {
@@ -1172,9 +1207,8 @@ export function EnvAIPage() {
       url: String(a.url ?? '').trim(),
     }));
 
-    ai.clearThreadReplay(tid);
+    ai.clearThreadDraftAssistantMessage(tid);
     ai.markThreadPendingRun(tid);
-    replayAppliedByThread.delete(String(tid ?? '').trim());
 
     try {
       setRunPhaseLabel('Planning...');

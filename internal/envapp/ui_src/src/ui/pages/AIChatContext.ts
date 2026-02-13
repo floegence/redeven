@@ -10,7 +10,7 @@ import {
   type Resource,
 } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
-import type { StreamEvent } from '@floegence/floe-webapp-core/chat';
+import type { Message, StreamEvent } from '@floegence/floe-webapp-core/chat';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type AIRealtimeEvent } from '../protocol/redeven_v1';
 import { useEnvContext } from './EnvContext';
@@ -162,8 +162,8 @@ export interface AIChatContextValue {
   markThreadPendingRun: (threadId: string) => void;
   confirmThreadRun: (threadId: string, runId: string) => void;
   clearThreadPendingRun: (threadId: string) => void;
-  clearThreadReplay: (threadId: string | null | undefined) => void;
-  threadReplayEvents: (threadId: string | null | undefined) => StreamEvent[];
+  clearThreadDraftAssistantMessage: (threadId: string | null | undefined) => void;
+  threadDraftAssistantMessage: (threadId: string | null | undefined) => Message | null;
   isThreadRunning: (threadId: string | null | undefined) => boolean;
   onRealtimeEvent: (handler: (event: AIRealtimeEvent) => void) => () => void;
 }
@@ -284,7 +284,7 @@ export function createAIChatContextValue(): AIChatContextValue {
 
   const [activeRunByThread, setActiveRunByThread] = createSignal<Record<string, string>>({});
   const [pendingRunByThread, setPendingRunByThread] = createSignal<Record<string, true>>({});
-  const [replayByThread, setReplayByThread] = createSignal<Record<string, StreamEvent[]>>({});
+  const [draftAssistantByThread, setDraftAssistantByThread] = createSignal<Record<string, Message>>({});
 
   const realtimeListeners = new Set<(event: AIRealtimeEvent) => void>();
 
@@ -335,10 +335,10 @@ export function createAIChatContextValue(): AIChatContextValue {
     });
   };
 
-  const clearThreadReplay = (threadId: string | null | undefined) => {
+  const clearThreadDraftAssistantMessage = (threadId: string | null | undefined) => {
     const tid = String(threadId ?? '').trim();
     if (!tid) return;
-    setReplayByThread((prev) => {
+    setDraftAssistantByThread((prev) => {
       if (!prev[tid]) return prev;
       const next = { ...prev };
       delete next[tid];
@@ -346,10 +346,10 @@ export function createAIChatContextValue(): AIChatContextValue {
     });
   };
 
-  const threadReplayEvents = (threadId: string | null | undefined): StreamEvent[] => {
+  const threadDraftAssistantMessage = (threadId: string | null | undefined): Message | null => {
     const tid = String(threadId ?? '').trim();
-    if (!tid) return [];
-    return replayByThread()[tid] ?? [];
+    if (!tid) return null;
+    return draftAssistantByThread()[tid] ?? null;
   };
 
   const isThreadRunning = (threadId: string | null | undefined): boolean => {
@@ -371,18 +371,120 @@ export function createAIChatContextValue(): AIChatContextValue {
     };
   };
 
-  const appendReplayEvent = (threadId: string, streamEvent: StreamEvent) => {
+  const applyDraftStreamEvent = (threadId: string, streamEvent: StreamEvent) => {
     const tid = String(threadId ?? '').trim();
-    if (!tid) return;
-    setReplayByThread((prev) => {
-      const next = { ...prev };
-      const arr = Array.isArray(next[tid]) ? [...next[tid]] : [];
-      arr.push(streamEvent);
-      if (arr.length > 1200) {
-        arr.splice(0, arr.length - 1200);
+    if (!tid || !streamEvent) return;
+
+    const streamType = String((streamEvent as any)?.type ?? '')
+      .trim()
+      .toLowerCase();
+    if (!streamType || streamType === 'lifecycle-phase') return;
+
+    const messageID = String((streamEvent as any)?.messageId ?? '').trim();
+    if (!messageID) return;
+
+    const now = Date.now();
+
+    const coerceBlockIndex = (raw: unknown): number => {
+      const n = Number(raw ?? 0);
+      if (!Number.isFinite(n)) return 0;
+      return Math.max(0, Math.floor(n));
+    };
+
+    const ensureBlocksSize = (blocks: any[], idx: number): any[] => {
+      if (idx < blocks.length) return blocks;
+      const next = blocks.slice();
+      while (next.length <= idx) {
+        next.push({ type: 'markdown', content: '' });
       }
-      next[tid] = arr;
       return next;
+    };
+
+    const toolCallPlaceholder = () => ({
+      type: 'tool-call',
+      toolName: '',
+      toolId: '',
+      args: {},
+      status: 'running',
+    });
+
+    setDraftAssistantByThread((prev) => {
+      const existing = prev[tid];
+      const existingID = String((existing as any)?.id ?? '').trim();
+
+      let nextMsg: any = existing;
+      let nextBlocks: any[] = Array.isArray((existing as any)?.blocks) ? [...((existing as any).blocks as any[])] : [];
+      let changed = false;
+
+      const ensureMessage = () => {
+        if (nextMsg && String((nextMsg as any)?.id ?? '').trim() === messageID) return;
+        nextMsg = {
+          id: messageID,
+          role: 'assistant',
+          blocks: [],
+          status: 'complete',
+          timestamp: now,
+        } as any;
+        nextBlocks = [];
+        changed = true;
+      };
+
+      if (streamType === 'message-start') {
+        if (!existing || existingID !== messageID) {
+          nextMsg = {
+            id: messageID,
+            role: 'assistant',
+            blocks: [],
+            status: 'complete',
+            timestamp: now,
+          } as any;
+          nextBlocks = [];
+          changed = true;
+        }
+      } else if (streamType === 'block-start') {
+        ensureMessage();
+        const idx = coerceBlockIndex((streamEvent as any)?.blockIndex);
+        nextBlocks = ensureBlocksSize(nextBlocks, idx);
+        const blockType = String((streamEvent as any)?.blockType ?? '')
+          .trim()
+          .toLowerCase();
+        const placeholder = blockType === 'tool-call' ? toolCallPlaceholder() : { type: 'markdown', content: '' };
+        nextBlocks[idx] = placeholder;
+        changed = true;
+      } else if (streamType === 'block-delta') {
+        ensureMessage();
+        const idx = coerceBlockIndex((streamEvent as any)?.blockIndex);
+        const delta = String((streamEvent as any)?.delta ?? '');
+        if (delta) {
+          nextBlocks = ensureBlocksSize(nextBlocks, idx);
+          const blk = nextBlocks[idx];
+          if (blk && typeof blk === 'object' && typeof (blk as any).content === 'string') {
+            nextBlocks[idx] = { ...(blk as any), content: String((blk as any).content ?? '') + delta };
+          } else {
+            nextBlocks[idx] = { type: 'markdown', content: delta };
+          }
+          changed = true;
+        }
+      } else if (streamType === 'block-set') {
+        ensureMessage();
+        const idx = coerceBlockIndex((streamEvent as any)?.blockIndex);
+        nextBlocks = ensureBlocksSize(nextBlocks, idx);
+        nextBlocks[idx] = (streamEvent as any)?.block ?? { type: 'markdown', content: '' };
+        changed = true;
+      } else if (streamType === 'error') {
+        ensureMessage();
+        changed = true;
+      } else if (streamType === 'message-end') {
+        ensureMessage();
+        changed = true;
+      } else {
+        return prev;
+      }
+
+      if (!changed || !nextMsg) return prev;
+
+      const merged: Message = { ...(nextMsg as any), blocks: nextBlocks } as any;
+      return { ...prev, [tid]: merged };
     });
   };
 
@@ -393,10 +495,7 @@ export function createAIChatContextValue(): AIChatContextValue {
 
     if (event.eventType === 'stream_event') {
       const streamEvent = event.streamEvent as StreamEvent | undefined;
-      const streamType = String((streamEvent as any)?.type ?? '').trim().toLowerCase();
-      if (streamEvent && streamType !== 'lifecycle-phase') {
-        appendReplayEvent(tid, streamEvent);
-      }
+      if (streamEvent) applyDraftStreamEvent(tid, streamEvent);
       emitRealtimeEvent(event);
       return;
     }
@@ -413,7 +512,7 @@ export function createAIChatContextValue(): AIChatContextValue {
         return next;
       });
       clearThreadPendingRun(tid);
-      clearThreadReplay(tid);
+      clearThreadDraftAssistantMessage(tid);
     }
 
     bumpThreadsSeq();
@@ -462,7 +561,7 @@ export function createAIChatContextValue(): AIChatContextValue {
       unsub();
       setActiveRunByThread({});
       setPendingRunByThread({});
-      setReplayByThread({});
+      setDraftAssistantByThread({});
     });
   });
 
@@ -485,7 +584,67 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (protocol.status() === 'connected') return;
     setActiveRunByThread({});
     setPendingRunByThread({});
-    setReplayByThread({});
+    setDraftAssistantByThread({});
+  });
+
+  // Reconcile run state with the thread list so UI never gets stuck if realtime events are dropped.
+  createEffect(() => {
+    if (!aiEnabled()) return;
+    const list = threads()?.threads ?? [];
+    if (list.length === 0) return;
+
+    const statusByThread = new Map<string, ThreadRunStatus>();
+    for (const t of list) {
+      const tid = String(t?.thread_id ?? '').trim();
+      if (!tid) continue;
+      statusByThread.set(tid, normalizeThreadRunStatus(t?.run_status));
+    }
+
+    const isTerminal = (status: ThreadRunStatus): boolean =>
+      status === 'success' || status === 'failed' || status === 'canceled' || status === 'timed_out' || status === 'waiting_user';
+
+    const active = activeRunByThread();
+    const pending = pendingRunByThread();
+    const drafts = draftAssistantByThread();
+
+    let nextActive: Record<string, string> | null = null;
+    let nextPending: Record<string, true> | null = null;
+    let nextDrafts: Record<string, Message> | null = null;
+
+    const clearThread = (tid: string) => {
+      if (active[tid]) {
+        if (!nextActive) nextActive = { ...active };
+        delete nextActive[tid];
+      }
+      if (pending[tid]) {
+        if (!nextPending) nextPending = { ...pending };
+        delete nextPending[tid];
+      }
+      if (drafts[tid]) {
+        if (!nextDrafts) nextDrafts = { ...drafts };
+        delete nextDrafts[tid];
+      }
+    };
+
+    for (const tid of Object.keys(active)) {
+      const st = statusByThread.get(tid);
+      if (!st) continue;
+      if (isTerminal(st)) clearThread(tid);
+    }
+    for (const tid of Object.keys(pending)) {
+      const st = statusByThread.get(tid);
+      if (!st) continue;
+      if (isTerminal(st)) clearThread(tid);
+    }
+    for (const tid of Object.keys(drafts)) {
+      const st = statusByThread.get(tid);
+      if (!st) continue;
+      if (isTerminal(st)) clearThread(tid);
+    }
+
+    if (nextActive) setActiveRunByThread(nextActive);
+    if (nextPending) setPendingRunByThread(nextPending);
+    if (nextDrafts) setDraftAssistantByThread(nextDrafts);
   });
 
   // Active thread
@@ -765,8 +924,8 @@ export function createAIChatContextValue(): AIChatContextValue {
     markThreadPendingRun,
     confirmThreadRun,
     clearThreadPendingRun,
-    clearThreadReplay,
-    threadReplayEvents,
+    clearThreadDraftAssistantMessage,
+    threadDraftAssistantMessage,
     isThreadRunning,
     onRealtimeEvent,
   };
