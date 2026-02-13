@@ -1,7 +1,6 @@
 import type { Message, MessageBlock, StreamEvent } from '@floegence/floe-webapp-core/chat';
 
 const TERMINAL_EXEC_TOOL_NAME = 'terminal.exec';
-const PREVIEW_LINE_LIMIT = 5;
 
 type AnyRecord = Record<string, unknown>;
 type ChatToolCallBlock = Extract<MessageBlock, { type: 'tool-call' }>;
@@ -45,7 +44,7 @@ function decorateBlockForTerminalExec(block: MessageBlock): MessageBlock {
     return block;
   }
 
-  const decoratedTerminalBlock = buildTerminalExecMarkdownBlock(block);
+  const decoratedTerminalBlock = buildTerminalExecShellBlock(block);
   if (decoratedTerminalBlock) {
     return decoratedTerminalBlock;
   }
@@ -73,11 +72,8 @@ function decorateBlockForTerminalExec(block: MessageBlock): MessageBlock {
   };
 }
 
-function buildTerminalExecMarkdownBlock(block: ChatToolCallBlock): MessageBlock | null {
+function buildTerminalExecShellBlock(block: ChatToolCallBlock): MessageBlock | null {
   if (String(block.toolName ?? '').trim() !== TERMINAL_EXEC_TOOL_NAME) {
-    return null;
-  }
-  if (block.status !== 'success' && block.status !== 'error') {
     return null;
   }
 
@@ -94,81 +90,23 @@ function buildTerminalExecMarkdownBlock(block: ChatToolCallBlock): MessageBlock 
   const durationMs = readNumber(result, ['duration_ms', 'durationMs']);
   const timedOut = readBoolean(result, ['timed_out', 'timedOut']);
   const truncated = readBoolean(result, ['truncated']);
-
-  const previewSource = block.status === 'success' ? stdout : stderr || stdout;
-  const preview = previewFirstLines(previewSource, PREVIEW_LINE_LIMIT);
-
-  const executionFacts: string[] = [];
-  executionFacts.push(`status ${formatStatus(block.status, timedOut)}`);
-  if (typeof exitCode === 'number' && Number.isFinite(exitCode)) {
-    executionFacts.push(`exit ${exitCode}`);
-  }
-  if (typeof durationMs === 'number' && Number.isFinite(durationMs)) {
-    executionFacts.push(`${Math.max(0, Math.round(durationMs))}ms`);
-  }
-
-  const markdown: string[] = [];
-  markdown.push('**Terminal command**');
-  markdown.push('');
-  markdown.push(toCodeFence(command, 'bash'));
-  markdown.push('');
-  if (executionFacts.length > 0) {
-    markdown.push(`**Execution**: ${executionFacts.join(' · ')}`);
-    markdown.push('');
-  }
-  if (cwd) {
-    markdown.push(`**Working directory**: \`${escapeInlineCode(cwd)}\``);
-    markdown.push('');
-  }
-  if (typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0) {
-    markdown.push(`**Timeout**: ${Math.round(timeoutMs)}ms`);
-    markdown.push('');
-  }
-
-  markdown.push(`**Output preview (first ${PREVIEW_LINE_LIMIT} lines)**`);
-  markdown.push('');
-  markdown.push(toCodeFence(preview.text, 'text'));
-  markdown.push('');
-
-  if (preview.truncated || truncated) {
-    markdown.push('_Preview is truncated. Expand details for the full captured output._');
-    markdown.push('');
-  }
-
-  markdown.push('<details class="chat-terminal-exec-details">');
-  markdown.push('<summary class="chat-terminal-exec-summary">View full execution details</summary>');
-  markdown.push('');
-  markdown.push('**stdout**');
-  markdown.push('');
-  markdown.push(toCodeFence(stdout || '(empty)', 'text'));
-  markdown.push('');
-  markdown.push('**stderr**');
-  markdown.push('');
-  markdown.push(toCodeFence(stderr || '(empty)', 'text'));
-  markdown.push('');
-  markdown.push('**Metadata**');
-  markdown.push('');
-  markdown.push(
-    toCodeFence(
-      safeJson(
-        {
-          status: block.status,
-          tool_id: String(block.toolId ?? '').trim() || undefined,
-          exit_code: exitCode,
-          duration_ms: durationMs,
-          timed_out: timedOut,
-          truncated,
-        },
-        2,
-      ),
-      'json',
-    ),
-  );
-  markdown.push('</details>');
+  const output = composeTerminalOutput({
+    stdout,
+    stderr,
+    cwd,
+    timeoutMs,
+    durationMs,
+    timedOut,
+    truncated,
+    toolError: String(block.error ?? '').trim(),
+  });
 
   return {
-    type: 'markdown',
-    content: markdown.join('\n'),
+    type: 'shell',
+    command,
+    output: output || undefined,
+    exitCode: typeof exitCode === 'number' && Number.isFinite(exitCode) ? Math.round(exitCode) : undefined,
+    status: toShellStatus(block.status),
   };
 }
 
@@ -231,54 +169,62 @@ function readBoolean(from: AnyRecord, keys: string[]): boolean {
   return false;
 }
 
-function previewFirstLines(raw: string, maxLines: number): { text: string; truncated: boolean } {
-  const normalized = String(raw ?? '').replace(/\r\n?/g, '\n');
-  const lines = normalized.split('\n');
-
-  while (lines.length > 0 && lines[lines.length - 1] === '') {
-    lines.pop();
-  }
-
-  if (lines.length === 0) {
-    return { text: '(no output)', truncated: false };
-  }
-
-  const previewLines = lines.slice(0, Math.max(1, maxLines));
-  return {
-    text: previewLines.join('\n'),
-    truncated: lines.length > Math.max(1, maxLines),
-  };
-}
-
-function escapeInlineCode(value: string): string {
-  return String(value ?? '').replace(/`/g, '\\`');
-}
-
-function toCodeFence(content: string, language = 'text'): string {
-  const source = String(content ?? '');
-  const runs = source.match(/`+/g);
-  const longest = runs ? runs.reduce((max, item) => Math.max(max, item.length), 0) : 0;
-  const fence = '`'.repeat(Math.max(3, longest + 1));
-  return `${fence}${language}\n${source}\n${fence}`;
-}
-
-function safeJson(value: unknown, indent = 2): string {
-  try {
-    return JSON.stringify(value, null, indent);
-  } catch {
-    return '{}';
-  }
-}
-
-function formatStatus(status: ChatToolCallBlock['status'], timedOut: boolean): string {
-  if (timedOut) {
-    return 'timed out';
-  }
+function toShellStatus(status: ChatToolCallBlock['status']): 'running' | 'success' | 'error' {
   if (status === 'success') {
     return 'success';
   }
   if (status === 'error') {
-    return 'failed';
+    return 'error';
   }
-  return status;
+  return 'running';
+}
+
+type TerminalOutputParts = Readonly<{
+  stdout: string;
+  stderr: string;
+  cwd: string;
+  timeoutMs?: number;
+  durationMs?: number;
+  timedOut: boolean;
+  truncated: boolean;
+  toolError: string;
+}>;
+
+function composeTerminalOutput(parts: TerminalOutputParts): string {
+  const info: string[] = [];
+  if (parts.cwd) {
+    info.push(`[cwd] ${parts.cwd}`);
+  }
+  if (typeof parts.timeoutMs === 'number' && Number.isFinite(parts.timeoutMs) && parts.timeoutMs > 0) {
+    info.push(`[timeout] ${Math.max(0, Math.round(parts.timeoutMs))}ms`);
+  }
+  if (typeof parts.durationMs === 'number' && Number.isFinite(parts.durationMs) && parts.durationMs >= 0) {
+    info.push(`[duration] ${Math.round(parts.durationMs)}ms`);
+  }
+  if (parts.timedOut) {
+    info.push('[status] timed out');
+  }
+  if (parts.truncated) {
+    info.push('[notice] output truncated');
+  }
+
+  const sections: string[] = [];
+  if (info.length > 0) {
+    sections.push(info.join('\n'));
+  }
+  const stdout = String(parts.stdout ?? '').trimEnd();
+  const stderr = String(parts.stderr ?? '').trimEnd();
+  const toolError = String(parts.toolError ?? '').trim();
+
+  if (stdout) {
+    sections.push(stdout);
+  }
+  if (stderr) {
+    sections.push(stdout ? `[stderr]\n${stderr}` : stderr);
+  }
+  if (toolError && !stderr.includes(toolError)) {
+    sections.push(`[error] ${toolError}`);
+  }
+
+  return sections.join('\n\n').trim();
 }
