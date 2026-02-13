@@ -213,7 +213,7 @@ func lifecyclePhaseForStatus(status string, runErr string) RealtimeLifecyclePhas
 			return RealtimePhaseStart
 		}
 		return RealtimePhaseStateChange
-	case RunStateSuccess, RunStateCanceled:
+	case RunStateSuccess, RunStateCanceled, RunStateWaitingUser:
 		return RealtimePhaseEnd
 	case RunStateFailed, RunStateTimedOut:
 		if runErr != "" {

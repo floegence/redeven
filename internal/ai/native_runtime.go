@@ -1195,6 +1195,14 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		taskObjective = strings.TrimSpace(req.ContextPack.Objective)
 	}
 	state := newRuntimeState(taskObjective)
+	if source, hydrated := r.hydrateTodoRuntimeState(execCtx, &state, req.ContextPack); hydrated {
+		r.persistRunEvent("todo.hydrated", RealtimeStreamKindLifecycle, map[string]any{
+			"source":           source,
+			"todo_open_count":  state.TodoOpenCount,
+			"todo_in_progress": state.TodoInProgressCount,
+			"todo_version":     state.TodoSnapshotVersion,
+		})
+	}
 	messages := buildMessagesForRun(req)
 	contextLimit := nativeDefaultContextLimit
 	if req.ModelCapability.MaxContextTokens > 0 {
@@ -1233,6 +1241,8 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		if question == "" {
 			question = "I need clarification to continue safely."
 		}
+		finalReason := finalizationReasonForAskUserSource(source)
+		r.emitAskUserToolBlock(question, source)
 		appendToMessage := strings.TrimSpace(source) == "model_signal" || !r.hasNonEmptyAssistantText()
 		if appendToMessage {
 			prefix := ""
@@ -1245,14 +1255,65 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			"question":            question,
 			"source":              strings.TrimSpace(source),
 			"appended_to_message": appendToMessage,
+			"finalization_reason": finalReason,
 		})
-		r.setFinalizationReason("ask_user_waiting")
+		r.setFinalizationReason(finalReason)
 		r.setEndReason("complete")
-		r.emitLifecyclePhase("ended", map[string]any{"reason": "ask_user_waiting", "step_index": step})
+		r.emitLifecyclePhase("ended", map[string]any{"reason": finalReason, "step_index": step})
 		r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 		return nil
 	}
+	rejectAskUser := func(source string, gateReason string) {
+		rejectionMsg := "ask_user was rejected. Continue autonomously: do NOT ask the user to run commands, gather logs, or paste outputs that tools can obtain directly. Use tools yourself and finish this task in the same run when possible."
+		recoveryOverlay := "[RECOVERY] ask_user rejected by autonomy gate. Continue with tools and call task_complete when done."
+		switch strings.TrimSpace(gateReason) {
+		case "pending_todos_without_blocker":
+			rejectionMsg = "ask_user was rejected because todos are still open. Continue execution, or update write_todos to mark blockers before asking the user."
+			recoveryOverlay = "[TODO ENFORCEMENT] Open todos remain without blockers. Continue execution and update write_todos before ask_user."
+		case "missing_todos_for_complex_task":
+			rejectionMsg = "ask_user was rejected for a complex task without todo tracking. Call write_todos first, then continue execution."
+			recoveryOverlay = "[TODO REQUIRED] Complex task requires write_todos before ask_user."
+		}
+		r.persistRunEvent("ask_user.rejected", RealtimeStreamKindLifecycle, map[string]any{
+			"source":      strings.TrimSpace(source),
+			"gate_reason": strings.TrimSpace(gateReason),
+		})
+		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: rejectionMsg}}})
+		exceptionOverlay = recoveryOverlay
+		isFirstRound = false
+	}
+	tryAskUser := func(step int, question string, source string) (bool, error) {
+		question = strings.TrimSpace(question)
+		if question == "" {
+			question = "I need clarification to continue safely."
+		}
+		source = strings.TrimSpace(source)
 
+		var askPassed bool
+		var askReason string
+		if source == "model_signal" {
+			askPassed, askReason = evaluateAskUserGate(question, state, taskComplexity)
+		} else {
+			askPassed, askReason = evaluateGuardAskUserGate(source, state, taskComplexity)
+		}
+		r.persistRunEvent("ask_user.attempt", RealtimeStreamKindLifecycle, map[string]any{
+			"step_index":      step,
+			"source":          source,
+			"gate_passed":     askPassed,
+			"gate_reason":     askReason,
+			"question_len":    len([]rune(strings.TrimSpace(question))),
+			"complexity":      taskComplexity,
+			"todo_tracking":   state.TodoTrackingEnabled,
+			"todo_open_count": state.TodoOpenCount,
+		})
+		if !askPassed {
+			rejectAskUser(source, askReason)
+			return false, nil
+		}
+		return true, endAskUser(step, question, source)
+	}
+
+mainLoop:
 	for step := 0; ; step++ {
 		// Safety net — absolute maximum to prevent infinite loop bugs.
 		// The loop is task-driven: it exits via task_complete or ask_user.
@@ -1326,7 +1387,14 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 				return nil
 			}
 			if recoveryCount > 5 {
-				return endAskUser(step, fmt.Sprintf("I encountered repeated errors from the AI provider and cannot continue. Last error: %s", sanitizeLogText(stepErr.Error(), 200)), "provider_repeated_error")
+				ended, askErr := tryAskUser(step, fmt.Sprintf("I encountered repeated errors from the AI provider and cannot continue. Last error: %s", sanitizeLogText(stepErr.Error(), 200)), "provider_repeated_error")
+				if askErr != nil {
+					return askErr
+				}
+				if ended {
+					return nil
+				}
+				continue
 			}
 			exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, stepErr, lastSignature)
 			state.RecentErrors = appendLimited(state.RecentErrors, sanitizeLogText(stepErr.Error(), 300), 6)
@@ -1391,7 +1459,14 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 						})
 					}
 					if hits >= 3 {
-						return endAskUser(step, fmt.Sprintf("The same tool call is repeating without progress (%s). Please clarify what should change or provide missing context.", strings.TrimSpace(call.Name)), "guard_doom_loop")
+						ended, askErr := tryAskUser(step, fmt.Sprintf("The same tool call is repeating without progress (%s). Please clarify what should change or provide missing context.", strings.TrimSpace(call.Name)), "guard_doom_loop")
+						if askErr != nil {
+							return askErr
+						}
+						if ended {
+							return nil
+						}
+						continue mainLoop
 					}
 					if hits == 2 {
 						guardedResults[strings.TrimSpace(call.ID)] = ToolResult{
@@ -1517,7 +1592,14 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 				}
 				appendMistake(stepMistake)
 				if mistakeSum() >= 3 {
-					return endAskUser(step, "I am not making progress due to repeated tool mistakes. Please clarify the objective or provide additional context to proceed.", "tool_mistake_loop")
+					ended, askErr := tryAskUser(step, "I am not making progress due to repeated tool mistakes. Please clarify the objective or provide additional context to proceed.", "tool_mistake_loop")
+					if askErr != nil {
+						return askErr
+					}
+					if ended {
+						return nil
+					}
+					continue mainLoop
 				}
 			}
 			isFirstRound = false
@@ -1526,21 +1608,14 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 
 		if askUserCall != nil {
 			question := extractSignalText(*askUserCall, "question")
-			askPassed, askReason := evaluateAskUserGate(question, state, taskComplexity)
-			r.persistRunEvent("ask_user.attempt", RealtimeStreamKindLifecycle, map[string]any{
-				"step_index":   step,
-				"gate_passed":  askPassed,
-				"gate_reason":  askReason,
-				"question_len": len([]rune(strings.TrimSpace(question))),
-				"complexity":   taskComplexity,
-			})
-			if !askPassed {
-				messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "ask_user was rejected. Continue autonomously: do NOT ask the user to run commands, gather logs, or paste outputs that tools can obtain directly. Use tools yourself and finish this task in the same run when possible."}}})
-				exceptionOverlay = "[RECOVERY] ask_user rejected by autonomy gate. Continue with tools and call task_complete when done."
-				isFirstRound = false
-				continue
+			ended, askErr := tryAskUser(step, question, "model_signal")
+			if askErr != nil {
+				return askErr
 			}
-			return endAskUser(step, question, "model_signal")
+			if ended {
+				return nil
+			}
+			continue
 		}
 
 		if taskCompleteCall != nil {
@@ -1605,7 +1680,14 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 				"nudge_attempt": todoSetupNudges,
 			})
 			if todoSetupNudges > 3 {
-				return endAskUser(step, "I need a concrete task list to continue this complex request safely. Please confirm the top-level goals and I will continue.", "complex_task_missing_todos")
+				ended, askErr := tryAskUser(step, "I need a concrete task list to continue this complex request safely. Please confirm the top-level goals and I will continue.", "complex_task_missing_todos")
+				if askErr != nil {
+					return askErr
+				}
+				if ended {
+					return nil
+				}
+				continue
 			}
 			exceptionOverlay = fmt.Sprintf("[TODO REQUIRED] Complex task (%d/3). You MUST call write_todos now with actionable steps, keep exactly one in_progress item, then continue execution.", todoSetupNudges)
 			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "This is a complex task. Start by calling write_todos with 3-7 actionable steps before proceeding."}}})
@@ -1635,11 +1717,25 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		if !turnTextSeen {
 			appendMistake(1)
 			if mistakeSum() >= 3 {
-				return endAskUser(step, "I am not getting usable output and cannot proceed safely. Please clarify the objective or provide more context.", "provider_empty_output")
+				ended, askErr := tryAskUser(step, "I am not getting usable output and cannot proceed safely. Please clarify the objective or provide more context.", "provider_empty_output")
+				if askErr != nil {
+					return askErr
+				}
+				if ended {
+					return nil
+				}
+				continue
 			}
 			recoveryCount++
 			if recoveryCount > 5 {
-				return endAskUser(step, "I have been unable to produce output after multiple attempts. Please check the AI provider configuration or try rephrasing your request.", "provider_empty_output_repeated")
+				ended, askErr := tryAskUser(step, "I have been unable to produce output after multiple attempts. Please check the AI provider configuration or try rephrasing your request.", "provider_empty_output_repeated")
+				if askErr != nil {
+					return askErr
+				}
+				if ended {
+					return nil
+				}
+				continue
 			}
 			exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, errors.New("empty output"), lastSignature)
 			isFirstRound = false
@@ -1668,7 +1764,15 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			"no_progress_rounds":  noToolRounds,
 			"complexity":          taskComplexity,
 		})
-		return endAskUser(step, "I still do not have explicit completion. Please provide missing requirements, or ask me to continue with a specific next action.", "missing_explicit_completion")
+		ended, askErr := tryAskUser(step, "I still do not have explicit completion. Please provide missing requirements, or ask me to continue with a specific next action.", "missing_explicit_completion")
+		if askErr != nil {
+			return askErr
+		}
+		if ended {
+			return nil
+		}
+		noToolRounds = 0
+		continue
 	}
 
 	// Safety net reached (nativeHardMaxSteps). This should rarely happen in
@@ -1716,7 +1820,13 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			if summaryErr != nil {
 				errMsg = fmt.Sprintf("The task reached the maximum step limit. Summary attempt failed: %s", sanitizeLogText(summaryErr.Error(), 200))
 			}
-			return endAskUser(nativeHardMaxSteps, errMsg, "hard_max_summary_failed")
+			ended, askErr := tryAskUser(nativeHardMaxSteps, errMsg, "hard_max_summary_failed")
+			if askErr != nil {
+				return askErr
+			}
+			if ended {
+				return nil
+			}
 		}
 	}
 
@@ -1728,7 +1838,14 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		"gate_reason":         "hard_max_steps_reached",
 		"complexity":          taskComplexity,
 	})
-	return endAskUser(nativeHardMaxSteps, "I reached the hard step limit before explicit completion. Please provide guidance for the next step and I will continue.", "hard_max_steps")
+	ended, askErr := tryAskUser(nativeHardMaxSteps, "I reached the hard step limit before explicit completion. Please provide guidance for the next step and I will continue.", "hard_max_steps")
+	if askErr != nil {
+		return askErr
+	}
+	if ended {
+		return nil
+	}
+	return r.failRun("Task reached hard max steps without an allowable termination path", errors.New("hard_max_steps_without_allowable_wait_user"))
 }
 
 func (r *run) runNativeSocial(
@@ -2252,6 +2369,30 @@ func buildRecoveryOverlay(used int, max int, failure error, lastSignature string
 	return fmt.Sprintf("[RECOVERY] Step %d/%d\nLast failure: %s\nDo NOT repeat signature: %s\nYou MUST choose one action from: repair args | switch tool | ask_user | summarize safe status.", used, max, failureType, strings.TrimSpace(lastSignature))
 }
 
+func finalizationReasonForAskUserSource(source string) string {
+	source = strings.TrimSpace(source)
+	if source == "model_signal" {
+		return "ask_user_waiting_model"
+	}
+	return "ask_user_waiting_guard"
+}
+
+func evaluateGuardAskUserGate(source string, state runtimeState, complexity string) (bool, string) {
+	source = strings.TrimSpace(source)
+	switch source {
+	case "provider_repeated_error", "complex_task_missing_todos", "hard_max_summary_failed", "hard_max_steps":
+		return true, "ok"
+	}
+	complexity = normalizeTaskComplexity(complexity)
+	if complexity == TaskComplexityComplex && !state.TodoTrackingEnabled && len(state.BlockedActionFacts) == 0 {
+		return false, "missing_todos_for_complex_task"
+	}
+	if state.TodoTrackingEnabled && state.TodoOpenCount > 0 && len(state.BlockedActionFacts) == 0 {
+		return false, "pending_todos_without_blocker"
+	}
+	return true, "ok"
+}
+
 func evaluateTaskCompletionGate(resultText string, state runtimeState, complexity string) (bool, string) {
 	text := strings.TrimSpace(resultText)
 	if text == "" {
@@ -2315,6 +2456,83 @@ func asksUserToRunCollectableWork(question string) bool {
 		return true
 	}
 	return false
+}
+
+func (r *run) hydrateTodoRuntimeState(ctx context.Context, state *runtimeState, pack contextmodel.PromptPack) (string, bool) {
+	if state == nil {
+		return "", false
+	}
+
+	endpointID := ""
+	threadID := ""
+	if r != nil {
+		endpointID = strings.TrimSpace(r.endpointID)
+		threadID = strings.TrimSpace(r.threadID)
+	}
+	if r != nil && r.threadsDB != nil && endpointID != "" && threadID != "" {
+		readCtx := ctx
+		if readCtx == nil {
+			readCtx = context.Background()
+		}
+		if _, hasDeadline := readCtx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			readCtx, cancel = context.WithTimeout(readCtx, 2*time.Second)
+			defer cancel()
+		}
+		snapshot, err := r.threadsDB.GetThreadTodosSnapshot(readCtx, endpointID, threadID)
+		if err == nil {
+			hasSnapshot := snapshot.UpdatedAtUnixMs > 0 || snapshot.Version > 0 || strings.TrimSpace(snapshot.UpdatedByRunID) != "" || strings.TrimSpace(snapshot.UpdatedByToolID) != ""
+			if hasSnapshot {
+				todos, decodeErr := decodeTodoItemsJSON(snapshot.TodosJSON)
+				if decodeErr == nil {
+					summary := summarizeTodos(todos)
+					state.TodoTrackingEnabled = true
+					state.TodoOpenCount = summary.Pending + summary.InProgress
+					state.TodoInProgressCount = summary.InProgress
+					state.TodoSnapshotVersion = snapshot.Version
+					return "thread_snapshot", true
+				}
+			}
+		}
+	}
+
+	openCount, inProgressCount, ok := deriveTodoRuntimeStateFromPromptPack(pack)
+	if !ok {
+		return "", false
+	}
+	state.TodoTrackingEnabled = true
+	state.TodoOpenCount = openCount
+	state.TodoInProgressCount = inProgressCount
+	return "prompt_pack", true
+}
+
+func deriveTodoRuntimeStateFromPromptPack(pack contextmodel.PromptPack) (openCount int, inProgressCount int, ok bool) {
+	if len(pack.PendingTodos) == 0 {
+		return 0, 0, false
+	}
+	seen := make(map[string]struct{}, len(pack.PendingTodos))
+	for i, item := range pack.PendingTodos {
+		content := strings.TrimSpace(item.Content)
+		if content == "" {
+			continue
+		}
+		key := strings.TrimSpace(item.MemoryID)
+		if key == "" {
+			key = fmt.Sprintf("pending_todo_%d::%s", i, content)
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		openCount++
+		if strings.HasPrefix(strings.ToLower(content), "[in_progress]") {
+			inProgressCount++
+		}
+	}
+	if openCount == 0 {
+		return 0, 0, false
+	}
+	return openCount, inProgressCount, true
 }
 
 func updateTodoRuntimeState(state *runtimeState, calls []ToolCall, results []ToolResult, round int) {
@@ -2701,6 +2919,38 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 		r.persistSetToolBlock(idx, block)
 		return false, errors.New("approval timed out")
 	}
+}
+
+func (r *run) emitAskUserToolBlock(question string, source string) {
+	if r == nil {
+		return
+	}
+	question = strings.TrimSpace(question)
+	source = strings.TrimSpace(source)
+	if question == "" {
+		return
+	}
+	toolID, err := newToolID()
+	if err != nil {
+		toolID = "tool_ask_user_waiting"
+	}
+	r.mu.Lock()
+	idx := r.nextBlockIndex
+	r.nextBlockIndex++
+	r.needNewTextBlock = true
+	r.mu.Unlock()
+
+	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "tool-call"})
+	block := ToolCallBlock{
+		Type:     "tool-call",
+		ToolName: "ask_user",
+		ToolID:   toolID,
+		Args:     map[string]any{"question": question},
+		Status:   ToolCallStatusSuccess,
+		Result:   map[string]any{"question": question, "source": source, "waiting_user": true},
+	}
+	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+	r.persistSetToolBlock(idx, block)
 }
 
 func (r *run) degradedSummary(state runtimeState, objective string) string {

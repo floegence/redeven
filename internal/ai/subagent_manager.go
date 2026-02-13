@@ -422,7 +422,7 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 		}
 
 		finalReason := strings.TrimSpace(child.getFinalizationReason())
-		if finalReason == "ask_user_waiting" {
+		if classifyFinalizationReason(finalReason) == finalizationClassWaitingUser {
 			task.setStatus(subagentStatusWaiting)
 			task.setResult(assistantText, "")
 			m.parent.persistRunEvent("delegation.interaction.end", RealtimeStreamKindLifecycle, map[string]any{"subagent_id": task.id, "status": task.statusSnapshot()})

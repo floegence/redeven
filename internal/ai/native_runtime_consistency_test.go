@@ -815,8 +815,11 @@ func TestIntegration_NativeSDK_OpenAI_MissingExplicitCompletionDoesNotPolluteAss
 		t.Fatalf("stream output missing reply token %q, body=%q", mock.replyToken, body)
 	}
 	fallbackText := "I still do not have explicit completion."
-	if strings.Contains(body, fallbackText) {
-		t.Fatalf("fallback ask_user text must not be appended to assistant output, body=%q", body)
+	if !strings.Contains(body, `"toolName":"ask_user"`) {
+		t.Fatalf("stream output missing ask_user tool block, body=%q", body)
+	}
+	if !strings.Contains(body, fallbackText) {
+		t.Fatalf("stream output missing fallback question text %q, body=%q", fallbackText, body)
 	}
 
 	events, err := svc.ListRunEvents(ctx, &meta, runID, 2000)

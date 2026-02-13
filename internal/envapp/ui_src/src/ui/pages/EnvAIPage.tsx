@@ -633,7 +633,7 @@ export function EnvAIPage() {
   };
 
   const isTerminalRunStatus = (status: string) =>
-    status === 'success' || status === 'failed' || status === 'canceled' || status === 'timed_out';
+    status === 'success' || status === 'failed' || status === 'canceled' || status === 'timed_out' || status === 'waiting_user';
 
   const syncThreadReplay = (threadId: string, opts?: { reset?: boolean }) => {
     if (!chat) return;

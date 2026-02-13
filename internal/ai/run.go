@@ -666,7 +666,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				errMsg = ""
 				eventType = "run.end"
 			case finalizationClassWaitingUser:
-				state = RunStateIdle
+				state = RunStateWaitingUser
 				errCode = ""
 				errMsg = ""
 				eventType = "run.end"

@@ -70,3 +70,26 @@ func TestEvaluateAskUserGate(t *testing.T) {
 		t.Fatalf("pending todos with blocker => pass=%v reason=%q", pass, reason)
 	}
 }
+
+func TestEvaluateGuardAskUserGate(t *testing.T) {
+	t.Parallel()
+
+	if pass, reason := evaluateGuardAskUserGate("missing_explicit_completion", runtimeState{
+		TodoTrackingEnabled: true,
+		TodoOpenCount:       2,
+	}, TaskComplexityStandard); pass || reason != "pending_todos_without_blocker" {
+		t.Fatalf("pending todos without blocker => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateGuardAskUserGate("missing_explicit_completion", runtimeState{
+		TodoTrackingEnabled: true,
+		TodoOpenCount:       1,
+		BlockedActionFacts:  []string{"tool failed due to permission"},
+	}, TaskComplexityStandard); !pass || reason != "ok" {
+		t.Fatalf("pending todos with blocker => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateGuardAskUserGate("complex_task_missing_todos", runtimeState{}, TaskComplexityComplex); !pass || reason != "ok" {
+		t.Fatalf("complex_task_missing_todos must be allowed => pass=%v reason=%q", pass, reason)
+	}
+}

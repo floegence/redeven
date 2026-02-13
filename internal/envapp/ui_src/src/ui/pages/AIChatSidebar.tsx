@@ -94,6 +94,8 @@ function statusDotClass(status: ThreadRunStatus): string {
       return 'bg-primary';
     case 'waiting_approval':
       return 'bg-amber-500';
+    case 'waiting_user':
+      return 'bg-amber-500';
     case 'recovering':
       return 'bg-sky-500';
     case 'success':
@@ -114,6 +116,7 @@ function statusLabel(status: ThreadRunStatus): string {
     case 'accepted': return 'Queued';
     case 'running': return 'Running';
     case 'waiting_approval': return 'Waiting Approval';
+    case 'waiting_user': return 'Waiting Input';
     case 'recovering': return 'Recovering';
     case 'success': return 'Done';
     case 'failed': return 'Failed';
@@ -827,6 +830,7 @@ function ThreadCard(props: {
       raw === 'running' ||
       raw === 'waiting_approval' ||
       raw === 'recovering' ||
+      raw === 'waiting_user' ||
       raw === 'success' ||
       raw === 'failed' ||
       raw === 'canceled' ||

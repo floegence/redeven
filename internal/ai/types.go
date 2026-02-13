@@ -182,6 +182,7 @@ const (
 	RunStateRunning         RunState = "running"
 	RunStateWaitingApproval RunState = "waiting_approval"
 	RunStateRecovering      RunState = "recovering"
+	RunStateWaitingUser     RunState = "waiting_user"
 	RunStateSuccess         RunState = "success"
 	RunStateFailed          RunState = "failed"
 	RunStateCanceled        RunState = "canceled"
@@ -191,7 +192,7 @@ const (
 func NormalizeRunState(raw string) RunState {
 	v := strings.TrimSpace(strings.ToLower(raw))
 	switch RunState(v) {
-	case RunStateAccepted, RunStateRunning, RunStateWaitingApproval, RunStateRecovering, RunStateSuccess, RunStateFailed, RunStateCanceled, RunStateTimedOut:
+	case RunStateAccepted, RunStateRunning, RunStateWaitingApproval, RunStateRecovering, RunStateWaitingUser, RunStateSuccess, RunStateFailed, RunStateCanceled, RunStateTimedOut:
 		return RunState(v)
 	default:
 		return RunStateIdle

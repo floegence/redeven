@@ -23,6 +23,8 @@ func TestClassifyFinalizationReason(t *testing.T) {
 		{reason: "task_complete", want: finalizationClassSuccess},
 		{reason: "social_reply", want: finalizationClassSuccess},
 		{reason: "ask_user_waiting", want: finalizationClassWaitingUser},
+		{reason: "ask_user_waiting_model", want: finalizationClassWaitingUser},
+		{reason: "ask_user_waiting_guard", want: finalizationClassWaitingUser},
 		{reason: "implicit_complete_backpressure", want: finalizationClassFailure},
 	}
 	for _, tc := range cases {

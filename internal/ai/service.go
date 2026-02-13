@@ -1144,7 +1144,7 @@ func deriveThreadRunState(endReason string, finalizationReason string, runErr er
 		case finalizationClassSuccess:
 			return "success", ""
 		case finalizationClassWaitingUser:
-			return "idle", ""
+			return "waiting_user", ""
 		}
 		msg := ""
 		if runErr != nil {

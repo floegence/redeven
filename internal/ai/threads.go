@@ -38,7 +38,7 @@ func normalizeThreadRunState(status string, runError string) (string, string) {
 	switch s {
 	case RunStateFailed, RunStateTimedOut:
 		return string(s), runError
-	case RunStateAccepted, RunStateRunning, RunStateWaitingApproval, RunStateRecovering, RunStateSuccess, RunStateCanceled:
+	case RunStateAccepted, RunStateRunning, RunStateWaitingApproval, RunStateRecovering, RunStateWaitingUser, RunStateSuccess, RunStateCanceled:
 		return string(s), ""
 	default:
 		return string(RunStateIdle), ""

@@ -408,7 +408,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 func normalizeRunStatus(status string) string {
 	status = strings.TrimSpace(strings.ToLower(status))
 	switch status {
-	case "idle", "accepted", "running", "waiting_approval", "recovering", "success", "failed", "canceled", "timed_out":
+	case "idle", "accepted", "running", "waiting_approval", "recovering", "waiting_user", "success", "failed", "canceled", "timed_out":
 		return status
 	default:
 		return "idle"

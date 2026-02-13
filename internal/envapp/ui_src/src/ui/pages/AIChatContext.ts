@@ -27,7 +27,7 @@ export type SettingsResponse = Readonly<{
   ai: any | null;
 }>;
 
-export type ThreadRunStatus = 'idle' | 'accepted' | 'running' | 'waiting_approval' | 'recovering' | 'success' | 'failed' | 'canceled' | 'timed_out';
+export type ThreadRunStatus = 'idle' | 'accepted' | 'running' | 'waiting_approval' | 'recovering' | 'waiting_user' | 'success' | 'failed' | 'canceled' | 'timed_out';
 
 export type ThreadView = Readonly<{
   thread_id: string;
@@ -114,6 +114,7 @@ function normalizeThreadRunStatus(raw: string | null | undefined): ThreadRunStat
     status === 'running' ||
     status === 'waiting_approval' ||
     status === 'recovering' ||
+    status === 'waiting_user' ||
     status === 'success' ||
     status === 'failed' ||
     status === 'canceled' ||
