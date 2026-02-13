@@ -105,6 +105,9 @@ Behavior summary:
 - `act` mode executes tools directly by default.
 - `plan` mode uses prompt-level guidance (analysis-first), not a hard readonly lock by default.
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
+- `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.
+- `task_complete` is rejected when todo tracking is active and open todos still exist.
+- `terminal.exec` output is rendered with structured shell blocks in the Env App (no markdown fallback conversion).
 
 Installer note:
 

@@ -230,6 +230,11 @@ type runtimeState struct {
 	BlockedActionFacts    []string          `json:"blocked_action_facts,omitempty"`
 	ActiveObjectiveDigest string            `json:"active_objective_digest,omitempty"`
 	EstimateSource        string            `json:"estimate_source,omitempty"`
+	TodoTrackingEnabled   bool              `json:"todo_tracking_enabled,omitempty"`
+	TodoOpenCount         int               `json:"todo_open_count,omitempty"`
+	TodoInProgressCount   int               `json:"todo_in_progress_count,omitempty"`
+	TodoSnapshotVersion   int64             `json:"todo_snapshot_version,omitempty"`
+	TodoLastUpdatedRound  int               `json:"todo_last_updated_round,omitempty"`
 }
 
 func newRuntimeState(objective string) runtimeState {
@@ -242,5 +247,6 @@ func newRuntimeState(objective string) runtimeState {
 		CompletedActionFacts:  make([]string, 0, 8),
 		BlockedActionFacts:    make([]string, 0, 8),
 		ActiveObjectiveDigest: strings.TrimSpace(objective),
+		TodoLastUpdatedRound:  -1,
 	}
 }

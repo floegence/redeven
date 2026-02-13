@@ -1416,6 +1416,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 					toolResults = append(toolResults, tr)
 				}
 			}
+			updateTodoRuntimeState(&state, normalCalls, toolResults, step)
 
 			messages = append(messages, buildToolCallMessages(normalCalls)...)
 			messages = append(messages, buildToolResultMessages(toolResults, normalCalls)...)
@@ -1528,8 +1529,14 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 				"gate_reason":         gateReason,
 			})
 			if !gatePassed {
-				messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "task_complete was rejected. Provide concrete completion evidence or call ask_user if blocked."}}})
-				exceptionOverlay = "[RECOVERY] task_complete rejected by completion gate. You must either provide explicit completion evidence and call task_complete again, or call ask_user."
+				rejectionMsg := "task_complete was rejected. Provide concrete completion evidence or call ask_user if blocked."
+				recoveryOverlay := "[RECOVERY] task_complete rejected by completion gate. You must either provide explicit completion evidence and call task_complete again, or call ask_user."
+				if gateReason == "pending_todos" {
+					rejectionMsg = "task_complete was rejected because todos are still open. Update write_todos first, then call task_complete."
+					recoveryOverlay = "[RECOVERY] Completion blocked: todos still open. Update write_todos to close remaining items, then call task_complete."
+				}
+				messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: rejectionMsg}}})
+				exceptionOverlay = recoveryOverlay
 				isFirstRound = false
 				continue
 			}
@@ -2175,12 +2182,109 @@ func buildRecoveryOverlay(used int, max int, failure error, lastSignature string
 }
 
 func evaluateTaskCompletionGate(resultText string, state runtimeState) (bool, string) {
-	_ = state
 	text := strings.TrimSpace(resultText)
 	if text == "" {
 		return false, "empty_result"
 	}
+	if state.TodoTrackingEnabled && state.TodoOpenCount > 0 {
+		return false, "pending_todos"
+	}
 	return true, "ok"
+}
+
+func updateTodoRuntimeState(state *runtimeState, calls []ToolCall, results []ToolResult, round int) {
+	if state == nil || len(results) == 0 {
+		return
+	}
+	callNameByID := make(map[string]string, len(calls))
+	for _, call := range calls {
+		id := strings.TrimSpace(call.ID)
+		name := strings.TrimSpace(call.Name)
+		if id == "" || name == "" {
+			continue
+		}
+		callNameByID[id] = name
+	}
+	for _, result := range results {
+		toolName := strings.TrimSpace(result.ToolName)
+		if toolName == "" {
+			toolName = callNameByID[strings.TrimSpace(result.ToolID)]
+		}
+		if toolName != "write_todos" || strings.TrimSpace(result.Status) != toolResultStatusSuccess {
+			continue
+		}
+		openCount, inProgressCount, version, ok := extractWriteTodosState(result.Data)
+		if !ok {
+			continue
+		}
+		state.TodoTrackingEnabled = true
+		state.TodoOpenCount = openCount
+		state.TodoInProgressCount = inProgressCount
+		state.TodoSnapshotVersion = version
+		state.TodoLastUpdatedRound = round
+	}
+}
+
+func extractWriteTodosState(raw any) (openCount int, inProgressCount int, version int64, ok bool) {
+	root, ok := raw.(map[string]any)
+	if !ok || root == nil {
+		return 0, 0, 0, false
+	}
+	summary, ok := root["summary"].(map[string]any)
+	if !ok || summary == nil {
+		return 0, 0, 0, false
+	}
+	pending := readAnyInt(summary["pending"])
+	inProgress := readAnyInt(summary["in_progress"])
+	completed := readAnyInt(summary["completed"])
+	cancelled := readAnyInt(summary["cancelled"])
+	total := readAnyInt(summary["total"])
+	if total < 0 || pending < 0 || inProgress < 0 || completed < 0 || cancelled < 0 {
+		return 0, 0, 0, false
+	}
+	open := pending + inProgress
+	ver := int64(readAnyInt(root["version"]))
+	if ver < 0 {
+		ver = 0
+	}
+	return open, inProgress, ver, true
+}
+
+func readAnyInt(raw any) int {
+	switch v := raw.(type) {
+	case int:
+		return v
+	case int8:
+		return int(v)
+	case int16:
+		return int(v)
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case uint:
+		return int(v)
+	case uint8:
+		return int(v)
+	case uint16:
+		return int(v)
+	case uint32:
+		return int(v)
+	case uint64:
+		return int(v)
+	case float32:
+		return int(v)
+	case float64:
+		return int(v)
+	case json.Number:
+		i, err := v.Int64()
+		if err != nil {
+			return 0
+		}
+		return int(i)
+	default:
+		return 0
+	}
 }
 
 func backoffDuration(attempt int) time.Duration {
@@ -2222,6 +2326,13 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int,
 		"- Do NOT fabricate file contents, command outputs, or tool results. Always use tools to get real data.",
 		"- If information is insufficient and tools cannot help, call ask_user.",
 		"",
+		"# Todo Discipline",
+		"- Use write_todos for complex tasks (multiple files/tools, or 3+ meaningful steps).",
+		"- Skip write_todos for a single trivial step that can be completed immediately.",
+		"- Keep exactly one todo as in_progress at a time.",
+		"- Update write_todos immediately when you start, complete, cancel, or discover work.",
+		"- Before task_complete, ensure all todos are completed or cancelled.",
+		"",
 		"# Anti-Patterns (NEVER do these)",
 		"- Do NOT respond with only text when tools could answer the question.",
 		"- Do NOT call task_complete without first verifying your work.",
@@ -2247,6 +2358,11 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int,
 	if len(state.RecentErrors) > 0 {
 		recentErrors = strings.Join(state.RecentErrors, " | ")
 	}
+	todoStatus := "unknown"
+	if state.TodoTrackingEnabled {
+		todoStatus = fmt.Sprintf("open=%d,in_progress=%d,version=%d,last_updated_round=%d",
+			state.TodoOpenCount, state.TodoInProgressCount, state.TodoSnapshotVersion, state.TodoLastUpdatedRound)
+	}
 	runtime := []string{
 		"## Current Context",
 		fmt.Sprintf("- Working directory: %s", cwd),
@@ -2255,6 +2371,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, round int,
 		fmt.Sprintf("- Available tools: %s", toolNames),
 		fmt.Sprintf("- Objective: %s", strings.TrimSpace(objective)),
 		fmt.Sprintf("- Recent errors: %s", recentErrors),
+		fmt.Sprintf("- Todo tracking: %s", todoStatus),
 	}
 	if len(availableSkills) > 0 {
 		runtime = append(runtime, fmt.Sprintf("- Available skills: %s", joinSkillNames(availableSkills)))

@@ -44,4 +44,11 @@ func TestEvaluateTaskCompletionGate(t *testing.T) {
 	}); !pass || reason != "ok" {
 		t.Fatalf("non-empty result => pass=%v reason=%q", pass, reason)
 	}
+
+	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{
+		TodoTrackingEnabled: true,
+		TodoOpenCount:       1,
+	}); pass || reason != "pending_todos" {
+		t.Fatalf("pending todos => pass=%v reason=%q", pass, reason)
+	}
 }
