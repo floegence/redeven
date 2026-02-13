@@ -396,8 +396,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.exec",
-			Description:      "Execute shell command in workspace. Prefer rg/sed/cat for investigation and use workdir instead of cd.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer", "minimum": 1, "maximum": 60000}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
+			Description:      "Execute shell command in workspace. Prefer rg/sed/cat for investigation and use workdir instead of cd. Use stdin for multi-line scripts.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer", "minimum": 1, "maximum": 60000}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         false,
 			RequiresApproval: false,

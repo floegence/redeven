@@ -526,6 +526,7 @@ func isSensitiveLogKey(key string) bool {
 	direct := map[string]struct{}{
 		"content_utf8":   {},
 		"content_base64": {},
+		"stdin":          {},
 		"api_key":        {},
 		"apikey":         {},
 		"authorization":  {},
@@ -592,6 +593,89 @@ func redactToolArgsForLog(toolName string, args map[string]any) map[string]any {
 	out := make(map[string]any, len(args))
 	for k, v := range args {
 		out[k] = redactAnyForLog(k, v, 0)
+	}
+	return out
+}
+
+func summarizeStdinForPersist(in string) map[string]any {
+	if in == "" {
+		return map[string]any{"redacted": true, "bytes": 0, "lines": 0}
+	}
+	lines := 1 + strings.Count(in, "\n")
+	return map[string]any{
+		"redacted": true,
+		"bytes":    len(in),
+		"lines":    lines,
+	}
+}
+
+func redactAnyForPersist(key string, in any, depth int) any {
+	if depth > 4 {
+		return "[omitted]"
+	}
+	if strings.EqualFold(strings.TrimSpace(key), "stdin") {
+		switch v := in.(type) {
+		case string:
+			return summarizeStdinForPersist(v)
+		case []byte:
+			if len(v) == 0 {
+				return map[string]any{"redacted": true, "bytes": 0}
+			}
+			return map[string]any{"redacted": true, "bytes": len(v)}
+		default:
+			if in == nil {
+				return nil
+			}
+			return "[redacted]"
+		}
+	}
+	if isSensitiveLogKey(key) {
+		switch v := in.(type) {
+		case string:
+			return fmt.Sprintf("[redacted:%d chars]", utf8.RuneCountInString(v))
+		case []byte:
+			return fmt.Sprintf("[redacted:%d bytes]", len(v))
+		default:
+			return "[redacted]"
+		}
+	}
+	switch v := in.(type) {
+	case string:
+		return v
+	case []byte:
+		return fmt.Sprintf("[bytes:%d]", len(v))
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, vv := range v {
+			out[k] = redactAnyForPersist(k, vv, depth+1)
+		}
+		return out
+	case []any:
+		limit := len(v)
+		if limit > 8 {
+			limit = 8
+		}
+		out := make([]any, 0, limit+1)
+		for i := 0; i < limit; i++ {
+			out = append(out, redactAnyForPersist("", v[i], depth+1))
+		}
+		if len(v) > limit {
+			out = append(out, fmt.Sprintf("[... %d more items]", len(v)-limit))
+		}
+		return out
+	default:
+		return in
+	}
+}
+
+func redactToolArgsForPersist(toolName string, args map[string]any) map[string]any {
+	_ = toolName
+	if args == nil {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(args))
+	for k, v := range args {
+		out[k] = redactAnyForPersist(k, v, 0)
 	}
 	return out
 }
@@ -992,10 +1076,18 @@ func (r *run) persistToolCallSnapshot(toolID string, toolName string, status Too
 	if r == nil {
 		return
 	}
-	argsPersist := marshalPersistJSON(redactAnyForLog("args", args, 0), 4000)
+	argsRedacted := any(redactAnyForLog("args", args, 0))
+	if strings.TrimSpace(toolName) == "terminal.exec" {
+		argsRedacted = redactAnyForPersist("args", args, 0)
+	}
+	argsPersist := marshalPersistJSON(argsRedacted, 4000)
 	resultPersist := ""
 	if result != nil {
-		resultPersist = marshalPersistJSON(redactAnyForLog("result", result, 0), 4000)
+		resultRedacted := any(redactAnyForLog("result", result, 0))
+		if strings.TrimSpace(toolName) == "terminal.exec" {
+			resultRedacted = redactAnyForPersist("result", result, 0)
+		}
+		resultPersist = marshalPersistJSON(resultRedacted, 4000)
 	}
 	errCode := ""
 	errMsg := ""
@@ -1050,6 +1142,11 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	}
 	if args == nil {
 		args = map[string]any{}
+	}
+
+	argsForPersist := args
+	if toolName == "terminal.exec" {
+		argsForPersist = redactToolArgsForPersist(toolName, args)
 	}
 
 	outcome := &toolCallOutcome{
@@ -1153,7 +1250,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		Type:     "tool-call",
 		ToolName: toolName,
 		ToolID:   toolID,
-		Args:     args,
+		Args:     argsForPersist,
 		Status:   ToolCallStatusPending,
 	}
 
@@ -1733,6 +1830,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		var p struct {
 			Command     string `json:"command"`
+			Stdin       string `json:"stdin"`
 			Cwd         string `json:"cwd"`
 			Workdir     string `json:"workdir"`
 			TimeoutMS   int64  `json:"timeout_ms"`
@@ -1749,7 +1847,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		} else if workdir != "" && filepath.Clean(cwd) != filepath.Clean(workdir) {
 			return nil, errors.New("invalid cwd")
 		}
-		return r.toolTerminalExec(ctx, p.Command, cwd, p.TimeoutMS)
+		return r.toolTerminalExec(ctx, p.Command, p.Stdin, cwd, p.TimeoutMS)
 
 	case "web.search":
 		if meta == nil || !meta.CanExecute {
@@ -1987,10 +2085,13 @@ func summarizeUnifiedDiff(patchText string) (filesChanged int, hunks int, additi
 
 // --- terminal.exec ---
 
-func (r *run) toolTerminalExec(ctx context.Context, command string, cwd string, timeoutMS int64) (any, error) {
+func (r *run) toolTerminalExec(ctx context.Context, command string, stdin string, cwd string, timeoutMS int64) (any, error) {
 	command = strings.TrimSpace(command)
 	if command == "" {
 		return nil, errors.New("missing command")
+	}
+	if len(stdin) > 200_000 {
+		return nil, errors.New("stdin too large")
 	}
 	if timeoutMS <= 0 {
 		timeoutMS = 60_000
@@ -2026,6 +2127,9 @@ func (r *run) toolTerminalExec(ctx context.Context, command string, cwd string, 
 	cmd := exec.CommandContext(execCtx, shell, "-lc", command)
 	cmd.Dir = cwdAbs
 	cmd.Env = prependRedevenBinToEnv(os.Environ())
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
 
 	lim := newCombinedLimitedBuffers(200_000)
 	cmd.Stdout = lim.Stdout()

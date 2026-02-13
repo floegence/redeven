@@ -74,9 +74,25 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 	workingDir := t.TempDir()
 	r := &run{fsRoot: workingDir, shell: "bash"}
 
+	t.Run("passes stdin to the command", func(t *testing.T) {
+		t.Parallel()
+		stdin := "hello\nworld\n"
+		out, err := r.toolTerminalExec(context.Background(), "cat", stdin, "", 5000)
+		if err != nil {
+			t.Fatalf("toolTerminalExec: %v", err)
+		}
+		m, ok := out.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected result type: %T", out)
+		}
+		if got := anyToString(m["stdout"]); got != stdin {
+			t.Fatalf("stdout=%q, want %q", got, stdin)
+		}
+	})
+
 	t.Run("empty cwd falls back to working_dir_abs", func(t *testing.T) {
 		t.Parallel()
-		out, err := r.toolTerminalExec(context.Background(), "pwd", "", 5000)
+		out, err := r.toolTerminalExec(context.Background(), "pwd", "", "", 5000)
 		if err != nil {
 			t.Fatalf("toolTerminalExec: %v", err)
 		}
@@ -96,7 +112,7 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 		if err := os.MkdirAll(subdir, 0o755); err != nil {
 			t.Fatalf("mkdir subdir: %v", err)
 		}
-		out, err := r.toolTerminalExec(context.Background(), "pwd", "subdir", 5000)
+		out, err := r.toolTerminalExec(context.Background(), "pwd", "", "subdir", 5000)
 		if err != nil {
 			t.Fatalf("toolTerminalExec: %v", err)
 		}

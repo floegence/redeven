@@ -105,6 +105,8 @@ func normalizeArgs(inv Invocation) map[string]any {
 	case "terminal.exec":
 		tryNormalizePath("cwd")
 		tryNormalizePath("workdir")
+		// Never persist stdin body in normalized args (it may contain secrets).
+		delete(clone, "stdin")
 	default:
 		return nil
 	}

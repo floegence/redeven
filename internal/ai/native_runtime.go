@@ -2772,6 +2772,8 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- If you can answer by reading files, use terminal.exec with rg/sed/cat first.",
 		"- Prefer apply_patch for file edits instead of shell redirection or ad-hoc overwrite commands.",
 		"- Use workdir/cwd fields on terminal.exec instead of running cd in the command string.",
+		"- Do NOT wrap terminal.exec commands with an extra `bash -lc` (terminal.exec already runs a shell with -lc).",
+		"- For multi-line scripts, pass content via terminal.exec `stdin` and use a stdin-reading command (e.g. `python -`, `bash`, `cat`). Avoid heredocs/here-strings.",
 		"- Do NOT fabricate file contents, command outputs, or tool results. Always use tools to get real data.",
 		"- Do NOT ask the user to run commands, gather logs, or paste outputs that tools can obtain directly.",
 		"- Prefer autonomous continuation over ask_user; ask_user is only for true external blockers.",
