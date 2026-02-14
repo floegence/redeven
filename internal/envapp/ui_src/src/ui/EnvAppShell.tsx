@@ -515,9 +515,10 @@ export function EnvAppShell() {
     if (!isLocalMode()) {
       list.push({ id: 'ports', name: 'Ports', icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 6, fullScreen: true } });
     }
-    if (canUseFlower()) {
-      list.push({ id: 'ai', name: 'Flower', icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
-    }
+    // Always register the AI view to keep ActivityAppsMain/KeepAliveStack stable:
+    // permissions load asynchronously, but FloeRegistryRuntime registers components only once on mount.
+    // Access to Flower is still gated via navigation + permission checks.
+    list.push({ id: 'ai', name: 'Flower', icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
     list.push({ id: 'settings', name: 'Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
     return list;
   });
