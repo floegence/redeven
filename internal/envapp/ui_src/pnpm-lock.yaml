@@ -29,12 +29,24 @@ importers:
       '@solidjs/router':
         specifier: ^0.15.3
         version: 0.15.4(solid-js@1.9.11)
+      diff:
+        specifier: ^8.0.3
+        version: 8.0.3
       docx-preview:
         specifier: ^0.3.6
         version: 0.3.7
       exceljs:
         specifier: ^4.4.0
         version: 4.4.0
+      marked:
+        specifier: ^17.0.2
+        version: 17.0.2
+      mermaid:
+        specifier: ^11.12.2
+        version: 11.12.2
+      shiki:
+        specifier: ^3.22.0
+        version: 3.22.0
       solid-js:
         specifier: ^1.9.3
         version: 1.9.11
@@ -45,6 +57,9 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.1.18(vite@6.4.1(@types/node@20.19.30)(jiti@2.6.1)(lightningcss@1.30.2))
+      '@types/diff':
+        specifier: ^8.0.0
+        version: 8.0.0
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.30
@@ -776,6 +791,10 @@ packages:
   '@types/d3@7.4.3':
     resolution: {integrity: sha512-lZXZ9ckh5R8uiFVt8ogUNf+pIrK4EsWrx2Np75WvF/eTpJ0FMHNhjXk8CKEx/+gpHbNQyJWehbFaTvqmHWB3ww==}
 
+  '@types/diff@8.0.0':
+    resolution: {integrity: sha512-o7jqJM04gfaYrdCecCVMbZhNdG6T1MHg/oQoRFdERLV+4d+V7FijhiEAbFu0Usww84Yijk9yH58U4Jk4HbtzZw==}
+    deprecated: This is a stub types definition. diff provides its own type definitions, so you do not need this installed.
+
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
@@ -1449,8 +1468,8 @@ packages:
     engines: {node: '>= 20'}
     hasBin: true
 
-  marked@17.0.1:
-    resolution: {integrity: sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg==}
+  marked@17.0.2:
+    resolution: {integrity: sha512-s5HZGFQea7Huv5zZcAGhJLT3qLpAfnY7v7GWkICUr0+Wd5TFEtdlRR2XUL5Gg+RH7u2Df595ifrxR03mBaw7gA==}
     engines: {node: '>= 20'}
     hasBin: true
 
@@ -2115,7 +2134,7 @@ snapshots:
     dependencies:
       clsx: 2.1.1
       diff: 8.0.3
-      marked: 17.0.1
+      marked: 17.0.2
       mermaid: 11.12.2
       shiki: 3.22.0
       solid-js: 1.9.11
@@ -2557,6 +2576,10 @@ snapshots:
       '@types/d3-timer': 3.0.2
       '@types/d3-transition': 3.0.9
       '@types/d3-zoom': 3.0.8
+
+  '@types/diff@8.0.0':
+    dependencies:
+      diff: 8.0.3
 
   '@types/estree@1.0.8': {}
 
@@ -3249,7 +3272,7 @@ snapshots:
 
   marked@16.4.2: {}
 
-  marked@17.0.1: {}
+  marked@17.0.2: {}
 
   mdast-util-to-hast@13.2.1:
     dependencies:

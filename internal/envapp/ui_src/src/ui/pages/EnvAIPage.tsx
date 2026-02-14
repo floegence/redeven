@@ -28,7 +28,7 @@ import {
   type ChatCallbacks,
   type ChatContextValue,
   type Message,
-} from '@floegence/floe-webapp-core/chat';
+} from '../chat';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
 import { useAIChatContext } from './AIChatContext';

@@ -1,4 +1,4 @@
-import type { StreamEvent } from '@floegence/floe-webapp-core/chat';
+import type { StreamEvent } from '../../../chat';
 
 export type AIRealtimeEventType = 'stream_event' | 'thread_state' | 'transcript_message';
 

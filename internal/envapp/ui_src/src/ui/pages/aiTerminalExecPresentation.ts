@@ -1,4 +1,4 @@
-import type { Message, MessageBlock, StreamEvent } from '@floegence/floe-webapp-core/chat';
+import type { Message, MessageBlock, StreamEvent } from '../chat';
 
 const TERMINAL_EXEC_TOOL_NAME = 'terminal.exec';
 
