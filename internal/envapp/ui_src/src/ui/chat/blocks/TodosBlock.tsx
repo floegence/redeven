@@ -78,58 +78,69 @@ export const TodosBlock: Component<TodosBlockProps> = (props) => {
 
       <Show
         when={props.todos.length > 0}
-        fallback={<div class="chat-todos-empty">No tasks tracked yet.</div>}
+        fallback={
+          <div class="chat-todos-empty-row">
+            <span class="chat-todos-empty">No tasks tracked yet.</span>
+          </div>
+        }
       >
-        <ul class="chat-todos-list" role="list">
+        <div class="chat-todos-table" role="table" aria-label="Checklist table">
+          <div class="chat-todos-table-header" role="row">
+            <span class="chat-todos-table-head-cell">Status</span>
+            <span class="chat-todos-table-head-cell">Task</span>
+            <span class="chat-todos-table-head-cell">Note</span>
+          </div>
           <For each={props.todos}>
             {(item) => (
-              <li class="chat-todos-item">
-                <span
-                  class={cn(
-                    'chat-todos-check',
-                    `chat-todos-check-${item.status}`,
-                  )}
-                  aria-hidden="true"
-                >
-                  <Switch>
-                    <Match when={item.status === 'completed'}>
-                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M20 6 9 17l-5-5" />
-                      </svg>
-                    </Match>
-                    <Match when={item.status === 'cancelled'}>
-                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M5 12h14" />
-                      </svg>
-                    </Match>
-                    <Match when={item.status === 'in_progress'}>
-                      <span class="chat-todos-check-dot" />
-                    </Match>
-                  </Switch>
-                </span>
+              <div class="chat-todos-row" role="row">
+                <div class="chat-todos-cell chat-todos-cell-status" role="cell">
+                  <span
+                    class={cn(
+                      'chat-todos-check',
+                      `chat-todos-check-${item.status}`,
+                    )}
+                    aria-hidden="true"
+                  >
+                    <Switch>
+                      <Match when={item.status === 'completed'}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M20 6 9 17l-5-5" />
+                        </svg>
+                      </Match>
+                      <Match when={item.status === 'cancelled'}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M5 12h14" />
+                        </svg>
+                      </Match>
+                      <Match when={item.status === 'in_progress'}>
+                        <span class="chat-todos-check-dot" />
+                      </Match>
+                    </Switch>
+                  </span>
+                  <span class={cn('chat-todos-status', statusClass(item.status))}>
+                    {statusLabel(item.status)}
+                  </span>
+                </div>
 
-                <div class="chat-todos-main">
-                  <div class="chat-todos-main-row">
-                    <span
-                      class={cn(
-                        'chat-todos-content',
-                        isDone(item.status) && 'chat-todos-content-done',
-                      )}
-                    >
-                      {item.content}
-                    </span>
-                    <span class={cn('chat-todos-status', statusClass(item.status))}>
-                      {statusLabel(item.status)}
-                    </span>
-                  </div>
-                  <Show when={item.note}>
-                    <div class="chat-todos-note">{item.note}</div>
+                <div
+                  class={cn(
+                    'chat-todos-cell chat-todos-content',
+                    isDone(item.status) && 'chat-todos-content-done',
+                  )}
+                  role="cell"
+                >
+                  {item.content}
+                </div>
+
+                <div class="chat-todos-cell chat-todos-note" role="cell">
+                  <Show when={item.note} fallback={<span class="chat-todos-note-empty">—</span>}>
+                    {item.note}
                   </Show>
                 </div>
-              </li>
+              </div>
             )}
           </For>
-        </ul>
+        </div>
       </Show>
     </div>
   );

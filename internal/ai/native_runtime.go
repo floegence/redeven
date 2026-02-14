@@ -1726,7 +1726,7 @@ mainLoop:
 			return nil
 		}
 
-		if taskComplexity == TaskComplexityComplex && !state.TodoTrackingEnabled {
+		if shouldRequireTodoTracking(taskComplexity, state) {
 			todoSetupNudges++
 			r.persistRunEvent("guard.todo_setup_required", RealtimeStreamKindLifecycle, map[string]any{
 				"step_index":    step,
@@ -2634,8 +2634,7 @@ func evaluateGuardAskUserGate(source string, state runtimeState, complexity stri
 	case "provider_repeated_error", "complex_task_missing_todos", "hard_max_summary_failed", "hard_max_steps":
 		return true, "ok"
 	}
-	complexity = normalizeTaskComplexity(complexity)
-	if complexity == TaskComplexityComplex && !state.TodoTrackingEnabled && len(state.BlockedActionFacts) == 0 {
+	if shouldRequireTodoTracking(complexity, state) {
 		return false, "missing_todos_for_complex_task"
 	}
 	if state.TodoTrackingEnabled && state.TodoOpenCount > 0 && len(state.BlockedActionFacts) == 0 {
@@ -2649,9 +2648,8 @@ func evaluateTaskCompletionGate(resultText string, state runtimeState, complexit
 	if text == "" {
 		return false, "empty_result"
 	}
-	complexity = normalizeTaskComplexity(complexity)
 	mode = strings.ToLower(strings.TrimSpace(mode))
-	if complexity == TaskComplexityComplex && !state.TodoTrackingEnabled {
+	if shouldRequireTodoTracking(complexity, state) {
 		return false, "missing_todos_for_complex_task"
 	}
 	if state.TodoTrackingEnabled && state.TodoOpenCount > 0 {
@@ -2673,8 +2671,7 @@ func evaluateAskUserGate(question string, state runtimeState, complexity string)
 	if asksUserToRunCollectableWork(q) {
 		return false, "delegated_collectable_work"
 	}
-	complexity = normalizeTaskComplexity(complexity)
-	if complexity == TaskComplexityComplex && !state.TodoTrackingEnabled && len(state.BlockedActionFacts) == 0 {
+	if shouldRequireTodoTracking(complexity, state) {
 		return false, "missing_todos_for_complex_task"
 	}
 	if state.TodoTrackingEnabled && state.TodoOpenCount > 0 && len(state.BlockedActionFacts) == 0 {
@@ -2713,6 +2710,19 @@ func asksUserToRunCollectableWork(question string) bool {
 		return true
 	}
 	return false
+}
+
+func shouldRequireTodoTracking(complexity string, state runtimeState) bool {
+	complexity = normalizeTaskComplexity(complexity)
+	if complexity != TaskComplexityComplex || state.TodoTrackingEnabled {
+		return false
+	}
+	if len(state.BlockedActionFacts) > 0 {
+		return false
+	}
+	// Enforce todo tracking only after the run clearly becomes multi-step.
+	actionFacts := len(state.CompletedActionFacts) + len(state.BlockedActionFacts)
+	return actionFacts >= 2
 }
 
 func (r *run) hydrateTodoRuntimeState(ctx context.Context, state *runtimeState, pack contextmodel.PromptPack) (string, bool) {
@@ -2951,6 +2961,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"# Todo Discipline",
 		"- Use write_todos for complex tasks (multiple files/tools, or 3+ meaningful steps).",
 		"- Skip write_todos for a single trivial step that can be completed immediately.",
+		"- Do NOT call write_todos with an empty list when there is no actionable work to track.",
 		"- Keep exactly one todo as in_progress at a time.",
 		"- Update write_todos immediately when you start, complete, cancel, or discover work.",
 		"- Finish all feasible todos in this run before asking the user.",

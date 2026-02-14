@@ -49,8 +49,14 @@ func TestEvaluateAskUserGate(t *testing.T) {
 		t.Fatalf("delegated work => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", runtimeState{}, TaskComplexityComplex); pass || reason != "missing_todos_for_complex_task" {
-		t.Fatalf("complex task without todos => pass=%v reason=%q", pass, reason)
+	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", runtimeState{}, TaskComplexityComplex); !pass || reason != "ok" {
+		t.Fatalf("complex task without actionable steps => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", runtimeState{
+		CompletedActionFacts: []string{"terminal.exec: inspected workspace", "apply_patch: updated files"},
+	}, TaskComplexityComplex); pass || reason != "missing_todos_for_complex_task" {
+		t.Fatalf("complex multi-step task without todos => pass=%v reason=%q", pass, reason)
 	}
 
 	pendingTodos := runtimeState{
@@ -91,5 +97,11 @@ func TestEvaluateGuardAskUserGate(t *testing.T) {
 
 	if pass, reason := evaluateGuardAskUserGate("complex_task_missing_todos", runtimeState{}, TaskComplexityComplex); !pass || reason != "ok" {
 		t.Fatalf("complex_task_missing_todos must be allowed => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateGuardAskUserGate("missing_explicit_completion", runtimeState{
+		CompletedActionFacts: []string{"terminal.exec: checked logs", "apply_patch: patched config"},
+	}, TaskComplexityComplex); pass || reason != "missing_todos_for_complex_task" {
+		t.Fatalf("complex multi-step guard ask_user without todos => pass=%v reason=%q", pass, reason)
 	}
 }

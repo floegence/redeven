@@ -250,7 +250,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "write_todos",
-			Description:      "Replace the current thread todo list snapshot. Keep at most one in_progress item.",
+			Description:      "Replace the current thread todo list snapshot for actionable work. Keep at most one in_progress item, and avoid empty lists unless you are explicitly clearing prior todos.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"todos": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "status": map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "cancelled"}}, "note": map[string]any{"type": "string"}}, "required": []string{"content", "status"}, "additionalProperties": false}}, "expected_version": map[string]any{"type": "integer", "minimum": 0}, "explanation": map[string]any{"type": "string", "maxLength": 500}}, "required": []string{"todos"}, "additionalProperties": false}),
 			ParallelSafe:     true,
 			Mutating:         false,

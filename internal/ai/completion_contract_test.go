@@ -65,11 +65,17 @@ func TestEvaluateTaskCompletionGate(t *testing.T) {
 		t.Fatalf("pending todos (plan) => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{}, TaskComplexityComplex, config.AIModeAct); pass || reason != "missing_todos_for_complex_task" {
-		t.Fatalf("complex task without todos (act) => pass=%v reason=%q", pass, reason)
+	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{}, TaskComplexityComplex, config.AIModeAct); !pass || reason != "ok" {
+		t.Fatalf("complex task without actionable steps (act) => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{}, TaskComplexityComplex, config.AIModePlan); pass || reason != "missing_todos_for_complex_task" {
-		t.Fatalf("complex task without todos (plan) => pass=%v reason=%q", pass, reason)
+	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{}, TaskComplexityComplex, config.AIModePlan); !pass || reason != "ok" {
+		t.Fatalf("complex task without actionable steps (plan) => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{
+		CompletedActionFacts: []string{"terminal.exec: inspected workspace", "apply_patch: updated files"},
+	}, TaskComplexityComplex, config.AIModeAct); pass || reason != "missing_todos_for_complex_task" {
+		t.Fatalf("complex task without todos after multi-step execution => pass=%v reason=%q", pass, reason)
 	}
 }
