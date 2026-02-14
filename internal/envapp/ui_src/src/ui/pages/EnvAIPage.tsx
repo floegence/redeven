@@ -768,6 +768,12 @@ const SUGGESTIONS: SuggestionItem[] = [
     description: 'Create scripts and workflows',
     prompt: 'Help me automate a repetitive task',
   },
+  {
+    icon: CheckCircle,
+    title: 'Plan a trip',
+    description: 'Use ask_user for a guided Q&A before giving the final recommendation',
+    prompt: 'I want to travel. Please use the ask_user tool so we can do a back-and-forth Q&A and reach a final recommendation.',
+  },
 ];
 
 // Empty chat state component with welcome message and suggestions
