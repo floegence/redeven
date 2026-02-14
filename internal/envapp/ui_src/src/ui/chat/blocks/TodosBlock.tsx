@@ -1,4 +1,4 @@
-// TodosBlock — checklist view for write_todos snapshots.
+// TodosBlock — Todos view for write_todos snapshots.
 
 import { For, Match, Show, Switch } from 'solid-js';
 import type { Component } from 'solid-js';
@@ -61,7 +61,7 @@ export const TodosBlock: Component<TodosBlockProps> = (props) => {
     <div class={cn('chat-todos-block', props.class)}>
       <div class="chat-todos-header">
         <div class="chat-todos-title-row">
-          <span class="chat-todos-title">Checklist</span>
+          <span class="chat-todos-title">Todos</span>
           <span class="chat-todos-progress">
             {doneCount()}/{props.todos.length || 0} done
           </span>
@@ -84,7 +84,7 @@ export const TodosBlock: Component<TodosBlockProps> = (props) => {
           </div>
         }
       >
-        <div class="chat-todos-table" role="table" aria-label="Checklist table">
+        <div class="chat-todos-table" role="table" aria-label="Todos table">
           <div class="chat-todos-table-header" role="row">
             <span class="chat-todos-table-head-cell">Status</span>
             <span class="chat-todos-table-head-cell">Task</span>
