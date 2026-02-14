@@ -28,7 +28,7 @@ import {
   type ChatContextValue,
   type Message,
 } from '../chat';
-import { useProtocol } from '@floegence/floe-webapp-protocol';
+import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
 import { useAIChatContext } from './AIChatContext';
 import { useRedevenRpc, type FsFileInfo } from '../protocol/redeven_v1';
@@ -1891,9 +1891,8 @@ export function EnvAIPage() {
       try {
         resp = await rpc.ai.sendUserTurn({ ...baseReq, expectedRunId: expected || undefined });
       } catch (e) {
-        const rawMsg = e instanceof Error ? e.message : String(e);
-        const msg = rawMsg.trim().toLowerCase();
-        if (expected && msg.includes('run changed')) {
+        const isConflict = e instanceof RpcError && e.code === 409;
+        if (expected && isConflict) {
           resp = await rpc.ai.sendUserTurn(baseReq);
         } else {
           throw e;

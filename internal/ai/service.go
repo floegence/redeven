@@ -503,6 +503,7 @@ func newToolID() (string, error) {
 type preparedRun struct {
 	meta                 *session.Meta
 	req                  RunStartRequest
+	persistedUser        *persistedUserMessage
 	runID                string
 	channelID            string
 	endpointID           string
@@ -522,7 +523,7 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	prepared, err := s.prepareRun(meta, runID, req, w)
+	prepared, err := s.prepareRun(meta, runID, req, w, nil)
 	if err != nil {
 		return err
 	}
@@ -530,7 +531,7 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 }
 
 func (s *Service) StartRunDetached(meta *session.Meta, runID string, req RunStartRequest) error {
-	prepared, err := s.prepareRun(meta, runID, req, nil)
+	prepared, err := s.prepareRun(meta, runID, req, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -544,7 +545,22 @@ func (s *Service) StartRunDetached(meta *session.Meta, runID string, req RunStar
 	return nil
 }
 
-func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter) (*preparedRun, error) {
+func (s *Service) StartRunDetachedWithPersisted(meta *session.Meta, runID string, req RunStartRequest, persisted persistedUserMessage) error {
+	prepared, err := s.prepareRun(meta, runID, req, nil, &persisted)
+	if err != nil {
+		return err
+	}
+	go func() {
+		if err := s.executePreparedRun(context.Background(), prepared); err != nil {
+			if s.log != nil {
+				s.log.Warn("ai detached run failed", "run_id", runID, "thread_id", strings.TrimSpace(req.ThreadID), "error", err)
+			}
+		}
+	}()
+	return nil
+}
+
+func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter, persisted *persistedUserMessage) (*preparedRun, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -668,9 +684,16 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	s.broadcastThreadState(endpointID, threadID, runID, "running", "")
 	s.broadcastThreadSummary(endpointID, threadID)
 
+	var persistedCopy *persistedUserMessage
+	if persisted != nil {
+		cp := *persisted
+		persistedCopy = &cp
+	}
+
 	return &preparedRun{
 		meta:                 metaRef,
 		req:                  req,
+		persistedUser:        persistedCopy,
 		runID:                runID,
 		channelID:            channelID,
 		endpointID:           endpointID,
@@ -841,52 +864,61 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}
 	effectiveInput := req.Input
 
-	userMsgID := strings.TrimSpace(req.Input.MessageID)
-	if userMsgID != "" && !isSafeClientMessageID(userMsgID) {
-		userMsgID = ""
-	}
-	if userMsgID == "" {
-		var genErr error
-		userMsgID, genErr = newUserMessageID()
-		if genErr != nil {
-			return streamEarlyError(genErr)
+	userMsgID := ""
+	if prepared.persistedUser != nil {
+		if persistedID := strings.TrimSpace(prepared.persistedUser.MessageID); persistedID != "" {
+			userMsgID = persistedID
 		}
 	}
-	now := time.Now().UnixMilli()
-	userJSON, userText, err := buildUserMessageJSON(userMsgID, req.Input, prepared.uploadsDir, now)
-	if err != nil {
-		return streamEarlyError(err)
-	}
-	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
-	userRowID, err := db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
-		ThreadID:           threadID,
-		EndpointID:         endpointID,
-		MessageID:          userMsgID,
-		Role:               "user",
-		AuthorUserPublicID: strings.TrimSpace(meta.UserPublicID),
-		AuthorUserEmail:    strings.TrimSpace(meta.UserEmail),
-		Status:             "complete",
-		CreatedAtUnixMs:    now,
-		UpdatedAtUnixMs:    now,
-		TextContent:        userText,
-		MessageJSON:        userJSON,
-	}, meta.UserPublicID, meta.UserEmail)
-	cancelPersist()
-	if err != nil {
-		if !isUniqueConstraintError(err) {
+	if userMsgID == "" {
+		userMsgID = strings.TrimSpace(req.Input.MessageID)
+		if userMsgID != "" && !isSafeClientMessageID(userMsgID) {
+			userMsgID = ""
+		}
+		if userMsgID == "" {
+			var genErr error
+			userMsgID, genErr = newUserMessageID()
+			if genErr != nil {
+				return streamEarlyError(genErr)
+			}
+		}
+		now := time.Now().UnixMilli()
+		userJSON, userText, err := buildUserMessageJSON(userMsgID, req.Input, prepared.uploadsDir, now)
+		if err != nil {
 			return streamEarlyError(err)
 		}
 		pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
-		existingRowID, existingJSON, getErr := db.GetTranscriptMessageRowIDAndJSONByMessageID(pctx, endpointID, threadID, userMsgID)
+		userRowID, appendErr := db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
+			ThreadID:           threadID,
+			EndpointID:         endpointID,
+			MessageID:          userMsgID,
+			Role:               "user",
+			AuthorUserPublicID: strings.TrimSpace(meta.UserPublicID),
+			AuthorUserEmail:    strings.TrimSpace(meta.UserEmail),
+			Status:             "complete",
+			CreatedAtUnixMs:    now,
+			UpdatedAtUnixMs:    now,
+			TextContent:        userText,
+			MessageJSON:        userJSON,
+		}, meta.UserPublicID, meta.UserEmail)
 		cancelPersist()
-		if getErr != nil {
-			return streamEarlyError(err)
+		if appendErr != nil {
+			if !isUniqueConstraintError(appendErr) {
+				return streamEarlyError(appendErr)
+			}
+			pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
+			existingRowID, existingJSON, getErr := db.GetTranscriptMessageRowIDAndJSONByMessageID(pctx, endpointID, threadID, userMsgID)
+			cancelPersist()
+			if getErr != nil {
+				return streamEarlyError(appendErr)
+			}
+			userRowID = existingRowID
+			userJSON = existingJSON
 		}
-		userRowID = existingRowID
-		userJSON = existingJSON
+		s.broadcastTranscriptMessage(endpointID, threadID, runID, userRowID, userJSON, now)
+		s.broadcastThreadSummary(endpointID, threadID)
 	}
-	s.broadcastTranscriptMessage(endpointID, threadID, runID, userRowID, userJSON, now)
-	s.broadcastThreadSummary(endpointID, threadID)
+	effectiveInput.MessageID = userMsgID
 
 	select {
 	case <-ctx.Done():
