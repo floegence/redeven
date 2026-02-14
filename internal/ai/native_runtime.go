@@ -260,20 +260,42 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 	if err := stream.Err(); err != nil {
 		return TurnResult{}, err
 	}
-	if !gotCompleted {
+	// Some OpenAI-compatible gateways omit `response.completed` even when they have already
+	// streamed usable text/tool-call deltas. Treat missing completion as a soft-failure
+	// and continue best-effort when we have enough information to proceed.
+	hasToolCall := false
+	for _, pc := range partials {
+		if pc == nil || !pc.Ended {
+			continue
+		}
+		if strings.TrimSpace(pc.CallID) == "" || strings.TrimSpace(pc.Name) == "" {
+			continue
+		}
+		hasToolCall = true
+		break
+	}
+	if !gotCompleted && strings.TrimSpace(textBuf.String()) == "" && !hasToolCall {
 		return TurnResult{}, errors.New("missing response.completed event")
 	}
 
 	result := TurnResult{
-		FinishReason: mapOpenAIStatus(completed.Status),
-		Text:         strings.TrimSpace(textBuf.String()),
-		Sources:      extractOpenAIURLSources(completed),
-		Usage: TurnUsage{
+		FinishReason:    "unknown",
+		Text:            strings.TrimSpace(textBuf.String()),
+		RawProviderDiag: map[string]any{},
+	}
+	if gotCompleted {
+		result.FinishReason = mapOpenAIStatus(completed.Status)
+		result.Sources = extractOpenAIURLSources(completed)
+		result.Usage = TurnUsage{
 			InputTokens:     completed.Usage.InputTokens,
 			OutputTokens:    completed.Usage.OutputTokens,
 			ReasoningTokens: completed.Usage.OutputTokensDetails.ReasoningTokens,
-		},
-		RawProviderDiag: map[string]any{"response_id": strings.TrimSpace(completed.ID)},
+		}
+		if rid := strings.TrimSpace(completed.ID); rid != "" {
+			result.RawProviderDiag["response_id"] = rid
+		}
+	} else {
+		result.RawProviderDiag["missing_response_completed"] = true
 	}
 
 	type orderedToolCall struct {
@@ -316,40 +338,47 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 	}
 
 	// Fallback: if stream events miss tool calls, recover them from completed.output.
-	for _, item := range completed.Output {
-		if strings.TrimSpace(item.Type) != "function_call" {
-			continue
+	if gotCompleted {
+		for _, item := range completed.Output {
+			if strings.TrimSpace(item.Type) != "function_call" {
+				continue
+			}
+			callID := strings.TrimSpace(item.CallID)
+			if callID == "" {
+				callID = strings.TrimSpace(item.ID)
+			}
+			if callID == "" {
+				callID = fmt.Sprintf("openai_call_%d", len(result.ToolCalls)+1)
+			}
+			if _, ok := seen[callID]; ok {
+				continue
+			}
+			toolName := strings.TrimSpace(item.Name)
+			if realName, ok := aliasToReal[toolName]; ok {
+				toolName = realName
+			}
+			rawArgs := strings.TrimSpace(item.Arguments)
+			args := map[string]any{}
+			if rawArgs != "" {
+				_ = json.Unmarshal([]byte(rawArgs), &args)
+			}
+			call := ToolCall{ID: callID, Name: toolName, Args: args}
+			result.ToolCalls = append(result.ToolCalls, call)
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name}})
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, ArgumentsJSON: rawArgs, Arguments: cloneAnyMap(call.Args)}})
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, Arguments: cloneAnyMap(call.Args)}})
 		}
-		callID := strings.TrimSpace(item.CallID)
-		if callID == "" {
-			callID = strings.TrimSpace(item.ID)
-		}
-		if callID == "" {
-			callID = fmt.Sprintf("openai_call_%d", len(result.ToolCalls)+1)
-		}
-		if _, ok := seen[callID]; ok {
-			continue
-		}
-		toolName := strings.TrimSpace(item.Name)
-		if realName, ok := aliasToReal[toolName]; ok {
-			toolName = realName
-		}
-		rawArgs := strings.TrimSpace(item.Arguments)
-		args := map[string]any{}
-		if rawArgs != "" {
-			_ = json.Unmarshal([]byte(rawArgs), &args)
-		}
-		call := ToolCall{ID: callID, Name: toolName, Args: args}
-		result.ToolCalls = append(result.ToolCalls, call)
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name}})
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, ArgumentsJSON: rawArgs, Arguments: cloneAnyMap(call.Args)}})
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: call.ID, Name: call.Name, Arguments: cloneAnyMap(call.Args)}})
 	}
 	if len(result.ToolCalls) > 0 {
 		result.FinishReason = "tool_calls"
 	}
 	if result.Text == "" {
-		result.Text = strings.TrimSpace(extractOpenAIResponseText(completed))
+		if gotCompleted {
+			result.Text = strings.TrimSpace(extractOpenAIResponseText(completed))
+		}
+	}
+	if result.FinishReason == "unknown" && result.Text != "" {
+		result.FinishReason = "stop"
 	}
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: &PartialUsage{InputTokens: result.Usage.InputTokens, OutputTokens: result.Usage.OutputTokens, ReasoningTokens: result.Usage.ReasoningTokens}})
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventFinishReason, FinishHint: result.FinishReason})
@@ -2752,6 +2781,12 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- Do NOT call task_complete without first verifying your work.",
 		"- Do NOT give up after a tool error — try a different approach.",
 		"- Do NOT repeat the same tool call with identical arguments.",
+		"",
+		"# Tool Failure Recovery",
+		"- Do NOT pre-probe tool availability. Choose the best tool and try it.",
+		"- On tool error: read the tool_result payload, then either repair args (once) or switch tools.",
+		"- If web.search fails (e.g., missing API key), do NOT retry web.search; use terminal.exec with curl to query a public API or fetch an authoritative URL directly.",
+		"- If terminal.exec fails, reduce scope or switch tools; only call ask_user for true external blockers.",
 		"",
 		"# Common Workflows",
 		"- **File questions**: terminal.exec (rg --files / rg pattern / sed -n) → analyze → task_complete",

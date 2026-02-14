@@ -51,6 +51,13 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 	}
 
 	switch {
+	case strings.Contains(lower, "missing web search api key"):
+		out.Code = ErrorCodeUnknown
+		out.Retryable = false
+		out.SuggestedFixes = []string{
+			"Configure a web search API key for the selected provider (for Brave: set REDEVEN_BRAVE_API_KEY or BRAVE_API_KEY, or update it in the AI settings UI).",
+			"If web.search is unavailable, switch tools: use terminal.exec with curl to query a public API or fetch an authoritative URL directly.",
+		}
 	case strings.Contains(lower, "permission denied"):
 		out.Code = ErrorCodePermissionDenied
 		out.Retryable = false
