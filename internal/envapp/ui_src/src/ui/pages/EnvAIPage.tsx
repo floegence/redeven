@@ -2345,6 +2345,34 @@ export function EnvAIPage() {
           </div>
         </Show>
 
+        {/* Empty state: settings failed to load */}
+        <Show when={ai.settings.error && !ai.settings.loading && !ai.aiEnabled()}>
+          <Motion.div
+            class="flex flex-col items-center justify-center h-full p-8 text-center"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4, easing: 'ease-out' }}
+          >
+            <div class="relative inline-flex items-center justify-center mb-6">
+              <div class="relative w-16 h-16 rounded-2xl bg-error/10 flex items-center justify-center border border-error/20 shadow-sm">
+                <svg class="w-8 h-8 text-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </div>
+            </div>
+            <div class="text-lg font-semibold text-foreground mb-2">Failed to load settings</div>
+            <div class="text-sm text-muted-foreground mb-6 max-w-[360px]">
+              {ai.settings.error instanceof Error ? ai.settings.error.message : String(ai.settings.error)}
+            </div>
+            <Button size="md" variant="default" onClick={() => env.openSettings('ai')}>
+              <Settings class="w-4 h-4 mr-2" />
+              Open Settings
+            </Button>
+          </Motion.div>
+        </Show>
+
         {/* Empty state: AI not configured */}
         <Show when={ai.settings() && !ai.aiEnabled() && !ai.settings.error && !ai.settings.loading}>
           <Motion.div
