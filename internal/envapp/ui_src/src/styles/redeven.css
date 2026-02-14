@@ -123,18 +123,18 @@
     transform: scale(1);
     opacity: 1;
   }
-  50% {
-    transform: scale(1.08);
-    opacity: 0.84;
+  45% {
+    transform: scale(1.2);
+    opacity: 0.7;
   }
 }
 
 .chat-message-avatar-streaming .chat-message-avatar-image-wrapper {
-  animation: redeven-flower-avatar-step-spin 1.2s steps(10, end) infinite;
+  animation: redeven-flower-avatar-step-spin 3.2s steps(12, end) infinite;
   will-change: transform;
 }
 
 .chat-message-avatar-streaming .chat-message-avatar-image {
-  animation: redeven-flower-avatar-breathe 1.9s ease-in-out infinite;
+  animation: redeven-flower-avatar-breathe 1.45s cubic-bezier(0.44, 0.05, 0.54, 0.95) infinite;
   will-change: transform, opacity;
 }

@@ -205,30 +205,36 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
   };
 
   const applySingleStreamEvent = (event: StreamEvent): void => {
+    const ensureStreamingAssistantMessage = (msgs: Message[], messageId: string, timestamp: number): number => {
+      let idx = msgs.findIndex((m) => m.id === messageId);
+      if (idx === -1) {
+        msgs.push({
+          id: messageId,
+          role: 'assistant',
+          blocks: [],
+          status: 'streaming',
+          timestamp,
+        });
+        return msgs.length - 1;
+      }
+
+      const prev = msgs[idx];
+      msgs[idx] = {
+        ...prev,
+        role: 'assistant',
+        status: 'streaming',
+        error: undefined,
+      };
+      return idx;
+    };
+
     switch (event.type) {
       case 'message-start': {
         consumeOnePrepId();
         const id = event.messageId;
         const ts = Date.now();
         setMessages(produce((msgs) => {
-          const idx = msgs.findIndex((m) => m.id === id);
-          if (idx === -1) {
-            msgs.push({
-              id,
-              role: 'assistant',
-              blocks: [],
-              status: 'streaming',
-              timestamp: ts,
-            });
-            return;
-          }
-          const prev = msgs[idx];
-          msgs[idx] = {
-            ...prev,
-            role: 'assistant',
-            status: 'streaming',
-            error: undefined,
-          };
+          ensureStreamingAssistantMessage(msgs, id, ts);
         }));
         setStreamingMessageId(id);
         break;
@@ -237,17 +243,7 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
         const id = event.messageId;
         const ts = Date.now();
         setMessages(produce((msgs) => {
-          let idx = msgs.findIndex((m) => m.id === id);
-          if (idx === -1) {
-            msgs.push({
-              id,
-              role: 'assistant',
-              blocks: [],
-              status: 'streaming',
-              timestamp: ts,
-            });
-            idx = msgs.length - 1;
-          }
+          const idx = ensureStreamingAssistantMessage(msgs, id, ts);
           const msg = msgs[idx];
           const blocks = [...msg.blocks];
           const target = Math.max(0, event.blockIndex);
@@ -260,29 +256,50 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
           }
           msgs[idx] = { ...msg, blocks };
         }));
+        setStreamingMessageId(id);
         break;
       }
       case 'block-delta': {
-        updateMessage(event.messageId, (msg) => {
+        const id = event.messageId;
+        const ts = Date.now();
+        setMessages(produce((msgs) => {
+          const idx = ensureStreamingAssistantMessage(msgs, id, ts);
+          const msg = msgs[idx];
           const blocks = [...msg.blocks];
-          const block = blocks[event.blockIndex];
-          if (block && 'content' in block && typeof block.content === 'string') {
-            (block as any).content += event.delta;
+          const target = Math.max(0, event.blockIndex);
+          while (blocks.length <= target) {
+            blocks.push(createEmptyBlock('text'));
           }
-          return { ...msg, blocks };
-        });
+          const block = blocks[target];
+          if (block && 'content' in block && typeof block.content === 'string') {
+            blocks[target] = { ...(block as any), content: block.content + event.delta };
+          } else {
+            blocks[target] = { type: 'text', content: event.delta };
+          }
+          msgs[idx] = { ...msg, blocks };
+        }));
+        setStreamingMessageId(id);
         break;
       }
       case 'block-set': {
-        updateMessage(event.messageId, (msg) => {
+        const id = event.messageId;
+        const ts = Date.now();
+        setMessages(produce((msgs) => {
+          const idx = ensureStreamingAssistantMessage(msgs, id, ts);
+          const msg = msgs[idx];
           const blocks = [...msg.blocks];
-          if (event.blockIndex === blocks.length) {
-            blocks.push(event.block);
-          } else if (event.blockIndex >= 0 && event.blockIndex < blocks.length) {
-            blocks[event.blockIndex] = event.block;
+          const target = Math.max(0, event.blockIndex);
+          while (blocks.length < target) {
+            blocks.push(createEmptyBlock(event.block.type));
           }
-          return { ...msg, blocks };
-        });
+          if (target === blocks.length) {
+            blocks.push(event.block);
+          } else {
+            blocks[target] = event.block;
+          }
+          msgs[idx] = { ...msg, blocks };
+        }));
+        setStreamingMessageId(id);
         break;
       }
       case 'block-end':

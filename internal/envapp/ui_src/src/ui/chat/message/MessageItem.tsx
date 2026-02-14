@@ -27,12 +27,14 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
   };
 
   const isActiveAssistantStreaming = () => {
-    if (props.message.role !== 'assistant' || props.message.status !== 'streaming') return false;
+    if (props.message.role !== 'assistant') return false;
 
     const currentStreamingId = ctx.streamingMessageId();
     if (currentStreamingId) {
       return currentStreamingId === props.message.id;
     }
+
+    if (props.message.status !== 'streaming') return false;
 
     // Fallback for snapshots that can restore a streaming message before stream frames arrive.
     const allMessages = ctx.messages();
