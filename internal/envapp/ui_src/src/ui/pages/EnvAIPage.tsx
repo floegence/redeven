@@ -9,12 +9,12 @@ import {
   Pencil,
   Settings,
   Sparkles,
-  MessageSquare,
   Stop,
   Terminal,
   Trash,
   Zap,
 } from '@floegence/floe-webapp-core/icons';
+import { FlowerIcon } from '../icons/FlowerIcon';
 import { LoadingOverlay, SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Button, ConfirmDialog, Dialog, Input, Select, Tooltip } from '@floegence/floe-webapp-core/ui';
 import {
@@ -673,16 +673,16 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, easing: 'ease-out' }}
       >
-        {/* Animated sparkles icon */}
+        {/* Animated flower icon */}
         <div class="relative inline-flex items-center justify-center mb-6">
-          <div class="absolute -inset-2 rounded-2xl bg-primary/10 animate-[pulse_3s_ease-in-out_infinite]" />
-          <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/25 to-primary/5 flex items-center justify-center border border-primary/20 shadow-sm">
-            <Sparkles class="w-8 h-8 text-primary" />
+          <div class="absolute -inset-2 rounded-2xl bg-pink-500/8 animate-[pulse_3s_ease-in-out_infinite]" />
+          <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500/15 to-amber-500/10 flex items-center justify-center border border-pink-500/15 shadow-sm">
+            <FlowerIcon class="w-9 h-9" />
           </div>
         </div>
 
         <h2 class="text-xl font-semibold text-foreground mb-3">
-          Hello! How can I help you today?
+          Hello! I'm Flower
         </h2>
         <p class="text-sm text-muted-foreground leading-relaxed">
           I'm your AI assistant. I can help you with code, files, commands, and more.
@@ -1749,7 +1749,7 @@ export function EnvAIPage() {
             <div class="chat-header border-b border-border/80 bg-background/95 backdrop-blur-md max-sm:flex-col max-sm:items-stretch max-sm:gap-2">
               <div class="chat-header-title flex items-center gap-2 min-w-0 w-full sm:w-auto">
                 <div class="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <MessageSquare class="w-4 h-4 text-primary" />
+                  <FlowerIcon class="w-4 h-4" />
                 </div>
                 <span class="truncate font-medium">{ai.activeThreadTitle()}</span>
               </div>
@@ -1936,14 +1936,14 @@ export function EnvAIPage() {
             transition={{ duration: 0.4, easing: 'ease-out' }}
           >
             <div class="relative inline-flex items-center justify-center mb-6">
-              <div class="absolute -inset-2 rounded-2xl bg-primary/10 animate-[pulse_3s_ease-in-out_infinite]" />
-              <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/25 to-primary/5 flex items-center justify-center border border-primary/20 shadow-sm">
-                <Sparkles class="w-8 h-8 text-primary" />
+              <div class="absolute -inset-2 rounded-2xl bg-pink-500/8 animate-[pulse_3s_ease-in-out_infinite]" />
+              <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500/15 to-amber-500/10 flex items-center justify-center border border-pink-500/15 shadow-sm">
+                <FlowerIcon class="w-9 h-9" />
               </div>
             </div>
-            <div class="text-lg font-semibold text-foreground mb-2">AI is not configured</div>
+            <div class="text-lg font-semibold text-foreground mb-2">Flower is not configured</div>
             <div class="text-sm text-muted-foreground mb-6 max-w-[320px]">
-              Configure an AI provider in settings to start using the AI assistant.
+              Configure an AI provider in settings to start using Flower.
             </div>
             <Button size="md" variant="default" onClick={() => env.openSettings('ai')}>
               <Settings class="w-4 h-4 mr-2" />
