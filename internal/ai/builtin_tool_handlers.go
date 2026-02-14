@@ -407,7 +407,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "web.search",
-			Description:      "Search the web and return sources (URLs) with titles/snippets.",
+			Description:      "Search the web for discovery and return sources (URLs) with titles/snippets. Prefer direct requests to authoritative sources via terminal.exec/curl; use this tool only when you need discovery.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "provider": map[string]any{"type": "string"}, "count": map[string]any{"type": "integer", "minimum": 1, "maximum": 10}, "timeout_ms": map[string]any{"type": "integer", "minimum": 1, "maximum": 60000}}, "required": []string{"query"}, "additionalProperties": false}),
 			ParallelSafe:     true,
 			Mutating:         false,
