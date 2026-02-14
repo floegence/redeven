@@ -260,8 +260,8 @@ interface SettingsCardProps {
 function SettingsCard(props: SettingsCardProps) {
   const badgeColors = {
     default: 'bg-muted text-muted-foreground',
-    warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20',
-    success: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20',
+    warning: 'bg-warning/10 text-warning border border-warning/50',
+    success: 'bg-success/10 text-success border border-success/50',
   };
 
   return (
@@ -1869,7 +1869,7 @@ export function EnvSettingsPage() {
             <div class="p-3 rounded-lg bg-muted/30 border border-border">
               <div class="text-[11px] font-medium text-muted-foreground mb-1">Status</div>
               <div class="flex items-center gap-1.5">
-                <div class={`w-1.5 h-1.5 rounded-full ${displayedStatus() === 'online' ? 'bg-emerald-500' : displayedStatus() === 'offline' ? 'bg-amber-500' : 'bg-muted-foreground/50'}`} />
+                <div class={`w-1.5 h-1.5 rounded-full ${displayedStatus() === 'online' ? 'bg-success' : displayedStatus() === 'offline' ? 'bg-warning' : 'bg-muted-foreground'}`} />
                 <span class="text-sm font-medium">{statusLabel()}</span>
               </div>
             </div>
@@ -2516,9 +2516,9 @@ export function EnvSettingsPage() {
                     />
                   </div>
                   <Show when={!aiBlockDangerousCommands()}>
-                    <div class="flex items-start gap-2.5 p-3 rounded-lg border border-amber-600/30 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10">
-                      <Shield class="w-4 h-4 mt-0.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                      <div class="text-xs font-medium text-amber-800 dark:text-amber-200">
+                    <div class="flex items-start gap-2.5 p-3 rounded-lg border border-warning/50 bg-warning/10">
+                      <Shield class="w-4 h-4 mt-0.5 text-warning shrink-0" />
+                      <div class="text-xs font-medium text-foreground">
                         Dangerous command blocking is disabled. The agent may execute high-risk commands directly.
                       </div>
                     </div>
@@ -2563,7 +2563,7 @@ export function EnvSettingsPage() {
                             class={
                               'text-xs px-2 py-1 rounded-md border ' +
                               (webSearchKeySet()?.brave
-                                ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                                ? 'bg-success/10 border-success/50 text-success'
                                 : 'bg-muted/40 border-border text-muted-foreground')
                             }
                           >
@@ -2729,7 +2729,7 @@ export function EnvSettingsPage() {
 	                                  class={
 	                                    'text-xs px-2 py-1 rounded-md border ' +
 	                                    (aiProviderKeySet()?.[String(p().id ?? '').trim()]
-	                                      ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+	                                      ? 'bg-success/10 border-success/50 text-success'
 	                                      : 'bg-muted/40 border-border text-muted-foreground')
 	                                  }
 	                                >
