@@ -59,3 +59,44 @@
 .chat-message-list-scroll {
   scrollbar-gutter: stable;
 }
+
+@keyframes redeven-flower-intro-spin {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  65% {
+    transform: rotate(380deg) scale(1.08);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes redeven-flower-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.redeven-flower-icon-spin {
+  transform-origin: 50% 50%;
+  will-change: transform;
+  animation: redeven-flower-intro-spin 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0s 1;
+}
+
+.redeven-flower-icon-breathe {
+  will-change: transform;
+  animation: redeven-flower-breathe 2.8s ease-in-out 0.65s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-flower-icon-spin,
+  .redeven-flower-icon-breathe {
+    animation: none !important;
+    transform: none !important;
+  }
+}
