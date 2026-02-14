@@ -250,6 +250,8 @@ const AIChatInput: Component<{
   const ctx = useChatContext();
   const [text, setText] = createSignal('');
   const [quickReplyText, setQuickReplyText] = createSignal('');
+  const [selectedQuickReplyIndex, setSelectedQuickReplyIndex] = createSignal<number>(-1);
+  const [useCustomQuickReply, setUseCustomQuickReply] = createSignal(false);
   const [isFocused, setIsFocused] = createSignal(false);
 
   let textareaRef: HTMLTextAreaElement | undefined;
@@ -267,11 +269,35 @@ const AIChatInput: Component<{
     if (!props.showAskUserPrompt) return null;
     return extractLatestAskUserPrompt(ctx.messages() ?? []);
   });
+  const askUserPromptKey = createMemo(() => {
+    const prompt = askUserPrompt();
+    if (!prompt) return '';
+    return `${prompt.question}\u001f${prompt.options.join('\u001f')}`;
+  });
+  const selectedQuickReply = createMemo(() => {
+    if (useCustomQuickReply()) {
+      return quickReplyText().trim();
+    }
+    const prompt = askUserPrompt();
+    if (!prompt) return '';
+    const idx = selectedQuickReplyIndex();
+    if (!Number.isInteger(idx) || idx < 0 || idx >= prompt.options.length) {
+      return '';
+    }
+    return String(prompt.options[idx] ?? '').trim();
+  });
 
   const canSend = () =>
     (text().trim() || attachments.attachments().length > 0) && !props.disabled;
 
-  const canSendQuickReplyText = () => quickReplyText().trim().length > 0 && !props.disabled;
+  const canSubmitQuickReply = () => selectedQuickReply().length > 0 && !props.disabled;
+
+  createEffect(() => {
+    askUserPromptKey();
+    setQuickReplyText('');
+    setSelectedQuickReplyIndex(-1);
+    setUseCustomQuickReply(false);
+  });
 
   // Auto-resize textarea height (coalesce to at most once per frame).
   const adjustHeight = () => {
@@ -306,16 +332,29 @@ const AIChatInput: Component<{
     await ctx.sendMessage(content, files);
   };
 
-  const handleQuickReplyClick = async (content: string) => {
-    const text = String(content ?? '').trim();
-    if (!text || props.disabled) return;
-    await ctx.sendMessage(text, []);
+  const handleSelectQuickReplyOption = (index: number) => {
+    if (props.disabled) return;
+    setSelectedQuickReplyIndex(index);
+    setUseCustomQuickReply(false);
+  };
+
+  const handleCustomQuickReplyInput = (value: string) => {
+    setQuickReplyText(value);
+    setUseCustomQuickReply(true);
+    setSelectedQuickReplyIndex(-1);
+  };
+
+  const handleCustomQuickReplyFocus = () => {
+    setUseCustomQuickReply(true);
+    setSelectedQuickReplyIndex(-1);
   };
 
   const handleQuickReplySubmit = async () => {
-    if (!canSendQuickReplyText()) return;
-    const content = quickReplyText().trim();
+    const content = selectedQuickReply();
+    if (!content || props.disabled) return;
     setQuickReplyText('');
+    setSelectedQuickReplyIndex(-1);
+    setUseCustomQuickReply(false);
     await ctx.sendMessage(content, []);
   };
 
@@ -374,6 +413,7 @@ const AIChatInput: Component<{
       <Show when={askUserPrompt()}>
         {(promptValue) => {
           const options = () => promptValue().options;
+          const hasOptions = () => options().length > 0;
           return (
             <div class="chat-ask-user-panel">
               <div class="chat-ask-user-header">
@@ -387,53 +427,72 @@ const AIChatInput: Component<{
               </div>
               <p class="chat-ask-user-question">{promptValue().question}</p>
 
-              <Show when={options().length > 0}>
+              <form
+                class="chat-ask-user-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleQuickReplySubmit();
+                }}
+              >
                 <div class="chat-ask-user-option-list-wrap">
                   <p class="chat-ask-user-section-label">Suggested replies</p>
-                  <div class="chat-ask-user-options">
+                  <div class="chat-ask-user-options" role="radiogroup" aria-label="Suggested replies">
                     <For each={options()}>
                       {(option, index) => (
-                        <button
-                          type="button"
-                          class="chat-ask-user-option-btn"
-                          disabled={!!props.disabled}
-                          onClick={() => void handleQuickReplyClick(option)}
-                        >
-                          <span class="chat-ask-user-option-index">{index() + 1}</span>
+                        <label class="chat-ask-user-option-item">
+                          <input
+                            type="radio"
+                            class="chat-ask-user-option-radio"
+                            name="ask-user-reply-choice"
+                            checked={!useCustomQuickReply() && selectedQuickReplyIndex() === index()}
+                            onChange={() => handleSelectQuickReplyOption(index())}
+                            disabled={!!props.disabled}
+                          />
                           <span class="chat-ask-user-option-text">{option}</span>
-                        </button>
+                        </label>
                       )}
                     </For>
+
+                    <label
+                      class={cn(
+                        'chat-ask-user-option-item',
+                        useCustomQuickReply() && 'chat-ask-user-option-item-custom-active',
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        class="chat-ask-user-option-radio"
+                        name="ask-user-reply-choice"
+                        checked={useCustomQuickReply()}
+                        onChange={() => handleCustomQuickReplyFocus()}
+                        disabled={!!props.disabled}
+                      />
+                      <input
+                        class="chat-ask-user-custom-input"
+                        value={quickReplyText()}
+                        onInput={(event) => handleCustomQuickReplyInput(event.currentTarget.value)}
+                        onFocus={() => handleCustomQuickReplyFocus()}
+                        placeholder="None of above"
+                        aria-label="Custom reply"
+                        disabled={!!props.disabled}
+                      />
+                    </label>
                   </div>
                 </div>
-              </Show>
 
-              <div class="chat-ask-user-custom-wrap">
-                <p class="chat-ask-user-section-label">Custom reply</p>
-                <form
-                  class="chat-ask-user-custom"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void handleQuickReplySubmit();
-                  }}
-                >
-                  <input
-                    class="chat-ask-user-custom-input"
-                    value={quickReplyText()}
-                    onInput={(event) => setQuickReplyText(event.currentTarget.value)}
-                    placeholder="None of above"
-                    aria-label="Custom reply"
-                    disabled={!!props.disabled}
-                  />
+                <div class="chat-ask-user-actions">
                   <button
                     type="submit"
                     class="chat-ask-user-custom-submit"
-                    disabled={!canSendQuickReplyText()}
+                    disabled={!canSubmitQuickReply()}
                   >
-                    Send
+                    Send reply
                   </button>
-                </form>
-              </div>
+                  <Show when={!hasOptions()}>
+                    <span class="chat-ask-user-actions-hint">Enter your reply in the input above.</span>
+                  </Show>
+                </div>
+              </form>
             </div>
           );
         }}

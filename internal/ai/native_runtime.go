@@ -2957,6 +2957,8 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- If information is insufficient and tools cannot help, call ask_user.",
 		"- When calling ask_user, include 2-4 concise recommended reply options in `options` (best option first).",
 		"- Keep ask_user options mutually exclusive and actionable; do not include a free-form catch-all option.",
+		"- Write ask_user options as ready-to-send user replies (plain text, no numbering, no markdown).",
+		"- Prefer concrete choices over template placeholders like `YYYY-MM-DD`; the UI already provides a custom fallback input.",
 		"",
 		"# Todo Discipline",
 		"- Use write_todos for complex tasks (multiple files/tools, or 3+ meaningful steps).",
