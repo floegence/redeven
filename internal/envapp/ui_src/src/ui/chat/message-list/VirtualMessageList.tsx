@@ -87,12 +87,17 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
       const index = resizeObserverMap.get(el);
       if (index === undefined) continue;
 
-      const height =
+      const rawHeight =
         entry.contentBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+      const height = Math.round(rawHeight);
 
       if (height > 0) {
         const msg = messages()[index];
         if (msg) {
+          const cachedHeight = ctx.getMessageHeight(msg.id);
+          if (Math.abs(cachedHeight - height) < 1) {
+            continue;
+          }
           ctx.setMessageHeight(msg.id, height);
           virtualList.setItemHeight(index, height);
         }
