@@ -102,7 +102,7 @@ func normalizeScope(scope string) string {
 func normalizeMemoryKind(kind string) string {
 	kind = strings.ToLower(strings.TrimSpace(kind))
 	switch kind {
-	case "fact", "constraint", "decision", "todo", "artifact":
+	case "fact", "constraint", "decision", "todo", "blocker", "artifact":
 		return kind
 	default:
 		return "fact"
@@ -636,6 +636,91 @@ LIMIT ?
 		out = append(out, tmp[i])
 	}
 	return out, nil
+}
+
+func (s *Store) ListMemoryItemsByScopeKind(ctx context.Context, endpointID string, threadID string, scope string, kind string, limit int) ([]MemoryItemRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	scope = normalizeScope(scope)
+	kind = normalizeMemoryKind(kind)
+	if endpointID == "" || threadID == "" {
+		return nil, errors.New("invalid request")
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	if limit > 2000 {
+		limit = 2000
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT memory_id, endpoint_id, thread_id,
+       scope, kind, content, source_refs_json,
+       importance, freshness, confidence,
+       created_at_unix_ms, updated_at_unix_ms
+FROM memory_items
+WHERE endpoint_id = ? AND thread_id = ? AND scope = ? AND kind = ?
+ORDER BY updated_at_unix_ms DESC, memory_id DESC
+LIMIT ?
+`, endpointID, threadID, scope, kind, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	tmp := make([]MemoryItemRecord, 0, limit)
+	for rows.Next() {
+		var rec MemoryItemRecord
+		if err := rows.Scan(
+			&rec.MemoryID,
+			&rec.EndpointID,
+			&rec.ThreadID,
+			&rec.Scope,
+			&rec.Kind,
+			&rec.Content,
+			&rec.SourceRefsJSON,
+			&rec.Importance,
+			&rec.Freshness,
+			&rec.Confidence,
+			&rec.CreatedAtUnixMs,
+			&rec.UpdatedAtUnixMs,
+		); err != nil {
+			return nil, err
+		}
+		tmp = append(tmp, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]MemoryItemRecord, 0, len(tmp))
+	for i := len(tmp) - 1; i >= 0; i-- {
+		out = append(out, tmp[i])
+	}
+	return out, nil
+}
+
+func (s *Store) DeleteThreadMemoryItem(ctx context.Context, endpointID string, threadID string, memoryID string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	memoryID = strings.TrimSpace(memoryID)
+	if endpointID == "" || threadID == "" || memoryID == "" {
+		return errors.New("invalid request")
+	}
+	_, err := s.db.ExecContext(ctx, `
+DELETE FROM memory_items
+WHERE endpoint_id = ? AND thread_id = ? AND memory_id = ?
+`, endpointID, threadID, memoryID)
+	return err
 }
 
 func (s *Store) SetThreadOpenGoal(ctx context.Context, endpointID string, threadID string, goal string) error {

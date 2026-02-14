@@ -1166,7 +1166,7 @@ func migrateSchema(db *sql.DB) error {
 	if db == nil {
 		return errors.New("nil db")
 	}
-	const targetVersion = 6
+	const targetVersion = 7
 
 	var v int
 	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
@@ -1456,6 +1456,15 @@ SELECT
   status, created_at_unix_ms, updated_at_unix_ms,
   text_content, message_json
 FROM ai_messages
+`); err != nil {
+		return err
+	}
+
+	// v7: Convert legacy "Action blocked:" todos into blockers, so they no longer pollute pending_todos.
+	if _, err := tx.Exec(`
+UPDATE memory_items
+SET kind = 'blocker'
+WHERE kind = 'todo' AND content LIKE 'Action blocked:%'
 `); err != nil {
 		return err
 	}

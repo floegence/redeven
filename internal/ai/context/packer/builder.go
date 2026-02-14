@@ -86,17 +86,19 @@ func (b *Builder) BuildPromptPack(ctx context.Context, in BuildInput) (model.Pro
 	systemContract := strings.Join([]string{
 		"Context contract:",
 		"- The transcript is for display only; rely on structured memory and execution evidence.",
-		"- Preserve hard constraints and unresolved todos.",
+		"- Preserve hard constraints, unresolved thread todos, and unresolved blockers.",
+		"- Thread todos are managed via write_todos and stored in the thread todo snapshot.",
+		"- Blockers capture unresolved tool/runtime failures; do not treat blockers as todos.",
 		"- Cite concrete execution evidence before claiming completion.",
 	}, "\n")
 
-	pendingTodos := append([]model.MemoryItem(nil), retrieved.PendingTodos...)
+	pendingTodos := []model.MemoryItem(nil)
 	if b.repo != nil && b.repo.Ready() {
 		threadPendingTodos, err := b.repo.ListThreadPendingTodos(ctx, in.EndpointID, in.ThreadID, 12)
 		if err != nil {
 			return model.PromptPack{}, err
 		}
-		pendingTodos = mergePendingTodos(threadPendingTodos, pendingTodos, 12)
+		pendingTodos = threadPendingTodos
 	}
 
 	pack.SystemContract = systemContract
@@ -105,6 +107,7 @@ func (b *Builder) BuildPromptPack(ctx context.Context, in BuildInput) (model.Pro
 	pack.RecentDialogue = append([]model.DialogueTurn(nil), retrieved.RecentDialogue...)
 	pack.ExecutionEvidence = append([]model.ExecutionEvidence(nil), retrieved.ExecutionEvidence...)
 	pack.PendingTodos = pendingTodos
+	pack.Blockers = append([]model.MemoryItem(nil), retrieved.Blockers...)
 	pack.RetrievedLongTermMemory = append([]model.MemoryItem(nil), retrieved.LongTermMemory...)
 	pack.ThreadSnapshot = strings.TrimSpace(retrieved.ThreadSnapshot)
 	pack.AttachmentsManifest = adapter.AdaptAttachments(cap, in.Attachments)
@@ -201,36 +204,6 @@ func enforceSectionBudget(pack model.PromptPack, budget map[string]int) model.Pr
 	return out
 }
 
-func mergePendingTodos(primary []model.MemoryItem, secondary []model.MemoryItem, limit int) []model.MemoryItem {
-	if limit <= 0 {
-		limit = 12
-	}
-	out := make([]model.MemoryItem, 0, limit)
-	seenByKey := map[string]struct{}{}
-	appendList := func(items []model.MemoryItem) {
-		for _, item := range items {
-			if len(out) >= limit {
-				return
-			}
-			content := strings.TrimSpace(item.Content)
-			if content == "" {
-				continue
-			}
-			memoryID := strings.TrimSpace(item.MemoryID)
-			key := strings.ToLower(strings.TrimSpace(memoryID + "::" + content))
-			if _, ok := seenByKey[key]; ok {
-				continue
-			}
-			seenByKey[key] = struct{}{}
-			item.Content = content
-			out = append(out, item)
-		}
-	}
-	appendList(primary)
-	appendList(secondary)
-	return out
-}
-
 func collectSectionTokens(pack model.PromptPack) map[string]int {
 	usage := map[string]int{}
 	usage["system"] = textTokens(pack.SystemContract)
@@ -249,6 +222,9 @@ func collectSectionTokens(pack model.PromptPack) map[string]int {
 	usage["execution"] = execTokens
 	memoryTokens := 0
 	for _, mem := range pack.PendingTodos {
+		memoryTokens += textTokens(mem.Content)
+	}
+	for _, mem := range pack.Blockers {
 		memoryTokens += textTokens(mem.Content)
 	}
 	for _, mem := range pack.RetrievedLongTermMemory {

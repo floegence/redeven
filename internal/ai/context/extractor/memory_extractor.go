@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -50,6 +51,44 @@ func (e *MemoryExtractor) Extract(ctx context.Context, in ExtractInput) ([]model
 	items := make([]model.MemoryItem, 0, len(evidence)+2)
 	nowUnix := e.now().UnixMilli()
 
+	type toolSpanPayload struct {
+		ToolName string `json:"tool_name"`
+		Error    *struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	parseToolPayload := func(raw string) (toolName string, errCode string, errMsg string, ok bool) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" || !json.Valid([]byte(raw)) {
+			return "", "", "", false
+		}
+		var p toolSpanPayload
+		if err := json.Unmarshal([]byte(raw), &p); err != nil {
+			return "", "", "", false
+		}
+		toolName = strings.TrimSpace(p.ToolName)
+		if p.Error != nil {
+			errCode = strings.TrimSpace(p.Error.Code)
+			errMsg = strings.TrimSpace(p.Error.Message)
+		}
+		ok = toolName != "" || errCode != "" || errMsg != ""
+		return toolName, errCode, errMsg, ok
+	}
+	truncateRunes := func(s string, max int) string {
+		s = strings.TrimSpace(s)
+		if s == "" || max <= 0 {
+			return ""
+		}
+		r := []rune(s)
+		if len(r) <= max {
+			return s
+		}
+		return string(r[:max])
+	}
+
+	blockerIDsToClear := make(map[string]struct{}, 8)
+
 	for _, ev := range evidence {
 		status := strings.ToLower(strings.TrimSpace(ev.Status))
 		var kind model.MemoryKind
@@ -64,19 +103,70 @@ func (e *MemoryExtractor) Extract(ctx context.Context, in ExtractInput) ([]model
 		if content == "" {
 			content = strings.TrimSpace(ev.Kind)
 		}
+
+		toolNameFromPayload := ""
+		errCode := ""
+		errMsg := ""
+		if strings.EqualFold(strings.TrimSpace(ev.Kind), "tool") {
+			if toolName, code, msg, ok := parseToolPayload(ev.PayloadJSON); ok {
+				toolNameFromPayload = toolName
+				errCode = code
+				errMsg = msg
+			}
+		}
+
+		blockerKey := ""
+		if strings.EqualFold(strings.TrimSpace(ev.Kind), "tool") {
+			toolName := strings.TrimSpace(toolNameFromPayload)
+			if toolName == "" {
+				toolName = strings.TrimSpace(ev.Name)
+			}
+			if toolName != "" {
+				blockerKey = "tool:" + strings.ToLower(toolName)
+			}
+		}
+		if blockerKey == "" {
+			if k := strings.TrimSpace(ev.Kind); k != "" {
+				blockerKey = strings.ToLower(k) + ":" + strings.ToLower(strings.TrimSpace(ev.Name))
+			}
+		}
+		blockerID := ""
+		if blockerKey != "" {
+			blockerID = buildMemoryID(in.ThreadID, "blocker", blockerKey)
+		}
+
 		switch status {
 		case "failed", "timed_out", "canceled":
-			kind = model.MemoryKindTodo
+			kind = model.MemoryKindBlocker
 			scope = model.MemoryScopeWorking
-			importance = 0.85
-			confidence = 0.9
-			content = "Action blocked: " + content
+			importance = 0.92
+			confidence = 0.92
+			if blockerKey != "" && strings.HasPrefix(blockerKey, "tool:") {
+				toolLabel := strings.TrimPrefix(blockerKey, "tool:")
+				toolLabel = strings.TrimSpace(toolLabel)
+				content = "Tool blocked: " + toolLabel
+				if errCode != "" || errMsg != "" {
+					msg := truncateRunes(errMsg, 220)
+					if errCode != "" && msg != "" {
+						content = fmt.Sprintf("%s (%s): %s", content, errCode, msg)
+					} else if errCode != "" {
+						content = fmt.Sprintf("%s (%s)", content, errCode)
+					} else if msg != "" {
+						content = fmt.Sprintf("%s: %s", content, msg)
+					}
+				}
+			} else {
+				content = "Blocked: " + content
+			}
 		case "success":
 			kind = model.MemoryKindFact
 			scope = model.MemoryScopeEpisodic
 			importance = 0.7
 			confidence = 0.85
 			content = "Evidence: " + content
+			if blockerID != "" && strings.HasPrefix(blockerKey, "tool:") {
+				blockerIDsToClear[blockerID] = struct{}{}
+			}
 		default:
 			kind = model.MemoryKindArtifact
 			scope = model.MemoryScopeEpisodic
@@ -90,8 +180,12 @@ func (e *MemoryExtractor) Extract(ctx context.Context, in ExtractInput) ([]model
 			"name":    ev.Name,
 			"status":  ev.Status,
 		}})
+		memoryID := buildMemoryID(in.ThreadID, in.RunID, ev.SpanID, string(kind))
+		if kind == model.MemoryKindBlocker && blockerID != "" {
+			memoryID = blockerID
+		}
 		items = append(items, model.MemoryItem{
-			MemoryID:       buildMemoryID(in.ThreadID, in.RunID, ev.SpanID, string(kind)),
+			MemoryID:       memoryID,
 			ThreadID:       in.ThreadID,
 			Scope:          scope,
 			Kind:           kind,
@@ -103,6 +197,23 @@ func (e *MemoryExtractor) Extract(ctx context.Context, in ExtractInput) ([]model
 			CreatedAtUnix:  nowUnix,
 			UpdatedAtUnix:  nowUnix,
 		})
+	}
+
+	// If a tool eventually succeeded in the same run, do not persist the intermediate failure
+	// as an active blocker.
+	if len(blockerIDsToClear) > 0 {
+		filtered := items[:0]
+		for _, item := range items {
+			if _, ok := blockerIDsToClear[strings.TrimSpace(item.MemoryID)]; ok {
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		items = filtered
+	}
+
+	for id := range blockerIDsToClear {
+		_ = e.repo.DeleteThreadMemoryItem(ctx, in.EndpointID, in.ThreadID, id)
 	}
 
 	assistantText := strings.TrimSpace(in.AssistantText)

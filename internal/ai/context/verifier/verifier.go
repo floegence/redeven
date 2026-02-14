@@ -19,6 +19,7 @@ type VerifyResult struct {
 	SavingRatio         float64
 	MissingConstraints  bool
 	MissingPendingTodos bool
+	MissingBlockers     bool
 	MissingEvidenceRefs bool
 	Reason              string
 }
@@ -40,15 +41,19 @@ func Verify(in VerifyInput) VerifyResult {
 
 	missingConstraints := !containsAllStrings(in.After.ActiveConstraints, in.Before.ActiveConstraints)
 	missingTodos := !containsAllMemory(in.After.PendingTodos, in.Before.PendingTodos)
+	missingBlockers := !containsAllMemory(in.After.Blockers, in.Before.Blockers)
 	missingEvidence := !containsAllEvidenceIDs(in.After.ExecutionEvidence, in.Before.ExecutionEvidence)
 
-	pass := !missingConstraints && !missingTodos && !missingEvidence && saving >= required
+	pass := !missingConstraints && !missingTodos && !missingBlockers && !missingEvidence && saving >= required
 	reasonParts := make([]string, 0, 4)
 	if missingConstraints {
 		reasonParts = append(reasonParts, "constraints_lost")
 	}
 	if missingTodos {
 		reasonParts = append(reasonParts, "pending_todos_lost")
+	}
+	if missingBlockers {
+		reasonParts = append(reasonParts, "blockers_lost")
 	}
 	if missingEvidence {
 		reasonParts = append(reasonParts, "evidence_refs_lost")
@@ -63,6 +68,7 @@ func Verify(in VerifyInput) VerifyResult {
 		SavingRatio:         saving,
 		MissingConstraints:  missingConstraints,
 		MissingPendingTodos: missingTodos,
+		MissingBlockers:     missingBlockers,
 		MissingEvidenceRefs: missingEvidence,
 		Reason:              reason,
 	}

@@ -184,8 +184,8 @@ WHERE type = 'table' AND name = ?
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 6 {
-		t.Fatalf("user_version=%d, want 6", version)
+	if version != 7 {
+		t.Fatalf("user_version=%d, want 7", version)
 	}
 }
 
