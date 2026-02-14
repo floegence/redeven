@@ -217,7 +217,7 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 	if workingDir == "" {
 		workingDir = fallbackWorkingDir
 	}
-	workingDirClean, err := validateThreadWorkingDir(workingDir, fallbackWorkingDir)
+	workingDirClean, err := validateThreadWorkingDir(workingDir)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +261,19 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 	}, nil
 }
 
-func validateThreadWorkingDir(workingDir string, fsRoot string) (string, error) {
+func (s *Service) ValidateWorkingDir(workingDir string) (string, error) {
+	if s == nil {
+		return "", errors.New("nil service")
+	}
+	fallbackWorkingDir := strings.TrimSpace(s.fsRoot)
+	workingDir = strings.TrimSpace(workingDir)
+	if workingDir == "" {
+		workingDir = fallbackWorkingDir
+	}
+	return validateThreadWorkingDir(workingDir)
+}
+
+func validateThreadWorkingDir(workingDir string) (string, error) {
 	workingDir = strings.TrimSpace(workingDir)
 	if workingDir == "" {
 		return "", errors.New("missing working_dir")
@@ -269,28 +281,6 @@ func validateThreadWorkingDir(workingDir string, fsRoot string) (string, error) 
 	workingDir = filepath.Clean(workingDir)
 	if !filepath.IsAbs(workingDir) {
 		return "", errors.New("working_dir must be absolute")
-	}
-
-	fsRoot = strings.TrimSpace(fsRoot)
-	if fsRoot == "" {
-		return "", errors.New("working_dir root is not configured")
-	}
-	fsRoot = filepath.Clean(fsRoot)
-	if !filepath.IsAbs(fsRoot) {
-		abs, err := filepath.Abs(fsRoot)
-		if err != nil {
-			return "", errors.New("working_dir root is invalid")
-		}
-		fsRoot = filepath.Clean(abs)
-	}
-
-	rel, err := filepath.Rel(fsRoot, workingDir)
-	if err != nil {
-		return "", errors.New("working_dir is invalid")
-	}
-	rel = filepath.Clean(rel)
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return "", errors.New("working_dir must be within root_dir")
 	}
 
 	info, err := os.Stat(workingDir)

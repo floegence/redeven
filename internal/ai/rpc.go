@@ -174,8 +174,8 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 	})
 
 	rpctyped.Register[aiSubscribeReq, aiSubscribeResp](r, TypeID_AI_SUBSCRIBE, func(_ context.Context, _ *aiSubscribeReq) (*aiSubscribeResp, error) {
-		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
+			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if streamServer == nil {
 			return nil, &rpc.Error{Code: 500, Message: "stream not ready"}
@@ -188,8 +188,8 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 	})
 
 	rpctyped.Register[aiListMessagesReq, aiListMessagesResp](r, TypeID_AI_MESSAGES_LIST, func(ctx context.Context, req *aiListMessagesReq) (*aiListMessagesResp, error) {
-		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
+			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
@@ -266,8 +266,8 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 	})
 
 	rpctyped.Register[aiGetActiveRunSnapshotReq, aiGetActiveRunSnapshotResp](r, TypeID_AI_ACTIVE_RUN_SNAPSHOT, func(ctx context.Context, req *aiGetActiveRunSnapshotReq) (*aiGetActiveRunSnapshotResp, error) {
-		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
+			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
@@ -306,8 +306,8 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 	})
 
 	rpctyped.Register[aiSetToolCollapsedReq, aiSetToolCollapsedResp](r, TypeID_AI_SET_TOOL_COLLAPSED, func(ctx context.Context, req *aiSetToolCollapsedReq) (*aiSetToolCollapsedResp, error) {
-		if meta == nil || !meta.CanRead {
-			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
+			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}

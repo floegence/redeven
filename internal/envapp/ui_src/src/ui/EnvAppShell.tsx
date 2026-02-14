@@ -33,6 +33,7 @@ import { EnvAIPage } from './pages/EnvAIPage';
 import { AIChatContext, createAIChatContextValue } from './pages/AIChatContext';
 import { AIChatSidebar } from './pages/AIChatSidebar';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
+import { hasRWXPermissions } from './pages/aiPermissions';
 import { redevenDeckWidgets } from './deck/redevenDeckWidgets';
 import { useRedevenRpc } from './protocol/redeven_v1';
 import { AuditLogDialog } from './widgets/AuditLogDialog';
@@ -117,6 +118,10 @@ export function EnvAppShell() {
   const [manualError, setManualError] = createSignal<string | null>(null);
   const [auditOpen, setAuditOpen] = createSignal(false);
   const canViewAudit = createMemo(() => Boolean(env()?.permissions?.can_admin));
+  const canUseFlower = createMemo(() => env.state === 'ready' && hasRWXPermissions(env()));
+
+  const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
+  let initialTab: EnvNavTab | null = null;
 
   const [aiInjectionSeq, setAiInjectionSeq] = createSignal(0);
   const [aiInjectionMarkdown, setAiInjectionMarkdown] = createSignal<string | null>(null);
@@ -401,6 +406,11 @@ export function EnvAppShell() {
 
       let preferred = readPersistedActiveTab();
       if (rt && preferred === 'ports') preferred = 'codespaces';
+      if (preferred === 'ai') {
+        // Defer opening Flower until permissions are loaded (and only if RWX is granted).
+        preferred = null;
+        setPendingAutoOpenAI(true);
+      }
 
       const initial = (() => {
         if (preferred) {
@@ -411,7 +421,8 @@ export function EnvAppShell() {
       })();
       // Mobile downgrade: keep "deck" as the persisted preference while opening "terminal".
       if (layout.isMobile() && preferred === 'deck' && initial === 'terminal') skipPersistOnce = true;
-      layout.setSidebarActiveTab(initial, { openSidebar: initial === 'ai' });
+      layout.setSidebarActiveTab(initial, { openSidebar: false });
+      initialTab = initial;
       setPersistReady(true);
 
       await connect();
@@ -504,10 +515,10 @@ export function EnvAppShell() {
     if (!isLocalMode()) {
       list.push({ id: 'ports', name: 'Ports', icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 6, fullScreen: true } });
     }
-    list.push(
-      { id: 'ai', name: 'Flower', icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } },
-      { id: 'settings', name: 'Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } },
-    );
+    if (canUseFlower()) {
+      list.push({ id: 'ai', name: 'Flower', icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
+    }
+    list.push({ id: 'settings', name: 'Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
     return list;
   });
 
@@ -515,6 +526,10 @@ export function EnvAppShell() {
   let skipPersistOnce = false;
 
   const goTab = (tab: EnvNavTab) => {
+    if (tab === 'ai' && !canUseFlower()) {
+      notify.error('Permission denied', 'Read/write/execute permission required.');
+      return;
+    }
     // Persist the user's preference; the runtime may downgrade it on mobile (deck -> terminal).
     persistActiveTab(tab);
     let next = tab;
@@ -523,6 +538,27 @@ export function EnvAppShell() {
     if (layout.isMobile() && tab === 'deck' && next === 'terminal') skipPersistOnce = true;
     layout.setSidebarActiveTab(next, { openSidebar: next === 'ai' });
   };
+
+  // If the user preferred Flower and the session has RWX, open it once after permissions load.
+  createEffect(() => {
+    if (!persistReady() || !pendingAutoOpenAI()) return;
+    if (env.state === 'ready' && !canUseFlower()) {
+      setPendingAutoOpenAI(false);
+      return;
+    }
+    if (!canUseFlower()) return;
+    if (initialTab && layout.sidebarActiveTab() !== initialTab) return;
+    setPendingAutoOpenAI(false);
+    goTab('ai');
+  });
+
+  // Never keep the user on Flower when RWX is not granted.
+  createEffect(() => {
+    if (layout.sidebarActiveTab() !== 'ai') return;
+    if (canUseFlower()) return;
+    const fallback = layout.isMobile() ? 'terminal' : 'deck';
+    layout.setSidebarActiveTab(fallback, { openSidebar: false });
+  });
 
   // Keep a global (cross-env) active tab preference, independent from FloeProvider's per-env storage namespace.
   // NOTE: On mobile, the "deck" tab is downgraded to "terminal"; skip persisting that one downgrade.
@@ -536,7 +572,7 @@ export function EnvAppShell() {
       id === 'monitor' ||
       id === 'files' ||
       id === 'codespaces' ||
-      id === 'ai' ||
+      (id === 'ai' && canUseFlower()) ||
       (allowPorts && id === 'ports');
     if (!isKnown) return;
     if (skipPersistOnce) {
@@ -561,7 +597,9 @@ export function EnvAppShell() {
     if (!isLocalMode()) {
       items.push({ id: 'ports', icon: Globe, label: 'Ports', collapseBehavior: 'preserve' });
     }
-    items.push({ id: 'ai', icon: FlowerIcon, label: 'Flower', collapseBehavior: 'toggle' });
+    if (canUseFlower()) {
+      items.push({ id: 'ai', icon: FlowerIcon, label: 'Flower', collapseBehavior: 'toggle' });
+    }
     return items;
   };
 
@@ -757,7 +795,7 @@ export function EnvAppShell() {
         <AIChatProviderBridge>
         <Shell
           sidebarMode="auto"
-          sidebarContent={(activeTab) => activeTab === 'ai' ? <AIChatSidebar /> : <></>}
+          sidebarContent={(activeTab) => activeTab === 'ai' && canUseFlower() ? <AIChatSidebar /> : <></>}
           logo={
             <Tooltip content="Back to dashboard" placement="bottom" delay={0}>
               <button

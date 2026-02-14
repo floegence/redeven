@@ -134,6 +134,23 @@ function toUserDisplayPath(realPath: string, rootAbs?: string): string {
   return '~' + (rel || '');
 }
 
+function normalizeWorkingDirInputText(input: string, rootAbs?: string): string {
+  const raw = String(input ?? '').trim();
+  if (!raw) return '';
+
+  const root = String(rootAbs ?? '').trim().replace(/\/+$/, '') || '';
+  if (raw === '~') return root;
+  if (raw.startsWith('~/') || raw.startsWith('~\\')) {
+    const vp = normalizeVirtualPath(raw.slice(1).replace(/\\/g, '/'));
+    return virtualToRealPath(vp, root);
+  }
+  if (!raw.startsWith('/')) {
+    const vp = normalizeVirtualPath(raw);
+    return virtualToRealPath(vp, root);
+  }
+  return raw;
+}
+
 type ExecutionMode = 'act' | 'plan';
 
 type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
@@ -250,6 +267,7 @@ const AIChatInput: Component<{
   workingDirLocked?: boolean;
   workingDirDisabled?: boolean;
   onPickWorkingDir?: () => void;
+  onEditWorkingDir?: () => void;
 }> = (props) => {
   const ctx = useChatContext();
   const [text, setText] = createSignal('');
@@ -319,6 +337,7 @@ const AIChatInput: Component<{
   };
 
   const canPickWorkingDir = () => !!props.onPickWorkingDir && !props.disabled && !props.workingDirDisabled && !props.workingDirLocked;
+  const canEditWorkingDir = () => !!props.onEditWorkingDir && !props.disabled && !props.workingDirDisabled && !props.workingDirLocked;
 
   onCleanup(() => {
     if (rafId !== null && typeof cancelAnimationFrame !== 'undefined') {
@@ -396,6 +415,21 @@ const AIChatInput: Component<{
                 <Show when={!!props.workingDirLocked}>
                   <LockIcon />
                 </Show>
+              </button>
+            </Show>
+
+            <Show when={props.onEditWorkingDir}>
+              <button
+                type="button"
+                class="chat-input-attachment-btn"
+                onClick={() => {
+                  if (!canEditWorkingDir()) return;
+                  props.onEditWorkingDir?.();
+                }}
+                title="Edit working directory"
+                disabled={!canEditWorkingDir()}
+              >
+                <Pencil class="w-4 h-4" />
               </button>
             </Show>
 
@@ -944,6 +978,10 @@ export function EnvAIPage() {
   const [homePath, setHomePath] = createSignal<string | undefined>(undefined);
   const [workingDirPickerOpen, setWorkingDirPickerOpen] = createSignal(false);
   const [workingDirFiles, setWorkingDirFiles] = createSignal<FileItem[]>([]);
+  const [workingDirEditOpen, setWorkingDirEditOpen] = createSignal(false);
+  const [workingDirEditValue, setWorkingDirEditValue] = createSignal('');
+  const [workingDirEditError, setWorkingDirEditError] = createSignal<string | null>(null);
+  const [workingDirEditSaving, setWorkingDirEditSaving] = createSignal(false);
   let workingDirCache: DirCache = new Map();
 
   const FOLLOW_BOTTOM_THRESHOLD_PX = 24;
@@ -1184,6 +1222,47 @@ export function EnvAIPage() {
   );
   const workingDirPickerInitialPath = createMemo(() => realToVirtualPath(activeWorkingDir(), homePath()));
 
+  const openWorkingDirEditor = () => {
+    if (workingDirLocked()) return;
+    setWorkingDirEditError(null);
+    setWorkingDirEditValue(workingDirLabel() || activeWorkingDir() || '');
+    setWorkingDirEditOpen(true);
+  };
+
+  const saveWorkingDirEditor = async () => {
+    if (!ensureRWX()) return;
+    if (workingDirLocked()) return;
+
+    const root = String(homePath() ?? '').trim();
+    const normalized = normalizeWorkingDirInputText(workingDirEditValue(), root);
+
+    // Empty input: reset to default root dir.
+    if (!normalized) {
+      ai.setDraftWorkingDir('');
+      setWorkingDirEditOpen(false);
+      setWorkingDirEditError(null);
+      return;
+    }
+
+    setWorkingDirEditSaving(true);
+    setWorkingDirEditError(null);
+    try {
+      const resp = await fetchGatewayJSON<Readonly<{ working_dir: string }>>('/_redeven_proxy/api/ai/validate_working_dir', {
+        method: 'POST',
+        body: JSON.stringify({ working_dir: normalized }),
+      });
+      const cleaned = String(resp?.working_dir ?? '').trim();
+      if (!cleaned) throw new Error('Invalid working directory');
+      ai.setDraftWorkingDir(cleaned);
+      setWorkingDirEditOpen(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setWorkingDirEditError(msg || 'Request failed.');
+    } finally {
+      setWorkingDirEditSaving(false);
+    }
+  };
+
   const loadWorkingDirRoot = async () => {
     if (!protocol.client()) return;
     const p = '/';
@@ -1325,6 +1404,7 @@ export function EnvAIPage() {
     opts?: { scrollToBottom?: boolean; reset?: boolean },
   ): Promise<void> => {
     if (!chat) return;
+    if (!canRWXReady()) return;
     const tid = String(threadId ?? '').trim();
     if (!tid) return;
 
@@ -1382,6 +1462,7 @@ export function EnvAIPage() {
   const loadActiveRunSnapshot = async (threadId: string): Promise<void> => {
     if (!chat) return;
     if (protocol.status() !== 'connected' || !ai.aiEnabled()) return;
+    if (!canRWXReady()) return;
 
     const tid = String(threadId ?? '').trim();
     if (!tid) return;
@@ -1794,6 +1875,7 @@ export function EnvAIPage() {
       original(messageId, toolId);
 
       if (protocol.status() !== 'connected' || !ai.aiEnabled()) return;
+      if (!canRWXReady()) return;
 
       const tid = String(ai.activeThreadId() ?? '').trim();
       const mid = String(messageId ?? '').trim();
@@ -2070,7 +2152,37 @@ export function EnvAIPage() {
           }}
         />
 
-        <Show when={ai.aiEnabled() || ai.settings.loading}>
+        <Show
+          when={permissionReady()}
+          fallback={
+            <div class="flex flex-col items-center justify-center h-full p-8 text-center">
+              <div class="text-sm text-muted-foreground">Loading environment permissions...</div>
+            </div>
+          }
+        >
+          <Show
+            when={canRWX()}
+            fallback={
+              <Motion.div
+                class="flex flex-col items-center justify-center h-full p-8 text-center"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4, easing: 'ease-out' }}
+              >
+                <div class="relative inline-flex items-center justify-center mb-6">
+                  <div class="absolute -inset-2 rounded-2xl bg-primary/8 animate-[pulse_3s_ease-in-out_infinite]" />
+                  <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/15 to-amber-500/10 flex items-center justify-center border border-primary/20 shadow-sm">
+                    <FlowerIcon class="w-9 h-9 text-primary" />
+                  </div>
+                </div>
+                <div class="text-lg font-semibold text-foreground mb-2">Flower is disabled</div>
+                <div class="text-sm text-muted-foreground mb-6 max-w-[360px]">
+                  Read/write/execute permission required to use Flower.
+                </div>
+              </Motion.div>
+            }
+          >
+            <Show when={ai.aiEnabled() || ai.settings.loading}>
           {/* Chat area — sidebar is managed by Shell */}
           <div class="flex-1 min-w-0 flex flex-col h-full">
             {/* Header */}
@@ -2190,23 +2302,6 @@ export function EnvAIPage() {
               </div>
             </Show>
 
-            {/* Permission banner: read-only session */}
-            <Show when={permissionReady() && !canRWX()}>
-              <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-xl shadow-sm bg-amber-500/5 border border-amber-500/20">
-                <div class="flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300">
-                  <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
-                  Read/write/execute permission required
-                </div>
-                <div class="mt-1 text-muted-foreground pl-6">
-                  You can view existing chats, but sending messages, starting runs, uploading files, and approving tools is disabled.
-                </div>
-              </div>
-            </Show>
-
             {/* Message list with empty state */}
             <MessageListWithEmptyState
               hasMessages={hasMessages()}
@@ -2265,6 +2360,59 @@ export function EnvAIPage() {
               }}
             />
 
+            <Dialog
+              open={workingDirEditOpen()}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setWorkingDirEditOpen(false);
+                  setWorkingDirEditError(null);
+                  setWorkingDirEditValue('');
+                  return;
+                }
+                setWorkingDirEditOpen(true);
+              }}
+              title="Edit Working Directory"
+              footer={
+                <div class="flex justify-end gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setWorkingDirEditOpen(false)} disabled={workingDirEditSaving()}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => void saveWorkingDirEditor()}
+                    disabled={workingDirEditSaving() || workingDirLocked()}
+                  >
+                    <Show when={workingDirEditSaving()}>
+                      <span class="mr-1">
+                        <InlineButtonSnakeLoading />
+                      </span>
+                    </Show>
+                    Save
+                  </Button>
+                </div>
+              }
+            >
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-xs font-medium mb-1.5">Path</label>
+                  <Input
+                    value={workingDirEditValue()}
+                    onInput={(e) => setWorkingDirEditValue(e.currentTarget.value)}
+                    placeholder="/path/to/dir"
+                    size="sm"
+                    class="w-full"
+                  />
+                  <p class="text-[11px] text-muted-foreground mt-1.5">
+                    Use an absolute path. <span class="font-mono">~</span> maps to Home (<span class="font-mono">root_dir</span>). Relative paths are resolved against Home.
+                  </p>
+                  <Show when={workingDirEditError()}>
+                    <p class="text-[11px] text-error mt-1.5">{workingDirEditError()}</p>
+                  </Show>
+                </div>
+              </div>
+            </Dialog>
+
             <AIChatInput
               disabled={!canInteract()}
               placeholder={chatInputPlaceholder()}
@@ -2273,6 +2421,7 @@ export function EnvAIPage() {
               workingDirLocked={workingDirLocked()}
               workingDirDisabled={workingDirDisabled()}
               onPickWorkingDir={() => setWorkingDirPickerOpen(true)}
+              onEditWorkingDir={() => openWorkingDirEditor()}
             />
           </div>
         </Show>
@@ -2300,6 +2449,8 @@ export function EnvAIPage() {
               Open Settings
             </Button>
           </Motion.div>
+        </Show>
+          </Show>
         </Show>
 
         {/* Rename dialog */}

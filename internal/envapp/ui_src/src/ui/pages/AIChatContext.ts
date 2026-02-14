@@ -14,6 +14,7 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type AIRealtimeEvent } from '../protocol/redeven_v1';
 import { useEnvContext } from './EnvContext';
 import { fetchGatewayJSON } from '../services/gatewayApi';
+import { hasRWXPermissions } from './aiPermissions';
 
 // ---- API response types (shared between sidebar and main page) ----
 
@@ -120,7 +121,10 @@ function readPersistedDraftWorkingDir(): string | null {
 function persistDraftWorkingDir(path: string): void {
   try {
     const v = String(path ?? '').trim();
-    if (!v) return;
+    if (!v) {
+      localStorage.removeItem(DRAFT_WORKING_DIR_STORAGE_KEY);
+      return;
+    }
     localStorage.setItem(DRAFT_WORKING_DIR_STORAGE_KEY, v);
   } catch {
     // ignore
@@ -210,8 +214,13 @@ export function createAIChatContextValue(): AIChatContextValue {
   const rpc = useRedevenRpc();
   const notify = useNotification();
 
+  const permissionReady = createMemo(() => env.env.state === 'ready');
+  const canUseFlower = createMemo(() => permissionReady() && hasRWXPermissions(env.env()));
+
   // Settings resource
-  const settingsKey = createMemo<number | null>(() => (protocol.status() === 'connected' ? env.settingsSeq() : null));
+  const settingsKey = createMemo<number | null>(() =>
+    protocol.status() === 'connected' && canUseFlower() ? env.settingsSeq() : null,
+  );
   const [settings] = createResource<SettingsResponse | null, number | null>(
     () => settingsKey(),
     async (k) => (k == null ? null : await fetchGatewayJSON<SettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' })),
@@ -239,7 +248,7 @@ export function createAIChatContextValue(): AIChatContextValue {
   const setDraftWorkingDir = (path: string) => {
     const v = String(path ?? '').trim();
     setDraftWorkingDirRaw(v);
-    if (v) persistDraftWorkingDir(v);
+    persistDraftWorkingDir(v);
   };
 
   const allowedModelIDs = createMemo(() => {
@@ -421,7 +430,7 @@ export function createAIChatContextValue(): AIChatContextValue {
 
   createEffect(() => {
     const client = protocol.client();
-    if (!client || !aiEnabled()) return;
+    if (!client || !canUseFlower() || !aiEnabled()) return;
 
     let disposed = false;
 
@@ -466,7 +475,7 @@ export function createAIChatContextValue(): AIChatContextValue {
 
   // Poll thread list while there is any active run so sidebar status stays fresh.
   createEffect(() => {
-    if (protocol.status() !== 'connected' || !aiEnabled()) return;
+    if (protocol.status() !== 'connected' || !canUseFlower() || !aiEnabled()) return;
     const hasRunningThread =
       Object.keys(activeRunByThread()).length > 0 ||
       Object.keys(pendingRunByThread()).length > 0 ||
@@ -725,6 +734,10 @@ export function createAIChatContextValue(): AIChatContextValue {
   const ensureThreadForSend = async (): Promise<string | null> => {
     if (protocol.status() !== 'connected') {
       notify.error('Not connected', 'Connecting to agent...');
+      return null;
+    }
+    if (!canUseFlower()) {
+      notify.error('Permission denied', 'Read/write/execute permission required.');
       return null;
     }
     if (!aiEnabled()) {
