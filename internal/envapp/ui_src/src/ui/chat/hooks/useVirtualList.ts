@@ -114,6 +114,14 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
   // Pending rAF for batched updates
   let rafId: number | null = null;
 
+  /** Normalize observed heights to reduce sub-pixel measurement noise. */
+  function normalizeHeight(height: number): number {
+    if (!Number.isFinite(height) || height <= 0) {
+      return 0;
+    }
+    return Math.max(1, Math.round(height));
+  }
+
   /** Ensure the BIT is sized for the current item count. */
   function ensureSize(n: number): void {
     if (n === prevCount) return;
@@ -236,11 +244,14 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
     ensureSize(n);
 
     if (index < 0 || index >= n) return;
-    const oldHeight = heights[index];
-    if (oldHeight === height) return;
+    const normalizedHeight = normalizeHeight(height);
+    if (normalizedHeight <= 0) return;
 
-    const delta = height - oldHeight;
-    heights[index] = height;
+    const oldHeight = heights[index] ?? config.defaultItemHeight;
+    if (Math.abs(oldHeight - normalizedHeight) < 1) return;
+
+    const delta = normalizedHeight - oldHeight;
+    heights[index] = normalizedHeight;
     bitUpdate(bit, index + 1, delta);
 
     // Trigger reactivity by touching scrollTop (read + write same value via rAF)
@@ -300,13 +311,16 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
 
   function containerRef(el: HTMLElement): void {
     containerEl = el;
-    setContainerHeight(el.clientHeight);
+    setContainerHeight(normalizeHeight(el.clientHeight));
 
     resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const height =
           entry.contentBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
-        setContainerHeight(height);
+        const normalizedHeight = normalizeHeight(height);
+        if (normalizedHeight > 0) {
+          setContainerHeight(normalizedHeight);
+        }
       }
     });
     resizeObserver.observe(el);
