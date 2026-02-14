@@ -64,8 +64,8 @@
   0% {
     transform: rotate(0deg) scale(1);
   }
-  65% {
-    transform: rotate(380deg) scale(1.08);
+  70% {
+    transform: rotate(390deg) scale(1.12);
   }
   100% {
     transform: rotate(360deg) scale(1);
@@ -85,12 +85,12 @@
 .redeven-flower-icon-spin {
   transform-origin: 50% 50%;
   will-change: transform;
-  animation: redeven-flower-intro-spin 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0s 1;
+  animation: redeven-flower-intro-spin 1.2s cubic-bezier(0.22, 1, 0.36, 1) 0.15s 1;
 }
 
 .redeven-flower-icon-breathe {
   will-change: transform;
-  animation: redeven-flower-breathe 2.8s ease-in-out 0.65s infinite;
+  animation: redeven-flower-breathe 2.8s ease-in-out 1.35s infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

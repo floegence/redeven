@@ -813,9 +813,11 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
       >
         {/* Animated flower icon */}
         <div class="relative inline-flex items-center justify-center mb-6">
-          <div class="absolute -inset-2 rounded-full bg-primary/8 animate-[pulse_3s_ease-in-out_0.65s_infinite] motion-reduce:animate-none" />
-          <div class="relative w-16 h-16 rounded-full bg-gradient-to-br from-primary/15 to-amber-500/10 flex items-center justify-center shadow-sm redeven-flower-icon-breathe">
-            <FlowerIcon class="w-9 h-9 text-primary redeven-flower-icon-spin" />
+          <div class="absolute -inset-2 rounded-full bg-primary/8 animate-[pulse_3s_ease-in-out_1.35s_infinite] motion-reduce:animate-none" />
+          <div class="relative w-16 h-16 redeven-flower-icon-breathe">
+            <div class="w-full h-full rounded-full bg-gradient-to-br from-primary/15 to-amber-500/10 flex items-center justify-center shadow-sm redeven-flower-icon-spin">
+              <FlowerIcon class="w-9 h-9 text-primary" />
+            </div>
           </div>
         </div>
 
