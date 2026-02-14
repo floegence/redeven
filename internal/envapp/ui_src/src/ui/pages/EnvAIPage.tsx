@@ -1005,29 +1005,102 @@ export function EnvAIPage() {
     return [...messages, decorateMessageForTerminalExec(draft as Message)];
   };
 
-  const mergeTranscriptSnapshot = (existing: Message[], snapshot: Message[]): Message[] => {
+  const mergeToolCallCollapseState = (existing: Message, loaded: Message): Message => {
+    const prevBlocks = Array.isArray((existing as any)?.blocks) ? ((existing as any).blocks as any[]) : [];
+    const nextBlocks = Array.isArray((loaded as any)?.blocks) ? ((loaded as any).blocks as any[]) : [];
+    if (prevBlocks.length === 0 || nextBlocks.length === 0) return loaded;
+
+    const collapsedByToolId = new Map<string, boolean>();
+    for (const blk of prevBlocks) {
+      if (!blk || typeof blk !== 'object') continue;
+      if (String((blk as any)?.type ?? '') !== 'tool-call') continue;
+      const toolId = String((blk as any)?.toolId ?? '').trim();
+      if (!toolId) continue;
+      if ((blk as any).collapsed === undefined) continue;
+      collapsedByToolId.set(toolId, Boolean((blk as any).collapsed));
+    }
+    if (collapsedByToolId.size === 0) return loaded;
+
+    const mergedBlocks = nextBlocks.map((blk) => {
+      if (!blk || typeof blk !== 'object') return blk;
+      if (String((blk as any)?.type ?? '') !== 'tool-call') return blk;
+      const toolId = String((blk as any)?.toolId ?? '').trim();
+      if (!toolId) return blk;
+      if (!collapsedByToolId.has(toolId)) return blk;
+      return { ...(blk as any), collapsed: collapsedByToolId.get(toolId) };
+    });
+
+    return { ...(loaded as any), blocks: mergedBlocks } as any;
+  };
+
+  const mergeTranscriptSnapshot = (
+    existing: Message[],
+    snapshot: Message[],
+    opts?: { snapshotIsBaseline?: boolean },
+  ): Message[] => {
+    const normalizeID = (m: any): string => String(m?.id ?? '').trim();
+
     const existingByID = new Map<string, Message>();
+    const existingOrder: string[] = [];
     existing.forEach((m) => {
-      const id = String((m as any)?.id ?? '').trim();
-      if (!id) return;
+      const id = normalizeID(m);
+      if (!id || existingByID.has(id)) return;
       existingByID.set(id, m);
+      existingOrder.push(id);
     });
 
-    const seen = new Set<string>();
-    const out: Message[] = [];
-
+    const snapshotByID = new Map<string, Message>();
+    const snapshotOrder: string[] = [];
     snapshot.forEach((m) => {
-      const id = String((m as any)?.id ?? '').trim();
-      if (!id || seen.has(id)) return;
-      seen.add(id);
-      out.push(existingByID.get(id) ?? m);
+      const id = normalizeID(m);
+      if (!id || snapshotByID.has(id)) return;
+      snapshotByID.set(id, m);
+      snapshotOrder.push(id);
     });
 
-    existing.forEach((m) => {
-      const id = String((m as any)?.id ?? '').trim();
-      if (!id || seen.has(id)) return;
+    const out: Message[] = [];
+    const seen = new Set<string>();
+
+    const mergeOne = (id: string): Message | null => {
+      const next = snapshotByID.get(id);
+      if (!next) return null;
+      const prev = existingByID.get(id);
+      if (!prev) return next;
+      // Treat transcript snapshot as the source of truth for content; keep UI-only state like tool collapse.
+      return mergeToolCallCollapseState(prev, next);
+    };
+
+    if (opts?.snapshotIsBaseline) {
+      snapshotOrder.forEach((id) => {
+        const merged = mergeOne(id);
+        if (!merged) return;
+        out.push(merged);
+        seen.add(id);
+      });
+
+      // Keep any optimistic/local-only messages that are not yet persisted.
+      existingOrder.forEach((id) => {
+        if (seen.has(id)) return;
+        const m = existingByID.get(id);
+        if (!m) return;
+        out.push(m);
+        seen.add(id);
+      });
+      return out;
+    }
+
+    // Delta snapshot: keep existing ordering, update messages in-place, then append truly new messages.
+    existingOrder.forEach((id) => {
+      const merged = mergeOne(id);
+      out.push(merged ?? (existingByID.get(id) as Message));
       seen.add(id);
+    });
+    snapshotOrder.forEach((id) => {
+      if (seen.has(id)) return;
+      const m = snapshotByID.get(id);
+      if (!m) return;
       out.push(m);
+      seen.add(id);
     });
 
     return out;
@@ -1044,8 +1117,9 @@ export function EnvAIPage() {
     const reqNo = ++lastMessagesReq;
     setMessagesLoading(true);
     try {
-      const afterRowId = opts?.reset ? 0 : Math.max(0, transcriptCursorByThread.get(tid) ?? 0);
-      const resp = await rpc.ai.listMessages({ threadId: tid, afterRowId, limit: 500 });
+      const baseline = opts?.reset === true;
+      const afterRowId = baseline ? 0 : Math.max(0, transcriptCursorByThread.get(tid) ?? 0);
+      const resp = await rpc.ai.listMessages({ threadId: tid, afterRowId, tail: baseline, limit: 500 });
       if (reqNo !== lastMessagesReq) return;
 
       const items = Array.isArray((resp as any)?.messages) ? (resp as any).messages : [];
@@ -1064,7 +1138,7 @@ export function EnvAIPage() {
       }
 
       const existing = tid === String(ai.activeThreadId() ?? '').trim() ? (chat.messages() ?? []) : (messagesCacheByThread.get(tid) ?? []);
-      const merged = mergeTranscriptSnapshot(existing, loaded);
+      const merged = mergeTranscriptSnapshot(existing, loaded, { snapshotIsBaseline: baseline });
       messagesCacheByThread.set(tid, merged);
 
       if (tid === String(ai.activeThreadId() ?? '').trim()) {
@@ -1376,19 +1450,21 @@ export function EnvAIPage() {
       return;
     }
 
-    if (lastSeenRunning && !running) {
-      if (sendPending()) {
-        deferredReloadTid = tid;
-      } else {
+      if (lastSeenRunning && !running) {
+        if (sendPending()) {
+          deferredReloadTid = tid;
+        } else {
+          deferredReloadTid = '';
+          // Hard refresh from persisted transcript so dropped realtime frames/tool blocks self-heal.
+          void loadThreadMessages(tid, { reset: true });
+        }
+        void loadThreadTodos(tid, { silent: true, notifyError: false });
+      } else if (!running && !sendPending() && deferredReloadTid === tid) {
         deferredReloadTid = '';
-        void loadThreadMessages(tid);
+        // Hard refresh from persisted transcript so dropped realtime frames/tool blocks self-heal.
+        void loadThreadMessages(tid, { reset: true });
+        void loadThreadTodos(tid, { silent: true, notifyError: false });
       }
-      void loadThreadTodos(tid, { silent: true, notifyError: false });
-    } else if (!running && !sendPending() && deferredReloadTid === tid) {
-      deferredReloadTid = '';
-      void loadThreadMessages(tid);
-      void loadThreadTodos(tid, { silent: true, notifyError: false });
-    }
 
     lastSeenRunningTid = tid;
     lastSeenRunning = running;

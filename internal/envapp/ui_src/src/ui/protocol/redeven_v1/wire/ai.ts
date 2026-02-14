@@ -72,6 +72,7 @@ export type wire_ai_event_notify = {
 export type wire_ai_list_messages_req = {
   thread_id: string;
   after_row_id?: number;
+  tail?: boolean;
   limit?: number;
 };
 

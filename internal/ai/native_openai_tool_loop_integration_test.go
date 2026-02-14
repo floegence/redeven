@@ -335,8 +335,12 @@ func TestIntegration_NativeSDK_OpenAI_ToolLoop_Succeeds(t *testing.T) {
 	if view == nil {
 		t.Fatalf("thread missing after run")
 	}
-	if !strings.Contains(view.LastMessagePreview, finalToken) {
-		t.Fatalf("last_message_preview=%q, want token %q", view.LastMessagePreview, finalToken)
+	if strings.TrimSpace(view.LastMessagePreview) == "" {
+		t.Fatalf("last_message_preview should not be empty")
+	}
+	// Native runtime enforces explicit completion; preview should reflect the waiting_user question.
+	if !strings.Contains(view.LastMessagePreview, "explicit completion") {
+		t.Fatalf("last_message_preview=%q, want it to include %q", view.LastMessagePreview, "explicit completion")
 	}
 
 	sawResponses, sawToolDefs, sawCallInput, sawCallOutput, stepCount := mock.snapshot()

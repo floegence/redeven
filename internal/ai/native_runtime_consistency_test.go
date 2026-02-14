@@ -839,8 +839,8 @@ func TestIntegration_NativeSDK_OpenAI_MissingExplicitCompletionDoesNotPolluteAss
 			t.Fatalf("ask_user.waiting source=%q, want %q", source, "missing_explicit_completion")
 		}
 		appended, _ := payload["appended_to_message"].(bool)
-		if appended {
-			t.Fatalf("ask_user.waiting appended_to_message should be false when assistant already has text")
+		if !appended {
+			t.Fatalf("ask_user.waiting appended_to_message should be true so the waiting_user question is visible in the assistant transcript")
 		}
 		foundAskUserWaiting = true
 		break

@@ -8,6 +8,7 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
+	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -51,6 +52,7 @@ type aiSubscribeResp struct {
 type aiListMessagesReq struct {
 	ThreadID    string `json:"thread_id"`
 	AfterRowID  int64  `json:"after_row_id,omitempty"`
+	Tail        bool   `json:"tail,omitempty"`
 	Limit       int    `json:"limit,omitempty"`
 	IncludeBody bool   `json:"include_body,omitempty"`
 }
@@ -195,9 +197,30 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 			limit = 500
 		}
 
-		msgs, nextAfter, hasMore, err := db.ListMessagesAfter(ctx, strings.TrimSpace(meta.EndpointID), threadID, limit, req.AfterRowID)
-		if err != nil {
-			return nil, &rpc.Error{Code: 400, Message: err.Error()}
+		endpointID := strings.TrimSpace(meta.EndpointID)
+		var msgs []threadstore.Message
+		var nextAfter int64
+		var hasMore bool
+
+		if req.Tail {
+			// Tail mode: return the latest messages window (ASC order) so the client can
+			// anchor its cursor near the end even when realtime frames were dropped.
+			var nextBefore int64
+			var err error
+			msgs, nextBefore, hasMore, err = db.ListMessages(ctx, endpointID, threadID, limit, 0)
+			_ = nextBefore // not used by the RPC client yet
+			if err != nil {
+				return nil, &rpc.Error{Code: 400, Message: err.Error()}
+			}
+			if len(msgs) > 0 {
+				nextAfter = msgs[len(msgs)-1].ID
+			}
+		} else {
+			var err error
+			msgs, nextAfter, hasMore, err = db.ListMessagesAfter(ctx, endpointID, threadID, limit, req.AfterRowID)
+			if err != nil {
+				return nil, &rpc.Error{Code: 400, Message: err.Error()}
+			}
 		}
 
 		out := &aiListMessagesResp{

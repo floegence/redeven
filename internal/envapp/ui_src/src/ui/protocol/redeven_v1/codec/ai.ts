@@ -172,6 +172,7 @@ export function toWireAIListMessagesRequest(req: AIListMessagesRequest): wire_ai
   return {
     thread_id: String(req.threadId ?? '').trim(),
     after_row_id: typeof req.afterRowId === 'number' && Number.isFinite(req.afterRowId) && req.afterRowId > 0 ? Math.floor(req.afterRowId) : undefined,
+    tail: req.tail === true ? true : undefined,
     limit: typeof req.limit === 'number' && Number.isFinite(req.limit) && req.limit > 0 ? Math.floor(req.limit) : undefined,
   };
 }

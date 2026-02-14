@@ -1027,6 +1027,28 @@ func (r *run) hasNonEmptyAssistantText() bool {
 	return false
 }
 
+func (r *run) assistantTextContains(substr string) bool {
+	if r == nil {
+		return false
+	}
+	substr = strings.TrimSpace(substr)
+	if substr == "" {
+		return false
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	for _, blk := range r.assistantBlocks {
+		b, ok := blk.(*persistedMarkdownBlock)
+		if !ok || b == nil {
+			continue
+		}
+		if strings.Contains(b.Content, substr) {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *run) sessionMetaForTool() (*session.Meta, error) {
 	if r == nil {
 		return nil, errors.New("nil run")

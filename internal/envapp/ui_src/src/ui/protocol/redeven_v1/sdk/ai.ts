@@ -52,6 +52,8 @@ export type AITranscriptMessageItem = {
 export type AIListMessagesRequest = {
   threadId: string;
   afterRowId?: number;
+  // When true, return the latest messages (tail) instead of incrementally listing after afterRowId.
+  tail?: boolean;
   limit?: number;
 };
 

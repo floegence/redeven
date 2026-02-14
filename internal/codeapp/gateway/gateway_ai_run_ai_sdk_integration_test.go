@@ -245,8 +245,12 @@ func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 		if !resp.OK {
 			t.Fatalf("unexpected get thread response: %s", rr.Body.String())
 		}
-		if !strings.Contains(resp.Data.Thread.LastMessagePreview, token) {
-			t.Fatalf("last_message_preview=%q, want token %q", resp.Data.Thread.LastMessagePreview, token)
+		if strings.TrimSpace(resp.Data.Thread.LastMessagePreview) == "" {
+			t.Fatalf("last_message_preview should not be empty")
+		}
+		// Native runtime enforces explicit completion; preview should reflect the waiting_user question.
+		if !strings.Contains(resp.Data.Thread.LastMessagePreview, "explicit completion") {
+			t.Fatalf("last_message_preview=%q, want it to include %q", resp.Data.Thread.LastMessagePreview, "explicit completion")
 		}
 	}
 }

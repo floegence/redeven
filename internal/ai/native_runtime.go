@@ -1261,7 +1261,9 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		}
 		finalReason := finalizationReasonForAskUserSource(source)
 		r.emitAskUserToolBlock(question, source)
-		appendToMessage := strings.TrimSpace(source) == "model_signal" || !r.hasNonEmptyAssistantText()
+		// Always make the waiting_user question visible as assistant text, unless the model
+		// already included the exact question in its output (avoid duplication).
+		appendToMessage := !r.assistantTextContains(question)
 		if appendToMessage {
 			prefix := ""
 			if r.hasNonEmptyAssistantText() {
