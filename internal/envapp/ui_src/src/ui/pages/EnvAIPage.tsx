@@ -1116,6 +1116,10 @@ export function EnvAIPage() {
   };
 
   const activeThreadRunning = createMemo(() => ai.isThreadRunning(ai.activeThreadId()));
+  const activeThreadWaitingUser = createMemo(() => {
+    const status = String(ai.activeThread()?.run_status ?? '').trim().toLowerCase();
+    return status === 'waiting_user';
+  });
   const permissionReady = () => env.env.state === 'ready';
   const canRWX = createMemo(() => hasRWXPermissions(env.env()));
   const canRWXReady = createMemo(() => permissionReady() && canRWX());
@@ -1142,6 +1146,9 @@ export function EnvAIPage() {
     }
     if (!canRWX()) {
       return 'Read/write/execute permission required to send messages.';
+    }
+    if (activeThreadWaitingUser()) {
+      return 'Flower is waiting for your reply. Continue with details or pick the next action.';
     }
     return 'Type a message...';
   });

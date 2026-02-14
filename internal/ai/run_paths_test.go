@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -181,5 +182,82 @@ func TestPrependRedevenBinToEnv_AddsPath(t *testing.T) {
 	wantPrefix := filepath.Join(home, ".redeven", "bin")
 	if !strings.HasPrefix(pathVal, wantPrefix+string(os.PathListSeparator)) {
 		t.Fatalf("PATH=%q, want prefix %q", pathVal, wantPrefix)
+	}
+}
+
+func TestSnapshotAssistantMessageJSON_UsesAskUserQuestionWhenMarkdownEmpty(t *testing.T) {
+	t.Parallel()
+
+	const question = "Please choose one direction so I can continue."
+	r := &run{
+		messageID:                "msg_ask_user",
+		assistantCreatedAtUnixMs: 1700000000000,
+		assistantBlocks: []any{
+			ToolCallBlock{
+				Type:     "tool-call",
+				ToolName: "ask_user",
+				ToolID:   "tool_ask_user_waiting",
+				Args: map[string]any{
+					"question": question,
+				},
+				Status: ToolCallStatusSuccess,
+				Result: map[string]any{
+					"question":     question,
+					"source":       "model_signal",
+					"waiting_user": true,
+				},
+			},
+		},
+	}
+
+	rawJSON, assistantText, assistantAt, err := r.snapshotAssistantMessageJSON()
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
+	}
+	if assistantText != question {
+		t.Fatalf("assistantText=%q, want %q", assistantText, question)
+	}
+	if assistantAt != 1700000000000 {
+		t.Fatalf("assistantAt=%d, want %d", assistantAt, 1700000000000)
+	}
+	if !strings.Contains(rawJSON, `"toolName":"ask_user"`) {
+		t.Fatalf("assistant JSON missing ask_user block: %s", rawJSON)
+	}
+}
+
+func TestSnapshotAssistantMessageJSON_PrefersMarkdownOverAskUserQuestion(t *testing.T) {
+	t.Parallel()
+
+	r := &run{
+		messageID:                "msg_markdown_first",
+		assistantCreatedAtUnixMs: 1700000000001,
+		assistantBlocks: []any{
+			&persistedMarkdownBlock{Type: "markdown", Content: "completed summary"},
+			map[string]any{
+				"type":     "tool-call",
+				"toolName": "ask_user",
+				"toolId":   "tool_ask_user_waiting",
+				"args": map[string]any{
+					"question": "Please provide more details",
+				},
+			},
+		},
+	}
+
+	rawJSON, assistantText, _, err := r.snapshotAssistantMessageJSON()
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
+	}
+	if assistantText != "completed summary" {
+		t.Fatalf("assistantText=%q, want markdown content", assistantText)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(rawJSON), &parsed); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	role, _ := parsed["role"].(string)
+	if strings.TrimSpace(role) != "assistant" {
+		t.Fatalf("role=%v, want assistant", parsed["role"])
 	}
 }

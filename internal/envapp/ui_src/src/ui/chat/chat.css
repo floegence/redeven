@@ -421,6 +421,9 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
 .chat-tool-section:last-child { border-bottom: none; }
 .chat-tool-section-label { font-size: 0.6875rem; font-weight: 600; color: var(--muted-foreground); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
 .chat-tool-args, .chat-tool-result { font-size: 0.75rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; background-color: color-mix(in srgb, var(--muted) 30%, transparent); border-radius: 0.375rem; padding: 0.625rem 0.75rem; overflow-x: auto; max-height: 12rem; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; }
+.chat-tool-ask-user-question { font-size: 0.8125rem; line-height: 1.45; white-space: pre-wrap; }
+.chat-tool-ask-user-hint { margin-top: 0.5rem; font-size: 0.6875rem; color: var(--muted-foreground); }
+.chat-tool-ask-user-source { margin-top: 0.35rem; font-size: 0.6875rem; color: var(--muted-foreground); }
 .chat-tool-error-section { background-color: rgb(239 68 68 / 0.05); }
 .chat-tool-error { font-size: 0.6875rem; color: rgb(239 68 68); }
 .chat-tool-children { padding: 0.75rem 0.875rem; border-top: 1px solid var(--border); background-color: color-mix(in srgb, var(--muted) 20%, transparent); }

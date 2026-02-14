@@ -498,9 +498,8 @@ func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT5_Succeeds(t *testing.T
 	if strings.TrimSpace(view.LastMessagePreview) == "" {
 		t.Fatalf("last_message_preview should not be empty")
 	}
-	// Native runtime enforces explicit completion; preview should reflect the waiting_user question.
-	if !strings.Contains(view.LastMessagePreview, "explicit completion") {
-		t.Fatalf("last_message_preview=%q, want it to include %q", view.LastMessagePreview, "explicit completion")
+	if !strings.Contains(view.LastMessagePreview, token) {
+		t.Fatalf("last_message_preview=%q, want it to include %q", view.LastMessagePreview, token)
 	}
 
 	if !mock.didSeeResponses() {
@@ -608,9 +607,8 @@ func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testing.
 	if strings.TrimSpace(view.LastMessagePreview) == "" {
 		t.Fatalf("last_message_preview should not be empty")
 	}
-	// Native runtime enforces explicit completion; preview should reflect the waiting_user question.
-	if !strings.Contains(view.LastMessagePreview, "explicit completion") {
-		t.Fatalf("last_message_preview=%q, want it to include %q", view.LastMessagePreview, "explicit completion")
+	if !strings.Contains(view.LastMessagePreview, token) {
+		t.Fatalf("last_message_preview=%q, want it to include %q", view.LastMessagePreview, token)
 	}
 
 	if !mock.didSeeResponses() {

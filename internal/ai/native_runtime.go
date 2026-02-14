@@ -1262,20 +1262,10 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		}
 		finalReason := finalizationReasonForAskUserSource(source)
 		r.emitAskUserToolBlock(question, source)
-		// Always make the waiting_user question visible as assistant text, unless the model
-		// already included the exact question in its output (avoid duplication).
-		appendToMessage := !r.assistantTextContains(question)
-		if appendToMessage {
-			prefix := ""
-			if r.hasNonEmptyAssistantText() {
-				prefix = "\n\n"
-			}
-			_ = r.appendTextDelta(prefix + question)
-		}
 		r.persistRunEvent("ask_user.waiting", RealtimeStreamKindLifecycle, map[string]any{
 			"question":            question,
 			"source":              strings.TrimSpace(source),
-			"appended_to_message": appendToMessage,
+			"appended_to_message": false,
 			"finalization_reason": finalReason,
 			"todo_closeout": map[string]any{
 				"updated":          closeout.Updated,

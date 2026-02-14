@@ -1176,28 +1176,6 @@ func (r *run) hasNonEmptyAssistantText() bool {
 	return false
 }
 
-func (r *run) assistantTextContains(substr string) bool {
-	if r == nil {
-		return false
-	}
-	substr = strings.TrimSpace(substr)
-	if substr == "" {
-		return false
-	}
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	for _, blk := range r.assistantBlocks {
-		b, ok := blk.(*persistedMarkdownBlock)
-		if !ok || b == nil {
-			continue
-		}
-		if strings.Contains(b.Content, substr) {
-			return true
-		}
-	}
-	return false
-}
-
 func (r *run) sessionMetaForTool() (*session.Meta, error) {
 	if r == nil {
 		return nil, errors.New("nil run")
@@ -1859,8 +1837,14 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 	}
 
 	// Text for history: concatenate markdown blocks.
-	var sb strings.Builder
+	var (
+		sb              strings.Builder
+		askUserQuestion string
+	)
 	for _, blk := range blocks {
+		if askUserQuestion == "" {
+			askUserQuestion = extractAskUserQuestionFromBlock(blk)
+		}
 		bm, ok := blk.(*persistedMarkdownBlock)
 		if !ok || bm == nil {
 			continue
@@ -1874,7 +1858,59 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 		sb.WriteString(bm.Content)
 	}
 
-	return string(b), strings.TrimSpace(sb.String()), assistantAt, nil
+	assistantText := strings.TrimSpace(sb.String())
+	if assistantText == "" {
+		assistantText = askUserQuestion
+	}
+	return string(b), assistantText, assistantAt, nil
+}
+
+func extractAskUserQuestionFromBlock(block any) string {
+	switch v := block.(type) {
+	case ToolCallBlock:
+		if strings.TrimSpace(v.ToolName) != "ask_user" {
+			return ""
+		}
+		if q := extractQuestionFromAny(v.Args); q != "" {
+			return q
+		}
+		return extractQuestionFromAny(v.Result)
+	case *ToolCallBlock:
+		if v == nil || strings.TrimSpace(v.ToolName) != "ask_user" {
+			return ""
+		}
+		if q := extractQuestionFromAny(v.Args); q != "" {
+			return q
+		}
+		return extractQuestionFromAny(v.Result)
+	case map[string]any:
+		typ, _ := v["type"].(string)
+		if strings.TrimSpace(typ) != "tool-call" {
+			return ""
+		}
+		toolName, _ := v["toolName"].(string)
+		if strings.TrimSpace(toolName) != "ask_user" {
+			return ""
+		}
+		if q := extractQuestionFromAny(v["args"]); q != "" {
+			return q
+		}
+		return extractQuestionFromAny(v["result"])
+	default:
+		return ""
+	}
+}
+
+func extractQuestionFromAny(value any) string {
+	switch v := value.(type) {
+	case map[string]any:
+		question, _ := v["question"].(string)
+		return strings.TrimSpace(question)
+	case map[string]string:
+		return strings.TrimSpace(v["question"])
+	default:
+		return ""
+	}
 }
 
 func (r *run) setToolCollapsed(toolID string, collapsed bool) bool {

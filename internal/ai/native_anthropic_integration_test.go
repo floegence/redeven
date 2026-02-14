@@ -231,10 +231,8 @@ func TestIntegration_NativeSDK_Anthropic_Stream_Succeeds(t *testing.T) {
 	if strings.TrimSpace(view.LastMessagePreview) == "" {
 		t.Fatalf("last_message_preview should not be empty")
 	}
-	// The native runtime enforces explicit completion, so it may end in waiting_user and
-	// append a deterministic question to the assistant transcript. Preview should reflect that.
-	if !strings.Contains(view.LastMessagePreview, "explicit completion") {
-		t.Fatalf("last_message_preview=%q, want it to include %q", view.LastMessagePreview, "explicit completion")
+	if !strings.Contains(view.LastMessagePreview, token) {
+		t.Fatalf("last_message_preview=%q, want it to include %q", view.LastMessagePreview, token)
 	}
 	if !mock.didSeeMessages() {
 		t.Fatalf("expected Anthropic Messages API call (/messages)")

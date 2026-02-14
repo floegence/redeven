@@ -1,11 +1,13 @@
 // ToolCallBlock — tool call display with approval workflow and collapsible body.
 
-import { createSignal, Show, For } from 'solid-js';
+import { Show, For } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { useChatContext } from '../ChatProvider';
 import type { ToolCallBlock as ToolCallBlockType } from '../types';
 import { BlockRenderer } from './BlockRenderer';
+
+const ASK_USER_TOOL_NAME = 'ask_user';
 
 export interface ToolCallBlockProps {
   block: ToolCallBlockType;
@@ -128,6 +130,56 @@ function summarizeArgs(args: Record<string, unknown>): string {
   return text.slice(0, 47) + '...';
 }
 
+type AskUserDisplay = {
+  question: string;
+  source: string;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function asTrimmedString(value: unknown): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value.trim();
+}
+
+function buildAskUserDisplay(block: ToolCallBlockType): AskUserDisplay | null {
+  if (String(block.toolName ?? '').trim() !== ASK_USER_TOOL_NAME) {
+    return null;
+  }
+  const args = asRecord(block.args);
+  const result = asRecord(block.result);
+  const question = asTrimmedString(args?.question) || asTrimmedString(result?.question);
+  if (!question) {
+    return null;
+  }
+  const source = asTrimmedString(result?.source);
+  return { question, source };
+}
+
+function humanizeAskUserSource(source: string): string {
+  const normalized = String(source ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return '';
+  }
+  return normalized
+    .split('_')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+}
+
+function summarizeAskUserQuestion(question: string): string {
+  if (question.length <= 50) return question;
+  return question.slice(0, 47) + '...';
+}
+
 /**
  * Renders a tool call block with collapsible body, status indicators,
  * and an approval workflow for tools that require user consent.
@@ -152,6 +204,14 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
   const handleReject = (e: MouseEvent) => {
     e.stopPropagation();
     ctx.approveToolCall(props.messageId, props.block.toolId, false);
+  };
+  const askUserDisplay = () => buildAskUserDisplay(props.block);
+  const collapsedSummary = () => {
+    const askUser = askUserDisplay();
+    if (askUser) {
+      return summarizeAskUserQuestion(askUser.question);
+    }
+    return summarizeArgs(props.block.args);
   };
 
   return (
@@ -189,29 +249,46 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
 
         {/* Collapsed summary */}
         <Show when={isCollapsed()}>
-          <span class="chat-tool-summary">{summarizeArgs(props.block.args)}</span>
+          <span class="chat-tool-summary">{collapsedSummary()}</span>
         </Show>
       </div>
 
       {/* Expandable body */}
       <Show when={!isCollapsed()}>
         <div class="chat-tool-call-body">
-          {/* Arguments section */}
-          <div class="chat-tool-section">
-            <div class="chat-tool-section-label">Arguments</div>
-            <pre class="chat-tool-args">
-              {JSON.stringify(props.block.args, null, 2)}
-            </pre>
-          </div>
+          <Show when={askUserDisplay()} fallback={
+            <>
+              {/* Arguments section */}
+              <div class="chat-tool-section">
+                <div class="chat-tool-section-label">Arguments</div>
+                <pre class="chat-tool-args">
+                  {JSON.stringify(props.block.args, null, 2)}
+                </pre>
+              </div>
 
-          {/* Result section */}
-          <Show when={props.block.result !== undefined}>
-            <div class="chat-tool-section">
-              <div class="chat-tool-section-label">Result</div>
-              <pre class="chat-tool-result">
-                {JSON.stringify(props.block.result, null, 2)}
-              </pre>
-            </div>
+              {/* Result section */}
+              <Show when={props.block.result !== undefined}>
+                <div class="chat-tool-section">
+                  <div class="chat-tool-section-label">Result</div>
+                  <pre class="chat-tool-result">
+                    {JSON.stringify(props.block.result, null, 2)}
+                  </pre>
+                </div>
+              </Show>
+            </>
+          }>
+            {(askUser) => (
+              <div class="chat-tool-section">
+                <div class="chat-tool-section-label">Question</div>
+                <div class="chat-tool-ask-user-question">{askUser().question}</div>
+                <div class="chat-tool-ask-user-hint">Flower is waiting for your reply.</div>
+                <Show when={askUser().source}>
+                  <div class="chat-tool-ask-user-source">
+                    Source: {humanizeAskUserSource(askUser().source)}
+                  </div>
+                </Show>
+              </div>
+            )}
           </Show>
 
           {/* Error section */}
@@ -226,7 +303,7 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
           <Show when={props.block.children && props.block.children.length > 0}>
             <div class="chat-tool-children">
               <For each={props.block.children}>
-                {(child, i) => (
+                {(child) => (
                   <BlockRenderer
                     block={child}
                     messageId={props.messageId}

@@ -821,6 +821,9 @@ func TestIntegration_NativeSDK_OpenAI_MissingExplicitCompletionDoesNotPolluteAss
 	if !strings.Contains(body, fallbackText) {
 		t.Fatalf("stream output missing fallback question text %q, body=%q", fallbackText, body)
 	}
+	if strings.Contains(body, `"delta":"I still do not have explicit completion`) {
+		t.Fatalf("fallback question should be emitted by ask_user tool block only, body=%q", body)
+	}
 
 	events, err := svc.ListRunEvents(ctx, &meta, runID, 2000)
 	if err != nil {
@@ -839,8 +842,8 @@ func TestIntegration_NativeSDK_OpenAI_MissingExplicitCompletionDoesNotPolluteAss
 			t.Fatalf("ask_user.waiting source=%q, want %q", source, "missing_explicit_completion")
 		}
 		appended, _ := payload["appended_to_message"].(bool)
-		if !appended {
-			t.Fatalf("ask_user.waiting appended_to_message should be true so the waiting_user question is visible in the assistant transcript")
+		if appended {
+			t.Fatalf("ask_user.waiting appended_to_message should be false; waiting_user question is rendered from ask_user tool block")
 		}
 		foundAskUserWaiting = true
 		break

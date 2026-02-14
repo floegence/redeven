@@ -338,9 +338,8 @@ func TestIntegration_NativeSDK_OpenAI_ToolLoop_Succeeds(t *testing.T) {
 	if strings.TrimSpace(view.LastMessagePreview) == "" {
 		t.Fatalf("last_message_preview should not be empty")
 	}
-	// Native runtime enforces explicit completion; preview should reflect the waiting_user question.
-	if !strings.Contains(view.LastMessagePreview, "explicit completion") {
-		t.Fatalf("last_message_preview=%q, want it to include %q", view.LastMessagePreview, "explicit completion")
+	if !strings.Contains(view.LastMessagePreview, finalToken) {
+		t.Fatalf("last_message_preview=%q, want it to include %q", view.LastMessagePreview, finalToken)
 	}
 
 	sawResponses, sawToolDefs, sawCallInput, sawCallOutput, stepCount := mock.snapshot()
