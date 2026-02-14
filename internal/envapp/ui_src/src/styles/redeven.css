@@ -100,18 +100,41 @@
     transform: none !important;
   }
 
+  .chat-message-avatar-streaming .chat-message-avatar-image-wrapper,
   .chat-message-avatar-streaming .chat-message-avatar-image {
     animation: none !important;
+    transform: none !important;
   }
 }
 
-/* Flower avatar breathe animation while streaming */
+/* Flower avatar animation while streaming: stepped spin + breathing pulse. */
+@keyframes redeven-flower-avatar-step-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes redeven-flower-avatar-breathe {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.08); opacity: 0.85; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.84;
+  }
+}
+
+.chat-message-avatar-streaming .chat-message-avatar-image-wrapper {
+  animation: redeven-flower-avatar-step-spin 1.2s steps(10, end) infinite;
+  will-change: transform;
 }
 
 .chat-message-avatar-streaming .chat-message-avatar-image {
-  animation: redeven-flower-avatar-breathe 2s ease-in-out infinite;
+  animation: redeven-flower-avatar-breathe 1.9s ease-in-out infinite;
   will-change: transform, opacity;
 }

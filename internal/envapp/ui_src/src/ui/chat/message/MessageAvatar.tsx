@@ -29,7 +29,9 @@ export const MessageAvatar: Component<MessageAvatarProps> = (props) => {
           </span>
         }
       >
-        <img class="chat-message-avatar-image" src={props.src!} alt={props.role} />
+        <span class="chat-message-avatar-image-wrapper">
+          <img class="chat-message-avatar-image" src={props.src!} alt={props.role} />
+        </span>
       </Show>
     </div>
   );

@@ -26,6 +26,25 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
     return props.message.role === 'user' ? cfg.userAvatar : cfg.assistantAvatar;
   };
 
+  const isActiveAssistantStreaming = () => {
+    if (props.message.role !== 'assistant' || props.message.status !== 'streaming') return false;
+
+    const currentStreamingId = ctx.streamingMessageId();
+    if (currentStreamingId) {
+      return currentStreamingId === props.message.id;
+    }
+
+    // Fallback for snapshots that can restore a streaming message before stream frames arrive.
+    const allMessages = ctx.messages();
+    for (let i = allMessages.length - 1; i >= 0; i -= 1) {
+      const candidate = allMessages[i];
+      if (candidate.role === 'assistant' && candidate.status === 'streaming') {
+        return candidate.id === props.message.id;
+      }
+    }
+    return false;
+  };
+
   return (
     <div
       class={cn(
@@ -39,7 +58,7 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
         <MessageAvatar
           role={props.message.role}
           src={avatarSrc()}
-          isStreaming={props.message.status === 'streaming'}
+          isStreaming={isActiveAssistantStreaming()}
         />
       </Show>
 
