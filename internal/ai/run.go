@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -2056,14 +2057,40 @@ func formatSourcesMarkdown(sources []SourceRef) string {
 	return strings.TrimSpace(sb.String())
 }
 
+func normalizeWebURL(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", false
+	}
+	// Guard against accidental non-URL "sources" like command output.
+	if strings.ContainsAny(raw, " \t\r\n") {
+		return "", false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", false
+	}
+	scheme := strings.ToLower(strings.TrimSpace(u.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return "", false
+	}
+	if strings.TrimSpace(u.Host) == "" {
+		return "", false
+	}
+	return u.String(), true
+}
+
 func (r *run) addWebSource(title string, rawURL string) {
 	if r == nil {
 		return
 	}
-	url := strings.TrimSpace(rawURL)
-	if url == "" {
+	url, ok := normalizeWebURL(rawURL)
+	if !ok {
 		return
 	}
+	title = strings.TrimSpace(title)
+	title = strings.ReplaceAll(title, "\n", " ")
+	title = strings.ReplaceAll(title, "\r", " ")
 	title = strings.TrimSpace(title)
 	if title == "" {
 		title = url

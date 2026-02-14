@@ -16,6 +16,17 @@ const SOURCES_TOOL_NAME = 'sources';
 type AnyRecord = Record<string, unknown>;
 type ChatToolCallBlock = Extract<MessageBlock, { type: 'tool-call' }>;
 
+function isWebURL(raw: string): boolean {
+  const input = String(raw ?? '').trim();
+  if (!input) return false;
+  try {
+    const u = new URL(input);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 // ---- Public API ----
 
 export function decorateMessageBlocks(message: Message): Message {
@@ -172,15 +183,18 @@ function buildSourcesBlock(block: ChatToolCallBlock): SourcesBlockType | null {
   const result = asRecord(block.result);
   const rawSources = Array.isArray(result.sources) ? result.sources : [];
   const sources: SourcesBlockType['sources'] = [];
+  const seen = new Set<string>();
 
   for (const entry of rawSources) {
     if (!entry || typeof entry !== 'object') continue;
     const rec = entry as Record<string, unknown>;
-    const title = String(rec.title ?? '').trim();
     const url = String(rec.url ?? '').trim();
-    if (url) {
-      sources.push({ title: title || url, url });
-    }
+    if (!isWebURL(url)) continue;
+    if (seen.has(url)) continue;
+    seen.add(url);
+
+    const title = String(rec.title ?? '').replace(/\s+/g, ' ').trim();
+    sources.push({ title: title || url, url });
   }
 
   if (sources.length === 0) {

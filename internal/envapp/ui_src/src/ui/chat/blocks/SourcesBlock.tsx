@@ -1,5 +1,5 @@
-// SourcesBlock — refined grid display of web search source links with favicon,
-// numbered badges, and collapsible overflow.
+// SourcesBlock — audit-friendly display of web source links (title + URL),
+// with copy-to-clipboard and collapsible overflow.
 
 import { For, Show, createSignal } from 'solid-js';
 import type { Component } from 'solid-js';
@@ -21,13 +21,23 @@ function extractDomain(url: string): string {
   }
 }
 
-/** Build a Google Favicon API URL for the given domain. */
-function faviconUrl(domain: string): string {
-  return `https://www.google.com/s2/favicons?sz=32&domain=${encodeURIComponent(domain)}`;
+function normalizeTitle(title: string, url: string): string {
+  const cleaned = String(title ?? '').replace(/\s+/g, ' ').trim();
+  return cleaned || url;
+}
+
+async function copyToClipboard(text: string): Promise<void> {
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // ignore
+  }
 }
 
 export const SourcesBlock: Component<SourcesBlockProps> = (props) => {
   const [expanded, setExpanded] = createSignal(false);
+  const [copiedURL, setCopiedURL] = createSignal<string | null>(null);
 
   const visibleSources = () => {
     if (expanded() || props.sources.length <= VISIBLE_LIMIT) {
@@ -66,37 +76,46 @@ export const SourcesBlock: Component<SourcesBlockProps> = (props) => {
         <For each={visibleSources()}>
           {(src, index) => {
             const domain = extractDomain(src.url);
-            const [faviconError, setFaviconError] = createSignal(false);
+            const title = normalizeTitle(src.title, src.url);
+            const copied = () => copiedURL() === src.url;
+
+            const doCopy = async () => {
+              await copyToClipboard(src.url);
+              setCopiedURL(src.url);
+              setTimeout(() => {
+                setCopiedURL((prev) => (prev === src.url ? null : prev));
+              }, 2000);
+            };
 
             return (
-              <a
-                class="chat-sources-item"
-                href={src.url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <div class="chat-sources-item">
                 <div class="chat-sources-badge">
-                  <Show
-                    when={!faviconError()}
-                    fallback={<span class="chat-sources-badge-number">{index() + 1}</span>}
-                  >
-                    <img
-                      class="chat-sources-favicon"
-                      src={faviconUrl(domain)}
-                      alt=""
-                      width="16"
-                      height="16"
-                      loading="lazy"
-                      onError={() => setFaviconError(true)}
-                    />
-                  </Show>
-                  <span class="chat-sources-index">{index() + 1}</span>
+                  <span class="chat-sources-badge-number">{index() + 1}</span>
                 </div>
-                <div class="chat-sources-item-text">
-                  <span class="chat-sources-title">{src.title}</span>
+
+                <a
+                  class="chat-sources-link"
+                  href={src.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span class="chat-sources-title">{title}</span>
+                  <span class="chat-sources-url">{src.url}</span>
                   <span class="chat-sources-domain">{domain}</span>
-                </div>
-              </a>
+                </a>
+
+                <button
+                  class="chat-sources-action-btn"
+                  type="button"
+                  onClick={doCopy}
+                  aria-label={copied() ? 'Copied' : 'Copy URL'}
+                  title={copied() ? 'Copied!' : 'Copy URL'}
+                >
+                  <Show when={copied()} fallback={<CopyIcon />}>
+                    <CheckIcon />
+                  </Show>
+                </button>
+              </div>
             );
           }}
         </For>
@@ -130,3 +149,38 @@ export const SourcesBlock: Component<SourcesBlockProps> = (props) => {
     </div>
   );
 };
+
+// -- Inline SVG icons --
+
+const CopyIcon: Component = () => (
+  <svg
+    class="chat-sources-action-icon"
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+);
+
+const CheckIcon: Component = () => (
+  <svg
+    class="chat-sources-action-icon"
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
