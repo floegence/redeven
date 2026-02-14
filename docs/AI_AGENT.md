@@ -87,6 +87,12 @@ Built-in tools:
 - `terminal.exec`
 - `apply_patch`
 - `write_todos`
+- `web.search` (optional; controlled by `ai.web_search_provider`)
+
+Online research notes:
+
+- Prefer direct requests to authoritative sources via `terminal.exec` + `curl` when you already know the right URL.
+- Use `web.search` (or provider built-in web search) only for discovery; always open and validate the underlying pages before relying on them.
 
 Hard guardrails are controlled by `ai.execution_policy`:
 
