@@ -1,6 +1,6 @@
-# AI Agent (Optional)
+# Flower (Optional)
 
-Redeven Agent can optionally enable an **AI Agent** feature inside the Env App UI.
+Redeven Agent can optionally enable **Flower**, an on-device AI assistant inside the Env App UI.
 
 High-level design:
 
@@ -18,7 +18,7 @@ High-level design:
 
 ## Configuration
 
-Enable the feature by adding an `ai` section to the agent config file (default: `~/.redeven/config.json`).
+Enable Flower by adding an `ai` section to the agent config file (default: `~/.redeven/config.json`).
 
 Notes:
 
@@ -30,7 +30,7 @@ Notes:
 API keys:
 
 - Keys are stored in `~/.redeven/secrets.json` (chmod `0600`) and never returned in plaintext.
-- You can configure keys from the Env App UI: Settings → AI → Provider → API key.
+- You can configure keys from the Env App UI: Settings → Flower → Provider → API key.
 - Multiple provider keys can be stored at the same time (keyed by `providers[].id`).
 - At runtime, Go resolves the provider key from local secrets per run and injects it directly into the provider SDK client.
 

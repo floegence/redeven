@@ -1,7 +1,6 @@
 import { For, Index, Show, createEffect, createMemo, createResource, createSignal, onCleanup, type JSX } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import {
-  Bot,
   ChevronRight,
   Code,
   Database,
@@ -19,6 +18,7 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { getAgentLatestVersion, getEnvironment } from '../services/controlplaneApi';
+import { FlowerIcon } from '../icons/FlowerIcon';
 import { useRedevenRpc } from '../protocol/redeven_v1/hooks';
 import { useEnvContext } from './EnvContext';
 
@@ -796,7 +796,7 @@ export function EnvSettingsPage() {
 
   const validateAIValue = (cfg: AIConfig) => {
     const mode = String((cfg as any).mode ?? '').trim();
-    if (mode && mode !== 'act' && mode !== 'plan') throw new Error(`Invalid AI mode: ${mode}`);
+    if (mode && mode !== 'act' && mode !== 'plan') throw new Error(`Invalid Flower mode: ${mode}`);
     const webSearchProvider = (cfg as any).web_search_provider;
     if (webSearchProvider !== undefined) {
       if (typeof webSearchProvider !== 'string') throw new Error('web_search_provider must be a string.');
@@ -1353,10 +1353,10 @@ export function EnvSettingsPage() {
 
     try {
       const v = parseJSONOrThrow(aiJSON());
-      if (!isJSONObject(v)) throw new Error('AI JSON must be an object.');
+      if (!isJSONObject(v)) throw new Error('Flower JSON must be an object.');
 
       const providersRaw = (v as any).providers;
-      if (!Array.isArray(providersRaw)) throw new Error('AI JSON is missing providers[].');
+      if (!Array.isArray(providersRaw)) throw new Error('Flower JSON is missing providers[].');
 
       setAiProviders(
         normalizeAIProviders(
@@ -1528,7 +1528,7 @@ export function EnvSettingsPage() {
       let cfg: AIConfig | null = null;
       if (aiView() === 'json') {
         const v = parseJSONOrThrow(aiJSON());
-        if (!isJSONObject(v)) throw new Error('AI JSON must be an object.');
+        if (!isJSONObject(v)) throw new Error('Flower JSON must be an object.');
         cfg = v as AIConfig;
       } else {
         cfg = buildAIValue();
@@ -1536,7 +1536,7 @@ export function EnvSettingsPage() {
       validateAIValue(cfg);
       await saveSettings({ ai: cfg });
       setAiDirty(false);
-      notify.success('Saved', aiEnabled() ? 'AI settings updated.' : 'AI has been enabled.');
+      notify.success('Saved', aiEnabled() ? 'Flower settings updated.' : 'Flower has been enabled.');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setAiError(msg || 'Save failed.');
@@ -1553,7 +1553,7 @@ export function EnvSettingsPage() {
       await saveSettings({ ai: null });
       setAiDirty(false);
       setDisableAIOpen(false);
-      notify.success('Disabled', 'AI has been disabled.');
+      notify.success('Disabled', 'Flower has been disabled.');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setAiError(msg || 'Disable failed.');
@@ -1631,7 +1631,7 @@ export function EnvSettingsPage() {
           <div>
             <h1 class="text-xl font-semibold text-foreground tracking-tight">Settings</h1>
             <p class="text-sm text-muted-foreground mt-1">
-              Configure your agent. AI changes apply immediately; other changes require a restart.
+              Configure your agent. Flower changes apply immediately; other changes require a restart.
             </p>
           </div>
           <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={settings.loading} class="gap-1.5 self-start">
@@ -2256,12 +2256,12 @@ export function EnvSettingsPage() {
           </Show>
         </SettingsCard>
 
-        {/* AI Card */}
+        {/* Flower Card */}
         <div id="redeven-settings-ai">
           <SettingsCard
-            icon={Bot}
-            title="AI"
-            description="Configure AI providers, models, and API keys. Keys are stored locally and never sent to the control-plane. Model selection is stored per chat thread."
+            icon={FlowerIcon}
+            title="Flower"
+            description="Configure Flower: providers, models, and API keys. Keys are stored locally and never sent to the control-plane. Model selection is stored per chat thread."
             badge={aiEnabled() ? 'Enabled' : 'Disabled'}
             badgeVariant={aiEnabled() ? 'success' : 'default'}
             error={aiError()}
@@ -2273,11 +2273,11 @@ export function EnvSettingsPage() {
                 </Button>
                 <Show when={aiEnabled()}>
                   <Button size="sm" variant="destructive" onClick={() => setDisableAIOpen(true)} disabled={!canInteract() || aiSaving()}>
-                    Disable
+                    Disable Flower
                   </Button>
                 </Show>
                 <Button size="sm" variant="default" onClick={() => void saveAI()} loading={aiSaving()} disabled={!canInteract()}>
-                  {aiEnabled() ? 'Save' : 'Enable AI'}
+                  {aiEnabled() ? 'Save' : 'Enable Flower'}
                 </Button>
               </>
             }
@@ -2286,7 +2286,7 @@ export function EnvSettingsPage() {
               <div class="flex items-center gap-3 p-4 rounded-lg bg-muted/30 border border-border">
                 <Zap class="w-5 h-5 text-muted-foreground" />
                 <div class="text-sm text-muted-foreground">
-                  AI is currently disabled. Configure the settings below and click <strong>Enable AI</strong> to activate.
+                  Flower is currently disabled. Configure the settings below and click <strong>Enable Flower</strong> to activate.
                 </div>
               </div>
             </Show>
@@ -2609,7 +2609,7 @@ export function EnvSettingsPage() {
                                     <div>
                                       <div class="text-sm font-medium text-foreground">Models</div>
                                       <p class="text-xs text-muted-foreground mt-0.5">
-                                        Shown in AI Chat. Mark one model as default to start new chats with it.
+                                        Shown in Flower Chat. Mark one model as default to start new chats with it.
                                       </p>
                                     </div>
                                     <Button
@@ -2779,18 +2779,18 @@ export function EnvSettingsPage() {
         </div>
       </ConfirmDialog>
 
-      {/* Disable AI Confirmation Dialog */}
+      {/* Disable Flower Confirmation Dialog */}
       <ConfirmDialog
         open={disableAIOpen()}
         onOpenChange={(open) => setDisableAIOpen(open)}
-        title="Disable AI"
+        title="Disable Flower"
         confirmText="Disable"
         variant="destructive"
         loading={disableAISaving()}
         onConfirm={() => void disableAI()}
       >
         <div class="space-y-3">
-          <p class="text-sm">Are you sure you want to disable AI?</p>
+          <p class="text-sm">Are you sure you want to disable Flower?</p>
           <p class="text-xs text-muted-foreground">
             This will remove the <CodeBadge>ai</CodeBadge> section from the agent config file.
           </p>

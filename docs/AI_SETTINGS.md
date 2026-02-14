@@ -1,6 +1,6 @@
-# AI Settings & Secrets (Recommended Design)
+# Flower Settings & Secrets (Recommended Design)
 
-This document describes the recommended, stable design for **AI configuration management** in the Redeven agent.
+This document describes the recommended, stable design for **Flower (AI assistant) configuration management** in the Redeven agent.
 
 Goals:
 
@@ -119,7 +119,7 @@ Key points:
 
 ---
 
-## 5. UI Flow (Env App → Settings → AI)
+## 5. UI Flow (Env App → Settings → Flower)
 
 - Providers:
   - “Add Provider” generates a provider id automatically.
@@ -168,4 +168,4 @@ Operational behavior:
 
 - `act` mode is direct execution by default.
 - `plan` mode is prompt-guided analysis by default (soft guidance, no hard readonly lock unless explicitly enabled).
-- Settings UI exposes these switches under **Settings → AI → Execution policy**.
+- Settings UI exposes these switches under **Settings → Flower → Execution policy**.

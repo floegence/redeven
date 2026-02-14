@@ -9,7 +9,6 @@ import {
   Globe,
   Grid3x3,
   LayoutDashboard,
-  MessageSquare,
   Moon,
   Refresh,
   Search,
@@ -17,6 +16,7 @@ import {
   Sun,
   Terminal,
 } from '@floegence/floe-webapp-core/icons';
+import { FlowerIcon } from './icons/FlowerIcon';
 import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
 import { Tooltip } from '@floegence/floe-webapp-core/ui';
 import type { ClientObserverLike } from '@floegence/flowersec-core';
@@ -505,7 +505,7 @@ export function EnvAppShell() {
       list.push({ id: 'ports', name: 'Ports', icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 6, fullScreen: true } });
     }
     list.push(
-      { id: 'ai', name: 'AI', icon: MessageSquare, component: EnvAIPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } },
+      { id: 'ai', name: 'Flower', icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } },
       { id: 'settings', name: 'Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } },
     );
     return list;
@@ -561,7 +561,7 @@ export function EnvAppShell() {
     if (!isLocalMode()) {
       items.push({ id: 'ports', icon: Globe, label: 'Ports', collapseBehavior: 'preserve' });
     }
-    items.push({ id: 'ai', icon: MessageSquare, label: 'AI', collapseBehavior: 'toggle' });
+    items.push({ id: 'ai', icon: FlowerIcon, label: 'Flower', collapseBehavior: 'toggle' });
     return items;
   };
 

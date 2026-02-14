@@ -84,12 +84,12 @@ What bootstrap writes by default:
 - Terminal RPC (`create/list/attach`) with bidirectional data notifications
 - Monitor RPC (CPU/network/process snapshots)
 - Agent-bundled Env App UI assets
-- Optional AI Agent (Go Native SDK runtime + Go tool executor)
+- Optional Flower (on-device AI assistant; Go Native SDK runtime + Go tool executor)
 
 Details:
 
 - Env App: [`docs/ENV_APP.md`](docs/ENV_APP.md)
-- AI Agent: [`docs/AI_AGENT.md`](docs/AI_AGENT.md)
+- Flower: [`docs/AI_AGENT.md`](docs/AI_AGENT.md)
 
 ### `floe_app = com.floegence.redeven.code`
 
@@ -147,8 +147,8 @@ Release details:
 
 - **Env App runtime**: [`docs/ENV_APP.md`](docs/ENV_APP.md)
 - **Code App runtime**: [`docs/CODE_APP.md`](docs/CODE_APP.md)
-- **AI runtime and behavior**: [`docs/AI_AGENT.md`](docs/AI_AGENT.md)
-- **AI settings and secrets model**: [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md)
+- **Flower runtime and behavior**: [`docs/AI_AGENT.md`](docs/AI_AGENT.md)
+- **Flower settings and secrets model**: [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md)
 - **Capability-to-permission contract**: [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md)
 - **Local permission policy**: [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md)
 - **Release and artifact verification**: [`docs/RELEASE.md`](docs/RELEASE.md)

@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
-import { History, MessageSquare, Plus, Refresh, Sparkles, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { History, Plus, Refresh, Sparkles, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { FlowerIcon } from '../icons/FlowerIcon';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { SidebarContent, SidebarSection } from '@floegence/floe-webapp-core/layout';
@@ -963,7 +964,7 @@ function EmptyState() {
         transition={{ duration: 0.4, easing: 'ease-out' }}
         class="relative w-14 h-14 rounded-2xl bg-sidebar-accent/80 flex items-center justify-center mx-auto mb-3"
       >
-        <MessageSquare class="w-7 h-7 text-muted-foreground/60" />
+        <FlowerIcon class="w-7 h-7" />
         {/* Sparkles decoration */}
         <Motion.div
           initial={{ opacity: 0, scale: 0 }}

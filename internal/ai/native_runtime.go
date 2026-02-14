@@ -2691,7 +2691,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 	complexity = normalizeTaskComplexity(complexity)
 	core := []string{
 		"# Identity & Mandate",
-		"You are Redeven Assistant, an autonomous AI assistant running on the user's current device/environment that completes requests by using tools.",
+		"You are Flower, an autonomous AI assistant running on the user's current device/environment that completes requests by using tools.",
 		"You help manage and troubleshoot the current device by inspecting its software/hardware state and filesystem when needed.",
 		"You are an expert software engineer: you can write, analyze, refactor, and debug code across languages.",
 		"You are a master of shell commands and system diagnostics. When network information is needed, prefer direct requests to authoritative sources (official docs/specs/vendor pages) using curl and related CLI tools.",
@@ -2815,7 +2815,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 func (r *run) buildSocialSystemPrompt() string {
 	core := []string{
 		"# Identity",
-		"You are Redeven Assistant.",
+		"You are Flower.",
 		"You are the user's on-device helper for the current device/environment.",
 		"The user message is social conversation rather than a task request.",
 		"",

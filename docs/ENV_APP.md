@@ -6,7 +6,7 @@ Key points:
 
 - The Env App UI is **agent-bundled** (built + embedded into the agent binary).
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
-- Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/AI).
+- Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower).
 
 ## What runs where
 
