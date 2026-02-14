@@ -491,7 +491,16 @@ export function createAIChatContextValue(): AIChatContextValue {
   const applyRealtimeEvent = (event: AIRealtimeEvent) => {
     const tid = String(event.threadId ?? '').trim();
     const rid = String(event.runId ?? '').trim();
-    if (!tid || !rid) return;
+    if (!tid) return;
+
+    if (event.eventType === 'transcript_message') {
+      // Transcript messages update thread metadata (last message preview / timestamps).
+      // Refresh the thread list so sidebar stays in sync without relying on polling.
+      bumpThreadsSeq();
+      emitRealtimeEvent(event);
+      return;
+    }
+    if (!rid) return;
 
     if (event.eventType === 'stream_event') {
       const streamEvent = event.streamEvent as StreamEvent | undefined;

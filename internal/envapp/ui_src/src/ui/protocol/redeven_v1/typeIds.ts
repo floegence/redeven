@@ -33,6 +33,7 @@ export const redevenV1TypeIds = {
     subscribe: 6003,
     event: 6004, // notify (agent -> client)
     toolApproval: 6005,
+    listMessages: 6006,
   },
   sessions: {
     listActive: 5001,

@@ -1,6 +1,6 @@
 import type { StreamEvent } from '@floegence/floe-webapp-core/chat';
 
-export type AIRealtimeEventType = 'stream_event' | 'thread_state';
+export type AIRealtimeEventType = 'stream_event' | 'thread_state' | 'transcript_message';
 
 export type AIThreadRunStatus = 'idle' | 'accepted' | 'running' | 'waiting_approval' | 'recovering' | 'waiting_user' | 'success' | 'failed' | 'canceled' | 'timed_out';
 
@@ -13,6 +13,7 @@ export type AIStartRunRequest = {
   threadId: string;
   model?: string;
   input: {
+    messageId?: string;
     text: string;
     attachments: Array<{
       name: string;
@@ -43,6 +44,23 @@ export type AISubscribeResponse = {
   activeRuns: AIActiveRun[];
 };
 
+export type AITranscriptMessageItem = {
+  rowId: number;
+  messageJson: any;
+};
+
+export type AIListMessagesRequest = {
+  threadId: string;
+  afterRowId?: number;
+  limit?: number;
+};
+
+export type AIListMessagesResponse = {
+  messages: AITranscriptMessageItem[];
+  nextAfterRowId?: number;
+  hasMore?: boolean;
+};
+
 export type AIToolApprovalRequest = {
   runId: string;
   toolId: string;
@@ -65,4 +83,8 @@ export type AIRealtimeEvent = {
   streamEvent?: StreamEvent;
   runStatus?: AIThreadRunStatus;
   runError?: string;
+
+  // transcript_message only
+  messageRowId?: number;
+  messageJson?: any;
 };

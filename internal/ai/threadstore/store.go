@@ -727,6 +727,92 @@ WHERE endpoint_id = ? AND thread_id = ? AND id < ?
 	return out, nextBeforeID, hasMore, nil
 }
 
+// ListMessagesAfter returns messages in ascending order by internal id.
+//
+// It returns messages with id > afterID. The returned nextAfterID is the largest id in the result
+// (for incremental backfill). If no messages are returned, nextAfterID equals afterID.
+func (s *Store) ListMessagesAfter(ctx context.Context, endpointID string, threadID string, limit int, afterID int64) ([]Message, int64, bool, error) {
+	if s == nil || s.db == nil {
+		return nil, 0, false, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return nil, 0, false, errors.New("invalid request")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if afterID < 0 {
+		afterID = 0
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, thread_id, endpoint_id, message_id, role,
+       author_user_public_id, author_user_email,
+       status, created_at_unix_ms, updated_at_unix_ms,
+       text_content, message_json
+FROM transcript_messages
+WHERE endpoint_id = ? AND thread_id = ? AND id > ?
+ORDER BY id ASC
+LIMIT ?
+`, endpointID, threadID, afterID, limit)
+	if err != nil {
+		return nil, afterID, false, err
+	}
+	defer rows.Close()
+
+	out := make([]Message, 0, limit)
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(
+			&m.ID,
+			&m.ThreadID,
+			&m.EndpointID,
+			&m.MessageID,
+			&m.Role,
+			&m.AuthorUserPublicID,
+			&m.AuthorUserEmail,
+			&m.Status,
+			&m.CreatedAtUnixMs,
+			&m.UpdatedAtUnixMs,
+			&m.TextContent,
+			&m.MessageJSON,
+		); err != nil {
+			return nil, afterID, false, err
+		}
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, afterID, false, err
+	}
+	if len(out) == 0 {
+		return nil, afterID, false, nil
+	}
+
+	nextAfterID := out[len(out)-1].ID
+
+	// Determine whether there's more history after the last returned id.
+	var more int
+	if err := s.db.QueryRowContext(ctx, `
+SELECT COUNT(1)
+FROM transcript_messages
+WHERE endpoint_id = ? AND thread_id = ? AND id > ?
+`, endpointID, threadID, nextAfterID).Scan(&more); err != nil {
+		// Best-effort: if this fails, just say no more.
+		more = 0
+	}
+	hasMore := more > 0
+
+	return out, nextAfterID, hasMore, nil
+}
+
 // ListHistoryLite returns the latest messages as (role, status, text_content), in ascending order.
 func (s *Store) ListHistoryLite(ctx context.Context, endpointID string, threadID string, limit int) ([]Message, error) {
 	if s == nil || s.db == nil {

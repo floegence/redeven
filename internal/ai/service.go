@@ -825,9 +825,28 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}
 	effectiveInput := req.Input
 
-	userMsgID, err := newUserMessageID()
-	if err != nil {
-		return streamEarlyError(err)
+	userMsgID := strings.TrimSpace(req.Input.MessageID)
+	if userMsgID != "" {
+		// Best-effort validation: keep ids short and URL-safe so the browser can reuse them
+		// as stable DOM keys and DB uniqueness keys.
+		if len(userMsgID) > 128 {
+			userMsgID = ""
+		}
+		for i := 0; i < len(userMsgID); i++ {
+			ch := userMsgID[i]
+			if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' {
+				continue
+			}
+			userMsgID = ""
+			break
+		}
+	}
+	if userMsgID == "" {
+		var genErr error
+		userMsgID, genErr = newUserMessageID()
+		if genErr != nil {
+			return streamEarlyError(genErr)
+		}
 	}
 	now := time.Now().UnixMilli()
 	userJSON, userText, err := buildUserMessageJSON(userMsgID, req.Input, prepared.uploadsDir, now)
@@ -835,7 +854,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		return streamEarlyError(err)
 	}
 	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
-	_, err = db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
+	userRowID, err := db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
 		ThreadID:           threadID,
 		EndpointID:         endpointID,
 		MessageID:          userMsgID,
@@ -852,6 +871,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	if err != nil {
 		return streamEarlyError(err)
 	}
+	s.broadcastTranscriptMessage(endpointID, threadID, runID, userRowID, userJSON, now)
 
 	select {
 	case <-ctx.Done():
@@ -958,7 +978,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		return err
 	}
 	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
-	_, err = db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
+	assistantRowID, err := db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
 		ThreadID:        threadID,
 		EndpointID:      endpointID,
 		MessageID:       messageID,
@@ -976,6 +996,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		}
 		return err
 	}
+	s.broadcastTranscriptMessage(endpointID, threadID, runID, assistantRowID, assistantJSON, assistantAt)
 	if s.contextRepo != nil {
 		turnID := "turn_" + strings.TrimSpace(runID)
 		turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
