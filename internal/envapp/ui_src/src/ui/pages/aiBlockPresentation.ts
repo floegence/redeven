@@ -7,7 +7,7 @@
 
 import type { Message, MessageBlock, StreamEvent } from '../chat/types';
 import type { TodosBlock as TodosBlockType, SourcesBlock as SourcesBlockType } from '../chat/types';
-import { normalizeThreadTodosView } from './aiDataNormalizers';
+import { normalizeWriteTodosToolView } from './aiDataNormalizers';
 
 const TERMINAL_EXEC_TOOL_NAME = 'terminal.exec';
 const WRITE_TODOS_TOOL_NAME = 'write_todos';
@@ -159,7 +159,7 @@ function buildTodosBlock(block: ChatToolCallBlock): TodosBlockType | null {
     return null;
   }
 
-  const normalized = normalizeThreadTodosView(block.result);
+  const normalized = normalizeWriteTodosToolView(block.result, block.args);
   return {
     type: 'todos',
     version: normalized.version,

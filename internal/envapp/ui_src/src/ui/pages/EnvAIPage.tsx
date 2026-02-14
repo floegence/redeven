@@ -34,7 +34,7 @@ import { useAIChatContext } from './AIChatContext';
 import { useRedevenRpc, type FsFileInfo } from '../protocol/redeven_v1';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { decorateMessageBlocks, decorateStreamEvent } from './aiBlockPresentation';
-import { normalizeThreadTodosView, todoStatusLabel, todoStatusBadgeClass, type TodoStatus, type ThreadTodoItem, type ThreadTodosView } from './aiDataNormalizers';
+import { normalizeThreadTodosView, normalizeWriteTodosToolView, todoStatusLabel, todoStatusBadgeClass, type TodoStatus, type ThreadTodoItem, type ThreadTodosView } from './aiDataNormalizers';
 import { hasRWXPermissions } from './aiPermissions';
 
 function createUserMarkdownMessage(markdown: string): Message {
@@ -1615,7 +1615,7 @@ export function EnvAIPage() {
           const toolName = String(block?.toolName ?? '').trim();
           const toolStatus = String(block?.status ?? '').trim().toLowerCase();
           if (streamType === 'block-set' && blockType === 'tool-call' && toolName === 'write_todos' && toolStatus === 'success') {
-            const next = normalizeThreadTodosView(block?.result);
+            const next = normalizeWriteTodosToolView(block?.result, block?.args);
             if (next.version > 0) {
               setThreadTodosIfChanged(next);
               setTodosError('');

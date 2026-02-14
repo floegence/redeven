@@ -25,12 +25,18 @@ export function normalizeTodoStatus(raw: unknown): TodoStatus {
   return 'pending';
 }
 
-export function normalizeThreadTodosView(raw: unknown): ThreadTodosView {
-  const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  const listRaw = Array.isArray(source.todos) ? source.todos : [];
+function asRecord(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  return raw as Record<string, unknown>;
+}
+
+function normalizeTodoItems(raw: unknown): ThreadTodoItem[] {
+  const listRaw = Array.isArray(raw) ? raw : [];
   const todos: ThreadTodoItem[] = [];
   listRaw.forEach((entry, index) => {
-    const item = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+    const item = asRecord(entry);
     const content = String(item.content ?? '').trim();
     if (!content) return;
     const id = String(item.id ?? '').trim() || `todo_${index + 1}`;
@@ -42,11 +48,36 @@ export function normalizeThreadTodosView(raw: unknown): ThreadTodosView {
       note: note || undefined,
     });
   });
+  return todos;
+}
+
+export function normalizeThreadTodosView(raw: unknown): ThreadTodosView {
+  const source = asRecord(raw);
+  const todos = normalizeTodoItems(source.todos);
 
   return {
     version: Math.max(0, Number(source.version ?? 0) || 0),
     updated_at_unix_ms: Math.max(0, Number(source.updated_at_unix_ms ?? 0) || 0),
     todos,
+  };
+}
+
+export function normalizeWriteTodosToolView(resultRaw: unknown, argsRaw: unknown): ThreadTodosView {
+  const normalizedResult = normalizeThreadTodosView(resultRaw);
+  if (normalizedResult.todos.length > 0) {
+    return normalizedResult;
+  }
+
+  const args = asRecord(argsRaw);
+  const todosFromArgs = normalizeTodoItems(args.todos);
+  if (todosFromArgs.length === 0) {
+    return normalizedResult;
+  }
+
+  return {
+    version: normalizedResult.version,
+    updated_at_unix_ms: normalizedResult.updated_at_unix_ms,
+    todos: todosFromArgs,
   };
 }
 

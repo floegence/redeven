@@ -56,6 +56,7 @@ func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoIte
 		"version":            snapshot.Version,
 		"updated_at_unix_ms": snapshot.UpdatedAtUnixMs,
 		"summary":            summary,
+		"todos":              normalized,
 	}
 	if txt := strings.TrimSpace(explanation); txt != "" {
 		result["explanation"] = txt
