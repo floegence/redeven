@@ -1882,7 +1882,10 @@ export function EnvAIPage() {
     if (!tid) {
       skipNextThreadLoad = true;
       tid = await ai.ensureThreadForSend();
-      skipNextThreadLoad = false;
+      if (!tid) {
+        // Thread creation failed; do not leave the "preserve optimistic messages" flag armed.
+        skipNextThreadLoad = false;
+      }
     }
     if (!tid) {
       setSendPending(false);
@@ -1936,20 +1939,11 @@ export function EnvAIPage() {
     return task;
   };
 
-  const pendingUserMessageIDs: string[] = [];
-
   const callbacks: ChatCallbacks = {
-    onWillSend: () => {
+    onWillSend: (_content, _attachments, _userMessageId) => {
       // Synchronous hook: called right after ChatProvider renders the optimistic user message.
       // Raising sendPending here makes the working indicator appear in the same frame.
       if (import.meta.env.DEV) console.debug('[AI Chat] onWillSend fired at', performance.now().toFixed(1), 'ms');
-
-      const last = chat?.messages()?.slice(-1)?.[0] as any;
-      const lastID = String(last?.id ?? '').trim();
-      const lastRole = String(last?.role ?? '').trim();
-      if (lastID && lastRole === 'user') {
-        pendingUserMessageIDs.push(lastID);
-      }
 
       if (!canInteract()) return;
       setSendPending(true);
@@ -1958,9 +1952,7 @@ export function EnvAIPage() {
       enableAutoFollow();
       forceScrollToLatest();
     },
-    onSendMessage: async (content, attachments, _addMessage) => {
-      const optimisticID = pendingUserMessageIDs.shift();
-
+    onSendMessage: async (content, attachments, userMessageId, _addMessage) => {
       if (protocol.status() !== 'connected') {
         notify.error('Not connected', 'Connecting to agent...');
         setSendPending(false);
@@ -1972,7 +1964,7 @@ export function EnvAIPage() {
         setRunPhaseLabel('Working');
         return;
       }
-      await enqueueStartRun(content, attachments, optimisticID);
+      await enqueueStartRun(content, attachments, userMessageId);
     },
     onUploadAttachment: uploadAttachment,
     onToolApproval: sendToolApproval,

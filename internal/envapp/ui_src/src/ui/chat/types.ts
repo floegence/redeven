@@ -201,10 +201,11 @@ export interface ChatConfig {
 }
 
 export interface ChatCallbacks {
-  onWillSend?: (content: string, attachments: Attachment[]) => void;
+  onWillSend?: (content: string, attachments: Attachment[], userMessageId: string) => void;
   onSendMessage?: (
     content: string,
     attachments: Attachment[],
+    userMessageId: string,
     addMessage: (msg: Message) => void,
   ) => Promise<void>;
   onLoadMore?: () => Promise<Message[]>;

@@ -37,37 +37,9 @@ func (s *Service) GetActiveRunSnapshot(meta *session.Meta, threadID string) (str
 		return runID, msgJSON, nil
 	}
 
-	// Best-effort fallback for very early runs (assistant blocks not ready yet).
-	messageID := strings.TrimSpace(r.messageID)
-	if messageID == "" {
-		if err != nil {
-			return "", "", err
-		}
-		return "", "", nil
-	}
-
-	assistantAt := time.Now().UnixMilli()
-	r.muAssistant.Lock()
-	if r.assistantCreatedAtUnixMs > 0 {
-		assistantAt = r.assistantCreatedAtUnixMs
-	}
-	r.muAssistant.Unlock()
-
-	fallback := persistedMessage{
-		ID:        messageID,
-		Role:      "assistant",
-		Blocks:    []any{},
-		Status:    "complete",
-		Timestamp: assistantAt,
-	}
-	b, marshalErr := json.Marshal(fallback)
-	if marshalErr != nil {
-		if err != nil {
-			return "", "", err
-		}
-		return "", "", marshalErr
-	}
-	return runID, string(b), nil
+	// Best-effort: for very early runs, the assistant message isn't initialized yet, so there is
+	// no snapshot to return. Callers should wait for stream events or the persisted transcript.
+	return "", "", nil
 }
 
 func (s *Service) SetToolCollapsed(meta *session.Meta, threadID string, messageID string, toolID string, collapsed bool) error {

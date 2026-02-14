@@ -208,21 +208,57 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
     switch (event.type) {
       case 'message-start': {
         consumeOnePrepId();
-        const msg: Message = {
-          id: event.messageId,
-          role: 'assistant',
-          blocks: [],
-          status: 'streaming',
-          timestamp: Date.now(),
-        };
-        addMessage(msg);
-        setStreamingMessageId(event.messageId);
+        const id = event.messageId;
+        const ts = Date.now();
+        setMessages(produce((msgs) => {
+          const idx = msgs.findIndex((m) => m.id === id);
+          if (idx === -1) {
+            msgs.push({
+              id,
+              role: 'assistant',
+              blocks: [],
+              status: 'streaming',
+              timestamp: ts,
+            });
+            return;
+          }
+          const prev = msgs[idx];
+          msgs[idx] = {
+            ...prev,
+            role: 'assistant',
+            status: 'streaming',
+            error: undefined,
+          };
+        }));
+        setStreamingMessageId(id);
         break;
       }
       case 'block-start': {
-        updateMessage(event.messageId, (msg) => ({
-          ...msg,
-          blocks: [...msg.blocks, createEmptyBlock(event.blockType)],
+        const id = event.messageId;
+        const ts = Date.now();
+        setMessages(produce((msgs) => {
+          let idx = msgs.findIndex((m) => m.id === id);
+          if (idx === -1) {
+            msgs.push({
+              id,
+              role: 'assistant',
+              blocks: [],
+              status: 'streaming',
+              timestamp: ts,
+            });
+            idx = msgs.length - 1;
+          }
+          const msg = msgs[idx];
+          const blocks = [...msg.blocks];
+          const target = Math.max(0, event.blockIndex);
+          while (blocks.length <= target) {
+            blocks.push(createEmptyBlock(event.blockType));
+          }
+          const existing = blocks[target];
+          if (existing && existing.type !== event.blockType) {
+            blocks[target] = createEmptyBlock(event.blockType);
+          }
+          msgs[idx] = { ...msg, blocks };
         }));
         break;
       }
@@ -297,7 +333,7 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
       });
 
       try {
-        props.callbacks?.onWillSend?.(content, attachments);
+        props.callbacks?.onWillSend?.(content, attachments, userMsg.id);
       } catch (err) {
         console.error('onWillSend error:', err);
       }
@@ -308,10 +344,11 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
       const prepId = addPrepId();
       const text = content;
       const atts = [...attachments];
+      const userMessageId = userMsg.id;
 
       deferNonBlocking(() => {
         Promise.resolve()
-          .then(() => onSend(text, atts, addMessage))
+          .then(() => onSend(text, atts, userMessageId, addMessage))
           .catch((err) => {
             console.error('Failed to send message:', err);
           })
