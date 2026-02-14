@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -18,6 +19,7 @@ const (
 	TypeID_AI_SUBSCRIBE     uint32 = 6003
 	TypeID_AI_EVENT_NOTIFY  uint32 = 6004 // notify (agent -> client)
 	TypeID_AI_TOOL_APPROVAL uint32 = 6005
+	TypeID_AI_MESSAGES_LIST uint32 = 6006
 )
 
 type aiRunStartReq struct {
@@ -44,6 +46,24 @@ type aiSubscribeReq struct{}
 
 type aiSubscribeResp struct {
 	ActiveRuns []ActiveThreadRun `json:"active_runs"`
+}
+
+type aiListMessagesReq struct {
+	ThreadID    string `json:"thread_id"`
+	AfterRowID  int64  `json:"after_row_id,omitempty"`
+	Limit       int    `json:"limit,omitempty"`
+	IncludeBody bool   `json:"include_body,omitempty"`
+}
+
+type aiListMessagesResp struct {
+	Messages       []aiTranscriptMessageItem `json:"messages"`
+	NextAfterRowID int64                     `json:"next_after_row_id,omitempty"`
+	HasMore        bool                      `json:"has_more,omitempty"`
+}
+
+type aiTranscriptMessageItem struct {
+	RowID       int64           `json:"row_id"`
+	MessageJSON json.RawMessage `json:"message_json"`
 }
 
 type aiToolApprovalReq struct {
@@ -139,6 +159,63 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 			return nil, toAIRPCError(err)
 		}
 		return &aiSubscribeResp{ActiveRuns: activeRuns}, nil
+	})
+
+	rpctyped.Register[aiListMessagesReq, aiListMessagesResp](r, TypeID_AI_MESSAGES_LIST, func(ctx context.Context, req *aiListMessagesReq) (*aiListMessagesResp, error) {
+		if meta == nil || !meta.CanRead {
+			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		}
+		if req == nil {
+			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+		}
+		threadID := strings.TrimSpace(req.ThreadID)
+		if threadID == "" {
+			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
+		}
+
+		s.mu.Lock()
+		db := s.threadsDB
+		s.mu.Unlock()
+		if db == nil {
+			return nil, &rpc.Error{Code: 503, Message: "threads store not ready"}
+		}
+
+		// Ensure thread exists (consistent with other endpoints).
+		if th, err := db.GetThread(ctx, strings.TrimSpace(meta.EndpointID), threadID); err != nil {
+			return nil, &rpc.Error{Code: 400, Message: err.Error()}
+		} else if th == nil {
+			return nil, &rpc.Error{Code: 404, Message: "thread not found"}
+		}
+
+		limit := req.Limit
+		if limit <= 0 {
+			limit = 200
+		}
+		if limit > 500 {
+			limit = 500
+		}
+
+		msgs, nextAfter, hasMore, err := db.ListMessagesAfter(ctx, strings.TrimSpace(meta.EndpointID), threadID, limit, req.AfterRowID)
+		if err != nil {
+			return nil, &rpc.Error{Code: 400, Message: err.Error()}
+		}
+
+		out := &aiListMessagesResp{
+			Messages:       make([]aiTranscriptMessageItem, 0, len(msgs)),
+			NextAfterRowID: nextAfter,
+			HasMore:        hasMore,
+		}
+		for _, m := range msgs {
+			raw := strings.TrimSpace(m.MessageJSON)
+			if raw == "" {
+				continue
+			}
+			out.Messages = append(out.Messages, aiTranscriptMessageItem{
+				RowID:       m.ID,
+				MessageJSON: json.RawMessage(raw),
+			})
+		}
+		return out, nil
 	})
 }
 

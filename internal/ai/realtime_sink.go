@@ -117,6 +117,10 @@ func (s *Service) DetachRealtimeSink(streamServer *rpc.Server) {
 }
 
 func shouldPersistRealtimeEvent(ev RealtimeEvent) bool {
+	if ev.EventType == RealtimeEventTypeTranscript {
+		// Transcript messages are already persisted in transcript_messages and can be backfilled directly.
+		return false
+	}
 	if ev.EventType == RealtimeEventTypeThreadState {
 		return true
 	}
@@ -169,7 +173,11 @@ func (s *Service) broadcastRealtimeEvent(ev RealtimeEvent) {
 	ev.EndpointID = strings.TrimSpace(ev.EndpointID)
 	ev.ThreadID = strings.TrimSpace(ev.ThreadID)
 	ev.RunID = strings.TrimSpace(ev.RunID)
-	if ev.EndpointID == "" || ev.ThreadID == "" || ev.RunID == "" {
+	if ev.EndpointID == "" || ev.ThreadID == "" {
+		return
+	}
+	// run_id is required for run-scoped events, but transcript messages may be appended outside a run.
+	if ev.EventType != RealtimeEventTypeTranscript && ev.RunID == "" {
 		return
 	}
 	if ev.AtUnixMs <= 0 {
@@ -304,6 +312,32 @@ func (s *Service) broadcastStreamEvent(endpointID string, threadID string, runID
 		AtUnixMs:    time.Now().UnixMilli(),
 		StreamKind:  classifyStreamKind(streamEvent),
 		StreamEvent: streamEvent,
+	}
+	s.broadcastRealtimeEvent(ev)
+}
+
+func (s *Service) broadcastTranscriptMessage(endpointID string, threadID string, runID string, rowID int64, messageJSON string, atUnixMs int64) {
+	if s == nil {
+		return
+	}
+	if rowID <= 0 {
+		return
+	}
+	raw := strings.TrimSpace(messageJSON)
+	if raw == "" {
+		return
+	}
+	if atUnixMs <= 0 {
+		atUnixMs = time.Now().UnixMilli()
+	}
+	ev := RealtimeEvent{
+		EventType:    RealtimeEventTypeTranscript,
+		EndpointID:   strings.TrimSpace(endpointID),
+		ThreadID:     strings.TrimSpace(threadID),
+		RunID:        strings.TrimSpace(runID),
+		AtUnixMs:     atUnixMs,
+		MessageRowID: rowID,
+		MessageJSON:  json.RawMessage(raw),
 	}
 	s.broadcastRealtimeEvent(ev)
 }

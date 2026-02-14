@@ -18,10 +18,12 @@ import {
 import { LoadingOverlay, SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Button, ConfirmDialog, Dialog, Input, Select, Tooltip } from '@floegence/floe-webapp-core/ui';
 import {
+  AttachmentPreview,
   ChatInput,
   ChatProvider,
   VirtualMessageList,
   useChatContext,
+  useAttachments,
   type Attachment,
   type ChatCallbacks,
   type ChatContextValue,
@@ -29,7 +31,7 @@ import {
 } from '@floegence/floe-webapp-core/chat';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
-import { useAIChatContext, type ListThreadMessagesResponse } from './AIChatContext';
+import { useAIChatContext } from './AIChatContext';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { decorateMessageForTerminalExec, decorateStreamEventForTerminalExec } from './aiTerminalExecPresentation';
@@ -151,6 +153,187 @@ const ChatCapture: Component<{ onReady: (ctx: ChatContextValue) => void }> = (pr
   createEffect(() => props.onReady(ctx));
   return null;
 };
+
+const AIChatInput: Component<{
+  class?: string;
+  placeholder?: string;
+  disabled?: boolean;
+  onSend: (content: string, attachments: Attachment[]) => Promise<void> | void;
+}> = (props) => {
+  const ctx = useChatContext();
+  const [text, setText] = createSignal('');
+  const [isFocused, setIsFocused] = createSignal(false);
+
+  let textareaRef: HTMLTextAreaElement | undefined;
+  let rafId: number | null = null;
+
+  const attachments = useAttachments({
+    maxAttachments: ctx.config().maxAttachments,
+    maxSize: ctx.config().maxAttachmentSize,
+    acceptedTypes: ctx.config().acceptedFileTypes,
+    onUpload: ctx.config().allowAttachments ? (file) => ctx.uploadAttachment(file) : undefined,
+  });
+
+  const placeholder = () => props.placeholder || ctx.config().placeholder || 'Type a message...';
+
+  const canSend = () =>
+    (text().trim() || attachments.attachments().length > 0) && !props.disabled;
+
+  // Auto-resize textarea height (coalesce to at most once per frame).
+  const adjustHeight = () => {
+    const el = textareaRef;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
+  };
+
+  const scheduleAdjustHeight = () => {
+    if (rafId !== null) return;
+    if (typeof requestAnimationFrame === 'undefined') {
+      adjustHeight();
+      return;
+    }
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      adjustHeight();
+    });
+  };
+
+  const handleSend = async () => {
+    if (!canSend()) return;
+
+    const content = text().trim();
+    const files = attachments.attachments();
+
+    setText('');
+    attachments.clearAttachments();
+    if (textareaRef) textareaRef.style.height = 'auto';
+
+    await props.onSend(content, files);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    // IME composition in progress (e.g. CJK input) — let the IME handle Enter.
+    if (e.isComposing) return;
+    // Enter to send (Shift+Enter for newline).
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void handleSend();
+    }
+  };
+
+  const handlePaste = async (e: ClipboardEvent) => {
+    if (!ctx.config().allowAttachments) return;
+    await attachments.handlePaste(e);
+  };
+
+  onCleanup(() => {
+    if (rafId !== null && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  });
+
+  return (
+    <div
+      class={cn(
+        'chat-input-container',
+        isFocused() && 'chat-input-container-focused',
+        attachments.isDragging() && 'chat-input-container-dragging',
+        props.class,
+      )}
+      onDragEnter={attachments.handleDragEnter}
+      onDragLeave={attachments.handleDragLeave}
+      onDragOver={attachments.handleDragOver}
+      onDrop={attachments.handleDrop}
+    >
+      <Show when={attachments.isDragging()}>
+        <div class="chat-input-drop-overlay">
+          <UploadIcon />
+          <span>Drop files here</span>
+        </div>
+      </Show>
+
+      <Show when={attachments.attachments().length > 0}>
+        <AttachmentPreview
+          attachments={attachments.attachments()}
+          onRemove={attachments.removeAttachment}
+        />
+      </Show>
+
+      <div class="chat-input-body">
+        <textarea
+          ref={textareaRef}
+          class="chat-input-textarea"
+          value={text()}
+          onInput={(e) => {
+            setText(e.currentTarget.value);
+            scheduleAdjustHeight();
+          }}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          placeholder={placeholder()}
+          disabled={props.disabled}
+          rows={2}
+        />
+      </div>
+
+      <div class="chat-input-toolbar">
+        <div class="chat-input-toolbar-left">
+          <Show when={ctx.config().allowAttachments}>
+            <button
+              type="button"
+              class="chat-input-attachment-btn"
+              onClick={attachments.openFilePicker}
+              title="Add attachments"
+            >
+              <PaperclipIcon />
+            </button>
+          </Show>
+        </div>
+
+        <div class="chat-input-toolbar-right">
+          <span class="chat-input-hint">
+            <kbd>Enter</kbd> send &nbsp; <kbd>Shift+Enter</kbd> newline
+          </span>
+
+          <button
+            type="button"
+            class={cn('chat-input-send-btn', canSend() && 'chat-input-send-btn-active')}
+            onClick={() => void handleSend()}
+            disabled={!canSend()}
+            title="Send message"
+          >
+            <SendIcon />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PaperclipIcon: Component = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+  </svg>
+);
+
+const SendIcon: Component = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="22" y1="2" x2="11" y2="13" />
+    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+  </svg>
+);
+
+const UploadIcon: Component = () => (
+  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+);
 
 function InlineButtonSnakeLoading() {
   return (
@@ -718,6 +901,8 @@ export function EnvAIPage() {
   let lastTodosReq = 0;
   let skipNextThreadLoad = false;
   const messagesCacheByThread = new Map<string, Message[]>();
+  const transcriptCursorByThread = new Map<string, number>(); // thread_id -> max transcript_messages.id seen
+  const transcriptInitDoneByThread = new Set<string>(); // thread_id with baseline history loaded
   const failureNotifiedRuns = new Set<string>();
   const [runPhaseLabel, setRunPhaseLabel] = createSignal('Working');
   const activeThreadTodos = createMemo(() => threadTodos()?.todos ?? []);
@@ -820,7 +1005,38 @@ export function EnvAIPage() {
     return [...messages, decorateMessageForTerminalExec(draft as Message)];
   };
 
-  const loadThreadMessages = async (threadId: string, opts?: { scrollToBottom?: boolean }): Promise<void> => {
+  const mergeTranscriptSnapshot = (existing: Message[], snapshot: Message[]): Message[] => {
+    const existingByID = new Map<string, Message>();
+    existing.forEach((m) => {
+      const id = String((m as any)?.id ?? '').trim();
+      if (!id) return;
+      existingByID.set(id, m);
+    });
+
+    const seen = new Set<string>();
+    const out: Message[] = [];
+
+    snapshot.forEach((m) => {
+      const id = String((m as any)?.id ?? '').trim();
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      out.push(existingByID.get(id) ?? m);
+    });
+
+    existing.forEach((m) => {
+      const id = String((m as any)?.id ?? '').trim();
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      out.push(m);
+    });
+
+    return out;
+  };
+
+  const loadThreadMessages = async (
+    threadId: string,
+    opts?: { scrollToBottom?: boolean; reset?: boolean },
+  ): Promise<void> => {
     if (!chat) return;
     const tid = String(threadId ?? '').trim();
     if (!tid) return;
@@ -828,28 +1044,42 @@ export function EnvAIPage() {
     const reqNo = ++lastMessagesReq;
     setMessagesLoading(true);
     try {
-      const resp = await fetchGatewayJSON<ListThreadMessagesResponse>(
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/messages?limit=500`,
-        { method: 'GET' },
-      );
+      const afterRowId = opts?.reset ? 0 : Math.max(0, transcriptCursorByThread.get(tid) ?? 0);
+      const resp = await rpc.ai.listMessages({ threadId: tid, afterRowId, limit: 500 });
       if (reqNo !== lastMessagesReq) return;
 
-      const messages = (resp.messages || []).map((message) => decorateMessageForTerminalExec(message as Message));
-      messagesCacheByThread.set(tid, messages);
-      const merged = mergeDraftAssistantMessage(tid, messages);
-      chat.setMessages(merged);
-      setHasMessages(merged.length > 0);
-      if (opts?.scrollToBottom) {
-        // Switching threads should always land on the latest message.
-        enableAutoFollow();
-        forceScrollToLatest();
+      const items = Array.isArray((resp as any)?.messages) ? (resp as any).messages : [];
+      const loaded = items
+        .map((it: any) => decorateMessageForTerminalExec((it?.messageJson ?? it?.message_json) as Message))
+        .filter((m: any) => !!String(m?.id ?? '').trim());
+
+      const nextAfter = Number((resp as any)?.nextAfterRowId ?? (resp as any)?.next_after_row_id ?? 0);
+      if (Number.isFinite(nextAfter) && nextAfter > 0) {
+        const prev = transcriptCursorByThread.get(tid) ?? 0;
+        transcriptCursorByThread.set(tid, Math.max(prev, Math.floor(nextAfter)));
+        transcriptInitDoneByThread.add(tid);
+      } else if (afterRowId === 0) {
+        // Mark baseline loaded even if the thread is currently empty.
+        transcriptInitDoneByThread.add(tid);
+      }
+
+      const existing = tid === String(ai.activeThreadId() ?? '').trim() ? (chat.messages() ?? []) : (messagesCacheByThread.get(tid) ?? []);
+      const merged = mergeTranscriptSnapshot(existing, loaded);
+      messagesCacheByThread.set(tid, merged);
+
+      if (tid === String(ai.activeThreadId() ?? '').trim()) {
+        const withDraft = mergeDraftAssistantMessage(tid, merged);
+        chat.setMessages(withDraft);
+        setHasMessages(withDraft.length > 0);
+        if (opts?.scrollToBottom) {
+          enableAutoFollow();
+          forceScrollToLatest();
+        }
       }
     } catch (e) {
       if (reqNo !== lastMessagesReq) return;
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Failed to load chat', msg || 'Request failed.');
-      chat.clearMessages();
-      setHasMessages(false);
     } finally {
       if (reqNo === lastMessagesReq) {
         setMessagesLoading(false);
@@ -987,9 +1217,15 @@ export function EnvAIPage() {
     const tid = ai.activeThreadId();
     enableAutoFollow();
 
-    // Draft -> thread promotion: keep the optimistic user message rendered by ChatProvider.
+    // Draft -> thread promotion: keep the optimistic user message already rendered in the chat store.
     if (skipNextThreadLoad && tid) {
       skipNextThreadLoad = false;
+      const tidStr = String(tid ?? '').trim();
+      const current = chat?.messages() ?? [];
+      if (tidStr) {
+        messagesCacheByThread.set(tidStr, current);
+      }
+      setHasMessages(current.length > 0);
       void loadThreadTodos(tid, { silent: true, notifyError: false });
       return;
     }
@@ -1018,7 +1254,8 @@ export function EnvAIPage() {
     setThreadTodos(null);
     setTodosError('');
     setTodosLoading(true);
-    void loadThreadMessages(tid, { scrollToBottom: true });
+    const needsBaseline = !transcriptInitDoneByThread.has(tidStr);
+    void loadThreadMessages(tid, { scrollToBottom: true, reset: needsBaseline });
     void loadThreadTodos(tid, { silent: false, notifyError: false });
   });
 
@@ -1028,6 +1265,41 @@ export function EnvAIPage() {
     const unsub = ai.onRealtimeEvent((event) => {
       const tid = String(event.threadId ?? '').trim();
       if (!tid) return;
+
+      if (event.eventType === 'transcript_message') {
+        const rowId = Math.max(0, Math.floor(Number((event as any)?.messageRowId ?? 0) || 0));
+        const messageJson = (event as any)?.messageJson ?? (event as any)?.message_json;
+        const messageID = String(messageJson?.id ?? '').trim();
+        if (!messageID) return;
+
+        const decorated = decorateMessageForTerminalExec(messageJson as Message);
+
+        const prevCursor = transcriptCursorByThread.get(tid) ?? 0;
+        const isActiveTid = tid === String(ai.activeThreadId() ?? '').trim();
+        const shouldBackfillGap = isActiveTid && rowId > prevCursor + 1 && transcriptInitDoneByThread.has(tid);
+        if (shouldBackfillGap) {
+          // Backfill before advancing the cursor so we don't skip missed rows.
+          void loadThreadMessages(tid, { reset: false });
+        } else if (rowId > 0) {
+          transcriptCursorByThread.set(tid, Math.max(prevCursor, rowId));
+        }
+
+        const cached = messagesCacheByThread.get(tid) ?? [];
+        if (!cached.some((m) => String((m as any)?.id ?? '').trim() === messageID)) {
+          const next = [...cached, decorated];
+          messagesCacheByThread.set(tid, next);
+        }
+
+        if (isActiveTid) {
+          const current = chat?.messages() ?? [];
+          if (!current.some((m) => String((m as any)?.id ?? '').trim() === messageID)) {
+            chat?.addMessage(decorated);
+          }
+          setHasMessages(true);
+          scheduleFollowScrollToLatest();
+        }
+        return;
+      }
 
       if (event.eventType === 'stream_event') {
         const streamEvent = event.streamEvent as any;
@@ -1212,7 +1484,7 @@ export function EnvAIPage() {
     await rpc.ai.approveTool({ runId: rid, toolId, approved });
   };
 
-  const startRun = async (content: string, attachments: Attachment[]) => {
+  const startRun = async (content: string, attachments: Attachment[], userMessageId?: string) => {
     if (!chat) {
       notify.error('AI unavailable', 'Chat is not ready.');
       setSendPending(false);
@@ -1293,10 +1565,12 @@ export function EnvAIPage() {
 
     try {
       setRunPhaseLabel('Planning...');
+      const msgID = String(userMessageId ?? '').trim();
       const resp = await rpc.ai.startRun({
         threadId: tid,
         model,
         input: {
+          messageId: msgID || undefined,
           text: userText,
           attachments: attIn,
         },
@@ -1320,17 +1594,27 @@ export function EnvAIPage() {
   };
 
   let startRunQueue: Promise<void> = Promise.resolve();
-  const enqueueStartRun = (content: string, attachments: Attachment[]) => {
-    const task = startRunQueue.then(() => startRun(content, attachments));
+  const enqueueStartRun = (content: string, attachments: Attachment[], userMessageId?: string) => {
+    const task = startRunQueue.then(() => startRun(content, attachments, userMessageId));
     startRunQueue = task.catch(() => {});
     return task;
   };
+
+  const pendingUserMessageIDs: string[] = [];
 
   const callbacks: ChatCallbacks = {
     onWillSend: () => {
       // Synchronous hook: called right after ChatProvider renders the optimistic user message.
       // Raising sendPending here makes the working indicator appear in the same frame.
       if (import.meta.env.DEV) console.debug('[AI Chat] onWillSend fired at', performance.now().toFixed(1), 'ms');
+
+      const last = chat?.messages()?.slice(-1)?.[0] as any;
+      const lastID = String(last?.id ?? '').trim();
+      const lastRole = String(last?.role ?? '').trim();
+      if (lastID && lastRole === 'user') {
+        pendingUserMessageIDs.push(lastID);
+      }
+
       if (!canInteract()) return;
       setSendPending(true);
       setHasMessages(true);
@@ -1339,6 +1623,8 @@ export function EnvAIPage() {
       forceScrollToLatest();
     },
     onSendMessage: async (content, attachments, _addMessage) => {
+      const optimisticID = pendingUserMessageIDs.shift();
+
       if (protocol.status() !== 'connected') {
         notify.error('Not connected', 'Connecting to agent...');
         setSendPending(false);
@@ -1350,7 +1636,7 @@ export function EnvAIPage() {
         setRunPhaseLabel('Working');
         return;
       }
-      await enqueueStartRun(content, attachments);
+      await enqueueStartRun(content, attachments, optimisticID);
     },
     onUploadAttachment: uploadAttachment,
     onToolApproval: sendToolApproval,

@@ -528,7 +528,7 @@ func (s *Service) AppendThreadMessage(ctx context.Context, meta *session.Meta, t
 		return err
 	}
 
-	_, err = db.AppendMessage(ctx, meta.EndpointID, threadID, threadstore.Message{
+	rowID, err := db.AppendMessage(ctx, meta.EndpointID, threadID, threadstore.Message{
 		ThreadID:           threadID,
 		EndpointID:         meta.EndpointID,
 		MessageID:          id,
@@ -541,7 +541,11 @@ func (s *Service) AppendThreadMessage(ctx context.Context, meta *session.Meta, t
 		TextContent:        strings.TrimSpace(content),
 		MessageJSON:        string(b),
 	}, meta.UserPublicID, meta.UserEmail)
-	return err
+	if err != nil {
+		return err
+	}
+	s.broadcastTranscriptMessage(meta.EndpointID, threadID, "", rowID, string(b), now)
+	return nil
 }
 
 func (s *Service) ListRunEvents(ctx context.Context, meta *session.Meta, runID string, limit int) (*ListRunEventsResponse, error) {

@@ -8,6 +8,7 @@ package ai
 // - The LLM orchestration runs inside Go runtime; the Go agent is the only authority that can execute tools.
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -101,6 +102,11 @@ type RunHistoryMsg struct {
 }
 
 type RunInput struct {
+	// MessageID is an optional client-supplied id for the user input message persisted in the transcript.
+	//
+	// When set, the agent will prefer this id over generating a new one so the UI can keep a stable
+	// message id across optimistic rendering, realtime events, and history backfill.
+	MessageID   string            `json:"message_id,omitempty"`
 	Text        string            `json:"text"`
 	Attachments []RunAttachmentIn `json:"attachments"`
 }
@@ -289,6 +295,7 @@ type RealtimeEventType string
 const (
 	RealtimeEventTypeStream      RealtimeEventType = "stream_event"
 	RealtimeEventTypeThreadState RealtimeEventType = "thread_state"
+	RealtimeEventTypeTranscript  RealtimeEventType = "transcript_message"
 )
 
 // RealtimeStreamKind is a low-cardinality stream category for diagnostics/UI routing.
@@ -325,6 +332,10 @@ type RealtimeEvent struct {
 	StreamEvent any                    `json:"stream_event,omitempty"`
 	RunStatus   string                 `json:"run_status,omitempty"`
 	RunError    string                 `json:"run_error,omitempty"`
+
+	// Transcript message events (EventType=transcript_message).
+	MessageRowID int64           `json:"message_row_id,omitempty"`
+	MessageJSON  json.RawMessage `json:"message_json,omitempty"`
 }
 
 // ActiveThreadRun is returned in subscribe snapshots so late subscribers can discover

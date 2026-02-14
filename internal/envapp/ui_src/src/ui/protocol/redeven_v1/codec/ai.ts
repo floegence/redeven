@@ -2,12 +2,15 @@ import type {
   AIActiveRun,
   AICancelRunRequest,
   AICancelRunResponse,
+  AIListMessagesRequest,
+  AIListMessagesResponse,
   AIRealtimeEvent,
   AIStartRunRequest,
   AIStartRunResponse,
   AISubscribeResponse,
   AIToolApprovalRequest,
   AIToolApprovalResponse,
+  AITranscriptMessageItem,
   AIThreadRunStatus,
 } from '../sdk/ai';
 import type {
@@ -15,9 +18,12 @@ import type {
   wire_ai_cancel_run_req,
   wire_ai_cancel_run_resp,
   wire_ai_event_notify,
+  wire_ai_list_messages_req,
+  wire_ai_list_messages_resp,
   wire_ai_start_run_req,
   wire_ai_start_run_resp,
   wire_ai_subscribe_resp,
+  wire_ai_transcript_message_item,
   wire_ai_tool_approval_req,
   wire_ai_tool_approval_resp,
 } from '../wire/ai';
@@ -34,6 +40,7 @@ export function toWireAIStartRunRequest(req: AIStartRunRequest): wire_ai_start_r
     thread_id: String(req.threadId ?? '').trim(),
     model: req.model?.trim() ? req.model.trim() : undefined,
     input: {
+      message_id: req.input?.messageId?.trim() ? String(req.input.messageId).trim() : undefined,
       text: String(req.input?.text ?? ''),
       attachments: Array.isArray(req.input?.attachments)
         ? req.input.attachments
@@ -92,14 +99,17 @@ export function fromWireAIToolApprovalResponse(resp: wire_ai_tool_approval_resp)
 
 export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtimeEvent | null {
   const eventType = String(payload?.event_type ?? '').trim();
-  if (eventType !== 'stream_event' && eventType !== 'thread_state') {
+  if (eventType !== 'stream_event' && eventType !== 'thread_state' && eventType !== 'transcript_message') {
     return null;
   }
 
   const threadId = String(payload?.thread_id ?? '').trim();
   const runId = String(payload?.run_id ?? '').trim();
   const endpointId = String(payload?.endpoint_id ?? '').trim();
-  if (!threadId || !runId || !endpointId) {
+  if (!threadId || !endpointId) {
+    return null;
+  }
+  if (eventType !== 'transcript_message' && !runId) {
     return null;
   }
 
@@ -143,5 +153,35 @@ export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtime
     streamEvent: eventType === 'stream_event' ? (payload?.stream_event as any) : undefined,
     runStatus,
     runError: typeof payload?.run_error === 'string' ? payload.run_error : undefined,
+
+    messageRowId: Number(payload?.message_row_id ?? 0) || undefined,
+    messageJson: payload?.message_json,
+  };
+}
+
+function fromWireTranscriptMessageItem(raw: wire_ai_transcript_message_item): AITranscriptMessageItem | null {
+  const rowId = Number(raw?.row_id ?? 0);
+  if (!Number.isFinite(rowId) || rowId <= 0) return null;
+  return {
+    rowId,
+    messageJson: raw?.message_json,
+  };
+}
+
+export function toWireAIListMessagesRequest(req: AIListMessagesRequest): wire_ai_list_messages_req {
+  return {
+    thread_id: String(req.threadId ?? '').trim(),
+    after_row_id: typeof req.afterRowId === 'number' && Number.isFinite(req.afterRowId) && req.afterRowId > 0 ? Math.floor(req.afterRowId) : undefined,
+    limit: typeof req.limit === 'number' && Number.isFinite(req.limit) && req.limit > 0 ? Math.floor(req.limit) : undefined,
+  };
+}
+
+export function fromWireAIListMessagesResponse(resp: wire_ai_list_messages_resp): AIListMessagesResponse {
+  const items = Array.isArray(resp?.messages) ? resp.messages.map(fromWireTranscriptMessageItem).filter(Boolean) as AITranscriptMessageItem[] : [];
+  const next = Number(resp?.next_after_row_id ?? 0);
+  return {
+    messages: items,
+    nextAfterRowId: Number.isFinite(next) && next > 0 ? next : undefined,
+    hasMore: Boolean(resp?.has_more ?? false),
   };
 }
