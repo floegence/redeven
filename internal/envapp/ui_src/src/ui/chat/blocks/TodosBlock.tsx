@@ -1,6 +1,6 @@
-// TodosBlock — inline display of write_todos results as a compact card list.
+// TodosBlock — checklist view for write_todos snapshots.
 
-import { For, Show } from 'solid-js';
+import { For, Match, Show, Switch } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 
@@ -16,56 +16,121 @@ export interface TodosBlockProps {
   class?: string;
 }
 
-function statusBadge(status: string): { label: string; cls: string } {
-  switch (status) {
-    case 'in_progress':
-      return { label: 'In progress', cls: 'chat-todos-status-badge-progress' };
-    case 'completed':
-      return { label: 'Completed', cls: 'chat-todos-status-badge-completed' };
-    case 'cancelled':
-      return { label: 'Cancelled', cls: 'chat-todos-status-badge-cancelled' };
-    default:
-      return { label: 'Pending', cls: 'chat-todos-status-badge-pending' };
-  }
-}
-
 function formatTime(ms: number): string {
   if (!ms || !Number.isFinite(ms) || ms <= 0) return '';
-  const d = new Date(ms);
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
+  const date = new Date(ms);
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
   return `${hh}:${mm}`;
 }
 
+function isDone(status: TodosBlockProps['todos'][number]['status']): boolean {
+  return status === 'completed' || status === 'cancelled';
+}
+
+function statusLabel(status: TodosBlockProps['todos'][number]['status']): string {
+  switch (status) {
+    case 'in_progress':
+      return 'In progress';
+    case 'completed':
+      return 'Completed';
+    case 'cancelled':
+      return 'Cancelled';
+    default:
+      return 'Pending';
+  }
+}
+
+function statusClass(status: TodosBlockProps['todos'][number]['status']): string {
+  switch (status) {
+    case 'in_progress':
+      return 'chat-todos-status-progress';
+    case 'completed':
+      return 'chat-todos-status-completed';
+    case 'cancelled':
+      return 'chat-todos-status-cancelled';
+    default:
+      return 'chat-todos-status-pending';
+  }
+}
+
 export const TodosBlock: Component<TodosBlockProps> = (props) => {
+  const doneCount = () => props.todos.filter((item) => isDone(item.status)).length;
+
   return (
     <div class={cn('chat-todos-block', props.class)}>
-      <div class="chat-todos-list">
-        <For each={props.todos}>
-          {(item) => {
-            const badge = () => statusBadge(item.status);
-            return (
-              <div class="chat-todos-item">
-                <div class="chat-todos-item-row">
-                  <span class={cn('chat-todos-status-badge', badge().cls)}>
-                    {badge().label}
-                  </span>
-                  <span class="chat-todos-content">{item.content}</span>
+      <div class="chat-todos-header">
+        <div class="chat-todos-title-row">
+          <span class="chat-todos-title">Checklist</span>
+          <span class="chat-todos-progress">
+            {doneCount()}/{props.todos.length || 0} done
+          </span>
+        </div>
+        <div class="chat-todos-meta">
+          <Show when={props.version > 0}>
+            <span>Version {props.version}</span>
+          </Show>
+          <Show when={props.updatedAtUnixMs > 0}>
+            <span>Updated {formatTime(props.updatedAtUnixMs)}</span>
+          </Show>
+        </div>
+      </div>
+
+      <Show
+        when={props.todos.length > 0}
+        fallback={<div class="chat-todos-empty">No tasks tracked yet.</div>}
+      >
+        <ul class="chat-todos-list" role="list">
+          <For each={props.todos}>
+            {(item) => (
+              <li class="chat-todos-item">
+                <span
+                  class={cn(
+                    'chat-todos-check',
+                    `chat-todos-check-${item.status}`,
+                  )}
+                  aria-hidden="true"
+                >
+                  <Switch>
+                    <Match when={item.status === 'completed'}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    </Match>
+                    <Match when={item.status === 'cancelled'}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12h14" />
+                      </svg>
+                    </Match>
+                    <Match when={item.status === 'in_progress'}>
+                      <span class="chat-todos-check-dot" />
+                    </Match>
+                  </Switch>
+                </span>
+
+                <div class="chat-todos-main">
+                  <div class="chat-todos-main-row">
+                    <span
+                      class={cn(
+                        'chat-todos-content',
+                        isDone(item.status) && 'chat-todos-content-done',
+                      )}
+                    >
+                      {item.content}
+                    </span>
+                    <span class={cn('chat-todos-status', statusClass(item.status))}>
+                      {statusLabel(item.status)}
+                    </span>
+                  </div>
+                  <Show when={item.note}>
+                    <div class="chat-todos-note">{item.note}</div>
+                  </Show>
                 </div>
-                <Show when={item.note}>
-                  <div class="chat-todos-note">{item.note}</div>
-                </Show>
-              </div>
-            );
-          }}
-        </For>
-      </div>
-      <div class="chat-todos-footer">
-        <span>Version {props.version}</span>
-        <Show when={props.updatedAtUnixMs > 0}>
-          <span>Updated {formatTime(props.updatedAtUnixMs)}</span>
-        </Show>
-      </div>
+              </li>
+            )}
+          </For>
+        </ul>
+      </Show>
     </div>
   );
 };
