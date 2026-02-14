@@ -1,4 +1,4 @@
-import { For, Index, Show, createEffect, createMemo, createResource, createSignal, onCleanup, type JSX } from 'solid-js';
+import { For, Index, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import {
   ChevronRight,
@@ -13,6 +13,7 @@ import {
   Zap,
 } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
+import { Sidebar, SidebarContent, SidebarItem, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
 import { Button, Card, Checkbox, ConfirmDialog, Input, Select } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
@@ -20,7 +21,7 @@ import { fetchGatewayJSON } from '../services/gatewayApi';
 import { getAgentLatestVersion, getEnvironment } from '../services/controlplaneApi';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { useRedevenRpc } from '../protocol/redeven_v1/hooks';
-import { useEnvContext } from './EnvContext';
+import { useEnvContext, type EnvSettingsSection } from './EnvContext';
 
 // ============================================================================
 // Types
@@ -99,6 +100,27 @@ type AIPreservedUIFields = {
 const DEFAULT_CODE_SERVER_PORT_MIN = 20000;
 const DEFAULT_CODE_SERVER_PORT_MAX = 21000;
 const RELEASE_VERSION_RE = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
+type SettingsNavItem = Readonly<{
+  id: EnvSettingsSection;
+  label: string;
+  icon: (props: { class?: string }) => JSX.Element;
+}>;
+
+const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
+  { id: 'config', label: 'Config File', icon: FileCode },
+  { id: 'connection', label: 'Connection', icon: Globe },
+  { id: 'agent', label: 'Agent', icon: Zap },
+  { id: 'runtime', label: 'Runtime', icon: Terminal },
+  { id: 'logging', label: 'Logging', icon: Database },
+  { id: 'codespaces', label: 'Codespaces', icon: Code },
+  { id: 'permission_policy', label: 'Permission Policy', icon: Shield },
+  { id: 'ai', label: 'Flower', icon: FlowerIcon },
+];
+
+function settingsSectionElementID(section: EnvSettingsSection): string {
+  return `redeven-settings-${section}`;
+}
 
 function isReleaseVersion(raw: string): boolean {
   const v = String(raw ?? '').trim();
@@ -348,6 +370,53 @@ export function EnvSettingsPage() {
   );
 
   const canInteract = createMemo(() => protocol.status() === 'connected' && !settings.loading && !settings.error);
+
+  // Settings quick-jump directory (sidebar/select).
+  const [activeSection, setActiveSection] = createSignal<EnvSettingsSection>('config');
+  let scrollEl: HTMLDivElement | undefined;
+
+  const scrollToSection = (section: EnvSettingsSection, behavior: ScrollBehavior = 'smooth') => {
+    const el = document.getElementById(settingsSectionElementID(section));
+    if (!el) return;
+    setActiveSection(section);
+    el.scrollIntoView({ behavior, block: 'start' });
+  };
+
+  let scrollRAF = 0;
+  const updateActiveFromScroll = () => {
+    if (!scrollEl) return;
+    const threshold = 96;
+    const containerTop = scrollEl.getBoundingClientRect().top;
+
+    let current: EnvSettingsSection | null = null;
+    for (const it of SETTINGS_NAV_ITEMS) {
+      const el = document.getElementById(settingsSectionElementID(it.id));
+      if (!el) continue;
+      const top = el.getBoundingClientRect().top - containerTop;
+      if (top - threshold <= 0) {
+        current = it.id;
+        continue;
+      }
+      if (!current) current = it.id;
+      break;
+    }
+
+    if (current) setActiveSection(current);
+  };
+
+  onMount(() => {
+    if (!scrollEl) return;
+    const onScroll = () => {
+      if (scrollRAF) cancelAnimationFrame(scrollRAF);
+      scrollRAF = requestAnimationFrame(updateActiveFromScroll);
+    };
+    scrollEl.addEventListener('scroll', onScroll, { passive: true });
+    updateActiveFromScroll();
+    onCleanup(() => {
+      scrollEl?.removeEventListener('scroll', onScroll);
+      if (scrollRAF) cancelAnimationFrame(scrollRAF);
+    });
+  });
 
   // ============================================================================
   // Agent maintenance actions (E2EE, data plane)
@@ -1217,10 +1286,7 @@ export function EnvSettingsPage() {
     const seq = env.settingsFocusSeq();
     const section = env.settingsFocusSection();
     if (!seq || !section) return;
-    requestAnimationFrame(() => {
-      const el = document.getElementById(`redeven-settings-${section}`);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
+    requestAnimationFrame(() => scrollToSection(section));
   });
 
   const saveSettings = async (body: any) => {
@@ -1624,8 +1690,35 @@ export function EnvSettingsPage() {
   // ============================================================================
 
   return (
-    <div class="h-full min-h-0 overflow-auto bg-background">
-      <div class="max-w-4xl mx-auto p-4 space-y-6 sm:p-6">
+    <div class="relative h-full min-h-0 bg-background">
+      <div class="h-full min-h-0 flex">
+        <div class="hidden lg:block h-full">
+          <Sidebar width={240} class="h-full">
+            <SidebarContent>
+              <SidebarSection title="Jump to">
+                <SidebarItemList>
+                  <For each={SETTINGS_NAV_ITEMS}>
+                    {(it) => {
+                      const Icon = it.icon;
+                      return (
+                        <SidebarItem
+                          active={activeSection() === it.id}
+                          icon={<Icon class="w-4 h-4" />}
+                          onClick={() => scrollToSection(it.id)}
+                        >
+                          {it.label}
+                        </SidebarItem>
+                      );
+                    }}
+                  </For>
+                </SidebarItemList>
+              </SidebarSection>
+            </SidebarContent>
+          </Sidebar>
+        </div>
+
+        <div ref={(el) => (scrollEl = el)} class="flex-1 min-w-0 overflow-auto">
+          <div class="max-w-4xl mx-auto p-4 space-y-6 sm:p-6">
         {/* Page Header */}
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -1640,6 +1733,19 @@ export function EnvSettingsPage() {
           </Button>
         </div>
 
+        <div class="lg:hidden">
+          <FieldLabel>Jump to</FieldLabel>
+          <Select
+            value={activeSection()}
+            onChange={(v) => {
+              if (!v) return;
+              scrollToSection(v as EnvSettingsSection);
+            }}
+            options={SETTINGS_NAV_ITEMS.map((it) => ({ value: it.id, label: it.label }))}
+            class="w-full"
+          />
+        </div>
+
         <Show when={settings.error}>
           <div class="flex items-start gap-2 p-4 rounded-lg bg-destructive/10 border border-destructive/20">
             <div class="text-sm text-destructive">{settings.error instanceof Error ? settings.error.message : String(settings.error)}</div>
@@ -1647,74 +1753,79 @@ export function EnvSettingsPage() {
         </Show>
 
         {/* Config File Card */}
-        <SettingsCard
-          icon={FileCode}
-          title="Config File"
-          description="Location of the agent configuration file."
-          badge="Read-only"
-          actions={<ViewToggle value={configView} onChange={(v) => setConfigView(v)} />}
-        >
-          <Show when={configView() === 'ui'} fallback={<JSONEditor value={configJSONText()} onChange={() => {}} disabled rows={4} />}>
-            <InfoRow label="Path" value={configPath() || '(unknown)'} mono />
-          </Show>
-        </SettingsCard>
+        <div id={settingsSectionElementID('config')} class="scroll-mt-6">
+          <SettingsCard
+            icon={FileCode}
+            title="Config File"
+            description="Location of the agent configuration file."
+            badge="Read-only"
+            actions={<ViewToggle value={configView} onChange={(v) => setConfigView(v)} />}
+          >
+            <Show when={configView() === 'ui'} fallback={<JSONEditor value={configJSONText()} onChange={() => {}} disabled rows={4} />}>
+              <InfoRow label="Path" value={configPath() || '(unknown)'} mono />
+            </Show>
+          </SettingsCard>
+        </div>
 
         {/* Connection Card */}
-        <SettingsCard
-          icon={Globe}
-          title="Connection"
-          description="Connection details managed by the control plane."
-          badge="Read-only"
-          actions={<ViewToggle value={connectionView} onChange={(v) => setConnectionView(v)} />}
-        >
-          <Show when={connectionView() === 'ui'} fallback={<JSONEditor value={connectionJSONText()} onChange={() => {}} disabled rows={10} />}>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 divide-y md:divide-y-0 divide-border">
-              <InfoRow label="Control Plane" value={String(settings()?.connection?.controlplane_base_url ?? '')} mono />
-              <InfoRow label="Environment ID" value={String(settings()?.connection?.environment_id ?? '')} mono />
-              <InfoRow label="Agent Instance ID" value={String(settings()?.connection?.agent_instance_id ?? '')} mono />
-              <InfoRow label="Direct Channel" value={String(settings()?.connection?.direct?.channel_id ?? '')} mono />
-              <InfoRow label="Direct Suite" value={String(settings()?.connection?.direct?.default_suite ?? '')} mono />
-              <InfoRow label="E2EE PSK" value={settings()?.connection?.direct?.e2ee_psk_set ? 'Configured' : 'Not set'} />
-              <div class="md:col-span-2">
-                <InfoRow label="Direct WebSocket URL" value={String(settings()?.connection?.direct?.ws_url ?? '')} mono />
+        <div id={settingsSectionElementID('connection')} class="scroll-mt-6">
+          <SettingsCard
+            icon={Globe}
+            title="Connection"
+            description="Connection details managed by the control plane."
+            badge="Read-only"
+            actions={<ViewToggle value={connectionView} onChange={(v) => setConnectionView(v)} />}
+          >
+            <Show when={connectionView() === 'ui'} fallback={<JSONEditor value={connectionJSONText()} onChange={() => {}} disabled rows={10} />}>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 divide-y md:divide-y-0 divide-border">
+                <InfoRow label="Control Plane" value={String(settings()?.connection?.controlplane_base_url ?? '')} mono />
+                <InfoRow label="Environment ID" value={String(settings()?.connection?.environment_id ?? '')} mono />
+                <InfoRow label="Agent Instance ID" value={String(settings()?.connection?.agent_instance_id ?? '')} mono />
+                <InfoRow label="Direct Channel" value={String(settings()?.connection?.direct?.channel_id ?? '')} mono />
+                <InfoRow label="Direct Suite" value={String(settings()?.connection?.direct?.default_suite ?? '')} mono />
+                <InfoRow label="E2EE PSK" value={settings()?.connection?.direct?.e2ee_psk_set ? 'Configured' : 'Not set'} />
+                <div class="md:col-span-2">
+                  <InfoRow label="Direct WebSocket URL" value={String(settings()?.connection?.direct?.ws_url ?? '')} mono />
+                </div>
               </div>
-            </div>
-          </Show>
-        </SettingsCard>
+            </Show>
+          </SettingsCard>
+        </div>
 
         {/* Agent Card */}
-        <SettingsCard
-          icon={Zap}
-          title="Agent"
-          description="Version and maintenance actions."
-          badge={agentCardBadge()}
-          badgeVariant={agentCardBadgeVariant()}
-          error={maintenanceError()}
-          actions={
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                class="w-full sm:w-auto"
-                onClick={() => setRestartOpen(true)}
-                loading={isRestarting()}
-                disabled={!canStartRestart()}
-              >
-                Restart agent
-              </Button>
-              <Button
-                size="sm"
-                variant="default"
-                class="w-full sm:w-auto"
-                onClick={() => setUpgradeOpen(true)}
-                loading={isUpgrading()}
-                disabled={!canStartUpgrade()}
-              >
-                Update agent
-              </Button>
-            </>
-          }
-        >
+        <div id={settingsSectionElementID('agent')} class="scroll-mt-6">
+          <SettingsCard
+            icon={Zap}
+            title="Agent"
+            description="Version and maintenance actions."
+            badge={agentCardBadge()}
+            badgeVariant={agentCardBadgeVariant()}
+            error={maintenanceError()}
+            actions={
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  class="w-full sm:w-auto"
+                  onClick={() => setRestartOpen(true)}
+                  loading={isRestarting()}
+                  disabled={!canStartRestart()}
+                >
+                  Restart agent
+                </Button>
+                <Button
+                  size="sm"
+                  variant="default"
+                  class="w-full sm:w-auto"
+                  onClick={() => setUpgradeOpen(true)}
+                  loading={isUpgrading()}
+                  disabled={!canStartUpgrade()}
+                >
+                  Update agent
+                </Button>
+              </>
+            }
+          >
           <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-1 divide-y md:divide-y-0 divide-border">
             <InfoRow label="Current" value={agentPing()?.version ? String(agentPing()!.version) : '—'} mono />
             <InfoRow label="Latest" value={latestVersion()?.latest_version ? String(latestVersion()!.latest_version) : latestVersion.loading ? 'Loading…' : '—'} mono />
@@ -1754,28 +1865,30 @@ export function EnvSettingsPage() {
           <Show when={maintenanceStage()}>
             <div class="text-xs text-muted-foreground">{maintenanceStage()}</div>
           </Show>
-        </SettingsCard>
+          </SettingsCard>
+        </div>
 
         {/* Runtime Card */}
-        <SettingsCard
-          icon={Terminal}
-          title="Runtime"
-          description="Shell and working directory configuration."
-          badge="Restart required"
-          badgeVariant="warning"
-          error={runtimeError()}
-          actions={
-            <>
-              <ViewToggle value={runtimeView} disabled={!canInteract()} onChange={(v) => switchRuntimeView(v)} />
-              <Button size="sm" variant="outline" onClick={() => resetRuntime()} disabled={!canInteract()}>
-                Reset
-              </Button>
-              <Button size="sm" variant="default" onClick={() => void saveRuntime()} loading={runtimeSaving()} disabled={!canInteract()}>
-                Save
-              </Button>
-            </>
-          }
-        >
+        <div id={settingsSectionElementID('runtime')} class="scroll-mt-6">
+          <SettingsCard
+            icon={Terminal}
+            title="Runtime"
+            description="Shell and working directory configuration."
+            badge="Restart required"
+            badgeVariant="warning"
+            error={runtimeError()}
+            actions={
+              <>
+                <ViewToggle value={runtimeView} disabled={!canInteract()} onChange={(v) => switchRuntimeView(v)} />
+                <Button size="sm" variant="outline" onClick={() => resetRuntime()} disabled={!canInteract()}>
+                  Reset
+                </Button>
+                <Button size="sm" variant="default" onClick={() => void saveRuntime()} loading={runtimeSaving()} disabled={!canInteract()}>
+                  Save
+                </Button>
+              </>
+            }
+          >
           <Show
             when={runtimeView() === 'ui'}
             fallback={
@@ -1821,28 +1934,30 @@ export function EnvSettingsPage() {
               </div>
             </div>
           </Show>
-        </SettingsCard>
+          </SettingsCard>
+        </div>
 
         {/* Logging Card */}
-        <SettingsCard
-          icon={Database}
-          title="Logging"
-          description="Log format and verbosity level."
-          badge="Restart required"
-          badgeVariant="warning"
-          error={loggingError()}
-          actions={
-            <>
-              <ViewToggle value={loggingView} disabled={!canInteract()} onChange={(v) => switchLoggingView(v)} />
-              <Button size="sm" variant="outline" onClick={() => resetLogging()} disabled={!canInteract()}>
-                Reset
-              </Button>
-              <Button size="sm" variant="default" onClick={() => void saveLogging()} loading={loggingSaving()} disabled={!canInteract()}>
-                Save
-              </Button>
-            </>
-          }
-        >
+        <div id={settingsSectionElementID('logging')} class="scroll-mt-6">
+          <SettingsCard
+            icon={Database}
+            title="Logging"
+            description="Log format and verbosity level."
+            badge="Restart required"
+            badgeVariant="warning"
+            error={loggingError()}
+            actions={
+              <>
+                <ViewToggle value={loggingView} disabled={!canInteract()} onChange={(v) => switchLoggingView(v)} />
+                <Button size="sm" variant="outline" onClick={() => resetLogging()} disabled={!canInteract()}>
+                  Reset
+                </Button>
+                <Button size="sm" variant="default" onClick={() => void saveLogging()} loading={loggingSaving()} disabled={!canInteract()}>
+                  Save
+                </Button>
+              </>
+            }
+          >
           <Show
             when={loggingView() === 'ui'}
             fallback={
@@ -1896,28 +2011,30 @@ export function EnvSettingsPage() {
               </div>
             </div>
           </Show>
-        </SettingsCard>
+          </SettingsCard>
+        </div>
 
         {/* Codespaces Card */}
-        <SettingsCard
-          icon={Code}
-          title="Codespaces"
-          description="Port range for code-server instances."
-          badge="Restart required"
-          badgeVariant="warning"
-          error={codespacesError()}
-          actions={
-            <>
-              <ViewToggle value={codespacesView} disabled={!canInteract()} onChange={(v) => switchCodespacesView(v)} />
-              <Button size="sm" variant="outline" onClick={() => resetCodespaces()} disabled={!canInteract()}>
-                Reset
-              </Button>
-              <Button size="sm" variant="default" onClick={() => void saveCodespaces()} loading={codespacesSaving()} disabled={!canInteract()}>
-                Save
-              </Button>
-            </>
-          }
-        >
+        <div id={settingsSectionElementID('codespaces')} class="scroll-mt-6">
+          <SettingsCard
+            icon={Code}
+            title="Codespaces"
+            description="Port range for code-server instances."
+            badge="Restart required"
+            badgeVariant="warning"
+            error={codespacesError()}
+            actions={
+              <>
+                <ViewToggle value={codespacesView} disabled={!canInteract()} onChange={(v) => switchCodespacesView(v)} />
+                <Button size="sm" variant="outline" onClick={() => resetCodespaces()} disabled={!canInteract()}>
+                  Reset
+                </Button>
+                <Button size="sm" variant="default" onClick={() => void saveCodespaces()} loading={codespacesSaving()} disabled={!canInteract()}>
+                  Save
+                </Button>
+              </>
+            }
+          >
           <Show
             when={codespacesView() === 'ui'}
             fallback={
@@ -1993,28 +2110,30 @@ export function EnvSettingsPage() {
               </Show>
             </div>
           </Show>
-        </SettingsCard>
+          </SettingsCard>
+        </div>
 
         {/* Permission Policy Card */}
-        <SettingsCard
-          icon={Shield}
-          title="Permission Policy"
-          description="Control read, write, and execute permissions."
-          badge="Restart required"
-          badgeVariant="warning"
-          error={policyError()}
-          actions={
-            <>
-              <ViewToggle value={policyView} disabled={!canInteract()} onChange={(v) => switchPolicyView(v)} />
-              <Button size="sm" variant="outline" onClick={() => resetPolicy()} disabled={!canInteract()}>
-                Reset
-              </Button>
-              <Button size="sm" variant="default" onClick={() => void savePolicy()} loading={policySaving()} disabled={!canInteract()}>
-                Save
-              </Button>
-            </>
-          }
-        >
+        <div id={settingsSectionElementID('permission_policy')} class="scroll-mt-6">
+          <SettingsCard
+            icon={Shield}
+            title="Permission Policy"
+            description="Control read, write, and execute permissions."
+            badge="Restart required"
+            badgeVariant="warning"
+            error={policyError()}
+            actions={
+              <>
+                <ViewToggle value={policyView} disabled={!canInteract()} onChange={(v) => switchPolicyView(v)} />
+                <Button size="sm" variant="outline" onClick={() => resetPolicy()} disabled={!canInteract()}>
+                  Reset
+                </Button>
+                <Button size="sm" variant="default" onClick={() => void savePolicy()} loading={policySaving()} disabled={!canInteract()}>
+                  Save
+                </Button>
+              </>
+            }
+          >
           <Show
             when={policyView() === 'ui'}
             fallback={
@@ -2254,10 +2373,11 @@ export function EnvSettingsPage() {
               </div>
             </div>
           </Show>
-        </SettingsCard>
+          </SettingsCard>
+        </div>
 
         {/* Flower Card */}
-        <div id="redeven-settings-ai">
+        <div id={settingsSectionElementID('ai')} class="scroll-mt-6">
           <SettingsCard
             icon={FlowerIcon}
             title="Flower"
@@ -2740,6 +2860,8 @@ export function EnvSettingsPage() {
 	              </div>
             </Show>
           </SettingsCard>
+        </div>
+          </div>
         </div>
       </div>
 
