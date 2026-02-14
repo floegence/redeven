@@ -451,6 +451,20 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
 .chat-working-dot:nth-child(2) { animation-delay: 150ms; }
 .chat-working-dot:nth-child(3) { animation-delay: 300ms; }
 
+.chat-ask-user-panel { margin: 0.75rem 0.75rem 0; padding: 0.625rem 0.75rem; border-radius: 0.75rem; border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 8%, transparent), color-mix(in srgb, var(--card) 75%, transparent)); }
+.chat-ask-user-header { display: flex; align-items: center; gap: 0.375rem; font-size: 0.6875rem; font-weight: 600; color: var(--primary); }
+.chat-ask-user-question { margin-top: 0.375rem; font-size: 0.75rem; line-height: 1.5; color: var(--foreground); white-space: pre-wrap; }
+.chat-ask-user-options { margin-top: 0.625rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.chat-ask-user-option-btn { border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); background: color-mix(in srgb, var(--primary) 8%, var(--card)); color: var(--foreground); border-radius: 0.5rem; padding: 0.375rem 0.625rem; font-size: 0.6875rem; line-height: 1.4; text-align: left; cursor: pointer; transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease; }
+.chat-ask-user-option-btn:hover { border-color: color-mix(in srgb, var(--primary) 48%, var(--border)); background-color: color-mix(in srgb, var(--primary) 14%, var(--card)); transform: translateY(-1px); }
+.chat-ask-user-option-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+.chat-ask-user-custom { display: flex; align-items: center; gap: 0.375rem; flex: 1 1 100%; }
+.chat-ask-user-custom-input { flex: 1; min-width: 11rem; border: 1px solid color-mix(in srgb, var(--border) 85%, var(--primary)); border-radius: 0.5rem; background: var(--background); color: var(--foreground); font-size: 0.6875rem; line-height: 1.4; padding: 0.375rem 0.5rem; }
+.chat-ask-user-custom-input:focus { outline: none; border-color: color-mix(in srgb, var(--primary) 55%, var(--border)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 14%, transparent); }
+.chat-ask-user-custom-submit { border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border)); border-radius: 0.5rem; background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--foreground); font-size: 0.6875rem; font-weight: 600; line-height: 1; padding: 0.4375rem 0.625rem; cursor: pointer; transition: border-color 150ms ease, background-color 150ms ease; }
+.chat-ask-user-custom-submit:hover { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); background: color-mix(in srgb, var(--primary) 20%, transparent); }
+.chat-ask-user-custom-submit:disabled { opacity: 0.55; cursor: not-allowed; }
+
 .chat-input-container { position: relative; margin: 0.75rem; background-color: var(--card); border: 1px solid var(--border); border-radius: 0.75rem; box-shadow: 0 1px 3px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.04); transition: border-color 200ms ease, box-shadow 200ms ease; overflow: hidden; }
 .chat-input-container-focused { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent), 0 1px 3px rgb(0 0 0 / 0.06); }
 .chat-input-container-dragging { box-shadow: inset 0 0 0 2px var(--primary); }

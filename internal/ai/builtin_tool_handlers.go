@@ -271,8 +271,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "ask_user",
-			Description:  "Ask user for clarification. Only use when you genuinely cannot determine the answer from available tools.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"question": map[string]any{"type": "string"}, "options": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"question"}, "additionalProperties": false}),
+			Description:  "Ask user for clarification. Only use when you genuinely cannot determine the answer from available tools. Provide concise recommended replies in options when possible.",
+			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"question": map[string]any{"type": "string"}, "options": map[string]any{"type": "array", "items": map[string]any{"type": "string", "maxLength": 200}, "minItems": 1, "maxItems": 4}}, "required": []string{"question"}, "additionalProperties": false}),
 			ParallelSafe: true,
 			Mutating:     false,
 			Source:       "builtin",

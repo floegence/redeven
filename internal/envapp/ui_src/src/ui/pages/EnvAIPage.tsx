@@ -185,10 +185,61 @@ const ChatCapture: Component<{ onReady: (ctx: ChatContextValue) => void }> = (pr
   return null;
 };
 
+type AskUserPromptView = Readonly<{
+  question: string;
+  options: string[];
+}>;
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function normalizeAskUserOptions(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of value) {
+    const text = String(entry ?? '').trim();
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
+function extractLatestAskUserPrompt(messages: Message[]): AskUserPromptView | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role !== 'assistant') continue;
+    const blocks = Array.isArray(message?.blocks) ? message.blocks : [];
+    for (let j = blocks.length - 1; j >= 0; j -= 1) {
+      const block = blocks[j] as any;
+      if (!block || block.type !== 'tool-call') continue;
+      if (String(block.toolName ?? '').trim() !== 'ask_user') continue;
+
+      const args = asRecord(block.args);
+      const result = asRecord(block.result);
+      const question = String(result.question ?? args.question ?? '').trim();
+      if (!question) continue;
+
+      const options = normalizeAskUserOptions(result.options ?? args.options);
+      return { question, options };
+    }
+  }
+  return null;
+}
+
 const AIChatInput: Component<{
   class?: string;
   placeholder?: string;
   disabled?: boolean;
+  showAskUserPrompt?: boolean;
   workingDirLabel?: string;
   workingDirTitle?: string;
   workingDirLocked?: boolean;
@@ -198,6 +249,7 @@ const AIChatInput: Component<{
 }> = (props) => {
   const ctx = useChatContext();
   const [text, setText] = createSignal('');
+  const [quickReplyText, setQuickReplyText] = createSignal('');
   const [isFocused, setIsFocused] = createSignal(false);
 
   let textareaRef: HTMLTextAreaElement | undefined;
@@ -211,9 +263,15 @@ const AIChatInput: Component<{
   });
 
   const placeholder = () => props.placeholder || ctx.config().placeholder || 'Type a message...';
+  const askUserPrompt = createMemo<AskUserPromptView | null>(() => {
+    if (!props.showAskUserPrompt) return null;
+    return extractLatestAskUserPrompt(ctx.messages() ?? []);
+  });
 
   const canSend = () =>
     (text().trim() || attachments.attachments().length > 0) && !props.disabled;
+
+  const canSendQuickReplyText = () => quickReplyText().trim().length > 0 && !props.disabled;
 
   // Auto-resize textarea height (coalesce to at most once per frame).
   const adjustHeight = () => {
@@ -246,6 +304,19 @@ const AIChatInput: Component<{
     if (textareaRef) textareaRef.style.height = 'auto';
 
     await ctx.sendMessage(content, files);
+  };
+
+  const handleQuickReplyClick = async (content: string) => {
+    const text = String(content ?? '').trim();
+    if (!text || props.disabled) return;
+    await ctx.sendMessage(text, []);
+  };
+
+  const handleQuickReplySubmit = async () => {
+    if (!canSendQuickReplyText()) return;
+    const content = quickReplyText().trim();
+    setQuickReplyText('');
+    await ctx.sendMessage(content, []);
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -298,6 +369,54 @@ const AIChatInput: Component<{
           attachments={attachments.attachments()}
           onRemove={attachments.removeAttachment}
         />
+      </Show>
+
+      <Show when={askUserPrompt()}>
+        {(prompt) => (
+          <div class="chat-ask-user-panel">
+            <div class="chat-ask-user-header">
+              <Sparkles class="w-3.5 h-3.5" />
+              <span>Assistant needs your input</span>
+            </div>
+            <p class="chat-ask-user-question">{prompt().question}</p>
+            <div class="chat-ask-user-options">
+              <For each={prompt().options}>
+                {(option) => (
+                  <button
+                    type="button"
+                    class="chat-ask-user-option-btn"
+                    disabled={!!props.disabled}
+                    onClick={() => void handleQuickReplyClick(option)}
+                  >
+                    {option}
+                  </button>
+                )}
+              </For>
+              <form
+                class="chat-ask-user-custom"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleQuickReplySubmit();
+                }}
+              >
+                <input
+                  class="chat-ask-user-custom-input"
+                  value={quickReplyText()}
+                  onInput={(event) => setQuickReplyText(event.currentTarget.value)}
+                  placeholder="None of above"
+                  disabled={!!props.disabled}
+                />
+                <button
+                  type="submit"
+                  class="chat-ask-user-custom-submit"
+                  disabled={!canSendQuickReplyText()}
+                >
+                  Send
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
       </Show>
 
       <div class="chat-input-body">
@@ -2383,6 +2502,7 @@ export function EnvAIPage() {
             <AIChatInput
               disabled={!canInteract()}
               placeholder={chatInputPlaceholder()}
+              showAskUserPrompt={activeThreadWaitingUser()}
               workingDirLabel={workingDirLabel() || 'Working dir'}
               workingDirTitle={activeWorkingDir() || workingDirLabel() || 'Working dir'}
               workingDirLocked={workingDirLocked()}

@@ -1246,11 +1246,12 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	resetMistakes := func() {
 		mistakeWindow = mistakeWindow[:0]
 	}
-	endAskUser := func(step int, question string, source string) error {
+	endAskUser := func(step int, question string, options []string, source string) error {
 		question = strings.TrimSpace(question)
 		if question == "" {
 			question = "I need clarification to continue safely."
 		}
+		options = normalizeAskUserOptions(options)
 		closeout, closeoutErr := r.closeOpenTodosBeforeWaitingUser(execCtx, step, question, source)
 		if closeoutErr != nil {
 			r.persistRunEvent("todos.closeout.waiting_user_failed", RealtimeStreamKindLifecycle, map[string]any{
@@ -1261,9 +1262,10 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			return closeoutErr
 		}
 		finalReason := finalizationReasonForAskUserSource(source)
-		r.emitAskUserToolBlock(question, source)
+		r.emitAskUserToolBlock(question, options, source)
 		r.persistRunEvent("ask_user.waiting", RealtimeStreamKindLifecycle, map[string]any{
 			"question":            question,
+			"options_count":       len(options),
 			"source":              strings.TrimSpace(source),
 			"appended_to_message": false,
 			"finalization_reason": finalReason,
@@ -1303,12 +1305,13 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		exceptionOverlay = recoveryOverlay
 		isFirstRound = false
 	}
-	tryAskUser := func(step int, question string, source string) (bool, error) {
+	tryAskUser := func(step int, question string, options []string, source string) (bool, error) {
 		question = strings.TrimSpace(question)
 		if question == "" {
 			question = "I need clarification to continue safely."
 		}
 		source = strings.TrimSpace(source)
+		options = normalizeAskUserOptions(options)
 
 		var askPassed bool
 		var askReason string
@@ -1323,6 +1326,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			"gate_passed":     askPassed,
 			"gate_reason":     askReason,
 			"question_len":    len([]rune(strings.TrimSpace(question))),
+			"options_count":   len(options),
 			"complexity":      taskComplexity,
 			"todo_tracking":   state.TodoTrackingEnabled,
 			"todo_open_count": state.TodoOpenCount,
@@ -1331,7 +1335,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			rejectAskUser(source, askReason)
 			return false, nil
 		}
-		return true, endAskUser(step, question, source)
+		return true, endAskUser(step, question, options, source)
 	}
 
 mainLoop:
@@ -1427,7 +1431,7 @@ mainLoop:
 				return nil
 			}
 			if recoveryCount > 5 {
-				ended, askErr := tryAskUser(step, fmt.Sprintf("I encountered repeated errors from the AI provider and cannot continue. Last error: %s", sanitizeLogText(stepErr.Error(), 200)), "provider_repeated_error")
+				ended, askErr := tryAskUser(step, fmt.Sprintf("I encountered repeated errors from the AI provider and cannot continue. Last error: %s", sanitizeLogText(stepErr.Error(), 200)), nil, "provider_repeated_error")
 				if askErr != nil {
 					return askErr
 				}
@@ -1502,7 +1506,7 @@ mainLoop:
 						})
 					}
 					if hits >= 3 {
-						ended, askErr := tryAskUser(step, fmt.Sprintf("The same tool call is repeating without progress (%s). Please clarify what should change or provide missing context.", strings.TrimSpace(call.Name)), "guard_doom_loop")
+						ended, askErr := tryAskUser(step, fmt.Sprintf("The same tool call is repeating without progress (%s). Please clarify what should change or provide missing context.", strings.TrimSpace(call.Name)), nil, "guard_doom_loop")
 						if askErr != nil {
 							return askErr
 						}
@@ -1635,7 +1639,7 @@ mainLoop:
 				}
 				appendMistake(stepMistake)
 				if mistakeSum() >= 3 {
-					ended, askErr := tryAskUser(step, "I am not making progress due to repeated tool mistakes. Please clarify the objective or provide additional context to proceed.", "tool_mistake_loop")
+					ended, askErr := tryAskUser(step, "I am not making progress due to repeated tool mistakes. Please clarify the objective or provide additional context to proceed.", nil, "tool_mistake_loop")
 					if askErr != nil {
 						return askErr
 					}
@@ -1651,7 +1655,8 @@ mainLoop:
 
 		if askUserCall != nil {
 			question := extractSignalText(*askUserCall, "question")
-			ended, askErr := tryAskUser(step, question, "model_signal")
+			options := extractSignalStringList(*askUserCall, "options")
+			ended, askErr := tryAskUser(step, question, options, "model_signal")
 			if askErr != nil {
 				return askErr
 			}
@@ -1729,7 +1734,7 @@ mainLoop:
 				"nudge_attempt": todoSetupNudges,
 			})
 			if todoSetupNudges > 3 {
-				ended, askErr := tryAskUser(step, "I need a concrete task list to continue this complex request safely. Please confirm the top-level goals and I will continue.", "complex_task_missing_todos")
+				ended, askErr := tryAskUser(step, "I need a concrete task list to continue this complex request safely. Please confirm the top-level goals and I will continue.", nil, "complex_task_missing_todos")
 				if askErr != nil {
 					return askErr
 				}
@@ -1766,7 +1771,7 @@ mainLoop:
 		if !turnTextSeen {
 			appendMistake(1)
 			if mistakeSum() >= 3 {
-				ended, askErr := tryAskUser(step, "I am not getting usable output and cannot proceed safely. Please clarify the objective or provide more context.", "provider_empty_output")
+				ended, askErr := tryAskUser(step, "I am not getting usable output and cannot proceed safely. Please clarify the objective or provide more context.", nil, "provider_empty_output")
 				if askErr != nil {
 					return askErr
 				}
@@ -1777,7 +1782,7 @@ mainLoop:
 			}
 			recoveryCount++
 			if recoveryCount > 5 {
-				ended, askErr := tryAskUser(step, "I have been unable to produce output after multiple attempts. Please check the AI provider configuration or try rephrasing your request.", "provider_empty_output_repeated")
+				ended, askErr := tryAskUser(step, "I have been unable to produce output after multiple attempts. Please check the AI provider configuration or try rephrasing your request.", nil, "provider_empty_output_repeated")
 				if askErr != nil {
 					return askErr
 				}
@@ -1877,7 +1882,7 @@ mainLoop:
 			}
 		}
 
-		ended, askErr := tryAskUser(step, "I still do not have explicit completion. Please provide missing requirements, or ask me to continue with a specific next action.", "missing_explicit_completion")
+		ended, askErr := tryAskUser(step, "I still do not have explicit completion. Please provide missing requirements, or ask me to continue with a specific next action.", nil, "missing_explicit_completion")
 		if askErr != nil {
 			return askErr
 		}
@@ -1970,7 +1975,7 @@ mainLoop:
 			if summaryErr != nil {
 				errMsg = fmt.Sprintf("The task reached the maximum step limit. Summary attempt failed: %s", sanitizeLogText(summaryErr.Error(), 200))
 			}
-			ended, askErr := tryAskUser(nativeHardMaxSteps, errMsg, "hard_max_summary_failed")
+			ended, askErr := tryAskUser(nativeHardMaxSteps, errMsg, nil, "hard_max_summary_failed")
 			if askErr != nil {
 				return askErr
 			}
@@ -1988,7 +1993,7 @@ mainLoop:
 		"gate_reason":         "hard_max_steps_reached",
 		"complexity":          taskComplexity,
 	})
-	ended, askErr := tryAskUser(nativeHardMaxSteps, "I reached the hard step limit before explicit completion. Please provide guidance for the next step and I will continue.", "hard_max_steps")
+	ended, askErr := tryAskUser(nativeHardMaxSteps, "I reached the hard step limit before explicit completion. Please provide guidance for the next step and I will continue.", nil, "hard_max_steps")
 	if askErr != nil {
 		return askErr
 	}
@@ -2533,6 +2538,33 @@ func extractSignalStringList(call ToolCall, key string) []string {
 	}
 }
 
+func normalizeAskUserOptions(options []string) []string {
+	if len(options) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(options))
+	out := make([]string, 0, len(options))
+	for _, item := range options {
+		text := truncateRunes(strings.TrimSpace(item), 120)
+		if text == "" {
+			continue
+		}
+		key := strings.ToLower(text)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, text)
+		if len(out) >= 4 {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func buildToolSignature(call ToolCall) string {
 	name := strings.TrimSpace(call.Name)
 	if name == "" {
@@ -2913,6 +2945,8 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- Do NOT ask the user to run commands, gather logs, or paste outputs that tools can obtain directly.",
 		"- Prefer autonomous continuation over ask_user; ask_user is only for true external blockers.",
 		"- If information is insufficient and tools cannot help, call ask_user.",
+		"- When calling ask_user, include 2-4 concise recommended reply options in `options` (best option first).",
+		"- Keep ask_user options mutually exclusive and actionable; do not include a free-form catch-all option.",
 		"",
 		"# Todo Discipline",
 		"- Use write_todos for complex tasks (multiple files/tools, or 3+ meaningful steps).",
@@ -3161,12 +3195,13 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 	}
 }
 
-func (r *run) emitAskUserToolBlock(question string, source string) {
+func (r *run) emitAskUserToolBlock(question string, options []string, source string) {
 	if r == nil {
 		return
 	}
 	question = strings.TrimSpace(question)
 	source = strings.TrimSpace(source)
+	options = normalizeAskUserOptions(options)
 	if question == "" {
 		return
 	}
@@ -3179,13 +3214,21 @@ func (r *run) emitAskUserToolBlock(question string, source string) {
 	r.nextBlockIndex++
 	r.needNewTextBlock = true
 	r.mu.Unlock()
+	args := map[string]any{"question": question}
+	if len(options) > 0 {
+		args["options"] = append([]string(nil), options...)
+	}
+	result := map[string]any{"question": question, "source": source, "waiting_user": true}
+	if len(options) > 0 {
+		result["options"] = append([]string(nil), options...)
+	}
 	block := ToolCallBlock{
 		Type:     "tool-call",
 		ToolName: "ask_user",
 		ToolID:   toolID,
-		Args:     map[string]any{"question": question},
+		Args:     args,
 		Status:   ToolCallStatusSuccess,
-		Result:   map[string]any{"question": question, "source": source, "waiting_user": true},
+		Result:   result,
 	}
 	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 	r.persistSetToolBlock(idx, block)
