@@ -269,7 +269,7 @@ function SettingsCard(props: SettingsCardProps) {
       <div class="border-b border-border bg-muted/20 px-4 py-3.5 sm:px-5">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div class="flex min-w-0 items-start gap-3">
-            <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/8 flex items-center justify-center ring-1 ring-primary/10">
+            <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center ring-1 ring-primary/15">
               <props.icon class="w-4 h-4 text-primary" />
             </div>
             <div class="min-w-0">
@@ -281,7 +281,7 @@ function SettingsCard(props: SettingsCardProps) {
                   </span>
                 </Show>
               </div>
-              <p class="mt-0.5 text-xs text-muted-foreground/80 break-words leading-relaxed">{props.description}</p>
+              <p class="mt-0.5 text-xs text-muted-foreground break-words leading-relaxed">{props.description}</p>
             </div>
           </div>
           <Show when={props.actions}>
@@ -327,7 +327,7 @@ interface InfoRowProps {
 
 function InfoRow(props: InfoRowProps) {
   return (
-    <div class="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3 py-2.5 border-b border-border/40 last:border-b-0">
+    <div class="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3 py-2.5 border-b border-border/60 last:border-b-0">
       <div class="text-xs font-medium text-muted-foreground sm:w-40 sm:flex-shrink-0 sm:text-right">{props.label}</div>
       <div class={`text-sm break-all min-w-0 ${props.mono ? 'font-mono text-xs leading-relaxed' : ''}`}>{props.value || '—'}</div>
     </div>
@@ -342,7 +342,7 @@ function SectionGroup(props: { title: string; children: JSX.Element }) {
   return (
     <div class="space-y-4">
       <div class="flex items-center gap-3 pt-2">
-        <h2 class="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground/70 whitespace-nowrap">{props.title}</h2>
+        <h2 class="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground whitespace-nowrap">{props.title}</h2>
         <div class="flex-1 h-px bg-border/50" />
       </div>
       {props.children}
@@ -1750,7 +1750,7 @@ export function EnvSettingsPage() {
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 class="text-xl font-semibold text-foreground tracking-tight">Settings</h1>
-            <p class="text-sm text-muted-foreground/80 mt-1 leading-relaxed">
+            <p class="text-sm text-muted-foreground mt-1 leading-relaxed">
               Configure your agent. Flower changes apply immediately; other changes require a restart.
             </p>
           </div>
@@ -1858,15 +1858,15 @@ export function EnvSettingsPage() {
             }
           >
           <div class="grid grid-cols-3 gap-3">
-            <div class="p-3 rounded-lg bg-muted/30 border border-border/40">
+            <div class="p-3 rounded-lg bg-muted/30 border border-border">
               <div class="text-[11px] font-medium text-muted-foreground mb-1">Current</div>
               <div class="text-sm font-mono font-medium">{agentPing()?.version ? String(agentPing()!.version) : '—'}</div>
             </div>
-            <div class="p-3 rounded-lg bg-muted/30 border border-border/40">
+            <div class="p-3 rounded-lg bg-muted/30 border border-border">
               <div class="text-[11px] font-medium text-muted-foreground mb-1">Latest</div>
               <div class="text-sm font-mono font-medium">{latestVersion()?.latest_version ? String(latestVersion()!.latest_version) : latestVersion.loading ? 'Loading...' : '—'}</div>
             </div>
-            <div class="p-3 rounded-lg bg-muted/30 border border-border/40">
+            <div class="p-3 rounded-lg bg-muted/30 border border-border">
               <div class="text-[11px] font-medium text-muted-foreground mb-1">Status</div>
               <div class="flex items-center gap-1.5">
                 <div class={`w-1.5 h-1.5 rounded-full ${displayedStatus() === 'online' ? 'bg-emerald-500' : displayedStatus() === 'offline' ? 'bg-amber-500' : 'bg-muted-foreground/50'}`} />
@@ -2199,7 +2199,7 @@ export function EnvSettingsPage() {
           >
             <div class="space-y-6">
               {/* Schema version */}
-              <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
+              <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/40 border border-border">
                 <span class="text-xs text-muted-foreground">schema_version</span>
                 <CodeBadge>1</CodeBadge>
               </div>
@@ -2207,7 +2207,7 @@ export function EnvSettingsPage() {
               {/* Local max */}
               <div class="space-y-3">
                 <SubSectionHeader title="local_max" description="Global permission ceiling for this agent. User and app rules are clamped to these limits." />
-                <div class="flex flex-wrap items-center gap-4 p-3 rounded-lg bg-muted/20 border border-border/40">
+                <div class="flex flex-wrap items-center gap-4 p-3 rounded-lg bg-muted/30 border border-border">
                   <Checkbox
                     checked={policyLocalRead()}
                     onChange={(v) => {
@@ -2218,7 +2218,7 @@ export function EnvSettingsPage() {
                     label="read"
                     size="sm"
                   />
-                  <div class="w-px h-4 bg-border/60" />
+                  <div class="w-px h-4 bg-border" />
                   <Checkbox
                     checked={policyLocalWrite()}
                     onChange={(v) => {
@@ -2229,7 +2229,7 @@ export function EnvSettingsPage() {
                     label="write"
                     size="sm"
                   />
-                  <div class="w-px h-4 bg-border/60" />
+                  <div class="w-px h-4 bg-border" />
                   <Checkbox
                     checked={policyLocalExecute()}
                     onChange={(v) => {
@@ -2267,7 +2267,7 @@ export function EnvSettingsPage() {
                   <div class="space-y-2">
                     <For each={policyByUser()}>
                       {(row, idx) => (
-                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border/60 bg-muted/10">
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border bg-muted/20">
                           <div class="flex-1 min-w-0">
                             <Input
                               value={row.key}
@@ -2357,7 +2357,7 @@ export function EnvSettingsPage() {
                   <div class="space-y-2">
                     <For each={policyByApp()}>
                       {(row, idx) => (
-                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border/60 bg-muted/10">
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border bg-muted/20">
                           <div class="flex-1 min-w-0">
                             <Input
                               value={row.key}
@@ -2483,7 +2483,7 @@ export function EnvSettingsPage() {
                     title="Execution policy"
                     description="Runtime guardrails for approvals, plan-mode blocking, and dangerous commands."
                   />
-                  <div class="space-y-3 p-4 rounded-lg border border-border/60 bg-muted/10">
+                  <div class="space-y-3 p-4 rounded-lg border border-border bg-muted/20">
                     <Checkbox
                       checked={aiRequireUserApproval()}
                       onChange={(v) => {
@@ -2516,9 +2516,9 @@ export function EnvSettingsPage() {
                     />
                   </div>
                   <Show when={!aiBlockDangerousCommands()}>
-                    <div class="flex items-start gap-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10">
-                      <Shield class="w-4 h-4 mt-0.5 text-amber-600 dark:text-amber-300 shrink-0" />
-                      <div class="text-xs text-amber-700 dark:text-amber-200">
+                    <div class="flex items-start gap-2.5 p-3 rounded-lg border border-amber-600/30 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10">
+                      <Shield class="w-4 h-4 mt-0.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <div class="text-xs font-medium text-amber-800 dark:text-amber-200">
                         Dangerous command blocking is disabled. The agent may execute high-risk commands directly.
                       </div>
                     </div>
@@ -2531,7 +2531,7 @@ export function EnvSettingsPage() {
                     title="Web search"
                     description="Search backend for the runtime. Sources and citations are collected per request."
                   />
-                  <div class="space-y-4 p-4 rounded-lg border border-border/60 bg-muted/10">
+                  <div class="space-y-4 p-4 rounded-lg border border-border bg-muted/20">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <FieldLabel>provider</FieldLabel>
@@ -2563,7 +2563,7 @@ export function EnvSettingsPage() {
                             class={
                               'text-xs px-2 py-1 rounded-md border ' +
                               (webSearchKeySet()?.brave
-                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                                ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
                                 : 'bg-muted/40 border-border text-muted-foreground')
                             }
                           >
@@ -2644,9 +2644,9 @@ export function EnvSettingsPage() {
                   <div class="space-y-4">
                     <Index each={aiProviders()}>
                       {(p, idx) => (
-                        <div class="rounded-lg border border-border/60 overflow-hidden">
+                        <div class="rounded-lg border border-border overflow-hidden">
                           {/* Provider header */}
-                          <div class="flex items-center justify-between px-4 py-2.5 bg-muted/20 border-b border-border/40">
+                          <div class="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border">
                             <div class="flex items-center gap-2">
                               <Layers class="w-3.5 h-3.5 text-muted-foreground" />
                               <span class="text-xs font-semibold tracking-wide uppercase text-muted-foreground">Provider {idx + 1}</span>
@@ -2729,7 +2729,7 @@ export function EnvSettingsPage() {
 	                                  class={
 	                                    'text-xs px-2 py-1 rounded-md border ' +
 	                                    (aiProviderKeySet()?.[String(p().id ?? '').trim()]
-	                                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+	                                      ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
 	                                      : 'bg-muted/40 border-border text-muted-foreground')
 	                                  }
 	                                >
@@ -2803,7 +2803,7 @@ export function EnvSettingsPage() {
                                   <div class="space-y-2">
                                     <Index each={p().models}>
                                       {(m, midx) => (
-                                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border/50 bg-background/60">
+                                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border bg-background">
                                           <div class="flex-1 min-w-0">
                                             <Input
                                               value={m().model_name}
@@ -2883,7 +2883,7 @@ export function EnvSettingsPage() {
                                             </Button>
                                           </div>
                                           <Show when={m().model_name}>
-                                            <div class="text-[10px] text-muted-foreground/70 font-mono sm:hidden">
+                                            <div class="text-[10px] text-muted-foreground font-mono sm:hidden">
                                               {modelID(p().id, m().model_name)}
                                             </div>
                                           </Show>
