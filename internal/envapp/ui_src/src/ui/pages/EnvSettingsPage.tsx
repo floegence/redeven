@@ -260,28 +260,28 @@ interface SettingsCardProps {
 function SettingsCard(props: SettingsCardProps) {
   const badgeColors = {
     default: 'bg-muted text-muted-foreground',
-    warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-    success: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+    warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20',
+    success: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20',
   };
 
   return (
-    <Card class="overflow-hidden">
-      <div class="border-b border-border bg-muted/20 px-4 py-4 sm:px-5">
+    <Card class="overflow-hidden shadow-sm">
+      <div class="border-b border-border bg-muted/20 px-4 py-3.5 sm:px-5">
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div class="flex min-w-0 items-start gap-3">
-            <div class="flex-shrink-0 w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-              <props.icon class="w-4.5 h-4.5 text-primary" />
+            <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/8 flex items-center justify-center ring-1 ring-primary/10">
+              <props.icon class="w-4 h-4 text-primary" />
             </div>
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
-                <h3 class="text-sm font-semibold text-foreground">{props.title}</h3>
+                <h3 class="text-sm font-semibold text-foreground tracking-tight">{props.title}</h3>
                 <Show when={props.badge}>
                   <span class={`text-[10px] font-medium px-2 py-0.5 rounded-full ${badgeColors[props.badgeVariant ?? 'default']}`}>
                     {props.badge}
                   </span>
                 </Show>
               </div>
-              <p class="mt-0.5 text-xs text-muted-foreground break-words">{props.description}</p>
+              <p class="mt-0.5 text-xs text-muted-foreground/80 break-words leading-relaxed">{props.description}</p>
             </div>
           </div>
           <Show when={props.actions}>
@@ -292,7 +292,8 @@ function SettingsCard(props: SettingsCardProps) {
 
       <div class="p-4 space-y-4 sm:p-5">
         <Show when={props.error}>
-          <div class="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+          <div class="flex items-start gap-2.5 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+            <div class="w-1 h-full min-h-4 rounded-full bg-destructive/60 flex-shrink-0" />
             <div class="text-xs text-destructive break-words">{props.error}</div>
           </div>
         </Show>
@@ -326,9 +327,9 @@ interface InfoRowProps {
 
 function InfoRow(props: InfoRowProps) {
   return (
-    <div class="py-2 first:pt-0 last:pb-0">
-      <div class="text-xs text-muted-foreground mb-0.5">{props.label}</div>
-      <div class={`text-sm break-all ${props.mono ? 'font-mono text-xs' : ''}`}>{props.value || '—'}</div>
+    <div class="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3 py-2.5 border-b border-border/40 last:border-b-0">
+      <div class="text-xs font-medium text-muted-foreground sm:w-40 sm:flex-shrink-0 sm:text-right">{props.label}</div>
+      <div class={`text-sm break-all min-w-0 ${props.mono ? 'font-mono text-xs leading-relaxed' : ''}`}>{props.value || '—'}</div>
     </div>
   );
 }
@@ -337,7 +338,33 @@ function CodeBadge(props: { children: string }) {
   return <code class="px-1.5 py-0.5 text-xs font-mono bg-muted rounded">{props.children}</code>;
 }
 
+function SectionGroup(props: { title: string; children: JSX.Element }) {
+  return (
+    <div class="space-y-4">
+      <div class="flex items-center gap-3 pt-2">
+        <h2 class="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground/70 whitespace-nowrap">{props.title}</h2>
+        <div class="flex-1 h-px bg-border/50" />
+      </div>
+      {props.children}
+    </div>
+  );
+}
 
+function SubSectionHeader(props: { title: string; description?: string; actions?: JSX.Element }) {
+  return (
+    <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <div class="text-sm font-semibold text-foreground">{props.title}</div>
+        <Show when={props.description}>
+          <p class="text-xs text-muted-foreground mt-0.5">{props.description}</p>
+        </Show>
+      </div>
+      <Show when={props.actions}>
+        <div class="flex-shrink-0">{props.actions}</div>
+      </Show>
+    </div>
+  );
+}
 
 function JSONEditor(props: { value: string; onChange: (v: string) => void; disabled?: boolean; rows?: number }) {
   return (
@@ -1718,12 +1745,12 @@ export function EnvSettingsPage() {
         </div>
 
         <div ref={(el) => (scrollEl = el)} class="flex-1 min-w-0 overflow-auto">
-          <div class="max-w-4xl mx-auto p-4 space-y-6 sm:p-6">
+          <div class="max-w-4xl mx-auto p-4 space-y-8 sm:p-6 pb-16">
         {/* Page Header */}
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 class="text-xl font-semibold text-foreground tracking-tight">Settings</h1>
-            <p class="text-sm text-muted-foreground mt-1">
+            <p class="text-sm text-muted-foreground/80 mt-1 leading-relaxed">
               Configure your agent. Flower changes apply immediately; other changes require a restart.
             </p>
           </div>
@@ -1747,12 +1774,14 @@ export function EnvSettingsPage() {
         </div>
 
         <Show when={settings.error}>
-          <div class="flex items-start gap-2 p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+          <div class="flex items-start gap-2.5 p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+            <div class="w-1 h-full min-h-4 rounded-full bg-destructive/60 flex-shrink-0" />
             <div class="text-sm text-destructive">{settings.error instanceof Error ? settings.error.message : String(settings.error)}</div>
           </div>
         </Show>
 
-        {/* Config File Card */}
+        {/* ── Information (read-only) ── */}
+        <SectionGroup title="Information">
         <div id={settingsSectionElementID('config')} class="scroll-mt-6">
           <SettingsCard
             icon={FileCode}
@@ -1777,20 +1806,22 @@ export function EnvSettingsPage() {
             actions={<ViewToggle value={connectionView} onChange={(v) => setConnectionView(v)} />}
           >
             <Show when={connectionView() === 'ui'} fallback={<JSONEditor value={connectionJSONText()} onChange={() => {}} disabled rows={10} />}>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 divide-y md:divide-y-0 divide-border">
+              <div class="space-y-0">
                 <InfoRow label="Control Plane" value={String(settings()?.connection?.controlplane_base_url ?? '')} mono />
                 <InfoRow label="Environment ID" value={String(settings()?.connection?.environment_id ?? '')} mono />
                 <InfoRow label="Agent Instance ID" value={String(settings()?.connection?.agent_instance_id ?? '')} mono />
                 <InfoRow label="Direct Channel" value={String(settings()?.connection?.direct?.channel_id ?? '')} mono />
                 <InfoRow label="Direct Suite" value={String(settings()?.connection?.direct?.default_suite ?? '')} mono />
                 <InfoRow label="E2EE PSK" value={settings()?.connection?.direct?.e2ee_psk_set ? 'Configured' : 'Not set'} />
-                <div class="md:col-span-2">
-                  <InfoRow label="Direct WebSocket URL" value={String(settings()?.connection?.direct?.ws_url ?? '')} mono />
-                </div>
+                <InfoRow label="Direct WebSocket URL" value={String(settings()?.connection?.direct?.ws_url ?? '')} mono />
               </div>
             </Show>
           </SettingsCard>
         </div>
+        </SectionGroup>
+
+        {/* ── Agent Management ── */}
+        <SectionGroup title="Agent Management">
 
         {/* Agent Card */}
         <div id={settingsSectionElementID('agent')} class="scroll-mt-6">
@@ -1826,10 +1857,22 @@ export function EnvSettingsPage() {
               </>
             }
           >
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-1 divide-y md:divide-y-0 divide-border">
-            <InfoRow label="Current" value={agentPing()?.version ? String(agentPing()!.version) : '—'} mono />
-            <InfoRow label="Latest" value={latestVersion()?.latest_version ? String(latestVersion()!.latest_version) : latestVersion.loading ? 'Loading…' : '—'} mono />
-            <InfoRow label="Status" value={displayedStatus()} />
+          <div class="grid grid-cols-3 gap-3">
+            <div class="p-3 rounded-lg bg-muted/30 border border-border/40">
+              <div class="text-[11px] font-medium text-muted-foreground mb-1">Current</div>
+              <div class="text-sm font-mono font-medium">{agentPing()?.version ? String(agentPing()!.version) : '—'}</div>
+            </div>
+            <div class="p-3 rounded-lg bg-muted/30 border border-border/40">
+              <div class="text-[11px] font-medium text-muted-foreground mb-1">Latest</div>
+              <div class="text-sm font-mono font-medium">{latestVersion()?.latest_version ? String(latestVersion()!.latest_version) : latestVersion.loading ? 'Loading...' : '—'}</div>
+            </div>
+            <div class="p-3 rounded-lg bg-muted/30 border border-border/40">
+              <div class="text-[11px] font-medium text-muted-foreground mb-1">Status</div>
+              <div class="flex items-center gap-1.5">
+                <div class={`w-1.5 h-1.5 rounded-full ${displayedStatus() === 'online' ? 'bg-emerald-500' : displayedStatus() === 'offline' ? 'bg-amber-500' : 'bg-muted-foreground/50'}`} />
+                <span class="text-sm font-medium">{statusLabel()}</span>
+              </div>
+            </div>
           </div>
 
           <div class="mt-3 space-y-2">
@@ -1867,7 +1910,10 @@ export function EnvSettingsPage() {
           </Show>
           </SettingsCard>
         </div>
+        </SectionGroup>
 
+        {/* ── Configuration ── */}
+        <SectionGroup title="Configuration">
         {/* Runtime Card */}
         <div id={settingsSectionElementID('runtime')} class="scroll-mt-6">
           <SettingsCard
@@ -2112,7 +2158,10 @@ export function EnvSettingsPage() {
           </Show>
           </SettingsCard>
         </div>
+        </SectionGroup>
 
+        {/* ── Security & AI ── */}
+        <SectionGroup title="Security & AI">
         {/* Permission Policy Card */}
         <div id={settingsSectionElementID('permission_policy')} class="scroll-mt-6">
           <SettingsCard
@@ -2150,14 +2199,15 @@ export function EnvSettingsPage() {
           >
             <div class="space-y-6">
               {/* Schema version */}
-              <div class="text-xs text-muted-foreground">
-                schema_version: <CodeBadge>1</CodeBadge>
+              <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/40 border border-border/40">
+                <span class="text-xs text-muted-foreground">schema_version</span>
+                <CodeBadge>1</CodeBadge>
               </div>
 
               {/* Local max */}
               <div class="space-y-3">
-                <div class="text-sm font-medium text-foreground">local_max</div>
-                <div class="flex flex-wrap gap-6">
+                <SubSectionHeader title="local_max" description="Global permission ceiling for this agent. User and app rules are clamped to these limits." />
+                <div class="flex flex-wrap items-center gap-4 p-3 rounded-lg bg-muted/20 border border-border/40">
                   <Checkbox
                     checked={policyLocalRead()}
                     onChange={(v) => {
@@ -2168,6 +2218,7 @@ export function EnvSettingsPage() {
                     label="read"
                     size="sm"
                   />
+                  <div class="w-px h-4 bg-border/60" />
                   <Checkbox
                     checked={policyLocalWrite()}
                     onChange={(v) => {
@@ -2178,6 +2229,7 @@ export function EnvSettingsPage() {
                     label="write"
                     size="sm"
                   />
+                  <div class="w-px h-4 bg-border/60" />
                   <Checkbox
                     checked={policyLocalExecute()}
                     onChange={(v) => {
@@ -2189,61 +2241,48 @@ export function EnvSettingsPage() {
                     size="sm"
                   />
                 </div>
-                <p class="text-xs text-muted-foreground">User and app rules are AND-ed with local_max.</p>
               </div>
 
               {/* by_user */}
               <div class="space-y-3">
-                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div class="text-sm font-medium text-foreground">by_user</div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setPolicyByUser((prev) => [...prev, { key: '', read: policyLocalRead(), write: policyLocalWrite(), execute: policyLocalExecute() }]);
-                      setPolicyDirty(true);
-                    }}
-                    disabled={!canInteract()}
-                  >
-                    Add Rule
-                  </Button>
-                </div>
+                <SubSectionHeader
+                  title="by_user"
+                  description="Per-user permission overrides."
+                  actions={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setPolicyByUser((prev) => [...prev, { key: '', read: policyLocalRead(), write: policyLocalWrite(), execute: policyLocalExecute() }]);
+                        setPolicyDirty(true);
+                      }}
+                      disabled={!canInteract()}
+                    >
+                      Add Rule
+                    </Button>
+                  }
+                />
 
-                <Show when={policyByUser().length > 0} fallback={<p class="text-xs text-muted-foreground">No user-specific overrides.</p>}>
-                  <div class="space-y-3">
+                <Show when={policyByUser().length > 0} fallback={<p class="text-xs text-muted-foreground italic">No user-specific overrides.</p>}>
+                  <div class="space-y-2">
                     <For each={policyByUser()}>
                       {(row, idx) => (
-                        <div class="p-4 rounded-lg border border-border bg-muted/20 space-y-3">
-                          <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-                            <div class="flex-1">
-                              <FieldLabel>user_public_id</FieldLabel>
-                              <Input
-                                value={row.key}
-                                onInput={(e) => {
-                                  const v = e.currentTarget.value;
-                                  setPolicyByUser((prev) => prev.map((it, i) => (i === idx() ? { ...it, key: v } : it)));
-                                  setPolicyDirty(true);
-                                }}
-                                placeholder="user_xxx"
-                                size="sm"
-                                class="w-full"
-                                disabled={!canInteract()}
-                              />
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              class="text-muted-foreground hover:text-destructive"
-                              onClick={() => {
-                                setPolicyByUser((prev) => prev.filter((_, i) => i !== idx()));
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border/60 bg-muted/10">
+                          <div class="flex-1 min-w-0">
+                            <Input
+                              value={row.key}
+                              onInput={(e) => {
+                                const v = e.currentTarget.value;
+                                setPolicyByUser((prev) => prev.map((it, i) => (i === idx() ? { ...it, key: v } : it)));
                                 setPolicyDirty(true);
                               }}
+                              placeholder="user_public_id"
+                              size="sm"
+                              class="w-full font-mono text-xs"
                               disabled={!canInteract()}
-                            >
-                              Remove
-                            </Button>
+                            />
                           </div>
-                          <div class="flex flex-wrap gap-6">
+                          <div class="flex items-center gap-3">
                             <Checkbox
                               checked={row.read}
                               onChange={(v) => {
@@ -2251,7 +2290,7 @@ export function EnvSettingsPage() {
                                 setPolicyDirty(true);
                               }}
                               disabled={!canInteract() || !policyLocalRead()}
-                              label="read"
+                              label="R"
                               size="sm"
                             />
                             <Checkbox
@@ -2261,7 +2300,7 @@ export function EnvSettingsPage() {
                                 setPolicyDirty(true);
                               }}
                               disabled={!canInteract() || !policyLocalWrite()}
-                              label="write"
+                              label="W"
                               size="sm"
                             />
                             <Checkbox
@@ -2271,9 +2310,21 @@ export function EnvSettingsPage() {
                                 setPolicyDirty(true);
                               }}
                               disabled={!canInteract() || !policyLocalExecute()}
-                              label="execute"
+                              label="X"
                               size="sm"
                             />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              class="text-muted-foreground hover:text-destructive h-7 w-7 p-0"
+                              onClick={() => {
+                                setPolicyByUser((prev) => prev.filter((_, i) => i !== idx()));
+                                setPolicyDirty(true);
+                              }}
+                              disabled={!canInteract()}
+                            >
+                              &times;
+                            </Button>
                           </div>
                         </div>
                       )}
@@ -2284,56 +2335,44 @@ export function EnvSettingsPage() {
 
               {/* by_app */}
               <div class="space-y-3">
-                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div class="text-sm font-medium text-foreground">by_app</div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setPolicyByApp((prev) => [...prev, { key: '', read: policyLocalRead(), write: policyLocalWrite(), execute: policyLocalExecute() }]);
-                      setPolicyDirty(true);
-                    }}
-                    disabled={!canInteract()}
-                  >
-                    Add Rule
-                  </Button>
-                </div>
+                <SubSectionHeader
+                  title="by_app"
+                  description="Per-application permission overrides."
+                  actions={
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setPolicyByApp((prev) => [...prev, { key: '', read: policyLocalRead(), write: policyLocalWrite(), execute: policyLocalExecute() }]);
+                        setPolicyDirty(true);
+                      }}
+                      disabled={!canInteract()}
+                    >
+                      Add Rule
+                    </Button>
+                  }
+                />
 
-                <Show when={policyByApp().length > 0} fallback={<p class="text-xs text-muted-foreground">No app-specific overrides.</p>}>
-                  <div class="space-y-3">
+                <Show when={policyByApp().length > 0} fallback={<p class="text-xs text-muted-foreground italic">No app-specific overrides.</p>}>
+                  <div class="space-y-2">
                     <For each={policyByApp()}>
                       {(row, idx) => (
-                        <div class="p-4 rounded-lg border border-border bg-muted/20 space-y-3">
-                          <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-                            <div class="flex-1">
-                              <FieldLabel>floe_app</FieldLabel>
-                              <Input
-                                value={row.key}
-                                onInput={(e) => {
-                                  const v = e.currentTarget.value;
-                                  setPolicyByApp((prev) => prev.map((it, i) => (i === idx() ? { ...it, key: v } : it)));
-                                  setPolicyDirty(true);
-                                }}
-                                placeholder="redeven.env"
-                                size="sm"
-                                class="w-full"
-                                disabled={!canInteract()}
-                              />
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              class="text-muted-foreground hover:text-destructive"
-                              onClick={() => {
-                                setPolicyByApp((prev) => prev.filter((_, i) => i !== idx()));
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border/60 bg-muted/10">
+                          <div class="flex-1 min-w-0">
+                            <Input
+                              value={row.key}
+                              onInput={(e) => {
+                                const v = e.currentTarget.value;
+                                setPolicyByApp((prev) => prev.map((it, i) => (i === idx() ? { ...it, key: v } : it)));
                                 setPolicyDirty(true);
                               }}
+                              placeholder="floe_app identifier"
+                              size="sm"
+                              class="w-full font-mono text-xs"
                               disabled={!canInteract()}
-                            >
-                              Remove
-                            </Button>
+                            />
                           </div>
-                          <div class="flex flex-wrap gap-6">
+                          <div class="flex items-center gap-3">
                             <Checkbox
                               checked={row.read}
                               onChange={(v) => {
@@ -2341,7 +2380,7 @@ export function EnvSettingsPage() {
                                 setPolicyDirty(true);
                               }}
                               disabled={!canInteract() || !policyLocalRead()}
-                              label="read"
+                              label="R"
                               size="sm"
                             />
                             <Checkbox
@@ -2351,7 +2390,7 @@ export function EnvSettingsPage() {
                                 setPolicyDirty(true);
                               }}
                               disabled={!canInteract() || !policyLocalWrite()}
-                              label="write"
+                              label="W"
                               size="sm"
                             />
                             <Checkbox
@@ -2361,9 +2400,21 @@ export function EnvSettingsPage() {
                                 setPolicyDirty(true);
                               }}
                               disabled={!canInteract() || !policyLocalExecute()}
-                              label="execute"
+                              label="X"
                               size="sm"
                             />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              class="text-muted-foreground hover:text-destructive h-7 w-7 p-0"
+                              onClick={() => {
+                                setPolicyByApp((prev) => prev.filter((_, i) => i !== idx()));
+                                setPolicyDirty(true);
+                              }}
+                              disabled={!canInteract()}
+                            >
+                              &times;
+                            </Button>
                           </div>
                         </div>
                       )}
@@ -2425,16 +2476,14 @@ export function EnvSettingsPage() {
                 />
               }
             >
-              <div class="space-y-6">
+              <div class="space-y-8">
                 {/* Execution policy */}
                 <div class="space-y-3">
-                  <div>
-                    <div class="text-sm font-medium text-foreground">Execution policy</div>
-                    <p class="text-xs text-muted-foreground mt-0.5">
-                      Configure runtime hard guardrails for approvals, plan-mode blocking, and dangerous commands.
-                    </p>
-                  </div>
-                  <div class="space-y-3 p-4 rounded-lg border border-border bg-muted/20">
+                  <SubSectionHeader
+                    title="Execution policy"
+                    description="Runtime guardrails for approvals, plan-mode blocking, and dangerous commands."
+                  />
+                  <div class="space-y-3 p-4 rounded-lg border border-border/60 bg-muted/10">
                     <Checkbox
                       checked={aiRequireUserApproval()}
                       onChange={(v) => {
@@ -2478,13 +2527,11 @@ export function EnvSettingsPage() {
 
                 {/* Web search */}
                 <div class="space-y-3">
-                  <div>
-                    <div class="text-sm font-medium text-foreground">Web search</div>
-                    <p class="text-xs text-muted-foreground mt-0.5">
-                      Configure which web search backend is available to the runtime and how sources/citations are collected.
-                    </p>
-                  </div>
-                  <div class="space-y-4 p-4 rounded-lg border border-border bg-muted/20">
+                  <SubSectionHeader
+                    title="Web search"
+                    description="Search backend for the runtime. Sources and citations are collected per request."
+                  />
+                  <div class="space-y-4 p-4 rounded-lg border border-border/60 bg-muted/10">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <FieldLabel>provider</FieldLabel>
@@ -2564,51 +2611,53 @@ export function EnvSettingsPage() {
 
                 {/* Providers */}
                 <div class="space-y-3">
-                  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div class="text-sm font-medium text-foreground">Providers</div>
-                      <p class="text-xs text-muted-foreground mt-0.5">
-                        Models are configured per provider. Exactly one model across all providers must be default (used for new chats). Each chat thread stores its selected model.
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        const id = newProviderID();
-                        setAiProviders((prev) =>
-                          normalizeAIProviders([
-                            ...prev,
-                            {
-                              id,
-                              name: '',
-                              type: 'openai',
-                              base_url: 'https://api.openai.com/v1',
-                              models: [{ model_name: '', is_default: false }],
-                            },
-                          ]),
-                        );
-                        setAiDirty(true);
-                      }}
-                      disabled={!canInteract()}
-                    >
-                      Add Provider
-                    </Button>
-                  </div>
+                  <SubSectionHeader
+                    title="Providers"
+                    description="Exactly one model across all providers must be default. Each chat thread stores its selected model."
+                    actions={
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const id = newProviderID();
+                          setAiProviders((prev) =>
+                            normalizeAIProviders([
+                              ...prev,
+                              {
+                                id,
+                                name: '',
+                                type: 'openai',
+                                base_url: 'https://api.openai.com/v1',
+                                models: [{ model_name: '', is_default: false }],
+                              },
+                            ]),
+                          );
+                          setAiDirty(true);
+                        }}
+                        disabled={!canInteract()}
+                      >
+                        Add Provider
+                      </Button>
+                    }
+                  />
 
-                  <div class="space-y-3">
+                  <div class="space-y-4">
                     <Index each={aiProviders()}>
                       {(p, idx) => (
-                        <div class="p-4 rounded-lg border border-border bg-muted/20 space-y-4">
-                          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div class="flex flex-wrap items-center gap-2">
-                              <Layers class="w-4 h-4 text-muted-foreground" />
-                              <span class="text-sm font-medium">Provider {idx + 1}</span>
+                        <div class="rounded-lg border border-border/60 overflow-hidden">
+                          {/* Provider header */}
+                          <div class="flex items-center justify-between px-4 py-2.5 bg-muted/20 border-b border-border/40">
+                            <div class="flex items-center gap-2">
+                              <Layers class="w-3.5 h-3.5 text-muted-foreground" />
+                              <span class="text-xs font-semibold tracking-wide uppercase text-muted-foreground">Provider {idx + 1}</span>
+                              <Show when={p().name}>
+                                <span class="text-xs text-foreground font-medium">&mdash; {p().name}</span>
+                              </Show>
                             </div>
                             <Button
                               size="sm"
                               variant="ghost"
-                              class="text-muted-foreground hover:text-destructive"
+                              class="text-muted-foreground hover:text-destructive h-7 px-2 text-xs"
                               onClick={() => {
                                 setAiProviders((prev) => normalizeAIProviders(prev.filter((_, i) => i !== idx)));
                                 setAiDirty(true);
@@ -2619,7 +2668,8 @@ export function EnvSettingsPage() {
                             </Button>
                           </div>
 
-	                          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div class="p-4 space-y-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 	                            <div>
                               <FieldLabel hint="optional">name</FieldLabel>
                               <Input
@@ -2723,79 +2773,98 @@ export function EnvSettingsPage() {
 		                              </p>
 		                            </div>
 
-                                {/* Models */}
                                 <div class="md:col-span-2 space-y-3">
-                                  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                      <div class="text-sm font-medium text-foreground">Models</div>
-                                      <p class="text-xs text-muted-foreground mt-0.5">
-                                        Shown in Flower Chat. Mark one model as default to start new chats with it.
-                                      </p>
-                                    </div>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => {
-                                        setAiProviders((prev) =>
-                                          normalizeAIProviders(
-                                            prev.map((it, i) => {
-                                              if (i !== idx) return it;
-                                              const models = Array.isArray(it.models) ? it.models : [];
-                                              return { ...it, models: [...models, { model_name: '', is_default: false }] };
-                                            }),
-                                          ),
-                                        );
-                                        setAiDirty(true);
-                                      }}
-                                      disabled={!canInteract()}
-                                    >
-                                      Add Model
-                                    </Button>
-                                  </div>
+                                  <SubSectionHeader
+                                    title="Models"
+                                    description="Shown in Flower Chat. Mark one model as default."
+                                    actions={
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setAiProviders((prev) =>
+                                            normalizeAIProviders(
+                                              prev.map((it, i) => {
+                                                if (i !== idx) return it;
+                                                const models = Array.isArray(it.models) ? it.models : [];
+                                                return { ...it, models: [...models, { model_name: '', is_default: false }] };
+                                              }),
+                                            ),
+                                          );
+                                          setAiDirty(true);
+                                        }}
+                                        disabled={!canInteract()}
+                                      >
+                                        Add Model
+                                      </Button>
+                                    }
+                                  />
 
-                                  <div class="space-y-3">
+                                  <div class="space-y-2">
                                     <Index each={p().models}>
                                       {(m, midx) => (
-                                        <div class="p-4 rounded-lg border border-border bg-background/40 space-y-3">
-                                          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                                            <div class="flex flex-wrap items-center gap-2">
-                                              <span class="text-sm font-medium">Model {midx + 1}</span>
-                                              <Show
-                                                when={m().is_default}
-                                                fallback={
-                                                  <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    class="h-6 px-2 text-[11px]"
-                                                    onClick={() => {
-                                                      setAiProviders((prev) =>
-                                                        normalizeAIProviders(
-                                                          prev.map((it, i) => ({
-                                                            ...it,
-                                                            models: (Array.isArray(it.models) ? it.models : []).map((mm, j) => ({
-                                                              ...mm,
-                                                              is_default: i === idx && j === midx,
-                                                            })),
+                                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border/50 bg-background/60">
+                                          <div class="flex-1 min-w-0">
+                                            <Input
+                                              value={m().model_name}
+                                              onInput={(e) => {
+                                                const v = e.currentTarget.value;
+                                                setAiProviders((prev) =>
+                                                  prev.map((it, i) =>
+                                                    i !== idx
+                                                      ? it
+                                                      : {
+                                                          ...it,
+                                                          models: (Array.isArray(it.models) ? it.models : []).map((mm, j) =>
+                                                            j === midx ? { ...mm, model_name: v } : mm,
+                                                          ),
+                                                        },
+                                                  ),
+                                                );
+                                                setAiDirty(true);
+                                              }}
+                                              placeholder="model_name"
+                                              size="sm"
+                                              class="w-full font-mono text-xs"
+                                              disabled={!canInteract()}
+                                            />
+                                          </div>
+                                          <div class="flex items-center gap-2 flex-shrink-0">
+                                            <Show
+                                              when={m().is_default}
+                                              fallback={
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  class="h-6 px-2 text-[11px]"
+                                                  onClick={() => {
+                                                    setAiProviders((prev) =>
+                                                      normalizeAIProviders(
+                                                        prev.map((it, i) => ({
+                                                          ...it,
+                                                          models: (Array.isArray(it.models) ? it.models : []).map((mm, j) => ({
+                                                            ...mm,
+                                                            is_default: i === idx && j === midx,
                                                           })),
-                                                        ),
-                                                      );
-                                                      setAiDirty(true);
-                                                    }}
-                                                    disabled={!canInteract()}
-                                                  >
-                                                    Set default
-                                                  </Button>
-                                                }
-                                              >
-                                                <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                                                  Default
-                                                </span>
-                                              </Show>
-                                            </div>
+                                                        })),
+                                                      ),
+                                                    );
+                                                    setAiDirty(true);
+                                                  }}
+                                                  disabled={!canInteract()}
+                                                >
+                                                  Set default
+                                                </Button>
+                                              }
+                                            >
+                                              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                                                Default
+                                              </span>
+                                            </Show>
                                             <Button
                                               size="sm"
                                               variant="ghost"
-                                              class="text-muted-foreground hover:text-destructive"
+                                              class="text-muted-foreground hover:text-destructive h-7 w-7 p-0"
                                               onClick={() => {
                                                 setAiProviders((prev) =>
                                                   normalizeAIProviders(
@@ -2810,57 +2879,32 @@ export function EnvSettingsPage() {
                                               }}
                                               disabled={!canInteract() || (p().models?.length ?? 0) <= 1}
                                             >
-                                              Remove
+                                              &times;
                                             </Button>
                                           </div>
-
-                                          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div class="md:col-span-2">
-                                              <FieldLabel hint="required">model_name</FieldLabel>
-                                              <Input
-                                                value={m().model_name}
-                                                onInput={(e) => {
-                                                  const v = e.currentTarget.value;
-                                                  setAiProviders((prev) =>
-                                                    prev.map((it, i) =>
-                                                      i !== idx
-                                                        ? it
-                                                        : {
-                                                            ...it,
-                                                            models: (Array.isArray(it.models) ? it.models : []).map((mm, j) =>
-                                                              j === midx ? { ...mm, model_name: v } : mm,
-                                                            ),
-                                                          },
-                                                    ),
-                                                  );
-                                                  setAiDirty(true);
-                                                }}
-                                                placeholder="gpt-5-mini"
-                                                size="sm"
-                                                class="w-full"
-                                                disabled={!canInteract()}
-                                              />
+                                          <Show when={m().model_name}>
+                                            <div class="text-[10px] text-muted-foreground/70 font-mono sm:hidden">
+                                              {modelID(p().id, m().model_name)}
                                             </div>
-                                            <div class="md:col-span-2 text-xs text-muted-foreground">
-                                              Wire id: <span class="font-mono">{modelID(p().id, m().model_name)}</span>
-                                            </div>
-                                          </div>
+                                          </Show>
                                         </div>
                                       )}
                                     </Index>
                                   </div>
                                 </div>
-		                          </div>
-		                        </div>
-		                      )}
-		                    </Index>
-		                  </div>
-		                </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </Index>
+                  </div>
+                </div>
 
 	              </div>
             </Show>
           </SettingsCard>
         </div>
+        </SectionGroup>
           </div>
         </div>
       </div>
