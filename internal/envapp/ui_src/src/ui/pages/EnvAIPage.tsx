@@ -675,9 +675,9 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
       >
         {/* Animated flower icon */}
         <div class="relative inline-flex items-center justify-center mb-6">
-          <div class="absolute -inset-2 rounded-2xl bg-pink-500/8 animate-[pulse_3s_ease-in-out_infinite]" />
-          <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500/15 to-amber-500/10 flex items-center justify-center border border-pink-500/15 shadow-sm">
-            <FlowerIcon class="w-9 h-9" />
+          <div class="absolute -inset-2 rounded-full bg-pink-500/8 animate-[pulse_3s_ease-in-out_infinite]" />
+          <div class="relative w-16 h-16 rounded-full bg-gradient-to-br from-pink-500/15 to-amber-500/10 flex items-center justify-center shadow-sm">
+            <FlowerIcon class="w-9 h-9 text-pink-600" />
           </div>
         </div>
 
@@ -1728,7 +1728,7 @@ export function EnvAIPage() {
       <ChatProvider
         config={{
           placeholder: 'Describe what you want to do...',
-          assistantAvatar: '/logo.png',
+          assistantAvatar: `${import.meta.env.BASE_URL}flower.svg`,
           allowAttachments: canInteract(),
           maxAttachments: 5,
           maxAttachmentSize: 10 * 1024 * 1024,
