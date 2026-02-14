@@ -233,6 +233,27 @@ func (a *threadActor) loop() {
 	}
 }
 
+func (a *threadActor) lookupActiveRun(endpointID string, threadID string) (string, *run) {
+	if a == nil || a.mgr == nil || a.mgr.svc == nil {
+		return "", nil
+	}
+	thKey := runThreadKey(endpointID, threadID)
+	if thKey == "" {
+		return "", nil
+	}
+	a.mgr.svc.mu.Lock()
+	activeRunID := strings.TrimSpace(a.mgr.svc.activeRunByTh[thKey])
+	r := (*run)(nil)
+	if activeRunID != "" {
+		r = a.mgr.svc.runs[activeRunID]
+	}
+	a.mgr.svc.mu.Unlock()
+	if activeRunID == "" || r == nil || r.isDetached() {
+		return "", nil
+	}
+	return activeRunID, r
+}
+
 func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (SendUserTurnResponse, error) {
 	if a == nil || a.mgr == nil || a.mgr.svc == nil {
 		return SendUserTurnResponse{}, errors.New("service not ready")
@@ -255,6 +276,11 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	if threadID == "" || threadID != strings.TrimSpace(a.threadID) {
 		return SendUserTurnResponse{}, errors.New("invalid request")
 	}
+	expected := strings.TrimSpace(req.ExpectedRunID)
+	activeRunID, _ := a.lookupActiveRun(endpointID, threadID)
+	if activeRunID != "" && expected != "" && expected != activeRunID {
+		return SendUserTurnResponse{}, ErrRunChanged
+	}
 
 	persisted, normalizedInput, err := a.mgr.svc.persistUserMessage(ctx, meta, endpointID, threadID, req.Input)
 	if err != nil {
@@ -266,24 +292,11 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	a.mgr.svc.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
 	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
 
-	thKey := runThreadKey(endpointID, threadID)
-	var activeRunID string
-	var r *run
-	a.mgr.svc.mu.Lock()
-	activeRunID = strings.TrimSpace(a.mgr.svc.activeRunByTh[thKey])
-	if activeRunID != "" {
-		r = a.mgr.svc.runs[activeRunID]
-	}
-	a.mgr.svc.mu.Unlock()
-
-	expected := strings.TrimSpace(req.ExpectedRunID)
-	if activeRunID != "" && r != nil && !r.isDetached() {
-		if expected != "" && expected != activeRunID {
-			return SendUserTurnResponse{}, ErrRunChanged
-		}
-		if err := r.enqueueSteer(ctx, steerInput{MessageID: persisted.MessageID, Input: req.Input, CreatedAtUnixMs: persisted.CreatedAtUnixMs}); err != nil {
+	var activeRun *run
+	if activeRunID, activeRun = a.lookupActiveRun(endpointID, threadID); activeRunID != "" && activeRun != nil {
+		if err := activeRun.enqueueSteer(ctx, steerInput{MessageID: persisted.MessageID, Input: req.Input, CreatedAtUnixMs: persisted.CreatedAtUnixMs}); err != nil {
 			// If the run finished between the lookup and the enqueue, fall back to starting a new run.
-			r = nil
+			activeRun = nil
 		} else {
 			return SendUserTurnResponse{RunID: activeRunID, Kind: "steer"}, nil
 		}
@@ -300,9 +313,15 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		Input:    req.Input,
 		Options:  req.Options,
 	}
-	if err := a.mgr.svc.StartRunDetached(meta, runID, startReq); err != nil {
+	if err := a.mgr.svc.StartRunDetachedWithPersisted(meta, runID, startReq, persisted); err != nil {
+		if errors.Is(err, ErrThreadBusy) {
+			if activeRunID, activeRun = a.lookupActiveRun(endpointID, threadID); activeRunID != "" && activeRun != nil {
+				if steerErr := activeRun.enqueueSteer(ctx, steerInput{MessageID: persisted.MessageID, Input: req.Input, CreatedAtUnixMs: persisted.CreatedAtUnixMs}); steerErr == nil {
+					return SendUserTurnResponse{RunID: activeRunID, Kind: "steer"}, nil
+				}
+			}
+		}
 		return SendUserTurnResponse{}, err
 	}
-	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
 	return SendUserTurnResponse{RunID: runID, Kind: "start"}, nil
 }
