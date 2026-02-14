@@ -43,6 +43,16 @@ func TestRunToolWriteTodos_PersistsSnapshotAndEvent(t *testing.T) {
 	if int64(resultMap["version"].(int64)) != 1 {
 		t.Fatalf("result version=%v, want 1", resultMap["version"])
 	}
+	todosResult, ok := resultMap["todos"].([]TodoItem)
+	if !ok {
+		t.Fatalf("result todos type=%T, want []TodoItem", resultMap["todos"])
+	}
+	if len(todosResult) != 1 {
+		t.Fatalf("result todos len=%d, want 1", len(todosResult))
+	}
+	if todosResult[0].Content != "Inspect workspace" || todosResult[0].Status != TodoStatusInProgress {
+		t.Fatalf("unexpected todo payload: %+v", todosResult[0])
+	}
 
 	snapshot, err := s.GetThreadTodosSnapshot(ctx, "env_1", "th_1")
 	if err != nil {
