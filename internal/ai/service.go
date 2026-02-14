@@ -738,11 +738,18 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	defer func() {
 		s.mu.Lock()
 		delete(s.runs, runID)
-		delete(s.activeRunByChan, channelID)
-		delete(s.activeRunByTh, thKey)
+		if strings.TrimSpace(s.activeRunByChan[channelID]) == runID {
+			delete(s.activeRunByChan, channelID)
+		}
+		if strings.TrimSpace(s.activeRunByTh[thKey]) == runID {
+			delete(s.activeRunByTh, thKey)
+		}
 		s.mu.Unlock()
 		r.markDone()
 
+		if r.isDetached() {
+			return
+		}
 		runStatus, runStatusErr := deriveThreadRunState(r.getEndReason(), r.getFinalizationReason(), retErr)
 		if prepared.updateThreadRunState != nil {
 			prepared.updateThreadRunState(runStatus, runStatusErr)
@@ -941,6 +948,12 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		if handledCancel {
 			finalErr = nil
 		}
+	}
+
+	// Hard-canceled runs are detached from the thread lifecycle to unblock UI actions.
+	// Do not persist assistant messages after detachment, or we may race with subsequent runs on the same thread.
+	if r.isDetached() {
+		return finalErr
 	}
 
 	assistantJSON, assistantText, assistantAt, err := r.snapshotAssistantMessageJSON()
@@ -1227,14 +1240,50 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 		return errors.New("invalid request")
 	}
 
+	var r *run
+	threadID := ""
+
 	s.mu.Lock()
-	r := s.runs[runID]
-	s.mu.Unlock()
+	r = s.runs[runID]
 	// Cancel is best-effort and idempotent. Do not leak run existence cross-session.
-	if r == nil || strings.TrimSpace(r.endpointID) != endpointID {
+	if r != nil && strings.TrimSpace(r.endpointID) != endpointID {
+		s.mu.Unlock()
 		return nil
 	}
-	r.requestCancel("canceled")
+	if r != nil {
+		threadID = strings.TrimSpace(r.threadID)
+		r.markDetached()
+	}
+	// Detach any stale active mappings so the thread can be managed even if the run is stuck.
+	for ch, rid := range s.activeRunByChan {
+		if strings.TrimSpace(rid) != runID {
+			continue
+		}
+		delete(s.activeRunByChan, ch)
+	}
+	for k, rid := range s.activeRunByTh {
+		if strings.TrimSpace(rid) != runID {
+			continue
+		}
+		delete(s.activeRunByTh, k)
+		if threadID == "" && strings.HasPrefix(k, endpointID+":") {
+			threadID = strings.TrimSpace(strings.TrimPrefix(k, endpointID+":"))
+		}
+	}
+	db := s.threadsDB
+	persistTO := s.persistOpTO
+	s.mu.Unlock()
+
+	if r != nil {
+		r.requestCancel("canceled")
+	}
+
+	if db != nil && threadID != "" {
+		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
+		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", meta.UserPublicID, meta.UserEmail)
+		cancel()
+		s.broadcastThreadState(endpointID, threadID, runID, "canceled", "")
+	}
 	return nil
 }
 
@@ -1256,7 +1305,7 @@ func (s *Service) ApproveTool(meta *session.Meta, runID string, toolID string, a
 	s.mu.Lock()
 	r := s.runs[runID]
 	s.mu.Unlock()
-	if r == nil || strings.TrimSpace(r.endpointID) != endpointID {
+	if r == nil || strings.TrimSpace(r.endpointID) != endpointID || r.isDetached() {
 		return errors.New("run not found")
 	}
 	// Approvals are restricted to the run starter to avoid cross-user privilege confusion.

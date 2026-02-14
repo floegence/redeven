@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -92,6 +93,7 @@ type run struct {
 	endReason       string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
 	cancelRequested bool
 	cancelFn        context.CancelFunc
+	detached        atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
 
 	uploadsDir       string
 	threadsDB        *threadstore.Store
@@ -359,12 +361,26 @@ func (r *run) cancel() {
 
 }
 
+func (r *run) markDetached() {
+	if r == nil {
+		return
+	}
+	r.detached.Store(true)
+}
+
+func (r *run) isDetached() bool {
+	if r == nil {
+		return true
+	}
+	return r.detached.Load()
+}
+
 func (r *run) sendStreamEvent(ev any) {
 	if r == nil || ev == nil {
 		return
 	}
 	r.touchActivity()
-	if r.onStreamEvent != nil {
+	if !r.detached.Load() && r.onStreamEvent != nil {
 		r.onStreamEvent(ev)
 	}
 	if r.stream == nil {

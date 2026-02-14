@@ -314,15 +314,20 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 
 	s.mu.Lock()
 	runID := strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)])
-	r := s.runs[runID]
+	db := s.threadsDB
+	persistTO := s.persistOpTO
 	s.mu.Unlock()
-	if runID == "" || r == nil {
-		return nil
+	if runID != "" {
+		return s.CancelRun(meta, runID)
 	}
-	if strings.TrimSpace(r.endpointID) != endpointID {
-		return errors.New("run not found")
+
+	// Best-effort: if the thread was stuck in a running state without an active in-memory run,
+	// allow the user to unblock the UI by marking it canceled.
+	if db != nil {
+		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
+		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", meta.UserPublicID, meta.UserEmail)
+		cancel()
 	}
-	r.requestCancel("canceled")
 	return nil
 }
 
@@ -355,26 +360,25 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		if !force {
 			return ErrThreadBusy
 		}
-		if r == nil || strings.TrimSpace(r.endpointID) != endpointID {
-			return ErrThreadBusy
+		// Force delete must be able to unblock a stuck run:
+		// - best-effort cancel the run
+		// - detach in-memory active mappings immediately
+		// - delete the thread without waiting for graceful shutdown
+		if r != nil {
+			r.markDetached()
+			r.requestCancel("canceled")
 		}
-
-		// Cancel first, then wait for the run to fully exit so we don't race with message persistence.
-		r.requestCancel("canceled")
-		wctx := ctx
-		if wctx == nil {
-			wctx = context.Background()
+		s.mu.Lock()
+		if strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)]) == runID {
+			delete(s.activeRunByTh, runThreadKey(endpointID, threadID))
 		}
-		if _, ok := wctx.Deadline(); !ok {
-			var cancel context.CancelFunc
-			wctx, cancel = context.WithTimeout(wctx, 10*time.Second)
-			defer cancel()
+		for ch, rid := range s.activeRunByChan {
+			if strings.TrimSpace(rid) != runID {
+				continue
+			}
+			delete(s.activeRunByChan, ch)
 		}
-		select {
-		case <-r.doneCh:
-		case <-wctx.Done():
-			return ErrThreadBusy
-		}
+		s.mu.Unlock()
 	}
 
 	return db.DeleteThread(ctx, endpointID, threadID)
