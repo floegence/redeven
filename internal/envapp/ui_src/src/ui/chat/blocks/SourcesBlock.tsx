@@ -1,5 +1,5 @@
 // SourcesBlock — audit-friendly display of web source links (title + URL),
-// with copy-to-clipboard and collapsible overflow.
+// with a citation-table style wrapper, ellipsis truncation, and copy-to-clipboard.
 
 import { For, Show, createSignal } from 'solid-js';
 import type { Component } from 'solid-js';
@@ -12,14 +12,6 @@ export interface SourcesBlockProps {
 
 /** Visible-by-default threshold; sources beyond this are collapsed. */
 const VISIBLE_LIMIT = 4;
-
-function extractDomain(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return url;
-  }
-}
 
 function normalizeTitle(title: string, url: string): string {
   const cleaned = String(title ?? '').replace(/\s+/g, ' ').trim();
@@ -71,11 +63,23 @@ export const SourcesBlock: Component<SourcesBlockProps> = (props) => {
         <span class="chat-sources-count-badge">{props.sources.length}</span>
       </div>
 
-      {/* Source list */}
-      <div class="chat-sources-list">
+      {/* Source table */}
+      <div class="chat-sources-table">
+        <div class="chat-sources-table-header" role="row">
+          <span class="chat-sources-th chat-sources-th-index" role="columnheader">
+            #
+          </span>
+          <span class="chat-sources-th chat-sources-th-title" role="columnheader">
+            Title
+          </span>
+          <span class="chat-sources-th chat-sources-th-url" role="columnheader">
+            URL
+          </span>
+          <span class="chat-sources-th chat-sources-th-actions" role="columnheader" />
+        </div>
+
         <For each={visibleSources()}>
           {(src, index) => {
-            const domain = extractDomain(src.url);
             const title = normalizeTitle(src.title, src.url);
             const copied = () => copiedURL() === src.url;
 
@@ -88,24 +92,32 @@ export const SourcesBlock: Component<SourcesBlockProps> = (props) => {
             };
 
             return (
-              <div class="chat-sources-item">
-                <div class="chat-sources-badge">
-                  <span class="chat-sources-badge-number">{index() + 1}</span>
-                </div>
+              <div class="chat-sources-row" role="row">
+                <span class="chat-sources-cell chat-sources-cell-index" role="cell">
+                  {index() + 1}
+                </span>
+
+                <span
+                  class="chat-sources-cell chat-sources-cell-title"
+                  role="cell"
+                  title={title}
+                >
+                  {title}
+                </span>
 
                 <a
-                  class="chat-sources-link"
+                  class="chat-sources-cell chat-sources-cell-url"
+                  role="cell"
                   href={src.url}
                   target="_blank"
                   rel="noopener noreferrer"
+                  title={src.url}
                 >
-                  <span class="chat-sources-title">{title}</span>
-                  <span class="chat-sources-url">{src.url}</span>
-                  <span class="chat-sources-domain">{domain}</span>
+                  {src.url}
                 </a>
 
                 <button
-                  class="chat-sources-action-btn"
+                  class="chat-sources-action-btn chat-sources-copy-btn"
                   type="button"
                   onClick={doCopy}
                   aria-label={copied() ? 'Copied' : 'Copy URL'}
