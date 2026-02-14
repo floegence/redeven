@@ -624,17 +624,29 @@ function CompactTasksSummary(props: {
 }) {
   const [expanded, setExpanded] = createSignal(false);
   let containerRef: HTMLDivElement | undefined;
+  const doneCount = createMemo(() => props.todos.filter((item) => item.status === 'completed').length);
+  const progressLabel = createMemo(() => `${doneCount()} done/${props.todos.length} total`);
 
   // Close the popover when clicking outside.
   createEffect(() => {
     if (!expanded()) return;
-    const handler = (e: MouseEvent) => {
+    const handlePointerDown = (e: PointerEvent) => {
       if (containerRef && !containerRef.contains(e.target as Node)) {
         setExpanded(false);
       }
     };
-    document.addEventListener('mousedown', handler);
-    onCleanup(() => document.removeEventListener('mousedown', handler));
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setExpanded(false);
+      }
+    };
+    // Capture phase keeps outside-close working even when inner widgets stop event bubbling.
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('keydown', handleKeyDown);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('keydown', handleKeyDown);
+    });
   });
 
   return (
@@ -643,6 +655,8 @@ function CompactTasksSummary(props: {
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded()}
+        aria-haspopup="dialog"
         class={cn(
           'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer',
           'border transition-all duration-150',
@@ -652,71 +666,72 @@ function CompactTasksSummary(props: {
         )}
       >
         <CheckCircle class="w-3.5 h-3.5" />
-        <span>{props.unresolvedCount} open</span>
+        <span>{progressLabel()}</span>
         <ChevronUp class={cn('w-3 h-3 transition-transform duration-200', expanded() ? '' : 'rotate-180')} />
       </button>
 
-      {/* Expanded panel — persistently mounted, visibility controlled by CSS transitions */}
-      <div class={cn(
-        'absolute bottom-full left-0 mb-1.5 z-50',
-        'w-80 max-sm:w-[calc(100vw-2rem)]',
-        'rounded-xl border border-border/70 bg-card shadow-lg shadow-black/10',
-        'backdrop-blur-md',
-        'chat-tasks-panel',
-        expanded() ? 'chat-tasks-panel-open' : 'chat-tasks-panel-closed',
-      )}>
-        <div class="px-3 py-2.5">
-          <div class="flex items-center justify-between gap-2 mb-2">
-            <div class="text-xs font-medium text-foreground">Tasks</div>
-            <div class="text-[11px] text-muted-foreground">
-              {props.unresolvedCount} open
+      <Show when={expanded()}>
+        {/* Expanded panel */}
+        <div class={cn(
+          'absolute bottom-full left-0 mb-1.5 z-50',
+          'w-80 max-sm:w-[calc(100vw-2rem)]',
+          'rounded-xl border border-border/70 bg-card shadow-lg shadow-black/10',
+          'backdrop-blur-md',
+          'chat-tasks-panel chat-tasks-panel-open',
+        )}>
+          <div class="px-3 py-2.5">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <div class="text-xs font-medium text-foreground">Tasks</div>
+              <div class="text-[11px] text-muted-foreground">
+                {props.unresolvedCount} open
+              </div>
             </div>
-          </div>
 
-          <Show when={props.executionMode === 'plan' && props.unresolvedCount > 0}>
-            <div class="text-[11px] text-muted-foreground mb-2">
-              Switch to Act to execute these tasks
-            </div>
-          </Show>
-
-          <Show when={!props.todosLoading || props.todos.length > 0} fallback={
-            <div class="text-[11px] text-muted-foreground py-2">Loading tasks...</div>
-          }>
-            <Show when={!props.todosError} fallback={
-              <div class="text-[11px] text-error py-2">{props.todosError}</div>
-            }>
-              <Show when={props.todos.length > 0} fallback={
-                <div class="text-[11px] text-muted-foreground py-2">No tasks yet.</div>
-              }>
-                <div class="space-y-1.5 max-h-52 overflow-auto pr-1">
-                  <For each={props.todos}>
-                    {(item) => (
-                      <div class="rounded-md border border-border/60 bg-background/70 px-2 py-1.5">
-                        <div class="flex items-center gap-2">
-                          <span class={cn('inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium shrink-0', todoStatusBadgeClass(item.status))}>
-                            {todoStatusLabel(item.status)}
-                          </span>
-                          <span class="text-xs text-foreground leading-relaxed break-words">{item.content}</span>
-                        </div>
-                        <Show when={item.note}>
-                          <div class="mt-1 text-[11px] text-muted-foreground leading-relaxed break-words">
-                            {item.note}
-                          </div>
-                        </Show>
-                      </div>
-                    )}
-                  </For>
-                </div>
-              </Show>
-
-              <div class="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
-                <span>Version {props.todosView?.version ?? 0}</span>
-                <span>{props.todoUpdatedLabel ? `Updated ${props.todoUpdatedLabel}` : ''}</span>
+            <Show when={props.executionMode === 'plan' && props.unresolvedCount > 0}>
+              <div class="text-[11px] text-muted-foreground mb-2">
+                Switch to Act to execute these tasks
               </div>
             </Show>
-          </Show>
+
+            <Show when={!props.todosLoading || props.todos.length > 0} fallback={
+              <div class="text-[11px] text-muted-foreground py-2">Loading tasks...</div>
+            }>
+              <Show when={!props.todosError} fallback={
+                <div class="text-[11px] text-error py-2">{props.todosError}</div>
+              }>
+                <Show when={props.todos.length > 0} fallback={
+                  <div class="text-[11px] text-muted-foreground py-2">No tasks yet.</div>
+                }>
+                  <div class="space-y-1.5 max-h-52 overflow-auto pr-1">
+                    <For each={props.todos}>
+                      {(item) => (
+                        <div class="rounded-md border border-border/60 bg-background/70 px-2 py-1.5">
+                          <div class="flex items-center gap-2">
+                            <span class={cn('inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium shrink-0', todoStatusBadgeClass(item.status))}>
+                              {todoStatusLabel(item.status)}
+                            </span>
+                            <span class="text-xs text-foreground leading-relaxed break-words">{item.content}</span>
+                          </div>
+                          <Show when={item.note}>
+                            <div class="mt-1 text-[11px] text-muted-foreground leading-relaxed break-words">
+                              {item.note}
+                            </div>
+                          </Show>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+
+                <div class="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>Version {props.todosView?.version ?? 0}</span>
+                  <span>{props.todoUpdatedLabel ? `Updated ${props.todoUpdatedLabel}` : ''}</span>
+                </div>
+              </Show>
+            </Show>
+          </div>
         </div>
-      </div>
+      </Show>
     </div>
   );
 }
