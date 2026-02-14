@@ -912,6 +912,19 @@ export function EnvAIPage() {
   const transcriptInitDoneByThread = new Set<string>(); // thread_id with baseline history loaded
   const failureNotifiedRuns = new Set<string>();
   const [runPhaseLabel, setRunPhaseLabel] = createSignal('Working');
+  const setThreadTodosIfChanged = (next: ThreadTodosView | null): void => {
+    if (!next) {
+      if (threadTodos() !== null) {
+        setThreadTodos(null);
+      }
+      return;
+    }
+    const prev = threadTodos();
+    if (prev && prev.version === next.version && prev.updated_at_unix_ms === next.updated_at_unix_ms) {
+      return;
+    }
+    setThreadTodos(next);
+  };
   const activeThreadTodos = createMemo(() => threadTodos()?.todos ?? []);
   const unresolvedTodoCount = createMemo(() =>
     activeThreadTodos().filter((item) => item.status === 'pending' || item.status === 'in_progress').length,
@@ -1192,13 +1205,17 @@ export function EnvAIPage() {
       );
       if (reqNo !== lastTodosReq) return;
 
-      setThreadTodos(normalizeThreadTodosView(resp.todos));
+      setThreadTodosIfChanged(normalizeThreadTodosView(resp.todos));
       setTodosError('');
     } catch (e) {
       if (reqNo !== lastTodosReq) return;
       const msg = e instanceof Error ? e.message : String(e);
-      setThreadTodos(null);
-      setTodosError(msg || 'Request failed.');
+      if (!silent) {
+        setThreadTodosIfChanged(null);
+        setTodosError(msg || 'Request failed.');
+      } else if (!threadTodos()) {
+        setTodosError(msg || 'Request failed.');
+      }
       if (!silent && notifyError) {
         notify.error('Failed to load tasks', msg || 'Request failed.');
       }
@@ -1400,7 +1417,13 @@ export function EnvAIPage() {
           const toolName = String(block?.toolName ?? '').trim();
           const toolStatus = String(block?.status ?? '').trim().toLowerCase();
           if (streamType === 'block-set' && blockType === 'tool-call' && toolName === 'write_todos' && toolStatus === 'success') {
-            void loadThreadTodos(tid, { silent: true, notifyError: false });
+            const next = normalizeThreadTodosView(block?.result);
+            if (next.version > 0) {
+              setThreadTodosIfChanged(next);
+              setTodosError('');
+            } else {
+              void loadThreadTodos(tid, { silent: true, notifyError: false });
+            }
           }
         }
         if (tid === String(ai.activeThreadId() ?? '').trim()) {
@@ -1418,7 +1441,6 @@ export function EnvAIPage() {
 
       if (tid === String(ai.activeThreadId() ?? '').trim()) {
         setRunPhaseLabel('Working');
-        void loadThreadTodos(tid, { silent: true, notifyError: false });
       }
 
       const runId = String(event.runId ?? '').trim();
@@ -1475,21 +1497,6 @@ export function EnvAIPage() {
 
     lastSeenRunningTid = tid;
     lastSeenRunning = running;
-  });
-
-  createEffect(() => {
-    if (!chatReady()) return;
-    const tid = String(ai.activeThreadId() ?? '').trim();
-    if (!tid || !activeThreadRunning()) return;
-
-    void loadThreadTodos(tid, { silent: true, notifyError: false });
-    const timer = window.setInterval(() => {
-      void loadThreadTodos(tid, { silent: true, notifyError: false });
-    }, 1600);
-
-    onCleanup(() => {
-      window.clearInterval(timer);
-    });
   });
 
   // FileBrowser -> AI context injection (persist into the active thread).

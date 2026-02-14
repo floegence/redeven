@@ -1351,8 +1351,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	r.toolBlockIndex[toolID] = idx
 	r.mu.Unlock()
 
-	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "tool-call"})
-
 	block := ToolCallBlock{
 		Type:     "tool-call",
 		ToolName: toolName,
@@ -1896,8 +1894,6 @@ func (r *run) emitSourcesToolBlock(source string) {
 	if err != nil {
 		toolID = "tool_sources"
 	}
-
-	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "tool-call"})
 	expanded := false
 	block := ToolCallBlock{
 		Type:      "tool-call",

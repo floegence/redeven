@@ -2967,8 +2967,6 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 	r.nextBlockIndex++
 	r.needNewTextBlock = true
 	r.mu.Unlock()
-
-	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "tool-call"})
 	block := ToolCallBlock{
 		Type:             "tool-call",
 		ToolName:         "task_complete",
@@ -3044,8 +3042,6 @@ func (r *run) emitAskUserToolBlock(question string, source string) {
 	r.nextBlockIndex++
 	r.needNewTextBlock = true
 	r.mu.Unlock()
-
-	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "tool-call"})
 	block := ToolCallBlock{
 		Type:     "tool-call",
 		ToolName: "ask_user",
