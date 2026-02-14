@@ -110,7 +110,7 @@ func TestDeriveTodoRuntimeStateFromPromptPack(t *testing.T) {
 	}
 }
 
-func TestHydrateTodoRuntimeState_FromPromptPackFallback(t *testing.T) {
+func TestHydrateTodoRuntimeState_NoPromptPackFallback(t *testing.T) {
 	t.Parallel()
 
 	r := &run{}
@@ -120,13 +120,13 @@ func TestHydrateTodoRuntimeState_FromPromptPackFallback(t *testing.T) {
 			{MemoryID: "thread_todo::todo_1", Content: "Inspect workspace"},
 		},
 	})
-	if !hydrated {
-		t.Fatalf("expected todo hydration from prompt pack")
+	if hydrated {
+		t.Fatalf("expected no todo hydration from prompt pack (thread snapshot is authoritative)")
 	}
-	if source != "prompt_pack" {
-		t.Fatalf("source=%q, want prompt_pack", source)
+	if source != "" {
+		t.Fatalf("source=%q, want empty", source)
 	}
-	if !state.TodoTrackingEnabled || state.TodoOpenCount != 1 {
-		t.Fatalf("unexpected hydrated state tracking=%v open=%d", state.TodoTrackingEnabled, state.TodoOpenCount)
+	if state.TodoTrackingEnabled || state.TodoOpenCount != 0 {
+		t.Fatalf("unexpected state tracking=%v open=%d", state.TodoTrackingEnabled, state.TodoOpenCount)
 	}
 }

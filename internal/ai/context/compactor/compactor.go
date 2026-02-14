@@ -75,6 +75,9 @@ func (c *SnapshotCompactor) CompactPromptPack(ctx context.Context, endpointID st
 		if len(working.PendingTodos) > 6 {
 			working.PendingTodos = append([]model.MemoryItem(nil), working.PendingTodos[:6]...)
 		}
+		if len(working.Blockers) > 6 {
+			working.Blockers = append([]model.MemoryItem(nil), working.Blockers[:6]...)
+		}
 	}
 
 	verify := verifier.Verify(verifier.VerifyInput{
@@ -172,6 +175,7 @@ func clonePromptPack(in model.PromptPack) model.PromptPack {
 	out.RecentDialogue = append([]model.DialogueTurn(nil), in.RecentDialogue...)
 	out.ExecutionEvidence = append([]model.ExecutionEvidence(nil), in.ExecutionEvidence...)
 	out.PendingTodos = append([]model.MemoryItem(nil), in.PendingTodos...)
+	out.Blockers = append([]model.MemoryItem(nil), in.Blockers...)
 	out.RetrievedLongTermMemory = append([]model.MemoryItem(nil), in.RetrievedLongTermMemory...)
 	out.AttachmentsManifest = append([]model.AttachmentManifest(nil), in.AttachmentsManifest...)
 	if in.ContextSectionsTokenUsage != nil {

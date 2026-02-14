@@ -267,6 +267,40 @@ func (r *Repository) ListRecentMemoryItems(ctx context.Context, endpointID strin
 	return out, nil
 }
 
+func (r *Repository) ListThreadBlockers(ctx context.Context, endpointID string, threadID string, limit int) ([]model.MemoryItem, error) {
+	if !r.Ready() {
+		return nil, errors.New("repository not ready")
+	}
+	recs, err := r.db.ListMemoryItemsByScopeKind(ctx, endpointID, threadID, "working", string(model.MemoryKindBlocker), limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]model.MemoryItem, 0, len(recs))
+	for _, rec := range recs {
+		out = append(out, model.MemoryItem{
+			MemoryID:       strings.TrimSpace(rec.MemoryID),
+			ThreadID:       strings.TrimSpace(rec.ThreadID),
+			Scope:          model.MemoryScope(strings.TrimSpace(rec.Scope)),
+			Kind:           model.MemoryKind(strings.TrimSpace(rec.Kind)),
+			Content:        strings.TrimSpace(rec.Content),
+			SourceRefsJSON: strings.TrimSpace(rec.SourceRefsJSON),
+			Importance:     rec.Importance,
+			Freshness:      rec.Freshness,
+			Confidence:     rec.Confidence,
+			CreatedAtUnix:  rec.CreatedAtUnixMs,
+			UpdatedAtUnix:  rec.UpdatedAtUnixMs,
+		})
+	}
+	return out, nil
+}
+
+func (r *Repository) DeleteThreadMemoryItem(ctx context.Context, endpointID string, threadID string, memoryID string) error {
+	if !r.Ready() {
+		return errors.New("repository not ready")
+	}
+	return r.db.DeleteThreadMemoryItem(ctx, endpointID, threadID, memoryID)
+}
+
 type threadTodoItem struct {
 	ID      string `json:"id"`
 	Content string `json:"content"`

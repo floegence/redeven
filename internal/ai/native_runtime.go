@@ -2049,6 +2049,20 @@ func buildMessagesFromPromptPack(pack contextmodel.PromptPack, currentUserInput 
 		}
 	}
 
+	if len(pack.Blockers) > 0 {
+		parts := make([]string, 0, len(pack.Blockers))
+		for _, item := range pack.Blockers {
+			txt := strings.TrimSpace(item.Content)
+			if txt == "" {
+				continue
+			}
+			parts = append(parts, "- "+txt)
+		}
+		if len(parts) > 0 {
+			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "Blockers:\n" + strings.Join(parts, "\n")}}})
+		}
+	}
+
 	if len(pack.RetrievedLongTermMemory) > 0 {
 		parts := make([]string, 0, len(pack.RetrievedLongTermMemory))
 		for _, item := range pack.RetrievedLongTermMemory {
@@ -2534,14 +2548,8 @@ func (r *run) hydrateTodoRuntimeState(ctx context.Context, state *runtimeState, 
 		}
 	}
 
-	openCount, inProgressCount, ok := deriveTodoRuntimeStateFromPromptPack(pack)
-	if !ok {
-		return "", false
-	}
-	state.TodoTrackingEnabled = true
-	state.TodoOpenCount = openCount
-	state.TodoInProgressCount = inProgressCount
-	return "prompt_pack", true
+	_ = pack // thread todos are authoritative; do not infer open todos from prompt-pack memory.
+	return "", false
 }
 
 func deriveTodoRuntimeStateFromPromptPack(pack contextmodel.PromptPack) (openCount int, inProgressCount int, ok bool) {

@@ -32,6 +32,7 @@ const (
 	MemoryKindConstraint MemoryKind = "constraint"
 	MemoryKindDecision   MemoryKind = "decision"
 	MemoryKindTodo       MemoryKind = "todo"
+	MemoryKindBlocker    MemoryKind = "blocker"
 	MemoryKindArtifact   MemoryKind = "artifact"
 )
 
@@ -92,6 +93,7 @@ type PromptPack struct {
 	RecentDialogue            []DialogueTurn       `json:"recent_dialogue"`
 	ExecutionEvidence         []ExecutionEvidence  `json:"execution_evidence"`
 	PendingTodos              []MemoryItem         `json:"pending_todos"`
+	Blockers                  []MemoryItem         `json:"blockers"`
 	RetrievedLongTermMemory   []MemoryItem         `json:"retrieved_long_term_memory"`
 	AttachmentsManifest       []AttachmentManifest `json:"attachments_manifest"`
 	ThreadSnapshot            string               `json:"thread_snapshot"`
@@ -118,6 +120,11 @@ func (p PromptPack) ApproxText() string {
 		}
 	}
 	for _, mem := range p.PendingTodos {
+		if txt := strings.TrimSpace(mem.Content); txt != "" {
+			parts = append(parts, txt)
+		}
+	}
+	for _, mem := range p.Blockers {
 		if txt := strings.TrimSpace(mem.Content); txt != "" {
 			parts = append(parts, txt)
 		}

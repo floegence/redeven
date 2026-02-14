@@ -29,6 +29,7 @@ type RetrievalResult struct {
 	ExecutionEvidence   []model.ExecutionEvidence
 	ActiveConstraints   []string
 	PendingTodos        []model.MemoryItem
+	Blockers            []model.MemoryItem
 	LongTermMemory      []model.MemoryItem
 	ThreadSnapshot      string
 	MemoryRecallHitRate float64
@@ -70,6 +71,10 @@ func (r *Retriever) Retrieve(ctx context.Context, opts RetrieveOptions) (Retriev
 	if err != nil {
 		return result, err
 	}
+	blockers, err := r.repo.ListThreadBlockers(ctx, opts.EndpointID, opts.ThreadID, 12)
+	if err != nil {
+		return result, err
+	}
 	memoryItems, err := r.repo.ListRecentMemoryItems(ctx, opts.EndpointID, opts.ThreadID, maxMem)
 	if err != nil {
 		return result, err
@@ -88,6 +93,10 @@ func (r *Retriever) Retrieve(ctx context.Context, opts RetrieveOptions) (Retriev
 	recallHit := 0
 	for _, item := range scored {
 		if item.memory.Content == "" {
+			continue
+		}
+		if item.memory.Kind == model.MemoryKindBlocker {
+			// Blockers are retrieved separately from thread working memory to avoid polluting pending_todos.
 			continue
 		}
 		if item.score >= 0.45 {
@@ -119,6 +128,7 @@ func (r *Retriever) Retrieve(ctx context.Context, opts RetrieveOptions) (Retriev
 	result.ExecutionEvidence = execEvidence
 	result.ActiveConstraints = dedupeStrings(constraints)
 	result.PendingTodos = pending
+	result.Blockers = blockers
 	result.LongTermMemory = longTerm
 	result.ThreadSnapshot = strings.TrimSpace(threadSnapshot)
 	result.MemoryRecallHitRate = recallRate
