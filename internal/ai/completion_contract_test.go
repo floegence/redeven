@@ -1,6 +1,10 @@
 package ai
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/floegence/redeven-agent/internal/config"
+)
 
 func TestCompletionContractForIntent(t *testing.T) {
 	t.Parallel()
@@ -37,24 +41,35 @@ func TestClassifyFinalizationReason(t *testing.T) {
 func TestEvaluateTaskCompletionGate(t *testing.T) {
 	t.Parallel()
 
-	if pass, reason := evaluateTaskCompletionGate("", runtimeState{}, TaskComplexitySimple); pass || reason != "empty_result" {
+	if pass, reason := evaluateTaskCompletionGate("", runtimeState{}, TaskComplexitySimple, config.AIModeAct); pass || reason != "empty_result" {
 		t.Fatalf("empty result => pass=%v reason=%q", pass, reason)
 	}
 
 	if pass, reason := evaluateTaskCompletionGate("Task finished with final answer.", runtimeState{
 		CompletedActionFacts: []string{"terminal.exec: go test ./..."},
-	}, TaskComplexitySimple); !pass || reason != "ok" {
+	}, TaskComplexitySimple, config.AIModeAct); !pass || reason != "ok" {
 		t.Fatalf("non-empty result => pass=%v reason=%q", pass, reason)
 	}
 
 	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{
 		TodoTrackingEnabled: true,
 		TodoOpenCount:       1,
-	}, TaskComplexityStandard); pass || reason != "pending_todos" {
-		t.Fatalf("pending todos => pass=%v reason=%q", pass, reason)
+	}, TaskComplexityStandard, config.AIModeAct); pass || reason != "pending_todos" {
+		t.Fatalf("pending todos (act) => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{}, TaskComplexityComplex); pass || reason != "missing_todos_for_complex_task" {
-		t.Fatalf("complex task without todos => pass=%v reason=%q", pass, reason)
+	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{
+		TodoTrackingEnabled: true,
+		TodoOpenCount:       1,
+	}, TaskComplexityStandard, config.AIModePlan); !pass || reason != "ok" {
+		t.Fatalf("pending todos (plan) => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{}, TaskComplexityComplex, config.AIModeAct); pass || reason != "missing_todos_for_complex_task" {
+		t.Fatalf("complex task without todos (act) => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{}, TaskComplexityComplex, config.AIModePlan); pass || reason != "missing_todos_for_complex_task" {
+		t.Fatalf("complex task without todos (plan) => pass=%v reason=%q", pass, reason)
 	}
 }

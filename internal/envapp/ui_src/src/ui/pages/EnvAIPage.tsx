@@ -522,6 +522,7 @@ function ExecutionModeToggle(props: {
 
 // Compact tasks summary — collapsed as a small chip, expanded as an absolutely positioned panel.
 function CompactTasksSummary(props: {
+  executionMode: ExecutionMode;
   todos: ThreadTodoItem[];
   unresolvedCount: number;
   todosLoading: boolean;
@@ -578,6 +579,12 @@ function CompactTasksSummary(props: {
                 {props.unresolvedCount} open
               </div>
             </div>
+
+            <Show when={props.executionMode === 'plan' && props.unresolvedCount > 0}>
+              <div class="text-[11px] text-muted-foreground mb-2">
+                Switch to Act to execute these tasks
+              </div>
+            </Show>
 
             <Show when={!props.todosLoading || props.todos.length > 0} fallback={
               <div class="text-[11px] text-muted-foreground py-2">Loading tasks...</div>
@@ -1976,6 +1983,7 @@ export function EnvAIPage() {
                   <span class="text-[11px] text-muted-foreground">Execution mode</span>
                 }>
                   <CompactTasksSummary
+                    executionMode={executionMode()}
                     todos={activeThreadTodos()}
                     unresolvedCount={unresolvedTodoCount()}
                     todosLoading={todosLoading()}

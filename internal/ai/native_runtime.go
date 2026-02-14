@@ -1676,7 +1676,7 @@ mainLoop:
 					continue
 				}
 			}
-			gatePassed, gateReason := evaluateTaskCompletionGate(resultText, state, taskComplexity)
+			gatePassed, gateReason := evaluateTaskCompletionGate(resultText, state, taskComplexity, req.Options.Mode)
 			r.persistRunEvent("completion.attempt", RealtimeStreamKindLifecycle, map[string]any{
 				"step_index":          step,
 				"attempt":             "task_complete",
@@ -1684,6 +1684,7 @@ mainLoop:
 				"gate_passed":         gatePassed,
 				"gate_reason":         gateReason,
 				"complexity":          taskComplexity,
+				"mode":                strings.TrimSpace(req.Options.Mode),
 			})
 			if !gatePassed {
 				rejectionMsg := "task_complete was rejected. Provide concrete completion evidence or call ask_user if blocked."
@@ -2476,16 +2477,22 @@ func evaluateGuardAskUserGate(source string, state runtimeState, complexity stri
 	return true, "ok"
 }
 
-func evaluateTaskCompletionGate(resultText string, state runtimeState, complexity string) (bool, string) {
+func evaluateTaskCompletionGate(resultText string, state runtimeState, complexity string, mode string) (bool, string) {
 	text := strings.TrimSpace(resultText)
 	if text == "" {
 		return false, "empty_result"
 	}
 	complexity = normalizeTaskComplexity(complexity)
+	mode = strings.ToLower(strings.TrimSpace(mode))
 	if complexity == TaskComplexityComplex && !state.TodoTrackingEnabled {
 		return false, "missing_todos_for_complex_task"
 	}
 	if state.TodoTrackingEnabled && state.TodoOpenCount > 0 {
+		// In plan mode, open todos are expected: they represent the execution plan that can
+		// be carried into act mode. Do not block task_complete on pending todos.
+		if mode == config.AIModePlan {
+			return true, "ok"
+		}
 		return false, "pending_todos"
 	}
 	return true, "ok"
