@@ -25,6 +25,7 @@ export type AskFlowerIntent = {
   id: string;
   source: AskFlowerIntentSource;
   mode: AskFlowerIntentMode;
+  userPrompt?: string;
   suggestedWorkingDir?: string;
   contextItems: AskFlowerContextItem[];
   pendingAttachments: File[];

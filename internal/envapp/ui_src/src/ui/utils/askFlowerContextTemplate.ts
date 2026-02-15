@@ -64,6 +64,11 @@ export function buildAskFlowerDraftMarkdown(params: {
     }
   }
 
+  const userPrompt = String(intent.userPrompt ?? '').trim();
+  if (userPrompt) {
+    sections.push(`User request:\n${userPrompt}`);
+  }
+
   return sections
     .map((part) => String(part ?? '').trim())
     .filter((part) => part)

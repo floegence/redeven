@@ -22,7 +22,7 @@ import { Tooltip } from '@floegence/floe-webapp-core/ui';
 import type { ClientObserverLike } from '@floegence/flowersec-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
-import { EnvContext, type EnvNavTab, type EnvSettingsSection } from './pages/EnvContext';
+import { EnvContext, type AskFlowerComposerAnchor, type EnvNavTab, type EnvSettingsSection } from './pages/EnvContext';
 import type { AskFlowerIntent } from './pages/askFlowerIntent';
 import { EnvDeckPage } from './pages/EnvDeckPage';
 import { EnvTerminalPage } from './pages/EnvTerminalPage';
@@ -38,6 +38,7 @@ import { hasRWXPermissions } from './pages/aiPermissions';
 import { redevenDeckWidgets } from './deck/redevenDeckWidgets';
 import { useRedevenRpc } from './protocol/redeven_v1';
 import { AuditLogDialog } from './widgets/AuditLogDialog';
+import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
 import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
 import {
   channelInitEntry,
@@ -126,6 +127,9 @@ export function EnvAppShell() {
 
   const [askFlowerIntentSeq, setAskFlowerIntentSeq] = createSignal(0);
   const [askFlowerIntent, setAskFlowerIntent] = createSignal<AskFlowerIntent | null>(null);
+  const [askFlowerComposerOpen, setAskFlowerComposerOpen] = createSignal(false);
+  const [askFlowerComposerIntent, setAskFlowerComposerIntent] = createSignal<AskFlowerIntent | null>(null);
+  const [askFlowerComposerAnchor, setAskFlowerComposerAnchor] = createSignal<AskFlowerComposerAnchor | null>(null);
 
   const [settingsSeq, setSettingsSeq] = createSignal(0);
   const bumpSettingsSeq = () => setSettingsSeq((n) => n + 1);
@@ -147,6 +151,33 @@ export function EnvAppShell() {
   const injectAskFlowerIntent = (intent: AskFlowerIntent) => {
     setAskFlowerIntent(intent);
     setAskFlowerIntentSeq((n) => n + 1);
+  };
+
+  const openAskFlowerComposer = (intent: AskFlowerIntent, anchor?: AskFlowerComposerAnchor) => {
+    if (!canUseFlower()) {
+      notify.error('Permission denied', 'Read/write/execute permission required.');
+      return;
+    }
+    setAskFlowerComposerIntent(intent);
+    setAskFlowerComposerAnchor(anchor ?? null);
+    setAskFlowerComposerOpen(true);
+  };
+
+  const closeAskFlowerComposer = () => {
+    setAskFlowerComposerOpen(false);
+    setAskFlowerComposerIntent(null);
+    setAskFlowerComposerAnchor(null);
+  };
+
+  const submitAskFlowerComposer = (userPrompt: string) => {
+    const intent = askFlowerComposerIntent();
+    if (!intent) return;
+    closeAskFlowerComposer();
+    goTab('ai');
+    injectAskFlowerIntent({
+      ...intent,
+      userPrompt: String(userPrompt ?? '').trim(),
+    });
   };
 
   const status = createMemo(() => (manualError() ? 'error' : protocol.status()));
@@ -791,6 +822,7 @@ export function EnvAppShell() {
         askFlowerIntentSeq,
         askFlowerIntent,
         injectAskFlowerIntent,
+        openAskFlowerComposer,
       }}
     >
       <FloeRegistryRuntime components={components()}>
@@ -883,6 +915,13 @@ export function EnvAppShell() {
           </div>
 
           <AuditLogDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
+          <AskFlowerComposerWindow
+            open={askFlowerComposerOpen()}
+            intent={askFlowerComposerIntent()}
+            anchor={askFlowerComposerAnchor()}
+            onClose={closeAskFlowerComposer}
+            onSubmit={submitAskFlowerComposer}
+          />
         </Shell>
         </AIChatProviderBridge>
       </FloeRegistryRuntime>

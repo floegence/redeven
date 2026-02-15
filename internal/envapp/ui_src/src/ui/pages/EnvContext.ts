@@ -14,6 +14,11 @@ export type EnvSettingsSection =
   | 'permission_policy'
   | 'ai';
 
+export type AskFlowerComposerAnchor = {
+  x: number;
+  y: number;
+};
+
 export type EnvContextValue = {
   env_id: () => string;
   env: Resource<EnvironmentDetail | null>;
@@ -32,6 +37,7 @@ export type EnvContextValue = {
   askFlowerIntentSeq: () => number;
   askFlowerIntent: () => AskFlowerIntent | null;
   injectAskFlowerIntent: (intent: AskFlowerIntent) => void;
+  openAskFlowerComposer: (intent: AskFlowerIntent, anchor?: AskFlowerComposerAnchor) => void;
 };
 
 export const EnvContext = createContext<EnvContextValue>();

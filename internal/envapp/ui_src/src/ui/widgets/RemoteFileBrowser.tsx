@@ -1201,8 +1201,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   const dispatchAskFlowerIntent = (intent: AskFlowerIntent) => {
-    ctx.goTab('ai');
-    ctx.injectAskFlowerIntent(intent);
+    ctx.openAskFlowerComposer(intent);
   };
 
   const toFileContextItems = (items: FileItem[]): AskFlowerIntent['contextItems'] =>
@@ -1591,7 +1590,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                 setPreviewAskMenu(null);
                 const intent = buildPreviewIntent(menu.selection);
                 if (!intent) return;
-                dispatchAskFlowerIntent(intent);
+                ctx.openAskFlowerComposer(intent, { x: menu.x, y: menu.y });
               }}
             >
               Ask Flower

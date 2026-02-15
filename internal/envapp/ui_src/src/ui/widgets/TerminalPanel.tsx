@@ -1,5 +1,5 @@
 import { Index, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
-import { useCurrentWidgetId, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
+import { useCurrentWidgetId, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
@@ -599,7 +599,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const env = useEnvContext();
-  const notify = useNotification();
   const theme = useTheme();
   const floe = useResolvedFloeConfig();
   const view = useViewActivation();
@@ -1177,8 +1176,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       ];
     }
 
-    env.goTab('ai');
-    env.injectAskFlowerIntent({
+    env.openAskFlowerComposer({
       id: crypto.randomUUID(),
       source: 'terminal',
       mode: 'append',
@@ -1186,8 +1184,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       contextItems,
       pendingAttachments,
       notes,
-    });
-    notify.info('Ask Flower', 'Terminal context added to draft.');
+    }, { x: menu.x, y: menu.y });
   };
 
   const bindSearchCore = (core: TerminalCore | null) => {
