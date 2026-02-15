@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/floegence/redeven-agent/internal/ai/context/model"
@@ -105,30 +106,7 @@ func (r *Repository) listFallbackDialogue(ctx context.Context, endpointID string
 	if err != nil {
 		return nil, err
 	}
-	out := make([]model.DialogueTurn, 0, len(messages)/2+1)
-	var pendingUser *threadstore.Message
-	for _, msg := range messages {
-		role := strings.ToLower(strings.TrimSpace(msg.Role))
-		switch role {
-		case "user":
-			msgCopy := msg
-			pendingUser = &msgCopy
-		case "assistant":
-			if pendingUser == nil {
-				continue
-			}
-			out = append(out, model.DialogueTurn{
-				TurnID:             "fallback::" + strings.TrimSpace(pendingUser.MessageID),
-				RunID:              "",
-				UserMessageID:      strings.TrimSpace(pendingUser.MessageID),
-				AssistantMessageID: strings.TrimSpace(msg.MessageID),
-				UserText:           strings.TrimSpace(pendingUser.TextContent),
-				AssistantText:      strings.TrimSpace(msg.TextContent),
-				CreatedAtUnixMs:    msg.CreatedAtUnixMs,
-			})
-			pendingUser = nil
-		}
-	}
+	out := buildDialogueFromTranscriptMessages(messages, nil)
 	if len(out) > limit {
 		out = out[len(out)-limit:]
 	}
@@ -165,50 +143,7 @@ func (r *Repository) appendUnlinkedTranscriptDialogue(ctx context.Context, endpo
 		}
 	}
 
-	extras := make([]model.DialogueTurn, 0, 4)
-	var pendingUser *threadstore.Message
-	for _, msg := range messages {
-		messageID := strings.TrimSpace(msg.MessageID)
-		if messageID == "" {
-			continue
-		}
-		if _, exists := referenced[messageID]; exists {
-			continue
-		}
-		role := strings.ToLower(strings.TrimSpace(msg.Role))
-		switch role {
-		case "user":
-			msgCopy := msg
-			pendingUser = &msgCopy
-		case "assistant":
-			if pendingUser == nil {
-				continue
-			}
-			extras = append(extras, model.DialogueTurn{
-				TurnID:             "unlinked::" + strings.TrimSpace(pendingUser.MessageID),
-				RunID:              "",
-				UserMessageID:      strings.TrimSpace(pendingUser.MessageID),
-				AssistantMessageID: messageID,
-				UserText:           strings.TrimSpace(pendingUser.TextContent),
-				AssistantText:      strings.TrimSpace(msg.TextContent),
-				CreatedAtUnixMs:    maxInt64(pendingUser.CreatedAtUnixMs, msg.CreatedAtUnixMs),
-			})
-			referenced[strings.TrimSpace(pendingUser.MessageID)] = struct{}{}
-			referenced[messageID] = struct{}{}
-			pendingUser = nil
-		}
-	}
-	if pendingUser != nil {
-		extras = append(extras, model.DialogueTurn{
-			TurnID:             "pending::" + strings.TrimSpace(pendingUser.MessageID),
-			RunID:              "",
-			UserMessageID:      strings.TrimSpace(pendingUser.MessageID),
-			AssistantMessageID: "",
-			UserText:           strings.TrimSpace(pendingUser.TextContent),
-			AssistantText:      "",
-			CreatedAtUnixMs:    pendingUser.CreatedAtUnixMs,
-		})
-	}
+	extras := buildDialogueFromTranscriptMessages(messages, referenced)
 	if len(extras) == 0 {
 		return existing, nil
 	}
@@ -216,6 +151,7 @@ func (r *Repository) appendUnlinkedTranscriptDialogue(ctx context.Context, endpo
 	merged := make([]model.DialogueTurn, 0, len(existing)+len(extras))
 	merged = append(merged, existing...)
 	merged = append(merged, extras...)
+	sortDialogueTurnsChronologically(merged)
 	return merged, nil
 }
 
@@ -231,6 +167,82 @@ func maxInt64(a int64, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+func buildDialogueFromTranscriptMessages(messages []threadstore.Message, referenced map[string]struct{}) []model.DialogueTurn {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	out := make([]model.DialogueTurn, 0, len(messages)/2+2)
+	pendingUsers := make([]threadstore.Message, 0, 4)
+	for _, msg := range messages {
+		messageID := strings.TrimSpace(msg.MessageID)
+		if messageID == "" {
+			continue
+		}
+		if referenced != nil {
+			if _, exists := referenced[messageID]; exists {
+				continue
+			}
+		}
+
+		role := strings.ToLower(strings.TrimSpace(msg.Role))
+		switch role {
+		case "user":
+			pendingUsers = append(pendingUsers, msg)
+		case "assistant":
+			if len(pendingUsers) == 0 {
+				continue
+			}
+			idx := len(pendingUsers) - 1
+			pendingUser := pendingUsers[idx]
+			pendingUsers = pendingUsers[:idx]
+
+			pendingID := strings.TrimSpace(pendingUser.MessageID)
+			out = append(out, model.DialogueTurn{
+				TurnID:             "unlinked::" + pendingID,
+				RunID:              "",
+				UserMessageID:      pendingID,
+				AssistantMessageID: messageID,
+				UserText:           strings.TrimSpace(pendingUser.TextContent),
+				AssistantText:      strings.TrimSpace(msg.TextContent),
+				CreatedAtUnixMs:    maxInt64(pendingUser.CreatedAtUnixMs, msg.CreatedAtUnixMs),
+			})
+			if referenced != nil {
+				referenced[pendingID] = struct{}{}
+				referenced[messageID] = struct{}{}
+			}
+		}
+	}
+
+	for _, pendingUser := range pendingUsers {
+		pendingID := strings.TrimSpace(pendingUser.MessageID)
+		if pendingID == "" {
+			continue
+		}
+		out = append(out, model.DialogueTurn{
+			TurnID:             "pending::" + pendingID,
+			RunID:              "",
+			UserMessageID:      pendingID,
+			AssistantMessageID: "",
+			UserText:           strings.TrimSpace(pendingUser.TextContent),
+			AssistantText:      "",
+			CreatedAtUnixMs:    pendingUser.CreatedAtUnixMs,
+		})
+	}
+
+	sortDialogueTurnsChronologically(out)
+	return out
+}
+
+func sortDialogueTurnsChronologically(turns []model.DialogueTurn) {
+	if len(turns) <= 1 {
+		return
+	}
+	sort.SliceStable(turns, func(i int, j int) bool {
+		return turns[i].CreatedAtUnixMs < turns[j].CreatedAtUnixMs
+	})
 }
 
 func (r *Repository) UpsertExecutionEvidence(ctx context.Context, endpointID string, threadID string, runID string, evidence model.ExecutionEvidence) error {

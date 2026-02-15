@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -304,6 +305,95 @@ func TestContextRepo_ListRecentDialogueTurns_IncludesPendingUserAfterTurns(t *te
 	}
 	if last.AssistantText != "" {
 		t.Fatalf("last assistant_text=%q, want empty", last.AssistantText)
+	}
+}
+
+func TestContextRepo_ListRecentDialogueTurns_PreservesOrphanUsersAroundReferencedTurn(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "orphan-users-around-turn", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	appendUser := func(messageID string, text string, at int64) {
+		t.Helper()
+		userJSON, userText, jsonErr := buildUserMessageJSON(messageID, RunInput{
+			MessageID: messageID,
+			Text:      text,
+		}, svc.uploadsDir, at)
+		if jsonErr != nil {
+			t.Fatalf("buildUserMessageJSON: %v", jsonErr)
+		}
+		if _, appendErr := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, threadstore.Message{
+			ThreadID:           th.ThreadID,
+			EndpointID:         meta.EndpointID,
+			MessageID:          messageID,
+			Role:               "user",
+			AuthorUserPublicID: meta.UserPublicID,
+			AuthorUserEmail:    meta.UserEmail,
+			Status:             "complete",
+			CreatedAtUnixMs:    at,
+			UpdatedAtUnixMs:    at,
+			TextContent:        userText,
+			MessageJSON:        userJSON,
+		}, meta.UserPublicID, meta.UserEmail); appendErr != nil {
+			t.Fatalf("append user message: %v", appendErr)
+		}
+	}
+
+	at1 := time.Now().UnixMilli()
+	at2 := at1 + 1000
+	at3 := at2 + 1000
+	at4 := at3 + 1000
+
+	userOrphanHeadID := "m_user_orphan_head"
+	userPairedID := "m_user_paired"
+	userOrphanTailID := "m_user_orphan_tail"
+	assistantPairedID := "m_assistant_paired"
+
+	appendUser(userOrphanHeadID, "first orphan question", at1)
+	appendUser(userPairedID, "paired question", at2)
+
+	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, threadstore.Message{
+		ThreadID:        th.ThreadID,
+		EndpointID:      meta.EndpointID,
+		MessageID:       assistantPairedID,
+		Role:            "assistant",
+		Status:          "complete",
+		CreatedAtUnixMs: at3,
+		UpdatedAtUnixMs: at3,
+		TextContent:     "paired answer",
+		MessageJSON:     fmt.Sprintf(`{"id":"%s","role":"assistant","blocks":[{"type":"text","content":"paired answer"}],"status":"complete"}`, assistantPairedID),
+	}, meta.UserPublicID, meta.UserEmail); err != nil {
+		t.Fatalf("append assistant message: %v", err)
+	}
+	if err := svc.contextRepo.AppendTurn(ctx, meta.EndpointID, th.ThreadID, "run_paired", "turn_paired", userPairedID, assistantPairedID, at3); err != nil {
+		t.Fatalf("AppendTurn: %v", err)
+	}
+
+	appendUser(userOrphanTailID, "last orphan question", at4)
+
+	turns, err := svc.contextRepo.ListRecentDialogueTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListRecentDialogueTurns: %v", err)
+	}
+	if len(turns) != 3 {
+		t.Fatalf("ListRecentDialogueTurns len=%d, want 3", len(turns))
+	}
+
+	if turns[0].UserMessageID != userOrphanHeadID || turns[0].AssistantMessageID != "" {
+		t.Fatalf("turn[0]=%+v, want head orphan user", turns[0])
+	}
+	if turns[1].UserMessageID != userPairedID || turns[1].AssistantMessageID != assistantPairedID {
+		t.Fatalf("turn[1]=%+v, want referenced pair", turns[1])
+	}
+	if turns[2].UserMessageID != userOrphanTailID || turns[2].AssistantMessageID != "" {
+		t.Fatalf("turn[2]=%+v, want tail orphan user", turns[2])
 	}
 }
 
