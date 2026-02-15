@@ -14,7 +14,7 @@ import {
 } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Sidebar, SidebarContent, SidebarItem, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
-import { Button, Card, Checkbox, ConfirmDialog, Input, Select } from '@floegence/floe-webapp-core/ui';
+import { Button, Card, Checkbox, ConfirmDialog, Dialog, Input, Select } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import { fetchGatewayJSON } from '../services/gatewayApi';
@@ -87,6 +87,95 @@ type SkillsCatalogResponse = Readonly<{
   skills: SkillCatalogEntry[];
   conflicts?: SkillCatalogNotice[];
   errors?: SkillCatalogNotice[];
+}>;
+
+type SkillSourceItem = Readonly<{
+  skill_path: string;
+  source_type: 'local_manual' | 'github_import' | 'system_bundle' | string;
+  source_id: string;
+  repo?: string;
+  ref?: string;
+  repo_path?: string;
+  install_mode?: string;
+  installed_commit?: string;
+  installed_at_unix_ms?: number;
+  last_checked_at_unix_ms?: number;
+}>;
+
+type SkillSourcesResponse = Readonly<{
+  items: SkillSourceItem[];
+}>;
+
+type SkillGitHubCatalogItem = Readonly<{
+  remote_id: string;
+  name: string;
+  description: string;
+  repo_path: string;
+  exists_local: boolean;
+  installed_paths?: string[];
+}>;
+
+type SkillGitHubCatalogResponse = Readonly<{
+  source: Readonly<{ repo: string; ref: string; base_path: string }>;
+  skills: SkillGitHubCatalogItem[];
+}>;
+
+type SkillGitHubValidateItem = Readonly<{
+  name: string;
+  description: string;
+  repo: string;
+  ref: string;
+  repo_path: string;
+  target_dir: string;
+  target_skill_path: string;
+  already_exists: boolean;
+}>;
+
+type SkillGitHubValidateResponse = Readonly<{
+  resolved: SkillGitHubValidateItem[];
+}>;
+
+type SkillGitHubImportItem = Readonly<{
+  name: string;
+  scope: string;
+  skill_path: string;
+  source_type: string;
+  source_id: string;
+  install_mode: string;
+  installed_commit?: string;
+}>;
+
+type SkillGitHubImportResponse = Readonly<{
+  catalog: SkillsCatalogResponse;
+  imports: SkillGitHubImportItem[];
+}>;
+
+type SkillReinstallResponse = Readonly<{
+  catalog: SkillsCatalogResponse;
+  reinstalled: ReadonlyArray<Readonly<{ skill_path: string; source_id: string; install_mode: string }>>;
+}>;
+
+type SkillBrowseTreeEntry = Readonly<{
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  modified_at_unix_ms: number;
+}>;
+
+type SkillBrowseTreeResponse = Readonly<{
+  root: string;
+  dir: string;
+  entries: SkillBrowseTreeEntry[];
+}>;
+
+type SkillBrowseFileResponse = Readonly<{
+  root: string;
+  file: string;
+  encoding: 'utf8' | 'base64' | string;
+  truncated: boolean;
+  size: number;
+  content: string;
 }>;
 
 type SettingsResponse = Readonly<{
@@ -260,6 +349,22 @@ function skillScopeLabel(scope: string): string {
   if (v === 'user') return 'User (.redeven)';
   if (v === 'user_agents') return 'User (.agents)';
   return v || 'unknown';
+}
+
+function skillSourceLabel(sourceType: string): string {
+  const v = String(sourceType ?? '').trim().toLowerCase();
+  if (v === 'github_import') return 'GitHub import';
+  if (v === 'local_manual') return 'Local manual';
+  if (v === 'system_bundle') return 'System bundle';
+  return v || 'unknown';
+}
+
+function normalizeRepoInput(raw: string): string {
+  return String(raw ?? '')
+    .trim()
+    .replace(/^https?:\/\/github\.com\//i, '')
+    .replace(/\.git$/i, '')
+    .replace(/^\/+|\/+$/g, '');
 }
 
 // ============================================================================
@@ -825,6 +930,30 @@ export function EnvSettingsPage() {
   const [skillDeleteOpen, setSkillDeleteOpen] = createSignal(false);
   const [skillDeleteSaving, setSkillDeleteSaving] = createSignal(false);
   const [skillDeleteTarget, setSkillDeleteTarget] = createSignal<SkillCatalogEntry | null>(null);
+  const [skillSources, setSkillSources] = createSignal<Record<string, SkillSourceItem>>({});
+  const [skillSourcesLoading, setSkillSourcesLoading] = createSignal(false);
+  const [skillReinstalling, setSkillReinstalling] = createSignal<Record<string, boolean>>({});
+
+  const [skillInstallOpen, setSkillInstallOpen] = createSignal(false);
+  const [skillInstallScope, setSkillInstallScope] = createSignal<'workspace' | 'workspace_agents' | 'user' | 'user_agents'>('workspace');
+  const [skillInstallURL, setSkillInstallURL] = createSignal('');
+  const [skillInstallRepo, setSkillInstallRepo] = createSignal('openai/skills');
+  const [skillInstallRef, setSkillInstallRef] = createSignal('main');
+  const [skillInstallPaths, setSkillInstallPaths] = createSignal('skills/.curated/skill-installer');
+  const [skillInstallOverwrite, setSkillInstallOverwrite] = createSignal(false);
+  const [skillInstallValidating, setSkillInstallValidating] = createSignal(false);
+  const [skillInstallSaving, setSkillInstallSaving] = createSignal(false);
+  const [skillInstallResolved, setSkillInstallResolved] = createSignal<SkillGitHubValidateItem[]>([]);
+  const [skillGitHubCatalog, setSkillGitHubCatalog] = createSignal<SkillGitHubCatalogResponse | null>(null);
+  const [skillGitHubCatalogLoading, setSkillGitHubCatalogLoading] = createSignal(false);
+
+  const [skillBrowseOpen, setSkillBrowseOpen] = createSignal(false);
+  const [skillBrowseTarget, setSkillBrowseTarget] = createSignal<SkillCatalogEntry | null>(null);
+  const [skillBrowseDir, setSkillBrowseDir] = createSignal('.');
+  const [skillBrowseTree, setSkillBrowseTree] = createSignal<SkillBrowseTreeResponse | null>(null);
+  const [skillBrowseTreeLoading, setSkillBrowseTreeLoading] = createSignal(false);
+  const [skillBrowseFileLoading, setSkillBrowseFileLoading] = createSignal(false);
+  const [skillBrowseFile, setSkillBrowseFile] = createSignal<SkillBrowseFileResponse | null>(null);
 
   // JSON editor values
   const [runtimeJSON, setRuntimeJSON] = createSignal('');
@@ -1307,6 +1436,42 @@ export function EnvSettingsPage() {
       });
   });
 
+  const refreshSkillSources = async () => {
+    setSkillSourcesLoading(true);
+    try {
+      const data = await fetchGatewayJSON<SkillSourcesResponse>('/_redeven_proxy/api/ai/skills/sources', { method: 'GET' });
+      const map: Record<string, SkillSourceItem> = {};
+      for (const item of data?.items ?? []) {
+        const key = String(item?.skill_path ?? '').trim();
+        if (!key) continue;
+        map[key] = item;
+      }
+      setSkillSources(map);
+    } catch {
+      // Keep this best-effort; catalog should still remain usable.
+    } finally {
+      setSkillSourcesLoading(false);
+    }
+  };
+
+  const refreshGitHubCatalog = async (forceReload: boolean) => {
+    setSkillGitHubCatalogLoading(true);
+    try {
+      const query = new URLSearchParams({
+        repo: 'openai/skills',
+        ref: 'main',
+        base_path: 'skills/.curated',
+      });
+      if (forceReload) query.set('force_reload', 'true');
+      const data = await fetchGatewayJSON<SkillGitHubCatalogResponse>(`/_redeven_proxy/api/ai/skills/import/github/catalog?${query.toString()}`, { method: 'GET' });
+      setSkillGitHubCatalog(data);
+    } catch {
+      // Keep silent in dialog; users can still install from direct URL.
+    } finally {
+      setSkillGitHubCatalogLoading(false);
+    }
+  };
+
   const refreshSkillsCatalog = async (forceReload: boolean) => {
     if (forceReload) setSkillsReloading(true);
     else setSkillsLoading(true);
@@ -1316,6 +1481,7 @@ export function EnvSettingsPage() {
       const method = forceReload ? 'POST' : 'GET';
       const data = await fetchGatewayJSON<SkillsCatalogResponse>(endpoint, { method });
       setSkillsCatalog(data);
+      void refreshSkillSources();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setSkillsError(msg || 'Failed to load skills.');
@@ -1348,6 +1514,169 @@ export function EnvSettingsPage() {
     }
   };
 
+  const openInstallDialog = () => {
+    setSkillInstallOpen(true);
+    setSkillInstallResolved([]);
+    if (!skillGitHubCatalog()) {
+      void refreshGitHubCatalog(false);
+    }
+  };
+
+  const buildSkillInstallBody = () => {
+    const scope = String(skillInstallScope() ?? '').trim();
+    const url = String(skillInstallURL() ?? '').trim();
+    const repo = normalizeRepoInput(skillInstallRepo());
+    const ref = String(skillInstallRef() ?? '').trim() || 'main';
+    const rawPaths = String(skillInstallPaths() ?? '')
+      .split(/[\n,]/g)
+      .map((x) => String(x ?? '').trim())
+      .filter((x) => !!x);
+    if (url) {
+      return {
+        scope,
+        url,
+        overwrite: !!skillInstallOverwrite(),
+        auth: { use_local_git_credentials: true },
+      };
+    }
+    return {
+      scope,
+      repo,
+      ref,
+      paths: rawPaths,
+      overwrite: !!skillInstallOverwrite(),
+      auth: { use_local_git_credentials: true },
+    };
+  };
+
+  const validateSkillInstall = async () => {
+    if (!canAdmin()) {
+      notify.error('Permission denied', 'Admin permission required.');
+      return;
+    }
+    const body = buildSkillInstallBody();
+    if (!String((body as any).url ?? '').trim() && !String((body as any).repo ?? '').trim()) {
+      notify.error('Invalid source', 'Provide a GitHub URL or repo/path fields.');
+      return;
+    }
+    setSkillInstallValidating(true);
+    try {
+      const data = await fetchGatewayJSON<SkillGitHubValidateResponse>('/_redeven_proxy/api/ai/skills/import/github/validate', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      setSkillInstallResolved(data?.resolved ?? []);
+      notify.success('Validated', `Resolved ${data?.resolved?.length ?? 0} skill(s).`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Validate failed', msg || 'Request failed.');
+    } finally {
+      setSkillInstallValidating(false);
+    }
+  };
+
+  const installSkillsFromGitHub = async () => {
+    if (!canAdmin()) {
+      notify.error('Permission denied', 'Admin permission required.');
+      return;
+    }
+    const body = buildSkillInstallBody();
+    if (!String((body as any).url ?? '').trim() && !String((body as any).repo ?? '').trim()) {
+      notify.error('Invalid source', 'Provide a GitHub URL or repo/path fields.');
+      return;
+    }
+    setSkillInstallSaving(true);
+    try {
+      const data = await fetchGatewayJSON<SkillGitHubImportResponse>('/_redeven_proxy/api/ai/skills/import/github', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      setSkillsCatalog(data?.catalog ?? null);
+      setSkillInstallResolved([]);
+      setSkillInstallOpen(false);
+      setSkillInstallURL('');
+      void refreshSkillSources();
+      notify.success('Installed', `Installed ${data?.imports?.length ?? 0} skill(s).`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Install failed', msg || 'Request failed.');
+    } finally {
+      setSkillInstallSaving(false);
+    }
+  };
+
+  const reinstallSkill = async (entry: SkillCatalogEntry) => {
+    const path = String(entry.path ?? '').trim();
+    if (!path) return;
+    if (!canAdmin()) {
+      notify.error('Permission denied', 'Admin permission required.');
+      return;
+    }
+    setSkillReinstalling((prev) => ({ ...prev, [path]: true }));
+    try {
+      const data = await fetchGatewayJSON<SkillReinstallResponse>('/_redeven_proxy/api/ai/skills/reinstall', {
+        method: 'POST',
+        body: JSON.stringify({ paths: [path], overwrite: true }),
+      });
+      setSkillsCatalog(data?.catalog ?? null);
+      void refreshSkillSources();
+      notify.success('Reinstalled', `Skill "${entry.name}" reinstalled.`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Reinstall failed', msg || 'Request failed.');
+    } finally {
+      setSkillReinstalling((prev) => ({ ...prev, [path]: false }));
+    }
+  };
+
+  const loadSkillBrowseTree = async (entry: SkillCatalogEntry, dir: string) => {
+    const skillPath = String(entry.path ?? '').trim();
+    if (!skillPath) return;
+    setSkillBrowseTreeLoading(true);
+    try {
+      const query = new URLSearchParams({ skill_path: skillPath, dir: String(dir ?? '.').trim() || '.' });
+      const data = await fetchGatewayJSON<SkillBrowseTreeResponse>(`/_redeven_proxy/api/ai/skills/browse/tree?${query.toString()}`, { method: 'GET' });
+      setSkillBrowseTree(data);
+      setSkillBrowseDir(String(data?.dir ?? '.'));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Browse failed', msg || 'Request failed.');
+    } finally {
+      setSkillBrowseTreeLoading(false);
+    }
+  };
+
+  const openSkillBrowse = (entry: SkillCatalogEntry) => {
+    setSkillBrowseTarget(entry);
+    setSkillBrowseOpen(true);
+    setSkillBrowseFile(null);
+    setSkillBrowseTree(null);
+    setSkillBrowseDir('.');
+    void loadSkillBrowseTree(entry, '.');
+  };
+
+  const openSkillBrowseFile = async (entry: SkillCatalogEntry, relPath: string) => {
+    const skillPath = String(entry.path ?? '').trim();
+    const filePath = String(relPath ?? '').trim();
+    if (!skillPath || !filePath) return;
+    setSkillBrowseFileLoading(true);
+    try {
+      const query = new URLSearchParams({
+        skill_path: skillPath,
+        file: filePath,
+        encoding: 'utf8',
+        max_bytes: String(1024 * 1024),
+      });
+      const data = await fetchGatewayJSON<SkillBrowseFileResponse>(`/_redeven_proxy/api/ai/skills/browse/file?${query.toString()}`, { method: 'GET' });
+      setSkillBrowseFile(data);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Read failed', msg || 'Request failed.');
+    } finally {
+      setSkillBrowseFileLoading(false);
+    }
+  };
+
   const createSkill = async () => {
     if (!canAdmin()) {
       notify.error('Permission denied', 'Admin permission required.');
@@ -1372,6 +1701,7 @@ export function EnvSettingsPage() {
         body: JSON.stringify({ scope, name, description, body }),
       });
       setSkillsCatalog(data);
+      void refreshSkillSources();
       setSkillCreateOpen(false);
       setSkillCreateName('');
       setSkillCreateDescription('');
@@ -1404,6 +1734,7 @@ export function EnvSettingsPage() {
         body: JSON.stringify({ scope: target.scope, name: target.name }),
       });
       setSkillsCatalog(data);
+      void refreshSkillSources();
       setSkillDeleteOpen(false);
       setSkillDeleteTarget(null);
       notify.success('Deleted', `Skill "${target.name}" deleted.`);
@@ -2626,7 +2957,7 @@ export function EnvSettingsPage() {
           <SettingsCard
             icon={Layers}
             title="Skills"
-            description="Manage Flower skills: enable or disable skills, reload catalog, and create or delete local skills."
+            description="Manage Flower skills: install from GitHub, browse skill files, toggle enable state, and maintain local skills."
             badge={skillsReloading() || skillsLoading() ? 'Loading' : `${skillsCatalog()?.skills?.length ?? 0} skills`}
             error={skillsError()}
             actions={
@@ -2639,6 +2970,9 @@ export function EnvSettingsPage() {
                   disabled={!canInteract()}
                 >
                   Reload
+                </Button>
+                <Button size="sm" variant="default" onClick={() => openInstallDialog()} disabled={!canInteract() || !canAdmin()}>
+                  Install from GitHub
                 </Button>
                 <Button size="sm" variant="default" onClick={() => setSkillCreateOpen(true)} disabled={!canInteract() || !canAdmin()}>
                   Create Skill
@@ -2703,6 +3037,14 @@ export function EnvSettingsPage() {
                             <div class="text-xs text-muted-foreground mt-1">{item.description || 'No description.'}</div>
                             <div class="text-[11px] text-muted-foreground mt-1 font-mono break-all">{item.path}</div>
                             <div class="text-[11px] text-muted-foreground mt-1">{skillScopeLabel(item.scope)}</div>
+                            <Show when={skillSources()?.[item.path]}>
+                              <div class="text-[11px] text-muted-foreground mt-1">
+                                Source: {skillSourceLabel(String(skillSources()?.[item.path]?.source_type ?? ''))}
+                                <Show when={String(skillSources()?.[item.path]?.source_id ?? '').trim()}>
+                                  <span class="font-mono ml-1 break-all">{skillSources()?.[item.path]?.source_id}</span>
+                                </Show>
+                              </div>
+                            </Show>
                             <Show when={item.shadowed_by}>
                               <div class="text-[11px] text-warning mt-1 break-all">Shadowed by: {item.shadowed_by}</div>
                             </Show>
@@ -2719,10 +3061,29 @@ export function EnvSettingsPage() {
                             />
                             <Button
                               size="sm"
+                              variant="outline"
+                              onClick={() => openSkillBrowse(item)}
+                              disabled={!canInteract()}
+                            >
+                              Browse
+                            </Button>
+                            <Show when={String(skillSources()?.[item.path]?.source_type ?? '').toLowerCase() === 'github_import'}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void reinstallSkill(item)}
+                                loading={!!skillReinstalling()?.[item.path]}
+                                disabled={!canInteract() || !canAdmin()}
+                              >
+                                Reinstall
+                              </Button>
+                            </Show>
+                            <Button
+                              size="sm"
                               variant="ghost"
                               class="text-muted-foreground hover:text-destructive"
                               onClick={() => askDeleteSkill(item)}
-                              disabled={!canInteract() || !canAdmin() || !!skillToggleSaving()?.[item.path]}
+                              disabled={!canInteract() || !canAdmin() || !!skillToggleSaving()?.[item.path] || !!skillReinstalling()?.[item.path]}
                             >
                               Delete
                             </Button>
@@ -3272,6 +3633,237 @@ export function EnvSettingsPage() {
           <p class="text-xs text-muted-foreground">You will reconnect automatically after the agent comes back online.</p>
         </div>
       </ConfirmDialog>
+
+      <Dialog
+        open={skillInstallOpen()}
+        onOpenChange={(open) => {
+          setSkillInstallOpen(open);
+          if (!open) {
+            setSkillInstallResolved([]);
+          }
+        }}
+        title="Install skills from GitHub"
+        footer={
+          <div class="flex items-center justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={() => setSkillInstallOpen(false)} disabled={skillInstallSaving() || skillInstallValidating()}>
+              Cancel
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => void validateSkillInstall()} loading={skillInstallValidating()} disabled={!canInteract() || !canAdmin() || skillInstallSaving()}>
+              Validate
+            </Button>
+            <Button size="sm" variant="default" onClick={() => void installSkillsFromGitHub()} loading={skillInstallSaving()} disabled={!canInteract() || !canAdmin()}>
+              Install
+            </Button>
+          </div>
+        }
+      >
+        <div class="space-y-4">
+          <div>
+            <FieldLabel>Scope</FieldLabel>
+            <Select
+              value={skillInstallScope()}
+              onChange={(v) => setSkillInstallScope(v as 'workspace' | 'workspace_agents' | 'user' | 'user_agents')}
+              options={[
+                { value: 'workspace', label: 'Workspace (.redeven)' },
+                { value: 'workspace_agents', label: 'Workspace (.agents)' },
+                { value: 'user', label: 'User (.redeven)' },
+                { value: 'user_agents', label: 'User (.agents)' },
+              ]}
+              class="w-full"
+            />
+          </div>
+
+          <div>
+            <FieldLabel hint="preferred">GitHub URL</FieldLabel>
+            <Input
+              value={skillInstallURL()}
+              onInput={(e) => setSkillInstallURL(e.currentTarget.value)}
+              placeholder="https://github.com/openai/skills/tree/main/skills/.curated/skill-installer"
+              size="sm"
+              class="w-full"
+            />
+            <p class="text-[11px] text-muted-foreground mt-1">Use URL directly, or leave empty and fill repo/ref/paths.</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <FieldLabel>repo</FieldLabel>
+              <Input value={skillInstallRepo()} onInput={(e) => setSkillInstallRepo(e.currentTarget.value)} placeholder="openai/skills" size="sm" class="w-full font-mono text-xs" />
+            </div>
+            <div>
+              <FieldLabel>ref</FieldLabel>
+              <Input value={skillInstallRef()} onInput={(e) => setSkillInstallRef(e.currentTarget.value)} placeholder="main" size="sm" class="w-full font-mono text-xs" />
+            </div>
+            <div class="md:col-span-2">
+              <FieldLabel hint="comma or newline separated">paths</FieldLabel>
+              <textarea
+                class="w-full font-mono text-xs border border-border rounded-lg px-3 py-2.5 bg-muted/30 resize-y focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                style={{ 'min-height': '5rem' }}
+                value={skillInstallPaths()}
+                onInput={(e) => setSkillInstallPaths(e.currentTarget.value)}
+                spellcheck={false}
+              />
+            </div>
+          </div>
+
+          <Checkbox
+            checked={skillInstallOverwrite()}
+            onChange={(v) => setSkillInstallOverwrite(v)}
+            label="Overwrite existing skills if target already exists"
+            size="sm"
+            disabled={!canInteract() || !canAdmin()}
+          />
+
+          <div class="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="text-xs font-semibold text-foreground">Curated catalog (openai/skills)</div>
+              <Button size="sm" variant="ghost" onClick={() => void refreshGitHubCatalog(true)} loading={skillGitHubCatalogLoading()} disabled={!canInteract()}>
+                Refresh
+              </Button>
+            </div>
+            <Show when={!skillGitHubCatalogLoading() && (skillGitHubCatalog()?.skills?.length ?? 0) > 0} fallback={<div class="text-[11px] text-muted-foreground">Catalog unavailable. You can still install by URL/repo.</div>}>
+              <div class="max-h-44 overflow-auto space-y-2 pr-1">
+                <For each={skillGitHubCatalog()?.skills ?? []}>
+                  {(item) => (
+                    <div class="rounded border border-border bg-background p-2 flex items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <div class="text-xs font-semibold text-foreground break-all">{item.name}</div>
+                        <div class="text-[11px] text-muted-foreground break-all">{item.repo_path}</div>
+                        <div class="text-[11px] text-muted-foreground">{item.description}</div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setSkillInstallURL('');
+                          setSkillInstallRepo('openai/skills');
+                          setSkillInstallRef('main');
+                          setSkillInstallPaths(item.repo_path);
+                        }}
+                        disabled={!canInteract()}
+                      >
+                        Use
+                      </Button>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+
+          <Show when={skillInstallResolved().length > 0}>
+            <div class="rounded-lg border border-success/40 bg-success/10 p-3 space-y-1">
+              <div class="text-xs font-semibold text-success">Resolved skills: {skillInstallResolved().length}</div>
+              <For each={skillInstallResolved()}>
+                {(item) => (
+                  <div class="text-[11px] text-foreground break-all">
+                    {item.name} → {item.target_skill_path}
+                    <Show when={item.already_exists}>
+                      <span class="text-warning ml-1">(already exists)</span>
+                    </Show>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={skillBrowseOpen()}
+        onOpenChange={(open) => {
+          setSkillBrowseOpen(open);
+          if (!open) {
+            setSkillBrowseTarget(null);
+            setSkillBrowseTree(null);
+            setSkillBrowseFile(null);
+            setSkillBrowseDir('.');
+          }
+        }}
+        title={`Browse skill files${skillBrowseTarget() ? `: ${skillBrowseTarget()?.name}` : ''}`}
+        footer={
+          <div class="flex justify-end">
+            <Button size="sm" variant="outline" onClick={() => setSkillBrowseOpen(false)}>
+              Close
+            </Button>
+          </div>
+        }
+      >
+        <div class="space-y-3">
+          <div class="text-[11px] text-muted-foreground break-all">
+            {skillBrowseTarget()?.path}
+            <Show when={skillBrowseTreeLoading() || skillBrowseFileLoading()}>
+              <span class="ml-2">Loading...</span>
+            </Show>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="rounded-lg border border-border bg-muted/10 p-2 space-y-2 max-h-96 overflow-auto">
+              <div class="flex items-center justify-between gap-2">
+                <div class="text-xs font-semibold text-foreground break-all">Directory: {skillBrowseDir()}</div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    const current = String(skillBrowseDir() ?? '.').trim();
+                    const parts = current === '.' ? [] : current.split('/').filter(Boolean);
+                    if (parts.length === 0) {
+                      const target = skillBrowseTarget();
+                      if (target) void loadSkillBrowseTree(target, '.');
+                      return;
+                    }
+                    parts.pop();
+                    const next = parts.length > 0 ? parts.join('/') : '.';
+                    const target = skillBrowseTarget();
+                    if (target) void loadSkillBrowseTree(target, next);
+                  }}
+                  disabled={!canInteract()}
+                >
+                  Up
+                </Button>
+              </div>
+              <Show when={skillBrowseTree()}>
+                <div class="space-y-1">
+                  <For each={skillBrowseTree()?.entries ?? []}>
+                    {(entry) => (
+                      <button
+                        type="button"
+                        class="w-full text-left rounded border border-border bg-background px-2 py-1.5 hover:bg-muted/40"
+                        onClick={() => {
+                          const target = skillBrowseTarget();
+                          if (!target) return;
+                          if (entry.is_dir) {
+                            void loadSkillBrowseTree(target, entry.path);
+                          } else {
+                            void openSkillBrowseFile(target, entry.path);
+                          }
+                        }}
+                      >
+                        <div class="text-xs font-medium text-foreground break-all">
+                          {entry.is_dir ? '[DIR] ' : '[FILE] '}
+                          {entry.name}
+                        </div>
+                        <Show when={!entry.is_dir}>
+                          <div class="text-[10px] text-muted-foreground">{entry.size} bytes</div>
+                        </Show>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
+
+            <div class="rounded-lg border border-border bg-muted/10 p-2 space-y-2 max-h-96 overflow-auto">
+              <div class="text-xs font-semibold text-foreground break-all">File preview: {skillBrowseFile()?.file || '-'}</div>
+              <Show when={skillBrowseFile()} fallback={<div class="text-[11px] text-muted-foreground">Select a file from the left panel.</div>}>
+                <Show when={skillBrowseFile()?.truncated}>
+                  <div class="text-[11px] text-warning">Large file truncated to 1MB.</div>
+                </Show>
+                <pre class="text-[11px] leading-relaxed whitespace-pre-wrap break-words bg-background border border-border rounded p-2">{skillBrowseFile()?.content}</pre>
+              </Show>
+            </div>
+          </div>
+        </div>
+      </Dialog>
 
       {/* Create Skill Dialog */}
       <ConfirmDialog

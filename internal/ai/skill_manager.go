@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -109,17 +110,25 @@ type skillManager struct {
 	workspace        string
 	userHome         string
 	statePath        string
+	sourcePath       string
 	discovered       map[string]SkillMeta
 	candidatesByName map[string][]SkillMeta
 	active           map[string]SkillActivation
 
 	disabledPaths map[string]struct{}
 	stateLoaded   bool
+	sources       map[string]SkillSourceRecord
+	sourcesLoaded bool
 
 	catalogVersion  int64
 	catalogEntries  []SkillCatalogEntry
 	catalogConflict []SkillCatalogNotice
 	catalogErrors   []SkillCatalogNotice
+
+	githubAPIBaseURL  string
+	githubRawBaseURL  string
+	githubRepoBaseURL string
+	httpClient        *http.Client
 }
 
 var skillNameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
@@ -127,21 +136,41 @@ var skillNameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 func newSkillManager(workspace string, stateDir string) *skillManager {
 	home, _ := os.UserHomeDir()
 	path := ""
+	sourcePath := ""
 	stateDir = strings.TrimSpace(stateDir)
 	if stateDir != "" {
 		path = filepath.Join(stateDir, "skills_state.json")
+		sourcePath = filepath.Join(stateDir, "skills_sources.json")
 	}
 	if path != "" {
 		path = filepath.Clean(path)
+	}
+	if sourcePath != "" {
+		sourcePath = filepath.Clean(sourcePath)
 	}
 	return &skillManager{
 		workspace:        strings.TrimSpace(workspace),
 		userHome:         strings.TrimSpace(home),
 		statePath:        path,
+		sourcePath:       sourcePath,
 		discovered:       map[string]SkillMeta{},
 		candidatesByName: map[string][]SkillMeta{},
 		active:           map[string]SkillActivation{},
 		disabledPaths:    map[string]struct{}{},
+		sources:          map[string]SkillSourceRecord{},
+		githubAPIBaseURL: firstNonEmpty(
+			strings.TrimSpace(os.Getenv("REDEVEN_AGENT_AI_SKILLS_GITHUB_API_BASE_URL")),
+			"https://api.github.com",
+		),
+		githubRawBaseURL: firstNonEmpty(
+			strings.TrimSpace(os.Getenv("REDEVEN_AGENT_AI_SKILLS_GITHUB_RAW_BASE_URL")),
+			"https://raw.githubusercontent.com",
+		),
+		githubRepoBaseURL: firstNonEmpty(
+			strings.TrimSpace(os.Getenv("REDEVEN_AGENT_AI_SKILLS_GITHUB_REPO_BASE_URL")),
+			"https://github.com",
+		),
+		httpClient: &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
@@ -262,6 +291,17 @@ func (m *skillManager) Create(scope string, name string, description string, bod
 	if err := os.WriteFile(skillFile, []byte(content), 0o600); err != nil {
 		return SkillCatalog{}, err
 	}
+	now := time.Now().UnixMilli()
+	m.sources[filepath.Clean(skillFile)] = SkillSourceRecord{
+		SkillPath:           filepath.Clean(skillFile),
+		SourceType:          SkillSourceTypeLocalManual,
+		SourceID:            "local:" + scope + ":" + name,
+		InstalledAtUnixMs:   now,
+		LastCheckedAtUnixMs: now,
+	}
+	if err := m.saveSourcesLocked(); err != nil {
+		return SkillCatalog{}, err
+	}
 
 	m.discoverLocked()
 	return m.catalogLocked(), nil
@@ -294,7 +334,11 @@ func (m *skillManager) Delete(scope string, name string) (SkillCatalog, error) {
 		return SkillCatalog{}, err
 	}
 	delete(m.disabledPaths, filepath.Clean(skillFile))
+	delete(m.sources, filepath.Clean(skillFile))
 	if err := m.saveStateLocked(); err != nil {
+		return SkillCatalog{}, err
+	}
+	if err := m.saveSourcesLocked(); err != nil {
 		return SkillCatalog{}, err
 	}
 	m.discoverLocked()
@@ -335,6 +379,9 @@ func (m *skillManager) discoverLocked() {
 	allErrors := make([]SkillCatalogNotice, 0, 8)
 	if err := m.loadStateLocked(); err != nil {
 		allErrors = append(allErrors, SkillCatalogNotice{Path: m.statePath, Message: err.Error()})
+	}
+	if err := m.loadSourcesLocked(); err != nil {
+		allErrors = append(allErrors, SkillCatalogNotice{Path: m.sourcePath, Message: err.Error()})
 	}
 
 	grouped := make(map[string][]SkillMeta)
@@ -446,6 +493,7 @@ func (m *skillManager) discoverLocked() {
 	m.catalogEntries = entries
 	m.catalogConflict = conflicts
 	m.catalogErrors = allErrors
+	m.pruneSourcesLocked()
 	m.catalogVersion++
 }
 

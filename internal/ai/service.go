@@ -560,6 +560,90 @@ func (s *Service) DeleteSkill(scope string, name string) (*SkillCatalog, error) 
 	return &catalog, nil
 }
 
+func (s *Service) ListGitHubSkillCatalog(req SkillGitHubCatalogRequest) (*SkillGitHubCatalog, error) {
+	mgr, err := s.skills()
+	if err != nil {
+		return nil, err
+	}
+	out, err := mgr.ListGitHubCatalog(req)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (s *Service) ValidateGitHubSkillImport(req SkillGitHubImportRequest) (*SkillGitHubValidateResult, error) {
+	mgr, err := s.skills()
+	if err != nil {
+		return nil, err
+	}
+	out, err := mgr.ValidateGitHubImport(req)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (s *Service) ImportGitHubSkills(req SkillGitHubImportRequest) (*SkillGitHubImportResult, error) {
+	mgr, err := s.skills()
+	if err != nil {
+		return nil, err
+	}
+	out, err := mgr.ImportFromGitHub(req)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (s *Service) ListSkillSources() (*SkillSourcesView, error) {
+	mgr, err := s.skills()
+	if err != nil {
+		return nil, err
+	}
+	out, err := mgr.ListSources()
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (s *Service) ReinstallSkills(paths []string, overwrite bool) (*SkillReinstallResult, error) {
+	mgr, err := s.skills()
+	if err != nil {
+		return nil, err
+	}
+	out, err := mgr.Reinstall(paths, overwrite)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (s *Service) BrowseSkillTree(skillPath string, dir string) (*SkillBrowseTreeResult, error) {
+	mgr, err := s.skills()
+	if err != nil {
+		return nil, err
+	}
+	out, err := mgr.BrowseTree(skillPath, dir)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (s *Service) BrowseSkillFile(skillPath string, file string, encoding string, maxBytes int) (*SkillBrowseFileResult, error) {
+	mgr, err := s.skills()
+	if err != nil {
+		return nil, err
+	}
+	out, err := mgr.BrowseFile(skillPath, file, encoding, maxBytes)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // NewRunID generates a cryptographically random run id.
 func NewRunID() (string, error) {
 	b := make([]byte, 18)

@@ -378,9 +378,10 @@ func (g *Gateway) isLocalUIRequest(r *http.Request) bool {
 }
 
 type apiResp struct {
-	OK    bool        `json:"ok"`
-	Error string      `json:"error,omitempty"`
-	Data  interface{} `json:"data,omitempty"`
+	OK        bool        `json:"ok"`
+	Error     string      `json:"error,omitempty"`
+	ErrorCode string      `json:"error_code,omitempty"`
+	Data      interface{} `json:"data,omitempty"`
 }
 
 type settingsView struct {
@@ -434,6 +435,16 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeAISkillError(w http.ResponseWriter, fallbackStatus int, err error) {
+	status := fallbackStatus
+	code := ""
+	if se, ok := ai.AsSkillError(err); ok {
+		status = se.HTTPStatus()
+		code = se.Code()
+	}
+	writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: code})
 }
 
 func toSettingsView(cfg *config.Config, configPath string, secrets *settings.SecretsStore) settingsView {
@@ -1146,7 +1157,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		catalog, err := g.ai.ListSkillsCatalog()
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_list", "failure", nil, err)
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
+			writeAISkillError(w, http.StatusServiceUnavailable, err)
 			return
 		}
 		g.appendAudit(meta, "ai_skills_list", "success", map[string]any{"catalog_version": catalog.CatalogVersion}, nil)
@@ -1165,7 +1176,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		catalog, err := g.ai.ReloadSkillsCatalog()
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_reload", "failure", nil, err)
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
+			writeAISkillError(w, http.StatusServiceUnavailable, err)
 			return
 		}
 		g.appendAudit(meta, "ai_skills_reload", "success", map[string]any{"catalog_version": catalog.CatalogVersion}, nil)
@@ -1201,7 +1212,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		catalog, err := g.ai.PatchSkillToggles(body.Patches)
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_toggle_update", "failure", map[string]any{"patches": len(body.Patches)}, err)
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			writeAISkillError(w, http.StatusBadRequest, err)
 			return
 		}
 		g.appendAudit(meta, "ai_skills_toggle_update", "success", map[string]any{"patches": len(body.Patches), "catalog_version": catalog.CatalogVersion}, nil)
@@ -1236,7 +1247,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		catalog, err := g.ai.CreateSkill(body.Scope, body.Name, body.Description, body.Body)
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_create", "failure", map[string]any{"scope": strings.TrimSpace(body.Scope), "name": strings.TrimSpace(body.Name)}, err)
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			writeAISkillError(w, http.StatusBadRequest, err)
 			return
 		}
 		g.appendAudit(meta, "ai_skills_create", "success", map[string]any{"scope": strings.TrimSpace(body.Scope), "name": strings.TrimSpace(body.Name), "catalog_version": catalog.CatalogVersion}, nil)
@@ -1269,11 +1280,203 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		catalog, err := g.ai.DeleteSkill(body.Scope, body.Name)
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_delete", "failure", map[string]any{"scope": strings.TrimSpace(body.Scope), "name": strings.TrimSpace(body.Name)}, err)
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			writeAISkillError(w, http.StatusBadRequest, err)
 			return
 		}
 		g.appendAudit(meta, "ai_skills_delete", "success", map[string]any{"scope": strings.TrimSpace(body.Scope), "name": strings.TrimSpace(body.Name), "catalog_version": catalog.CatalogVersion}, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: catalog})
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/skills/import/github/catalog":
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok {
+			return
+		}
+		if g.ai == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			return
+		}
+		query := r.URL.Query()
+		req := ai.SkillGitHubCatalogRequest{
+			Repo:        strings.TrimSpace(query.Get("repo")),
+			Ref:         strings.TrimSpace(query.Get("ref")),
+			BasePath:    strings.TrimSpace(query.Get("base_path")),
+			ForceReload: strings.EqualFold(strings.TrimSpace(query.Get("force_reload")), "true"),
+		}
+		out, err := g.ai.ListGitHubSkillCatalog(req)
+		if err != nil {
+			g.appendAudit(meta, "ai_skills_github_catalog_list", "failure", map[string]any{"repo": req.Repo, "ref": req.Ref, "base_path": req.BasePath}, err)
+			writeAISkillError(w, http.StatusServiceUnavailable, err)
+			return
+		}
+		g.appendAudit(meta, "ai_skills_github_catalog_list", "success", map[string]any{"repo": out.Source.Repo, "ref": out.Source.Ref, "base_path": out.Source.BasePath, "skills": len(out.Skills)}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/skills/import/github/validate":
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return
+		}
+		if g.ai == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			return
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body ai.SkillGitHubImportRequest
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		out, err := g.ai.ValidateGitHubSkillImport(body)
+		if err != nil {
+			g.appendAudit(meta, "ai_skills_github_validate", "failure", map[string]any{"scope": strings.TrimSpace(body.Scope), "repo": strings.TrimSpace(body.Repo), "ref": strings.TrimSpace(body.Ref), "paths": len(body.Paths), "url": strings.TrimSpace(body.URL) != ""}, err)
+			writeAISkillError(w, http.StatusBadRequest, err)
+			return
+		}
+		g.appendAudit(meta, "ai_skills_github_validate", "success", map[string]any{"scope": strings.TrimSpace(body.Scope), "repo": strings.TrimSpace(body.Repo), "ref": strings.TrimSpace(body.Ref), "resolved": len(out.Resolved)}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/skills/import/github":
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return
+		}
+		if g.ai == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			return
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body ai.SkillGitHubImportRequest
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		out, err := g.ai.ImportGitHubSkills(body)
+		if err != nil {
+			g.appendAudit(meta, "ai_skills_github_import", "failure", map[string]any{"scope": strings.TrimSpace(body.Scope), "repo": strings.TrimSpace(body.Repo), "ref": strings.TrimSpace(body.Ref), "paths": len(body.Paths), "url": strings.TrimSpace(body.URL) != ""}, err)
+			writeAISkillError(w, http.StatusBadRequest, err)
+			return
+		}
+		g.appendAudit(meta, "ai_skills_github_import", "success", map[string]any{"scope": strings.TrimSpace(body.Scope), "repo": strings.TrimSpace(body.Repo), "ref": strings.TrimSpace(body.Ref), "imports": len(out.Imports), "catalog_version": out.Catalog.CatalogVersion}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/skills/sources":
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok {
+			return
+		}
+		if g.ai == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			return
+		}
+		out, err := g.ai.ListSkillSources()
+		if err != nil {
+			g.appendAudit(meta, "ai_skills_sources_list", "failure", nil, err)
+			writeAISkillError(w, http.StatusServiceUnavailable, err)
+			return
+		}
+		g.appendAudit(meta, "ai_skills_sources_list", "success", map[string]any{"items": len(out.Items)}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/skills/reinstall":
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return
+		}
+		if g.ai == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			return
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body struct {
+			Paths     []string `json:"paths"`
+			Overwrite bool     `json:"overwrite,omitempty"`
+		}
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		out, err := g.ai.ReinstallSkills(body.Paths, body.Overwrite)
+		if err != nil {
+			g.appendAudit(meta, "ai_skills_reinstall", "failure", map[string]any{"paths": len(body.Paths), "overwrite": body.Overwrite}, err)
+			writeAISkillError(w, http.StatusBadRequest, err)
+			return
+		}
+		g.appendAudit(meta, "ai_skills_reinstall", "success", map[string]any{"paths": len(body.Paths), "reinstalled": len(out.Reinstalled), "catalog_version": out.Catalog.CatalogVersion}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/skills/browse/tree":
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok {
+			return
+		}
+		if g.ai == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			return
+		}
+		query := r.URL.Query()
+		skillPath := strings.TrimSpace(query.Get("skill_path"))
+		dir := strings.TrimSpace(query.Get("dir"))
+		out, err := g.ai.BrowseSkillTree(skillPath, dir)
+		if err != nil {
+			g.appendAudit(meta, "ai_skills_browse_tree", "failure", map[string]any{"skill_path": skillPath, "dir": dir}, err)
+			writeAISkillError(w, http.StatusBadRequest, err)
+			return
+		}
+		g.appendAudit(meta, "ai_skills_browse_tree", "success", map[string]any{"skill_path": skillPath, "dir": out.Dir, "entries": len(out.Entries)}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/skills/browse/file":
+		meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+		if !ok {
+			return
+		}
+		if g.ai == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			return
+		}
+		query := r.URL.Query()
+		skillPath := strings.TrimSpace(query.Get("skill_path"))
+		filePath := strings.TrimSpace(query.Get("file"))
+		encoding := strings.TrimSpace(query.Get("encoding"))
+		maxBytes := 0
+		if raw := strings.TrimSpace(query.Get("max_bytes")); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n <= 0 {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid max_bytes"})
+				return
+			}
+			maxBytes = n
+		}
+		out, err := g.ai.BrowseSkillFile(skillPath, filePath, encoding, maxBytes)
+		if err != nil {
+			g.appendAudit(meta, "ai_skills_browse_file", "failure", map[string]any{"skill_path": skillPath, "file": filePath, "encoding": encoding}, err)
+			writeAISkillError(w, http.StatusBadRequest, err)
+			return
+		}
+		g.appendAudit(meta, "ai_skills_browse_file", "success", map[string]any{"skill_path": skillPath, "file": out.File, "encoding": out.Encoding, "truncated": out.Truncated}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/models":
