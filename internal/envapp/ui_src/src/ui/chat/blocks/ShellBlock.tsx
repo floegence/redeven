@@ -1,6 +1,6 @@
 // ShellBlock — terminal-style command display with collapsible output and status indicators.
 
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 
@@ -47,6 +47,7 @@ interface RawToken {
 interface TerminalToolOutputPayload {
   run_id?: string;
   tool_id?: string;
+  status?: string;
   stdout?: string;
   stderr?: string;
   exit_code?: number;
@@ -60,6 +61,7 @@ interface TerminalToolOutputPayload {
 
 const MULTI_CHAR_OPERATORS = ['&&', '||', '>>', '<<', '>|', '|&', '2>', '1>', '&>'] as const;
 const SINGLE_CHAR_OPERATORS = new Set(['|', ';', '>', '<', '(', ')']);
+const TERMINAL_STATUS_POLL_INTERVAL_MS = 1200;
 
 function isShellWhitespace(char: string): boolean {
   return /\s/.test(char);
@@ -299,6 +301,20 @@ function composeDeferredOutput(parts: {
   return sections.join('\n\n').trim();
 }
 
+function normalizeShellStatus(raw: unknown): ShellBlockProps['status'] | undefined {
+  const value = String(raw ?? '').trim().toLowerCase();
+  if (value === 'success') return 'success';
+  if (value === 'error' || value === 'failed' || value === 'timeout' || value === 'timed_out') return 'error';
+  if (value === 'running' || value === 'pending') return 'running';
+  return undefined;
+}
+
+function terminalOutputURL(runID: string, toolID: string, metaOnly: boolean): string {
+  const base = `/_redeven_proxy/api/ai/runs/${encodeURIComponent(runID)}/tools/${encodeURIComponent(toolID)}/output`;
+  if (!metaOnly) return base;
+  return `${base}?meta_only=1`;
+}
+
 /**
  * Renders a terminal-style block showing a shell command, its output,
  * and exit code. Output is collapsed by default and can be toggled
@@ -310,17 +326,51 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = createSignal<string | undefined>(undefined);
   const [loadError, setLoadError] = createSignal<string>('');
   const [loadAttempted, setLoadAttempted] = createSignal(false);
+  const [runtimeStatus, setRuntimeStatus] = createSignal<'success' | 'error' | undefined>(undefined);
+  const [runtimeExitCode, setRuntimeExitCode] = createSignal<number | undefined>(undefined);
+  const [runtimeDurationMs, setRuntimeDurationMs] = createSignal<number | undefined>(undefined);
+  const [runtimeTimedOut, setRuntimeTimedOut] = createSignal<boolean | undefined>(undefined);
+  const [runtimeTruncated, setRuntimeTruncated] = createSignal<boolean | undefined>(undefined);
+  const [runtimeCwd, setRuntimeCwd] = createSignal<string | undefined>(undefined);
+  const [runtimeTimeoutMs, setRuntimeTimeoutMs] = createSignal<number | undefined>(undefined);
   const commandTokens = createMemo(() => tokenizeShellCommand(props.command));
 
   const hasOutputRef = () =>
     String(props.outputRef?.runId ?? '').trim().length > 0 &&
     String(props.outputRef?.toolId ?? '').trim().length > 0;
+  const displayStatus = () => props.status === 'running' ? runtimeStatus() ?? 'running' : props.status;
+  const displayExitCode = () => props.exitCode ?? runtimeExitCode();
+  const displayDurationMs = () => props.durationMs ?? runtimeDurationMs();
+  const displayTimedOut = () => (typeof props.timedOut === 'boolean' ? props.timedOut : runtimeTimedOut() ?? false);
+  const displayTruncated = () => (typeof props.truncated === 'boolean' ? props.truncated : runtimeTruncated() ?? false);
+  const displayCwd = () => props.cwd ?? runtimeCwd() ?? '';
+  const displayTimeoutMs = () => props.timeoutMs ?? runtimeTimeoutMs();
   const resolvedOutput = () => props.output ?? loadedOutput();
   const hasOutput = () => String(resolvedOutput() ?? '').trim().length > 0;
-  const canToggle = () => hasOutput() || hasOutputRef() || props.status === 'running';
+  const canToggle = () => hasOutput() || hasOutputRef() || displayStatus() === 'running';
+
+  createEffect(() => {
+    const runID = String(props.outputRef?.runId ?? '').trim();
+    const toolID = String(props.outputRef?.toolId ?? '').trim();
+    const command = props.command;
+    void runID;
+    void toolID;
+    void command;
+    setRuntimeStatus(undefined);
+    setRuntimeExitCode(undefined);
+    setRuntimeDurationMs(undefined);
+    setRuntimeTimedOut(undefined);
+    setRuntimeTruncated(undefined);
+    setRuntimeCwd(undefined);
+    setRuntimeTimeoutMs(undefined);
+    setLoadedOutput(undefined);
+    setLoadError('');
+    setLoadAttempted(false);
+    setLoadingOutput(false);
+  });
 
   const statusClass = () => {
-    switch (props.status) {
+    switch (displayStatus()) {
       case 'running':
         return 'chat-shell-block-running';
       case 'error':
@@ -332,47 +382,78 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
 
   const toggleLabel = () => (expanded() ? 'Hide output' : 'Show output');
 
+  const fetchToolOutput = async (metaOnly: boolean): Promise<TerminalToolOutputPayload> => {
+    const runID = String(props.outputRef?.runId ?? '').trim();
+    const toolID = String(props.outputRef?.toolId ?? '').trim();
+    if (!runID || !toolID) return {};
+
+    const resp = await fetch(terminalOutputURL(runID, toolID, metaOnly), {
+      method: 'GET',
+      credentials: 'omit',
+      cache: 'no-store',
+    });
+    const raw = await resp.text();
+    let payload: any = null;
+    try {
+      payload = raw ? JSON.parse(raw) : null;
+    } catch {
+      payload = null;
+    }
+    if (!resp.ok || payload?.ok === false) {
+      throw new Error(String(payload?.error ?? `HTTP ${resp.status}`));
+    }
+    return (payload?.data ?? {}) as TerminalToolOutputPayload;
+  };
+
+  const applyRuntimeMetadata = (data: TerminalToolOutputPayload) => {
+    const normalizedStatus = normalizeShellStatus(data.status);
+    if (normalizedStatus === 'success' || normalizedStatus === 'error') {
+      setRuntimeStatus(normalizedStatus);
+    }
+    if (typeof data.exit_code === 'number' && Number.isFinite(data.exit_code)) {
+      setRuntimeExitCode(Math.round(data.exit_code));
+    }
+    if (typeof data.duration_ms === 'number' && Number.isFinite(data.duration_ms) && data.duration_ms >= 0) {
+      setRuntimeDurationMs(Math.round(data.duration_ms));
+    }
+    if (typeof data.timed_out === 'boolean') {
+      setRuntimeTimedOut(data.timed_out);
+    }
+    if (typeof data.truncated === 'boolean') {
+      setRuntimeTruncated(data.truncated);
+    }
+    if (typeof data.cwd === 'string' && data.cwd.trim()) {
+      setRuntimeCwd(data.cwd.trim());
+    }
+    if (typeof data.timeout_ms === 'number' && Number.isFinite(data.timeout_ms) && data.timeout_ms > 0) {
+      setRuntimeTimeoutMs(Math.round(data.timeout_ms));
+    }
+  };
+
   const ensureOutputLoaded = async () => {
     if (props.output || loadedOutput() || loadingOutput()) return;
     if (!hasOutputRef()) return;
-    if (props.status === 'running') return;
-
-    const runID = String(props.outputRef?.runId ?? '').trim();
-    const toolID = String(props.outputRef?.toolId ?? '').trim();
-    if (!runID || !toolID) return;
+    if (displayStatus() === 'running') return;
 
     setLoadingOutput(true);
     setLoadError('');
     setLoadAttempted(true);
     try {
-      const resp = await fetch(
-        `/_redeven_proxy/api/ai/runs/${encodeURIComponent(runID)}/tools/${encodeURIComponent(toolID)}/output`,
-        { method: 'GET', credentials: 'omit', cache: 'no-store' },
-      );
-      const raw = await resp.text();
-      let payload: any = null;
-      try {
-        payload = raw ? JSON.parse(raw) : null;
-      } catch {
-        payload = null;
-      }
-      if (!resp.ok || payload?.ok === false) {
-        throw new Error(String(payload?.error ?? `HTTP ${resp.status}`));
-      }
-      const data = (payload?.data ?? {}) as TerminalToolOutputPayload;
+      const data = await fetchToolOutput(false);
+      applyRuntimeMetadata(data);
       const output = composeDeferredOutput({
         stdout: String(data.stdout ?? ''),
         stderr: String(data.stderr ?? ''),
         rawResult: String(data.raw_result ?? ''),
-        cwd: String(data.cwd ?? props.cwd ?? ''),
+        cwd: String(data.cwd ?? displayCwd()),
         timeoutMs:
-          typeof data.timeout_ms === 'number' ? data.timeout_ms : props.timeoutMs,
+          typeof data.timeout_ms === 'number' ? data.timeout_ms : displayTimeoutMs(),
         durationMs:
-          typeof data.duration_ms === 'number' ? data.duration_ms : props.durationMs,
+          typeof data.duration_ms === 'number' ? data.duration_ms : displayDurationMs(),
         timedOut:
-          typeof data.timed_out === 'boolean' ? data.timed_out : !!props.timedOut,
+          typeof data.timed_out === 'boolean' ? data.timed_out : displayTimedOut(),
         truncated:
-          typeof data.truncated === 'boolean' ? data.truncated : !!props.truncated,
+          typeof data.truncated === 'boolean' ? data.truncated : displayTruncated(),
       });
       setLoadedOutput(output || 'No output captured.');
     } catch (err) {
@@ -385,8 +466,46 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
 
   createEffect(() => {
     if (!expanded()) return;
-    if (props.status === 'running') return;
+    if (displayStatus() === 'running') return;
     void ensureOutputLoaded();
+  });
+
+  createEffect(() => {
+    if (!hasOutputRef()) return;
+    if (displayStatus() !== 'running') return;
+    let disposed = false;
+    let timer: number | null = null;
+
+    const pollStatus = async () => {
+      if (disposed) return;
+      try {
+        const data = await fetchToolOutput(true);
+        if (disposed) return;
+        applyRuntimeMetadata(data);
+        const status = normalizeShellStatus(data.status);
+        if (status && status !== 'running') {
+          if (expanded()) {
+            void ensureOutputLoaded();
+          }
+          return;
+        }
+      } catch {
+        // Best effort: keep current status from stream and retry.
+      }
+      if (!disposed && displayStatus() === 'running') {
+        timer = window.setTimeout(() => {
+          void pollStatus();
+        }, TERMINAL_STATUS_POLL_INTERVAL_MS);
+      }
+    };
+
+    void pollStatus();
+    onCleanup(() => {
+      disposed = true;
+      if (timer != null) {
+        window.clearTimeout(timer);
+      }
+    });
   });
 
   const handleHeaderClick = () => {
@@ -411,7 +530,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
         aria-label={canToggle() ? `${toggleLabel()} for command output` : undefined}
       >
         {/* Status icon */}
-        <Show when={props.status === 'running'}>
+        <Show when={displayStatus() === 'running'}>
           <span class="chat-shell-status-icon chat-shell-status-running" aria-label="Running">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -430,14 +549,14 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
             </svg>
           </span>
         </Show>
-        <Show when={props.status === 'success'}>
+        <Show when={displayStatus() === 'success'}>
           <span class="chat-shell-status-icon chat-shell-status-success" aria-label="Success">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M20 6 9 17l-5-5" />
             </svg>
           </span>
         </Show>
-        <Show when={props.status === 'error'}>
+        <Show when={displayStatus() === 'error'}>
           <span class="chat-shell-status-icon chat-shell-status-error" aria-label="Error">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M18 6 6 18" />
@@ -456,14 +575,14 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
         </span>
 
         {/* Exit code / duration inline */}
-        <Show when={props.status !== 'running' && props.exitCode !== undefined}>
+        <Show when={displayStatus() !== 'running' && displayExitCode() !== undefined}>
           <span
             class={cn(
               'chat-shell-exit-inline',
-              props.exitCode === 0 ? 'chat-shell-exit-inline-success' : 'chat-shell-exit-inline-error',
+              displayExitCode() === 0 ? 'chat-shell-exit-inline-success' : 'chat-shell-exit-inline-error',
             )}
           >
-            exit {props.exitCode}
+            exit {displayExitCode()}
           </span>
         </Show>
 
@@ -491,11 +610,11 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
               when={resolvedOutput()}
               fallback={
                 <Show
-                  when={props.status === 'running' || loadingOutput() || loadAttempted() || loadError()}
+                  when={displayStatus() === 'running' || loadingOutput() || loadAttempted() || loadError()}
                 >
                   <div class={cn('chat-shell-output', loadError() ? 'chat-shell-output-error' : 'chat-shell-output-muted')}>
                     <pre>
-                      {props.status === 'running'
+                      {displayStatus() === 'running'
                         ? 'Waiting for output...'
                         : loadingOutput()
                           ? 'Loading output...'
@@ -510,7 +629,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
               <div
                 class={cn(
                   'chat-shell-output',
-                  props.status === 'error' && 'chat-shell-output-error',
+                  displayStatus() === 'error' && 'chat-shell-output-error',
                 )}
               >
                 <pre>{resolvedOutput()}</pre>
