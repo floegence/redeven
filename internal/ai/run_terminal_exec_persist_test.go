@@ -3,12 +3,16 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/floegence/redeven-agent/internal/ai/threadstore"
+	"github.com/floegence/redeven-agent/internal/session"
 )
 
 func TestRedactAnyForPersist_TerminalExec_RedactsStdinAndPreservesNewlines(t *testing.T) {
@@ -147,5 +151,93 @@ func TestPersistToolCallSnapshot_TerminalExecResult_NotTruncated(t *testing.T) {
 	}
 	if got := parsed["stdout"]; got != longStdout {
 		t.Fatalf("stdout length=%d, want=%d", len(anyToString(got)), len(longStdout))
+	}
+}
+
+func TestHandleToolCall_TerminalExec_AlwaysEmitsOutputRefForStatusFrames(t *testing.T) {
+	t.Parallel()
+
+	runID := "run_terminal_output_ref"
+	toolID := "tool_terminal_output_ref"
+	workspace := t.TempDir()
+
+	var (
+		mu         sync.Mutex
+		toolFrames []ToolCallBlock
+	)
+
+	r := newRun(runOptions{
+		Log:    slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		RunID:  runID,
+		FSRoot: workspace,
+		Shell:  "bash",
+		SessionMeta: &session.Meta{
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+		},
+		MessageID: "msg_terminal_output_ref",
+		OnStreamEvent: func(ev any) {
+			bs, ok := ev.(streamEventBlockSet)
+			if !ok {
+				return
+			}
+			block, ok := bs.Block.(ToolCallBlock)
+			if !ok {
+				return
+			}
+			if strings.TrimSpace(block.ToolID) != toolID || strings.TrimSpace(block.ToolName) != "terminal.exec" {
+				return
+			}
+			mu.Lock()
+			toolFrames = append(toolFrames, block)
+			mu.Unlock()
+		},
+	})
+
+	outcome, err := r.handleToolCall(context.Background(), toolID, "terminal.exec", map[string]any{
+		"command": "printf ok",
+	})
+	if err != nil {
+		t.Fatalf("handleToolCall: %v", err)
+	}
+	if outcome == nil || !outcome.Success {
+		t.Fatalf("tool outcome should be success, got %+v", outcome)
+	}
+
+	mu.Lock()
+	frames := append([]ToolCallBlock(nil), toolFrames...)
+	mu.Unlock()
+
+	if len(frames) == 0 {
+		t.Fatalf("expected tool block-set frames")
+	}
+
+	foundStatus := map[ToolCallStatus]bool{}
+	for _, frame := range frames {
+		if frame.Status != ToolCallStatusPending && frame.Status != ToolCallStatusRunning && frame.Status != ToolCallStatusSuccess {
+			continue
+		}
+		foundStatus[frame.Status] = true
+		resultMap, ok := frame.Result.(map[string]any)
+		if !ok || resultMap == nil {
+			t.Fatalf("status=%s missing result map for output_ref", frame.Status)
+		}
+		outputRef, ok := resultMap["output_ref"].(map[string]any)
+		if !ok || outputRef == nil {
+			t.Fatalf("status=%s missing output_ref", frame.Status)
+		}
+		if got := strings.TrimSpace(anyToString(outputRef["run_id"])); got != runID {
+			t.Fatalf("status=%s output_ref.run_id=%q, want %q", frame.Status, got, runID)
+		}
+		if got := strings.TrimSpace(anyToString(outputRef["tool_id"])); got != toolID {
+			t.Fatalf("status=%s output_ref.tool_id=%q, want %q", frame.Status, got, toolID)
+		}
+	}
+
+	for _, status := range []ToolCallStatus{ToolCallStatusPending, ToolCallStatusRunning, ToolCallStatusSuccess} {
+		if !foundStatus[status] {
+			t.Fatalf("missing tool frame for status=%s", status)
+		}
 	}
 }

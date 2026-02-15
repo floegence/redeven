@@ -1511,6 +1511,10 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		Args:     argsForPersist,
 		Status:   ToolCallStatusPending,
 	}
+	if toolName == "terminal.exec" {
+		// Keep output_ref available across pending/running/error so the UI can always reconcile runtime status.
+		block.Result = buildTerminalExecBlockResult(strings.TrimSpace(r.id), strings.TrimSpace(toolID), nil)
+	}
 
 	if requireApprovalForInvocation {
 		block.RequiresApproval = true
