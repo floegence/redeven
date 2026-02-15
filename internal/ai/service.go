@@ -1223,7 +1223,12 @@ func promptPackToHistory(pack contextmodel.PromptPack, currentUserInput string) 
 		}
 	}
 	if txt := strings.TrimSpace(currentUserInput); txt != "" {
-		history = append(history, RunHistoryMsg{Role: "user", Text: txt})
+		duplicateTail := len(history) > 0 &&
+			history[len(history)-1].Role == "user" &&
+			strings.TrimSpace(history[len(history)-1].Text) == txt
+		if !duplicateTail {
+			history = append(history, RunHistoryMsg{Role: "user", Text: txt})
+		}
 	}
 	return history
 }

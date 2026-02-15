@@ -62,7 +62,11 @@ func (r *Repository) ListRecentDialogueTurns(ctx context.Context, endpointID str
 		return nil, err
 	}
 	if len(turns) == 0 {
-		return r.listFallbackDialogue(ctx, endpointID, threadID, limit)
+		fallback, fallbackErr := r.listFallbackDialogue(ctx, endpointID, threadID, limit)
+		if fallbackErr != nil {
+			return nil, fallbackErr
+		}
+		return trimDialogueTurns(fallback, limit), nil
 	}
 
 	out := make([]model.DialogueTurn, 0, len(turns))
@@ -89,7 +93,11 @@ func (r *Repository) ListRecentDialogueTurns(ctx context.Context, endpointID str
 			CreatedAtUnixMs:    turn.CreatedAtUnixMs,
 		})
 	}
-	return out, nil
+	out, err = r.appendUnlinkedTranscriptDialogue(ctx, endpointID, threadID, limit, out)
+	if err != nil {
+		return nil, err
+	}
+	return trimDialogueTurns(out, limit), nil
 }
 
 func (r *Repository) listFallbackDialogue(ctx context.Context, endpointID string, threadID string, limit int) ([]model.DialogueTurn, error) {
@@ -125,6 +133,104 @@ func (r *Repository) listFallbackDialogue(ctx context.Context, endpointID string
 		out = out[len(out)-limit:]
 	}
 	return out, nil
+}
+
+func (r *Repository) appendUnlinkedTranscriptDialogue(ctx context.Context, endpointID string, threadID string, limit int, existing []model.DialogueTurn) ([]model.DialogueTurn, error) {
+	if !r.Ready() {
+		return nil, errors.New("repository not ready")
+	}
+	if limit <= 0 {
+		limit = 80
+	}
+
+	lookback := limit * 4
+	if lookback < 80 {
+		lookback = 80
+	}
+	messages, err := r.db.ListRecentTranscriptMessages(ctx, endpointID, threadID, lookback)
+	if err != nil {
+		return nil, err
+	}
+	if len(messages) == 0 {
+		return existing, nil
+	}
+
+	referenced := make(map[string]struct{}, len(existing)*2)
+	for _, turn := range existing {
+		if msgID := strings.TrimSpace(turn.UserMessageID); msgID != "" {
+			referenced[msgID] = struct{}{}
+		}
+		if msgID := strings.TrimSpace(turn.AssistantMessageID); msgID != "" {
+			referenced[msgID] = struct{}{}
+		}
+	}
+
+	extras := make([]model.DialogueTurn, 0, 4)
+	var pendingUser *threadstore.Message
+	for _, msg := range messages {
+		messageID := strings.TrimSpace(msg.MessageID)
+		if messageID == "" {
+			continue
+		}
+		if _, exists := referenced[messageID]; exists {
+			continue
+		}
+		role := strings.ToLower(strings.TrimSpace(msg.Role))
+		switch role {
+		case "user":
+			msgCopy := msg
+			pendingUser = &msgCopy
+		case "assistant":
+			if pendingUser == nil {
+				continue
+			}
+			extras = append(extras, model.DialogueTurn{
+				TurnID:             "unlinked::" + strings.TrimSpace(pendingUser.MessageID),
+				RunID:              "",
+				UserMessageID:      strings.TrimSpace(pendingUser.MessageID),
+				AssistantMessageID: messageID,
+				UserText:           strings.TrimSpace(pendingUser.TextContent),
+				AssistantText:      strings.TrimSpace(msg.TextContent),
+				CreatedAtUnixMs:    maxInt64(pendingUser.CreatedAtUnixMs, msg.CreatedAtUnixMs),
+			})
+			referenced[strings.TrimSpace(pendingUser.MessageID)] = struct{}{}
+			referenced[messageID] = struct{}{}
+			pendingUser = nil
+		}
+	}
+	if pendingUser != nil {
+		extras = append(extras, model.DialogueTurn{
+			TurnID:             "pending::" + strings.TrimSpace(pendingUser.MessageID),
+			RunID:              "",
+			UserMessageID:      strings.TrimSpace(pendingUser.MessageID),
+			AssistantMessageID: "",
+			UserText:           strings.TrimSpace(pendingUser.TextContent),
+			AssistantText:      "",
+			CreatedAtUnixMs:    pendingUser.CreatedAtUnixMs,
+		})
+	}
+	if len(extras) == 0 {
+		return existing, nil
+	}
+
+	merged := make([]model.DialogueTurn, 0, len(existing)+len(extras))
+	merged = append(merged, existing...)
+	merged = append(merged, extras...)
+	return merged, nil
+}
+
+func trimDialogueTurns(turns []model.DialogueTurn, limit int) []model.DialogueTurn {
+	if limit <= 0 || len(turns) <= limit {
+		return turns
+	}
+	return append([]model.DialogueTurn(nil), turns[len(turns)-limit:]...)
+}
+
+func maxInt64(a int64, b int64) int64 {
+	if a >= b {
+		return a
+	}
+	return b
 }
 
 func (r *Repository) UpsertExecutionEvidence(ctx context.Context, endpointID string, threadID string, runID string, evidence model.ExecutionEvidence) error {
