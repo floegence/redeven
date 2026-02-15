@@ -1167,6 +1167,8 @@ export function EnvAIPage() {
   let activeTranscriptThreadId = '';
   let activeTranscriptCursor = 0; // max transcript_messages.id seen for the active thread
   let activeTranscriptBaselineLoaded = false;
+  let activeRealtimeEventSeq = 0;
+  let activeSnapshotReqSeq = 0;
   const failureNotifiedRuns = new Set<string>();
   const [runPhaseLabel, setRunPhaseLabel] = createSignal('Working');
   const setThreadTodosIfChanged = (next: ThreadTodosView | null): void => {
@@ -1458,6 +1460,9 @@ export function EnvAIPage() {
     activeTranscriptThreadId = tid;
     activeTranscriptCursor = 0;
     activeTranscriptBaselineLoaded = false;
+    activeRealtimeEventSeq = 0;
+    // Invalidate in-flight active snapshot requests when switching threads.
+    activeSnapshotReqSeq += 1;
   };
 
   const upsertMessageById = (existing: Message[], next: Message): Message[] => {
@@ -1587,12 +1592,17 @@ export function EnvAIPage() {
     const tid = String(threadId ?? '').trim();
     if (!tid) return;
     if (tid !== String(ai.activeThreadId() ?? '').trim()) return;
+    const reqSeq = ++activeSnapshotReqSeq;
+    const realtimeSeqAtStart = activeRealtimeEventSeq;
 
     try {
       const resp = await rpc.ai.getActiveRunSnapshot({ threadId: tid });
       if (!resp.ok || !resp.messageJson) return;
 
+      if (reqSeq !== activeSnapshotReqSeq) return;
       if (tid !== String(ai.activeThreadId() ?? '').trim()) return;
+      // Realtime events that arrived during fetch are newer than this snapshot.
+      if (realtimeSeqAtStart !== activeRealtimeEventSeq) return;
 
       const decorated = decorateMessageBlocks(resp.messageJson as Message);
       const current = chat.messages() ?? [];
@@ -1751,6 +1761,7 @@ export function EnvAIPage() {
 
         const isActiveTid = tid === String(ai.activeThreadId() ?? '').trim();
         if (isActiveTid) {
+          activeRealtimeEventSeq += 1;
           if (rowId > 0) {
             const shouldBackfillGap = activeTranscriptBaselineLoaded && rowId > activeTranscriptCursor + 1;
             if (shouldBackfillGap) {
@@ -1772,6 +1783,9 @@ export function EnvAIPage() {
       if (event.eventType === 'stream_event') {
         const streamEvent = event.streamEvent as any;
         const streamType = String(streamEvent?.type ?? '').trim().toLowerCase();
+        if (tid === String(ai.activeThreadId() ?? '').trim()) {
+          activeRealtimeEventSeq += 1;
+        }
         if (streamType === 'lifecycle-phase') {
           if (tid === String(ai.activeThreadId() ?? '').trim()) {
             const normalizedPhase = normalizeLifecyclePhase(streamEvent?.phase ?? event.diag?.phase);
