@@ -44,6 +44,7 @@ Follow this skill.`
 	}
 
 	mgr := newSkillManager(workspace, workspace)
+	mgr.userHome = workspace
 	mgr.Discover()
 	list := mgr.List("")
 	if len(list) == 0 {
@@ -116,6 +117,7 @@ mode_hint:
 	}
 
 	mgr := newSkillManager(workspace, workspace)
+	mgr.userHome = workspace
 	catalog := mgr.Reload()
 	if len(catalog.Skills) < 2 {
 		t.Fatalf("expected at least two catalog skills")
@@ -150,7 +152,8 @@ func TestSkillManager_CreateDeleteAndStatePersistence(t *testing.T) {
 	workspace := t.TempDir()
 	stateDir := t.TempDir()
 	mgr := newSkillManager(workspace, stateDir)
-	if _, err := mgr.Create("workspace", "created-skill", "skill created in test", ""); err != nil {
+	mgr.userHome = workspace
+	if _, err := mgr.Create("user", "created-skill", "skill created in test", ""); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	skillPath := filepath.Join(workspace, ".redeven", "skills", "created-skill", "SKILL.md")
@@ -163,6 +166,7 @@ func TestSkillManager_CreateDeleteAndStatePersistence(t *testing.T) {
 	}
 
 	mgr2 := newSkillManager(workspace, stateDir)
+	mgr2.userHome = workspace
 	catalog := mgr2.Reload()
 	foundDisabled := false
 	for _, item := range catalog.Skills {
@@ -174,7 +178,7 @@ func TestSkillManager_CreateDeleteAndStatePersistence(t *testing.T) {
 		t.Fatalf("expected persisted disabled state for %s", skillPath)
 	}
 
-	if _, err := mgr2.Delete("workspace", "created-skill"); err != nil {
+	if _, err := mgr2.Delete("user", "created-skill"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(workspace, ".redeven", "skills", "created-skill")); !os.IsNotExist(err) {
@@ -204,6 +208,9 @@ This content should appear in overlay.`
 	}
 
 	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), FSRoot: workspace})
+	r.skillManager = newSkillManager(workspace, workspace)
+	r.skillManager.userHome = workspace
+	r.skillManager.Discover()
 	if _, _, err := r.activateSkill(skillName); err != nil {
 		t.Fatalf("activate skill: %v", err)
 	}
@@ -612,6 +619,9 @@ Use this handler skill.`, skillName)
 	}
 
 	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), FSRoot: workspace})
+	r.skillManager = newSkillManager(workspace, workspace)
+	r.skillManager.userHome = workspace
+	r.skillManager.Discover()
 	meta := &session.Meta{CanRead: true, CanWrite: true, CanExecute: true}
 	out, err := r.execTool(context.Background(), meta, "tool_1", "use_skill", map[string]any{"name": skillName})
 	if err != nil {

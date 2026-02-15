@@ -175,13 +175,7 @@ func newSkillManager(workspace string, stateDir string) *skillManager {
 }
 
 func (m *skillManager) roots() []skillDiscoveryRoot {
-	roots := make([]skillDiscoveryRoot, 0, 5)
-	if ws := strings.TrimSpace(m.workspace); ws != "" {
-		roots = append(roots,
-			skillDiscoveryRoot{Path: filepath.Join(ws, ".redeven", "skills"), Scope: "workspace"},
-			skillDiscoveryRoot{Path: filepath.Join(ws, ".agents", "skills"), Scope: "workspace_agents"},
-		)
-	}
+	roots := make([]skillDiscoveryRoot, 0, 2)
 	if home := strings.TrimSpace(m.userHome); home != "" {
 		roots = append(roots,
 			skillDiscoveryRoot{Path: filepath.Join(home, ".redeven", "skills"), Scope: "user"},
@@ -347,16 +341,6 @@ func (m *skillManager) Delete(scope string, name string) (SkillCatalog, error) {
 
 func (m *skillManager) scopeRootLocked(scope string) (string, error) {
 	switch strings.TrimSpace(strings.ToLower(scope)) {
-	case "workspace":
-		if strings.TrimSpace(m.workspace) == "" {
-			return "", fmt.Errorf("workspace scope unavailable")
-		}
-		return filepath.Join(m.workspace, ".redeven", "skills"), nil
-	case "workspace_agents":
-		if strings.TrimSpace(m.workspace) == "" {
-			return "", fmt.Errorf("workspace scope unavailable")
-		}
-		return filepath.Join(m.workspace, ".agents", "skills"), nil
 	case "user":
 		if strings.TrimSpace(m.userHome) == "" {
 			return "", fmt.Errorf("user scope unavailable")

@@ -91,12 +91,13 @@ description: Install Codex skills
 	defer server.Close()
 
 	mgr := newSkillManager(workspace, stateDir)
+	mgr.userHome = workspace
 	mgr.githubAPIBaseURL = server.URL
 	mgr.githubRawBaseURL = server.URL + "/raw"
 	mgr.githubRepoBaseURL = server.URL
 
 	validated, err := mgr.ValidateGitHubImport(SkillGitHubImportRequest{
-		Scope: "workspace",
+		Scope: "user",
 		Repo:  "openai/skills",
 		Ref:   "main",
 		Paths: []string{"skills/.curated/skill-installer"},
@@ -112,7 +113,7 @@ description: Install Codex skills
 	}
 
 	imported, err := mgr.ImportFromGitHub(SkillGitHubImportRequest{
-		Scope: "workspace",
+		Scope: "user",
 		Repo:  "openai/skills",
 		Ref:   "main",
 		Paths: []string{"skills/.curated/skill-installer"},
@@ -185,12 +186,13 @@ Follow installer guide.`
 	defer server.Close()
 
 	mgr := newSkillManager(workspace, stateDir)
+	mgr.userHome = workspace
 	mgr.githubAPIBaseURL = server.URL
 	mgr.githubRawBaseURL = server.URL + "/raw"
 	mgr.githubRepoBaseURL = server.URL
 
 	imported, err := mgr.ImportFromGitHub(SkillGitHubImportRequest{
-		Scope: "workspace",
+		Scope: "user",
 		Repo:  "openai/skills",
 		Ref:   "main",
 		Paths: []string{"skills/.curated/skill-installer"},
@@ -239,13 +241,14 @@ description: Install Codex skills
 	defer server.Close()
 
 	mgr := newSkillManager(workspace, stateDir)
+	mgr.userHome = workspace
 	mgr.githubAPIBaseURL = server.URL
 	mgr.githubRawBaseURL = server.URL + "/raw"
 	mgr.githubRepoBaseURL = server.URL
 
 	resolved := []SkillGitHubResolvedSkill{{
 		Name:            "skill-installer",
-		Scope:           "workspace",
+		Scope:           "user",
 		Repo:            "openai/skills",
 		Ref:             "main",
 		RepoPath:        "skills/.curated/skill-installer",
@@ -253,7 +256,7 @@ description: Install Codex skills
 		TargetSkillPath: filepath.Join(workspace, ".redeven", "skills", "skill-installer", "SKILL.md"),
 	}}
 	input := resolvedGitHubImportInput{
-		scope:     "workspace",
+		scope:     "user",
 		repo:      "openai/skills",
 		ref:       "main",
 		repoPaths: []string{"skills/.curated/skill-installer"},
@@ -286,6 +289,7 @@ func TestSkillManager_BrowsePathEscape(t *testing.T) {
 	}
 
 	mgr := newSkillManager(workspace, stateDir)
+	mgr.userHome = workspace
 	mgr.Discover()
 	_, err := mgr.BrowseFile(skillPath, "../outside", "utf8", 1024)
 	if err == nil {
