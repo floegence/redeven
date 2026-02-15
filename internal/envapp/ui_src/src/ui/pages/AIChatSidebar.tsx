@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { For, Index, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { History, Plus, Refresh, Sparkles, Trash, X } from '@floegence/floe-webapp-core/icons';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { useNotification } from '@floegence/floe-webapp-core';
@@ -563,30 +563,37 @@ export function AIChatSidebar() {
           >
             <SidebarSection title="Conversations">
               <div class="flex flex-col gap-0.5">
-                <For each={groupedThreads()}>
-                  {(group) => (
-                    <>
-                      <Show when={showGroupHeaders()}>
-                        <div class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40 px-2.5 pt-3 pb-1 select-none">
-                          {group.group}
-                        </div>
-                      </Show>
-                      <For each={group.threads}>
-                        {(t) => (
-                          <ThreadCard
-                            thread={t}
-                            active={t.thread_id === ctx.activeThreadId()}
-                            isRunning={ctx.isThreadRunning(t.thread_id)}
-                            connected={protocol.status() === 'connected'}
-                            canDelete={canManageChats()}
-                            onClick={() => ctx.selectThreadId(t.thread_id)}
-                            onDelete={() => openDelete(t.thread_id, t.title)}
-                          />
-                        )}
-                      </For>
-                    </>
-                  )}
-                </For>
+                <Index each={groupedThreads()}>
+                  {(groupAccessor) => {
+                    const group = () => groupAccessor();
+                    return (
+                      <>
+                        <Show when={showGroupHeaders()}>
+                          <div class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40 px-2.5 pt-3 pb-1 select-none">
+                            {group().group}
+                          </div>
+                        </Show>
+                        <Index each={group().threads}>
+                          {(threadAccessor) => {
+                            const thread = () => threadAccessor();
+                            const threadID = () => thread().thread_id;
+                            return (
+                              <ThreadCard
+                                thread={thread()}
+                                active={threadID() === ctx.activeThreadId()}
+                                isRunning={ctx.isThreadRunning(threadID())}
+                                connected={protocol.status() === 'connected'}
+                                canDelete={canManageChats()}
+                                onClick={() => ctx.selectThreadId(threadID())}
+                                onDelete={() => openDelete(threadID(), thread().title)}
+                              />
+                            );
+                          }}
+                        </Index>
+                      </>
+                    );
+                  }}
+                </Index>
               </div>
             </SidebarSection>
           </Show>
