@@ -1,6 +1,6 @@
 import { Index, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useCurrentWidgetId, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button, Dropdown, type DropdownItem, Input, NumberInput, Tabs, TabPanel, type TabItem } from '@floegence/floe-webapp-core/ui';
@@ -214,21 +214,6 @@ const MoreVerticalIcon = (props: { class?: string }) => (
     <circle cx="12" cy="12" r="1" />
     <circle cx="12" cy="5" r="1" />
     <circle cx="12" cy="19" r="1" />
-  </svg>
-);
-
-const SparklesIcon = (props: { class?: string }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="2"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    class={props.class}
-  >
-    <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" />
   </svg>
 );
 
@@ -643,7 +628,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     selection: string;
   } | null>(null);
   let terminalAskMenuEl: HTMLDivElement | null = null;
-  let terminalContextMenuHostEl: HTMLDivElement | null = null;
+  const [terminalContextMenuHostEl, setTerminalContextMenuHostEl] = createSignal<HTMLDivElement | null>(null);
 
   let searchLastAppliedKey = '';
   let searchBoundCore: TerminalCore | null = null;
@@ -695,15 +680,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
-    if (!connected()) return;
-    const host = terminalContextMenuHostEl;
+    const host = terminalContextMenuHostEl();
     if (!host) return;
 
     const onContextMenuCapture = (event: MouseEvent) => {
-      const target = event.target as Element | null;
-      if (!target) return;
-      if (!target.closest('.redeven-terminal-surface')) return;
-      openTerminalAskMenu(event);
+      handleTerminalContextMenuCapture(event);
     };
 
     host.addEventListener('contextmenu', onContextMenuCapture, true);
@@ -1132,32 +1113,79 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return coreRegistry.get(sid) ?? null;
   };
 
+  const clampAskMenuPosition = (x: number, y: number): { x: number; y: number } => {
+    if (typeof window === 'undefined') return { x, y };
+
+    const margin = 8;
+    const menuWidth = 180;
+    const menuHeight = 44;
+    const maxX = Math.max(margin, window.innerWidth - menuWidth - margin);
+    const maxY = Math.max(margin, window.innerHeight - menuHeight - margin);
+
+    return {
+      x: Math.min(Math.max(x, margin), maxX),
+      y: Math.min(Math.max(y, margin), maxY),
+    };
+  };
+
+  const isTerminalSurfaceContextMenuEvent = (event: MouseEvent): boolean => {
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    const host = terminalContextMenuHostEl();
+    for (const node of path) {
+      if (!(node instanceof Element)) continue;
+      if (node.classList.contains('redeven-terminal-surface')) return true;
+      if (node === host) break;
+    }
+
+    const target = event.target;
+    if (target instanceof Element) {
+      return !!target.closest('.redeven-terminal-surface');
+    }
+
+    return false;
+  };
+
   const openTerminalAskMenu = (event: MouseEvent) => {
     if (!connected()) return;
 
-    const sid = String(activeSessionId() ?? '').trim();
-    if (!sid) return;
+    const currentActiveId = String(activeSessionId() ?? '').trim();
+    const activeSession = currentActiveId
+      ? sessions().find((item) => item.id === currentActiveId) ?? null
+      : null;
+    const resolvedSession = activeSession ?? sessions()[0] ?? null;
+    if (!resolvedSession) return;
 
-    const session = sessions().find((item) => item.id === sid);
-    const workingDir = normalizeAskFlowerAbsolutePath(String(session?.workingDir ?? '').trim()) || '/';
+    const workingDir = normalizeAskFlowerAbsolutePath(String(resolvedSession.workingDir ?? '').trim()) || '/';
+    const core = coreRegistry.get(resolvedSession.id) ?? getActiveCore();
 
     let selection = '';
     try {
-      const core = getActiveCore() as any;
-      selection = String(core?.getSelectionText?.() ?? '').trim();
+      selection = String((core as any)?.getSelectionText?.() ?? '').trim();
     } catch {
       selection = '';
     }
 
+    const pos = clampAskMenuPosition(event.clientX, event.clientY);
     event.preventDefault();
     event.stopPropagation();
+
+    if (!currentActiveId) {
+      setActiveSessionId(resolvedSession.id);
+    }
+
     setTerminalAskMenu({
-      x: event.clientX,
-      y: event.clientY,
+      x: pos.x,
+      y: pos.y,
       workingDir,
       selection,
     });
   };
+
+  function handleTerminalContextMenuCapture(event: MouseEvent) {
+    if (!connected()) return;
+    if (!isTerminalSurfaceContextMenuEvent(event)) return;
+    openTerminalAskMenu(event);
+  }
 
   const askFlowerFromTerminal = () => {
     const menu = terminalAskMenu();
@@ -1460,9 +1488,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
       <Show when={connected()} fallback={<div class="p-4 text-xs text-muted-foreground">Not connected.</div>}>
         <div
-          ref={(el) => {
-            terminalContextMenuHostEl = el;
-          }}
+          ref={setTerminalContextMenuHostEl}
           class="flex-1 min-h-0 relative"
         >
           <Show when={searchOpen()}>
@@ -1584,7 +1610,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
               onClick={askFlowerFromTerminal}
             >
-              <SparklesIcon class="w-3.5 h-3.5 opacity-60" />
+              <Sparkles class="w-3.5 h-3.5 opacity-60" />
               <span class="flex-1 text-left">Ask Flower</span>
             </button>
           </div>

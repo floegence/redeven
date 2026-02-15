@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { useDeck, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
-import { Sparkles } from '@floegence/floe-webapp-core/icons';
-import { FileBrowser, type BuiltinContextMenuAction, type ContextMenuCallbacks, type ContextMenuItem, type FileItem } from '@floegence/floe-webapp-core/file-browser';
+import { ArrowRightLeft, Copy, Folder, Pencil, Sparkles, Trash } from '@floegence/floe-webapp-core/icons';
+import { FileBrowser, type ContextMenuCallbacks, type ContextMenuItem, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button, ConfirmDialog, Dialog, DirectoryPicker, FileSavePicker, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type { Client } from '@floegence/flowersec-core';
@@ -1503,15 +1503,50 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
   };
 
-  const customContextMenuItems: ContextMenuItem[] = [
+  const overrideContextMenuItems: ContextMenuItem[] = [
     {
       id: 'ask-flower',
       label: 'Ask Flower',
       type: 'custom',
       icon: (props) => <Sparkles class={props.class} />,
+      separator: true,
       onAction: (items: FileItem[]) => {
         void askFlowerFromFileBrowser(items);
       },
+    },
+    {
+      id: 'duplicate',
+      label: 'Duplicate',
+      type: 'duplicate',
+      icon: (props) => <Copy class={props.class} />,
+      shortcut: 'Cmd+D',
+    },
+    {
+      id: 'copy-to',
+      label: 'Copy to...',
+      type: 'copy-to',
+      icon: (props) => <Folder class={props.class} />,
+    },
+    {
+      id: 'move-to',
+      label: 'Move to...',
+      type: 'move-to',
+      icon: (props) => <ArrowRightLeft class={props.class} />,
+      separator: true,
+    },
+    {
+      id: 'rename',
+      label: 'Rename',
+      type: 'rename',
+      icon: (props) => <Pencil class={props.class} />,
+      shortcut: 'Enter',
+    },
+    {
+      id: 'delete',
+      label: 'Delete',
+      type: 'delete',
+      icon: (props) => <Trash class={props.class} />,
+      shortcut: 'Del',
     },
   ];
 
@@ -1541,14 +1576,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                 onOpen={(item) => void openPreview(item)}
                 onDragMove={(items, targetPath) => void handleDragMove(items, targetPath)}
                 contextMenuCallbacks={ctxMenu}
-                customContextMenuItems={customContextMenuItems}
-                hideContextMenuItems={(items: FileItem[]): BuiltinContextMenuAction[] => {
-                  const hidden: BuiltinContextMenuAction[] = ['ask-agent'];
-                  if (items.some((i) => i.type === 'folder')) {
-                    hidden.push('duplicate', 'copy-to');
-                  }
-                  return hidden;
-                }}
+                overrideContextMenuItems={overrideContextMenuItems}
                 class="h-full border-0 rounded-none shadow-none"
               />
             )}
