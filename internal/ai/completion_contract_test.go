@@ -15,6 +15,9 @@ func TestCompletionContractForIntent(t *testing.T) {
 	if got := completionContractForIntent(RunIntentSocial); got != completionContractNone {
 		t.Fatalf("social contract=%q, want %q", got, completionContractNone)
 	}
+	if got := completionContractForIntent(RunIntentCreative); got != completionContractNone {
+		t.Fatalf("creative contract=%q, want %q", got, completionContractNone)
+	}
 }
 
 func TestClassifyFinalizationReason(t *testing.T) {
@@ -26,6 +29,7 @@ func TestClassifyFinalizationReason(t *testing.T) {
 	}{
 		{reason: "task_complete", want: finalizationClassSuccess},
 		{reason: "social_reply", want: finalizationClassSuccess},
+		{reason: "creative_reply", want: finalizationClassSuccess},
 		{reason: "ask_user_waiting", want: finalizationClassWaitingUser},
 		{reason: "ask_user_waiting_model", want: finalizationClassWaitingUser},
 		{reason: "ask_user_waiting_guard", want: finalizationClassWaitingUser},

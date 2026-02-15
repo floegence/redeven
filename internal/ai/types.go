@@ -135,7 +135,7 @@ type RunOptions struct {
 	// Mode overrides runtime mode for this run (act|plan).
 	Mode string `json:"mode,omitempty"`
 
-	// Intent is classified by the agent runtime (social|task).
+	// Intent is classified by the agent runtime (social|creative|task).
 	// Clients should not set this field directly.
 	Intent string `json:"intent,omitempty"`
 

@@ -93,6 +93,14 @@ type AIProvider struct {
 	// When empty, provider defaults apply (except openai_compatible where base_url is required).
 	BaseURL string `json:"base_url,omitempty"`
 
+	// StrictToolSchema overrides provider tool schema strictness.
+	//
+	// When unset, runtime falls back to built-in policy:
+	// - openai official endpoints: strict
+	// - openai custom gateways: non-strict
+	// - openai_compatible: non-strict
+	StrictToolSchema *bool `json:"strict_tool_schema,omitempty"`
+
 	// Models is the allowed model list for this provider (shown in the Chat UI).
 	Models []AIProviderModel `json:"models,omitempty"`
 }

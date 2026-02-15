@@ -138,6 +138,56 @@ func TestIntentRouting_SocialInputUsesSocialPathWithoutTools(t *testing.T) {
 	}
 }
 
+func TestIntentRouting_CreativeInputUsesCreativePathWithoutTools(t *testing.T) {
+	t.Parallel()
+
+	mock := &openAIMock{token: "CREATIVE_REPLY_OK"}
+	svc, meta := newIntentRoutingService(t, mock)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	thread, err := svc.CreateThread(ctx, &meta, "creative test", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_intent_creative_1"
+	rr := httptest.NewRecorder()
+	err = svc.StartRun(ctx, &meta, runID, RunStartRequest{
+		ThreadID: thread.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "请用 markdown 写一篇长篇童话故事"},
+		Options:  RunOptions{MaxSteps: 1, Mode: "act"},
+	}, rr)
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	if !strings.Contains(rr.Body.String(), "CREATIVE_REPLY_OK") {
+		t.Fatalf("stream output missing creative reply token, body=%q", rr.Body.String())
+	}
+	if names := mock.toolNamesSnapshot(); len(names) != 0 {
+		t.Fatalf("creative path must not send tools, got=%v", names)
+	}
+
+	runEvents, err := svc.ListRunEvents(ctx, &meta, runID, 2000)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	classified := findRunEventPayload(t, runEvents.Events, "intent.classified")
+	if got := strings.TrimSpace(fmt.Sprint(classified["intent"])); got != RunIntentCreative {
+		t.Fatalf("intent=%q, want %q", got, RunIntentCreative)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(classified["intent_source"])); got != RunIntentSourceDeterministic {
+		t.Fatalf("intent_source=%q, want %q", got, RunIntentSourceDeterministic)
+	}
+	routed := findRunEventPayload(t, runEvents.Events, "intent.routed")
+	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != "creative_responder" {
+		t.Fatalf("intent path=%q, want creative_responder", got)
+	}
+}
+
 func TestIntentRouting_ContinuationWithOpenGoalStaysTask(t *testing.T) {
 	t.Parallel()
 

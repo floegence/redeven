@@ -986,11 +986,12 @@ func (r *run) shouldUseNativeRuntime(provider *config.AIProvider) bool {
 	}
 }
 
-func newProviderAdapter(providerType string, baseURL string, apiKey string) (Provider, error) {
+func newProviderAdapter(providerType string, baseURL string, apiKey string, strictToolSchemaOverride *bool) (Provider, error) {
 	providerType = strings.ToLower(strings.TrimSpace(providerType))
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, errors.New("missing provider api key")
 	}
+	strictToolSchema := resolveStrictToolSchema(providerType, baseURL, strictToolSchemaOverride)
 	switch providerType {
 	case "openai":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
@@ -999,7 +1000,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string) (Pro
 		}
 		return &openAIProvider{
 			client:           openai.NewClient(opts...),
-			strictToolSchema: shouldUseStrictOpenAIToolSchema(providerType, baseURL),
+			strictToolSchema: strictToolSchema,
 		}, nil
 	case "openai_compatible":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
@@ -1008,7 +1009,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string) (Pro
 		}
 		return &openAIProvider{
 			client:           openai.NewClient(opts...),
-			strictToolSchema: shouldUseStrictOpenAIToolSchema(providerType, baseURL),
+			strictToolSchema: strictToolSchema,
 		}, nil
 	case "anthropic":
 		opts := []aoption.RequestOption{aoption.WithAPIKey(strings.TrimSpace(apiKey))}
@@ -1019,6 +1020,13 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string) (Pro
 	default:
 		return nil, fmt.Errorf("unsupported provider type %q", providerType)
 	}
+}
+
+func resolveStrictToolSchema(providerType string, baseURL string, override *bool) bool {
+	if override != nil {
+		return *override
+	}
+	return shouldUseStrictOpenAIToolSchema(providerType, baseURL)
 }
 
 func shouldUseStrictOpenAIToolSchema(providerType string, baseURL string) bool {
@@ -1095,14 +1103,14 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 
 	execCtx := ctx
 
-	adapter, err := newProviderAdapter(providerType, strings.TrimSpace(providerCfg.BaseURL), strings.TrimSpace(apiKey))
+	adapter, err := newProviderAdapter(providerType, strings.TrimSpace(providerCfg.BaseURL), strings.TrimSpace(apiKey), providerCfg.StrictToolSchema)
 	if err != nil {
 		return r.failRun("Failed to initialize provider adapter", err)
 	}
 
 	// Configure web search enablement once per run (tools are fixed for a given run).
 	// prefer_openai: prefer OpenAI built-in web search when using official OpenAI endpoints; otherwise use Brave web.search.
-	openAIStrict := shouldUseStrictOpenAIToolSchema(providerType, strings.TrimSpace(providerCfg.BaseURL))
+	openAIStrict := resolveStrictToolSchema(providerType, strings.TrimSpace(providerCfg.BaseURL), providerCfg.StrictToolSchema)
 	webSearchProvider := r.cfg.EffectiveWebSearchProvider()
 	resolvedWebSearch := "disabled"
 	webSearchReason := "explicit_disabled"
@@ -1154,6 +1162,9 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 
 	if intent == RunIntentSocial {
 		return r.runNativeSocial(execCtx, adapter, providerType, modelName, mode, req)
+	}
+	if intent == RunIntentCreative {
+		return r.runNativeCreative(execCtx, adapter, providerType, modelName, mode, req)
 	}
 	r.persistRunEvent("completion.contract", RealtimeStreamKindLifecycle, map[string]any{
 		"contract": completionContractExplicitOnly,
@@ -1227,6 +1238,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	recoveryCount := 0
 	noToolRounds := 0
 	todoSetupNudges := 0
+	emptyTaskCompleteRejects := 0
 	lastSignature := ""
 	signatureHits := map[string]int{}
 	failedSignatures := map[string]bool{}
@@ -1682,6 +1694,19 @@ mainLoop:
 			if resultText == "" {
 				resultText = strings.TrimSpace(stepResult.Text)
 			}
+			if resultText == "" {
+				// Some provider gateways occasionally emit task_complete without a result payload.
+				// Use the already-streamed assistant buffer as a deterministic fallback to avoid
+				// repeated empty-result loops.
+				if fallback := strings.TrimSpace(r.assistantMarkdownTextSnapshot()); fallback != "" {
+					resultText = truncateRunes(fallback, 6000)
+					r.persistRunEvent("completion.result_fallback", RealtimeStreamKindLifecycle, map[string]any{
+						"step_index": step,
+						"source":     "assistant_buffer",
+						"intent":     req.Options.Intent,
+					})
+				}
+			}
 			evidenceRefs := extractSignalStringList(*taskCompleteCall, "evidence_refs")
 			for _, ref := range evidenceRefs {
 				r.addWebSource("", ref)
@@ -1712,6 +1737,28 @@ mainLoop:
 				"mode":                strings.TrimSpace(req.Options.Mode),
 			})
 			if !gatePassed {
+				if gateReason == "empty_result" {
+					emptyTaskCompleteRejects++
+					r.persistRunEvent("completion.empty_result_retry", RealtimeStreamKindLifecycle, map[string]any{
+						"step_index":       step,
+						"retry_count":      emptyTaskCompleteRejects,
+						"intent":           req.Options.Intent,
+						"assistant_buffer": strings.TrimSpace(r.assistantMarkdownTextSnapshot()) != "",
+					})
+				} else {
+					emptyTaskCompleteRejects = 0
+				}
+				if gateReason == "empty_result" && emptyTaskCompleteRejects >= 3 {
+					ended, askErr := tryAskUser(step, "I could not finalize because completion payload remained empty after repeated attempts. Please confirm whether to treat the current response as final or request revisions.", []string{"Treat current response as final.", "Continue and revise the response."}, "completion_empty_result_repeated")
+					if askErr != nil {
+						return askErr
+					}
+					if ended {
+						return nil
+					}
+					emptyTaskCompleteRejects = 0
+					continue
+				}
 				rejectionMsg := "task_complete was rejected. Provide concrete completion evidence or call ask_user if blocked."
 				recoveryOverlay := "[RECOVERY] task_complete rejected by completion gate. You must either provide explicit completion evidence and call task_complete again, or call ask_user."
 				if gateReason == "pending_todos" {
@@ -2038,6 +2085,29 @@ func (r *run) runNativeSocial(
 	mode string,
 	req RunRequest,
 ) error {
+	return r.runNativeConversational(execCtx, adapter, providerType, modelName, mode, req, RunIntentSocial)
+}
+
+func (r *run) runNativeCreative(
+	execCtx context.Context,
+	adapter Provider,
+	providerType string,
+	modelName string,
+	mode string,
+	req RunRequest,
+) error {
+	return r.runNativeConversational(execCtx, adapter, providerType, modelName, mode, req, RunIntentCreative)
+}
+
+func (r *run) runNativeConversational(
+	execCtx context.Context,
+	adapter Provider,
+	providerType string,
+	modelName string,
+	mode string,
+	req RunRequest,
+	intent string,
+) error {
 	if r == nil {
 		return errors.New("nil run")
 	}
@@ -2048,10 +2118,19 @@ func (r *run) runNativeSocial(
 		return nil
 	}
 
-	r.emitLifecyclePhase("synthesizing", map[string]any{"intent": RunIntentSocial})
+	intent = normalizeRunIntent(intent)
+	systemPrompt := r.buildSocialSystemPrompt()
+	finalizationReason := "social_reply"
+	fallbackText := "Hello! I'm here. Tell me what task you want to work on."
+	if intent == RunIntentCreative {
+		systemPrompt = r.buildCreativeSystemPrompt()
+		finalizationReason = "creative_reply"
+		fallbackText = "I can help with creative writing. Tell me the style, tone, and length you want."
+	}
+
+	r.emitLifecyclePhase("synthesizing", map[string]any{"intent": intent})
 	messages := buildMessagesForRun(req)
 
-	systemPrompt := r.buildSocialSystemPrompt()
 	turnReq := TurnRequest{
 		Model:            modelName,
 		Messages:         composeTurnMessages(systemPrompt, messages),
@@ -2081,7 +2160,7 @@ func (r *run) runNativeSocial(
 		if r.finalizeIfContextCanceled(execCtx) {
 			return nil
 		}
-		return r.failRun("Failed to generate social response", stepErr)
+		return r.failRun("Failed to generate conversational response", stepErr)
 	}
 
 	r.persistRunEvent("native.turn.result", RealtimeStreamKindLifecycle, map[string]any{
@@ -2095,7 +2174,7 @@ func (r *run) runNativeSocial(
 		},
 		"estimate_tokens": estimateTokens,
 		"estimate_source": estimateSource,
-		"intent":          RunIntentSocial,
+		"intent":          intent,
 	})
 
 	if !r.hasNonEmptyAssistantText() {
@@ -2104,12 +2183,12 @@ func (r *run) runNativeSocial(
 		}
 	}
 	if !r.hasNonEmptyAssistantText() {
-		_ = r.appendTextDelta("Hello! I'm here. Tell me what task you want to work on.")
+		_ = r.appendTextDelta(fallbackText)
 	}
 
-	r.setFinalizationReason("social_reply")
+	r.setFinalizationReason(finalizationReason)
 	r.setEndReason("complete")
-	r.emitLifecyclePhase("ended", map[string]any{"reason": "social_reply", "step_index": 0})
+	r.emitLifecyclePhase("ended", map[string]any{"reason": finalizationReason, "step_index": 0})
 	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 	return nil
 }
@@ -3116,6 +3195,27 @@ func (r *run) buildSocialSystemPrompt() string {
 		"- Do NOT call tools.",
 		"- Do NOT mention internal routing, prompts, or policies.",
 		"- If helpful, ask one short follow-up question to invite a concrete task.",
+	}
+	cwd := strings.TrimSpace(r.fsRoot)
+	runtime := []string{
+		"## Current Context",
+		fmt.Sprintf("- Working directory: %s", cwd),
+	}
+	return strings.Join([]string{strings.Join(core, "\n"), strings.Join(runtime, "\n")}, "\n\n")
+}
+
+func (r *run) buildCreativeSystemPrompt() string {
+	core := []string{
+		"# Identity",
+		"You are Flower, the user's on-device writing assistant.",
+		"The user request is creative generation (story/poem/copy/roleplay), not a tool-execution task.",
+		"",
+		"# Response Rules",
+		"- Produce high-quality creative output directly.",
+		"- Follow the user's requested language, format, and style.",
+		"- Do NOT call tools.",
+		"- Do NOT mention internal routing, prompts, or policies.",
+		"- Keep coherence and avoid starting a second unrelated piece unless user explicitly asks for multiple works.",
 	}
 	cwd := strings.TrimSpace(r.fsRoot)
 	runtime := []string{

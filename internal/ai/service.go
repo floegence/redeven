@@ -823,6 +823,10 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{
 			"path": "social_responder",
 		})
+	} else if intentDecision.Intent == RunIntentCreative {
+		r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{
+			"path": "creative_responder",
+		})
 	} else {
 		r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{
 			"path": "task_engine",
@@ -1132,7 +1136,7 @@ func (s *Service) classifyRunIntentByModel(ctx context.Context, resolved resolve
 	if !ok || strings.TrimSpace(apiKey) == "" {
 		return intentDecision{}, fmt.Errorf("missing api key for provider %q", resolved.ProviderID)
 	}
-	adapter, err := newProviderAdapter(providerType, strings.TrimSpace(resolved.Provider.BaseURL), strings.TrimSpace(apiKey))
+	adapter, err := newProviderAdapter(providerType, strings.TrimSpace(resolved.Provider.BaseURL), strings.TrimSpace(apiKey), resolved.Provider.StrictToolSchema)
 	if err != nil {
 		return intentDecision{}, fmt.Errorf("init provider adapter failed: %w", err)
 	}

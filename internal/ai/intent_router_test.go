@@ -28,6 +28,27 @@ func TestClassifyRunIntent_UsesModelDecision(t *testing.T) {
 	}
 }
 
+func TestClassifyRunIntent_CreativeRequestUsesDeterministicCreativePath(t *testing.T) {
+	t.Parallel()
+
+	got := classifyRunIntent("请你用 markdown 写一篇长篇童话故事", nil, "", func() (intentDecision, error) {
+		t.Fatalf("classifier should not be called for deterministic creative request")
+		return intentDecision{}, nil
+	})
+	if got.Intent != RunIntentCreative {
+		t.Fatalf("intent=%q, want %q", got.Intent, RunIntentCreative)
+	}
+	if got.Source != RunIntentSourceDeterministic {
+		t.Fatalf("source=%q, want %q", got.Source, RunIntentSourceDeterministic)
+	}
+	if got.Reason != "creative_request_detected" {
+		t.Fatalf("reason=%q, want creative_request_detected", got.Reason)
+	}
+	if got.ObjectiveMode != RunObjectiveModeReplace {
+		t.Fatalf("objective_mode=%q, want %q", got.ObjectiveMode, RunObjectiveModeReplace)
+	}
+}
+
 func TestClassifyRunIntent_ModelFailureFallsBackToTask(t *testing.T) {
 	t.Parallel()
 
@@ -87,6 +108,24 @@ func TestParseModelIntentDecision_CodeFenceJSON(t *testing.T) {
 	}
 	if got.Intent != RunIntentSocial {
 		t.Fatalf("intent=%q, want %q", got.Intent, RunIntentSocial)
+	}
+	if got.Source != RunIntentSourceModel {
+		t.Fatalf("source=%q, want %q", got.Source, RunIntentSourceModel)
+	}
+	if got.ObjectiveMode != RunObjectiveModeReplace {
+		t.Fatalf("objective_mode=%q, want %q", got.ObjectiveMode, RunObjectiveModeReplace)
+	}
+}
+
+func TestParseModelIntentDecision_Creative(t *testing.T) {
+	t.Parallel()
+
+	got, err := parseModelIntentDecision(`{"intent":"creative","reason":"story_generation_requested","objective_mode":"replace"}`)
+	if err != nil {
+		t.Fatalf("parseModelIntentDecision: %v", err)
+	}
+	if got.Intent != RunIntentCreative {
+		t.Fatalf("intent=%q, want %q", got.Intent, RunIntentCreative)
 	}
 	if got.Source != RunIntentSourceModel {
 		t.Fatalf("source=%q, want %q", got.Source, RunIntentSourceModel)
