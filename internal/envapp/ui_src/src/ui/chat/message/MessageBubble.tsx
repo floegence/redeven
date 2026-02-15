@@ -1,9 +1,9 @@
 // Renders message blocks inside a styled bubble.
 
-import { For, Show } from 'solid-js';
-import type { Component } from 'solid-js';
+import { Index, Show, createEffect, createSignal } from 'solid-js';
+import type { Accessor, Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import type { Message } from '../types';
+import type { Message, MessageBlock } from '../types';
 import { BlockRenderer } from '../blocks/BlockRenderer';
 
 export interface MessageBubbleProps {
@@ -30,6 +30,81 @@ const ErrorIcon: Component = () => (
   </svg>
 );
 
+function hasStandaloneBlockPayload(block: MessageBlock): boolean {
+  switch (block.type) {
+    case 'text':
+    case 'markdown':
+      return false;
+    case 'tool-call':
+      return String(block.toolName ?? '').trim().length > 0;
+    case 'shell':
+      return String(block.command ?? '').trim().length > 0 || String(block.output ?? '').trim().length > 0;
+    case 'todos':
+      return block.version > 0 || block.todos.length > 0;
+    case 'sources':
+      return block.sources.length > 0;
+    case 'code':
+      return String(block.content ?? '').length > 0;
+    case 'code-diff':
+      return String(block.oldCode ?? '').length > 0 || String(block.newCode ?? '').length > 0;
+    case 'checklist':
+      return block.items.length > 0;
+    case 'image':
+      return String(block.src ?? '').trim().length > 0;
+    case 'file':
+      return String(block.name ?? '').trim().length > 0;
+    case 'svg':
+    case 'mermaid':
+      return String(block.content ?? '').trim().length > 0;
+    case 'thinking':
+      return String(block.content ?? '').trim().length > 0 || Number(block.duration ?? 0) > 0;
+    default:
+      return false;
+  }
+}
+
+function shouldAnimateStandaloneBlock(message: Message, block: MessageBlock): boolean {
+  if (message.role !== 'assistant') return false;
+  if (message.status !== 'streaming') return false;
+  return hasStandaloneBlockPayload(block);
+}
+
+interface MessageBlockSlotProps {
+  message: Message;
+  block: Accessor<MessageBlock>;
+  blockIndex: number;
+}
+
+const MessageBlockSlot: Component<MessageBlockSlotProps> = (props) => {
+  const [animateIn, setAnimateIn] = createSignal(false);
+
+  createEffect(() => {
+    if (animateIn()) return;
+    if (shouldAnimateStandaloneBlock(props.message, props.block())) {
+      setAnimateIn(true);
+    }
+  });
+
+  const enterStyle = () =>
+    animateIn()
+      ? ({ '--chat-stream-block-enter-delay': `${Math.min(props.blockIndex, 4) * 24}ms` } as Record<string, string>)
+      : undefined;
+
+  return (
+    <div
+      class={cn('chat-message-block-slot', animateIn() && 'chat-message-block-slot-imessage-enter')}
+      style={enterStyle()}
+    >
+      <BlockRenderer
+        block={props.block()}
+        messageId={props.message.id}
+        blockIndex={props.blockIndex}
+        isStreaming={props.message.status === 'streaming'}
+      />
+    </div>
+  );
+};
+
 export const MessageBubble: Component<MessageBubbleProps> = (props) => {
   return (
     <div
@@ -41,16 +116,15 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
         props.class,
       )}
     >
-      <For each={props.message.blocks}>
+      <Index each={props.message.blocks}>
         {(block, index) => (
-          <BlockRenderer
+          <MessageBlockSlot
+            message={props.message}
             block={block}
-            messageId={props.message.id}
-            blockIndex={index()}
-            isStreaming={props.message.status === 'streaming'}
+            blockIndex={index}
           />
         )}
-      </For>
+      </Index>
 
       <Show when={props.message.status === 'error' && props.message.error}>
         <div class="chat-message-error">
