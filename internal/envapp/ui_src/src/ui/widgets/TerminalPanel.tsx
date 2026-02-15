@@ -1,5 +1,5 @@
 import { Index, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
-import { useCurrentWidgetId, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
+import { useCurrentWidgetId, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
@@ -32,6 +32,8 @@ import {
 import { useEnvContext } from '../pages/EnvContext';
 import { isPermissionDeniedError } from '../utils/permission';
 import { PermissionEmptyState } from './PermissionEmptyState';
+import type { AskFlowerIntent } from '../pages/askFlowerIntent';
+import { normalizeVirtualPath as normalizeAskFlowerVirtualPath } from '../utils/askFlowerPath';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
 
@@ -130,6 +132,8 @@ const TERMINAL_THEME_ITEMS: DropdownItem[] = [
 ];
 
 const HISTORY_STATS_POLL_MS = 10_000;
+const MAX_INLINE_TERMINAL_SELECTION_CHARS = 10_000;
+const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 
 const TERMINAL_SELECTION_BACKGROUND = 'rgba(255, 234, 0, 0.72)';
 const TERMINAL_SELECTION_FOREGROUND = '#000000';
@@ -594,6 +598,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const variant: TerminalPanelVariant = props.variant ?? 'panel';
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
+  const env = useEnvContext();
+  const notify = useNotification();
   const theme = useTheme();
   const floe = useResolvedFloeConfig();
   const view = useViewActivation();
@@ -616,6 +622,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [searchResultCount, setSearchResultCount] = createSignal(0);
   const [searchResultIndex, setSearchResultIndex] = createSignal(-1);
   const [panelHasFocus, setPanelHasFocus] = createSignal(false);
+  const [terminalAskMenu, setTerminalAskMenu] = createSignal<{
+    x: number;
+    y: number;
+    workingDir: string;
+    selection: string;
+  } | null>(null);
+  let terminalAskMenuEl: HTMLDivElement | null = null;
 
   let searchLastAppliedKey = '';
   let searchBoundCore: TerminalCore | null = null;
@@ -635,6 +648,35 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (viewActive()) return;
     // Reset focus state when the view becomes inactive to avoid stale focus affecting autoFocus decisions.
     setPanelHasFocus(false);
+  });
+
+  createEffect(() => {
+    const menu = terminalAskMenu();
+    if (!menu) return;
+
+    const closeMenu = () => {
+      setTerminalAskMenu(null);
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) {
+        closeMenu();
+        return;
+      }
+      if (terminalAskMenuEl?.contains(target)) return;
+      closeMenu();
+    };
+
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+
+    onCleanup(() => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+    });
   });
 
   const userTheme = terminalPrefs.userTheme;
@@ -1057,6 +1099,97 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return coreRegistry.get(sid) ?? null;
   };
 
+  const openTerminalAskMenu = (event: MouseEvent) => {
+    if (!connected()) return;
+
+    const sid = String(activeSessionId() ?? '').trim();
+    if (!sid) return;
+
+    const session = sessions().find((item) => item.id === sid);
+    const workingDir = normalizeAskFlowerVirtualPath(String(session?.workingDir ?? '').trim() || '/');
+
+    let selection = '';
+    try {
+      const core = getActiveCore() as any;
+      selection = String(core?.getSelectionText?.() ?? '').trim();
+    } catch {
+      selection = '';
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setTerminalAskMenu({
+      x: event.clientX,
+      y: event.clientY,
+      workingDir,
+      selection,
+    });
+  };
+
+  const askFlowerFromTerminal = () => {
+    const menu = terminalAskMenu();
+    if (!menu) return;
+    setTerminalAskMenu(null);
+
+    const selection = String(menu.selection ?? '');
+    const trimmedSelection = selection.trim();
+    const pendingAttachments: File[] = [];
+    const notes: string[] = [];
+    let contextItems: AskFlowerIntent['contextItems'] = [];
+
+    if (trimmedSelection) {
+      if (trimmedSelection.length > MAX_INLINE_TERMINAL_SELECTION_CHARS) {
+        const attachmentName = `terminal-selection-${Date.now()}.txt`;
+        const attachmentBlob = new Blob([trimmedSelection], { type: 'text/plain' });
+        if (attachmentBlob.size > ASK_FLOWER_ATTACHMENT_MAX_BYTES) {
+          notes.push('Skipped large terminal selection attachment because it exceeds the 10 MiB upload limit.');
+        } else {
+          pendingAttachments.push(new File([attachmentBlob], attachmentName, { type: 'text/plain' }));
+          notes.push(`Large terminal selection was attached as \"${attachmentName}\".`);
+        }
+        contextItems = [
+          {
+            kind: 'terminal_selection',
+            workingDir: menu.workingDir,
+            selection: '',
+            selectionChars: trimmedSelection.length,
+          },
+        ];
+      } else {
+        contextItems = [
+          {
+            kind: 'terminal_selection',
+            workingDir: menu.workingDir,
+            selection: trimmedSelection,
+            selectionChars: trimmedSelection.length,
+          },
+        ];
+      }
+    } else {
+      notes.push('No terminal text selected. Added working directory context only.');
+      contextItems = [
+        {
+          kind: 'terminal_selection',
+          workingDir: menu.workingDir,
+          selection: '',
+          selectionChars: 0,
+        },
+      ];
+    }
+
+    env.goTab('ai');
+    env.injectAskFlowerIntent({
+      id: crypto.randomUUID(),
+      source: 'terminal',
+      mode: 'append',
+      suggestedWorkingDir: menu.workingDir,
+      contextItems,
+      pendingAttachments,
+      notes,
+    });
+    notify.info('Ask Flower', 'Terminal context added to draft.');
+  };
+
   const bindSearchCore = (core: TerminalCore | null) => {
     if (searchBoundCore && searchBoundCore !== core) {
       // Unbind callbacks from the previous core to avoid cross-session search counters.
@@ -1295,7 +1428,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       </div>
 
       <Show when={connected()} fallback={<div class="p-4 text-xs text-muted-foreground">Not connected.</div>}>
-        <div class="flex-1 min-h-0 relative">
+        <div class="flex-1 min-h-0 relative" onContextMenu={openTerminalAskMenu}>
           <Show when={searchOpen()}>
             <div class="absolute top-2 right-2 z-20 flex items-center gap-1 rounded-md border border-white/15 bg-[#0b0f14]/95 px-2 py-1 shadow-md backdrop-blur">
               <Input
@@ -1398,6 +1531,27 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             </div>
           </Show>
         </div>
+      </Show>
+
+      <Show when={terminalAskMenu()} keyed>
+        {(menu) => (
+          <div
+            ref={(el) => {
+              terminalAskMenuEl = el;
+            }}
+            class="fixed z-[120] min-w-[160px] rounded-md border border-border bg-background shadow-lg p-1"
+            style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <button
+              type="button"
+              class="w-full text-left px-3 py-1.5 text-xs rounded hover:bg-muted/60"
+              onClick={askFlowerFromTerminal}
+            >
+              Ask Flower
+            </button>
+          </div>
+        )}
       </Show>
 
       <Show when={error()}>

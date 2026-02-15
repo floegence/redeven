@@ -23,6 +23,8 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
     addFiles,
     removeAttachment,
     clearAttachments,
+    hasUploading,
+    uploadAll,
   } = useAttachments({
     maxAttachments: config().maxAttachments ?? 10,
     maxSize: config().maxAttachmentSize ?? 10_485_760,
@@ -46,13 +48,15 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
     el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
   };
 
-  const canSend = () => text().trim().length > 0 || attachments().length > 0;
+  const canSend = () => (text().trim().length > 0 || attachments().length > 0) && !hasUploading();
 
   const handleSend = async () => {
     if (!canSend() || props.disabled) return;
 
     const content = text().trim();
-    const atts = [...attachments()];
+    const upload = await uploadAll();
+    if (!upload.ok) return;
+    const atts = upload.attachments.filter((attachment) => attachment.status === 'uploaded');
     setText('');
     clearAttachments();
 

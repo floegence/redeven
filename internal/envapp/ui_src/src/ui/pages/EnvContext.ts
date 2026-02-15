@@ -1,5 +1,6 @@
 import { createContext, useContext, type Resource } from 'solid-js';
 import type { EnvironmentDetail } from '../services/controlplaneApi';
+import type { AskFlowerIntent } from './askFlowerIntent';
 
 export type EnvNavTab = 'deck' | 'terminal' | 'monitor' | 'files' | 'codespaces' | 'ports' | 'ai';
 
@@ -28,9 +29,9 @@ export type EnvContextValue = {
   settingsFocusSeq: () => number;
   settingsFocusSection: () => EnvSettingsSection | null;
 
-  aiInjectionSeq: () => number;
-  aiInjectionMarkdown: () => string | null;
-  injectAiMarkdown: (markdown: string) => void;
+  askFlowerIntentSeq: () => number;
+  askFlowerIntent: () => AskFlowerIntent | null;
+  injectAskFlowerIntent: (intent: AskFlowerIntent) => void;
 };
 
 export const EnvContext = createContext<EnvContextValue>();

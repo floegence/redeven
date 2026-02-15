@@ -36,16 +36,9 @@ import { fetchGatewayJSON } from '../services/gatewayApi';
 import { decorateMessageBlocks, decorateStreamEvent } from './aiBlockPresentation';
 import { normalizeThreadTodosView, normalizeWriteTodosToolView, todoStatusLabel, todoStatusBadgeClass, type TodoStatus, type ThreadTodoItem, type ThreadTodosView } from './aiDataNormalizers';
 import { hasRWXPermissions } from './aiPermissions';
-
-function createUserMarkdownMessage(markdown: string): Message {
-  return {
-    id: crypto.randomUUID(),
-    role: 'user',
-    blocks: [{ type: 'markdown', content: markdown }],
-    status: 'complete',
-    timestamp: Date.now(),
-  };
-}
+import type { AskFlowerIntent } from './askFlowerIntent';
+import { buildAskFlowerDraftMarkdown, mergeAskFlowerDraft } from '../utils/askFlowerContextTemplate';
+import { normalizeVirtualPath as normalizeAskFlowerVirtualPath } from '../utils/askFlowerPath';
 
 // ---- Working dir picker (directory tree utilities) ----
 
@@ -184,6 +177,12 @@ const ChatCapture: Component<{ onReady: (ctx: ChatContextValue) => void }> = (pr
   return null;
 };
 
+type AIChatInputApi = {
+  applyDraftText: (nextText: string, mode: 'append' | 'replace') => void;
+  addAttachmentFiles: (files: File[]) => void;
+  focusInput: () => void;
+};
+
 const AIChatInput: Component<{
   class?: string;
   placeholder?: string;
@@ -194,10 +193,13 @@ const AIChatInput: Component<{
   workingDirDisabled?: boolean;
   onPickWorkingDir?: () => void;
   onEditWorkingDir?: () => void;
+  onApiReady?: (api: AIChatInputApi | null) => void;
 }> = (props) => {
   const ctx = useChatContext();
+  const notify = useNotification();
   const [text, setText] = createSignal('');
   const [isFocused, setIsFocused] = createSignal(false);
+  const [sending, setSending] = createSignal(false);
 
   let textareaRef: HTMLTextAreaElement | undefined;
   let rafId: number | null = null;
@@ -207,12 +209,16 @@ const AIChatInput: Component<{
     maxSize: ctx.config().maxAttachmentSize,
     acceptedTypes: ctx.config().acceptedFileTypes,
     onUpload: ctx.config().allowAttachments ? (file) => ctx.uploadAttachment(file) : undefined,
+    uploadMode: 'deferred',
   });
 
   const placeholder = () => props.placeholder || ctx.config().placeholder || 'Type a message...';
 
   const canSend = () =>
-    (text().trim() || attachments.attachments().length > 0) && !props.disabled;
+    (text().trim() || attachments.attachments().length > 0) &&
+    !props.disabled &&
+    !sending() &&
+    !attachments.hasUploading();
 
   // Auto-resize textarea height (coalesce to at most once per frame).
   const adjustHeight = () => {
@@ -237,14 +243,26 @@ const AIChatInput: Component<{
   const handleSend = async () => {
     if (!canSend()) return;
 
+    setSending(true);
+
     const content = text().trim();
-    const files = attachments.attachments();
+    try {
+      const upload = await attachments.uploadAll();
+      if (!upload.ok) {
+        notify.error('Attachment upload failed', 'Remove failed attachments and try again.');
+        return;
+      }
 
-    setText('');
-    attachments.clearAttachments();
-    if (textareaRef) textareaRef.style.height = 'auto';
+      const files = upload.attachments.filter((attachment) => attachment.status === 'uploaded');
 
-    await ctx.sendMessage(content, files);
+      setText('');
+      attachments.clearAttachments();
+      if (textareaRef) textareaRef.style.height = 'auto';
+
+      await ctx.sendMessage(content, files);
+    } finally {
+      setSending(false);
+    }
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -265,7 +283,54 @@ const AIChatInput: Component<{
   const canPickWorkingDir = () => !!props.onPickWorkingDir && !props.disabled && !props.workingDirDisabled && !props.workingDirLocked;
   const canEditWorkingDir = () => !!props.onEditWorkingDir && !props.disabled && !props.workingDirDisabled && !props.workingDirLocked;
 
+  const applyDraftText = (nextText: string, mode: 'append' | 'replace') => {
+    const normalized = String(nextText ?? '').trim();
+    if (!normalized) return;
+
+    setText((prev) =>
+      mergeAskFlowerDraft({
+        currentText: prev,
+        nextText: normalized,
+        mode,
+      }),
+    );
+
+    requestAnimationFrame(() => {
+      scheduleAdjustHeight();
+      const el = textareaRef;
+      if (!el) return;
+      el.focus();
+      const cursor = el.value.length;
+      try {
+        el.setSelectionRange(cursor, cursor);
+      } catch {
+        // ignore cursor placement failures on older browsers
+      }
+    });
+  };
+
+  const addAttachmentFiles = (files: File[]) => {
+    if (!ctx.config().allowAttachments) return;
+    if (!Array.isArray(files) || files.length <= 0) return;
+    attachments.addFiles(files);
+  };
+
+  const focusInput = () => {
+    requestAnimationFrame(() => {
+      textareaRef?.focus();
+    });
+  };
+
+  createEffect(() => {
+    props.onApiReady?.({
+      applyDraftText,
+      addAttachmentFiles,
+      focusInput,
+    });
+  });
+
   onCleanup(() => {
+    props.onApiReady?.(null);
     if (rafId !== null && typeof cancelAnimationFrame !== 'undefined') {
       cancelAnimationFrame(rafId);
       rafId = null;
@@ -920,6 +985,8 @@ export function EnvAIPage() {
 
   let chat: ChatContextValue | null = null;
   const [chatReady, setChatReady] = createSignal(false);
+  const [chatInputApi, setChatInputApi] = createSignal<AIChatInputApi | null>(null);
+  let queuedAskFlowerIntents: AskFlowerIntent[] = [];
 
   // Working dir (draft-only; locked after thread creation)
   const [homePath, setHomePath] = createSignal<string | undefined>(undefined);
@@ -1175,6 +1242,56 @@ export function EnvAIPage() {
       !String(homePath() ?? '').trim(),
   );
   const workingDirPickerInitialPath = createMemo(() => realToVirtualPath(activeWorkingDir(), homePath()));
+
+  const applyAskFlowerIntent = (intent: AskFlowerIntent): boolean => {
+    const inputApi = chatInputApi();
+    if (!inputApi) return false;
+
+    const suggestedWorkingDir = String(intent.suggestedWorkingDir ?? '').trim();
+    const normalizedSuggested = suggestedWorkingDir ? normalizeAskFlowerVirtualPath(suggestedWorkingDir) : '';
+    const includeSuggestedWorkingDir = workingDirLocked() && !!normalizedSuggested;
+
+    const draftText = buildAskFlowerDraftMarkdown({
+      intent: {
+        ...intent,
+        suggestedWorkingDir: normalizedSuggested || undefined,
+      },
+      includeSuggestedWorkingDir,
+    });
+
+    if (draftText) {
+      inputApi.applyDraftText(draftText, intent.mode);
+    }
+
+    if (intent.pendingAttachments.length > 0) {
+      inputApi.addAttachmentFiles(intent.pendingAttachments);
+    }
+
+    if (normalizedSuggested) {
+      if (workingDirLocked()) {
+        notify.info('Working directory locked', `Suggested: ${normalizedSuggested}`);
+      } else {
+        ai.setDraftWorkingDir(normalizedSuggested);
+      }
+    }
+
+    if (intent.notes.length > 0) {
+      notify.info('Ask Flower', intent.notes.join('\n'));
+    }
+
+    inputApi.focusInput();
+    return true;
+  };
+
+  createEffect(() => {
+    if (!chatInputApi()) return;
+    if (queuedAskFlowerIntents.length <= 0) return;
+    const queue = [...queuedAskFlowerIntents];
+    queuedAskFlowerIntents = [];
+    for (const intent of queue) {
+      applyAskFlowerIntent(intent);
+    }
+  });
 
   const openWorkingDirEditor = () => {
     if (workingDirLocked()) return;
@@ -1703,42 +1820,24 @@ export function EnvAIPage() {
     lastSeenRunning = running;
   });
 
-  // FileBrowser -> AI context injection (persist into the active thread).
-  let lastInjectionSeq = 0;
+  // Context intent injection from file browser / terminal / preview.
+  let lastAskFlowerIntentSeq = 0;
   createEffect(() => {
     if (!chatReady()) return;
     if (protocol.status() !== 'connected' || !ai.aiEnabled()) return;
     if (!canRWXReady()) return;
 
-    const seq = env.aiInjectionSeq();
-    if (!seq || seq === lastInjectionSeq) return;
-    lastInjectionSeq = seq;
+    const seq = env.askFlowerIntentSeq();
+    if (!seq || seq === lastAskFlowerIntentSeq) return;
+    lastAskFlowerIntentSeq = seq;
 
-    const md = env.aiInjectionMarkdown();
-    if (!md || !md.trim()) return;
+    const intent = env.askFlowerIntent();
+    if (!intent) return;
 
-    void (async () => {
-      let tid = ai.activeThreadId();
-      if (!tid) {
-        tid = await ai.ensureThreadForSend();
-      }
-      if (!tid) return;
-
-      chat?.addMessage(createUserMarkdownMessage(md));
-      setHasMessages(true);
-
-      try {
-        await fetchGatewayJSON<void>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/messages`, {
-          method: 'POST',
-          body: JSON.stringify({ role: 'user', text: md, format: 'markdown' }),
-        });
-        ai.bumpThreadsSeq();
-        await loadThreadMessages(tid);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        notify.error('Failed to add message', msg || 'Request failed.');
-      }
-    })();
+    const applied = applyAskFlowerIntent(intent);
+    if (!applied) {
+      queuedAskFlowerIntents.push(intent);
+    }
   });
 
   const uploadAttachment = async (file: File): Promise<string> => {
@@ -2393,6 +2492,7 @@ export function EnvAIPage() {
               workingDirDisabled={workingDirDisabled()}
               onPickWorkingDir={() => setWorkingDirPickerOpen(true)}
               onEditWorkingDir={() => openWorkingDirEditor()}
+              onApiReady={setChatInputApi}
             />
           </div>
         </Show>

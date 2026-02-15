@@ -23,6 +23,7 @@ import type { ClientObserverLike } from '@floegence/flowersec-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import { EnvContext, type EnvNavTab, type EnvSettingsSection } from './pages/EnvContext';
+import type { AskFlowerIntent } from './pages/askFlowerIntent';
 import { EnvDeckPage } from './pages/EnvDeckPage';
 import { EnvTerminalPage } from './pages/EnvTerminalPage';
 import { EnvMonitorPage } from './pages/EnvMonitorPage';
@@ -123,8 +124,8 @@ export function EnvAppShell() {
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
   let initialTab: EnvNavTab | null = null;
 
-  const [aiInjectionSeq, setAiInjectionSeq] = createSignal(0);
-  const [aiInjectionMarkdown, setAiInjectionMarkdown] = createSignal<string | null>(null);
+  const [askFlowerIntentSeq, setAskFlowerIntentSeq] = createSignal(0);
+  const [askFlowerIntent, setAskFlowerIntent] = createSignal<AskFlowerIntent | null>(null);
 
   const [settingsSeq, setSettingsSeq] = createSignal(0);
   const bumpSettingsSeq = () => setSettingsSeq((n) => n + 1);
@@ -143,9 +144,9 @@ export function EnvAppShell() {
     layout.setSidebarActiveTab('settings', { openSidebar: false });
   };
 
-  const injectAiMarkdown = (markdown: string) => {
-    setAiInjectionMarkdown(String(markdown ?? ''));
-    setAiInjectionSeq((n) => n + 1);
+  const injectAskFlowerIntent = (intent: AskFlowerIntent) => {
+    setAskFlowerIntent(intent);
+    setAskFlowerIntentSeq((n) => n + 1);
   };
 
   const status = createMemo(() => (manualError() ? 'error' : protocol.status()));
@@ -787,9 +788,9 @@ export function EnvAppShell() {
         openSettings,
         settingsFocusSeq,
         settingsFocusSection,
-        aiInjectionSeq,
-        aiInjectionMarkdown,
-        injectAiMarkdown,
+        askFlowerIntentSeq,
+        askFlowerIntent,
+        injectAskFlowerIntent,
       }}
     >
       <FloeRegistryRuntime components={components()}>

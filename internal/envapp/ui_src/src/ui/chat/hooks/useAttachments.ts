@@ -3,19 +3,30 @@
 import { createSignal } from 'solid-js';
 import type { Attachment, AttachmentType, AttachmentStatus } from '../types';
 
+export type AttachmentUploadMode = 'immediate' | 'deferred';
+
 export interface UseAttachmentsOptions {
   maxAttachments?: number;
   maxSize?: number;
   acceptedTypes?: string;
   onUpload?: (file: File) => Promise<string>;
+  uploadMode?: AttachmentUploadMode;
+}
+
+export interface UploadAllResult {
+  ok: boolean;
+  failed: Attachment[];
+  attachments: Attachment[];
 }
 
 export interface UseAttachmentsReturn {
   attachments: () => Attachment[];
   isDragging: () => boolean;
+  hasUploading: () => boolean;
   addFiles: (files: FileList | File[]) => void;
   removeAttachment: (id: string) => void;
   clearAttachments: () => void;
+  uploadAll: () => Promise<UploadAllResult>;
   openFilePicker: () => void;
   handleDragEnter: (e: DragEvent) => void;
   handleDragLeave: (e: DragEvent) => void;
@@ -76,12 +87,19 @@ function isAcceptedType(file: File, acceptedTypes?: string): boolean {
   });
 }
 
+function revokePreview(attachment: Attachment): void {
+  if (attachment.preview) {
+    URL.revokeObjectURL(attachment.preview);
+  }
+}
+
 export function useAttachments(options: UseAttachmentsOptions = {}): UseAttachmentsReturn {
   const {
     maxAttachments = 10,
     maxSize = 10_485_760, // 10 MB
     acceptedTypes,
     onUpload,
+    uploadMode = 'immediate',
   } = options;
 
   const [attachments, setAttachments] = createSignal<Attachment[]>([]);
@@ -90,41 +108,106 @@ export function useAttachments(options: UseAttachmentsOptions = {}): UseAttachme
   // Track nested drag enter/leave events
   let dragCounter = 0;
 
+  // Keep per-attachment upload promises to dedupe retry/upload-all calls.
+  const uploadTasks = new Map<string, Promise<void>>();
+
+  const hasUploading = () => attachments().some((attachment) => attachment.status === 'uploading');
+
   /** Upload a single attachment and update its status. */
   async function uploadAttachment(attachment: Attachment): Promise<void> {
-    if (!onUpload) return;
+    const id = String(attachment.id ?? '').trim();
+    if (!id) return;
 
-    // Mark as uploading
-    setAttachments((prev) =>
-      prev.map((a) =>
-        a.id === attachment.id
-          ? { ...a, status: 'uploading' as AttachmentStatus, uploadProgress: 0 }
-          : a,
-      ),
-    );
-
-    try {
-      const url = await onUpload(attachment.file);
-
-      // Mark as uploaded
-      setAttachments((prev) =>
-        prev.map((a) =>
-          a.id === attachment.id
-            ? { ...a, status: 'uploaded' as AttachmentStatus, uploadProgress: 100, url }
-            : a,
-        ),
-      );
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Upload failed';
-
-      setAttachments((prev) =>
-        prev.map((a) =>
-          a.id === attachment.id
-            ? { ...a, status: 'error' as AttachmentStatus, error: errorMessage }
-            : a,
-        ),
-      );
+    const inFlight = uploadTasks.get(id);
+    if (inFlight) {
+      await inFlight;
+      return;
     }
+
+    const task = (async () => {
+      const current = attachments().find((item) => item.id === id);
+      if (!current) return;
+      if (current.status === 'uploaded') return;
+
+      if (!onUpload) {
+        setAttachments((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? { ...item, status: 'error' as AttachmentStatus, error: 'Upload handler unavailable' }
+              : item,
+          ),
+        );
+        return;
+      }
+
+      // Mark as uploading
+      setAttachments((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? { ...item, status: 'uploading' as AttachmentStatus, uploadProgress: 0, error: undefined }
+            : item,
+        ),
+      );
+
+      try {
+        const url = await onUpload(current.file);
+
+        // Mark as uploaded
+        setAttachments((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? { ...item, status: 'uploaded' as AttachmentStatus, uploadProgress: 100, url }
+              : item,
+          ),
+        );
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Upload failed';
+
+        setAttachments((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? { ...item, status: 'error' as AttachmentStatus, error: errorMessage }
+              : item,
+          ),
+        );
+      }
+    })().finally(() => {
+      uploadTasks.delete(id);
+    });
+
+    uploadTasks.set(id, task);
+    await task;
+  }
+
+  /** Upload pending/failed attachments and wait until all uploads finish. */
+  async function uploadAll(): Promise<UploadAllResult> {
+    const snapshot = attachments();
+    const idsToUpload = snapshot
+      .filter((attachment) => attachment.status === 'pending' || attachment.status === 'error')
+      .map((attachment) => attachment.id);
+
+    for (const id of idsToUpload) {
+      const current = attachments().find((item) => item.id === id);
+      if (!current) continue;
+      await uploadAttachment(current);
+    }
+
+    const pendingUploads = attachments()
+      .filter((attachment) => attachment.status === 'uploading')
+      .map((attachment) => uploadTasks.get(attachment.id))
+      .filter((task): task is Promise<void> => !!task);
+
+    if (pendingUploads.length > 0) {
+      await Promise.allSettled(pendingUploads);
+    }
+
+    const final = attachments();
+    const failed = final.filter((attachment) => attachment.status !== 'uploaded');
+    return {
+      ok: failed.length === 0,
+      failed,
+      attachments: final,
+    };
   }
 
   /** Add files to the attachment list after validation. */
@@ -167,27 +250,25 @@ export function useAttachments(options: UseAttachmentsOptions = {}): UseAttachme
 
     setAttachments((prev) => [...prev, ...newAttachments]);
 
-    // Queue uploads
-    for (const att of newAttachments) {
-      uploadAttachment(att);
+    if (uploadMode === 'immediate') {
+      // Queue uploads immediately for the legacy flow.
+      for (const attachment of newAttachments) {
+        void uploadAttachment(attachment);
+      }
     }
   }
 
   /** Remove an attachment by ID. Revokes any preview blob URL. */
   function removeAttachment(id: string): void {
-    const removed = attachments().find((a) => a.id === id);
-    if (removed?.preview) {
-      URL.revokeObjectURL(removed.preview);
-    }
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
+    const removed = attachments().find((attachment) => attachment.id === id);
+    if (removed) revokePreview(removed);
+    setAttachments((prev) => prev.filter((attachment) => attachment.id !== id));
   }
 
   /** Clear all attachments. Revokes all preview blob URLs. */
   function clearAttachments(): void {
-    for (const att of attachments()) {
-      if (att.preview) {
-        URL.revokeObjectURL(att.preview);
-      }
+    for (const attachment of attachments()) {
+      revokePreview(attachment);
     }
     setAttachments([]);
   }
@@ -268,9 +349,11 @@ export function useAttachments(options: UseAttachmentsOptions = {}): UseAttachme
   return {
     attachments,
     isDragging,
+    hasUploading,
     addFiles,
     removeAttachment,
     clearAttachments,
+    uploadAll,
     openFilePicker,
     handleDragEnter,
     handleDragLeave,

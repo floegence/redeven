@@ -10,6 +10,8 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type FsFileInfo } from '../protocol/redeven_v1';
 import { getExtDot, isLikelyTextContent, mimeFromExtDot, previewModeByName, type PreviewMode } from '../utils/filePreview';
 import { useEnvContext } from '../pages/EnvContext';
+import type { AskFlowerIntent } from '../pages/askFlowerIntent';
+import { deriveWorkingDirFromItems, dirnameVirtual, normalizeVirtualPath as normalizeAskFlowerVirtualPath } from '../utils/askFlowerPath';
 
 type DirCache = Map<string, FileItem[]>;
 
@@ -94,6 +96,9 @@ const JSON_FRAME_MAX_BYTES = DEFAULT_MAX_JSON_FRAME_BYTES;
 const MAX_PREVIEW_BYTES = 20 * 1024 * 1024;
 const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
 const SNIFF_BYTES = 64 * 1024;
+const ASK_FLOWER_MAX_ATTACHMENTS = 5;
+const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+const ASK_FLOWER_MAX_INLINE_SELECTION_CHARS = 10_000;
 
 export interface RemoteFileBrowserProps {
   widgetId?: string;
@@ -357,6 +362,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [previewTruncated, setPreviewTruncated] = createSignal(false);
   const [previewLoading, setPreviewLoading] = createSignal(false);
   const [previewError, setPreviewError] = createSignal<string | null>(null);
+  const [previewAskMenu, setPreviewAskMenu] = createSignal<{ x: number; y: number; selection: string } | null>(null);
 
   const [xlsxSheetName, setXlsxSheetName] = createSignal('');
   const [xlsxRows, setXlsxRows] = createSignal<string[][]>([]);
@@ -393,6 +399,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let previewReqSeq = 0;
   let dirReqSeq = 0;
   let docxHost: HTMLDivElement | undefined;
+  let previewContentEl: HTMLDivElement | undefined;
+  let previewAskMenuEl: HTMLDivElement | undefined;
 
   const cleanupPreview = () => {
     if (activePreviewStream) {
@@ -423,6 +431,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setPreviewMessage('');
     setPreviewTruncated(false);
     setPreviewError(null);
+    setPreviewAskMenu(null);
     setXlsxRows([]);
     setXlsxSheetName('');
     setPreviewLoading(false);
@@ -1162,6 +1171,209 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     })();
   });
 
+  createEffect(() => {
+    const menu = previewAskMenu();
+    if (!menu) return;
+
+    const closeMenu = () => {
+      setPreviewAskMenu(null);
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) {
+        closeMenu();
+        return;
+      }
+      if (previewAskMenuEl?.contains(target)) return;
+      closeMenu();
+    };
+
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+
+    onCleanup(() => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+    });
+  });
+
+  const dispatchAskFlowerIntent = (intent: AskFlowerIntent) => {
+    ctx.goTab('ai');
+    ctx.injectAskFlowerIntent(intent);
+  };
+
+  const toFileContextItems = (items: FileItem[]): AskFlowerIntent['contextItems'] =>
+    items.map((item) => ({
+      kind: 'file_path' as const,
+      path: normalizeAskFlowerVirtualPath(item.path),
+      isDirectory: item.type === 'folder',
+    }));
+
+  const createAttachmentFromFileItem = async (
+    item: FileItem,
+    client: Client,
+  ): Promise<{ file: File | null; note?: string }> => {
+    if (item.type !== 'file') return { file: null };
+
+    const normalizedPath = normalizeAskFlowerVirtualPath(item.path);
+    const declaredSize = typeof item.size === 'number' && Number.isFinite(item.size) ? Math.max(0, Math.floor(item.size)) : null;
+    if (declaredSize != null && declaredSize > ASK_FLOWER_ATTACHMENT_MAX_BYTES) {
+      return {
+        file: null,
+        note: `Skipped "${item.name}" because it exceeds the 10 MiB upload limit.`,
+      };
+    }
+
+    const readMaxBytes = declaredSize != null ? Math.min(declaredSize, ASK_FLOWER_ATTACHMENT_MAX_BYTES + 1) : ASK_FLOWER_ATTACHMENT_MAX_BYTES + 1;
+    try {
+      const { bytes, meta } = await readFileBytesOnce({
+        client,
+        path: normalizedPath,
+        maxBytes: readMaxBytes,
+      });
+
+      const reportedSize = Number(meta.file_size ?? declaredSize ?? bytes.byteLength);
+      const exceedsLimit = (Number.isFinite(reportedSize) && reportedSize > ASK_FLOWER_ATTACHMENT_MAX_BYTES) || bytes.byteLength > ASK_FLOWER_ATTACHMENT_MAX_BYTES || !!meta.truncated;
+      if (exceedsLimit) {
+        return {
+          file: null,
+          note: `Skipped "${item.name}" because it exceeds the 10 MiB upload limit.`,
+        };
+      }
+
+      const mime = mimeFromExtDot(getExtDot(item.name)) ?? 'application/octet-stream';
+      const file = new File([bytes], item.name || 'attachment', {
+        type: mime,
+        lastModified: item.modifiedAt?.getTime() ?? Date.now(),
+      });
+      return { file };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return {
+        file: null,
+        note: `Skipped "${item.name}" because it could not be read (${msg || 'unknown error'}).`,
+      };
+    }
+  };
+
+  const askFlowerFromFileBrowser = async (items: FileItem[]) => {
+    const normalizedItems = items.filter((item) => String(item.path ?? '').trim());
+    if (normalizedItems.length <= 0) return;
+
+    const notes: string[] = [];
+    const pendingAttachments: File[] = [];
+    const fileCandidates = normalizedItems.filter((item) => item.type === 'file');
+
+    if (fileCandidates.length > ASK_FLOWER_MAX_ATTACHMENTS) {
+      notes.push(`Attached only the first ${ASK_FLOWER_MAX_ATTACHMENTS} files. Remaining files are added as path context only.`);
+    }
+
+    const attachmentCandidates = fileCandidates.slice(0, ASK_FLOWER_MAX_ATTACHMENTS);
+    const client = protocol.client();
+    if (attachmentCandidates.length > 0 && !client) {
+      notes.push('Skipped file attachments because the connection is not ready.');
+    }
+
+    if (client) {
+      for (const fileItem of attachmentCandidates) {
+        const result = await createAttachmentFromFileItem(fileItem, client);
+        if (result.file) {
+          pendingAttachments.push(result.file);
+        } else if (result.note) {
+          notes.push(result.note);
+        }
+      }
+    }
+
+    const contextItems = toFileContextItems(normalizedItems);
+    const suggestedWorkingDir = deriveWorkingDirFromItems(
+      normalizedItems.map((item) => ({ path: item.path, isDirectory: item.type === 'folder' })),
+      currentBrowserPath(),
+    );
+
+    dispatchAskFlowerIntent({
+      id: crypto.randomUUID(),
+      source: 'file_browser',
+      mode: 'append',
+      suggestedWorkingDir,
+      contextItems,
+      pendingAttachments,
+      notes,
+    });
+  };
+
+  const readPreviewSelectionText = (): string => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount <= 0) return '';
+
+    const raw = String(selection.toString() ?? '').trim();
+    if (!raw) return '';
+
+    if (previewContentEl) {
+      const range = selection.getRangeAt(0);
+      const containerNode = range.commonAncestorContainer;
+      const containerElement =
+        containerNode.nodeType === Node.ELEMENT_NODE
+          ? (containerNode as Element)
+          : containerNode.parentElement;
+      if (!containerElement || !previewContentEl.contains(containerElement)) {
+        return '';
+      }
+    }
+
+    return raw;
+  };
+
+  const buildPreviewIntent = (selectionText: string): AskFlowerIntent | null => {
+    const item = previewItem();
+    if (!item || item.type !== 'file') return null;
+
+    const path = normalizeAskFlowerVirtualPath(item.path);
+    const selection = String(selectionText ?? '').trim();
+    const notes: string[] = [];
+    const pendingAttachments: File[] = [];
+    let contextItems: AskFlowerIntent['contextItems'];
+
+    if (selection) {
+      if (selection.length > ASK_FLOWER_MAX_INLINE_SELECTION_CHARS) {
+        const attachmentName = `${item.name || 'file'}-selection-${Date.now()}.txt`;
+        pendingAttachments.push(new File([selection], attachmentName, { type: 'text/plain' }));
+        notes.push(`Large selection was attached as "${attachmentName}".`);
+        contextItems = [{ kind: 'file_path', path, isDirectory: false }];
+      } else {
+        contextItems = [{ kind: 'file_selection', path, selection, selectionChars: selection.length }];
+      }
+    } else {
+      contextItems = [{ kind: 'file_path', path, isDirectory: false }];
+    }
+
+    return {
+      id: crypto.randomUUID(),
+      source: 'file_preview',
+      mode: 'append',
+      suggestedWorkingDir: dirnameVirtual(path),
+      contextItems,
+      pendingAttachments,
+      notes,
+    };
+  };
+
+  const openPreviewAskMenu = (event: MouseEvent) => {
+    const item = previewItem();
+    if (!item || item.type !== 'file') return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    setPreviewAskMenu({
+      x: event.clientX,
+      y: event.clientY,
+      selection: readPreviewSelectionText(),
+    });
+  };
+
   const ctxMenu: ContextMenuCallbacks = {
     onDelete: (items: FileItem[]) => {
       setDeleteDialogItems(items);
@@ -1211,14 +1423,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
     },
     onAskAgent: (items: FileItem[]) => {
-      const paths = items
-        .map((it) => String(it?.path ?? '').trim())
-        .filter((p) => p);
-      if (paths.length <= 0) return;
-
-      const md = `Use these files as context:\n${paths.map((p) => `- ${p}`).join('\n')}`;
-      ctx.goTab('ai');
-      ctx.injectAiMarkdown(md);
+      void askFlowerFromFileBrowser(items);
     },
   };
 
@@ -1269,6 +1474,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         open={previewOpen()}
         onOpenChange={(open) => {
           setPreviewOpen(open);
+          if (!open) setPreviewAskMenu(null);
           if (!open) {
             previewReqSeq += 1;
             cleanupPreview();
@@ -1284,7 +1490,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
             {previewItem()?.path}
           </div>
 
-          <div class="flex-1 min-h-0 overflow-auto relative bg-background">
+          <div
+            ref={previewContentEl}
+            class="flex-1 min-h-0 overflow-auto relative bg-background"
+            onContextMenu={(event) => openPreviewAskMenu(event)}
+          >
             <Show when={previewMode() === 'text' && !previewError()}>
               <pre class="p-3 text-xs leading-relaxed font-mono whitespace-pre-wrap break-words select-text">
                 {previewText()}
@@ -1365,6 +1575,30 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           </div>
         </div>
       </FloatingWindow>
+
+      <Show when={previewAskMenu()} keyed>
+        {(menu) => (
+          <div
+            ref={previewAskMenuEl}
+            class="fixed z-[120] min-w-[160px] rounded-md border border-border bg-background shadow-lg p-1"
+            style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <button
+              type="button"
+              class="w-full text-left px-3 py-1.5 text-xs rounded hover:bg-muted/60"
+              onClick={() => {
+                setPreviewAskMenu(null);
+                const intent = buildPreviewIntent(menu.selection);
+                if (!intent) return;
+                dispatchAskFlowerIntent(intent);
+              }}
+            >
+              Ask Flower
+            </button>
+          </div>
+        )}
+      </Show>
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
