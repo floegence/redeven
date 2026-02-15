@@ -1,8 +1,9 @@
 // Renders message blocks inside a styled bubble.
 
 import { Index, Show, createEffect, createSignal } from 'solid-js';
-import type { Accessor, Component } from 'solid-js';
+import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { Motion } from 'solid-motionone';
 import type { Message, MessageBlock } from '../types';
 import { BlockRenderer } from '../blocks/BlockRenderer';
 
@@ -29,6 +30,21 @@ const ErrorIcon: Component = () => (
     <line x1="12" y1="16" x2="12.01" y2="16" />
   </svg>
 );
+
+const IMESSAGE_MAX_STAGGER_INDEX = 4;
+const IMESSAGE_STAGGER_SECONDS = 0.026;
+const IMESSAGE_ENTER_SECONDS = 0.34;
+const IMESSAGE_EASING = 'ease-out';
+
+function readPrefersReducedMotion(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  if (typeof window.matchMedia !== 'function') {
+    return false;
+  }
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 function hasStandaloneBlockPayload(block: MessageBlock): boolean {
   switch (block.type) {
@@ -69,43 +85,43 @@ function shouldAnimateStandaloneBlock(message: Message, block: MessageBlock): bo
   return hasStandaloneBlockPayload(block);
 }
 
-interface MessageBlockSlotProps {
-  message: Message;
-  block: Accessor<MessageBlock>;
-  blockIndex: number;
-}
-
-const MessageBlockSlot: Component<MessageBlockSlotProps> = (props) => {
-  const [animateIn, setAnimateIn] = createSignal(false);
+export const MessageBubble: Component<MessageBubbleProps> = (props) => {
+  const prefersReducedMotion = readPrefersReducedMotion();
+  const [animatedSlots, setAnimatedSlots] = createSignal<Record<number, true>>({});
 
   createEffect(() => {
-    if (animateIn()) return;
-    if (shouldAnimateStandaloneBlock(props.message, props.block())) {
-      setAnimateIn(true);
-    }
+    props.message.id;
+    setAnimatedSlots({});
   });
 
-  const enterStyle = () =>
-    animateIn()
-      ? ({ '--chat-stream-block-enter-delay': `${Math.min(props.blockIndex, 4) * 24}ms` } as Record<string, string>)
-      : undefined;
+  createEffect(() => {
+    if (prefersReducedMotion) return;
+    if (props.message.role !== 'assistant' || props.message.status !== 'streaming') {
+      return;
+    }
+    const blocks = props.message.blocks;
+    setAnimatedSlots((prev) => {
+      let changed = false;
+      const next: Record<number, true> = { ...prev };
+      for (let i = 0; i < blocks.length; i += 1) {
+        if (next[i]) continue;
+        if (!shouldAnimateStandaloneBlock(props.message, blocks[i])) continue;
+        next[i] = true;
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  });
 
-  return (
-    <div
-      class={cn('chat-message-block-slot', animateIn() && 'chat-message-block-slot-imessage-enter')}
-      style={enterStyle()}
-    >
-      <BlockRenderer
-        block={props.block()}
-        messageId={props.message.id}
-        blockIndex={props.blockIndex}
-        isStreaming={props.message.status === 'streaming'}
-      />
-    </div>
-  );
-};
+  const shouldAnimateSlot = (blockIndex: number): boolean => {
+    if (prefersReducedMotion) return false;
+    return !!animatedSlots()[blockIndex];
+  };
 
-export const MessageBubble: Component<MessageBubbleProps> = (props) => {
+  const slotEnterDelay = (blockIndex: number): number => {
+    return Math.min(blockIndex, IMESSAGE_MAX_STAGGER_INDEX) * IMESSAGE_STAGGER_SECONDS;
+  };
+
   return (
     <div
       class={cn(
@@ -118,11 +134,37 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
     >
       <Index each={props.message.blocks}>
         {(block, index) => (
-          <MessageBlockSlot
-            message={props.message}
-            block={block}
-            blockIndex={index}
-          />
+          <Show
+            when={shouldAnimateSlot(index)}
+            fallback={
+              <div class="chat-message-block-slot">
+                <BlockRenderer
+                  block={block()}
+                  messageId={props.message.id}
+                  blockIndex={index}
+                  isStreaming={props.message.status === 'streaming'}
+                />
+              </div>
+            }
+          >
+            <Motion.div
+              class="chat-message-block-slot chat-message-block-slot-imessage"
+              initial={{ opacity: 0, x: 14, y: 10, scale: 0.96, filter: 'blur(2px)' }}
+              animate={{ opacity: 1, x: 0, y: 0, scale: 1, filter: 'blur(0px)' }}
+              transition={{
+                duration: IMESSAGE_ENTER_SECONDS,
+                delay: slotEnterDelay(index),
+                easing: IMESSAGE_EASING,
+              }}
+            >
+              <BlockRenderer
+                block={block()}
+                messageId={props.message.id}
+                blockIndex={index}
+                isStreaming={props.message.status === 'streaming'}
+              />
+            </Motion.div>
+          </Show>
         )}
       </Index>
 
