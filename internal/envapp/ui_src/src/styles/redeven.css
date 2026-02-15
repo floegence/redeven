@@ -107,36 +107,44 @@
   }
 }
 
-/* Flower avatar animation while streaming: stepped spin + breathing pulse. */
-@keyframes redeven-flower-avatar-step-spin {
-  from {
+/* Flower avatar animation while streaming: smooth playful spin -> pause -> spin. */
+@keyframes redeven-flower-avatar-playful-rotate {
+  0% {
     transform: rotate(0deg);
   }
-  to {
+  26% {
+    transform: rotate(140deg);
+  }
+  34% {
+    transform: rotate(168deg);
+  }
+  42% {
+    transform: rotate(160deg);
+  }
+  58% {
+    transform: rotate(160deg);
+  }
+  84% {
+    transform: rotate(334deg);
+  }
+  92% {
+    transform: rotate(366deg);
+  }
+  100% {
     transform: rotate(360deg);
   }
 }
 
-@keyframes redeven-flower-avatar-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  45% {
-    transform: scale(1.2);
-    opacity: 0.7;
-  }
-}
-
 .chat-message-avatar-streaming .chat-message-avatar-image-wrapper {
-  animation: redeven-flower-avatar-step-spin 3.2s steps(12, end) infinite;
+  animation: redeven-flower-avatar-playful-rotate 2.4s cubic-bezier(0.33, 1, 0.68, 1) infinite;
+  transform-origin: 50% 50%;
   will-change: transform;
 }
 
 .chat-message-avatar-streaming .chat-message-avatar-image {
-  animation: redeven-flower-avatar-breathe 1.45s cubic-bezier(0.44, 0.05, 0.54, 0.95) infinite;
-  will-change: transform, opacity;
+  animation: none;
+  transform: none;
+  will-change: auto;
 }
 
 /* Tool-call status colors and spinner behavior. */
