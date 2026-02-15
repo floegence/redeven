@@ -1245,7 +1245,6 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	mistakeWindow := make([]int, 0, 8)
 	exceptionOverlay := ""
 	isFirstRound := true
-	steerApplied := false
 
 	appendMistake := func(score int) {
 		mistakeWindow = append(mistakeWindow, score)
@@ -1374,18 +1373,6 @@ mainLoop:
 			return nil
 		}
 
-		if pending := r.drainSteer(64); len(pending) > 0 {
-			for _, it := range pending {
-				messages = appendRunInputMessages(messages, it.Input)
-			}
-			steerApplied = true
-			r.persistRunEvent("run.steer.applied", RealtimeStreamKindLifecycle, map[string]any{
-				"step_index": step,
-				"count":      len(pending),
-			})
-			isFirstRound = false
-		}
-
 		activeTools := scheduler.ActiveTools(mode)
 		systemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, taskComplexity, step, maxSteps, isFirstRound, activeTools, state, exceptionOverlay)
 		turnMessages := composeTurnMessages(systemPrompt, messages)
@@ -1403,11 +1390,7 @@ mainLoop:
 		state.EstimateSource = estimateSource
 		pressure := float64(estimateTokens) / float64(contextLimit)
 		if pressure >= nativeCompactThreshold {
-			// If the run received steer inputs, prefer compacting the current runtime message buffer.
-			// Rebuilding from prompt pack would drop those steer messages.
-			if steerApplied {
-				messages = compactMessages(messages)
-			} else if req.ContextPack.ThreadID != "" {
+			if req.ContextPack.ThreadID != "" {
 				targetTokens := req.Options.MaxInputTokens
 				if targetTokens <= 0 {
 					targetTokens = contextLimit
@@ -2207,29 +2190,6 @@ func buildInitialMessages(history []RunHistoryMsg, userInput string) []Message {
 		messages = append(messages, Message{Role: role, Content: []ContentPart{{Type: "text", Text: text}}})
 	}
 	if txt := strings.TrimSpace(userInput); txt != "" {
-		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: txt}}})
-	}
-	return messages
-}
-
-func appendRunInputMessages(messages []Message, input RunInput) []Message {
-	if len(input.Attachments) > 0 {
-		for _, it := range input.Attachments {
-			if strings.TrimSpace(it.URL) == "" {
-				continue
-			}
-			messages = append(messages, Message{
-				Role: "user",
-				Content: []ContentPart{{
-					Type:     "file",
-					FileURI:  strings.TrimSpace(it.URL),
-					MimeType: strings.TrimSpace(it.MimeType),
-					Text:     strings.TrimSpace(it.Name),
-				}},
-			})
-		}
-	}
-	if txt := strings.TrimSpace(input.Text); txt != "" {
 		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: txt}}})
 	}
 	return messages

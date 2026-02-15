@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	contextmodel "github.com/floegence/redeven-agent/internal/ai/context/model"
+	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
 )
@@ -172,5 +174,158 @@ func TestExecutePreparedRun_WithPersistedUserMessage_ReusesPersistedMessageID(t 
 	}
 	if userMsgIDs[0] != persisted.MessageID {
 		t.Fatalf("user message id=%q, want persisted id=%q", userMsgIDs[0], persisted.MessageID)
+	}
+}
+
+func TestSendUserTurn_ActiveRun_InterruptsAndStartsNewRun(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "interrupt", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	activeRunID := "run_active_interrupt"
+	thKey := runThreadKey(meta.EndpointID, th.ThreadID)
+	if thKey == "" {
+		t.Fatalf("invalid thread key")
+	}
+	oldRun := &run{
+		id:         activeRunID,
+		channelID:  meta.ChannelID,
+		endpointID: meta.EndpointID,
+		threadID:   th.ThreadID,
+		doneCh:     make(chan struct{}),
+	}
+
+	svc.mu.Lock()
+	svc.activeRunByTh[thKey] = activeRunID
+	svc.runs[activeRunID] = oldRun
+	svc.mu.Unlock()
+
+	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			Text: "interrupt this run",
+		},
+		Options: RunOptions{MaxSteps: 1},
+	})
+	if err != nil {
+		t.Fatalf("SendUserTurn: %v", err)
+	}
+	if resp.Kind != "start" {
+		t.Fatalf("SendUserTurn kind=%q, want start", resp.Kind)
+	}
+	if resp.RunID == "" {
+		t.Fatalf("SendUserTurn run_id is empty")
+	}
+	if resp.RunID == activeRunID {
+		t.Fatalf("SendUserTurn run_id=%q, want a new run id", resp.RunID)
+	}
+	if !oldRun.isDetached() {
+		t.Fatalf("active run should be detached after interruption")
+	}
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(msgs) == 0 {
+		t.Fatalf("expected persisted user message after interruption")
+	}
+}
+
+func TestContextRepo_ListRecentDialogueTurns_IncludesPendingUserAfterTurns(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "pending-after-turn", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	first, _, err := svc.persistUserMessage(ctx, meta, meta.EndpointID, th.ThreadID, RunInput{
+		Text: "first question",
+	})
+	if err != nil {
+		t.Fatalf("persistUserMessage first: %v", err)
+	}
+	assistantID, err := newMessageID()
+	if err != nil {
+		t.Fatalf("newMessageID: %v", err)
+	}
+	assistantAt := time.Now().UnixMilli()
+	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, threadstore.Message{
+		ThreadID:        th.ThreadID,
+		EndpointID:      meta.EndpointID,
+		MessageID:       assistantID,
+		Role:            "assistant",
+		Status:          "complete",
+		CreatedAtUnixMs: assistantAt,
+		UpdatedAtUnixMs: assistantAt,
+		TextContent:     "first answer",
+		MessageJSON:     `{"id":"` + assistantID + `","role":"assistant","blocks":[{"type":"text","content":"first answer"}],"status":"complete"}`,
+	}, meta.UserPublicID, meta.UserEmail); err != nil {
+		t.Fatalf("append assistant message: %v", err)
+	}
+	if err := svc.contextRepo.AppendTurn(ctx, meta.EndpointID, th.ThreadID, "run_first", "turn_first", first.MessageID, assistantID, assistantAt); err != nil {
+		t.Fatalf("AppendTurn: %v", err)
+	}
+
+	second, _, err := svc.persistUserMessage(ctx, meta, meta.EndpointID, th.ThreadID, RunInput{
+		Text: "second pending",
+	})
+	if err != nil {
+		t.Fatalf("persistUserMessage second: %v", err)
+	}
+
+	turns, err := svc.contextRepo.ListRecentDialogueTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListRecentDialogueTurns: %v", err)
+	}
+	if len(turns) < 2 {
+		t.Fatalf("ListRecentDialogueTurns len=%d, want >=2", len(turns))
+	}
+
+	last := turns[len(turns)-1]
+	if last.UserMessageID != second.MessageID {
+		t.Fatalf("last user_message_id=%q, want %q", last.UserMessageID, second.MessageID)
+	}
+	if last.UserText != "second pending" {
+		t.Fatalf("last user_text=%q, want %q", last.UserText, "second pending")
+	}
+	if last.AssistantText != "" {
+		t.Fatalf("last assistant_text=%q, want empty", last.AssistantText)
+	}
+}
+
+func TestPromptPackToHistory_DeduplicatesPendingTailInput(t *testing.T) {
+	t.Parallel()
+
+	pack := contextmodel.PromptPack{
+		RecentDialogue: []contextmodel.DialogueTurn{
+			{
+				UserMessageID:      "m_user_pending",
+				AssistantMessageID: "",
+				UserText:           "same text",
+				AssistantText:      "",
+			},
+		},
+	}
+
+	history := promptPackToHistory(pack, "same text")
+	if len(history) != 1 {
+		t.Fatalf("history len=%d, want 1", len(history))
+	}
+	if history[0].Role != "user" || history[0].Text != "same text" {
+		t.Fatalf("history[0]=%+v, want single user entry", history[0])
 	}
 }

@@ -292,13 +292,9 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	a.mgr.svc.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
 	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
 
-	var activeRun *run
-	if activeRunID, activeRun = a.lookupActiveRun(endpointID, threadID); activeRunID != "" && activeRun != nil {
-		if err := activeRun.enqueueSteer(ctx, steerInput{MessageID: persisted.MessageID, Input: req.Input, CreatedAtUnixMs: persisted.CreatedAtUnixMs}); err != nil {
-			// If the run finished between the lookup and the enqueue, fall back to starting a new run.
-			activeRun = nil
-		} else {
-			return SendUserTurnResponse{RunID: activeRunID, Kind: "steer"}, nil
+	if activeRunID, _ = a.lookupActiveRun(endpointID, threadID); activeRunID != "" {
+		if err := a.mgr.svc.CancelRun(meta, activeRunID); err != nil {
+			return SendUserTurnResponse{}, err
 		}
 	}
 
@@ -314,13 +310,6 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		Options:  req.Options,
 	}
 	if err := a.mgr.svc.StartRunDetachedWithPersisted(meta, runID, startReq, persisted); err != nil {
-		if errors.Is(err, ErrThreadBusy) {
-			if activeRunID, activeRun = a.lookupActiveRun(endpointID, threadID); activeRunID != "" && activeRun != nil {
-				if steerErr := activeRun.enqueueSteer(ctx, steerInput{MessageID: persisted.MessageID, Input: req.Input, CreatedAtUnixMs: persisted.CreatedAtUnixMs}); steerErr == nil {
-					return SendUserTurnResponse{RunID: activeRunID, Kind: "steer"}, nil
-				}
-			}
-		}
 		return SendUserTurnResponse{}, err
 	}
 	return SendUserTurnResponse{RunID: runID, Kind: "start"}, nil

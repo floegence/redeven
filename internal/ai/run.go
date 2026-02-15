@@ -62,12 +62,6 @@ type runOptions struct {
 	ToolAllowlist         []string
 }
 
-type steerInput struct {
-	MessageID       string
-	Input           RunInput
-	CreatedAtUnixMs int64
-}
-
 type run struct {
 	log *slog.Logger
 
@@ -92,7 +86,6 @@ type run struct {
 	idleTimeout    time.Duration
 	toolApprovalTO time.Duration
 	activityCh     chan struct{}
-	steerCh        chan steerInput
 	doneCh         chan struct{}
 	doneOnce       sync.Once
 
@@ -181,7 +174,6 @@ func newRun(opts runOptions) *run {
 		idleTimeout:             opts.IdleTimeout,
 		toolApprovalTO:          opts.ToolApprovalTimeout,
 		doneCh:                  make(chan struct{}),
-		steerCh:                 make(chan steerInput, 256),
 		lifecycleMinEmitGap:     600 * time.Millisecond,
 		collectedWebSources:     make(map[string]SourceRef),
 		collectedWebSourceOrder: make([]string, 0, 8),
@@ -247,50 +239,6 @@ func (r *run) isWaitingApproval() bool {
 	v := r.waitingApproval
 	r.mu.Unlock()
 	return v
-}
-
-func (r *run) enqueueSteer(ctx context.Context, in steerInput) error {
-	if r == nil {
-		return errors.New("nil run")
-	}
-	if r.steerCh == nil {
-		return errors.New("steer not supported")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	select {
-	case <-r.doneCh:
-		return errors.New("run not active")
-	default:
-	}
-	select {
-	case r.steerCh <- in:
-		return nil
-	case <-r.doneCh:
-		return errors.New("run not active")
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func (r *run) drainSteer(max int) []steerInput {
-	if r == nil || r.steerCh == nil {
-		return nil
-	}
-	if max <= 0 {
-		max = 128
-	}
-	out := make([]steerInput, 0, 4)
-	for i := 0; i < max; i++ {
-		select {
-		case it := <-r.steerCh:
-			out = append(out, it)
-		default:
-			return out
-		}
-	}
-	return out
 }
 
 func (r *run) runIdleWatchdog(ctx context.Context) {

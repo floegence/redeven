@@ -22,7 +22,7 @@ type SendUserTurnRequest struct {
 
 type SendUserTurnResponse struct {
 	RunID string `json:"run_id"`
-	Kind  string `json:"kind"` // "start" | "steer"
+	Kind  string `json:"kind"` // "start"
 }
 
 type persistedUserMessage struct {
