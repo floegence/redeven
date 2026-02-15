@@ -1586,6 +1586,11 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
+			metaOnly := false
+			switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("meta_only"))) {
+			case "1", "true", "yes", "y", "on":
+				metaOnly = true
+			}
 			toolID := strings.TrimSpace(parts[2])
 			if toolID == "" {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing tool_id"})
@@ -1603,6 +1608,12 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				}
 				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 				return
+			}
+			if metaOnly {
+				// Default terminal view only needs status/metadata; output is fetched lazily when expanded.
+				out.Stdout = ""
+				out.Stderr = ""
+				out.RawResult = ""
 			}
 			g.appendAudit(meta, "ai_terminal_output", "success", map[string]any{
 				"run_id":      runID,
