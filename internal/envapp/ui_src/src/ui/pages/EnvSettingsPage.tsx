@@ -344,8 +344,6 @@ function mapToPermissionRows(m: Record<string, PermissionSet> | undefined): Perm
 
 function skillScopeLabel(scope: string): string {
   const v = String(scope ?? '').trim().toLowerCase();
-  if (v === 'workspace') return 'Workspace (.redeven)';
-  if (v === 'workspace_agents') return 'Workspace (.agents)';
   if (v === 'user') return 'User (.redeven)';
   if (v === 'user_agents') return 'User (.agents)';
   return v || 'unknown';
@@ -919,10 +917,10 @@ export function EnvSettingsPage() {
   const [skillsReloading, setSkillsReloading] = createSignal(false);
   const [skillsError, setSkillsError] = createSignal<string | null>(null);
   const [skillQuery, setSkillQuery] = createSignal('');
-  const [skillScopeFilter, setSkillScopeFilter] = createSignal<'all' | 'workspace' | 'workspace_agents' | 'user' | 'user_agents'>('all');
+  const [skillScopeFilter, setSkillScopeFilter] = createSignal<'all' | 'user' | 'user_agents'>('all');
   const [skillToggleSaving, setSkillToggleSaving] = createSignal<Record<string, boolean>>({});
   const [skillCreateOpen, setSkillCreateOpen] = createSignal(false);
-  const [skillCreateScope, setSkillCreateScope] = createSignal<'workspace' | 'workspace_agents' | 'user' | 'user_agents'>('workspace');
+  const [skillCreateScope, setSkillCreateScope] = createSignal<'user' | 'user_agents'>('user');
   const [skillCreateName, setSkillCreateName] = createSignal('');
   const [skillCreateDescription, setSkillCreateDescription] = createSignal('');
   const [skillCreateBody, setSkillCreateBody] = createSignal('');
@@ -935,7 +933,7 @@ export function EnvSettingsPage() {
   const [skillReinstalling, setSkillReinstalling] = createSignal<Record<string, boolean>>({});
 
   const [skillInstallOpen, setSkillInstallOpen] = createSignal(false);
-  const [skillInstallScope, setSkillInstallScope] = createSignal<'workspace' | 'workspace_agents' | 'user' | 'user_agents'>('workspace');
+  const [skillInstallScope, setSkillInstallScope] = createSignal<'user' | 'user_agents'>('user');
   const [skillInstallURL, setSkillInstallURL] = createSignal('');
   const [skillInstallRepo, setSkillInstallRepo] = createSignal('openai/skills');
   const [skillInstallRef, setSkillInstallRef] = createSignal('main');
@@ -2997,12 +2995,10 @@ export function EnvSettingsPage() {
                   <FieldLabel>Scope</FieldLabel>
                   <Select
                     value={skillScopeFilter()}
-                    onChange={(v) => setSkillScopeFilter(v as 'all' | 'workspace' | 'workspace_agents' | 'user' | 'user_agents')}
+                    onChange={(v) => setSkillScopeFilter(v as 'all' | 'user' | 'user_agents')}
                     disabled={!canInteract()}
                     options={[
                       { value: 'all', label: 'All scopes' },
-                      { value: 'workspace', label: 'Workspace (.redeven)' },
-                      { value: 'workspace_agents', label: 'Workspace (.agents)' },
                       { value: 'user', label: 'User (.redeven)' },
                       { value: 'user_agents', label: 'User (.agents)' },
                     ]}
@@ -3662,10 +3658,8 @@ export function EnvSettingsPage() {
             <FieldLabel>Scope</FieldLabel>
             <Select
               value={skillInstallScope()}
-              onChange={(v) => setSkillInstallScope(v as 'workspace' | 'workspace_agents' | 'user' | 'user_agents')}
+              onChange={(v) => setSkillInstallScope(v as 'user' | 'user_agents')}
               options={[
-                { value: 'workspace', label: 'Workspace (.redeven)' },
-                { value: 'workspace_agents', label: 'Workspace (.agents)' },
                 { value: 'user', label: 'User (.redeven)' },
                 { value: 'user_agents', label: 'User (.agents)' },
               ]}
@@ -3879,10 +3873,8 @@ export function EnvSettingsPage() {
             <FieldLabel>Scope</FieldLabel>
             <Select
               value={skillCreateScope()}
-              onChange={(v) => setSkillCreateScope(v as 'workspace' | 'workspace_agents' | 'user' | 'user_agents')}
+              onChange={(v) => setSkillCreateScope(v as 'user' | 'user_agents')}
               options={[
-                { value: 'workspace', label: 'Workspace (.redeven)' },
-                { value: 'workspace_agents', label: 'Workspace (.agents)' },
                 { value: 'user', label: 'User (.redeven)' },
                 { value: 'user_agents', label: 'User (.agents)' },
               ]}

@@ -25,7 +25,7 @@ func TestGateway_AISkills_CRUDAndToggle(t *testing.T) {
 	t.Setenv("HOME", homeDir)
 	workspace := t.TempDir()
 	skillName := "gateway-skill"
-	skillDir := filepath.Join(workspace, ".redeven", "skills", skillName)
+	skillDir := filepath.Join(homeDir, ".redeven", "skills", skillName)
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatalf("mkdir skill dir: %v", err)
 	}
@@ -134,7 +134,7 @@ description: test skill
 
 	// create skill
 	{
-		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/skills", bytes.NewBufferString(`{"scope":"workspace","name":"created-skill","description":"created from test"}`))
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/skills", bytes.NewBufferString(`{"scope":"user","name":"created-skill","description":"created from test"}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		gw.serveHTTP(rr, req)
@@ -145,7 +145,7 @@ description: test skill
 
 	// delete created skill
 	{
-		req := httptest.NewRequest(http.MethodDelete, "/_redeven_proxy/api/ai/skills", bytes.NewBufferString(`{"scope":"workspace","name":"created-skill"}`))
+		req := httptest.NewRequest(http.MethodDelete, "/_redeven_proxy/api/ai/skills", bytes.NewBufferString(`{"scope":"user","name":"created-skill"}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		gw.serveHTTP(rr, req)
@@ -159,7 +159,7 @@ func TestGateway_AISkills_PermissionModel(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	workspace := t.TempDir()
-	skillDir := filepath.Join(workspace, ".redeven", "skills", "perm-skill")
+	skillDir := filepath.Join(homeDir, ".redeven", "skills", "perm-skill")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatalf("mkdir skill dir: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestGateway_AISkills_PermissionModel(t *testing.T) {
 		}
 	}
 	{
-		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/skills/import/github", bytes.NewBufferString(`{"scope":"workspace","repo":"openai/skills","ref":"main","paths":["skills/.curated/skill-installer"]}`))
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/skills/import/github", bytes.NewBufferString(`{"scope":"user","repo":"openai/skills","ref":"main","paths":["skills/.curated/skill-installer"]}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		gw.serveHTTP(rr, req)
@@ -345,13 +345,13 @@ description: Install Codex skills
 		return data
 	}
 
-	validateData := request(http.MethodPost, "/_redeven_proxy/api/ai/skills/import/github/validate", `{"scope":"workspace","repo":"openai/skills","ref":"main","paths":["skills/.curated/skill-installer"]}`)
+	validateData := request(http.MethodPost, "/_redeven_proxy/api/ai/skills/import/github/validate", `{"scope":"user","repo":"openai/skills","ref":"main","paths":["skills/.curated/skill-installer"]}`)
 	resolved, _ := validateData["resolved"].([]any)
 	if len(resolved) != 1 {
 		t.Fatalf("expected one resolved item, got=%d", len(resolved))
 	}
 
-	importData := request(http.MethodPost, "/_redeven_proxy/api/ai/skills/import/github", `{"scope":"workspace","repo":"openai/skills","ref":"main","paths":["skills/.curated/skill-installer"]}`)
+	importData := request(http.MethodPost, "/_redeven_proxy/api/ai/skills/import/github", `{"scope":"user","repo":"openai/skills","ref":"main","paths":["skills/.curated/skill-installer"]}`)
 	imports, _ := importData["imports"].([]any)
 	if len(imports) != 1 {
 		t.Fatalf("expected one imported item, got=%d", len(imports))
