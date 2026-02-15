@@ -126,6 +126,12 @@ func classifyIntentResponseToken(req map[string]any) string {
 			}
 		}
 	}
+	creativeSignals := []string{"write a story", "fairy tale", "poem", "creative writing", "童话", "故事", "小说", "诗歌", "文案"}
+	for _, signal := range creativeSignals {
+		if strings.Contains(userText, signal) {
+			return `{"intent":"creative","reason":"creative_generation_requested","objective_mode":"replace"}`
+		}
+	}
 	taskSignals := []string{
 		"say ", "analyze", "analysis", "implement", "fix", "edit", "change", "review",
 		"debug", "test", "build", "run", "list", "summarize", "check", "inspect",

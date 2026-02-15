@@ -20,7 +20,7 @@ func completionContractForIntent(intent string) string {
 
 func classifyFinalizationReason(finalizationReason string) string {
 	switch strings.TrimSpace(finalizationReason) {
-	case "task_complete", "social_reply":
+	case "task_complete", "social_reply", "creative_reply":
 		return finalizationClassSuccess
 	case "ask_user_waiting", "ask_user_waiting_model", "ask_user_waiting_guard":
 		return finalizationClassWaitingUser

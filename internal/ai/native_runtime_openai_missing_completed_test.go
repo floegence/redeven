@@ -83,7 +83,7 @@ func TestOpenAIProvider_StreamTurn_MissingCompleted_SucceedsWithText(t *testing.
 	t.Cleanup(srv.Close)
 
 	baseURL := strings.TrimSuffix(srv.URL, "/") + "/v1"
-	adapter, err := newProviderAdapter("openai", baseURL, "sk-test")
+	adapter, err := newProviderAdapter("openai", baseURL, "sk-test", nil)
 	if err != nil {
 		t.Fatalf("newProviderAdapter: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestOpenAIProvider_StreamTurn_MissingCompleted_SucceedsWithToolCall(t *test
 	t.Cleanup(srv.Close)
 
 	baseURL := strings.TrimSuffix(srv.URL, "/") + "/v1"
-	adapter, err := newProviderAdapter("openai", baseURL, "sk-test")
+	adapter, err := newProviderAdapter("openai", baseURL, "sk-test", nil)
 	if err != nil {
 		t.Fatalf("newProviderAdapter: %v", err)
 	}

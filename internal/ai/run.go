@@ -1153,9 +1153,61 @@ func (r *run) appendTextDelta(delta string) error {
 		r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "markdown"})
 		r.persistSetMarkdownBlock(idx)
 	}
+	delta = r.normalizeMarkdownDelta(r.currentTextBlockIndex, delta)
+	if delta == "" {
+		return nil
+	}
 	r.persistAppendMarkdownDelta(r.currentTextBlockIndex, delta)
 	r.sendStreamEvent(streamEventBlockDelta{Type: "block-delta", MessageID: r.messageID, BlockIndex: r.currentTextBlockIndex, Delta: delta})
 	return nil
+}
+
+func (r *run) normalizeMarkdownDelta(idx int, delta string) string {
+	if r == nil || idx < 0 || delta == "" {
+		return delta
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	if idx >= len(r.assistantBlocks) {
+		return delta
+	}
+	b, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
+	if !ok || b == nil || b.Content == "" {
+		return delta
+	}
+	return trimMarkdownDeltaOverlap(b.Content, delta)
+}
+
+func trimMarkdownDeltaOverlap(existing string, delta string) string {
+	if existing == "" || delta == "" {
+		return delta
+	}
+	existingRunes := []rune(existing)
+	deltaRunes := []rune(delta)
+	if len(existingRunes) == 0 || len(deltaRunes) == 0 {
+		return delta
+	}
+
+	maxOverlap := len(deltaRunes)
+	if len(existingRunes) < maxOverlap {
+		maxOverlap = len(existingRunes)
+	}
+	if maxOverlap > 400 {
+		maxOverlap = 400
+	}
+	for overlap := maxOverlap; overlap >= 24; overlap-- {
+		if string(existingRunes[len(existingRunes)-overlap:]) == string(deltaRunes[:overlap]) {
+			if overlap == len(deltaRunes) {
+				return ""
+			}
+			return string(deltaRunes[overlap:])
+		}
+	}
+	// Keep tiny chunks untouched unless they are exact suffix duplicates.
+	if len(deltaRunes) <= 24 && strings.HasSuffix(existing, delta) {
+		return ""
+	}
+	return delta
 }
 
 func (r *run) hasNonEmptyAssistantText() bool {
@@ -1174,6 +1226,27 @@ func (r *run) hasNonEmptyAssistantText() bool {
 		}
 	}
 	return false
+}
+
+func (r *run) assistantMarkdownTextSnapshot() string {
+	if r == nil {
+		return ""
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	parts := make([]string, 0, len(r.assistantBlocks))
+	for _, blk := range r.assistantBlocks {
+		b, ok := blk.(*persistedMarkdownBlock)
+		if !ok || b == nil {
+			continue
+		}
+		txt := strings.TrimSpace(b.Content)
+		if txt == "" {
+			continue
+		}
+		parts = append(parts, txt)
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n\n"))
 }
 
 func (r *run) sessionMetaForTool() (*session.Meta, error) {

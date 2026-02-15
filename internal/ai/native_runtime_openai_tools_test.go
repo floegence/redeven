@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+func boolPtr(v bool) *bool { return &v }
+
 func TestBuildOpenAITools_RespectsStrictFlag(t *testing.T) {
 	t.Parallel()
 
@@ -39,19 +41,22 @@ func TestNewProviderAdapter_OpenAIStrictPolicy(t *testing.T) {
 		name     string
 		typ      string
 		baseURL  string
+		override *bool
 		expected bool
 	}{
 		{name: "openai", typ: "openai", baseURL: "https://api.openai.com/v1", expected: true},
 		{name: "openai_official_default_base_url", typ: "openai", baseURL: "", expected: true},
 		{name: "openai_custom_gateway", typ: "openai", baseURL: "https://codex-api.packycode.com/v1", expected: false},
 		{name: "openai_compatible", typ: "openai_compatible", baseURL: "https://example.com/v1", expected: false},
+		{name: "openai_custom_gateway_override_true", typ: "openai", baseURL: "https://gateway.example/v1", override: boolPtr(true), expected: true},
+		{name: "openai_official_override_false", typ: "openai", baseURL: "https://api.openai.com/v1", override: boolPtr(false), expected: false},
 	}
 
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			provider, err := newProviderAdapter(tc.typ, tc.baseURL, "sk-test")
+			provider, err := newProviderAdapter(tc.typ, tc.baseURL, "sk-test", tc.override)
 			if err != nil {
 				t.Fatalf("newProviderAdapter error: %v", err)
 			}
