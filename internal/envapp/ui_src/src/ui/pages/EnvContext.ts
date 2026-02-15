@@ -39,6 +39,10 @@ export type EnvContextValue = {
   askFlowerIntent: () => AskFlowerIntent | null;
   injectAskFlowerIntent: (intent: AskFlowerIntent) => void;
   openAskFlowerComposer: (intent: AskFlowerIntent, anchor?: AskFlowerComposerAnchor) => void;
+
+  aiThreadFocusSeq: () => number;
+  aiThreadFocusId: () => string | null;
+  focusAIThread: (threadId: string) => void;
 };
 
 export const EnvContext = createContext<EnvContextValue>();

@@ -217,6 +217,21 @@ const MoreVerticalIcon = (props: { class?: string }) => (
   </svg>
 );
 
+const SparklesIcon = (props: { class?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class={props.class}
+  >
+    <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" />
+  </svg>
+);
+
 function TerminalSessionView(props: terminal_session_view_props) {
   const sessionId = () => props.session.id;
   const colors = () => props.themeColors();
@@ -1536,16 +1551,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             ref={(el) => {
               terminalAskMenuEl = el;
             }}
-            class="fixed z-[120] min-w-[160px] rounded-md border border-border bg-background shadow-lg p-1"
+            class="fixed z-50 min-w-[180px] py-1 bg-popover border border-border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100"
             style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
             onContextMenu={(event) => event.preventDefault()}
           >
             <button
               type="button"
-              class="w-full text-left px-3 py-1.5 text-xs rounded hover:bg-muted/60"
+              class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
               onClick={askFlowerFromTerminal}
             >
-              Ask Flower
+              <SparklesIcon class="w-3.5 h-3.5 opacity-60" />
+              <span class="flex-1 text-left">Ask Flower</span>
             </button>
           </div>
         )}

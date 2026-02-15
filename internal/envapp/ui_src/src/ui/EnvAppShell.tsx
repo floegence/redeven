@@ -175,6 +175,8 @@ export function EnvAppShell() {
 
   const [settingsFocusSeq, setSettingsFocusSeq] = createSignal(0);
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
+  const [aiThreadFocusSeq, setAIThreadFocusSeq] = createSignal(0);
+  const [aiThreadFocusId, setAIThreadFocusId] = createSignal<string | null>(null);
 
   const openSettings = (section?: EnvSettingsSection) => {
     if (!section) {
@@ -190,6 +192,13 @@ export function EnvAppShell() {
   const injectAskFlowerIntent = (intent: AskFlowerIntent) => {
     setAskFlowerIntent(intent);
     setAskFlowerIntentSeq((n) => n + 1);
+  };
+
+  const focusAIThread = (threadId: string) => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return;
+    setAIThreadFocusId(tid);
+    setAIThreadFocusSeq((n) => n + 1);
   };
 
   const openAskFlowerComposer = (intent: AskFlowerIntent, anchor?: AskFlowerComposerAnchor) => {
@@ -354,6 +363,7 @@ export function EnvAppShell() {
       });
 
       persistActiveThreadId(threadId);
+      focusAIThread(threadId);
       closeAskFlowerComposer();
       goTab('ai');
     } catch (e) {
@@ -1005,6 +1015,9 @@ export function EnvAppShell() {
         askFlowerIntent,
         injectAskFlowerIntent,
         openAskFlowerComposer,
+        aiThreadFocusSeq,
+        aiThreadFocusId,
+        focusAIThread,
       }}
     >
       <FloeRegistryRuntime components={components()}>

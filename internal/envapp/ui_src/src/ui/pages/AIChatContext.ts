@@ -581,6 +581,18 @@ export function createAIChatContextValue(): AIChatContextValue {
     setActiveThreadId(null);
   };
 
+  // Allow external send flows (e.g., Ask Flower composer) to force-focus the newly created thread.
+  createEffect(() => {
+    const seq = env.aiThreadFocusSeq();
+    if (seq <= 0) return;
+
+    const tid = String(env.aiThreadFocusId() ?? '').trim();
+    if (!tid) return;
+
+    selectThreadId(tid);
+    bumpThreadsSeq();
+  });
+
   // Subscribe to full-fidelity events for the currently active thread only.
   //
   // Background threads are tracked via subscribeSummary + thread_summary events to avoid
