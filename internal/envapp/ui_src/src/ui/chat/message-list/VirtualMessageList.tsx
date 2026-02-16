@@ -1,12 +1,13 @@
 // Virtualized message list component with auto-scroll and history loading.
 
-import { createSignal, createEffect, createMemo, onCleanup, Show, For } from 'solid-js';
+import { createEffect, createMemo, onCleanup, Show, For } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { useChatContext } from '../ChatProvider';
 import { useVirtualList } from '../hooks/useVirtualList';
 import { WorkingIndicator } from '../status/WorkingIndicator';
 import { MessageItem } from '../message/MessageItem';
+import type { Message } from '../types';
 
 export interface VirtualMessageListProps {
   class?: string;
@@ -34,6 +35,20 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   const messages = createMemo(() => ctx.messages());
   const isWorking = ctx.isWorking;
   const isLoadingHistory = ctx.isLoadingHistory;
+  const messageById = createMemo(() => {
+    const byId = new Map<string, Message>();
+    messages().forEach((msg) => {
+      byId.set(msg.id, msg);
+    });
+    return byId;
+  });
+  const messageIndexById = createMemo(() => {
+    const indexById = new Map<string, number>();
+    messages().forEach((msg, index) => {
+      indexById.set(msg.id, index);
+    });
+    return indexById;
+  });
 
   const virtualList = useVirtualList({
     count: () => messages().length,
@@ -91,12 +106,14 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     });
   };
 
-  const resizeObserverMap = new Map<Element, number>();
+  const resizeObserverMap = new Map<Element, string>();
   const resizeObserver = new ResizeObserver((entries) => {
     let anyHeightChanged = false;
     for (const entry of entries) {
       const el = entry.target as HTMLElement;
-      const index = resizeObserverMap.get(el);
+      const messageId = resizeObserverMap.get(el);
+      if (!messageId) continue;
+      const index = messageIndexById().get(messageId);
       if (index === undefined) continue;
 
       const rawHeight =
@@ -104,16 +121,13 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
       const height = Math.round(rawHeight);
 
       if (height > 0) {
-        const msg = messages()[index];
-        if (msg) {
-          const cachedHeight = ctx.getMessageHeight(msg.id);
-          if (Math.abs(cachedHeight - height) < 1) {
-            continue;
-          }
-          ctx.setMessageHeight(msg.id, height);
-          virtualList.setItemHeight(index, height);
-          anyHeightChanged = true;
+        const cachedHeight = ctx.getMessageHeight(messageId);
+        if (Math.abs(cachedHeight - height) < 1) {
+          continue;
         }
+        ctx.setMessageHeight(messageId, height);
+        virtualList.setItemHeight(index, height);
+        anyHeightChanged = true;
       }
     }
 
@@ -133,14 +147,20 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   });
 
   // Ref callback for message items — observe resizes
-  function observeItem(el: HTMLElement, index: number): void {
-    resizeObserverMap.set(el, index);
+  function observeItem(el: HTMLElement, messageId: string): void {
+    resizeObserverMap.set(el, messageId);
     resizeObserver.observe(el);
   }
 
-  // Compute visible indices from virtual items
-  const visibleIndices = createMemo(() => {
-    return virtualList.virtualItems().map((item) => item.index);
+  const visibleMessageIds = createMemo<string[]>(() => {
+    const currentMessages = messages();
+    const ids: string[] = [];
+    virtualList.virtualItems().forEach((item) => {
+      const msg = currentMessages[item.index];
+      if (!msg) return;
+      ids.push(msg.id);
+    });
+    return ids;
   });
 
   return (
@@ -163,13 +183,13 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
             style={{ height: `${virtualList.paddingTop()}px` }}
           />
 
-          <For each={visibleIndices()}>
-            {(idx) => (
-              <Show when={messages()[idx]}>
+          <For each={visibleMessageIds()}>
+            {(messageId) => (
+              <Show when={messageById().get(messageId)}>
                 {(msg) => (
                   <div
                     class="chat-message-list-item"
-                    ref={(el: HTMLElement) => observeItem(el, idx)}
+                    ref={(el: HTMLElement) => observeItem(el, messageId)}
                   >
                     <MessageItem message={msg()} />
                   </div>
