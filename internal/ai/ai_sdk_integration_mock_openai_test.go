@@ -109,10 +109,15 @@ func isIntentClassifierRequest(req map[string]any) bool {
 		return false
 	}
 	instructions, _ := req["instructions"].(string)
-	return strings.Contains(strings.TrimSpace(instructions), runPolicyClassifierMarker)
+	instructions = strings.TrimSpace(instructions)
+	return strings.Contains(instructions, runPolicyClassifierMarker) || strings.Contains(instructions, askUserPolicyClassifierMarker)
 }
 
 func classifyIntentResponseToken(req map[string]any) string {
+	instructions, _ := req["instructions"].(string)
+	if strings.Contains(strings.TrimSpace(instructions), askUserPolicyClassifierMarker) {
+		return classifyAskUserPolicyResponseToken(req)
+	}
 	userText := strings.ToLower(strings.TrimSpace(extractResponsesUserText(req)))
 	openGoalText, userMessage := extractIntentClassifierContext(userText)
 	if userText == "" {
@@ -148,6 +153,14 @@ func classifyIntentResponseToken(req map[string]any) string {
 		}
 	}
 	return `{"intent":"task","reason":"actionable_request_detected","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.78}`
+}
+
+func classifyAskUserPolicyResponseToken(req map[string]any) string {
+	userText := strings.ToLower(strings.TrimSpace(extractResponsesUserText(req)))
+	if strings.Contains(userText, `"reason_code":""`) || strings.Contains(userText, `"required_from_user":[]`) {
+		return `{"allow":false,"reason":"contract_incomplete","confidence":0.72}`
+	}
+	return `{"allow":true,"reason":"policy_allowed_by_model","confidence":0.88}`
 }
 
 func extractIntentClassifierContext(text string) (string, string) {

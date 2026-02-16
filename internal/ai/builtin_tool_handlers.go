@@ -271,8 +271,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "ask_user",
-			Description:  "Ask user for clarification. Only use when you genuinely cannot determine the answer from available tools. Provide concise recommended replies in options when possible.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"question": map[string]any{"type": "string"}, "options": map[string]any{"type": "array", "items": map[string]any{"type": "string", "maxLength": 200}, "minItems": 1, "maxItems": 4}}, "required": []string{"question"}, "additionalProperties": false}),
+			Description:  "Ask user for clarification only for true external blockers. Include reason_code, required_from_user, and evidence_refs for explainable policy checks.",
+			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"question": map[string]any{"type": "string"}, "options": map[string]any{"type": "array", "items": map[string]any{"type": "string", "maxLength": 200}, "minItems": 1, "maxItems": 4}, "reason_code": map[string]any{"type": "string", "enum": []string{"user_decision_required", "permission_blocked", "missing_external_input", "conflicting_constraints", "safety_confirmation"}}, "required_from_user": map[string]any{"type": "array", "items": map[string]any{"type": "string", "maxLength": 200}, "minItems": 1, "maxItems": 8}, "evidence_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string", "maxLength": 120}, "maxItems": 12}}, "required": []string{"question", "reason_code", "required_from_user", "evidence_refs"}, "additionalProperties": false}),
 			ParallelSafe: true,
 			Mutating:     false,
 			Source:       "builtin",

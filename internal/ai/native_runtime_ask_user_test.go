@@ -2,87 +2,118 @@ package ai
 
 import "testing"
 
-func TestAsksUserToRunCollectableWork(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name     string
-		question string
-		want     bool
-	}{
-		{
-			name:     "english command output request",
-			question: "Please run the command and paste the output here.",
-			want:     true,
-		},
-		{
-			name:     "english shell output request",
-			question: "Run the terminal command and share the logs.",
-			want:     true,
-		},
-		{
-			name:     "normal clarification",
-			question: "Should I prefer a quick fix or a full refactor?",
-			want:     false,
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := asksUserToRunCollectableWork(tc.question); got != tc.want {
-				t.Fatalf("asksUserToRunCollectableWork(%q)=%v, want %v", tc.question, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestEvaluateAskUserGate(t *testing.T) {
 	t.Parallel()
 
-	if pass, reason := evaluateAskUserGate("", runtimeState{}, TaskComplexitySimple); pass || reason != "empty_question" {
+	allowPolicy := askUserPolicyDecision{
+		Allow:      true,
+		Reason:     "policy_allowed_by_model",
+		Confidence: 0.92,
+		Source:     askUserPolicySourceModel,
+	}
+
+	if pass, reason := evaluateAskUserGate(askUserSignal{}, runtimeState{}, TaskComplexitySimple, allowPolicy); pass || reason != "empty_question" {
 		t.Fatalf("empty question => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate("Please execute the command and paste the output.", runtimeState{}, TaskComplexitySimple); pass || reason != "delegated_collectable_work" {
-		t.Fatalf("delegated work => pass=%v reason=%q", pass, reason)
+	if pass, reason := evaluateAskUserGate(askUserSignal{
+		Question: "Should I proceed?",
+	}, runtimeState{}, TaskComplexitySimple, allowPolicy); pass || reason != "missing_reason_code" {
+		t.Fatalf("missing reason_code => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", runtimeState{}, TaskComplexityComplex); !pass || reason != "ok" {
-		t.Fatalf("no required todo policy => pass=%v reason=%q", pass, reason)
+	if pass, reason := evaluateAskUserGate(askUserSignal{
+		Question:   "Should I proceed?",
+		ReasonCode: AskUserReasonUserDecisionRequired,
+	}, runtimeState{}, TaskComplexitySimple, allowPolicy); pass || reason != "missing_required_from_user" {
+		t.Fatalf("missing required_from_user => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", runtimeState{
+	if pass, reason := evaluateAskUserGate(askUserSignal{
+		Question:         "I need a permission decision.",
+		ReasonCode:       AskUserReasonPermissionBlocked,
+		RequiredFromUser: []string{"Approve elevated execution."},
+	}, runtimeState{}, TaskComplexitySimple, allowPolicy); pass || reason != "missing_evidence_refs" {
+		t.Fatalf("missing evidence refs => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateAskUserGate(askUserSignal{
+		Question:         "I need a permission decision.",
+		ReasonCode:       AskUserReasonPermissionBlocked,
+		RequiredFromUser: []string{"Approve elevated execution."},
+		EvidenceRefs:     []string{"tool_missing"},
+	}, runtimeState{ToolCallLedger: map[string]string{"tool_1": "failed"}}, TaskComplexitySimple, allowPolicy); pass || reason != "unresolved_evidence_refs" {
+		t.Fatalf("unresolved evidence refs => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateAskUserGate(askUserSignal{
+		Question:         "I need a permission decision.",
+		ReasonCode:       AskUserReasonPermissionBlocked,
+		RequiredFromUser: []string{"Approve elevated execution."},
+		EvidenceRefs:     []string{"tool_1"},
+	}, runtimeState{ToolCallLedger: map[string]string{"tool_1": "completed"}}, TaskComplexitySimple, allowPolicy); pass || reason != "permission_reason_without_blocked_evidence" {
+		t.Fatalf("permission reason without blocked evidence => pass=%v reason=%q", pass, reason)
+	}
+
+	rejectPolicy := askUserPolicyDecision{
+		Allow:      false,
+		Reason:     "policy_rejected_by_model",
+		Confidence: 0.64,
+		Source:     askUserPolicySourceModel,
+	}
+	if pass, reason := evaluateAskUserGate(askUserSignal{
+		Question:         "Which release strategy do you prefer?",
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Choose conservative or aggressive rollout."},
+		EvidenceRefs:     []string{},
+	}, runtimeState{}, TaskComplexitySimple, rejectPolicy); pass || reason != "policy_rejected_by_model" {
+		t.Fatalf("policy rejected => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateAskUserGate(askUserSignal{
+		Question:         "I need permission to continue with a privileged command.",
+		ReasonCode:       AskUserReasonPermissionBlocked,
+		RequiredFromUser: []string{"Approve elevated execution."},
+		EvidenceRefs:     []string{"tool:tool_perm"},
+	}, runtimeState{
+		ToolCallLedger: map[string]string{"tool_perm": "failed"},
+	}, TaskComplexityStandard, allowPolicy); !pass || reason != "ok" {
+		t.Fatalf("valid signal => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateAskUserGate(askUserSignal{
+		Question:         "I need your decision on deployment order.",
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Pick canary-first or full rollout."},
+	}, runtimeState{
 		TodoPolicy:       TodoPolicyRequired,
 		MinimumTodoItems: 3,
-	}, TaskComplexityStandard); pass || reason != todoRequirementMissingPolicyRequired {
+	}, TaskComplexityStandard, allowPolicy); pass || reason != todoRequirementMissingPolicyRequired {
 		t.Fatalf("required todo policy without snapshot => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", runtimeState{
-		TodoPolicy:          TodoPolicyRequired,
-		MinimumTodoItems:    3,
-		TodoTrackingEnabled: true,
-		TodoTotalCount:      2,
-	}, TaskComplexityStandard); pass || reason != todoRequirementInsufficientPolicyRequired {
-		t.Fatalf("required todo policy with too few todos => pass=%v reason=%q", pass, reason)
-	}
-
-	pendingTodos := runtimeState{
+	if pass, reason := evaluateAskUserGate(askUserSignal{
+		Question:         "I need your decision on deployment order.",
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Pick canary-first or full rollout."},
+	}, runtimeState{
 		TodoTrackingEnabled: true,
 		TodoOpenCount:       2,
-	}
-	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", pendingTodos, TaskComplexityStandard); pass || reason != "pending_todos_without_blocker" {
+	}, TaskComplexityStandard, allowPolicy); pass || reason != "pending_todos_without_blocker" {
 		t.Fatalf("pending todos without blocker => pass=%v reason=%q", pass, reason)
 	}
 
-	withBlocker := runtimeState{
+	if pass, reason := evaluateAskUserGate(askUserSignal{
+		Question:         "Need approval for a privileged command.",
+		ReasonCode:       AskUserReasonPermissionBlocked,
+		RequiredFromUser: []string{"Approve elevated execution."},
+		EvidenceRefs:     []string{"tool_1"},
+	}, runtimeState{
+		ToolCallLedger:      map[string]string{"tool_1": "failed"},
 		TodoTrackingEnabled: true,
 		TodoOpenCount:       1,
 		BlockedActionFacts:  []string{"terminal.exec: permission denied"},
-	}
-	if pass, reason := evaluateAskUserGate("Need approval for a privileged command.", withBlocker, TaskComplexityComplex); !pass || reason != "ok" {
+	}, TaskComplexityComplex, allowPolicy); !pass || reason != "ok" {
 		t.Fatalf("pending todos with blocker => pass=%v reason=%q", pass, reason)
 	}
 }

@@ -1612,12 +1612,51 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	resetMistakes := func() {
 		mistakeWindow = mistakeWindow[:0]
 	}
-	endAskUser := func(step int, question string, options []string, source string) error {
-		question = strings.TrimSpace(question)
+	classifyAskUserByModel := func(signal askUserSignal) askUserPolicyDecision {
+		signal = normalizeAskUserSignal(signal)
+		policyCtx := execCtx
+		cancel := func() {}
+		if _, hasDeadline := execCtx.Deadline(); !hasDeadline {
+			policyCtx, cancel = context.WithTimeout(execCtx, 12*time.Second)
+		}
+		defer cancel()
+		result, err := adapter.StreamTurn(policyCtx, TurnRequest{
+			Model:            modelName,
+			Messages:         buildAskUserPolicyClassifierMessages(taskObjective, signal, state),
+			Budgets:          TurnBudgets{MaxSteps: 1, MaxOutputToken: 120},
+			ModeFlags:        ModeFlags{Mode: config.AIModePlan},
+			ProviderControls: ProviderControls{ResponseFormat: "json_object"},
+		}, nil)
+		if err != nil {
+			if r.log != nil {
+				r.log.Warn("ask_user policy classification failed",
+					"run_id", strings.TrimSpace(r.id),
+					"thread_id", strings.TrimSpace(r.threadID),
+					"error", err,
+				)
+			}
+			return fallbackAskUserPolicyDecision("policy_classifier_failed")
+		}
+		decision, err := parseAskUserPolicyDecision(result.Text)
+		if err != nil {
+			if r.log != nil {
+				r.log.Warn("ask_user policy parse failed",
+					"run_id", strings.TrimSpace(r.id),
+					"thread_id", strings.TrimSpace(r.threadID),
+					"error", err,
+				)
+			}
+			return fallbackAskUserPolicyDecision("policy_classifier_parse_failed")
+		}
+		return decision
+	}
+	endAskUser := func(step int, signal askUserSignal, source string) error {
+		signal = normalizeAskUserSignal(signal)
+		question := signal.Question
 		if question == "" {
 			question = "I need clarification to continue safely."
+			signal.Question = question
 		}
-		options = normalizeAskUserOptions(options)
 		closeout, closeoutErr := r.closeOpenTodosBeforeWaitingUser(execCtx, step, question, source)
 		if closeoutErr != nil {
 			r.persistRunEvent("todos.closeout.waiting_user_failed", RealtimeStreamKindLifecycle, map[string]any{
@@ -1628,10 +1667,13 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			return closeoutErr
 		}
 		finalReason := finalizationReasonForAskUserSource(source)
-		r.emitAskUserToolBlock(question, options, source)
+		r.emitAskUserToolBlock(signal, source)
 		r.persistRunEvent("ask_user.waiting", RealtimeStreamKindLifecycle, map[string]any{
 			"question":            question,
-			"options_count":       len(options),
+			"options_count":       len(signal.Options),
+			"reason_code":         signal.ReasonCode,
+			"required_inputs":     len(signal.RequiredFromUser),
+			"evidence_refs":       len(signal.EvidenceRefs),
 			"source":              strings.TrimSpace(source),
 			"appended_to_message": false,
 			"finalization_reason": finalReason,
@@ -1653,9 +1695,27 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		return nil
 	}
 	rejectAskUser := func(source string, gateReason string) {
-		rejectionMsg := "ask_user was rejected. Continue autonomously: do NOT ask the user to run commands, gather logs, or paste outputs that tools can obtain directly. Use tools yourself and finish this task in the same run when possible."
-		recoveryOverlay := "[RECOVERY] ask_user rejected by autonomy gate. Continue with tools and call task_complete when done."
+		rejectionMsg := "ask_user was rejected by policy gate. Continue autonomously with available tools and call task_complete when done."
+		recoveryOverlay := "[RECOVERY] ask_user rejected by policy gate. Continue with tools and call task_complete when done."
 		switch strings.TrimSpace(gateReason) {
+		case "policy_rejected_by_model", "policy_rejected", "policy_classifier_failed", "policy_classifier_parse_failed":
+			rejectionMsg = "ask_user was rejected because policy classification did not allow waiting for user input. Continue autonomously and only ask the user for true external blockers."
+			recoveryOverlay = "[POLICY] ask_user rejected by model policy. Continue with tools."
+		case "missing_reason_code":
+			rejectionMsg = "ask_user was rejected because reason_code is missing or invalid. Regenerate ask_user with a valid structured reason."
+			recoveryOverlay = "[CONTRACT] ask_user requires a valid reason_code."
+		case "missing_required_from_user":
+			rejectionMsg = "ask_user was rejected because required_from_user is empty. Specify exactly what information is needed from the user."
+			recoveryOverlay = "[CONTRACT] ask_user requires required_from_user."
+		case "missing_evidence_refs":
+			rejectionMsg = "ask_user was rejected because evidence_refs is empty for an evidence-backed reason. Provide concrete evidence refs from tool calls."
+			recoveryOverlay = "[CONTRACT] ask_user requires evidence_refs for this reason_code."
+		case "unresolved_evidence_refs":
+			rejectionMsg = "ask_user was rejected because evidence_refs do not match known tool-call records. Use valid tool IDs as evidence refs."
+			recoveryOverlay = "[CONTRACT] ask_user evidence_refs must reference known tool calls."
+		case "permission_reason_without_blocked_evidence":
+			rejectionMsg = "ask_user was rejected because reason_code=permission_blocked requires blocked tool evidence."
+			recoveryOverlay = "[CONTRACT] reason_code=permission_blocked requires blocked evidence refs."
 		case "pending_todos_without_blocker":
 			rejectionMsg = "ask_user was rejected because todos are still open. Continue execution, or update write_todos to mark blockers before asking the user."
 			recoveryOverlay = "[TODO ENFORCEMENT] Open todos remain without blockers. Continue execution and update write_todos before ask_user."
@@ -1674,37 +1734,50 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		exceptionOverlay = recoveryOverlay
 		isFirstRound = false
 	}
-	tryAskUser := func(step int, question string, options []string, source string) (bool, error) {
-		question = strings.TrimSpace(question)
-		if question == "" {
-			question = "I need clarification to continue safely."
+	tryAskUser := func(step int, signal askUserSignal, source string) (bool, error) {
+		signal = normalizeAskUserSignal(signal)
+		if signal.Question == "" {
+			signal.Question = "I need clarification to continue safely."
 		}
 		source = strings.TrimSpace(source)
-		options = normalizeAskUserOptions(options)
 
 		var askPassed bool
 		var askReason string
+		policyDecision := askUserPolicyDecision{
+			Allow:      true,
+			Reason:     "not_applicable",
+			Confidence: 1,
+			Source:     askUserPolicySourceFallback,
+		}
 		if source == "model_signal" {
-			askPassed, askReason = evaluateAskUserGate(question, state, taskComplexity)
+			policyDecision = classifyAskUserByModel(signal)
+			askPassed, askReason = evaluateAskUserGate(signal, state, taskComplexity, policyDecision)
 		} else {
 			askPassed, askReason = evaluateGuardAskUserGate(source, state, taskComplexity)
 		}
 		r.persistRunEvent("ask_user.attempt", RealtimeStreamKindLifecycle, map[string]any{
-			"step_index":      step,
-			"source":          source,
-			"gate_passed":     askPassed,
-			"gate_reason":     askReason,
-			"question_len":    len([]rune(strings.TrimSpace(question))),
-			"options_count":   len(options),
-			"complexity":      taskComplexity,
-			"todo_tracking":   state.TodoTrackingEnabled,
-			"todo_open_count": state.TodoOpenCount,
+			"step_index":            step,
+			"source":                source,
+			"gate_passed":           askPassed,
+			"gate_reason":           askReason,
+			"question_len":          len([]rune(strings.TrimSpace(signal.Question))),
+			"options_count":         len(signal.Options),
+			"reason_code":           signal.ReasonCode,
+			"required_inputs_count": len(signal.RequiredFromUser),
+			"evidence_refs_count":   len(signal.EvidenceRefs),
+			"policy_allow":          policyDecision.Allow,
+			"policy_reason":         policyDecision.Reason,
+			"policy_source":         policyDecision.Source,
+			"policy_confidence":     policyDecision.Confidence,
+			"complexity":            taskComplexity,
+			"todo_tracking":         state.TodoTrackingEnabled,
+			"todo_open_count":       state.TodoOpenCount,
 		})
 		if !askPassed {
 			rejectAskUser(source, askReason)
 			return false, nil
 		}
-		return true, endAskUser(step, question, options, source)
+		return true, endAskUser(step, signal, source)
 	}
 
 mainLoop:
@@ -1784,7 +1857,11 @@ mainLoop:
 				return nil
 			}
 			if recoveryCount > 5 {
-				ended, askErr := tryAskUser(step, fmt.Sprintf("I encountered repeated errors from the AI provider and cannot continue. Last error: %s", sanitizeLogText(stepErr.Error(), 200)), nil, "provider_repeated_error")
+				ended, askErr := tryAskUser(step, defaultGuardAskUserSignal(
+					fmt.Sprintf("I encountered repeated errors from the AI provider and cannot continue. Last error: %s", sanitizeLogText(stepErr.Error(), 200)),
+					nil,
+					"provider_repeated_error",
+				), "provider_repeated_error")
 				if askErr != nil {
 					return askErr
 				}
@@ -1860,7 +1937,11 @@ mainLoop:
 						})
 					}
 					if hits >= 3 {
-						ended, askErr := tryAskUser(step, fmt.Sprintf("The same tool call is repeating without progress (%s). Please clarify what should change or provide missing context.", strings.TrimSpace(call.Name)), nil, "guard_doom_loop")
+						ended, askErr := tryAskUser(step, defaultGuardAskUserSignal(
+							fmt.Sprintf("The same tool call is repeating without progress (%s). Please clarify what should change or provide missing context.", strings.TrimSpace(call.Name)),
+							nil,
+							"guard_doom_loop",
+						), "guard_doom_loop")
 						if askErr != nil {
 							return askErr
 						}
@@ -1981,7 +2062,11 @@ mainLoop:
 				}
 				appendMistake(stepMistake)
 				if mistakeSum() >= 3 {
-					ended, askErr := tryAskUser(step, "I am not making progress due to repeated tool mistakes. Please clarify the objective or provide additional context to proceed.", nil, "tool_mistake_loop")
+					ended, askErr := tryAskUser(step, defaultGuardAskUserSignal(
+						"I am not making progress due to repeated tool mistakes. Please clarify the objective or provide additional context to proceed.",
+						nil,
+						"tool_mistake_loop",
+					), "tool_mistake_loop")
 					if askErr != nil {
 						return askErr
 					}
@@ -1999,9 +2084,14 @@ mainLoop:
 		}
 
 		if askUserCall != nil {
-			question := extractSignalText(*askUserCall, "question")
-			options := extractSignalStringList(*askUserCall, "options")
-			ended, askErr := tryAskUser(step, question, options, "model_signal")
+			signal := askUserSignal{
+				Question:         extractSignalText(*askUserCall, "question"),
+				Options:          extractSignalStringList(*askUserCall, "options"),
+				ReasonCode:       extractSignalText(*askUserCall, "reason_code"),
+				RequiredFromUser: extractSignalStringList(*askUserCall, "required_from_user"),
+				EvidenceRefs:     extractSignalStringList(*askUserCall, "evidence_refs"),
+			}
+			ended, askErr := tryAskUser(step, signal, "model_signal")
 			if askErr != nil {
 				return askErr
 			}
@@ -2071,7 +2161,11 @@ mainLoop:
 					emptyTaskCompleteRejects = 0
 				}
 				if gateReason == "empty_result" && emptyTaskCompleteRejects >= 3 {
-					ended, askErr := tryAskUser(step, "I could not finalize because completion payload remained empty after repeated attempts. Please confirm whether to treat the current response as final or request revisions.", []string{"Treat current response as final.", "Continue and revise the response."}, "completion_empty_result_repeated")
+					ended, askErr := tryAskUser(step, defaultGuardAskUserSignal(
+						"I could not finalize because completion payload remained empty after repeated attempts. Please confirm whether to treat the current response as final or request revisions.",
+						[]string{"Treat current response as final.", "Continue and revise the response."},
+						"completion_empty_result_repeated",
+					), "completion_empty_result_repeated")
 					if askErr != nil {
 						return askErr
 					}
@@ -2130,7 +2224,7 @@ mainLoop:
 				if todoReason == todoRequirementInsufficientPolicyRequired {
 					question = "The current todo list is smaller than the required minimum. Please confirm the key goals and I will continue with an expanded todo plan."
 				}
-				ended, askErr := tryAskUser(step, question, nil, "complex_task_missing_todos")
+				ended, askErr := tryAskUser(step, defaultGuardAskUserSignal(question, nil, "complex_task_missing_todos"), "complex_task_missing_todos")
 				if askErr != nil {
 					return askErr
 				}
@@ -2171,7 +2265,11 @@ mainLoop:
 		if !turnTextSeen {
 			appendMistake(1)
 			if mistakeSum() >= 3 {
-				ended, askErr := tryAskUser(step, "I am not getting usable output and cannot proceed safely. Please clarify the objective or provide more context.", nil, "provider_empty_output")
+				ended, askErr := tryAskUser(step, defaultGuardAskUserSignal(
+					"I am not getting usable output and cannot proceed safely. Please clarify the objective or provide more context.",
+					nil,
+					"provider_empty_output",
+				), "provider_empty_output")
 				if askErr != nil {
 					return askErr
 				}
@@ -2182,7 +2280,11 @@ mainLoop:
 			}
 			recoveryCount++
 			if recoveryCount > 5 {
-				ended, askErr := tryAskUser(step, "I have been unable to produce output after multiple attempts. Please check the AI provider configuration or try rephrasing your request.", nil, "provider_empty_output_repeated")
+				ended, askErr := tryAskUser(step, defaultGuardAskUserSignal(
+					"I have been unable to produce output after multiple attempts. Please check the AI provider configuration or try rephrasing your request.",
+					nil,
+					"provider_empty_output_repeated",
+				), "provider_empty_output_repeated")
 				if askErr != nil {
 					return askErr
 				}
@@ -2282,7 +2384,11 @@ mainLoop:
 			}
 		}
 
-		ended, askErr := tryAskUser(step, "I still do not have explicit completion. Please provide missing requirements, or ask me to continue with a specific next action.", nil, "missing_explicit_completion")
+		ended, askErr := tryAskUser(step, defaultGuardAskUserSignal(
+			"I still do not have explicit completion. Please provide missing requirements, or ask me to continue with a specific next action.",
+			nil,
+			"missing_explicit_completion",
+		), "missing_explicit_completion")
 		if askErr != nil {
 			return askErr
 		}
@@ -2375,7 +2481,7 @@ mainLoop:
 			if summaryErr != nil {
 				errMsg = fmt.Sprintf("The task reached the maximum step limit. Summary attempt failed: %s", sanitizeLogText(summaryErr.Error(), 200))
 			}
-			ended, askErr := tryAskUser(nativeHardMaxSteps, errMsg, nil, "hard_max_summary_failed")
+			ended, askErr := tryAskUser(nativeHardMaxSteps, defaultGuardAskUserSignal(errMsg, nil, "hard_max_summary_failed"), "hard_max_summary_failed")
 			if askErr != nil {
 				return askErr
 			}
@@ -2393,7 +2499,11 @@ mainLoop:
 		"gate_reason":         "hard_max_steps_reached",
 		"complexity":          taskComplexity,
 	})
-	ended, askErr := tryAskUser(nativeHardMaxSteps, "I reached the hard step limit before explicit completion. Please provide guidance for the next step and I will continue.", nil, "hard_max_steps")
+	ended, askErr := tryAskUser(nativeHardMaxSteps, defaultGuardAskUserSignal(
+		"I reached the hard step limit before explicit completion. Please provide guidance for the next step and I will continue.",
+		nil,
+		"hard_max_steps",
+	), "hard_max_steps")
 	if askErr != nil {
 		return askErr
 	}
@@ -3076,13 +3186,34 @@ func evaluateTaskCompletionGate(resultText string, state runtimeState, complexit
 	return true, "ok"
 }
 
-func evaluateAskUserGate(question string, state runtimeState, complexity string) (bool, string) {
-	q := strings.TrimSpace(question)
-	if q == "" {
+func evaluateAskUserGate(signal askUserSignal, state runtimeState, complexity string, policy askUserPolicyDecision) (bool, string) {
+	signal = normalizeAskUserSignal(signal)
+	if strings.TrimSpace(signal.Question) == "" {
 		return false, "empty_question"
 	}
-	if asksUserToRunCollectableWork(q) {
-		return false, "delegated_collectable_work"
+	if signal.ReasonCode == "" {
+		return false, "missing_reason_code"
+	}
+	if len(signal.RequiredFromUser) == 0 {
+		return false, "missing_required_from_user"
+	}
+	if askUserReasonRequiresEvidence(signal.ReasonCode) {
+		if len(signal.EvidenceRefs) == 0 {
+			return false, "missing_evidence_refs"
+		}
+		matched, blocked := askUserEvidenceMatch(state, signal.EvidenceRefs)
+		if matched == 0 {
+			return false, "unresolved_evidence_refs"
+		}
+		if signal.ReasonCode == AskUserReasonPermissionBlocked && blocked == 0 {
+			return false, "permission_reason_without_blocked_evidence"
+		}
+	}
+	if !policy.Allow {
+		if normalizeIntentReason(policy.Reason) == "" {
+			return false, "policy_rejected"
+		}
+		return false, "policy_rejected_by_model"
 	}
 	if required, reason := todoTrackingRequirement(complexity, state); required {
 		return false, reason
@@ -3093,36 +3224,32 @@ func evaluateAskUserGate(question string, state runtimeState, complexity string)
 	return true, "ok"
 }
 
-func asksUserToRunCollectableWork(question string) bool {
-	raw := strings.TrimSpace(question)
-	if raw == "" {
-		return false
+func askUserEvidenceMatch(state runtimeState, refs []string) (matched int, blocked int) {
+	if len(refs) == 0 || len(state.ToolCallLedger) == 0 {
+		return 0, 0
 	}
-	lower := strings.ToLower(raw)
-
-	containsAny := func(text string, parts []string) bool {
-		for _, part := range parts {
-			if strings.Contains(text, part) {
-				return true
-			}
+	for _, ref := range refs {
+		id := strings.TrimSpace(ref)
+		if id == "" {
+			continue
 		}
-		return false
+		if strings.HasPrefix(strings.ToLower(id), "tool:") {
+			id = strings.TrimSpace(id[5:])
+		}
+		if id == "" {
+			continue
+		}
+		status := strings.TrimSpace(state.ToolCallLedger[id])
+		if status == "" {
+			continue
+		}
+		matched++
+		switch status {
+		case "failed", "aborted":
+			blocked++
+		}
 	}
-
-	englishActions := []string{"run", "execute", "paste", "copy", "share", "provide", "send", "upload"}
-	englishTargets := []string{"command", "shell", "terminal", "output", "stdout", "stderr", "log", "logs", "screenshot"}
-	if containsAny(lower, englishActions) && containsAny(lower, englishTargets) {
-		return true
-	}
-	chineseActions := []string{"运行", "执行", "提供", "贴", "发送", "上传"}
-	chineseTargets := []string{"命令", "终端", "输出", "日志", "截图", "屏幕"}
-	if containsAny(raw, chineseActions) && containsAny(raw, chineseTargets) {
-		return true
-	}
-	if strings.Contains(raw, "命令输出") || strings.Contains(raw, "输出贴") || strings.Contains(raw, "贴上") || strings.Contains(lower, "paste the output") {
-		return true
-	}
-	return false
+	return matched, blocked
 }
 
 const (
@@ -3382,6 +3509,10 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- Do NOT ask the user to run commands, gather logs, or paste outputs that tools can obtain directly.",
 		"- Prefer autonomous continuation over ask_user; ask_user is only for true external blockers.",
 		"- If information is insufficient and tools cannot help, call ask_user.",
+		"- ask_user must include structured fields: reason_code, required_from_user, evidence_refs.",
+		"- reason_code must be one of: user_decision_required | permission_blocked | missing_external_input | conflicting_constraints | safety_confirmation.",
+		"- required_from_user must list concrete user inputs needed to proceed.",
+		"- evidence_refs must reference relevant tool IDs whenever reason_code requires evidence (for example permission_blocked).",
 		"- When calling ask_user, include 2-4 concise recommended reply options in `options` (best option first).",
 		"- Keep ask_user options mutually exclusive and actionable; do not include a free-form catch-all option.",
 		"- Write ask_user options as ready-to-send user replies (plain text, no numbering, no markdown).",
@@ -3659,13 +3790,14 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 	}
 }
 
-func (r *run) emitAskUserToolBlock(question string, options []string, source string) {
+func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
 	if r == nil {
 		return
 	}
-	question = strings.TrimSpace(question)
+	signal = normalizeAskUserSignal(signal)
+	question := strings.TrimSpace(signal.Question)
 	source = strings.TrimSpace(source)
-	options = normalizeAskUserOptions(options)
+	options := signal.Options
 	if question == "" {
 		return
 	}
@@ -3678,11 +3810,23 @@ func (r *run) emitAskUserToolBlock(question string, options []string, source str
 	r.nextBlockIndex++
 	r.needNewTextBlock = true
 	r.mu.Unlock()
-	args := map[string]any{"question": question}
+	args := map[string]any{
+		"question":           question,
+		"reason_code":        signal.ReasonCode,
+		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
+		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
+	}
 	if len(options) > 0 {
 		args["options"] = append([]string(nil), options...)
 	}
-	result := map[string]any{"question": question, "source": source, "waiting_user": true}
+	result := map[string]any{
+		"question":           question,
+		"source":             source,
+		"reason_code":        signal.ReasonCode,
+		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
+		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
+		"waiting_user":       true,
+	}
 	if len(options) > 0 {
 		result["options"] = append([]string(nil), options...)
 	}
