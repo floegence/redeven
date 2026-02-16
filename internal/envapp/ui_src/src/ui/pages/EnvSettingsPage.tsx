@@ -291,6 +291,13 @@ function modelID(providerID: string, modelName: string): string {
   return `${pid}/${mn}`;
 }
 
+function defaultBaseURLForProviderType(providerType: AIProviderType): string {
+  if (providerType === 'moonshot') return 'https://api.moonshot.cn/v1';
+  if (providerType === 'anthropic') return 'https://api.anthropic.com/v1';
+  if (providerType === 'openai_compatible') return 'https://api.example.com/v1';
+  return 'https://api.openai.com/v1';
+}
+
 function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
   return {
     id: String(row?.id ?? ''),
@@ -326,7 +333,7 @@ function newAIProviderDraft(): AIProviderRow {
     id: newProviderID(),
     name: '',
     type: 'openai',
-    base_url: 'https://api.openai.com/v1',
+    base_url: defaultBaseURLForProviderType('openai'),
     models: [{ model_name: '', is_default: false }],
   });
 }
@@ -3797,7 +3804,12 @@ export function EnvSettingsPage() {
                     <Select
                       value={provider().type}
                       onChange={(v) => {
-                        updateDraft((current) => ({ ...current, type: v as AIProviderType }));
+                        const nextType = v as AIProviderType;
+                        updateDraft((current) => ({
+                          ...current,
+                          type: nextType,
+                          base_url: defaultBaseURLForProviderType(nextType),
+                        }));
                       }}
                       disabled={!canInteract()}
                       options={[
@@ -3823,13 +3835,7 @@ export function EnvSettingsPage() {
                         const v = e.currentTarget.value;
                         updateDraft((current) => ({ ...current, base_url: v }));
                       }}
-                      placeholder={
-                        provider().type === 'openai_compatible'
-                          ? 'https://api.example.com/v1'
-                          : provider().type === 'moonshot'
-                            ? 'https://api.moonshot.cn/v1'
-                            : 'https://api.openai.com/v1'
-                      }
+                      placeholder={defaultBaseURLForProviderType(provider().type)}
                       size="sm"
                       class="w-full"
                       disabled={!canInteract()}
