@@ -13,17 +13,24 @@ func TestBuildToolCallMessages(t *testing.T) {
 		},
 	}
 
-	msgs := buildToolCallMessages(calls)
+	msgs := buildToolCallMessages(calls, "verify cwd before command execution")
 	if len(msgs) != 1 {
 		t.Fatalf("messages=%d, want 1", len(msgs))
 	}
 	if msgs[0].Role != "assistant" {
 		t.Fatalf("role=%q, want assistant", msgs[0].Role)
 	}
-	if len(msgs[0].Content) != 1 {
-		t.Fatalf("content length=%d, want 1", len(msgs[0].Content))
+	if len(msgs[0].Content) != 2 {
+		t.Fatalf("content length=%d, want 2", len(msgs[0].Content))
 	}
-	part := msgs[0].Content[0]
+	reasoning := msgs[0].Content[0]
+	if reasoning.Type != "reasoning" {
+		t.Fatalf("type=%q, want reasoning", reasoning.Type)
+	}
+	if reasoning.Text != "verify cwd before command execution" {
+		t.Fatalf("reasoning=%q, want verify cwd before command execution", reasoning.Text)
+	}
+	part := msgs[0].Content[1]
 	if part.Type != "tool_call" {
 		t.Fatalf("type=%q, want tool_call", part.Type)
 	}

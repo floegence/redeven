@@ -460,6 +460,10 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req TurnRequest, onEv
 			result.Text = txt
 			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventTextDelta, Text: txt})
 		}
+		if reasoning := extractMoonshotChatReasoning(choice.Message); reasoning != "" {
+			result.Reasoning = reasoning
+			emitProviderEvent(onEvent, StreamEvent{Type: StreamEventThinkingDelta, Text: reasoning})
+		}
 		for _, tc := range choice.Message.ToolCalls {
 			callID := strings.TrimSpace(tc.ID)
 			if callID == "" {
@@ -551,6 +555,7 @@ func buildOpenAIChatMessages(messages []Message) []openai.ChatCompletionMessageP
 			}
 		case "assistant":
 			var textBuf strings.Builder
+			var reasoningBuf strings.Builder
 			toolCalls := make([]openai.ChatCompletionMessageToolCallParam, 0, 2)
 			appendAssistantText := func(text string) {
 				text = strings.TrimSpace(text)
@@ -562,10 +567,22 @@ func buildOpenAIChatMessages(messages []Message) []openai.ChatCompletionMessageP
 				}
 				textBuf.WriteString(text)
 			}
+			appendAssistantReasoning := func(text string) {
+				text = strings.TrimSpace(text)
+				if text == "" {
+					return
+				}
+				if reasoningBuf.Len() > 0 {
+					reasoningBuf.WriteString("\n")
+				}
+				reasoningBuf.WriteString(text)
+			}
 			for _, part := range msg.Content {
 				switch strings.ToLower(strings.TrimSpace(part.Type)) {
 				case "text":
 					appendAssistantText(part.Text)
+				case "reasoning":
+					appendAssistantReasoning(part.Text)
 				case "tool_call":
 					callID := strings.TrimSpace(part.ToolCallID)
 					if callID == "" {
@@ -612,6 +629,9 @@ func buildOpenAIChatMessages(messages []Message) []openai.ChatCompletionMessageP
 			if content != "" {
 				assistant.Content = openai.ChatCompletionAssistantMessageParamContentUnion{OfString: openai.String(content)}
 			}
+			assistant.SetExtraFields(map[string]any{
+				"reasoning_content": strings.TrimSpace(reasoningBuf.String()),
+			})
 			out = append(out, openai.ChatCompletionMessageParamUnion{OfAssistant: &assistant})
 		default:
 			contentParts := make([]openai.ChatCompletionContentPartUnionParam, 0, len(msg.Content))
@@ -647,6 +667,51 @@ func buildOpenAIChatMessages(messages []Message) []openai.ChatCompletionMessageP
 		}
 	}
 	return out
+}
+
+func extractMoonshotChatReasoning(msg openai.ChatCompletionMessage) string {
+	if msg.JSON.ExtraFields == nil {
+		return ""
+	}
+	for _, key := range []string{"reasoning_content", "reasoning"} {
+		field, ok := msg.JSON.ExtraFields[key]
+		if !ok {
+			continue
+		}
+		raw := strings.TrimSpace(field.Raw())
+		if raw == "" || raw == "null" {
+			continue
+		}
+		var decoded any
+		if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
+			if txt := strings.TrimSpace(raw); txt != "" {
+				return txt
+			}
+			continue
+		}
+		switch val := decoded.(type) {
+		case string:
+			if txt := strings.TrimSpace(val); txt != "" {
+				return txt
+			}
+		case []any:
+			parts := make([]string, 0, len(val))
+			for _, item := range val {
+				s, ok := item.(string)
+				if !ok {
+					continue
+				}
+				s = strings.TrimSpace(s)
+				if s != "" {
+					parts = append(parts, s)
+				}
+			}
+			if len(parts) > 0 {
+				return strings.Join(parts, "\n")
+			}
+		}
+	}
+	return ""
 }
 
 func mapOpenAIChatFinishReason(reason string) string {
@@ -1862,7 +1927,7 @@ mainLoop:
 				req.Options.Complexity = taskComplexity
 			}
 
-			messages = append(messages, buildToolCallMessages(normalCalls)...)
+			messages = append(messages, buildToolCallMessages(normalCalls, stepResult.Reasoning)...)
 			messages = append(messages, buildToolResultMessages(toolResults, normalCalls)...)
 			state.PendingToolCalls = nil
 			hasError := false
@@ -2815,11 +2880,15 @@ func buildToolResultMessages(results []ToolResult, calls []ToolCall) []Message {
 	return out
 }
 
-func buildToolCallMessages(calls []ToolCall) []Message {
+func buildToolCallMessages(calls []ToolCall, reasoning string) []Message {
 	if len(calls) == 0 {
 		return nil
 	}
-	out := make([]Message, 0, len(calls))
+	parts := make([]ContentPart, 0, len(calls)+1)
+	parts = append(parts, ContentPart{
+		Type: "reasoning",
+		Text: strings.TrimSpace(reasoning),
+	})
 	for _, call := range calls {
 		callID := strings.TrimSpace(call.ID)
 		name := strings.TrimSpace(call.Name)
@@ -2836,18 +2905,18 @@ func buildToolCallMessages(calls []ToolCall) []Message {
 			rawArgs = "{}"
 			b = []byte(rawArgs)
 		}
-		out = append(out, Message{
-			Role: "assistant",
-			Content: []ContentPart{{
-				Type:       "tool_call",
-				ToolCallID: callID,
-				ToolName:   name,
-				ArgsJSON:   rawArgs,
-				JSON:       b,
-			}},
+		parts = append(parts, ContentPart{
+			Type:       "tool_call",
+			ToolCallID: callID,
+			ToolName:   name,
+			ArgsJSON:   rawArgs,
+			JSON:       b,
 		})
 	}
-	return out
+	if len(parts) == 1 {
+		return nil
+	}
+	return []Message{{Role: "assistant", Content: parts}}
 }
 
 func extractSignalText(call ToolCall, key string) string {

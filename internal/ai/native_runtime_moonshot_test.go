@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -199,6 +200,170 @@ func TestMoonshotProvider_StreamTurn_ToolCallAliasRoundTrip(t *testing.T) {
 	}
 	if !containsStreamEvent(events, StreamEventToolCallStart) || !containsStreamEvent(events, StreamEventToolCallEnd) {
 		t.Fatalf("missing tool call stream events")
+	}
+}
+
+func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *testing.T) {
+	t.Parallel()
+
+	var requestCount atomic.Int32
+	const reasoningContent = "I should inspect system metrics before summarizing."
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqIndex := requestCount.Add(1)
+		if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/chat/completions") {
+			t.Fatalf("path=%s, want /chat/completions", r.URL.Path)
+		}
+
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+
+		switch reqIndex {
+		case 1:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id":      "chatcmpl_reasoning_1",
+				"object":  "chat.completion",
+				"created": 125,
+				"model":   "kimi-k2.5",
+				"choices": []any{
+					map[string]any{
+						"index":         0,
+						"finish_reason": "tool_calls",
+						"message": map[string]any{
+							"role":              "assistant",
+							"content":           "",
+							"reasoning_content": reasoningContent,
+							"tool_calls": []any{
+								map[string]any{
+									"id":   "call_reasoning_1",
+									"type": "function",
+									"function": map[string]any{
+										"name":      "terminal_exec",
+										"arguments": `{"cmd":"uptime"}`,
+									},
+								},
+							},
+						},
+					},
+				},
+				"usage": map[string]any{
+					"prompt_tokens":     30,
+					"completion_tokens": 6,
+					"total_tokens":      36,
+					"completion_tokens_details": map[string]any{
+						"reasoning_tokens": 4,
+					},
+				},
+			})
+		case 2:
+			messages, _ := req["messages"].([]any)
+			var assistantWithTool map[string]any
+			for _, item := range messages {
+				msg, _ := item.(map[string]any)
+				if msg == nil {
+					continue
+				}
+				if strings.TrimSpace(anyString(msg["role"])) != "assistant" {
+					continue
+				}
+				if toolCalls, ok := msg["tool_calls"].([]any); ok && len(toolCalls) > 0 {
+					assistantWithTool = msg
+					break
+				}
+			}
+			if assistantWithTool == nil {
+				t.Fatalf("missing assistant tool_call history message")
+			}
+			gotReasoning := strings.TrimSpace(anyString(assistantWithTool["reasoning_content"]))
+			if gotReasoning != reasoningContent {
+				t.Fatalf("reasoning_content=%q, want %q", gotReasoning, reasoningContent)
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id":      "chatcmpl_reasoning_2",
+				"object":  "chat.completion",
+				"created": 126,
+				"model":   "kimi-k2.5",
+				"choices": []any{
+					map[string]any{
+						"index":         0,
+						"finish_reason": "stop",
+						"message": map[string]any{
+							"role":    "assistant",
+							"content": "done",
+						},
+					},
+				},
+				"usage": map[string]any{
+					"prompt_tokens":     12,
+					"completion_tokens": 2,
+					"total_tokens":      14,
+				},
+			})
+		default:
+			t.Fatalf("unexpected request count=%d", reqIndex)
+		}
+	}))
+	defer srv.Close()
+
+	provider, err := newProviderAdapter("moonshot", srv.URL+"/v1", "sk-test", nil)
+	if err != nil {
+		t.Fatalf("newProviderAdapter: %v", err)
+	}
+
+	firstResult, err := provider.StreamTurn(context.Background(), TurnRequest{
+		Model: "kimi-k2.5",
+		Messages: []Message{
+			{Role: "user", Content: []ContentPart{{Type: "text", Text: "check load"}}},
+		},
+		Tools: []ToolDef{
+			{
+				Name:        "terminal.exec",
+				Description: "Run shell command",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"cmd":{"type":"string"}},"required":["cmd"]}`),
+			},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("first StreamTurn: %v", err)
+	}
+	if strings.TrimSpace(firstResult.Reasoning) != reasoningContent {
+		t.Fatalf("first reasoning=%q, want %q", firstResult.Reasoning, reasoningContent)
+	}
+	if len(firstResult.ToolCalls) != 1 {
+		t.Fatalf("first tool_calls=%d, want 1", len(firstResult.ToolCalls))
+	}
+
+	history := []Message{
+		{Role: "user", Content: []ContentPart{{Type: "text", Text: "check load"}}},
+	}
+	history = append(history, buildToolCallMessages(firstResult.ToolCalls, firstResult.Reasoning)...)
+	history = append(history, buildToolResultMessages([]ToolResult{
+		{
+			ToolID:   firstResult.ToolCalls[0].ID,
+			ToolName: firstResult.ToolCalls[0].Name,
+			Status:   toolResultStatusSuccess,
+			Summary:  "ok",
+		},
+	}, firstResult.ToolCalls)...)
+	history = append(history, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "continue"}}})
+
+	secondResult, err := provider.StreamTurn(context.Background(), TurnRequest{
+		Model:    "kimi-k2.5",
+		Messages: history,
+	}, nil)
+	if err != nil {
+		t.Fatalf("second StreamTurn: %v", err)
+	}
+	if strings.TrimSpace(secondResult.Text) != "done" {
+		t.Fatalf("second text=%q, want done", secondResult.Text)
+	}
+	if requestCount.Load() != 2 {
+		t.Fatalf("request_count=%d, want 2", requestCount.Load())
 	}
 }
 

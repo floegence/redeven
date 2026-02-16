@@ -121,6 +121,7 @@ type TurnUsage struct {
 type TurnResult struct {
 	FinishReason    string         `json:"finish_reason"`
 	Text            string         `json:"text,omitempty"`
+	Reasoning       string         `json:"reasoning,omitempty"`
 	ToolCalls       []ToolCall     `json:"tool_calls,omitempty"`
 	Sources         []SourceRef    `json:"sources,omitempty"`
 	Usage           TurnUsage      `json:"usage,omitempty"`
