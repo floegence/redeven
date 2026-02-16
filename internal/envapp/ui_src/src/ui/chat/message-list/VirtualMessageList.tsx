@@ -65,22 +65,17 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   let prevMessageCount = messages().length;
   // Keep a short "follow lock" after explicit bottoming so delayed markdown/worker
   // height updates do not leave the viewport stranded above the latest message.
-  const RESIZE_FOLLOW_GRACE_MS = 2200;
+  const RESIZE_FOLLOW_GRACE_MS = 5000;
   const FOLLOW_BOTTOM_THRESHOLD_PX = 24;
-  const USER_SCROLL_UP_EPSILON_PX = 2;
   let followLockUntilMs = 0;
-  let lastScrollTop = 0;
   let scrollContainerEl: HTMLElement | null = null;
+  let didInitialBottomSync = false;
 
   const isNearBottom = (el: HTMLElement) =>
     el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_BOTTOM_THRESHOLD_PX;
 
   const lockFollowToBottom = () => {
     followLockUntilMs = Math.max(followLockUntilMs, Date.now() + RESIZE_FOLLOW_GRACE_MS);
-  };
-
-  const clearFollowLock = () => {
-    followLockUntilMs = 0;
   };
 
   const shouldForceFollow = () => followLockUntilMs > Date.now();
@@ -99,6 +94,26 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     prevMessageCount = currentCount;
   });
 
+  // When the list mounts with preloaded messages (thread restore), run a dedicated
+  // bottom sync. The normal "count increased" path does not fire in this case.
+  createEffect(() => {
+    const currentCount = messages().length;
+    if (currentCount <= 0) {
+      didInitialBottomSync = false;
+      return;
+    }
+    if (didInitialBottomSync) return;
+    didInitialBottomSync = true;
+
+    lockFollowToBottom();
+    requestAnimationFrame(() => {
+      virtualList.scrollToBottom();
+      requestAnimationFrame(() => {
+        virtualList.scrollToBottom();
+      });
+    });
+  });
+
   // Show scroll-to-bottom button when not at bottom
   const showScrollToBottom = createMemo(() => !virtualList.isAtBottom());
 
@@ -106,13 +121,9 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   function handleScroll(): void {
     const el = scrollContainerEl;
     if (el) {
-      const nextScrollTop = el.scrollTop;
-      if (nextScrollTop + USER_SCROLL_UP_EPSILON_PX < lastScrollTop) {
-        clearFollowLock();
-      } else if (isNearBottom(el)) {
+      if (isNearBottom(el)) {
         lockFollowToBottom();
       }
-      lastScrollTop = nextScrollTop;
     }
 
     virtualList.onScroll();
@@ -209,7 +220,6 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
         class="chat-message-list-scroll"
         ref={((el: HTMLElement) => {
           scrollContainerEl = el;
-          lastScrollTop = el.scrollTop;
           virtualList.containerRef(el);
           virtualList.scrollRef(el);
         }) as any}
