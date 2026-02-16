@@ -63,11 +63,34 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
 
   // Track previous message count for auto-scroll
   let prevMessageCount = messages().length;
+  // Keep a short "follow lock" after explicit bottoming so delayed markdown/worker
+  // height updates do not leave the viewport stranded above the latest message.
+  const RESIZE_FOLLOW_GRACE_MS = 2200;
+  const FOLLOW_BOTTOM_THRESHOLD_PX = 24;
+  const USER_SCROLL_UP_EPSILON_PX = 2;
+  let followLockUntilMs = 0;
+  let lastScrollTop = 0;
+  let scrollContainerEl: HTMLElement | null = null;
+
+  const isNearBottom = (el: HTMLElement) =>
+    el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_BOTTOM_THRESHOLD_PX;
+
+  const lockFollowToBottom = () => {
+    followLockUntilMs = Math.max(followLockUntilMs, Date.now() + RESIZE_FOLLOW_GRACE_MS);
+  };
+
+  const clearFollowLock = () => {
+    followLockUntilMs = 0;
+  };
+
+  const shouldForceFollow = () => followLockUntilMs > Date.now();
+  const shouldFollowBottom = () => virtualList.isAtBottom() || shouldForceFollow();
 
   // Auto-scroll to bottom when new messages arrive (only if already at bottom)
   createEffect(() => {
     const currentCount = messages().length;
     if (currentCount > prevMessageCount && virtualList.isAtBottom()) {
+      lockFollowToBottom();
       // Use rAF to wait for DOM update before scrolling
       requestAnimationFrame(() => {
         virtualList.scrollToBottom();
@@ -81,6 +104,17 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
 
   // Load more history when scrolled near the top
   function handleScroll(): void {
+    const el = scrollContainerEl;
+    if (el) {
+      const nextScrollTop = el.scrollTop;
+      if (nextScrollTop + USER_SCROLL_UP_EPSILON_PX < lastScrollTop) {
+        clearFollowLock();
+      } else if (isNearBottom(el)) {
+        lockFollowToBottom();
+      }
+      lastScrollTop = nextScrollTop;
+    }
+
     virtualList.onScroll();
 
     // Check if near top for loading more history
@@ -100,7 +134,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     if (followToBottomRaf !== null) return;
     followToBottomRaf = requestAnimationFrame(() => {
       followToBottomRaf = null;
-      if (virtualList.isAtBottom()) {
+      if (shouldFollowBottom()) {
         virtualList.scrollToBottom();
       }
     });
@@ -133,12 +167,14 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
 
     // Keep the view anchored to the bottom while streaming (worker-based markdown rendering
     // may update DOM height asynchronously after the last stream event).
-    if (anyHeightChanged && virtualList.isAtBottom()) {
+    if (anyHeightChanged && shouldFollowBottom()) {
+      lockFollowToBottom();
       scheduleFollowToBottom();
     }
   });
 
   onCleanup(() => {
+    scrollContainerEl = null;
     resizeObserver.disconnect();
     if (followToBottomRaf !== null) {
       cancelAnimationFrame(followToBottomRaf);
@@ -172,6 +208,8 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
       <div
         class="chat-message-list-scroll"
         ref={((el: HTMLElement) => {
+          scrollContainerEl = el;
+          lastScrollTop = el.scrollTop;
           virtualList.containerRef(el);
           virtualList.scrollRef(el);
         }) as any}
@@ -214,7 +252,10 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
       <Show when={showScrollToBottom()}>
         <button
           class="chat-scroll-to-bottom-btn"
-          onClick={() => virtualList.scrollToBottom()}
+          onClick={() => {
+            lockFollowToBottom();
+            virtualList.scrollToBottom();
+          }}
           aria-label="Scroll to bottom"
         >
           <ChevronDownIcon />
