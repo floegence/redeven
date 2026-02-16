@@ -70,32 +70,26 @@ func TestEvaluateTaskCompletionGate(t *testing.T) {
 	}
 
 	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{}, TaskComplexityComplex, config.AIModeAct); !pass || reason != "ok" {
-		t.Fatalf("complex task without actionable steps (act) => pass=%v reason=%q", pass, reason)
+		t.Fatalf("no required todo policy (act) => pass=%v reason=%q", pass, reason)
 	}
 
 	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{}, TaskComplexityComplex, config.AIModePlan); !pass || reason != "ok" {
-		t.Fatalf("complex task without actionable steps (plan) => pass=%v reason=%q", pass, reason)
+		t.Fatalf("no required todo policy (plan) => pass=%v reason=%q", pass, reason)
 	}
 
 	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{
-		CompletedActionFacts: []string{"terminal.exec: inspected workspace", "apply_patch: updated files"},
-	}, TaskComplexityComplex, config.AIModeAct); pass || reason != "missing_todos_for_complex_task" {
-		t.Fatalf("complex task without todos after multi-step execution => pass=%v reason=%q", pass, reason)
+		TodoPolicy:       TodoPolicyRequired,
+		MinimumTodoItems: 3,
+	}, TaskComplexityStandard, config.AIModeAct); pass || reason != todoRequirementMissingPolicyRequired {
+		t.Fatalf("required todo policy without snapshot => pass=%v reason=%q", pass, reason)
 	}
 
 	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{
-		RequireStructuredTodos: true,
-		MinimumTodoItems:       3,
-	}, TaskComplexityStandard, config.AIModeAct); pass || reason != "missing_todos_for_explicit_plan_request" {
-		t.Fatalf("explicit todo plan without snapshot => pass=%v reason=%q", pass, reason)
-	}
-
-	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{
-		RequireStructuredTodos: true,
-		MinimumTodoItems:       3,
-		TodoTrackingEnabled:    true,
-		TodoTotalCount:         2,
-	}, TaskComplexityStandard, config.AIModeAct); pass || reason != "insufficient_todos_for_explicit_plan_request" {
-		t.Fatalf("explicit todo plan with too few todos => pass=%v reason=%q", pass, reason)
+		TodoPolicy:          TodoPolicyRequired,
+		MinimumTodoItems:    3,
+		TodoTrackingEnabled: true,
+		TodoTotalCount:      2,
+	}, TaskComplexityStandard, config.AIModeAct); pass || reason != todoRequirementInsufficientPolicyRequired {
+		t.Fatalf("required todo policy with too few todos => pass=%v reason=%q", pass, reason)
 	}
 }

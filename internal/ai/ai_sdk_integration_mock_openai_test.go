@@ -109,27 +109,27 @@ func isIntentClassifierRequest(req map[string]any) bool {
 		return false
 	}
 	instructions, _ := req["instructions"].(string)
-	return strings.Contains(strings.TrimSpace(instructions), intentClassifierPromptMarker)
+	return strings.Contains(strings.TrimSpace(instructions), runPolicyClassifierMarker)
 }
 
 func classifyIntentResponseToken(req map[string]any) string {
 	userText := strings.ToLower(strings.TrimSpace(extractResponsesUserText(req)))
 	openGoalText, userMessage := extractIntentClassifierContext(userText)
 	if userText == "" {
-		return `{"intent":"task","reason":"empty_input","objective_mode":"replace"}`
+		return `{"intent":"task","reason":"empty_input","objective_mode":"replace","complexity":"simple","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.42}`
 	}
 	if strings.TrimSpace(openGoalText) != "" {
 		continuationSignals := []string{"continue", "go on", "keep going", "proceed"}
 		for _, signal := range continuationSignals {
 			if strings.Contains(userMessage, signal) {
-				return `{"intent":"task","reason":"follow_up_to_open_goal","objective_mode":"continue"}`
+				return `{"intent":"task","reason":"follow_up_to_open_goal","objective_mode":"continue","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.91}`
 			}
 		}
 	}
 	creativeSignals := []string{"write a story", "fairy tale", "poem", "creative writing", "童话", "故事", "小说", "诗歌", "文案"}
 	for _, signal := range creativeSignals {
 		if strings.Contains(userText, signal) {
-			return `{"intent":"creative","reason":"creative_generation_requested","objective_mode":"replace"}`
+			return `{"intent":"creative","reason":"creative_generation_requested","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.93}`
 		}
 	}
 	taskSignals := []string{
@@ -138,16 +138,16 @@ func classifyIntentResponseToken(req map[string]any) string {
 	}
 	for _, signal := range taskSignals {
 		if strings.Contains(userText, signal) {
-			return `{"intent":"task","reason":"actionable_request_detected","objective_mode":"replace"}`
+			return `{"intent":"task","reason":"actionable_request_detected","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.86}`
 		}
 	}
 	socialSignals := []string{"hello", "hi", "hey", "thanks", "thank you", "你好", "谢谢"}
 	for _, signal := range socialSignals {
 		if strings.Contains(userText, signal) {
-			return `{"intent":"social","reason":"small_talk_detected","objective_mode":"replace"}`
+			return `{"intent":"social","reason":"small_talk_detected","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.95}`
 		}
 	}
-	return `{"intent":"task","reason":"actionable_request_detected","objective_mode":"replace"}`
+	return `{"intent":"task","reason":"actionable_request_detected","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.78}`
 }
 
 func extractIntentClassifierContext(text string) (string, string) {

@@ -970,10 +970,10 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	model := resolvedModel.ID
 	modelCapability := resolvedModel.Capability
 
-	intentDecision := classifyRunIntent(rawUserInputText, req.Input.Attachments, existingOpenGoal, func() (intentDecision, error) {
-		decision, classifyErr := s.classifyRunIntentByModel(ctx, resolvedModel, rawUserInputText, existingOpenGoal)
+	policyDecision := classifyRunPolicy(rawUserInputText, req.Input.Attachments, existingOpenGoal, func() (runPolicyDecision, error) {
+		decision, classifyErr := s.classifyRunPolicyByModel(ctx, resolvedModel, rawUserInputText, existingOpenGoal)
 		if classifyErr != nil && r.log != nil {
-			r.log.Warn("model intent classification failed",
+			r.log.Warn("model policy classification failed",
 				"thread_id", threadID,
 				"run_id", runID,
 				"model", model,
@@ -982,43 +982,33 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		}
 		return decision, classifyErr
 	})
-	req.Options.Intent = intentDecision.Intent
-	complexityDecision := classifyTaskComplexity(rawUserInputText, req.Input.Attachments, existingOpenGoal)
-	if req.Options.Intent != RunIntentTask {
-		complexityDecision.Level = TaskComplexitySimple
-		complexityDecision.Reasons = []string{"non_task_intent"}
-	}
-	req.Options.Complexity = normalizeTaskComplexity(complexityDecision.Level)
-	if req.Options.Intent == RunIntentTask {
-		req.Options.RequireStructuredTodos = requiresStructuredTodoPlan(rawUserInputText)
-		if req.Options.RequireStructuredTodos && req.Options.MinimumTodoItems < 3 {
-			req.Options.MinimumTodoItems = 3
-		}
-	} else {
-		req.Options.RequireStructuredTodos = false
-		req.Options.MinimumTodoItems = 0
-	}
+	req.Options.Intent = policyDecision.Intent
+	req.Options.Complexity = normalizeTaskComplexity(policyDecision.Complexity)
+	req.Options.TodoPolicy = normalizeTodoPolicy(policyDecision.TodoPolicy)
+	req.Options.MinimumTodoItems = normalizeMinimumTodoItems(req.Options.TodoPolicy, policyDecision.MinimumTodoItems)
 	r.persistRunEvent("intent.classified", RealtimeStreamKindLifecycle, map[string]any{
-		"intent":         intentDecision.Intent,
-		"reason":         intentDecision.Reason,
-		"source":         intentDecision.Source,
-		"objective_mode": intentDecision.ObjectiveMode,
-		"intent_source":  intentDecision.Source,
-		"intent_reason":  intentDecision.Reason,
+		"intent":         policyDecision.Intent,
+		"reason":         policyDecision.Reason,
+		"source":         policyDecision.Source,
+		"objective_mode": policyDecision.ObjectiveMode,
+		"intent_source":  policyDecision.Source,
+		"intent_reason":  policyDecision.Reason,
 		"mode":           req.Options.Mode,
 	})
-	r.persistRunEvent("complexity.classified", RealtimeStreamKindLifecycle, map[string]any{
-		"intent":                   req.Options.Intent,
-		"complexity":               req.Options.Complexity,
-		"reasons":                  append([]string(nil), complexityDecision.Reasons...),
-		"require_structured_todos": req.Options.RequireStructuredTodos,
-		"minimum_todo_items":       req.Options.MinimumTodoItems,
+	r.persistRunEvent("policy.classified", RealtimeStreamKindLifecycle, map[string]any{
+		"intent":             req.Options.Intent,
+		"complexity":         req.Options.Complexity,
+		"todo_policy":        req.Options.TodoPolicy,
+		"minimum_todo_items": req.Options.MinimumTodoItems,
+		"source":             policyDecision.Source,
+		"reason":             policyDecision.Reason,
+		"confidence":         policyDecision.Confidence,
 	})
-	if intentDecision.Intent == RunIntentSocial {
+	if policyDecision.Intent == RunIntentSocial {
 		r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{
 			"path": "social_responder",
 		})
-	} else if intentDecision.Intent == RunIntentCreative {
+	} else if policyDecision.Intent == RunIntentCreative {
 		r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{
 			"path": "creative_responder",
 		})
@@ -1032,7 +1022,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	// social intent keeps existing open_goal unchanged.
 	openGoal := strings.TrimSpace(existingOpenGoal)
 	if req.Options.Intent == RunIntentTask && rawUserInputText != "" {
-		if existingOpenGoal != "" && strings.TrimSpace(intentDecision.ObjectiveMode) == RunObjectiveModeContinue {
+		if existingOpenGoal != "" && strings.TrimSpace(policyDecision.ObjectiveMode) == RunObjectiveModeContinue {
 			openGoal = strings.TrimSpace(existingOpenGoal)
 		} else {
 			openGoal = rawUserInputText
@@ -1320,29 +1310,29 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	}, nil
 }
 
-func (s *Service) classifyRunIntentByModel(ctx context.Context, resolved resolvedRunModel, userInput string, openGoal string) (intentDecision, error) {
+func (s *Service) classifyRunPolicyByModel(ctx context.Context, resolved resolvedRunModel, userInput string, openGoal string) (runPolicyDecision, error) {
 	if s == nil {
-		return intentDecision{}, errors.New("nil service")
+		return runPolicyDecision{}, errors.New("nil service")
 	}
 	providerType := strings.ToLower(strings.TrimSpace(resolved.Provider.Type))
 	switch providerType {
 	case "openai", "openai_compatible", "anthropic", "moonshot":
 	default:
-		return intentDecision{}, fmt.Errorf("unsupported provider type %q", strings.TrimSpace(resolved.Provider.Type))
+		return runPolicyDecision{}, fmt.Errorf("unsupported provider type %q", strings.TrimSpace(resolved.Provider.Type))
 	}
 	if s.resolveProviderKey == nil {
-		return intentDecision{}, errors.New("missing provider key resolver")
+		return runPolicyDecision{}, errors.New("missing provider key resolver")
 	}
 	apiKey, ok, err := s.resolveProviderKey(resolved.ProviderID)
 	if err != nil {
-		return intentDecision{}, fmt.Errorf("resolve provider key failed: %w", err)
+		return runPolicyDecision{}, fmt.Errorf("resolve provider key failed: %w", err)
 	}
 	if !ok || strings.TrimSpace(apiKey) == "" {
-		return intentDecision{}, fmt.Errorf("missing api key for provider %q", resolved.ProviderID)
+		return runPolicyDecision{}, fmt.Errorf("missing api key for provider %q", resolved.ProviderID)
 	}
 	adapter, err := newProviderAdapter(providerType, strings.TrimSpace(resolved.Provider.BaseURL), strings.TrimSpace(apiKey), resolved.Provider.StrictToolSchema)
 	if err != nil {
-		return intentDecision{}, fmt.Errorf("init provider adapter failed: %w", err)
+		return runPolicyDecision{}, fmt.Errorf("init provider adapter failed: %w", err)
 	}
 
 	intentCtx := ctx
@@ -1354,15 +1344,15 @@ func (s *Service) classifyRunIntentByModel(ctx context.Context, resolved resolve
 
 	result, err := adapter.StreamTurn(intentCtx, TurnRequest{
 		Model:            strings.TrimSpace(resolved.ModelName),
-		Messages:         buildIntentClassifierMessages(userInput, openGoal),
+		Messages:         buildRunPolicyClassifierMessages(userInput, openGoal),
 		Budgets:          TurnBudgets{MaxSteps: 1, MaxOutputToken: 120},
 		ModeFlags:        ModeFlags{Mode: config.AIModePlan},
 		ProviderControls: ProviderControls{ResponseFormat: "json_object"},
 	}, nil)
 	if err != nil {
-		return intentDecision{}, err
+		return runPolicyDecision{}, err
 	}
-	return parseModelIntentDecision(result.Text)
+	return parseModelRunPolicyDecision(result.Text)
 }
 
 func shouldClearThreadState(finalReason string) bool {

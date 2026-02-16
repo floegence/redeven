@@ -16,8 +16,8 @@ func TestAsksUserToRunCollectableWork(t *testing.T) {
 			want:     true,
 		},
 		{
-			name:     "chinese output request",
-			question: "请执行命令并把输出贴上来。",
+			name:     "english shell output request",
+			question: "Run the terminal command and share the logs.",
 			want:     true,
 		},
 		{
@@ -45,34 +45,28 @@ func TestEvaluateAskUserGate(t *testing.T) {
 		t.Fatalf("empty question => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate("请执行命令并把输出贴上来。", runtimeState{}, TaskComplexitySimple); pass || reason != "delegated_collectable_work" {
+	if pass, reason := evaluateAskUserGate("Please execute the command and paste the output.", runtimeState{}, TaskComplexitySimple); pass || reason != "delegated_collectable_work" {
 		t.Fatalf("delegated work => pass=%v reason=%q", pass, reason)
 	}
 
 	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", runtimeState{}, TaskComplexityComplex); !pass || reason != "ok" {
-		t.Fatalf("complex task without actionable steps => pass=%v reason=%q", pass, reason)
+		t.Fatalf("no required todo policy => pass=%v reason=%q", pass, reason)
 	}
 
 	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", runtimeState{
-		CompletedActionFacts: []string{"terminal.exec: inspected workspace", "apply_patch: updated files"},
-	}, TaskComplexityComplex); pass || reason != "missing_todos_for_complex_task" {
-		t.Fatalf("complex multi-step task without todos => pass=%v reason=%q", pass, reason)
+		TodoPolicy:       TodoPolicyRequired,
+		MinimumTodoItems: 3,
+	}, TaskComplexityStandard); pass || reason != todoRequirementMissingPolicyRequired {
+		t.Fatalf("required todo policy without snapshot => pass=%v reason=%q", pass, reason)
 	}
 
 	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", runtimeState{
-		RequireStructuredTodos: true,
-		MinimumTodoItems:       3,
-	}, TaskComplexityStandard); pass || reason != "missing_todos_for_explicit_plan_request" {
-		t.Fatalf("explicit plan request without todos => pass=%v reason=%q", pass, reason)
-	}
-
-	if pass, reason := evaluateAskUserGate("Need your decision on deployment order.", runtimeState{
-		RequireStructuredTodos: true,
-		MinimumTodoItems:       3,
-		TodoTrackingEnabled:    true,
-		TodoTotalCount:         2,
-	}, TaskComplexityStandard); pass || reason != "insufficient_todos_for_explicit_plan_request" {
-		t.Fatalf("explicit plan request with too few todos => pass=%v reason=%q", pass, reason)
+		TodoPolicy:          TodoPolicyRequired,
+		MinimumTodoItems:    3,
+		TodoTrackingEnabled: true,
+		TodoTotalCount:      2,
+	}, TaskComplexityStandard); pass || reason != todoRequirementInsufficientPolicyRequired {
+		t.Fatalf("required todo policy with too few todos => pass=%v reason=%q", pass, reason)
 	}
 
 	pendingTodos := runtimeState{
@@ -116,15 +110,9 @@ func TestEvaluateGuardAskUserGate(t *testing.T) {
 	}
 
 	if pass, reason := evaluateGuardAskUserGate("missing_explicit_completion", runtimeState{
-		CompletedActionFacts: []string{"terminal.exec: checked logs", "apply_patch: patched config"},
-	}, TaskComplexityComplex); pass || reason != "missing_todos_for_complex_task" {
-		t.Fatalf("complex multi-step guard ask_user without todos => pass=%v reason=%q", pass, reason)
-	}
-
-	if pass, reason := evaluateGuardAskUserGate("missing_explicit_completion", runtimeState{
-		RequireStructuredTodos: true,
-		MinimumTodoItems:       3,
-	}, TaskComplexityStandard); pass || reason != "missing_todos_for_explicit_plan_request" {
-		t.Fatalf("explicit plan guard ask_user without todos => pass=%v reason=%q", pass, reason)
+		TodoPolicy:       TodoPolicyRequired,
+		MinimumTodoItems: 3,
+	}, TaskComplexityStandard); pass || reason != todoRequirementMissingPolicyRequired {
+		t.Fatalf("required todo policy guard without snapshot => pass=%v reason=%q", pass, reason)
 	}
 }

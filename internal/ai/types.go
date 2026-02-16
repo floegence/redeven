@@ -143,11 +143,11 @@ type RunOptions struct {
 	// Clients should not set this field directly.
 	Complexity string `json:"complexity,omitempty"`
 
-	// RequireStructuredTodos is set by runtime classification when user explicitly requests
-	// a task breakdown/todo-style plan. Clients should not set this field directly.
-	RequireStructuredTodos bool `json:"require_structured_todos,omitempty"`
+	// TodoPolicy is classified by the runtime (none|recommended|required).
+	// Clients should not set this field directly.
+	TodoPolicy string `json:"todo_policy,omitempty"`
 
-	// MinimumTodoItems is the minimum todo count enforced when RequireStructuredTodos is true.
+	// MinimumTodoItems is enforced when TodoPolicy is required.
 	// Clients should not set this field directly.
 	MinimumTodoItems int `json:"minimum_todo_items,omitempty"`
 

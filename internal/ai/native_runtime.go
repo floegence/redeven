@@ -1567,10 +1567,8 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		taskObjective = strings.TrimSpace(req.ContextPack.Objective)
 	}
 	state := newRuntimeState(taskObjective)
-	if req.Options.RequireStructuredTodos {
-		state.RequireStructuredTodos = true
-		state.MinimumTodoItems = normalizeMinimumTodoItems(req.Options.MinimumTodoItems)
-	}
+	state.TodoPolicy = normalizeTodoPolicy(req.Options.TodoPolicy)
+	state.MinimumTodoItems = normalizeMinimumTodoItems(state.TodoPolicy, req.Options.MinimumTodoItems)
 	if source, hydrated := r.hydrateTodoRuntimeState(execCtx, &state, req.ContextPack); hydrated {
 		r.persistRunEvent("todo.hydrated", RealtimeStreamKindLifecycle, map[string]any{
 			"source":           source,
@@ -1661,15 +1659,12 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		case "pending_todos_without_blocker":
 			rejectionMsg = "ask_user was rejected because todos are still open. Continue execution, or update write_todos to mark blockers before asking the user."
 			recoveryOverlay = "[TODO ENFORCEMENT] Open todos remain without blockers. Continue execution and update write_todos before ask_user."
-		case "missing_todos_for_complex_task":
-			rejectionMsg = "ask_user was rejected for a complex task without todo tracking. Call write_todos first, then continue execution."
-			recoveryOverlay = "[TODO REQUIRED] Complex task requires write_todos before ask_user."
-		case "missing_todos_for_explicit_plan_request":
-			rejectionMsg = "ask_user was rejected because the user explicitly requested todo planning, but no todo snapshot exists. Call write_todos with at least 3 actionable todos, then continue execution."
-			recoveryOverlay = "[TODO REQUIRED] User explicitly requested todo planning. Initialize write_todos with at least 3 actionable items before ask_user."
-		case "insufficient_todos_for_explicit_plan_request":
-			rejectionMsg = "ask_user was rejected because the todo plan is too small for the explicit planning request. Expand write_todos to at least 3 actionable todos, then continue execution."
-			recoveryOverlay = "[TODO REQUIRED] Expand write_todos to at least 3 actionable items before ask_user."
+		case todoRequirementMissingPolicyRequired:
+			rejectionMsg = "ask_user was rejected because the run policy requires todo tracking, but no todo snapshot exists. Call write_todos first, then continue execution."
+			recoveryOverlay = "[TODO REQUIRED] Run policy requires write_todos before ask_user."
+		case todoRequirementInsufficientPolicyRequired:
+			rejectionMsg = "ask_user was rejected because the current todo plan is smaller than the required minimum. Expand write_todos first, then continue execution."
+			recoveryOverlay = "[TODO REQUIRED] Expand write_todos to satisfy the run policy minimum before ask_user."
 		}
 		r.persistRunEvent("ask_user.rejected", RealtimeStreamKindLifecycle, map[string]any{
 			"source":      strings.TrimSpace(source),
@@ -1915,18 +1910,6 @@ mainLoop:
 			if state.TodoTrackingEnabled {
 				todoSetupNudges = 0
 			}
-			nextComplexity := maybeEscalateTaskComplexity(taskComplexity, state, normalCalls, step)
-			if nextComplexity != taskComplexity {
-				r.persistRunEvent("complexity.escalated", RealtimeStreamKindLifecycle, map[string]any{
-					"step_index":      step,
-					"from_complexity": taskComplexity,
-					"to_complexity":   nextComplexity,
-					"normal_calls":    len(normalCalls),
-					"todo_tracking":   state.TodoTrackingEnabled,
-				})
-				taskComplexity = nextComplexity
-				req.Options.Complexity = taskComplexity
-			}
 
 			messages = append(messages, buildToolCallMessages(normalCalls, stepResult.Reasoning)...)
 			messages = append(messages, buildToolResultMessages(toolResults, normalCalls)...)
@@ -2103,15 +2086,12 @@ mainLoop:
 				if gateReason == "pending_todos" {
 					rejectionMsg = "task_complete was rejected because todos are still open. Update write_todos first, then call task_complete."
 					recoveryOverlay = "[RECOVERY] Completion blocked: todos still open. Update write_todos to close remaining items, then call task_complete."
-				} else if gateReason == "missing_todos_for_complex_task" {
-					rejectionMsg = "task_complete was rejected for a complex task without an active todo snapshot. Call write_todos first, then continue and complete."
-					recoveryOverlay = "[RECOVERY] Complex-task completion blocked: initialize and maintain todos with write_todos before calling task_complete."
-				} else if gateReason == "missing_todos_for_explicit_plan_request" {
-					rejectionMsg = "task_complete was rejected because the user explicitly requested todo planning, but no todo snapshot exists. Call write_todos with at least 3 actionable todos, execute against them, then complete."
-					recoveryOverlay = "[RECOVERY] Completion blocked: explicit planning request requires write_todos with at least 3 actionable items."
-				} else if gateReason == "insufficient_todos_for_explicit_plan_request" {
-					rejectionMsg = "task_complete was rejected because the todo plan is too small for the explicit planning request. Expand write_todos to at least 3 actionable todos and continue execution."
-					recoveryOverlay = "[RECOVERY] Completion blocked: expand write_todos to at least 3 actionable items for the requested plan."
+				} else if gateReason == todoRequirementMissingPolicyRequired {
+					rejectionMsg = "task_complete was rejected because the run policy requires todo tracking, but no todo snapshot exists. Call write_todos first, then continue and complete."
+					recoveryOverlay = "[RECOVERY] Completion blocked: run policy requires write_todos before task_complete."
+				} else if gateReason == todoRequirementInsufficientPolicyRequired {
+					rejectionMsg = "task_complete was rejected because the current todo plan is smaller than the required minimum. Expand write_todos and continue execution."
+					recoveryOverlay = "[RECOVERY] Completion blocked: expand write_todos to satisfy the run policy minimum."
 				}
 				messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: rejectionMsg}}})
 				exceptionOverlay = recoveryOverlay
@@ -2140,14 +2120,15 @@ mainLoop:
 			r.persistRunEvent("guard.todo_setup_required", RealtimeStreamKindLifecycle, map[string]any{
 				"step_index":       step,
 				"complexity":       taskComplexity,
+				"todo_policy":      state.TodoPolicy,
 				"nudge_attempt":    todoSetupNudges,
 				"require_reason":   todoReason,
 				"todo_total_count": state.TodoTotalCount,
 			})
 			if todoSetupNudges > 3 {
-				question := "I need a concrete task list to continue this complex request safely. Please confirm the top-level goals and I will continue."
-				if todoReason == "missing_todos_for_explicit_plan_request" || todoReason == "insufficient_todos_for_explicit_plan_request" {
-					question = "You explicitly asked for a todo-based execution plan. Please confirm the key goals, and I will continue with at least 3 todos."
+				question := "I need a concrete task list to continue safely. Please confirm the top-level goals and I will continue."
+				if todoReason == todoRequirementInsufficientPolicyRequired {
+					question = "The current todo list is smaller than the required minimum. Please confirm the key goals and I will continue with an expanded todo plan."
 				}
 				ended, askErr := tryAskUser(step, question, nil, "complex_task_missing_todos")
 				if askErr != nil {
@@ -2159,9 +2140,9 @@ mainLoop:
 				continue
 			}
 			exceptionOverlay = fmt.Sprintf("[TODO REQUIRED] (%d/3). You MUST call write_todos now with at least %d actionable steps, keep exactly one in_progress item, then continue execution following those todos.", todoSetupNudges, requiredTodoCount(state))
-			nudgeText := "This task now requires todo tracking. Start by calling write_todos with 3-7 actionable steps before proceeding."
-			if todoReason == "missing_todos_for_explicit_plan_request" || todoReason == "insufficient_todos_for_explicit_plan_request" {
-				nudgeText = "The user explicitly requested a todo-style plan. Call write_todos with at least 3 actionable todos first, then execute according to that todo list."
+			nudgeText := "This run policy requires todo tracking. Call write_todos with actionable steps first, then execute according to that todo list."
+			if todoReason == todoRequirementInsufficientPolicyRequired {
+				nudgeText = "The current todo plan is below the required minimum. Expand write_todos, then continue execution according to that todo list."
 			}
 			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: nudgeText}}})
 			isFirstRound = false
@@ -3145,45 +3126,26 @@ func asksUserToRunCollectableWork(question string) bool {
 }
 
 const (
-	todoRequirementMissingComplex           = "missing_todos_for_complex_task"
-	todoRequirementMissingExplicitPlan      = "missing_todos_for_explicit_plan_request"
-	todoRequirementInsufficientExplicitPlan = "insufficient_todos_for_explicit_plan_request"
+	todoRequirementMissingPolicyRequired      = "missing_todos_for_policy_required"
+	todoRequirementInsufficientPolicyRequired = "insufficient_todos_for_policy_required"
 )
 
-func normalizeMinimumTodoItems(raw int) int {
-	if raw < 3 {
-		return 3
-	}
-	return raw
-}
-
 func requiredTodoCount(state runtimeState) int {
-	return normalizeMinimumTodoItems(state.MinimumTodoItems)
+	return normalizeMinimumTodoItems(state.TodoPolicy, state.MinimumTodoItems)
 }
 
 func todoTrackingRequirement(complexity string, state runtimeState) (bool, string) {
-	if state.RequireStructuredTodos {
+	_ = complexity
+
+	if normalizeTodoPolicy(state.TodoPolicy) == TodoPolicyRequired {
 		minItems := requiredTodoCount(state)
 		if !state.TodoTrackingEnabled {
-			return true, todoRequirementMissingExplicitPlan
+			return true, todoRequirementMissingPolicyRequired
 		}
 		if state.TodoTotalCount < minItems {
-			return true, todoRequirementInsufficientExplicitPlan
+			return true, todoRequirementInsufficientPolicyRequired
 		}
 		return false, ""
-	}
-
-	complexity = normalizeTaskComplexity(complexity)
-	if complexity != TaskComplexityComplex || state.TodoTrackingEnabled {
-		return false, ""
-	}
-	if len(state.BlockedActionFacts) > 0 {
-		return false, ""
-	}
-	// Enforce todo tracking only after the run clearly becomes multi-step.
-	actionFacts := len(state.CompletedActionFacts) + len(state.BlockedActionFacts)
-	if actionFacts >= 2 {
-		return true, todoRequirementMissingComplex
 	}
 	return false, ""
 }
@@ -3402,7 +3364,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- Classify the current request as simple, standard, or complex and adapt depth accordingly.",
 		"- simple: solve directly with minimal overhead; avoid unnecessary process.",
 		"- standard: keep a concise plan and checkpoint progress while executing.",
-		"- complex: establish and maintain todos with write_todos before completion.",
+		"- complex: provide deeper investigation, stronger verification, and clearer progress checkpoints.",
 		"",
 		"# Mandatory Rules",
 		"- Use tools when they are needed for reliable evidence or actions.",
@@ -3426,8 +3388,10 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- Prefer concrete choices over template placeholders like `YYYY-MM-DD`; the UI already provides a custom fallback input.",
 		"",
 		"# Todo Discipline",
-		"- Use write_todos for complex tasks (multiple files/tools, or 3+ meaningful steps).",
-		"- If the user explicitly asks for task breakdown/planning/todos, create at least 3 actionable todos first and execute according to that todo list.",
+		"- Follow the current todo policy from runtime context (none|recommended|required).",
+		"- If todo policy is required, call write_todos before ask_user/task_complete and satisfy the minimum todo count.",
+		"- If todo policy is recommended, prefer write_todos for multi-step execution and keep it updated.",
+		"- If todo policy is none, skip todos unless they clearly improve execution quality.",
 		"- Skip write_todos for a single trivial step that can be completed immediately.",
 		"- Do NOT call write_todos with an empty list when there is no actionable work to track.",
 		"- Keep exactly one todo as in_progress at a time.",
@@ -3477,13 +3441,14 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		fmt.Sprintf("- Current round: %d (first_round=%t)", round+1, isFirstRound),
 		fmt.Sprintf("- Mode: %s", strings.TrimSpace(mode)),
 		fmt.Sprintf("- Task complexity: %s", complexity),
+		fmt.Sprintf("- Todo policy: %s", normalizeTodoPolicy(state.TodoPolicy)),
 		fmt.Sprintf("- Available tools: %s", toolNames),
 		fmt.Sprintf("- Objective: %s", strings.TrimSpace(objective)),
 		fmt.Sprintf("- Recent errors: %s", recentErrors),
 		fmt.Sprintf("- Todo tracking: %s", todoStatus),
 	}
-	if state.RequireStructuredTodos {
-		runtime = append(runtime, fmt.Sprintf("- Explicit todo plan requested by user: yes (minimum todos=%d)", requiredTodoCount(state)))
+	if normalizeTodoPolicy(state.TodoPolicy) == TodoPolicyRequired {
+		runtime = append(runtime, fmt.Sprintf("- Required todo minimum: %d", requiredTodoCount(state)))
 	}
 	if len(availableSkills) > 0 {
 		runtime = append(runtime, fmt.Sprintf("- Available skills: %s", joinSkillNames(availableSkills)))

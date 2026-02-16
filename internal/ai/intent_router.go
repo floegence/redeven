@@ -16,17 +16,21 @@ const (
 
 	RunIntentSourceModel         = "model"
 	RunIntentSourceDeterministic = "deterministic_fallback"
-	intentClassifierPromptMarker = "INTENT_CLASSIFIER_V1"
+	runPolicyClassifierMarker    = "RUN_POLICY_CLASSIFIER_V1"
 
 	RunObjectiveModeReplace  = "replace"
 	RunObjectiveModeContinue = "continue"
 )
 
-type intentDecision struct {
-	Intent        string
-	Reason        string
-	Source        string
-	ObjectiveMode string
+type runPolicyDecision struct {
+	Intent           string
+	Reason           string
+	Source           string
+	ObjectiveMode    string
+	Complexity       string
+	TodoPolicy       string
+	MinimumTodoItems int
+	Confidence       float64
 }
 
 func normalizeRunIntent(raw string) string {
@@ -54,52 +58,71 @@ func normalizeRunMode(raw string, fallback string) string {
 	return config.AIModeAct
 }
 
-type modelIntentClassifier func() (intentDecision, error)
+type modelRunPolicyClassifier func() (runPolicyDecision, error)
 
-func classifyRunIntent(userInput string, attachments []RunAttachmentIn, openGoal string, classifyByModel modelIntentClassifier) intentDecision {
+func classifyRunPolicy(userInput string, attachments []RunAttachmentIn, openGoal string, classifyByModel modelRunPolicyClassifier) runPolicyDecision {
 	if len(attachments) > 0 {
-		return intentDecision{
-			Intent:        RunIntentTask,
-			Reason:        "attachments_present",
-			Source:        RunIntentSourceDeterministic,
-			ObjectiveMode: RunObjectiveModeReplace,
+		return runPolicyDecision{
+			Intent:           RunIntentTask,
+			Reason:           "attachments_present",
+			Source:           RunIntentSourceDeterministic,
+			ObjectiveMode:    RunObjectiveModeReplace,
+			Complexity:       TaskComplexityStandard,
+			TodoPolicy:       TodoPolicyRecommended,
+			MinimumTodoItems: 0,
+			Confidence:       1,
 		}
 	}
-	if looksLikeCreativeRequest(userInput) {
-		return intentDecision{
-			Intent:        RunIntentCreative,
-			Reason:        "creative_request_detected",
-			Source:        RunIntentSourceDeterministic,
-			ObjectiveMode: RunObjectiveModeReplace,
-		}
-	}
+
 	if classifyByModel != nil {
 		decision, err := classifyByModel()
 		if err == nil {
-			return normalizeModelIntentDecision(decision)
+			return normalizeModelRunPolicyDecision(decision)
 		}
 	}
-	return intentDecision{
-		Intent:        RunIntentTask,
-		Reason:        "model_classifier_failed",
-		Source:        RunIntentSourceDeterministic,
-		ObjectiveMode: RunObjectiveModeReplace,
+
+	return runPolicyDecision{
+		Intent:           RunIntentTask,
+		Reason:           "model_classifier_failed",
+		Source:           RunIntentSourceDeterministic,
+		ObjectiveMode:    RunObjectiveModeReplace,
+		Complexity:       TaskComplexityStandard,
+		TodoPolicy:       TodoPolicyRecommended,
+		MinimumTodoItems: 0,
+		Confidence:       0,
 	}
 }
 
-func normalizeModelIntentDecision(decision intentDecision) intentDecision {
-	normalized := intentDecision{
+func normalizeModelRunPolicyDecision(decision runPolicyDecision) runPolicyDecision {
+	normalized := runPolicyDecision{
 		Intent:        normalizeRunIntent(decision.Intent),
 		Reason:        normalizeIntentReason(decision.Reason),
 		Source:        RunIntentSourceModel,
 		ObjectiveMode: normalizeObjectiveMode(decision.ObjectiveMode),
+		Complexity:    normalizeTaskComplexity(decision.Complexity),
+		TodoPolicy:    normalizeTodoPolicy(decision.TodoPolicy),
+		Confidence:    decision.Confidence,
 	}
+
 	if strings.TrimSpace(normalized.Reason) == "" {
 		normalized.Reason = "model_classifier"
 	}
+	if normalized.Confidence < 0 {
+		normalized.Confidence = 0
+	}
+	if normalized.Confidence > 1 {
+		normalized.Confidence = 1
+	}
+
 	if normalized.Intent == RunIntentSocial || normalized.Intent == RunIntentCreative {
 		normalized.ObjectiveMode = RunObjectiveModeReplace
+		normalized.Complexity = TaskComplexitySimple
+		normalized.TodoPolicy = TodoPolicyNone
+		normalized.MinimumTodoItems = 0
+		return normalized
 	}
+
+	normalized.MinimumTodoItems = normalizeMinimumTodoItems(normalized.TodoPolicy, decision.MinimumTodoItems)
 	return normalized
 }
 
@@ -125,22 +148,28 @@ func normalizeIntentReason(reason string) string {
 	return strings.Join(parts, "_")
 }
 
-func buildIntentClassifierMessages(userInput string, openGoal string) []Message {
+func buildRunPolicyClassifierMessages(userInput string, openGoal string) []Message {
 	system := strings.Join([]string{
-		intentClassifierPromptMarker,
-		"You classify whether a user message is social chat, creative writing, or a task request for a coding agent.",
-		"Return exactly one JSON object with keys: intent, reason, objective_mode.",
+		runPolicyClassifierMarker,
+		"You classify run policy for an on-device coding assistant.",
+		"Return exactly one JSON object with keys: intent, reason, objective_mode, complexity, todo_policy, minimum_todo_items, confidence.",
 		"intent must be one of: social, creative, task.",
-		"Choose the intent category directly, based on the category definitions below.",
-		"reason must be a short snake_case phrase that explains why this category was selected.",
+		"reason must be a short snake_case phrase.",
 		"objective_mode must be one of: replace, continue.",
 		"Use objective_mode=continue only when there is an existing open goal and user message clearly continues it.",
 		"If there is no existing open goal, objective_mode must be replace.",
+		"complexity must be one of: simple, standard, complex.",
+		"todo_policy must be one of: none, recommended, required.",
+		"minimum_todo_items must be an integer. Use 0 unless todo_policy=required.",
+		"When todo_policy=required, minimum_todo_items must be >=3.",
+		"For intent social or creative, always output complexity=simple, todo_policy=none, minimum_todo_items=0.",
+		"confidence must be a float between 0 and 1.",
 		"social means greetings, thanks, casual chat, or no actionable request.",
 		"creative means story/poem/copywriting/roleplay style generation that should not execute tools.",
-		"task means any actionable request about code, files, shell commands, debugging, or analysis.",
+		"task means any actionable request about code, files, shell commands, debugging, analysis, planning, or implementation.",
 		"Do not include markdown or extra text.",
 	}, "\n")
+
 	openGoalText := strings.TrimSpace(openGoal)
 	if openGoalText == "" {
 		openGoalText = "(none)"
@@ -158,13 +187,12 @@ func buildIntentClassifierMessages(userInput string, openGoal string) []Message 
 	}
 }
 
-func parseModelIntentDecision(raw string) (intentDecision, error) {
+func parseModelRunPolicyDecision(raw string) (runPolicyDecision, error) {
 	candidate := strings.TrimSpace(raw)
 	if candidate == "" {
-		return intentDecision{}, errors.New("empty model intent response")
+		return runPolicyDecision{}, errors.New("empty model policy response")
 	}
 
-	// Common model outputs may wrap JSON in markdown code fences.
 	if strings.HasPrefix(candidate, "```") {
 		candidate = strings.TrimPrefix(candidate, "```json")
 		candidate = strings.TrimPrefix(candidate, "```JSON")
@@ -173,15 +201,20 @@ func parseModelIntentDecision(raw string) (intentDecision, error) {
 		candidate = strings.TrimSpace(candidate)
 	}
 
-	type modelIntentPayload struct {
-		Intent        string `json:"intent"`
-		Reason        string `json:"reason"`
-		ObjectiveMode string `json:"objective_mode"`
+	type modelRunPolicyPayload struct {
+		Intent           string  `json:"intent"`
+		Reason           string  `json:"reason"`
+		ObjectiveMode    string  `json:"objective_mode"`
+		Complexity       string  `json:"complexity"`
+		TodoPolicy       string  `json:"todo_policy"`
+		MinimumTodoItems int     `json:"minimum_todo_items"`
+		Confidence       float64 `json:"confidence"`
 	}
-	parse := func(text string) (modelIntentPayload, error) {
-		var payload modelIntentPayload
+
+	parse := func(text string) (modelRunPolicyPayload, error) {
+		var payload modelRunPolicyPayload
 		if err := json.Unmarshal([]byte(text), &payload); err != nil {
-			return modelIntentPayload{}, err
+			return modelRunPolicyPayload{}, err
 		}
 		return payload, nil
 	}
@@ -190,11 +223,11 @@ func parseModelIntentDecision(raw string) (intentDecision, error) {
 	if err != nil {
 		embedded := extractFirstJSONObject(candidate)
 		if embedded == "" {
-			return intentDecision{}, fmt.Errorf("invalid model intent response: %w", err)
+			return runPolicyDecision{}, fmt.Errorf("invalid model policy response: %w", err)
 		}
 		payload, err = parse(embedded)
 		if err != nil {
-			return intentDecision{}, fmt.Errorf("invalid model intent JSON payload: %w", err)
+			return runPolicyDecision{}, fmt.Errorf("invalid model policy JSON payload: %w", err)
 		}
 	}
 
@@ -202,59 +235,19 @@ func parseModelIntentDecision(raw string) (intentDecision, error) {
 	switch intent {
 	case RunIntentSocial, RunIntentCreative, RunIntentTask:
 	default:
-		return intentDecision{}, fmt.Errorf("invalid model intent: %q", payload.Intent)
+		return runPolicyDecision{}, fmt.Errorf("invalid model intent: %q", payload.Intent)
 	}
 
-	return normalizeModelIntentDecision(intentDecision{
-		Intent:        intent,
-		Reason:        payload.Reason,
-		ObjectiveMode: payload.ObjectiveMode,
-	}), nil
-}
-
-func looksLikeCreativeRequest(userInput string) bool {
-	raw := strings.TrimSpace(userInput)
-	if raw == "" {
-		return false
+	decision := runPolicyDecision{
+		Intent:           intent,
+		Reason:           payload.Reason,
+		ObjectiveMode:    payload.ObjectiveMode,
+		Complexity:       payload.Complexity,
+		TodoPolicy:       payload.TodoPolicy,
+		MinimumTodoItems: payload.MinimumTodoItems,
+		Confidence:       payload.Confidence,
 	}
-	lower := strings.ToLower(raw)
-
-	containsAny := func(text string, tokens []string) bool {
-		for _, token := range tokens {
-			if strings.Contains(text, token) {
-				return true
-			}
-		}
-		return false
-	}
-
-	strongCreativeCN := []string{"童话", "小说", "短篇", "长篇", "诗歌", "散文", "剧本", "故事", "续写", "改写", "文案"}
-	strongCreativeEN := []string{
-		"fairy tale", "write a story", "tell me a story", "short story", "long story",
-		"creative writing", "compose a poem", "roleplay",
-	}
-	if containsAny(raw, strongCreativeCN) || containsAny(lower, strongCreativeEN) {
-		return true
-	}
-
-	creativeNounsCN := []string{"故事", "童话", "小说", "诗", "文案", "剧本", "对白", "旁白"}
-	creativeNounsEN := []string{"story", "poem", "novel", "copywriting", "screenplay", "lyrics"}
-	creativeVerbsCN := []string{"写", "创作", "编", "续写", "改写", "润色", "生成", "讲"}
-	creativeVerbsEN := []string{"write", "create", "craft", "compose", "rewrite", "polish", "continue"}
-	if (containsAny(raw, creativeNounsCN) || containsAny(lower, creativeNounsEN)) &&
-		(containsAny(raw, creativeVerbsCN) || containsAny(lower, creativeVerbsEN)) {
-		return true
-	}
-
-	technicalSignalsCN := []string{"代码", "仓库", "命令", "终端", "脚本", "调试", "修复", "测试", "编译", "接口", "数据库", "文件"}
-	technicalSignalsEN := []string{
-		"code", "repo", "repository", "bug", "test", "lint", "build", "compile",
-		"api", "endpoint", "sql", "terminal", "shell", "command", "patch", "diff", "file",
-	}
-	if containsAny(raw, technicalSignalsCN) || containsAny(lower, technicalSignalsEN) {
-		return false
-	}
-	return false
+	return normalizeModelRunPolicyDecision(decision), nil
 }
 
 func extractFirstJSONObject(raw string) string {
@@ -301,7 +294,7 @@ func extractFirstJSONObject(raw string) string {
 			}
 			depth--
 			if depth == 0 && start >= 0 {
-				return string(runes[start : i+1])
+				return strings.TrimSpace(string(runes[start : i+1]))
 			}
 		}
 	}

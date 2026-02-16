@@ -179,8 +179,8 @@ func TestIntentRouting_CreativeInputUsesCreativePathWithoutTools(t *testing.T) {
 	if got := strings.TrimSpace(fmt.Sprint(classified["intent"])); got != RunIntentCreative {
 		t.Fatalf("intent=%q, want %q", got, RunIntentCreative)
 	}
-	if got := strings.TrimSpace(fmt.Sprint(classified["intent_source"])); got != RunIntentSourceDeterministic {
-		t.Fatalf("intent_source=%q, want %q", got, RunIntentSourceDeterministic)
+	if got := strings.TrimSpace(fmt.Sprint(classified["intent_source"])); got != RunIntentSourceModel {
+		t.Fatalf("intent_source=%q, want %q", got, RunIntentSourceModel)
 	}
 	routed := findRunEventPayload(t, runEvents.Events, "intent.routed")
 	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != "creative_responder" {
