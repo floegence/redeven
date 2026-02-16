@@ -82,6 +82,8 @@ function hasStandaloneBlockPayload(block: MessageBlock): boolean {
 function shouldAnimateStandaloneBlock(message: Message, block: MessageBlock): boolean {
   if (message.role !== 'assistant') return false;
   if (message.status !== 'streaming') return false;
+  // Keep runtime tool surfaces deterministic while stream frames update rapidly.
+  if (block.type === 'tool-call' || block.type === 'shell') return false;
   return hasStandaloneBlockPayload(block);
 }
 
