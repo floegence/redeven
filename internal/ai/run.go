@@ -60,6 +60,7 @@ type runOptions struct {
 	SubagentDepth         int
 	AllowSubagentDelegate bool
 	ToolAllowlist         []string
+	ForceReadonlyExec     bool
 	SkillManager          *skillManager
 }
 
@@ -137,6 +138,7 @@ type run struct {
 	subagentDepth         int
 	allowSubagentDelegate bool
 	toolAllowlist         map[string]struct{}
+	forceReadonlyExec     bool
 
 	skillManager    *skillManager
 	subagentManager *subagentManager
@@ -179,6 +181,7 @@ func newRun(opts runOptions) *run {
 		collectedWebSources:     make(map[string]SourceRef),
 		collectedWebSourceOrder: make([]string, 0, 8),
 		subagentDepth:           opts.SubagentDepth,
+		forceReadonlyExec:       opts.ForceReadonlyExec,
 		skillManager:            opts.SkillManager,
 		allowSubagentDelegate: func() bool {
 			if opts.AllowSubagentDelegate {
@@ -1427,13 +1430,18 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	isPlanMode := strings.TrimSpace(strings.ToLower(r.runMode)) == config.AIModePlan
 	denyDangerous := blockDangerousCommands && dangerous
 	denyPlanMutating := enforcePlanModeGuard && isPlanMode && mutating
-	requireApprovalForInvocation := requireUserApproval && needsApproval
 	commandRisk, normalizedCommand := aitools.InvocationRiskInfo(toolName, args)
 	commandRisk = strings.TrimSpace(commandRisk)
 	normalizedCommand = strings.TrimSpace(normalizedCommand)
+	readonlyRisk := string(aitools.TerminalCommandRiskReadonly)
+	denyReadonlyExec := r.forceReadonlyExec && toolName == "terminal.exec" && commandRisk != "" && commandRisk != readonlyRisk
+	requireApprovalForInvocation := requireUserApproval && needsApproval && !denyReadonlyExec
 	policyDecision := "allow"
 	policyReason := "none"
-	if denyDangerous {
+	if denyReadonlyExec {
+		policyDecision = "deny"
+		policyReason = "subagent_readonly_guard_blocked"
+	} else if denyDangerous {
 		policyDecision = "deny"
 		policyReason = "dangerous_command_blocked"
 	} else if denyPlanMutating {
@@ -1459,6 +1467,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			"command_risk":                    commandRisk,
 			"policy_decision":                 policyDecision,
 			"policy_reason":                   policyReason,
+			"policy_force_readonly_exec":      r.forceReadonlyExec,
 			"policy_require_user_approval":    requireUserApproval,
 			"policy_enforce_plan_mode_guard":  enforcePlanModeGuard,
 			"policy_block_dangerous_commands": blockDangerousCommands,
@@ -1583,6 +1592,20 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			EndedAtUnixMs:   time.Now().UnixMilli(),
 			UpdatedAtUnixMs: time.Now().UnixMilli(),
 		})
+	}
+
+	if denyReadonlyExec {
+		toolErr := &aitools.ToolError{
+			Code:      aitools.ErrorCodePermissionDenied,
+			Message:   "terminal.exec command is blocked by subagent readonly policy",
+			Retryable: false,
+			SuggestedFixes: []string{
+				"Use readonly commands (for example rg, ls, cat, grep, git status, git diff).",
+				"Switch to a worker subagent role when write operations are required.",
+			},
+		}
+		setToolError(toolErr, "")
+		return outcome, nil
 	}
 
 	if denyDangerous {
@@ -2504,26 +2527,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return r.delegateTask(ctx, cloneAnyMap(args))
 
-	case "send_subagent_input":
-		if meta == nil || !meta.CanExecute {
-			return nil, errors.New("execute permission denied")
-		}
-		var p struct {
-			ID        string `json:"id"`
-			Message   string `json:"message"`
-			Interrupt bool   `json:"interrupt"`
-		}
-		b, _ := json.Marshal(args)
-		if err := json.Unmarshal(b, &p); err != nil {
-			return nil, errors.New("invalid args")
-		}
-		id := strings.TrimSpace(p.ID)
-		message := strings.TrimSpace(p.Message)
-		if id == "" || message == "" {
-			return nil, errors.New("missing id or message")
-		}
-		return r.sendSubagentInput(id, message, p.Interrupt)
-
 	case "wait_subagents":
 		if meta == nil || !meta.CanExecute {
 			return nil, errors.New("execute permission denied")
@@ -2551,22 +2554,11 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		out, timedOut := r.waitSubagents(waitCtx, p.IDs)
 		return map[string]any{"status": out, "timed_out": timedOut}, nil
 
-	case "close_subagent":
+	case "subagents":
 		if meta == nil || !meta.CanExecute {
 			return nil, errors.New("execute permission denied")
 		}
-		var p struct {
-			ID string `json:"id"`
-		}
-		b, _ := json.Marshal(args)
-		if err := json.Unmarshal(b, &p); err != nil {
-			return nil, errors.New("invalid args")
-		}
-		id := strings.TrimSpace(p.ID)
-		if id == "" {
-			return nil, errors.New("missing id")
-		}
-		return r.closeSubagent(id)
+		return r.manageSubagents(ctx, cloneAnyMap(args))
 
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)

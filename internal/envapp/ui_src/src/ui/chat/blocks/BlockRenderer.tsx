@@ -12,6 +12,7 @@ import { ShellBlock } from './ShellBlock';
 import { ThinkingBlock } from './ThinkingBlock';
 import { TodosBlock } from './TodosBlock';
 import { SourcesBlock } from './SourcesBlock';
+import { SubagentBlock } from './SubagentBlock';
 
 // Lazy-load heavy components that rely on large third-party libraries
 const CodeBlock = lazy(() =>
@@ -252,6 +253,13 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
         {(block) => {
           const b = block() as import('../types').SourcesBlock;
           return <SourcesBlock sources={b.sources} />;
+        }}
+      </Match>
+
+      <Match when={props.block.type === 'subagent' && props.block}>
+        {(block) => {
+          const b = block() as import('../types').SubagentBlock;
+          return <SubagentBlock block={b} />;
         }}
       </Match>
     </Switch>

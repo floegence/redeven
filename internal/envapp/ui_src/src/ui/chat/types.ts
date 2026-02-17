@@ -116,6 +116,44 @@ export interface SourcesBlock {
   sources: Array<{ title: string; url: string }>;
 }
 
+export type SubagentStatus =
+  | 'queued'
+  | 'running'
+  | 'waiting_input'
+  | 'completed'
+  | 'failed'
+  | 'canceled'
+  | 'timed_out'
+  | 'unknown';
+
+export interface SubagentBlock {
+  type: 'subagent';
+  subagentId: string;
+  taskId: string;
+  agentType: string;
+  triggerReason: string;
+  status: SubagentStatus;
+  summary: string;
+  evidenceRefs: string[];
+  keyFiles: Array<{
+    path: string;
+    line?: number;
+    purpose?: string;
+  }>;
+  openRisks: string[];
+  nextActions: string[];
+  stats: {
+    steps: number;
+    toolCalls: number;
+    tokens: number;
+    cost: number;
+    elapsedMs: number;
+    outcome: string;
+  };
+  updatedAtUnixMs: number;
+  error?: string;
+}
+
 export type MessageBlock =
   | TextBlock
   | MarkdownBlock
@@ -130,7 +168,8 @@ export type MessageBlock =
   | ThinkingBlock
   | ToolCallBlock
   | TodosBlock
-  | SourcesBlock;
+  | SourcesBlock
+  | SubagentBlock;
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 export type MessageStatus = 'sending' | 'streaming' | 'complete' | 'error';

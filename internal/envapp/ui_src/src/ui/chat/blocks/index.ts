@@ -15,3 +15,4 @@ export { ThinkingBlock, type ThinkingBlockProps } from './ThinkingBlock';
 export { ToolCallBlock, type ToolCallBlockProps } from './ToolCallBlock';
 export { TodosBlock, type TodosBlockProps } from './TodosBlock';
 export { SourcesBlock, type SourcesBlockProps } from './SourcesBlock';
+export { SubagentBlock, type SubagentBlockProps } from './SubagentBlock';

@@ -4,67 +4,156 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	subagentStatusQueued      = "queued"
-	subagentStatusRunning     = "running"
-	subagentStatusWaiting     = "waiting_input"
-	subagentStatusCompleted   = "completed"
-	subagentStatusFailed      = "failed"
-	subagentStatusCanceled    = "canceled"
-	subagentStatusTimedOut    = "timed_out"
+	subagentStatusQueued    = "queued"
+	subagentStatusRunning   = "running"
+	subagentStatusWaiting   = "waiting_input"
+	subagentStatusCompleted = "completed"
+	subagentStatusFailed    = "failed"
+	subagentStatusCanceled  = "canceled"
+	subagentStatusTimedOut  = "timed_out"
+
+	subagentAgentTypeExplore  = "explore"
+	subagentAgentTypeWorker   = "worker"
+	subagentAgentTypeReviewer = "reviewer"
+
+	subagentActionList         = "list"
+	subagentActionInspect      = "inspect"
+	subagentActionSteer        = "steer"
+	subagentActionTerminate    = "terminate"
+	subagentActionTerminateAll = "terminate_all"
+
 	subagentDefaultMaxSteps   = 8
 	subagentDefaultTimeoutSec = 180
+	subagentSteerMinInterval  = 2 * time.Second
 )
 
+type subagentStats struct {
+	Steps     int64
+	ToolCalls int64
+	Tokens    int64
+	Cost      float64
+	ElapsedMS int64
+	Outcome   string
+}
+
+type subagentResult struct {
+	Summary      string
+	EvidenceRefs []string
+	KeyFiles     []map[string]any
+	OpenRisks    []string
+	NextActions  []string
+}
+
+func defaultSubagentResult() subagentResult {
+	return subagentResult{
+		Summary:      "",
+		EvidenceRefs: []string{},
+		KeyFiles:     []map[string]any{},
+		OpenRisks:    []string{},
+		NextActions:  []string{},
+	}
+}
+
 type subagentTask struct {
-	id           string
-	taskID       string
-	objective    string
-	mode         string
-	modelID      string
-	allowedTools []string
-	maxSteps     int
-	timeoutSec   int
+	id             string
+	taskID         string
+	objective      string
+	agentType      string
+	triggerReason  string
+	expectedOutput map[string]any
+
+	mode              string
+	modelID           string
+	allowedTools      []string
+	maxSteps          int
+	timeoutSec        int
+	forceReadonlyExec bool
 
 	ctx    context.Context
 	cancel context.CancelFunc
 	doneCh chan struct{}
 	input  chan string
 
-	mu        sync.RWMutex
-	status    string
-	result    string
-	errMsg    string
-	startedAt int64
-	endedAt   int64
-	history   []RunHistoryMsg
+	mu            sync.RWMutex
+	status        string
+	result        subagentResult
+	errMsg        string
+	startedAt     int64
+	endedAt       int64
+	updatedAt     int64
+	history       []RunHistoryMsg
+	stats         subagentStats
+	lastSteerAtMS int64
 }
 
 func (t *subagentTask) setStatus(status string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.status = strings.TrimSpace(status)
+	now := time.Now().UnixMilli()
 	if t.startedAt == 0 {
-		t.startedAt = time.Now().UnixMilli()
+		t.startedAt = now
 	}
 	if isSubagentTerminalStatus(status) {
-		t.endedAt = time.Now().UnixMilli()
+		t.endedAt = now
 	}
+	t.updatedAt = now
+	t.recalculateDerivedStatsLocked()
 }
 
-func (t *subagentTask) setResult(result string, errMsg string) {
+func (t *subagentTask) setResult(summary string, errMsg string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.result = strings.TrimSpace(result)
+	t.result.Summary = strings.TrimSpace(summary)
 	t.errMsg = strings.TrimSpace(errMsg)
+	now := time.Now().UnixMilli()
 	if t.startedAt == 0 {
-		t.startedAt = time.Now().UnixMilli()
+		t.startedAt = now
 	}
+	t.updatedAt = now
+	t.recalculateDerivedStatsLocked()
+}
+
+func (t *subagentTask) incrementSteps() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.stats.Steps++
+	now := time.Now().UnixMilli()
+	if t.startedAt == 0 {
+		t.startedAt = now
+	}
+	t.updatedAt = now
+	t.recalculateDerivedStatsLocked()
+}
+
+func (t *subagentTask) allowSteer(minInterval time.Duration) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	now := time.Now().UnixMilli()
+	if t.lastSteerAtMS > 0 && now-t.lastSteerAtMS < minInterval.Milliseconds() {
+		return false
+	}
+	t.lastSteerAtMS = now
+	t.updatedAt = now
+	return true
+}
+
+func (t *subagentTask) recalculateDerivedStatsLocked() {
+	endAt := t.endedAt
+	if endAt == 0 {
+		endAt = time.Now().UnixMilli()
+	}
+	if t.startedAt > 0 && endAt >= t.startedAt {
+		t.stats.ElapsedMS = endAt - t.startedAt
+	}
+	t.stats.Outcome = strings.TrimSpace(t.status)
 }
 
 func (t *subagentTask) appendHistory(user string, assistant string) {
@@ -81,6 +170,7 @@ func (t *subagentTask) appendHistory(user string, assistant string) {
 	if len(t.history) > 20 {
 		t.history = append([]RunHistoryMsg(nil), t.history[len(t.history)-20:]...)
 	}
+	t.updatedAt = time.Now().UnixMilli()
 }
 
 func (t *subagentTask) historySnapshot() []RunHistoryMsg {
@@ -94,17 +184,76 @@ func (t *subagentTask) historySnapshot() []RunHistoryMsg {
 	return out
 }
 
+func cloneStringSlice(in []string) []string {
+	if len(in) == 0 {
+		return []string{}
+	}
+	out := make([]string, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneMapList(in []map[string]any) []map[string]any {
+	if len(in) == 0 {
+		return []map[string]any{}
+	}
+	out := make([]map[string]any, 0, len(in))
+	for _, item := range in {
+		cp := map[string]any{}
+		for k, v := range item {
+			cp[k] = v
+		}
+		out = append(out, cp)
+	}
+	return out
+}
+
 func (t *subagentTask) snapshot() map[string]any {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+
+	resultPayload := map[string]any{
+		"summary":       t.result.Summary,
+		"evidence_refs": cloneStringSlice(t.result.EvidenceRefs),
+		"key_files":     cloneMapList(t.result.KeyFiles),
+		"open_risks":    cloneStringSlice(t.result.OpenRisks),
+		"next_actions":  cloneStringSlice(t.result.NextActions),
+	}
+	statsPayload := map[string]any{
+		"steps":      t.stats.Steps,
+		"tool_calls": t.stats.ToolCalls,
+		"tokens":     t.stats.Tokens,
+		"cost":       t.stats.Cost,
+		"elapsed_ms": t.stats.ElapsedMS,
+		"outcome":    t.stats.Outcome,
+	}
 	return map[string]any{
-		"id":            t.id,
-		"task_id":       t.taskID,
-		"status":        t.status,
-		"result":        t.result,
-		"error":         t.errMsg,
-		"started_at_ms": t.startedAt,
-		"ended_at_ms":   t.endedAt,
+		"id":             t.id,
+		"subagent_id":    t.id,
+		"task_id":        t.taskID,
+		"agent_type":     t.agentType,
+		"trigger_reason": t.triggerReason,
+		"status":         t.status,
+		"result":         t.result.Summary,
+		"result_struct":  resultPayload,
+		"error":          t.errMsg,
+		"started_at_ms":  t.startedAt,
+		"ended_at_ms":    t.endedAt,
+		"updated_at_ms":  t.updatedAt,
+		"stats":          statsPayload,
+	}
+}
+
+func (t *subagentTask) eventPayload() map[string]any {
+	snapshot := t.snapshot()
+	return map[string]any{
+		"subagent_id":    snapshot["subagent_id"],
+		"task_id":        snapshot["task_id"],
+		"agent_type":     snapshot["agent_type"],
+		"trigger_reason": snapshot["trigger_reason"],
+		"status":         snapshot["status"],
+		"updated_at_ms":  snapshot["updated_at_ms"],
+		"stats":          snapshot["stats"],
 	}
 }
 
@@ -112,6 +261,14 @@ func (t *subagentTask) statusSnapshot() string {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	return t.status
+}
+
+type subagentRoleDefaults struct {
+	Mode              string
+	Allowlist         []string
+	MaxSteps          int
+	TimeoutSec        int
+	ForceReadonlyExec bool
 }
 
 type subagentManager struct {
@@ -139,6 +296,44 @@ func isSubagentTerminalStatus(status string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func isValidSubagentAgentType(agentType string) bool {
+	switch strings.TrimSpace(strings.ToLower(agentType)) {
+	case subagentAgentTypeExplore, subagentAgentTypeWorker, subagentAgentTypeReviewer:
+		return true
+	default:
+		return false
+	}
+}
+
+func buildRoleDefaults(agentType string) subagentRoleDefaults {
+	switch strings.TrimSpace(strings.ToLower(agentType)) {
+	case subagentAgentTypeWorker:
+		return subagentRoleDefaults{
+			Mode:              "act",
+			Allowlist:         defaultSubagentToolAllowlistWorker(),
+			MaxSteps:          12,
+			TimeoutSec:        360,
+			ForceReadonlyExec: false,
+		}
+	case subagentAgentTypeReviewer:
+		return subagentRoleDefaults{
+			Mode:              "plan",
+			Allowlist:         defaultSubagentToolAllowlistReadonly(),
+			MaxSteps:          10,
+			TimeoutSec:        300,
+			ForceReadonlyExec: true,
+		}
+	default:
+		return subagentRoleDefaults{
+			Mode:              "plan",
+			Allowlist:         defaultSubagentToolAllowlistReadonly(),
+			MaxSteps:          subagentDefaultMaxSteps,
+			TimeoutSec:        subagentDefaultTimeoutSec,
+			ForceReadonlyExec: true,
+		}
 	}
 }
 
@@ -223,6 +418,44 @@ func (m *subagentManager) closeAll() {
 	}
 }
 
+func sanitizeReadonlyAllowlist(allowlist []string) []string {
+	if len(allowlist) == 0 {
+		return defaultSubagentToolAllowlistReadonly()
+	}
+	defByName := make(map[string]ToolDef)
+	for _, def := range builtInToolDefinitions() {
+		name := strings.TrimSpace(def.Name)
+		if name == "" {
+			continue
+		}
+		defByName[name] = def
+	}
+	seen := make(map[string]struct{})
+	out := make([]string, 0, len(allowlist))
+	for _, rawName := range allowlist {
+		name := strings.TrimSpace(rawName)
+		if name == "" {
+			continue
+		}
+		if name == "delegate_task" || name == "wait_subagents" || name == "subagents" || name == "write_todos" {
+			continue
+		}
+		def, ok := defByName[name]
+		if ok && def.Mutating {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	if len(out) == 0 {
+		return defaultSubagentToolAllowlistReadonly()
+	}
+	return out
+}
+
 func (m *subagentManager) delegate(ctx context.Context, args map[string]any) (map[string]any, error) {
 	if m == nil || m.parent == nil {
 		return nil, errors.New("subagent manager unavailable")
@@ -233,14 +466,12 @@ func (m *subagentManager) delegate(ctx context.Context, args map[string]any) (ma
 	if m.activeCount() >= m.maxParallel {
 		return nil, fmt.Errorf("subagent parallel limit reached")
 	}
+
 	objective := strings.TrimSpace(anyToString(args["objective"]))
 	if objective == "" {
 		return nil, fmt.Errorf("missing objective")
 	}
-	mode := strings.ToLower(strings.TrimSpace(anyToString(args["mode"])))
-	if mode == "" {
-		mode = "plan"
-	}
+
 	taskID := strings.TrimSpace(anyToString(args["task_id"]))
 	if taskID != "" {
 		if task := m.getTaskByTaskID(taskID); task != nil {
@@ -249,13 +480,11 @@ func (m *subagentManager) delegate(ctx context.Context, args map[string]any) (ma
 			default:
 				return nil, fmt.Errorf("subagent input queue is full")
 			}
-			return map[string]any{
-				"subagent_id":   task.id,
-				"task_id":       task.taskID,
-				"status":        task.statusSnapshot(),
-				"reopen_parent": true,
-				"resumed":       true,
-			}, nil
+			payload := task.snapshot()
+			payload["status"] = task.statusSnapshot()
+			payload["reopen_parent"] = true
+			payload["resumed"] = true
+			return payload, nil
 		}
 		return map[string]any{
 			"task_id":       taskID,
@@ -265,16 +494,42 @@ func (m *subagentManager) delegate(ctx context.Context, args map[string]any) (ma
 		}, nil
 	}
 
-	maxSteps := parseIntArg(args, "budget.max_steps", subagentDefaultMaxSteps)
+	agentType := strings.ToLower(strings.TrimSpace(anyToString(args["agent_type"])))
+	if !isValidSubagentAgentType(agentType) {
+		return nil, fmt.Errorf("invalid agent_type")
+	}
+	triggerReason := strings.TrimSpace(anyToString(args["trigger_reason"]))
+	if triggerReason == "" {
+		return nil, fmt.Errorf("missing trigger_reason")
+	}
+	expectedOutput, _ := args["expected_output"].(map[string]any)
+	if len(expectedOutput) == 0 {
+		return nil, fmt.Errorf("missing expected_output")
+	}
+	expectedOutputCopy := map[string]any{}
+	for k, v := range expectedOutput {
+		expectedOutputCopy[strings.TrimSpace(k)] = v
+	}
+
+	defaults := buildRoleDefaults(agentType)
+	mode := strings.ToLower(strings.TrimSpace(anyToString(args["mode"])))
+	if mode == "" {
+		mode = defaults.Mode
+	}
+	if mode != "act" && mode != "plan" {
+		mode = defaults.Mode
+	}
+
+	maxSteps := parseIntArg(args, "budget.max_steps", defaults.MaxSteps)
 	if maxSteps <= 0 {
-		maxSteps = subagentDefaultMaxSteps
+		maxSteps = defaults.MaxSteps
 	}
 	if maxSteps > 32 {
 		maxSteps = 32
 	}
-	timeoutSec := parseIntArg(args, "budget.timeout_sec", subagentDefaultTimeoutSec)
+	timeoutSec := parseIntArg(args, "budget.timeout_sec", defaults.TimeoutSec)
 	if timeoutSec <= 0 {
-		timeoutSec = subagentDefaultTimeoutSec
+		timeoutSec = defaults.TimeoutSec
 	}
 	if timeoutSec > 900 {
 		timeoutSec = 900
@@ -282,8 +537,12 @@ func (m *subagentManager) delegate(ctx context.Context, args map[string]any) (ma
 
 	allowedTools := extractStringSlice(args["allowed_tools"])
 	if len(allowedTools) == 0 {
-		allowedTools = defaultSubagentToolAllowlist()
+		allowedTools = append([]string(nil), defaults.Allowlist...)
 	}
+	if defaults.ForceReadonlyExec {
+		allowedTools = sanitizeReadonlyAllowlist(allowedTools)
+	}
+
 	modelID := strings.TrimSpace(m.parent.currentModelID)
 	if modelID == "" && m.parent.cfg != nil {
 		if def, ok := m.parent.cfg.DefaultModelID(); ok {
@@ -302,30 +561,43 @@ func (m *subagentManager) delegate(ctx context.Context, args map[string]any) (ma
 
 	taskCtx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
 	task := &subagentTask{
-		id:           subagentID,
-		taskID:       taskID,
-		objective:    objective,
-		mode:         mode,
-		modelID:      modelID,
-		allowedTools: append([]string(nil), allowedTools...),
-		maxSteps:     maxSteps,
-		timeoutSec:   timeoutSec,
-		ctx:          taskCtx,
-		cancel:       cancel,
-		doneCh:       make(chan struct{}),
-		input:        make(chan string, 8),
-		status:       subagentStatusQueued,
-		startedAt:    time.Now().UnixMilli(),
+		id:                subagentID,
+		taskID:            taskID,
+		objective:         objective,
+		agentType:         agentType,
+		triggerReason:     triggerReason,
+		expectedOutput:    expectedOutputCopy,
+		mode:              mode,
+		modelID:           modelID,
+		allowedTools:      append([]string(nil), allowedTools...),
+		maxSteps:          maxSteps,
+		timeoutSec:        timeoutSec,
+		forceReadonlyExec: defaults.ForceReadonlyExec,
+		ctx:               taskCtx,
+		cancel:            cancel,
+		doneCh:            make(chan struct{}),
+		input:             make(chan string, 8),
+		status:            subagentStatusQueued,
+		result:            defaultSubagentResult(),
+		startedAt:         time.Now().UnixMilli(),
+		updatedAt:         time.Now().UnixMilli(),
 	}
+	task.recalculateDerivedStatsLocked()
 	m.addTask(task)
 	task.setStatus(subagentStatusRunning)
-	m.parent.persistRunEvent("delegation.spawn.begin", RealtimeStreamKindLifecycle, map[string]any{"subagent_id": task.id, "task_id": task.taskID})
+
+	beginPayload := task.eventPayload()
+	m.parent.persistRunEvent("delegation.spawn.begin", RealtimeStreamKindLifecycle, beginPayload)
 	go m.runTask(task, objective)
+
 	return map[string]any{
-		"subagent_id":   task.id,
-		"task_id":       task.taskID,
-		"status":        task.statusSnapshot(),
-		"reopen_parent": true,
+		"subagent_id":    task.id,
+		"task_id":        task.taskID,
+		"agent_type":     task.agentType,
+		"trigger_reason": task.triggerReason,
+		"status":         task.statusSnapshot(),
+		"reopen_parent":  true,
+		"resumed":        false,
 	}, nil
 }
 
@@ -340,12 +612,12 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 		if err := task.ctx.Err(); err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
 				task.setStatus(subagentStatusTimedOut)
-				task.setResult(task.result, "subagent timed out")
+				task.setResult(task.result.Summary, "subagent timed out")
 			} else {
 				task.setStatus(subagentStatusCanceled)
-				task.setResult(task.result, "subagent canceled")
+				task.setResult(task.result.Summary, "subagent canceled")
 			}
-			m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, map[string]any{"subagent_id": task.id, "status": task.statusSnapshot()})
+			m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, task.eventPayload())
 			return
 		}
 
@@ -353,17 +625,18 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 		if err != nil {
 			task.setStatus(subagentStatusFailed)
 			task.setResult("", err.Error())
-			m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, map[string]any{"subagent_id": task.id, "status": task.statusSnapshot()})
+			m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, task.eventPayload())
 			return
 		}
 		messageID, err := newMessageID()
 		if err != nil {
 			task.setStatus(subagentStatusFailed)
 			task.setResult("", err.Error())
-			m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, map[string]any{"subagent_id": task.id, "status": task.statusSnapshot()})
+			m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, task.eventPayload())
 			return
 		}
 
+		task.incrementSteps()
 		history := task.historySnapshot()
 		child := newRun(runOptions{
 			Log:                   m.parent.log,
@@ -386,6 +659,7 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 			SubagentDepth:         m.parent.subagentDepth + 1,
 			AllowSubagentDelegate: false,
 			ToolAllowlist:         append([]string(nil), task.allowedTools...),
+			ForceReadonlyExec:     task.forceReadonlyExec,
 		})
 
 		req := RunRequest{
@@ -418,7 +692,7 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 				task.setStatus(subagentStatusFailed)
 				task.setResult(assistantText, strings.TrimSpace(err.Error()))
 			}
-			m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, map[string]any{"subagent_id": task.id, "status": task.statusSnapshot()})
+			m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, task.eventPayload())
 			return
 		}
 
@@ -426,7 +700,7 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 		if classifyFinalizationReason(finalReason) == finalizationClassWaitingUser {
 			task.setStatus(subagentStatusWaiting)
 			task.setResult(assistantText, "")
-			m.parent.persistRunEvent("delegation.interaction.end", RealtimeStreamKindLifecycle, map[string]any{"subagent_id": task.id, "status": task.statusSnapshot()})
+			m.parent.persistRunEvent("delegation.interaction.end", RealtimeStreamKindLifecycle, task.eventPayload())
 			select {
 			case <-task.ctx.Done():
 				continue
@@ -436,14 +710,14 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 					input = "Continue with previous objective."
 				}
 				task.setStatus(subagentStatusRunning)
-				m.parent.persistRunEvent("delegation.interaction.begin", RealtimeStreamKindLifecycle, map[string]any{"subagent_id": task.id})
+				m.parent.persistRunEvent("delegation.interaction.begin", RealtimeStreamKindLifecycle, task.eventPayload())
 				continue
 			}
 		}
 
 		task.setStatus(subagentStatusCompleted)
 		task.setResult(assistantText, "")
-		m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, map[string]any{"subagent_id": task.id, "status": task.statusSnapshot()})
+		m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, task.eventPayload())
 		return
 	}
 }
@@ -466,7 +740,7 @@ func (m *subagentManager) sendInput(id string, message string, interrupt bool) (
 	}
 	select {
 	case task.input <- message:
-		m.parent.persistRunEvent("delegation.interaction.begin", RealtimeStreamKindLifecycle, map[string]any{"subagent_id": id})
+		m.parent.persistRunEvent("delegation.interaction.begin", RealtimeStreamKindLifecycle, task.eventPayload())
 		return task.snapshot(), nil
 	default:
 		return nil, fmt.Errorf("subagent input queue is full")
@@ -553,8 +827,284 @@ func (m *subagentManager) close(id string) (map[string]any, error) {
 	case <-time.After(2 * time.Second):
 	}
 	out := task.snapshot()
-	m.parent.persistRunEvent("delegation.close.end", RealtimeStreamKindLifecycle, map[string]any{"subagent_id": id, "status": task.statusSnapshot()})
+	m.parent.persistRunEvent("delegation.close.end", RealtimeStreamKindLifecycle, task.eventPayload())
 	return out, nil
+}
+
+func parseBoolArg(args map[string]any, key string, fallback bool) bool {
+	raw, ok := args[key]
+	if !ok {
+		return fallback
+	}
+	switch v := raw.(type) {
+	case bool:
+		return v
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "1", "true", "yes", "y", "on":
+			return true
+		case "0", "false", "no", "n", "off":
+			return false
+		default:
+			return fallback
+		}
+	default:
+		return fallback
+	}
+}
+
+func (m *subagentManager) manage(_ context.Context, args map[string]any) (map[string]any, error) {
+	if m == nil {
+		return nil, errors.New("subagent manager unavailable")
+	}
+	action := strings.ToLower(strings.TrimSpace(anyToString(args["action"])))
+	if action == "" {
+		return nil, fmt.Errorf("missing action")
+	}
+	m.parent.persistRunEvent("delegation.manage.begin", RealtimeStreamKindLifecycle, map[string]any{"action": action})
+	var out map[string]any
+	var err error
+	switch action {
+	case subagentActionList:
+		out, err = m.manageList(args)
+	case subagentActionInspect:
+		out, err = m.manageInspect(args)
+	case subagentActionSteer:
+		out, err = m.manageSteer(args)
+	case subagentActionTerminate:
+		out, err = m.manageTerminate(args)
+	case subagentActionTerminateAll:
+		out, err = m.manageTerminateAll(args)
+	default:
+		err = fmt.Errorf("unsupported action %q", action)
+	}
+	if err != nil {
+		return nil, err
+	}
+	m.parent.persistRunEvent("delegation.manage.end", RealtimeStreamKindLifecycle, map[string]any{
+		"action": action,
+		"status": strings.TrimSpace(anyToString(out["status"])),
+	})
+	return out, nil
+}
+
+func sortTasksByUpdatedDesc(tasks []*subagentTask) {
+	sort.Slice(tasks, func(i, j int) bool {
+		left := tasks[i].snapshot()
+		right := tasks[j].snapshot()
+		leftUpdated := parseIntRaw(left["updated_at_ms"], 0)
+		rightUpdated := parseIntRaw(right["updated_at_ms"], 0)
+		if leftUpdated == rightUpdated {
+			leftStart := parseIntRaw(left["started_at_ms"], 0)
+			rightStart := parseIntRaw(right["started_at_ms"], 0)
+			return leftStart > rightStart
+		}
+		return leftUpdated > rightUpdated
+	})
+}
+
+func (m *subagentManager) manageList(args map[string]any) (map[string]any, error) {
+	runningOnly := parseBoolArg(args, "running_only", false)
+	limit := parseIntArg(args, "limit", 50)
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	tasks := m.allTasks()
+	sortTasksByUpdatedDesc(tasks)
+
+	items := make([]map[string]any, 0, len(tasks))
+	counts := map[string]int{
+		subagentStatusQueued:    0,
+		subagentStatusRunning:   0,
+		subagentStatusWaiting:   0,
+		subagentStatusCompleted: 0,
+		subagentStatusFailed:    0,
+		subagentStatusCanceled:  0,
+		subagentStatusTimedOut:  0,
+	}
+	for _, task := range tasks {
+		if task == nil {
+			continue
+		}
+		snapshot := task.snapshot()
+		status := strings.TrimSpace(anyToString(snapshot["status"]))
+		if _, ok := counts[status]; ok {
+			counts[status]++
+		}
+		if runningOnly && isSubagentTerminalStatus(status) {
+			continue
+		}
+		item := map[string]any{
+			"subagent_id":    snapshot["subagent_id"],
+			"task_id":        snapshot["task_id"],
+			"agent_type":     snapshot["agent_type"],
+			"trigger_reason": snapshot["trigger_reason"],
+			"status":         status,
+			"updated_at_ms":  snapshot["updated_at_ms"],
+			"stats":          snapshot["stats"],
+		}
+		items = append(items, item)
+		if len(items) >= limit {
+			break
+		}
+	}
+	return map[string]any{
+		"status":             "ok",
+		"action":             subagentActionList,
+		"total":              len(tasks),
+		"running_only":       runningOnly,
+		"queued":             counts[subagentStatusQueued],
+		"running":            counts[subagentStatusRunning],
+		"waiting_input":      counts[subagentStatusWaiting],
+		"completed":          counts[subagentStatusCompleted],
+		"failed":             counts[subagentStatusFailed],
+		"canceled":           counts[subagentStatusCanceled],
+		"timed_out":          counts[subagentStatusTimedOut],
+		"items":              items,
+		"updated_at_unix_ms": time.Now().UnixMilli(),
+	}, nil
+}
+
+func (m *subagentManager) manageInspect(args map[string]any) (map[string]any, error) {
+	target := strings.TrimSpace(anyToString(args["target"]))
+	task := m.getTask(target)
+	if task == nil {
+		return map[string]any{
+			"status": "not_found",
+			"action": subagentActionInspect,
+			"target": target,
+		}, nil
+	}
+	return map[string]any{
+		"status": "ok",
+		"action": subagentActionInspect,
+		"target": target,
+		"item":   task.snapshot(),
+	}, nil
+}
+
+func (m *subagentManager) manageSteer(args map[string]any) (map[string]any, error) {
+	target := strings.TrimSpace(anyToString(args["target"]))
+	message := strings.TrimSpace(anyToString(args["message"]))
+	interrupt := parseBoolArg(args, "interrupt", false)
+	if target == "" || message == "" {
+		return nil, fmt.Errorf("missing target or message")
+	}
+	task := m.getTask(target)
+	if task == nil {
+		return map[string]any{
+			"status": "not_found",
+			"action": subagentActionSteer,
+			"target": target,
+		}, nil
+	}
+	if isSubagentTerminalStatus(task.statusSnapshot()) {
+		return map[string]any{
+			"status":      "already_terminal",
+			"action":      subagentActionSteer,
+			"subagent_id": task.id,
+			"target":      target,
+		}, nil
+	}
+	if !task.allowSteer(subagentSteerMinInterval) {
+		return map[string]any{
+			"status":      "rate_limited",
+			"action":      subagentActionSteer,
+			"subagent_id": task.id,
+			"target":      target,
+		}, nil
+	}
+	snapshot, err := m.sendInput(task.id, message, interrupt)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"status":      "ok",
+		"action":      subagentActionSteer,
+		"subagent_id": task.id,
+		"target":      target,
+		"accepted":    true,
+		"snapshot":    snapshot,
+	}, nil
+}
+
+func (m *subagentManager) manageTerminate(args map[string]any) (map[string]any, error) {
+	target := strings.TrimSpace(anyToString(args["target"]))
+	if target == "" {
+		return nil, fmt.Errorf("missing target")
+	}
+	task := m.getTask(target)
+	if task == nil {
+		return map[string]any{
+			"status": "not_found",
+			"action": subagentActionTerminate,
+			"target": target,
+		}, nil
+	}
+	if isSubagentTerminalStatus(task.statusSnapshot()) {
+		return map[string]any{
+			"status":      "already_terminal",
+			"action":      subagentActionTerminate,
+			"target":      target,
+			"subagent_id": task.id,
+			"snapshot":    task.snapshot(),
+		}, nil
+	}
+	snapshot, err := m.close(task.id)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"status":      "ok",
+		"action":      subagentActionTerminate,
+		"target":      target,
+		"subagent_id": task.id,
+		"killed":      true,
+		"snapshot":    snapshot,
+	}, nil
+}
+
+func (m *subagentManager) manageTerminateAll(args map[string]any) (map[string]any, error) {
+	scope := strings.ToLower(strings.TrimSpace(anyToString(args["scope"])))
+	if scope == "" {
+		scope = "current_run"
+	}
+	if scope != "current_run" {
+		return nil, fmt.Errorf("forbidden scope")
+	}
+
+	tasks := m.allTasks()
+	killedCount := 0
+	alreadyTerminalCount := 0
+	affectedIDs := make([]string, 0, len(tasks))
+
+	for _, task := range tasks {
+		if task == nil {
+			continue
+		}
+		affectedIDs = append(affectedIDs, task.id)
+		if isSubagentTerminalStatus(task.statusSnapshot()) {
+			alreadyTerminalCount++
+			continue
+		}
+		if _, err := m.close(task.id); err != nil {
+			return nil, err
+		}
+		killedCount++
+	}
+
+	return map[string]any{
+		"status":                 "ok",
+		"action":                 subagentActionTerminateAll,
+		"scope":                  scope,
+		"killed_count":           killedCount,
+		"already_terminal_count": alreadyTerminalCount,
+		"affected_ids":           affectedIDs,
+	}, nil
 }
 
 func parseIntArg(args map[string]any, key string, fallback int) int {
@@ -591,7 +1141,7 @@ func parseIntRaw(v any, fallback int) int {
 	}
 }
 
-func defaultSubagentToolAllowlist() []string {
+func defaultSubagentToolAllowlistReadonly() []string {
 	defs := builtInToolDefinitions()
 	out := make([]string, 0, len(defs))
 	for _, def := range defs {
@@ -602,7 +1152,23 @@ func defaultSubagentToolAllowlist() []string {
 		if name == "" {
 			continue
 		}
-		if name == "delegate_task" || name == "send_subagent_input" || name == "wait_subagents" || name == "close_subagent" || name == "write_todos" {
+		if name == "delegate_task" || name == "wait_subagents" || name == "subagents" || name == "write_todos" {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+func defaultSubagentToolAllowlistWorker() []string {
+	defs := builtInToolDefinitions()
+	out := make([]string, 0, len(defs))
+	for _, def := range defs {
+		name := strings.TrimSpace(def.Name)
+		if name == "" {
+			continue
+		}
+		if name == "delegate_task" || name == "wait_subagents" || name == "subagents" || name == "write_todos" {
 			continue
 		}
 		out = append(out, name)

@@ -6,12 +6,23 @@
 //   - sources → SourcesBlock
 
 import type { Message, MessageBlock, StreamEvent } from '../chat/types';
-import type { TodosBlock as TodosBlockType, SourcesBlock as SourcesBlockType } from '../chat/types';
-import { normalizeWriteTodosToolView } from './aiDataNormalizers';
+import type {
+  TodosBlock as TodosBlockType,
+  SourcesBlock as SourcesBlockType,
+  SubagentBlock as SubagentBlockType,
+} from '../chat/types';
+import {
+  extractSubagentViewsFromWaitResult,
+  mapSubagentPayloadSnakeToCamel,
+  normalizeWriteTodosToolView,
+} from './aiDataNormalizers';
 
 const TERMINAL_EXEC_TOOL_NAME = 'terminal.exec';
 const WRITE_TODOS_TOOL_NAME = 'write_todos';
 const SOURCES_TOOL_NAME = 'sources';
+const DELEGATE_TASK_TOOL_NAME = 'delegate_task';
+const WAIT_SUBAGENTS_TOOL_NAME = 'wait_subagents';
+const SUBAGENTS_TOOL_NAME = 'subagents';
 
 type AnyRecord = Record<string, unknown>;
 type ChatToolCallBlock = Extract<MessageBlock, { type: 'tool-call' }>;
@@ -77,6 +88,7 @@ function decorateBlock(block: MessageBlock): MessageBlock {
   // Try each decorator in order
   const decorated =
     buildTerminalExecShellBlock(block) ??
+    buildSubagentBlock(block) ??
     buildTodosBlock(block) ??
     buildSourcesBlock(block);
   if (decorated) {
@@ -105,6 +117,49 @@ function decorateBlock(block: MessageBlock): MessageBlock {
     ...block,
     children: nextChildren,
   };
+}
+
+function buildSubagentBlock(block: ChatToolCallBlock): SubagentBlockType | null {
+  const toolName = String(block.toolName ?? '').trim();
+  if (
+    toolName !== DELEGATE_TASK_TOOL_NAME &&
+    toolName !== WAIT_SUBAGENTS_TOOL_NAME &&
+    toolName !== SUBAGENTS_TOOL_NAME
+  ) {
+    return null;
+  }
+
+  const args = asRecord(block.args);
+  const result = asRecord(block.result);
+
+  if (toolName === DELEGATE_TASK_TOOL_NAME) {
+    const merged = {
+      ...result,
+      agent_type: result.agent_type ?? args.agent_type,
+      trigger_reason: result.trigger_reason ?? args.trigger_reason,
+    };
+    const view = mapSubagentPayloadSnakeToCamel(merged);
+    if (!view) return null;
+    return toSubagentBlock(view);
+  }
+
+  if (toolName === WAIT_SUBAGENTS_TOOL_NAME) {
+    const views = extractSubagentViewsFromWaitResult(result);
+    if (views.length !== 1) return null;
+    return toSubagentBlock(views[0]);
+  }
+
+  const action = String(args.action ?? result.action ?? '').trim().toLowerCase();
+  if (!action) return null;
+  if (action === 'inspect') {
+    const view = mapSubagentPayloadSnakeToCamel(result.item);
+    return view ? toSubagentBlock(view) : null;
+  }
+  if (action === 'steer' || action === 'terminate') {
+    const view = mapSubagentPayloadSnakeToCamel(result.snapshot);
+    return view ? toSubagentBlock(view) : null;
+  }
+  return null;
 }
 
 // ---- terminal.exec → ShellBlock ----
@@ -213,6 +268,53 @@ function buildSourcesBlock(block: ChatToolCallBlock): SourcesBlockType | null {
   return {
     type: 'sources',
     sources,
+  };
+}
+
+function toSubagentBlock(view: {
+  subagentId: string;
+  taskId: string;
+  agentType: string;
+  triggerReason: string;
+  status: string;
+  summary: string;
+  evidenceRefs: string[];
+  keyFiles: Array<{ path: string; line?: number; purpose?: string }>;
+  openRisks: string[];
+  nextActions: string[];
+  stats: {
+    steps: number;
+    toolCalls: number;
+    tokens: number;
+    cost: number;
+    elapsedMs: number;
+    outcome: string;
+  };
+  updatedAtUnixMs: number;
+  error?: string;
+}): SubagentBlockType {
+  return {
+    type: 'subagent',
+    subagentId: view.subagentId,
+    taskId: view.taskId,
+    agentType: view.agentType,
+    triggerReason: view.triggerReason,
+    status: view.status as SubagentBlockType['status'],
+    summary: view.summary,
+    evidenceRefs: view.evidenceRefs,
+    keyFiles: view.keyFiles,
+    openRisks: view.openRisks,
+    nextActions: view.nextActions,
+    stats: {
+      steps: view.stats.steps,
+      toolCalls: view.stats.toolCalls,
+      tokens: view.stats.tokens,
+      cost: view.stats.cost,
+      elapsedMs: view.stats.elapsedMs,
+      outcome: view.stats.outcome,
+    },
+    updatedAtUnixMs: view.updatedAtUnixMs,
+    error: view.error,
   };
 }
 

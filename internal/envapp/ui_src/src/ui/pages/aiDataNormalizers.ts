@@ -106,3 +106,222 @@ export function todoStatusBadgeClass(status: TodoStatus): string {
       return 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20';
   }
 }
+
+export type SubagentStatus =
+  | 'queued'
+  | 'running'
+  | 'waiting_input'
+  | 'completed'
+  | 'failed'
+  | 'canceled'
+  | 'timed_out'
+  | 'unknown';
+
+export interface SubagentKeyFile {
+  readonly path: string;
+  readonly line?: number;
+  readonly purpose?: string;
+}
+
+export interface SubagentStatsView {
+  readonly steps: number;
+  readonly toolCalls: number;
+  readonly tokens: number;
+  readonly cost: number;
+  readonly elapsedMs: number;
+  readonly outcome: string;
+}
+
+export interface SubagentView {
+  readonly subagentId: string;
+  readonly taskId: string;
+  readonly agentType: string;
+  readonly triggerReason: string;
+  readonly status: SubagentStatus;
+  readonly summary: string;
+  readonly evidenceRefs: string[];
+  readonly keyFiles: SubagentKeyFile[];
+  readonly openRisks: string[];
+  readonly nextActions: string[];
+  readonly stats: SubagentStatsView;
+  readonly updatedAtUnixMs: number;
+  readonly error?: string;
+}
+
+export function normalizeSubagentStatus(raw: unknown): SubagentStatus {
+  const value = String(raw ?? '').trim().toLowerCase();
+  switch (value) {
+    case 'queued':
+    case 'running':
+    case 'waiting_input':
+    case 'completed':
+    case 'failed':
+    case 'canceled':
+    case 'timed_out':
+      return value;
+    default:
+      return 'unknown';
+  }
+}
+
+function readNumber(raw: unknown, fallback = 0): number {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string') {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return fallback;
+}
+
+function toStringArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    const value = String(item ?? '').trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+function normalizeSubagentKeyFiles(raw: unknown): SubagentKeyFile[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SubagentKeyFile[] = [];
+  for (const item of raw) {
+    const rec = asRecord(item);
+    const path = String(rec.path ?? '').trim();
+    if (!path) continue;
+    const lineRaw = readNumber(rec.line, 0);
+    const purpose = String(rec.purpose ?? '').trim();
+    out.push({
+      path,
+      line: lineRaw > 0 ? Math.floor(lineRaw) : undefined,
+      purpose: purpose || undefined,
+    });
+  }
+  return out;
+}
+
+export function normalizeSubagentStats(raw: unknown): SubagentStatsView {
+  const rec = asRecord(raw);
+  return {
+    steps: Math.max(0, Math.floor(readNumber(rec.steps, 0))),
+    toolCalls: Math.max(0, Math.floor(readNumber(rec.tool_calls ?? rec.toolCalls, 0))),
+    tokens: Math.max(0, Math.floor(readNumber(rec.tokens, 0))),
+    cost: Math.max(0, readNumber(rec.cost, 0)),
+    elapsedMs: Math.max(0, Math.floor(readNumber(rec.elapsed_ms ?? rec.elapsedMs, 0))),
+    outcome: String(rec.outcome ?? '').trim(),
+  };
+}
+
+type SubagentResultView = {
+  summary: string;
+  evidenceRefs: string[];
+  keyFiles: SubagentKeyFile[];
+  openRisks: string[];
+  nextActions: string[];
+};
+
+export function normalizeSubagentResult(resultRaw: unknown, fallbackSummary = ''): SubagentResultView {
+  if (typeof resultRaw === 'string') {
+    return {
+      summary: resultRaw.trim() || fallbackSummary,
+      evidenceRefs: [],
+      keyFiles: [],
+      openRisks: [],
+      nextActions: [],
+    };
+  }
+  const rec = asRecord(resultRaw);
+  const summary = String(rec.summary ?? rec.result ?? '').trim() || fallbackSummary;
+  return {
+    summary,
+    evidenceRefs: toStringArray(rec.evidence_refs ?? rec.evidenceRefs),
+    keyFiles: normalizeSubagentKeyFiles(rec.key_files ?? rec.keyFiles),
+    openRisks: toStringArray(rec.open_risks ?? rec.openRisks),
+    nextActions: toStringArray(rec.next_actions ?? rec.nextActions),
+  };
+}
+
+export function mapSubagentPayloadSnakeToCamel(raw: unknown): SubagentView | null {
+  const rec = asRecord(raw);
+  const subagentId = String(rec.subagent_id ?? rec.subagentId ?? rec.id ?? '').trim();
+  if (!subagentId) return null;
+  const taskId = String(rec.task_id ?? rec.taskId ?? '').trim();
+  const agentType = String(rec.agent_type ?? rec.agentType ?? '').trim();
+  const triggerReason = String(rec.trigger_reason ?? rec.triggerReason ?? '').trim();
+  const status = normalizeSubagentStatus(rec.status);
+  const fallbackSummary = String(rec.result ?? '').trim();
+  const resultPayload = rec.result_struct ?? rec.resultStruct ?? rec.result ?? {};
+  const normalizedResult = normalizeSubagentResult(resultPayload, fallbackSummary);
+  const stats = normalizeSubagentStats(rec.stats);
+  const updatedAtUnixMs = Math.max(
+    0,
+    Math.floor(
+      readNumber(rec.updated_at_ms ?? rec.updatedAtUnixMs, 0) ||
+      readNumber(rec.ended_at_ms, 0) ||
+      readNumber(rec.started_at_ms, 0),
+    ),
+  );
+  const error = String(rec.error ?? '').trim();
+  return {
+    subagentId,
+    taskId,
+    agentType,
+    triggerReason,
+    status,
+    summary: normalizedResult.summary,
+    evidenceRefs: normalizedResult.evidenceRefs,
+    keyFiles: normalizedResult.keyFiles,
+    openRisks: normalizedResult.openRisks,
+    nextActions: normalizedResult.nextActions,
+    stats,
+    updatedAtUnixMs,
+    error: error || undefined,
+  };
+}
+
+function subagentStatusRank(status: SubagentStatus): number {
+  switch (status) {
+    case 'queued':
+      return 1;
+    case 'running':
+      return 2;
+    case 'waiting_input':
+      return 3;
+    case 'completed':
+    case 'failed':
+    case 'canceled':
+    case 'timed_out':
+      return 4;
+    default:
+      return 0;
+  }
+}
+
+export function mergeSubagentEventsByTimestamp(
+  current: SubagentView | null,
+  incoming: SubagentView | null,
+): SubagentView | null {
+  if (!current) return incoming;
+  if (!incoming) return current;
+  if (incoming.updatedAtUnixMs > current.updatedAtUnixMs) return incoming;
+  if (incoming.updatedAtUnixMs < current.updatedAtUnixMs) return current;
+  if (subagentStatusRank(incoming.status) >= subagentStatusRank(current.status)) return incoming;
+  return current;
+}
+
+export function extractSubagentViewsFromWaitResult(raw: unknown): SubagentView[] {
+  const root = asRecord(raw);
+  const statusPayload = asRecord(root.status);
+  const out: SubagentView[] = [];
+  for (const value of Object.values(statusPayload)) {
+    const view = mapSubagentPayloadSnakeToCamel(value);
+    if (view) out.push(view);
+  }
+  return out;
+}

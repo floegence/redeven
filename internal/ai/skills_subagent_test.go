@@ -323,8 +323,14 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 	r.currentModelID = "openai/gpt-5-mini"
 
 	created, err := r.delegateTask(context.Background(), map[string]any{
-		"objective": "Summarize current workspace status.",
-		"mode":      "plan",
+		"objective":      "Summarize current workspace status.",
+		"agent_type":     "explore",
+		"trigger_reason": "Need an isolated exploration result before deciding the next parent step.",
+		"expected_output": map[string]any{
+			"summary":       "A concise workspace status summary.",
+			"required_keys": []any{"summary"},
+		},
+		"mode": "plan",
 		"budget": map[string]any{
 			"timeout_sec": 60,
 		},
@@ -359,16 +365,41 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 		t.Fatalf("unexpected subagent result: %#v", entry)
 	}
 
-	closed, err := r.closeSubagent(id)
+	managedList, err := r.manageSubagents(context.Background(), map[string]any{
+		"action": "list",
+	})
 	if err != nil {
-		t.Fatalf("closeSubagent: %v", err)
+		t.Fatalf("manageSubagents(list): %v", err)
 	}
-	if strings.TrimSpace(anyToString(closed["id"])) != id {
-		t.Fatalf("unexpected close payload: %#v", closed)
+	if strings.TrimSpace(anyToString(managedList["status"])) != "ok" {
+		t.Fatalf("unexpected list payload: %#v", managedList)
 	}
-	finalStatus := strings.TrimSpace(anyToString(closed["status"]))
-	if finalStatus != subagentStatusCompleted {
-		t.Fatalf("unexpected close status=%q payload=%#v", finalStatus, closed)
+
+	inspected, err := r.manageSubagents(context.Background(), map[string]any{
+		"action": "inspect",
+		"target": id,
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(inspect): %v", err)
+	}
+	if strings.TrimSpace(anyToString(inspected["status"])) != "ok" {
+		t.Fatalf("unexpected inspect payload: %#v", inspected)
+	}
+	item, _ := inspected["item"].(map[string]any)
+	if strings.TrimSpace(anyToString(item["subagent_id"])) != id {
+		t.Fatalf("unexpected inspect item payload: %#v", inspected)
+	}
+
+	terminated, err := r.manageSubagents(context.Background(), map[string]any{
+		"action": "terminate",
+		"target": id,
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(terminate): %v", err)
+	}
+	finalStatus := strings.TrimSpace(anyToString(terminated["status"]))
+	if finalStatus != "already_terminal" {
+		t.Fatalf("unexpected terminate status=%q payload=%#v", finalStatus, terminated)
 	}
 }
 
@@ -516,8 +547,14 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 	r.currentModelID = "openai/gpt-5-mini"
 
 	created, err := r.delegateTask(context.Background(), map[string]any{
-		"objective": "Search the web and summarize the results.",
-		"mode":      "plan",
+		"objective":      "Search the web and summarize the results.",
+		"agent_type":     "explore",
+		"trigger_reason": "Need independent source lookup before drafting the final response.",
+		"expected_output": map[string]any{
+			"summary":       "A concise summary of relevant sources.",
+			"required_keys": []any{"summary"},
+		},
+		"mode": "plan",
 		"budget": map[string]any{
 			"timeout_sec": 60,
 		},
@@ -539,6 +576,161 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 
 	if !resolverCalled.Load() {
 		t.Fatalf("expected ResolveWebSearchKey to be called in subagent run")
+	}
+}
+
+func TestSubagentManager_ManageActions(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{
+		Log:    slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		FSRoot: t.TempDir(),
+		RunID:  "run_manage_actions",
+	})
+	mgr := newSubagentManager(r)
+	r.subagentManager = mgr
+
+	runningTask := &subagentTask{
+		id:            "tool_running",
+		taskID:        "task_running",
+		agentType:     subagentAgentTypeWorker,
+		triggerReason: "Validate management actions",
+		ctx:           context.Background(),
+		doneCh:        make(chan struct{}),
+		input:         make(chan string, 2),
+		status:        subagentStatusRunning,
+		result:        defaultSubagentResult(),
+	}
+	runningTask.startedAt = time.Now().Add(-5 * time.Second).UnixMilli()
+	runningTask.updatedAt = time.Now().Add(-3 * time.Second).UnixMilli()
+	runningTask.recalculateDerivedStatsLocked()
+	runningTask.cancel = func() {
+		runningTask.setStatus(subagentStatusCanceled)
+		select {
+		case <-runningTask.doneCh:
+		default:
+			close(runningTask.doneCh)
+		}
+	}
+	mgr.addTask(runningTask)
+
+	completedTask := &subagentTask{
+		id:            "tool_completed",
+		taskID:        "task_completed",
+		agentType:     subagentAgentTypeExplore,
+		triggerReason: "Already done",
+		ctx:           context.Background(),
+		cancel:        func() {},
+		doneCh:        make(chan struct{}),
+		input:         make(chan string, 1),
+		status:        subagentStatusCompleted,
+		result:        defaultSubagentResult(),
+	}
+	completedTask.result.Summary = "done"
+	completedTask.startedAt = time.Now().Add(-10 * time.Second).UnixMilli()
+	completedTask.endedAt = time.Now().Add(-8 * time.Second).UnixMilli()
+	completedTask.updatedAt = time.Now().Add(-8 * time.Second).UnixMilli()
+	completedTask.recalculateDerivedStatsLocked()
+	close(completedTask.doneCh)
+	mgr.addTask(completedTask)
+
+	listOut, err := r.manageSubagents(context.Background(), map[string]any{
+		"action":       "list",
+		"running_only": false,
+		"limit":        10,
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(list): %v", err)
+	}
+	if strings.TrimSpace(anyToString(listOut["status"])) != "ok" {
+		t.Fatalf("unexpected list payload: %#v", listOut)
+	}
+	if parseIntRaw(listOut["total"], 0) != 2 {
+		t.Fatalf("unexpected list total payload: %#v", listOut)
+	}
+
+	inspectOut, err := r.manageSubagents(context.Background(), map[string]any{
+		"action": "inspect",
+		"target": "task_running",
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(inspect): %v", err)
+	}
+	if strings.TrimSpace(anyToString(inspectOut["status"])) != "ok" {
+		t.Fatalf("unexpected inspect payload: %#v", inspectOut)
+	}
+	item, _ := inspectOut["item"].(map[string]any)
+	if strings.TrimSpace(anyToString(item["subagent_id"])) != runningTask.id {
+		t.Fatalf("inspect item mismatch: %#v", inspectOut)
+	}
+
+	steerOut, err := r.manageSubagents(context.Background(), map[string]any{
+		"action":    "steer",
+		"target":    runningTask.id,
+		"message":   "continue with deeper validation",
+		"interrupt": false,
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(steer): %v", err)
+	}
+	if strings.TrimSpace(anyToString(steerOut["status"])) != "ok" {
+		t.Fatalf("unexpected steer payload: %#v", steerOut)
+	}
+	select {
+	case got := <-runningTask.input:
+		if strings.TrimSpace(got) != "continue with deeper validation" {
+			t.Fatalf("unexpected steer message: %q", got)
+		}
+	default:
+		t.Fatalf("expected steer message to be delivered")
+	}
+
+	rateLimitedOut, err := r.manageSubagents(context.Background(), map[string]any{
+		"action":  "steer",
+		"target":  runningTask.id,
+		"message": "second steer too soon",
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(steer rate limit): %v", err)
+	}
+	if strings.TrimSpace(anyToString(rateLimitedOut["status"])) != "rate_limited" {
+		t.Fatalf("unexpected rate-limited payload: %#v", rateLimitedOut)
+	}
+
+	terminateOut, err := r.manageSubagents(context.Background(), map[string]any{
+		"action": "terminate",
+		"target": runningTask.taskID,
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(terminate): %v", err)
+	}
+	if strings.TrimSpace(anyToString(terminateOut["status"])) != "ok" {
+		t.Fatalf("unexpected terminate payload: %#v", terminateOut)
+	}
+
+	terminateAgainOut, err := r.manageSubagents(context.Background(), map[string]any{
+		"action": "terminate",
+		"target": runningTask.id,
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(terminate again): %v", err)
+	}
+	if strings.TrimSpace(anyToString(terminateAgainOut["status"])) != "already_terminal" {
+		t.Fatalf("unexpected terminate-again payload: %#v", terminateAgainOut)
+	}
+
+	terminateAllOut, err := r.manageSubagents(context.Background(), map[string]any{
+		"action": "terminate_all",
+		"scope":  "current_run",
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(terminate_all): %v", err)
+	}
+	if strings.TrimSpace(anyToString(terminateAllOut["status"])) != "ok" {
+		t.Fatalf("unexpected terminate_all payload: %#v", terminateAllOut)
+	}
+	if parseIntRaw(terminateAllOut["killed_count"], 0) != 0 {
+		t.Fatalf("unexpected terminate_all killed_count payload: %#v", terminateAllOut)
 	}
 }
 

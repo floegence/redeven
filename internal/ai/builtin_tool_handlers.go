@@ -28,12 +28,10 @@ func toolSuccessSummary(toolName string) string {
 		return "skill.activated"
 	case "delegate_task":
 		return "delegation.created"
-	case "send_subagent_input":
-		return "delegation.input_sent"
 	case "wait_subagents":
 		return "delegation.wait"
-	case "close_subagent":
-		return "delegation.closed"
+	case "subagents":
+		return "delegation.managed"
 	default:
 		return "tool.success"
 	}
@@ -290,19 +288,40 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:     100,
 		},
 		{
-			Name:         "delegate_task",
-			Description:  "Delegate a task to a subagent.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"objective": map[string]any{"type": "string"}, "agent_type": map[string]any{"type": "string"}, "mode": map[string]any{"type": "string"}, "allowed_tools": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "task_id": map[string]any{"type": "string"}, "budget": map[string]any{"type": "object", "properties": map[string]any{"max_steps": map[string]any{"type": "integer", "minimum": 1}, "timeout_sec": map[string]any{"type": "integer", "minimum": 1}}, "additionalProperties": false}}, "required": []string{"objective"}, "additionalProperties": false}),
-			ParallelSafe: true,
-			Mutating:     false,
-			Source:       "builtin",
-			Namespace:    "builtin.subagent",
-			Priority:     100,
-		},
-		{
-			Name:         "send_subagent_input",
-			Description:  "Send additional input to a running subagent.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "message": map[string]any{"type": "string"}, "interrupt": map[string]any{"type": "boolean"}}, "required": []string{"id", "message"}, "additionalProperties": false}),
+			Name:        "delegate_task",
+			Description: "Delegate a task to a subagent.",
+			InputSchema: toSchema(map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"objective":      map[string]any{"type": "string", "minLength": 1},
+					"agent_type":     map[string]any{"type": "string", "enum": []string{"explore", "worker", "reviewer"}},
+					"trigger_reason": map[string]any{"type": "string", "minLength": 1},
+					"expected_output": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"summary":       map[string]any{"type": "string"},
+							"required_keys": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+						},
+						"additionalProperties": false,
+					},
+					"mode": map[string]any{"type": "string"},
+					"allowed_tools": map[string]any{
+						"type":  "array",
+						"items": map[string]any{"type": "string"},
+					},
+					"task_id": map[string]any{"type": "string"},
+					"budget": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"max_steps":   map[string]any{"type": "integer", "minimum": 1},
+							"timeout_sec": map[string]any{"type": "integer", "minimum": 1},
+						},
+						"additionalProperties": false,
+					},
+				},
+				"required":             []string{"objective", "agent_type", "trigger_reason", "expected_output"},
+				"additionalProperties": false,
+			}),
 			ParallelSafe: true,
 			Mutating:     false,
 			Source:       "builtin",
@@ -320,9 +339,25 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:     100,
 		},
 		{
-			Name:         "close_subagent",
-			Description:  "Close a subagent and return its last known status.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}}, "required": []string{"id"}, "additionalProperties": false}),
+			Name:        "subagents",
+			Description: "Manage delegated subagents with actions: list, inspect, steer, terminate, terminate_all.",
+			InputSchema: toSchema(map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action": map[string]any{
+						"type": "string",
+						"enum": []string{"list", "inspect", "steer", "terminate", "terminate_all"},
+					},
+					"target":       map[string]any{"type": "string"},
+					"message":      map[string]any{"type": "string", "maxLength": 4000},
+					"interrupt":    map[string]any{"type": "boolean"},
+					"scope":        map[string]any{"type": "string", "enum": []string{"current_run"}},
+					"running_only": map[string]any{"type": "boolean"},
+					"limit":        map[string]any{"type": "integer", "minimum": 1, "maximum": 200},
+				},
+				"required":             []string{"action"},
+				"additionalProperties": false,
+			}),
 			ParallelSafe: true,
 			Mutating:     false,
 			Source:       "builtin",
@@ -343,7 +378,7 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run) error {
 		}
 		if !r.allowSubagentDelegate {
 			switch def.Name {
-			case "delegate_task", "send_subagent_input", "wait_subagents", "close_subagent":
+			case "delegate_task", "wait_subagents", "subagents":
 				continue
 			}
 		}

@@ -33,7 +33,20 @@ import { useAIChatContext } from './AIChatContext';
 import { useRedevenRpc, type FsFileInfo } from '../protocol/redeven_v1';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { decorateMessageBlocks, decorateStreamEvent } from './aiBlockPresentation';
-import { normalizeThreadTodosView, normalizeWriteTodosToolView, todoStatusLabel, todoStatusBadgeClass, type TodoStatus, type ThreadTodoItem, type ThreadTodosView } from './aiDataNormalizers';
+import {
+  extractSubagentViewsFromWaitResult,
+  mapSubagentPayloadSnakeToCamel,
+  mergeSubagentEventsByTimestamp,
+  normalizeSubagentStatus,
+  normalizeThreadTodosView,
+  normalizeWriteTodosToolView,
+  todoStatusBadgeClass,
+  todoStatusLabel,
+  type SubagentView,
+  type ThreadTodoItem,
+  type ThreadTodosView,
+  type TodoStatus,
+} from './aiDataNormalizers';
 import { hasRWXPermissions } from './aiPermissions';
 import type { AskFlowerIntent } from './askFlowerIntent';
 import { buildAskFlowerDraftMarkdown, mergeAskFlowerDraft } from '../utils/askFlowerContextTemplate';
@@ -794,6 +807,150 @@ function CompactTasksSummary(props: {
   );
 }
 
+function subagentStatusLabel(status: string): string {
+  const normalized = String(status ?? '').trim().toLowerCase();
+  switch (normalized) {
+    case 'queued':
+      return 'Queued';
+    case 'running':
+      return 'Running';
+    case 'waiting_input':
+      return 'Waiting input';
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    case 'canceled':
+      return 'Canceled';
+    case 'timed_out':
+      return 'Timed out';
+    default:
+      return 'Unknown';
+  }
+}
+
+function subagentStatusBadgeClass(status: string): string {
+  const normalized = String(status ?? '').trim().toLowerCase();
+  switch (normalized) {
+    case 'running':
+      return 'bg-primary/10 text-primary border-primary/20';
+    case 'waiting_input':
+      return 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20';
+    case 'completed':
+      return 'bg-success/10 text-success border-success/20';
+    case 'failed':
+    case 'timed_out':
+      return 'bg-error/10 text-error border-error/20';
+    case 'canceled':
+      return 'bg-muted text-muted-foreground border-border';
+    default:
+      return 'bg-muted/50 text-muted-foreground border-border/60';
+  }
+}
+
+function CompactSubagentsSummary(props: {
+  subagents: SubagentView[];
+  updatedLabel: string;
+}) {
+  const [expanded, setExpanded] = createSignal(false);
+  let containerRef: HTMLDivElement | undefined;
+
+  const runningCount = createMemo(
+    () => props.subagents.filter((item) => item.status === 'running').length,
+  );
+  const waitingCount = createMemo(
+    () => props.subagents.filter((item) => item.status === 'waiting_input').length,
+  );
+  const completedCount = createMemo(
+    () => props.subagents.filter((item) => item.status === 'completed').length,
+  );
+  const failedCount = createMemo(
+    () => props.subagents.filter((item) => item.status === 'failed' || item.status === 'timed_out').length,
+  );
+
+  createEffect(() => {
+    if (!expanded()) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (containerRef && !containerRef.contains(event.target as Node)) {
+        setExpanded(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('keydown', handleKeyDown);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('keydown', handleKeyDown);
+    });
+  });
+
+  return (
+    <div ref={containerRef} class="relative">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded()}
+        aria-haspopup="dialog"
+        class={cn(
+          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer border transition-all duration-150',
+          expanded()
+            ? 'bg-primary/10 text-primary border-primary/30'
+            : 'bg-muted/50 text-muted-foreground border-border/60 hover:bg-muted hover:text-foreground',
+        )}
+      >
+        <Settings class="w-3.5 h-3.5" />
+        <span>{runningCount()} running</span>
+        <ChevronUp class={cn('w-3 h-3 transition-transform duration-200', expanded() ? '' : 'rotate-180')} />
+      </button>
+
+      <Show when={expanded()}>
+        <div class={cn(
+          'absolute bottom-full left-0 mb-1.5 z-50 w-96 max-sm:w-[calc(100vw-2rem)] rounded-xl border border-border/70 bg-card shadow-lg shadow-black/10 backdrop-blur-md',
+          'chat-tasks-panel chat-tasks-panel-open',
+        )}>
+          <div class="px-3 py-2.5">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <div class="text-xs font-medium text-foreground">Subagents</div>
+              <div class="text-[11px] text-muted-foreground">
+                {runningCount()} running · {waitingCount()} waiting · {completedCount()} completed · {failedCount()} failed
+              </div>
+            </div>
+
+            <Show when={props.subagents.length > 0} fallback={
+              <div class="text-[11px] text-muted-foreground py-2">No subagents yet.</div>
+            }>
+              <div class="space-y-1.5 max-h-64 overflow-auto pr-1">
+                <For each={props.subagents}>
+                  {(item) => (
+                    <div class="rounded-md border border-border/60 bg-background/70 px-2 py-1.5">
+                      <div class="flex items-center gap-2">
+                        <span class={cn('inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium shrink-0', subagentStatusBadgeClass(item.status))}>
+                          {subagentStatusLabel(item.status)}
+                        </span>
+                        <span class="text-[11px] text-muted-foreground">{item.agentType || 'subagent'}</span>
+                        <span class="ml-auto text-[10px] text-muted-foreground">{item.subagentId}</span>
+                      </div>
+                      <Show when={item.summary}>
+                        <div class="mt-1 text-[11px] text-foreground leading-relaxed break-words">{item.summary}</div>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+
+            <div class="mt-2 text-[10px] text-muted-foreground">
+              {props.updatedLabel ? `Updated ${props.updatedLabel}` : ''}
+            </div>
+          </div>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 // Suggestion item for empty chat state
 interface SuggestionItem {
   icon: Component<{ class?: string }>;
@@ -992,6 +1149,7 @@ export function EnvAIPage() {
   const [todosLoading, setTodosLoading] = createSignal(false);
   const [todosError, setTodosError] = createSignal('');
   const [threadTodos, setThreadTodos] = createSignal<ThreadTodosView | null>(null);
+  const [threadSubagentsById, setThreadSubagentsById] = createSignal<Record<string, SubagentView>>({});
   const [hasMessages, setHasMessages] = createSignal(false);
   // Turns true immediately after send to keep instant feedback before run state events arrive.
   const [sendPending, setSendPending] = createSignal(false);
@@ -1203,10 +1361,140 @@ export function EnvAIPage() {
     }
     setThreadTodos(next);
   };
+  const resetThreadSubagents = (): void => {
+    setThreadSubagentsById({});
+  };
+  const rebuildSubagentsFromMessages = (messages: Message[]): void => {
+    const nextMap: Record<string, SubagentView> = {};
+    const mergeIntoMap = (incoming: SubagentView | null, fallbackUpdatedAt = 0): void => {
+      if (!incoming || !incoming.subagentId) return;
+      const normalized: SubagentView = incoming.updatedAtUnixMs > 0
+        ? incoming
+        : {
+          ...incoming,
+          updatedAtUnixMs: Math.max(0, Number(fallbackUpdatedAt || 0)),
+        };
+      const merged = mergeSubagentEventsByTimestamp(nextMap[normalized.subagentId] ?? null, normalized);
+      if (merged) {
+        nextMap[normalized.subagentId] = merged;
+      }
+    };
+    const emptySubagentView = (subagentId: string, fallbackUpdatedAt = 0): SubagentView => ({
+      subagentId,
+      taskId: '',
+      agentType: '',
+      triggerReason: '',
+      status: 'unknown',
+      summary: '',
+      evidenceRefs: [],
+      keyFiles: [],
+      openRisks: [],
+      nextActions: [],
+      stats: {
+        steps: 0,
+        toolCalls: 0,
+        tokens: 0,
+        cost: 0,
+        elapsedMs: 0,
+        outcome: '',
+      },
+      updatedAtUnixMs: Math.max(0, Number(fallbackUpdatedAt || 0)),
+      error: undefined,
+    });
+    const walkBlocks = (blocks: any[], messageTimestamp: number): void => {
+      for (const block of blocks) {
+        if (!block || typeof block !== 'object') continue;
+        const blockType = String((block as any).type ?? '').trim().toLowerCase();
+        if (blockType === 'subagent') {
+          const candidate = block as any;
+          const subagentId = String(candidate.subagentId ?? '').trim();
+          if (!subagentId) continue;
+          const view: SubagentView = {
+            subagentId,
+            taskId: String(candidate.taskId ?? '').trim(),
+            agentType: String(candidate.agentType ?? '').trim(),
+            triggerReason: String(candidate.triggerReason ?? '').trim(),
+            status: normalizeSubagentStatus(candidate.status),
+            summary: String(candidate.summary ?? '').trim(),
+            evidenceRefs: Array.isArray(candidate.evidenceRefs) ? candidate.evidenceRefs : [],
+            keyFiles: Array.isArray(candidate.keyFiles) ? candidate.keyFiles : [],
+            openRisks: Array.isArray(candidate.openRisks) ? candidate.openRisks : [],
+            nextActions: Array.isArray(candidate.nextActions) ? candidate.nextActions : [],
+            stats: candidate.stats ?? {
+              steps: 0,
+              toolCalls: 0,
+              tokens: 0,
+              cost: 0,
+              elapsedMs: 0,
+              outcome: '',
+            },
+            updatedAtUnixMs: Math.max(0, Number(candidate.updatedAtUnixMs ?? 0) || messageTimestamp || 0),
+            error: String(candidate.error ?? '').trim() || undefined,
+          };
+          mergeIntoMap(view, messageTimestamp);
+        } else if (blockType === 'tool-call') {
+          const toolBlock = block as any;
+          const toolName = String(toolBlock.toolName ?? '').trim();
+          const toolStatus = String(toolBlock.status ?? '').trim().toLowerCase();
+          const args = toolBlock.args && typeof toolBlock.args === 'object' && !Array.isArray(toolBlock.args) ? toolBlock.args : {};
+          const result = toolBlock.result && typeof toolBlock.result === 'object' && !Array.isArray(toolBlock.result) ? toolBlock.result : {};
+
+          if (toolName === 'delegate_task') {
+            const view = mapSubagentPayloadSnakeToCamel({
+              ...result,
+              agent_type: (result as any).agent_type ?? (args as any).agent_type,
+              trigger_reason: (result as any).trigger_reason ?? (args as any).trigger_reason,
+            });
+            mergeIntoMap(view, messageTimestamp);
+          } else if (toolName === 'wait_subagents' && toolStatus === 'success') {
+            const views = extractSubagentViewsFromWaitResult(result);
+            views.forEach((item) => mergeIntoMap(item, messageTimestamp));
+          } else if (toolName === 'subagents' && toolStatus === 'success') {
+            const action = String((args as any).action ?? (result as any).action ?? '').trim().toLowerCase();
+            if (action === 'inspect') {
+              mergeIntoMap(mapSubagentPayloadSnakeToCamel((result as any).item), messageTimestamp);
+            } else if (action === 'steer' || action === 'terminate') {
+              mergeIntoMap(mapSubagentPayloadSnakeToCamel((result as any).snapshot), messageTimestamp);
+            } else if (action === 'terminate_all') {
+              const ids = Array.isArray((result as any).affected_ids) ? ((result as any).affected_ids as unknown[]) : [];
+              ids.forEach((rawID) => {
+                const id = String(rawID ?? '').trim();
+                if (!id) return;
+                const prev = nextMap[id] ?? emptySubagentView(id, messageTimestamp);
+                mergeIntoMap({
+                  ...prev,
+                  status: 'canceled',
+                  updatedAtUnixMs: Math.max(prev.updatedAtUnixMs, messageTimestamp),
+                }, messageTimestamp);
+              });
+            }
+          }
+        }
+        const children = Array.isArray((block as any).children) ? ((block as any).children as any[]) : [];
+        if (children.length > 0) walkBlocks(children, messageTimestamp);
+      }
+    };
+    for (const message of messages) {
+      const messageTimestamp = Math.max(0, Number((message as any)?.timestamp ?? 0) || 0);
+      const blocks = Array.isArray((message as any)?.blocks) ? ((message as any).blocks as any[]) : [];
+      walkBlocks(blocks, messageTimestamp);
+    }
+    setThreadSubagentsById(nextMap);
+  };
   const activeThreadTodos = createMemo(() => threadTodos()?.todos ?? []);
   const unresolvedTodoCount = createMemo(() =>
     activeThreadTodos().filter((item) => item.status === 'pending' || item.status === 'in_progress').length,
   );
+  const activeThreadSubagents = createMemo(() =>
+    Object.values(threadSubagentsById()).sort((a, b) => b.updatedAtUnixMs - a.updatedAtUnixMs),
+  );
+  const subagentsUpdatedLabel = createMemo(() => {
+    const latest = activeThreadSubagents()[0];
+    if (!latest || latest.updatedAtUnixMs <= 0) return '';
+    const date = new Date(latest.updatedAtUnixMs);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  });
   const todoUpdatedLabel = createMemo(() => {
     const updatedAt = Number(threadTodos()?.updated_at_unix_ms ?? 0);
     if (!updatedAt) return '';
@@ -1587,6 +1875,7 @@ export function EnvAIPage() {
       const existing = chat.messages() ?? [];
       const merged = baseline ? mergeBaselineTranscript(existing, loaded) : mergeDeltaTranscript(existing, loaded);
       chat.setMessages(merged);
+      rebuildSubagentsFromMessages(merged);
       setHasMessages(merged.length > 0);
       if (opts?.scrollToBottom) {
         enableAutoFollow();
@@ -1627,6 +1916,7 @@ export function EnvAIPage() {
       const current = chat.messages() ?? [];
       const next = upsertMessageById(current, decorated);
       chat.setMessages(next);
+      rebuildSubagentsFromMessages(next);
       setHasMessages(next.length > 0);
       scheduleFollowScrollToLatest();
     } catch {
@@ -1720,6 +2010,7 @@ export function EnvAIPage() {
       setHasMessages(false);
       setRunPhaseLabel('Working');
       setThreadTodos(null);
+      resetThreadSubagents();
       setTodosError('');
       setTodosLoading(false);
       resetActiveTranscriptCursor('');
@@ -1734,6 +2025,7 @@ export function EnvAIPage() {
       setHasMessages(false);
       setRunPhaseLabel('Working');
       setThreadTodos(null);
+      resetThreadSubagents();
       setTodosError('');
       setTodosLoading(false);
       resetActiveTranscriptCursor('');
@@ -1755,6 +2047,7 @@ export function EnvAIPage() {
 
     setRunPhaseLabel('Working');
     setThreadTodos(null);
+    resetThreadSubagents();
     setTodosError('');
     setTodosLoading(true);
     void loadThreadMessages(tid, { scrollToBottom: true, reset: true }).then(() => {
@@ -1793,6 +2086,7 @@ export function EnvAIPage() {
           const current = chat?.messages() ?? [];
           const next = upsertMessageById(current, decorated);
           chat?.setMessages(next);
+          rebuildSubagentsFromMessages(next);
           setHasMessages(true);
           scheduleFollowScrollToLatest();
         }
@@ -1831,6 +2125,7 @@ export function EnvAIPage() {
         }
         if (tid === String(ai.activeThreadId() ?? '').trim()) {
           chat?.handleStreamEvent(decorateStreamEvent(streamEvent) as any);
+          rebuildSubagentsFromMessages(chat?.messages() ?? []);
           setHasMessages(true);
           scheduleFollowScrollToLatest();
         }
@@ -2480,19 +2775,28 @@ export function EnvAIPage() {
             {/* Toolbar: Tasks chip + Execution mode toggle */}
             <div class="relative px-3 pt-1 pb-1.5 chat-toolbar-separator">
               <div class="flex items-center justify-between gap-2 flex-wrap">
-                <Show when={ai.activeThreadId() && activeThreadTodos().length > 0} fallback={
-                  <span class="text-[11px] text-muted-foreground">Execution mode</span>
-                }>
-                  <CompactTasksSummary
-                    executionMode={executionMode()}
-                    todos={activeThreadTodos()}
-                    unresolvedCount={unresolvedTodoCount()}
-                    todosLoading={todosLoading()}
-                    todosError={todosError()}
-                    todosView={threadTodos()}
-                    todoUpdatedLabel={todoUpdatedLabel()}
-                  />
-                </Show>
+                <div class="min-w-0 flex items-center gap-1.5 flex-wrap">
+                  <Show when={ai.activeThreadId() && activeThreadTodos().length > 0}>
+                    <CompactTasksSummary
+                      executionMode={executionMode()}
+                      todos={activeThreadTodos()}
+                      unresolvedCount={unresolvedTodoCount()}
+                      todosLoading={todosLoading()}
+                      todosError={todosError()}
+                      todosView={threadTodos()}
+                      todoUpdatedLabel={todoUpdatedLabel()}
+                    />
+                  </Show>
+                  <Show when={ai.activeThreadId() && activeThreadSubagents().length > 0}>
+                    <CompactSubagentsSummary
+                      subagents={activeThreadSubagents()}
+                      updatedLabel={subagentsUpdatedLabel()}
+                    />
+                  </Show>
+                  <Show when={!ai.activeThreadId() || (activeThreadTodos().length === 0 && activeThreadSubagents().length === 0)}>
+                    <span class="text-[11px] text-muted-foreground">Execution mode</span>
+                  </Show>
+                </div>
                 <ExecutionModeToggle
                   value={executionMode()}
                   disabled={activeThreadRunning()}
