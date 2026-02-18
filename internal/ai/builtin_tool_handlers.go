@@ -203,6 +203,149 @@ func truncateByRunes(in string, max int) (string, bool) {
 	return string(runes[:max]), true
 }
 
+func subagentsToolInputSchema() map[string]any {
+	actionField := func(action string) map[string]any {
+		return map[string]any{"type": "string", "enum": []string{action}}
+	}
+	createOutputSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"type": map[string]any{
+				"type": "string",
+				"enum": []string{"object"},
+			},
+			"required": map[string]any{
+				"type":     "array",
+				"minItems": 1,
+				"items":    map[string]any{"type": "string", "minLength": 1},
+			},
+			"properties": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"patternProperties": map[string]any{
+					"^.{1,120}$": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"type": map[string]any{
+								"type": "string",
+								"enum": []string{"string", "number", "integer", "boolean", "array", "object"},
+							},
+							"description": map[string]any{"type": "string", "maxLength": 400},
+							"enum": map[string]any{
+								"type":     "array",
+								"items":    map[string]any{"type": "string"},
+								"minItems": 1,
+							},
+							"items": map[string]any{
+								"type":                 "object",
+								"additionalProperties": false,
+								"properties": map[string]any{
+									"type": map[string]any{
+										"type": "string",
+										"enum": []string{"string", "number", "integer", "boolean", "array", "object"},
+									},
+									"description": map[string]any{"type": "string", "maxLength": 400},
+								},
+							},
+						},
+						"required":             []string{"type"},
+						"additionalProperties": false,
+					},
+				},
+			},
+			"additionalProperties": map[string]any{"type": "boolean"},
+		},
+		"required":             []string{"type", "required", "properties"},
+		"additionalProperties": false,
+	}
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"oneOf": []any{
+			map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action":             actionField("create"),
+					"title":              map[string]any{"type": "string", "maxLength": 140},
+					"objective":          map[string]any{"type": "string", "minLength": 1},
+					"agent_type":         map[string]any{"type": "string", "enum": []string{"explore", "worker", "reviewer"}},
+					"trigger_reason":     map[string]any{"type": "string", "minLength": 1},
+					"context_mode":       map[string]any{"type": "string", "enum": []string{"isolated", "minimal_pack", "thread_compact", "thread_full"}},
+					"inputs":             map[string]any{"type": "array", "items": map[string]any{"oneOf": []any{map[string]any{"type": "string"}, map[string]any{"type": "object", "properties": map[string]any{"kind": map[string]any{"type": "string"}, "value": map[string]any{"type": "string"}, "source": map[string]any{"type": "string"}}, "required": []string{"value"}, "additionalProperties": false}}}},
+					"deliverables":       map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "minLength": 1}},
+					"definition_of_done": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string", "minLength": 1}},
+					"output_schema":      createOutputSchema,
+					"mode":               map[string]any{"type": "string"},
+					"allowed_tools":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"budget":             map[string]any{"type": "object", "properties": map[string]any{"max_steps": map[string]any{"type": "integer", "minimum": 1}, "timeout_sec": map[string]any{"type": "integer", "minimum": 1}}, "additionalProperties": false},
+				},
+				"required":             []string{"action", "objective", "agent_type", "trigger_reason", "deliverables", "definition_of_done", "output_schema"},
+				"additionalProperties": false,
+			},
+			map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action":     actionField("wait"),
+					"ids":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+					"timeout_ms": map[string]any{"type": "integer", "minimum": 10000, "maximum": 300000},
+				},
+				"required":             []string{"action"},
+				"additionalProperties": false,
+			},
+			map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action":       actionField("list"),
+					"running_only": map[string]any{"type": "boolean"},
+					"limit":        map[string]any{"type": "integer", "minimum": 1, "maximum": 200},
+				},
+				"required":             []string{"action"},
+				"additionalProperties": false,
+			},
+			map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action": actionField("inspect"),
+					"target": map[string]any{"type": "string"},
+					"ids":    map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "string"}},
+				},
+				"required":             []string{"action"},
+				"anyOf":                []any{map[string]any{"required": []string{"target"}}, map[string]any{"required": []string{"ids"}}},
+				"additionalProperties": false,
+			},
+			map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action":    actionField("steer"),
+					"target":    map[string]any{"type": "string"},
+					"message":   map[string]any{"type": "string", "maxLength": 4000},
+					"interrupt": map[string]any{"type": "boolean"},
+				},
+				"required":             []string{"action", "target", "message"},
+				"additionalProperties": false,
+			},
+			map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action": actionField("terminate"),
+					"target": map[string]any{"type": "string"},
+				},
+				"required":             []string{"action", "target"},
+				"additionalProperties": false,
+			},
+			map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"action": actionField("terminate_all"),
+					"scope":  map[string]any{"type": "string", "enum": []string{"current_run"}},
+				},
+				"required":             []string{"action"},
+				"additionalProperties": false,
+			},
+		},
+	}
+}
+
 func builtInToolDefinitions() []ToolDef {
 	toSchema := func(m map[string]any) json.RawMessage {
 		b, _ := json.Marshal(m)
@@ -284,130 +427,9 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:     100,
 		},
 		{
-			Name:        "subagents",
-			Description: "Manage subagents with actions: create, wait, list, inspect, steer, terminate, terminate_all. Create requires a strict delegation contract (deliverables, definition_of_done, output_schema). Subagent timeout is fixed at 900 seconds.",
-			InputSchema: toSchema(map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"action": map[string]any{
-						"type": "string",
-						"enum": []string{"create", "wait", "list", "inspect", "steer", "terminate", "terminate_all"},
-					},
-					"title":          map[string]any{"type": "string", "maxLength": 140},
-					"objective":      map[string]any{"type": "string", "minLength": 1},
-					"agent_type":     map[string]any{"type": "string", "enum": []string{"explore", "worker", "reviewer"}},
-					"trigger_reason": map[string]any{"type": "string", "minLength": 1},
-					"context_mode": map[string]any{
-						"type": "string",
-						"enum": []string{"isolated", "minimal_pack", "thread_compact", "thread_full"},
-					},
-					"inputs": map[string]any{
-						"type": "array",
-						"items": map[string]any{
-							"oneOf": []any{
-								map[string]any{"type": "string"},
-								map[string]any{
-									"type": "object",
-									"properties": map[string]any{
-										"kind":   map[string]any{"type": "string"},
-										"value":  map[string]any{"type": "string"},
-										"source": map[string]any{"type": "string"},
-									},
-									"required":             []string{"value"},
-									"additionalProperties": false,
-								},
-							},
-						},
-					},
-					"deliverables": map[string]any{
-						"type":     "array",
-						"minItems": 1,
-						"items":    map[string]any{"type": "string", "minLength": 1},
-					},
-					"definition_of_done": map[string]any{
-						"type":     "array",
-						"minItems": 1,
-						"items":    map[string]any{"type": "string", "minLength": 1},
-					},
-					"output_schema": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"type": map[string]any{
-								"type": "string",
-								"enum": []string{"object"},
-							},
-							"required": map[string]any{
-								"type":     "array",
-								"minItems": 1,
-								"items":    map[string]any{"type": "string", "minLength": 1},
-							},
-							"properties": map[string]any{
-								"type":                 "object",
-								"additionalProperties": false,
-								"patternProperties": map[string]any{
-									"^.{1,120}$": map[string]any{
-										"type": "object",
-										"properties": map[string]any{
-											"type": map[string]any{
-												"type": "string",
-												"enum": []string{"string", "number", "integer", "boolean", "array", "object"},
-											},
-											"description": map[string]any{"type": "string", "maxLength": 400},
-											"enum": map[string]any{
-												"type":     "array",
-												"items":    map[string]any{"type": "string"},
-												"minItems": 1,
-											},
-											"items": map[string]any{
-												"type":                 "object",
-												"additionalProperties": false,
-												"properties": map[string]any{
-													"type": map[string]any{
-														"type": "string",
-														"enum": []string{"string", "number", "integer", "boolean", "array", "object"},
-													},
-													"description": map[string]any{"type": "string", "maxLength": 400},
-												},
-											},
-										},
-										"required":             []string{"type"},
-										"additionalProperties": false,
-									},
-								},
-							},
-							"additionalProperties": map[string]any{"type": "boolean"},
-						},
-						"required":             []string{"type", "required", "properties"},
-						"additionalProperties": false,
-					},
-					"mode": map[string]any{"type": "string"},
-					"allowed_tools": map[string]any{
-						"type":  "array",
-						"items": map[string]any{"type": "string"},
-					},
-					"budget": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"max_steps":   map[string]any{"type": "integer", "minimum": 1},
-							"timeout_sec": map[string]any{"type": "integer", "minimum": 1},
-						},
-						"additionalProperties": false,
-					},
-					"ids": map[string]any{
-						"type":  "array",
-						"items": map[string]any{"type": "string"},
-					},
-					"timeout_ms":   map[string]any{"type": "integer", "minimum": 10000, "maximum": 300000},
-					"target":       map[string]any{"type": "string"},
-					"message":      map[string]any{"type": "string", "maxLength": 4000},
-					"interrupt":    map[string]any{"type": "boolean"},
-					"scope":        map[string]any{"type": "string", "enum": []string{"current_run"}},
-					"running_only": map[string]any{"type": "boolean"},
-					"limit":        map[string]any{"type": "integer", "minimum": 1, "maximum": 200},
-				},
-				"required":             []string{"action"},
-				"additionalProperties": false,
-			}),
+			Name:         "subagents",
+			Description:  "Manage subagents with actions: create, wait, list, inspect, steer, terminate, terminate_all. Create requires a strict delegation contract (deliverables, definition_of_done, output_schema). Subagent timeout is fixed at 900 seconds.",
+			InputSchema:  toSchema(subagentsToolInputSchema()),
 			ParallelSafe: true,
 			Mutating:     false,
 			Source:       "builtin",

@@ -215,6 +215,10 @@ type WaitSubagentItem = {
 type WaitSubagentsDisplay = {
   action: 'create' | 'wait' | 'list' | 'inspect' | 'steer' | 'terminate' | 'terminate_all';
   ids: string[];
+  requestedIds: string[];
+  missingIds: string[];
+  requestedCount: number;
+  foundCount: number;
   target: string;
   scope: string;
   requestedAgentType: string;
@@ -409,6 +413,16 @@ function buildWaitSubagentsDisplay(block: ToolCallBlockType): WaitSubagentsDispl
   const interrupt = readBooleanFlag(args?.interrupt);
   const timeoutMs = Math.max(0, Math.floor(readFiniteNumber(result?.timeout_ms ?? result?.timeoutMs ?? args?.timeout_ms ?? args?.timeoutMs, 0)));
   const timedOut = readBooleanFlag(result?.timed_out ?? result?.timedOut);
+  const rawMissingIDs = result?.missing_ids ?? result?.missingIds;
+  const missingIDs = Array.isArray(rawMissingIDs)
+    ? Array.from(
+      new Set(
+        (rawMissingIDs as unknown[])
+          .map((value) => String(value ?? '').trim())
+          .filter(Boolean),
+      ),
+    )
+    : [];
   const items: WaitSubagentItem[] = [];
   const counts = {
     queued: 0,
@@ -491,7 +505,12 @@ function buildWaitSubagentsDisplay(block: ToolCallBlockType): WaitSubagentsDispl
     const rawItems = Array.isArray(result?.items) ? result.items : [];
     rawItems.forEach((raw) => appendItem(raw));
   } else if (action === 'inspect') {
-    appendItem(result?.item);
+    const rawItems = Array.isArray(result?.items) ? result.items : [];
+    if (rawItems.length > 0) {
+      rawItems.forEach((raw) => appendItem(raw));
+    } else {
+      appendItem(result?.item);
+    }
   } else if (action === 'steer' || action === 'terminate') {
     appendItem(result?.snapshot);
   }
@@ -502,9 +521,26 @@ function buildWaitSubagentsDisplay(block: ToolCallBlockType): WaitSubagentsDispl
     return a.subagentId.localeCompare(b.subagentId);
   });
 
+  const requestedIDs = (() => {
+    const rawRequestedIDs = result?.requested_ids ?? result?.requestedIds;
+    const fromResult = Array.isArray(rawRequestedIDs)
+      ? (rawRequestedIDs as unknown[])
+      : [];
+    if (fromResult.length > 0) {
+      return Array.from(new Set(fromResult.map((value) => String(value ?? '').trim()).filter(Boolean)));
+    }
+    return ids;
+  })();
+  const requestedCount = Math.max(0, Math.floor(readFiniteNumber(result?.requested_count ?? result?.requestedCount, requestedIDs.length)));
+  const foundCount = Math.max(0, Math.floor(readFiniteNumber(result?.found_count ?? result?.foundCount, items.length)));
+
   return {
     action,
     ids,
+    requestedIds: requestedIDs,
+    missingIds: missingIDs,
+    requestedCount,
+    foundCount,
     target,
     scope,
     requestedAgentType,
@@ -536,7 +572,7 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
       case 'list':
         return 'List subagents';
       case 'inspect':
-        return 'Inspect subagent';
+        return 'Inspect subagents';
       case 'steer':
         return 'Steer subagent';
       case 'terminate':
@@ -587,16 +623,23 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
   });
 
   const targetsCount = createMemo(() => {
+    if (props.display.requestedCount > 0) return props.display.requestedCount;
     if (props.display.items.length > 0) return props.display.items.length;
     if (props.display.ids.length > 0) return props.display.ids.length;
     if (props.display.target) return 1;
     return 0;
   });
   const visibleItems = createMemo(() => props.display.items.slice(0, 4));
-  const visibleIDChips = createMemo(() => props.display.ids.slice(0, 4));
+  const visibleIDChips = createMemo(() => {
+    const ids = props.display.requestedIds.length > 0 ? props.display.requestedIds : props.display.ids;
+    return ids.slice(0, 4);
+  });
   const trackedIDsPreview = createMemo(() => {
     if (props.display.items.length > 0) {
       return props.display.items.slice(0, 3).map((item) => item.subagentId);
+    }
+    if (props.display.requestedIds.length > 0) {
+      return props.display.requestedIds.slice(0, 3);
     }
     return props.display.ids.slice(0, 3);
   });
@@ -621,7 +664,14 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
       </div>
 
       <div class="chat-tool-wait-subagents-summary">
-        <span>{targetsCount()} target{targetsCount() === 1 ? '' : 's'}</span>
+        <span>
+          {targetsCount()} target{targetsCount() === 1 ? '' : 's'}
+        </span>
+        <Show when={props.display.action === 'inspect' && props.display.requestedCount > 0}>
+          <span>
+            Requested {formatSubagentInteger(props.display.requestedCount)} · Found {formatSubagentInteger(props.display.foundCount)} · Missing {formatSubagentInteger(props.display.missingIds.length)}
+          </span>
+        </Show>
         <Show when={props.display.items.length > 0}>
           <span>
             {props.display.counts.running} running · {props.display.counts.waiting} waiting · {props.display.counts.completed} completed · {props.display.counts.failed} failed
@@ -629,7 +679,7 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
         </Show>
       </div>
 
-      <Show when={props.display.scope || props.display.requestedAgentType || props.display.target || props.display.ids.length > 0}>
+      <Show when={props.display.scope || props.display.requestedAgentType || props.display.target || props.display.requestedIds.length > 0 || props.display.ids.length > 0}>
         <div class="chat-tool-wait-subagents-params">
           <Show when={props.display.scope}>
             <span class="chat-tool-wait-subagents-param-pill">Scope: {props.display.scope}</span>
@@ -650,10 +700,21 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
                 </span>
               )}
             </For>
-            <Show when={props.display.ids.length > visibleIDChips().length}>
-              <span class="chat-tool-wait-subagents-param-pill">+{props.display.ids.length - visibleIDChips().length} more</span>
+            <Show when={(props.display.requestedIds.length > 0 ? props.display.requestedIds.length : props.display.ids.length) > visibleIDChips().length}>
+              <span class="chat-tool-wait-subagents-param-pill">+{(props.display.requestedIds.length > 0 ? props.display.requestedIds.length : props.display.ids.length) - visibleIDChips().length} more</span>
             </Show>
           </Show>
+        </div>
+      </Show>
+
+      <Show when={props.display.missingIds.length > 0}>
+        <div class="chat-tool-wait-subagents-request">
+          <div class="chat-tool-wait-subagents-item-trigger">
+            Missing: {props.display.missingIds.slice(0, 3).join(', ')}
+            <Show when={props.display.missingIds.length > 3}>
+              {' '}+{props.display.missingIds.length - 3} more
+            </Show>
+          </div>
         </div>
       </Show>
 

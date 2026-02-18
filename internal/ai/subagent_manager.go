@@ -1728,6 +1728,66 @@ func parseBoolArg(args map[string]any, key string, fallback bool) bool {
 	}
 }
 
+func subagentManageProvidedKeys(args map[string]any) []string {
+	if len(args) == 0 {
+		return []string{}
+	}
+	out := make([]string, 0, len(args))
+	for key := range args {
+		trimmed := strings.TrimSpace(key)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func subagentManageContractVariant(action string, args map[string]any) string {
+	switch action {
+	case subagentActionInspect:
+		target := strings.TrimSpace(anyToString(args["target"]))
+		ids := extractStringSlice(args["ids"])
+		switch {
+		case target != "" && len(ids) > 0:
+			return "inspect.target_and_ids"
+		case target != "":
+			return "inspect.target"
+		case len(ids) > 0:
+			return "inspect.ids"
+		default:
+			return "inspect.invalid"
+		}
+	default:
+		if action == "" {
+			return "unknown"
+		}
+		return action
+	}
+}
+
+func collectInspectTargets(args map[string]any) []string {
+	out := make([]string, 0, 4)
+	seen := map[string]struct{}{}
+	appendID := func(raw string) {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	appendID(anyToString(args["target"]))
+	for _, id := range extractStringSlice(args["ids"]) {
+		appendID(id)
+	}
+	return out
+}
+
 func (m *subagentManager) manage(ctx context.Context, args map[string]any) (map[string]any, error) {
 	if m == nil {
 		return nil, errors.New("subagent manager unavailable")
@@ -1736,7 +1796,12 @@ func (m *subagentManager) manage(ctx context.Context, args map[string]any) (map[
 	if action == "" {
 		return nil, fmt.Errorf("missing action")
 	}
-	m.parent.persistRunEvent("delegation.manage.begin", RealtimeStreamKindLifecycle, map[string]any{"action": action})
+	contractVariant := subagentManageContractVariant(action, args)
+	m.parent.persistRunEvent("delegation.manage.begin", RealtimeStreamKindLifecycle, map[string]any{
+		"action":           action,
+		"provided_keys":    subagentManageProvidedKeys(args),
+		"contract_variant": contractVariant,
+	})
 	var out map[string]any
 	var err error
 	switch action {
@@ -1760,10 +1825,19 @@ func (m *subagentManager) manage(ctx context.Context, args map[string]any) (map[
 	if err != nil {
 		return nil, err
 	}
-	m.parent.persistRunEvent("delegation.manage.end", RealtimeStreamKindLifecycle, map[string]any{
+	eventPayload := map[string]any{
 		"action": action,
 		"status": strings.TrimSpace(anyToString(out["status"])),
-	})
+	}
+	if contractVariant != "" {
+		eventPayload["contract_variant"] = contractVariant
+	}
+	if action == subagentActionInspect {
+		eventPayload["requested_count"] = parseIntRaw(out["requested_count"], 0)
+		eventPayload["found_count"] = parseIntRaw(out["found_count"], 0)
+		eventPayload["missing_count"] = parseIntRaw(out["missing_count"], 0)
+	}
+	m.parent.persistRunEvent("delegation.manage.end", RealtimeStreamKindLifecycle, eventPayload)
 	return out, nil
 }
 
@@ -1880,21 +1954,43 @@ func (m *subagentManager) manageWait(ctx context.Context, args map[string]any) (
 }
 
 func (m *subagentManager) manageInspect(args map[string]any) (map[string]any, error) {
-	target := strings.TrimSpace(anyToString(args["target"]))
-	task := m.getTask(target)
-	if task == nil {
-		return map[string]any{
-			"status": "not_found",
-			"action": subagentActionInspect,
-			"target": target,
-		}, nil
+	requestedIDs := collectInspectTargets(args)
+	items := make([]map[string]any, 0, len(requestedIDs))
+	missingIDs := make([]string, 0)
+	for _, id := range requestedIDs {
+		task := m.getTask(id)
+		if task == nil {
+			missingIDs = append(missingIDs, id)
+			continue
+		}
+		items = append(items, task.snapshot())
 	}
-	return map[string]any{
-		"status": "ok",
-		"action": subagentActionInspect,
-		"target": target,
-		"item":   task.snapshot(),
-	}, nil
+	status := "ok"
+	if len(items) == 0 {
+		status = "not_found"
+	} else if len(missingIDs) > 0 {
+		status = "partial"
+	}
+	out := map[string]any{
+		"status":          status,
+		"action":          subagentActionInspect,
+		"requested_ids":   requestedIDs,
+		"requested_count": len(requestedIDs),
+		"found_count":     len(items),
+		"missing_count":   len(missingIDs),
+		"missing_ids":     missingIDs,
+		"items":           items,
+	}
+	if target := strings.TrimSpace(anyToString(args["target"])); target != "" {
+		out["target"] = target
+	}
+	if len(requestedIDs) > 0 {
+		out["ids"] = requestedIDs
+	}
+	if len(items) == 1 {
+		out["item"] = items[0]
+	}
+	return out, nil
 }
 
 func (m *subagentManager) manageSteer(args map[string]any) (map[string]any, error) {

@@ -3524,6 +3524,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- output_schema must include type=object, a non-empty properties object, and required keys that exist in properties.",
 		"- Use subagents(action=wait) to gather child status snapshots before final decisions.",
 		"- Use subagents(action=list|inspect|steer|terminate|terminate_all) to manage child runs deterministically.",
+		"- Inspect contract: use {action:\"inspect\",target:\"<subagent_id>\"} for a single child, or {action:\"inspect\",ids:[\"<subagent_id>\",...]} for batch inspection.",
 		"",
 		"# Online Research Policy",
 		"- When you need up-to-date or external information, prefer authoritative primary sources and direct URLs over web search.",

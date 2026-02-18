@@ -17,6 +17,7 @@ type ErrorCode string
 const (
 	ErrorCodeNotFound         ErrorCode = "NOT_FOUND"
 	ErrorCodeInvalidPath      ErrorCode = "INVALID_PATH"
+	ErrorCodeInvalidArguments ErrorCode = "INVALID_ARGUMENTS"
 	ErrorCodePermissionDenied ErrorCode = "PERMISSION_DENIED"
 	ErrorCodeTimeout          ErrorCode = "TIMEOUT"
 	ErrorCodeCanceled         ErrorCode = "CANCELED"

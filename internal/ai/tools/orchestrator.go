@@ -16,6 +16,11 @@ type Invocation struct {
 	WorkingDir string
 }
 
+type invalidArgumentsError interface {
+	InvalidArgumentsCode() string
+	InvalidArgumentsMeta() map[string]any
+}
+
 func ClassifyError(inv Invocation, err error) *ToolError {
 	if err == nil {
 		return nil
@@ -33,6 +38,26 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 			Message:        "Timed out",
 			Retryable:      true,
 			SuggestedFixes: []string{"Retry with a smaller scope.", "Increase timeout when safe."},
+		}
+		out.Normalize()
+		return out
+	}
+	var invalidErr invalidArgumentsError
+	if errors.As(err, &invalidErr) {
+		code := strings.TrimSpace(invalidErr.InvalidArgumentsCode())
+		if code == "" {
+			code = "invalid_arguments"
+		}
+		out := &ToolError{
+			Code:      ErrorCodeInvalidArguments,
+			Message:   strings.TrimSpace(err.Error()),
+			Retryable: false,
+			Meta: map[string]any{
+				"validation_error_code": code,
+			},
+		}
+		if meta := invalidErr.InvalidArgumentsMeta(); len(meta) > 0 {
+			out.Meta["validation_details"] = meta
 		}
 		out.Normalize()
 		return out

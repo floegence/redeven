@@ -424,9 +424,23 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 	if strings.TrimSpace(anyToString(inspected["status"])) != "ok" {
 		t.Fatalf("unexpected inspect payload: %#v", inspected)
 	}
-	item, _ := inspected["item"].(map[string]any)
-	if strings.TrimSpace(anyToString(item["subagent_id"])) != id {
-		t.Fatalf("unexpected inspect item payload: %#v", inspected)
+	if parseIntRaw(inspected["requested_count"], 0) != 1 {
+		t.Fatalf("unexpected inspect requested_count payload: %#v", inspected)
+	}
+	if parseIntRaw(inspected["found_count"], 0) != 1 {
+		t.Fatalf("unexpected inspect found_count payload: %#v", inspected)
+	}
+	items, _ := inspected["items"].([]map[string]any)
+	if len(items) == 0 {
+		rawItems, _ := inspected["items"].([]any)
+		if len(rawItems) > 0 {
+			if first, ok := rawItems[0].(map[string]any); ok {
+				items = []map[string]any{first}
+			}
+		}
+	}
+	if len(items) != 1 || strings.TrimSpace(anyToString(items[0]["subagent_id"])) != id {
+		t.Fatalf("unexpected inspect items payload: %#v", inspected)
 	}
 
 	terminated, err := r.manageSubagents(context.Background(), map[string]any{
@@ -729,9 +743,53 @@ func TestSubagentManager_ManageActions(t *testing.T) {
 	if strings.TrimSpace(anyToString(inspectOut["status"])) != "ok" {
 		t.Fatalf("unexpected inspect payload: %#v", inspectOut)
 	}
-	item, _ := inspectOut["item"].(map[string]any)
+	if parseIntRaw(inspectOut["requested_count"], 0) != 1 || parseIntRaw(inspectOut["found_count"], 0) != 1 {
+		t.Fatalf("unexpected inspect count payload: %#v", inspectOut)
+	}
+	itemsRaw := make([]any, 0, 1)
+	if typed, ok := inspectOut["items"].([]any); ok {
+		itemsRaw = typed
+	} else if typed, ok := inspectOut["items"].([]map[string]any); ok {
+		for _, item := range typed {
+			itemsRaw = append(itemsRaw, item)
+		}
+	}
+	if len(itemsRaw) != 1 {
+		t.Fatalf("inspect items payload mismatch: %#v", inspectOut)
+	}
+	item, _ := itemsRaw[0].(map[string]any)
 	if strings.TrimSpace(anyToString(item["subagent_id"])) != runningTask.id {
 		t.Fatalf("inspect item mismatch: %#v", inspectOut)
+	}
+
+	bulkInspectOut, err := r.manageSubagents(context.Background(), map[string]any{
+		"action": "inspect",
+		"ids":    []string{runningTask.id, "tool_missing", completedTask.id},
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(inspect bulk): %v", err)
+	}
+	if strings.TrimSpace(anyToString(bulkInspectOut["status"])) != "partial" {
+		t.Fatalf("unexpected bulk inspect status payload: %#v", bulkInspectOut)
+	}
+	if parseIntRaw(bulkInspectOut["requested_count"], 0) != 3 {
+		t.Fatalf("unexpected bulk inspect requested_count payload: %#v", bulkInspectOut)
+	}
+	if parseIntRaw(bulkInspectOut["found_count"], 0) != 2 {
+		t.Fatalf("unexpected bulk inspect found_count payload: %#v", bulkInspectOut)
+	}
+	if parseIntRaw(bulkInspectOut["missing_count"], 0) != 1 {
+		t.Fatalf("unexpected bulk inspect missing_count payload: %#v", bulkInspectOut)
+	}
+
+	_, err = r.manageSubagents(context.Background(), map[string]any{
+		"action": "inspect",
+	})
+	if err == nil {
+		t.Fatalf("expected inspect validation error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "inspect requires target or ids") {
+		t.Fatalf("unexpected inspect validation error: %v", err)
 	}
 
 	steerOut, err := r.manageSubagents(context.Background(), map[string]any{

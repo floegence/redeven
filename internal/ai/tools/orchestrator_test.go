@@ -6,6 +6,20 @@ import (
 	"testing"
 )
 
+type orchestratorInvalidArgsError struct{}
+
+func (orchestratorInvalidArgsError) Error() string {
+	return "invalid arguments: inspect requires target or ids"
+}
+
+func (orchestratorInvalidArgsError) InvalidArgumentsCode() string {
+	return "invalid_arguments.subagents.inspect_requires_target_or_ids"
+}
+
+func (orchestratorInvalidArgsError) InvalidArgumentsMeta() map[string]any {
+	return map[string]any{"action": "inspect"}
+}
+
 func TestClassifyError_InvalidPathProducesNormalizedArgs(t *testing.T) {
 	t.Parallel()
 
@@ -99,5 +113,23 @@ func TestShouldRetryWithNormalizedArgs_NotFound(t *testing.T) {
 	}
 	if ShouldRetryWithNormalizedArgs(toolErr) {
 		t.Fatalf("did not expect normalized retry for not found")
+	}
+}
+
+func TestClassifyError_InvalidArguments(t *testing.T) {
+	t.Parallel()
+
+	toolErr := ClassifyError(Invocation{ToolName: "subagents"}, orchestratorInvalidArgsError{})
+	if toolErr == nil {
+		t.Fatalf("expected tool error")
+	}
+	if toolErr.Code != ErrorCodeInvalidArguments {
+		t.Fatalf("code=%q, want=%q", toolErr.Code, ErrorCodeInvalidArguments)
+	}
+	if toolErr.Retryable {
+		t.Fatalf("retryable=true, want false")
+	}
+	if got := toolErr.Meta["validation_error_code"]; got != "invalid_arguments.subagents.inspect_requires_target_or_ids" {
+		t.Fatalf("validation_error_code=%v, want inspect contract code", got)
 	}
 }
