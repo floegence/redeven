@@ -2,6 +2,7 @@
 
 @import 'tailwindcss';
 @import '@floegence/floe-webapp-core/tailwind';
+@import './ui/chat/chat.css';
 @import './styles/redeven.css';
 
 @source './**/*.{ts,tsx,html}';
