@@ -197,6 +197,13 @@
   transform-box: fill-box;
 }
 
+/* Reduce global overlay loader size to better match the compact Env App style. */
+.floe-loader-ambient + [role='status'] {
+  width: 2.25rem;
+  height: 2.25rem;
+  gap: 0.1875rem;
+}
+
 /* Shell block: command highlighting + collapsed output interaction. */
 .chat-shell-block {
   margin: 0.125rem 0;
