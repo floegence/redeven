@@ -510,18 +510,6 @@ function InlineButtonSnakeLoading() {
   );
 }
 
-function InlineStatusSnakeLoading() {
-  return (
-    <span
-      class="inline-flex items-center justify-center text-blue-600 dark:text-blue-300"
-      style={{ '--primary': 'rgb(37 99 235)', '--muted': 'rgb(59 130 246 / 0.2)' }}
-      aria-hidden="true"
-    >
-      <SnakeLoader size="sm" class="origin-center scale-[0.72]" />
-    </span>
-  );
-}
-
 // Custom working indicator — neural animation + minimal waveform bars
 function ChatWorkingIndicator(props: { phaseLabel?: string }) {
   const uid = `neural-${Math.random().toString(36).slice(2, 8)}`;
@@ -753,8 +741,8 @@ function CompactTasksSummary(props: {
               : 'bg-muted/50 text-muted-foreground border-border/60 hover:bg-muted hover:text-foreground',
         )}
       >
-        <Show when={inProgressCount() > 0} fallback={<CheckCircle class="w-3.5 h-3.5" />}>
-          <InlineButtonSnakeLoading />
+        <Show when={inProgressCount() <= 0}>
+          <CheckCircle class="w-3.5 h-3.5" />
         </Show>
         <span>{progressLabel()}</span>
         <ChevronUp class={cn('w-3 h-3 transition-transform duration-200', expanded() ? '' : 'rotate-180')} />
@@ -798,9 +786,6 @@ function CompactTasksSummary(props: {
                         <div class="rounded-md border border-border/60 bg-background/70 px-2 py-1.5">
                           <div class="flex items-center gap-2">
                             <span class={cn('inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium shrink-0', todoStatusBadgeClass(item.status))}>
-                              <Show when={item.status === 'in_progress'}>
-                                <InlineStatusSnakeLoading />
-                              </Show>
                               {todoStatusLabel(item.status)}
                             </span>
                             <span class="text-xs text-foreground leading-relaxed break-words">{item.content}</span>
