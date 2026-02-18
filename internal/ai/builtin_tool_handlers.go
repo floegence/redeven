@@ -26,10 +26,6 @@ func toolSuccessSummary(toolName string) string {
 		return "web.search"
 	case "use_skill":
 		return "skill.activated"
-	case "delegate_task":
-		return "delegation.created"
-	case "wait_subagents":
-		return "delegation.wait"
 	case "subagents":
 		return "delegation.managed"
 	default:
@@ -288,11 +284,15 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:     100,
 		},
 		{
-			Name:        "delegate_task",
-			Description: "Delegate a task to a subagent.",
+			Name:        "subagents",
+			Description: "Manage subagents with actions: create, wait, list, inspect, steer, terminate, terminate_all.",
 			InputSchema: toSchema(map[string]any{
 				"type": "object",
 				"properties": map[string]any{
+					"action": map[string]any{
+						"type": "string",
+						"enum": []string{"create", "wait", "list", "inspect", "steer", "terminate", "terminate_all"},
+					},
 					"objective":      map[string]any{"type": "string", "minLength": 1},
 					"agent_type":     map[string]any{"type": "string", "enum": []string{"explore", "worker", "reviewer"}},
 					"trigger_reason": map[string]any{"type": "string", "minLength": 1},
@@ -309,7 +309,6 @@ func builtInToolDefinitions() []ToolDef {
 						"type":  "array",
 						"items": map[string]any{"type": "string"},
 					},
-					"task_id": map[string]any{"type": "string"},
 					"budget": map[string]any{
 						"type": "object",
 						"properties": map[string]any{
@@ -318,36 +317,11 @@ func builtInToolDefinitions() []ToolDef {
 						},
 						"additionalProperties": false,
 					},
-				},
-				"required":             []string{"objective", "agent_type", "trigger_reason", "expected_output"},
-				"additionalProperties": false,
-			}),
-			ParallelSafe: true,
-			Mutating:     false,
-			Source:       "builtin",
-			Namespace:    "builtin.subagent",
-			Priority:     100,
-		},
-		{
-			Name:         "wait_subagents",
-			Description:  "Wait for subagent tasks to reach terminal status or timeout.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"ids": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "timeout_ms": map[string]any{"type": "integer", "minimum": 10000, "maximum": 300000}}, "additionalProperties": false}),
-			ParallelSafe: true,
-			Mutating:     false,
-			Source:       "builtin",
-			Namespace:    "builtin.subagent",
-			Priority:     100,
-		},
-		{
-			Name:        "subagents",
-			Description: "Manage delegated subagents with actions: list, inspect, steer, terminate, terminate_all.",
-			InputSchema: toSchema(map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"action": map[string]any{
-						"type": "string",
-						"enum": []string{"list", "inspect", "steer", "terminate", "terminate_all"},
+					"ids": map[string]any{
+						"type":  "array",
+						"items": map[string]any{"type": "string"},
 					},
+					"timeout_ms":   map[string]any{"type": "integer", "minimum": 10000, "maximum": 300000},
 					"target":       map[string]any{"type": "string"},
 					"message":      map[string]any{"type": "string", "maxLength": 4000},
 					"interrupt":    map[string]any{"type": "boolean"},
@@ -381,7 +355,7 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run) error {
 		}
 		if !r.allowSubagentDelegate {
 			switch def.Name {
-			case "delegate_task", "wait_subagents", "subagents":
+			case "subagents":
 				continue
 			}
 		}

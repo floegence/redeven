@@ -19,8 +19,6 @@ import {
 const TERMINAL_EXEC_TOOL_NAME = 'terminal.exec';
 const WRITE_TODOS_TOOL_NAME = 'write_todos';
 const SOURCES_TOOL_NAME = 'sources';
-const DELEGATE_TASK_TOOL_NAME = 'delegate_task';
-const WAIT_SUBAGENTS_TOOL_NAME = 'wait_subagents';
 const SUBAGENTS_TOOL_NAME = 'subagents';
 
 type AnyRecord = Record<string, unknown>;
@@ -120,34 +118,24 @@ function decorateBlock(block: MessageBlock): MessageBlock {
 
 function buildSubagentBlock(block: ChatToolCallBlock): SubagentBlockType | null {
   const toolName = String(block.toolName ?? '').trim();
-  if (
-    toolName !== DELEGATE_TASK_TOOL_NAME &&
-    toolName !== WAIT_SUBAGENTS_TOOL_NAME &&
-    toolName !== SUBAGENTS_TOOL_NAME
-  ) {
+  if (toolName !== SUBAGENTS_TOOL_NAME) {
     return null;
   }
 
   const args = asRecord(block.args);
   const result = asRecord(block.result);
-
-  if (toolName === DELEGATE_TASK_TOOL_NAME) {
+  const action = String(args.action ?? result.action ?? '').trim().toLowerCase();
+  if (!action) return null;
+  if (action === 'create') {
     const merged = {
       ...result,
+      status: result.subagent_status ?? result.subagentStatus ?? result.status,
       agent_type: result.agent_type ?? args.agent_type,
       trigger_reason: result.trigger_reason ?? args.trigger_reason,
     };
     const view = mapSubagentPayloadSnakeToCamel(merged);
-    if (!view) return null;
-    return toSubagentBlock(view);
+    return view ? toSubagentBlock(view) : null;
   }
-
-  if (toolName === WAIT_SUBAGENTS_TOOL_NAME) {
-    return null;
-  }
-
-  const action = String(args.action ?? result.action ?? '').trim().toLowerCase();
-  if (!action) return null;
   if (action === 'inspect') {
     const view = mapSubagentPayloadSnakeToCamel(result.item);
     return view ? toSubagentBlock(view) : null;

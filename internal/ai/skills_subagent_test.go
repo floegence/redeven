@@ -322,7 +322,8 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 	})
 	r.currentModelID = "openai/gpt-5-mini"
 
-	created, err := r.delegateTask(context.Background(), map[string]any{
+	created, err := r.manageSubagents(context.Background(), map[string]any{
+		"action":         "create",
 		"objective":      "Summarize current workspace status.",
 		"agent_type":     "explore",
 		"trigger_reason": "Need an isolated exploration result before deciding the next parent step.",
@@ -336,19 +337,25 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("delegateTask: %v", err)
+		t.Fatalf("manageSubagents(create): %v", err)
 	}
 	id := strings.TrimSpace(anyToString(created["subagent_id"]))
 	if id == "" {
 		t.Fatalf("missing subagent_id in result: %#v", created)
 	}
 
-	waitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	statuses, timedOut := r.waitSubagents(waitCtx, []string{id})
-	if timedOut {
-		t.Fatalf("wait timed out: %#v", statuses)
+	waited, err := r.manageSubagents(context.Background(), map[string]any{
+		"action":     "wait",
+		"ids":        []string{id},
+		"timeout_ms": 20_000,
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(wait): %v", err)
 	}
+	if waited["timed_out"] == true {
+		t.Fatalf("wait timed out: %#v", waited)
+	}
+	statuses, _ := waited["snapshots"].(map[string]any)
 	entryRaw, ok := statuses[id]
 	if !ok {
 		t.Fatalf("missing subagent status for id=%s: %#v", id, statuses)
@@ -553,7 +560,8 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 	})
 	r.currentModelID = "openai/gpt-5-mini"
 
-	created, err := r.delegateTask(context.Background(), map[string]any{
+	created, err := r.manageSubagents(context.Background(), map[string]any{
+		"action":         "create",
 		"objective":      "Search the web and summarize the results.",
 		"agent_type":     "explore",
 		"trigger_reason": "Need independent source lookup before drafting the final response.",
@@ -567,19 +575,25 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("delegateTask: %v", err)
+		t.Fatalf("manageSubagents(create): %v", err)
 	}
 	id := strings.TrimSpace(anyToString(created["subagent_id"]))
 	if id == "" {
 		t.Fatalf("missing subagent_id in result: %#v", created)
 	}
 
-	waitCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	statuses, timedOut := r.waitSubagents(waitCtx, []string{id})
-	if timedOut {
-		t.Fatalf("wait timed out: %#v", statuses)
+	waited, err := r.manageSubagents(context.Background(), map[string]any{
+		"action":     "wait",
+		"ids":        []string{id},
+		"timeout_ms": 20_000,
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(wait): %v", err)
 	}
+	if waited["timed_out"] == true {
+		t.Fatalf("wait timed out: %#v", waited)
+	}
+	statuses, _ := waited["snapshots"].(map[string]any)
 	entryRaw, ok := statuses[id]
 	if !ok {
 		t.Fatalf("missing subagent status for id=%s: %#v", id, statuses)
@@ -756,58 +770,27 @@ func TestSubagentManager_ManageActions(t *testing.T) {
 	}
 }
 
-func TestSubagentManager_TaskIDResumeContract(t *testing.T) {
+func TestSubagentManager_CreateRejectsLegacyTaskID(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), FSRoot: t.TempDir()})
 	mgr := newSubagentManager(r)
 	r.subagentManager = mgr
 
-	task := &subagentTask{
-		id:     "tool_existing",
-		taskID: "task_existing",
-		input:  make(chan string, 1),
-		doneCh: make(chan struct{}),
-		ctx:    context.Background(),
-		cancel: func() {},
-		status: subagentStatusRunning,
-	}
-	mgr.addTask(task)
-
-	resumed, err := mgr.delegate(context.Background(), map[string]any{
-		"task_id":   "task_existing",
-		"objective": "continue with new detail",
+	_, err := mgr.create(context.Background(), map[string]any{
+		"task_id":        "task_existing",
+		"objective":      "continue with new detail",
+		"agent_type":     "explore",
+		"trigger_reason": "legacy resume input should be rejected",
+		"expected_output": map[string]any{
+			"summary": "legacy",
+		},
 	})
-	if err != nil {
-		t.Fatalf("resume delegate failed: %v", err)
+	if err == nil {
+		t.Fatalf("expected create to reject task_id")
 	}
-	if !resumed["resumed"].(bool) {
-		t.Fatalf("expected resumed=true payload=%#v", resumed)
-	}
-	if strings.TrimSpace(anyToString(resumed["subagent_id"])) != task.id {
-		t.Fatalf("unexpected resumed subagent id: %#v", resumed)
-	}
-	select {
-	case got := <-task.input:
-		if strings.TrimSpace(got) != "continue with new detail" {
-			t.Fatalf("unexpected resumed objective=%q", got)
-		}
-	default:
-		t.Fatalf("expected resumed objective to be delivered")
-	}
-
-	notFound, err := mgr.delegate(context.Background(), map[string]any{
-		"task_id":   "task_missing",
-		"objective": "hello",
-	})
-	if err != nil {
-		t.Fatalf("not_found delegate failed: %v", err)
-	}
-	if strings.TrimSpace(anyToString(notFound["status"])) != "not_found" {
-		t.Fatalf("expected not_found status payload=%#v", notFound)
-	}
-	if notFound["resumed"].(bool) {
-		t.Fatalf("expected resumed=false payload=%#v", notFound)
+	if !strings.Contains(err.Error(), "task_id is not supported") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

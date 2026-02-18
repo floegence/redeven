@@ -277,7 +277,7 @@ export function mapSubagentPayloadSnakeToCamel(raw: unknown): SubagentView | nul
   const taskId = String(rec.task_id ?? rec.taskId ?? '').trim();
   const agentType = String(rec.agent_type ?? rec.agentType ?? '').trim();
   const triggerReason = String(rec.trigger_reason ?? rec.triggerReason ?? '').trim();
-  const status = normalizeSubagentStatus(rec.status);
+  const status = normalizeSubagentStatus(rec.status ?? rec.subagent_status ?? rec.subagentStatus);
   const fallbackSummary = String(rec.result ?? '').trim();
   const resultPayload = rec.result_struct ?? rec.resultStruct ?? rec.result ?? {};
   const normalizedResult = normalizeSubagentResult(resultPayload, fallbackSummary);
@@ -348,7 +348,7 @@ export function mergeSubagentEventsByTimestamp(
 
 export function extractSubagentViewsFromWaitResult(raw: unknown): SubagentView[] {
   const root = asRecord(raw);
-  const statusPayload = asRecord(root.status);
+  const statusPayload = asRecord(root.status ?? root.snapshots);
   const out: SubagentView[] = [];
   for (const value of Object.values(statusPayload)) {
     const view = mapSubagentPayloadSnakeToCamel(value);

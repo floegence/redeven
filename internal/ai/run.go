@@ -2575,39 +2575,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		}
 		return out, nil
 
-	case "delegate_task":
-		if meta == nil || !meta.CanExecute {
-			return nil, errors.New("execute permission denied")
-		}
-		return r.delegateTask(ctx, cloneAnyMap(args))
-
-	case "wait_subagents":
-		if meta == nil || !meta.CanExecute {
-			return nil, errors.New("execute permission denied")
-		}
-		var p struct {
-			IDs       []string `json:"ids"`
-			TimeoutMS int64    `json:"timeout_ms"`
-		}
-		b, _ := json.Marshal(args)
-		if err := json.Unmarshal(b, &p); err != nil {
-			return nil, errors.New("invalid args")
-		}
-		timeoutMS := p.TimeoutMS
-		if timeoutMS <= 0 {
-			timeoutMS = 30_000
-		}
-		if timeoutMS < 10_000 {
-			timeoutMS = 10_000
-		}
-		if timeoutMS > 300_000 {
-			timeoutMS = 300_000
-		}
-		waitCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
-		defer cancel()
-		out, timedOut := r.waitSubagents(waitCtx, p.IDs)
-		return map[string]any{"status": out, "timed_out": timedOut}, nil
-
 	case "subagents":
 		if meta == nil || !meta.CanExecute {
 			return nil, errors.New("execute permission denied")

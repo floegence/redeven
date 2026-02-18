@@ -65,39 +65,6 @@ func (r *run) ensureSubagentManager() *subagentManager {
 	return r.subagentManager
 }
 
-func (r *run) delegateTask(ctx context.Context, args map[string]any) (map[string]any, error) {
-	if r == nil {
-		return nil, errors.New("nil run")
-	}
-	if !r.allowSubagentDelegate {
-		return nil, fmt.Errorf("delegate_task is disabled in this run")
-	}
-	objective := strings.TrimSpace(anyToString(args["objective"]))
-	if objective == "" {
-		return nil, fmt.Errorf("missing objective")
-	}
-	taskID := strings.TrimSpace(anyToString(args["task_id"]))
-	if taskID == "" {
-		agentType := strings.ToLower(strings.TrimSpace(anyToString(args["agent_type"])))
-		if !isValidSubagentAgentType(agentType) {
-			return nil, fmt.Errorf("invalid agent_type %q", strings.TrimSpace(anyToString(args["agent_type"])))
-		}
-		triggerReason := strings.TrimSpace(anyToString(args["trigger_reason"]))
-		if triggerReason == "" {
-			return nil, fmt.Errorf("missing trigger_reason")
-		}
-		expectedOutput, ok := args["expected_output"].(map[string]any)
-		if !ok || len(expectedOutput) == 0 {
-			return nil, fmt.Errorf("missing expected_output")
-		}
-	}
-	mgr := r.ensureSubagentManager()
-	if mgr == nil {
-		return nil, errors.New("subagent manager unavailable")
-	}
-	return mgr.delegate(ctx, args)
-}
-
 func (r *run) manageSubagents(ctx context.Context, args map[string]any) (map[string]any, error) {
 	if r == nil {
 		return nil, errors.New("nil run")
@@ -110,6 +77,25 @@ func (r *run) manageSubagents(ctx context.Context, args map[string]any) (map[str
 		return nil, fmt.Errorf("missing action")
 	}
 	switch action {
+	case subagentActionCreate:
+		objective := strings.TrimSpace(anyToString(args["objective"]))
+		if objective == "" {
+			return nil, fmt.Errorf("missing objective")
+		}
+		agentType := strings.ToLower(strings.TrimSpace(anyToString(args["agent_type"])))
+		if !isValidSubagentAgentType(agentType) {
+			return nil, fmt.Errorf("invalid agent_type %q", strings.TrimSpace(anyToString(args["agent_type"])))
+		}
+		triggerReason := strings.TrimSpace(anyToString(args["trigger_reason"]))
+		if triggerReason == "" {
+			return nil, fmt.Errorf("missing trigger_reason")
+		}
+		expectedOutput, ok := args["expected_output"].(map[string]any)
+		if !ok || len(expectedOutput) == 0 {
+			return nil, fmt.Errorf("missing expected_output")
+		}
+	case subagentActionWait:
+		// Optional fields only.
 	case subagentActionList:
 		// Optional fields only.
 	case subagentActionInspect, subagentActionTerminate:
@@ -143,15 +129,4 @@ func (r *run) manageSubagents(ctx context.Context, args map[string]any) (map[str
 		return nil, errors.New("subagent manager unavailable")
 	}
 	return mgr.manage(ctx, args)
-}
-
-func (r *run) waitSubagents(ctx context.Context, ids []string) (map[string]any, bool) {
-	if r == nil {
-		return map[string]any{}, false
-	}
-	mgr := r.ensureSubagentManager()
-	if mgr == nil {
-		return map[string]any{}, false
-	}
-	return mgr.wait(ctx, ids)
 }

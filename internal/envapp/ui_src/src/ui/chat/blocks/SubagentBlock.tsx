@@ -16,8 +16,6 @@ export interface SubagentBlockProps {
   class?: string;
 }
 
-const DELEGATE_TASK_TOOL_NAME = 'delegate_task';
-const WAIT_SUBAGENTS_TOOL_NAME = 'wait_subagents';
 const SUBAGENTS_TOOL_NAME = 'subagents';
 
 function subagentStatusLabel(status: SubagentBlockType['status']): string {
@@ -191,23 +189,24 @@ function resolveLatestSubagentView(messages: Message[], subagentId: string, seed
         const toolStatus = String(rec.status ?? '').trim().toLowerCase();
         const args = asRecord(rec.args) ?? {};
         const result = asRecord(rec.result) ?? {};
-        if (toolName === DELEGATE_TASK_TOOL_NAME) {
-          mergeCandidate(
-            mapSubagentPayloadSnakeToCamel({
-              ...result,
-              agent_type: (result as any).agent_type ?? (args as any).agent_type,
-              trigger_reason: (result as any).trigger_reason ?? (args as any).trigger_reason,
-            }),
-            messageTimestamp,
-          );
-        } else if (toolName === WAIT_SUBAGENTS_TOOL_NAME && toolStatus === 'success') {
-          const statusPayload = asRecord(result.status);
-          for (const value of Object.values(statusPayload ?? {})) {
-            mergeCandidate(mapSubagentPayloadSnakeToCamel(value), messageTimestamp);
-          }
-        } else if (toolName === SUBAGENTS_TOOL_NAME && toolStatus === 'success') {
+        if (toolName === SUBAGENTS_TOOL_NAME && toolStatus === 'success') {
           const action = String((args as any).action ?? (result as any).action ?? '').trim().toLowerCase();
-          if (action === 'inspect') {
+          if (action === 'create') {
+            mergeCandidate(
+              mapSubagentPayloadSnakeToCamel({
+                ...(result as any),
+                status: (result as any).subagent_status ?? (result as any).subagentStatus ?? (result as any).status,
+                agent_type: (result as any).agent_type ?? (args as any).agent_type,
+                trigger_reason: (result as any).trigger_reason ?? (args as any).trigger_reason,
+              }),
+              messageTimestamp,
+            );
+          } else if (action === 'wait') {
+            const statusPayload = asRecord((result as any).snapshots);
+            for (const value of Object.values(statusPayload ?? {})) {
+              mergeCandidate(mapSubagentPayloadSnakeToCamel(value), messageTimestamp);
+            }
+          } else if (action === 'inspect') {
             mergeCandidate(mapSubagentPayloadSnakeToCamel((result as any).item), messageTimestamp);
           } else if (action === 'steer' || action === 'terminate') {
             mergeCandidate(mapSubagentPayloadSnakeToCamel((result as any).snapshot), messageTimestamp);

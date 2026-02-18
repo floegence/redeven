@@ -10,7 +10,7 @@ import { BlockRenderer } from './BlockRenderer';
 import { useAIChatContext } from '../../pages/AIChatContext';
 
 const ASK_USER_TOOL_NAME = 'ask_user';
-const WAIT_SUBAGENTS_TOOL_NAME = 'wait_subagents';
+const SUBAGENTS_TOOL_NAME = 'subagents';
 const WEB_SEARCH_TOOL_NAME = 'web.search';
 
 export interface ToolCallBlockProps {
@@ -209,6 +209,7 @@ type WaitSubagentItem = {
 };
 
 type WaitSubagentsDisplay = {
+  action: 'create' | 'wait' | 'list';
   ids: string[];
   timeoutMs: number;
   timedOut: boolean;
@@ -327,17 +328,18 @@ function formatSubagentInteger(value: number): string {
 }
 
 function buildWaitSubagentsDisplay(block: ToolCallBlockType): WaitSubagentsDisplay | null {
-  if (String(block.toolName ?? '').trim() !== WAIT_SUBAGENTS_TOOL_NAME) return null;
+  if (String(block.toolName ?? '').trim() !== SUBAGENTS_TOOL_NAME) return null;
 
   const args = asRecord(block.args);
   const result = asRecord(block.result);
+  const action = asTrimmedString(args?.action ?? result?.action).toLowerCase();
+  if (action !== 'create' && action !== 'wait' && action !== 'list') return null;
+
   const ids = Array.isArray(args?.ids)
     ? Array.from(new Set(args.ids.map((value) => String(value ?? '').trim()).filter(Boolean)))
     : [];
-  const timeoutMs = Math.max(0, Math.floor(readFiniteNumber(args?.timeout_ms ?? args?.timeoutMs, 0)));
+  const timeoutMs = Math.max(0, Math.floor(readFiniteNumber(result?.timeout_ms ?? result?.timeoutMs ?? args?.timeout_ms ?? args?.timeoutMs, 0)));
   const timedOut = result?.timed_out === true || readFiniteNumber(result?.timed_out, 0) === 1;
-  const rawStatusMap = asRecord(result?.status);
-
   const items: WaitSubagentItem[] = [];
   const counts = {
     queued: 0,
@@ -348,53 +350,70 @@ function buildWaitSubagentsDisplay(block: ToolCallBlockType): WaitSubagentsDispl
     canceled: 0,
   };
 
-  if (rawStatusMap) {
-    for (const [fallbackID, raw] of Object.entries(rawStatusMap)) {
-      const snapshot = asRecord(raw);
-      if (!snapshot) continue;
-      const subagentId =
-        asTrimmedString(snapshot.subagent_id ?? snapshot.subagentId ?? snapshot.id) ||
-        asTrimmedString(fallbackID) ||
-        'unknown';
-      const status = normalizeWaitSubagentStatus(snapshot.status);
-      const stats = asRecord(snapshot.stats);
-      const item: WaitSubagentItem = {
-        subagentId,
-        agentType: asTrimmedString(snapshot.agent_type ?? snapshot.agentType) || 'subagent',
-        status,
-        triggerReason: asTrimmedString(snapshot.trigger_reason ?? snapshot.triggerReason),
-        steps: Math.max(0, Math.floor(readFiniteNumber(stats?.steps, 0))),
-        toolCalls: Math.max(0, Math.floor(readFiniteNumber(stats?.tool_calls ?? stats?.toolCalls, 0))),
-        tokens: Math.max(0, Math.floor(readFiniteNumber(stats?.tokens, 0))),
-        elapsedMs: Math.max(0, Math.floor(readFiniteNumber(stats?.elapsed_ms ?? stats?.elapsedMs, 0))),
-        outcome: asTrimmedString(stats?.outcome),
-        error: asTrimmedString(snapshot.error),
-      };
-      items.push(item);
-      switch (item.status) {
-        case 'queued':
-          counts.queued += 1;
-          break;
-        case 'running':
-          counts.running += 1;
-          break;
-        case 'waiting_input':
-          counts.waiting += 1;
-          break;
-        case 'completed':
-          counts.completed += 1;
-          break;
-        case 'failed':
-        case 'timed_out':
-          counts.failed += 1;
-          break;
-        case 'canceled':
-          counts.canceled += 1;
-          break;
-        default:
-          break;
+  const appendItem = (raw: unknown, fallbackID = ''): void => {
+    const snapshot = asRecord(raw);
+    if (!snapshot) return;
+    const subagentId =
+      asTrimmedString(snapshot.subagent_id ?? snapshot.subagentId ?? snapshot.id) ||
+      asTrimmedString(fallbackID) ||
+      'unknown';
+    const status = normalizeWaitSubagentStatus(snapshot.status ?? snapshot.subagent_status ?? snapshot.subagentStatus);
+    const stats = asRecord(snapshot.stats);
+    const item: WaitSubagentItem = {
+      subagentId,
+      agentType: asTrimmedString(snapshot.agent_type ?? snapshot.agentType) || 'subagent',
+      status,
+      triggerReason: asTrimmedString(snapshot.trigger_reason ?? snapshot.triggerReason),
+      steps: Math.max(0, Math.floor(readFiniteNumber(stats?.steps, 0))),
+      toolCalls: Math.max(0, Math.floor(readFiniteNumber(stats?.tool_calls ?? stats?.toolCalls, 0))),
+      tokens: Math.max(0, Math.floor(readFiniteNumber(stats?.tokens, 0))),
+      elapsedMs: Math.max(0, Math.floor(readFiniteNumber(stats?.elapsed_ms ?? stats?.elapsedMs, 0))),
+      outcome: asTrimmedString(stats?.outcome),
+      error: asTrimmedString(snapshot.error),
+    };
+    items.push(item);
+    switch (item.status) {
+      case 'queued':
+        counts.queued += 1;
+        break;
+      case 'running':
+        counts.running += 1;
+        break;
+      case 'waiting_input':
+        counts.waiting += 1;
+        break;
+      case 'completed':
+        counts.completed += 1;
+        break;
+      case 'failed':
+      case 'timed_out':
+        counts.failed += 1;
+        break;
+      case 'canceled':
+        counts.canceled += 1;
+        break;
+      default:
+        break;
+    }
+  };
+
+  if (action === 'create') {
+    appendItem({
+      subagent_id: result?.subagent_id ?? result?.subagentId,
+      agent_type: result?.agent_type ?? args?.agent_type,
+      trigger_reason: result?.trigger_reason ?? args?.trigger_reason,
+      status: result?.subagent_status ?? result?.subagentStatus ?? result?.status,
+    });
+  } else if (action === 'wait') {
+    const rawSnapshots = asRecord(result?.snapshots ?? result?.status);
+    if (rawSnapshots) {
+      for (const [fallbackID, raw] of Object.entries(rawSnapshots)) {
+        appendItem(raw, fallbackID);
       }
     }
+  } else if (action === 'list') {
+    const rawItems = Array.isArray(result?.items) ? result.items : [];
+    rawItems.forEach((raw) => appendItem(raw));
   }
 
   items.sort((a, b) => {
@@ -404,6 +423,7 @@ function buildWaitSubagentsDisplay(block: ToolCallBlockType): WaitSubagentsDispl
   });
 
   return {
+    action: action as WaitSubagentsDisplay['action'],
     ids,
     timeoutMs,
     timedOut,
@@ -419,8 +439,18 @@ interface WaitSubagentsToolCardProps {
 }
 
 const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => {
+  const badgeLabel = createMemo(() => {
+    if (props.display.action === 'create') return 'Create subagent';
+    if (props.display.action === 'list') return 'List subagents';
+    return 'Wait subagents';
+  });
+
   const headlineStateLabel = createMemo(() => {
-    if (props.block.status === 'running') return 'Waiting snapshots';
+    if (props.block.status === 'running') {
+      if (props.display.action === 'create') return 'Creating';
+      if (props.display.action === 'list') return 'Collecting snapshots';
+      return 'Waiting snapshots';
+    }
     if (props.block.status === 'pending') return 'Queued';
     if (props.block.status === 'success') return props.display.timedOut ? 'Timed out' : 'Completed';
     return 'Failed';
@@ -452,7 +482,7 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
     <div class={cn('chat-tool-wait-subagents-block', props.class)}>
       <div class="chat-tool-wait-subagents-head">
         <div class="chat-tool-wait-subagents-head-main">
-          <span class="chat-tool-wait-subagents-badge">Wait subagents</span>
+          <span class="chat-tool-wait-subagents-badge">{badgeLabel()}</span>
           <span class={cn('chat-tool-wait-subagents-state', headlineStateClass())}>
             <Show when={isWorking()}>
               <span class="chat-tool-wait-subagents-state-loader" aria-hidden="true">
@@ -463,7 +493,7 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
           </span>
         </div>
         <div class="chat-tool-wait-subagents-head-meta">
-          <Show when={props.display.timeoutMs > 0}>
+          <Show when={props.display.action === 'wait' && props.display.timeoutMs > 0}>
             <span>Timeout {Math.max(1, Math.floor(props.display.timeoutMs / 1000))}s</span>
           </Show>
           <Show when={props.display.timedOut}>
@@ -488,7 +518,9 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
             fallback={<span>No subagent snapshots yet.</span>}
           >
             <span>
-              Tracking IDs: {trackedIDsPreview().join(', ')}
+              <Show when={props.display.action === 'wait'} fallback={<span>Subagent IDs: {trackedIDsPreview().join(', ')}</span>}>
+                <span>Tracking IDs: {trackedIDsPreview().join(', ')}</span>
+              </Show>
               <Show when={targetsCount() > trackedIDsPreview().length}> +{targetsCount() - trackedIDsPreview().length} more</Show>
             </span>
           </Show>
@@ -1239,6 +1271,7 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
   const shouldHideWaitSubagentsRow = createMemo(() => {
     const display = waitSubagentsDisplay();
     if (!display) return false;
+    if (display.action !== 'wait') return false;
     const ids = display.items.length > 0
       ? display.items.map((item) => String(item.subagentId ?? '').trim()).filter(Boolean)
       : display.ids.map((id) => String(id ?? '').trim()).filter(Boolean);

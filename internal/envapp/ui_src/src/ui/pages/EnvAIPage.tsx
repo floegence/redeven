@@ -1433,19 +1433,26 @@ export function EnvAIPage() {
           const args = toolBlock.args && typeof toolBlock.args === 'object' && !Array.isArray(toolBlock.args) ? toolBlock.args : {};
           const result = toolBlock.result && typeof toolBlock.result === 'object' && !Array.isArray(toolBlock.result) ? toolBlock.result : {};
 
-          if (toolName === 'delegate_task') {
-            const view = mapSubagentPayloadSnakeToCamel({
-              ...result,
-              agent_type: (result as any).agent_type ?? (args as any).agent_type,
-              trigger_reason: (result as any).trigger_reason ?? (args as any).trigger_reason,
-            });
-            mergeIntoMap(view, messageTimestamp);
-          } else if (toolName === 'wait_subagents' && toolStatus === 'success') {
-            const views = extractSubagentViewsFromWaitResult(result);
-            views.forEach((item) => mergeIntoMap(item, messageTimestamp));
-          } else if (toolName === 'subagents' && toolStatus === 'success') {
+          if (toolName === 'subagents' && toolStatus === 'success') {
             const action = String((args as any).action ?? (result as any).action ?? '').trim().toLowerCase();
-            if (action === 'inspect') {
+            if (action === 'create') {
+              mergeIntoMap(mapSubagentPayloadSnakeToCamel({
+                ...(result as any),
+                status: (result as any).subagent_status ?? (result as any).subagentStatus ?? (result as any).status,
+                agent_type: (result as any).agent_type ?? (args as any).agent_type,
+                trigger_reason: (result as any).trigger_reason ?? (args as any).trigger_reason,
+              }), messageTimestamp);
+            } else if (action === 'wait') {
+              const views = extractSubagentViewsFromWaitResult({
+                status: (result as any).snapshots ?? {},
+              });
+              views.forEach((item) => mergeIntoMap(item, messageTimestamp));
+            } else if (action === 'list') {
+              const listItems = Array.isArray((result as any).items) ? ((result as any).items as unknown[]) : [];
+              listItems.forEach((entry) => {
+                mergeIntoMap(mapSubagentPayloadSnakeToCamel(entry), messageTimestamp);
+              });
+            } else if (action === 'inspect') {
               mergeIntoMap(mapSubagentPayloadSnakeToCamel((result as any).item), messageTimestamp);
             } else if (action === 'steer' || action === 'terminate') {
               mergeIntoMap(mapSubagentPayloadSnakeToCamel((result as any).snapshot), messageTimestamp);

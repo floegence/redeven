@@ -23,7 +23,7 @@ func TestDefaultSubagentToolAllowlists_ExcludeAskUser(t *testing.T) {
 }
 
 func TestSanitizeSubagentToolAllowlist_FiltersDisallowedAndDuplicates(t *testing.T) {
-	in := []string{"ask_user", "delegate_task", "terminal.exec", "terminal.exec", "task_complete"}
+	in := []string{"ask_user", "subagents", "terminal.exec", "terminal.exec", "task_complete"}
 	got := sanitizeSubagentToolAllowlist(in, defaultSubagentToolAllowlistWorker(), false)
 	if len(got) != 2 || got[0] != "terminal.exec" || got[1] != "task_complete" {
 		t.Fatalf("sanitizeSubagentToolAllowlist()=%v, want [terminal.exec task_complete]", got)

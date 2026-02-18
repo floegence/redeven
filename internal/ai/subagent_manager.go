@@ -25,6 +25,8 @@ const (
 	subagentAgentTypeWorker   = "worker"
 	subagentAgentTypeReviewer = "reviewer"
 
+	subagentActionCreate       = "create"
+	subagentActionWait         = "wait"
 	subagentActionList         = "list"
 	subagentActionInspect      = "inspect"
 	subagentActionSteer        = "steer"
@@ -480,20 +482,6 @@ func (m *subagentManager) getTask(id string) *subagentTask {
 	return nil
 }
 
-func (m *subagentManager) getTaskByTaskID(taskID string) *subagentTask {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	taskID = strings.TrimSpace(taskID)
-	if taskID == "" {
-		return nil
-	}
-	subagentID, ok := m.taskByTaskID[taskID]
-	if !ok {
-		return nil
-	}
-	return m.tasks[subagentID]
-}
-
 func (m *subagentManager) allTasks() []*subagentTask {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -581,14 +569,15 @@ func sanitizeSubagentToolAllowlist(allowlist []string, fallback []string, readon
 
 func isSubagentDisallowedTool(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "delegate_task", "wait_subagents", "subagents", "write_todos", "ask_user":
+	case "subagents", "write_todos", "ask_user":
 		return true
 	default:
 		return false
 	}
 }
 
-func (m *subagentManager) delegate(ctx context.Context, args map[string]any) (map[string]any, error) {
+func (m *subagentManager) create(ctx context.Context, args map[string]any) (map[string]any, error) {
+	_ = ctx
 	if m == nil || m.parent == nil {
 		return nil, errors.New("subagent manager unavailable")
 	}
@@ -603,27 +592,8 @@ func (m *subagentManager) delegate(ctx context.Context, args map[string]any) (ma
 	if objective == "" {
 		return nil, fmt.Errorf("missing objective")
 	}
-
-	taskID := strings.TrimSpace(anyToString(args["task_id"]))
-	if taskID != "" {
-		if task := m.getTaskByTaskID(taskID); task != nil {
-			select {
-			case task.input <- objective:
-			default:
-				return nil, fmt.Errorf("subagent input queue is full")
-			}
-			payload := task.snapshot()
-			payload["status"] = task.statusSnapshot()
-			payload["reopen_parent"] = true
-			payload["resumed"] = true
-			return payload, nil
-		}
-		return map[string]any{
-			"task_id":       taskID,
-			"status":        "not_found",
-			"reopen_parent": false,
-			"resumed":       false,
-		}, nil
+	if strings.TrimSpace(anyToString(args["task_id"])) != "" {
+		return nil, fmt.Errorf("task_id is not supported in create action")
 	}
 
 	agentType := strings.ToLower(strings.TrimSpace(anyToString(args["agent_type"])))
@@ -683,7 +653,7 @@ func (m *subagentManager) delegate(ctx context.Context, args map[string]any) (ma
 	if err != nil {
 		return nil, err
 	}
-	taskID = subagentID
+	taskID := subagentID
 
 	taskCtx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
 	task := &subagentTask{
@@ -713,17 +683,17 @@ func (m *subagentManager) delegate(ctx context.Context, args map[string]any) (ma
 	task.setStatus(subagentStatusRunning)
 
 	beginPayload := task.eventPayload()
-	m.parent.persistRunEvent("delegation.spawn.begin", RealtimeStreamKindLifecycle, beginPayload)
+	m.parent.persistRunEvent("delegation.create.begin", RealtimeStreamKindLifecycle, beginPayload)
 	go m.runTask(task, objective)
 
 	return map[string]any{
-		"subagent_id":    task.id,
-		"task_id":        task.taskID,
-		"agent_type":     task.agentType,
-		"trigger_reason": task.triggerReason,
-		"status":         task.statusSnapshot(),
-		"reopen_parent":  true,
-		"resumed":        false,
+		"status":          "ok",
+		"action":          subagentActionCreate,
+		"subagent_id":     task.id,
+		"task_id":         task.taskID,
+		"agent_type":      task.agentType,
+		"trigger_reason":  task.triggerReason,
+		"subagent_status": task.statusSnapshot(),
 	}, nil
 }
 
@@ -743,7 +713,7 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 			task.setStatus(subagentStatusCanceled)
 			task.setResult(task.result.Summary, "subagent canceled")
 		}
-		m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, task.eventPayload())
+		m.parent.persistRunEvent("delegation.create.end", RealtimeStreamKindLifecycle, task.eventPayload())
 		return
 	}
 
@@ -751,14 +721,14 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 	if err != nil {
 		task.setStatus(subagentStatusFailed)
 		task.setResult("", err.Error())
-		m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, task.eventPayload())
+		m.parent.persistRunEvent("delegation.create.end", RealtimeStreamKindLifecycle, task.eventPayload())
 		return
 	}
 	messageID, err := newMessageID()
 	if err != nil {
 		task.setStatus(subagentStatusFailed)
 		task.setResult("", err.Error())
-		m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, task.eventPayload())
+		m.parent.persistRunEvent("delegation.create.end", RealtimeStreamKindLifecycle, task.eventPayload())
 		return
 	}
 
@@ -822,7 +792,7 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 			task.setStatus(subagentStatusFailed)
 			task.setResult(assistantText, strings.TrimSpace(err.Error()))
 		}
-		m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, task.eventPayload())
+		m.parent.persistRunEvent("delegation.create.end", RealtimeStreamKindLifecycle, task.eventPayload())
 		return
 	}
 
@@ -832,13 +802,13 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 		task.setResult(assistantText, "subagent blocked by no-user-interaction policy")
 		payload := task.eventPayload()
 		payload["reason"] = "no_user_interaction_policy"
-		m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, payload)
+		m.parent.persistRunEvent("delegation.create.end", RealtimeStreamKindLifecycle, payload)
 		return
 	}
 
 	task.setStatus(subagentStatusCompleted)
 	task.setResult(assistantText, "")
-	m.parent.persistRunEvent("delegation.spawn.end", RealtimeStreamKindLifecycle, task.eventPayload())
+	m.parent.persistRunEvent("delegation.create.end", RealtimeStreamKindLifecycle, task.eventPayload())
 }
 
 func (m *subagentManager) sendInput(id string, message string, interrupt bool) (map[string]any, error) {
@@ -972,7 +942,7 @@ func parseBoolArg(args map[string]any, key string, fallback bool) bool {
 	}
 }
 
-func (m *subagentManager) manage(_ context.Context, args map[string]any) (map[string]any, error) {
+func (m *subagentManager) manage(ctx context.Context, args map[string]any) (map[string]any, error) {
 	if m == nil {
 		return nil, errors.New("subagent manager unavailable")
 	}
@@ -984,6 +954,10 @@ func (m *subagentManager) manage(_ context.Context, args map[string]any) (map[st
 	var out map[string]any
 	var err error
 	switch action {
+	case subagentActionCreate:
+		out, err = m.create(ctx, args)
+	case subagentActionWait:
+		out, err = m.manageWait(ctx, args)
 	case subagentActionList:
 		out, err = m.manageList(args)
 	case subagentActionInspect:
@@ -1085,6 +1059,31 @@ func (m *subagentManager) manageList(args map[string]any) (map[string]any, error
 		"timed_out":          counts[subagentStatusTimedOut],
 		"items":              items,
 		"updated_at_unix_ms": time.Now().UnixMilli(),
+	}, nil
+}
+
+func (m *subagentManager) manageWait(ctx context.Context, args map[string]any) (map[string]any, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	timeoutMS := parseIntArg(args, "timeout_ms", 30_000)
+	if timeoutMS < 10_000 {
+		timeoutMS = 10_000
+	}
+	if timeoutMS > 300_000 {
+		timeoutMS = 300_000
+	}
+	ids := extractStringSlice(args["ids"])
+	waitCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMS)*time.Millisecond)
+	defer cancel()
+	snapshots, timedOut := m.wait(waitCtx, ids)
+	return map[string]any{
+		"status":     "ok",
+		"action":     subagentActionWait,
+		"ids":        ids,
+		"timeout_ms": timeoutMS,
+		"timed_out":  timedOut,
+		"snapshots":  snapshots,
 	}, nil
 }
 
