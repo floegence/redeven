@@ -1034,11 +1034,6 @@ const WebSearchToolCard: Component<WebSearchToolCardProps> = (props) => {
           <span class="chat-tool-web-search-badge">Web search</span>
           <span class="chat-tool-web-search-provider">{providerLabel()}</span>
           <span class={cn('chat-tool-web-search-state', statusClass())}>
-            <Show when={isWorking()}>
-              <span class="chat-tool-web-search-state-loader" aria-hidden="true">
-                <SnakeLoader size="sm" class="chat-tool-inline-snake-loader" />
-              </span>
-            </Show>
             {statusLabel()}
           </span>
         </div>

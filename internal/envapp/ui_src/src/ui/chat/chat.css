@@ -808,14 +808,6 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
   background-color: color-mix(in srgb, var(--destructive) 12%, transparent);
 }
 
-.chat-tool-web-search-state-loader {
-  width: 0.82rem;
-  height: 0.82rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .chat-tool-web-search-copy-query {
   display: inline-flex;
   align-items: center;
