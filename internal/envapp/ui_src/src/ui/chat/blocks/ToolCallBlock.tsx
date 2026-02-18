@@ -484,11 +484,6 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
         <div class="chat-tool-wait-subagents-head-main">
           <span class="chat-tool-wait-subagents-badge">{badgeLabel()}</span>
           <span class={cn('chat-tool-wait-subagents-state', headlineStateClass())}>
-            <Show when={isWorking()}>
-              <span class="chat-tool-wait-subagents-state-loader" aria-hidden="true">
-                <SnakeLoader size="sm" class="chat-tool-inline-snake-loader" />
-              </span>
-            </Show>
             {headlineStateLabel()}
           </span>
         </div>
@@ -534,11 +529,6 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
               <div class="chat-tool-wait-subagents-item">
                 <div class="chat-tool-wait-subagents-item-head">
                   <span class={cn('chat-subagent-status', waitSubagentStatusClass(item.status))}>
-                    <Show when={item.status === 'running'}>
-                      <span class="chat-subagent-status-loader" aria-hidden="true">
-                        <SnakeLoader size="sm" class="chat-inline-snake-loader-subagent" />
-                      </span>
-                    </Show>
                     {waitSubagentStatusLabel(item.status)}
                   </span>
                   <span class="chat-tool-wait-subagents-item-agent">{item.agentType || 'subagent'}</span>

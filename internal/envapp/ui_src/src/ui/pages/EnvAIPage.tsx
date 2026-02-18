@@ -947,9 +947,7 @@ function CompactSubagentsSummary(props: {
               : 'bg-muted/50 text-muted-foreground border-border/60 hover:bg-muted hover:text-foreground',
         )}
       >
-        <Show when={runningCount() > 0} fallback={<Settings class="w-3.5 h-3.5" />}>
-          <InlineButtonSnakeLoading />
-        </Show>
+        <Settings class="w-3.5 h-3.5" />
         <span>{runningCount()} running</span>
         <ChevronUp class={cn('w-3 h-3 transition-transform duration-200', expanded() ? '' : 'rotate-180')} />
       </button>
@@ -976,9 +974,6 @@ function CompactSubagentsSummary(props: {
                     <div class="rounded-lg border border-border/65 bg-background/75 px-2.5 py-2">
                       <div class="flex items-center gap-2">
                         <span class={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium shrink-0', subagentStatusBadgeClass(item.status))}>
-                          <Show when={String(item.status ?? '').toLowerCase() === 'running'}>
-                            <InlineStatusSnakeLoading />
-                          </Show>
                           {subagentStatusLabel(item.status)}
                         </span>
                         <span class="text-[11px] text-muted-foreground">{item.agentType || 'subagent'}</span>

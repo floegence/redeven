@@ -1,7 +1,6 @@
 import { Show, createMemo } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import type { Message, SubagentBlock as SubagentBlockType } from '../types';
 import { useChatContext } from '../ChatProvider';
 import {
@@ -252,11 +251,6 @@ export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
       <div class="chat-subagent-header chat-subagent-header-static">
         <span class="chat-subagent-header-main">
           <span class={subagentStatusClass(blockView().status)}>
-            <Show when={blockView().status === 'running'}>
-              <span class="chat-subagent-status-loader" aria-hidden="true">
-                <SnakeLoader size="sm" class="chat-inline-snake-loader-subagent" />
-              </span>
-            </Show>
             {statusText()}
           </span>
           <span class="chat-subagent-meta chat-subagent-agent">{blockView().agentType || 'subagent'}</span>
