@@ -3487,6 +3487,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- Delegate only when work can be parallelized, isolated, or independently reviewed.",
 		"- Do NOT delegate trivial single-step tasks that can be completed directly.",
 		"- Create subagents with subagents(action=create) and include objective, agent_type, trigger_reason, deliverables, definition_of_done, and output_schema (title/context_mode/inputs when useful).",
+		"- output_schema must include type=object, a non-empty properties object, and required keys that exist in properties.",
 		"- Use subagents(action=wait) to gather child status snapshots before final decisions.",
 		"- Use subagents(action=list|inspect|steer|terminate|terminate_all) to manage child runs deterministically.",
 		"",

@@ -213,8 +213,16 @@ type WaitSubagentItem = {
 };
 
 type WaitSubagentsDisplay = {
-  action: 'create' | 'wait' | 'list';
+  action: 'create' | 'wait' | 'list' | 'inspect' | 'steer' | 'terminate' | 'terminate_all';
   ids: string[];
+  target: string;
+  scope: string;
+  requestedAgentType: string;
+  requestedTitle: string;
+  requestedObjective: string;
+  requestedTriggerReason: string;
+  requestedMessage: string;
+  interrupt: boolean;
   timeoutMs: number;
   timedOut: boolean;
   items: WaitSubagentItem[];
@@ -235,6 +243,16 @@ function readFiniteNumber(value: unknown, fallback = 0): number {
     if (Number.isFinite(parsed)) return parsed;
   }
   return fallback;
+}
+
+function readBooleanFlag(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+  }
+  return false;
 }
 
 function normalizeWaitSubagentStatus(value: unknown): WaitSubagentStatus {
@@ -331,19 +349,66 @@ function formatSubagentInteger(value: number): string {
   return waitSubagentIntegerFormatter.format(Math.round(value));
 }
 
+function summarizeSubagentText(value: string, maxLength = 132): string {
+  const normalized = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function asSubagentsAction(
+  value: string,
+): WaitSubagentsDisplay['action'] | '' {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  switch (normalized) {
+    case 'create':
+    case 'wait':
+    case 'list':
+    case 'inspect':
+    case 'steer':
+    case 'terminate':
+    case 'terminate_all':
+      return normalized;
+    default:
+      return '';
+  }
+}
+
 function buildWaitSubagentsDisplay(block: ToolCallBlockType): WaitSubagentsDisplay | null {
   if (String(block.toolName ?? '').trim() !== SUBAGENTS_TOOL_NAME) return null;
 
   const args = asRecord(block.args);
   const result = asRecord(block.result);
-  const action = asTrimmedString(args?.action ?? result?.action).toLowerCase();
-  if (action !== 'create' && action !== 'wait' && action !== 'list') return null;
+  const action = asSubagentsAction(asTrimmedString(args?.action ?? result?.action));
+  if (!action) return null;
 
-  const ids = Array.isArray(args?.ids)
-    ? Array.from(new Set(args.ids.map((value) => String(value ?? '').trim()).filter(Boolean)))
-    : [];
+  const idPool: string[] = [];
+  const appendIDs = (raw: unknown): void => {
+    if (!Array.isArray(raw)) return;
+    raw.forEach((value) => {
+      const id = String(value ?? '').trim();
+      if (id) idPool.push(id);
+    });
+  };
+  appendIDs(args?.ids);
+  appendIDs(result?.ids);
+  appendIDs(result?.affected_ids ?? result?.affectedIds);
+
+  const target = asTrimmedString(args?.target ?? result?.target);
+  if (target) {
+    idPool.push(target);
+  }
+  const ids = Array.from(new Set(idPool.filter(Boolean)));
+
+  const scope = asTrimmedString(args?.scope ?? result?.scope);
+  const requestedAgentType = asTrimmedString(args?.agent_type ?? args?.agentType);
+  const requestedTitle = asTrimmedString(args?.title);
+  const requestedObjective = asTrimmedString(args?.objective);
+  const requestedTriggerReason = asTrimmedString(args?.trigger_reason ?? args?.triggerReason);
+  const requestedMessage = asTrimmedString(args?.message);
+  const interrupt = readBooleanFlag(args?.interrupt);
   const timeoutMs = Math.max(0, Math.floor(readFiniteNumber(result?.timeout_ms ?? result?.timeoutMs ?? args?.timeout_ms ?? args?.timeoutMs, 0)));
-  const timedOut = result?.timed_out === true || readFiniteNumber(result?.timed_out, 0) === 1;
+  const timedOut = readBooleanFlag(result?.timed_out ?? result?.timedOut);
   const items: WaitSubagentItem[] = [];
   const counts = {
     queued: 0,
@@ -408,6 +473,9 @@ function buildWaitSubagentsDisplay(block: ToolCallBlockType): WaitSubagentsDispl
   if (action === 'create') {
     appendItem({
       subagent_id: result?.subagent_id ?? result?.subagentId,
+      title: result?.title ?? args?.title,
+      objective: result?.objective ?? args?.objective,
+      delegation_prompt_markdown: result?.delegation_prompt_markdown ?? result?.delegationPromptMarkdown,
       agent_type: result?.agent_type ?? args?.agent_type,
       trigger_reason: result?.trigger_reason ?? args?.trigger_reason,
       status: result?.subagent_status ?? result?.subagentStatus ?? result?.status,
@@ -422,6 +490,10 @@ function buildWaitSubagentsDisplay(block: ToolCallBlockType): WaitSubagentsDispl
   } else if (action === 'list') {
     const rawItems = Array.isArray(result?.items) ? result.items : [];
     rawItems.forEach((raw) => appendItem(raw));
+  } else if (action === 'inspect') {
+    appendItem(result?.item);
+  } else if (action === 'steer' || action === 'terminate') {
+    appendItem(result?.snapshot);
   }
 
   items.sort((a, b) => {
@@ -431,8 +503,16 @@ function buildWaitSubagentsDisplay(block: ToolCallBlockType): WaitSubagentsDispl
   });
 
   return {
-    action: action as WaitSubagentsDisplay['action'],
+    action,
     ids,
+    target,
+    scope,
+    requestedAgentType,
+    requestedTitle,
+    requestedObjective,
+    requestedTriggerReason,
+    requestedMessage,
+    interrupt,
     timeoutMs,
     timedOut,
     items,
@@ -448,16 +528,46 @@ interface WaitSubagentsToolCardProps {
 
 const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => {
   const badgeLabel = createMemo(() => {
-    if (props.display.action === 'create') return 'Create subagent';
-    if (props.display.action === 'list') return 'List subagents';
-    return 'Wait subagents';
+    switch (props.display.action) {
+      case 'create':
+        return 'Create subagent';
+      case 'wait':
+        return 'Wait subagents';
+      case 'list':
+        return 'List subagents';
+      case 'inspect':
+        return 'Inspect subagent';
+      case 'steer':
+        return 'Steer subagent';
+      case 'terminate':
+        return 'Terminate subagent';
+      case 'terminate_all':
+        return 'Terminate all';
+      default:
+        return 'Subagents';
+    }
   });
 
   const headlineStateLabel = createMemo(() => {
     if (props.block.status === 'running') {
-      if (props.display.action === 'create') return 'Creating';
-      if (props.display.action === 'list') return 'Collecting snapshots';
-      return 'Waiting snapshots';
+      switch (props.display.action) {
+        case 'create':
+          return 'Creating';
+        case 'wait':
+          return 'Waiting snapshots';
+        case 'list':
+          return 'Collecting snapshots';
+        case 'inspect':
+          return 'Inspecting';
+        case 'steer':
+          return 'Steering';
+        case 'terminate':
+          return 'Terminating';
+        case 'terminate_all':
+          return 'Terminating all';
+        default:
+          return 'Running';
+      }
     }
     if (props.block.status === 'pending') return 'Queued';
     if (props.block.status === 'success') return props.display.timedOut ? 'Timed out' : 'Completed';
@@ -476,9 +586,14 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
     return 'chat-tool-wait-subagents-state-error';
   });
 
-  const isWorking = createMemo(() => props.block.status === 'running' || props.block.status === 'pending');
-  const targetsCount = createMemo(() => (props.display.items.length > 0 ? props.display.items.length : props.display.ids.length));
+  const targetsCount = createMemo(() => {
+    if (props.display.items.length > 0) return props.display.items.length;
+    if (props.display.ids.length > 0) return props.display.ids.length;
+    if (props.display.target) return 1;
+    return 0;
+  });
   const visibleItems = createMemo(() => props.display.items.slice(0, 4));
+  const visibleIDChips = createMemo(() => props.display.ids.slice(0, 4));
   const trackedIDsPreview = createMemo(() => {
     if (props.display.items.length > 0) {
       return props.display.items.slice(0, 3).map((item) => item.subagentId);
@@ -514,11 +629,62 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
         </Show>
       </div>
 
+      <Show when={props.display.scope || props.display.requestedAgentType || props.display.target || props.display.ids.length > 0}>
+        <div class="chat-tool-wait-subagents-params">
+          <Show when={props.display.scope}>
+            <span class="chat-tool-wait-subagents-param-pill">Scope: {props.display.scope}</span>
+          </Show>
+          <Show when={props.display.requestedAgentType}>
+            <span class="chat-tool-wait-subagents-param-pill">Type: {props.display.requestedAgentType}</span>
+          </Show>
+          <Show when={props.display.target}>
+            <span class="chat-tool-wait-subagents-param-pill" title={props.display.target}>
+              Target: {summarizeSubagentText(props.display.target, 36)}
+            </span>
+          </Show>
+          <Show when={visibleIDChips().length > 0}>
+            <For each={visibleIDChips()}>
+              {(id) => (
+                <span class="chat-tool-wait-subagents-id-pill" title={id}>
+                  {summarizeSubagentText(id, 26)}
+                </span>
+              )}
+            </For>
+            <Show when={props.display.ids.length > visibleIDChips().length}>
+              <span class="chat-tool-wait-subagents-param-pill">+{props.display.ids.length - visibleIDChips().length} more</span>
+            </Show>
+          </Show>
+        </div>
+      </Show>
+
+      <Show when={props.display.requestedTitle || props.display.requestedObjective || props.display.requestedTriggerReason || props.display.requestedMessage}>
+        <div class="chat-tool-wait-subagents-request">
+          <Show when={props.display.requestedTitle || props.display.requestedObjective}>
+            <div class="chat-tool-wait-subagents-item-trigger">
+              Task: {summarizeSubagentText(props.display.requestedTitle || props.display.requestedObjective, 170)}
+            </div>
+          </Show>
+          <Show when={props.display.requestedTriggerReason}>
+            <div class="chat-tool-wait-subagents-item-trigger">
+              Trigger: {summarizeSubagentText(props.display.requestedTriggerReason, 170)}
+            </div>
+          </Show>
+          <Show when={props.display.requestedMessage}>
+            <div class="chat-tool-wait-subagents-item-trigger">
+              Message: {summarizeSubagentText(props.display.requestedMessage, 170)}
+              <Show when={props.display.interrupt}>
+                <span class="chat-tool-wait-subagents-inline-flag">interrupt=true</span>
+              </Show>
+            </div>
+          </Show>
+        </div>
+      </Show>
+
       <Show when={props.display.items.length === 0}>
         <div class="chat-tool-wait-subagents-empty">
           <Show
             when={trackedIDsPreview().length > 0}
-            fallback={<span>No subagent snapshots yet.</span>}
+            fallback={<span>No subagent snapshots returned.</span>}
           >
             <span>
               <Show when={props.display.action === 'wait'} fallback={<span>Subagent IDs: {trackedIDsPreview().join(', ')}</span>}>
@@ -544,7 +710,7 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
                 </div>
                 <Show when={item.title || item.objective}>
                   <div class="chat-tool-wait-subagents-item-trigger">
-                    Title: {item.title || item.objective}
+                    Title: {summarizeSubagentText(item.title || item.objective, 170)}
                   </div>
                 </Show>
 
@@ -558,7 +724,7 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
 
                 <Show when={item.triggerReason}>
                   <div class="chat-tool-wait-subagents-item-trigger">
-                    Trigger: {item.triggerReason}
+                    Trigger: {summarizeSubagentText(item.triggerReason, 170)}
                   </div>
                 </Show>
 

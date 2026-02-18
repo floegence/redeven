@@ -576,6 +576,62 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
   color: var(--muted-foreground);
 }
 
+.chat-tool-wait-subagents-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+  padding: 0 0.8rem 0.46rem;
+}
+
+.chat-tool-wait-subagents-param-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  background: color-mix(in srgb, var(--muted) 48%, transparent);
+  color: var(--muted-foreground);
+  font-size: 0.625rem;
+  line-height: 1;
+  padding: 0.2rem 0.46rem;
+  max-width: 40ch;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-tool-wait-subagents-id-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: color-mix(in srgb, var(--primary) 90%, var(--foreground));
+  font-size: 0.625rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  line-height: 1;
+  padding: 0.2rem 0.46rem;
+  max-width: 30ch;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-tool-wait-subagents-request {
+  margin: 0 0.8rem 0.56rem;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 0.62rem;
+  background: color-mix(in srgb, var(--background) 76%, transparent);
+  padding: 0.42rem 0.52rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.chat-tool-wait-subagents-inline-flag {
+  margin-left: 0.45rem;
+  font-size: 0.6rem;
+  color: color-mix(in srgb, var(--primary) 82%, var(--muted-foreground));
+}
+
 .chat-tool-wait-subagents-item {
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   border-radius: 0.66rem;
