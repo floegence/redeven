@@ -1705,12 +1705,43 @@ button.chat-subagent-header:focus-visible {
   gap: 0.2rem;
 }
 
+.chat-subagent-compact-line-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .chat-subagent-compact-label {
   font-size: 0.62rem;
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--muted-foreground);
+}
+
+.chat-subagent-detail-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--primary) 86%, var(--foreground));
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.chat-subagent-detail-link:hover {
+  color: color-mix(in srgb, var(--primary) 100%, #000);
+  text-decoration: underline;
+  text-underline-offset: 0.11rem;
+}
+
+.chat-subagent-detail-link:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--primary) 52%, transparent);
+  outline-offset: 1px;
+  border-radius: 0.22rem;
 }
 
 .chat-subagent-compact-value {
@@ -1767,6 +1798,77 @@ button.chat-subagent-header:focus-visible {
   border-radius: 0.55rem;
   background: color-mix(in srgb, var(--destructive) 9%, transparent);
   padding: 0.45rem 0.55rem;
+}
+
+.chat-subagent-detail-dialog {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.chat-subagent-detail-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.chat-subagent-detail-meta-card {
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 0.52rem;
+  background: color-mix(in srgb, var(--muted) 38%, transparent);
+  padding: 0.4rem 0.5rem;
+}
+
+.chat-subagent-detail-meta-label {
+  font-size: 0.63rem;
+  color: var(--muted-foreground);
+}
+
+.chat-subagent-detail-meta-value {
+  margin-top: 0.14rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--foreground);
+}
+
+.chat-subagent-detail-meta-value-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  word-break: break-all;
+}
+
+.chat-subagent-detail-section {
+  display: grid;
+  gap: 0.24rem;
+}
+
+.chat-subagent-detail-label {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.chat-subagent-detail-text {
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--foreground);
+  white-space: normal;
+  word-break: break-word;
+}
+
+.chat-subagent-detail-prompt {
+  margin: 0;
+  max-height: min(52vh, 32rem);
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 0.62rem;
+  background: color-mix(in srgb, var(--background) 78%, transparent);
+  padding: 0.62rem 0.72rem;
+  font-size: 0.72rem;
+  line-height: 1.52;
+  color: color-mix(in srgb, var(--foreground) 90%, transparent);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .chat-subagent-status {

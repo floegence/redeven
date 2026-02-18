@@ -883,6 +883,8 @@ function CompactSubagentsSummary(props: {
   updatedLabel: string;
 }) {
   const [expanded, setExpanded] = createSignal(false);
+  const [promptDialogOpen, setPromptDialogOpen] = createSignal(false);
+  const [promptDialogItem, setPromptDialogItem] = createSignal<SubagentView | null>(null);
   let containerRef: HTMLDivElement | undefined;
 
   const runningCount = createMemo(
@@ -897,6 +899,20 @@ function CompactSubagentsSummary(props: {
   const failedCount = createMemo(
     () => props.subagents.filter((item) => item.status === 'failed' || item.status === 'timed_out').length,
   );
+  const promptDialogTitle = createMemo(() => {
+    const item = promptDialogItem();
+    if (!item) return 'Subagent Prompt';
+    const title = String(item.title ?? '').trim();
+    if (title) return `Subagent Prompt · ${title}`;
+    return `Subagent Prompt · ${item.subagentId}`;
+  });
+
+  const openPromptDialog = (item: SubagentView) => {
+    const prompt = String(item.delegationPromptMarkdown ?? '').trim();
+    if (!prompt) return;
+    setPromptDialogItem(item);
+    setPromptDialogOpen(true);
+  };
 
   createEffect(() => {
     if (!expanded()) return;
@@ -979,9 +995,17 @@ function CompactSubagentsSummary(props: {
                         </div>
                       </Show>
                       <Show when={item.delegationPromptMarkdown}>
-                        <div class="mt-1 text-[11px] text-muted-foreground leading-relaxed">
-                          Prompt: {summarizeSubagentText(String(item.delegationPromptMarkdown ?? ''), 108)}
-                        </div>
+                        <button
+                          type="button"
+                          class="mt-1 w-full rounded-md border border-border/65 bg-muted/35 px-2 py-1.5 text-left transition-colors hover:bg-accent/45"
+                          onClick={() => openPromptDialog(item)}
+                        >
+                          <div class="text-[10px] uppercase tracking-wide text-muted-foreground">Prompt</div>
+                          <div class="mt-0.5 text-[11px] text-foreground leading-relaxed">
+                            {summarizeSubagentText(String(item.delegationPromptMarkdown ?? ''), 108)}
+                          </div>
+                          <div class="mt-1 text-[10px] font-medium text-primary">Click to view full prompt</div>
+                        </button>
                       </Show>
                       <Show when={item.triggerReason}>
                         <div class="mt-1 text-[11px] text-muted-foreground leading-relaxed">
@@ -1005,6 +1029,55 @@ function CompactSubagentsSummary(props: {
           </div>
         </div>
       </Show>
+
+      <Dialog
+        open={promptDialogOpen()}
+        onOpenChange={(open) => {
+          setPromptDialogOpen(open);
+          if (!open) {
+            setPromptDialogItem(null);
+          }
+        }}
+        title={promptDialogTitle()}
+      >
+        <Show when={promptDialogItem()}>
+          {(item) => (
+            <div class="space-y-3">
+              <div class="grid gap-2 sm:grid-cols-2">
+                <div class="rounded-md border border-border/70 bg-muted/35 px-2.5 py-2">
+                  <div class="text-[10px] uppercase tracking-wide text-muted-foreground">Subagent</div>
+                  <div class="mt-0.5 text-[11px] font-mono break-all">{item().subagentId}</div>
+                </div>
+                <div class="rounded-md border border-border/70 bg-muted/35 px-2.5 py-2">
+                  <div class="text-[10px] uppercase tracking-wide text-muted-foreground">Status</div>
+                  <div class="mt-0.5 text-[11px]">{subagentStatusLabel(item().status)}</div>
+                </div>
+              </div>
+
+              <Show when={item().objective}>
+                <div>
+                  <div class="text-[10px] uppercase tracking-wide text-muted-foreground">Objective</div>
+                  <div class="mt-1 text-[12px] text-foreground leading-relaxed">{item().objective}</div>
+                </div>
+              </Show>
+
+              <Show when={item().triggerReason}>
+                <div>
+                  <div class="text-[10px] uppercase tracking-wide text-muted-foreground">Trigger reason</div>
+                  <div class="mt-1 text-[12px] text-foreground leading-relaxed">{item().triggerReason}</div>
+                </div>
+              </Show>
+
+              <div>
+                <div class="text-[10px] uppercase tracking-wide text-muted-foreground">Delegation prompt</div>
+                <pre class="mt-1 max-h-[52vh] overflow-auto rounded-md border border-border/70 bg-background px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap break-words text-foreground">
+                  {String(item().delegationPromptMarkdown ?? '').trim()}
+                </pre>
+              </div>
+            </div>
+          )}
+        </Show>
+      </Dialog>
     </div>
   );
 }

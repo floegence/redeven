@@ -1,6 +1,7 @@
-import { Show, createMemo } from 'solid-js';
+import { Show, createMemo, createSignal } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { Dialog } from '@floegence/floe-webapp-core/ui';
 import type { Message, SubagentBlock as SubagentBlockType } from '../types';
 import { useChatContext } from '../ChatProvider';
 import {
@@ -254,6 +255,7 @@ function resolveLatestSubagentView(messages: Message[], subagentId: string, seed
 
 export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
   const ctx = useChatContext();
+  const [promptDialogOpen, setPromptDialogOpen] = createSignal(false);
 
   const blockView = createMemo(() => {
     const seed = subagentBlockToView(props.block);
@@ -278,6 +280,11 @@ export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
     const prompt = String(blockView().delegationPromptMarkdown ?? '').trim();
     if (!prompt) return '';
     return summarizeText(prompt.replace(/\s+/g, ' '), 200);
+  });
+  const promptDialogTitle = createMemo(() => {
+    const title = String(blockView().title ?? '').trim();
+    if (title) return `Subagent Prompt · ${title}`;
+    return `Subagent Prompt · ${blockView().subagentId}`;
   });
   const outcomeText = createMemo(() => {
     const value = String(blockView().stats.outcome ?? '').trim();
@@ -311,7 +318,16 @@ export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
         </div>
         <Show when={promptPreview()}>
           <div class="chat-subagent-compact-line">
-            <span class="chat-subagent-compact-label">Prompt</span>
+            <div class="chat-subagent-compact-line-head">
+              <span class="chat-subagent-compact-label">Prompt</span>
+              <button
+                type="button"
+                class="chat-subagent-detail-link"
+                onClick={() => setPromptDialogOpen(true)}
+              >
+                View details
+              </button>
+            </div>
             <span class="chat-subagent-compact-value">{promptPreview()}</span>
           </div>
         </Show>
@@ -342,6 +358,54 @@ export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
           </div>
         </Show>
       </div>
+
+      <Dialog
+        open={promptDialogOpen()}
+        onOpenChange={(open) => setPromptDialogOpen(open)}
+        title={promptDialogTitle()}
+      >
+        <div class="chat-subagent-detail-dialog">
+          <div class="chat-subagent-detail-meta-grid">
+            <div class="chat-subagent-detail-meta-card">
+              <div class="chat-subagent-detail-meta-label">Subagent</div>
+              <div class="chat-subagent-detail-meta-value chat-subagent-detail-meta-value-mono">{blockView().subagentId}</div>
+            </div>
+            <div class="chat-subagent-detail-meta-card">
+              <div class="chat-subagent-detail-meta-label">Status</div>
+              <div class="chat-subagent-detail-meta-value">{statusText()}</div>
+            </div>
+            <div class="chat-subagent-detail-meta-card">
+              <div class="chat-subagent-detail-meta-label">Type</div>
+              <div class="chat-subagent-detail-meta-value">{blockView().agentType || 'subagent'}</div>
+            </div>
+            <div class="chat-subagent-detail-meta-card">
+              <div class="chat-subagent-detail-meta-label">Elapsed</div>
+              <div class="chat-subagent-detail-meta-value">{durationText()}</div>
+            </div>
+          </div>
+
+          <Show when={blockView().objective}>
+            <div class="chat-subagent-detail-section">
+              <div class="chat-subagent-detail-label">Objective</div>
+              <div class="chat-subagent-detail-text">{blockView().objective}</div>
+            </div>
+          </Show>
+
+          <Show when={blockView().triggerReason}>
+            <div class="chat-subagent-detail-section">
+              <div class="chat-subagent-detail-label">Trigger reason</div>
+              <div class="chat-subagent-detail-text">{blockView().triggerReason}</div>
+            </div>
+          </Show>
+
+          <div class="chat-subagent-detail-section">
+            <div class="chat-subagent-detail-label">Delegation prompt</div>
+            <pre class="chat-subagent-detail-prompt">
+              {String(blockView().delegationPromptMarkdown ?? '').trim()}
+            </pre>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 };
