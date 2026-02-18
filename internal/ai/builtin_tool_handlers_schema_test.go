@@ -20,8 +20,19 @@ func TestBuiltInToolDefinitions_StrictSchemaCompatible(t *testing.T) {
 			if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
 				t.Fatalf("parse schema: %v", err)
 			}
+			validateProviderRootSchema(t, def.Name, schema)
 			validateStrictObjectSchema(t, def.Name, schema)
 		})
+	}
+}
+
+func validateProviderRootSchema(t *testing.T, toolName string, schema map[string]any) {
+	t.Helper()
+	disallowed := []string{"oneOf", "anyOf", "allOf", "enum", "not"}
+	for _, key := range disallowed {
+		if _, exists := schema[key]; exists {
+			t.Fatalf("%s: provider-incompatible top-level key %q", toolName, key)
+		}
 	}
 }
 
