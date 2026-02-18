@@ -3,7 +3,6 @@
 import { For, Match, Show, Switch } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 
 export interface TodosBlockProps {
   version: number;
@@ -112,11 +111,6 @@ export const TodosBlock: Component<TodosBlockProps> = (props) => {
                         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                           <path d="M5 12h14" />
                         </svg>
-                      </Match>
-                      <Match when={item.status === 'in_progress'}>
-                        <span class="chat-todos-check-loader" aria-hidden="true">
-                          <SnakeLoader size="sm" class="chat-inline-snake-loader-todo" />
-                        </span>
                       </Match>
                     </Switch>
                   </span>
