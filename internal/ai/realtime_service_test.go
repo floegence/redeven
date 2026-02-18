@@ -100,7 +100,7 @@ func newRealtimeTestService(t *testing.T, delay time.Duration) *Service {
 				ID:      "openai",
 				Type:    "openai",
 				BaseURL: strings.TrimSuffix(server.URL, "/") + "/v1",
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 			},
 		},
 	}

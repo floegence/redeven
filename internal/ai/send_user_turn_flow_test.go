@@ -26,7 +26,7 @@ func newSendTurnTestService(t *testing.T) *Service {
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: "https://api.openai.com/v1",
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 			},
 		},
 	}

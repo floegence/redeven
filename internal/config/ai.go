@@ -17,8 +17,12 @@ type AIConfig struct {
 	//
 	// Notes:
 	// - Providers own their allowed model list (provider + model are always configured together).
-	// - Exactly one provider model must be marked as default via models[].is_default.
 	Providers []AIProvider `json:"providers,omitempty"`
+
+	// CurrentModelID points to the model used by default for new chats.
+	//
+	// Format: <provider_id>/<model_name>
+	CurrentModelID string `json:"current_model_id"`
 
 	// Mode controls the AI runtime behavior.
 	//
@@ -108,10 +112,6 @@ type AIProvider struct {
 
 type AIProviderModel struct {
 	ModelName string `json:"model_name"`
-
-	// IsDefault marks the single default model across all providers.
-	// Exactly one providers[].models[].is_default must be true.
-	IsDefault bool `json:"is_default,omitempty"`
 }
 
 const (
@@ -168,7 +168,6 @@ func (c *AIConfig) Validate() error {
 		return errors.New("missing providers")
 	}
 	seen := make(map[string]struct{}, len(c.Providers))
-	defaultCount := 0
 	for i := range c.Providers {
 		p := c.Providers[i]
 		id := strings.TrimSpace(p.ID)
@@ -226,26 +225,22 @@ func (c *AIConfig) Validate() error {
 				return fmt.Errorf("providers[%d].models[%d]: duplicate model_name %q", i, j, name)
 			}
 			modelNames[name] = struct{}{}
-			if m.IsDefault {
-				defaultCount++
-			}
 		}
 	}
 
-	if defaultCount == 0 {
-		return errors.New("missing default model (providers[].models[].is_default)")
+	currentModelID := strings.TrimSpace(c.CurrentModelID)
+	if currentModelID == "" {
+		return errors.New("missing current model (current_model_id)")
 	}
-	if defaultCount > 1 {
-		return errors.New("multiple default models (providers[].models[].is_default)")
+	if !c.IsAllowedModelID(currentModelID) {
+		return fmt.Errorf("current_model_id %q is not in providers[].models[]", c.CurrentModelID)
 	}
 
 	return nil
 }
 
-// DefaultModelID returns the default model wire id (<provider_id>/<model_name>).
-//
-// It assumes Validate() has passed. When config is invalid/incomplete, it returns ("", false).
-func (c *AIConfig) DefaultModelID() (string, bool) {
+// FirstModelID returns the first available model wire id (<provider_id>/<model_name>) from providers[].models[] order.
+func (c *AIConfig) FirstModelID() (string, bool) {
 	if c == nil {
 		return "", false
 	}
@@ -255,9 +250,6 @@ func (c *AIConfig) DefaultModelID() (string, bool) {
 			continue
 		}
 		for _, m := range p.Models {
-			if !m.IsDefault {
-				continue
-			}
 			mn := strings.TrimSpace(m.ModelName)
 			if mn == "" {
 				continue
@@ -266,6 +258,33 @@ func (c *AIConfig) DefaultModelID() (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// ResolvedCurrentModelID returns the current model when valid; otherwise it falls back to the first available model.
+func (c *AIConfig) ResolvedCurrentModelID() (string, bool) {
+	if c == nil {
+		return "", false
+	}
+	current := strings.TrimSpace(c.CurrentModelID)
+	if current != "" && c.IsAllowedModelID(current) {
+		return current, true
+	}
+	return c.FirstModelID()
+}
+
+// NormalizeCurrentModelID rewrites current_model_id to a valid value.
+//
+// It returns true when a valid model exists and current_model_id was set.
+func (c *AIConfig) NormalizeCurrentModelID() bool {
+	if c == nil {
+		return false
+	}
+	modelID, ok := c.ResolvedCurrentModelID()
+	if !ok {
+		return false
+	}
+	c.CurrentModelID = modelID
+	return true
 }
 
 // IsAllowedModelID reports whether the given model wire id (<provider_id>/<model_name>) exists in the config allow-list.

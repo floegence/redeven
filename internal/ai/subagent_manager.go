@@ -579,7 +579,7 @@ func (m *subagentManager) delegate(ctx context.Context, args map[string]any) (ma
 
 	modelID := strings.TrimSpace(m.parent.currentModelID)
 	if modelID == "" && m.parent.cfg != nil {
-		if def, ok := m.parent.cfg.DefaultModelID(); ok {
+		if def, ok := m.parent.cfg.ResolvedCurrentModelID(); ok {
 			modelID = def
 		}
 	}

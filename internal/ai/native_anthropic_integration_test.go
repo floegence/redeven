@@ -158,7 +158,7 @@ func TestIntegration_NativeSDK_Anthropic_Stream_Succeeds(t *testing.T) {
 				Name:    "Anthropic",
 				Type:    "anthropic",
 				BaseURL: baseURL,
-				Models:  []config.AIProviderModel{{ModelName: "claude-3-5-sonnet-latest", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "claude-3-5-sonnet-latest"}},
 			},
 		},
 	}

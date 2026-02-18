@@ -28,7 +28,7 @@ func newIntentRoutingService(t *testing.T, mock *openAIMock) (*Service, session.
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: strings.TrimSuffix(srv.URL, "/") + "/v1",
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 			},
 		},
 	}

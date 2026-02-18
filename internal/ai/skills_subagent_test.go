@@ -288,7 +288,7 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 			ID:      "openai",
 			Type:    "openai",
 			BaseURL: strings.TrimSuffix(srv.URL, "/") + "/v1",
-			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 		}},
 	}
 	meta := &session.Meta{
@@ -502,7 +502,7 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 			ID:      "openai",
 			Type:    "openai",
 			BaseURL: strings.TrimSuffix(srv.URL, "/") + "/v1",
-			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 		}},
 	}
 

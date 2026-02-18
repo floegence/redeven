@@ -79,16 +79,21 @@ The wire model id remains:
 <provider_id>/<model_name>
 ```
 
-But the config stores models under each provider (provider + model are always configured together):
+But the config keeps `current_model_id` at the AI root, and stores models under each provider:
 
 ```json
 {
-  "id": "openai",
-  "type": "openai",
-  "name": "OpenAI",
-  "models": [
-    { "model_name": "gpt-5-mini", "is_default": true },
-    { "model_name": "gpt-5" }
+  "current_model_id": "openai/gpt-5-mini",
+  "providers": [
+    {
+      "id": "openai",
+      "type": "openai",
+      "name": "OpenAI",
+      "models": [
+        { "model_name": "gpt-5-mini" },
+        { "model_name": "gpt-5" }
+      ]
+    }
   ]
 }
 ```
@@ -96,14 +101,15 @@ But the config stores models under each provider (provider + model are always co
 Rules:
 
 - `providers[].models[]` is the allow-list shown in the Chat UI.
-- Exactly one `providers[].models[].is_default` must be true across all providers (default for new chats).
+- `current_model_id` must point to one allowed model id (`<provider_id>/<model_name>`).
+- When `current_model_id` is missing/invalid after provider/model edits, the system falls back to the first available model.
 - `model_name` must not contain `/` (wire id uses `/` as a delimiter).
 - The agent derives the wire id as `provider.id + "/" + model_name` when talking to runtime providers and when returning `/api/ai/models`.
 
 Thread-level selection:
 
 - Each chat thread stores its selected `model_id` (wire id).
-- New chats start with the config default.
+- New chats start with `current_model_id`.
 - Switching threads automatically follows the thread's `model_id`.
 
 ---
@@ -126,12 +132,14 @@ Key points:
   - “Add Provider” generates a provider id automatically.
   - Users edit `name`, `type`, `base_url`.
   - Provider id is displayed read-only (useful for debugging / advanced JSON edits).
+- Current model:
+  - A single `current_model_id` controls which model is used by default for new chats.
+  - Chat model selection automatically updates `current_model_id`.
 - API keys:
   - Stored locally in `secrets.json`, never shown again.
   - UI shows `Key set / Key not set`, with `Save key` and `Clear`.
 - Models:
-  - Configured inside each provider as `models[]` (`model_name` + optional `is_default`).
-  - One model across all providers is marked **Default** (used for new chats).
+  - Configured inside each provider as `models[]` (`model_name` only).
   - Chat header shows a single **Model** selector (no separate provider dropdown), displayed as `<provider name> / <model_name>`.
 
 ---

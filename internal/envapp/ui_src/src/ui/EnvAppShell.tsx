@@ -61,7 +61,6 @@ const CODE_SPACE_ID_ENV_UI = 'env-ui';
 
 const ACTIVE_TAB_STORAGE_KEY = 'redeven_envapp_active_tab';
 const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
-const DRAFT_MODEL_STORAGE_KEY = 'redeven_ai_draft_model_id';
 const EXECUTION_MODE_STORAGE_KEY = 'redeven_ai_execution_mode';
 
 type CreateThreadResponse = Readonly<{
@@ -69,14 +68,6 @@ type CreateThreadResponse = Readonly<{
     thread_id: string;
   }>;
 }>;
-
-function readPersistedDraftModelId(): string {
-  try {
-    return String(localStorage.getItem(DRAFT_MODEL_STORAGE_KEY) ?? '').trim();
-  } catch {
-    return '';
-  }
-}
 
 function readPersistedExecutionMode(): 'act' | 'plan' {
   try {
@@ -252,11 +243,8 @@ export function EnvAppShell() {
       if (id) allowed.add(id);
     }
 
-    const persisted = readPersistedDraftModelId();
-    if (persisted && allowed.has(persisted)) return persisted;
-
-    const defaultModel = String(models?.default_model ?? '').trim();
-    if (defaultModel && allowed.has(defaultModel)) return defaultModel;
+    const currentModel = String(models?.current_model ?? '').trim();
+    if (currentModel && allowed.has(currentModel)) return currentModel;
 
     const first = String(options[0]?.id ?? '').trim();
     if (first && allowed.has(first)) return first;

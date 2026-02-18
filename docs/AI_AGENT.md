@@ -24,7 +24,7 @@ Enable Flower by adding an `ai` section to the agent config file (default: `~/.r
 Notes:
 
 - Providers own their model list: `ai.providers[].models[]` is the allow-list shown in the Chat UI.
-- Exactly one `providers[].models[].is_default` must be true (default for new chats).
+- `ai.current_model_id` points to the default model for new chats.
 - The wire model id remains `<provider_id>/<model_name>` (stored on each chat thread).
 - `providers[].base_url` is optional for `openai` / `anthropic`, and **required** for `openai_compatible` / `moonshot`.
 
@@ -56,6 +56,7 @@ Example:
       "enforce_plan_mode_guard": false,
       "block_dangerous_commands": false
     },
+    "current_model_id": "openai/gpt-5-mini",
     "providers": [
       {
         "id": "openai",
@@ -63,7 +64,7 @@ Example:
         "name": "OpenAI",
         "base_url": "https://api.openai.com/v1",
         "models": [
-          { "model_name": "gpt-5-mini", "is_default": true },
+          { "model_name": "gpt-5-mini" },
           { "model_name": "gpt-5" }
         ]
       },

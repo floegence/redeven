@@ -16,7 +16,7 @@ func TestAIConfigValidate_RequiresProviderModels(t *testing.T) {
 	}
 }
 
-func TestAIConfigValidate_RequiresDefaultModel(t *testing.T) {
+func TestAIConfigValidate_RequiresCurrentModel(t *testing.T) {
 	t.Parallel()
 
 	cfg := &AIConfig{
@@ -32,27 +32,28 @@ func TestAIConfigValidate_RequiresDefaultModel(t *testing.T) {
 	}
 
 	if err := cfg.Validate(); err == nil {
-		t.Fatalf("expected validation error for missing default model")
+		t.Fatalf("expected validation error for missing current model")
 	}
 }
 
-func TestAIConfigValidate_RejectsMultipleDefaults(t *testing.T) {
+func TestAIConfigValidate_RejectsInvalidCurrentModel(t *testing.T) {
 	t.Parallel()
 
 	cfg := &AIConfig{
+		CurrentModelID: "openai/gpt-unknown",
 		Providers: []AIProvider{
 			{
 				ID:      "openai",
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: "https://api.openai.com/v1",
-				Models:  []AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}, {ModelName: "gpt-5", IsDefault: true}},
+				Models:  []AIProviderModel{{ModelName: "gpt-5-mini"}, {ModelName: "gpt-5"}},
 			},
 		},
 	}
 
 	if err := cfg.Validate(); err == nil {
-		t.Fatalf("expected validation error for multiple default models")
+		t.Fatalf("expected validation error for invalid current model")
 	}
 }
 
@@ -60,12 +61,13 @@ func TestAIConfigValidate_MoonshotRequiresBaseURL(t *testing.T) {
 	t.Parallel()
 
 	cfg := &AIConfig{
+		CurrentModelID: "moonshot/kimi-k2.5",
 		Providers: []AIProvider{
 			{
 				ID:     "moonshot",
 				Name:   "Moonshot",
 				Type:   "moonshot",
-				Models: []AIProviderModel{{ModelName: "kimi-k2.5", IsDefault: true}},
+				Models: []AIProviderModel{{ModelName: "kimi-k2.5"}},
 			},
 		},
 	}
@@ -83,13 +85,14 @@ func TestAIConfigValidate_OK(t *testing.T) {
 	t.Parallel()
 
 	cfg := &AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []AIProvider{
 			{
 				ID:      "openai",
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: "https://api.openai.com/v1",
-				Models:  []AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}, {ModelName: "gpt-4o-mini"}},
+				Models:  []AIProviderModel{{ModelName: "gpt-5-mini"}, {ModelName: "gpt-4o-mini"}},
 			},
 			{
 				ID:      "anthropic",
@@ -110,14 +113,15 @@ func TestAIConfigValidate_RejectsInvalidMode(t *testing.T) {
 	t.Parallel()
 
 	cfg := &AIConfig{
-		Mode: "oops",
+		Mode:           "oops",
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []AIProvider{
 			{
 				ID:      "openai",
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: "https://api.openai.com/v1",
-				Models:  []AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				Models:  []AIProviderModel{{ModelName: "gpt-5-mini"}},
 			},
 		},
 	}
@@ -177,13 +181,14 @@ func TestAIConfigValidate_RejectsLegacyWebSearchProviderValues(t *testing.T) {
 
 	cfg := &AIConfig{
 		WebSearchProvider: "auto",
+		CurrentModelID:    "openai/gpt-5-mini",
 		Providers: []AIProvider{
 			{
 				ID:      "openai",
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: "https://api.openai.com/v1",
-				Models:  []AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				Models:  []AIProviderModel{{ModelName: "gpt-5-mini"}},
 			},
 		},
 	}
@@ -199,6 +204,55 @@ func TestAIConfigValidate_RejectsLegacyWebSearchProviderValues(t *testing.T) {
 	cfg.WebSearchProvider = "prefer_openai"
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate prefer_openai: %v", err)
+	}
+}
+
+func TestAIConfig_ResolvedCurrentModelID_FallbacksToFirstModel(t *testing.T) {
+	t.Parallel()
+
+	cfg := &AIConfig{
+		CurrentModelID: "openai/missing",
+		Providers: []AIProvider{
+			{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: "https://api.openai.com/v1",
+				Models:  []AIProviderModel{{ModelName: "gpt-5-mini"}, {ModelName: "gpt-5"}},
+			},
+		},
+	}
+
+	modelID, ok := cfg.ResolvedCurrentModelID()
+	if !ok {
+		t.Fatalf("ResolvedCurrentModelID should return a fallback model")
+	}
+	if modelID != "openai/gpt-5-mini" {
+		t.Fatalf("ResolvedCurrentModelID=%q, want %q", modelID, "openai/gpt-5-mini")
+	}
+}
+
+func TestAIConfig_NormalizeCurrentModelID(t *testing.T) {
+	t.Parallel()
+
+	cfg := &AIConfig{
+		CurrentModelID: "openai/missing",
+		Providers: []AIProvider{
+			{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: "https://api.openai.com/v1",
+				Models:  []AIProviderModel{{ModelName: "gpt-5-mini"}},
+			},
+		},
+	}
+
+	if ok := cfg.NormalizeCurrentModelID(); !ok {
+		t.Fatalf("NormalizeCurrentModelID should set current_model_id")
+	}
+	if cfg.CurrentModelID != "openai/gpt-5-mini" {
+		t.Fatalf("CurrentModelID=%q, want %q", cfg.CurrentModelID, "openai/gpt-5-mini")
 	}
 }
 
@@ -265,13 +319,14 @@ func TestAIConfigValidate_RejectsInvalidToolRecoveryMaxSteps(t *testing.T) {
 	t.Parallel()
 
 	base := AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []AIProvider{
 			{
 				ID:      "openai",
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: "https://api.openai.com/v1",
-				Models:  []AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				Models:  []AIProviderModel{{ModelName: "gpt-5-mini"}},
 			},
 		},
 	}

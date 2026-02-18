@@ -52,7 +52,7 @@ description: test skill
 			Name:    "OpenAI",
 			Type:    "openai",
 			BaseURL: "https://api.openai.com/v1",
-			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 		}}},
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "", false, nil },
 	})
@@ -179,7 +179,7 @@ func TestGateway_AISkills_PermissionModel(t *testing.T) {
 			Name:    "OpenAI",
 			Type:    "openai",
 			BaseURL: "https://api.openai.com/v1",
-			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 		}}},
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "", false, nil },
 	})
@@ -296,7 +296,7 @@ description: Install Codex skills
 			Name:    "OpenAI",
 			Type:    "openai",
 			BaseURL: "https://api.openai.com/v1",
-			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 		}}},
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "", false, nil },
 	})

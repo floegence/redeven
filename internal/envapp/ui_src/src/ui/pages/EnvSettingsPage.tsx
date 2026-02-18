@@ -39,7 +39,7 @@ type PermissionPolicy = Readonly<{
 }>;
 
 type AIProviderType = 'openai' | 'anthropic' | 'openai_compatible' | 'moonshot';
-type AIProviderModel = Readonly<{ model_name: string; is_default?: boolean }>;
+type AIProviderModel = Readonly<{ model_name: string }>;
 type AIProvider = Readonly<{ id: string; name?: string; type: AIProviderType; base_url?: string; models: AIProviderModel[] }>;
 type AIExecutionPolicy = Readonly<{
   require_user_approval?: boolean;
@@ -47,6 +47,7 @@ type AIExecutionPolicy = Readonly<{
   block_dangerous_commands?: boolean;
 }>;
 type AIConfig = Readonly<{
+  current_model_id: string;
   providers: AIProvider[];
   mode?: 'act' | 'plan';
   web_search_provider?: 'prefer_openai' | 'brave' | 'disabled';
@@ -201,7 +202,7 @@ type SettingsResponse = Readonly<{
 }>;
 
 type PermissionRow = { key: string; read: boolean; write: boolean; execute: boolean };
-type AIProviderModelRow = { model_name: string; is_default: boolean };
+type AIProviderModelRow = { model_name: string };
 type AIProviderRow = { id: string; name: string; type: AIProviderType; base_url: string; models: AIProviderModelRow[] };
 type AIProviderDialogMode = 'create' | 'edit';
 type AIPreservedUIFields = {
@@ -306,7 +307,6 @@ function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
     base_url: String(row?.base_url ?? ''),
     models: (Array.isArray(row?.models) ? row.models : []).map((m) => ({
       model_name: String(m?.model_name ?? ''),
-      is_default: !!m?.is_default,
     })),
   };
 }
@@ -315,16 +315,10 @@ function normalizeAIProviderRowDraft(row: AIProviderRow): AIProviderRow {
   const out = cloneAIProviderRow(row);
   const models = Array.isArray(out.models) ? out.models : [];
   if (models.length === 0) {
-    out.models = [{ model_name: '', is_default: false }];
-    return out;
+    out.models = [{ model_name: '' }];
+  } else {
+    out.models = models.map((m) => ({ model_name: String(m?.model_name ?? '') }));
   }
-  let defaultFound = false;
-  out.models = models.map((m) => {
-    if (!m.is_default) return { ...m, is_default: false };
-    if (defaultFound) return { ...m, is_default: false };
-    defaultFound = true;
-    return { ...m, is_default: true };
-  });
   return out;
 }
 
@@ -334,7 +328,7 @@ function newAIProviderDraft(): AIProviderRow {
     name: '',
     type: 'openai',
     base_url: defaultBaseURLForProviderType('openai'),
-    models: [{ model_name: '', is_default: false }],
+    models: [{ model_name: '' }],
   });
 }
 
@@ -344,6 +338,7 @@ function defaultPermissionPolicy(): PermissionPolicy {
 
 function defaultAIConfig(): AIConfig {
   return {
+    current_model_id: 'openai/gpt-5-mini',
     web_search_provider: 'prefer_openai',
     execution_policy: {
       require_user_approval: false,
@@ -356,10 +351,38 @@ function defaultAIConfig(): AIConfig {
         name: 'OpenAI',
         type: 'openai',
         base_url: 'https://api.openai.com/v1',
-        models: [{ model_name: 'gpt-5-mini', is_default: true }],
+        models: [{ model_name: 'gpt-5-mini' }],
       },
     ],
   };
+}
+
+type AIModelOption = Readonly<{ id: string; label: string }>;
+
+function collectAIModelOptions(rows: AIProviderRow[]): AIModelOption[] {
+  const options: AIModelOption[] = [];
+  for (const p of Array.isArray(rows) ? rows : []) {
+    const providerID = String(p?.id ?? '').trim();
+    if (!providerID) continue;
+    const providerName = String(p?.name ?? '').trim() || providerID;
+    for (const m of Array.isArray(p?.models) ? p.models : []) {
+      const modelName = String(m?.model_name ?? '').trim();
+      if (!modelName) continue;
+      options.push({
+        id: modelID(providerID, modelName),
+        label: `${providerName} / ${modelName}`,
+      });
+    }
+  }
+  return options;
+}
+
+function normalizeAICurrentModelID(raw: string, rows: AIProviderRow[]): string {
+  const current = String(raw ?? '').trim();
+  const options = collectAIModelOptions(rows);
+  if (options.length === 0) return '';
+  if (options.some((it) => it.id === current)) return current;
+  return options[0].id;
 }
 
 function isJSONObject(v: unknown): v is Record<string, unknown> {
@@ -981,9 +1004,10 @@ export function EnvSettingsPage() {
       name: 'OpenAI',
       type: 'openai',
       base_url: 'https://api.openai.com/v1',
-      models: [{ model_name: 'gpt-5-mini', is_default: true }],
+      models: [{ model_name: 'gpt-5-mini' }],
     },
   ]);
+  const [aiCurrentModelID, setAiCurrentModelID] = createSignal('openai/gpt-5-mini');
   const [aiPreservedFields, setAiPreservedFields] = createSignal<AIPreservedUIFields>({});
   const [aiRequireUserApproval, setAiRequireUserApproval] = createSignal(false);
   const [aiEnforcePlanModeGuard, setAiEnforcePlanModeGuard] = createSignal(false);
@@ -1074,6 +1098,7 @@ export function EnvSettingsPage() {
   const [aiError, setAiError] = createSignal<string | null>(null);
 
   const aiEnabled = createMemo(() => !!settings()?.ai);
+  const aiModelOptions = createMemo(() => collectAIModelOptions(aiProviders()));
   const aiProviderDialogProvider = createMemo(() => aiProviderDialogDraft());
   const aiProviderDialogTitle = createMemo(() => (aiProviderDialogMode() === 'create' ? 'Add provider' : 'Edit provider'));
 
@@ -1141,16 +1166,17 @@ export function EnvSettingsPage() {
       const baseURL = String(p.base_url ?? '').trim();
       if (baseURL) out.base_url = baseURL;
       out.models = (p.models ?? []).map((m) => {
-        const mm: any = { model_name: String(m.model_name ?? '').trim() };
-        if (m.is_default) mm.is_default = true;
-        return mm as AIProviderModel;
+        return { model_name: String(m.model_name ?? '').trim() } as AIProviderModel;
       });
 
       return out as AIProvider;
     });
 
     const preserved = aiPreservedFields();
-    const out: any = { providers, web_search_provider: aiWebSearchProvider() };
+    const currentModelID = normalizeAICurrentModelID(aiCurrentModelID(), aiProviders());
+    if (!currentModelID) throw new Error('Flower JSON is missing current_model_id.');
+
+    const out: any = { current_model_id: currentModelID, providers, web_search_provider: aiWebSearchProvider() };
     if (preserved.mode === 'act' || preserved.mode === 'plan') out.mode = preserved.mode;
     if (typeof preserved.tool_recovery_enabled === 'boolean') out.tool_recovery_enabled = preserved.tool_recovery_enabled;
     if (typeof preserved.tool_recovery_max_steps === 'number' && Number.isFinite(preserved.tool_recovery_max_steps)) {
@@ -1228,7 +1254,7 @@ export function EnvSettingsPage() {
     if (providers.length === 0) throw new Error('Missing providers.');
 
     const providerIDs = new Set<string>();
-    let defaultCount = 0;
+    const modelIDs = new Set<string>();
     for (const p of providers) {
       const id = String((p as any).id ?? '').trim();
       const name = String((p as any).name ?? '').trim();
@@ -1262,20 +1288,23 @@ export function EnvSettingsPage() {
       const modelNames = new Set<string>();
       for (const m of models) {
         const mn = String((m as any).model_name ?? '').trim();
-        const isDefault = !!(m as any).is_default;
         if ((m as any).label !== undefined) {
           throw new Error(`Provider "${id}" models[].label is not supported. Use model_name only.`);
+        }
+        if ((m as any).is_default !== undefined) {
+          throw new Error(`Provider "${id}" models[].is_default is not supported. Use current_model_id.`);
         }
         if (!mn) throw new Error(`Provider "${id}" has a model with missing model_name.`);
         if (mn.includes('/')) throw new Error(`Provider "${id}" model_name must not contain "/".`);
         if (modelNames.has(mn)) throw new Error(`Provider "${id}" has duplicate model_name: ${mn}`);
         modelNames.add(mn);
-        if (isDefault) defaultCount++;
+        modelIDs.add(modelID(id, mn));
       }
     }
 
-    if (defaultCount === 0) throw new Error('Missing default model (providers[].models[].is_default).');
-    if (defaultCount > 1) throw new Error('Multiple default models (providers[].models[].is_default).');
+    const currentModelID = String((cfg as any).current_model_id ?? '').trim();
+    if (!currentModelID) throw new Error('Missing current_model_id.');
+    if (!modelIDs.has(currentModelID)) throw new Error(`current_model_id is not in providers[].models[]: ${currentModelID}`);
   };
 
   const normalizeAIProviders = (rows: AIProviderRow[]): AIProviderRow[] => {
@@ -1286,28 +1315,17 @@ export function EnvSettingsPage() {
       base_url: String((p as any).base_url ?? ''),
       models: (Array.isArray((p as any).models) ? ((p as any).models as any[]) : []).map((m) => ({
         model_name: String(m?.model_name ?? ''),
-        is_default: !!m?.is_default,
       })),
     }));
 
-    let defaultFound = false;
     for (let i = 0; i < list.length; i++) {
       const p = list[i];
       const models = Array.isArray(p.models) ? p.models : [];
       if (models.length === 0) {
-        p.models = [{ model_name: '', is_default: false }];
+        p.models = [{ model_name: '' }];
         continue;
       }
-      p.models = models.map((m) => {
-        if (!m.is_default) return { ...m, is_default: false };
-        if (defaultFound) return { ...m, is_default: false };
-        defaultFound = true;
-        return { ...m, is_default: true };
-      });
-    }
-
-    if (!defaultFound && list.length > 0 && list[0].models.length > 0) {
-      list[0] = { ...list[0], models: [{ ...list[0].models[0], is_default: true }, ...list[0].models.slice(1)] };
+      p.models = models.map((m) => ({ model_name: String(m?.model_name ?? '') }));
     }
     return list;
   };
@@ -1465,7 +1483,6 @@ export function EnvSettingsPage() {
     const sourceIndex = aiProviderDialogSourceIndex();
     const normalizedDraft = normalizeAIProviderRowDraft(draft);
 
-    let targetIndex = sourceIndex ?? -1;
     let nextProviders = aiProviders().map((item) => cloneAIProviderRow(item));
 
     if (mode === 'edit') {
@@ -1474,25 +1491,14 @@ export function EnvSettingsPage() {
         closeAIProviderDialog();
         return;
       }
-      targetIndex = sourceIndex;
       nextProviders = nextProviders.map((item, idx) => (idx === sourceIndex ? normalizedDraft : item));
     } else {
-      targetIndex = nextProviders.length;
       nextProviders = [...nextProviders, normalizedDraft];
     }
 
-    const hasDefaultInDraft = normalizedDraft.models.some((m) => !!m.is_default);
-    if (hasDefaultInDraft && targetIndex >= 0) {
-      nextProviders = nextProviders.map((provider, idx) => ({
-        ...provider,
-        models: (provider.models ?? []).map((model) => ({
-          ...model,
-          is_default: idx === targetIndex ? !!model.is_default : false,
-        })),
-      }));
-    }
-
-    setAiProviders(normalizeAIProviders(nextProviders));
+    const normalizedProviders = normalizeAIProviders(nextProviders);
+    setAiProviders(normalizedProviders);
+    setAiCurrentModelID(normalizeAICurrentModelID(aiCurrentModelID(), normalizedProviders));
     setAiDirty(true);
     closeAIProviderDialog();
     if (mode === 'create') notify.success('Provider added', 'Changes confirmed. Auto-save is in progress.');
@@ -1973,7 +1979,6 @@ export function EnvSettingsPage() {
         base_url: String(p.base_url ?? ''),
         models: (p.models ?? []).map((m) => ({
           model_name: String(m.model_name ?? ''),
-          is_default: !!m.is_default,
         })),
       }));
       const fallback = defaultAIConfig();
@@ -1984,10 +1989,11 @@ export function EnvSettingsPage() {
         base_url: String(p.base_url ?? ''),
         models: (p.models ?? []).map((m) => ({
           model_name: String(m.model_name ?? ''),
-          is_default: !!m.is_default,
         })),
       }));
-      setAiProviders(normalizeAIProviders(rows.length > 0 ? rows : fallbackRows));
+      const normalizedProviders = normalizeAIProviders(rows.length > 0 ? rows : fallbackRows);
+      setAiProviders(normalizedProviders);
+      setAiCurrentModelID(normalizeAICurrentModelID(String((a as any).current_model_id ?? ''), normalizedProviders));
 
       setAiJSON(JSON.stringify(a, null, 2));
 
@@ -2157,20 +2163,23 @@ export function EnvSettingsPage() {
       if (!Array.isArray(providersRaw)) throw new Error('Flower JSON is missing providers[].');
 
       setAiProviders(
-        normalizeAIProviders(
-          providersRaw.map((p) => ({
-          id: String(p?.id ?? ''),
-          name: String(p?.name ?? ''),
-          type: String(p?.type ?? '') as AIProviderType,
-          base_url: String(p?.base_url ?? ''),
-          models: Array.isArray(p?.models)
-            ? (p.models as any[]).map((m) => ({
-                model_name: String(m?.model_name ?? ''),
-                is_default: !!m?.is_default,
-              }))
-            : [],
-        })),
-        ),
+        (() => {
+          const normalizedProviders = normalizeAIProviders(
+            providersRaw.map((p) => ({
+              id: String(p?.id ?? ''),
+              name: String(p?.name ?? ''),
+              type: String(p?.type ?? '') as AIProviderType,
+              base_url: String(p?.base_url ?? ''),
+              models: Array.isArray(p?.models)
+                ? (p.models as any[]).map((m) => ({
+                    model_name: String(m?.model_name ?? ''),
+                  }))
+                : [],
+            })),
+          );
+          setAiCurrentModelID(normalizeAICurrentModelID(String((v as any).current_model_id ?? ''), normalizedProviders));
+          return normalizedProviders;
+        })(),
       );
       const executionPolicy = readAIExecutionPolicy(v);
       setAiRequireUserApproval(!!executionPolicy.require_user_approval);
@@ -3669,7 +3678,7 @@ export function EnvSettingsPage() {
                 <div class="space-y-3">
                   <SubSectionHeader
                     title="Providers"
-                    description="Exactly one model across all providers must be default. Each chat thread stores its selected model."
+                    description="Configure providers and models. The current model is used by default for new chats."
                     actions={
                       <Button
                         size="sm"
@@ -3684,12 +3693,25 @@ export function EnvSettingsPage() {
 
                   <div class="rounded-lg border border-border bg-muted/10 p-3 space-y-3">
                     <div class="text-xs text-muted-foreground">{aiProviders().length} provider(s) configured.</div>
+                    <div class="grid grid-cols-1 md:grid-cols-[200px_minmax(0,1fr)] gap-2 items-center">
+                      <FieldLabel>Current model</FieldLabel>
+                      <Select
+                        value={aiCurrentModelID()}
+                        options={aiModelOptions().map((it) => ({ value: it.id, label: it.label }))}
+                        onChange={(v) => {
+                          setAiCurrentModelID(normalizeAICurrentModelID(String(v ?? '').trim(), aiProviders()));
+                          setAiDirty(true);
+                        }}
+                        placeholder="Select current model..."
+                        class="w-full"
+                        disabled={!canInteract() || aiModelOptions().length === 0}
+                      />
+                    </div>
                     <div class="space-y-2">
                       <For each={aiProviders()}>
                         {(provider, idx) => {
                           const providerID = () => String(provider.id ?? '').trim();
                           const displayName = () => String(provider.name ?? '').trim() || providerID() || `Provider ${idx() + 1}`;
-                          const defaultModel = () => String(provider.models?.find((m) => !!m.is_default)?.model_name ?? '').trim();
                           return (
                             <div class="rounded-lg border border-border bg-background px-3 py-2.5">
                               <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -3710,11 +3732,6 @@ export function EnvSettingsPage() {
                                   </div>
                                   <div class="text-[11px] text-muted-foreground">
                                     {provider.models?.length ?? 0} model(s)
-                                    <Show when={defaultModel()}>
-                                      <span class="ml-2">
-                                        Default: <span class="font-mono">{defaultModel()}</span>
-                                      </span>
-                                    </Show>
                                   </div>
                                 </div>
                                 <div class="flex items-center gap-2">
@@ -3726,7 +3743,11 @@ export function EnvSettingsPage() {
                                     variant="ghost"
                                     class="text-muted-foreground hover:text-destructive"
                                     onClick={() => {
-                                      setAiProviders((prev) => normalizeAIProviders(prev.filter((_, i) => i !== idx())));
+                                      setAiProviders((prev) => {
+                                        const normalizedProviders = normalizeAIProviders(prev.filter((_, i) => i !== idx()));
+                                        setAiCurrentModelID(normalizeAICurrentModelID(aiCurrentModelID(), normalizedProviders));
+                                        return normalizedProviders;
+                                      });
                                       setAiDirty(true);
                                     }}
                                     disabled={!canInteract() || aiProviders().length <= 1}
@@ -3895,7 +3916,7 @@ export function EnvSettingsPage() {
                 <div class="space-y-3">
                   <SubSectionHeader
                     title="Models"
-                    description="Shown in Flower Chat. Mark one model as default."
+                    description="Shown in Flower Chat."
                     actions={
                       <Button
                         size="sm"
@@ -3903,7 +3924,7 @@ export function EnvSettingsPage() {
                         onClick={() => {
                           updateDraft((current) => ({
                             ...current,
-                            models: [...(Array.isArray(current.models) ? current.models : []), { model_name: '', is_default: false }],
+                            models: [...(Array.isArray(current.models) ? current.models : []), { model_name: '' }],
                           }));
                         }}
                         disabled={!canInteract()}
@@ -3936,32 +3957,6 @@ export function EnvSettingsPage() {
                             />
                           </div>
                           <div class="flex items-center gap-2 flex-shrink-0">
-                            <Show
-                              when={model().is_default}
-                              fallback={
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  class="h-6 px-2 text-[11px]"
-                                  onClick={() => {
-                                    updateDraft((current) => ({
-                                      ...current,
-                                      models: (Array.isArray(current.models) ? current.models : []).map((itModel, j) => ({
-                                        ...itModel,
-                                        is_default: j === modelIndex,
-                                      })),
-                                    }));
-                                  }}
-                                  disabled={!canInteract()}
-                                >
-                                  Set default
-                                </Button>
-                              }
-                            >
-                              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                                Default
-                              </span>
-                            </Show>
                             <Button
                               size="sm"
                               variant="ghost"
@@ -3971,7 +3966,7 @@ export function EnvSettingsPage() {
                                   const models = (Array.isArray(current.models) ? current.models : []).filter((_, j) => j !== modelIndex);
                                   return {
                                     ...current,
-                                    models: models.length > 0 ? models : [{ model_name: '', is_default: false }],
+                                    models: models.length > 0 ? models : [{ model_name: '' }],
                                   };
                                 });
                               }}

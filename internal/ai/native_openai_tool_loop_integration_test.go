@@ -264,7 +264,7 @@ func TestIntegration_NativeSDK_OpenAI_ToolLoop_Succeeds(t *testing.T) {
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: baseURL,
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 			},
 		},
 	}
@@ -559,7 +559,7 @@ func TestIntegration_NativeSDK_OpenAI_MixedSignalsCompleteInSameTurn(t *testing.
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: baseURL,
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 			},
 		},
 	}

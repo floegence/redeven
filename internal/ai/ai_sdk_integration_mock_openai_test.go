@@ -443,7 +443,7 @@ func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT5_Succeeds(t *testing.T
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: baseURL,
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 			},
 		},
 	}
@@ -555,7 +555,7 @@ func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testing.
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: baseURL,
-				Models:  []config.AIProviderModel{{ModelName: "gpt-4o-mini", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-4o-mini"}},
 			},
 		},
 	}

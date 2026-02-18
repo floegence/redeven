@@ -303,7 +303,7 @@ func TestIntegration_NativeSDK_OpenAI_DoomLoopGuard_BlocksRepeat(t *testing.T) {
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: baseURL,
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 			},
 		},
 	}
@@ -566,7 +566,7 @@ func TestIntegration_NativeSDK_OpenAI_LengthFinishReason_ForcesRecovery(t *testi
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: baseURL,
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 			},
 		},
 	}
@@ -753,7 +753,7 @@ func TestIntegration_NativeSDK_OpenAI_MissingExplicitCompletionDoesNotPolluteAss
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: baseURL,
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 			},
 		},
 	}

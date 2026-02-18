@@ -179,7 +179,7 @@ func TestIntegration_NativeSDK_OpenAI_AskUser_ClosesOpenTodosBeforeWaitingUser(t
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: baseURL,
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 			},
 		},
 	}

@@ -334,6 +334,46 @@ func (s *Service) UpdateConfig(next *config.AIConfig, persist func() error) erro
 	return nil
 }
 
+// SetCurrentModelID updates current_model_id while keeping the provider/model registry unchanged.
+//
+// Unlike UpdateConfig, this method is lightweight and allowed while runs are active because it only
+// changes the current model for future chats.
+func (s *Service) SetCurrentModelID(modelID string, persist func(next *config.AIConfig) error) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if persist == nil {
+		return errors.New("missing persist function")
+	}
+
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return errors.New("missing model_id")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.cfg == nil {
+		return ErrNotConfigured
+	}
+	if !s.cfg.IsAllowedModelID(modelID) {
+		return fmt.Errorf("model not allowed: %s", modelID)
+	}
+
+	next := *s.cfg
+	next.CurrentModelID = modelID
+	if err := next.Validate(); err != nil {
+		return err
+	}
+	if err := persist(&next); err != nil {
+		return err
+	}
+
+	s.cfg = &next
+	return nil
+}
+
 func (s *Service) HasActiveThread(threadID string) bool {
 	if s == nil {
 		return false
@@ -413,61 +453,9 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		providerNameByID[id] = name
 	}
 
-	defaultProviderID := ""
-	defaultModelName := ""
-	defaultModelDisplayName := ""
-	for _, p := range cfg.Providers {
-		pid := strings.TrimSpace(p.ID)
-		pn := strings.TrimSpace(providerNameByID[pid])
-		if pn == "" {
-			pn = pid
-		}
-		for _, m := range p.Models {
-			if !m.IsDefault {
-				continue
-			}
-			mn := strings.TrimSpace(m.ModelName)
-			if pid == "" || mn == "" {
-				continue
-			}
-			defaultProviderID = pid
-			defaultModelName = mn
-			defaultModelDisplayName = pn + " / " + mn
-		}
-	}
-	defaultModelID := strings.TrimSpace(defaultProviderID) + "/" + strings.TrimSpace(defaultModelName)
-
-	out := &ModelsResponse{
-		DefaultModel: defaultModelID,
-	}
-	if out.DefaultModel == "" {
-		return nil, errors.New("invalid ai config: missing default model")
-	}
-
-	defaultLabel := strings.TrimSpace(defaultModelDisplayName)
-	if defaultLabel == "" {
-		defaultLabel = out.DefaultModel
-	}
-
-	seen := make(map[string]struct{})
-	appendModel := func(id string, label string) {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			return
-		}
-		if _, ok := seen[id]; ok {
-			return
-		}
-		seen[id] = struct{}{}
-		label = strings.TrimSpace(label)
-		if label == "" {
-			label = id
-		}
-		out.Models = append(out.Models, Model{ID: id, Label: label})
-	}
-
-	appendModel(out.DefaultModel, defaultLabel)
-
+	modelLabelByID := make(map[string]string, len(cfg.Providers))
+	modelOrder := make([]string, 0, 16)
+	seenModel := make(map[string]struct{}, 16)
 	for _, p := range cfg.Providers {
 		providerID := strings.TrimSpace(p.ID)
 		if providerID == "" {
@@ -485,8 +473,45 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 			}
 			id := providerID + "/" + modelName
 			label := pn + " / " + modelName
-			appendModel(id, label)
+			if _, ok := seenModel[id]; ok {
+				continue
+			}
+			seenModel[id] = struct{}{}
+			modelOrder = append(modelOrder, id)
+			if strings.TrimSpace(label) == "" {
+				label = id
+			}
+			modelLabelByID[id] = label
 		}
+	}
+
+	if len(modelOrder) == 0 {
+		return nil, errors.New("invalid ai config: missing models")
+	}
+
+	currentModelID := strings.TrimSpace(cfg.CurrentModelID)
+	if !cfg.IsAllowedModelID(currentModelID) {
+		currentModelID = modelOrder[0]
+	}
+	if currentModelID == "" {
+		return nil, errors.New("invalid ai config: missing current model")
+	}
+
+	out := &ModelsResponse{
+		CurrentModel: currentModelID,
+	}
+	out.Models = append(out.Models, Model{
+		ID:    currentModelID,
+		Label: strings.TrimSpace(modelLabelByID[currentModelID]),
+	})
+	for _, id := range modelOrder {
+		if id == currentModelID {
+			continue
+		}
+		out.Models = append(out.Models, Model{
+			ID:    id,
+			Label: strings.TrimSpace(modelLabelByID[id]),
+		})
 	}
 
 	return out, nil
@@ -1286,7 +1311,7 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 		model = strings.TrimSpace(threadModelID)
 	}
 	if model == "" {
-		if id, ok := cfg.DefaultModelID(); ok {
+		if id, ok := cfg.ResolvedCurrentModelID(); ok {
 			model = id
 		}
 	}

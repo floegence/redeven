@@ -30,7 +30,7 @@ type WaitingPrompt struct {
 // --- HTTP API types (snake_case, stable) ---
 
 type ModelsResponse struct {
-	DefaultModel string  `json:"default_model"`
+	CurrentModel string  `json:"current_model"`
 	Models       []Model `json:"models"`
 }
 

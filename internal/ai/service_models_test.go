@@ -10,18 +10,19 @@ import (
 	"github.com/floegence/redeven-agent/internal/config"
 )
 
-func TestService_ListModels_DefaultFirstAndDedup(t *testing.T) {
+func TestService_ListModels_CurrentFirstAndDedup(t *testing.T) {
 	t.Parallel()
 
 	svc := &Service{
 		cfg: &config.AIConfig{
+			CurrentModelID: "openai/gpt-5-mini",
 			Providers: []config.AIProvider{
 				{
 					ID:      "openai",
 					Name:    "OpenAI",
 					Type:    "openai",
 					BaseURL: "https://api.openai.com/v1",
-					Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}, {ModelName: "gpt-4o-mini"}},
+					Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}, {ModelName: "gpt-4o-mini"}},
 				},
 				{
 					ID:      "anthropic",
@@ -42,8 +43,8 @@ func TestService_ListModels_DefaultFirstAndDedup(t *testing.T) {
 		t.Fatalf("ListModels returned nil")
 	}
 
-	if out.DefaultModel != "openai/gpt-5-mini" {
-		t.Fatalf("DefaultModel=%q, want %q", out.DefaultModel, "openai/gpt-5-mini")
+	if out.CurrentModel != "openai/gpt-5-mini" {
+		t.Fatalf("CurrentModel=%q, want %q", out.CurrentModel, "openai/gpt-5-mini")
 	}
 
 	gotIDs := make([]string, 0, len(out.Models))
@@ -66,18 +67,49 @@ func TestService_ListModels_DefaultFirstAndDedup(t *testing.T) {
 	}
 }
 
+func TestService_ListModels_InvalidCurrentFallsBackToFirst(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{
+		cfg: &config.AIConfig{
+			CurrentModelID: "openai/missing",
+			Providers: []config.AIProvider{
+				{
+					ID:      "openai",
+					Name:    "OpenAI",
+					Type:    "openai",
+					BaseURL: "https://api.openai.com/v1",
+					Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}, {ModelName: "gpt-4o-mini"}},
+				},
+			},
+		},
+	}
+
+	out, err := svc.ListModels()
+	if err != nil {
+		t.Fatalf("ListModels: %v", err)
+	}
+	if out == nil {
+		t.Fatalf("ListModels returned nil")
+	}
+	if out.CurrentModel != "openai/gpt-5-mini" {
+		t.Fatalf("CurrentModel=%q, want %q", out.CurrentModel, "openai/gpt-5-mini")
+	}
+}
+
 func TestService_ListModels_ProviderNameFallbackDoesNotExposeProviderID(t *testing.T) {
 	t.Parallel()
 
 	svc := &Service{
 		cfg: &config.AIConfig{
+			CurrentModelID: "prov_26f7c2a6-db3d-4691-8dcf-3f179b08b252/gpt-5-mini",
 			Providers: []config.AIProvider{
 				{
 					ID:      "prov_26f7c2a6-db3d-4691-8dcf-3f179b08b252",
 					Name:    "",
 					Type:    "openai",
 					BaseURL: "https://api.openai.com/v1",
-					Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini", IsDefault: true}},
+					Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 				},
 			},
 		},

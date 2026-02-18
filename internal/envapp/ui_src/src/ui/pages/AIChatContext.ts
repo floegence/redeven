@@ -19,7 +19,7 @@ import { hasRWXPermissions } from './aiPermissions';
 // ---- API response types (shared between sidebar and main page) ----
 
 export type ModelsResponse = Readonly<{
-  default_model: string;
+  current_model: string;
   models: Array<{ id: string; label?: string }>;
 }>;
 
@@ -69,7 +69,6 @@ export type ListThreadMessagesResponse = Readonly<{
 // ---- Persistence helpers ----
 
 const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
-const DRAFT_MODEL_STORAGE_KEY = 'redeven_ai_draft_model_id';
 const DRAFT_WORKING_DIR_STORAGE_KEY = 'redeven_ai_draft_working_dir';
 
 function readPersistedActiveThreadId(): string | null {
@@ -92,25 +91,6 @@ function persistActiveThreadId(threadId: string): void {
 function clearPersistedActiveThreadId(): void {
   try {
     localStorage.removeItem(ACTIVE_THREAD_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
-}
-
-function readPersistedDraftModelId(): string | null {
-  try {
-    const v = String(localStorage.getItem(DRAFT_MODEL_STORAGE_KEY) ?? '').trim();
-    return v || null;
-  } catch {
-    return null;
-  }
-}
-
-function persistDraftModelId(modelId: string): void {
-  try {
-    const v = String(modelId ?? '').trim();
-    if (!v) return;
-    localStorage.setItem(DRAFT_MODEL_STORAGE_KEY, v);
   } catch {
     // ignore
   }
@@ -263,7 +243,7 @@ export function createAIChatContextValue(): AIChatContextValue {
 
   const modelsReady = createMemo(() => !!models() && !models.loading && !models.error);
 
-  const [draftModelId, setDraftModelId] = createSignal<string>(readPersistedDraftModelId() ?? '');
+  const [draftModelId, setDraftModelId] = createSignal<string>('');
   const [threadModelOverride, setThreadModelOverride] = createSignal<Record<string, string>>({});
 
   const [draftWorkingDir, setDraftWorkingDirRaw] = createSignal<string>(readPersistedDraftWorkingDir() ?? '');
@@ -288,29 +268,21 @@ export function createAIChatContextValue(): AIChatContextValue {
     const m = models();
     if (!m) return '';
     const allowed = allowedModelIDs();
-    const def = String(m.default_model ?? '').trim();
-    if (def && allowed.has(def)) return def;
+    const current = String(m.current_model ?? '').trim();
+    if (current && allowed.has(current)) return current;
     const first = m.models?.[0]?.id ? String(m.models[0].id).trim() : '';
     if (first && allowed.has(first)) return first;
     return '';
   });
 
-  // Keep the persisted draft model valid; fall back to config default when needed.
+  // Keep the draft model valid; fall back to current_model when needed.
   createEffect(() => {
     if (!modelsReady()) return;
     const allowed = allowedModelIDs();
     const current = String(draftModelId() ?? '').trim();
     if (current && allowed.has(current)) return;
-    const persisted = readPersistedDraftModelId();
-    if (persisted && allowed.has(persisted)) {
-      setDraftModelId(persisted);
-      return;
-    }
     const next = fallbackModelId();
-    if (next) {
-      setDraftModelId(next);
-      persistDraftModelId(next);
-    }
+    setDraftModelId(next);
   });
 
   const modelOptions = createMemo(() => {
@@ -721,10 +693,10 @@ export function createAIChatContextValue(): AIChatContextValue {
     return fallback;
   });
 
-  const patchThreadModel = async (threadId: string, nextModelId: string, prevModelId: string | null, silent?: boolean) => {
+  const patchThreadModel = async (threadId: string, nextModelId: string, prevModelId: string | null, silent?: boolean): Promise<boolean> => {
     const tid = String(threadId ?? '').trim();
     const mid = String(nextModelId ?? '').trim();
-    if (!tid || !mid) return;
+    if (!tid || !mid) return false;
 
     try {
       await fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, {
@@ -732,6 +704,7 @@ export function createAIChatContextValue(): AIChatContextValue {
         body: JSON.stringify({ model_id: mid }),
       });
       bumpThreadsSeq();
+      return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (!silent) notify.error('Failed to update model', msg || 'Request failed.');
@@ -742,6 +715,24 @@ export function createAIChatContextValue(): AIChatContextValue {
         else delete next[tid];
         return next;
       });
+      return false;
+    }
+  };
+
+  const patchCurrentModel = async (nextModelId: string, silent?: boolean): Promise<boolean> => {
+    const mid = String(nextModelId ?? '').trim();
+    if (!mid) return false;
+    try {
+      await fetchGatewayJSON<ModelsResponse>('/_redeven_proxy/api/ai/current_model', {
+        method: 'PUT',
+        body: JSON.stringify({ model_id: mid }),
+      });
+      setDraftModelId(mid);
+      return true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!silent) notify.error('Failed to update current model', msg || 'Request failed.');
+      return false;
     }
   };
 
@@ -762,7 +753,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const tid = String(activeThreadId() ?? '').trim();
     if (!tid) {
       setDraftModelId(id);
-      persistDraftModelId(id);
+      void patchCurrentModel(id, false);
       return;
     }
 
@@ -775,7 +766,10 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (prev === id) return;
 
     setThreadModelOverride((prevMap) => ({ ...prevMap, [tid]: id }));
-    void patchThreadModel(tid, id, prev, false);
+    void patchThreadModel(tid, id, prev, false).then((ok) => {
+      if (!ok) return;
+      void patchCurrentModel(id, true);
+    });
   };
 
   // Clear local overrides once the server state catches up.
@@ -843,7 +837,7 @@ export function createAIChatContextValue(): AIChatContextValue {
   const [creatingThread, setCreatingThread] = createSignal(false);
 
   const createThread = async (): Promise<ThreadView> => {
-    const modelID = String(draftModelId() ?? '').trim();
+    const modelID = String(selectedModel() ?? '').trim();
     const body: any = { title: '' };
     if (modelID) body.model_id = modelID;
     const workingDir = String(draftWorkingDir() ?? '').trim();

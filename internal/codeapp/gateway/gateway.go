@@ -871,6 +871,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid ai json"})
 					return
 				}
+				cfg.NormalizeCurrentModelID()
 				if err := cfg.Validate(); err != nil {
 					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: fmt.Sprintf("invalid ai: %s", err.Error())})
 					return
@@ -1495,6 +1496,61 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: models})
 		return
 
+	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/current_model":
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok {
+			return
+		}
+		if g.ai == nil || !g.ai.Enabled() {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+			return
+		}
+
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body struct {
+			ModelID string `json:"model_id"`
+		}
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		modelID := strings.TrimSpace(body.ModelID)
+		if modelID == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing model_id"})
+			return
+		}
+
+		persist := func(next *config.AIConfig) error {
+			_, err := g.updateConfigLocked(func(c *config.Config) error {
+				if c.AI == nil {
+					return errors.New("ai not configured")
+				}
+				c.AI = next
+				return nil
+			})
+			return err
+		}
+
+		if err := g.ai.SetCurrentModelID(modelID, persist); err != nil {
+			g.appendAudit(meta, "ai_current_model_update", "failure", map[string]any{"model_id": modelID}, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		models, err := g.ai.ListModels()
+		if err != nil {
+			g.appendAudit(meta, "ai_current_model_update", "failure", map[string]any{"model_id": modelID}, err)
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		g.appendAudit(meta, "ai_current_model_update", "success", map[string]any{"model_id": modelID}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: models})
+		return
+
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/validate_working_dir":
 		_, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
@@ -1862,7 +1918,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 					writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
 					return
 				}
-				req.Model = models.DefaultModel
+				req.Model = models.CurrentModel
 			}
 		}
 

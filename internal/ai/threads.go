@@ -213,7 +213,7 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 		}
 	}
 	if modelID == "" && cfg != nil {
-		if id, ok := cfg.DefaultModelID(); ok {
+		if id, ok := cfg.ResolvedCurrentModelID(); ok {
 			modelID = id
 		}
 	}
