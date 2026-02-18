@@ -517,9 +517,9 @@ export function AIChatSidebar() {
       {/* Top action buttons */}
       <div class="px-1 pb-1 flex items-center gap-1">
         <Button
-          variant="outline"
+          variant="primary"
           size="sm"
-          class="flex-1 justify-start gap-2 h-8 border-sidebar-border/60 bg-sidebar hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground transition-all duration-150"
+          class="flex-1 justify-start gap-2 h-8 shadow-sm"
           icon={Plus}
           onClick={() => ctx.enterDraftChat()}
           disabled={protocol.status() !== 'connected' || !canManageChats()}
