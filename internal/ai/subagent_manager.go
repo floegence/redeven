@@ -208,6 +208,25 @@ func cloneMapList(in []map[string]any) []map[string]any {
 	return out
 }
 
+func cloneHistoryList(in []RunHistoryMsg) []map[string]any {
+	if len(in) == 0 {
+		return []map[string]any{}
+	}
+	out := make([]map[string]any, 0, len(in))
+	for _, item := range in {
+		role := strings.TrimSpace(item.Role)
+		text := strings.TrimSpace(item.Text)
+		if role == "" || text == "" {
+			continue
+		}
+		out = append(out, map[string]any{
+			"role": role,
+			"text": text,
+		})
+	}
+	return out
+}
+
 func (t *subagentTask) snapshot() map[string]any {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -241,6 +260,7 @@ func (t *subagentTask) snapshot() map[string]any {
 		"ended_at_ms":    t.endedAt,
 		"updated_at_ms":  t.updatedAt,
 		"stats":          statsPayload,
+		"history":        cloneHistoryList(t.history),
 	}
 }
 

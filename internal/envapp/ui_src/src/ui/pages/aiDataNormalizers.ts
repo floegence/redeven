@@ -131,6 +131,11 @@ export interface SubagentStatsView {
   readonly outcome: string;
 }
 
+export interface SubagentHistoryMessageView {
+  readonly role: 'user' | 'assistant' | 'system';
+  readonly text: string;
+}
+
 export interface SubagentView {
   readonly subagentId: string;
   readonly taskId: string;
@@ -142,6 +147,7 @@ export interface SubagentView {
   readonly keyFiles: SubagentKeyFile[];
   readonly openRisks: string[];
   readonly nextActions: string[];
+  readonly history: SubagentHistoryMessageView[];
   readonly stats: SubagentStatsView;
   readonly updatedAtUnixMs: number;
   readonly error?: string;
@@ -205,6 +211,25 @@ function normalizeSubagentKeyFiles(raw: unknown): SubagentKeyFile[] {
   return out;
 }
 
+function normalizeSubagentHistory(raw: unknown): SubagentHistoryMessageView[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SubagentHistoryMessageView[] = [];
+  for (const item of raw) {
+    const rec = asRecord(item);
+    const roleRaw = String(rec.role ?? '').trim().toLowerCase();
+    const role = roleRaw === 'user' || roleRaw === 'assistant' || roleRaw === 'system'
+      ? roleRaw
+      : '';
+    const text = String(rec.text ?? '').trim();
+    if (!role || !text) continue;
+    out.push({
+      role,
+      text,
+    });
+  }
+  return out;
+}
+
 export function normalizeSubagentStats(raw: unknown): SubagentStatsView {
   const rec = asRecord(raw);
   return {
@@ -256,6 +281,7 @@ export function mapSubagentPayloadSnakeToCamel(raw: unknown): SubagentView | nul
   const fallbackSummary = String(rec.result ?? '').trim();
   const resultPayload = rec.result_struct ?? rec.resultStruct ?? rec.result ?? {};
   const normalizedResult = normalizeSubagentResult(resultPayload, fallbackSummary);
+  const history = normalizeSubagentHistory(rec.history);
   const stats = normalizeSubagentStats(rec.stats);
   const updatedAtUnixMs = Math.max(
     0,
@@ -277,6 +303,7 @@ export function mapSubagentPayloadSnakeToCamel(raw: unknown): SubagentView | nul
     keyFiles: normalizedResult.keyFiles,
     openRisks: normalizedResult.openRisks,
     nextActions: normalizedResult.nextActions,
+    history,
     stats,
     updatedAtUnixMs,
     error: error || undefined,
@@ -309,7 +336,13 @@ export function mergeSubagentEventsByTimestamp(
   if (!incoming) return current;
   if (incoming.updatedAtUnixMs > current.updatedAtUnixMs) return incoming;
   if (incoming.updatedAtUnixMs < current.updatedAtUnixMs) return current;
-  if (subagentStatusRank(incoming.status) >= subagentStatusRank(current.status)) return incoming;
+  const incomingRank = subagentStatusRank(incoming.status);
+  const currentRank = subagentStatusRank(current.status);
+  if (incomingRank > currentRank) return incoming;
+  if (incomingRank < currentRank) return current;
+  if (incoming.history.length > current.history.length) return incoming;
+  if (incoming.history.length < current.history.length) return current;
+  if (incoming.summary.length > current.summary.length) return incoming;
   return current;
 }
 
