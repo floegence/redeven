@@ -115,7 +115,7 @@ export const TodosBlock: Component<TodosBlockProps> = (props) => {
                       </Match>
                       <Match when={item.status === 'in_progress'}>
                         <span class="chat-todos-check-loader" aria-hidden="true">
-                          <SnakeLoader size="sm" />
+                          <SnakeLoader size="sm" class="chat-inline-snake-loader-todo" />
                         </span>
                       </Match>
                     </Switch>

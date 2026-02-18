@@ -12,7 +12,6 @@ import type {
   SubagentBlock as SubagentBlockType,
 } from '../chat/types';
 import {
-  extractSubagentViewsFromWaitResult,
   mapSubagentPayloadSnakeToCamel,
   normalizeWriteTodosToolView,
 } from './aiDataNormalizers';
@@ -144,9 +143,7 @@ function buildSubagentBlock(block: ChatToolCallBlock): SubagentBlockType | null 
   }
 
   if (toolName === WAIT_SUBAGENTS_TOOL_NAME) {
-    const views = extractSubagentViewsFromWaitResult(result);
-    if (views.length !== 1) return null;
-    return toSubagentBlock(views[0]);
+    return null;
   }
 
   const action = String(args.action ?? result.action ?? '').trim().toLowerCase();
@@ -286,7 +283,6 @@ function toSubagentBlock(view: {
     steps: number;
     toolCalls: number;
     tokens: number;
-    cost: number;
     elapsedMs: number;
     outcome: string;
   };
@@ -309,7 +305,6 @@ function toSubagentBlock(view: {
       steps: view.stats.steps,
       toolCalls: view.stats.toolCalls,
       tokens: view.stats.tokens,
-      cost: view.stats.cost,
       elapsedMs: view.stats.elapsedMs,
       outcome: view.stats.outcome,
     },

@@ -146,7 +146,6 @@ export interface SubagentBlock {
     steps: number;
     toolCalls: number;
     tokens: number;
-    cost: number;
     elapsedMs: number;
     outcome: string;
   };

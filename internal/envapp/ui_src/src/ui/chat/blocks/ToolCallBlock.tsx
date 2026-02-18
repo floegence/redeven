@@ -3,12 +3,14 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { useChatContext } from '../ChatProvider';
 import type { ToolCallBlock as ToolCallBlockType } from '../types';
 import { BlockRenderer } from './BlockRenderer';
 import { useAIChatContext } from '../../pages/AIChatContext';
 
 const ASK_USER_TOOL_NAME = 'ask_user';
+const WAIT_SUBAGENTS_TOOL_NAME = 'wait_subagents';
 
 export interface ToolCallBlockProps {
   block: ToolCallBlockType;
@@ -69,21 +71,9 @@ const StatusIcon: Component<{ status: ToolCallBlockType['status'] }> = (props) =
         </svg>
       )}
       {props.status === 'running' && (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="chat-tool-status-icon chat-tool-status-running chat-tool-spinner"
-          style={iconStyle}
-        >
-          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-        </svg>
+        <span class="chat-tool-status-icon chat-tool-status-running" style={iconStyle}>
+          <SnakeLoader size="sm" class="chat-tool-status-loader" />
+        </span>
       )}
       {props.status === 'success' && (
         <svg
@@ -193,6 +183,371 @@ function humanizeAskUserSource(source: string): string {
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(' ');
 }
+
+type WaitSubagentStatus =
+  | 'queued'
+  | 'running'
+  | 'waiting_input'
+  | 'completed'
+  | 'failed'
+  | 'canceled'
+  | 'timed_out'
+  | 'unknown';
+
+type WaitSubagentItem = {
+  subagentId: string;
+  agentType: string;
+  status: WaitSubagentStatus;
+  summary: string;
+  steps: number;
+  toolCalls: number;
+  tokens: number;
+  elapsedMs: number;
+  outcome: string;
+  error: string;
+};
+
+type WaitSubagentsDisplay = {
+  ids: string[];
+  timeoutMs: number;
+  timedOut: boolean;
+  items: WaitSubagentItem[];
+  counts: {
+    queued: number;
+    running: number;
+    waiting: number;
+    completed: number;
+    failed: number;
+    canceled: number;
+  };
+};
+
+function readFiniteNumber(value: unknown, fallback = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function normalizeWaitSubagentStatus(value: unknown): WaitSubagentStatus {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  switch (normalized) {
+    case 'queued':
+    case 'running':
+    case 'waiting_input':
+    case 'completed':
+    case 'failed':
+    case 'canceled':
+    case 'timed_out':
+      return normalized;
+    default:
+      return 'unknown';
+  }
+}
+
+function waitSubagentStatusLabel(status: WaitSubagentStatus): string {
+  switch (status) {
+    case 'queued':
+      return 'Queued';
+    case 'running':
+      return 'Running';
+    case 'waiting_input':
+      return 'Waiting input';
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    case 'canceled':
+      return 'Canceled';
+    case 'timed_out':
+      return 'Timed out';
+    default:
+      return 'Unknown';
+  }
+}
+
+function waitSubagentStatusClass(status: WaitSubagentStatus): string {
+  switch (status) {
+    case 'queued':
+      return 'chat-subagent-status-queued';
+    case 'running':
+      return 'chat-subagent-status-running';
+    case 'waiting_input':
+      return 'chat-subagent-status-waiting';
+    case 'completed':
+      return 'chat-subagent-status-completed';
+    case 'failed':
+      return 'chat-subagent-status-failed';
+    case 'timed_out':
+      return 'chat-subagent-status-timed-out';
+    case 'canceled':
+      return 'chat-subagent-status-canceled';
+    default:
+      return '';
+  }
+}
+
+function waitSubagentStatusRank(status: WaitSubagentStatus): number {
+  switch (status) {
+    case 'running':
+      return 1;
+    case 'waiting_input':
+      return 2;
+    case 'queued':
+      return 3;
+    case 'completed':
+      return 4;
+    case 'failed':
+    case 'timed_out':
+      return 5;
+    case 'canceled':
+      return 6;
+    default:
+      return 7;
+  }
+}
+
+function clampText(value: string, maxLength = 160): string {
+  const normalized = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function formatSubagentDuration(elapsedMs: number): string {
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return '0s';
+  const totalSeconds = Math.floor(elapsedMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes <= 0) return `${seconds}s`;
+  return `${minutes}m ${seconds}s`;
+}
+
+const waitSubagentIntegerFormatter = new Intl.NumberFormat('en-US');
+
+function formatSubagentInteger(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '0';
+  return waitSubagentIntegerFormatter.format(Math.round(value));
+}
+
+function readWaitSubagentSummary(snapshot: Record<string, unknown>): string {
+  const resultStruct = asRecord(snapshot.result_struct ?? snapshot.resultStruct);
+  if (resultStruct) {
+    const summary = asTrimmedString(resultStruct.summary ?? resultStruct.result);
+    if (summary) return summary;
+  }
+  return asTrimmedString(snapshot.result);
+}
+
+function buildWaitSubagentsDisplay(block: ToolCallBlockType): WaitSubagentsDisplay | null {
+  if (String(block.toolName ?? '').trim() !== WAIT_SUBAGENTS_TOOL_NAME) return null;
+
+  const args = asRecord(block.args);
+  const result = asRecord(block.result);
+  const ids = Array.isArray(args?.ids)
+    ? Array.from(new Set(args.ids.map((value) => String(value ?? '').trim()).filter(Boolean)))
+    : [];
+  const timeoutMs = Math.max(0, Math.floor(readFiniteNumber(args?.timeout_ms ?? args?.timeoutMs, 0)));
+  const timedOut = result?.timed_out === true || readFiniteNumber(result?.timed_out, 0) === 1;
+  const rawStatusMap = asRecord(result?.status);
+
+  const items: WaitSubagentItem[] = [];
+  const counts = {
+    queued: 0,
+    running: 0,
+    waiting: 0,
+    completed: 0,
+    failed: 0,
+    canceled: 0,
+  };
+
+  if (rawStatusMap) {
+    for (const [fallbackID, raw] of Object.entries(rawStatusMap)) {
+      const snapshot = asRecord(raw);
+      if (!snapshot) continue;
+      const subagentId =
+        asTrimmedString(snapshot.subagent_id ?? snapshot.subagentId ?? snapshot.id) ||
+        asTrimmedString(fallbackID) ||
+        'unknown';
+      const status = normalizeWaitSubagentStatus(snapshot.status);
+      const stats = asRecord(snapshot.stats);
+      const item: WaitSubagentItem = {
+        subagentId,
+        agentType: asTrimmedString(snapshot.agent_type ?? snapshot.agentType) || 'subagent',
+        status,
+        summary: clampText(readWaitSubagentSummary(snapshot), 180),
+        steps: Math.max(0, Math.floor(readFiniteNumber(stats?.steps, 0))),
+        toolCalls: Math.max(0, Math.floor(readFiniteNumber(stats?.tool_calls ?? stats?.toolCalls, 0))),
+        tokens: Math.max(0, Math.floor(readFiniteNumber(stats?.tokens, 0))),
+        elapsedMs: Math.max(0, Math.floor(readFiniteNumber(stats?.elapsed_ms ?? stats?.elapsedMs, 0))),
+        outcome: asTrimmedString(stats?.outcome),
+        error: asTrimmedString(snapshot.error),
+      };
+      items.push(item);
+      switch (item.status) {
+        case 'queued':
+          counts.queued += 1;
+          break;
+        case 'running':
+          counts.running += 1;
+          break;
+        case 'waiting_input':
+          counts.waiting += 1;
+          break;
+        case 'completed':
+          counts.completed += 1;
+          break;
+        case 'failed':
+        case 'timed_out':
+          counts.failed += 1;
+          break;
+        case 'canceled':
+          counts.canceled += 1;
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  items.sort((a, b) => {
+    const rankDelta = waitSubagentStatusRank(a.status) - waitSubagentStatusRank(b.status);
+    if (rankDelta !== 0) return rankDelta;
+    return a.subagentId.localeCompare(b.subagentId);
+  });
+
+  return {
+    ids,
+    timeoutMs,
+    timedOut,
+    items,
+    counts,
+  };
+}
+
+interface WaitSubagentsToolCardProps {
+  block: ToolCallBlockType;
+  display: WaitSubagentsDisplay;
+  class?: string;
+}
+
+const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => {
+  const headlineStateLabel = createMemo(() => {
+    if (props.block.status === 'running') return 'Waiting snapshots';
+    if (props.block.status === 'pending') return 'Queued';
+    if (props.block.status === 'success') return props.display.timedOut ? 'Timed out' : 'Completed';
+    return 'Failed';
+  });
+
+  const headlineStateClass = createMemo(() => {
+    if (props.block.status === 'running' || props.block.status === 'pending') {
+      return 'chat-tool-wait-subagents-state-running';
+    }
+    if (props.block.status === 'success') {
+      return props.display.timedOut
+        ? 'chat-tool-wait-subagents-state-error'
+        : 'chat-tool-wait-subagents-state-success';
+    }
+    return 'chat-tool-wait-subagents-state-error';
+  });
+
+  const isWorking = createMemo(() => props.block.status === 'running' || props.block.status === 'pending');
+  const targetsCount = createMemo(() => (props.display.items.length > 0 ? props.display.items.length : props.display.ids.length));
+
+  return (
+    <div class={cn('chat-tool-wait-subagents-block', props.class)}>
+      <div class="chat-tool-wait-subagents-head">
+        <div class="chat-tool-wait-subagents-head-main">
+          <span class="chat-tool-wait-subagents-badge">Wait subagents</span>
+          <span class={cn('chat-tool-wait-subagents-state', headlineStateClass())}>
+            <Show when={isWorking()}>
+              <span class="chat-tool-wait-subagents-state-loader" aria-hidden="true">
+                <SnakeLoader size="sm" class="chat-tool-inline-snake-loader" />
+              </span>
+            </Show>
+            {headlineStateLabel()}
+          </span>
+        </div>
+        <div class="chat-tool-wait-subagents-head-meta">
+          <Show when={props.display.timeoutMs > 0}>
+            <span>Timeout {Math.max(1, Math.floor(props.display.timeoutMs / 1000))}s</span>
+          </Show>
+          <Show when={props.display.timedOut}>
+            <span class="chat-tool-wait-subagents-timeout-flag">Timed out</span>
+          </Show>
+        </div>
+      </div>
+
+      <div class="chat-tool-wait-subagents-summary">
+        <span>{targetsCount()} target{targetsCount() === 1 ? '' : 's'}</span>
+        <Show when={props.display.items.length > 0}>
+          <span>
+            {props.display.counts.running} running · {props.display.counts.waiting} waiting · {props.display.counts.completed} completed · {props.display.counts.failed} failed
+          </span>
+        </Show>
+      </div>
+
+      <Show
+        when={props.display.items.length > 0}
+        fallback={
+          <div class="chat-tool-wait-subagents-empty">
+            <Show
+              when={props.display.ids.length > 0}
+              fallback={<span>No subagent snapshots yet.</span>}
+            >
+              <span>
+                Tracking IDs: {props.display.ids.slice(0, 4).join(', ')}
+                <Show when={props.display.ids.length > 4}> +{props.display.ids.length - 4} more</Show>
+              </span>
+            </Show>
+          </div>
+        }
+      >
+        <div class="chat-tool-wait-subagents-list">
+          <For each={props.display.items}>
+            {(item) => (
+              <div class="chat-tool-wait-subagents-item">
+                <div class="chat-tool-wait-subagents-item-head">
+                  <span class={cn('chat-subagent-status', waitSubagentStatusClass(item.status))}>
+                    <Show when={item.status === 'running'}>
+                      <span class="chat-subagent-status-loader" aria-hidden="true">
+                        <SnakeLoader size="sm" class="chat-inline-snake-loader-subagent" />
+                      </span>
+                    </Show>
+                    {waitSubagentStatusLabel(item.status)}
+                  </span>
+                  <span class="chat-tool-wait-subagents-item-agent">{item.agentType || 'subagent'}</span>
+                  <span class="chat-tool-wait-subagents-item-id" title={item.subagentId}>{item.subagentId}</span>
+                </div>
+                <Show when={item.summary}>
+                  <p class="chat-tool-wait-subagents-item-summary">{item.summary}</p>
+                </Show>
+                <div class="chat-tool-wait-subagents-item-metrics">
+                  <span>Steps {formatSubagentInteger(item.steps)}</span>
+                  <span>Tool calls {formatSubagentInteger(item.toolCalls)}</span>
+                  <span>Tokens {formatSubagentInteger(item.tokens)}</span>
+                  <span>Elapsed {formatSubagentDuration(item.elapsedMs)}</span>
+                  <Show when={item.outcome}>
+                    <span>Outcome {item.outcome}</span>
+                  </Show>
+                </div>
+                <Show when={item.error}>
+                  <div class="chat-tool-wait-subagents-item-error">{item.error}</div>
+                </Show>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      <Show when={props.block.error}>
+        <div class="chat-tool-wait-subagents-error">Error: {props.block.error}</div>
+      </Show>
+    </div>
+  );
+};
 
 interface AskUserToolCardProps {
   block: ToolCallBlockType;
@@ -397,6 +752,7 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
 export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
   const ctx = useChatContext();
   const askUserDisplay = createMemo(() => buildAskUserDisplay(props.block));
+  const waitSubagentsDisplay = createMemo(() => buildWaitSubagentsDisplay(props.block));
 
   const isCollapsed = () => props.block.collapsed ?? false;
   const showApproval = () =>
@@ -425,6 +781,16 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
         block={props.block}
         messageId={props.messageId}
         display={askUserDisplay() as AskUserDisplay}
+        class={props.class}
+      />
+    );
+  }
+
+  if (waitSubagentsDisplay()) {
+    return (
+      <WaitSubagentsToolCard
+        block={props.block}
+        display={waitSubagentsDisplay() as WaitSubagentsDisplay}
         class={props.class}
       />
     );

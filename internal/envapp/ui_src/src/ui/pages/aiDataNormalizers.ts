@@ -127,7 +127,6 @@ export interface SubagentStatsView {
   readonly steps: number;
   readonly toolCalls: number;
   readonly tokens: number;
-  readonly cost: number;
   readonly elapsedMs: number;
   readonly outcome: string;
 }
@@ -212,7 +211,6 @@ export function normalizeSubagentStats(raw: unknown): SubagentStatsView {
     steps: Math.max(0, Math.floor(readNumber(rec.steps, 0))),
     toolCalls: Math.max(0, Math.floor(readNumber(rec.tool_calls ?? rec.toolCalls, 0))),
     tokens: Math.max(0, Math.floor(readNumber(rec.tokens, 0))),
-    cost: Math.max(0, readNumber(rec.cost, 0)),
     elapsedMs: Math.max(0, Math.floor(readNumber(rec.elapsed_ms ?? rec.elapsedMs, 0))),
     outcome: String(rec.outcome ?? '').trim(),
   };

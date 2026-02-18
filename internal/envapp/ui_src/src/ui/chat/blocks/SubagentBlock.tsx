@@ -67,13 +67,6 @@ function formatIntegerMetric(value: number): string {
   return integerFormatter.format(Math.round(value));
 }
 
-function formatCostMetric(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return '$0.00';
-  if (value < 0.01) return `$${value.toFixed(4)}`;
-  if (value < 1) return `$${value.toFixed(3)}`;
-  return `$${value.toFixed(2)}`;
-}
-
 export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
   const [collapsed, setCollapsed] = createSignal(false);
   const statusText = createMemo(() => subagentStatusLabel(props.block.status));
@@ -82,7 +75,6 @@ export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
     { label: 'Steps', value: formatIntegerMetric(props.block.stats.steps) },
     { label: 'Tool calls', value: formatIntegerMetric(props.block.stats.toolCalls) },
     { label: 'Tokens', value: formatIntegerMetric(props.block.stats.tokens) },
-    { label: 'Cost', value: formatCostMetric(props.block.stats.cost) },
     { label: 'Elapsed', value: durationText() },
     { label: 'Outcome', value: props.block.stats.outcome || props.block.status },
   ]);
@@ -99,7 +91,7 @@ export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
           <span class={subagentStatusClass(props.block.status)}>
             <Show when={props.block.status === 'running'}>
               <span class="chat-subagent-status-loader" aria-hidden="true">
-                <SnakeLoader size="sm" />
+                <SnakeLoader size="sm" class="chat-inline-snake-loader-subagent" />
               </span>
             </Show>
             {statusText()}
