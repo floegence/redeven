@@ -11,6 +11,7 @@ import { useAIChatContext } from '../../pages/AIChatContext';
 
 const ASK_USER_TOOL_NAME = 'ask_user';
 const WAIT_SUBAGENTS_TOOL_NAME = 'wait_subagents';
+const WEB_SEARCH_TOOL_NAME = 'web.search';
 
 export interface ToolCallBlockProps {
   block: ToolCallBlockType;
@@ -547,6 +548,475 @@ const WaitSubagentsToolCard: Component<WaitSubagentsToolCardProps> = (props) => 
   );
 };
 
+type WebSearchItem = {
+  title: string;
+  url: string;
+  snippet: string;
+  domainKey: string;
+  domainLabel: string;
+};
+
+type WebSearchDomainFilter = {
+  id: string;
+  label: string;
+  count: number;
+};
+
+type WebSearchDisplay = {
+  query: string;
+  provider: string;
+  requestedCount: number;
+  timeoutMs: number;
+  items: WebSearchItem[];
+  domains: WebSearchDomainFilter[];
+};
+
+const WEB_SEARCH_UNKNOWN_DOMAIN_KEY = 'domain:unknown';
+const WEB_SEARCH_DEFAULT_DOMAIN_KEY = 'all';
+const WEB_SEARCH_VISIBLE_RESULTS = 5;
+const webSearchIntegerFormatter = new Intl.NumberFormat('en-US');
+
+function formatWebSearchInteger(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '0';
+  return webSearchIntegerFormatter.format(Math.round(value));
+}
+
+function normalizeWebSearchProvider(provider: string): string {
+  const normalized = String(provider ?? '').trim().toLowerCase();
+  if (!normalized) return 'Default';
+  if (normalized === 'brave') return 'Brave';
+  return normalized
+    .split(/[^a-z0-9]+/i)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+}
+
+function normalizeWebSearchURL(rawURL: unknown): string {
+  const value = asTrimmedString(rawURL);
+  if (!value) return '';
+  const lower = value.toLowerCase();
+  if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
+    return '';
+  }
+  return value;
+}
+
+function readWebSearchDomain(url: string): { key: string; label: string } {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.trim().toLowerCase().replace(/^www\./, '');
+    if (!host) return { key: WEB_SEARCH_UNKNOWN_DOMAIN_KEY, label: 'Unknown host' };
+    return { key: `domain:${host}`, label: host };
+  } catch {
+    return { key: WEB_SEARCH_UNKNOWN_DOMAIN_KEY, label: 'Unknown host' };
+  }
+}
+
+function normalizeWebSearchItems(rawItems: unknown): WebSearchItem[] {
+  if (!Array.isArray(rawItems)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const items: WebSearchItem[] = [];
+  for (const raw of rawItems) {
+    const rec = asRecord(raw);
+    if (!rec) continue;
+    const url = normalizeWebSearchURL(rec.url ?? rec.link);
+    if (!url) continue;
+    const dedupeKey = url.toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    const title = asTrimmedString(rec.title) || url;
+    const snippet = asTrimmedString(rec.snippet ?? rec.description).replace(/\s+/g, ' ').trim();
+    const domain = readWebSearchDomain(url);
+    items.push({
+      title,
+      url,
+      snippet,
+      domainKey: domain.key,
+      domainLabel: domain.label,
+    });
+  }
+  return items;
+}
+
+function buildWebSearchDisplay(block: ToolCallBlockType): WebSearchDisplay | null {
+  if (String(block.toolName ?? '').trim() !== WEB_SEARCH_TOOL_NAME) {
+    return null;
+  }
+  const args = asRecord(block.args);
+  const result = asRecord(block.result);
+  const query = asTrimmedString(result?.query) || asTrimmedString(args?.query);
+  const provider = asTrimmedString(result?.provider) || asTrimmedString(args?.provider);
+  const requestedCount = Math.max(0, Math.floor(readFiniteNumber(args?.count, 0)));
+  const timeoutMs = Math.max(0, Math.floor(readFiniteNumber(args?.timeout_ms ?? args?.timeoutMs, 0)));
+
+  const mergedItems: unknown[] = [];
+  const resultItems = Array.isArray(result?.results) ? (result?.results as unknown[]) : [];
+  if (resultItems.length > 0) mergedItems.push(...resultItems);
+  const sourceItems = Array.isArray(result?.sources) ? (result?.sources as unknown[]) : [];
+  if (sourceItems.length > 0) mergedItems.push(...sourceItems);
+
+  const items = normalizeWebSearchItems(mergedItems);
+
+  const domainStats = new Map<string, WebSearchDomainFilter>();
+  for (const item of items) {
+    const existing = domainStats.get(item.domainKey);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+    domainStats.set(item.domainKey, {
+      id: item.domainKey,
+      label: item.domainLabel,
+      count: 1,
+    });
+  }
+
+  const domains = Array.from(domainStats.values()).sort((a, b) => {
+    const countDelta = b.count - a.count;
+    if (countDelta !== 0) return countDelta;
+    return a.label.localeCompare(b.label);
+  });
+
+  return {
+    query,
+    provider,
+    requestedCount,
+    timeoutMs,
+    items,
+    domains,
+  };
+}
+
+function webSearchStateLabel(status: ToolCallBlockType['status']): string {
+  switch (status) {
+    case 'pending':
+      return 'Queued';
+    case 'running':
+      return 'Searching';
+    case 'success':
+      return 'Completed';
+    case 'error':
+      return 'Failed';
+    default:
+      return 'Unknown';
+  }
+}
+
+function webSearchStateClass(status: ToolCallBlockType['status']): string {
+  switch (status) {
+    case 'pending':
+    case 'running':
+      return 'chat-tool-web-search-state-running';
+    case 'success':
+      return 'chat-tool-web-search-state-success';
+    case 'error':
+      return 'chat-tool-web-search-state-error';
+    default:
+      return '';
+  }
+}
+
+async function copyToolText(text: string): Promise<boolean> {
+  const value = String(text ?? '').trim();
+  if (!value) return false;
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+interface WebSearchToolCardProps {
+  block: ToolCallBlockType;
+  messageId: string;
+  blockIndex: number;
+  display: WebSearchDisplay;
+  class?: string;
+}
+
+const WebSearchToolCard: Component<WebSearchToolCardProps> = (props) => {
+  const [activeDomain, setActiveDomain] = createSignal(WEB_SEARCH_DEFAULT_DOMAIN_KEY);
+  const [copiedURL, setCopiedURL] = createSignal('');
+  const [copiedQuery, setCopiedQuery] = createSignal(false);
+  const [expanded, setExpanded] = createSignal(false);
+
+  const domainFilters = createMemo<WebSearchDomainFilter[]>(() => {
+    const filters: WebSearchDomainFilter[] = [{
+      id: WEB_SEARCH_DEFAULT_DOMAIN_KEY,
+      label: 'All',
+      count: props.display.items.length,
+    }];
+    filters.push(...props.display.domains.slice(0, 6));
+    return filters;
+  });
+
+  const filteredItems = createMemo(() => {
+    const targetDomain = activeDomain();
+    if (targetDomain === WEB_SEARCH_DEFAULT_DOMAIN_KEY) {
+      return props.display.items;
+    }
+    return props.display.items.filter((item) => item.domainKey === targetDomain);
+  });
+
+  const visibleItems = createMemo(() => {
+    if (expanded()) {
+      return filteredItems();
+    }
+    return filteredItems().slice(0, WEB_SEARCH_VISIBLE_RESULTS);
+  });
+
+  const hiddenCount = createMemo(() => Math.max(0, filteredItems().length - visibleItems().length));
+  const canToggleExpand = createMemo(() => filteredItems().length > WEB_SEARCH_VISIBLE_RESULTS);
+  const statusLabel = createMemo(() => webSearchStateLabel(props.block.status));
+  const statusClass = createMemo(() => webSearchStateClass(props.block.status));
+  const providerLabel = createMemo(() => normalizeWebSearchProvider(props.display.provider));
+  const isWorking = createMemo(() => props.block.status === 'pending' || props.block.status === 'running');
+  const emptyMessage = createMemo(() => {
+    if (isWorking()) return 'Searching the web...';
+    if (props.block.status === 'success') return 'No results returned.';
+    return 'No web results available.';
+  });
+
+  createEffect(() => {
+    const filters = domainFilters();
+    const selected = activeDomain();
+    if (filters.some((item) => item.id === selected)) {
+      return;
+    }
+    setActiveDomain(WEB_SEARCH_DEFAULT_DOMAIN_KEY);
+  });
+
+  createEffect(() => {
+    activeDomain();
+    setExpanded(false);
+  });
+
+  const handleCopyQuery = async () => {
+    if (!props.display.query) return;
+    const copied = await copyToolText(props.display.query);
+    if (!copied) return;
+    setCopiedQuery(true);
+    setTimeout(() => setCopiedQuery(false), 1600);
+  };
+
+  const handleCopyURL = async (url: string) => {
+    const copied = await copyToolText(url);
+    if (!copied) return;
+    setCopiedURL(url);
+    setTimeout(() => {
+      setCopiedURL((current) => (current === url ? '' : current));
+    }, 1600);
+  };
+
+  return (
+    <div class={cn('chat-tool-web-search-block', props.class)}>
+      <div class="chat-tool-web-search-head">
+        <div class="chat-tool-web-search-head-main">
+          <span class="chat-tool-web-search-badge">Web search</span>
+          <span class="chat-tool-web-search-provider">{providerLabel()}</span>
+          <span class={cn('chat-tool-web-search-state', statusClass())}>
+            <Show when={isWorking()}>
+              <span class="chat-tool-web-search-state-loader" aria-hidden="true">
+                <SnakeLoader size="sm" class="chat-tool-inline-snake-loader" />
+              </span>
+            </Show>
+            {statusLabel()}
+          </span>
+        </div>
+        <Show when={props.display.query}>
+          <button
+            class="chat-tool-web-search-copy-query"
+            type="button"
+            onClick={() => void handleCopyQuery()}
+            aria-label={copiedQuery() ? 'Query copied' : 'Copy search query'}
+            title={copiedQuery() ? 'Copied' : 'Copy query'}
+          >
+            <Show when={copiedQuery()} fallback={<CopyMiniIcon />}>
+              <CheckMiniIcon />
+            </Show>
+            <span>{copiedQuery() ? 'Copied' : 'Copy query'}</span>
+          </button>
+        </Show>
+      </div>
+
+      <Show when={props.display.query}>
+        <div class="chat-tool-web-search-query-row">
+          <span class="chat-tool-web-search-query-label">Query</span>
+          <p class="chat-tool-web-search-query-text">{props.display.query}</p>
+        </div>
+      </Show>
+
+      <div class="chat-tool-web-search-meta">
+        <span>{formatWebSearchInteger(filteredItems().length)} result{filteredItems().length === 1 ? '' : 's'}</span>
+        <Show when={props.display.requestedCount > 0}>
+          <span>Requested {formatWebSearchInteger(props.display.requestedCount)}</span>
+        </Show>
+        <Show when={props.display.timeoutMs > 0}>
+          <span>Timeout {Math.max(1, Math.floor(props.display.timeoutMs / 1000))}s</span>
+        </Show>
+      </div>
+
+      <Show when={domainFilters().length > 1}>
+        <div class="chat-tool-web-search-domain-filters" role="tablist" aria-label="Filter search results by domain">
+          <For each={domainFilters()}>
+            {(item) => (
+              <button
+                type="button"
+                class={cn(
+                  'chat-tool-web-search-domain-chip',
+                  activeDomain() === item.id && 'chat-tool-web-search-domain-chip-active',
+                )}
+                onClick={() => setActiveDomain(item.id)}
+                role="tab"
+                aria-selected={activeDomain() === item.id}
+              >
+                <span>{item.label}</span>
+                <span class="chat-tool-web-search-domain-chip-count">{item.count}</span>
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      <Show when={visibleItems().length > 0} fallback={<div class="chat-tool-web-search-empty">{emptyMessage()}</div>}>
+        <div class="chat-tool-web-search-list">
+          <For each={visibleItems()}>
+            {(item, index) => (
+              <article class="chat-tool-web-search-item">
+                <div class="chat-tool-web-search-item-head">
+                  <span class="chat-tool-web-search-item-rank">{index() + 1}</span>
+                  <a
+                    class="chat-tool-web-search-item-title"
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={item.title}
+                  >
+                    <span>{item.title}</span>
+                    <ExternalLinkMiniIcon />
+                  </a>
+                  <button
+                    class="chat-tool-web-search-item-copy"
+                    type="button"
+                    onClick={() => void handleCopyURL(item.url)}
+                    aria-label={copiedURL() === item.url ? 'URL copied' : 'Copy result URL'}
+                    title={copiedURL() === item.url ? 'Copied' : 'Copy URL'}
+                  >
+                    <Show when={copiedURL() === item.url} fallback={<CopyMiniIcon />}>
+                      <CheckMiniIcon />
+                    </Show>
+                  </button>
+                </div>
+
+                <div class="chat-tool-web-search-item-meta">
+                  <span class="chat-tool-web-search-item-domain">{item.domainLabel}</span>
+                  <a
+                    class="chat-tool-web-search-item-url"
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={item.url}
+                  >
+                    {item.url}
+                  </a>
+                </div>
+
+                <Show when={item.snippet}>
+                  <p class="chat-tool-web-search-item-snippet">{item.snippet}</p>
+                </Show>
+              </article>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      <Show when={canToggleExpand()}>
+        <div class="chat-tool-web-search-toggle-row">
+          <button
+            type="button"
+            class="chat-tool-web-search-toggle-btn"
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <Show when={expanded()} fallback={`Show ${hiddenCount()} more`}>
+              Show less
+            </Show>
+          </button>
+        </div>
+      </Show>
+
+      <Show when={props.block.error}>
+        <div class="chat-tool-web-search-error">{props.block.error}</div>
+      </Show>
+
+      <Show when={props.block.children && props.block.children.length > 0}>
+        <div class="chat-tool-web-search-children">
+          <For each={props.block.children}>
+            {(child) => (
+              <BlockRenderer
+                block={child}
+                messageId={props.messageId}
+                blockIndex={props.blockIndex}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+};
+
+const CopyMiniIcon: Component = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+);
+
+const CheckMiniIcon: Component = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+
+const ExternalLinkMiniIcon: Component = () => (
+  <svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    <polyline points="15 3 21 3 21 9" />
+    <line x1="10" y1="14" x2="21" y2="3" />
+  </svg>
+);
+
 interface AskUserToolCardProps {
   block: ToolCallBlockType;
   messageId: string;
@@ -751,6 +1221,7 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
   const ctx = useChatContext();
   const askUserDisplay = createMemo(() => buildAskUserDisplay(props.block));
   const waitSubagentsDisplay = createMemo(() => buildWaitSubagentsDisplay(props.block));
+  const webSearchDisplay = createMemo(() => buildWebSearchDisplay(props.block));
   const shouldHideWaitSubagentsRow = createMemo(() => {
     const display = waitSubagentsDisplay();
     if (!display) return false;
@@ -820,6 +1291,18 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
       <WaitSubagentsToolCard
         block={props.block}
         display={waitSubagentsDisplay() as WaitSubagentsDisplay}
+        class={props.class}
+      />
+    );
+  }
+
+  if (webSearchDisplay()) {
+    return (
+      <WebSearchToolCard
+        block={props.block}
+        messageId={props.messageId}
+        blockIndex={props.blockIndex}
+        display={webSearchDisplay() as WebSearchDisplay}
         class={props.class}
       />
     );
