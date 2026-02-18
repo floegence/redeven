@@ -201,6 +201,16 @@ type SettingsResponse = Readonly<{
   ai_secrets?: AISecretsView | null;
 }>;
 
+type SettingsAIUpdateMeta = Readonly<{
+  apply_scope?: string;
+  active_run_count?: number;
+}>;
+
+type SettingsUpdateResponse = Readonly<{
+  settings: SettingsResponse;
+  ai_update?: SettingsAIUpdateMeta | null;
+}>;
+
 type PermissionRow = { key: string; read: boolean; write: boolean; execute: boolean };
 type AIProviderModelRow = { model_name: string };
 type AIProviderRow = { id: string; name: string; type: AIProviderType; base_url: string; models: AIProviderModelRow[] };
@@ -269,6 +279,25 @@ function formatSavedTime(unixMs: number | null): string {
 function autoSaveMessage(label: string, unixMs: number): string {
   const t = formatSavedTime(unixMs);
   return t ? `${label} saved at ${t}.` : `${label} saved.`;
+}
+
+function isSettingsResponseLike(raw: unknown): raw is SettingsResponse {
+  if (!raw || typeof raw !== 'object') return false;
+  const v = raw as any;
+  return typeof v.config_path === 'string' && typeof v.connection === 'object' && typeof v.runtime === 'object';
+}
+
+function normalizeSettingsUpdateResponse(raw: unknown): { settings: SettingsResponse | null; aiUpdate: SettingsAIUpdateMeta | null } {
+  if (isSettingsResponseLike(raw)) {
+    return { settings: raw, aiUpdate: null };
+  }
+  if (!raw || typeof raw !== 'object') {
+    return { settings: null, aiUpdate: null };
+  }
+  const v = raw as any;
+  const settings = isSettingsResponseLike(v.settings) ? (v.settings as SettingsResponse) : null;
+  const aiUpdate = v.ai_update && typeof v.ai_update === 'object' ? (v.ai_update as SettingsAIUpdateMeta) : null;
+  return { settings, aiUpdate };
 }
 
 function newProviderID(): string {
@@ -2024,9 +2053,13 @@ export function EnvSettingsPage() {
     requestAnimationFrame(() => scrollToSection(section));
   });
 
-  const saveSettings = async (body: any) => {
-    await fetchGatewayJSON<SettingsResponse>('/_redeven_proxy/api/settings', { method: 'PUT', body: JSON.stringify(body) });
+  const saveSettings = async (body: any): Promise<{ settings: SettingsResponse | null; aiUpdate: SettingsAIUpdateMeta | null }> => {
+    const data = await fetchGatewayJSON<SettingsResponse | SettingsUpdateResponse>('/_redeven_proxy/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
     env.bumpSettingsSeq();
+    return normalizeSettingsUpdateResponse(data);
   };
 
   // View switchers
@@ -2250,7 +2283,14 @@ export function EnvSettingsPage() {
     return { body, signature: JSON.stringify(body) };
   };
 
-  const notifyAutoSaveSuccess = (label: string, unixMs: number) => {
+  const notifyAutoSaveSuccess = (label: string, unixMs: number, aiUpdate?: SettingsAIUpdateMeta | null) => {
+    const applyScope = String(aiUpdate?.apply_scope ?? '').trim().toLowerCase();
+    const activeRunCount = Number(aiUpdate?.active_run_count ?? 0);
+    if (applyScope === 'future_runs' && Number.isFinite(activeRunCount) && activeRunCount > 0) {
+      const base = autoSaveMessage(label, unixMs);
+      notify.success('Auto-saved', `${base} Changes apply to future runs.`);
+      return;
+    }
     notify.success('Auto-saved', autoSaveMessage(label, unixMs));
   };
 
@@ -2398,11 +2438,11 @@ export function EnvSettingsPage() {
     }
     setAiSaving(true);
     try {
-      await saveSettings(draft.body);
+      const saved = await saveSettings(draft.body);
       const now = Date.now();
       setAiSavedAt(now);
       setAiError(null);
-      notifyAutoSaveSuccess('Flower settings', now);
+      notifyAutoSaveSuccess('Flower settings', now, saved.aiUpdate);
       let unchanged = false;
       try {
         unchanged = buildAIDraft().signature === draft.signature;
@@ -2413,6 +2453,33 @@ export function EnvSettingsPage() {
     } catch (e) {
       const msg = formatUnknownError(e) || 'Save failed.';
       setAiError(msg);
+      notifyAutoSaveFailed('Flower settings', e);
+    } finally {
+      setAiSaving(false);
+    }
+  };
+
+  const saveAICurrentModelDirectly = async (nextModelID: string, prevModelID: string) => {
+    const modelID = String(nextModelID ?? '').trim();
+    if (!modelID) return;
+    setAiSaving(true);
+    setAiError(null);
+    try {
+      await fetchGatewayJSON<unknown>('/_redeven_proxy/api/ai/current_model', {
+        method: 'PUT',
+        body: JSON.stringify({ model_id: modelID }),
+      });
+      env.bumpSettingsSeq();
+      const now = Date.now();
+      setAiSavedAt(now);
+      setAiError(null);
+      setAiDirty(false);
+      notifyAutoSaveSuccess('Flower settings', now, null);
+    } catch (e) {
+      const msg = formatUnknownError(e) || 'Save failed.';
+      setAiCurrentModelID(prevModelID);
+      setAiError(msg);
+      setAiDirty(true);
       notifyAutoSaveFailed('Flower settings', e);
     } finally {
       setAiSaving(false);
@@ -3696,12 +3763,21 @@ export function EnvSettingsPage() {
                         value={aiCurrentModelID()}
                         options={aiModelOptions().map((it) => ({ value: it.id, label: it.label }))}
                         onChange={(v) => {
-                          setAiCurrentModelID(normalizeAICurrentModelID(String(v ?? '').trim(), aiProviders()));
+                          const nextModelID = normalizeAICurrentModelID(String(v ?? '').trim(), aiProviders());
+                          if (!nextModelID) return;
+                          const prevModelID = normalizeAICurrentModelID(aiCurrentModelID(), aiProviders());
+                          if (nextModelID === prevModelID) return;
+                          setAiCurrentModelID(nextModelID);
+                          const canDirectSave = aiView() === 'ui' && !aiDirty() && !aiSaving() && !disableAISaving();
+                          if (canDirectSave) {
+                            void saveAICurrentModelDirectly(nextModelID, prevModelID || '');
+                            return;
+                          }
                           setAiDirty(true);
                         }}
                         placeholder="Select current model..."
                         class="w-full"
-                        disabled={!canInteract() || aiModelOptions().length === 0}
+                        disabled={!canInteract() || aiModelOptions().length === 0 || aiSaving() || disableAISaving()}
                       />
                     </div>
                     <div class="space-y-2">

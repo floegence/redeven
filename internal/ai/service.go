@@ -32,7 +32,6 @@ var (
 	ErrNotConfigured = errors.New("ai not configured")
 	ErrRunActive     = errors.New("run already active")
 	ErrThreadBusy    = errors.New("thread already active")
-	ErrConfigLocked  = errors.New("cannot update ai settings while a run is active")
 )
 
 type Options struct {
@@ -304,8 +303,8 @@ func (s *Service) Enabled() bool {
 
 // UpdateConfig updates the in-memory AI config after persisting it via the provided callback.
 //
-// It blocks new runs from starting while the update is in progress. If any run is active,
-// the update is rejected with ErrConfigLocked.
+// Active runs keep their existing run-local config snapshot. The updated config applies to
+// runs created after this method returns.
 func (s *Service) UpdateConfig(next *config.AIConfig, persist func() error) error {
 	if s == nil {
 		return errors.New("nil service")
@@ -322,16 +321,38 @@ func (s *Service) UpdateConfig(next *config.AIConfig, persist func() error) erro
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if len(s.activeRunByTh) > 0 {
-		return ErrConfigLocked
-	}
-
 	if err := persist(); err != nil {
 		return err
 	}
 
 	s.cfg = next
 	return nil
+}
+
+// ActiveRunCount returns the number of active runs for the given endpoint.
+//
+// When endpointID is empty, it returns the global active run count.
+func (s *Service) ActiveRunCount(endpointID string) int {
+	if s == nil {
+		return 0
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	prefix := endpointID + ":"
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	count := 0
+	for key, runID := range s.activeRunByTh {
+		if strings.TrimSpace(runID) == "" {
+			continue
+		}
+		if endpointID != "" && !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 // SetCurrentModelID updates current_model_id while keeping the provider/model registry unchanged.

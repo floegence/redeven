@@ -397,6 +397,16 @@ type settingsView struct {
 	AISecrets        *settingsAISecretsView   `json:"ai_secrets,omitempty"`
 }
 
+type settingsAIUpdateView struct {
+	ApplyScope     string `json:"apply_scope"`
+	ActiveRunCount int    `json:"active_run_count"`
+}
+
+type settingsUpdateView struct {
+	Settings settingsView          `json:"settings"`
+	AIUpdate *settingsAIUpdateView `json:"ai_update,omitempty"`
+}
+
 type settingsAISecretsView struct {
 	ProviderAPIKeySet map[string]bool `json:"provider_api_key_set"`
 }
@@ -906,6 +916,17 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			// Do NOT log any AI config details (may include secrets).
 			auditDetail["ai_updated"] = true
 		}
+		endpointID := strings.TrimSpace(meta.EndpointID)
+		aiUpdate := (*settingsAIUpdateView)(nil)
+		if len(body.AI) > 0 && g.ai != nil {
+			activeRunCount := g.ai.ActiveRunCount(endpointID)
+			aiUpdate = &settingsAIUpdateView{
+				ApplyScope:     "future_runs",
+				ActiveRunCount: activeRunCount,
+			}
+			auditDetail["ai_apply_scope"] = aiUpdate.ApplyScope
+			auditDetail["ai_active_run_count"] = activeRunCount
+		}
 
 		var updated *config.Config
 		persist := func() error {
@@ -956,16 +977,18 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			g.appendAudit(meta, "settings_update", "failure", auditDetail, err)
-			status := http.StatusBadRequest
-			if errors.Is(err, ai.ErrConfigLocked) {
-				status = http.StatusConflict
-			}
-			writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
 
 		g.appendAudit(meta, "settings_update", "success", auditDetail, nil)
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: toSettingsView(updated, g.configPath, g.secrets)})
+		writeJSON(w, http.StatusOK, apiResp{
+			OK: true,
+			Data: settingsUpdateView{
+				Settings: toSettingsView(updated, g.configPath, g.secrets),
+				AIUpdate: aiUpdate,
+			},
+		})
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/provider_keys/status":

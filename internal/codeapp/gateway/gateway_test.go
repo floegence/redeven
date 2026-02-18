@@ -17,6 +17,8 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/floegence/redeven-agent/internal/ai"
+	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -667,6 +669,114 @@ func TestGateway_Settings_RedactsSecrets(t *testing.T) {
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("cs origin status = %d, want %d", rr.Code, http.StatusNotFound)
 		}
+	}
+}
+
+func TestGateway_SettingsUpdate_ReturnsAIUpdateMeta(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+
+	cfgPath := writeTestConfigWithAI(t)
+	channelID := "ch_test_settings_ai_update"
+	envOrigin := envOriginWithChannel(channelID)
+	aiCfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
+		Providers: []config.AIProvider{{
+			ID:      "openai",
+			Name:    "OpenAI",
+			Type:    "openai",
+			BaseURL: "https://api.openai.com/v1",
+			Models: []config.AIProviderModel{
+				{ModelName: "gpt-5-mini"},
+				{ModelName: "gpt-5"},
+			},
+		}},
+	}
+	aiSvc, err := ai.NewService(ai.Options{
+		StateDir: t.TempDir(),
+		FSRoot:   t.TempDir(),
+		Shell:    "/bin/sh",
+		Config:   aiCfg,
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = aiSvc.Close()
+	})
+
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		AI:                 aiSvc,
+		ConfigPath:         cfgPath,
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanAdmin: true}),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	body := `{
+  "ai": {
+    "current_model_id": "openai/gpt-5-mini",
+    "providers": [
+      {
+        "id": "openai",
+        "name": "OpenAI",
+        "type": "openai",
+        "base_url": "https://api.openai.com/v1",
+        "models": [
+          { "model_name": "gpt-5-mini" },
+          { "model_name": "gpt-5" }
+        ]
+      }
+    ]
+  }
+}`
+
+	req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/settings", bytes.NewBufferString(body))
+	req.Header.Set("Origin", envOrigin)
+	rr := httptest.NewRecorder()
+	gw.serveHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if ok, _ := resp["ok"].(bool); !ok {
+		t.Fatalf("unexpected ok=%v resp=%v", resp["ok"], resp)
+	}
+
+	data, _ := resp["data"].(map[string]any)
+	if data == nil {
+		t.Fatalf("missing data object")
+	}
+	settingsObj, _ := data["settings"].(map[string]any)
+	if settingsObj == nil {
+		t.Fatalf("missing settings object in update response")
+	}
+	if gotPath := strings.TrimSpace(settingsObj["config_path"].(string)); gotPath != cfgPath {
+		t.Fatalf("config_path mismatch: got=%q want=%q", gotPath, cfgPath)
+	}
+
+	aiUpdate, _ := data["ai_update"].(map[string]any)
+	if aiUpdate == nil {
+		t.Fatalf("missing ai_update object")
+	}
+	if got := strings.TrimSpace(aiUpdate["apply_scope"].(string)); got != "future_runs" {
+		t.Fatalf("apply_scope=%q, want=%q", got, "future_runs")
+	}
+	if got, ok := aiUpdate["active_run_count"].(float64); !ok || int(got) != 0 {
+		t.Fatalf("active_run_count=%v, want=0", aiUpdate["active_run_count"])
 	}
 }
 
