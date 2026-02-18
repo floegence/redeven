@@ -893,39 +893,11 @@ function summarizeSubagentText(value: string, maxLength = 120): string {
   return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
-function subagentHistoryRoleLabel(role: string): string {
-  const normalized = String(role ?? '').trim().toLowerCase();
-  if (normalized === 'user') return 'User';
-  if (normalized === 'assistant') return 'Subagent';
-  if (normalized === 'system') return 'System';
-  return 'Message';
-}
-
-function subagentHistoryRoleClass(role: string): string {
-  const normalized = String(role ?? '').trim().toLowerCase();
-  if (normalized === 'user') return 'bg-primary/[0.06] border-primary/20';
-  if (normalized === 'assistant') return 'bg-emerald-500/[0.08] border-emerald-500/20';
-  if (normalized === 'system') return 'bg-amber-500/[0.08] border-amber-500/20';
-  return 'bg-muted/40 border-border/70';
-}
-
-function resolveSubagentFinalMessage(item: SubagentView): string {
-  for (let i = item.history.length - 1; i >= 0; i -= 1) {
-    const entry = item.history[i];
-    if (entry.role === 'assistant' && String(entry.text ?? '').trim()) {
-      return String(entry.text).trim();
-    }
-  }
-  return String(item.summary ?? '').trim();
-}
-
 function CompactSubagentsSummary(props: {
   subagents: SubagentView[];
   updatedLabel: string;
 }) {
   const [expanded, setExpanded] = createSignal(false);
-  const [detailOpen, setDetailOpen] = createSignal(false);
-  const [selectedSubagent, setSelectedSubagent] = createSignal<SubagentView | null>(null);
   let containerRef: HTMLDivElement | undefined;
 
   const runningCount = createMemo(
@@ -940,12 +912,6 @@ function CompactSubagentsSummary(props: {
   const failedCount = createMemo(
     () => props.subagents.filter((item) => item.status === 'failed' || item.status === 'timed_out').length,
   );
-
-  const openDetails = (item: SubagentView) => {
-    setSelectedSubagent(item);
-    setDetailOpen(true);
-    setExpanded(false);
-  };
 
   createEffect(() => {
     if (!expanded()) return;
@@ -1007,15 +973,7 @@ function CompactSubagentsSummary(props: {
               <div class="space-y-1.5 max-h-64 overflow-auto pr-1">
                 <For each={props.subagents}>
                   {(item) => (
-                    <button
-                      type="button"
-                      onClick={() => openDetails(item)}
-                      class={cn(
-                        'w-full text-left rounded-lg border border-border/65 bg-background/75 px-2.5 py-2',
-                        'transition-all duration-150 hover:border-primary/35 hover:bg-primary/[0.04]',
-                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
-                      )}
-                    >
+                    <div class="rounded-lg border border-border/65 bg-background/75 px-2.5 py-2">
                       <div class="flex items-center gap-2">
                         <span class={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium shrink-0', subagentStatusBadgeClass(item.status))}>
                           <Show when={String(item.status ?? '').toLowerCase() === 'running'}>
@@ -1035,12 +993,17 @@ function CompactSubagentsSummary(props: {
                         <span>•</span>
                         <span>Tokens {formatSubagentInteger(item.stats.tokens)}</span>
                       </div>
-                      <Show when={item.summary}>
-                        <div class="mt-1 text-[11px] text-foreground leading-relaxed">
-                          {summarizeSubagentText(item.summary, 108)}
+                      <Show when={item.triggerReason}>
+                        <div class="mt-1 text-[11px] text-muted-foreground leading-relaxed">
+                          Trigger: {summarizeSubagentText(item.triggerReason, 108)}
                         </div>
                       </Show>
-                    </button>
+                      <Show when={item.error}>
+                        <div class="mt-1 rounded-md border border-error/30 bg-error/10 px-2 py-1 text-[11px] text-error">
+                          Error: {item.error}
+                        </div>
+                      </Show>
+                    </div>
                   )}
                 </For>
               </div>
@@ -1052,165 +1015,6 @@ function CompactSubagentsSummary(props: {
           </div>
         </div>
       </Show>
-
-      <Dialog
-        open={detailOpen()}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDetailOpen(false);
-            setSelectedSubagent(null);
-            return;
-          }
-          setDetailOpen(true);
-        }}
-        title="Subagent details"
-      >
-        <Show when={selectedSubagent()} fallback={<div class="text-sm text-muted-foreground">No subagent selected.</div>}>
-          {(selected) => {
-            const item = selected();
-            return (
-              <div class="space-y-3">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium', subagentStatusBadgeClass(item.status))}>
-                    <Show when={String(item.status ?? '').toLowerCase() === 'running'}>
-                      <InlineStatusSnakeLoading />
-                    </Show>
-                    {subagentStatusLabel(item.status)}
-                  </span>
-                  <span class="text-xs text-muted-foreground">{item.agentType || 'subagent'}</span>
-                  <span class="ml-auto rounded-md border border-border/70 bg-muted/35 px-2 py-0.5 text-[11px] font-mono text-muted-foreground">
-                    {item.subagentId}
-                  </span>
-                </div>
-
-                <div class="grid grid-cols-2 gap-2 text-[11px]">
-                  <div class="rounded-md border border-border/70 bg-background/70 px-2 py-1.5">
-                    <div class="text-muted-foreground">Steps</div>
-                    <div class="mt-0.5 font-medium text-foreground">{formatSubagentInteger(item.stats.steps)}</div>
-                  </div>
-                  <div class="rounded-md border border-border/70 bg-background/70 px-2 py-1.5">
-                    <div class="text-muted-foreground">Tool calls</div>
-                    <div class="mt-0.5 font-medium text-foreground">{formatSubagentInteger(item.stats.toolCalls)}</div>
-                  </div>
-                  <div class="rounded-md border border-border/70 bg-background/70 px-2 py-1.5">
-                    <div class="text-muted-foreground">Tokens</div>
-                    <div class="mt-0.5 font-medium text-foreground">{formatSubagentInteger(item.stats.tokens)}</div>
-                  </div>
-                  <div class="rounded-md border border-border/70 bg-background/70 px-2 py-1.5">
-                    <div class="text-muted-foreground">Elapsed</div>
-                    <div class="mt-0.5 font-medium text-foreground">{formatSubagentElapsed(item.stats.elapsedMs)}</div>
-                  </div>
-                  <div class="col-span-2 rounded-md border border-border/70 bg-background/70 px-2 py-1.5">
-                    <div class="text-muted-foreground">Outcome</div>
-                    <div class="mt-0.5 font-medium text-foreground">{item.stats.outcome || subagentStatusLabel(item.status)}</div>
-                  </div>
-                </div>
-
-                <Show when={item.summary}>
-                  <div class="rounded-md border border-border/70 bg-background/70 px-2.5 py-2">
-                    <div class="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Summary</div>
-                    <div class="mt-1 text-xs leading-relaxed text-foreground whitespace-pre-wrap break-words">{item.summary}</div>
-                  </div>
-                </Show>
-
-                <Show when={resolveSubagentFinalMessage(item)}>
-                  <div class="rounded-md border border-border/70 bg-background/70 px-2.5 py-2">
-                    <div class="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Final message</div>
-                    <div class="mt-1 text-xs leading-relaxed text-foreground whitespace-pre-wrap break-words">{resolveSubagentFinalMessage(item)}</div>
-                  </div>
-                </Show>
-
-                <div class="rounded-md border border-border/70 bg-background/70 px-2.5 py-2">
-                  <div class="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Message timeline</div>
-                  <Show
-                    when={item.history.length > 0}
-                    fallback={<div class="mt-1 text-xs text-muted-foreground">No detailed messages yet.</div>}
-                  >
-                    <div class="mt-1 space-y-1.5 max-h-56 overflow-auto pr-0.5">
-                      <For each={item.history}>
-                        {(entry) => (
-                          <div class={cn('rounded-md border px-2 py-1.5', subagentHistoryRoleClass(entry.role))}>
-                            <div class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                              {subagentHistoryRoleLabel(entry.role)}
-                            </div>
-                            <div class="mt-0.5 text-xs leading-relaxed text-foreground whitespace-pre-wrap break-words">
-                              {entry.text}
-                            </div>
-                          </div>
-                        )}
-                      </For>
-                    </div>
-                  </Show>
-                </div>
-
-                <Show when={item.triggerReason}>
-                  <div class="rounded-md border border-border/70 bg-background/70 px-2.5 py-2">
-                    <div class="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Trigger reason</div>
-                    <div class="mt-1 text-xs leading-relaxed text-foreground whitespace-pre-wrap break-words">{item.triggerReason}</div>
-                  </div>
-                </Show>
-
-                <Show when={item.evidenceRefs.length > 0}>
-                  <div class="rounded-md border border-border/70 bg-background/70 px-2.5 py-2">
-                    <div class="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Evidence refs</div>
-                    <div class="mt-1 flex flex-wrap gap-1.5">
-                      <For each={item.evidenceRefs}>
-                        {(ref) => (
-                          <span class="rounded-full border border-primary/25 bg-primary/[0.08] px-2 py-0.5 text-[11px] text-primary">
-                            {ref}
-                          </span>
-                        )}
-                      </For>
-                    </div>
-                  </div>
-                </Show>
-
-                <Show when={item.keyFiles.length > 0}>
-                  <div class="rounded-md border border-border/70 bg-background/70 px-2.5 py-2">
-                    <div class="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Key files</div>
-                    <div class="mt-1 space-y-1.5">
-                      <For each={item.keyFiles}>
-                        {(file) => (
-                          <div class="text-[11px] leading-relaxed text-foreground">
-                            <span class="font-mono">{file.path}<Show when={file.line && file.line > 0}>:{file.line}</Show></span>
-                            <Show when={file.purpose}>
-                              <span class="text-muted-foreground"> — {file.purpose}</span>
-                            </Show>
-                          </div>
-                        )}
-                      </For>
-                    </div>
-                  </div>
-                </Show>
-
-                <Show when={item.openRisks.length > 0}>
-                  <div class="rounded-md border border-border/70 bg-background/70 px-2.5 py-2">
-                    <div class="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Open risks</div>
-                    <ul class="mt-1 list-disc pl-4 space-y-1 text-xs leading-relaxed text-foreground">
-                      <For each={item.openRisks}>{(risk) => <li>{risk}</li>}</For>
-                    </ul>
-                  </div>
-                </Show>
-
-                <Show when={item.nextActions.length > 0}>
-                  <div class="rounded-md border border-border/70 bg-background/70 px-2.5 py-2">
-                    <div class="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Next actions</div>
-                    <ul class="mt-1 list-disc pl-4 space-y-1 text-xs leading-relaxed text-foreground">
-                      <For each={item.nextActions}>{(action) => <li>{action}</li>}</For>
-                    </ul>
-                  </div>
-                </Show>
-
-                <Show when={item.error}>
-                  <div class="rounded-md border border-error/30 bg-error/10 px-2.5 py-2 text-xs text-error">
-                    Error: {item.error}
-                  </div>
-                </Show>
-              </div>
-            );
-          }}
-        </Show>
-      </Dialog>
     </div>
   );
 }
