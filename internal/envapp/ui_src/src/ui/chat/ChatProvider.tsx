@@ -21,7 +21,6 @@ import type {
   ChatCallbacks,
   VirtualListConfig,
   StreamEvent,
-  DEFAULT_VIRTUAL_LIST_CONFIG as _DEFAULT_VIRTUAL_LIST_CONFIG,
 } from './types';
 import { DEFAULT_VIRTUAL_LIST_CONFIG } from './types';
 
@@ -60,12 +59,27 @@ export interface ChatContextValue {
   uploadAttachment: (file: File) => Promise<string>;
   toggleToolCollapse: (messageId: string, toolId: string) => void;
   approveToolCall: (messageId: string, toolId: string, approved: boolean) => void;
+  scrollToBottomRequest: Accessor<ScrollToBottomRequest | null>;
+  requestScrollToBottom: (options?: ScrollToBottomRequestOptions) => void;
 
   heightCache: Map<string, number>;
   setMessageHeight: (id: string, height: number) => void;
   getMessageHeight: (id: string) => number;
 
   toggleChecklistItem: (messageId: string, blockIndex: number, itemId: string) => void;
+}
+
+export type ScrollToBottomBehavior = 'auto' | 'smooth';
+
+export interface ScrollToBottomRequest {
+  seq: number;
+  behavior: ScrollToBottomBehavior;
+  source: 'system' | 'user';
+}
+
+export interface ScrollToBottomRequestOptions {
+  behavior?: ScrollToBottomBehavior;
+  source?: 'system' | 'user';
 }
 
 // ---- Context ----
@@ -121,6 +135,17 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
   const [hasMoreHistory, setHasMoreHistory] = createSignal(true);
   const [streamingMessageId, setStreamingMessageId] = createSignal<string | null>(null);
   const [preparingCount, setPreparingCount] = createSignal(0);
+  const [scrollToBottomRequest, setScrollToBottomRequest] = createSignal<ScrollToBottomRequest | null>(null);
+  let scrollToBottomRequestSeq = 0;
+
+  const requestScrollToBottom = (options?: ScrollToBottomRequestOptions): void => {
+    scrollToBottomRequestSeq += 1;
+    setScrollToBottomRequest({
+      seq: scrollToBottomRequestSeq,
+      behavior: options?.behavior ?? 'auto',
+      source: options?.source ?? 'system',
+    });
+  };
 
   // Preparing tracking (tracks outstanding send operations)
   let prepIdCounter = 0;
@@ -477,6 +502,9 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
         });
       });
     },
+
+    scrollToBottomRequest,
+    requestScrollToBottom,
 
     heightCache,
     setMessageHeight: (id, height) => { heightCache.set(id, height); },

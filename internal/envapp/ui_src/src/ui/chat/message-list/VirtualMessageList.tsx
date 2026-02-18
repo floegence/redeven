@@ -1,6 +1,6 @@
-// Virtualized message list component with auto-scroll and history loading.
+// Virtualized message list with a single, explicit follow-state machine.
 
-import { createEffect, createMemo, onCleanup, Show, For } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, Show, For } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { useChatContext } from '../ChatProvider';
@@ -29,12 +29,23 @@ const ChevronDownIcon: Component = () => (
   </svg>
 );
 
+type FollowMode = 'following' | 'paused';
+
+const FOLLOW_BOTTOM_THRESHOLD_PX = 24;
+const EXTERNAL_SCROLL_SYNC_PASSES = 2;
+
 export const VirtualMessageList: Component<VirtualMessageListProps> = (props) => {
   const ctx = useChatContext();
 
   const messages = createMemo(() => ctx.messages());
   const isWorking = ctx.isWorking;
   const isLoadingHistory = ctx.isLoadingHistory;
+
+  const [followMode, setFollowMode] = createSignal<FollowMode>('following');
+  const [distanceToBottomPx, setDistanceToBottomPx] = createSignal(0);
+  const [pendingMessageCount, setPendingMessageCount] = createSignal(0);
+  const [scrollContainerVersion, setScrollContainerVersion] = createSignal(0);
+
   const messageById = createMemo(() => {
     const byId = new Map<string, Message>();
     messages().forEach((msg) => {
@@ -42,6 +53,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     });
     return byId;
   });
+
   const messageIndexById = createMemo(() => {
     const indexById = new Map<string, number>();
     messages().forEach((msg, index) => {
@@ -61,74 +73,149 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     config: ctx.virtualListConfig(),
   });
 
-  // Track previous message count for auto-scroll
   let prevMessageCount = messages().length;
-  // Keep a short "follow lock" after explicit bottoming so delayed markdown/worker
-  // height updates do not leave the viewport stranded above the latest message.
-  const RESIZE_FOLLOW_GRACE_MS = 5000;
-  const FOLLOW_BOTTOM_THRESHOLD_PX = 24;
-  let followLockUntilMs = 0;
+  let prevScrollTop = 0;
   let scrollContainerEl: HTMLElement | null = null;
   let didInitialBottomSync = false;
+  let lastHandledScrollRequestSeq = 0;
+  let followToBottomRaf: number | null = null;
+
+  const getDistanceToBottom = (el: HTMLElement) =>
+    Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight);
 
   const isNearBottom = (el: HTMLElement) =>
-    el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_BOTTOM_THRESHOLD_PX;
+    getDistanceToBottom(el) <= FOLLOW_BOTTOM_THRESHOLD_PX;
 
-  const lockFollowToBottom = () => {
-    followLockUntilMs = Math.max(followLockUntilMs, Date.now() + RESIZE_FOLLOW_GRACE_MS);
+  const updateDistanceToBottom = (el?: HTMLElement | null) => {
+    const target = el ?? scrollContainerEl;
+    if (!target) return;
+    setDistanceToBottomPx(getDistanceToBottom(target));
   };
 
-  const shouldForceFollow = () => followLockUntilMs > Date.now();
-  const shouldFollowBottom = () => virtualList.isAtBottom() || shouldForceFollow();
+  const applyFollowingMode = () => {
+    if (followMode() !== 'following') {
+      setFollowMode('following');
+    }
+    if (pendingMessageCount() !== 0) {
+      setPendingMessageCount(0);
+    }
+  };
 
-  // Auto-scroll to bottom when new messages arrive (only if already at bottom)
+  const applyPausedMode = () => {
+    if (followMode() !== 'paused') {
+      setFollowMode('paused');
+    }
+  };
+
+  const scrollToBottomNow = (behavior: 'auto' | 'smooth' = 'auto'): boolean => {
+    const el = scrollContainerEl;
+    if (!el) return false;
+
+    if (behavior === 'smooth') {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    } else {
+      virtualList.scrollToBottom();
+    }
+
+    prevScrollTop = el.scrollTop;
+    updateDistanceToBottom(el);
+    return true;
+  };
+
+  const scheduleFollowToBottom = (behavior: 'auto' | 'smooth' = 'auto', passes = 1) => {
+    if (followToBottomRaf !== null) return;
+    followToBottomRaf = requestAnimationFrame(() => {
+      followToBottomRaf = null;
+      if (followMode() !== 'following') return;
+      if (!scrollToBottomNow(behavior)) return;
+      if (passes > 1) {
+        scheduleFollowToBottom(behavior, passes - 1);
+      }
+    });
+  };
+
+  // Auto-follow only when in FOLLOWING mode; otherwise collect unread count.
   createEffect(() => {
     const currentCount = messages().length;
-    if (currentCount > prevMessageCount && virtualList.isAtBottom()) {
-      lockFollowToBottom();
-      // Use rAF to wait for DOM update before scrolling
-      requestAnimationFrame(() => {
-        virtualList.scrollToBottom();
-      });
+
+    if (currentCount <= 0) {
+      prevMessageCount = 0;
+      didInitialBottomSync = false;
+      setPendingMessageCount(0);
+      setDistanceToBottomPx(0);
+      setFollowMode('following');
+      return;
     }
+
+    if (currentCount > prevMessageCount) {
+      const addedCount = currentCount - prevMessageCount;
+      if (followMode() === 'following') {
+        scheduleFollowToBottom('auto');
+      } else {
+        setPendingMessageCount((count) => count + addedCount);
+      }
+    }
+
     prevMessageCount = currentCount;
+
+    requestAnimationFrame(() => {
+      updateDistanceToBottom();
+    });
   });
 
-  // When the list mounts with preloaded messages (thread restore), run a dedicated
-  // bottom sync. The normal "count increased" path does not fire in this case.
+  // Initial mount sync for already-loaded thread messages.
   createEffect(() => {
+    scrollContainerVersion();
     const currentCount = messages().length;
-    if (currentCount <= 0) {
+    if (currentCount <= 0 || !scrollContainerEl) {
       didInitialBottomSync = false;
       return;
     }
     if (didInitialBottomSync) return;
-    didInitialBottomSync = true;
 
-    lockFollowToBottom();
-    requestAnimationFrame(() => {
-      virtualList.scrollToBottom();
-      requestAnimationFrame(() => {
-        virtualList.scrollToBottom();
-      });
-    });
+    didInitialBottomSync = true;
+    applyFollowingMode();
+    scheduleFollowToBottom('auto', EXTERNAL_SCROLL_SYNC_PASSES);
   });
 
-  // Show scroll-to-bottom button when not at bottom
-  const showScrollToBottom = createMemo(() => !virtualList.isAtBottom());
+  // External bottom intents (thread switch/send) are funneled into the same state machine.
+  createEffect(() => {
+    scrollContainerVersion();
+    const request = ctx.scrollToBottomRequest();
+    if (!request || !scrollContainerEl) return;
+    if (request.seq <= lastHandledScrollRequestSeq) return;
 
-  // Load more history when scrolled near the top
+    lastHandledScrollRequestSeq = request.seq;
+    applyFollowingMode();
+    const syncPasses = request.source === 'system' ? EXTERNAL_SCROLL_SYNC_PASSES : 1;
+    scheduleFollowToBottom(request.behavior, syncPasses);
+  });
+
+  const showScrollToBottom = createMemo(
+    () => followMode() === 'paused' || distanceToBottomPx() > FOLLOW_BOTTOM_THRESHOLD_PX,
+  );
+
+  // Load more history when scrolled near the top.
   function handleScroll(): void {
     const el = scrollContainerEl;
-    if (el) {
-      if (isNearBottom(el)) {
-        lockFollowToBottom();
-      }
-    }
 
     virtualList.onScroll();
 
-    // Check if near top for loading more history
+    if (el) {
+      const nextScrollTop = el.scrollTop;
+      const nearBottom = isNearBottom(el);
+
+      updateDistanceToBottom(el);
+
+      if (nearBottom) {
+        applyFollowingMode();
+      } else if (Math.abs(nextScrollTop - prevScrollTop) > 0.5) {
+        applyPausedMode();
+      }
+
+      prevScrollTop = nextScrollTop;
+    }
+
     const range = virtualList.visibleRange();
     if (
       range.start <= ctx.virtualListConfig().loadThreshold &&
@@ -139,48 +226,39 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     }
   }
 
-  // ResizeObserver for tracking individual message heights
-  let followToBottomRaf: number | null = null;
-  const scheduleFollowToBottom = () => {
-    if (followToBottomRaf !== null) return;
-    followToBottomRaf = requestAnimationFrame(() => {
-      followToBottomRaf = null;
-      if (shouldFollowBottom()) {
-        virtualList.scrollToBottom();
-      }
-    });
-  };
-
+  // ResizeObserver tracks per-item height changes from markdown/tool reflow.
   const resizeObserverMap = new Map<Element, string>();
   const resizeObserver = new ResizeObserver((entries) => {
     let anyHeightChanged = false;
+
     for (const entry of entries) {
       const el = entry.target as HTMLElement;
       const messageId = resizeObserverMap.get(el);
       if (!messageId) continue;
+
       const index = messageIndexById().get(messageId);
       if (index === undefined) continue;
 
       const rawHeight =
         entry.contentBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
       const height = Math.round(rawHeight);
+      if (height <= 0) continue;
 
-      if (height > 0) {
-        const cachedHeight = ctx.getMessageHeight(messageId);
-        if (Math.abs(cachedHeight - height) < 1) {
-          continue;
-        }
-        ctx.setMessageHeight(messageId, height);
-        virtualList.setItemHeight(index, height);
-        anyHeightChanged = true;
+      const cachedHeight = ctx.getMessageHeight(messageId);
+      if (Math.abs(cachedHeight - height) < 1) {
+        continue;
       }
+
+      ctx.setMessageHeight(messageId, height);
+      virtualList.setItemHeight(index, height);
+      anyHeightChanged = true;
     }
 
-    // Keep the view anchored to the bottom while streaming (worker-based markdown rendering
-    // may update DOM height asynchronously after the last stream event).
-    if (anyHeightChanged && shouldFollowBottom()) {
-      lockFollowToBottom();
-      scheduleFollowToBottom();
+    if (!anyHeightChanged) return;
+
+    updateDistanceToBottom();
+    if (followMode() === 'following') {
+      scheduleFollowToBottom('auto');
     }
   });
 
@@ -193,7 +271,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     }
   });
 
-  // Ref callback for message items — observe resizes
+  // Ref callback for message items — observe resizes.
   function observeItem(el: HTMLElement, messageId: string): void {
     resizeObserverMap.set(el, messageId);
     resizeObserver.observe(el);
@@ -222,6 +300,9 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
           scrollContainerEl = el;
           virtualList.containerRef(el);
           virtualList.scrollRef(el);
+          prevScrollTop = el.scrollTop;
+          updateDistanceToBottom(el);
+          setScrollContainerVersion((version) => version + 1);
         }) as any}
         onScroll={handleScroll}
       >
@@ -263,12 +344,16 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
         <button
           class="chat-scroll-to-bottom-btn"
           onClick={() => {
-            lockFollowToBottom();
-            virtualList.scrollToBottom();
+            applyFollowingMode();
+            ctx.requestScrollToBottom({ source: 'user', behavior: 'auto' });
           }}
           aria-label="Scroll to bottom"
+          title={pendingMessageCount() > 0 ? `${pendingMessageCount()} new messages` : 'Scroll to bottom'}
         >
           <ChevronDownIcon />
+          <Show when={pendingMessageCount() > 0}>
+            <span class="chat-scroll-to-bottom-badge">{pendingMessageCount()}</span>
+          </Show>
         </button>
       </Show>
     </div>

@@ -1433,12 +1433,6 @@ export function EnvAIPage() {
   const [workingDirEditError, setWorkingDirEditError] = createSignal<string | null>(null);
   const [workingDirEditSaving, setWorkingDirEditSaving] = createSignal(false);
   let workingDirCache: DirCache = new Map();
-
-  const FOLLOW_BOTTOM_THRESHOLD_PX = 24;
-  let autoFollowEnabled = true;
-  let followScrollRafPending = false;
-  let scrollerListenerEl: HTMLElement | null = null;
-  let scrollerListenerCleanup: (() => void) | null = null;
   let draftWorkingDirInitializedForHome = false;
 
   createEffect(() => {
@@ -1511,96 +1505,9 @@ export function EnvAIPage() {
     })();
   });
 
-  const getMessageListScroller = () =>
-    document.querySelector<HTMLElement>('.chat-message-list-scroll') ??
-    document.querySelector<HTMLElement>('.chat-message-list');
-
-  const isNearBottom = (el: HTMLElement) =>
-    el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_BOTTOM_THRESHOLD_PX;
-
-  const enableAutoFollow = () => {
-    autoFollowEnabled = true;
+  const requestScrollToBottom = (source: 'system' | 'user' = 'system') => {
+    chat?.requestScrollToBottom({ source, behavior: 'auto' });
   };
-
-  const ensureMessageListScrollerListener = () => {
-    const el = getMessageListScroller();
-    if (!el) return null;
-    if (el === scrollerListenerEl) return el;
-
-    scrollerListenerCleanup?.();
-    scrollerListenerEl = el;
-
-    let lastScrollTop = el.scrollTop;
-    const onScroll = () => {
-      const nextScrollTop = el.scrollTop;
-      const prevScrollTop = lastScrollTop;
-      lastScrollTop = nextScrollTop;
-
-      if (isNearBottom(el)) {
-        autoFollowEnabled = true;
-        return;
-      }
-
-      // Only disable auto-follow when the user scrolls up (away from the bottom).
-      if (nextScrollTop < prevScrollTop) {
-        autoFollowEnabled = false;
-      }
-    };
-
-    el.addEventListener('scroll', onScroll, { passive: true });
-    scrollerListenerCleanup = () => {
-      el.removeEventListener('scroll', onScroll);
-    };
-
-    autoFollowEnabled = isNearBottom(el);
-    return el;
-  };
-
-  onCleanup(() => {
-    scrollerListenerCleanup?.();
-    scrollerListenerCleanup = null;
-    scrollerListenerEl = null;
-  });
-
-  const forceScrollToLatest = () => {
-    const scrollBottom = () => {
-      const el = ensureMessageListScrollerListener();
-      if (!el) return false;
-      el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
-      return true;
-    };
-
-    if (scrollBottom()) return;
-    requestAnimationFrame(() => {
-      if (scrollBottom()) return;
-      requestAnimationFrame(() => {
-        void scrollBottom();
-      });
-    });
-  };
-
-  const scheduleFollowScrollToLatest = () => {
-    ensureMessageListScrollerListener();
-
-    if (!autoFollowEnabled || followScrollRafPending) {
-      return;
-    }
-
-    followScrollRafPending = true;
-    requestAnimationFrame(() => {
-      followScrollRafPending = false;
-      if (!autoFollowEnabled) return;
-      forceScrollToLatest();
-    });
-  };
-
-  createEffect(() => {
-    if (!chatReady()) return;
-    hasMessages();
-    requestAnimationFrame(() => {
-      ensureMessageListScrollerListener();
-    });
-  });
 
   let lastMessagesReq = 0;
   let lastTodosReq = 0;
@@ -2250,8 +2157,7 @@ export function EnvAIPage() {
       rebuildSubagentsFromMessages(merged);
       setHasMessages(merged.length > 0);
       if (opts?.scrollToBottom) {
-        enableAutoFollow();
-        forceScrollToLatest();
+        requestScrollToBottom('system');
       }
     } catch (e) {
       if (reqNo !== lastMessagesReq) return;
@@ -2290,7 +2196,6 @@ export function EnvAIPage() {
       chat.setMessages(next);
       rebuildSubagentsFromMessages(next);
       setHasMessages(next.length > 0);
-      scheduleFollowScrollToLatest();
     } catch {
       // Best-effort: ignore snapshot failures (realtime frames / transcript refresh can self-heal).
     }
@@ -2390,7 +2295,6 @@ export function EnvAIPage() {
     }
 
     const tid = ai.activeThreadId();
-    enableAutoFollow();
 
     if (!tid) {
       chat?.clearMessages();
@@ -2460,7 +2364,6 @@ export function EnvAIPage() {
           chat?.setMessages(next);
           rebuildSubagentsFromMessages(next);
           setHasMessages(true);
-          scheduleFollowScrollToLatest();
         }
         return;
       }
@@ -2499,7 +2402,6 @@ export function EnvAIPage() {
           chat?.handleStreamEvent(decorateStreamEvent(streamEvent) as any);
           rebuildSubagentsFromMessages(chat?.messages() ?? []);
           setHasMessages(true);
-          scheduleFollowScrollToLatest();
         }
         return;
       }
@@ -2691,8 +2593,7 @@ export function EnvAIPage() {
     setHasMessages(true);
     setSendPending(true);
     setRunPhaseLabel('Planning...');
-    enableAutoFollow();
-    forceScrollToLatest();
+    requestScrollToBottom('user');
 
     let tid = ai.activeThreadId();
     if (!tid) {
@@ -2798,8 +2699,7 @@ export function EnvAIPage() {
       setSendPending(true);
       setHasMessages(true);
       setRunPhaseLabel('Planning...');
-      enableAutoFollow();
-      forceScrollToLatest();
+      requestScrollToBottom('user');
     },
     onSendMessage: async (content, attachments, userMessageId, _addMessage) => {
       if (protocol.status() !== 'connected') {
