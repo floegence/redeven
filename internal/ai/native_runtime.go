@@ -1543,6 +1543,8 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if err != nil {
 		return r.failRun("Failed to initialize tool scheduler", err)
 	}
+	capabilityContract := resolveRunCapabilityContract(r, scheduler.ActiveTools(mode))
+	r.persistRunEvent("capability.contract.resolved", RealtimeStreamKindLifecycle, capabilityContract.eventPayload())
 	r.ensureSkillManager()
 
 	loop := AgentLoop{
@@ -1737,12 +1739,16 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			signal.Question = "I need clarification to continue safely."
 		}
 		source = strings.TrimSpace(source)
-		if r.noUserInteraction {
-			r.persistRunEvent("ask_user.rejected", RealtimeStreamKindLifecycle, map[string]any{
+		if !capabilityContract.AllowUserInteraction {
+			r.persistRunEvent("policy.signal_blocked", RealtimeStreamKindLifecycle, map[string]any{
+				"signal":      "ask_user",
 				"source":      source,
-				"gate_reason": "no_user_interaction_policy",
+				"reason_code": noUserInteractionFallbackReasonCode(source),
+				"detail":      buildNoUserInteractionFallbackDetail(source, signal),
+				"step_index":  step,
 			})
-			return false, errors.New("ask_user is disabled in this run by no-user-interaction policy")
+			r.applyNoUserInteractionFallback(step, source, signal)
+			return true, nil
 		}
 
 		var askPassed bool
@@ -1801,7 +1807,7 @@ mainLoop:
 		}
 
 		activeTools := scheduler.ActiveTools(mode)
-		systemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, taskComplexity, step, maxSteps, isFirstRound, activeTools, state, exceptionOverlay)
+		systemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, taskComplexity, step, maxSteps, isFirstRound, activeTools, state, exceptionOverlay, capabilityContract)
 		turnMessages := composeTurnMessages(systemPrompt, messages)
 		turnReq := TurnRequest{
 			Model:            modelName,
@@ -1877,7 +1883,7 @@ mainLoop:
 				}
 				continue
 			}
-			exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, stepErr, lastSignature)
+			exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, stepErr, lastSignature, capabilityContract.AllowUserInteraction)
 			state.RecentErrors = appendLimited(state.RecentErrors, sanitizeLogText(stepErr.Error(), 300), 6)
 			time.Sleep(backoffDuration(recoveryCount))
 			continue
@@ -1914,7 +1920,31 @@ mainLoop:
 			"pending_user_items": len(state.PendingUserInputQueue),
 		})
 
-		normalCalls, taskCompleteCall, askUserCall := splitSignalToolCalls(stepResult.ToolCalls)
+		signalSplit := splitSignalsByPolicy(stepResult.ToolCalls, capabilityContract)
+		normalCalls := signalSplit.NormalCalls
+		taskCompleteCall := signalSplit.TaskCompleteCall
+		askUserCall := signalSplit.AskUserCall
+		if len(signalSplit.ForbiddenSignals) > 0 {
+			blockedSignals := make([]string, 0, len(signalSplit.ForbiddenSignals))
+			for _, blocked := range signalSplit.ForbiddenSignals {
+				name := strings.TrimSpace(blocked.Name)
+				if name == "" {
+					continue
+				}
+				blockedSignals = append(blockedSignals, name)
+			}
+			r.persistRunEvent("policy.signal_blocked", RealtimeStreamKindLifecycle, map[string]any{
+				"signals":    blockedSignals,
+				"step_index": step,
+				"source":     "model_signal",
+			})
+			if !capabilityContract.AllowUserInteraction && taskCompleteCall == nil {
+				if firstBlocked, ok := firstAskUserSignal(signalSplit.ForbiddenSignals); ok {
+					r.applyNoUserInteractionFallback(step, "model_signal_forbidden", firstBlocked)
+					return nil
+				}
+			}
+		}
 		for _, call := range normalCalls {
 			state.ToolCallLedger[call.ID] = "proposed"
 		}
@@ -2052,7 +2082,7 @@ mainLoop:
 				if sawDoomLoopGuard {
 					failure = errors.New("doom-loop guard hit")
 				}
-				exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, failure, lastSignature)
+				exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, failure, lastSignature, capabilityContract.AllowUserInteraction)
 			} else {
 				recoveryCount = 0
 				if hasSuccess {
@@ -2135,7 +2165,7 @@ mainLoop:
 				approved, approveErr := r.waitForTaskCompleteConfirm(execCtx, resultText)
 				if approveErr != nil {
 					recoveryCount++
-					exceptionOverlay = buildRecoveryOverlay(recoveryCount, 3, approveErr, lastSignature)
+					exceptionOverlay = buildRecoveryOverlay(recoveryCount, 3, approveErr, lastSignature, capabilityContract.AllowUserInteraction)
 					continue
 				}
 				if !approved {
@@ -2183,8 +2213,12 @@ mainLoop:
 					emptyTaskCompleteRejects = 0
 					continue
 				}
-				rejectionMsg := "task_complete was rejected. Provide concrete completion evidence or call ask_user if blocked."
-				recoveryOverlay := "[RECOVERY] task_complete rejected by completion gate. You must either provide explicit completion evidence and call task_complete again, or call ask_user."
+				rejectionMsg := "task_complete was rejected. Provide concrete completion evidence and retry task_complete."
+				recoveryOverlay := "[RECOVERY] task_complete rejected by completion gate. Provide explicit completion evidence and call task_complete again."
+				if capabilityContract.AllowUserInteraction {
+					rejectionMsg = "task_complete was rejected. Provide concrete completion evidence or call ask_user if blocked."
+					recoveryOverlay = "[RECOVERY] task_complete rejected by completion gate. You must either provide explicit completion evidence and call task_complete again, or call ask_user."
+				}
 				if gateReason == "pending_todos" {
 					rejectionMsg = "task_complete was rejected because todos are still open. Update write_todos first, then call task_complete."
 					recoveryOverlay = "[RECOVERY] Completion blocked: todos still open. Update write_todos to close remaining items, then call task_complete."
@@ -2256,7 +2290,7 @@ mainLoop:
 			// Genuine truncation — recovery path.
 			recoveryCount++
 			fail := errors.New("provider output truncated (length)")
-			exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, fail, "")
+			exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, fail, "", capabilityContract.AllowUserInteraction)
 			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "Continue from where you left off, without repeating previous content."}}})
 			isFirstRound = false
 			continue
@@ -2264,7 +2298,10 @@ mainLoop:
 		if finishReason == "tool_calls" || finishReason == "unknown" {
 			// Model wanted tools but parsing failed, or unknown state — treat as backpressure nudge.
 			noToolRounds++
-			exceptionOverlay = fmt.Sprintf("[BACKPRESSURE] Provider returned finish_reason=%q but no valid tool calls were parsed. You MUST do one of: (1) Call task_complete if done, (2) Use tools to investigate, (3) Call ask_user if stuck.", finishReason)
+			exceptionOverlay = fmt.Sprintf("[BACKPRESSURE] Provider returned finish_reason=%q but no valid tool calls were parsed. You MUST do one of: (1) Call task_complete if done, (2) Use tools to investigate.", finishReason)
+			if capabilityContract.AllowUserInteraction {
+				exceptionOverlay = fmt.Sprintf("[BACKPRESSURE] Provider returned finish_reason=%q but no valid tool calls were parsed. You MUST do one of: (1) Call task_complete if done, (2) Use tools to investigate, (3) Call ask_user if stuck.", finishReason)
+			}
 			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "Continue from where you left off. Call a tool or task_complete."}}})
 			isFirstRound = false
 			continue
@@ -2301,7 +2338,7 @@ mainLoop:
 				}
 				continue
 			}
-			exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, errors.New("empty output"), lastSignature)
+			exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, errors.New("empty output"), lastSignature, capabilityContract.AllowUserInteraction)
 			isFirstRound = false
 			continue
 		}
@@ -2310,12 +2347,21 @@ mainLoop:
 		if noToolRounds <= maxNoToolRounds {
 			if noToolRounds == maxNoToolRounds {
 				exceptionOverlay = fmt.Sprintf("[COMPLETION REQUIRED] You have produced no-tool rounds (%d/%d). Unless an external blocker exists, finalize with task_complete now after summarizing verified outcomes.", noToolRounds, maxNoToolRounds)
-				messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "Before asking the user, try to finish autonomously in this run. If done, call task_complete now with concrete evidence."}}})
+				nudgeText := "Try to finish autonomously in this run. If done, call task_complete now with concrete evidence."
+				if capabilityContract.AllowUserInteraction {
+					nudgeText = "Before asking the user, try to finish autonomously in this run. If done, call task_complete now with concrete evidence."
+				}
+				messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: nudgeText}}})
 				isFirstRound = false
 				continue
 			}
-			exceptionOverlay = fmt.Sprintf("[BACKPRESSURE] No tool call used (%d/%d). You MUST do one of: (1) Call task_complete if the task is done, (2) Use tools to continue investigating or making changes, (3) Call ask_user if you are stuck and need clarification.", noToolRounds, maxNoToolRounds)
-			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "You must either call task_complete, use a tool, or call ask_user. Do not respond with text only."}}})
+			exceptionOverlay = fmt.Sprintf("[BACKPRESSURE] No tool call used (%d/%d). You MUST do one of: (1) Call task_complete if the task is done, (2) Use tools to continue investigating or making changes.", noToolRounds, maxNoToolRounds)
+			nudgeText := "You must either call task_complete or use a tool. Do not respond with text only."
+			if capabilityContract.AllowUserInteraction {
+				exceptionOverlay = fmt.Sprintf("[BACKPRESSURE] No tool call used (%d/%d). You MUST do one of: (1) Call task_complete if the task is done, (2) Use tools to continue investigating or making changes, (3) Call ask_user if you are stuck and need clarification.", noToolRounds, maxNoToolRounds)
+				nudgeText = "You must either call task_complete, use a tool, or call ask_user. Do not respond with text only."
+			}
+			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: nudgeText}}})
 			isFirstRound = false
 			continue
 		}
@@ -2334,7 +2380,7 @@ mainLoop:
 		forcedMsg := "You have produced repeated no-tool rounds. Summarize what you accomplished and what remains (if anything), then call task_complete."
 		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: forcedMsg}}})
 		forcedOverlay := "[FINAL SUMMARY] Repeated no-tool rounds. You MUST call task_complete now with a verified summary (include remaining work and next actions if incomplete)."
-		forcedSystemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, taskComplexity, step, maxSteps, false, scheduler.ActiveTools(mode), state, forcedOverlay)
+		forcedSystemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, taskComplexity, step, maxSteps, false, scheduler.ActiveTools(mode), state, forcedOverlay, capabilityContract)
 		forcedTurnMessages := composeTurnMessages(forcedSystemPrompt, messages)
 
 		signalOnlyTools := make([]ToolDef, 0, 1)
@@ -2360,7 +2406,8 @@ mainLoop:
 		})
 		endForcedBusy()
 		if forcedErr == nil {
-			_, forcedTaskComplete, _ := splitSignalToolCalls(forcedResult.ToolCalls)
+			forcedSplit := splitSignalsByPolicy(forcedResult.ToolCalls, capabilityContract)
+			forcedTaskComplete := forcedSplit.TaskCompleteCall
 			if forcedTaskComplete != nil {
 				resultText := extractSignalText(*forcedTaskComplete, "result")
 				if resultText == "" {
@@ -2420,7 +2467,7 @@ mainLoop:
 	summaryMsg := "You have reached the absolute step limit. Summarize what you accomplished and what remains, then call task_complete."
 	messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: summaryMsg}}})
 	summaryOverlay := "[FINAL SUMMARY] You have exhausted the hard step limit. You MUST call task_complete now with a detailed summary of what was done and what remains."
-	summarySystemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, taskComplexity, nativeHardMaxSteps, maxSteps, false, scheduler.ActiveTools(mode), state, summaryOverlay)
+	summarySystemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, taskComplexity, nativeHardMaxSteps, maxSteps, false, scheduler.ActiveTools(mode), state, summaryOverlay, capabilityContract)
 	summaryTurnMessages := composeTurnMessages(summarySystemPrompt, messages)
 
 	signalOnlyTools := make([]ToolDef, 0, 1)
@@ -2449,7 +2496,8 @@ mainLoop:
 	// If the provider produced a task_complete tool call, honor it even if it did not
 	// also emit plain text in the turn.
 	if summaryErr == nil {
-		_, taskCompleteCall, _ := splitSignalToolCalls(summaryResult.ToolCalls)
+		summarySplit := splitSignalsByPolicy(summaryResult.ToolCalls, capabilityContract)
+		taskCompleteCall := summarySplit.TaskCompleteCall
 		if taskCompleteCall != nil {
 			resultText := extractSignalText(*taskCompleteCall, "result")
 			if resultText == "" {
@@ -2932,28 +2980,6 @@ func appendLimited(in []string, value string, limit int) []string {
 	return in
 }
 
-func splitSignalToolCalls(calls []ToolCall) (normal []ToolCall, taskComplete *ToolCall, askUser *ToolCall) {
-	normal = make([]ToolCall, 0, len(calls))
-	for i := range calls {
-		call := calls[i]
-		switch strings.TrimSpace(call.Name) {
-		case "task_complete":
-			if taskComplete == nil {
-				copyCall := call
-				taskComplete = &copyCall
-			}
-		case "ask_user":
-			if askUser == nil {
-				copyCall := call
-				askUser = &copyCall
-			}
-		default:
-			normal = append(normal, call)
-		}
-	}
-	return normal, taskComplete, askUser
-}
-
 func buildToolResultMessages(results []ToolResult, calls []ToolCall) []Message {
 	if len(results) == 0 {
 		return nil
@@ -3144,12 +3170,15 @@ func normalizeAnyForJSON(v any) any {
 	}
 }
 
-func buildRecoveryOverlay(used int, max int, failure error, lastSignature string) string {
+func buildRecoveryOverlay(used int, max int, failure error, lastSignature string, allowUserInteraction bool) string {
 	failureType := "unknown"
 	if failure != nil {
 		failureType = sanitizeLogText(failure.Error(), 160)
 	}
-	return fmt.Sprintf("[RECOVERY] Step %d/%d\nLast failure: %s\nDo NOT repeat signature: %s\nYou MUST choose one action from: repair args | switch tool | ask_user | summarize safe status.", used, max, failureType, strings.TrimSpace(lastSignature))
+	if allowUserInteraction {
+		return fmt.Sprintf("[RECOVERY] Step %d/%d\nLast failure: %s\nDo NOT repeat signature: %s\nYou MUST choose one action from: repair args | switch tool | ask_user | summarize safe status.", used, max, failureType, strings.TrimSpace(lastSignature))
+	}
+	return fmt.Sprintf("[RECOVERY] Step %d/%d\nLast failure: %s\nDo NOT repeat signature: %s\nYou MUST choose one action from: repair args | switch tool | summarize safe status.", used, max, failureType, strings.TrimSpace(lastSignature))
 }
 
 func finalizationReasonForAskUserSource(source string) string {
@@ -3459,8 +3488,12 @@ func backoffDuration(attempt int) time.Duration {
 	}
 }
 
-func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity string, round int, maxSteps int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string) string {
+func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity string, round int, maxSteps int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string, capability runCapabilityContract) string {
 	complexity = normalizeTaskComplexity(complexity)
+	allowUserInteraction := capability.AllowUserInteraction
+	if !allowUserInteraction && strings.TrimSpace(capability.PromptProfile) == "" {
+		allowUserInteraction = !r.noUserInteraction
+	}
 	core := []string{
 		"# Identity & Mandate",
 		"You are Flower, an autonomous AI assistant running on the user's current device/environment that completes requests by using tools.",
@@ -3508,7 +3541,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"# Mandatory Rules",
 		"- Use tools when they are needed for reliable evidence or actions.",
 		"- You MUST call task_complete with a detailed result summary when done. Never end without it.",
-		"- If you cannot complete safely, call ask_user. Do not stop silently.",
+		"- If you cannot complete safely, use the allowed completion path for this run. Do not stop silently.",
 		"- Task runs are explicit-completion only: no task_complete means the task is not complete.",
 		"- You MUST use tools to investigate before answering questions about files, code, or the workspace.",
 		"- If you can answer by reading files, use terminal.exec with rg/sed/cat first.",
@@ -3519,20 +3552,13 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- For multi-line scripts, pass content via terminal.exec `stdin` and use a stdin-reading command (e.g. `python -`, `bash`, `cat`). Avoid heredocs/here-strings.",
 		"- Do NOT fabricate file contents, command outputs, or tool results. Always use tools to get real data.",
 		"- Do NOT ask the user to run commands, gather logs, or paste outputs that tools can obtain directly.",
-		"- Prefer autonomous continuation over ask_user; ask_user is only for true external blockers.",
-		"- If information is insufficient and tools cannot help, call ask_user.",
-		"- ask_user must include structured fields: reason_code, required_from_user, evidence_refs.",
-		"- reason_code must be one of: user_decision_required | permission_blocked | missing_external_input | conflicting_constraints | safety_confirmation.",
-		"- required_from_user must list concrete user inputs needed to proceed.",
-		"- evidence_refs must reference relevant tool IDs whenever reason_code requires evidence (for example permission_blocked).",
-		"- When calling ask_user, include 2-4 concise recommended reply options in `options` (best option first).",
-		"- Keep ask_user options mutually exclusive and actionable; do not include a free-form catch-all option.",
-		"- Write ask_user options as ready-to-send user replies (plain text, no numbering, no markdown).",
+		"- Prefer autonomous continuation whenever available tools can make progress.",
+		"- If information is insufficient and tools cannot help, follow the interaction policy in runtime context.",
 		"- Prefer concrete choices over template placeholders like `YYYY-MM-DD`; the UI already provides a custom fallback input.",
 		"",
 		"# Todo Discipline",
 		"- Follow the current todo policy from runtime context (none|recommended|required).",
-		"- If todo policy is required, call write_todos before ask_user/task_complete and satisfy the minimum todo count.",
+		"- If todo policy is required, call write_todos before finalization and satisfy the minimum todo count.",
 		"- If todo policy is recommended, prefer write_todos for multi-step execution and keep it updated.",
 		"- If todo policy is none, skip todos unless they clearly improve execution quality.",
 		"- Skip write_todos for a single trivial step that can be completed immediately.",
@@ -3552,7 +3578,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- Do NOT pre-probe tool availability. Choose the best tool and try it.",
 		"- On tool error: read the tool_result payload, then either repair args (once) or switch tools.",
 		"- If web.search fails (e.g., missing API key), do NOT retry web.search; use terminal.exec with curl to query a public API or fetch an authoritative URL directly.",
-		"- If terminal.exec fails, reduce scope or switch tools; only call ask_user for true external blockers.",
+		"- If terminal.exec fails, reduce scope or switch tools; if blocked, follow the interaction policy in runtime context.",
 		"",
 		"# Common Workflows",
 		"- **File questions**: terminal.exec (rg --files / rg pattern / sed -n) → analyze → task_complete",
@@ -3564,11 +3590,34 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- Default: `rg \"<PATTERN>\" . --hidden --glob '!.git' --glob '!node_modules' --glob '!.pnpm-store' --glob '!dist' --glob '!build' --glob '!out' --glob '!coverage' --glob '!target' --glob '!.venv' --glob '!venv' --glob '!.cache' --glob '!.next' --glob '!.turbo'`",
 		"- If you explicitly need dependency or build output, remove the relevant --glob excludes.",
 	}
+	if allowUserInteraction {
+		core = append(core,
+			"",
+			"# Ask User Policy",
+			"- Use ask_user only for true external blockers that tools cannot resolve.",
+			"- ask_user must include reason_code, required_from_user, and evidence_refs.",
+			"- reason_code must be one of: user_decision_required | permission_blocked | missing_external_input | conflicting_constraints | safety_confirmation.",
+			"- required_from_user must list concrete user inputs needed to proceed.",
+			"- evidence_refs must reference relevant tool IDs when evidence is required.",
+			"- When calling ask_user, include 2-4 concise mutually exclusive options in `options` (best option first).",
+		)
+	} else {
+		core = append(core,
+			"",
+			"# Interaction Policy",
+			"- User interaction is disabled in this run.",
+			"- Do not request user input.",
+			"- If blocked, finish with task_complete and include blockers plus suggested parent actions.",
+		)
+	}
 	availableSkills := r.listSkills()
 	activeSkills := r.activeSkills()
 
 	cwd := strings.TrimSpace(r.fsRoot)
 	toolNames := joinToolNames(tools)
+	if len(capability.AllowedTools) > 0 {
+		toolNames = strings.Join(capability.AllowedTools, ", ")
+	}
 	recentErrors := "none"
 	if len(state.RecentErrors) > 0 {
 		recentErrors = strings.Join(state.RecentErrors, " | ")
@@ -3590,8 +3639,8 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		fmt.Sprintf("- Recent errors: %s", recentErrors),
 		fmt.Sprintf("- Todo tracking: %s", todoStatus),
 	}
-	if r.noUserInteraction {
-		runtime = append(runtime, "- Interaction policy: ask_user is unavailable in this run. Continue autonomously or finish with task_complete including blockers.")
+	if !allowUserInteraction {
+		runtime = append(runtime, "- Interaction policy: user interaction is disabled in this run. Continue autonomously or finish with task_complete including blockers.")
 	}
 	if normalizeTodoPolicy(state.TodoPolicy) == TodoPolicyRequired {
 		runtime = append(runtime, fmt.Sprintf("- Required todo minimum: %d", requiredTodoCount(state)))

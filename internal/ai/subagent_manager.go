@@ -43,6 +43,11 @@ const (
 	subagentDefaultMaxSteps   = 8
 	subagentDefaultTimeoutSec = 900
 	subagentSteerMinInterval  = 2 * time.Second
+
+	subagentFailureReasonRuntimeError            = "runtime_error"
+	subagentFailureReasonResultContractViolation = "result_contract_violation"
+	subagentFailureReasonTimedOut                = "timed_out"
+	subagentFailureReasonCanceled                = "canceled"
 )
 
 type subagentStats struct {
@@ -66,13 +71,17 @@ type subagentResultValidation struct {
 }
 
 type subagentResult struct {
-	Summary      string
-	EvidenceRefs []string
-	KeyFiles     []map[string]any
-	OpenRisks    []string
-	NextActions  []string
-	Structured   map[string]any
-	Validation   subagentResultValidation
+	Summary                string
+	EvidenceRefs           []string
+	KeyFiles               []map[string]any
+	OpenRisks              []string
+	NextActions            []string
+	Structured             map[string]any
+	Validation             subagentResultValidation
+	FailureReasonCode      string
+	FailureReasonDetail    string
+	Blockers               []string
+	SuggestedParentActions []string
 }
 
 type subagentSpec struct {
@@ -105,6 +114,10 @@ func defaultSubagentResult() subagentResult {
 			Passed: false,
 			Errors: []string{},
 		},
+		FailureReasonCode:      "",
+		FailureReasonDetail:    "",
+		Blockers:               []string{},
+		SuggestedParentActions: []string{},
 	}
 }
 
@@ -155,19 +168,6 @@ func (t *subagentTask) setStatus(status string) {
 	t.recalculateDerivedStatsLocked()
 }
 
-func (t *subagentTask) setResult(summary string, errMsg string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.result.Summary = strings.TrimSpace(summary)
-	t.errMsg = strings.TrimSpace(errMsg)
-	now := time.Now().UnixMilli()
-	if t.startedAt == 0 {
-		t.startedAt = now
-	}
-	t.updatedAt = now
-	t.recalculateDerivedStatsLocked()
-}
-
 func (t *subagentTask) setResultDetailed(summary string, evidenceRefs []string, structured map[string]any, validation subagentResultValidation, errMsg string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -178,7 +178,40 @@ func (t *subagentTask) setResultDetailed(summary string, evidenceRefs []string, 
 		Passed: validation.Passed,
 		Errors: cloneStringSlice(validation.Errors),
 	}
+	if validation.Passed {
+		t.result.FailureReasonCode = ""
+		t.result.FailureReasonDetail = ""
+		t.result.Blockers = []string{}
+		t.result.SuggestedParentActions = []string{}
+	}
 	t.errMsg = strings.TrimSpace(errMsg)
+	now := time.Now().UnixMilli()
+	if t.startedAt == 0 {
+		t.startedAt = now
+	}
+	t.updatedAt = now
+	t.recalculateDerivedStatsLocked()
+}
+
+func (t *subagentTask) setFailure(reasonCode string, reasonDetail string, summary string, blockers []string, suggestedParentActions []string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.result.FailureReasonCode = strings.TrimSpace(reasonCode)
+	t.result.FailureReasonDetail = strings.TrimSpace(reasonDetail)
+	t.result.Summary = strings.TrimSpace(summary)
+	t.result.Blockers = cloneStringSlice(blockers)
+	t.result.SuggestedParentActions = cloneStringSlice(suggestedParentActions)
+	if len(t.result.Blockers) == 0 && t.result.FailureReasonDetail != "" {
+		t.result.Blockers = []string{t.result.FailureReasonDetail}
+	}
+	if len(t.result.SuggestedParentActions) == 0 {
+		t.result.SuggestedParentActions = []string{
+			"Continue autonomously in the parent agent with updated constraints.",
+			"Create a replacement subagent with tighter scope and richer trusted inputs.",
+		}
+	}
+	t.result.Validation.Passed = false
+	t.errMsg = t.result.FailureReasonDetail
 	now := time.Now().UnixMilli()
 	if t.startedAt == 0 {
 		t.startedAt = now
@@ -424,12 +457,16 @@ func (t *subagentTask) snapshot() map[string]any {
 
 	specCopy := cloneSpec(t.spec)
 	resultPayload := map[string]any{
-		"summary":       t.result.Summary,
-		"evidence_refs": cloneStringSlice(t.result.EvidenceRefs),
-		"key_files":     cloneMapList(t.result.KeyFiles),
-		"open_risks":    cloneStringSlice(t.result.OpenRisks),
-		"next_actions":  cloneStringSlice(t.result.NextActions),
-		"structured":    cloneAnyMap(t.result.Structured),
+		"summary":                  t.result.Summary,
+		"evidence_refs":            cloneStringSlice(t.result.EvidenceRefs),
+		"key_files":                cloneMapList(t.result.KeyFiles),
+		"open_risks":               cloneStringSlice(t.result.OpenRisks),
+		"next_actions":             cloneStringSlice(t.result.NextActions),
+		"structured":               cloneAnyMap(t.result.Structured),
+		"failure_reason_code":      strings.TrimSpace(t.result.FailureReasonCode),
+		"failure_reason_detail":    strings.TrimSpace(t.result.FailureReasonDetail),
+		"blockers":                 cloneStringSlice(t.result.Blockers),
+		"suggested_parent_actions": cloneStringSlice(t.result.SuggestedParentActions),
 		"validation": map[string]any{
 			"passed": t.result.Validation.Passed,
 			"errors": cloneStringSlice(t.result.Validation.Errors),
@@ -479,6 +516,10 @@ func (t *subagentTask) snapshot() map[string]any {
 		"status":                     t.status,
 		"result":                     t.result.Summary,
 		"result_struct":              resultPayload,
+		"failure_reason_code":        strings.TrimSpace(t.result.FailureReasonCode),
+		"failure_reason_detail":      strings.TrimSpace(t.result.FailureReasonDetail),
+		"suggested_parent_actions":   cloneStringSlice(t.result.SuggestedParentActions),
+		"blockers":                   cloneStringSlice(t.result.Blockers),
 		"error":                      t.errMsg,
 		"started_at_ms":              t.startedAt,
 		"ended_at_ms":                t.endedAt,
@@ -491,16 +532,17 @@ func (t *subagentTask) snapshot() map[string]any {
 func (t *subagentTask) eventPayload() map[string]any {
 	snapshot := t.snapshot()
 	return map[string]any{
-		"subagent_id":    snapshot["subagent_id"],
-		"task_id":        snapshot["task_id"],
-		"agent_type":     snapshot["agent_type"],
-		"spec_id":        snapshot["spec_id"],
-		"title":          snapshot["title"],
-		"objective":      snapshot["objective"],
-		"trigger_reason": snapshot["trigger_reason"],
-		"status":         snapshot["status"],
-		"updated_at_ms":  snapshot["updated_at_ms"],
-		"stats":          snapshot["stats"],
+		"subagent_id":         snapshot["subagent_id"],
+		"task_id":             snapshot["task_id"],
+		"agent_type":          snapshot["agent_type"],
+		"spec_id":             snapshot["spec_id"],
+		"title":               snapshot["title"],
+		"objective":           snapshot["objective"],
+		"trigger_reason":      snapshot["trigger_reason"],
+		"status":              snapshot["status"],
+		"failure_reason_code": snapshot["failure_reason_code"],
+		"updated_at_ms":       snapshot["updated_at_ms"],
+		"stats":               snapshot["stats"],
 	}
 }
 
@@ -1074,10 +1116,10 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 	if err := task.ctx.Err(); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			task.setStatus(subagentStatusTimedOut)
-			task.setResult(task.result.Summary, "subagent timed out")
+			task.setFailure(subagentFailureReasonTimedOut, "Subagent timed out before completion.", task.result.Summary, []string{"Execution timed out before completion."}, []string{"Reduce scope and retry with a narrower objective.", "Create a replacement subagent with focused deliverables."})
 		} else {
 			task.setStatus(subagentStatusCanceled)
-			task.setResult(task.result.Summary, "subagent canceled")
+			task.setFailure(subagentFailureReasonCanceled, "Subagent was canceled before completion.", task.result.Summary, []string{"Execution was canceled before completion."}, []string{"Re-run the subagent if work is still required."})
 		}
 		m.parent.persistRunEvent("delegation.create.end", RealtimeStreamKindLifecycle, task.eventPayload())
 		return
@@ -1094,10 +1136,10 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 		if err := task.ctx.Err(); err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
 				task.setStatus(subagentStatusTimedOut)
-				task.setResult(task.result.Summary, "subagent timed out")
+				task.setFailure(subagentFailureReasonTimedOut, "Subagent timed out before completion.", task.result.Summary, []string{"Execution timed out before completion."}, []string{"Reduce scope and retry with a narrower objective.", "Create a replacement subagent with focused deliverables."})
 			} else {
 				task.setStatus(subagentStatusCanceled)
-				task.setResult(task.result.Summary, "subagent canceled")
+				task.setFailure(subagentFailureReasonCanceled, "Subagent was canceled before completion.", task.result.Summary, []string{"Execution was canceled before completion."}, []string{"Re-run the subagent if work is still required."})
 			}
 			m.parent.persistRunEvent("delegation.create.end", RealtimeStreamKindLifecycle, task.eventPayload())
 			return
@@ -1106,14 +1148,14 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 		runID, err := NewRunID()
 		if err != nil {
 			task.setStatus(subagentStatusFailed)
-			task.setResult("", err.Error())
+			task.setFailure(subagentFailureReasonRuntimeError, "Subagent run initialization failed.", "", []string{"Unable to allocate a child run identifier."}, []string{"Retry subagent creation."})
 			m.parent.persistRunEvent("delegation.create.end", RealtimeStreamKindLifecycle, task.eventPayload())
 			return
 		}
 		messageID, err := newMessageID()
 		if err != nil {
 			task.setStatus(subagentStatusFailed)
-			task.setResult("", err.Error())
+			task.setFailure(subagentFailureReasonRuntimeError, "Subagent message initialization failed.", "", []string{"Unable to allocate a child message identifier."}, []string{"Retry subagent creation."})
 			m.parent.persistRunEvent("delegation.create.end", RealtimeStreamKindLifecycle, task.eventPayload())
 			return
 		}
@@ -1171,26 +1213,55 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 		task.appendHistory(attemptInput, assistantText)
 
 		if err != nil {
-			if errors.Is(err, context.DeadlineExceeded) {
+			reasonCode, reasonDetail := subagentFailureFromRunError(err)
+			switch reasonCode {
+			case subagentFailureReasonTimedOut:
 				task.setStatus(subagentStatusTimedOut)
-				task.setResult(assistantText, "subagent timed out")
-			} else if errors.Is(err, context.Canceled) {
+			case subagentFailureReasonCanceled:
 				task.setStatus(subagentStatusCanceled)
-				task.setResult(assistantText, "subagent canceled")
-			} else {
+			default:
 				task.setStatus(subagentStatusFailed)
-				task.setResult(assistantText, strings.TrimSpace(err.Error()))
 			}
+			task.setFailure(reasonCode, reasonDetail, assistantText, []string{reasonDetail}, []string{
+				"Continue in parent agent and collect additional evidence.",
+				"Create a replacement subagent with narrower scope and clearer trusted inputs.",
+			})
 			m.parent.persistRunEvent("delegation.create.end", RealtimeStreamKindLifecycle, task.eventPayload())
 			return
 		}
 
 		finalReason := strings.TrimSpace(child.getFinalizationReason())
-		if classifyFinalizationReason(finalReason) == finalizationClassWaitingUser {
+		finalClass := classifyFinalizationReason(finalReason)
+		if finalReason == finalizationReasonBlockedNoUserInteraction || finalClass == finalizationClassWaitingUser {
 			task.setStatus(subagentStatusFailed)
-			task.setResult(assistantText, "subagent blocked by no-user-interaction policy")
+			task.setFailure(
+				subagentFailureReasonBlockedNoUserInteraction,
+				"Subagent requested user interaction, but autonomous mode forbids user interaction.",
+				assistantText,
+				[]string{"Subagent attempted to request user input in autonomous mode."},
+				[]string{
+					"Continue in parent agent and decide the next step.",
+					"Re-delegate with tighter constraints and richer trusted inputs.",
+				},
+			)
 			payload := task.eventPayload()
 			payload["reason"] = "no_user_interaction_policy"
+			m.parent.persistRunEvent("delegation.create.end", RealtimeStreamKindLifecycle, payload)
+			return
+		}
+		if finalClass == finalizationClassFailure {
+			task.setStatus(subagentStatusFailed)
+			detail := "Subagent run ended without explicit completion."
+			if finalReason != "" {
+				detail = fmt.Sprintf("Subagent ended with finalization reason: %s.", finalReason)
+			}
+			task.setFailure(subagentFailureReasonRuntimeError, detail, assistantText, []string{detail}, []string{
+				"Continue in parent agent and summarize partial evidence.",
+				"Re-delegate with refined objective and output contract.",
+			})
+			payload := task.eventPayload()
+			payload["reason"] = "subagent_runtime_finalization_failure"
+			payload["finalization_reason"] = finalReason
 			m.parent.persistRunEvent("delegation.create.end", RealtimeStreamKindLifecycle, payload)
 			return
 		}
@@ -1208,7 +1279,12 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 
 		if attempt >= 2 {
 			task.setStatus(subagentStatusFailed)
-			task.setResultDetailed(completion.summary, completion.evidenceRefs, completion.structured, validation, "subagent result contract violation")
+			detail := "Subagent result contract violation."
+			task.setResultDetailed(completion.summary, completion.evidenceRefs, completion.structured, validation, detail)
+			task.setFailure(subagentFailureReasonResultContractViolation, detail, completion.summary, cloneStringSlice(validation.Errors), []string{
+				"Re-run subagent with a tighter output schema and explicit field examples.",
+				"Handle remaining work directly in the parent agent.",
+			})
 			payload := task.eventPayload()
 			payload["reason"] = "result_contract_violation"
 			payload["validation_errors"] = cloneStringSlice(validation.Errors)
@@ -1224,6 +1300,34 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 			"prompt_contract_id": task.spec.SpecID,
 		})
 	}
+}
+
+func sanitizeSubagentFailureDetail(detail string) string {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return "Subagent ended before producing a valid completion payload."
+	}
+	return truncateRunes(detail, 240)
+}
+
+func subagentFailureFromRunError(err error) (string, string) {
+	if err == nil {
+		return "", ""
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return subagentFailureReasonTimedOut, "Subagent timed out before completion."
+	}
+	if errors.Is(err, context.Canceled) {
+		return subagentFailureReasonCanceled, "Subagent was canceled before completion."
+	}
+	msg := strings.TrimSpace(err.Error())
+	if msg == "" {
+		return subagentFailureReasonRuntimeError, "Subagent run failed before completion."
+	}
+	if strings.Contains(msg, finalizationReasonBlockedNoUserInteraction) || strings.Contains(msg, "no-user-interaction") || strings.Contains(msg, "ask_user is disabled") {
+		return subagentFailureReasonBlockedNoUserInteraction, "Subagent requested user interaction, but autonomous mode forbids user interaction."
+	}
+	return subagentFailureReasonRuntimeError, sanitizeSubagentFailureDetail(msg)
 }
 
 type subagentCompletionPayload struct {
