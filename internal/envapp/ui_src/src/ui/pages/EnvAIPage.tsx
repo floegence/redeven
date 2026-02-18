@@ -893,6 +893,32 @@ function summarizeSubagentText(value: string, maxLength = 120): string {
   return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
+function subagentHistoryRoleLabel(role: string): string {
+  const normalized = String(role ?? '').trim().toLowerCase();
+  if (normalized === 'user') return 'User';
+  if (normalized === 'assistant') return 'Subagent';
+  if (normalized === 'system') return 'System';
+  return 'Message';
+}
+
+function subagentHistoryRoleClass(role: string): string {
+  const normalized = String(role ?? '').trim().toLowerCase();
+  if (normalized === 'user') return 'bg-primary/[0.06] border-primary/20';
+  if (normalized === 'assistant') return 'bg-emerald-500/[0.08] border-emerald-500/20';
+  if (normalized === 'system') return 'bg-amber-500/[0.08] border-amber-500/20';
+  return 'bg-muted/40 border-border/70';
+}
+
+function resolveSubagentFinalMessage(item: SubagentView): string {
+  for (let i = item.history.length - 1; i >= 0; i -= 1) {
+    const entry = item.history[i];
+    if (entry.role === 'assistant' && String(entry.text ?? '').trim()) {
+      return String(entry.text).trim();
+    }
+  }
+  return String(item.summary ?? '').trim();
+}
+
 function CompactSubagentsSummary(props: {
   subagents: SubagentView[];
   updatedLabel: string;
@@ -1086,6 +1112,36 @@ function CompactSubagentsSummary(props: {
                     <div class="mt-1 text-xs leading-relaxed text-foreground whitespace-pre-wrap break-words">{item.summary}</div>
                   </div>
                 </Show>
+
+                <Show when={resolveSubagentFinalMessage(item)}>
+                  <div class="rounded-md border border-border/70 bg-background/70 px-2.5 py-2">
+                    <div class="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Final message</div>
+                    <div class="mt-1 text-xs leading-relaxed text-foreground whitespace-pre-wrap break-words">{resolveSubagentFinalMessage(item)}</div>
+                  </div>
+                </Show>
+
+                <div class="rounded-md border border-border/70 bg-background/70 px-2.5 py-2">
+                  <div class="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Message timeline</div>
+                  <Show
+                    when={item.history.length > 0}
+                    fallback={<div class="mt-1 text-xs text-muted-foreground">No detailed messages yet.</div>}
+                  >
+                    <div class="mt-1 space-y-1.5 max-h-56 overflow-auto pr-0.5">
+                      <For each={item.history}>
+                        {(entry) => (
+                          <div class={cn('rounded-md border px-2 py-1.5', subagentHistoryRoleClass(entry.role))}>
+                            <div class="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                              {subagentHistoryRoleLabel(entry.role)}
+                            </div>
+                            <div class="mt-0.5 text-xs leading-relaxed text-foreground whitespace-pre-wrap break-words">
+                              {entry.text}
+                            </div>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
 
                 <Show when={item.triggerReason}>
                   <div class="rounded-md border border-border/70 bg-background/70 px-2.5 py-2">
@@ -1573,6 +1629,25 @@ export function EnvAIPage() {
     setThreadSubagentsById({});
   };
   const rebuildSubagentsFromMessages = (messages: Message[]): void => {
+    const normalizeSubagentHistory = (raw: any): Array<{ role: 'user' | 'assistant' | 'system'; text: string }> => {
+      if (!Array.isArray(raw)) return [];
+      const history: Array<{ role: 'user' | 'assistant' | 'system'; text: string }> = [];
+      for (const item of raw) {
+        const rec = item && typeof item === 'object' && !Array.isArray(item) ? item as any : null;
+        if (!rec) continue;
+        const roleRaw = String(rec.role ?? '').trim().toLowerCase();
+        const role = roleRaw === 'user' || roleRaw === 'assistant' || roleRaw === 'system'
+          ? roleRaw
+          : '';
+        const text = String(rec.text ?? '').trim();
+        if (!role || !text) continue;
+        history.push({
+          role,
+          text,
+        });
+      }
+      return history;
+    };
     const nextMap: Record<string, SubagentView> = {};
     const mergeIntoMap = (incoming: SubagentView | null, fallbackUpdatedAt = 0): void => {
       if (!incoming || !incoming.subagentId) return;
@@ -1598,6 +1673,7 @@ export function EnvAIPage() {
       keyFiles: [],
       openRisks: [],
       nextActions: [],
+      history: [],
       stats: {
         steps: 0,
         toolCalls: 0,
@@ -1627,6 +1703,7 @@ export function EnvAIPage() {
             keyFiles: Array.isArray(candidate.keyFiles) ? candidate.keyFiles : [],
             openRisks: Array.isArray(candidate.openRisks) ? candidate.openRisks : [],
             nextActions: Array.isArray(candidate.nextActions) ? candidate.nextActions : [],
+            history: normalizeSubagentHistory(candidate.history),
             stats: candidate.stats ?? {
               steps: 0,
               toolCalls: 0,
@@ -1686,6 +1763,95 @@ export function EnvAIPage() {
       walkBlocks(blocks, messageTimestamp);
     }
     setThreadSubagentsById(nextMap);
+
+    const syncSubagentBlocksWithLatest = (inputMessages: Message[]): Message[] | null => {
+      let changed = false;
+      const patchBlocks = (blocks: any[]): any[] => {
+        let blockChanged = false;
+        const nextBlocks = blocks.map((block) => {
+          if (!block || typeof block !== 'object') return block;
+          let nextBlock = block;
+          const blockType = String((block as any).type ?? '').trim().toLowerCase();
+          if (blockType === 'subagent') {
+            const subagentId = String((block as any).subagentId ?? '').trim();
+            const latest = nextMap[subagentId];
+            if (latest) {
+              const latestStatus = normalizeSubagentStatus(latest.status);
+              const latestError = String(latest.error ?? '').trim();
+              const currentStatus = normalizeSubagentStatus((block as any).status);
+              const currentError = String((block as any).error ?? '').trim();
+              const currentUpdatedAt = Math.max(0, Number((block as any).updatedAtUnixMs ?? 0) || 0);
+              const same =
+                currentStatus === latestStatus &&
+                String((block as any).summary ?? '').trim() === latest.summary &&
+                String((block as any).agentType ?? '').trim() === latest.agentType &&
+                String((block as any).triggerReason ?? '').trim() === latest.triggerReason &&
+                String((block as any).taskId ?? '').trim() === latest.taskId &&
+                currentError === latestError &&
+                currentUpdatedAt === latest.updatedAtUnixMs &&
+                JSON.stringify((block as any).evidenceRefs ?? []) === JSON.stringify(latest.evidenceRefs) &&
+                JSON.stringify((block as any).keyFiles ?? []) === JSON.stringify(latest.keyFiles) &&
+                JSON.stringify((block as any).openRisks ?? []) === JSON.stringify(latest.openRisks) &&
+                JSON.stringify((block as any).nextActions ?? []) === JSON.stringify(latest.nextActions) &&
+                JSON.stringify((block as any).history ?? []) === JSON.stringify(latest.history) &&
+                JSON.stringify((block as any).stats ?? {}) === JSON.stringify(latest.stats);
+              if (!same) {
+                nextBlock = {
+                  ...(block as any),
+                  subagentId: latest.subagentId,
+                  taskId: latest.taskId,
+                  agentType: latest.agentType,
+                  triggerReason: latest.triggerReason,
+                  status: latestStatus,
+                  summary: latest.summary,
+                  evidenceRefs: latest.evidenceRefs,
+                  keyFiles: latest.keyFiles,
+                  openRisks: latest.openRisks,
+                  nextActions: latest.nextActions,
+                  history: latest.history,
+                  stats: latest.stats,
+                  updatedAtUnixMs: latest.updatedAtUnixMs,
+                  error: latest.error,
+                };
+                blockChanged = true;
+              }
+            }
+          }
+          const children = Array.isArray((nextBlock as any).children) ? ((nextBlock as any).children as any[]) : [];
+          if (children.length > 0) {
+            const patchedChildren = patchBlocks(children);
+            if (patchedChildren !== children) {
+              nextBlock = {
+                ...(nextBlock as any),
+                children: patchedChildren,
+              };
+              blockChanged = true;
+            }
+          }
+          return nextBlock;
+        });
+        if (!blockChanged) return blocks;
+        changed = true;
+        return nextBlocks;
+      };
+
+      const nextMessages = inputMessages.map((message) => {
+        const blocks = Array.isArray((message as any)?.blocks) ? ((message as any).blocks as any[]) : [];
+        const patchedBlocks = patchBlocks(blocks);
+        if (patchedBlocks === blocks) return message;
+        return {
+          ...message,
+          blocks: patchedBlocks,
+        };
+      });
+      if (!changed) return null;
+      return nextMessages;
+    };
+
+    const patchedMessages = syncSubagentBlocksWithLatest(messages);
+    if (patchedMessages && chat) {
+      chat.setMessages(patchedMessages);
+    }
   };
   const activeThreadTodos = createMemo(() => threadTodos()?.todos ?? []);
   const unresolvedTodoCount = createMemo(() =>

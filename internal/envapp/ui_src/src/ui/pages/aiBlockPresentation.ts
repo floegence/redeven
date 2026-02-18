@@ -279,6 +279,7 @@ function toSubagentBlock(view: {
   keyFiles: Array<{ path: string; line?: number; purpose?: string }>;
   openRisks: string[];
   nextActions: string[];
+  history: Array<{ role: 'user' | 'assistant' | 'system'; text: string }>;
   stats: {
     steps: number;
     toolCalls: number;
@@ -301,6 +302,7 @@ function toSubagentBlock(view: {
     keyFiles: view.keyFiles,
     openRisks: view.openRisks,
     nextActions: view.nextActions,
+    history: view.history,
     stats: {
       steps: view.stats.steps,
       toolCalls: view.stats.toolCalls,

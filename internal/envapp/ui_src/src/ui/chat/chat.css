@@ -541,10 +541,36 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
   font-size: 0.625rem;
   color: var(--muted-foreground);
   white-space: nowrap;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .chat-tool-wait-subagents-timeout-flag {
   color: var(--destructive);
+}
+
+.chat-tool-wait-subagents-open-btn {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.2rem 0.48rem;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.chat-tool-wait-subagents-open-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 36%, var(--border));
+}
+
+.chat-tool-wait-subagents-open-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .chat-tool-wait-subagents-summary {
@@ -557,14 +583,6 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
   color: var(--muted-foreground);
 }
 
-.chat-tool-wait-subagents-list {
-  display: grid;
-  gap: 0.5rem;
-  max-height: 18rem;
-  overflow: auto;
-  padding: 0 0.8rem 0.75rem;
-}
-
 .chat-tool-wait-subagents-item {
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   border-radius: 0.66rem;
@@ -572,13 +590,6 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
   padding: 0.5rem 0.58rem;
   display: grid;
   gap: 0.35rem;
-}
-
-.chat-tool-wait-subagents-item-head {
-  display: flex;
-  align-items: center;
-  gap: 0.42rem;
-  min-width: 0;
 }
 
 .chat-tool-wait-subagents-item-agent {
@@ -599,11 +610,12 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
 }
 
 .chat-tool-wait-subagents-item-summary {
-  margin: 0;
+  margin: 0.12rem 0 0;
   font-size: 0.72rem;
   line-height: 1.45;
   color: var(--foreground);
   word-break: break-word;
+  display: block;
 }
 
 .chat-tool-wait-subagents-item-metrics {
@@ -623,6 +635,43 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
   padding: 0.52rem 0.8rem 0.76rem;
   font-size: 0.67rem;
   color: var(--muted-foreground);
+}
+
+.chat-tool-wait-subagents-dialog {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.chat-tool-wait-subagents-dialog-list {
+  display: grid;
+  gap: 0.42rem;
+  max-height: 11rem;
+  overflow: auto;
+  padding-right: 0.1rem;
+}
+
+button.chat-tool-wait-subagents-dialog-item {
+  appearance: none;
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 0.58rem;
+  background: color-mix(in srgb, var(--background) 80%, transparent);
+  padding: 0.44rem 0.52rem;
+  text-align: left;
+  display: grid;
+  gap: 0.2rem;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+button.chat-tool-wait-subagents-dialog-item:hover {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+button.chat-tool-wait-subagents-dialog-item.chat-tool-wait-subagents-dialog-item-active {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: color-mix(in srgb, var(--primary) 11%, transparent);
 }
 
 .chat-tool-wait-subagents-error {
@@ -1259,6 +1308,114 @@ button.chat-subagent-header:focus-visible {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--card) 55%, transparent), color-mix(in srgb, var(--card) 90%, transparent)),
     color-mix(in srgb, var(--card) 96%, transparent);
+}
+
+.chat-subagent-compact-body {
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding: 0.66rem 0.75rem 0.72rem;
+  display: grid;
+  gap: 0.45rem;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 55%, transparent), color-mix(in srgb, var(--card) 90%, transparent)),
+    color-mix(in srgb, var(--card) 96%, transparent);
+}
+
+.chat-subagent-compact-metrics {
+  font-size: 0.64rem;
+  color: var(--muted-foreground);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+button.chat-subagent-open-details-btn {
+  appearance: none;
+  justify-self: flex-start;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+button.chat-subagent-open-details-btn:hover {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.chat-subagent-dialog-content {
+  display: grid;
+  gap: 0.62rem;
+}
+
+.chat-subagent-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.chat-subagent-dialog-head .chat-subagent-id {
+  margin-left: auto;
+}
+
+.chat-subagent-muted {
+  color: var(--muted-foreground);
+}
+
+.chat-subagent-history-list {
+  display: grid;
+  gap: 0.42rem;
+  max-height: 14rem;
+  overflow: auto;
+  padding-right: 0.1rem;
+}
+
+.chat-subagent-history-item {
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 0.55rem;
+  padding: 0.42rem 0.52rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.chat-subagent-history-item-user {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
+}
+
+.chat-subagent-history-item-assistant {
+  background: color-mix(in srgb, #16a34a 8%, transparent);
+  border-color: color-mix(in srgb, #16a34a 24%, var(--border));
+}
+
+.chat-subagent-history-item-system {
+  background: color-mix(in srgb, #d97706 8%, transparent);
+  border-color: color-mix(in srgb, #d97706 24%, var(--border));
+}
+
+.chat-subagent-history-item-generic {
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+}
+
+.chat-subagent-history-role {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.chat-subagent-history-text {
+  font-size: 0.73rem;
+  line-height: 1.45;
+  color: var(--foreground);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .chat-subagent-section {

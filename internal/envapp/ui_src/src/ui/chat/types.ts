@@ -142,6 +142,10 @@ export interface SubagentBlock {
   }>;
   openRisks: string[];
   nextActions: string[];
+  history: Array<{
+    role: 'user' | 'assistant' | 'system';
+    text: string;
+  }>;
   stats: {
     steps: number;
     toolCalls: number;
