@@ -41,7 +41,7 @@ const (
 	subagentContextModeThreadFull    = "thread_full"
 
 	subagentDefaultMaxSteps   = 8
-	subagentDefaultTimeoutSec = 180
+	subagentDefaultTimeoutSec = 900
 	subagentSteerMinInterval  = 2 * time.Second
 )
 
@@ -514,7 +514,6 @@ type subagentRoleDefaults struct {
 	Mode              string
 	Allowlist         []string
 	MaxSteps          int
-	TimeoutSec        int
 	ForceReadonlyExec bool
 }
 
@@ -562,7 +561,6 @@ func buildRoleDefaults(agentType string) subagentRoleDefaults {
 			Mode:              "act",
 			Allowlist:         defaultSubagentToolAllowlistWorker(),
 			MaxSteps:          12,
-			TimeoutSec:        360,
 			ForceReadonlyExec: false,
 		}
 	case subagentAgentTypeReviewer:
@@ -570,7 +568,6 @@ func buildRoleDefaults(agentType string) subagentRoleDefaults {
 			Mode:              "plan",
 			Allowlist:         defaultSubagentToolAllowlistReadonly(),
 			MaxSteps:          10,
-			TimeoutSec:        300,
 			ForceReadonlyExec: true,
 		}
 	default:
@@ -578,7 +575,6 @@ func buildRoleDefaults(agentType string) subagentRoleDefaults {
 			Mode:              "plan",
 			Allowlist:         defaultSubagentToolAllowlistReadonly(),
 			MaxSteps:          subagentDefaultMaxSteps,
-			TimeoutSec:        subagentDefaultTimeoutSec,
 			ForceReadonlyExec: true,
 		}
 	}
@@ -992,13 +988,7 @@ func (m *subagentManager) create(ctx context.Context, args map[string]any) (map[
 	if maxSteps > 32 {
 		maxSteps = 32
 	}
-	timeoutSec := parseIntArg(args, "budget.timeout_sec", defaults.TimeoutSec)
-	if timeoutSec <= 0 {
-		timeoutSec = defaults.TimeoutSec
-	}
-	if timeoutSec > 900 {
-		timeoutSec = 900
-	}
+	timeoutSec := subagentDefaultTimeoutSec
 
 	allowedTools := sanitizeSubagentToolAllowlist(extractStringSlice(args["allowed_tools"]), defaults.Allowlist, defaults.ForceReadonlyExec)
 	spec, err := buildSubagentSpec(args, agentType, objective, triggerReason, allowedTools, maxSteps, timeoutSec, defaults.ForceReadonlyExec)

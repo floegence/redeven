@@ -285,7 +285,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:        "subagents",
-			Description: "Manage subagents with actions: create, wait, list, inspect, steer, terminate, terminate_all. Create requires a strict delegation contract (deliverables, definition_of_done, output_schema).",
+			Description: "Manage subagents with actions: create, wait, list, inspect, steer, terminate, terminate_all. Create requires a strict delegation contract (deliverables, definition_of_done, output_schema). Subagent timeout is fixed at 900 seconds.",
 			InputSchema: toSchema(map[string]any{
 				"type": "object",
 				"properties": map[string]any{

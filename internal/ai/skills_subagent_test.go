@@ -358,6 +358,9 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 	if !strings.Contains(strings.TrimSpace(anyToString(created["delegation_prompt_markdown"])), "# Mission") {
 		t.Fatalf("missing canonical delegation prompt in create result: %#v", created)
 	}
+	if !strings.Contains(strings.TrimSpace(anyToString(created["delegation_prompt_markdown"])), "Timeout: 900 seconds") {
+		t.Fatalf("expected fixed 900-second timeout in delegation prompt: %#v", created)
+	}
 
 	waited, err := r.manageSubagents(context.Background(), map[string]any{
 		"action":     "wait",
@@ -607,6 +610,9 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 	id := strings.TrimSpace(anyToString(created["subagent_id"]))
 	if id == "" {
 		t.Fatalf("missing subagent_id in result: %#v", created)
+	}
+	if !strings.Contains(strings.TrimSpace(anyToString(created["delegation_prompt_markdown"])), "Timeout: 900 seconds") {
+		t.Fatalf("expected fixed 900-second timeout in delegation prompt: %#v", created)
 	}
 
 	waited, err := r.manageSubagents(context.Background(), map[string]any{
