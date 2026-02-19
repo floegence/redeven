@@ -78,8 +78,23 @@ func defaultCapability(provider config.AIProvider, modelName string) model.Model
 	case "moonshot":
 		cap.SupportsStrictJSONSchema = false
 		cap.PreferredToolSchemaMode = "relaxed_json"
-		cap.MaxContextTokens = 64000
-		cap.MaxOutputTokens = 4096
+		cap.MaxContextTokens = 256000
+		cap.MaxOutputTokens = 16384
+	case "chatglm":
+		cap.SupportsStrictJSONSchema = false
+		cap.PreferredToolSchemaMode = "relaxed_json"
+		cap.MaxContextTokens = 200000
+		cap.MaxOutputTokens = 16000
+	case "deepseek":
+		cap.SupportsStrictJSONSchema = false
+		cap.PreferredToolSchemaMode = "relaxed_json"
+		cap.MaxContextTokens = 128000
+		cap.MaxOutputTokens = 64000
+	case "qwen":
+		cap.SupportsStrictJSONSchema = false
+		cap.PreferredToolSchemaMode = "relaxed_json"
+		cap.MaxContextTokens = 262144
+		cap.MaxOutputTokens = 65536
 	case "openai_compatible":
 		cap.SupportsStrictJSONSchema = false
 		cap.PreferredToolSchemaMode = "relaxed_json"
@@ -102,6 +117,24 @@ func defaultCapability(provider config.AIProvider, modelName string) model.Model
 	if strings.Contains(modelLower, "haiku") {
 		cap.MaxContextTokens = min(cap.MaxContextTokens, 128000)
 		cap.MaxOutputTokens = min(cap.MaxOutputTokens, 4096)
+	}
+	if strings.Contains(modelLower, "qwen-plus") || strings.Contains(modelLower, "qwen-flash") || strings.Contains(modelLower, "qwen3-coder-plus") {
+		cap.MaxContextTokens = max(cap.MaxContextTokens, 1000000)
+	}
+	if strings.Contains(modelLower, "qwen3-max") {
+		cap.MaxContextTokens = max(cap.MaxContextTokens, 262144)
+		cap.MaxOutputTokens = max(cap.MaxOutputTokens, 65536)
+	}
+	if strings.Contains(modelLower, "kimi-k2") {
+		cap.MaxContextTokens = max(cap.MaxContextTokens, 256000)
+	}
+	if strings.Contains(modelLower, "deepseek-chat") || strings.Contains(modelLower, "deepseek-reasoner") {
+		cap.MaxContextTokens = max(cap.MaxContextTokens, 128000)
+		cap.MaxOutputTokens = max(cap.MaxOutputTokens, 64000)
+	}
+	if strings.Contains(modelLower, "glm-5") {
+		cap.MaxContextTokens = max(cap.MaxContextTokens, 200000)
+		cap.MaxOutputTokens = max(cap.MaxOutputTokens, 128000)
 	}
 	return cap
 }
@@ -128,6 +161,13 @@ func AdaptAttachments(cap model.ModelCapability, in []model.AttachmentManifest) 
 
 func min(a int, b int) int {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a int, b int) int {
+	if a > b {
 		return a
 	}
 	return b

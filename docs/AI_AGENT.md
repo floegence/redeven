@@ -26,7 +26,7 @@ Notes:
 - Providers own their model list: `ai.providers[].models[]` is the allow-list shown in the Chat UI.
 - `ai.current_model_id` points to the default model for new chats.
 - The wire model id remains `<provider_id>/<model_name>` (stored on each chat thread).
-- `providers[].base_url` is optional for `openai` / `anthropic`, and **required** for `openai_compatible` / `moonshot`.
+- `providers[].base_url` is optional for `openai` / `anthropic`, and **required** for `moonshot` / `chatglm` / `deepseek` / `qwen` / `openai_compatible`.
 
 API keys:
 

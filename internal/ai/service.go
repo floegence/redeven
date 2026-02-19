@@ -451,6 +451,12 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 				name = "OpenAI"
 			case "anthropic":
 				name = "Anthropic"
+			case "chatglm":
+				name = "ChatGLM"
+			case "deepseek":
+				name = "DeepSeek"
+			case "qwen":
+				name = "Qwen"
 			case "openai_compatible":
 				baseURL := strings.TrimSpace(p.BaseURL)
 				if baseURL != "" {
@@ -1385,7 +1391,7 @@ func (s *Service) classifyRunPolicyByModel(ctx context.Context, resolved resolve
 	}
 	providerType := strings.ToLower(strings.TrimSpace(resolved.Provider.Type))
 	switch providerType {
-	case "openai", "openai_compatible", "anthropic", "moonshot":
+	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible":
 	default:
 		return runPolicyDecision{}, fmt.Errorf("unsupported provider type %q", strings.TrimSpace(resolved.Provider.Type))
 	}

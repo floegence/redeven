@@ -1318,7 +1318,7 @@ func (r *run) shouldUseNativeRuntime(provider *config.AIProvider) bool {
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(provider.Type)) {
-	case "openai", "openai_compatible", "anthropic", "moonshot":
+	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible":
 		return true
 	default:
 		return false
@@ -1342,6 +1342,15 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			strictToolSchema: strictToolSchema,
 		}, nil
 	case "openai_compatible":
+		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
+		if strings.TrimSpace(baseURL) != "" {
+			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
+		}
+		return &openAIProvider{
+			client:           openai.NewClient(opts...),
+			strictToolSchema: strictToolSchema,
+		}, nil
+	case "chatglm", "deepseek", "qwen":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
 		if strings.TrimSpace(baseURL) != "" {
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
@@ -1379,7 +1388,7 @@ func resolveStrictToolSchema(providerType string, baseURL string, override *bool
 
 func shouldUseStrictOpenAIToolSchema(providerType string, baseURL string) bool {
 	providerType = strings.ToLower(strings.TrimSpace(providerType))
-	if providerType == "openai_compatible" {
+	if providerType == "openai_compatible" || providerType == "chatglm" || providerType == "deepseek" || providerType == "qwen" {
 		// Compatible gateways vary widely in strict function schema support; disable strict mode by default.
 		return false
 	}
