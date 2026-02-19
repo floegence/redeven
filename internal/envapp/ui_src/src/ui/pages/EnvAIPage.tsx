@@ -955,78 +955,156 @@ function CompactSubagentsSummary(props: {
 
       <Show when={expanded()}>
         <div class={cn(
-          'absolute bottom-full left-0 mb-1.5 z-50 w-96 max-sm:w-[calc(100vw-2rem)] rounded-xl border border-border/70 bg-card shadow-lg shadow-black/10 backdrop-blur-md',
+          'absolute bottom-full left-0 mb-1.5 z-50 w-[26rem] max-sm:w-[calc(100vw-2rem)] rounded-xl overflow-hidden',
+          'border border-border/60 bg-card shadow-xl shadow-black/12 backdrop-blur-xl',
           'chat-tasks-panel chat-tasks-panel-open',
         )}>
-          <div class="px-3 py-2.5">
-            <div class="flex items-center justify-between gap-2 mb-2">
-              <div class="text-xs font-medium text-foreground">Subagents</div>
-              <div class="text-[11px] text-muted-foreground">
-                {runningCount()} running · {waitingCount()} waiting · {completedCount()} completed · {failedCount()} failed
+          {/* Panel accent line */}
+          <div class="h-[2px] bg-gradient-to-r from-primary/60 via-primary/30 to-transparent" />
+
+          {/* Panel header */}
+          <div class="px-3.5 pt-2.5 pb-2 border-b border-border/50 bg-gradient-to-b from-muted/40 to-transparent">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <Settings class="w-3.5 h-3.5 text-primary/70" />
+                <span class="text-[13px] font-semibold text-foreground tracking-tight">Subagents</span>
+                <span class="text-[10px] font-semibold tabular-nums text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-px leading-none">
+                  {props.subagents.length}
+                </span>
               </div>
+              <Show when={props.updatedLabel}>
+                <span class="text-[10px] text-muted-foreground/70">{props.updatedLabel}</span>
+              </Show>
             </div>
-
-            <Show when={props.subagents.length > 0} fallback={
-              <div class="text-[11px] text-muted-foreground py-2">No subagents yet.</div>
-            }>
-              <div class="space-y-1.5 max-h-64 overflow-auto pr-1">
-                <For each={props.subagents}>
-                  {(item) => (
-                    <div class="rounded-lg border border-border/65 bg-background/75 px-2.5 py-2">
-                      <div class="flex items-center gap-2">
-                        <span class={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium shrink-0', subagentStatusBadgeClass(item.status))}>
-                          {subagentStatusLabel(item.status)}
-                        </span>
-                        <span class="text-[11px] text-muted-foreground">{item.agentType || 'subagent'}</span>
-                        <span class="ml-auto text-[10px] text-muted-foreground">{formatSubagentElapsed(item.stats.elapsedMs)}</span>
-                      </div>
-                      <div class="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                        <span class="font-mono">{item.subagentId}</span>
-                        <span>•</span>
-                        <span>Steps {formatSubagentInteger(item.stats.steps)}</span>
-                        <span>•</span>
-                        <span>Tools {formatSubagentInteger(item.stats.toolCalls)}</span>
-                        <span>•</span>
-                        <span>Tokens {formatSubagentInteger(item.stats.tokens)}</span>
-                      </div>
-                      <Show when={item.title || item.objective}>
-                        <div class="mt-1 text-[11px] text-foreground leading-relaxed">
-                          {summarizeSubagentText(String(item.title ?? item.objective ?? ''), 108)}
-                        </div>
-                      </Show>
-                      <Show when={item.delegationPromptMarkdown}>
-                        <button
-                          type="button"
-                          class="mt-1 w-full rounded-md border border-border/65 bg-muted/35 px-2 py-1.5 text-left transition-colors hover:bg-accent/45"
-                          onClick={() => openPromptDialog(item)}
-                        >
-                          <div class="text-[10px] uppercase tracking-wide text-muted-foreground">Prompt</div>
-                          <div class="mt-0.5 text-[11px] text-foreground leading-relaxed">
-                            {summarizeSubagentText(String(item.delegationPromptMarkdown ?? ''), 108)}
-                          </div>
-                          <div class="mt-1 text-[10px] font-medium text-primary">Click to view full prompt</div>
-                        </button>
-                      </Show>
-                      <Show when={item.triggerReason}>
-                        <div class="mt-1 text-[11px] text-muted-foreground leading-relaxed">
-                          Trigger: {summarizeSubagentText(item.triggerReason, 108)}
-                        </div>
-                      </Show>
-                      <Show when={item.error}>
-                        <div class="mt-1 rounded-md border border-error/30 bg-error/10 px-2 py-1 text-[11px] text-error">
-                          Error: {item.error}
-                        </div>
-                      </Show>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
-
-            <div class="mt-2 text-[10px] text-muted-foreground">
-              {props.updatedLabel ? `Updated ${props.updatedLabel}` : ''}
+            <div class="flex items-center gap-1.5 mt-1.5">
+              <Show when={runningCount() > 0}>
+                <span class="inline-flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-full px-1.5 py-px">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                  {runningCount()} running
+                </span>
+              </Show>
+              <Show when={waitingCount() > 0}>
+                <span class="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-1.5 py-px">
+                  {waitingCount()} waiting
+                </span>
+              </Show>
+              <Show when={completedCount() > 0}>
+                <span class="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-1.5 py-px">
+                  {completedCount()} completed
+                </span>
+              </Show>
+              <Show when={failedCount() > 0}>
+                <span class="inline-flex items-center gap-1 text-[10px] font-medium text-error bg-error/10 border border-error/20 rounded-full px-1.5 py-px">
+                  {failedCount()} failed
+                </span>
+              </Show>
             </div>
           </div>
+
+          {/* Agent list */}
+          <Show when={props.subagents.length > 0} fallback={
+            <div class="px-3.5 py-4 text-[11px] text-muted-foreground text-center">No subagents yet.</div>
+          }>
+            <div class="flex flex-col gap-2 max-h-72 overflow-auto p-2.5">
+              <For each={props.subagents}>
+                {(item) => {
+                  const borderColor = (): string => {
+                    const s = String(item.status ?? '').trim().toLowerCase();
+                    if (s === 'running') return 'border-l-blue-500';
+                    if (s === 'waiting_input') return 'border-l-amber-500';
+                    if (s === 'completed') return 'border-l-emerald-500';
+                    if (s === 'failed' || s === 'timed_out') return 'border-l-red-500';
+                    return 'border-l-border';
+                  };
+                  return (
+                    <div class={cn(
+                      'rounded-lg border border-border/60 bg-background/80 overflow-hidden',
+                      'border-l-[3px] transition-colors',
+                      borderColor(),
+                    )}>
+                      {/* Card header */}
+                      <div class="flex items-center gap-2 px-2.5 py-1.5 bg-muted/20">
+                        <span class={cn(
+                          'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold shrink-0',
+                          subagentStatusBadgeClass(item.status),
+                        )}>
+                          {subagentStatusLabel(item.status)}
+                        </span>
+                        <span class="text-[11px] font-medium text-foreground/80">{item.agentType || 'subagent'}</span>
+                        <span class="ml-auto text-[10px] font-mono tabular-nums text-muted-foreground">{formatSubagentElapsed(item.stats.elapsedMs)}</span>
+                      </div>
+
+                      {/* Card body */}
+                      <div class="px-2.5 py-2 space-y-1.5">
+                        {/* Title / Objective */}
+                        <Show when={item.title || item.objective}>
+                          <p class="text-[11.5px] font-medium text-foreground leading-snug m-0">
+                            {summarizeSubagentText(String(item.title ?? item.objective ?? ''), 120)}
+                          </p>
+                        </Show>
+
+                        {/* Stats grid */}
+                        <div class="grid grid-cols-4 gap-1">
+                          <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
+                            <div class="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Steps</div>
+                            <div class="text-[11px] font-semibold tabular-nums text-foreground/85">{formatSubagentInteger(item.stats.steps)}</div>
+                          </div>
+                          <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
+                            <div class="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Tools</div>
+                            <div class="text-[11px] font-semibold tabular-nums text-foreground/85">{formatSubagentInteger(item.stats.toolCalls)}</div>
+                          </div>
+                          <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
+                            <div class="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Tokens</div>
+                            <div class="text-[11px] font-semibold tabular-nums text-foreground/85">{formatSubagentInteger(item.stats.tokens)}</div>
+                          </div>
+                          <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
+                            <div class="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">ID</div>
+                            <div class="text-[10px] font-mono text-foreground/70 truncate">{String(item.subagentId).slice(-6)}</div>
+                          </div>
+                        </div>
+
+                        {/* Prompt section */}
+                        <Show when={item.delegationPromptMarkdown}>
+                          <button
+                            type="button"
+                            class={cn(
+                              'group w-full text-left rounded-md px-2 py-1.5',
+                              'border border-border/50 bg-muted/20',
+                              'transition-all duration-150 hover:bg-accent/30 hover:border-primary/25',
+                            )}
+                            onClick={() => openPromptDialog(item)}
+                          >
+                            <div class="flex items-center justify-between gap-1.5">
+                              <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Prompt</span>
+                              <span class="text-[10px] font-medium text-primary/70 group-hover:text-primary transition-colors">View</span>
+                            </div>
+                            <p class="mt-0.5 text-[10.5px] text-foreground/75 leading-relaxed line-clamp-2 m-0">
+                              {summarizeSubagentText(String(item.delegationPromptMarkdown ?? ''), 120)}
+                            </p>
+                          </button>
+                        </Show>
+
+                        {/* Trigger reason */}
+                        <Show when={item.triggerReason}>
+                          <p class="text-[10px] text-muted-foreground/70 leading-snug m-0">
+                            <span class="font-semibold uppercase tracking-wider">Trigger</span>{' '}
+                            {summarizeSubagentText(item.triggerReason, 108)}
+                          </p>
+                        </Show>
+
+                        {/* Error */}
+                        <Show when={item.error}>
+                          <div class="rounded-md border border-error/25 bg-error/8 px-2 py-1 text-[10.5px] text-error">
+                            {item.error}
+                          </div>
+                        </Show>
+                      </div>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
+          </Show>
         </div>
       </Show>
 
@@ -1042,35 +1120,44 @@ function CompactSubagentsSummary(props: {
       >
         <Show when={promptDialogItem()}>
           {(item) => (
-            <div class="space-y-3">
-              <div class="grid gap-2 sm:grid-cols-2">
-                <div class="rounded-md border border-border/70 bg-muted/35 px-2.5 py-2">
-                  <div class="text-[10px] uppercase tracking-wide text-muted-foreground">Subagent</div>
-                  <div class="mt-0.5 text-[11px] font-mono break-all">{item().subagentId}</div>
+            <div class="space-y-4">
+              {/* Meta cards */}
+              <div class="grid gap-2 sm:grid-cols-3">
+                <div class="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
+                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60">Subagent</div>
+                  <div class="mt-1 text-[11.5px] font-mono text-foreground/90 break-all leading-snug">{item().subagentId}</div>
                 </div>
-                <div class="rounded-md border border-border/70 bg-muted/35 px-2.5 py-2">
-                  <div class="text-[10px] uppercase tracking-wide text-muted-foreground">Status</div>
-                  <div class="mt-0.5 text-[11px]">{subagentStatusLabel(item().status)}</div>
+                <div class="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
+                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60">Status</div>
+                  <div class="mt-1">
+                    <span class={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', subagentStatusBadgeClass(item().status))}>
+                      {subagentStatusLabel(item().status)}
+                    </span>
+                  </div>
+                </div>
+                <div class="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
+                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60">Type</div>
+                  <div class="mt-1 text-[11.5px] font-medium text-foreground/90">{item().agentType || 'subagent'}</div>
                 </div>
               </div>
 
               <Show when={item().objective}>
                 <div>
-                  <div class="text-[10px] uppercase tracking-wide text-muted-foreground">Objective</div>
-                  <div class="mt-1 text-[12px] text-foreground leading-relaxed">{item().objective}</div>
+                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1.5">Objective</div>
+                  <p class="text-[12.5px] text-foreground leading-relaxed m-0">{item().objective}</p>
                 </div>
               </Show>
 
               <Show when={item().triggerReason}>
                 <div>
-                  <div class="text-[10px] uppercase tracking-wide text-muted-foreground">Trigger reason</div>
-                  <div class="mt-1 text-[12px] text-foreground leading-relaxed">{item().triggerReason}</div>
+                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1.5">Trigger reason</div>
+                  <p class="text-[12.5px] text-foreground leading-relaxed m-0">{item().triggerReason}</p>
                 </div>
               </Show>
 
               <div>
-                <div class="text-[10px] uppercase tracking-wide text-muted-foreground">Delegation prompt</div>
-                <pre class="mt-1 max-h-[52vh] overflow-auto rounded-md border border-border/70 bg-background px-3 py-2 text-[11px] leading-relaxed whitespace-pre-wrap break-words text-foreground">
+                <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1.5">Delegation prompt</div>
+                <pre class="max-h-[52vh] overflow-auto rounded-lg border border-border/60 bg-background/90 px-3.5 py-2.5 text-[11.5px] leading-[1.6] whitespace-pre-wrap break-words text-foreground/90 m-0">
                   {String(item().delegationPromptMarkdown ?? '').trim()}
                 </pre>
               </div>
