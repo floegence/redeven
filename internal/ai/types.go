@@ -189,6 +189,7 @@ type UploadResponse struct {
 }
 
 type RunEventView struct {
+	EventID    int64  `json:"event_id"`
 	RunID      string `json:"run_id"`
 	ThreadID   string `json:"thread_id"`
 	StreamKind string `json:"stream_kind,omitempty"`
@@ -198,7 +199,9 @@ type RunEventView struct {
 }
 
 type ListRunEventsResponse struct {
-	Events []RunEventView `json:"events"`
+	Events     []RunEventView `json:"events"`
+	NextCursor int64          `json:"next_cursor,omitempty"`
+	HasMore    bool           `json:"has_more,omitempty"`
 }
 
 // RunState is the normalized state machine for a single AI run.
@@ -284,6 +287,17 @@ type streamEventLifecyclePhase struct {
 	Diag      map[string]any `json:"diag,omitempty"`
 }
 
+type streamEventContextUsage struct {
+	Type    string         `json:"type"`
+	Payload map[string]any `json:"payload,omitempty"`
+}
+
+type streamEventContextCompaction struct {
+	Type      string         `json:"type"`
+	EventType string         `json:"eventType"`
+	Payload   map[string]any `json:"payload,omitempty"`
+}
+
 // Convenience helpers for tool-call blocks (MessageBlock).
 
 type ToolCallStatus string
@@ -329,6 +343,7 @@ const (
 	RealtimeStreamKindLifecycle RealtimeStreamKind = "lifecycle"
 	RealtimeStreamKindAssistant RealtimeStreamKind = "assistant"
 	RealtimeStreamKindTool      RealtimeStreamKind = "tool"
+	RealtimeStreamKindContext   RealtimeStreamKind = "context"
 )
 
 // RealtimeLifecyclePhase marks lifecycle transitions.

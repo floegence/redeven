@@ -107,6 +107,223 @@ export function todoStatusBadgeClass(status: TodoStatus): string {
   }
 }
 
+export interface ContextUsageView {
+  readonly eventId?: number;
+  readonly atUnixMs: number;
+  readonly stepIndex: number;
+  readonly estimateTokens: number;
+  readonly estimateSource?: string;
+  readonly contextLimit: number;
+  readonly pressure: number;
+  readonly usagePercent: number;
+  readonly effectiveThreshold?: number;
+  readonly configuredThreshold?: number;
+  readonly windowBasedThreshold?: number;
+  readonly turnMessages?: number;
+  readonly historyMessages?: number;
+  readonly promptPackEstimate?: number;
+  readonly sectionsTokens: Record<string, number>;
+  readonly sectionsTokensTotal: number;
+  readonly unattributedTokens: number;
+}
+
+export interface ContextCompactionEventView {
+  readonly eventId?: number;
+  readonly atUnixMs: number;
+  readonly eventType: string;
+  readonly stage: 'started' | 'applied' | 'skipped' | 'failed' | 'unknown';
+  readonly compactionId: string;
+  readonly stepIndex: number;
+  readonly strategy?: string;
+  readonly reason?: string;
+  readonly error?: string;
+  readonly estimateTokensBefore?: number;
+  readonly estimateTokensAfter?: number;
+  readonly contextLimit?: number;
+  readonly pressure?: number;
+  readonly dedupeKey: string;
+}
+
+function normalizeSectionTokens(raw: unknown): Record<string, number> {
+  const rec = asRecord(raw);
+  const out: Record<string, number> = {};
+  for (const [key, value] of Object.entries(rec)) {
+    const normalizedKey = String(key ?? '').trim();
+    if (!normalizedKey) continue;
+    const numeric = Math.floor(readNumber(value, -1));
+    if (numeric < 0) continue;
+    out[normalizedKey] = numeric;
+  }
+  return out;
+}
+
+function normalizeOptionalNumber(raw: unknown): number | undefined {
+  const n = readNumber(raw, NaN);
+  if (!Number.isFinite(n)) return undefined;
+  return n;
+}
+
+function normalizeOptionalInteger(raw: unknown): number | undefined {
+  const n = normalizeOptionalNumber(raw);
+  if (!Number.isFinite(n ?? NaN)) return undefined;
+  return Math.max(0, Math.floor(n as number));
+}
+
+function normalizeCompactionStage(eventType: string): ContextCompactionEventView['stage'] {
+  const normalized = String(eventType ?? '').trim().toLowerCase();
+  if (normalized.endsWith('.started')) return 'started';
+  if (normalized.endsWith('.applied')) return 'applied';
+  if (normalized.endsWith('.skipped')) return 'skipped';
+  if (normalized.endsWith('.failed')) return 'failed';
+  return 'unknown';
+}
+
+export function normalizeContextUsage(
+  payloadRaw: unknown,
+  meta?: {
+    eventId?: unknown;
+    atUnixMs?: unknown;
+  },
+): ContextUsageView | null {
+  const payload = asRecord(payloadRaw);
+  const estimateTokens = Math.max(0, Math.floor(readNumber(payload.estimate_tokens, -1)));
+  const contextLimit = Math.max(0, Math.floor(readNumber(payload.context_limit, -1)));
+  if (estimateTokens < 0 || contextLimit <= 0) return null;
+
+  const pressureRaw = readNumber(payload.pressure, NaN);
+  const pressure = Number.isFinite(pressureRaw) && pressureRaw >= 0 ? pressureRaw : estimateTokens / contextLimit;
+  const usagePercentRaw = readNumber(payload.usage_percent, NaN);
+  const usagePercent = Number.isFinite(usagePercentRaw) && usagePercentRaw >= 0 ? usagePercentRaw : pressure * 100;
+
+  const sectionsTokens = normalizeSectionTokens(payload.sections_tokens);
+  const sectionsTokensTotalRaw = Math.floor(readNumber(payload.sections_tokens_total, -1));
+  const sectionsTokensTotal = sectionsTokensTotalRaw >= 0
+    ? sectionsTokensTotalRaw
+    : Object.values(sectionsTokens).reduce((sum, value) => sum + value, 0);
+
+  const unattributedTokensRaw = Math.floor(readNumber(payload.unattributed_tokens, -1));
+  const unattributedTokens = unattributedTokensRaw >= 0
+    ? unattributedTokensRaw
+    : Math.max(0, estimateTokens - sectionsTokensTotal);
+
+  const atUnixMs = Math.max(0, Math.floor(readNumber(meta?.atUnixMs, 0)));
+  const eventId = normalizeOptionalInteger(meta?.eventId);
+  const stepIndex = Math.max(0, Math.floor(readNumber(payload.step_index, 0)));
+  const estimateSource = String(payload.estimate_source ?? '').trim();
+  const turnMessages = normalizeOptionalInteger(payload.turn_messages);
+  const historyMessages = normalizeOptionalInteger(payload.history_messages);
+  const promptPackEstimate = normalizeOptionalInteger(payload.prompt_pack_estimate);
+
+  return {
+    eventId,
+    atUnixMs,
+    stepIndex,
+    estimateTokens,
+    estimateSource: estimateSource || undefined,
+    contextLimit,
+    pressure,
+    usagePercent,
+    effectiveThreshold: normalizeOptionalNumber(payload.effective_threshold),
+    configuredThreshold: normalizeOptionalNumber(payload.configured_threshold),
+    windowBasedThreshold: normalizeOptionalNumber(payload.window_based_threshold),
+    turnMessages,
+    historyMessages,
+    promptPackEstimate,
+    sectionsTokens,
+    sectionsTokensTotal,
+    unattributedTokens,
+  };
+}
+
+export function normalizeContextCompactionEvent(
+  eventTypeRaw: unknown,
+  payloadRaw: unknown,
+  meta?: {
+    eventId?: unknown;
+    atUnixMs?: unknown;
+  },
+): ContextCompactionEventView | null {
+  const eventType = String(eventTypeRaw ?? '').trim();
+  if (!eventType) return null;
+  const payload = asRecord(payloadRaw);
+  const compactionId = String(payload.compaction_id ?? '').trim();
+  if (!compactionId) return null;
+
+  const stepIndex = Math.max(0, Math.floor(readNumber(payload.step_index, 0)));
+  const eventId = normalizeOptionalInteger(meta?.eventId);
+  const atUnixMs = Math.max(0, Math.floor(readNumber(meta?.atUnixMs, 0)));
+  const stage = normalizeCompactionStage(eventType);
+  const strategy = String(payload.strategy ?? '').trim();
+  const reason = String(payload.reason ?? '').trim();
+  const error = String(payload.error ?? '').trim();
+  const dedupeKey = `${compactionId}:${eventType}:${stepIndex}`;
+
+  return {
+    eventId,
+    atUnixMs,
+    eventType,
+    stage,
+    compactionId,
+    stepIndex,
+    strategy: strategy || undefined,
+    reason: reason || undefined,
+    error: error || undefined,
+    estimateTokensBefore: normalizeOptionalInteger(payload.estimate_tokens_before ?? payload.estimate_tokens),
+    estimateTokensAfter: normalizeOptionalInteger(payload.estimate_tokens_after),
+    contextLimit: normalizeOptionalInteger(payload.context_limit),
+    pressure: normalizeOptionalNumber(payload.pressure),
+    dedupeKey,
+  };
+}
+
+export function mergeContextCompactionEvents(
+  current: ContextCompactionEventView[],
+  incoming: ContextCompactionEventView[],
+  maxItems = 200,
+): ContextCompactionEventView[] {
+  if (!Array.isArray(incoming) || incoming.length <= 0) return current;
+
+  const byEventId = new Map<number, ContextCompactionEventView>();
+  const byKey = new Map<string, ContextCompactionEventView>();
+
+  const register = (item: ContextCompactionEventView) => {
+    if (!item) return;
+    if (typeof item.eventId === 'number' && Number.isFinite(item.eventId) && item.eventId > 0) {
+      byEventId.set(item.eventId, item);
+      return;
+    }
+    byKey.set(item.dedupeKey, item);
+  };
+
+  current.forEach(register);
+  incoming.forEach(register);
+
+  const merged = [
+    ...Array.from(byEventId.values()),
+    ...Array.from(byKey.values()).filter((item) => {
+      if (typeof item.eventId === 'number' && Number.isFinite(item.eventId) && item.eventId > 0) {
+        return !byEventId.has(item.eventId);
+      }
+      return true;
+    }),
+  ];
+
+  merged.sort((a, b) => {
+    const atA = a.atUnixMs || 0;
+    const atB = b.atUnixMs || 0;
+    if (atA !== atB) return atA - atB;
+    const idA = a.eventId ?? 0;
+    const idB = b.eventId ?? 0;
+    if (idA !== idB) return idA - idB;
+    return a.dedupeKey.localeCompare(b.dedupeKey);
+  });
+
+  if (maxItems > 0 && merged.length > maxItems) {
+    return merged.slice(merged.length - maxItems);
+  }
+  return merged;
+}
+
 export type SubagentStatus =
   | 'queued'
   | 'running'

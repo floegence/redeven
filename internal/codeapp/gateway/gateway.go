@@ -2074,7 +2074,21 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 					limit = v
 				}
 			}
-			out, err := g.ai.ListRunEvents(r.Context(), meta, runID, limit)
+			cursor := int64(0)
+			if raw := strings.TrimSpace(r.URL.Query().Get("cursor")); raw != "" {
+				v, err := strconv.ParseInt(raw, 10, 64)
+				if err != nil || v < 0 {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid cursor"})
+					return
+				}
+				cursor = v
+			}
+			category := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("category")))
+			out, err := g.ai.ListRunEventsWithQuery(r.Context(), meta, runID, ai.ListRunEventsQuery{
+				Cursor:   cursor,
+				Limit:    limit,
+				Category: category,
+			})
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return

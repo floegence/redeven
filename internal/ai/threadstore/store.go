@@ -16,6 +16,11 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+const (
+	runEventRetentionMaxAge       = 30 * 24 * time.Hour
+	runEventRetentionMaxPerThread = 5000
+)
+
 // Store is a local SQLite-backed persistence layer for AI threads and messages.
 //
 // Notes:
@@ -1075,6 +1080,7 @@ type ToolCallRecord struct {
 }
 
 type RunEventRecord struct {
+	ID          int64  `json:"id"`
 	EndpointID  string `json:"endpoint_id"`
 	ThreadID    string `json:"thread_id"`
 	RunID       string `json:"run_id"`
@@ -1082,6 +1088,12 @@ type RunEventRecord struct {
 	EventType   string `json:"event_type"`
 	PayloadJSON string `json:"payload_json"`
 	AtUnixMs    int64  `json:"at_unix_ms"`
+}
+
+type RunEventsQuery struct {
+	Cursor   int64
+	Limit    int
+	Category string
 }
 
 type ThreadState struct {
@@ -1410,12 +1422,22 @@ func (s *Store) AppendRunEvent(ctx context.Context, rec RunEventRecord) error {
 INSERT INTO ai_run_events(endpoint_id, thread_id, run_id, stream_kind, event_type, payload_json, at_unix_ms)
 VALUES(?, ?, ?, ?, ?, ?, ?)
 `, rec.EndpointID, rec.ThreadID, rec.RunID, rec.StreamKind, rec.EventType, rec.PayloadJSON, rec.AtUnixMs)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.pruneRunEventsForThread(ctx, rec.EndpointID, rec.ThreadID)
 }
 
 func (s *Store) ListRunEvents(ctx context.Context, endpointID string, runID string, limit int) ([]RunEventRecord, error) {
+	recs, _, _, err := s.ListRunEventsPage(ctx, endpointID, runID, RunEventsQuery{
+		Limit: limit,
+	})
+	return recs, err
+}
+
+func (s *Store) ListRunEventsPage(ctx context.Context, endpointID string, runID string, query RunEventsQuery) ([]RunEventRecord, int64, bool, error) {
 	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
+		return nil, 0, false, errors.New("store not initialized")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -1423,37 +1445,116 @@ func (s *Store) ListRunEvents(ctx context.Context, endpointID string, runID stri
 	endpointID = strings.TrimSpace(endpointID)
 	runID = strings.TrimSpace(runID)
 	if endpointID == "" || runID == "" {
-		return nil, errors.New("invalid request")
+		return nil, 0, false, errors.New("invalid request")
 	}
+
+	limit := query.Limit
 	if limit <= 0 {
 		limit = 200
 	}
 	if limit > 2000 {
 		limit = 2000
 	}
-	rows, err := s.db.QueryContext(ctx, `
-SELECT endpoint_id, thread_id, run_id, stream_kind, event_type, payload_json, at_unix_ms
+	cursor := query.Cursor
+	if cursor < 0 {
+		cursor = 0
+	}
+
+	category := strings.TrimSpace(strings.ToLower(query.Category))
+	switch category {
+	case "", "all":
+		category = ""
+	case "context":
+		// keep as-is
+	default:
+		return nil, 0, false, fmt.Errorf("unsupported run event category: %s", category)
+	}
+
+	args := []any{endpointID, runID, cursor}
+	whereCategory := ""
+	if category == "context" {
+		// Explicit whitelist to avoid leaking non-UI diagnostic categories (for example context.integrity.*).
+		whereCategory = `
+AND (
+  event_type = 'context.usage.updated'
+  OR event_type LIKE 'context.compaction.%'
+)`
+	}
+	args = append(args, limit+1)
+
+	q := fmt.Sprintf(`
+SELECT id, endpoint_id, thread_id, run_id, stream_kind, event_type, payload_json, at_unix_ms
 FROM ai_run_events
-WHERE endpoint_id = ? AND run_id = ?
+WHERE endpoint_id = ? AND run_id = ? AND id > ?
+%s
 ORDER BY id ASC
 LIMIT ?
-`, endpointID, runID, limit)
+`, whereCategory)
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, false, err
 	}
 	defer rows.Close()
-	out := make([]RunEventRecord, 0, limit)
+	out := make([]RunEventRecord, 0, limit+1)
 	for rows.Next() {
 		var rec RunEventRecord
-		if err := rows.Scan(&rec.EndpointID, &rec.ThreadID, &rec.RunID, &rec.StreamKind, &rec.EventType, &rec.PayloadJSON, &rec.AtUnixMs); err != nil {
-			return nil, err
+		if err := rows.Scan(&rec.ID, &rec.EndpointID, &rec.ThreadID, &rec.RunID, &rec.StreamKind, &rec.EventType, &rec.PayloadJSON, &rec.AtUnixMs); err != nil {
+			return nil, 0, false, err
 		}
 		out = append(out, rec)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, 0, false, err
 	}
-	return out, nil
+	hasMore := len(out) > limit
+	if hasMore {
+		out = out[:limit]
+	}
+	nextCursor := cursor
+	if len(out) > 0 {
+		nextCursor = out[len(out)-1].ID
+	}
+	return out, nextCursor, hasMore, nil
+}
+
+func (s *Store) pruneRunEventsForThread(ctx context.Context, endpointID string, threadID string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid request")
+	}
+
+	if runEventRetentionMaxAge > 0 {
+		minAtUnixMs := time.Now().Add(-runEventRetentionMaxAge).UnixMilli()
+		if _, err := s.db.ExecContext(ctx, `
+DELETE FROM ai_run_events
+WHERE endpoint_id = ? AND thread_id = ? AND at_unix_ms > 0 AND at_unix_ms < ?
+`, endpointID, threadID, minAtUnixMs); err != nil {
+			return err
+		}
+	}
+
+	if runEventRetentionMaxPerThread > 0 {
+		if _, err := s.db.ExecContext(ctx, `
+DELETE FROM ai_run_events
+WHERE id IN (
+  SELECT id
+  FROM ai_run_events
+  WHERE endpoint_id = ? AND thread_id = ?
+  ORDER BY id DESC
+  LIMIT -1 OFFSET ?
+)
+`, endpointID, threadID, runEventRetentionMaxPerThread); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func boolToInt(v bool) int {

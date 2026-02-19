@@ -1844,8 +1844,10 @@ mainLoop:
 			compactStats := toolReferenceIntegrityStats{}
 			var pruneStats toolResultPruneStats
 			compactApplied := false
+			compactionID := newRunCompactionID(r.id, step)
 
-			r.persistRunEvent("context.compaction.started", RealtimeStreamKindLifecycle, map[string]any{
+			r.emitContextCompactionEvent("context.compaction.started", map[string]any{
+				"compaction_id":            compactionID,
 				"step_index":               step,
 				"strategy":                 "pipeline",
 				"estimate_tokens_before":   beforeEstimateTokens,
@@ -1875,7 +1877,8 @@ mainLoop:
 					messages = buildMessagesFromPromptPack(req.ContextPack, req.Input.Text)
 					compactApplied = true
 				} else if compactErr != nil {
-					r.persistRunEvent("context.compaction.failed", RealtimeStreamKindLifecycle, map[string]any{
+					r.emitContextCompactionEvent("context.compaction.failed", map[string]any{
+						"compaction_id":       compactionID,
 						"step_index":          step,
 						"strategy":            "prompt_pack",
 						"estimate_tokens":     beforeEstimateTokens,
@@ -1922,7 +1925,8 @@ mainLoop:
 			turnReq.Messages = turnMessages
 			afterEstimateTokens, _ := estimateTurnTokens(providerType, turnReq)
 			if compactApplied {
-				r.persistRunEvent("context.compaction.applied", RealtimeStreamKindLifecycle, map[string]any{
+				r.emitContextCompactionEvent("context.compaction.applied", map[string]any{
+					"compaction_id":              compactionID,
 					"step_index":                 step,
 					"strategy":                   compactStrategy,
 					"messages_before":            beforeCount,
@@ -1941,7 +1945,8 @@ mainLoop:
 					"tool_result_protected_from": pruneStats.ProtectedStartIndex,
 				})
 			} else {
-				r.persistRunEvent("context.compaction.skipped", RealtimeStreamKindLifecycle, map[string]any{
+				r.emitContextCompactionEvent("context.compaction.skipped", map[string]any{
+					"compaction_id":          compactionID,
 					"step_index":             step,
 					"reason":                 "no_effect",
 					"strategy":               compactStrategy,
@@ -1953,7 +1958,8 @@ mainLoop:
 				})
 			}
 		} else {
-			r.persistRunEvent("context.compaction.skipped", RealtimeStreamKindLifecycle, map[string]any{
+			r.emitContextCompactionEvent("context.compaction.skipped", map[string]any{
+				"compaction_id":          newRunCompactionID(r.id, step),
 				"step_index":             step,
 				"reason":                 "below_threshold",
 				"estimate_tokens_before": estimateTokens,
@@ -1983,6 +1989,21 @@ mainLoop:
 			})
 			turnReq.Messages = repaired
 		}
+		estimateTokens, estimateSource = estimateTurnTokens(providerType, turnReq)
+		state.EstimateSource = estimateSource
+		r.emitContextUsageEvent(contextUsageEventInput{
+			StepIndex:             step,
+			EstimateTokens:        estimateTokens,
+			EstimateSource:        estimateSource,
+			ContextLimit:          contextLimit,
+			EffectiveThreshold:    compactThreshold,
+			ConfiguredThreshold:   normalizeCompactionThreshold(req.Options.CompactionThreshold),
+			WindowBasedThreshold:  deriveModelWindowCompactionThreshold(contextLimit, turnReq.Budgets.MaxOutputToken),
+			TurnMessagesCount:     len(turnReq.Messages),
+			HistoryMessagesCount:  len(messages),
+			PromptPackEstimated:   req.ContextPack.EstimatedInputTokens,
+			ContextSectionsTokens: req.ContextPack.ContextSectionsTokenUsage,
+		})
 
 		turnTextSeen := false
 		runTurn := func(req TurnRequest) (TurnResult, error) {
@@ -2034,6 +2055,21 @@ mainLoop:
 					"prepended_declarations": stats.PrependedAssistantMessages,
 				})
 				turnReq.Messages = repaired
+				estimateTokens, estimateSource = estimateTurnTokens(providerType, turnReq)
+				state.EstimateSource = estimateSource
+				r.emitContextUsageEvent(contextUsageEventInput{
+					StepIndex:             step,
+					EstimateTokens:        estimateTokens,
+					EstimateSource:        estimateSource,
+					ContextLimit:          contextLimit,
+					EffectiveThreshold:    compactThreshold,
+					ConfiguredThreshold:   normalizeCompactionThreshold(req.Options.CompactionThreshold),
+					WindowBasedThreshold:  deriveModelWindowCompactionThreshold(contextLimit, turnReq.Budgets.MaxOutputToken),
+					TurnMessagesCount:     len(turnReq.Messages),
+					HistoryMessagesCount:  len(messages),
+					PromptPackEstimated:   req.ContextPack.EstimatedInputTokens,
+					ContextSectionsTokens: req.ContextPack.ContextSectionsTokenUsage,
+				})
 				turnTextSeen = false
 				stepResult, stepErr = runTurn(turnReq)
 				r.persistRunEvent("provider.retry.after_integrity_repair", RealtimeStreamKindLifecycle, map[string]any{
@@ -2825,6 +2861,23 @@ func (r *run) runNativeConversational(
 		ProviderControls: ProviderControls{ThinkingBudgetTokens: req.Options.ThinkingBudgetTokens, CacheControl: req.Options.CacheControl, ResponseFormat: req.Options.ResponseFormat, Temperature: req.Options.Temperature, TopP: req.Options.TopP},
 	}
 	estimateTokens, estimateSource := estimateTurnTokens(providerType, turnReq)
+	contextLimit := nativeDefaultContextLimit
+	if req.ModelCapability.MaxContextTokens > 0 {
+		contextLimit = req.ModelCapability.MaxContextTokens
+	}
+	r.emitContextUsageEvent(contextUsageEventInput{
+		StepIndex:             0,
+		EstimateTokens:        estimateTokens,
+		EstimateSource:        estimateSource,
+		ContextLimit:          contextLimit,
+		EffectiveThreshold:    resolveCompactionThreshold(req.Options.CompactionThreshold, contextLimit, turnReq.Budgets.MaxOutputToken),
+		ConfiguredThreshold:   normalizeCompactionThreshold(req.Options.CompactionThreshold),
+		WindowBasedThreshold:  deriveModelWindowCompactionThreshold(contextLimit, turnReq.Budgets.MaxOutputToken),
+		TurnMessagesCount:     len(turnReq.Messages),
+		HistoryMessagesCount:  len(messages),
+		PromptPackEstimated:   req.ContextPack.EstimatedInputTokens,
+		ContextSectionsTokens: req.ContextPack.ContextSectionsTokenUsage,
+	})
 	endBusy := r.beginBusy()
 	stepResult, stepErr := adapter.StreamTurn(execCtx, turnReq, func(event StreamEvent) {
 		switch event.Type {
@@ -3086,6 +3139,120 @@ func estimateTextTokens(text string) int {
 		return 0
 	}
 	return len([]rune(text))/4 + 1
+}
+
+type contextUsageEventInput struct {
+	StepIndex             int
+	EstimateTokens        int
+	EstimateSource        string
+	ContextLimit          int
+	EffectiveThreshold    float64
+	ConfiguredThreshold   float64
+	WindowBasedThreshold  float64
+	TurnMessagesCount     int
+	HistoryMessagesCount  int
+	PromptPackEstimated   int
+	ContextSectionsTokens map[string]int
+}
+
+func newRunCompactionID(runID string, stepIndex int) string {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		runID = "run"
+	}
+	base := fmt.Sprintf("%s|%d|%d", runID, stepIndex, time.Now().UnixNano())
+	sum := sha256.Sum256([]byte(base))
+	return "cmp_" + hex.EncodeToString(sum[:6])
+}
+
+func cloneIntMapToAny(in map[string]int) map[string]any {
+	if len(in) == 0 {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if value < 0 {
+			continue
+		}
+		out[key] = value
+	}
+	return out
+}
+
+func (r *run) emitContextUsageEvent(input contextUsageEventInput) {
+	if r == nil {
+		return
+	}
+	limit := input.ContextLimit
+	if limit <= 0 {
+		limit = nativeDefaultContextLimit
+	}
+	pressure := 0.0
+	if limit > 0 {
+		pressure = float64(input.EstimateTokens) / float64(limit)
+	}
+	usageBySection := cloneIntMapToAny(input.ContextSectionsTokens)
+	sectionsTotal := 0
+	for _, raw := range usageBySection {
+		value, ok := raw.(int)
+		if !ok {
+			continue
+		}
+		sectionsTotal += value
+	}
+	if sectionsTotal < 0 {
+		sectionsTotal = 0
+	}
+	unattributedTokens := input.EstimateTokens - sectionsTotal
+	if unattributedTokens < 0 {
+		unattributedTokens = 0
+	}
+	payload := map[string]any{
+		"step_index":               input.StepIndex,
+		"estimate_tokens":          input.EstimateTokens,
+		"estimate_source":          strings.TrimSpace(input.EstimateSource),
+		"context_limit":            limit,
+		"pressure":                 pressure,
+		"usage_percent":            pressure * 100,
+		"effective_threshold":      input.EffectiveThreshold,
+		"configured_threshold":     input.ConfiguredThreshold,
+		"window_based_threshold":   input.WindowBasedThreshold,
+		"turn_messages":            input.TurnMessagesCount,
+		"history_messages":         input.HistoryMessagesCount,
+		"prompt_pack_estimate":     input.PromptPackEstimated,
+		"sections_tokens":          usageBySection,
+		"sections_tokens_total":    sectionsTotal,
+		"unattributed_tokens":      unattributedTokens,
+		"context_sections_present": len(usageBySection) > 0,
+	}
+	r.persistRunEvent("context.usage.updated", RealtimeStreamKindContext, payload)
+	r.sendStreamEvent(streamEventContextUsage{
+		Type:    "context-usage",
+		Payload: cloneAnyMap(payload),
+	})
+}
+
+func (r *run) emitContextCompactionEvent(eventType string, payload map[string]any) {
+	if r == nil {
+		return
+	}
+	eventType = strings.TrimSpace(eventType)
+	if eventType == "" {
+		return
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	r.persistRunEvent(eventType, RealtimeStreamKindContext, payload)
+	r.sendStreamEvent(streamEventContextCompaction{
+		Type:      "context-compaction",
+		EventType: eventType,
+		Payload:   cloneAnyMap(payload),
+	})
 }
 
 func normalizeCompactionThreshold(input float64) float64 {

@@ -645,6 +645,18 @@ func (s *Service) AppendThreadMessage(ctx context.Context, meta *session.Meta, t
 }
 
 func (s *Service) ListRunEvents(ctx context.Context, meta *session.Meta, runID string, limit int) (*ListRunEventsResponse, error) {
+	return s.ListRunEventsWithQuery(ctx, meta, runID, ListRunEventsQuery{
+		Limit: limit,
+	})
+}
+
+type ListRunEventsQuery struct {
+	Cursor   int64
+	Limit    int
+	Category string
+}
+
+func (s *Service) ListRunEventsWithQuery(ctx context.Context, meta *session.Meta, runID string, query ListRunEventsQuery) (*ListRunEventsResponse, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -662,11 +674,19 @@ func (s *Service) ListRunEvents(ctx context.Context, meta *session.Meta, runID s
 		return nil, errors.New("threads store not ready")
 	}
 
-	recs, err := db.ListRunEvents(ctx, strings.TrimSpace(meta.EndpointID), runID, limit)
+	recs, nextCursor, hasMore, err := db.ListRunEventsPage(ctx, strings.TrimSpace(meta.EndpointID), runID, threadstore.RunEventsQuery{
+		Cursor:   query.Cursor,
+		Limit:    query.Limit,
+		Category: query.Category,
+	})
 	if err != nil {
 		return nil, err
 	}
-	out := &ListRunEventsResponse{Events: make([]RunEventView, 0, len(recs))}
+	out := &ListRunEventsResponse{
+		Events:     make([]RunEventView, 0, len(recs)),
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	}
 	for _, rec := range recs {
 		payload := any(nil)
 		if raw := strings.TrimSpace(rec.PayloadJSON); raw != "" {
@@ -676,6 +696,7 @@ func (s *Service) ListRunEvents(ctx context.Context, meta *session.Meta, runID s
 			}
 		}
 		out.Events = append(out.Events, RunEventView{
+			EventID:    rec.ID,
 			RunID:      strings.TrimSpace(rec.RunID),
 			ThreadID:   strings.TrimSpace(rec.ThreadID),
 			StreamKind: strings.TrimSpace(rec.StreamKind),
