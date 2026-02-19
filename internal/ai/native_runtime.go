@@ -1823,7 +1823,11 @@ mainLoop:
 		state.EstimateSource = estimateSource
 		pressure := float64(estimateTokens) / float64(contextLimit)
 		if pressure >= nativeCompactThreshold {
+			beforeCount := len(messages)
+			compactStrategy := "round_boundary"
+			compactStats := toolReferenceIntegrityStats{}
 			if req.ContextPack.ThreadID != "" {
+				compactStrategy = "prompt_pack"
 				targetTokens := req.Options.MaxInputTokens
 				if targetTokens <= 0 {
 					targetTokens = contextLimit
@@ -1833,37 +1837,123 @@ mainLoop:
 					req.ContextPack = compressed
 					messages = buildMessagesFromPromptPack(req.ContextPack, req.Input.Text)
 				} else {
-					messages = compactMessages(messages)
+					compactStrategy = "round_boundary_fallback"
+					messages, compactStats = compactMessages(messages)
 				}
 			} else {
-				messages = compactMessages(messages)
+				messages, compactStats = compactMessages(messages)
+			}
+			if compactStats.hasChanges() {
+				if len(compactStats.OrphanToolCallIDs) > 0 {
+					r.persistRunEvent("context.integrity.orphan_detected", RealtimeStreamKindLifecycle, map[string]any{
+						"step_index":             step,
+						"source":                 "compaction",
+						"orphan_count":           len(compactStats.OrphanToolCallIDs),
+						"orphan_tool_call_ids":   compactStats.OrphanToolCallIDs,
+						"prepended_declarations": compactStats.PrependedAssistantMessages,
+					})
+				}
+				r.persistRunEvent("context.integrity.repair_applied", RealtimeStreamKindLifecycle, map[string]any{
+					"step_index":             step,
+					"source":                 "compaction",
+					"dropped_orphan_results": compactStats.DroppedToolResultParts,
+					"dropped_tool_messages":  compactStats.DroppedToolMessages,
+					"prepended_declarations": compactStats.PrependedAssistantMessages,
+				})
 			}
 			state = syncRuntimeStateAfterCompact(state, messages)
+			r.persistRunEvent("context.compaction.applied", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":      step,
+				"strategy":        compactStrategy,
+				"messages_before": beforeCount,
+				"messages_after":  len(messages),
+				"estimate_tokens": estimateTokens,
+				"context_limit":   contextLimit,
+				"pressure":        pressure,
+			})
 			turnMessages = composeTurnMessages(systemPrompt, messages)
 			turnReq.Messages = turnMessages
 		}
 
-		turnTextSeen := false
-		endBusy := r.beginBusy()
-		stepResult, stepErr := adapter.StreamTurn(execCtx, turnReq, func(event StreamEvent) {
-			switch event.Type {
-			case StreamEventTextDelta:
-				if strings.TrimSpace(event.Text) != "" {
-					turnTextSeen = true
-					r.touchActivity()
-					_ = r.appendTextDelta(event.Text)
-				}
-			case StreamEventThinkingDelta:
-				if strings.TrimSpace(event.Text) != "" {
-					r.persistRunEvent("thinking.delta", RealtimeStreamKindLifecycle, map[string]any{"delta": truncateRunes(event.Text, 2000)})
-				}
-			case StreamEventToolCallDelta:
-				if event.ToolCall != nil {
-					_ = scheduler.HandlePartial(execCtx, *event.ToolCall)
-				}
+		if repaired, stats := enforceToolReferenceIntegrity(turnReq.Messages, nil); stats.hasChanges() {
+			if len(stats.OrphanToolCallIDs) > 0 {
+				r.persistRunEvent("context.integrity.orphan_detected", RealtimeStreamKindLifecycle, map[string]any{
+					"step_index":           step,
+					"source":               "pre_send_gate",
+					"orphan_count":         len(stats.OrphanToolCallIDs),
+					"orphan_tool_call_ids": stats.OrphanToolCallIDs,
+				})
 			}
-		})
-		endBusy()
+			r.persistRunEvent("context.integrity.repair_applied", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":             step,
+				"source":                 "pre_send_gate",
+				"dropped_orphan_results": stats.DroppedToolResultParts,
+				"dropped_tool_messages":  stats.DroppedToolMessages,
+				"prepended_declarations": stats.PrependedAssistantMessages,
+			})
+			turnReq.Messages = repaired
+		}
+
+		turnTextSeen := false
+		runTurn := func(req TurnRequest) (TurnResult, error) {
+			endBusy := r.beginBusy()
+			result, err := adapter.StreamTurn(execCtx, req, func(event StreamEvent) {
+				switch event.Type {
+				case StreamEventTextDelta:
+					if strings.TrimSpace(event.Text) != "" {
+						turnTextSeen = true
+						r.touchActivity()
+						_ = r.appendTextDelta(event.Text)
+					}
+				case StreamEventThinkingDelta:
+					if strings.TrimSpace(event.Text) != "" {
+						r.persistRunEvent("thinking.delta", RealtimeStreamKindLifecycle, map[string]any{"delta": truncateRunes(event.Text, 2000)})
+					}
+				case StreamEventToolCallDelta:
+					if event.ToolCall != nil {
+						_ = scheduler.HandlePartial(execCtx, *event.ToolCall)
+					}
+				}
+			})
+			endBusy()
+			return result, err
+		}
+		stepResult, stepErr := runTurn(turnReq)
+		if stepErr != nil && isProviderToolCallReferenceError(stepErr) {
+			r.persistRunEvent("provider.error.classified", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":    step,
+				"class":         "provider_protocol_tool_call_reference",
+				"provider_type": providerType,
+				"error":         sanitizeLogText(stepErr.Error(), 240),
+			})
+			repaired, stats := enforceToolReferenceIntegrity(turnReq.Messages, nil)
+			if stats.hasChanges() {
+				if len(stats.OrphanToolCallIDs) > 0 {
+					r.persistRunEvent("context.integrity.orphan_detected", RealtimeStreamKindLifecycle, map[string]any{
+						"step_index":           step,
+						"source":               "provider_retry",
+						"orphan_count":         len(stats.OrphanToolCallIDs),
+						"orphan_tool_call_ids": stats.OrphanToolCallIDs,
+					})
+				}
+				r.persistRunEvent("context.integrity.repair_applied", RealtimeStreamKindLifecycle, map[string]any{
+					"step_index":             step,
+					"source":                 "provider_retry",
+					"dropped_orphan_results": stats.DroppedToolResultParts,
+					"dropped_tool_messages":  stats.DroppedToolMessages,
+					"prepended_declarations": stats.PrependedAssistantMessages,
+				})
+				turnReq.Messages = repaired
+				turnTextSeen = false
+				stepResult, stepErr = runTurn(turnReq)
+				r.persistRunEvent("provider.retry.after_integrity_repair", RealtimeStreamKindLifecycle, map[string]any{
+					"step_index":    step,
+					"attempt":       1,
+					"provider_type": providerType,
+					"success":       stepErr == nil,
+				})
+			}
+		}
 		if stepErr != nil {
 			recoveryCount++
 			if r.finalizeIfContextCanceled(execCtx) {
@@ -2887,16 +2977,30 @@ func estimateTurnTokens(providerType string, req TurnRequest) (int, string) {
 	return estimate, "heuristic"
 }
 
-func compactMessages(messages []Message) []Message {
+type toolReferenceIntegrityStats struct {
+	OrphanToolCallIDs          []string
+	PrependedAssistantMessages int
+	DroppedToolResultParts     int
+	DroppedToolMessages        int
+}
+
+func (s toolReferenceIntegrityStats) hasChanges() bool {
+	return len(s.OrphanToolCallIDs) > 0 || s.PrependedAssistantMessages > 0 || s.DroppedToolResultParts > 0 || s.DroppedToolMessages > 0
+}
+
+func compactMessages(messages []Message) ([]Message, toolReferenceIntegrityStats) {
+	stats := toolReferenceIntegrityStats{}
 	if len(messages) <= 12 {
-		return append([]Message(nil), messages...)
+		out := cloneMessages(messages)
+		out, gateStats := enforceToolReferenceIntegrity(out, nil)
+		return out, mergeToolReferenceStats(stats, gateStats)
 	}
 	keepRecent := 10
 	if keepRecent > len(messages) {
 		keepRecent = len(messages)
 	}
-	archived := messages[:len(messages)-keepRecent]
-	recent := append([]Message(nil), messages[len(messages)-keepRecent:]...)
+	archived := cloneMessages(messages[:len(messages)-keepRecent])
+	recent := cloneMessages(messages[len(messages)-keepRecent:])
 	summaryLines := make([]string, 0, len(archived))
 	for _, msg := range archived {
 		role := strings.ToLower(strings.TrimSpace(msg.Role))
@@ -2944,8 +3048,264 @@ func compactMessages(messages []Message) []Message {
 			}
 		}
 	}
+	var repairStats toolReferenceIntegrityStats
+	recent, repairStats = enforceToolReferenceIntegrity(recent, archived)
+	stats = mergeToolReferenceStats(stats, repairStats)
 	compacted = append(compacted, recent...)
-	return compacted
+	compacted, gateStats := enforceToolReferenceIntegrity(compacted, nil)
+	stats = mergeToolReferenceStats(stats, gateStats)
+	return compacted, stats
+}
+
+func mergeToolReferenceStats(base toolReferenceIntegrityStats, other toolReferenceIntegrityStats) toolReferenceIntegrityStats {
+	if len(other.OrphanToolCallIDs) > 0 {
+		existing := make(map[string]struct{}, len(base.OrphanToolCallIDs))
+		for _, id := range base.OrphanToolCallIDs {
+			existing[strings.TrimSpace(id)] = struct{}{}
+		}
+		for _, id := range other.OrphanToolCallIDs {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			if _, ok := existing[id]; ok {
+				continue
+			}
+			existing[id] = struct{}{}
+			base.OrphanToolCallIDs = append(base.OrphanToolCallIDs, id)
+		}
+	}
+	base.PrependedAssistantMessages += other.PrependedAssistantMessages
+	base.DroppedToolResultParts += other.DroppedToolResultParts
+	base.DroppedToolMessages += other.DroppedToolMessages
+	return base
+}
+
+func cloneMessages(messages []Message) []Message {
+	if len(messages) == 0 {
+		return nil
+	}
+	out := make([]Message, 0, len(messages))
+	for _, msg := range messages {
+		cloned := Message{
+			Role:    msg.Role,
+			Content: make([]ContentPart, 0, len(msg.Content)),
+		}
+		for _, part := range msg.Content {
+			cp := part
+			if len(part.JSON) > 0 {
+				cp.JSON = append([]byte(nil), part.JSON...)
+			}
+			cloned.Content = append(cloned.Content, cp)
+		}
+		out = append(out, cloned)
+	}
+	return out
+}
+
+func enforceToolReferenceIntegrity(messages []Message, archived []Message) ([]Message, toolReferenceIntegrityStats) {
+	current := cloneMessages(messages)
+	stats := toolReferenceIntegrityStats{}
+	if len(current) == 0 {
+		return current, stats
+	}
+
+	missing := findMissingToolCallIDs(current)
+	if len(missing) > 0 {
+		stats.OrphanToolCallIDs = append(stats.OrphanToolCallIDs, missing...)
+	}
+
+	if len(archived) > 0 && len(missing) > 0 {
+		recovered := collectAssistantDeclarationsForCallIDs(archived, missing)
+		if len(recovered) > 0 {
+			stats.PrependedAssistantMessages = len(recovered)
+			prefixed := make([]Message, 0, len(recovered)+len(current))
+			prefixed = append(prefixed, cloneMessages(recovered)...)
+			prefixed = append(prefixed, current...)
+			current = prefixed
+		}
+	}
+
+	declared := make(map[string]struct{}, 8)
+	out := make([]Message, 0, len(current))
+	for _, msg := range current {
+		role := strings.ToLower(strings.TrimSpace(msg.Role))
+		if role == "assistant" {
+			for _, callID := range toolCallIDsFromAssistantMessage(msg) {
+				declared[callID] = struct{}{}
+			}
+			out = append(out, msg)
+			continue
+		}
+		if role != "tool" {
+			out = append(out, msg)
+			continue
+		}
+		filtered := make([]ContentPart, 0, len(msg.Content))
+		dropped := 0
+		for _, part := range msg.Content {
+			if strings.ToLower(strings.TrimSpace(part.Type)) != "tool_result" {
+				filtered = append(filtered, part)
+				continue
+			}
+			callID := toolCallIDFromPart(part)
+			if callID == "" {
+				dropped++
+				continue
+			}
+			if _, ok := declared[callID]; !ok {
+				dropped++
+				continue
+			}
+			filtered = append(filtered, part)
+		}
+		if dropped > 0 {
+			stats.DroppedToolResultParts += dropped
+		}
+		if len(filtered) == 0 {
+			stats.DroppedToolMessages++
+			continue
+		}
+		msg.Content = filtered
+		out = append(out, msg)
+	}
+	return out, stats
+}
+
+func findMissingToolCallIDs(messages []Message) []string {
+	if len(messages) == 0 {
+		return nil
+	}
+	declared := make(map[string]struct{}, 8)
+	missingSet := make(map[string]struct{}, 4)
+	order := make([]string, 0, 4)
+	for _, msg := range messages {
+		role := strings.ToLower(strings.TrimSpace(msg.Role))
+		switch role {
+		case "assistant":
+			for _, callID := range toolCallIDsFromAssistantMessage(msg) {
+				declared[callID] = struct{}{}
+			}
+		case "tool":
+			for _, part := range msg.Content {
+				if strings.ToLower(strings.TrimSpace(part.Type)) != "tool_result" {
+					continue
+				}
+				callID := toolCallIDFromPart(part)
+				if callID == "" {
+					continue
+				}
+				if _, ok := declared[callID]; ok {
+					continue
+				}
+				if _, seen := missingSet[callID]; seen {
+					continue
+				}
+				missingSet[callID] = struct{}{}
+				order = append(order, callID)
+			}
+		}
+	}
+	return order
+}
+
+func collectAssistantDeclarationsForCallIDs(archived []Message, callIDs []string) []Message {
+	if len(archived) == 0 || len(callIDs) == 0 {
+		return nil
+	}
+	need := make(map[string]struct{}, len(callIDs))
+	for _, id := range callIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		need[id] = struct{}{}
+	}
+	if len(need) == 0 {
+		return nil
+	}
+	indexSet := make(map[int]struct{}, len(need))
+	for i := len(archived) - 1; i >= 0; i-- {
+		msg := archived[i]
+		if strings.ToLower(strings.TrimSpace(msg.Role)) != "assistant" {
+			continue
+		}
+		ids := toolCallIDsFromAssistantMessage(msg)
+		if len(ids) == 0 {
+			continue
+		}
+		hit := false
+		for _, id := range ids {
+			if _, ok := need[id]; ok {
+				delete(need, id)
+				hit = true
+			}
+		}
+		if hit {
+			indexSet[i] = struct{}{}
+		}
+		if len(need) == 0 {
+			break
+		}
+	}
+	if len(indexSet) == 0 {
+		return nil
+	}
+	indexes := make([]int, 0, len(indexSet))
+	for idx := range indexSet {
+		indexes = append(indexes, idx)
+	}
+	sort.Ints(indexes)
+	out := make([]Message, 0, len(indexes))
+	for _, idx := range indexes {
+		out = append(out, archived[idx])
+	}
+	return out
+}
+
+func toolCallIDsFromAssistantMessage(msg Message) []string {
+	if strings.ToLower(strings.TrimSpace(msg.Role)) != "assistant" {
+		return nil
+	}
+	out := make([]string, 0, 2)
+	seen := make(map[string]struct{}, 2)
+	for _, part := range msg.Content {
+		if strings.ToLower(strings.TrimSpace(part.Type)) != "tool_call" {
+			continue
+		}
+		callID := toolCallIDFromPart(part)
+		if callID == "" {
+			continue
+		}
+		if _, ok := seen[callID]; ok {
+			continue
+		}
+		seen[callID] = struct{}{}
+		out = append(out, callID)
+	}
+	return out
+}
+
+func toolCallIDFromPart(part ContentPart) string {
+	callID := strings.TrimSpace(part.ToolCallID)
+	if callID == "" {
+		callID = strings.TrimSpace(part.ToolUseID)
+	}
+	return callID
+}
+
+func isProviderToolCallReferenceError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	if msg == "" {
+		return false
+	}
+	if !strings.Contains(msg, "tool_call_id") && !strings.Contains(msg, "tool call id") {
+		return false
+	}
+	return strings.Contains(msg, "not found")
 }
 
 func syncRuntimeStateAfterCompact(state runtimeState, messages []Message) runtimeState {
