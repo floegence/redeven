@@ -752,62 +752,109 @@ function CompactTasksSummary(props: {
         {/* Expanded panel */}
         <div class={cn(
           'absolute bottom-full left-0 mb-1.5 z-50',
-          'w-80 max-sm:w-[calc(100vw-2rem)]',
-          'rounded-xl border border-border/70 bg-card shadow-lg shadow-black/10',
-          'backdrop-blur-md',
+          'w-[22rem] max-sm:w-[calc(100vw-2rem)]',
+          'rounded-xl overflow-hidden',
+          'border border-border/60 bg-card shadow-xl shadow-black/12',
+          'backdrop-blur-xl',
           'chat-tasks-panel chat-tasks-panel-open',
         )}>
-          <div class="px-3 py-2.5">
-            <div class="flex items-center justify-between gap-2 mb-2">
-              <div class="text-xs font-medium text-foreground">Tasks</div>
-              <div class="text-[11px] text-muted-foreground">
-                {props.unresolvedCount} open
+          {/* Accent line */}
+          <div class="h-[2px] bg-gradient-to-r from-emerald-500/50 via-emerald-500/20 to-transparent" />
+
+          {/* Header */}
+          <div class="px-3.5 pt-2.5 pb-2 border-b border-border/50 bg-gradient-to-b from-muted/40 to-transparent">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <CheckCircle class="w-3.5 h-3.5 text-emerald-500/70" />
+                <span class="text-[13px] font-semibold text-foreground tracking-tight">Tasks</span>
+                <span class="text-[10px] font-semibold tabular-nums text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-px leading-none">
+                  {props.todos.length}
+                </span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <Show when={props.unresolvedCount > 0}>
+                  <span class="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-1.5 py-px">
+                    {props.unresolvedCount} open
+                  </span>
+                </Show>
+                <Show when={doneCount() > 0}>
+                  <span class="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-1.5 py-px">
+                    {doneCount()} done
+                  </span>
+                </Show>
               </div>
             </div>
+          </div>
 
-            <Show when={props.executionMode === 'plan' && props.unresolvedCount > 0}>
-              <div class="text-[11px] text-muted-foreground mb-2">
-                Switch to Act to execute these tasks
-              </div>
-            </Show>
+          <Show when={props.executionMode === 'plan' && props.unresolvedCount > 0}>
+            <div class="px-3.5 py-1.5 border-b border-border/40 bg-amber-500/5 text-[10.5px] text-amber-600 dark:text-amber-400">
+              Switch to Act to execute these tasks
+            </div>
+          </Show>
 
-            <Show when={!props.todosLoading || props.todos.length > 0} fallback={
-              <div class="text-[11px] text-muted-foreground py-2">Loading tasks...</div>
+          <Show when={!props.todosLoading || props.todos.length > 0} fallback={
+            <div class="px-3.5 py-4 text-[11px] text-muted-foreground text-center">Loading tasks...</div>
+          }>
+            <Show when={!props.todosError} fallback={
+              <div class="px-3.5 py-3 text-[11px] text-error">{props.todosError}</div>
             }>
-              <Show when={!props.todosError} fallback={
-                <div class="text-[11px] text-error py-2">{props.todosError}</div>
+              <Show when={props.todos.length > 0} fallback={
+                <div class="px-3.5 py-4 text-[11px] text-muted-foreground text-center">No tasks yet.</div>
               }>
-                <Show when={props.todos.length > 0} fallback={
-                  <div class="text-[11px] text-muted-foreground py-2">No tasks yet.</div>
-                }>
-                  <div class="space-y-1.5 max-h-52 overflow-auto pr-1">
+                <div class="max-h-56 overflow-auto">
+                  <div class="flex flex-col gap-1.5 p-2.5">
                     <For each={props.todos}>
-                      {(item) => (
-                        <div class="rounded-md border border-border/60 bg-background/70 px-2 py-1.5">
-                          <div class="flex items-center gap-2">
-                            <span class={cn('inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium shrink-0', todoStatusBadgeClass(item.status))}>
-                              {todoStatusLabel(item.status)}
-                            </span>
-                            <span class="text-xs text-foreground leading-relaxed break-words">{item.content}</span>
-                          </div>
-                          <Show when={item.note}>
-                            <div class="mt-1 text-[11px] text-muted-foreground leading-relaxed break-words">
-                              {item.note}
+                      {(item) => {
+                        const borderColor = (): string => {
+                          if (item.status === 'completed') return 'border-l-emerald-500';
+                          if (item.status === 'in_progress') return 'border-l-blue-500';
+                          if (item.status === 'cancelled') return 'border-l-muted-foreground';
+                          return 'border-l-amber-500';
+                        };
+                        return (
+                          <div class={cn(
+                            'rounded-lg border border-border/55 bg-background/80 overflow-hidden',
+                            'border-l-[3px] transition-colors',
+                            borderColor(),
+                          )}>
+                            <div class="flex items-start gap-2 px-2.5 py-2">
+                              <span class={cn(
+                                'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold shrink-0 mt-px',
+                                todoStatusBadgeClass(item.status),
+                              )}>
+                                {todoStatusLabel(item.status)}
+                              </span>
+                              <div class="min-w-0 flex-1">
+                                <span class={cn(
+                                  'text-[11.5px] leading-snug break-words',
+                                  item.status === 'completed'
+                                    ? 'text-muted-foreground line-through decoration-muted-foreground/50'
+                                    : 'text-foreground font-medium',
+                                )}>
+                                  {item.content}
+                                </span>
+                                <Show when={item.note}>
+                                  <p class="mt-1 text-[10.5px] text-muted-foreground/80 leading-snug m-0 break-words">
+                                    {item.note}
+                                  </p>
+                                </Show>
+                              </div>
                             </div>
-                          </Show>
-                        </div>
-                      )}
+                          </div>
+                        );
+                      }}
                     </For>
                   </div>
-                </Show>
-
-                <div class="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
-                  <span>Version {props.todosView?.version ?? 0}</span>
-                  <span>{props.todoUpdatedLabel ? `Updated ${props.todoUpdatedLabel}` : ''}</span>
                 </div>
               </Show>
+
+              {/* Footer */}
+              <div class="flex items-center justify-between px-3.5 py-1.5 border-t border-border/40 bg-muted/15 text-[10px] text-muted-foreground/70">
+                <span>v{props.todosView?.version ?? 0}</span>
+                <span>{props.todoUpdatedLabel ? `Updated ${props.todoUpdatedLabel}` : ''}</span>
+              </div>
             </Show>
-          </div>
+          </Show>
         </div>
       </Show>
     </div>
@@ -1005,7 +1052,8 @@ function CompactSubagentsSummary(props: {
           <Show when={props.subagents.length > 0} fallback={
             <div class="px-3.5 py-4 text-[11px] text-muted-foreground text-center">No subagents yet.</div>
           }>
-            <div class="flex flex-col gap-2 max-h-72 overflow-auto p-2.5">
+            <div class="max-h-72 overflow-auto">
+            <div class="flex flex-col gap-2 p-2.5">
               <For each={props.subagents}>
                 {(item) => {
                   const borderColor = (): string => {
@@ -1103,6 +1151,7 @@ function CompactSubagentsSummary(props: {
                   );
                 }}
               </For>
+            </div>
             </div>
           </Show>
         </div>
