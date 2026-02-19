@@ -169,6 +169,10 @@ type RunOptions struct {
 	MaxInputTokens  int     `json:"max_input_tokens,omitempty"`
 	MaxOutputTokens int     `json:"max_output_tokens,omitempty"`
 	MaxCostUSD      float64 `json:"max_cost_usd,omitempty"`
+
+	// CompactionThreshold controls when runtime compaction is triggered.
+	// Value is a fraction in range [0,1]. 0 means use runtime default.
+	CompactionThreshold float64 `json:"compaction_threshold,omitempty"`
 }
 
 type ToolApprovalRequest struct {
