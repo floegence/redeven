@@ -81,6 +81,54 @@ func TestAIConfigValidate_MoonshotRequiresBaseURL(t *testing.T) {
 	}
 }
 
+func TestAIConfigValidate_ProviderTypeBaseURLRequirements(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		typ       string
+		baseURL   string
+		wantError bool
+	}{
+		{name: "openai_without_base_url", typ: "openai", baseURL: "", wantError: false},
+		{name: "anthropic_without_base_url", typ: "anthropic", baseURL: "", wantError: false},
+		{name: "openai_compatible_without_base_url", typ: "openai_compatible", baseURL: "", wantError: true},
+		{name: "moonshot_without_base_url", typ: "moonshot", baseURL: "", wantError: true},
+		{name: "chatglm_without_base_url", typ: "chatglm", baseURL: "", wantError: true},
+		{name: "deepseek_without_base_url", typ: "deepseek", baseURL: "", wantError: true},
+		{name: "qwen_without_base_url", typ: "qwen", baseURL: "", wantError: true},
+		{name: "chatglm_with_base_url", typ: "chatglm", baseURL: "https://open.bigmodel.cn/api/paas/v4/", wantError: false},
+		{name: "deepseek_with_base_url", typ: "deepseek", baseURL: "https://api.deepseek.com", wantError: false},
+		{name: "qwen_with_base_url", typ: "qwen", baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", wantError: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &AIConfig{
+				CurrentModelID: "provider/test-model",
+				Providers: []AIProvider{
+					{
+						ID:      "provider",
+						Name:    "Provider",
+						Type:    tc.typ,
+						BaseURL: tc.baseURL,
+						Models:  []AIProviderModel{{ModelName: "test-model"}},
+					},
+				},
+			}
+			err := cfg.Validate()
+			if tc.wantError && err == nil {
+				t.Fatalf("expected validation error, got nil")
+			}
+			if !tc.wantError && err != nil {
+				t.Fatalf("expected no validation error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestAIConfigValidate_OK(t *testing.T) {
 	t.Parallel()
 

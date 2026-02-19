@@ -38,7 +38,7 @@ type PermissionPolicy = Readonly<{
   by_app?: Record<string, PermissionSet>;
 }>;
 
-type AIProviderType = 'openai' | 'anthropic' | 'openai_compatible' | 'moonshot';
+type AIProviderType = 'openai' | 'anthropic' | 'moonshot' | 'chatglm' | 'deepseek' | 'qwen' | 'openai_compatible';
 type AIProviderModel = Readonly<{ model_name: string }>;
 type AIProvider = Readonly<{ id: string; name?: string; type: AIProviderType; base_url?: string; models: AIProviderModel[] }>;
 type AIExecutionPolicy = Readonly<{
@@ -214,6 +214,18 @@ type SettingsUpdateResponse = Readonly<{
 type PermissionRow = { key: string; read: boolean; write: boolean; execute: boolean };
 type AIProviderModelRow = { model_name: string };
 type AIProviderRow = { id: string; name: string; type: AIProviderType; base_url: string; models: AIProviderModelRow[] };
+type AIProviderModelPreset = Readonly<{
+  model_name: string;
+  context_window: number;
+  max_output_tokens?: number;
+  note?: string;
+}>;
+type AIProviderPreset = Readonly<{
+  type: AIProviderType;
+  name: string;
+  default_base_url: string;
+  models: readonly AIProviderModelPreset[];
+}>;
 type AIProviderDialogMode = 'create' | 'edit';
 type AIPreservedUIFields = {
   mode?: 'act' | 'plan';
@@ -232,6 +244,87 @@ const DEFAULT_CODE_SERVER_PORT_MIN = 20000;
 const DEFAULT_CODE_SERVER_PORT_MAX = 21000;
 const RELEASE_VERSION_RE = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const AUTO_SAVE_DELAY_MS = 700;
+const AI_PROVIDER_TYPE_OPTIONS: ReadonlyArray<{ value: AIProviderType; label: string }> = [
+  { value: 'openai', label: 'openai' },
+  { value: 'anthropic', label: 'anthropic' },
+  { value: 'moonshot', label: 'moonshot' },
+  { value: 'chatglm', label: 'chatglm' },
+  { value: 'deepseek', label: 'deepseek' },
+  { value: 'qwen', label: 'qwen' },
+  { value: 'openai_compatible', label: 'openai_compatible' },
+];
+
+const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset> = {
+  openai: {
+    type: 'openai',
+    name: 'OpenAI',
+    default_base_url: 'https://api.openai.com/v1',
+    models: [
+      { model_name: 'gpt-5.2', context_window: 400000, max_output_tokens: 128000, note: 'Latest flagship model' },
+      { model_name: 'gpt-5.2-mini', context_window: 400000, max_output_tokens: 128000, note: 'Cost-effective flagship variant' },
+      { model_name: 'gpt-5', context_window: 400000, max_output_tokens: 128000, note: 'Stable flagship' },
+      { model_name: 'gpt-5-mini', context_window: 400000, max_output_tokens: 128000, note: 'Stable lightweight option' },
+    ],
+  },
+  anthropic: {
+    type: 'anthropic',
+    name: 'Anthropic',
+    default_base_url: 'https://api.anthropic.com/v1',
+    models: [
+      { model_name: 'claude-opus-4-1-20250805', context_window: 200000, note: 'Highest quality flagship' },
+      { model_name: 'claude-sonnet-4-5-20250929', context_window: 200000, note: 'General-purpose flagship (1M context beta available)' },
+      { model_name: 'claude-haiku-4-5-20251001', context_window: 200000, note: 'Fast and lower-cost option (1M context beta available)' },
+    ],
+  },
+  moonshot: {
+    type: 'moonshot',
+    name: 'Moonshot',
+    default_base_url: 'https://api.moonshot.cn/v1',
+    models: [
+      { model_name: 'kimi-k2.5', context_window: 256000, note: 'Current all-round Kimi flagship' },
+      { model_name: 'kimi-k2-0905-preview', context_window: 256000, note: 'Agent and coding enhanced preview' },
+      { model_name: 'kimi-k2-thinking', context_window: 256000, note: 'Long-thinking model' },
+      { model_name: 'kimi-k2-thinking-turbo', context_window: 256000, note: 'Long-thinking model, faster output' },
+    ],
+  },
+  chatglm: {
+    type: 'chatglm',
+    name: 'ChatGLM',
+    default_base_url: 'https://open.bigmodel.cn/api/paas/v4/',
+    models: [
+      { model_name: 'glm-5', context_window: 200000, max_output_tokens: 128000, note: 'Latest flagship model' },
+      { model_name: 'glm-4.7', context_window: 200000, max_output_tokens: 16000, note: 'Stable flagship-level model' },
+      { model_name: 'glm-4.5-air', context_window: 128000, max_output_tokens: 16000, note: 'Balanced quality and speed' },
+      { model_name: 'glm-4.5-flash', context_window: 128000, max_output_tokens: 16000, note: 'Fast and low-latency option' },
+    ],
+  },
+  deepseek: {
+    type: 'deepseek',
+    name: 'DeepSeek',
+    default_base_url: 'https://api.deepseek.com',
+    models: [
+      { model_name: 'deepseek-chat', context_window: 128000, max_output_tokens: 64000, note: 'Maps to DeepSeek-V3.2-Exp' },
+      { model_name: 'deepseek-reasoner', context_window: 128000, max_output_tokens: 64000, note: 'Maps to DeepSeek-R1-0528' },
+    ],
+  },
+  qwen: {
+    type: 'qwen',
+    name: 'Qwen',
+    default_base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    models: [
+      { model_name: 'qwen3-max', context_window: 262144, max_output_tokens: 65536, note: 'Flagship model for complex tasks' },
+      { model_name: 'qwen-plus', context_window: 1000000, max_output_tokens: 32768, note: 'Balanced quality/speed/cost' },
+      { model_name: 'qwen-flash', context_window: 1000000, max_output_tokens: 65536, note: 'Fast and low-cost option' },
+      { model_name: 'qwen3-coder-plus', context_window: 1000000, max_output_tokens: 65536, note: 'Flagship coding model' },
+    ],
+  },
+  openai_compatible: {
+    type: 'openai_compatible',
+    name: 'OpenAI compatible',
+    default_base_url: 'https://api.example.com/v1',
+    models: [],
+  },
+};
 
 type SettingsNavItem = Readonly<{
   id: EnvSettingsSection;
@@ -321,11 +414,25 @@ function modelID(providerID: string, modelName: string): string {
   return `${pid}/${mn}`;
 }
 
+function providerTypeRequiresBaseURL(providerType: AIProviderType): boolean {
+  return providerType === 'moonshot' || providerType === 'chatglm' || providerType === 'deepseek' || providerType === 'qwen' || providerType === 'openai_compatible';
+}
+
+function providerPresetForType(providerType: AIProviderType): AIProviderPreset {
+  return AI_PROVIDER_PRESET_CATALOG[providerType] ?? AI_PROVIDER_PRESET_CATALOG.openai;
+}
+
+function recommendedModelsForProviderType(providerType: AIProviderType): readonly AIProviderModelPreset[] {
+  return providerPresetForType(providerType).models;
+}
+
+function formatTokenCount(tokenCount: number): string {
+  if (!Number.isFinite(tokenCount) || tokenCount <= 0) return 'N/A';
+  return new Intl.NumberFormat('en-US').format(Math.trunc(tokenCount));
+}
+
 function defaultBaseURLForProviderType(providerType: AIProviderType): string {
-  if (providerType === 'moonshot') return 'https://api.moonshot.cn/v1';
-  if (providerType === 'anthropic') return 'https://api.anthropic.com/v1';
-  if (providerType === 'openai_compatible') return 'https://api.example.com/v1';
-  return 'https://api.openai.com/v1';
+  return providerPresetForType(providerType).default_base_url;
 }
 
 function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
@@ -352,12 +459,15 @@ function normalizeAIProviderRowDraft(row: AIProviderRow): AIProviderRow {
 }
 
 function newAIProviderDraft(): AIProviderRow {
+  const defaultType: AIProviderType = 'openai';
+  const defaultPresetModels = recommendedModelsForProviderType(defaultType);
+  const firstModelName = String(defaultPresetModels[0]?.model_name ?? '').trim();
   return normalizeAIProviderRowDraft({
     id: newProviderID(),
-    name: '',
-    type: 'openai',
-    base_url: defaultBaseURLForProviderType('openai'),
-    models: [{ model_name: '' }],
+    name: providerPresetForType(defaultType).name,
+    type: defaultType,
+    base_url: defaultBaseURLForProviderType(defaultType),
+    models: [{ model_name: firstModelName }],
   });
 }
 
@@ -367,7 +477,7 @@ function defaultPermissionPolicy(): PermissionPolicy {
 
 function defaultAIConfig(): AIConfig {
   return {
-    current_model_id: 'openai/gpt-5-mini',
+    current_model_id: 'openai/gpt-5.2-mini',
     web_search_provider: 'prefer_openai',
     execution_policy: {
       require_user_approval: false,
@@ -380,7 +490,7 @@ function defaultAIConfig(): AIConfig {
         name: 'OpenAI',
         type: 'openai',
         base_url: 'https://api.openai.com/v1',
-        models: [{ model_name: 'gpt-5-mini' }],
+        models: [{ model_name: 'gpt-5.2-mini' }],
       },
     ],
   };
@@ -1033,10 +1143,10 @@ export function EnvSettingsPage() {
       name: 'OpenAI',
       type: 'openai',
       base_url: 'https://api.openai.com/v1',
-      models: [{ model_name: 'gpt-5-mini' }],
+      models: [{ model_name: 'gpt-5.2-mini' }],
     },
   ]);
-  const [aiCurrentModelID, setAiCurrentModelID] = createSignal('openai/gpt-5-mini');
+  const [aiCurrentModelID, setAiCurrentModelID] = createSignal('openai/gpt-5.2-mini');
   const [aiPreservedFields, setAiPreservedFields] = createSignal<AIPreservedUIFields>({});
   const [aiRequireUserApproval, setAiRequireUserApproval] = createSignal(false);
   const [aiEnforcePlanModeGuard, setAiEnforcePlanModeGuard] = createSignal(false);
@@ -1046,6 +1156,7 @@ export function EnvSettingsPage() {
   const [aiProviderDialogMode, setAiProviderDialogMode] = createSignal<AIProviderDialogMode>('edit');
   const [aiProviderDialogSourceIndex, setAiProviderDialogSourceIndex] = createSignal<number | null>(null);
   const [aiProviderDialogDraft, setAiProviderDialogDraft] = createSignal<AIProviderRow | null>(null);
+  const [aiProviderPresetModel, setAiProviderPresetModel] = createSignal('');
 
   // AI provider keys (stored locally in secrets.json; never returned in plaintext).
   const [aiProviderKeySet, setAiProviderKeySet] = createSignal<Record<string, boolean>>({});
@@ -1129,6 +1240,20 @@ export function EnvSettingsPage() {
   const aiEnabled = createMemo(() => !!settings()?.ai);
   const aiModelOptions = createMemo(() => collectAIModelOptions(aiProviders()));
   const aiProviderDialogProvider = createMemo(() => aiProviderDialogDraft());
+  const aiProviderDialogRecommendedModels = createMemo<readonly AIProviderModelPreset[]>(() => {
+    const provider = aiProviderDialogProvider();
+    if (!provider) return [];
+    return recommendedModelsForProviderType(provider.type);
+  });
+  const aiProviderDialogRecommendedModelOptions = createMemo(() =>
+    aiProviderDialogRecommendedModels().map((model) => {
+      const output = model.max_output_tokens ? ` / max ${formatTokenCount(model.max_output_tokens)}` : '';
+      return {
+        value: model.model_name,
+        label: `${model.model_name} (ctx ${formatTokenCount(model.context_window)}${output})`,
+      };
+    }),
+  );
   const aiProviderDialogTitle = createMemo(() => (aiProviderDialogMode() === 'create' ? 'Add provider' : 'Edit provider'));
 
   const configPath = () => String(settings()?.config_path ?? '').trim();
@@ -1297,10 +1422,18 @@ export function EnvSettingsPage() {
       providerIDs.add(id);
       if (name && name.length > 80) throw new Error(`Provider "${id}" name is too long.`);
 
-      if (typ !== 'openai' && typ !== 'anthropic' && typ !== 'openai_compatible' && typ !== 'moonshot') {
+      if (
+        typ !== 'openai' &&
+        typ !== 'anthropic' &&
+        typ !== 'moonshot' &&
+        typ !== 'chatglm' &&
+        typ !== 'deepseek' &&
+        typ !== 'qwen' &&
+        typ !== 'openai_compatible'
+      ) {
         throw new Error(`Invalid provider type: ${typ || '(empty)'}`);
       }
-      if ((typ === 'openai_compatible' || typ === 'moonshot') && !baseURL) throw new Error(`Provider "${id}" requires base_url.`);
+      if (providerTypeRequiresBaseURL(typ as AIProviderType) && !baseURL) throw new Error(`Provider "${id}" requires base_url.`);
       if (baseURL) {
         let u: URL;
         try {
@@ -1475,26 +1608,79 @@ export function EnvSettingsPage() {
     void updateAIProviderKey(id, null);
   };
 
+  const normalizeProviderModelRows = (rows: AIProviderModelRow[]): AIProviderModelRow[] => {
+    const seen = new Set<string>();
+    const out: AIProviderModelRow[] = [];
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const modelName = String(row?.model_name ?? '').trim();
+      if (!modelName || seen.has(modelName)) continue;
+      seen.add(modelName);
+      out.push({ model_name: modelName });
+    }
+    return out;
+  };
+
+  const addRecommendedModelToDraft = (modelName: string) => {
+    const targetName = String(modelName ?? '').trim();
+    if (!targetName) return;
+    setAiProviderDialogDraft((prev) => {
+      if (!prev) return prev;
+      const merged = normalizeProviderModelRows([
+        ...(Array.isArray(prev.models) ? prev.models : []),
+        { model_name: targetName },
+      ]);
+      return normalizeAIProviderRowDraft({
+        ...cloneAIProviderRow(prev),
+        models: merged.length > 0 ? merged : [{ model_name: '' }],
+      });
+    });
+  };
+
+  const applyRecommendedModelsToDraft = () => {
+    const provider = aiProviderDialogProvider();
+    if (!provider) return;
+    const recommendedRows = normalizeProviderModelRows(
+      recommendedModelsForProviderType(provider.type).map((model) => ({ model_name: model.model_name })),
+    );
+    if (recommendedRows.length === 0) {
+      notify.info('No presets', `No recommended models are available for provider type "${provider.type}".`);
+      return;
+    }
+    setAiProviderDialogDraft((prev) => {
+      if (!prev) return prev;
+      return normalizeAIProviderRowDraft({
+        ...cloneAIProviderRow(prev),
+        models: recommendedRows,
+      });
+    });
+    notify.success('Models applied', `${recommendedRows.length} recommended model(s) applied.`);
+  };
+
   const closeAIProviderDialog = () => {
     setAiProviderDialogOpen(false);
     setAiProviderDialogMode('edit');
     setAiProviderDialogSourceIndex(null);
     setAiProviderDialogDraft(null);
+    setAiProviderPresetModel('');
   };
 
   const openAIProviderDialog = (index: number) => {
     const list = aiProviders();
     if (index < 0 || index >= list.length) return;
+    const draft = normalizeAIProviderRowDraft(cloneAIProviderRow(list[index]));
     setAiProviderDialogMode('edit');
     setAiProviderDialogSourceIndex(index);
-    setAiProviderDialogDraft(normalizeAIProviderRowDraft(cloneAIProviderRow(list[index])));
+    setAiProviderDialogDraft(draft);
+    setAiProviderPresetModel(String(recommendedModelsForProviderType(draft.type)[0]?.model_name ?? ''));
     setAiProviderDialogOpen(true);
   };
 
   const addAIProviderAndOpenDialog = () => {
+    const draft = newAIProviderDraft();
     setAiProviderDialogMode('create');
     setAiProviderDialogSourceIndex(null);
-    setAiProviderDialogDraft(newAIProviderDraft());
+    setAiProviderDialogDraft(draft);
+    setAiProviderPresetModel(String(recommendedModelsForProviderType(draft.type)[0]?.model_name ?? ''));
     setAiProviderDialogOpen(true);
   };
 
@@ -2042,6 +2228,21 @@ export function EnvSettingsPage() {
   createEffect(() => {
     if (aiView() !== 'ui' && aiProviderDialogOpen()) {
       closeAIProviderDialog();
+    }
+  });
+
+  createEffect(() => {
+    if (!aiProviderDialogOpen()) return;
+    const provider = aiProviderDialogProvider();
+    if (!provider) return;
+    const models = recommendedModelsForProviderType(provider.type);
+    const current = String(aiProviderPresetModel() ?? '').trim();
+    if (models.length === 0) {
+      if (current) setAiProviderPresetModel('');
+      return;
+    }
+    if (!models.some((it) => it.model_name === current)) {
+      setAiProviderPresetModel(models[0].model_name);
     }
   });
 
@@ -3899,19 +4100,24 @@ export function EnvSettingsPage() {
                       value={provider().type}
                       onChange={(v) => {
                         const nextType = v as AIProviderType;
+                        const nextPreset = providerPresetForType(nextType);
+                        const nextPresetModels = recommendedModelsForProviderType(nextType).map((model) => ({
+                          model_name: model.model_name,
+                        }));
                         updateDraft((current) => ({
                           ...current,
+                          name:
+                            !String(current.name ?? '').trim() || String(current.name ?? '').trim() === providerPresetForType(current.type).name
+                              ? nextPreset.name
+                              : current.name,
                           type: nextType,
                           base_url: defaultBaseURLForProviderType(nextType),
+                          models: nextPresetModels.length > 0 ? nextPresetModels : [{ model_name: '' }],
                         }));
+                        setAiProviderPresetModel(String(nextPreset.models[0]?.model_name ?? ''));
                       }}
                       disabled={!canInteract()}
-                      options={[
-                        { value: 'openai', label: 'openai' },
-                        { value: 'anthropic', label: 'anthropic' },
-                        { value: 'openai_compatible', label: 'openai_compatible' },
-                        { value: 'moonshot', label: 'moonshot' },
-                      ]}
+                      options={[...AI_PROVIDER_TYPE_OPTIONS]}
                       class="w-full"
                     />
                   </div>
@@ -3920,7 +4126,7 @@ export function EnvSettingsPage() {
                     <Input value={providerID()} size="sm" class="w-full font-mono" disabled />
                   </div>
                   <div class="md:col-span-2">
-                    <FieldLabel hint={provider().type === 'openai_compatible' || provider().type === 'moonshot' ? 'required' : 'optional'}>
+                    <FieldLabel hint={providerTypeRequiresBaseURL(provider().type) ? 'required' : 'optional'}>
                       base_url
                     </FieldLabel>
                     <Input
@@ -3987,6 +4193,62 @@ export function EnvSettingsPage() {
                 </div>
 
                 <div class="space-y-3">
+                  <Show when={aiProviderDialogRecommendedModels().length > 0}>
+                    <div class="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+                      <SubSectionHeader
+                        title="Recommended models"
+                        description="Select from maintained presets (with context window metadata) for quick setup."
+                        actions={
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => applyRecommendedModelsToDraft()}
+                            disabled={!canInteract()}
+                          >
+                            Apply all presets
+                          </Button>
+                        }
+                      />
+                      <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-2">
+                        <Select
+                          value={aiProviderPresetModel()}
+                          onChange={(v) => setAiProviderPresetModel(String(v ?? '').trim())}
+                          options={aiProviderDialogRecommendedModelOptions()}
+                          placeholder="Select a recommended model..."
+                          class="w-full"
+                          disabled={!canInteract()}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => addRecommendedModelToDraft(aiProviderPresetModel())}
+                          disabled={!canInteract() || !aiProviderPresetModel()}
+                        >
+                          Add selected preset
+                        </Button>
+                      </div>
+                      <div class="space-y-1">
+                        <For each={aiProviderDialogRecommendedModels()}>
+                          {(preset) => (
+                            <div class="flex flex-col gap-1 rounded-md border border-border/70 bg-background px-2 py-1.5">
+                              <div class="text-xs font-mono">{preset.model_name}</div>
+                              <div class="text-[11px] text-muted-foreground">
+                                context {formatTokenCount(preset.context_window)}
+                                <Show when={preset.max_output_tokens}>
+                                  {' '}
+                                  · max output {formatTokenCount(preset.max_output_tokens ?? 0)}
+                                </Show>
+                              </div>
+                              <Show when={preset.note}>
+                                <div class="text-[11px] text-muted-foreground">{preset.note}</div>
+                              </Show>
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                    </div>
+                  </Show>
+
                   <SubSectionHeader
                     title="Models"
                     description="Shown in Flower Chat."

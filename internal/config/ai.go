@@ -90,11 +90,25 @@ type AIProvider struct {
 	// Name is a human-friendly display name (safe to rename at any time).
 	Name string `json:"name,omitempty"`
 
-	// Type is one of: "openai" | "anthropic" | "openai_compatible" | "moonshot".
+	// Type is one of:
+	// - "openai"
+	// - "anthropic"
+	// - "moonshot"
+	// - "chatglm"
+	// - "deepseek"
+	// - "qwen"
+	// - "openai_compatible"
 	Type string `json:"type"`
 
 	// BaseURL overrides the provider endpoint (example: "https://api.openai.com/v1").
-	// When empty, provider defaults apply (except openai_compatible and moonshot where base_url is required).
+	// When empty, provider defaults apply.
+	//
+	// Required provider types:
+	// - moonshot
+	// - chatglm
+	// - deepseek
+	// - qwen
+	// - openai_compatible
 	BaseURL string `json:"base_url,omitempty"`
 
 	// StrictToolSchema overrides provider tool schema strictness.
@@ -103,7 +117,7 @@ type AIProvider struct {
 	// - openai official endpoints: strict
 	// - openai custom gateways: non-strict
 	// - openai_compatible: non-strict
-	// - moonshot: non-strict
+	// - moonshot/chatglm/deepseek/qwen: non-strict
 	StrictToolSchema *bool `json:"strict_tool_schema,omitempty"`
 
 	// Models is the allowed model list for this provider (shown in the Chat UI).
@@ -132,6 +146,15 @@ const (
 
 	defaultAIWebSearchProvider = "prefer_openai"
 )
+
+func requiresExplicitAIProviderBaseURL(providerType string) bool {
+	switch strings.ToLower(strings.TrimSpace(providerType)) {
+	case "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible":
+		return true
+	default:
+		return false
+	}
+}
 
 func (c *AIConfig) Validate() error {
 	if c == nil {
@@ -182,15 +205,15 @@ func (c *AIConfig) Validate() error {
 		}
 		seen[id] = struct{}{}
 
-		t := strings.TrimSpace(p.Type)
+		t := strings.ToLower(strings.TrimSpace(p.Type))
 		switch t {
-		case "openai", "anthropic", "openai_compatible", "moonshot":
+		case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible":
 		default:
 			return fmt.Errorf("providers[%d]: invalid type %q", i, t)
 		}
 
 		baseURL := strings.TrimSpace(p.BaseURL)
-		if (t == "openai_compatible" || t == "moonshot") && baseURL == "" {
+		if requiresExplicitAIProviderBaseURL(t) && baseURL == "" {
 			return fmt.Errorf("providers[%d]: base_url is required for %s", i, t)
 		}
 		if baseURL != "" {

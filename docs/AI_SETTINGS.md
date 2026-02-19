@@ -64,9 +64,9 @@ This is the common “immutable primary key + mutable display name” pattern.
 
 Notes:
 
-- `type` is one of: `openai` | `anthropic` | `openai_compatible` | `moonshot`
-- `base_url` is optional for `openai`/`anthropic`, and required for `openai_compatible`/`moonshot`
-- `moonshot` uses Moonshot's Chat Completions compatible endpoint on the configured `base_url` (for example `https://api.moonshot.cn/v1`)
+- `type` is one of: `openai` | `anthropic` | `moonshot` | `chatglm` | `deepseek` | `qwen` | `openai_compatible`
+- `base_url` is optional for `openai`/`anthropic`, and required for `moonshot` / `chatglm` / `deepseek` / `qwen` / `openai_compatible`
+- `moonshot` / `chatglm` / `deepseek` / `qwen` / `openai_compatible` run via OpenAI-compatible endpoints on the configured `base_url`
 - Provider auth env var names are intentionally **not configurable** in config or UI
 
 ---
