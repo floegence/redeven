@@ -12,6 +12,8 @@ import { useAIChatContext } from '../../pages/AIChatContext';
 const ASK_USER_TOOL_NAME = 'ask_user';
 const SUBAGENTS_TOOL_NAME = 'subagents';
 const WEB_SEARCH_TOOL_NAME = 'web.search';
+const KNOWLEDGE_SEARCH_TOOL_NAME = 'knowledge.search';
+const KNOWLEDGE_TOOL_PREFIX = 'knowledge.';
 
 export interface ToolCallBlockProps {
   block: ToolCallBlockType;
@@ -833,10 +835,40 @@ type WebSearchDisplay = {
   domains: WebSearchDomainFilter[];
 };
 
+type KnowledgeSearchMatch = {
+  cardId: string;
+  title: string;
+  summary: string;
+  score: number;
+  tags: string[];
+  sourceRepos: string[];
+};
+
+type KnowledgeDisplayDetail = {
+  label: string;
+  value: string;
+};
+
+type KnowledgeToolDisplay = {
+  toolName: string;
+  operationLabel: string;
+  isSearch: boolean;
+  query: string;
+  requestedMaxResults: number;
+  requestedTags: string[];
+  totalCards: number;
+  matches: KnowledgeSearchMatch[];
+  sourceRepos: string[];
+  details: KnowledgeDisplayDetail[];
+  resultNote: string;
+};
+
 const WEB_SEARCH_UNKNOWN_DOMAIN_KEY = 'domain:unknown';
 const WEB_SEARCH_DEFAULT_DOMAIN_KEY = 'all';
 const WEB_SEARCH_VISIBLE_RESULTS = 5;
+const KNOWLEDGE_VISIBLE_MATCHES = 4;
 const webSearchIntegerFormatter = new Intl.NumberFormat('en-US');
+const knowledgeIntegerFormatter = new Intl.NumberFormat('en-US');
 
 function formatWebSearchInteger(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return '0';
@@ -950,6 +982,263 @@ function buildWebSearchDisplay(block: ToolCallBlockType): WebSearchDisplay | nul
     items,
     domains,
   };
+}
+
+function formatKnowledgeInteger(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '0';
+  return knowledgeIntegerFormatter.format(Math.round(value));
+}
+
+function summarizeKnowledgeText(value: string, maxLength = 190): string {
+  const normalized = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function normalizeKnowledgeStringList(value: unknown, maxItems = 10): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const items: string[] = [];
+  for (const raw of value) {
+    const text = summarizeKnowledgeText(asTrimmedString(raw), 88);
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push(text);
+    if (items.length >= maxItems) break;
+  }
+  return items;
+}
+
+function isKnowledgeToolName(toolName: string): boolean {
+  return asTrimmedString(toolName).toLowerCase().startsWith(KNOWLEDGE_TOOL_PREFIX);
+}
+
+function normalizeKnowledgeOperationLabel(toolName: string): string {
+  const normalizedToolName = asTrimmedString(toolName).toLowerCase();
+  let operation = normalizedToolName;
+  if (operation.startsWith(KNOWLEDGE_TOOL_PREFIX)) {
+    operation = operation.slice(KNOWLEDGE_TOOL_PREFIX.length);
+  }
+  if (!operation) return 'Tool';
+  const segments = operation
+    .split('.')
+    .flatMap((segment) => segment.split(/[^a-z0-9]+/i))
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (segments.length === 0) return 'Tool';
+  return segments
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+}
+
+function formatKnowledgeScalar(value: unknown, maxLength = 170): string {
+  if (typeof value === 'string') {
+    return summarizeKnowledgeText(value, maxLength);
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (Number.isInteger(value)) {
+      return formatKnowledgeInteger(value);
+    }
+    return summarizeKnowledgeText(String(value), maxLength);
+  }
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No';
+  }
+  if (!Array.isArray(value)) {
+    return '';
+  }
+  const parts: string[] = [];
+  for (const item of value) {
+    if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
+      const text = formatKnowledgeScalar(item, 64);
+      if (!text) continue;
+      parts.push(text);
+    }
+    if (parts.length >= 4) break;
+  }
+  if (parts.length === 0) return '';
+  return summarizeKnowledgeText(parts.join(', '), maxLength);
+}
+
+function appendKnowledgeDetail(
+  details: KnowledgeDisplayDetail[],
+  label: string,
+  value: unknown,
+  maxLength = 170,
+): void {
+  const text = formatKnowledgeScalar(value, maxLength);
+  if (!text) return;
+  if (details.some((item) => item.label === label && item.value === text)) return;
+  details.push({ label, value: text });
+}
+
+function normalizeKnowledgeMatches(rawMatches: unknown): KnowledgeSearchMatch[] {
+  if (!Array.isArray(rawMatches)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const matches: KnowledgeSearchMatch[] = [];
+  for (let index = 0; index < rawMatches.length; index += 1) {
+    const rec = asRecord(rawMatches[index]);
+    if (!rec) continue;
+    const cardId = asTrimmedString(rec.card_id ?? rec.cardId);
+    const title = summarizeKnowledgeText(asTrimmedString(rec.title), 128) || cardId || `Card ${index + 1}`;
+    const summary = summarizeKnowledgeText(asTrimmedString(rec.summary), 320);
+    const score = Math.max(0, Math.floor(readFiniteNumber(rec.score, 0)));
+    const tags = normalizeKnowledgeStringList(rec.tags, 6);
+    const sourceRepos = normalizeKnowledgeStringList(rec.source_repos ?? rec.sourceRepos, 5);
+    const dedupeKey = `${cardId.toLowerCase()}\u001f${title.toLowerCase()}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    matches.push({
+      cardId,
+      title,
+      summary,
+      score,
+      tags,
+      sourceRepos,
+    });
+  }
+  return matches;
+}
+
+function collectKnowledgeSourceRepos(matches: KnowledgeSearchMatch[]): string[] {
+  if (matches.length === 0) return [];
+  const seen = new Set<string>();
+  const repos: string[] = [];
+  for (const match of matches) {
+    for (const rawRepo of match.sourceRepos) {
+      const repo = asTrimmedString(rawRepo);
+      if (!repo) continue;
+      const key = repo.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      repos.push(repo);
+    }
+  }
+  repos.sort((a, b) => a.localeCompare(b));
+  return repos;
+}
+
+function buildKnowledgeResultNote(
+  result: Record<string, unknown> | null,
+  rawResult: unknown,
+): string {
+  const candidates = [
+    asTrimmedString(result?.message),
+    asTrimmedString(result?.summary),
+    asTrimmedString(result?.detail),
+    asTrimmedString(result?.note),
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    return summarizeKnowledgeText(candidate, 260);
+  }
+  if (!result) {
+    return formatKnowledgeScalar(rawResult, 260);
+  }
+  return '';
+}
+
+function buildKnowledgeDetails(
+  args: Record<string, unknown> | null,
+  result: Record<string, unknown> | null,
+  rawResult: unknown,
+): KnowledgeDisplayDetail[] {
+  const details: KnowledgeDisplayDetail[] = [];
+  appendKnowledgeDetail(details, 'Action', args?.action, 76);
+  appendKnowledgeDetail(details, 'Scope', result?.scope ?? args?.scope, 96);
+  appendKnowledgeDetail(details, 'Knowledge ID', result?.knowledge_id ?? result?.knowledgeId, 96);
+  appendKnowledgeDetail(details, 'Knowledge name', result?.knowledge_name ?? result?.knowledgeName, 112);
+  appendKnowledgeDetail(details, 'Version', result?.version ?? result?.bundle_version ?? result?.bundleVersion, 76);
+  appendKnowledgeDetail(details, 'Status', result?.status, 76);
+  appendKnowledgeDetail(details, 'Updated', result?.updated_at ?? result?.updatedAt, 96);
+
+  const resultItems = result?.items;
+  if (Array.isArray(resultItems)) {
+    appendKnowledgeDetail(details, 'Items', resultItems.length);
+  }
+  const resultWarnings = normalizeKnowledgeStringList(result?.warnings, 2);
+  if (resultWarnings.length > 0) {
+    appendKnowledgeDetail(details, 'Warnings', resultWarnings.join(' | '), 220);
+  }
+
+  if (details.length === 0 && !result) {
+    appendKnowledgeDetail(details, 'Result', rawResult, 220);
+  }
+  if (details.length <= 6) return details;
+  return details.slice(0, 6);
+}
+
+function buildKnowledgeToolDisplay(block: ToolCallBlockType): KnowledgeToolDisplay | null {
+  const toolName = asTrimmedString(block.toolName);
+  if (!isKnowledgeToolName(toolName)) {
+    return null;
+  }
+
+  const normalizedToolName = toolName.toLowerCase();
+  const args = asRecord(block.args);
+  const result = asRecord(block.result);
+  const query = asTrimmedString(result?.query) || asTrimmedString(args?.query);
+  const requestedMaxResults = Math.max(
+    0,
+    Math.floor(readFiniteNumber(
+      args?.max_results ?? args?.maxResults ?? result?.max_results ?? result?.maxResults,
+      0,
+    )),
+  );
+  const requestedTags = normalizeKnowledgeStringList(args?.tags ?? result?.tags, 8);
+  const totalCards = Math.max(0, Math.floor(readFiniteNumber(result?.total_cards ?? result?.totalCards, 0)));
+  const matches = normalizeKnowledgeMatches(result?.matches ?? result?.results ?? result?.cards);
+  const sourceRepos = collectKnowledgeSourceRepos(matches);
+  const details = buildKnowledgeDetails(args, result, block.result);
+  const resultNote = buildKnowledgeResultNote(result, block.result);
+
+  return {
+    toolName,
+    operationLabel: normalizeKnowledgeOperationLabel(toolName),
+    isSearch: normalizedToolName === KNOWLEDGE_SEARCH_TOOL_NAME,
+    query,
+    requestedMaxResults,
+    requestedTags,
+    totalCards,
+    matches,
+    sourceRepos,
+    details,
+    resultNote,
+  };
+}
+
+function knowledgeStateLabel(status: ToolCallBlockType['status']): string {
+  switch (status) {
+    case 'pending':
+      return 'Queued';
+    case 'running':
+      return 'Running';
+    case 'success':
+      return 'Completed';
+    case 'error':
+      return 'Failed';
+    default:
+      return 'Unknown';
+  }
+}
+
+function knowledgeStateClass(status: ToolCallBlockType['status']): string {
+  switch (status) {
+    case 'pending':
+    case 'running':
+      return 'chat-tool-knowledge-state-running';
+    case 'success':
+      return 'chat-tool-knowledge-state-success';
+    case 'error':
+      return 'chat-tool-knowledge-state-error';
+    default:
+      return '';
+  }
 }
 
 function webSearchStateLabel(status: ToolCallBlockType['status']): string {
@@ -1240,6 +1529,248 @@ const WebSearchToolCard: Component<WebSearchToolCardProps> = (props) => {
   );
 };
 
+interface KnowledgeToolCardProps {
+  block: ToolCallBlockType;
+  messageId: string;
+  blockIndex: number;
+  display: KnowledgeToolDisplay;
+  class?: string;
+}
+
+const KnowledgeToolCard: Component<KnowledgeToolCardProps> = (props) => {
+  const [copiedQuery, setCopiedQuery] = createSignal(false);
+  const [expanded, setExpanded] = createSignal(false);
+
+  const statusLabel = createMemo(() => knowledgeStateLabel(props.block.status));
+  const statusClass = createMemo(() => knowledgeStateClass(props.block.status));
+  const metaItems = createMemo(() => {
+    const items: string[] = [];
+    if (props.display.totalCards > 0) {
+      items.push(`Indexed ${formatKnowledgeInteger(props.display.totalCards)} cards`);
+    }
+    if (props.display.isSearch || props.display.matches.length > 0) {
+      const matchCount = props.display.matches.length;
+      items.push(`${formatKnowledgeInteger(matchCount)} match${matchCount === 1 ? '' : 'es'}`);
+    }
+    if (props.display.requestedMaxResults > 0) {
+      items.push(`Requested ${formatKnowledgeInteger(props.display.requestedMaxResults)}`);
+    }
+    if (props.display.sourceRepos.length > 0) {
+      const repoCount = props.display.sourceRepos.length;
+      items.push(`${formatKnowledgeInteger(repoCount)} repo${repoCount === 1 ? '' : 's'}`);
+    }
+    return items;
+  });
+  const visibleMatches = createMemo(() => {
+    if (expanded()) {
+      return props.display.matches;
+    }
+    return props.display.matches.slice(0, KNOWLEDGE_VISIBLE_MATCHES);
+  });
+  const hiddenMatchCount = createMemo(() => Math.max(0, props.display.matches.length - visibleMatches().length));
+  const canToggleExpand = createMemo(() => props.display.matches.length > KNOWLEDGE_VISIBLE_MATCHES);
+  const visibleChildren = createMemo(() => {
+    const children = Array.isArray(props.block.children) ? props.block.children : [];
+    return children;
+  });
+  const showEmptyState = createMemo(() => {
+    if (visibleMatches().length > 0) return false;
+    if (props.display.isSearch) return true;
+    return props.display.details.length === 0 && !props.display.resultNote;
+  });
+  const shouldShowResultNote = createMemo(() => {
+    if (!props.display.resultNote) return false;
+    if (props.display.isSearch && props.display.matches.length === 0) return false;
+    return true;
+  });
+  const emptyMessage = createMemo(() => {
+    if (props.block.status === 'pending' || props.block.status === 'running') {
+      return props.display.isSearch ? 'Searching knowledge cards...' : 'Running knowledge tool...';
+    }
+    if (props.display.isSearch) {
+      return 'No matching cards found.';
+    }
+    if (props.block.status === 'success') {
+      return 'No additional details returned.';
+    }
+    return 'No knowledge output available.';
+  });
+
+  createEffect(() => {
+    props.display.toolName;
+    props.display.query;
+    props.display.matches.length;
+    setExpanded(false);
+  });
+
+  const handleCopyQuery = async () => {
+    if (!props.display.query) return;
+    const copied = await copyToolText(props.display.query);
+    if (!copied) return;
+    setCopiedQuery(true);
+    setTimeout(() => setCopiedQuery(false), 1600);
+  };
+
+  return (
+    <div class={cn('chat-tool-knowledge-block', props.class)}>
+      <div class="chat-tool-knowledge-head">
+        <div class="chat-tool-knowledge-head-main">
+          <span class="chat-tool-knowledge-badge">Knowledge</span>
+          <span class="chat-tool-knowledge-operation">{props.display.operationLabel}</span>
+          <span class={cn('chat-tool-knowledge-state', statusClass())}>{statusLabel()}</span>
+        </div>
+        <Show when={props.display.query}>
+          <button
+            class="chat-tool-knowledge-copy-query"
+            type="button"
+            onClick={() => void handleCopyQuery()}
+            aria-label={copiedQuery() ? 'Query copied' : 'Copy query'}
+            title={copiedQuery() ? 'Copied' : 'Copy query'}
+          >
+            <Show when={copiedQuery()} fallback={<CopyMiniIcon />}>
+              <CheckMiniIcon />
+            </Show>
+            <span>{copiedQuery() ? 'Copied' : 'Copy query'}</span>
+          </button>
+        </Show>
+      </div>
+
+      <Show when={props.display.query}>
+        <div class="chat-tool-knowledge-query-row">
+          <span class="chat-tool-knowledge-query-label">Query</span>
+          <p class="chat-tool-knowledge-query-text">{props.display.query}</p>
+        </div>
+      </Show>
+
+      <Show when={metaItems().length > 0}>
+        <div class="chat-tool-knowledge-meta">
+          <For each={metaItems()}>
+            {(item) => <span>{item}</span>}
+          </For>
+        </div>
+      </Show>
+
+      <Show when={props.display.requestedTags.length > 0}>
+        <div class="chat-tool-knowledge-request-row">
+          <span class="chat-tool-knowledge-request-label">Tags</span>
+          <div class="chat-tool-knowledge-chip-list">
+            <For each={props.display.requestedTags}>
+              {(tag) => <span class="chat-tool-knowledge-chip">{tag}</span>}
+            </For>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={props.display.sourceRepos.length > 0}>
+        <div class="chat-tool-knowledge-request-row">
+          <span class="chat-tool-knowledge-request-label">Repos</span>
+          <div class="chat-tool-knowledge-chip-list">
+            <For each={props.display.sourceRepos}>
+              {(repo) => <span class="chat-tool-knowledge-chip chat-tool-knowledge-chip-repo">{repo}</span>}
+            </For>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={props.display.details.length > 0}>
+        <div class="chat-tool-knowledge-details">
+          <For each={props.display.details}>
+            {(detail) => (
+              <div class="chat-tool-knowledge-detail-item">
+                <span class="chat-tool-knowledge-detail-label">{detail.label}</span>
+                <span class="chat-tool-knowledge-detail-value">{detail.value}</span>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      <Show when={visibleMatches().length > 0}>
+        <div class="chat-tool-knowledge-list">
+          <For each={visibleMatches()}>
+            {(item, index) => (
+              <article class="chat-tool-knowledge-item">
+                <div class="chat-tool-knowledge-item-head">
+                  <span class="chat-tool-knowledge-item-rank">{index() + 1}</span>
+                  <div class="chat-tool-knowledge-item-title-wrap">
+                    <p class="chat-tool-knowledge-item-title">{item.title}</p>
+                    <Show when={item.cardId}>
+                      <span class="chat-tool-knowledge-item-card-id">{item.cardId}</span>
+                    </Show>
+                  </div>
+                  <Show when={item.score > 0}>
+                    <span class="chat-tool-knowledge-item-score">Score {formatKnowledgeInteger(item.score)}</span>
+                  </Show>
+                </div>
+
+                <Show when={item.summary}>
+                  <p class="chat-tool-knowledge-item-summary">{item.summary}</p>
+                </Show>
+
+                <Show when={item.tags.length > 0}>
+                  <div class="chat-tool-knowledge-item-tags">
+                    <For each={item.tags}>
+                      {(tag) => <span class="chat-tool-knowledge-item-tag">{tag}</span>}
+                    </For>
+                  </div>
+                </Show>
+
+                <Show when={item.sourceRepos.length > 0}>
+                  <div class="chat-tool-knowledge-item-repos">
+                    <For each={item.sourceRepos}>
+                      {(repo) => <span class="chat-tool-knowledge-item-repo">{repo}</span>}
+                    </For>
+                  </div>
+                </Show>
+              </article>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      <Show when={canToggleExpand()}>
+        <div class="chat-tool-knowledge-toggle-row">
+          <button
+            type="button"
+            class="chat-tool-knowledge-toggle-btn"
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <Show when={expanded()} fallback={`Show ${hiddenMatchCount()} more`}>
+              Show less
+            </Show>
+          </button>
+        </div>
+      </Show>
+
+      <Show when={shouldShowResultNote()}>
+        <div class="chat-tool-knowledge-note">{props.display.resultNote}</div>
+      </Show>
+
+      <Show when={showEmptyState()}>
+        <div class="chat-tool-knowledge-empty">{emptyMessage()}</div>
+      </Show>
+
+      <Show when={props.block.error}>
+        <div class="chat-tool-knowledge-error">{props.block.error}</div>
+      </Show>
+
+      <Show when={visibleChildren().length > 0}>
+        <div class="chat-tool-knowledge-children">
+          <For each={visibleChildren()}>
+            {(child) => (
+              <BlockRenderer
+                block={child}
+                messageId={props.messageId}
+                blockIndex={props.blockIndex}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+};
+
 const CopyMiniIcon: Component = () => (
   <svg
     width="14"
@@ -1493,6 +2024,7 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
   const askUserDisplay = createMemo(() => buildAskUserDisplay(props.block));
   const waitSubagentsDisplay = createMemo(() => buildWaitSubagentsDisplay(props.block));
   const webSearchDisplay = createMemo(() => buildWebSearchDisplay(props.block));
+  const knowledgeDisplay = createMemo(() => buildKnowledgeToolDisplay(props.block));
   const shouldHideWaitSubagentsRow = createMemo(() => {
     const display = waitSubagentsDisplay();
     if (!display) return false;
@@ -1575,6 +2107,18 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
         messageId={props.messageId}
         blockIndex={props.blockIndex}
         display={webSearchDisplay() as WebSearchDisplay}
+        class={props.class}
+      />
+    );
+  }
+
+  if (knowledgeDisplay()) {
+    return (
+      <KnowledgeToolCard
+        block={props.block}
+        messageId={props.messageId}
+        blockIndex={props.blockIndex}
+        display={knowledgeDisplay() as KnowledgeToolDisplay}
         class={props.class}
       />
     );
