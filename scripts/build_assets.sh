@@ -109,6 +109,18 @@ build_codeapp_ui() {
   log "Code App UI: done."
 }
 
+build_knowledge_bundle() {
+  local script="$ROOT_DIR/scripts/build_knowledge_bundle.sh"
+  if [ ! -x "$script" ]; then
+    die "missing executable knowledge bundle builder: $script"
+  fi
+
+  log ""
+  log "Knowledge bundle: building..."
+  "$script"
+  log "Knowledge bundle: done."
+}
+
 main() {
   log "Building redeven embedded assets..."
   log "ROOT_DIR: $ROOT_DIR"
@@ -118,6 +130,7 @@ main() {
 
   build_envapp_ui
   build_codeapp_ui
+  build_knowledge_bundle
 
   log ""
   log "All embedded assets built."

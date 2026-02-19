@@ -46,6 +46,13 @@ jobs:
       - name: Build embedded assets
         run: ./scripts/build_assets.sh
 
+      - name: Collect knowledge bundle assets
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp internal/knowledge/dist/knowledge_bundle.manifest.json dist/
+          cp internal/knowledge/dist/knowledge_bundle.sha256 dist/
+
       - name: Build binary
         env:
           GOOS: ${{ matrix.goos }}
@@ -71,7 +78,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: package-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+          path: |
+            dist/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+            dist/knowledge_bundle.manifest.json
+            dist/knowledge_bundle.sha256
           if-no-files-found: error
 
   release:
@@ -96,7 +106,7 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          sha256sum redeven_*.tar.gz > SHA256SUMS
+          sha256sum redeven_*.tar.gz knowledge_bundle.manifest.json knowledge_bundle.sha256 > SHA256SUMS
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
@@ -122,3 +132,5 @@ jobs:
             dist/SHA256SUMS
             dist/SHA256SUMS.sig
             dist/SHA256SUMS.pem
+            dist/knowledge_bundle.manifest.json
+            dist/knowledge_bundle.sha256

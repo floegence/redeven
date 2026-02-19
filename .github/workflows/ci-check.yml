@@ -1,0 +1,72 @@
+name: CI Check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  knowledge-bundle-check:
+    name: knowledge bundle check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check generated knowledge integrity
+        run: ./scripts/knowledge/check_generated_integrity.sh
+
+      - name: Verify knowledge dist bundle
+        run: ./scripts/build_knowledge_bundle.sh --verify-only
+
+      - name: Check lock freshness
+        run: ./scripts/knowledge/check_lock_freshness.sh
+
+  go-check:
+    name: go check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
+
+      - name: Shell script syntax check
+        run: |
+          sh -n scripts/install.sh
+          sh -n scripts/publish_delivery_branch.sh
+          sh -n scripts/sync_release_assets.sh
+          sh -n scripts/generate_release_notes.sh
+
+      - name: Build embedded assets
+        run: ./scripts/build_assets.sh
+
+      - name: go test
+        run: go test ./...
+
+      - name: golangci-lint
+        run: golangci-lint run ./...

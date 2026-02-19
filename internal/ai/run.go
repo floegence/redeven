@@ -22,6 +22,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven-agent/internal/ai/tools"
 	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven-agent/internal/knowledge"
 	"github.com/floegence/redeven-agent/internal/session"
 	"github.com/floegence/redeven-agent/internal/websearch"
 )
@@ -2514,6 +2515,29 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		defer cancel()
 
 		return websearch.Search(ctx, provider, key, websearch.SearchRequest{Query: query, Count: p.Count})
+
+	case "knowledge.search":
+		if meta == nil || !meta.CanRead {
+			return nil, errors.New("read permission denied")
+		}
+		var p struct {
+			Query      string   `json:"query"`
+			MaxResults int      `json:"max_results"`
+			Tags       []string `json:"tags"`
+		}
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		query := strings.TrimSpace(p.Query)
+		if query == "" {
+			return nil, errors.New("missing query")
+		}
+		return knowledge.Search(knowledge.SearchRequest{
+			Query:      query,
+			MaxResults: p.MaxResults,
+			Tags:       p.Tags,
+		})
 
 	case "write_todos":
 		var p struct {
