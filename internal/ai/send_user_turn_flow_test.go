@@ -26,7 +26,10 @@ func newSendTurnTestService(t *testing.T) *Service {
 				Name:    "OpenAI",
 				Type:    "openai",
 				BaseURL: "https://api.openai.com/v1",
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+				Models: []config.AIProviderModel{
+					{ModelName: "gpt-5-mini"},
+					{ModelName: "gpt-4o-mini"},
+				},
 			},
 		},
 	}
@@ -355,6 +358,42 @@ func TestSendUserTurn_ActiveRun_InterruptsAndStartsNewRun(t *testing.T) {
 	}
 	if len(msgs) == 0 {
 		t.Fatalf("expected persisted user message after interruption")
+	}
+}
+
+func TestSendUserTurn_ModelLockConflict_DoesNotPersistMessage(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "model-lock-conflict", "openai/gpt-5-mini", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if err := svc.threadsDB.UpdateThreadModelLock(ctx, meta.EndpointID, th.ThreadID, true); err != nil {
+		t.Fatalf("UpdateThreadModelLock: %v", err)
+	}
+
+	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-4o-mini",
+		Input: RunInput{
+			Text: "try switching model while locked",
+		},
+		Options: RunOptions{MaxSteps: 1},
+	})
+	if !errors.Is(err, ErrModelSwitchRequiresExplicitRestart) {
+		t.Fatalf("SendUserTurn err=%v, want %v", err, ErrModelSwitchRequiresExplicitRestart)
+	}
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("expected no persisted messages on model lock conflict, got %d", len(msgs))
 	}
 }
 

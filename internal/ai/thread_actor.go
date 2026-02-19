@@ -303,6 +303,17 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	if th == nil {
 		return SendUserTurnResponse{}, errors.New("thread not found")
 	}
+	requestedModel := strings.TrimSpace(req.Model)
+	if th.ModelLocked {
+		lockedModelID := strings.TrimSpace(th.ModelID)
+		if lockedModelID == "" {
+			return SendUserTurnResponse{}, ErrModelLockViolation
+		}
+		if requestedModel != "" && requestedModel != lockedModelID {
+			return SendUserTurnResponse{}, ErrModelSwitchRequiresExplicitRestart
+		}
+		req.Model = lockedModelID
+	}
 	openWaitingPrompt := waitingPromptFromThreadRecord(th, th.RunStatus)
 	if openWaitingPrompt != nil {
 		if replyToWaitingPromptID == "" || strings.TrimSpace(openWaitingPrompt.PromptID) != replyToWaitingPromptID {

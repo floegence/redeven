@@ -38,6 +38,7 @@ type ThreadView struct {
 	ThreadID            string         `json:"thread_id"`
 	Title               string         `json:"title"`
 	ModelID             string         `json:"model_id"`
+	ModelLocked         bool           `json:"model_locked"`
 	WorkingDir          string         `json:"working_dir"`
 	RunStatus           string         `json:"run_status"`
 	RunUpdatedAtUnixMs  int64          `json:"run_updated_at_unix_ms"`

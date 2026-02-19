@@ -61,6 +61,7 @@ type Thread struct {
 	EndpointID         string `json:"endpoint_id"`
 	NamespacePublicID  string `json:"namespace_public_id"`
 	ModelID            string `json:"model_id"`
+	ModelLocked        bool   `json:"model_locked"`
 	WorkingDir         string `json:"working_dir"`
 	Title              string `json:"title"`
 	RunStatus          string `json:"run_status"`
@@ -175,7 +176,7 @@ func (s *Store) ListThreads(ctx context.Context, endpointID string, limit int, c
 
 	q := fmt.Sprintf(`
 SELECT
-  thread_id, endpoint_id, namespace_public_id, model_id, working_dir, title,
+  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, working_dir, title,
   run_status, run_updated_at_unix_ms, run_error,
   waiting_prompt_id, waiting_message_id, waiting_tool_id,
   created_by_user_public_id, created_by_user_email,
@@ -197,11 +198,13 @@ LIMIT ?
 	out := make([]Thread, 0, limit)
 	for rows.Next() {
 		var t Thread
+		var modelLockedInt int
 		if err := rows.Scan(
 			&t.ThreadID,
 			&t.EndpointID,
 			&t.NamespacePublicID,
 			&t.ModelID,
+			&modelLockedInt,
 			&t.WorkingDir,
 			&t.Title,
 			&t.RunStatus,
@@ -221,6 +224,7 @@ LIMIT ?
 		); err != nil {
 			return nil, "", err
 		}
+		t.ModelLocked = modelLockedInt != 0
 		out = append(out, t)
 	}
 	if err := rows.Err(); err != nil {
@@ -248,9 +252,10 @@ func (s *Store) GetThread(ctx context.Context, endpointID string, threadID strin
 	}
 
 	var t Thread
+	var modelLockedInt int
 	err := s.db.QueryRowContext(ctx, `
 SELECT
-  thread_id, endpoint_id, namespace_public_id, model_id, working_dir, title,
+  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, working_dir, title,
   run_status, run_updated_at_unix_ms, run_error,
   waiting_prompt_id, waiting_message_id, waiting_tool_id,
   created_by_user_public_id, created_by_user_email,
@@ -263,6 +268,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		&t.EndpointID,
 		&t.NamespacePublicID,
 		&t.ModelID,
+		&modelLockedInt,
 		&t.WorkingDir,
 		&t.Title,
 		&t.RunStatus,
@@ -286,6 +292,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		}
 		return nil, err
 	}
+	t.ModelLocked = modelLockedInt != 0
 	return &t, nil
 }
 
@@ -330,19 +337,20 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO ai_threads(
-  thread_id, endpoint_id, namespace_public_id, model_id, working_dir, title,
+  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, working_dir, title,
   run_status, run_updated_at_unix_ms, run_error,
   waiting_prompt_id, waiting_message_id, waiting_tool_id,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms,
   last_message_at_unix_ms, last_message_preview
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `,
 		t.ThreadID,
 		t.EndpointID,
 		t.NamespacePublicID,
 		t.ModelID,
+		boolToInt(t.ModelLocked),
 		t.WorkingDir,
 		t.Title,
 		t.RunStatus,
@@ -385,6 +393,34 @@ UPDATE ai_threads
 SET model_id = ?
 WHERE endpoint_id = ? AND thread_id = ?
 `, modelID, endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Store) UpdateThreadModelLock(ctx context.Context, endpointID string, threadID string, locked bool) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid request")
+	}
+
+	res, err := s.db.ExecContext(ctx, `
+UPDATE ai_threads
+SET model_locked = ?
+WHERE endpoint_id = ? AND thread_id = ?
+`, boolToInt(locked), endpointID, threadID)
 	if err != nil {
 		return err
 	}
@@ -1444,7 +1480,7 @@ func migrateSchema(db *sql.DB) error {
 	if db == nil {
 		return errors.New("nil db")
 	}
-	const targetVersion = 10
+	const targetVersion = 11
 
 	var v int
 	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
@@ -1476,6 +1512,7 @@ CREATE TABLE IF NOT EXISTS ai_threads (
   endpoint_id TEXT NOT NULL,
   namespace_public_id TEXT NOT NULL DEFAULT '',
   model_id TEXT NOT NULL DEFAULT '',
+  model_locked INTEGER NOT NULL DEFAULT 0,
   working_dir TEXT NOT NULL DEFAULT '',
   title TEXT NOT NULL DEFAULT '',
   run_status TEXT NOT NULL DEFAULT 'idle',
@@ -1503,6 +1540,15 @@ CREATE INDEX IF NOT EXISTS idx_ai_threads_endpoint_updated ON ai_threads(endpoin
 		return err
 	} else if !has {
 		if _, err := tx.Exec(`ALTER TABLE ai_threads ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+
+	// v11: Persist thread-level model lock to prevent implicit model switching.
+	if has, err := columnExists(tx, "ai_threads", "model_locked"); err != nil {
+		return err
+	} else if !has {
+		if _, err := tx.Exec(`ALTER TABLE ai_threads ADD COLUMN model_locked INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}
