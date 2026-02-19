@@ -76,7 +76,7 @@ export type wire_ai_event_notify = {
   thread_id: string;
   run_id: string;
   at_unix_ms: number;
-  stream_kind?: 'lifecycle' | 'assistant' | 'tool';
+  stream_kind?: 'lifecycle' | 'assistant' | 'tool' | 'context';
   phase?: 'start' | 'state_change' | 'end' | 'error';
   diag?: Record<string, any>;
   stream_event?: any;

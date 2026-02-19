@@ -35,13 +35,18 @@ import { fetchGatewayJSON } from '../services/gatewayApi';
 import { decorateMessageBlocks, decorateStreamEvent } from './aiBlockPresentation';
 import {
   extractSubagentViewsFromWaitResult,
+  mergeContextCompactionEvents,
   mapSubagentPayloadSnakeToCamel,
+  normalizeContextCompactionEvent,
+  normalizeContextUsage,
   mergeSubagentEventsByTimestamp,
   normalizeSubagentStatus,
   normalizeThreadTodosView,
   normalizeWriteTodosToolView,
   todoStatusBadgeClass,
   todoStatusLabel,
+  type ContextCompactionEventView,
+  type ContextUsageView,
   type SubagentView,
   type ThreadTodoItem,
   type ThreadTodosView,
@@ -177,6 +182,26 @@ function persistExecutionMode(mode: ExecutionMode): void {
     // ignore
   }
 }
+
+const CONTEXT_TIMELINE_WINDOW_LIMIT = 200;
+const RUN_CONTEXT_EVENTS_PAGE_LIMIT = 200;
+const RUN_CONTEXT_EVENTS_MAX_PAGES = 12;
+
+type RunEventResponseItem = {
+  event_id?: number;
+  run_id?: string;
+  thread_id?: string;
+  stream_kind?: string;
+  event_type?: string;
+  at_unix_ms?: number;
+  payload?: unknown;
+};
+
+type RunContextEventsResponse = {
+  events?: RunEventResponseItem[];
+  next_cursor?: number;
+  has_more?: boolean;
+};
 
 const ChatCapture: Component<{ onReady: (ctx: ChatContextValue) => void }> = (props) => {
   const ctx = useChatContext();
@@ -861,6 +886,210 @@ function CompactTasksSummary(props: {
   );
 }
 
+function CompactContextSummary(props: {
+  usage: ContextUsageView | null;
+  compactions: ContextCompactionEventView[];
+}) {
+  const [expanded, setExpanded] = createSignal(false);
+  let containerRef: HTMLDivElement | undefined;
+
+  const usagePercent = createMemo(() => {
+    const raw = Number(props.usage?.usagePercent ?? 0);
+    if (!Number.isFinite(raw) || raw < 0) return 0;
+    return raw;
+  });
+  const usagePercentLabel = createMemo(() => (props.usage ? `${usagePercent().toFixed(1)}%` : '--'));
+  const chipLabel = createMemo(() => (props.usage ? usagePercentLabel() : `${props.compactions.length} events`));
+  const usageTokensLabel = createMemo(() => {
+    const usage = props.usage;
+    if (!usage) return '';
+    const used = Math.max(0, Math.floor(Number(usage.estimateTokens ?? 0) || 0));
+    const total = Math.max(0, Math.floor(Number(usage.contextLimit ?? 0) || 0));
+    if (total <= 0) return '';
+    return `${used.toLocaleString('en-US')} / ${total.toLocaleString('en-US')} tok`;
+  });
+  const usageBadgeClass = createMemo(() => {
+    if (!props.usage) return 'bg-muted/50 text-muted-foreground border-border/60 hover:bg-muted hover:text-foreground';
+    const percent = usagePercent();
+    if (percent >= 90) return 'bg-error/10 text-error border-error/30 hover:bg-error/14';
+    if (percent >= 75) return 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25 hover:bg-amber-500/14';
+    return 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/25 hover:bg-blue-500/14';
+  });
+  const sortedSections = createMemo(() => {
+    const usage = props.usage;
+    if (!usage) return [] as Array<[string, number]>;
+    const entries = Object.entries(usage.sectionsTokens ?? {})
+      .map(([name, value]) => [String(name ?? '').trim(), Math.max(0, Number(value ?? 0) || 0)] as [string, number])
+      .filter(([name]) => !!name);
+    entries.sort((a, b) => b[1] - a[1]);
+    return entries;
+  });
+  const recentCompactions = createMemo(() => {
+    const list = Array.isArray(props.compactions) ? props.compactions : [];
+    if (list.length <= 12) return list;
+    return list.slice(list.length - 12);
+  });
+
+  createEffect(() => {
+    if (!expanded()) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (containerRef && !containerRef.contains(event.target as Node)) {
+        setExpanded(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('keydown', handleKeyDown);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('keydown', handleKeyDown);
+    });
+  });
+
+  return (
+    <div ref={containerRef} class="relative">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded()}
+        aria-haspopup="dialog"
+        class={cn(
+          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer border transition-all duration-150',
+          expanded()
+            ? 'bg-primary/10 text-primary border-primary/30'
+            : usageBadgeClass(),
+        )}
+      >
+        <Terminal class="w-3.5 h-3.5" />
+        <span>{chipLabel()}</span>
+        <ChevronUp class={cn('w-3 h-3 transition-transform duration-200', expanded() ? '' : 'rotate-180')} />
+      </button>
+
+      <Show when={expanded()}>
+        <div class={cn(
+          'absolute bottom-full left-0 mb-1.5 z-50 w-[24rem] max-sm:w-[calc(100vw-2rem)] rounded-xl overflow-hidden',
+          'border border-border/60 bg-card shadow-xl shadow-black/12 backdrop-blur-xl',
+          'chat-tasks-panel chat-tasks-panel-open',
+        )}>
+          <div class="h-[2px] bg-gradient-to-r from-blue-500/60 via-blue-500/30 to-transparent" />
+
+          <div class="px-3.5 pt-2.5 pb-2 border-b border-border/50 bg-gradient-to-b from-muted/40 to-transparent">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <Terminal class="w-3.5 h-3.5 text-blue-500/80" />
+                <span class="text-[13px] font-semibold text-foreground tracking-tight">Context</span>
+                <span class="text-[10px] font-semibold tabular-nums text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-px leading-none">
+                  {usagePercentLabel()}
+                </span>
+              </div>
+              <Show when={usageTokensLabel()}>
+                <span class="text-[10px] font-mono tabular-nums text-muted-foreground/80">{usageTokensLabel()}</span>
+              </Show>
+            </div>
+          </div>
+
+          <div class="px-3.5 py-2 border-b border-border/40 bg-muted/10">
+            <Show when={props.usage} fallback={
+              <div class="text-[11px] text-muted-foreground">No context usage telemetry yet.</div>
+            }>
+              <div class="grid grid-cols-3 gap-1.5 text-[10px]">
+                <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
+                  <div class="font-medium text-muted-foreground/70 uppercase tracking-wider">Step</div>
+                  <div class="font-semibold tabular-nums text-foreground/85">{props.usage?.stepIndex ?? 0}</div>
+                </div>
+                <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
+                  <div class="font-medium text-muted-foreground/70 uppercase tracking-wider">Used</div>
+                  <div class="font-semibold tabular-nums text-foreground/85">{usagePercentLabel()}</div>
+                </div>
+                <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
+                  <div class="font-medium text-muted-foreground/70 uppercase tracking-wider">Estimate</div>
+                  <div class="font-semibold tabular-nums text-foreground/85">{(props.usage?.estimateTokens ?? 0).toLocaleString('en-US')}</div>
+                </div>
+              </div>
+
+              <Show when={sortedSections().length > 0}>
+                <div class="mt-2">
+                  <div class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Sections</div>
+                  <div class="mt-1 flex flex-wrap gap-1">
+                    <For each={sortedSections()}>
+                      {([name, value]) => (
+                        <span class="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-1.5 py-0.5 text-[10px] text-foreground/80">
+                          <span class="font-medium">{name}</span>
+                          <span class="font-mono tabular-nums text-muted-foreground">{Math.max(0, Math.floor(value)).toLocaleString('en-US')}</span>
+                        </span>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              </Show>
+            </Show>
+          </div>
+
+          <div class="max-h-56 overflow-auto">
+            <Show when={recentCompactions().length > 0} fallback={
+              <div class="px-3.5 py-3 text-[11px] text-muted-foreground text-center">No compaction events yet.</div>
+            }>
+              <div class="flex flex-col gap-1.5 p-2.5">
+                <For each={recentCompactions()}>
+                  {(item) => {
+                    const stageClass = () => {
+                      switch (item.stage) {
+                        case 'started':
+                          return 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/25';
+                        case 'applied':
+                          return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25';
+                        case 'failed':
+                          return 'bg-error/10 text-error border-error/25';
+                        default:
+                          return 'bg-muted/50 text-muted-foreground border-border/60';
+                      }
+                    };
+                    const stageLabel = () => {
+                      switch (item.stage) {
+                        case 'started':
+                          return 'Started';
+                        case 'applied':
+                          return 'Applied';
+                        case 'failed':
+                          return 'Failed';
+                        case 'skipped':
+                          return 'Skipped';
+                        default:
+                          return 'Unknown';
+                      }
+                    };
+                    return (
+                      <div class="rounded-lg border border-border/55 bg-background/80 px-2.5 py-1.5">
+                        <div class="flex items-center gap-2">
+                          <span class={cn('inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold', stageClass())}>
+                            {stageLabel()}
+                          </span>
+                          <span class="text-[10px] text-muted-foreground">step {item.stepIndex}</span>
+                          <Show when={item.reason}>
+                            <span class="ml-auto text-[10px] text-muted-foreground truncate max-w-[10rem]" title={item.reason}>{item.reason}</span>
+                          </Show>
+                        </div>
+                        <Show when={item.strategy}>
+                          <div class="mt-1 text-[10px] text-muted-foreground/85">strategy: {item.strategy}</div>
+                        </Show>
+                        <Show when={item.error}>
+                          <div class="mt-1 text-[10px] text-error break-words">{item.error}</div>
+                        </Show>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </Show>
+          </div>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 function subagentStatusLabel(status: string): string {
   const normalized = String(status ?? '').trim().toLowerCase();
   switch (normalized) {
@@ -1417,6 +1646,8 @@ export function EnvAIPage() {
   const [todosError, setTodosError] = createSignal('');
   const [threadTodos, setThreadTodos] = createSignal<ThreadTodosView | null>(null);
   const [threadSubagentsById, setThreadSubagentsById] = createSignal<Record<string, SubagentView>>({});
+  const [contextUsage, setContextUsage] = createSignal<ContextUsageView | null>(null);
+  const [contextCompactions, setContextCompactions] = createSignal<ContextCompactionEventView[]>([]);
   const [hasMessages, setHasMessages] = createSignal(false);
   // Turns true immediately after send to keep instant feedback before run state events arrive.
   const [sendPending, setSendPending] = createSignal(false);
@@ -1520,8 +1751,131 @@ export function EnvAIPage() {
   let activeTranscriptBaselineLoaded = false;
   let activeRealtimeEventSeq = 0;
   let activeSnapshotReqSeq = 0;
+  let activeContextRunID = '';
+  let activeContextEventCursor = 0;
+  let activeContextReplaySeq = 0;
   const failureNotifiedRuns = new Set<string>();
   const [runPhaseLabel, setRunPhaseLabel] = createSignal('Working');
+  const resetContextTelemetryState = (opts?: { keepRunId?: boolean }) => {
+    setContextUsage(null);
+    setContextCompactions([]);
+    activeContextEventCursor = 0;
+    activeContextReplaySeq += 1;
+    if (!opts?.keepRunId) {
+      activeContextRunID = '';
+    }
+  };
+  const ensureContextRun = (runId: string, opts?: { reset?: boolean }) => {
+    const rid = String(runId ?? '').trim();
+    if (!rid) return false;
+    if (rid === activeContextRunID && !opts?.reset) return true;
+    activeContextRunID = rid;
+    resetContextTelemetryState({ keepRunId: true });
+    return true;
+  };
+  const applyContextUsagePayload = (
+    payload: unknown,
+    meta?: {
+      eventId?: unknown;
+      atUnixMs?: unknown;
+    },
+  ) => {
+    const normalized = normalizeContextUsage(payload, meta);
+    if (!normalized) return;
+    const current = contextUsage();
+    const nextEventId = Number(normalized.eventId ?? 0);
+    const currentEventId = Number(current?.eventId ?? 0);
+    const nextAt = Number(normalized.atUnixMs ?? 0);
+    const currentAt = Number(current?.atUnixMs ?? 0);
+
+    if (nextEventId > 0 && currentEventId > 0 && nextEventId < currentEventId) return;
+    if (nextEventId > 0 && currentEventId > 0 && nextEventId === currentEventId && nextAt < currentAt) return;
+    if (nextEventId <= 0 && currentEventId > 0 && nextAt <= currentAt) return;
+    if (nextEventId <= 0 && currentEventId <= 0 && nextAt < currentAt) return;
+
+    setContextUsage(normalized);
+  };
+  const applyContextCompactionPayload = (
+    eventType: string,
+    payload: unknown,
+    meta?: {
+      eventId?: unknown;
+      atUnixMs?: unknown;
+    },
+  ) => {
+    const normalized = normalizeContextCompactionEvent(eventType, payload, meta);
+    if (!normalized) return;
+    setContextCompactions((prev) =>
+      mergeContextCompactionEvents(prev, [normalized], CONTEXT_TIMELINE_WINDOW_LIMIT),
+    );
+  };
+  const loadContextRunEvents = async (
+    runId: string,
+    opts?: {
+      reset?: boolean;
+      maxPages?: number;
+    },
+  ): Promise<void> => {
+    if (!canRWXReady()) return;
+    const rid = String(runId ?? '').trim();
+    if (!rid) return;
+    if (!ensureContextRun(rid, { reset: opts?.reset })) return;
+
+    const reqSeq = ++activeContextReplaySeq;
+    let cursor = activeContextEventCursor;
+    const maxPages = Math.max(1, Math.floor(Number(opts?.maxPages ?? RUN_CONTEXT_EVENTS_MAX_PAGES)));
+    let pages = 0;
+    try {
+      while (pages < maxPages) {
+        pages += 1;
+        const params = new URLSearchParams();
+        params.set('category', 'context');
+        params.set('limit', String(RUN_CONTEXT_EVENTS_PAGE_LIMIT));
+        if (cursor > 0) {
+          params.set('cursor', String(cursor));
+        }
+        const resp = await fetchGatewayJSON<RunContextEventsResponse>(
+          `/_redeven_proxy/api/ai/runs/${encodeURIComponent(rid)}/events?${params.toString()}`,
+          { method: 'GET' },
+        );
+        if (reqSeq !== activeContextReplaySeq) return;
+
+        const events = Array.isArray(resp?.events) ? resp.events : [];
+        const cursorBeforePage = cursor;
+        let pageMaxEventID = cursor;
+        for (const entry of events) {
+          const eventID = Math.max(0, Math.floor(Number(entry?.event_id ?? 0) || 0));
+          const atUnixMs = Math.max(0, Math.floor(Number(entry?.at_unix_ms ?? 0) || 0));
+          const eventType = String(entry?.event_type ?? '').trim();
+          const payload = entry?.payload;
+
+          if (eventType === 'context.usage.updated') {
+            applyContextUsagePayload(payload, { eventId: eventID, atUnixMs });
+          } else if (eventType.startsWith('context.compaction.')) {
+            applyContextCompactionPayload(eventType, payload, { eventId: eventID, atUnixMs });
+          }
+
+          if (eventID > pageMaxEventID) {
+            pageMaxEventID = eventID;
+          }
+        }
+
+        const nextCursorRaw = Math.max(0, Math.floor(Number(resp?.next_cursor ?? 0) || 0));
+        const nextCursor = Math.max(pageMaxEventID, nextCursorRaw, cursor);
+        const hasMore = Boolean(resp?.has_more);
+
+        cursor = nextCursor;
+        if (!hasMore) break;
+        if (events.length <= 0 && nextCursor <= cursorBeforePage) break;
+      }
+
+      if (reqSeq === activeContextReplaySeq) {
+        activeContextEventCursor = Math.max(activeContextEventCursor, cursor);
+      }
+    } catch {
+      // best effort, realtime stream continues to update the UI
+    }
+  };
   const setThreadTodosIfChanged = (next: ThreadTodosView | null): void => {
     if (!next) {
       if (threadTodos() !== null) {
@@ -1829,6 +2183,7 @@ export function EnvAIPage() {
     if (Number.isNaN(date.getTime())) return '';
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   });
+  const hasContextTelemetry = createMemo(() => !!contextUsage() || contextCompactions().length > 0);
 
   const normalizeLifecyclePhase = (raw: unknown): string => {
     const v = String(raw ?? '').trim().toLowerCase();
@@ -2336,6 +2691,7 @@ export function EnvAIPage() {
       setRunPhaseLabel('Working');
       setThreadTodos(null);
       resetThreadSubagents();
+      resetContextTelemetryState();
       setTodosError('');
       setTodosLoading(false);
       resetActiveTranscriptCursor('');
@@ -2350,6 +2706,7 @@ export function EnvAIPage() {
       setRunPhaseLabel('Working');
       setThreadTodos(null);
       resetThreadSubagents();
+      resetContextTelemetryState();
       setTodosError('');
       setTodosLoading(false);
       resetActiveTranscriptCursor('');
@@ -2372,6 +2729,7 @@ export function EnvAIPage() {
     setRunPhaseLabel('Working');
     setThreadTodos(null);
     resetThreadSubagents();
+    resetContextTelemetryState();
     setTodosError('');
     setTodosLoading(true);
     void loadThreadMessages(tid, { scrollToBottom: true, reset: true }).then(() => {
@@ -2419,8 +2777,28 @@ export function EnvAIPage() {
       if (event.eventType === 'stream_event') {
         const streamEvent = event.streamEvent as any;
         const streamType = String(streamEvent?.type ?? '').trim().toLowerCase();
+        const streamKind = String(event.streamKind ?? '').trim().toLowerCase();
+        const eventRunID = String(event.runId ?? '').trim();
         if (tid === String(ai.activeThreadId() ?? '').trim()) {
           activeRealtimeEventSeq += 1;
+          if (eventRunID) {
+            ensureContextRun(eventRunID);
+          }
+        }
+        if (tid === String(ai.activeThreadId() ?? '').trim() && (streamKind === 'context' || streamType === 'context-usage' || streamType === 'context-compaction')) {
+          if (streamType === 'context-usage') {
+            applyContextUsagePayload(streamEvent?.payload, {
+              atUnixMs: event.atUnixMs,
+            });
+          } else if (streamType === 'context-compaction') {
+            const eventType = String(streamEvent?.eventType ?? '').trim();
+            if (eventType) {
+              applyContextCompactionPayload(eventType, streamEvent?.payload, {
+                atUnixMs: event.atUnixMs,
+              });
+            }
+          }
+          return;
         }
         if (streamType === 'lifecycle-phase') {
           if (tid === String(ai.activeThreadId() ?? '').trim()) {
@@ -2464,6 +2842,12 @@ export function EnvAIPage() {
       }
 
       const runId = String(event.runId ?? '').trim();
+      if (tid === String(ai.activeThreadId() ?? '').trim() && runId) {
+        void loadContextRunEvents(runId, {
+          reset: runId !== activeContextRunID,
+          maxPages: RUN_CONTEXT_EVENTS_MAX_PAGES,
+        });
+      }
       const runError = String(event.runError ?? '').trim();
       if (status === 'failed' && runError && runId && !failureNotifiedRuns.has(runId)) {
         failureNotifiedRuns.add(runId);
@@ -2474,6 +2858,43 @@ export function EnvAIPage() {
     onCleanup(() => {
       unsub();
     });
+  });
+
+  createEffect(() => {
+    if (!chatReady()) return;
+    if (protocol.status() !== 'connected' || !ai.aiEnabled()) return;
+    if (!canRWXReady()) return;
+
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    if (!tid) return;
+
+    const runId = String(ai.runIdForThread(tid) ?? '').trim();
+    if (!runId) return;
+
+    const needReset = runId !== activeContextRunID;
+    if (!ensureContextRun(runId, { reset: needReset })) return;
+    void loadContextRunEvents(runId, {
+      reset: needReset,
+      maxPages: RUN_CONTEXT_EVENTS_MAX_PAGES,
+    });
+  });
+
+  createEffect(() => {
+    if (!chatReady()) return;
+    if (protocol.status() !== 'connected' || !ai.aiEnabled()) return;
+    if (!canRWXReady()) return;
+
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    if (!tid) return;
+    if (!activeThreadRunning()) return;
+
+    const runId = String(ai.runIdForThread(tid) ?? activeContextRunID).trim();
+    if (!runId) return;
+
+    const timer = window.setInterval(() => {
+      void loadContextRunEvents(runId, { reset: false, maxPages: 2 });
+    }, 2000);
+    onCleanup(() => window.clearInterval(timer));
   });
 
   // When the active thread finishes a run, refresh persisted messages even if realtime terminal events were dropped.
@@ -2714,6 +3135,8 @@ export function EnvAIPage() {
       }
       if (rid) {
         ai.confirmThreadRun(tid, rid);
+        ensureContextRun(rid, { reset: true });
+        void loadContextRunEvents(rid, { reset: true });
       }
       ai.bumpThreadsSeq();
       if (String(resp.kind ?? '').trim().toLowerCase() === 'steer') {
@@ -3113,7 +3536,13 @@ export function EnvAIPage() {
                       updatedLabel={subagentsUpdatedLabel()}
                     />
                   </Show>
-                  <Show when={!ai.activeThreadId() || (activeThreadTodos().length === 0 && activeThreadSubagents().length === 0)}>
+                  <Show when={ai.activeThreadId() && hasContextTelemetry()}>
+                    <CompactContextSummary
+                      usage={contextUsage()}
+                      compactions={contextCompactions()}
+                    />
+                  </Show>
+                  <Show when={!ai.activeThreadId() || (activeThreadTodos().length === 0 && activeThreadSubagents().length === 0 && !hasContextTelemetry())}>
                     <span class="text-[11px] text-muted-foreground">Execution mode</span>
                   </Show>
                 </div>

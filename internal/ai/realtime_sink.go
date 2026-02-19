@@ -179,6 +179,12 @@ func shouldPersistRealtimeEvent(ev RealtimeEvent) bool {
 	switch ev.StreamEvent.(type) {
 	case streamEventBlockDelta:
 		return false
+	case streamEventContextUsage:
+		// Context telemetry is persisted via explicit run events.
+		return false
+	case streamEventContextCompaction:
+		// Context telemetry is persisted via explicit run events.
+		return false
 	default:
 		return true
 	}
@@ -292,6 +298,8 @@ func classifyRealtimePriority(ev RealtimeEvent) aiSinkPriority {
 	switch ev.StreamEvent.(type) {
 	case streamEventBlockDelta:
 		return aiSinkPriorityLow
+	case streamEventContextUsage:
+		return aiSinkPriorityLow
 	default:
 		return aiSinkPriorityHigh
 	}
@@ -324,6 +332,10 @@ func classifyStreamKind(streamEvent any) RealtimeStreamKind {
 		return RealtimeStreamKindLifecycle
 	case streamEventLifecyclePhase:
 		return RealtimeStreamKindLifecycle
+	case streamEventContextUsage:
+		return RealtimeStreamKindContext
+	case streamEventContextCompaction:
+		return RealtimeStreamKindContext
 	case streamEventBlockStart:
 		if strings.TrimSpace(strings.ToLower(ev.BlockType)) == "tool-call" {
 			return RealtimeStreamKindTool

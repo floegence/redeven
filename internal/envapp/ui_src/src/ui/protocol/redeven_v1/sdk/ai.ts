@@ -118,7 +118,7 @@ export type AIRealtimeEvent = {
   threadId: string;
   runId: string;
   atUnixMs: number;
-  streamKind?: 'lifecycle' | 'assistant' | 'tool';
+  streamKind?: 'lifecycle' | 'assistant' | 'tool' | 'context';
   phase?: 'start' | 'state_change' | 'end' | 'error';
   diag?: Record<string, any>;
   streamEvent?: StreamEvent;

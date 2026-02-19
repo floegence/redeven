@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -802,6 +803,148 @@ func TestStore_ReplaceThreadTodosSnapshot(t *testing.T) {
 	}, &stale)
 	if !errors.Is(err, ErrThreadTodosVersionConflict) {
 		t.Fatalf("stale replace err=%v, want %v", err, ErrThreadTodosVersionConflict)
+	}
+}
+
+func TestStore_ListRunEventsPage_ContextCategory(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	appendEvent := func(eventType string) {
+		t.Helper()
+		err := s.AppendRunEvent(ctx, RunEventRecord{
+			EndpointID:  "env_1",
+			ThreadID:    "th_1",
+			RunID:       "run_1",
+			StreamKind:  "lifecycle",
+			EventType:   eventType,
+			PayloadJSON: "{}",
+			AtUnixMs:    time.Now().UnixMilli(),
+		})
+		if err != nil {
+			t.Fatalf("AppendRunEvent(%s): %v", eventType, err)
+		}
+	}
+
+	appendEvent("context.integrity.repair_applied")
+	appendEvent("context.compaction.started")
+	appendEvent("context.usage.updated")
+	appendEvent("context.compaction.skipped")
+	appendEvent("native.turn.result")
+
+	firstPage, nextCursor, hasMore, err := s.ListRunEventsPage(ctx, "env_1", "run_1", RunEventsQuery{
+		Category: "context",
+		Limit:    2,
+	})
+	if err != nil {
+		t.Fatalf("ListRunEventsPage first: %v", err)
+	}
+	if len(firstPage) != 2 {
+		t.Fatalf("len(firstPage)=%d, want 2", len(firstPage))
+	}
+	if !hasMore {
+		t.Fatalf("hasMore=%v, want true", hasMore)
+	}
+	if strings.TrimSpace(firstPage[0].EventType) != "context.compaction.started" {
+		t.Fatalf("firstPage[0].EventType=%q, want context.compaction.started", firstPage[0].EventType)
+	}
+	if strings.TrimSpace(firstPage[1].EventType) != "context.usage.updated" {
+		t.Fatalf("firstPage[1].EventType=%q, want context.usage.updated", firstPage[1].EventType)
+	}
+	if nextCursor <= 0 {
+		t.Fatalf("nextCursor=%d, want > 0", nextCursor)
+	}
+
+	secondPage, secondCursor, secondHasMore, err := s.ListRunEventsPage(ctx, "env_1", "run_1", RunEventsQuery{
+		Category: "context",
+		Limit:    2,
+		Cursor:   nextCursor,
+	})
+	if err != nil {
+		t.Fatalf("ListRunEventsPage second: %v", err)
+	}
+	if secondHasMore {
+		t.Fatalf("secondHasMore=%v, want false", secondHasMore)
+	}
+	if len(secondPage) != 1 {
+		t.Fatalf("len(secondPage)=%d, want 1", len(secondPage))
+	}
+	if strings.TrimSpace(secondPage[0].EventType) != "context.compaction.skipped" {
+		t.Fatalf("secondPage[0].EventType=%q, want context.compaction.skipped", secondPage[0].EventType)
+	}
+	if secondCursor < nextCursor {
+		t.Fatalf("secondCursor=%d, want >= %d", secondCursor, nextCursor)
+	}
+}
+
+func TestStore_AppendRunEvent_AgeRetention(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	oldEventTime := time.Now().Add(-(runEventRetentionMaxAge + 24*time.Hour)).UnixMilli()
+	if err := s.AppendRunEvent(ctx, RunEventRecord{
+		EndpointID:  "env_1",
+		ThreadID:    "th_1",
+		RunID:       "run_1",
+		StreamKind:  "context",
+		EventType:   "context.usage.updated",
+		PayloadJSON: "{}",
+		AtUnixMs:    oldEventTime,
+	}); err != nil {
+		t.Fatalf("AppendRunEvent old: %v", err)
+	}
+
+	eventsAfterOld, err := s.ListRunEvents(ctx, "env_1", "run_1", 10)
+	if err != nil {
+		t.Fatalf("ListRunEvents after old: %v", err)
+	}
+	if len(eventsAfterOld) != 0 {
+		t.Fatalf("len(eventsAfterOld)=%d, want 0", len(eventsAfterOld))
+	}
+
+	if err := s.AppendRunEvent(ctx, RunEventRecord{
+		EndpointID:  "env_1",
+		ThreadID:    "th_1",
+		RunID:       "run_1",
+		StreamKind:  "context",
+		EventType:   "context.compaction.started",
+		PayloadJSON: "{}",
+		AtUnixMs:    time.Now().UnixMilli(),
+	}); err != nil {
+		t.Fatalf("AppendRunEvent fresh: %v", err)
+	}
+
+	events, err := s.ListRunEvents(ctx, "env_1", "run_1", 10)
+	if err != nil {
+		t.Fatalf("ListRunEvents fresh: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("len(events)=%d, want 1", len(events))
+	}
+	if strings.TrimSpace(events[0].EventType) != "context.compaction.started" {
+		t.Fatalf("EventType=%q, want context.compaction.started", events[0].EventType)
 	}
 }
 

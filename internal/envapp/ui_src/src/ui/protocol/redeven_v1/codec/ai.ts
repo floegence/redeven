@@ -202,8 +202,8 @@ export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtime
 
   const streamKindRaw = String(payload?.stream_kind ?? '').trim().toLowerCase();
   const streamKind =
-    streamKindRaw === 'lifecycle' || streamKindRaw === 'assistant' || streamKindRaw === 'tool'
-      ? (streamKindRaw as 'lifecycle' | 'assistant' | 'tool')
+    streamKindRaw === 'lifecycle' || streamKindRaw === 'assistant' || streamKindRaw === 'tool' || streamKindRaw === 'context'
+      ? (streamKindRaw as 'lifecycle' | 'assistant' | 'tool' | 'context')
       : undefined;
 
   const phaseRaw = String(payload?.phase ?? '').trim().toLowerCase();
