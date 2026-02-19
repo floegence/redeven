@@ -1740,6 +1740,8 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 					status := http.StatusBadRequest
 					if errors.Is(err, sql.ErrNoRows) {
 						status = http.StatusNotFound
+					} else if errors.Is(err, ai.ErrModelSwitchRequiresExplicitRestart) || errors.Is(err, ai.ErrModelLockViolation) {
+						status = http.StatusConflict
 					}
 					writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 					return

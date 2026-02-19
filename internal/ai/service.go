@@ -29,9 +29,11 @@ import (
 )
 
 var (
-	ErrNotConfigured = errors.New("ai not configured")
-	ErrRunActive     = errors.New("run already active")
-	ErrThreadBusy    = errors.New("thread already active")
+	ErrNotConfigured                      = errors.New("ai not configured")
+	ErrRunActive                          = errors.New("run already active")
+	ErrThreadBusy                         = errors.New("thread already active")
+	ErrModelLockViolation                 = errors.New("model lock violation")
+	ErrModelSwitchRequiresExplicitRestart = errors.New("model switch requires explicit restart")
 )
 
 type Options struct {
@@ -733,6 +735,7 @@ type preparedRun struct {
 	threadID             string
 	thKey                string
 	threadModelID        string
+	threadModelLocked    bool
 	cfg                  *config.AIConfig
 	uploadsDir           string
 	persistTO            time.Duration
@@ -963,6 +966,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		threadID:             threadID,
 		thKey:                thKey,
 		threadModelID:        strings.TrimSpace(th.ModelID),
+		threadModelLocked:    th.ModelLocked,
 		cfg:                  cfg,
 		uploadsDir:           uploadsDir,
 		persistTO:            persistTO,
@@ -1058,12 +1062,34 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	cancelPersist()
 
 	req.Options.Mode = normalizeRunMode(req.Options.Mode, cfg.EffectiveMode())
-	resolvedModel, err := s.resolveRunModel(ctx, cfg, req.Model, prepared.threadModelID, r)
+	resolvedModel, err := s.resolveRunModel(ctx, cfg, req.Model, prepared.threadModelID, prepared.threadModelLocked, r)
 	if err != nil {
+		if errors.Is(err, ErrModelLockViolation) || errors.Is(err, ErrModelSwitchRequiresExplicitRestart) {
+			r.persistRunEvent("task.model_lock.rejected", RealtimeStreamKindLifecycle, map[string]any{
+				"reason_code":     "model_lock_conflict",
+				"policy_source":   "thread_model_lock",
+				"requested_model": strings.TrimSpace(req.Model),
+				"locked_model_id": strings.TrimSpace(prepared.threadModelID),
+				"thread_locked":   prepared.threadModelLocked,
+				"error":           strings.TrimSpace(err.Error()),
+			})
+		}
 		return streamEarlyError(err)
 	}
 	model := resolvedModel.ID
 	modelCapability := resolvedModel.Capability
+	lockReasonCode := "thread_model_pending_lock"
+	if prepared.threadModelLocked {
+		lockReasonCode = "thread_model_locked"
+	}
+	r.persistRunEvent("task.model_lock.enforced", RealtimeStreamKindLifecycle, map[string]any{
+		"reason_code":     lockReasonCode,
+		"policy_source":   "thread_model_lock",
+		"requested_model": strings.TrimSpace(req.Model),
+		"locked_model_id": strings.TrimSpace(prepared.threadModelID),
+		"resolved_model":  model,
+		"thread_locked":   prepared.threadModelLocked,
+	})
 
 	policyDecision := classifyRunPolicy(rawUserInputText, req.Input.Attachments, existingOpenGoal, func() (runPolicyDecision, error) {
 		decision, classifyErr := s.classifyRunPolicyByModel(ctx, resolvedModel, rawUserInputText, existingOpenGoal)
@@ -1201,6 +1227,18 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	{
 		pctx, cancel := context.WithTimeout(context.Background(), persistTO)
 		_ = db.UpdateThreadModelID(pctx, endpointID, threadID, model)
+		if !prepared.threadModelLocked {
+			_ = db.UpdateThreadModelLock(pctx, endpointID, threadID, true)
+			prepared.threadModelLocked = true
+			prepared.threadModelID = model
+			r.persistRunEvent("task.model_lock.enforced", RealtimeStreamKindLifecycle, map[string]any{
+				"reason_code":     "thread_model_lock_initialized",
+				"policy_source":   "thread_model_lock",
+				"locked_model_id": model,
+				"resolved_model":  model,
+				"thread_locked":   true,
+			})
+		}
 		cancel()
 	}
 
@@ -1352,10 +1390,23 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	return finalErr
 }
 
-func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, requestedModel string, threadModelID string, r *run) (resolvedRunModel, error) {
-	model := strings.TrimSpace(requestedModel)
-	if model == "" {
-		model = strings.TrimSpace(threadModelID)
+func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, requestedModel string, threadModelID string, threadModelLocked bool, r *run) (resolvedRunModel, error) {
+	model := ""
+	requestedModel = strings.TrimSpace(requestedModel)
+	threadModelID = strings.TrimSpace(threadModelID)
+	if threadModelLocked {
+		if threadModelID == "" {
+			return resolvedRunModel{}, fmt.Errorf("%w: missing locked model id", ErrModelLockViolation)
+		}
+		if requestedModel != "" && requestedModel != threadModelID {
+			return resolvedRunModel{}, fmt.Errorf("%w: locked=%s requested=%s", ErrModelSwitchRequiresExplicitRestart, threadModelID, requestedModel)
+		}
+		model = threadModelID
+	} else {
+		model = requestedModel
+		if model == "" {
+			model = threadModelID
+		}
 	}
 	if model == "" {
 		if id, ok := cfg.ResolvedCurrentModelID(); ok {

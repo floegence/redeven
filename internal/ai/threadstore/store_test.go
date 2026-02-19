@@ -240,7 +240,7 @@ PRAGMA user_version=1;
 		t.Fatalf("rows err: %v", err)
 	}
 
-	for _, col := range []string{"model_id", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_prompt_id", "waiting_message_id", "waiting_tool_id"} {
+	for _, col := range []string{"model_id", "model_locked", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_prompt_id", "waiting_message_id", "waiting_tool_id"} {
 		if !cols[col] {
 			t.Fatalf("missing migrated column %q", col)
 		}
@@ -264,8 +264,8 @@ WHERE type = 'table' AND name = ?
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 10 {
-		t.Fatalf("user_version=%d, want 10", version)
+	if version != 11 {
+		t.Fatalf("user_version=%d, want 11", version)
 	}
 }
 
@@ -352,8 +352,8 @@ WHERE run_id = 'run_legacy'
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 10 {
-		t.Fatalf("user_version=%d, want 10", version)
+	if version != 11 {
+		t.Fatalf("user_version=%d, want 11", version)
 	}
 }
 
@@ -399,6 +399,75 @@ func TestStore_UpdateThreadModelID_DoesNotTouchUpdatedAt(t *testing.T) {
 	}
 	if th.UpdatedAtUnixMs != updatedAt {
 		t.Fatalf("UpdatedAtUnixMs changed: got=%d want=%d", th.UpdatedAtUnixMs, updatedAt)
+	}
+}
+
+func TestStore_CreateThread_ModelLockDefaultsToFalse(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	th, err := s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if th == nil {
+		t.Fatalf("thread missing")
+	}
+	if th.ModelLocked {
+		t.Fatalf("ModelLocked=%v, want false", th.ModelLocked)
+	}
+}
+
+func TestStore_UpdateThreadModelLock(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if err := s.UpdateThreadModelLock(ctx, "env_1", "th_1", true); err != nil {
+		t.Fatalf("UpdateThreadModelLock(true): %v", err)
+	}
+	th, err := s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if th == nil {
+		t.Fatalf("thread missing")
+	}
+	if !th.ModelLocked {
+		t.Fatalf("ModelLocked=%v, want true", th.ModelLocked)
+	}
+
+	if err := s.UpdateThreadModelLock(ctx, "env_1", "th_1", false); err != nil {
+		t.Fatalf("UpdateThreadModelLock(false): %v", err)
+	}
+	th, err = s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread after unlock: %v", err)
+	}
+	if th == nil {
+		t.Fatalf("thread missing after unlock")
+	}
+	if th.ModelLocked {
+		t.Fatalf("ModelLocked=%v, want false", th.ModelLocked)
 	}
 }
 

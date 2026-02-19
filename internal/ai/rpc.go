@@ -395,7 +395,11 @@ func toAIRPCError(err error) *rpc.Error {
 	switch {
 	case errors.Is(err, ErrNotConfigured):
 		return &rpc.Error{Code: 503, Message: "ai not configured"}
-	case errors.Is(err, ErrThreadBusy), errors.Is(err, ErrRunChanged), errors.Is(err, ErrWaitingPromptChanged):
+	case errors.Is(err, ErrThreadBusy),
+		errors.Is(err, ErrRunChanged),
+		errors.Is(err, ErrWaitingPromptChanged),
+		errors.Is(err, ErrModelLockViolation),
+		errors.Is(err, ErrModelSwitchRequiresExplicitRestart):
 		return &rpc.Error{Code: 409, Message: msg}
 	}
 

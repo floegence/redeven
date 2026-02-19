@@ -125,6 +125,7 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 		ThreadID:            strings.TrimSpace(th.ThreadID),
 		Title:               strings.TrimSpace(th.Title),
 		ModelID:             strings.TrimSpace(th.ModelID),
+		ModelLocked:         th.ModelLocked,
 		WorkingDir:          workingDir,
 		RunStatus:           runStatus,
 		RunUpdatedAtUnixMs:  th.RunUpdatedAtUnixMs,
@@ -175,6 +176,7 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 			ThreadID:            strings.TrimSpace(t.ThreadID),
 			Title:               strings.TrimSpace(t.Title),
 			ModelID:             strings.TrimSpace(t.ModelID),
+			ModelLocked:         t.ModelLocked,
 			WorkingDir:          workingDir,
 			RunStatus:           runStatus,
 			RunUpdatedAtUnixMs:  t.RunUpdatedAtUnixMs,
@@ -262,6 +264,7 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 		ThreadID:            id,
 		Title:               strings.TrimSpace(t.Title),
 		ModelID:             modelID,
+		ModelLocked:         false,
 		WorkingDir:          workingDirClean,
 		RunStatus:           "idle",
 		RunUpdatedAtUnixMs:  0,
@@ -368,6 +371,23 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	}
 	if !cfg.IsAllowedModelID(modelID) {
 		return fmt.Errorf("model not allowed: %s", modelID)
+	}
+	th, err := db.GetThread(ctx, endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	if th == nil {
+		return sql.ErrNoRows
+	}
+	currentModelID := strings.TrimSpace(th.ModelID)
+	if currentModelID == modelID {
+		return nil
+	}
+	if th.ModelLocked {
+		return ErrModelSwitchRequiresExplicitRestart
+	}
+	if s.HasActiveThreadForEndpoint(endpointID, threadID) {
+		return ErrModelSwitchRequiresExplicitRestart
 	}
 
 	if err := db.UpdateThreadModelID(ctx, endpointID, threadID, modelID); err != nil {
