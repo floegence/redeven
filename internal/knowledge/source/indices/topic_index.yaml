@@ -1,0 +1,20 @@
+topics:
+  architecture:
+    - K-AGENT-001
+    - K-DEP-001
+    - K-KNOW-001
+  control_plane:
+    - K-AGENT-001
+  dependencies:
+    - K-DEP-001
+    - K-WEB-001
+  knowledge:
+    - K-KNOW-001
+  release:
+    - K-KNOW-001
+    - K-REL-001
+  security:
+    - K-AGENT-001
+    - K-REL-001
+  ui:
+    - K-WEB-001

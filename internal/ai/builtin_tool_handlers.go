@@ -371,7 +371,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "knowledge.search",
-			Description:      "Search the embedded Redeven knowledge bundle and return the most relevant cards with evidence refs.",
+			Description:      "Search the embedded Redeven Agent knowledge bundle and return scoped card summaries without internal file-level evidence details.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 8}, "tags": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"query"}, "additionalProperties": false}),
 			ParallelSafe:     true,
 			Mutating:         false,

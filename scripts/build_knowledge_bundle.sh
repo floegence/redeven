@@ -16,16 +16,16 @@ for arg in "$@"; do
   esac
 done
 
-GEN_ROOT="$ROOT_DIR/internal/knowledge/generated"
+SOURCE_ROOT="$ROOT_DIR/internal/knowledge/source"
 DIST_ROOT="$ROOT_DIR/internal/knowledge/dist"
 
 if [ "$VERIFY_ONLY" -eq 1 ]; then
   go run ./cmd/knowledge-bundle \
-    --generated-root "$GEN_ROOT" \
+    --source-root "$SOURCE_ROOT" \
     --dist-root "$DIST_ROOT" \
     --verify-only
 else
   go run ./cmd/knowledge-bundle \
-    --generated-root "$GEN_ROOT" \
+    --source-root "$SOURCE_ROOT" \
     --dist-root "$DIST_ROOT"
 fi

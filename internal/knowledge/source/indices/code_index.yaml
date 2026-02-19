@@ -1,0 +1,22 @@
+paths:
+  redeven-agent/.github/workflows/release.yml:
+    - K-REL-001
+  redeven-agent/README.md:
+    - K-AGENT-001
+  redeven-agent/cmd/knowledge-bundle/main.go:
+    - K-KNOW-001
+  redeven-agent/go.mod:
+    - K-DEP-001
+  redeven-agent/internal/agent/agent.go:
+    - K-AGENT-001
+    - K-DEP-001
+  redeven-agent/internal/envapp/ui_src/package.json:
+    - K-WEB-001
+  redeven-agent/internal/terminal/manager.go:
+    - K-DEP-001
+  redeven-agent/scripts/build_assets.sh:
+    - K-KNOW-001
+  redeven-agent/scripts/build_knowledge_bundle.sh:
+    - K-KNOW-001
+  redeven-agent/scripts/sync_release_assets.sh:
+    - K-REL-001

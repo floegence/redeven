@@ -19,25 +19,46 @@ type BuildResult struct {
 	SHA256File   []byte
 }
 
-func BuildFromGenerated(generatedRoot string) (BuildResult, error) {
-	cards, err := LoadGeneratedCards(generatedRoot)
+func BuildFromSource(sourceRoot string) (BuildResult, error) {
+	root := strings.TrimSpace(sourceRoot)
+	if root == "" {
+		return BuildResult{}, fmt.Errorf("missing source root")
+	}
+
+	sourceManifest, _, err := LoadSourceManifest(root)
 	if err != nil {
 		return BuildResult{}, err
 	}
-	indices, err := LoadGeneratedIndices(generatedRoot)
+	allowedRepos := make(map[string]struct{}, len(sourceManifest.AllowedRepos))
+	for _, repo := range sourceManifest.AllowedRepos {
+		allowedRepos[repo] = struct{}{}
+	}
+
+	cards, err := LoadSourceCards(root, allowedRepos)
 	if err != nil {
 		return BuildResult{}, err
 	}
-	lock, lockRaw, err := loadLockFile(filepath.Join(strings.TrimSpace(generatedRoot), "knowledge_lock.json"))
+	indices, err := LoadSourceIndices(root, allowedRepos)
+	if err != nil {
+		return BuildResult{}, err
+	}
+	if err := validateCardsAndIndices(cards, indices); err != nil {
+		return BuildResult{}, err
+	}
+
+	sourceHash, err := hashTree(root)
 	if err != nil {
 		return BuildResult{}, err
 	}
 
 	bundle := Bundle{
 		SchemaVersion: SchemaVersion,
-		GeneratedAt:   strings.TrimSpace(lock.GeneratedAt),
-		SourceCommit:  strings.TrimSpace(lock.RedevenSourceCommit),
-		PromptVersion: strings.TrimSpace(lock.Generator.PromptVersion),
+		BuiltAt:       sourceManifest.UpdatedAt,
+		KnowledgeID:   sourceManifest.KnowledgeID,
+		KnowledgeName: sourceManifest.KnowledgeName,
+		AllowedRepos:  append([]string(nil), sourceManifest.AllowedRepos...),
+		SourceRefs:    cloneSourceRefs(sourceManifest.SourceRefs),
+		SourceSHA256:  sourceHash,
 		Cards:         cards,
 		Indices:       indices,
 	}
@@ -62,14 +83,15 @@ func BuildFromGenerated(generatedRoot string) (BuildResult, error) {
 	bundleHash := sha256Hex(bundleJSON)
 	manifest := BundleManifest{
 		SchemaVersion:    SchemaVersion,
-		GeneratedAt:      bundle.GeneratedAt,
-		SourceCommit:     bundle.SourceCommit,
+		BuiltAt:          bundle.BuiltAt,
+		KnowledgeID:      bundle.KnowledgeID,
+		AllowedRepos:     append([]string(nil), bundle.AllowedRepos...),
 		CardCount:        len(bundle.Cards),
 		BundleSHA256:     bundleHash,
 		CardsSHA256:      sha256Hex(cardsJSON),
 		TopicIndexSHA256: sha256Hex(topicsJSON),
 		CodeIndexSHA256:  sha256Hex(codeJSON),
-		LockSHA256:       sha256Hex(lockRaw),
+		SourceSHA256:     sourceHash,
 	}
 	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
@@ -131,28 +153,55 @@ func VerifyDistFiles(distRoot string, result BuildResult) error {
 	return nil
 }
 
-func loadLockFile(path string) (LockFile, []byte, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return LockFile{}, nil, err
+func validateCardsAndIndices(cards []Card, indices Indices) error {
+	cardIDs := make(map[string]struct{}, len(cards))
+	for _, card := range cards {
+		cardIDs[card.ID] = struct{}{}
 	}
-	var lock LockFile
-	if err := json.Unmarshal(raw, &lock); err != nil {
-		return LockFile{}, nil, fmt.Errorf("parse lock failed: %w", err)
+	for topic, ids := range indices.Topics {
+		if strings.TrimSpace(topic) == "" {
+			return fmt.Errorf("topic index contains empty topic")
+		}
+		for _, id := range ids {
+			if _, ok := cardIDs[id]; !ok {
+				return fmt.Errorf("topic index references unknown card id %q", id)
+			}
+		}
 	}
-	if lock.SchemaVersion <= 0 {
-		return LockFile{}, nil, fmt.Errorf("invalid schema_version in lock file")
+	for path, ids := range indices.CodePaths {
+		repo, _, err := splitRepoPath(path)
+		if err != nil {
+			return fmt.Errorf("invalid code index path %q: %w", path, err)
+		}
+		if strings.EqualFold(repo, "redeven") {
+			return fmt.Errorf("code index must not contain redeven path %q", path)
+		}
+		for _, id := range ids {
+			if _, ok := cardIDs[id]; !ok {
+				return fmt.Errorf("code index references unknown card id %q", id)
+			}
+		}
 	}
-	if strings.TrimSpace(lock.RedevenSourceCommit) == "" {
-		return LockFile{}, nil, fmt.Errorf("lock file missing redeven_source_commit")
+	return nil
+}
+
+func cloneSourceRefs(raw map[string]string) map[string]string {
+	if len(raw) == 0 {
+		return nil
 	}
-	if strings.TrimSpace(lock.Generator.Engine) == "" {
-		return LockFile{}, nil, fmt.Errorf("lock file missing generator.engine")
+	out := make(map[string]string, len(raw))
+	for repo, ref := range raw {
+		repo = strings.TrimSpace(repo)
+		ref = strings.TrimSpace(ref)
+		if repo == "" || ref == "" {
+			continue
+		}
+		out[repo] = ref
 	}
-	if strings.TrimSpace(lock.GeneratedAt) == "" {
-		return LockFile{}, nil, fmt.Errorf("lock file missing generated_at")
+	if len(out) == 0 {
+		return nil
 	}
-	return lock, raw, nil
+	return out
 }
 
 func sha256Hex(payload []byte) string {
@@ -160,10 +209,36 @@ func sha256Hex(payload []byte) string {
 	return hex.EncodeToString(h[:])
 }
 
-func SortCardIDs(mapping map[string][]string) {
-	for key := range mapping {
-		ids := mapping[key]
-		sort.Strings(ids)
-		mapping[key] = ids
+func hashTree(root string) (string, error) {
+	entries := make([]string, 0, 64)
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		entries = append(entries, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		return "", err
 	}
+	sort.Strings(entries)
+	h := sha256.New()
+	for _, rel := range entries {
+		payload, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			return "", err
+		}
+		_, _ = h.Write([]byte(rel))
+		_, _ = h.Write([]byte("\n"))
+		_, _ = h.Write(payload)
+		_, _ = h.Write([]byte("\n"))
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

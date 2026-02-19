@@ -11,7 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var evidenceLinePattern = regexp.MustCompile(`^-\s*([^:\n]+):(\d+)(?:\s*-\s*(.+))?$`)
+var evidenceLinePattern = regexp.MustCompile(`^-\s*([a-z0-9][a-z0-9_.-]*):([^:\n]+):(\d+)(?:\s*-\s*(.+))?$`)
 
 type cardFrontmatter struct {
 	ID           string   `yaml:"id"`
@@ -21,7 +21,6 @@ type cardFrontmatter struct {
 	Owners       []string `yaml:"owners"`
 	Tags         []string `yaml:"tags"`
 	SourceCardID string   `yaml:"source_card_id"`
-	SourceCommit string   `yaml:"source_commit"`
 }
 
 type topicIndexFile struct {
@@ -32,10 +31,60 @@ type codeIndexFile struct {
 	Paths map[string][]string `yaml:"paths"`
 }
 
-func LoadGeneratedCards(generatedRoot string) ([]Card, error) {
-	root := strings.TrimSpace(generatedRoot)
+func LoadSourceManifest(sourceRoot string) (SourceManifest, []byte, error) {
+	root := strings.TrimSpace(sourceRoot)
 	if root == "" {
-		return nil, fmt.Errorf("missing generated root")
+		return SourceManifest{}, nil, fmt.Errorf("missing source root")
+	}
+	path := filepath.Join(root, "manifest.yaml")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return SourceManifest{}, nil, err
+	}
+	var manifest SourceManifest
+	if err := yaml.Unmarshal(raw, &manifest); err != nil {
+		return SourceManifest{}, nil, fmt.Errorf("parse %s failed: %w", path, err)
+	}
+	if manifest.SchemaVersion != SchemaVersion {
+		return SourceManifest{}, nil, fmt.Errorf("manifest schema_version must be %d", SchemaVersion)
+	}
+	manifest.KnowledgeID = strings.TrimSpace(manifest.KnowledgeID)
+	manifest.KnowledgeName = strings.TrimSpace(manifest.KnowledgeName)
+	manifest.UpdatedAt = strings.TrimSpace(manifest.UpdatedAt)
+	if manifest.KnowledgeID == "" || manifest.KnowledgeName == "" {
+		return SourceManifest{}, nil, fmt.Errorf("manifest requires knowledge_id and knowledge_name")
+	}
+	if manifest.UpdatedAt == "" {
+		return SourceManifest{}, nil, fmt.Errorf("manifest requires updated_at")
+	}
+	manifest.AllowedRepos = normalizeStringList(manifest.AllowedRepos)
+	if len(manifest.AllowedRepos) == 0 {
+		return SourceManifest{}, nil, fmt.Errorf("manifest requires allowed_repos")
+	}
+	for _, repo := range manifest.AllowedRepos {
+		if strings.EqualFold(repo, "redeven") {
+			return SourceManifest{}, nil, fmt.Errorf("allowed_repos must not contain redeven")
+		}
+	}
+	if len(manifest.SourceRefs) > 0 {
+		next := make(map[string]string, len(manifest.SourceRefs))
+		for repo, ref := range manifest.SourceRefs {
+			repo = strings.TrimSpace(repo)
+			ref = strings.TrimSpace(ref)
+			if repo == "" || ref == "" {
+				continue
+			}
+			next[repo] = ref
+		}
+		manifest.SourceRefs = next
+	}
+	return manifest, raw, nil
+}
+
+func LoadSourceCards(sourceRoot string, allowedRepos map[string]struct{}) ([]Card, error) {
+	root := strings.TrimSpace(sourceRoot)
+	if root == "" {
+		return nil, fmt.Errorf("missing source root")
 	}
 	cardsDir := filepath.Join(root, "cards")
 	entries, err := os.ReadDir(cardsDir)
@@ -53,7 +102,7 @@ func LoadGeneratedCards(generatedRoot string) ([]Card, error) {
 			continue
 		}
 		path := filepath.Join(cardsDir, entry.Name())
-		card, err := ParseGeneratedCardMarkdown(path)
+		card, err := ParseSourceCardMarkdown(path, allowedRepos)
 		if err != nil {
 			return nil, err
 		}
@@ -69,12 +118,12 @@ func LoadGeneratedCards(generatedRoot string) ([]Card, error) {
 
 	sort.Slice(cards, func(i, j int) bool { return cards[i].ID < cards[j].ID })
 	if len(cards) == 0 {
-		return nil, fmt.Errorf("no generated cards found under %s", cardsDir)
+		return nil, fmt.Errorf("no source cards found under %s", cardsDir)
 	}
 	return cards, nil
 }
 
-func ParseGeneratedCardMarkdown(path string) (Card, error) {
+func ParseSourceCardMarkdown(path string, allowedRepos map[string]struct{}) (Card, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return Card{}, err
@@ -94,7 +143,7 @@ func ParseGeneratedCardMarkdown(path string) (Card, error) {
 	mechanism := strings.TrimSpace(strings.Join(sections["Mechanism"], "\n"))
 	boundaries := strings.TrimSpace(strings.Join(sections["Boundaries"], "\n"))
 	invalidConditions := strings.TrimSpace(strings.Join(sections["Invalid Conditions"], "\n"))
-	evidence, err := parseEvidenceSection(sections["Evidence"], path)
+	evidence, err := parseEvidenceSection(sections["Evidence"], path, allowedRepos)
 	if err != nil {
 		return Card{}, err
 	}
@@ -127,14 +176,13 @@ func ParseGeneratedCardMarkdown(path string) (Card, error) {
 		InvalidConditions: invalidConditions,
 		Evidence:          evidence,
 		SourceCardID:      strings.TrimSpace(fm.SourceCardID),
-		SourceCommit:      strings.TrimSpace(fm.SourceCommit),
 	}, nil
 }
 
-func LoadGeneratedIndices(generatedRoot string) (Indices, error) {
-	root := strings.TrimSpace(generatedRoot)
+func LoadSourceIndices(sourceRoot string, allowedRepos map[string]struct{}) (Indices, error) {
+	root := strings.TrimSpace(sourceRoot)
 	if root == "" {
-		return Indices{}, fmt.Errorf("missing generated root")
+		return Indices{}, fmt.Errorf("missing source root")
 	}
 	topicPath := filepath.Join(root, "indices", "topic_index.yaml")
 	codePath := filepath.Join(root, "indices", "code_index.yaml")
@@ -172,6 +220,13 @@ func LoadGeneratedIndices(generatedRoot string) (Indices, error) {
 		normalizedKey := strings.TrimSpace(key)
 		if normalizedKey == "" {
 			continue
+		}
+		repo, _, err := splitRepoPath(normalizedKey)
+		if err != nil {
+			return Indices{}, fmt.Errorf("invalid code index key %q: %w", normalizedKey, err)
+		}
+		if _, ok := allowedRepos[repo]; !ok {
+			return Indices{}, fmt.Errorf("invalid code index repo %q", repo)
 		}
 		out.CodePaths[normalizedKey] = normalizeStringList(ids)
 	}
@@ -216,7 +271,7 @@ func parseSections(body string) map[string][]string {
 	return sections
 }
 
-func parseEvidenceSection(lines []string, sourcePath string) ([]EvidenceRef, error) {
+func parseEvidenceSection(lines []string, sourcePath string, allowedRepos map[string]struct{}) ([]EvidenceRef, error) {
 	out := make([]EvidenceRef, 0, len(lines))
 	for _, raw := range lines {
 		line := strings.TrimSpace(raw)
@@ -228,13 +283,52 @@ func parseEvidenceSection(lines []string, sourcePath string) ([]EvidenceRef, err
 			return nil, fmt.Errorf("%s: invalid evidence entry: %s", sourcePath, line)
 		}
 		lineNo := 0
-		if _, err := fmt.Sscanf(matches[2], "%d", &lineNo); err != nil || lineNo <= 0 {
+		if _, err := fmt.Sscanf(matches[3], "%d", &lineNo); err != nil || lineNo <= 0 {
 			return nil, fmt.Errorf("%s: invalid evidence line: %s", sourcePath, line)
 		}
-		note := strings.TrimSpace(matches[3])
-		out = append(out, EvidenceRef{Path: strings.TrimSpace(matches[1]), Line: lineNo, Note: note})
+		repo := strings.TrimSpace(matches[1])
+		if _, ok := allowedRepos[repo]; !ok {
+			return nil, fmt.Errorf("%s: evidence repo not allowed: %s", sourcePath, repo)
+		}
+		normalizedPath, err := normalizeEvidencePath(matches[2])
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", sourcePath, err)
+		}
+		note := strings.TrimSpace(matches[4])
+		out = append(out, EvidenceRef{
+			Repo: repo,
+			Path: normalizedPath,
+			Line: lineNo,
+			Note: note,
+		})
 	}
 	return out, nil
+}
+
+func normalizeEvidencePath(raw string) (string, error) {
+	path := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
+	if path == "" || path == "." || strings.HasPrefix(path, "/") {
+		return "", fmt.Errorf("invalid evidence path: %s", raw)
+	}
+	if path == ".." || strings.HasPrefix(path, "../") {
+		return "", fmt.Errorf("invalid evidence path: %s", raw)
+	}
+	return path, nil
+}
+
+func splitRepoPath(raw string) (string, string, error) {
+	value := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
+	if value == "" || value == "." || strings.HasPrefix(value, "/") {
+		return "", "", fmt.Errorf("path must be <repo>/<path>")
+	}
+	parts := strings.SplitN(value, "/", 2)
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return "", "", fmt.Errorf("path must be <repo>/<path>")
+	}
+	if parts[1] == "." || parts[1] == ".." || strings.HasPrefix(parts[1], "../") {
+		return "", "", fmt.Errorf("path must be <repo>/<path>")
+	}
+	return parts[0], parts[1], nil
 }
 
 func trimEmptyLines(lines []string) []string {

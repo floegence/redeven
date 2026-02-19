@@ -1,0 +1,14 @@
+schema_version: 2
+knowledge_id: redeven-agent-core
+knowledge_name: Redeven Agent Runtime Knowledge
+updated_at: 2026-02-19T00:00:00Z
+allowed_repos:
+  - redeven-agent
+  - flowersec
+  - floeterm
+  - floe-webapp
+source_refs:
+  redeven-agent: main
+  flowersec: workspace
+  floeterm: workspace
+  floe-webapp: workspace

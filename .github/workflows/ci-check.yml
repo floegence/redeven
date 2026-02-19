@@ -23,14 +23,11 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Check generated knowledge integrity
-        run: ./scripts/knowledge/check_generated_integrity.sh
+      - name: Check knowledge source integrity
+        run: ./scripts/knowledge/check_source_integrity.sh
 
       - name: Verify knowledge dist bundle
         run: ./scripts/build_knowledge_bundle.sh --verify-only
-
-      - name: Check lock freshness
-        run: ./scripts/knowledge/check_lock_freshness.sh
 
   go-check:
     name: go check

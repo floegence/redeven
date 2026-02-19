@@ -15,12 +15,12 @@ type SearchRequest struct {
 }
 
 type SearchMatch struct {
-	CardID   string        `json:"card_id"`
-	Title    string        `json:"title"`
-	Summary  string        `json:"summary"`
-	Score    int           `json:"score"`
-	Tags     []string      `json:"tags,omitempty"`
-	Evidence []EvidenceRef `json:"evidence,omitempty"`
+	CardID      string   `json:"card_id"`
+	Title       string   `json:"title"`
+	Summary     string   `json:"summary"`
+	Score       int      `json:"score"`
+	Tags        []string `json:"tags,omitempty"`
+	SourceRepos []string `json:"source_repos,omitempty"`
 }
 
 type SearchResult struct {
@@ -89,12 +89,12 @@ func Search(req SearchRequest) (SearchResult, error) {
 			continue
 		}
 		matches = append(matches, SearchMatch{
-			CardID:   card.ID,
-			Title:    card.Title,
-			Summary:  card.Summary,
-			Score:    score,
-			Tags:     append([]string(nil), card.Tags...),
-			Evidence: append([]EvidenceRef(nil), card.Evidence...),
+			CardID:      card.ID,
+			Title:       card.Title,
+			Summary:     card.Summary,
+			Score:       score,
+			Tags:        append([]string(nil), card.Tags...),
+			SourceRepos: collectSourceRepos(card.Evidence),
 		})
 	}
 
@@ -182,4 +182,28 @@ func scoreCard(card Card, terms []string) int {
 		}
 	}
 	return score
+}
+
+func collectSourceRepos(evidence []EvidenceRef) []string {
+	if len(evidence) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(evidence))
+	out := make([]string, 0, len(evidence))
+	for _, item := range evidence {
+		repo := strings.TrimSpace(item.Repo)
+		if repo == "" {
+			continue
+		}
+		if _, ok := seen[repo]; ok {
+			continue
+		}
+		seen[repo] = struct{}{}
+		out = append(out, repo)
+	}
+	sort.Strings(out)
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

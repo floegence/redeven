@@ -69,14 +69,14 @@ Usage:
   redeven bootstrap [flags]
   redeven run [flags]
   redeven search [flags] <query>
-  redeven knowledge <generate|bundle> [flags]
+  redeven knowledge bundle [flags]
   redeven version
 
 Commands:
   bootstrap   Exchange an environment token for Flowersec direct control-channel credentials and write config.
   run         Run the agent (uses local config by default; can also bootstrap via flags).
   search      Web search (Brave by default). Useful as a local search helper and as an AI tool backend.
-  knowledge   Build and generate knowledge assets for Redeven assistant workflows.
+  knowledge   Build and verify deterministic knowledge assets for Redeven assistant workflows.
   version     Print build information.
 
 `)

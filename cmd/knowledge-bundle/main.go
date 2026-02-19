@@ -11,15 +11,20 @@ import (
 )
 
 func main() {
-	generatedRoot := flag.String("generated-root", cleanAbs(filepath.Join("internal", "knowledge", "generated")), "Generated knowledge root")
+	sourceRoot := flag.String("source-root", cleanAbs(filepath.Join("internal", "knowledge", "source")), "Knowledge source root")
 	distRoot := flag.String("dist-root", cleanAbs(filepath.Join("internal", "knowledge", "dist")), "Dist output root")
 	verifyOnly := flag.Bool("verify-only", false, "Verify dist files without rewriting")
+	validateSourceOnly := flag.Bool("validate-source-only", false, "Validate source files only without reading dist")
 	flag.Parse()
 
-	result, err := knowledge.BuildFromGenerated(cleanAbs(*generatedRoot))
+	result, err := knowledge.BuildFromSource(cleanAbs(*sourceRoot))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "knowledge bundle build failed: %v\n", err)
 		os.Exit(1)
+	}
+	if *validateSourceOnly {
+		fmt.Printf("knowledge source validated: %s\n", cleanAbs(*sourceRoot))
+		return
 	}
 
 	if *verifyOnly {

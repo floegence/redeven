@@ -3915,6 +3915,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- Task runs are explicit-completion only: no task_complete means the task is not complete.",
 		"- You MUST use tools to investigate before answering questions about files, code, or the workspace.",
 		"- When knowledge.search is available, query it first for domain background, then verify with terminal.exec before final conclusions.",
+		"- Do NOT expose internal evidence path:line details to end users unless they explicitly ask for repository-level traceability.",
 		"- If you can answer by reading files, use terminal.exec with rg/sed/cat first.",
 		"- Prefer apply_patch for file edits instead of shell redirection or ad-hoc overwrite commands.",
 		"- Use workdir/cwd fields on terminal.exec instead of running cd in the command string.",
