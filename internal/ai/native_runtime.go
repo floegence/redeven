@@ -25,11 +25,16 @@ import (
 )
 
 const (
-	nativeDefaultMaxSteps        = 24
-	nativeDefaultMaxOutputTokens = 4096
-	nativeDefaultNoToolRounds    = 3
-	nativeCompactThreshold       = 0.70
-	nativeDefaultContextLimit    = 128000
+	nativeDefaultMaxSteps         = 24
+	nativeDefaultMaxOutputTokens  = 4096
+	nativeDefaultNoToolRounds     = 3
+	nativeDefaultCompactThreshold = 0.80
+	nativeMinCompactThreshold     = 0.65
+	nativeMaxCompactThreshold     = 0.90
+	nativeDefaultContextLimit     = 128000
+	nativeToolResultPruneBudget   = 50000
+	nativeToolResultPruneRunes    = 480
+	nativeToolResultKeepTurns     = 2
 	// nativeHardMaxSteps is the absolute safety net for the task-driven loop.
 	// The loop is now driven by explicit completion signals (task_complete,
 	// ask_user), NOT by a step budget. This constant only prevents
@@ -1831,12 +1836,35 @@ mainLoop:
 		estimateTokens, estimateSource := estimateTurnTokens(providerType, turnReq)
 		state.EstimateSource = estimateSource
 		pressure := float64(estimateTokens) / float64(contextLimit)
-		if pressure >= nativeCompactThreshold {
+		compactThreshold := resolveCompactionThreshold(req.Options.CompactionThreshold, contextLimit, turnReq.Budgets.MaxOutputToken)
+		if pressure >= compactThreshold {
 			beforeCount := len(messages)
+			beforeEstimateTokens := estimateTokens
 			compactStrategy := "round_boundary"
 			compactStats := toolReferenceIntegrityStats{}
+			var pruneStats toolResultPruneStats
+			compactApplied := false
+
+			r.persistRunEvent("context.compaction.started", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":               step,
+				"strategy":                 "pipeline",
+				"estimate_tokens_before":   beforeEstimateTokens,
+				"context_limit":            contextLimit,
+				"pressure":                 pressure,
+				"effective_threshold":      compactThreshold,
+				"configured_threshold":     normalizeCompactionThreshold(req.Options.CompactionThreshold),
+				"window_based_threshold":   deriveModelWindowCompactionThreshold(contextLimit, turnReq.Budgets.MaxOutputToken),
+				"tool_result_prune_budget": nativeToolResultPruneBudget,
+			})
+
+			messages, pruneStats = pruneToolResultPayloads(messages, nativeToolResultPruneBudget, nativeToolResultKeepTurns, nativeToolResultPruneRunes)
+			if pruneStats.hasChanges() {
+				compactStrategy = "tool_prune"
+				compactApplied = true
+			}
+
 			if req.ContextPack.ThreadID != "" {
-				compactStrategy = "prompt_pack"
+				compactStrategy = compactStrategy + "+prompt_pack"
 				targetTokens := req.Options.MaxInputTokens
 				if targetTokens <= 0 {
 					targetTokens = contextLimit
@@ -1845,12 +1873,29 @@ mainLoop:
 				if compactErr == nil && changed {
 					req.ContextPack = compressed
 					messages = buildMessagesFromPromptPack(req.ContextPack, req.Input.Text)
-				} else {
-					compactStrategy = "round_boundary_fallback"
+					compactApplied = true
+				} else if compactErr != nil {
+					r.persistRunEvent("context.compaction.failed", RealtimeStreamKindLifecycle, map[string]any{
+						"step_index":          step,
+						"strategy":            "prompt_pack",
+						"estimate_tokens":     beforeEstimateTokens,
+						"context_limit":       contextLimit,
+						"pressure":            pressure,
+						"effective_threshold": compactThreshold,
+						"error":               sanitizeLogText(compactErr.Error(), 240),
+					})
+					compactStrategy = compactStrategy + "+round_boundary_fallback"
 					messages, compactStats = compactMessages(messages)
+					if len(messages) != beforeCount || compactStats.hasChanges() {
+						compactApplied = true
+					}
 				}
 			} else {
+				compactStrategy = compactStrategy + "+round_boundary"
 				messages, compactStats = compactMessages(messages)
+				if len(messages) != beforeCount || compactStats.hasChanges() {
+					compactApplied = true
+				}
 			}
 			if compactStats.hasChanges() {
 				if len(compactStats.OrphanToolCallIDs) > 0 {
@@ -1870,18 +1915,54 @@ mainLoop:
 					"prepended_declarations": compactStats.PrependedAssistantMessages,
 				})
 			}
-			state = syncRuntimeStateAfterCompact(state, messages)
-			r.persistRunEvent("context.compaction.applied", RealtimeStreamKindLifecycle, map[string]any{
-				"step_index":      step,
-				"strategy":        compactStrategy,
-				"messages_before": beforeCount,
-				"messages_after":  len(messages),
-				"estimate_tokens": estimateTokens,
-				"context_limit":   contextLimit,
-				"pressure":        pressure,
-			})
+			if compactApplied {
+				state = syncRuntimeStateAfterCompact(state, messages)
+			}
 			turnMessages = composeTurnMessages(systemPrompt, messages)
 			turnReq.Messages = turnMessages
+			afterEstimateTokens, _ := estimateTurnTokens(providerType, turnReq)
+			if compactApplied {
+				r.persistRunEvent("context.compaction.applied", RealtimeStreamKindLifecycle, map[string]any{
+					"step_index":                 step,
+					"strategy":                   compactStrategy,
+					"messages_before":            beforeCount,
+					"messages_after":             len(messages),
+					"estimate_tokens_before":     beforeEstimateTokens,
+					"estimate_tokens_after":      afterEstimateTokens,
+					"context_limit":              contextLimit,
+					"pressure":                   pressure,
+					"effective_threshold":        compactThreshold,
+					"configured_threshold":       normalizeCompactionThreshold(req.Options.CompactionThreshold),
+					"window_based_threshold":     deriveModelWindowCompactionThreshold(contextLimit, turnReq.Budgets.MaxOutputToken),
+					"tool_pruned_parts":          pruneStats.PrunedParts,
+					"tool_pruned_tokens_before":  pruneStats.PrunedTokensBefore,
+					"tool_pruned_tokens_after":   pruneStats.PrunedTokensAfter,
+					"tool_result_prune_budget":   nativeToolResultPruneBudget,
+					"tool_result_protected_from": pruneStats.ProtectedStartIndex,
+				})
+			} else {
+				r.persistRunEvent("context.compaction.skipped", RealtimeStreamKindLifecycle, map[string]any{
+					"step_index":             step,
+					"reason":                 "no_effect",
+					"strategy":               compactStrategy,
+					"estimate_tokens_before": beforeEstimateTokens,
+					"estimate_tokens_after":  afterEstimateTokens,
+					"context_limit":          contextLimit,
+					"pressure":               pressure,
+					"effective_threshold":    compactThreshold,
+				})
+			}
+		} else {
+			r.persistRunEvent("context.compaction.skipped", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":             step,
+				"reason":                 "below_threshold",
+				"estimate_tokens_before": estimateTokens,
+				"context_limit":          contextLimit,
+				"pressure":               pressure,
+				"effective_threshold":    compactThreshold,
+				"configured_threshold":   normalizeCompactionThreshold(req.Options.CompactionThreshold),
+				"window_based_threshold": deriveModelWindowCompactionThreshold(contextLimit, turnReq.Budgets.MaxOutputToken),
+			})
 		}
 
 		if repaired, stats := enforceToolReferenceIntegrity(turnReq.Messages, nil); stats.hasChanges() {
@@ -2986,6 +3067,151 @@ func estimateTurnTokens(providerType string, req TurnRequest) (int, string) {
 	return estimate, "heuristic"
 }
 
+func estimateTextTokens(text string) int {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0
+	}
+	return len([]rune(text))/4 + 1
+}
+
+func normalizeCompactionThreshold(input float64) float64 {
+	if input <= 0 {
+		return nativeDefaultCompactThreshold
+	}
+	return clampFloat(input, nativeMinCompactThreshold, nativeMaxCompactThreshold)
+}
+
+func deriveModelWindowCompactionThreshold(contextLimit int, maxOutputTokens int) float64 {
+	if contextLimit <= 0 {
+		return nativeDefaultCompactThreshold
+	}
+	if maxOutputTokens <= 0 {
+		maxOutputTokens = nativeDefaultMaxOutputTokens
+	}
+	overheadReserve := int(float64(contextLimit) * 0.05)
+	if overheadReserve < 1024 {
+		overheadReserve = 1024
+	}
+	reserved := maxOutputTokens + overheadReserve
+	if reserved >= contextLimit {
+		return nativeMinCompactThreshold
+	}
+	return float64(contextLimit-reserved) / float64(contextLimit)
+}
+
+func resolveCompactionThreshold(configThreshold float64, contextLimit int, maxOutputTokens int) float64 {
+	cfg := normalizeCompactionThreshold(configThreshold)
+	window := deriveModelWindowCompactionThreshold(contextLimit, maxOutputTokens)
+	if window > 0 {
+		cfg = minFloat(cfg, window)
+	}
+	return clampFloat(cfg, nativeMinCompactThreshold, nativeMaxCompactThreshold)
+}
+
+func clampFloat(value float64, minVal float64, maxVal float64) float64 {
+	if minVal > maxVal {
+		minVal, maxVal = maxVal, minVal
+	}
+	if value < minVal {
+		return minVal
+	}
+	if value > maxVal {
+		return maxVal
+	}
+	return value
+}
+
+func minFloat(a float64, b float64) float64 {
+	if a <= b {
+		return a
+	}
+	return b
+}
+
+type toolResultPruneStats struct {
+	PrunedParts         int
+	PrunedTokensBefore  int
+	PrunedTokensAfter   int
+	ProtectedStartIndex int
+}
+
+func (s toolResultPruneStats) hasChanges() bool {
+	return s.PrunedParts > 0
+}
+
+func pruneToolResultPayloads(messages []Message, budgetTokens int, keepRecentUserTurns int, maxRunes int) ([]Message, toolResultPruneStats) {
+	out := cloneMessages(messages)
+	stats := toolResultPruneStats{}
+	if len(out) == 0 || budgetTokens <= 0 || keepRecentUserTurns < 0 {
+		return out, stats
+	}
+
+	protectedStart := len(out)
+	userSeen := 0
+	for i := len(out) - 1; i >= 0; i-- {
+		if strings.EqualFold(strings.TrimSpace(out[i].Role), "user") {
+			userSeen++
+			if userSeen > keepRecentUserTurns {
+				protectedStart = i + 1
+				break
+			}
+		}
+	}
+	stats.ProtectedStartIndex = protectedStart
+	if protectedStart == 0 {
+		return out, stats
+	}
+
+	accumulated := 0
+	for i := len(out) - 1; i >= 0; i-- {
+		for j := len(out[i].Content) - 1; j >= 0; j-- {
+			part := &out[i].Content[j]
+			if !strings.EqualFold(strings.TrimSpace(part.Type), "tool_result") {
+				continue
+			}
+			payload := strings.TrimSpace(part.Text)
+			if payload == "" && len(part.JSON) > 0 {
+				payload = strings.TrimSpace(string(part.JSON))
+			}
+			if payload == "" {
+				payload = "{}"
+			}
+			payloadTokens := estimateTextTokens(payload)
+			if payloadTokens <= 0 {
+				payloadTokens = 1
+			}
+			accumulated += payloadTokens
+			if i >= protectedStart || accumulated <= budgetTokens {
+				continue
+			}
+			callID := toolCallIDFromPart(*part)
+			placeholder := "[tool_result_compacted]"
+			if callID != "" {
+				placeholder += " call_id=" + callID
+			}
+			placeholder += " output moved to compressed context summary."
+			trimmed, truncated := truncateByRunes(payload, maxRunes)
+			if truncated {
+				placeholder += "\npreview: " + trimmed + " ..."
+			} else {
+				placeholder += "\npreview: " + trimmed
+			}
+			placeholder = strings.TrimSpace(placeholder)
+			part.Text = placeholder
+			part.JSON = nil
+			stats.PrunedParts++
+			stats.PrunedTokensBefore += payloadTokens
+			replacementTokens := estimateTextTokens(placeholder)
+			if replacementTokens <= 0 {
+				replacementTokens = 1
+			}
+			stats.PrunedTokensAfter += replacementTokens
+		}
+	}
+	return out, stats
+}
+
 type toolReferenceIntegrityStats struct {
 	OrphanToolCallIDs          []string
 	PrependedAssistantMessages int
@@ -3138,35 +3364,31 @@ func enforceToolReferenceIntegrity(messages []Message, archived []Message) ([]Me
 	declared := make(map[string]struct{}, 8)
 	out := make([]Message, 0, len(current))
 	for _, msg := range current {
-		role := strings.ToLower(strings.TrimSpace(msg.Role))
-		if role == "assistant" {
-			for _, callID := range toolCallIDsFromAssistantMessage(msg) {
-				declared[callID] = struct{}{}
-			}
-			out = append(out, msg)
-			continue
-		}
-		if role != "tool" {
-			out = append(out, msg)
-			continue
-		}
 		filtered := make([]ContentPart, 0, len(msg.Content))
 		dropped := 0
 		for _, part := range msg.Content {
-			if strings.ToLower(strings.TrimSpace(part.Type)) != "tool_result" {
+			partType := strings.ToLower(strings.TrimSpace(part.Type))
+			switch partType {
+			case "tool_call":
+				callID := toolCallIDFromPart(part)
+				if callID != "" {
+					declared[callID] = struct{}{}
+				}
 				filtered = append(filtered, part)
-				continue
+			case "tool_result":
+				callID := toolCallIDFromPart(part)
+				if callID == "" {
+					dropped++
+					continue
+				}
+				if _, ok := declared[callID]; !ok {
+					dropped++
+					continue
+				}
+				filtered = append(filtered, part)
+			default:
+				filtered = append(filtered, part)
 			}
-			callID := toolCallIDFromPart(part)
-			if callID == "" {
-				dropped++
-				continue
-			}
-			if _, ok := declared[callID]; !ok {
-				dropped++
-				continue
-			}
-			filtered = append(filtered, part)
 		}
 		if dropped > 0 {
 			stats.DroppedToolResultParts += dropped
@@ -3189,17 +3411,16 @@ func findMissingToolCallIDs(messages []Message) []string {
 	missingSet := make(map[string]struct{}, 4)
 	order := make([]string, 0, 4)
 	for _, msg := range messages {
-		role := strings.ToLower(strings.TrimSpace(msg.Role))
-		switch role {
-		case "assistant":
-			for _, callID := range toolCallIDsFromAssistantMessage(msg) {
-				declared[callID] = struct{}{}
-			}
-		case "tool":
-			for _, part := range msg.Content {
-				if strings.ToLower(strings.TrimSpace(part.Type)) != "tool_result" {
+		for _, part := range msg.Content {
+			partType := strings.ToLower(strings.TrimSpace(part.Type))
+			switch partType {
+			case "tool_call":
+				callID := toolCallIDFromPart(part)
+				if callID == "" {
 					continue
 				}
+				declared[callID] = struct{}{}
+			case "tool_result":
 				callID := toolCallIDFromPart(part)
 				if callID == "" {
 					continue
