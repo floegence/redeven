@@ -55,17 +55,33 @@ Verification is bound to:
 
 This is the same identity constraint used by `install.sh`.
 
-## external delivery package mirror + version endpoint (automatic)
+## downstream automation dispatch (automatic)
 
-The mirror workflow is `.github/workflows/sync-release-assets-to-r2.yml`.
+The release workflow sends a `release hook` event after GitHub Release is published.
 
-Trigger conditions:
+Event contract:
 
-- `workflow_run` when `Release Agent` completes successfully on `v*` tag pushes (primary auto chain)
-- `release` event with type `published` (fallback for externally published releases)
-- `workflow_dispatch` for manual re-sync
+- Event type: `release_published`
+- Payload fields:
+  - `release_repo` (value: `${{ github.repository }}`)
+  - `release_tag` (value: `${{ github.ref_name }}`)
+  - `recommended_version` (default: same as `release_tag`)
 
-What it does:
+Required repository secrets:
+
+- `REDEVEN_RELEASE_HOOK_TOKEN`
+- `REDEVEN_RELEASE_HOOK_TARGET` (format: `owner/repo`)
+
+Failure policy:
+
+- If dispatch fails, `.github/workflows/release.yml` fails at `Notify downstream automation`.
+- GitHub Release tag and published assets stay immutable.
+
+## external delivery package mirror + version endpoint (handled by downstream automation)
+
+external delivery mirror sync and manifest deployment run in the downstream automation repository.
+
+downstream automation workflow responsibilities:
 
 1. Download release assets from GitHub Release.
 2. Verify `SHA256SUMS` and Cosign signature.
@@ -77,33 +93,7 @@ What it does:
 Manifest endpoint served by Worker:
 
 - URL: `https://version.agent.example.invalid/v1/manifest.json`
-- Worker source: `deployment/private-delivery/workers/version-manifest/src/worker.mjs`
-- Worker config: `deployment/private-delivery/workers/version-manifest/wrangler.toml`
-
-Manifest fields returned by Worker:
-
-- `latest`
-- `recommended`
-- `updated_at`
-- `source_release_tag`
-- `mirror_complete`
-
-### Required repository secrets
-
-- `CLOUDFLARE_R2_ENDPOINT`
-- `CLOUDFLARE_R2_ACCESS_KEY_ID`
-- `CLOUDFLARE_R2_SECRET_ACCESS_KEY`
-- `CLOUDFLARE_AGENT_PACKAGE_BUCKET`
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
-
-### Failure handling
-
-If mirror/upload/worker deploy fails:
-
-- Workflow is marked failed.
-- Existing manifest Worker deployment remains unchanged.
-- GitHub Release tag and assets remain intact.
+- Worker source of truth is in the downstream automation repository.
 
 ## Install script delivery
 
@@ -130,7 +120,7 @@ Worker files:
 
 Configure the Worker build in external delivery Dashboard:
 
-1. Connect repository: `floegence/redeven-agent`.
+1. Connect repository: `<your-redeven-agent-repository>`.
 2. Set production branch to `release`.
 3. Set project root to `deployment/private-delivery/workers/install-agent`.
 4. Build command: `node generate-worker.js`.
@@ -179,4 +169,3 @@ sha256sum -c SHA256SUMS
 - If the workflow identity changes (repo/path/workflow name), update the identity regex in:
   - `docs/RELEASE.md`
   - `scripts/install.sh`
-  - `scripts/sync_release_assets.sh`

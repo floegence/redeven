@@ -3,7 +3,7 @@ name: Release Agent
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -38,7 +38,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Enable corepack
         run: corepack enable
@@ -134,3 +134,53 @@ jobs:
             dist/SHA256SUMS.pem
             dist/knowledge_bundle.manifest.json
             dist/knowledge_bundle.sha256
+
+  notify_private_ops:
+    name: Notify downstream automation
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      DISPATCH_TOKEN: ${{ secrets.REDEVEN_RELEASE_HOOK_TOKEN }}
+      TARGET_REPO: ${{ secrets.REDEVEN_RELEASE_HOOK_TARGET }}
+      RELEASE_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+
+    steps:
+      - name: Validate dispatch settings
+        run: |
+          set -euo pipefail
+          if [ -z "${DISPATCH_TOKEN}" ]; then
+            echo "::error::Missing secret: REDEVEN_RELEASE_HOOK_TOKEN"
+            exit 1
+          fi
+          if [ -z "${TARGET_REPO}" ]; then
+            echo "::error::Missing secret: REDEVEN_RELEASE_HOOK_TARGET"
+            exit 1
+          fi
+          if [[ ! "${TARGET_REPO}" =~ ^[^/]+/[^/]+$ ]]; then
+            echo "::error::Invalid target repo format in REDEVEN_RELEASE_HOOK_TARGET (expected owner/repo)"
+            exit 1
+          fi
+
+      - name: Dispatch release sync event
+        run: |
+          set -euo pipefail
+          payload=$(cat <<JSON
+          {
+            "event_type": "release_published",
+            "client_payload": {
+              "release_repo": "${RELEASE_REPO}",
+              "release_tag": "${RELEASE_TAG}",
+              "recommended_version": "${RELEASE_TAG}"
+            }
+          }
+          JSON
+          )
+
+          curl --fail --show-error --silent \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${DISPATCH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${TARGET_REPO}/dispatches" \
+            -d "${payload}"
