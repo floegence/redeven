@@ -64,9 +64,11 @@ jobs:
         run: |
           set -euo pipefail
           version="8.24.2"
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "${tmpdir}"' EXIT
           curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz" \
-            | tar -xz
-          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+            | tar -xz -C "${tmpdir}"
+          sudo install -m 0755 "${tmpdir}/gitleaks" /usr/local/bin/gitleaks
 
       - name: Install ripgrep
         run: |
