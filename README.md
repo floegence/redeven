@@ -54,6 +54,14 @@ Notes:
 - `internal/**/dist/` is generated and embedded via Go `embed`.
 - Generated `dist` assets are not checked into git.
 
+### Enable local guardrails (recommended)
+
+```bash
+./scripts/install_git_hooks.sh
+```
+
+This enables the repository pre-commit hook that runs `scripts/open_source_hygiene_check.sh --staged`.
+
 ### Bootstrap and run
 
 ```bash
@@ -135,9 +143,9 @@ Multi-environment mode uses isolated state per environment:
 
 - GitHub Release remains the source of truth for versioned binaries and checksums.
 - On `v*` tag push, `Release Agent` publishes GitHub Release assets and then sends a `release hook` event to the downstream automation repository.
-- downstream automation workflow handles package mirror mirror sync (`release-assets/<tag>/...`) and version-manifest Worker deployment for `https://version.agent.example.invalid/v1/manifest.json`.
+- downstream automation workflow handles package mirror mirror sync (`release-assets/<tag>/...`) and version-manifest Worker deployment for `https://<manifest-host>/v1/manifest.json`.
 - `install.sh` downloads from GitHub first, then falls back to external delivery mirror.
-- Installer worker deployment (`example.invalid/install.sh`) stays on downstream deployment automation and is triggered only via the `release` branch flow.
+- Installer worker deployment (`https://<install-host>/install.sh`) stays on downstream deployment automation and is triggered only via the `release` branch flow.
 
 Release details:
 

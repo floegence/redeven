@@ -85,7 +85,7 @@ Commands:
 func bootstrapCmd(args []string) {
 	fs := flag.NewFlagSet("bootstrap", flag.ExitOnError)
 
-	controlplane := fs.String("controlplane", "", "Controlplane base URL (e.g. https://sg.example.invalid)")
+	controlplane := fs.String("controlplane", "", "Controlplane base URL (e.g. https://region.example.invalid)")
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
 	envToken := fs.String("env-token", "", "Environment token (raw token; 'Bearer <token>' is also accepted)")
 

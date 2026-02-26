@@ -61,9 +61,14 @@ let brokerRecoverRedirecting = false;
 
 const SESSION_STORAGE_KEYS = {
   envPublicID: 'redeven_env_public_id',
+  // Transitional bootstrap handoff key.
+  // The token is hydrated into runtime memory and then removed from storage immediately.
   brokerToken: 'redeven_broker_token',
   brokerRecoverAtMs: 'redeven_broker_recover_at_ms',
 } as const;
+
+let runtimeBrokerToken = '';
+let runtimeBrokerTokenHydrated = false;
 
 function getSessionStorage(key: string): string {
   try {
@@ -93,8 +98,35 @@ export function getEnvPublicIDFromSession(): string {
   return getSessionStorage(SESSION_STORAGE_KEYS.envPublicID);
 }
 
+function normalizeBrokerToken(raw: string): string {
+  return asString(raw);
+}
+
+function hydrateBrokerTokenIntoRuntimeBestEffort(): void {
+  if (runtimeBrokerTokenHydrated) return;
+  runtimeBrokerTokenHydrated = true;
+
+  const fromStorage = normalizeBrokerToken(getSessionStorage(SESSION_STORAGE_KEYS.brokerToken));
+  if (!fromStorage) return;
+
+  runtimeBrokerToken = fromStorage;
+  removeSessionStorage(SESSION_STORAGE_KEYS.brokerToken);
+}
+
+export function setBrokerTokenForRuntime(raw: string): void {
+  runtimeBrokerToken = normalizeBrokerToken(raw);
+  runtimeBrokerTokenHydrated = true;
+}
+
+export function clearBrokerTokenForRuntime(): void {
+  runtimeBrokerToken = '';
+  runtimeBrokerTokenHydrated = true;
+  removeSessionStorage(SESSION_STORAGE_KEYS.brokerToken);
+}
+
 export function getBrokerTokenFromSession(): string {
-  return getSessionStorage(SESSION_STORAGE_KEYS.brokerToken);
+  hydrateBrokerTokenIntoRuntimeBestEffort();
+  return runtimeBrokerToken;
 }
 
 function parseStatusCodeBestEffort(v: unknown): number {
@@ -186,6 +218,7 @@ function redirectToPortalForBrokerRecovery(envPublicID: string): never {
     throw new Error('Session expired. Redirecting to Redeven Portal...');
   }
   brokerRecoverRedirecting = true;
+  clearBrokerTokenForRuntime();
   markBrokerRecoverNow();
 
   const target = buildPortalEnvRecoverURL(envID);

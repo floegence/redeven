@@ -57,6 +57,19 @@ jobs:
           sh -n scripts/install.sh
           sh -n scripts/publish_delivery_branch.sh
           sh -n scripts/generate_release_notes.sh
+          bash -n scripts/open_source_hygiene_check.sh
+          bash -n scripts/install_git_hooks.sh
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          version="8.24.2"
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz" \
+            | tar -xz
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+
+      - name: Open-source hygiene guard
+        run: ./scripts/open_source_hygiene_check.sh --all
 
       - name: Build embedded assets
         run: ./scripts/build_assets.sh

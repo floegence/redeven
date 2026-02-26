@@ -4,6 +4,8 @@ set -eu
 release_tag="${1:-${RELEASE_TAG:-}}"
 output_path="${2:-${RELEASE_NOTES_PATH:-dist/RELEASE_NOTES.md}}"
 repo="${GITHUB_REPOSITORY:-floegence/redeven-agent}"
+install_script_url="${INSTALL_SCRIPT_URL:-https://install.example.invalid/install.sh}"
+version_manifest_url="${VERSION_MANIFEST_URL:-https://version.agent.example.invalid/v1/manifest.json}"
 
 validate_release_tag() {
   case "$1" in
@@ -53,13 +55,13 @@ cat > "$output_path" <<NOTES
 Pinned install:
 
 \`\`\`bash
-curl -fsSL https://example.invalid/install.sh | REDEVEN_VERSION=${release_tag} sh
+curl -fsSL ${install_script_url} | REDEVEN_VERSION=${release_tag} sh
 \`\`\`
 
 Upgrade an existing agent in place:
 
 \`\`\`bash
-curl -fsSL https://example.invalid/install.sh | REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION=${release_tag} sh
+curl -fsSL ${install_script_url} | REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION=${release_tag} sh
 \`\`\`
 
 ## Binary Assets
@@ -90,7 +92,7 @@ sha256sum -c SHA256SUMS
 ## Notes For Operators
 
 - Installer download order: GitHub Release first, external delivery package mirror fallback.
-- Version manifest endpoint: https://version.agent.example.invalid/v1/manifest.json
+- Version manifest endpoint: ${version_manifest_url}
 - If you need deployment details, see \`docs/RELEASE.md\` in this repository.
 ${compare_line}
 

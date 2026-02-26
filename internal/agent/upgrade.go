@@ -18,11 +18,21 @@ import (
 )
 
 const (
-	upgradeInstallScriptURL = "https://example.invalid/install.sh"
-	upgradeTimeout          = 10 * time.Minute
+	defaultUpgradeInstallScriptURL = "https://install.example.invalid/install.sh"
+	upgradeInstallScriptURLEnvKey  = "REDEVEN_UPGRADE_INSTALL_SCRIPT_URL"
+	upgradeTimeout                 = 10 * time.Minute
 )
 
 var releaseTagPattern = regexp.MustCompile(`^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+var upgradeInstallScriptURL = resolveUpgradeInstallScriptURL()
+
+func resolveUpgradeInstallScriptURL() string {
+	v := strings.TrimSpace(os.Getenv(upgradeInstallScriptURLEnvKey))
+	if v == "" {
+		return defaultUpgradeInstallScriptURL
+	}
+	return v
+}
 
 type sysUpgrader struct {
 	a *Agent

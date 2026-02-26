@@ -25,16 +25,17 @@ Agent side:
 
 ## Control-plane APIs used by the Env App UI
 
-The Env App UI does not use Redeven login cookies. It uses a `broker_token` stored in
-the sandbox origin `sessionStorage`.
+The Env App UI does not use Redeven login cookies. It uses short-lived control-plane tickets
+issued by the portal side.
 
-- `POST /api/srv/v1/floeproxy/entry` (Env App only; broker_token -> one-time entry_ticket for itself)
-- `GET /api/srv/v1/floeproxy/environments/:envId`
-- `POST /api/srv/v1/floeproxy/environments/:envId/entry` (Env App launcher; mint one-time entry_ticket for target apps)
+Security baseline:
 
-All requests are `credentials: 'omit'` and include:
+- High-value ticket material is runtime-only and should not be durably persisted in browser storage.
+- One-time tickets are exchanged on demand and expire quickly.
+- If runtime ticket context is lost, the browser must return to the portal flow for re-issuance.
 
-- `Authorization: Bearer <broker_token>`
+Implementation details (exact endpoint names, headers, and payload fields) are intentionally kept in
+private operator runbooks.
 
 ## Audit log
 
@@ -62,7 +63,7 @@ The Env App UI manages local codespaces via the agent local gateway API:
 - `POST /_redeven_proxy/api/spaces/:id/stop`
 - `DELETE /_redeven_proxy/api/spaces/:id`
 
-When opening a codespace, the Env App uses its own `broker_token(com.floegence.redeven.agent)` to mint a one-time `entry_ticket` for `com.floegence.redeven.code`, then opens:
+When opening a codespace, the Env App mints a one-time ticket for `com.floegence.redeven.code`, then opens:
 
 - `https://cs-<code_space_id>.<region>.<base-domain>/_redeven_boot/#redeven=<b64url(init)>`
 

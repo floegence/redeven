@@ -4,18 +4,18 @@
 # This script downloads and installs the latest Redeven agent binary
 # from the floegence/redeven-agent GitHub repository.
 #
-# Usage: curl -fsSL https://example.invalid/install.sh | sh
+# Usage: curl -fsSL https://install.example.invalid/install.sh | sh
 #
 # Optional:
-#   REDEVEN_VERSION=v1.2.3 curl -fsSL https://example.invalid/install.sh | sh
+#   REDEVEN_VERSION=v1.2.3 curl -fsSL https://install.example.invalid/install.sh | sh
 #
 # The script will:
 # 1. Detect your OS and architecture
-# 2. Resolve target version from https://version.agent.example.invalid/v1/manifest.json
+# 2. Resolve target version from REDEVEN_VERSION_MANIFEST_URL
 #    (or REDEVEN_VERSION when explicitly provided)
 # 3. Download the release package and release checksums with fallback support:
 #    - Primary: GitHub releases
-#    - Fallback: external delivery CDN (agent.package.example.invalid)
+#    - Fallback: external delivery CDN (REDEVEN_PACKAGE_MIRROR_BASE_URL)
 # 4. Verify checksum + signature before extraction
 # 5. Install to /usr/local/bin/redeven (or ~/.redeven/bin/redeven)
 
@@ -34,10 +34,17 @@ GITHUB_RELEASES_URL="https://github.com/${GITHUB_REPO}/releases"
 # Binary name
 BINARY_NAME="redeven"
 
+# Public URL templates. Production values should be injected by downstream automation.
+REDEVEN_INSTALL_SCRIPT_URL="${REDEVEN_INSTALL_SCRIPT_URL:-https://install.example.invalid/install.sh}"
+REDEVEN_VERSION_MANIFEST_URL="${REDEVEN_VERSION_MANIFEST_URL:-https://version.agent.example.invalid/v1/manifest.json}"
+REDEVEN_PACKAGE_MIRROR_BASE_URL="${REDEVEN_PACKAGE_MIRROR_BASE_URL:-https://agent.package.example.invalid}"
+REDEVEN_CONSOLE_URL="${REDEVEN_CONSOLE_URL:-https://console.example.invalid}"
+REDEVEN_DOCS_URL="${REDEVEN_DOCS_URL:-https://docs.example.invalid}"
+
 # Shell-first tooling: pinned ripgrep distribution.
 RG_VERSION="14.1.1"
 RG_GITHUB_RELEASES_URL="https://github.com/BurntSushi/ripgrep/releases"
-RG_MIRROR_BASE_URL="https://agent.package.example.invalid/third-party/ripgrep"
+RG_MIRROR_BASE_URL="${REDEVEN_RG_MIRROR_BASE_URL:-${REDEVEN_PACKAGE_MIRROR_BASE_URL}/third-party/ripgrep}"
 
 # Redeven home directory - config is written to ~/.redeven/config.json (default)
 REDEVEN_HOME="${HOME}/.redeven"
@@ -52,7 +59,7 @@ REDEVEN_INSTALL_MODE="${REDEVEN_INSTALL_MODE:-install}"
 REDEVEN_VERSION="${REDEVEN_VERSION:-}"
 
 # Version metadata endpoint (must be HTTPS)
-VERSION_MANIFEST_URL="https://version.agent.example.invalid/v1/manifest.json"
+VERSION_MANIFEST_URL="${REDEVEN_VERSION_MANIFEST_URL}"
 
 # Cosign identity constraint for SHA256SUMS signature verification.
 COSIGN_CERT_IDENTITY_REGEXP='^https://github.com/floegence/redeven-agent/.github/workflows/release\.yml@refs/tags/v.*$'
@@ -379,7 +386,7 @@ install_redeven() {
     GITHUB_SIG_URL="${GITHUB_RELEASES_URL}/download/${LATEST_VERSION}/SHA256SUMS.sig"
     GITHUB_CERT_URL="${GITHUB_RELEASES_URL}/download/${LATEST_VERSION}/SHA256SUMS.pem"
 
-    CLOUDFLARE_BASE_URL="https://agent.package.example.invalid/release-assets/${LATEST_VERSION}"
+    CLOUDFLARE_BASE_URL="${REDEVEN_PACKAGE_MIRROR_BASE_URL}/release-assets/${LATEST_VERSION}"
     CLOUDFLARE_DOWNLOAD_URL="${CLOUDFLARE_BASE_URL}/${PACKAGE_NAME}"
     CLOUDFLARE_SUMS_URL="${CLOUDFLARE_BASE_URL}/SHA256SUMS"
     CLOUDFLARE_SIG_URL="${CLOUDFLARE_BASE_URL}/SHA256SUMS.sig"
@@ -694,11 +701,11 @@ print_summary() {
 
     echo ""
     log_info "Next steps:"
-    log_info "  1. Create an account at https://example.invalid"
+    log_info "  1. Create an account at ${REDEVEN_CONSOLE_URL}"
     log_info "  2. Create a new environment in the dashboard"
     log_info "  3. Click \"Setup environment\" and run the setup commands"
     echo ""
-    log_info "For more information, visit: https://example.invalid/docs"
+    log_info "For more information, visit: ${REDEVEN_DOCS_URL}"
     echo ""
 }
 

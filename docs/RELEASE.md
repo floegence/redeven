@@ -92,7 +92,7 @@ downstream automation workflow responsibilities:
 
 Manifest endpoint served by Worker:
 
-- URL: `https://version.agent.example.invalid/v1/manifest.json`
+- URL shape: `https://<manifest-host>/v1/manifest.json`
 - Worker source of truth is in the downstream automation repository.
 
 ## Install script delivery
@@ -104,11 +104,11 @@ The installer script source of truth is in this repository:
 `install.sh` download strategy:
 
 - Primary: GitHub Release assets
-- Fallback: external delivery package mirror (`agent.package.example.invalid`)
+- Fallback: external delivery package mirror (`<package-mirror-host>`)
 
 ## Installer wrapper deployment (separate from package mirror)
 
-external delivery Worker deployment for `example.invalid/install.sh` is managed by **downstream deployment automation** (GitHub integration), not by GitHub Actions.
+external delivery Worker deployment for `<install-host>/install.sh` is managed by **downstream deployment automation** (GitHub integration), not by GitHub Actions.
 
 Worker files:
 
