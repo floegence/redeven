@@ -145,7 +145,7 @@ Multi-environment mode uses isolated state per environment:
 - On `v*` tag push, `Release Agent` publishes GitHub Release assets and then sends a `release hook` event to the downstream automation repository.
 - downstream automation workflow handles package mirror mirror sync (`release-assets/<tag>/...`) and version-manifest Worker deployment for `https://<manifest-host>/v1/manifest.json`.
 - `install.sh` downloads from GitHub first, then falls back to external delivery mirror.
-- Installer worker deployment (`https://<install-host>/install.sh`) stays on downstream deployment automation and is triggered only via the `release` branch flow.
+- Installer worker deployment (`https://<install-host>/install.sh`) stays on downstream deployment automation; the release workflow automatically force-updates `release` on every `v*` tag push.
 
 Release details:
 

@@ -106,9 +106,10 @@ The installer script source of truth is in this repository:
 - Primary: GitHub Release assets
 - Fallback: external delivery package mirror (`<package-mirror-host>`)
 
-## Installer wrapper deployment (separate from package mirror)
+## Installer wrapper deployment (automatic on tag)
 
-external delivery Worker deployment for `<install-host>/install.sh` is managed by **downstream deployment automation** (GitHub integration), not by GitHub Actions.
+external delivery Worker deployment for `<install-host>/install.sh` is managed by **downstream deployment automation** (GitHub integration).
+GitHub Actions automatically updates the `release` branch to the tagged commit during the release workflow, and Workers Builds deploys from that branch.
 
 Worker files:
 
@@ -126,23 +127,18 @@ Configure the Worker build in external delivery Dashboard:
 4. Build command: `node generate-worker.js`.
 5. Deploy command: `npx wrangler deploy --config wrangler.toml`.
 
-Also ensure `release` branch exists on origin (run once if needed):
-
-```bash
-git push origin origin/main:refs/heads/release
-```
-
 This setup ensures merges into `main` do not deploy the installer wrapper.
 
-### Tag-driven installer wrapper rollout (when installer changed)
+### Tag-driven installer wrapper rollout (automatic)
 
-Use this only when installer/worker source changes need rollout:
+On every `v*` tag push:
 
-```bash
-./scripts/publish_delivery_branch.sh vX.Y.Z
-```
+1. `.github/workflows/release.yml` runs.
+2. The workflow runs `./scripts/publish_delivery_branch.sh "${GITHUB_REF_NAME}" release`.
+3. `release` is force-updated to the tagged commit.
+4. downstream deployment automation deploys from `release`.
 
-This force-updates `release` to the tag commit and triggers downstream deployment automation.
+No manual approval step is required in the normal release path.
 
 ## Local verification example
 

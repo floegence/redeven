@@ -135,6 +135,9 @@ jobs:
             dist/knowledge_bundle.manifest.json
             dist/knowledge_bundle.sha256
 
+      - name: Publish installer wrapper delivery branch
+        run: ./scripts/publish_delivery_branch.sh "${GITHUB_REF_NAME}" release
+
   notify_private_ops:
     name: Notify downstream automation
     needs: release
