@@ -1581,7 +1581,7 @@ func migrateSchema(db *sql.DB) error {
 	if db == nil {
 		return errors.New("nil db")
 	}
-	const targetVersion = 11
+	const targetVersion = 12
 
 	var v int
 	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
@@ -1807,6 +1807,24 @@ CREATE TABLE IF NOT EXISTS ai_thread_todos (
   PRIMARY KEY(endpoint_id, thread_id)
 );
 CREATE INDEX IF NOT EXISTS idx_ai_thread_todos_updated ON ai_thread_todos(endpoint_id, thread_id, updated_at_unix_ms DESC);
+
+CREATE TABLE IF NOT EXISTS ai_thread_checkpoints (
+  checkpoint_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  run_id TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'pre_run',
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  thread_json TEXT NOT NULL DEFAULT '{}',
+  derived_json TEXT NOT NULL DEFAULT '{}',
+  workspace_json TEXT NOT NULL DEFAULT '',
+  transcript_max_id INTEGER NOT NULL DEFAULT 0,
+  turns_max_id INTEGER NOT NULL DEFAULT 0,
+  tool_calls_max_id INTEGER NOT NULL DEFAULT 0,
+  run_events_max_id INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_ai_thread_checkpoints_thread_created ON ai_thread_checkpoints(endpoint_id, thread_id, created_at_unix_ms DESC, checkpoint_id DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_thread_checkpoints_run_id ON ai_thread_checkpoints(run_id);
 
 CREATE TABLE IF NOT EXISTS transcript_messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

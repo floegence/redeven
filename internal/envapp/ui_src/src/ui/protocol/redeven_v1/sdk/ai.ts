@@ -1,6 +1,6 @@
 import type { StreamEvent } from '../../../chat';
 
-export type AIRealtimeEventType = 'stream_event' | 'thread_state' | 'transcript_message' | 'thread_summary';
+export type AIRealtimeEventType = 'stream_event' | 'thread_state' | 'transcript_message' | 'transcript_reset' | 'thread_summary';
 
 export type AIThreadRunStatus = 'idle' | 'accepted' | 'running' | 'waiting_approval' | 'recovering' | 'finalizing' | 'waiting_user' | 'success' | 'failed' | 'canceled' | 'timed_out';
 
@@ -60,6 +60,15 @@ export type AISubscribeThreadRequest = {
 
 export type AISubscribeThreadResponse = {
   runId?: string;
+};
+
+export type AIThreadRewindRequest = {
+  threadId: string;
+};
+
+export type AIThreadRewindResponse = {
+  ok: boolean;
+  checkpointId?: string;
 };
 
 export type AITranscriptMessageItem = {
@@ -136,4 +145,8 @@ export type AIRealtimeEvent = {
   lastMessagePreview?: string;
   lastMessageAtUnixMs?: number;
   activeRunId?: string;
+
+  // transcript_reset only
+  resetReason?: string;
+  resetCheckpointId?: string;
 };

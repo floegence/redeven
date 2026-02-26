@@ -147,6 +147,9 @@ type run struct {
 
 	skillManager    *skillManager
 	subagentManager *subagentManager
+
+	muCheckpoint               sync.Mutex
+	workspaceCheckpointCreated bool
 }
 
 func newRun(opts runOptions) *run {
@@ -154,6 +157,13 @@ func newRun(opts runOptions) *run {
 	if opts.SessionMeta != nil {
 		metaCopy := *opts.SessionMeta
 		runMeta = &metaCopy
+	}
+
+	runID := strings.TrimSpace(opts.RunID)
+	if runID == "" {
+		if id, err := NewRunID(); err == nil {
+			runID = id
+		}
 	}
 
 	r := &run{
@@ -165,7 +175,7 @@ func newRun(opts runOptions) *run {
 		sessionMeta:             runMeta,
 		resolveProviderKey:      opts.ResolveProviderKey,
 		resolveWebSearchKey:     opts.ResolveWebSearchKey,
-		id:                      strings.TrimSpace(opts.RunID),
+		id:                      runID,
 		channelID:               strings.TrimSpace(opts.ChannelID),
 		endpointID:              strings.TrimSpace(opts.EndpointID),
 		threadID:                strings.TrimSpace(opts.ThreadID),
@@ -1459,6 +1469,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	needsApproval := requiresApproval(toolName, args)
 	mutating := isMutatingInvocation(toolName, args)
 	dangerous := isDangerousInvocation(toolName, args)
+
 	requireUserApproval := r.cfg.EffectiveRequireUserApproval()
 	enforcePlanModeGuard := r.cfg.EffectiveEnforcePlanModeGuard()
 	blockDangerousCommands := r.cfg.EffectiveBlockDangerousCommands()
@@ -1635,6 +1646,13 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		})
 	}
 
+	// Detached runs are hard-canceled (e.g. replaced by a new user turn). Prevent them from
+	// mutating the workspace even if some tool calls were already queued.
+	if r.isDetached() && mutating {
+		setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Run was canceled", Retryable: false}, "")
+		return outcome, nil
+	}
+
 	if denyReadonlyExec {
 		toolErr := &aitools.ToolError{
 			Code:      aitools.ErrorCodePermissionDenied,
@@ -1755,6 +1773,21 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		block.ApprovalState = "approved"
 		r.persistRunEvent("tool.approval.approved", RealtimeStreamKindLifecycle, map[string]any{"tool_id": toolID, "tool_name": toolName})
 		r.debug("ai.run.tool.approval.approved", "tool_id", toolID, "tool_name", toolName)
+	}
+
+	if mutating {
+		if _, err := r.ensureWorkspaceCheckpoint(ctx); err != nil {
+			setToolError(&aitools.ToolError{
+				Code:      aitools.ErrorCodeUnknown,
+				Message:   "Failed to create workspace checkpoint: " + strings.TrimSpace(err.Error()),
+				Retryable: true,
+				SuggestedFixes: []string{
+					"Ensure the agent state directory is writable.",
+					"Retry the tool call after fixing the checkpoint error.",
+				},
+			}, "")
+			return outcome, nil
+		}
 	}
 
 	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", toolName)

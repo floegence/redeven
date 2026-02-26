@@ -169,6 +169,9 @@ func shouldPersistRealtimeEvent(ev RealtimeEvent) bool {
 		// Transcript messages are already persisted in transcript_messages and can be backfilled directly.
 		return false
 	}
+	if ev.EventType == RealtimeEventTypeTranscriptReset {
+		return false
+	}
 	if ev.EventType == RealtimeEventTypeThreadSummary {
 		return false
 	}
@@ -235,7 +238,7 @@ func (s *Service) broadcastRealtimeEvent(ev RealtimeEvent) {
 		return
 	}
 	// run_id is required for run-scoped events, but transcript messages may be appended outside a run.
-	if ev.EventType != RealtimeEventTypeTranscript && ev.EventType != RealtimeEventTypeThreadSummary && ev.RunID == "" {
+	if ev.EventType != RealtimeEventTypeTranscript && ev.EventType != RealtimeEventTypeTranscriptReset && ev.EventType != RealtimeEventTypeThreadSummary && ev.RunID == "" {
 		return
 	}
 	if ev.AtUnixMs <= 0 {
@@ -293,6 +296,9 @@ const (
 
 func classifyRealtimePriority(ev RealtimeEvent) aiSinkPriority {
 	if ev.EventType == RealtimeEventTypeThreadState {
+		return aiSinkPriorityHigh
+	}
+	if ev.EventType == RealtimeEventTypeTranscriptReset {
 		return aiSinkPriorityHigh
 	}
 	switch ev.StreamEvent.(type) {
@@ -434,6 +440,29 @@ func (s *Service) broadcastTranscriptMessage(endpointID string, threadID string,
 		AtUnixMs:     atUnixMs,
 		MessageRowID: rowID,
 		MessageJSON:  json.RawMessage(raw),
+	}
+	s.broadcastRealtimeEvent(ev)
+}
+
+func (s *Service) broadcastTranscriptReset(endpointID string, threadID string, checkpointID string, reason string) {
+	if s == nil {
+		return
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	checkpointID = strings.TrimSpace(checkpointID)
+	reason = strings.TrimSpace(reason)
+	if endpointID == "" || threadID == "" {
+		return
+	}
+	ev := RealtimeEvent{
+		EventType:         RealtimeEventTypeTranscriptReset,
+		EndpointID:        endpointID,
+		ThreadID:          threadID,
+		RunID:             "",
+		AtUnixMs:          time.Now().UnixMilli(),
+		ResetReason:       reason,
+		ResetCheckpointID: checkpointID,
 	}
 	s.broadcastRealtimeEvent(ev)
 }

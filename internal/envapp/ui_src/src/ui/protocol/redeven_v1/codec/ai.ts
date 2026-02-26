@@ -14,6 +14,8 @@ import type {
   AISubscribeSummaryResponse,
   AISubscribeThreadRequest,
   AISubscribeThreadResponse,
+  AIThreadRewindRequest,
+  AIThreadRewindResponse,
   AIToolApprovalRequest,
   AIToolApprovalResponse,
   AITranscriptMessageItem,
@@ -36,6 +38,8 @@ import type {
   wire_ai_subscribe_summary_resp,
   wire_ai_subscribe_thread_req,
   wire_ai_subscribe_thread_resp,
+  wire_ai_thread_rewind_req,
+  wire_ai_thread_rewind_resp,
   wire_ai_transcript_message_item,
   wire_ai_tool_approval_req,
   wire_ai_tool_approval_resp,
@@ -126,6 +130,21 @@ export function fromWireAISubscribeThreadResponse(resp: wire_ai_subscribe_thread
   return { runId: runId ? runId : undefined };
 }
 
+export function toWireAIThreadRewindRequest(req: AIThreadRewindRequest): wire_ai_thread_rewind_req {
+  return {
+    thread_id: String(req.threadId ?? '').trim(),
+  };
+}
+
+export function fromWireAIThreadRewindResponse(resp: wire_ai_thread_rewind_resp): AIThreadRewindResponse {
+  const ok = Boolean(resp?.ok ?? false);
+  const checkpointId = String(resp?.checkpoint_id ?? '').trim();
+  return {
+    ok,
+    checkpointId: ok && checkpointId ? checkpointId : undefined,
+  };
+}
+
 export function toWireAIToolApprovalRequest(req: AIToolApprovalRequest): wire_ai_tool_approval_req {
   return {
     run_id: String(req.runId ?? '').trim(),
@@ -169,7 +188,7 @@ export function fromWireAISetToolCollapsedResponse(resp: wire_ai_set_tool_collap
 
 export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtimeEvent | null {
   const eventType = String(payload?.event_type ?? '').trim();
-  if (eventType !== 'stream_event' && eventType !== 'thread_state' && eventType !== 'transcript_message' && eventType !== 'thread_summary') {
+  if (eventType !== 'stream_event' && eventType !== 'thread_state' && eventType !== 'transcript_message' && eventType !== 'transcript_reset' && eventType !== 'thread_summary') {
     return null;
   }
 
@@ -179,7 +198,7 @@ export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtime
   if (!threadId || !endpointId) {
     return null;
   }
-  if (eventType !== 'transcript_message' && eventType !== 'thread_summary' && !runId) {
+  if (eventType !== 'transcript_message' && eventType !== 'transcript_reset' && eventType !== 'thread_summary' && !runId) {
     return null;
   }
 
@@ -234,6 +253,9 @@ export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtime
     lastMessagePreview: typeof payload?.last_message_preview === 'string' ? payload.last_message_preview : undefined,
     lastMessageAtUnixMs: typeof payload?.last_message_at_unix_ms === 'number' ? payload.last_message_at_unix_ms : undefined,
     activeRunId: typeof payload?.active_run_id === 'string' ? payload.active_run_id : undefined,
+
+    resetReason: typeof payload?.reset_reason === 'string' ? payload.reset_reason : undefined,
+    resetCheckpointId: typeof payload?.reset_checkpoint_id === 'string' ? payload.reset_checkpoint_id : undefined,
   };
 }
 

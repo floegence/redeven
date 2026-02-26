@@ -247,7 +247,7 @@ PRAGMA user_version=1;
 		}
 	}
 
-	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "ai_thread_todos", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "context_snapshots", "provider_capabilities"} {
+	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "ai_thread_todos", "ai_thread_checkpoints", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "context_snapshots", "provider_capabilities"} {
 		var exists int
 		if err := s.db.QueryRowContext(ctx, `
 SELECT COUNT(1)
@@ -265,8 +265,8 @@ WHERE type = 'table' AND name = ?
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 11 {
-		t.Fatalf("user_version=%d, want 11", version)
+	if version != 12 {
+		t.Fatalf("user_version=%d, want 12", version)
 	}
 }
 
@@ -353,8 +353,8 @@ WHERE run_id = 'run_legacy'
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 11 {
-		t.Fatalf("user_version=%d, want 11", version)
+	if version != 12 {
+		t.Fatalf("user_version=%d, want 12", version)
 	}
 }
 

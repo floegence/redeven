@@ -37,6 +37,7 @@ export const redevenV1TypeIds = {
     getActiveRunSnapshot: 6007,
     setToolCollapsed: 6008,
     subscribeThread: 6009,
+    threadRewind: 6010,
   },
   sessions: {
     listActive: 5001,

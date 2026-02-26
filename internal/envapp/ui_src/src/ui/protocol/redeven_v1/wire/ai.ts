@@ -71,7 +71,7 @@ export type wire_ai_tool_approval_resp = {
 };
 
 export type wire_ai_event_notify = {
-  event_type: 'stream_event' | 'thread_state' | 'transcript_message' | 'thread_summary';
+  event_type: 'stream_event' | 'thread_state' | 'transcript_message' | 'transcript_reset' | 'thread_summary';
   endpoint_id: string;
   thread_id: string;
   run_id: string;
@@ -93,6 +93,19 @@ export type wire_ai_event_notify = {
   last_message_preview?: string;
   last_message_at_unix_ms?: number;
   active_run_id?: string;
+
+  // transcript_reset only
+  reset_reason?: string;
+  reset_checkpoint_id?: string;
+};
+
+export type wire_ai_thread_rewind_req = {
+  thread_id: string;
+};
+
+export type wire_ai_thread_rewind_resp = {
+  ok: boolean;
+  checkpoint_id?: string;
 };
 
 export type wire_ai_list_messages_req = {

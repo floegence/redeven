@@ -2971,6 +2971,28 @@ export function EnvAIPage() {
       const tid = String(event.threadId ?? '').trim();
       if (!tid) return;
 
+      if (event.eventType === 'transcript_reset') {
+        const isActiveTid = tid === String(ai.activeThreadId() ?? '').trim();
+        if (!isActiveTid) return;
+
+        activeRealtimeEventSeq += 1;
+        resetActiveTranscriptCursor(tid);
+        chat?.clearMessages();
+        setHasMessages(false);
+        setRunPhaseLabel('Working');
+        setThreadTodos(null);
+        resetThreadSubagents();
+        resetContextTelemetryState();
+        setTodosError('');
+        setTodosLoading(true);
+
+        void loadThreadMessages(tid, { reset: true }).then(() => {
+          void loadActiveRunSnapshot(tid);
+        });
+        void loadThreadTodos(tid, { silent: true, notifyError: false });
+        return;
+      }
+
       if (event.eventType === 'transcript_message') {
         const rowId = Math.max(0, Math.floor(Number((event as any)?.messageRowId ?? 0) || 0));
         const messageJson = (event as any)?.messageJson ?? (event as any)?.message_json;

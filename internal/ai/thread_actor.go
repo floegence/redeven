@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -104,6 +105,18 @@ type sendUserTurnResult struct {
 	err  error
 }
 
+type cmdRewindThread struct {
+	ctx  context.Context
+	meta *session.Meta
+	req  RewindThreadRequest
+	resp chan rewindThreadResult
+}
+
+type rewindThreadResult struct {
+	resp RewindThreadResponse
+	err  error
+}
+
 type threadActor struct {
 	mgr *threadManager
 	key string
@@ -187,6 +200,34 @@ func (a *threadActor) SendUserTurn(ctx context.Context, meta *session.Meta, req 
 	}
 }
 
+func (a *threadActor) RewindThread(ctx context.Context, meta *session.Meta, req RewindThreadRequest) (RewindThreadResponse, error) {
+	if a == nil {
+		return RewindThreadResponse{}, errors.New("thread actor not ready")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ch := make(chan rewindThreadResult, 1)
+	cmd := cmdRewindThread{ctx: ctx, meta: meta, req: req, resp: ch}
+
+	select {
+	case <-a.stopCh:
+		return RewindThreadResponse{}, errors.New("thread actor closed")
+	case <-ctx.Done():
+		return RewindThreadResponse{}, ctx.Err()
+	case a.inbox <- cmd:
+	}
+
+	select {
+	case <-a.stopCh:
+		return RewindThreadResponse{}, errors.New("thread actor closed")
+	case <-ctx.Done():
+		return RewindThreadResponse{}, ctx.Err()
+	case res := <-ch:
+		return res.resp, res.err
+	}
+}
+
 func (a *threadActor) loop() {
 	defer close(a.doneCh)
 	defer func() {
@@ -228,6 +269,9 @@ func (a *threadActor) loop() {
 			case cmdSendUserTurn:
 				resp, err := a.handleSendUserTurn(cmd.ctx, cmd.meta, cmd.req)
 				cmd.resp <- sendUserTurnResult{resp: resp, err: err}
+			case cmdRewindThread:
+				resp, err := a.handleRewindThread(cmd.ctx, cmd.meta, cmd.req)
+				cmd.resp <- rewindThreadResult{resp: resp, err: err}
 			}
 		}
 	}
@@ -278,7 +322,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	}
 	expected := strings.TrimSpace(req.ExpectedRunID)
 	replyToWaitingPromptID := strings.TrimSpace(req.ReplyToWaitingPromptID)
-	activeRunID, _ := a.lookupActiveRun(endpointID, threadID)
+	activeRunID, activeRun := a.lookupActiveRun(endpointID, threadID)
 	if activeRunID != "" && expected != "" && expected != activeRunID {
 		return SendUserTurnResponse{}, ErrRunChanged
 	}
@@ -324,6 +368,56 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		return SendUserTurnResponse{}, ErrWaitingPromptChanged
 	}
 
+	shouldAutoRewind := activeRunID != "" && consumedWaitingPromptID == "" && replyToWaitingPromptID == ""
+	if shouldAutoRewind {
+		// Avoid a destructive rewind on invalid/empty input.
+		hasText := strings.TrimSpace(req.Input.Text) != ""
+		hasAttachment := false
+		for _, a := range req.Input.Attachments {
+			if strings.TrimSpace(a.URL) != "" {
+				hasAttachment = true
+				break
+			}
+		}
+		if !hasText && !hasAttachment {
+			return SendUserTurnResponse{}, errors.New("empty input")
+		}
+
+		_ = a.mgr.svc.CancelRun(meta, activeRunID)
+		if activeRun != nil && activeRun.doneCh != nil {
+			timer := time.NewTimer(3 * time.Second)
+			defer timer.Stop()
+			select {
+			case <-activeRun.doneCh:
+			case <-timer.C:
+			case <-ctx.Done():
+			}
+		}
+
+		cpID := checkpointIDForRun(activeRunID)
+		if strings.TrimSpace(cpID) != "" {
+			if _, err := a.mgr.svc.rewindThreadCheckpoint(ctx, meta, endpointID, threadID, cpID, "update_user_turn"); err != nil && !errors.Is(err, ErrNoCheckpoint) {
+				return SendUserTurnResponse{}, err
+			}
+		}
+	}
+
+	runID, err := NewRunID()
+	if err != nil {
+		return SendUserTurnResponse{}, err
+	}
+
+	checkpointID := checkpointIDForRun(runID)
+	if strings.TrimSpace(checkpointID) == "" {
+		return SendUserTurnResponse{}, errors.New("missing checkpoint id")
+	}
+	cctx, cancel := context.WithTimeout(ctx, persistTO)
+	_, cpErr := db.CreateThreadCheckpoint(cctx, endpointID, threadID, checkpointID, runID, threadstore.CheckpointKindPreRun)
+	cancel()
+	if cpErr != nil {
+		return SendUserTurnResponse{}, cpErr
+	}
+
 	persisted, normalizedInput, err := a.mgr.svc.persistUserMessage(ctx, meta, endpointID, threadID, req.Input)
 	if err != nil {
 		return SendUserTurnResponse{}, err
@@ -334,15 +428,13 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	a.mgr.svc.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
 	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
 
-	if activeRunID, _ = a.lookupActiveRun(endpointID, threadID); activeRunID != "" {
+	if !shouldAutoRewind {
+		activeRunID, _ = a.lookupActiveRun(endpointID, threadID)
+	}
+	if activeRunID != "" && !shouldAutoRewind {
 		if err := a.mgr.svc.CancelRun(meta, activeRunID); err != nil {
 			return SendUserTurnResponse{}, err
 		}
-	}
-
-	runID, err := NewRunID()
-	if err != nil {
-		return SendUserTurnResponse{}, err
 	}
 
 	startReq := RunStartRequest{
@@ -355,4 +447,46 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		return SendUserTurnResponse{}, err
 	}
 	return SendUserTurnResponse{RunID: runID, Kind: "start", ConsumedWaitingPromptID: consumedWaitingPromptID}, nil
+}
+
+func (a *threadActor) handleRewindThread(ctx context.Context, meta *session.Meta, req RewindThreadRequest) (RewindThreadResponse, error) {
+	if a == nil || a.mgr == nil || a.mgr.svc == nil {
+		return RewindThreadResponse{}, errors.New("service not ready")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := requireRWX(meta); err != nil {
+		return RewindThreadResponse{}, err
+	}
+
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if endpointID == "" || endpointID != strings.TrimSpace(a.endpointID) {
+		return RewindThreadResponse{}, errors.New("invalid request")
+	}
+	threadID := strings.TrimSpace(req.ThreadID)
+	if threadID == "" || threadID != strings.TrimSpace(a.threadID) {
+		return RewindThreadResponse{}, errors.New("invalid request")
+	}
+
+	// Best-effort: cancel any active run so it cannot keep mutating the workspace while rewinding.
+	activeRunID, r := a.lookupActiveRun(endpointID, threadID)
+	if activeRunID != "" {
+		_ = a.mgr.svc.CancelRun(meta, activeRunID)
+		if r != nil && r.doneCh != nil {
+			timer := time.NewTimer(3 * time.Second)
+			defer timer.Stop()
+			select {
+			case <-r.doneCh:
+			case <-timer.C:
+			case <-ctx.Done():
+			}
+		}
+	}
+
+	checkpointID, err := a.mgr.svc.rewindThreadCheckpoint(ctx, meta, endpointID, threadID, "", "rewind")
+	if err != nil {
+		return RewindThreadResponse{}, err
+	}
+	return RewindThreadResponse{OK: true, CheckpointID: checkpointID}, nil
 }

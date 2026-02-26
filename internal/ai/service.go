@@ -946,6 +946,31 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		)
 	}
 
+	// For StartRun / StartRunDetached flows (persisted user message is nil), create a checkpoint
+	// before mutating thread run state so the thread can be rewound consistently.
+	if persisted == nil && db != nil {
+		checkpointID := checkpointIDForRun(runID)
+		cctx, cancel := context.WithTimeout(context.Background(), persistTO)
+		_, cpErr := db.CreateThreadCheckpoint(cctx, endpointID, threadID, checkpointID, runID, threadstore.CheckpointKindPreRun)
+		cancel()
+		if cpErr != nil {
+			// Cleanup: prepareRun already registered the run in memory; ensure we don't leak it.
+			s.mu.Lock()
+			delete(s.runs, runID)
+			if strings.TrimSpace(s.activeRunByTh[thKey]) == runID {
+				delete(s.activeRunByTh, thKey)
+			}
+			s.mu.Unlock()
+
+			if r.stream != nil {
+				r.stream.close()
+				r.stream.wait()
+			}
+			r.markDone()
+			return nil, cpErr
+		}
+	}
+
 	updateThreadRunState("running", "", nil)
 	s.broadcastThreadState(endpointID, threadID, runID, "running", "")
 	s.broadcastThreadSummary(endpointID, threadID)
