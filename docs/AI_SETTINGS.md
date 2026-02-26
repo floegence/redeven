@@ -90,8 +90,17 @@ But the config keeps `current_model_id` at the AI root, and stores models under 
       "type": "openai",
       "name": "OpenAI",
       "models": [
-        { "model_name": "gpt-5-mini" },
-        { "model_name": "gpt-5" }
+        {
+          "model_name": "gpt-5-mini",
+          "context_window": 400000,
+          "max_output_tokens": 128000,
+          "effective_context_window_percent": 95
+        },
+        {
+          "model_name": "gpt-5",
+          "context_window": 400000,
+          "max_output_tokens": 128000
+        }
       ]
     }
   ]
@@ -104,6 +113,10 @@ Rules:
 - `current_model_id` must point to one allowed model id (`<provider_id>/<model_name>`).
 - When `current_model_id` is missing/invalid after provider/model edits, the system falls back to the first available model.
 - `model_name` must not contain `/` (wire id uses `/` as a delimiter).
+- `context_window` controls the model context size used by runtime context budgeting.
+- For `openai_compatible` providers, `context_window` is required for every model.
+- `max_output_tokens` is optional; when set it overrides runtime output-token capability.
+- `effective_context_window_percent` is optional (default `95`), used to derive effective input window from `context_window`.
 - The agent derives the wire id as `provider.id + "/" + model_name` when talking to runtime providers and when returning `/api/ai/models`.
 
 Thread-level selection:

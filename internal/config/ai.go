@@ -125,7 +125,10 @@ type AIProvider struct {
 }
 
 type AIProviderModel struct {
-	ModelName string `json:"model_name"`
+	ModelName                     string `json:"model_name"`
+	ContextWindow                 int    `json:"context_window,omitempty"`
+	MaxOutputTokens               int    `json:"max_output_tokens,omitempty"`
+	EffectiveContextWindowPercent int    `json:"effective_context_window_percent,omitempty"`
 }
 
 const (
@@ -144,8 +147,32 @@ const (
 	defaultAIEnforcePlanModeGuard  = false
 	defaultAIBlockDangerousCommand = false
 
-	defaultAIWebSearchProvider = "prefer_openai"
+	defaultAIWebSearchProvider                 = "prefer_openai"
+	defaultAIEffectiveContextWindowPercent int = 95
 )
+
+func (m AIProviderModel) EffectiveContextWindowPercentValue() int {
+	if m.EffectiveContextWindowPercent <= 0 {
+		return defaultAIEffectiveContextWindowPercent
+	}
+	return m.EffectiveContextWindowPercent
+}
+
+func (m AIProviderModel) EffectiveInputWindowTokens() int {
+	contextWindow := m.ContextWindow
+	if contextWindow <= 0 {
+		return 0
+	}
+	percent := m.EffectiveContextWindowPercentValue()
+	if percent <= 0 {
+		return 0
+	}
+	effective := (contextWindow * percent) / 100
+	if effective <= 0 {
+		return 1
+	}
+	return effective
+}
 
 func requiresExplicitAIProviderBaseURL(providerType string) bool {
 	switch strings.ToLower(strings.TrimSpace(providerType)) {
@@ -248,6 +275,32 @@ func (c *AIConfig) Validate() error {
 				return fmt.Errorf("providers[%d].models[%d]: duplicate model_name %q", i, j, name)
 			}
 			modelNames[name] = struct{}{}
+
+			contextWindow := m.ContextWindow
+			if t == "openai_compatible" {
+				if contextWindow <= 0 {
+					return fmt.Errorf("providers[%d].models[%d]: context_window is required for %s", i, j, t)
+				}
+			}
+			if contextWindow < 0 {
+				return fmt.Errorf("providers[%d].models[%d]: invalid context_window %d", i, j, contextWindow)
+			}
+
+			if m.MaxOutputTokens < 0 {
+				return fmt.Errorf("providers[%d].models[%d]: invalid max_output_tokens %d", i, j, m.MaxOutputTokens)
+			}
+			if contextWindow > 0 && m.MaxOutputTokens > contextWindow {
+				return fmt.Errorf("providers[%d].models[%d]: max_output_tokens %d exceeds context_window %d", i, j, m.MaxOutputTokens, contextWindow)
+			}
+
+			if m.EffectiveContextWindowPercent != 0 {
+				if m.EffectiveContextWindowPercent < 1 || m.EffectiveContextWindowPercent > 100 {
+					return fmt.Errorf("providers[%d].models[%d]: invalid effective_context_window_percent %d (must be in [1,100])", i, j, m.EffectiveContextWindowPercent)
+				}
+			}
+			if contextWindow > 0 && m.EffectiveInputWindowTokens() <= 0 {
+				return fmt.Errorf("providers[%d].models[%d]: effective input window is invalid", i, j)
+			}
 		}
 	}
 

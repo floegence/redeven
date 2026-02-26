@@ -163,7 +163,30 @@ func defaultCapability(provider config.AIProvider, modelName string) model.Model
 		cap.MaxContextTokens = max(cap.MaxContextTokens, 200000)
 		cap.MaxOutputTokens = max(cap.MaxOutputTokens, 128000)
 	}
+
+	if providerModel, ok := providerModelByName(provider, modelName); ok {
+		if effectiveInputWindow := providerModel.EffectiveInputWindowTokens(); effectiveInputWindow > 0 {
+			cap.MaxContextTokens = effectiveInputWindow
+		}
+		if providerModel.MaxOutputTokens > 0 {
+			cap.MaxOutputTokens = providerModel.MaxOutputTokens
+		}
+	}
 	return cap
+}
+
+func providerModelByName(provider config.AIProvider, modelName string) (config.AIProviderModel, bool) {
+	target := strings.TrimSpace(modelName)
+	if target == "" {
+		return config.AIProviderModel{}, false
+	}
+	for _, item := range provider.Models {
+		if strings.TrimSpace(item.ModelName) != target {
+			continue
+		}
+		return item, true
+	}
+	return config.AIProviderModel{}, false
 }
 
 // AdaptAttachments applies explicit capability-based degradation modes.

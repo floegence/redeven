@@ -39,7 +39,12 @@ type PermissionPolicy = Readonly<{
 }>;
 
 type AIProviderType = 'openai' | 'anthropic' | 'moonshot' | 'chatglm' | 'deepseek' | 'qwen' | 'openai_compatible';
-type AIProviderModel = Readonly<{ model_name: string }>;
+type AIProviderModel = Readonly<{
+  model_name: string;
+  context_window?: number;
+  max_output_tokens?: number;
+  effective_context_window_percent?: number;
+}>;
 type AIProvider = Readonly<{ id: string; name?: string; type: AIProviderType; base_url?: string; models: AIProviderModel[] }>;
 type AIExecutionPolicy = Readonly<{
   require_user_approval?: boolean;
@@ -212,12 +217,18 @@ type SettingsUpdateResponse = Readonly<{
 }>;
 
 type PermissionRow = { key: string; read: boolean; write: boolean; execute: boolean };
-type AIProviderModelRow = { model_name: string };
+type AIProviderModelRow = {
+  model_name: string;
+  context_window?: number;
+  max_output_tokens?: number;
+  effective_context_window_percent?: number;
+};
 type AIProviderRow = { id: string; name: string; type: AIProviderType; base_url: string; models: AIProviderModelRow[] };
 type AIProviderModelPreset = Readonly<{
   model_name: string;
   context_window: number;
   max_output_tokens?: number;
+  effective_context_window_percent?: number;
   note?: string;
 }>;
 type AIProviderPreset = Readonly<{
@@ -242,6 +253,8 @@ type AIPreservedUIFields = {
 
 const DEFAULT_CODE_SERVER_PORT_MIN = 20000;
 const DEFAULT_CODE_SERVER_PORT_MAX = 21000;
+const DEFAULT_OPENAI_COMPAT_CONTEXT_WINDOW = 128000;
+const DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT = 95;
 const RELEASE_VERSION_RE = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const AUTO_SAVE_DELAY_MS = 700;
 const AI_PROVIDER_TYPE_OPTIONS: ReadonlyArray<{ value: AIProviderType; label: string }> = [
@@ -431,6 +444,33 @@ function formatTokenCount(tokenCount: number): string {
   return new Intl.NumberFormat('en-US').format(Math.trunc(tokenCount));
 }
 
+function normalizePositiveInteger(raw: unknown): number | undefined {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return undefined;
+  const value = Math.floor(n);
+  if (value <= 0) return undefined;
+  return value;
+}
+
+function normalizeContextWindowByProvider(providerType: AIProviderType, raw: unknown): number | undefined {
+  const parsed = normalizePositiveInteger(raw);
+  if (parsed != null) return parsed;
+  if (providerType === 'openai_compatible') return DEFAULT_OPENAI_COMPAT_CONTEXT_WINDOW;
+  return undefined;
+}
+
+function defaultContextWindowForProviderType(providerType: AIProviderType): number | undefined {
+  if (providerType === 'openai_compatible') return DEFAULT_OPENAI_COMPAT_CONTEXT_WINDOW;
+  return undefined;
+}
+
+function normalizeEffectiveContextPercent(raw: unknown): number | undefined {
+  const parsed = normalizePositiveInteger(raw);
+  if (parsed == null) return undefined;
+  if (parsed < 1 || parsed > 100) return undefined;
+  return parsed;
+}
+
 function defaultBaseURLForProviderType(providerType: AIProviderType): string {
   return providerPresetForType(providerType).default_base_url;
 }
@@ -443,6 +483,9 @@ function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
     base_url: String(row?.base_url ?? ''),
     models: (Array.isArray(row?.models) ? row.models : []).map((m) => ({
       model_name: String(m?.model_name ?? ''),
+      context_window: normalizePositiveInteger(m?.context_window),
+      max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
+      effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
     })),
   };
 }
@@ -451,9 +494,14 @@ function normalizeAIProviderRowDraft(row: AIProviderRow): AIProviderRow {
   const out = cloneAIProviderRow(row);
   const models = Array.isArray(out.models) ? out.models : [];
   if (models.length === 0) {
-    out.models = [{ model_name: '' }];
+    out.models = [{ model_name: '', context_window: defaultContextWindowForProviderType(out.type) }];
   } else {
-    out.models = models.map((m) => ({ model_name: String(m?.model_name ?? '') }));
+    out.models = models.map((m) => ({
+      model_name: String(m?.model_name ?? ''),
+      context_window: normalizeContextWindowByProvider(out.type, m?.context_window),
+      max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
+      effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
+    }));
   }
   return out;
 }
@@ -461,13 +509,21 @@ function normalizeAIProviderRowDraft(row: AIProviderRow): AIProviderRow {
 function newAIProviderDraft(): AIProviderRow {
   const defaultType: AIProviderType = 'openai';
   const defaultPresetModels = recommendedModelsForProviderType(defaultType);
-  const firstModelName = String(defaultPresetModels[0]?.model_name ?? '').trim();
+  const firstPreset = defaultPresetModels[0];
+  const firstModelName = String(firstPreset?.model_name ?? '').trim();
   return normalizeAIProviderRowDraft({
     id: newProviderID(),
     name: providerPresetForType(defaultType).name,
     type: defaultType,
     base_url: defaultBaseURLForProviderType(defaultType),
-    models: [{ model_name: firstModelName }],
+    models: [
+      {
+        model_name: firstModelName,
+        context_window: normalizePositiveInteger(firstPreset?.context_window),
+        max_output_tokens: normalizePositiveInteger(firstPreset?.max_output_tokens),
+        effective_context_window_percent: normalizeEffectiveContextPercent(firstPreset?.effective_context_window_percent),
+      },
+    ],
   });
 }
 
@@ -490,7 +546,7 @@ function defaultAIConfig(): AIConfig {
         name: 'OpenAI',
         type: 'openai',
         base_url: 'https://api.openai.com/v1',
-        models: [{ model_name: 'gpt-5.2-mini' }],
+        models: [{ model_name: 'gpt-5.2-mini', context_window: 400000, max_output_tokens: 128000, effective_context_window_percent: DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT }],
       },
     ],
   };
@@ -1143,7 +1199,7 @@ export function EnvSettingsPage() {
       name: 'OpenAI',
       type: 'openai',
       base_url: 'https://api.openai.com/v1',
-      models: [{ model_name: 'gpt-5.2-mini' }],
+      models: [{ model_name: 'gpt-5.2-mini', context_window: 400000, max_output_tokens: 128000, effective_context_window_percent: DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT }],
     },
   ]);
   const [aiCurrentModelID, setAiCurrentModelID] = createSignal('openai/gpt-5.2-mini');
@@ -1320,7 +1376,14 @@ export function EnvSettingsPage() {
       const baseURL = String(p.base_url ?? '').trim();
       if (baseURL) out.base_url = baseURL;
       out.models = (p.models ?? []).map((m) => {
-        return { model_name: String(m.model_name ?? '').trim() } as AIProviderModel;
+        const modelOut: any = { model_name: String(m.model_name ?? '').trim() };
+        const contextWindow = normalizePositiveInteger(m.context_window);
+        if (contextWindow != null) modelOut.context_window = contextWindow;
+        const maxOutputTokens = normalizePositiveInteger(m.max_output_tokens);
+        if (maxOutputTokens != null) modelOut.max_output_tokens = maxOutputTokens;
+        const effectiveContextPercent = normalizeEffectiveContextPercent(m.effective_context_window_percent);
+        if (effectiveContextPercent != null) modelOut.effective_context_window_percent = effectiveContextPercent;
+        return modelOut as AIProviderModel;
       });
 
       return out as AIProvider;
@@ -1450,12 +1513,36 @@ export function EnvSettingsPage() {
       const modelNames = new Set<string>();
       for (const m of models) {
         const mn = String((m as any).model_name ?? '').trim();
+        const contextWindowRaw = Number((m as any).context_window);
+        const hasContextWindow = Number.isFinite(contextWindowRaw);
+        const contextWindow = hasContextWindow ? Math.floor(contextWindowRaw) : 0;
+        const maxOutputTokensRaw = Number((m as any).max_output_tokens);
+        const hasMaxOutputTokens = Number.isFinite(maxOutputTokensRaw);
+        const maxOutputTokens = hasMaxOutputTokens ? Math.floor(maxOutputTokensRaw) : 0;
+        const effectiveContextPercentRaw = Number((m as any).effective_context_window_percent);
+        const hasEffectiveContextPercent = Number.isFinite(effectiveContextPercentRaw);
+        const effectiveContextPercent = hasEffectiveContextPercent ? Math.floor(effectiveContextPercentRaw) : 0;
         if ((m as any).label !== undefined) {
           throw new Error(`Provider "${id}" models[].label is not supported. Use model_name only.`);
         }
         if (!mn) throw new Error(`Provider "${id}" has a model with missing model_name.`);
         if (mn.includes('/')) throw new Error(`Provider "${id}" model_name must not contain "/".`);
         if (modelNames.has(mn)) throw new Error(`Provider "${id}" has duplicate model_name: ${mn}`);
+        if (hasContextWindow && contextWindow <= 0) {
+          throw new Error(`Provider "${id}" model "${mn}" context_window must be a positive integer.`);
+        }
+        if (typ === 'openai_compatible' && contextWindow <= 0) {
+          throw new Error(`Provider "${id}" model "${mn}" requires context_window.`);
+        }
+        if (hasMaxOutputTokens && maxOutputTokens <= 0) {
+          throw new Error(`Provider "${id}" model "${mn}" max_output_tokens must be a positive integer.`);
+        }
+        if (contextWindow > 0 && maxOutputTokens > contextWindow) {
+          throw new Error(`Provider "${id}" model "${mn}" max_output_tokens must not exceed context_window.`);
+        }
+        if (hasEffectiveContextPercent && (effectiveContextPercent < 1 || effectiveContextPercent > 100)) {
+          throw new Error(`Provider "${id}" model "${mn}" effective_context_window_percent must be in [1,100].`);
+        }
         modelNames.add(mn);
         modelIDs.add(modelID(id, mn));
       }
@@ -1474,6 +1561,9 @@ export function EnvSettingsPage() {
       base_url: String((p as any).base_url ?? ''),
       models: (Array.isArray((p as any).models) ? ((p as any).models as any[]) : []).map((m) => ({
         model_name: String(m?.model_name ?? ''),
+        context_window: normalizePositiveInteger(m?.context_window),
+        max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
+        effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
       })),
     }));
 
@@ -1481,10 +1571,15 @@ export function EnvSettingsPage() {
       const p = list[i];
       const models = Array.isArray(p.models) ? p.models : [];
       if (models.length === 0) {
-        p.models = [{ model_name: '' }];
+        p.models = [{ model_name: '', context_window: defaultContextWindowForProviderType(p.type) }];
         continue;
       }
-      p.models = models.map((m) => ({ model_name: String(m?.model_name ?? '') }));
+      p.models = models.map((m) => ({
+        model_name: String(m?.model_name ?? ''),
+        context_window: normalizeContextWindowByProvider(p.type, m?.context_window),
+        max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
+        effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
+      }));
     }
     return list;
   };
@@ -1608,14 +1703,19 @@ export function EnvSettingsPage() {
     void updateAIProviderKey(id, null);
   };
 
-  const normalizeProviderModelRows = (rows: AIProviderModelRow[]): AIProviderModelRow[] => {
+  const normalizeProviderModelRows = (providerType: AIProviderType, rows: AIProviderModelRow[]): AIProviderModelRow[] => {
     const seen = new Set<string>();
     const out: AIProviderModelRow[] = [];
     for (const row of Array.isArray(rows) ? rows : []) {
       const modelName = String(row?.model_name ?? '').trim();
       if (!modelName || seen.has(modelName)) continue;
       seen.add(modelName);
-      out.push({ model_name: modelName });
+      out.push({
+        model_name: modelName,
+        context_window: normalizeContextWindowByProvider(providerType, row?.context_window),
+        max_output_tokens: normalizePositiveInteger(row?.max_output_tokens),
+        effective_context_window_percent: normalizeEffectiveContextPercent(row?.effective_context_window_percent),
+      });
     }
     return out;
   };
@@ -1625,13 +1725,19 @@ export function EnvSettingsPage() {
     if (!targetName) return;
     setAiProviderDialogDraft((prev) => {
       if (!prev) return prev;
-      const merged = normalizeProviderModelRows([
+      const targetPreset = recommendedModelsForProviderType(prev.type).find((item) => item.model_name === targetName);
+      const merged = normalizeProviderModelRows(prev.type, [
         ...(Array.isArray(prev.models) ? prev.models : []),
-        { model_name: targetName },
+        {
+          model_name: targetName,
+          context_window: normalizePositiveInteger(targetPreset?.context_window),
+          max_output_tokens: normalizePositiveInteger(targetPreset?.max_output_tokens),
+          effective_context_window_percent: normalizeEffectiveContextPercent(targetPreset?.effective_context_window_percent),
+        },
       ]);
       return normalizeAIProviderRowDraft({
         ...cloneAIProviderRow(prev),
-        models: merged.length > 0 ? merged : [{ model_name: '' }],
+        models: merged.length > 0 ? merged : [{ model_name: '', context_window: defaultContextWindowForProviderType(prev.type) }],
       });
     });
   };
@@ -1640,7 +1746,13 @@ export function EnvSettingsPage() {
     const provider = aiProviderDialogProvider();
     if (!provider) return;
     const recommendedRows = normalizeProviderModelRows(
-      recommendedModelsForProviderType(provider.type).map((model) => ({ model_name: model.model_name })),
+      provider.type,
+      recommendedModelsForProviderType(provider.type).map((model) => ({
+        model_name: model.model_name,
+        context_window: normalizePositiveInteger(model.context_window),
+        max_output_tokens: normalizePositiveInteger(model.max_output_tokens),
+        effective_context_window_percent: normalizeEffectiveContextPercent(model.effective_context_window_percent),
+      })),
     );
     if (recommendedRows.length === 0) {
       notify.info('No presets', `No recommended models are available for provider type "${provider.type}".`);
@@ -2191,6 +2303,9 @@ export function EnvSettingsPage() {
         base_url: String(p.base_url ?? ''),
         models: (p.models ?? []).map((m) => ({
           model_name: String(m.model_name ?? ''),
+          context_window: normalizePositiveInteger((m as any).context_window),
+          max_output_tokens: normalizePositiveInteger((m as any).max_output_tokens),
+          effective_context_window_percent: normalizeEffectiveContextPercent((m as any).effective_context_window_percent),
         })),
       }));
       const fallback = defaultAIConfig();
@@ -2201,6 +2316,9 @@ export function EnvSettingsPage() {
         base_url: String(p.base_url ?? ''),
         models: (p.models ?? []).map((m) => ({
           model_name: String(m.model_name ?? ''),
+          context_window: normalizePositiveInteger((m as any).context_window),
+          max_output_tokens: normalizePositiveInteger((m as any).max_output_tokens),
+          effective_context_window_percent: normalizeEffectiveContextPercent((m as any).effective_context_window_percent),
         })),
       }));
       const normalizedProviders = normalizeAIProviders(rows.length > 0 ? rows : fallbackRows);
@@ -2404,6 +2522,9 @@ export function EnvSettingsPage() {
               models: Array.isArray(p?.models)
                 ? (p.models as any[]).map((m) => ({
                     model_name: String(m?.model_name ?? ''),
+                    context_window: normalizePositiveInteger(m?.context_window),
+                    max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
+                    effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
                   }))
                 : [],
             })),
@@ -4103,6 +4224,9 @@ export function EnvSettingsPage() {
                         const nextPreset = providerPresetForType(nextType);
                         const nextPresetModels = recommendedModelsForProviderType(nextType).map((model) => ({
                           model_name: model.model_name,
+                          context_window: normalizePositiveInteger(model.context_window),
+                          max_output_tokens: normalizePositiveInteger(model.max_output_tokens),
+                          effective_context_window_percent: normalizeEffectiveContextPercent(model.effective_context_window_percent),
                         }));
                         updateDraft((current) => ({
                           ...current,
@@ -4112,7 +4236,10 @@ export function EnvSettingsPage() {
                               : current.name,
                           type: nextType,
                           base_url: defaultBaseURLForProviderType(nextType),
-                          models: nextPresetModels.length > 0 ? nextPresetModels : [{ model_name: '' }],
+                          models:
+                            nextPresetModels.length > 0
+                              ? nextPresetModels
+                              : [{ model_name: '', context_window: defaultContextWindowForProviderType(nextType) }],
                         }));
                         setAiProviderPresetModel(String(nextPreset.models[0]?.model_name ?? ''));
                       }}
@@ -4259,7 +4386,10 @@ export function EnvSettingsPage() {
                         onClick={() => {
                           updateDraft((current) => ({
                             ...current,
-                            models: [...(Array.isArray(current.models) ? current.models : []), { model_name: '' }],
+                            models: [
+                              ...(Array.isArray(current.models) ? current.models : []),
+                              { model_name: '', context_window: defaultContextWindowForProviderType(current.type) },
+                            ],
                           }));
                         }}
                         disabled={!canInteract()}
@@ -4272,8 +4402,8 @@ export function EnvSettingsPage() {
                   <div class="space-y-2">
                     <Index each={provider().models}>
                       {(model, modelIndex) => (
-                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border bg-background">
-                          <div class="flex-1 min-w-0">
+                        <div class="p-3 rounded-lg border border-border bg-background space-y-2">
+                          <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_180px_auto] gap-2 items-center">
                             <Input
                               value={model().model_name}
                               onInput={(e) => {
@@ -4290,8 +4420,23 @@ export function EnvSettingsPage() {
                               class="w-full font-mono text-xs"
                               disabled={!canInteract()}
                             />
-                          </div>
-                          <div class="flex items-center gap-2 flex-shrink-0">
+                            <Input
+                              type="number"
+                              value={model().context_window ?? ''}
+                              onInput={(e) => {
+                                const contextWindow = normalizePositiveInteger(e.currentTarget.value);
+                                updateDraft((current) => ({
+                                  ...current,
+                                  models: (Array.isArray(current.models) ? current.models : []).map((itModel, j) =>
+                                    j === modelIndex ? { ...itModel, context_window: contextWindow } : itModel,
+                                  ),
+                                }));
+                              }}
+                              placeholder="context_window"
+                              size="sm"
+                              class="w-full font-mono text-xs"
+                              disabled={!canInteract()}
+                            />
                             <Button
                               size="sm"
                               variant="ghost"
@@ -4301,7 +4446,10 @@ export function EnvSettingsPage() {
                                   const models = (Array.isArray(current.models) ? current.models : []).filter((_, j) => j !== modelIndex);
                                   return {
                                     ...current,
-                                    models: models.length > 0 ? models : [{ model_name: '' }],
+                                    models:
+                                      models.length > 0
+                                        ? models
+                                        : [{ model_name: '', context_window: defaultContextWindowForProviderType(current.type) }],
                                   };
                                 });
                               }}
@@ -4309,6 +4457,13 @@ export function EnvSettingsPage() {
                             >
                               &times;
                             </Button>
+                          </div>
+                          <div class="text-[11px] text-muted-foreground">
+                            context {formatTokenCount(Number(model().context_window ?? 0))}
+                            <Show when={model().max_output_tokens}>
+                              {' '}
+                              · max output {formatTokenCount(Number(model().max_output_tokens ?? 0))}
+                            </Show>
                           </div>
                           <Show when={model().model_name}>
                             <div class="text-[10px] text-muted-foreground font-mono sm:hidden">{modelID(providerID(), model().model_name)}</div>

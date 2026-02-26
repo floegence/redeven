@@ -1595,10 +1595,12 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		})
 	}
 	messages := buildMessagesForRun(req)
-	contextLimit := nativeDefaultContextLimit
+	contextWindow := nativeDefaultContextLimit
 	if req.ModelCapability.MaxContextTokens > 0 {
-		contextLimit = req.ModelCapability.MaxContextTokens
+		contextWindow = req.ModelCapability.MaxContextTokens
 	}
+	inputContextLimit := resolveInputContextLimit(contextWindow, req.Options.MaxInputTokens)
+	windowBasedThreshold := deriveModelWindowCompactionThreshold(contextWindow, inputContextLimit)
 	runtimeCompactor := contextcompactor.New(nil)
 
 	recoveryCount := 0
@@ -1835,8 +1837,8 @@ mainLoop:
 
 		estimateTokens, estimateSource := estimateTurnTokens(providerType, turnReq)
 		state.EstimateSource = estimateSource
-		pressure := float64(estimateTokens) / float64(contextLimit)
-		compactThreshold := resolveCompactionThreshold(req.Options.CompactionThreshold, contextLimit, turnReq.Budgets.MaxOutputToken)
+		pressure := float64(estimateTokens) / float64(inputContextLimit)
+		compactThreshold := resolveCompactionThreshold(req.Options.CompactionThreshold, contextWindow, inputContextLimit)
 		if pressure >= compactThreshold {
 			beforeCount := len(messages)
 			beforeEstimateTokens := estimateTokens
@@ -1851,11 +1853,12 @@ mainLoop:
 				"step_index":               step,
 				"strategy":                 "pipeline",
 				"estimate_tokens_before":   beforeEstimateTokens,
-				"context_limit":            contextLimit,
+				"context_window":           contextWindow,
+				"context_limit":            inputContextLimit,
 				"pressure":                 pressure,
 				"effective_threshold":      compactThreshold,
 				"configured_threshold":     normalizeCompactionThreshold(req.Options.CompactionThreshold),
-				"window_based_threshold":   deriveModelWindowCompactionThreshold(contextLimit, turnReq.Budgets.MaxOutputToken),
+				"window_based_threshold":   windowBasedThreshold,
 				"tool_result_prune_budget": nativeToolResultPruneBudget,
 			})
 
@@ -1867,10 +1870,7 @@ mainLoop:
 
 			if req.ContextPack.ThreadID != "" {
 				compactStrategy = compactStrategy + "+prompt_pack"
-				targetTokens := req.Options.MaxInputTokens
-				if targetTokens <= 0 {
-					targetTokens = contextLimit
-				}
+				targetTokens := inputContextLimit
 				compressed, changed, _, compactErr := runtimeCompactor.CompactPromptPack(execCtx, strings.TrimSpace(r.endpointID), targetTokens, req.ContextPack)
 				if compactErr == nil && changed {
 					req.ContextPack = compressed
@@ -1882,7 +1882,8 @@ mainLoop:
 						"step_index":          step,
 						"strategy":            "prompt_pack",
 						"estimate_tokens":     beforeEstimateTokens,
-						"context_limit":       contextLimit,
+						"context_window":      contextWindow,
+						"context_limit":       inputContextLimit,
 						"pressure":            pressure,
 						"effective_threshold": compactThreshold,
 						"error":               sanitizeLogText(compactErr.Error(), 240),
@@ -1933,11 +1934,12 @@ mainLoop:
 					"messages_after":             len(messages),
 					"estimate_tokens_before":     beforeEstimateTokens,
 					"estimate_tokens_after":      afterEstimateTokens,
-					"context_limit":              contextLimit,
+					"context_window":             contextWindow,
+					"context_limit":              inputContextLimit,
 					"pressure":                   pressure,
 					"effective_threshold":        compactThreshold,
 					"configured_threshold":       normalizeCompactionThreshold(req.Options.CompactionThreshold),
-					"window_based_threshold":     deriveModelWindowCompactionThreshold(contextLimit, turnReq.Budgets.MaxOutputToken),
+					"window_based_threshold":     windowBasedThreshold,
 					"tool_pruned_parts":          pruneStats.PrunedParts,
 					"tool_pruned_tokens_before":  pruneStats.PrunedTokensBefore,
 					"tool_pruned_tokens_after":   pruneStats.PrunedTokensAfter,
@@ -1952,7 +1954,8 @@ mainLoop:
 					"strategy":               compactStrategy,
 					"estimate_tokens_before": beforeEstimateTokens,
 					"estimate_tokens_after":  afterEstimateTokens,
-					"context_limit":          contextLimit,
+					"context_window":         contextWindow,
+					"context_limit":          inputContextLimit,
 					"pressure":               pressure,
 					"effective_threshold":    compactThreshold,
 				})
@@ -1984,10 +1987,11 @@ mainLoop:
 			StepIndex:             step,
 			EstimateTokens:        estimateTokens,
 			EstimateSource:        estimateSource,
-			ContextLimit:          contextLimit,
+			ContextWindow:         contextWindow,
+			ContextLimit:          inputContextLimit,
 			EffectiveThreshold:    compactThreshold,
 			ConfiguredThreshold:   normalizeCompactionThreshold(req.Options.CompactionThreshold),
-			WindowBasedThreshold:  deriveModelWindowCompactionThreshold(contextLimit, turnReq.Budgets.MaxOutputToken),
+			WindowBasedThreshold:  windowBasedThreshold,
 			TurnMessagesCount:     len(turnReq.Messages),
 			HistoryMessagesCount:  len(messages),
 			PromptPackEstimated:   req.ContextPack.EstimatedInputTokens,
@@ -2050,10 +2054,11 @@ mainLoop:
 					StepIndex:             step,
 					EstimateTokens:        estimateTokens,
 					EstimateSource:        estimateSource,
-					ContextLimit:          contextLimit,
+					ContextWindow:         contextWindow,
+					ContextLimit:          inputContextLimit,
 					EffectiveThreshold:    compactThreshold,
 					ConfiguredThreshold:   normalizeCompactionThreshold(req.Options.CompactionThreshold),
-					WindowBasedThreshold:  deriveModelWindowCompactionThreshold(contextLimit, turnReq.Budgets.MaxOutputToken),
+					WindowBasedThreshold:  windowBasedThreshold,
 					TurnMessagesCount:     len(turnReq.Messages),
 					HistoryMessagesCount:  len(messages),
 					PromptPackEstimated:   req.ContextPack.EstimatedInputTokens,
@@ -2850,18 +2855,21 @@ func (r *run) runNativeConversational(
 		ProviderControls: ProviderControls{ThinkingBudgetTokens: req.Options.ThinkingBudgetTokens, CacheControl: req.Options.CacheControl, ResponseFormat: req.Options.ResponseFormat, Temperature: req.Options.Temperature, TopP: req.Options.TopP},
 	}
 	estimateTokens, estimateSource := estimateTurnTokens(providerType, turnReq)
-	contextLimit := nativeDefaultContextLimit
+	contextWindow := nativeDefaultContextLimit
 	if req.ModelCapability.MaxContextTokens > 0 {
-		contextLimit = req.ModelCapability.MaxContextTokens
+		contextWindow = req.ModelCapability.MaxContextTokens
 	}
+	inputContextLimit := resolveInputContextLimit(contextWindow, req.Options.MaxInputTokens)
+	windowBasedThreshold := deriveModelWindowCompactionThreshold(contextWindow, inputContextLimit)
 	r.emitContextUsageEvent(contextUsageEventInput{
 		StepIndex:             0,
 		EstimateTokens:        estimateTokens,
 		EstimateSource:        estimateSource,
-		ContextLimit:          contextLimit,
-		EffectiveThreshold:    resolveCompactionThreshold(req.Options.CompactionThreshold, contextLimit, turnReq.Budgets.MaxOutputToken),
+		ContextWindow:         contextWindow,
+		ContextLimit:          inputContextLimit,
+		EffectiveThreshold:    resolveCompactionThreshold(req.Options.CompactionThreshold, contextWindow, inputContextLimit),
 		ConfiguredThreshold:   normalizeCompactionThreshold(req.Options.CompactionThreshold),
-		WindowBasedThreshold:  deriveModelWindowCompactionThreshold(contextLimit, turnReq.Budgets.MaxOutputToken),
+		WindowBasedThreshold:  windowBasedThreshold,
 		TurnMessagesCount:     len(turnReq.Messages),
 		HistoryMessagesCount:  len(messages),
 		PromptPackEstimated:   req.ContextPack.EstimatedInputTokens,
@@ -3134,6 +3142,7 @@ type contextUsageEventInput struct {
 	StepIndex             int
 	EstimateTokens        int
 	EstimateSource        string
+	ContextWindow         int
 	ContextLimit          int
 	EffectiveThreshold    float64
 	ConfiguredThreshold   float64
@@ -3176,9 +3185,13 @@ func (r *run) emitContextUsageEvent(input contextUsageEventInput) {
 	if r == nil {
 		return
 	}
+	contextWindow := input.ContextWindow
+	if contextWindow <= 0 {
+		contextWindow = nativeDefaultContextLimit
+	}
 	limit := input.ContextLimit
 	if limit <= 0 {
-		limit = nativeDefaultContextLimit
+		limit = contextWindow
 	}
 	pressure := 0.0
 	if limit > 0 {
@@ -3204,6 +3217,7 @@ func (r *run) emitContextUsageEvent(input contextUsageEventInput) {
 		"step_index":               input.StepIndex,
 		"estimate_tokens":          input.EstimateTokens,
 		"estimate_source":          strings.TrimSpace(input.EstimateSource),
+		"context_window":           contextWindow,
 		"context_limit":            limit,
 		"pressure":                 pressure,
 		"usage_percent":            pressure * 100,
@@ -3251,27 +3265,31 @@ func normalizeCompactionThreshold(input float64) float64 {
 	return clampFloat(input, nativeMinCompactThreshold, nativeMaxCompactThreshold)
 }
 
-func deriveModelWindowCompactionThreshold(contextLimit int, maxOutputTokens int) float64 {
-	if contextLimit <= 0 {
-		return nativeDefaultCompactThreshold
+func resolveInputContextLimit(contextWindow int, maxInputTokens int) int {
+	if contextWindow <= 0 {
+		contextWindow = nativeDefaultContextLimit
 	}
-	if maxOutputTokens <= 0 {
-		maxOutputTokens = nativeDefaultMaxOutputTokens
+	if maxInputTokens > 0 && maxInputTokens < contextWindow {
+		return maxInputTokens
 	}
-	overheadReserve := int(float64(contextLimit) * 0.05)
-	if overheadReserve < 1024 {
-		overheadReserve = 1024
-	}
-	reserved := maxOutputTokens + overheadReserve
-	if reserved >= contextLimit {
-		return nativeMinCompactThreshold
-	}
-	return float64(contextLimit-reserved) / float64(contextLimit)
+	return contextWindow
 }
 
-func resolveCompactionThreshold(configThreshold float64, contextLimit int, maxOutputTokens int) float64 {
+func deriveModelWindowCompactionThreshold(contextWindow int, inputContextLimit int) float64 {
+	inputContextLimit = resolveInputContextLimit(contextWindow, inputContextLimit)
+	contextWindow = resolveInputContextLimit(contextWindow, 0)
+	if contextWindow <= 0 {
+		return nativeDefaultCompactThreshold
+	}
+	if inputContextLimit >= contextWindow {
+		return nativeMaxCompactThreshold
+	}
+	return clampFloat(float64(inputContextLimit)/float64(contextWindow), nativeMinCompactThreshold, nativeMaxCompactThreshold)
+}
+
+func resolveCompactionThreshold(configThreshold float64, contextWindow int, inputContextLimit int) float64 {
 	cfg := normalizeCompactionThreshold(configThreshold)
-	window := deriveModelWindowCompactionThreshold(contextLimit, maxOutputTokens)
+	window := deriveModelWindowCompactionThreshold(contextWindow, inputContextLimit)
 	if window > 0 {
 		cfg = minFloat(cfg, window)
 	}

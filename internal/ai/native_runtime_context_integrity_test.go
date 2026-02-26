@@ -125,28 +125,34 @@ func TestDeriveModelWindowCompactionThreshold(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name            string
-		contextLimit    int
-		maxOutputTokens int
-		want            float64
+		name              string
+		contextWindow     int
+		inputContextLimit int
+		want              float64
 	}{
 		{
-			name:            "default_when_context_limit_invalid",
-			contextLimit:    0,
-			maxOutputTokens: 2048,
-			want:            nativeDefaultCompactThreshold,
+			name:              "max_threshold_when_input_window_matches_default_context_window",
+			contextWindow:     0,
+			inputContextLimit: 0,
+			want:              nativeMaxCompactThreshold,
 		},
 		{
-			name:            "minimum_when_reserved_exceeds_context",
-			contextLimit:    6000,
-			maxOutputTokens: 5000,
-			want:            nativeMinCompactThreshold,
+			name:              "minimum_when_input_window_is_much_smaller_than_context_window",
+			contextWindow:     6000,
+			inputContextLimit: 1000,
+			want:              nativeMinCompactThreshold,
 		},
 		{
-			name:            "derived_ratio_for_regular_window",
-			contextLimit:    16000,
-			maxOutputTokens: 2000,
-			want:            0.811, // (16000-(2000+1024))/16000
+			name:              "derived_ratio_for_regular_window",
+			contextWindow:     16000,
+			inputContextLimit: 12000,
+			want:              0.75,
+		},
+		{
+			name:              "input_limit_larger_than_context_window_is_clamped",
+			contextWindow:     32000,
+			inputContextLimit: 64000,
+			want:              nativeMaxCompactThreshold,
 		},
 	}
 
@@ -154,7 +160,7 @@ func TestDeriveModelWindowCompactionThreshold(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := deriveModelWindowCompactionThreshold(tt.contextLimit, tt.maxOutputTokens)
+			got := deriveModelWindowCompactionThreshold(tt.contextWindow, tt.inputContextLimit)
 			if math.Abs(got-tt.want) > 1e-9 {
 				t.Fatalf("deriveModelWindowCompactionThreshold()=%v, want %v", got, tt.want)
 			}
@@ -166,39 +172,46 @@ func TestResolveCompactionThreshold(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name            string
-		configThreshold float64
-		contextLimit    int
-		maxOutputTokens int
-		want            float64
+		name              string
+		configThreshold   float64
+		contextWindow     int
+		inputContextLimit int
+		want              float64
 	}{
 		{
-			name:            "uses_default_when_unset",
-			configThreshold: 0,
-			contextLimit:    128000,
-			maxOutputTokens: 4096,
-			want:            nativeDefaultCompactThreshold,
+			name:              "uses_default_when_unset",
+			configThreshold:   0,
+			contextWindow:     128000,
+			inputContextLimit: 128000,
+			want:              nativeDefaultCompactThreshold,
 		},
 		{
-			name:            "config_lower_bound_is_clamped",
-			configThreshold: 0.30,
-			contextLimit:    128000,
-			maxOutputTokens: 4096,
-			want:            nativeMinCompactThreshold,
+			name:              "config_lower_bound_is_clamped",
+			configThreshold:   0.30,
+			contextWindow:     128000,
+			inputContextLimit: 128000,
+			want:              nativeMinCompactThreshold,
 		},
 		{
-			name:            "window_limit_can_override_config",
-			configThreshold: 0.90,
-			contextLimit:    12000,
-			maxOutputTokens: 3000,
-			want:            0.6646666666666666, // (12000-(3000+1024))/12000
+			name:              "window_limit_can_override_config",
+			configThreshold:   0.90,
+			contextWindow:     12000,
+			inputContextLimit: 9000,
+			want:              0.75,
 		},
 		{
-			name:            "window_below_minimum_still_clamps_to_min",
-			configThreshold: 0.90,
-			contextLimit:    6000,
-			maxOutputTokens: 5000,
-			want:            nativeMinCompactThreshold,
+			name:              "window_below_minimum_still_clamps_to_min",
+			configThreshold:   0.90,
+			contextWindow:     6000,
+			inputContextLimit: 1000,
+			want:              nativeMinCompactThreshold,
+		},
+		{
+			name:              "configured_threshold_stays_when_stricter_than_window",
+			configThreshold:   0.72,
+			contextWindow:     16000,
+			inputContextLimit: 14000,
+			want:              0.72,
 		},
 	}
 
@@ -206,9 +219,56 @@ func TestResolveCompactionThreshold(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := resolveCompactionThreshold(tt.configThreshold, tt.contextLimit, tt.maxOutputTokens)
+			got := resolveCompactionThreshold(tt.configThreshold, tt.contextWindow, tt.inputContextLimit)
 			if math.Abs(got-tt.want) > 1e-9 {
 				t.Fatalf("resolveCompactionThreshold()=%v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveInputContextLimit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		contextWindow int
+		maxInputToken int
+		want          int
+	}{
+		{
+			name:          "defaults_to_native_context_window_when_context_window_invalid",
+			contextWindow: 0,
+			maxInputToken: 0,
+			want:          nativeDefaultContextLimit,
+		},
+		{
+			name:          "uses_max_input_when_smaller_than_context_window",
+			contextWindow: 200000,
+			maxInputToken: 120000,
+			want:          120000,
+		},
+		{
+			name:          "ignores_max_input_when_larger_than_context_window",
+			contextWindow: 200000,
+			maxInputToken: 300000,
+			want:          200000,
+		},
+		{
+			name:          "ignores_non_positive_max_input",
+			contextWindow: 200000,
+			maxInputToken: -1,
+			want:          200000,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := resolveInputContextLimit(tt.contextWindow, tt.maxInputToken)
+			if got != tt.want {
+				t.Fatalf("resolveInputContextLimit()=%d, want %d", got, tt.want)
 			}
 		})
 	}

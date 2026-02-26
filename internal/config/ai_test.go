@@ -129,6 +129,45 @@ func TestAIConfigValidate_ProviderTypeBaseURLRequirements(t *testing.T) {
 	}
 }
 
+func TestAIConfigValidate_OpenAICompatibleRequiresContextWindow(t *testing.T) {
+	t.Parallel()
+
+	cfg := &AIConfig{
+		CurrentModelID: "compat/test-model",
+		Providers: []AIProvider{
+			{
+				ID:      "compat",
+				Name:    "Compat",
+				Type:    "openai_compatible",
+				BaseURL: "https://example.com/v1",
+				Models:  []AIProviderModel{{ModelName: "test-model"}},
+			},
+		},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatalf("expected validation error for missing context_window on openai_compatible model")
+	}
+
+	cfg.Providers[0].Models[0].ContextWindow = 128000
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate openai_compatible with context_window: %v", err)
+	}
+}
+
+func TestAIProviderModel_EffectiveInputWindowTokens(t *testing.T) {
+	t.Parallel()
+
+	model := AIProviderModel{ContextWindow: 200000}
+	if got := model.EffectiveInputWindowTokens(); got != 190000 {
+		t.Fatalf("EffectiveInputWindowTokens default=%d, want 190000", got)
+	}
+
+	model.EffectiveContextWindowPercent = 80
+	if got := model.EffectiveInputWindowTokens(); got != 160000 {
+		t.Fatalf("EffectiveInputWindowTokens percent=80 got=%d, want 160000", got)
+	}
+}
+
 func TestAIConfigValidate_OK(t *testing.T) {
 	t.Parallel()
 

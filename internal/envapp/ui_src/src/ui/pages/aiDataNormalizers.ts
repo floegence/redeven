@@ -113,6 +113,7 @@ export interface ContextUsageView {
   readonly stepIndex: number;
   readonly estimateTokens: number;
   readonly estimateSource?: string;
+  readonly contextWindow?: number;
   readonly contextLimit: number;
   readonly pressure: number;
   readonly usagePercent: number;
@@ -139,6 +140,7 @@ export interface ContextCompactionEventView {
   readonly error?: string;
   readonly estimateTokensBefore?: number;
   readonly estimateTokensAfter?: number;
+  readonly contextWindow?: number;
   readonly contextLimit?: number;
   readonly pressure?: number;
   readonly effectiveThreshold?: number;
@@ -215,6 +217,7 @@ export function normalizeContextUsage(
   const eventId = normalizeOptionalInteger(meta?.eventId);
   const stepIndex = Math.max(0, Math.floor(readNumber(payload.step_index, 0)));
   const estimateSource = String(payload.estimate_source ?? '').trim();
+  const contextWindow = normalizeOptionalInteger(payload.context_window);
   const turnMessages = normalizeOptionalInteger(payload.turn_messages);
   const historyMessages = normalizeOptionalInteger(payload.history_messages);
   const promptPackEstimate = normalizeOptionalInteger(payload.prompt_pack_estimate);
@@ -225,6 +228,7 @@ export function normalizeContextUsage(
     stepIndex,
     estimateTokens,
     estimateSource: estimateSource || undefined,
+    contextWindow,
     contextLimit,
     pressure,
     usagePercent,
@@ -280,6 +284,7 @@ export function normalizeContextCompactionEvent(
     error: error || undefined,
     estimateTokensBefore: normalizeOptionalInteger(payload.estimate_tokens_before ?? payload.estimate_tokens),
     estimateTokensAfter: normalizeOptionalInteger(payload.estimate_tokens_after),
+    contextWindow: normalizeOptionalInteger(payload.context_window),
     contextLimit: normalizeOptionalInteger(payload.context_limit),
     pressure: normalizeOptionalNumber(payload.pressure),
     effectiveThreshold,

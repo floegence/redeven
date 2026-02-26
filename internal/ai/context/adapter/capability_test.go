@@ -118,6 +118,35 @@ func TestResolver_Resolve_RefreshesStaleCapability(t *testing.T) {
 	}
 }
 
+func TestResolver_Resolve_UsesProviderModelContextWindow(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver(nil)
+	provider := config.AIProvider{
+		ID:   "compat",
+		Type: "openai_compatible",
+		Models: []config.AIProviderModel{
+			{
+				ModelName:                     "custom-model",
+				ContextWindow:                 200000,
+				MaxOutputTokens:               32000,
+				EffectiveContextWindowPercent: 90,
+			},
+		},
+	}
+
+	cap, err := resolver.Resolve(context.Background(), provider, "compat/custom-model")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cap.MaxContextTokens != 180000 {
+		t.Fatalf("MaxContextTokens=%d, want 180000", cap.MaxContextTokens)
+	}
+	if cap.MaxOutputTokens != 32000 {
+		t.Fatalf("MaxOutputTokens=%d, want 32000", cap.MaxOutputTokens)
+	}
+}
+
 func TestAdaptAttachments_DegradeUnsupportedModes(t *testing.T) {
 	t.Parallel()
 

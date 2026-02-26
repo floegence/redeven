@@ -1038,14 +1038,21 @@ function CompactContextSummary(props: {
     const usage = props.usage;
     if (!usage) return '';
     const source = String(usage.estimateSource ?? '').trim();
+    const contextWindow = Math.max(0, Math.floor(Number(usage.contextWindow ?? 0) || 0));
+    const inputWindow = Math.max(0, Math.floor(Number(usage.contextLimit ?? 0) || 0));
+    const windowLabel =
+      contextWindow > 0 && contextWindow !== inputWindow
+        ? `Input window ${inputWindow.toLocaleString('en-US')} / Context window ${contextWindow.toLocaleString('en-US')}`
+        : '';
     const at = Number(usage.atUnixMs ?? 0) || 0;
     const timeLabel = at > 0
       ? new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : '';
-    if (!source && !timeLabel) return '';
-    if (source && timeLabel) return `Source: ${source} · Updated ${timeLabel}`;
-    if (source) return `Source: ${source}`;
-    return `Updated ${timeLabel}`;
+    const parts = [] as string[];
+    if (source) parts.push(`Source: ${source}`);
+    if (windowLabel) parts.push(windowLabel);
+    if (timeLabel) parts.push(`Updated ${timeLabel}`);
+    return parts.join(' · ');
   });
   const sortedSections = createMemo(() => {
     const usage = props.usage;
