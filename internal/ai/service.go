@@ -1506,6 +1506,14 @@ func (s *Service) classifyRunPolicyByModel(ctx context.Context, resolved resolve
 		return runPolicyDecision{}, fmt.Errorf("init provider adapter failed: %w", err)
 	}
 
+	responseFormat := "json_object"
+	switch providerType {
+	case "openai_compatible", "chatglm", "deepseek", "qwen":
+		// Some OpenAI-compatible gateways return empty/incomplete outputs under forced
+		// json_object mode. Keep prompt-level JSON constraints and parse the text payload.
+		responseFormat = ""
+	}
+
 	intentCtx := ctx
 	cancel := func() {}
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
@@ -1516,9 +1524,9 @@ func (s *Service) classifyRunPolicyByModel(ctx context.Context, resolved resolve
 	result, err := adapter.StreamTurn(intentCtx, TurnRequest{
 		Model:            strings.TrimSpace(resolved.ModelName),
 		Messages:         buildRunPolicyClassifierMessages(userInput, openGoal),
-		Budgets:          TurnBudgets{MaxSteps: 1, MaxOutputToken: 120},
+		Budgets:          TurnBudgets{MaxSteps: 1, MaxOutputToken: 512},
 		ModeFlags:        ModeFlags{Mode: config.AIModePlan},
-		ProviderControls: ProviderControls{ResponseFormat: "json_object"},
+		ProviderControls: ProviderControls{ResponseFormat: responseFormat},
 	}, nil)
 	if err != nil {
 		return runPolicyDecision{}, err
