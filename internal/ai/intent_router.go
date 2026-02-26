@@ -20,6 +20,8 @@ const (
 
 	RunObjectiveModeReplace  = "replace"
 	RunObjectiveModeContinue = "continue"
+
+	modelRunPolicyMaxAttempts = 2
 )
 
 type runPolicyDecision struct {
@@ -75,9 +77,11 @@ func classifyRunPolicy(userInput string, attachments []RunAttachmentIn, openGoal
 	}
 
 	if classifyByModel != nil {
-		decision, err := classifyByModel()
-		if err == nil {
-			return normalizeModelRunPolicyDecision(decision)
+		for attempt := 0; attempt < modelRunPolicyMaxAttempts; attempt++ {
+			decision, err := classifyByModel()
+			if err == nil {
+				return normalizeModelRunPolicyDecision(decision)
+			}
 		}
 	}
 
@@ -175,6 +179,8 @@ func buildRunPolicyClassifierMessages(userInput string, openGoal string) []Messa
 		openGoalText = "(none)"
 	}
 	user := strings.Join([]string{
+		"Return JSON only: output exactly one JSON object.",
+		"",
 		"Current open goal:",
 		openGoalText,
 		"",

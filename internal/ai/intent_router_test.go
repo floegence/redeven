@@ -55,6 +55,36 @@ func TestClassifyRunPolicy_ModelFailureFallsBackToTask(t *testing.T) {
 	}
 }
 
+func TestClassifyRunPolicy_ModelRetrySucceeds(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	got := classifyRunPolicy("你是谁", nil, "", func() (runPolicyDecision, error) {
+		calls++
+		if calls == 1 {
+			return runPolicyDecision{}, assertErr{}
+		}
+		return runPolicyDecision{
+			Intent:           RunIntentSocial,
+			Reason:           "greeting_asking_identity",
+			ObjectiveMode:    RunObjectiveModeReplace,
+			Complexity:       TaskComplexitySimple,
+			TodoPolicy:       TodoPolicyNone,
+			MinimumTodoItems: 0,
+			Confidence:       0.9,
+		}, nil
+	})
+	if calls != 2 {
+		t.Fatalf("classify calls=%d, want 2", calls)
+	}
+	if got.Intent != RunIntentSocial {
+		t.Fatalf("intent=%q, want %q", got.Intent, RunIntentSocial)
+	}
+	if got.Source != RunIntentSourceModel {
+		t.Fatalf("source=%q, want %q", got.Source, RunIntentSourceModel)
+	}
+}
+
 func TestClassifyRunPolicy_ModelControlsContinuationObjectiveMode(t *testing.T) {
 	t.Parallel()
 
