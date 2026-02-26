@@ -4,8 +4,9 @@ title = "redeven-agent gitleaks config"
 useDefault = true
 
 [allowlist]
-description = "ignore local tooling caches and dependency directories"
+description = "ignore local metadata, tooling caches, and dependency directories"
 paths = [
+  '''^\.git/''',
   '''^\.tools/''',
   '''^node_modules/''',
   '''^internal/envapp/ui_src/node_modules/''',
