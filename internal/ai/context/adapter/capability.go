@@ -9,6 +9,8 @@ import (
 	"github.com/floegence/redeven-agent/internal/config"
 )
 
+const capabilityResolverVersion = 1
+
 // Resolver builds and caches provider/model capability descriptors.
 type Resolver struct {
 	repo *contextstore.Repository
@@ -21,6 +23,7 @@ func NewResolver(repo *contextstore.Repository) *Resolver {
 func (r *Resolver) Resolve(ctx context.Context, provider config.AIProvider, modelID string) (model.ModelCapability, error) {
 	providerID := strings.TrimSpace(provider.ID)
 	modelName := modelNameFromID(modelID)
+	providerType := strings.ToLower(strings.TrimSpace(provider.Type))
 	if providerID == "" {
 		providerID = "unknown"
 	}
@@ -28,20 +31,42 @@ func (r *Resolver) Resolve(ctx context.Context, provider config.AIProvider, mode
 		modelName = strings.TrimSpace(modelID)
 	}
 
-	if r != nil && r.repo != nil && r.repo.Ready() {
-		if cached, ok, err := r.repo.GetCapability(ctx, providerID, modelName); err == nil && ok {
-			return model.NormalizeCapability(cached), nil
-		}
-	}
-
 	cap := defaultCapability(provider, modelName)
 	cap.ProviderID = providerID
+	cap.ProviderType = providerType
+	cap.ResolverVersion = capabilityResolverVersion
 	cap.ModelName = modelName
 	cap = model.NormalizeCapability(cap)
 	if r != nil && r.repo != nil && r.repo.Ready() {
-		_ = r.repo.UpsertCapability(ctx, cap)
+		if cached, ok, err := r.repo.GetCapability(ctx, providerID, modelName); err == nil && ok {
+			cached = model.NormalizeCapability(cached)
+			if !capabilitiesEquivalent(cached, cap) {
+				_ = r.repo.UpsertCapability(ctx, cap)
+			}
+		} else {
+			_ = r.repo.UpsertCapability(ctx, cap)
+		}
 	}
 	return cap, nil
+}
+
+func capabilitiesEquivalent(a model.ModelCapability, b model.ModelCapability) bool {
+	a = model.NormalizeCapability(a)
+	b = model.NormalizeCapability(b)
+
+	return a.ProviderID == b.ProviderID &&
+		a.ModelName == b.ModelName &&
+		a.ProviderType == b.ProviderType &&
+		a.ResolverVersion == b.ResolverVersion &&
+		a.SupportsTools == b.SupportsTools &&
+		a.SupportsParallelTools == b.SupportsParallelTools &&
+		a.SupportsStrictJSONSchema == b.SupportsStrictJSONSchema &&
+		a.SupportsImageInput == b.SupportsImageInput &&
+		a.SupportsFileInput == b.SupportsFileInput &&
+		a.SupportsReasoningTokens == b.SupportsReasoningTokens &&
+		a.MaxContextTokens == b.MaxContextTokens &&
+		a.MaxOutputTokens == b.MaxOutputTokens &&
+		a.PreferredToolSchemaMode == b.PreferredToolSchemaMode
 }
 
 func modelNameFromID(modelID string) string {
@@ -57,6 +82,8 @@ func defaultCapability(provider config.AIProvider, modelName string) model.Model
 	providerType := strings.ToLower(strings.TrimSpace(provider.Type))
 	modelLower := strings.ToLower(strings.TrimSpace(modelName))
 	cap := model.ModelCapability{
+		ProviderType:             providerType,
+		ResolverVersion:          capabilityResolverVersion,
 		SupportsTools:            true,
 		SupportsParallelTools:    false,
 		SupportsStrictJSONSchema: true,
