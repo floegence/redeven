@@ -163,7 +163,7 @@ async function openCodespace(codeSpaceID: string, setStatus: (s: string) => void
     const entryTicket = await mintEnvEntryTicketForApp({ envId: envPublicID, floeApp: FLOE_APP_CODE, codeSpaceId: codeSpaceID });
 
     const init = {
-      v: 1,
+      v: 2,
       env_public_id: envPublicID,
       floe_app: FLOE_APP_CODE,
       code_space_id: codeSpaceID,
