@@ -141,6 +141,11 @@ export interface ContextCompactionEventView {
   readonly estimateTokensAfter?: number;
   readonly contextLimit?: number;
   readonly pressure?: number;
+  readonly effectiveThreshold?: number;
+  readonly configuredThreshold?: number;
+  readonly windowBasedThreshold?: number;
+  readonly messagesBefore?: number;
+  readonly messagesAfter?: number;
   readonly dedupeKey: string;
 }
 
@@ -256,6 +261,11 @@ export function normalizeContextCompactionEvent(
   const strategy = String(payload.strategy ?? '').trim();
   const reason = String(payload.reason ?? '').trim();
   const error = String(payload.error ?? '').trim();
+  const effectiveThreshold = normalizeOptionalNumber(payload.effective_threshold);
+  const configuredThreshold = normalizeOptionalNumber(payload.configured_threshold);
+  const windowBasedThreshold = normalizeOptionalNumber(payload.window_based_threshold);
+  const messagesBefore = normalizeOptionalInteger(payload.messages_before);
+  const messagesAfter = normalizeOptionalInteger(payload.messages_after);
   const dedupeKey = `${compactionId}:${eventType}:${stepIndex}`;
 
   return {
@@ -272,6 +282,11 @@ export function normalizeContextCompactionEvent(
     estimateTokensAfter: normalizeOptionalInteger(payload.estimate_tokens_after),
     contextLimit: normalizeOptionalInteger(payload.context_limit),
     pressure: normalizeOptionalNumber(payload.pressure),
+    effectiveThreshold,
+    configuredThreshold,
+    windowBasedThreshold,
+    messagesBefore,
+    messagesAfter,
     dedupeKey,
   };
 }

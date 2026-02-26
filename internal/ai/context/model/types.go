@@ -5,6 +5,8 @@ import "strings"
 // ModelCapability defines model/runtime feature support for prompt adaptation.
 type ModelCapability struct {
 	ProviderID               string `json:"provider_id"`
+	ProviderType             string `json:"provider_type,omitempty"`
+	ResolverVersion          int    `json:"resolver_version,omitempty"`
 	ModelName                string `json:"model_name"`
 	SupportsTools            bool   `json:"supports_tools"`
 	SupportsParallelTools    bool   `json:"supports_parallel_tools"`
@@ -139,6 +141,12 @@ func (p PromptPack) ApproxText() string {
 
 func NormalizeCapability(in ModelCapability) ModelCapability {
 	out := in
+	out.ProviderID = strings.TrimSpace(out.ProviderID)
+	out.ModelName = strings.TrimSpace(out.ModelName)
+	out.ProviderType = strings.ToLower(strings.TrimSpace(out.ProviderType))
+	if out.ResolverVersion < 0 {
+		out.ResolverVersion = 0
+	}
 	if strings.TrimSpace(out.PreferredToolSchemaMode) == "" {
 		out.PreferredToolSchemaMode = "json_schema"
 	}

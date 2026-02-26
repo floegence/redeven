@@ -1957,19 +1957,8 @@ mainLoop:
 					"effective_threshold":    compactThreshold,
 				})
 			}
-		} else {
-			r.emitContextCompactionEvent("context.compaction.skipped", map[string]any{
-				"compaction_id":          newRunCompactionID(r.id, step),
-				"step_index":             step,
-				"reason":                 "below_threshold",
-				"estimate_tokens_before": estimateTokens,
-				"context_limit":          contextLimit,
-				"pressure":               pressure,
-				"effective_threshold":    compactThreshold,
-				"configured_threshold":   normalizeCompactionThreshold(req.Options.CompactionThreshold),
-				"window_based_threshold": deriveModelWindowCompactionThreshold(contextLimit, turnReq.Budgets.MaxOutputToken),
-			})
 		}
+		// Note: "below threshold" is implied by context.usage.updated; we intentionally avoid emitting noisy per-round compaction events.
 
 		if repaired, stats := enforceToolReferenceIntegrity(turnReq.Messages, nil); stats.hasChanges() {
 			if len(stats.OrphanToolCallIDs) > 0 {

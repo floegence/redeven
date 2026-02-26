@@ -891,6 +891,7 @@ function CompactContextSummary(props: {
   compactions: ContextCompactionEventView[];
 }) {
   const [expanded, setExpanded] = createSignal(false);
+  const [showDebug, setShowDebug] = createSignal(false);
   let containerRef: HTMLDivElement | undefined;
 
   const usagePercent = createMemo(() => {
@@ -899,7 +900,111 @@ function CompactContextSummary(props: {
     return raw;
   });
   const usagePercentLabel = createMemo(() => (props.usage ? `${usagePercent().toFixed(1)}%` : '--'));
-  const chipLabel = createMemo(() => (props.usage ? usagePercentLabel() : `${props.compactions.length} events`));
+
+  type CompactionAttemptView = {
+    compactionId: string;
+    stepIndex: number;
+    stage: ContextCompactionEventView['stage'];
+    strategy?: string;
+    reason?: string;
+    error?: string;
+    estimateTokensBefore?: number;
+    estimateTokensAfter?: number;
+    contextLimit?: number;
+    pressure?: number;
+    effectiveThreshold?: number;
+    configuredThreshold?: number;
+    windowBasedThreshold?: number;
+    messagesBefore?: number;
+    messagesAfter?: number;
+    atUnixMs: number;
+  };
+
+  const compactionAttempts = createMemo((): CompactionAttemptView[] => {
+    const list = Array.isArray(props.compactions) ? props.compactions : [];
+    if (list.length <= 0) return [];
+
+    const byID = new Map<string, ContextCompactionEventView[]>();
+    for (const entry of list) {
+      const id = String(entry?.compactionId ?? '').trim();
+      if (!id) continue;
+      const existing = byID.get(id);
+      if (existing) existing.push(entry);
+      else byID.set(id, [entry]);
+    }
+
+    const pickLatest = (
+      items: ContextCompactionEventView[],
+      stage: ContextCompactionEventView['stage'],
+    ): ContextCompactionEventView | null => {
+      const filtered = items.filter((it) => it.stage === stage);
+      if (filtered.length <= 0) return null;
+      filtered.sort((a, b) => {
+        const atA = Number(a.atUnixMs ?? 0) || 0;
+        const atB = Number(b.atUnixMs ?? 0) || 0;
+        if (atA !== atB) return atB - atA;
+        const idA = Number(a.eventId ?? 0) || 0;
+        const idB = Number(b.eventId ?? 0) || 0;
+        return idB - idA;
+      });
+      return filtered[0] ?? null;
+    };
+
+    const out: CompactionAttemptView[] = [];
+    for (const [id, items] of byID.entries()) {
+      if (!items || items.length <= 0) continue;
+
+      const applied = pickLatest(items, 'applied');
+      const failed = pickLatest(items, 'failed');
+      const skipped = pickLatest(items, 'skipped');
+      const started = pickLatest(items, 'started');
+      const terminal = applied || failed || skipped || started;
+      if (!terminal) continue;
+
+      let atUnixMs = 0;
+      for (const item of items) {
+        const at = Number(item.atUnixMs ?? 0) || 0;
+        if (at > atUnixMs) atUnixMs = at;
+      }
+
+      const stage = terminal.stage;
+      const stepIndex = Math.max(0, Math.floor(Number(terminal.stepIndex ?? 0) || 0));
+      const strategy = String((applied?.strategy ?? failed?.strategy ?? skipped?.strategy ?? started?.strategy ?? '')).trim();
+      const reason = String((applied?.reason ?? failed?.reason ?? skipped?.reason ?? started?.reason ?? '')).trim();
+      const error = String((applied?.error ?? failed?.error ?? skipped?.error ?? started?.error ?? '')).trim();
+
+      out.push({
+        compactionId: id,
+        stepIndex,
+        stage,
+        strategy: strategy || undefined,
+        reason: reason || undefined,
+        error: error || undefined,
+        estimateTokensBefore: applied?.estimateTokensBefore ?? failed?.estimateTokensBefore ?? skipped?.estimateTokensBefore ?? started?.estimateTokensBefore,
+        estimateTokensAfter: applied?.estimateTokensAfter ?? skipped?.estimateTokensAfter ?? started?.estimateTokensAfter,
+        contextLimit: applied?.contextLimit ?? failed?.contextLimit ?? skipped?.contextLimit ?? started?.contextLimit,
+        pressure: applied?.pressure ?? failed?.pressure ?? skipped?.pressure ?? started?.pressure,
+        effectiveThreshold: applied?.effectiveThreshold ?? failed?.effectiveThreshold ?? skipped?.effectiveThreshold ?? started?.effectiveThreshold,
+        configuredThreshold: applied?.configuredThreshold ?? failed?.configuredThreshold ?? skipped?.configuredThreshold ?? started?.configuredThreshold,
+        windowBasedThreshold: applied?.windowBasedThreshold ?? failed?.windowBasedThreshold ?? skipped?.windowBasedThreshold ?? started?.windowBasedThreshold,
+        messagesBefore: applied?.messagesBefore ?? skipped?.messagesBefore ?? started?.messagesBefore,
+        messagesAfter: applied?.messagesAfter ?? skipped?.messagesAfter ?? started?.messagesAfter,
+        atUnixMs,
+      });
+    }
+
+    out.sort((a, b) => {
+      const atA = Number(a.atUnixMs ?? 0) || 0;
+      const atB = Number(b.atUnixMs ?? 0) || 0;
+      if (atA !== atB) return atA - atB;
+      return a.compactionId.localeCompare(b.compactionId);
+    });
+
+    if (out.length <= 12) return out;
+    return out.slice(out.length - 12);
+  });
+
+  const chipLabel = createMemo(() => (props.usage ? usagePercentLabel() : `${compactionAttempts().length} events`));
   const usageTokensLabel = createMemo(() => {
     const usage = props.usage;
     if (!usage) return '';
@@ -915,6 +1020,33 @@ function CompactContextSummary(props: {
     if (percent >= 75) return 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25 hover:bg-amber-500/14';
     return 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/25 hover:bg-blue-500/14';
   });
+  const thresholdLabel = createMemo(() => {
+    const usage = props.usage;
+    if (!usage) return '--';
+    const ratio = Number(usage.effectiveThreshold ?? NaN);
+    if (!Number.isFinite(ratio) || ratio <= 0) return '--';
+    return `${Math.round(ratio * 100)}%`;
+  });
+  const turnMessagesLabel = createMemo(() => {
+    const usage = props.usage;
+    if (!usage) return '--';
+    const raw = Number(usage.turnMessages ?? NaN);
+    if (!Number.isFinite(raw) || raw <= 0) return '--';
+    return Math.max(0, Math.floor(raw)).toLocaleString('en-US');
+  });
+  const usageMetaLabel = createMemo(() => {
+    const usage = props.usage;
+    if (!usage) return '';
+    const source = String(usage.estimateSource ?? '').trim();
+    const at = Number(usage.atUnixMs ?? 0) || 0;
+    const timeLabel = at > 0
+      ? new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : '';
+    if (!source && !timeLabel) return '';
+    if (source && timeLabel) return `Source: ${source} · Updated ${timeLabel}`;
+    if (source) return `Source: ${source}`;
+    return `Updated ${timeLabel}`;
+  });
   const sortedSections = createMemo(() => {
     const usage = props.usage;
     if (!usage) return [] as Array<[string, number]>;
@@ -924,11 +1056,34 @@ function CompactContextSummary(props: {
     entries.sort((a, b) => b[1] - a[1]);
     return entries;
   });
-  const recentCompactions = createMemo(() => {
-    const list = Array.isArray(props.compactions) ? props.compactions : [];
-    if (list.length <= 12) return list;
-    return list.slice(list.length - 12);
+  const visibleCompactionAttempts = createMemo(() => {
+    const list = compactionAttempts();
+    if (showDebug()) return list;
+    return list.filter((item) => item.stage === 'applied' || item.stage === 'failed');
   });
+  const hiddenAttemptsCount = createMemo(() => {
+    const all = compactionAttempts().length;
+    const visible = visibleCompactionAttempts().length;
+    return Math.max(0, all - visible);
+  });
+  const debugToggleLabel = createMemo(() => {
+    if (showDebug()) return 'Hide debug';
+    const hidden = hiddenAttemptsCount();
+    if (hidden > 0) return `Show debug (+${hidden})`;
+    return 'Show debug';
+  });
+  const formatRatioPercent = (ratio: number | undefined, digits = 1): string => {
+    const raw = Number(ratio ?? NaN);
+    if (!Number.isFinite(raw) || raw < 0) return '--';
+    return `${(raw * 100).toFixed(digits)}%`;
+  };
+  const formatCompactionReason = (reason: string | undefined): string => {
+    const v = String(reason ?? '').trim().toLowerCase();
+    if (!v) return '';
+    if (v === 'below_threshold') return 'Below threshold';
+    if (v === 'no_effect') return 'No effect';
+    return v;
+  };
 
   createEffect(() => {
     if (!expanded()) return;
@@ -984,9 +1139,26 @@ function CompactContextSummary(props: {
                   {usagePercentLabel()}
                 </span>
               </div>
-              <Show when={usageTokensLabel()}>
-                <span class="text-[10px] font-mono tabular-nums text-muted-foreground/80">{usageTokensLabel()}</span>
-              </Show>
+              <div class="flex items-center gap-2">
+                <Show when={usageTokensLabel()}>
+                  <span class="text-[10px] font-mono tabular-nums text-muted-foreground/80">{usageTokensLabel()}</span>
+                </Show>
+                <Show when={compactionAttempts().length > 0}>
+                  <button
+                    type="button"
+                    class={cn(
+                      'text-[10px] font-medium px-1.5 py-px rounded border transition-colors',
+                      showDebug()
+                        ? 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/15'
+                        : 'bg-muted/40 text-muted-foreground border-border/60 hover:bg-muted/60 hover:text-foreground',
+                    )}
+                    title="Show compaction debug events"
+                    onClick={() => setShowDebug((v) => !v)}
+                  >
+                    {debugToggleLabel()}
+                  </button>
+                </Show>
+              </div>
             </div>
           </div>
 
@@ -996,18 +1168,29 @@ function CompactContextSummary(props: {
             }>
               <div class="grid grid-cols-3 gap-1.5 text-[10px]">
                 <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
-                  <div class="font-medium text-muted-foreground/70 uppercase tracking-wider">Step</div>
+                  <div
+                    class="font-medium text-muted-foreground/70 uppercase tracking-wider"
+                    title="One model request equals one round."
+                  >
+                    Round
+                  </div>
                   <div class="font-semibold tabular-nums text-foreground/85">{props.usage?.stepIndex ?? 0}</div>
                 </div>
                 <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
-                  <div class="font-medium text-muted-foreground/70 uppercase tracking-wider">Used</div>
-                  <div class="font-semibold tabular-nums text-foreground/85">{usagePercentLabel()}</div>
+                  <div class="font-medium text-muted-foreground/70 uppercase tracking-wider" title="When compaction may trigger.">
+                    Threshold
+                  </div>
+                  <div class="font-semibold tabular-nums text-foreground/85">{thresholdLabel()}</div>
                 </div>
                 <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
-                  <div class="font-medium text-muted-foreground/70 uppercase tracking-wider">Estimate</div>
-                  <div class="font-semibold tabular-nums text-foreground/85">{(props.usage?.estimateTokens ?? 0).toLocaleString('en-US')}</div>
+                  <div class="font-medium text-muted-foreground/70 uppercase tracking-wider">Msgs</div>
+                  <div class="font-semibold tabular-nums text-foreground/85">{turnMessagesLabel()}</div>
                 </div>
               </div>
+
+              <Show when={usageMetaLabel()}>
+                <div class="mt-2 text-[10px] text-muted-foreground/80">{usageMetaLabel()}</div>
+              </Show>
 
               <Show when={sortedSections().length > 0}>
                 <div class="mt-2">
@@ -1028,11 +1211,11 @@ function CompactContextSummary(props: {
           </div>
 
           <div class="max-h-56 overflow-auto">
-            <Show when={recentCompactions().length > 0} fallback={
-              <div class="px-3.5 py-3 text-[11px] text-muted-foreground text-center">No compaction events yet.</div>
+            <Show when={visibleCompactionAttempts().length > 0} fallback={
+              <div class="px-3.5 py-3 text-[11px] text-muted-foreground text-center">No compaction actions yet.</div>
             }>
               <div class="flex flex-col gap-1.5 p-2.5">
-                <For each={recentCompactions()}>
+                <For each={visibleCompactionAttempts()}>
                   {(item) => {
                     const stageClass = () => {
                       switch (item.stage) {
@@ -1060,18 +1243,61 @@ function CompactContextSummary(props: {
                           return 'Unknown';
                       }
                     };
+                    const tokenDeltaLabel = () => {
+                      const before = Number(item.estimateTokensBefore ?? NaN);
+                      const after = Number(item.estimateTokensAfter ?? NaN);
+                      if (Number.isFinite(before) && Number.isFinite(after) && after > 0) {
+                        return `${Math.floor(before).toLocaleString('en-US')} → ${Math.floor(after).toLocaleString('en-US')} tok`;
+                      }
+                      if (Number.isFinite(before) && before > 0) {
+                        return `${Math.floor(before).toLocaleString('en-US')} tok`;
+                      }
+                      return '';
+                    };
+                    const pressureLabel = () => {
+                      const parts: string[] = [];
+                      const pressure = formatRatioPercent(item.pressure, 1);
+                      if (pressure !== '--') parts.push(`pressure ${pressure}`);
+                      const thr = formatRatioPercent(item.effectiveThreshold, 0);
+                      if (thr !== '--') parts.push(`thr ${thr}`);
+                      return parts.join(' · ');
+                    };
+                    const messagesDeltaLabel = () => {
+                      const before = Number(item.messagesBefore ?? NaN);
+                      const after = Number(item.messagesAfter ?? NaN);
+                      if (!Number.isFinite(before) || !Number.isFinite(after) || before <= 0 || after <= 0) return '';
+                      return `msgs ${Math.floor(before)} → ${Math.floor(after)}`;
+                    };
                     return (
                       <div class="rounded-lg border border-border/55 bg-background/80 px-2.5 py-1.5">
                         <div class="flex items-center gap-2">
                           <span class={cn('inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold', stageClass())}>
                             {stageLabel()}
                           </span>
-                          <span class="text-[10px] text-muted-foreground">step {item.stepIndex}</span>
-                          <Show when={item.reason}>
-                            <span class="ml-auto text-[10px] text-muted-foreground truncate max-w-[10rem]" title={item.reason}>{item.reason}</span>
+                          <span class="text-[10px] text-muted-foreground">round {item.stepIndex}</span>
+                          <Show when={formatCompactionReason(item.reason)}>
+                            <span
+                              class="ml-auto text-[10px] text-muted-foreground truncate max-w-[10rem]"
+                              title={formatCompactionReason(item.reason)}
+                            >
+                              {formatCompactionReason(item.reason)}
+                            </span>
                           </Show>
                         </div>
-                        <Show when={item.strategy}>
+                        <Show when={tokenDeltaLabel() || pressureLabel() || messagesDeltaLabel()}>
+                          <div class="mt-1 text-[10px] text-muted-foreground/85">
+                            {tokenDeltaLabel()}
+                            <Show when={tokenDeltaLabel() && (pressureLabel() || messagesDeltaLabel())}>
+                              <span> · </span>
+                            </Show>
+                            {pressureLabel()}
+                            <Show when={pressureLabel() && messagesDeltaLabel()}>
+                              <span> · </span>
+                            </Show>
+                            {messagesDeltaLabel()}
+                          </div>
+                        </Show>
+                        <Show when={item.strategy && showDebug()}>
                           <div class="mt-1 text-[10px] text-muted-foreground/85">strategy: {item.strategy}</div>
                         </Show>
                         <Show when={item.error}>

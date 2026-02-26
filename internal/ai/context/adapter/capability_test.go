@@ -51,6 +51,73 @@ func TestResolver_ResolveAndCache(t *testing.T) {
 	}
 }
 
+func TestResolver_Resolve_RefreshesStaleCapability(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	db, err := threadstore.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	repo := contextstore.NewRepository(db)
+	resolver := NewResolver(repo)
+
+	ctx := context.Background()
+
+	// Seed a stale cached capability (e.g., provider type changed from openai_compatible to moonshot).
+	if err := repo.UpsertCapability(ctx, model.ModelCapability{
+		ProviderID:               "prov_1",
+		ProviderType:             "openai_compatible",
+		ResolverVersion:          0,
+		ModelName:                "kimi-k2.5",
+		SupportsTools:            true,
+		SupportsParallelTools:    false,
+		SupportsStrictJSONSchema: false,
+		SupportsImageInput:       true,
+		SupportsFileInput:        true,
+		SupportsReasoningTokens:  true,
+		MaxContextTokens:         64000,
+		MaxOutputTokens:          4096,
+		PreferredToolSchemaMode:  "relaxed_json",
+	}); err != nil {
+		t.Fatalf("UpsertCapability: %v", err)
+	}
+
+	cap, err := resolver.Resolve(ctx, config.AIProvider{ID: "prov_1", Type: "moonshot"}, "prov_1/kimi-k2.5")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cap.ProviderType != "moonshot" {
+		t.Fatalf("ProviderType=%q, want moonshot", cap.ProviderType)
+	}
+	if cap.ResolverVersion != capabilityResolverVersion {
+		t.Fatalf("ResolverVersion=%d, want %d", cap.ResolverVersion, capabilityResolverVersion)
+	}
+	if cap.MaxContextTokens != 256000 {
+		t.Fatalf("MaxContextTokens=%d, want 256000", cap.MaxContextTokens)
+	}
+	if cap.MaxOutputTokens != 16384 {
+		t.Fatalf("MaxOutputTokens=%d, want 16384", cap.MaxOutputTokens)
+	}
+
+	cached, ok, err := repo.GetCapability(ctx, "prov_1", "kimi-k2.5")
+	if err != nil {
+		t.Fatalf("GetCapability: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected cached capability")
+	}
+	cached = model.NormalizeCapability(cached)
+	if cached.ProviderType != "moonshot" {
+		t.Fatalf("cached.ProviderType=%q, want moonshot", cached.ProviderType)
+	}
+	if cached.MaxContextTokens != 256000 {
+		t.Fatalf("cached.MaxContextTokens=%d, want 256000", cached.MaxContextTokens)
+	}
+}
+
 func TestAdaptAttachments_DegradeUnsupportedModes(t *testing.T) {
 	t.Parallel()
 
