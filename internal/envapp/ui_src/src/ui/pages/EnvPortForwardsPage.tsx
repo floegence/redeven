@@ -441,7 +441,7 @@ async function openPortForward(forwardID: string, setStatus: (s: string) => void
     const entryTicket = await mintEnvEntryTicketForApp({ envId: envPublicID, floeApp: FLOE_APP_PORT_FORWARD, codeSpaceId: forwardID });
 
     const init = {
-      v: 1,
+      v: 2,
       env_public_id: envPublicID,
       floe_app: FLOE_APP_PORT_FORWARD,
       code_space_id: forwardID,

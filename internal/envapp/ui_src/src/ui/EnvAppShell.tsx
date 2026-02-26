@@ -45,11 +45,10 @@ import { fetchGatewayJSON } from './services/gatewayApi';
 import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
 import {
   channelInitEntry,
-  exchangeBrokerToEntryTicket,
-  getBrokerTokenFromSession,
   getEnvPublicIDFromSession,
   getLocalRuntime,
   getEnvironment,
+  mintEnvProxyEntryTicket,
   mintLocalDirectConnectInfo,
   mintEnvEntryTicketForApp,
   type EnvironmentDetail,
@@ -390,9 +389,6 @@ export function EnvAppShell() {
     const id = envId();
     if (!id) throw new Error('Missing env context. Please reopen from the Redeven Portal.');
 
-    const brokerToken = getBrokerTokenFromSession();
-    if (!brokerToken) throw new Error('Missing broker token. Please reopen from the Redeven Portal.');
-
     // Probe agent status to avoid grant-audit spam while the agent is clearly offline.
     let agentStatus: string | null = null;
     try {
@@ -401,17 +397,16 @@ export function EnvAppShell() {
       agentStatus = detail?.status ? String(detail.status) : null;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('Missing broker token')) throw new Error(msg);
+      if (msg.includes('Redirecting to Redeven Portal')) throw new Error(msg);
       // For transient failures (meta/network), continue with the grant flow below.
     }
     if (agentStatus && agentStatus !== 'online') {
       throw new Error(`Agent is ${agentStatus}.`);
     }
 
-    const entryTicket = await exchangeBrokerToEntryTicket({
+    const entryTicket = await mintEnvProxyEntryTicket({
       endpointId: id,
       floeApp: FLOE_APP_AGENT,
-      brokerToken,
       codeSpaceId: CODE_SPACE_ID_ENV_UI,
     });
 
@@ -426,15 +421,6 @@ export function EnvAppShell() {
       setManualError('Missing env context. Please reopen from the Redeven Portal.');
       protocol.disconnect();
       return;
-    }
-
-    if (!isLocalMode()) {
-      const brokerToken = getBrokerTokenFromSession();
-      if (!brokerToken) {
-        setManualError('Missing broker token. Please reopen from the Redeven Portal.');
-        protocol.disconnect();
-        return;
-      }
     }
 
     setManualError(null);
@@ -646,7 +632,7 @@ export function EnvAppShell() {
   });
 
   // Cross-window handshake: allow non-Env App sandbox windows (codespaces/3rd-party apps) to
-  // request a fresh entry_ticket after refresh, without leaking broker_token outside the Env App origin.
+  // request a fresh entry_ticket after refresh.
   onMount(() => {
     const onMessage = (ev: MessageEvent) => {
       if (isLocalMode()) return;
@@ -675,7 +661,7 @@ export function EnvAppShell() {
             {
               type: 'redeven:boot_init',
               payload: {
-                v: 1,
+                v: 2,
                 env_public_id: envPublicID,
                 floe_app: floeApp,
                 code_space_id: codeSpaceID,

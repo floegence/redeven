@@ -25,17 +25,19 @@ Agent side:
 
 ## Control-plane APIs used by the Env App UI
 
-The Env App UI does not use Redeven login cookies. It uses short-lived control-plane tickets
-issued by the portal side.
+The Env App UI runs on sandbox origins and uses the cookie-session control-plane flow:
+
+- Portal issues a one-time `boot_ticket` for Env App startup.
+- Sandbox bootstrap exchanges `boot_ticket` for an HttpOnly `env_session` cookie.
+- Env App uses `env_session` to mint one-time `entry_ticket` values on demand.
+- `entry_ticket` is then exchanged at `/v1/channel/init/entry` to establish Flowersec sessions.
 
 Security baseline:
 
-- High-value ticket material is runtime-only and should not be durably persisted in browser storage.
-- One-time tickets are exchanged on demand and expire quickly.
-- If runtime ticket context is lost, the browser must return to the portal flow for re-issuance.
-
-Implementation details (exact endpoint names, headers, and payload fields) are intentionally kept in
-private operator runbooks.
+- Env App UI never stores long-lived capability credentials in browser storage.
+- High-value credentials are HttpOnly cookies scoped to the sandbox origin.
+- One-time `entry_ticket` values are exchanged on demand with short TTL.
+- If sandbox session context is missing/expired, the browser must return to Portal for re-issuance.
 
 ## Audit log
 
@@ -69,7 +71,7 @@ When opening a codespace, the Env App mints a one-time ticket for `com.floegence
 
 Notes:
 
-- Codespace/3rd-party app windows never receive or persist `broker_token`. They only get a short-lived one-time `entry_ticket`.
+- Codespace/3rd-party app windows never receive `boot_ticket` or `env_session`. They only get one-time `entry_ticket`.
 - If a codespace window is refreshed after the hash is cleared, it can request a fresh `entry_ticket` from the opener Env App via `postMessage` handshake.
 
 ## Build
