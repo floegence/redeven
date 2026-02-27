@@ -61,6 +61,7 @@ import {
   resolveSuggestedWorkingDirAbsolute,
   virtualPathToAbsolutePath,
 } from '../utils/askFlowerPath';
+import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';
 
 // ---- Working dir picker (directory tree utilities) ----
 
@@ -3638,7 +3639,7 @@ export function EnvAIPage() {
               }
             >
               {/* Chat area — sidebar is managed by Shell */}
-          <div class="flex-1 min-w-0 flex flex-col h-full">
+          <div class="flex-1 min-w-0 flex flex-col h-full relative">
             {/* Header */}
             <div class="chat-header border-b border-border/80 bg-background/95 backdrop-blur-md max-sm:flex-col max-sm:items-stretch max-sm:gap-2">
               <div class="chat-header-title flex items-center gap-2 min-w-0 w-full sm:w-auto">
@@ -3892,6 +3893,11 @@ export function EnvAIPage() {
               onPickWorkingDir={() => setWorkingDirPickerOpen(true)}
               onEditWorkingDir={() => openWorkingDirEditor()}
               onApiReady={setChatInputApi}
+            />
+            <ChatFileBrowserFAB
+              workingDir={activeWorkingDir()}
+              homePath={homePath()}
+              enabled={canInteract() && protocol.status() === 'connected'}
             />
           </div>
         </Show>
