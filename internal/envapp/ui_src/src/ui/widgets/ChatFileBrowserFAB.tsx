@@ -107,7 +107,8 @@ const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
 const SNIFF_BYTES = 64 * 1024;
 const FAB_SIZE = 44;
 const EDGE_MARGIN = 12;
-const FILE_BROWSER_MENU_ELEVATION_CLASS = 'redeven-chat-fab-browser-open';
+const FILE_BROWSER_WINDOW_Z_INDEX = 44;
+const FILE_PREVIEW_WINDOW_Z_INDEX = 45;
 
 // ---- component ----
 
@@ -153,16 +154,6 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
     setFiles([]);
     setResetSeq((n) => n + 1);
     void loadPathChain(wd);
-  });
-
-  // Keep the file-browser context menu above the floating window layer.
-  createEffect(() => {
-    if (typeof document === 'undefined') return;
-    if (browserOpen()) {
-      document.body.classList.add(FILE_BROWSER_MENU_ELEVATION_CLASS);
-    } else {
-      document.body.classList.remove(FILE_BROWSER_MENU_ELEVATION_CLASS);
-    }
   });
 
   async function loadDirOnce(path: string, seq: number): Promise<'ok' | 'error'> {
@@ -289,12 +280,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
     }
   }
 
-  onCleanup(() => {
-    if (typeof document !== 'undefined') {
-      document.body.classList.remove(FILE_BROWSER_MENU_ELEVATION_CLASS);
-    }
-    cleanupPreview();
-  });
+  onCleanup(() => cleanupPreview());
 
   // -- Snap to nearest edge of the container --
   function snapToEdge(left: number, top: number) {
@@ -474,7 +460,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
         title="File Browser"
         defaultSize={{ width: 560, height: 520 }}
         minSize={{ width: 380, height: 340 }}
-        zIndex={100}
+        zIndex={FILE_BROWSER_WINDOW_Z_INDEX}
       >
         <div class="h-full relative">
           <Show when={resetSeq() + 1} keyed>
@@ -516,7 +502,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
         title={previewItem()?.name ?? 'File Preview'}
         defaultSize={{ width: 720, height: 520 }}
         minSize={{ width: 400, height: 300 }}
-        zIndex={110}
+        zIndex={FILE_PREVIEW_WINDOW_Z_INDEX}
       >
         <div class="h-full flex flex-col min-h-0">
           <div class="px-3 py-2 border-b border-border text-[11px] text-muted-foreground font-mono truncate">
