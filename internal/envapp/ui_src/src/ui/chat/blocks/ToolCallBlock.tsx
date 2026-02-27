@@ -2111,6 +2111,23 @@ function applyPatchFilterLabel(filter: ApplyPatchFileFilter): string {
   }
 }
 
+function applyPatchFileName(summary: ApplyPatchFileSummary): string {
+  const fullPath = summary.path || summary.newPath || summary.oldPath || '';
+  if (!fullPath) return '(unknown)';
+  const lastSlash = fullPath.lastIndexOf('/');
+  return lastSlash >= 0 ? fullPath.slice(lastSlash + 1) : fullPath;
+}
+
+function applyPatchDotClass(change: ApplyPatchChangeKind): string {
+  switch (change) {
+    case 'added': return 'chat-tool-apply-patch-dot-added';
+    case 'modified': return 'chat-tool-apply-patch-dot-modified';
+    case 'deleted': return 'chat-tool-apply-patch-dot-deleted';
+    case 'renamed': return 'chat-tool-apply-patch-dot-renamed';
+    default: return '';
+  }
+}
+
 interface ApplyPatchToolCardProps {
   block: ToolCallBlockType;
   messageId: string;
@@ -2125,16 +2142,6 @@ const ApplyPatchToolCard: Component<ApplyPatchToolCardProps> = (props) => {
   const [activeFilter, setActiveFilter] = createSignal<ApplyPatchFileFilter>('all');
   const [selectedDetailID, setSelectedDetailID] = createSignal('');
   const [sectionExpanded, setSectionExpanded] = createSignal(false);
-  const [rawExpanded, setRawExpanded] = createSignal(false);
-
-  const summaryItems = createMemo(() => {
-    const parts: string[] = [];
-    parts.push(`${formatApplyPatchInteger(props.display.filesChanged)} files`);
-    parts.push(`${formatApplyPatchInteger(props.display.hunks)} hunks`);
-    parts.push(`+${formatApplyPatchInteger(props.display.additions)}`);
-    parts.push(`-${formatApplyPatchInteger(props.display.deletions)}`);
-    return parts;
-  });
 
   const filterItems = createMemo(() => {
     const counts: Record<ApplyPatchChangeKind, number> = {
@@ -2212,18 +2219,6 @@ const ApplyPatchToolCard: Component<ApplyPatchToolCardProps> = (props) => {
 
   const hasMoreSectionLines = createMemo(() => selectedRenderedLines().length > APPLY_PATCH_SECTION_PREVIEW_LINES);
 
-  const rawPatchLines = createMemo(() =>
-    props.display.patchText ? props.display.patchText.split('\n') : [],
-  );
-  const visibleRawPatchLines = createMemo(() => {
-    const lines = rawPatchLines();
-    if (rawExpanded()) {
-      return lines;
-    }
-    return lines.slice(0, APPLY_PATCH_RAW_PREVIEW_LINES);
-  });
-  const hasMoreRawPatchLines = createMemo(() => rawPatchLines().length > APPLY_PATCH_RAW_PREVIEW_LINES);
-
   const handleCopyPatch = async () => {
     if (!props.display.patchText) return;
     const ok = await copyToolText(props.display.patchText);
@@ -2246,14 +2241,13 @@ const ApplyPatchToolCard: Component<ApplyPatchToolCardProps> = (props) => {
       <div class="chat-tool-apply-patch-head">
         <div class="chat-tool-apply-patch-head-main">
           <span class="chat-tool-apply-patch-badge">Patch</span>
-          <span class="chat-tool-apply-patch-format">
-            Input {applyPatchFormatLabel(props.display.inputFormat)}
+          <span class="chat-tool-apply-patch-head-stats">
+            {formatApplyPatchInteger(props.display.filesChanged)} files
+            {' \u00B7 '}
+            <span class="chat-tool-apply-patch-head-add">+{formatApplyPatchInteger(props.display.additions)}</span>
+            {' '}
+            <span class="chat-tool-apply-patch-head-del">{'\u2212'}{formatApplyPatchInteger(props.display.deletions)}</span>
           </span>
-          <Show when={props.display.normalizedFormat !== props.display.inputFormat}>
-            <span class="chat-tool-apply-patch-format chat-tool-apply-patch-format-normalized">
-              Normalized {applyPatchFormatLabel(props.display.normalizedFormat)}
-            </span>
-          </Show>
           <span class={cn('chat-tool-apply-patch-state', applyPatchStateClass(props.block.status))}>
             <Show when={props.block.status === 'pending' || props.block.status === 'running'}>
               <span class="chat-tool-apply-patch-state-loader">
@@ -2274,146 +2268,128 @@ const ApplyPatchToolCard: Component<ApplyPatchToolCardProps> = (props) => {
         </button>
       </div>
 
-      <div class="chat-tool-apply-patch-summary">
-        <For each={summaryItems()}>
-          {(item) => <span class="chat-tool-apply-patch-summary-chip">{item}</span>}
-        </For>
-      </div>
-
       <Show when={props.display.details.length > 0}>
-        <div class="chat-tool-apply-patch-workspace">
-          <div class="chat-tool-apply-patch-sidebar">
-            <div class="chat-tool-apply-patch-filters">
-              <For each={filterItems()}>
-                {(item) => (
-                  <button
-                    type="button"
-                    class={cn(
-                      'chat-tool-apply-patch-filter-btn',
-                      activeFilter() === item.filter && 'chat-tool-apply-patch-filter-btn-active',
-                    )}
-                    onClick={() => setActiveFilter(item.filter)}
-                  >
-                    <span>{applyPatchFilterLabel(item.filter)}</span>
-                    <span class="chat-tool-apply-patch-filter-count">{formatApplyPatchInteger(item.count)}</span>
-                  </button>
-                )}
-              </For>
-            </div>
+        <Show when={filterItems().length > 2}>
+          <div class="chat-tool-apply-patch-filters">
+            <For each={filterItems()}>
+              {(item) => (
+                <button
+                  type="button"
+                  class={cn(
+                    'chat-tool-apply-patch-filter-btn',
+                    activeFilter() === item.filter && 'chat-tool-apply-patch-filter-btn-active',
+                  )}
+                  onClick={() => setActiveFilter(item.filter)}
+                >
+                  {applyPatchFilterLabel(item.filter)} {formatApplyPatchInteger(item.count)}
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
 
-            <div class="chat-tool-apply-patch-file-list">
-              <For each={filteredDetails()}>
-                {(detail) => (
-                  <button
-                    type="button"
-                    class={cn(
-                      'chat-tool-apply-patch-file-item',
-                      selectedDetailID() === detail.id && 'chat-tool-apply-patch-file-item-active',
-                    )}
-                    onClick={() => setSelectedDetailID(detail.id)}
-                  >
-                    <div class="chat-tool-apply-patch-file-item-top">
-                      <span class={cn('chat-tool-apply-patch-change', applyPatchChangeClass(detail.summary.change))}>
-                        {applyPatchChangeLabel(detail.summary.change)}
+        <div class="chat-tool-apply-patch-tabs-wrap">
+          <div class="chat-tool-apply-patch-tabs">
+            <For each={filteredDetails()}>
+              {(detail) => (
+                <button
+                  type="button"
+                  class={cn(
+                    'chat-tool-apply-patch-tab',
+                    selectedDetailID() === detail.id && 'chat-tool-apply-patch-tab-active',
+                  )}
+                  onClick={() => setSelectedDetailID(detail.id)}
+                  title={detail.summary.path || detail.summary.newPath || detail.summary.oldPath || ''}
+                >
+                  <span class={cn('chat-tool-apply-patch-tab-dot', applyPatchDotClass(detail.summary.change))} />
+                  <span class="chat-tool-apply-patch-tab-name">
+                    {applyPatchFileName(detail.summary)}
+                  </span>
+                </button>
+              )}
+            </For>
+          </div>
+        </div>
+
+        <div class="chat-tool-apply-patch-detail-panel">
+          <Show when={selectedDetail()} fallback={<div class="chat-tool-apply-patch-detail-empty">No file changes in this filter.</div>}>
+            {(detailAccessor) => {
+              const detail = detailAccessor();
+              const summary = detail.summary;
+              return (
+                <>
+                  <div class="chat-tool-apply-patch-detail-head">
+                    <div class="chat-tool-apply-patch-detail-main">
+                      <span class={cn('chat-tool-apply-patch-change', applyPatchChangeClass(summary.change))}>
+                        {applyPatchChangeLabel(summary.change)}
                       </span>
-                      <span class="chat-tool-apply-patch-file-item-metrics">
-                        +{formatApplyPatchInteger(detail.summary.additions)} / -{formatApplyPatchInteger(detail.summary.deletions)}
+                      <span class="chat-tool-apply-patch-detail-path" title={summary.path || summary.newPath || summary.oldPath}>
+                        {summary.path || summary.newPath || summary.oldPath || '(unknown path)'}
+                      </span>
+                      <span class="chat-tool-apply-patch-detail-metrics">
+                        +{formatApplyPatchInteger(summary.additions)} / {'\u2212'}{formatApplyPatchInteger(summary.deletions)}
+                        <Show when={summary.hunks > 0}>
+                          <> {'\u00B7'} {formatApplyPatchInteger(summary.hunks)} hunks</>
+                        </Show>
                       </span>
                     </div>
-                    <span class="chat-tool-apply-patch-file-item-path" title={detail.summary.path || detail.summary.newPath || detail.summary.oldPath}>
-                      {detail.summary.path || detail.summary.newPath || detail.summary.oldPath || '(unknown path)'}
-                    </span>
-                    <Show when={detail.summary.hunks > 0}>
-                      <span class="chat-tool-apply-patch-file-item-hunks">
-                        {formatApplyPatchInteger(detail.summary.hunks)} hunks
-                      </span>
-                    </Show>
-                  </button>
-                )}
-              </For>
-            </div>
-          </div>
+                    <button
+                      type="button"
+                      class="chat-tool-apply-patch-copy chat-tool-apply-patch-copy-inline"
+                      onClick={() => void handleCopySelectedDetail()}
+                      disabled={!detail.sectionText}
+                    >
+                      {copiedDetailID() === detail.id ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
 
-          <div class="chat-tool-apply-patch-detail-panel">
-            <Show when={selectedDetail()} fallback={<div class="chat-tool-apply-patch-detail-empty">No file changes in this filter.</div>}>
-              {(detailAccessor) => {
-                const detail = detailAccessor();
-                const summary = detail.summary;
-                return (
-                  <>
-                    <div class="chat-tool-apply-patch-detail-head">
-                      <div class="chat-tool-apply-patch-detail-main">
-                        <span class={cn('chat-tool-apply-patch-change', applyPatchChangeClass(summary.change))}>
-                          {applyPatchChangeLabel(summary.change)}
-                        </span>
-                        <span class="chat-tool-apply-patch-detail-path" title={summary.path || summary.newPath || summary.oldPath}>
-                          {summary.path || summary.newPath || summary.oldPath || '(unknown path)'}
-                        </span>
-                        <span class="chat-tool-apply-patch-detail-metrics">
-                          +{formatApplyPatchInteger(summary.additions)} / -{formatApplyPatchInteger(summary.deletions)}
-                          <Show when={summary.hunks > 0}>
-                            <> · {formatApplyPatchInteger(summary.hunks)} hunks</>
-                          </Show>
-                        </span>
-                      </div>
+                  <Show when={summary.change === 'renamed' && summary.oldPath && summary.newPath}>
+                    <div class="chat-tool-apply-patch-rename-row">
+                      <span class="chat-tool-apply-patch-rename-path" title={summary.oldPath}>{summary.oldPath}</span>
+                      <span class="chat-tool-apply-patch-rename-arrow">{'\u2192'}</span>
+                      <span class="chat-tool-apply-patch-rename-path" title={summary.newPath}>{summary.newPath}</span>
+                    </div>
+                  </Show>
+
+                  <Show when={visibleRenderedLines().length > 0} fallback={<div class="chat-tool-apply-patch-detail-empty">No inline diff lines available for this file.</div>}>
+                    <div class="chat-tool-apply-patch-detail-code">
+                      <For each={visibleRenderedLines()}>
+                        {(line) => (
+                          <div class={cn('chat-tool-apply-patch-detail-line', applyPatchRenderedLineClass(line))}>
+                            <span class="chat-tool-apply-patch-detail-line-num">{formatApplyPatchLineNumber(line.oldLine)}</span>
+                            <span class="chat-tool-apply-patch-detail-line-num">{formatApplyPatchLineNumber(line.newLine)}</span>
+                            <span class={cn('chat-tool-apply-patch-detail-line-text', applyPatchPreviewLineClass(line.text))}>{line.text}</span>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+
+                  <Show when={hasMoreSectionLines()}>
+                    <div class="chat-tool-apply-patch-toggle-row">
                       <button
                         type="button"
-                        class="chat-tool-apply-patch-copy chat-tool-apply-patch-copy-inline"
-                        onClick={() => void handleCopySelectedDetail()}
-                        disabled={!detail.sectionText}
+                        class="chat-tool-apply-patch-toggle-btn"
+                        onClick={() => setSectionExpanded((value) => !value)}
                       >
-                        {copiedDetailID() === detail.id ? 'Copied file patch' : 'Copy file patch'}
+                        {sectionExpanded()
+                          ? 'Show less'
+                          : `Show all ${selectedRenderedLines().length} lines`}
                       </button>
                     </div>
-
-                    <Show when={summary.change === 'renamed' && summary.oldPath && summary.newPath}>
-                      <div class="chat-tool-apply-patch-rename-row">
-                        <span class="chat-tool-apply-patch-rename-path" title={summary.oldPath}>{summary.oldPath}</span>
-                        <span class="chat-tool-apply-patch-rename-arrow">→</span>
-                        <span class="chat-tool-apply-patch-rename-path" title={summary.newPath}>{summary.newPath}</span>
-                      </div>
-                    </Show>
-
-                    <Show when={visibleRenderedLines().length > 0} fallback={<div class="chat-tool-apply-patch-detail-empty">No inline diff lines available for this file.</div>}>
-                      <div class="chat-tool-apply-patch-detail-code">
-                        <For each={visibleRenderedLines()}>
-                          {(line) => (
-                            <div class={cn('chat-tool-apply-patch-detail-line', applyPatchRenderedLineClass(line))}>
-                              <span class="chat-tool-apply-patch-detail-line-num">{formatApplyPatchLineNumber(line.oldLine)}</span>
-                              <span class="chat-tool-apply-patch-detail-line-num">{formatApplyPatchLineNumber(line.newLine)}</span>
-                              <span class={cn('chat-tool-apply-patch-detail-line-text', applyPatchPreviewLineClass(line.text))}>{line.text}</span>
-                            </div>
-                          )}
-                        </For>
-                      </div>
-                    </Show>
-
-                    <Show when={hasMoreSectionLines()}>
-                      <div class="chat-tool-apply-patch-toggle-row">
-                        <button
-                          type="button"
-                          class="chat-tool-apply-patch-toggle-btn"
-                          onClick={() => setSectionExpanded((value) => !value)}
-                        >
-                          {sectionExpanded()
-                            ? 'Show less for selected file'
-                            : `Show full selected file (${selectedRenderedLines().length} lines)`}
-                        </button>
-                      </div>
-                    </Show>
-                  </>
-                );
-              }}
-            </Show>
-          </div>
+                  </Show>
+                </>
+              );
+            }}
+          </Show>
         </div>
       </Show>
 
-      <Show when={visibleRawPatchLines().length > 0}>
+      <Show when={props.display.details.length === 0 && props.display.patchText}>
         <div class="chat-tool-apply-patch-preview-wrap">
           <div class="chat-tool-apply-patch-preview-label">Raw patch</div>
           <pre class="chat-tool-apply-patch-preview">
-            <For each={visibleRawPatchLines()}>
+            <For each={props.display.patchText!.split('\n').slice(0, APPLY_PATCH_RAW_PREVIEW_LINES)}>
               {(line) => (
                 <span class={cn('chat-tool-apply-patch-line', applyPatchPreviewLineClass(line))}>
                   {line}
@@ -2421,17 +2397,6 @@ const ApplyPatchToolCard: Component<ApplyPatchToolCardProps> = (props) => {
               )}
             </For>
           </pre>
-          <Show when={hasMoreRawPatchLines()}>
-            <div class="chat-tool-apply-patch-toggle-row">
-              <button
-                type="button"
-                class="chat-tool-apply-patch-toggle-btn"
-                onClick={() => setRawExpanded((value) => !value)}
-              >
-                {rawExpanded() ? 'Show less raw patch' : `Show full raw patch (${rawPatchLines().length} lines)`}
-              </button>
-            </div>
-          </Show>
         </div>
       </Show>
 
