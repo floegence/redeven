@@ -1310,11 +1310,6 @@ a.chat-sources-cell-url:focus-visible {
   cursor: grabbing;
 }
 
-/* File browser context menu is portaled to body with z-50; raise it above the floating window. */
-body.redeven-chat-fab-browser-open div[role='menu'][aria-orientation='vertical'][class*='min-w-[180px]'][class*='bg-popover'] {
-  z-index: 140 !important;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .redeven-fab-file-browser-btn {
     transition: none !important;
