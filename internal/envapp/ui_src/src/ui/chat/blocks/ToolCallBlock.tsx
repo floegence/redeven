@@ -11,6 +11,7 @@ import { useAIChatContext } from '../../pages/AIChatContext';
 
 const ASK_USER_TOOL_NAME = 'ask_user';
 const SUBAGENTS_TOOL_NAME = 'subagents';
+const APPLY_PATCH_TOOL_NAME = 'apply_patch';
 const WEB_SEARCH_TOOL_NAME = 'web.search';
 const KNOWLEDGE_SEARCH_TOOL_NAME = 'knowledge.search';
 const KNOWLEDGE_TOOL_PREFIX = 'knowledge.';
@@ -863,12 +864,363 @@ type KnowledgeToolDisplay = {
   resultNote: string;
 };
 
+type ApplyPatchChangeKind = 'added' | 'modified' | 'deleted' | 'renamed';
+
+type ApplyPatchFileSummary = {
+  path: string;
+  oldPath: string;
+  newPath: string;
+  change: ApplyPatchChangeKind;
+  hunks: number;
+  additions: number;
+  deletions: number;
+};
+
+type ApplyPatchDisplay = {
+  patchText: string;
+  format: 'codex' | 'unified' | 'unknown';
+  files: ApplyPatchFileSummary[];
+  filesChanged: number;
+  hunks: number;
+  additions: number;
+  deletions: number;
+};
+
 const WEB_SEARCH_UNKNOWN_DOMAIN_KEY = 'domain:unknown';
 const WEB_SEARCH_DEFAULT_DOMAIN_KEY = 'all';
 const WEB_SEARCH_VISIBLE_RESULTS = 5;
 const KNOWLEDGE_VISIBLE_MATCHES = 4;
+const APPLY_PATCH_VISIBLE_FILES = 8;
+const APPLY_PATCH_PREVIEW_LINES = 24;
 const webSearchIntegerFormatter = new Intl.NumberFormat('en-US');
 const knowledgeIntegerFormatter = new Intl.NumberFormat('en-US');
+const applyPatchIntegerFormatter = new Intl.NumberFormat('en-US');
+
+function formatApplyPatchInteger(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '0';
+  return applyPatchIntegerFormatter.format(Math.round(value));
+}
+
+function normalizePatchTextForDisplay(value: string): string {
+  return String(value ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+}
+
+function trimDiffPathPrefix(path: string): string {
+  let normalized = String(path ?? '').trim();
+  if (normalized.startsWith('a/')) normalized = normalized.slice(2);
+  if (normalized.startsWith('b/')) normalized = normalized.slice(2);
+  return normalized;
+}
+
+function parseDiffPathFromHeader(raw: string): string {
+  const value = String(raw ?? '').trim();
+  if (!value) return '';
+  const first = value.split(/\s+/)[0] ?? '';
+  return trimDiffPathPrefix(first);
+}
+
+function createApplyPatchFileSummary(change: ApplyPatchChangeKind, oldPath: string, newPath: string): ApplyPatchFileSummary {
+  const oldClean = trimDiffPathPrefix(oldPath);
+  const newClean = trimDiffPathPrefix(newPath);
+  let path = newClean || oldClean;
+  if (!path || path === '/dev/null') {
+    path = oldClean === '/dev/null' ? newClean : oldClean;
+  }
+  if (path === '/dev/null') {
+    path = '';
+  }
+  return {
+    path,
+    oldPath: oldClean,
+    newPath: newClean,
+    change,
+    hunks: 0,
+    additions: 0,
+    deletions: 0,
+  };
+}
+
+function parseUnifiedPatchFiles(patchText: string): ApplyPatchFileSummary[] {
+  const lines = normalizePatchTextForDisplay(patchText).split('\n');
+  const files: ApplyPatchFileSummary[] = [];
+  let current: ApplyPatchFileSummary | null = null;
+
+  const pushCurrent = () => {
+    if (!current) return;
+    if (!current.path) {
+      current.path = current.newPath || current.oldPath;
+    }
+    files.push(current);
+    current = null;
+  };
+
+  for (const rawLine of lines) {
+    if (rawLine.startsWith('diff --git ')) {
+      pushCurrent();
+      const parts = rawLine.trim().split(/\s+/);
+      const oldPath = parts[2] ?? '';
+      const newPath = parts[3] ?? '';
+      current = createApplyPatchFileSummary('modified', oldPath, newPath);
+      continue;
+    }
+    if (!current) {
+      continue;
+    }
+    if (rawLine.startsWith('new file mode ')) {
+      current.change = 'added';
+      continue;
+    }
+    if (rawLine.startsWith('deleted file mode ')) {
+      current.change = 'deleted';
+      continue;
+    }
+    if (rawLine.startsWith('rename from ')) {
+      current.change = 'renamed';
+      current.oldPath = parseDiffPathFromHeader(rawLine.slice('rename from '.length));
+      if (!current.path) current.path = current.oldPath;
+      continue;
+    }
+    if (rawLine.startsWith('rename to ')) {
+      current.change = 'renamed';
+      current.newPath = parseDiffPathFromHeader(rawLine.slice('rename to '.length));
+      current.path = current.newPath || current.path;
+      continue;
+    }
+    if (rawLine.startsWith('--- ')) {
+      current.oldPath = parseDiffPathFromHeader(rawLine.slice(4));
+      if (current.oldPath === '/dev/null') {
+        current.change = 'added';
+      }
+      if (!current.path) current.path = current.oldPath;
+      continue;
+    }
+    if (rawLine.startsWith('+++ ')) {
+      current.newPath = parseDiffPathFromHeader(rawLine.slice(4));
+      if (current.newPath === '/dev/null') {
+        current.change = 'deleted';
+      }
+      current.path = current.newPath === '/dev/null' ? current.oldPath : current.newPath;
+      continue;
+    }
+    if (rawLine.startsWith('@@')) {
+      current.hunks += 1;
+      continue;
+    }
+    if (rawLine.startsWith('+') && !rawLine.startsWith('+++')) {
+      current.additions += 1;
+      continue;
+    }
+    if (rawLine.startsWith('-') && !rawLine.startsWith('---')) {
+      current.deletions += 1;
+    }
+  }
+
+  pushCurrent();
+  return files;
+}
+
+function isCodexPatchTopLevelHeader(line: string): boolean {
+  if (!line) return false;
+  return (
+    line.startsWith('*** Add File: ') ||
+    line.startsWith('*** Delete File: ') ||
+    line.startsWith('*** Update File: ') ||
+    line === '*** End Patch'
+  );
+}
+
+function parseCodexPatchFiles(patchText: string): ApplyPatchFileSummary[] {
+  const lines = normalizePatchTextForDisplay(patchText).split('\n');
+  const files: ApplyPatchFileSummary[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = String(lines[index] ?? '').trim();
+    if (!line || line === '*** Begin Patch') {
+      index += 1;
+      continue;
+    }
+    if (line === '*** End Patch') {
+      break;
+    }
+    if (line.startsWith('*** Add File: ')) {
+      const newPath = line.slice('*** Add File: '.length).trim();
+      const file = createApplyPatchFileSummary('added', '/dev/null', newPath);
+      index += 1;
+      while (index < lines.length) {
+        const bodyLine = String(lines[index] ?? '');
+        const bodyTrimmed = bodyLine.trim();
+        if (isCodexPatchTopLevelHeader(bodyTrimmed)) break;
+        if (bodyTrimmed === '*** End of File') {
+          index += 1;
+          continue;
+        }
+        if (bodyLine.startsWith('+')) {
+          file.additions += 1;
+        }
+        index += 1;
+      }
+      if (file.additions > 0) {
+        file.hunks = 1;
+      }
+      files.push(file);
+      continue;
+    }
+    if (line.startsWith('*** Delete File: ')) {
+      const oldPath = line.slice('*** Delete File: '.length).trim();
+      files.push(createApplyPatchFileSummary('deleted', oldPath, '/dev/null'));
+      index += 1;
+      continue;
+    }
+    if (line.startsWith('*** Update File: ')) {
+      const oldPath = line.slice('*** Update File: '.length).trim();
+      const file = createApplyPatchFileSummary('modified', oldPath, oldPath);
+      index += 1;
+      if (index < lines.length) {
+        const maybeMove = String(lines[index] ?? '').trim();
+        if (maybeMove.startsWith('*** Move to: ')) {
+          file.change = 'renamed';
+          file.newPath = maybeMove.slice('*** Move to: '.length).trim();
+          file.path = file.newPath || file.path;
+          index += 1;
+        }
+      }
+      while (index < lines.length) {
+        const bodyLine = String(lines[index] ?? '');
+        const bodyTrimmed = bodyLine.trim();
+        if (isCodexPatchTopLevelHeader(bodyTrimmed)) break;
+        if (bodyTrimmed === '*** End of File') {
+          index += 1;
+          continue;
+        }
+        if (bodyLine.startsWith('@@')) {
+          file.hunks += 1;
+          index += 1;
+          continue;
+        }
+        if (bodyLine.startsWith('+')) {
+          file.additions += 1;
+        } else if (bodyLine.startsWith('-')) {
+          file.deletions += 1;
+        }
+        index += 1;
+      }
+      if ((file.additions > 0 || file.deletions > 0) && file.hunks === 0) {
+        file.hunks = 1;
+      }
+      files.push(file);
+      continue;
+    }
+    index += 1;
+  }
+  return files;
+}
+
+function readOptionalNonNegativeInt(value: unknown): number | null {
+  const parsed = readFiniteNumber(value, Number.NaN);
+  if (!Number.isFinite(parsed)) return null;
+  if (parsed < 0) return null;
+  return Math.floor(parsed);
+}
+
+function buildApplyPatchDisplay(block: ToolCallBlockType): ApplyPatchDisplay | null {
+  if (String(block.toolName ?? '').trim() !== APPLY_PATCH_TOOL_NAME) {
+    return null;
+  }
+  const args = asRecord(block.args);
+  const result = asRecord(block.result);
+  const rawPatchText = typeof args?.patch === 'string' ? args.patch : '';
+  const patchText = normalizePatchTextForDisplay(rawPatchText).trim();
+
+  let format: ApplyPatchDisplay['format'] = 'unknown';
+  let files: ApplyPatchFileSummary[] = [];
+  if (patchText.startsWith('*** Begin Patch')) {
+    format = 'codex';
+    files = parseCodexPatchFiles(patchText);
+  } else if (patchText.includes('diff --git ')) {
+    format = 'unified';
+    files = parseUnifiedPatchFiles(patchText);
+  }
+
+  const derivedFilesChanged = files.length;
+  const derivedHunks = files.reduce((sum, file) => sum + file.hunks, 0);
+  const derivedAdditions = files.reduce((sum, file) => sum + file.additions, 0);
+  const derivedDeletions = files.reduce((sum, file) => sum + file.deletions, 0);
+
+  const filesChanged = readOptionalNonNegativeInt(result?.files_changed ?? result?.filesChanged) ?? derivedFilesChanged;
+  const hunks = readOptionalNonNegativeInt(result?.hunks) ?? derivedHunks;
+  const additions = readOptionalNonNegativeInt(result?.additions) ?? derivedAdditions;
+  const deletions = readOptionalNonNegativeInt(result?.deletions) ?? derivedDeletions;
+
+  return {
+    patchText,
+    format,
+    files,
+    filesChanged,
+    hunks,
+    additions,
+    deletions,
+  };
+}
+
+function applyPatchStateLabel(status: ToolCallBlockType['status']): string {
+  switch (status) {
+    case 'pending':
+      return 'Queued';
+    case 'running':
+      return 'Applying';
+    case 'success':
+      return 'Applied';
+    case 'error':
+      return 'Failed';
+    default:
+      return 'Unknown';
+  }
+}
+
+function applyPatchStateClass(status: ToolCallBlockType['status']): string {
+  switch (status) {
+    case 'pending':
+    case 'running':
+      return 'chat-tool-apply-patch-state-running';
+    case 'success':
+      return 'chat-tool-apply-patch-state-success';
+    case 'error':
+      return 'chat-tool-apply-patch-state-error';
+    default:
+      return '';
+  }
+}
+
+function applyPatchChangeLabel(change: ApplyPatchChangeKind): string {
+  switch (change) {
+    case 'added':
+      return 'Added';
+    case 'deleted':
+      return 'Deleted';
+    case 'renamed':
+      return 'Renamed';
+    case 'modified':
+    default:
+      return 'Updated';
+  }
+}
+
+function applyPatchChangeClass(change: ApplyPatchChangeKind): string {
+  switch (change) {
+    case 'added':
+      return 'chat-tool-apply-patch-change-added';
+    case 'deleted':
+      return 'chat-tool-apply-patch-change-deleted';
+    case 'renamed':
+      return 'chat-tool-apply-patch-change-renamed';
+    case 'modified':
+    default:
+      return 'chat-tool-apply-patch-change-modified';
+  }
+}
 
 function formatWebSearchInteger(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return '0';
@@ -1290,6 +1642,178 @@ async function copyToolText(text: string): Promise<boolean> {
     return false;
   }
 }
+
+function applyPatchFormatLabel(format: ApplyPatchDisplay['format']): string {
+  switch (format) {
+    case 'codex':
+      return 'Begin Patch';
+    case 'unified':
+      return 'Unified Diff';
+    default:
+      return 'Patch';
+  }
+}
+
+function applyPatchPreviewLineClass(line: string): string {
+  if (!line) return '';
+  if (line.startsWith('+') && !line.startsWith('+++')) return 'chat-tool-apply-patch-line-add';
+  if (line.startsWith('-') && !line.startsWith('---')) return 'chat-tool-apply-patch-line-del';
+  if (
+    line.startsWith('@@') ||
+    line.startsWith('*** ') ||
+    line.startsWith('diff --git ') ||
+    line.startsWith('--- ') ||
+    line.startsWith('+++ ')
+  ) {
+    return 'chat-tool-apply-patch-line-meta';
+  }
+  return '';
+}
+
+interface ApplyPatchToolCardProps {
+  block: ToolCallBlockType;
+  messageId: string;
+  blockIndex: number;
+  display: ApplyPatchDisplay;
+  class?: string;
+}
+
+const ApplyPatchToolCard: Component<ApplyPatchToolCardProps> = (props) => {
+  const [copied, setCopied] = createSignal(false);
+  const [expanded, setExpanded] = createSignal(false);
+
+  const patchLines = createMemo(() =>
+    props.display.patchText ? props.display.patchText.split('\n') : [],
+  );
+  const hasMorePatchLines = createMemo(() => patchLines().length > APPLY_PATCH_PREVIEW_LINES);
+  const visiblePatchLines = createMemo(() =>
+    expanded() ? patchLines() : patchLines().slice(0, APPLY_PATCH_PREVIEW_LINES),
+  );
+  const visibleFiles = createMemo(() => props.display.files.slice(0, APPLY_PATCH_VISIBLE_FILES));
+  const hasMoreFiles = createMemo(() => props.display.files.length > APPLY_PATCH_VISIBLE_FILES);
+  const summaryItems = createMemo(() => {
+    const parts: string[] = [];
+    parts.push(`${formatApplyPatchInteger(props.display.filesChanged)} files`);
+    parts.push(`${formatApplyPatchInteger(props.display.hunks)} hunks`);
+    parts.push(`+${formatApplyPatchInteger(props.display.additions)}`);
+    parts.push(`-${formatApplyPatchInteger(props.display.deletions)}`);
+    return parts;
+  });
+
+  const handleCopyPatch = async () => {
+    if (!props.display.patchText) return;
+    const ok = await copyToolText(props.display.patchText);
+    if (!ok) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  };
+
+  return (
+    <div class={cn('chat-tool-apply-patch-block', props.class)}>
+      <div class="chat-tool-apply-patch-head">
+        <div class="chat-tool-apply-patch-head-main">
+          <span class="chat-tool-apply-patch-badge">Patch</span>
+          <span class="chat-tool-apply-patch-format">{applyPatchFormatLabel(props.display.format)}</span>
+          <span class={cn('chat-tool-apply-patch-state', applyPatchStateClass(props.block.status))}>
+            <Show when={props.block.status === 'pending' || props.block.status === 'running'}>
+              <span class="chat-tool-apply-patch-state-loader">
+                <SnakeLoader size="sm" class="chat-tool-inline-snake-loader" />
+              </span>
+            </Show>
+            {applyPatchStateLabel(props.block.status)}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          class="chat-tool-apply-patch-copy"
+          onClick={() => void handleCopyPatch()}
+          disabled={!props.display.patchText}
+        >
+          {copied() ? 'Copied' : 'Copy patch'}
+        </button>
+      </div>
+
+      <div class="chat-tool-apply-patch-summary">
+        <For each={summaryItems()}>
+          {(item) => <span class="chat-tool-apply-patch-summary-chip">{item}</span>}
+        </For>
+      </div>
+
+      <Show when={visibleFiles().length > 0}>
+        <div class="chat-tool-apply-patch-files">
+          <For each={visibleFiles()}>
+            {(file) => (
+              <div class="chat-tool-apply-patch-file-row">
+                <span class={cn('chat-tool-apply-patch-change', applyPatchChangeClass(file.change))}>
+                  {applyPatchChangeLabel(file.change)}
+                </span>
+                <span class="chat-tool-apply-patch-file-path" title={file.path || file.newPath || file.oldPath}>
+                  {file.path || file.newPath || file.oldPath || '(unknown path)'}
+                </span>
+                <span class="chat-tool-apply-patch-file-metrics">
+                  +{formatApplyPatchInteger(file.additions)} / -{formatApplyPatchInteger(file.deletions)}
+                  <Show when={file.hunks > 0}>
+                    <> · {formatApplyPatchInteger(file.hunks)} hunks</>
+                  </Show>
+                </span>
+              </div>
+            )}
+          </For>
+          <Show when={hasMoreFiles()}>
+            <div class="chat-tool-apply-patch-more-files">
+              +{props.display.files.length - APPLY_PATCH_VISIBLE_FILES} more files
+            </div>
+          </Show>
+        </div>
+      </Show>
+
+      <Show when={visiblePatchLines().length > 0}>
+        <div class="chat-tool-apply-patch-preview-wrap">
+          <div class="chat-tool-apply-patch-preview-label">Patch preview</div>
+          <pre class="chat-tool-apply-patch-preview">
+            <For each={visiblePatchLines()}>
+              {(line) => (
+                <span class={cn('chat-tool-apply-patch-line', applyPatchPreviewLineClass(line))}>
+                  {line}
+                </span>
+              )}
+            </For>
+          </pre>
+          <Show when={hasMorePatchLines()}>
+            <div class="chat-tool-apply-patch-toggle-row">
+              <button
+                type="button"
+                class="chat-tool-apply-patch-toggle-btn"
+                onClick={() => setExpanded((value) => !value)}
+              >
+                {expanded() ? 'Show less' : `Show full patch (${patchLines().length} lines)`}
+              </button>
+            </div>
+          </Show>
+        </div>
+      </Show>
+
+      <Show when={props.block.error}>
+        <div class="chat-tool-apply-patch-error">{props.block.error}</div>
+      </Show>
+
+      <Show when={props.block.children && props.block.children.length > 0}>
+        <div class="chat-tool-apply-patch-children">
+          <For each={props.block.children}>
+            {(child) => (
+              <BlockRenderer
+                block={child}
+                messageId={props.messageId}
+                blockIndex={props.blockIndex}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+};
 
 interface WebSearchToolCardProps {
   block: ToolCallBlockType;
@@ -2023,6 +2547,7 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
   const ctx = useChatContext();
   const askUserDisplay = createMemo(() => buildAskUserDisplay(props.block));
   const waitSubagentsDisplay = createMemo(() => buildWaitSubagentsDisplay(props.block));
+  const applyPatchDisplay = createMemo(() => buildApplyPatchDisplay(props.block));
   const webSearchDisplay = createMemo(() => buildWebSearchDisplay(props.block));
   const knowledgeDisplay = createMemo(() => buildKnowledgeToolDisplay(props.block));
   const shouldHideWaitSubagentsRow = createMemo(() => {
@@ -2095,6 +2620,18 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
       <WaitSubagentsToolCard
         block={props.block}
         display={waitSubagentsDisplay() as WaitSubagentsDisplay}
+        class={props.class}
+      />
+    );
+  }
+
+  if (applyPatchDisplay()) {
+    return (
+      <ApplyPatchToolCard
+        block={props.block}
+        messageId={props.messageId}
+        blockIndex={props.blockIndex}
+        display={applyPatchDisplay() as ApplyPatchDisplay}
         class={props.class}
       />
     );

@@ -717,6 +717,308 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
   font-size: 0.69rem;
 }
 
+.chat-tool-apply-patch-block {
+  margin: 0.5rem 0;
+  border-radius: 0.82rem;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background:
+    radial-gradient(120% 100% at 100% 0%, color-mix(in srgb, var(--primary) 8%, transparent), transparent 58%),
+    color-mix(in srgb, var(--card) 97%, transparent);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.05), 0 10px 24px rgb(15 23 42 / 0.06);
+  overflow: hidden;
+}
+
+.chat-tool-apply-patch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.68rem 0.8rem 0.56rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--muted) 40%, transparent),
+    color-mix(in srgb, var(--muted) 14%, transparent)
+  );
+}
+
+.chat-tool-apply-patch-head-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.chat-tool-apply-patch-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
+  background: color-mix(in srgb, var(--primary) 11%, transparent);
+  color: var(--primary);
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  text-transform: uppercase;
+  padding: 0.17rem 0.46rem;
+}
+
+.chat-tool-apply-patch-format {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background-color: color-mix(in srgb, var(--background) 82%, transparent);
+  color: var(--muted-foreground);
+  font-size: 0.64rem;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0.15rem 0.44rem;
+}
+
+.chat-tool-apply-patch-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  padding: 0.15rem 0.44rem;
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.chat-tool-apply-patch-state-loader {
+  width: 0.82rem;
+  height: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-tool-apply-patch-state-running {
+  color: rgb(29 78 216);
+  background: rgb(59 130 246 / 0.14);
+  border-color: rgb(59 130 246 / 0.28);
+}
+
+.chat-tool-apply-patch-state-success {
+  color: rgb(5 150 105);
+  background: rgb(16 185 129 / 0.14);
+  border-color: rgb(16 185 129 / 0.24);
+}
+
+.chat-tool-apply-patch-state-error {
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 14%, transparent);
+  border-color: color-mix(in srgb, var(--destructive) 26%, transparent);
+}
+
+.chat-tool-apply-patch-copy {
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 9999px;
+  padding: 0.21rem 0.55rem;
+  font-size: 0.63rem;
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--background) 86%, transparent);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.chat-tool-apply-patch-copy:hover {
+  background: color-mix(in srgb, var(--muted) 36%, transparent);
+  color: var(--foreground);
+}
+
+.chat-tool-apply-patch-copy:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.chat-tool-apply-patch-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.34rem;
+  padding: 0.45rem 0.8rem 0.38rem;
+}
+
+.chat-tool-apply-patch-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  background: color-mix(in srgb, var(--muted) 44%, transparent);
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  line-height: 1;
+  padding: 0.2rem 0.48rem;
+}
+
+.chat-tool-apply-patch-files {
+  display: grid;
+  gap: 0.34rem;
+  padding: 0 0.8rem 0.5rem;
+}
+
+.chat-tool-apply-patch-file-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.48rem;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 0.58rem;
+  background: color-mix(in srgb, var(--background) 82%, transparent);
+  padding: 0.35rem 0.46rem;
+}
+
+.chat-tool-apply-patch-change {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  padding: 0.14rem 0.42rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.chat-tool-apply-patch-change-added {
+  color: rgb(5 150 105);
+  border-color: rgb(16 185 129 / 0.3);
+  background: rgb(16 185 129 / 0.14);
+}
+
+.chat-tool-apply-patch-change-modified {
+  color: rgb(37 99 235);
+  border-color: rgb(59 130 246 / 0.3);
+  background: rgb(59 130 246 / 0.14);
+}
+
+.chat-tool-apply-patch-change-deleted {
+  color: var(--destructive);
+  border-color: color-mix(in srgb, var(--destructive) 36%, transparent);
+  background: color-mix(in srgb, var(--destructive) 14%, transparent);
+}
+
+.chat-tool-apply-patch-change-renamed {
+  color: rgb(124 58 237);
+  border-color: rgb(167 139 250 / 0.36);
+  background: rgb(167 139 250 / 0.16);
+}
+
+.chat-tool-apply-patch-file-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground));
+}
+
+.chat-tool-apply-patch-file-metrics {
+  font-size: 0.61rem;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.chat-tool-apply-patch-more-files {
+  font-size: 0.64rem;
+  color: var(--muted-foreground);
+  text-align: center;
+}
+
+.chat-tool-apply-patch-preview-wrap {
+  margin: 0 0.8rem 0.66rem;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 0.58rem;
+  background: color-mix(in srgb, var(--background) 82%, transparent);
+  overflow: hidden;
+}
+
+.chat-tool-apply-patch-preview-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+  padding: 0.38rem 0.5rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--muted) 34%, transparent);
+}
+
+.chat-tool-apply-patch-preview {
+  margin: 0;
+  padding: 0.44rem 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.67rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground));
+  white-space: pre;
+  overflow-x: auto;
+  max-height: 13rem;
+  overflow-y: auto;
+}
+
+.chat-tool-apply-patch-line {
+  display: block;
+}
+
+.chat-tool-apply-patch-line-add {
+  color: rgb(5 150 105);
+}
+
+.chat-tool-apply-patch-line-del {
+  color: var(--destructive);
+}
+
+.chat-tool-apply-patch-line-meta {
+  color: color-mix(in srgb, var(--primary) 85%, var(--muted-foreground));
+}
+
+.chat-tool-apply-patch-toggle-row {
+  display: flex;
+  justify-content: center;
+  padding: 0.22rem 0.4rem 0.46rem;
+}
+
+.chat-tool-apply-patch-toggle-btn {
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 9999px;
+  padding: 0.2rem 0.52rem;
+  font-size: 0.63rem;
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--background) 86%, transparent);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.chat-tool-apply-patch-toggle-btn:hover {
+  background: color-mix(in srgb, var(--muted) 36%, transparent);
+  color: var(--foreground);
+}
+
+.chat-tool-apply-patch-error {
+  margin: 0 0.8rem 0.68rem;
+  border: 1px solid color-mix(in srgb, var(--destructive) 30%, transparent);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+  color: var(--destructive);
+  padding: 0.4rem 0.52rem;
+  font-size: 0.69rem;
+}
+
+.chat-tool-apply-patch-children {
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  padding: 0.62rem 0.74rem 0.72rem;
+  background: color-mix(in srgb, var(--muted) 20%, transparent);
+}
+
 .chat-tool-web-search-block {
   margin: 0.5rem 0;
   border-radius: 0.82rem;

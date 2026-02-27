@@ -33,9 +33,222 @@ type unifiedDiffFile struct {
 
 var unifiedDiffHunkHeaderRE = regexp.MustCompile(`^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@`)
 
+func normalizePatchText(patchText string) string {
+	normalized := strings.ReplaceAll(patchText, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	return normalized
+}
+
+func parsePatchFiles(patchText string) ([]unifiedDiffFile, error) {
+	normalized := normalizePatchText(patchText)
+	trimmed := strings.TrimSpace(normalized)
+	if strings.HasPrefix(trimmed, "*** Begin Patch") {
+		return parseCodexPatch(normalized)
+	}
+	return parseUnifiedDiff(normalized)
+}
+
+func isCodexPatchHeader(trimmedLine string) bool {
+	switch {
+	case strings.HasPrefix(trimmedLine, "*** Add File: "):
+		return true
+	case strings.HasPrefix(trimmedLine, "*** Delete File: "):
+		return true
+	case strings.HasPrefix(trimmedLine, "*** Update File: "):
+		return true
+	case trimmedLine == "*** End Patch":
+		return true
+	default:
+		return false
+	}
+}
+
+func parseCodexPatch(patchText string) ([]unifiedDiffFile, error) {
+	lines := strings.Split(normalizePatchText(patchText), "\n")
+	i := 0
+	for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
+		i++
+	}
+	if i >= len(lines) || strings.TrimSpace(lines[i]) != "*** Begin Patch" {
+		return nil, errors.New("unsupported patch format: missing *** Begin Patch header")
+	}
+	i++
+
+	var out []unifiedDiffFile
+	for i < len(lines) {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == "" {
+			i++
+			continue
+		}
+		if trimmed == "*** End Patch" {
+			if len(out) == 0 {
+				return nil, errors.New("invalid patch: no file operations")
+			}
+			return out, nil
+		}
+
+		switch {
+		case strings.HasPrefix(trimmed, "*** Add File: "):
+			newPath := strings.TrimSpace(strings.TrimPrefix(trimmed, "*** Add File: "))
+			if newPath == "" {
+				return nil, errors.New("invalid add file patch: missing path")
+			}
+			i++
+			var hunkLines []string
+			for i < len(lines) {
+				nextTrimmed := strings.TrimSpace(lines[i])
+				if isCodexPatchHeader(nextTrimmed) {
+					break
+				}
+				if strings.TrimSpace(lines[i]) == "*** End of File" {
+					i++
+					continue
+				}
+				if !strings.HasPrefix(lines[i], "+") {
+					return nil, fmt.Errorf("invalid add file line: %q", lines[i])
+				}
+				hunkLines = append(hunkLines, lines[i])
+				i++
+			}
+			if len(hunkLines) == 0 {
+				return nil, fmt.Errorf("invalid add file patch for %q: empty body", newPath)
+			}
+			out = append(out, unifiedDiffFile{
+				oldPath: "/dev/null",
+				newPath: newPath,
+				isNew:   true,
+				hunks: []unifiedDiffHunk{
+					{
+						oldStart: 1,
+						oldCount: 0,
+						newStart: 1,
+						newCount: len(hunkLines),
+						lines:    hunkLines,
+					},
+				},
+			})
+
+		case strings.HasPrefix(trimmed, "*** Delete File: "):
+			oldPath := strings.TrimSpace(strings.TrimPrefix(trimmed, "*** Delete File: "))
+			if oldPath == "" {
+				return nil, errors.New("invalid delete file patch: missing path")
+			}
+			out = append(out, unifiedDiffFile{
+				oldPath:  oldPath,
+				newPath:  "/dev/null",
+				isDelete: true,
+			})
+			i++
+
+		case strings.HasPrefix(trimmed, "*** Update File: "):
+			oldPath := strings.TrimSpace(strings.TrimPrefix(trimmed, "*** Update File: "))
+			if oldPath == "" {
+				return nil, errors.New("invalid update file patch: missing path")
+			}
+			i++
+			newPath := oldPath
+			if i < len(lines) {
+				moveLine := strings.TrimSpace(lines[i])
+				if strings.HasPrefix(moveLine, "*** Move to: ") {
+					newPath = strings.TrimSpace(strings.TrimPrefix(moveLine, "*** Move to: "))
+					if newPath == "" {
+						return nil, errors.New("invalid move target path")
+					}
+					i++
+				}
+			}
+			body := make([]string, 0, 8)
+			for i < len(lines) {
+				nextTrimmed := strings.TrimSpace(lines[i])
+				if isCodexPatchHeader(nextTrimmed) {
+					break
+				}
+				body = append(body, lines[i])
+				i++
+			}
+			hunks, err := parseCodexUpdateHunks(body)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, unifiedDiffFile{
+				oldPath: oldPath,
+				newPath: newPath,
+				hunks:   hunks,
+			})
+
+		default:
+			return nil, fmt.Errorf("unsupported patch format line: %q", lines[i])
+		}
+	}
+	return nil, errors.New("invalid patch: missing *** End Patch trailer")
+}
+
+func parseCodexUpdateHunks(lines []string) ([]unifiedDiffHunk, error) {
+	if len(lines) == 0 {
+		return nil, nil
+	}
+	defaultHeader := unifiedDiffHunk{
+		oldStart: 1,
+		oldCount: 1,
+		newStart: 1,
+		newCount: 1,
+		lines:    nil,
+	}
+	var (
+		hunks []unifiedDiffHunk
+		cur   *unifiedDiffHunk
+	)
+
+	flushCurrent := func() {
+		if cur == nil {
+			return
+		}
+		if len(cur.lines) == 0 {
+			return
+		}
+		hunks = append(hunks, *cur)
+	}
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if line == "" {
+				return nil, fmt.Errorf("invalid update line: %q", line)
+			}
+		}
+		if trimmed == "*** End of File" {
+			continue
+		}
+		if strings.HasPrefix(line, "@@") {
+			flushCurrent()
+			next := defaultHeader
+			if parsed, err := parseUnifiedDiffHunkHeader(line); err == nil {
+				next = parsed
+			}
+			cur = &next
+			continue
+		}
+		if len(line) == 0 {
+			return nil, fmt.Errorf("invalid update line: %q", line)
+		}
+		switch line[0] {
+		case ' ', '+', '-', '\\':
+			if cur == nil {
+				next := defaultHeader
+				cur = &next
+			}
+			cur.lines = append(cur.lines, line)
+		default:
+			return nil, fmt.Errorf("invalid update line: %q", line)
+		}
+	}
+	flushCurrent()
+	return hunks, nil
+}
+
 func parseUnifiedDiff(patchText string) ([]unifiedDiffFile, error) {
-	raw := strings.ReplaceAll(patchText, "\r\n", "\n")
-	raw = strings.ReplaceAll(raw, "\r", "\n")
+	raw := normalizePatchText(patchText)
 	lines := strings.Split(raw, "\n")
 
 	var out []unifiedDiffFile
@@ -193,7 +406,7 @@ func applyUnifiedDiff(workingDirAbs string, patchText string) error {
 		return errors.New("invalid working dir")
 	}
 
-	diffs, err := parseUnifiedDiff(patchText)
+	diffs, err := parsePatchFiles(patchText)
 	if err != nil {
 		return err
 	}
@@ -272,9 +485,13 @@ func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan
 		perm = *fd.newPerm & 0o777
 	}
 
-	next, err := applyUnifiedDiffHunksToBytes(fileBytes, fd.hunks)
-	if err != nil {
-		return patchFilePlan{}, err
+	next := fileBytes
+	if len(fd.hunks) > 0 {
+		var applyErr error
+		next, applyErr = applyUnifiedDiffHunksToBytes(fileBytes, fd.hunks)
+		if applyErr != nil {
+			return patchFilePlan{}, applyErr
+		}
 	}
 	return patchFilePlan{
 		oldAbs:   oldAbs,
@@ -390,6 +607,14 @@ func findHunkStart(lines []string, h unifiedDiffHunk, preferred int) (int, bool)
 		end = len(lines)
 	}
 	for pos := start; pos <= end; pos++ {
+		if tryAt(pos) {
+			return pos, true
+		}
+	}
+	for pos := 0; pos <= len(lines); pos++ {
+		if pos >= start && pos <= end {
+			continue
+		}
 		if tryAt(pos) {
 			return pos, true
 		}

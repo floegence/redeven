@@ -2743,29 +2743,27 @@ func (r *run) toolApplyPatch(ctx context.Context, patchText string) (any, error)
 }
 
 func summarizeUnifiedDiff(patchText string) (filesChanged int, hunks int, additions int, deletions int) {
-	seenFile := make(map[string]struct{})
-	lines := strings.Split(patchText, "\n")
-	for _, line := range lines {
-		switch {
-		case strings.HasPrefix(line, "diff --git "):
-			parts := strings.Fields(line)
-			if len(parts) >= 4 {
-				file := strings.TrimSpace(parts[3])
-				if file != "" {
-					if _, ok := seenFile[file]; !ok {
-						seenFile[file] = struct{}{}
-						filesChanged++
-					}
+	diffs, err := parsePatchFiles(patchText)
+	if err != nil {
+		return 0, 0, 0, 0
+	}
+	filesChanged = len(diffs)
+	for _, fd := range diffs {
+		for _, h := range fd.hunks {
+			if len(h.lines) > 0 {
+				hunks++
+			}
+			for _, line := range h.lines {
+				if line == "" {
+					continue
+				}
+				switch line[0] {
+				case '+':
+					additions++
+				case '-':
+					deletions++
 				}
 			}
-		case strings.HasPrefix(line, "@@"):
-			hunks++
-		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
-			continue
-		case strings.HasPrefix(line, "+"):
-			additions++
-		case strings.HasPrefix(line, "-"):
-			deletions++
 		}
 	}
 	return filesChanged, hunks, additions, deletions
