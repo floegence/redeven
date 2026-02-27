@@ -2,9 +2,10 @@
 // The FAB lives inside the message area and can be dragged to any edge.
 import { Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { Motion } from 'solid-motionone';
+import { useNotification } from '@floegence/floe-webapp-core';
 import { Folder } from '@floegence/floe-webapp-core/icons';
-import { FileBrowser, type FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
+import { FileBrowser, type ContextMenuCallbacks, type FileItem } from '@floegence/floe-webapp-core/file-browser';
+import { Button, ConfirmDialog, Dialog, DirectoryPicker, FileSavePicker, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type FsFileInfo } from '../protocol/redeven_v1';
@@ -17,6 +18,66 @@ export interface ChatFileBrowserFABProps {
   enabled?: boolean;
   /** Ref to the container element that bounds the FAB drag area. */
   containerRef?: HTMLElement;
+}
+
+function InputDialog(props: {
+  open: boolean;
+  title: string;
+  label: string;
+  value: string;
+  placeholder?: string;
+  confirmText?: string;
+  cancelText?: string;
+  loading?: boolean;
+  onConfirm: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const [inputValue, setInputValue] = createSignal(props.value);
+
+  createEffect(() => {
+    if (props.open) {
+      setInputValue(props.value);
+    }
+  });
+
+  return (
+    <Dialog
+      open={props.open}
+      onOpenChange={(open) => {
+        if (!open) props.onCancel();
+      }}
+      title={props.title}
+      footer={(
+        <div class="flex justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={props.onCancel} disabled={props.loading}>
+            {props.cancelText ?? 'Cancel'}
+          </Button>
+          <Button size="sm" variant="default" onClick={() => props.onConfirm(inputValue())} loading={props.loading}>
+            {props.confirmText ?? 'Confirm'}
+          </Button>
+        </div>
+      )}
+    >
+      <div>
+        <label class="block text-xs text-muted-foreground mb-1">{props.label}</label>
+        <input
+          type="text"
+          class="w-full px-3 py-2 text-sm border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+          value={inputValue()}
+          placeholder={props.placeholder}
+          onInput={(e) => setInputValue(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !props.loading) {
+              props.onConfirm(inputValue());
+            } else if (e.key === 'Escape') {
+              props.onCancel();
+            }
+          }}
+          autofocus
+        />
+      </div>
+    </Dialog>
+  );
 }
 
 // ---- helpers ----
@@ -103,6 +164,74 @@ function withChildren(tree: FileItem[], folderPath: string, children: FileItem[]
   return result;
 }
 
+function rewriteSubtreePaths(item: FileItem, fromBase: string, toBase: string): FileItem {
+  const from = normalizePath(fromBase);
+  const to = normalizePath(toBase);
+
+  const rewritePath = (path: string): string => {
+    const normalizedPath = normalizePath(path);
+    if (normalizedPath === from) return to;
+    if (normalizedPath.startsWith(`${from}/`)) return `${to}${normalizedPath.slice(from.length)}`;
+    return normalizedPath;
+  };
+
+  const nextPath = rewritePath(item.path);
+  const nextChildren = item.children?.map((child) => rewriteSubtreePaths(child, from, to));
+
+  return {
+    ...item,
+    id: nextPath,
+    path: nextPath,
+    children: nextChildren,
+  };
+}
+
+function removeItemsFromTree(tree: FileItem[], pathsToRemove: Set<string>): FileItem[] {
+  const visit = (items: FileItem[]): FileItem[] =>
+    items
+      .filter((item) => !pathsToRemove.has(normalizePath(item.path)))
+      .map((item) => {
+        if (item.type !== 'folder' || !item.children?.length) return item;
+        const nextChildren = visit(item.children);
+        if (nextChildren === item.children) return item;
+        return { ...item, children: nextChildren };
+      });
+
+  return visit(tree);
+}
+
+function insertItemToTree(tree: FileItem[], parentPath: string, item: FileItem): FileItem[] {
+  const targetParent = normalizePath(parentPath);
+  const targetItemPath = normalizePath(item.path);
+
+  if (targetParent === '/') {
+    if (tree.some((entry) => normalizePath(entry.path) === targetItemPath)) return tree;
+    return sortFileItems([...tree, item]);
+  }
+
+  const visit = (items: FileItem[]): [FileItem[], boolean] => {
+    let changed = false;
+    const next = items.map((entry) => {
+      if (entry.type !== 'folder') return entry;
+      if (normalizePath(entry.path) === targetParent) {
+        const children = entry.children ?? [];
+        if (children.some((child) => normalizePath(child.path) === targetItemPath)) return entry;
+        changed = true;
+        return { ...entry, children: sortFileItems([...children, item]) };
+      }
+      if (!entry.children?.length) return entry;
+      const [nextChildren, hit] = visit(entry.children);
+      if (!hit) return entry;
+      changed = true;
+      return { ...entry, children: nextChildren };
+    });
+    return [changed ? next : items, changed];
+  };
+
+  const [nextTree] = visit(tree);
+  return nextTree;
+}
+
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
 const SNIFF_BYTES = 64 * 1024;
 const FAB_SIZE = 44;
@@ -115,12 +244,14 @@ const FILE_PREVIEW_WINDOW_Z_INDEX = 45;
 export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
+  const notification = useNotification();
 
   // -- browser state --
   const [browserOpen, setBrowserOpen] = createSignal(false);
   const [files, setFiles] = createSignal<FileItem[]>([]);
   const [loading, setLoading] = createSignal(false);
   const [resetSeq, setResetSeq] = createSignal(0);
+  const [currentBrowserPath, setCurrentBrowserPath] = createSignal('/');
 
   // -- preview state --
   const [previewOpen, setPreviewOpen] = createSignal(false);
@@ -130,6 +261,25 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   const [previewLoading, setPreviewLoading] = createSignal(false);
   const [previewError, setPreviewError] = createSignal<string | null>(null);
   const [previewMode, setPreviewMode] = createSignal<'text' | 'image' | 'binary' | 'unsupported'>('unsupported');
+
+  // -- context menu actions --
+  const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
+  const [deleteDialogItems, setDeleteDialogItems] = createSignal<FileItem[]>([]);
+  const [deleteLoading, setDeleteLoading] = createSignal(false);
+
+  const [renameDialogOpen, setRenameDialogOpen] = createSignal(false);
+  const [renameDialogItem, setRenameDialogItem] = createSignal<FileItem | null>(null);
+  const [renameLoading, setRenameLoading] = createSignal(false);
+
+  const [moveToDialogOpen, setMoveToDialogOpen] = createSignal(false);
+  const [moveToDialogItem, setMoveToDialogItem] = createSignal<FileItem | null>(null);
+  const [moveToLoading, setMoveToLoading] = createSignal(false);
+
+  const [copyToDialogOpen, setCopyToDialogOpen] = createSignal(false);
+  const [copyToDialogItem, setCopyToDialogItem] = createSignal<FileItem | null>(null);
+  const [copyToLoading, setCopyToLoading] = createSignal(false);
+
+  const [duplicateLoading, setDuplicateLoading] = createSignal(false);
 
   // -- FAB position (px from container top-left) --
   // null = use default CSS position (bottom-right)
@@ -152,6 +302,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
     if (!enabled || !wd) return;
     cache = new Map();
     setFiles([]);
+    setCurrentBrowserPath(wd);
     setResetSeq((n) => n + 1);
     void loadPathChain(wd);
   });
@@ -206,6 +357,316 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
       if (seq === dirReqSeq) setLoading(false);
     }
   }
+
+  const getParentDir = (filePath: string): string => {
+    const p = normalizePath(filePath);
+    const lastSlash = p.lastIndexOf('/');
+    if (lastSlash <= 0) return '/';
+    return p.slice(0, lastSlash) || '/';
+  };
+
+  const fileNameFromPath = (path: string): string => {
+    const p = normalizePath(path);
+    if (p === '/') return '';
+    return p.slice(p.lastIndexOf('/') + 1);
+  };
+
+  const rewriteCachePathPrefix = (fromPrefix: string, toPrefix: string) => {
+    const from = normalizePath(fromPrefix);
+    const to = normalizePath(toPrefix);
+    if (from === to) return;
+
+    const captured: Array<[string, FileItem[]]> = [];
+    for (const [key, value] of cache.entries()) {
+      const normalizedKey = normalizePath(key);
+      if (normalizedKey === from || normalizedKey.startsWith(`${from}/`)) {
+        captured.push([normalizedKey, value]);
+      }
+    }
+
+    if (captured.length <= 0) return;
+
+    for (const [oldKey] of captured) {
+      cache.delete(oldKey);
+    }
+
+    for (const [oldKey, items] of captured) {
+      const newKey = oldKey === from ? to : `${to}${oldKey.slice(from.length)}`;
+      cache.set(newKey, sortFileItems(items.map((item) => rewriteSubtreePaths(item, from, to))));
+    }
+  };
+
+  const applyLocalRelocate = (item: FileItem, finalDestPath: string) => {
+    const from = normalizePath(item.path);
+    const to = normalizePath(finalDestPath);
+    const nextName = fileNameFromPath(to) || item.name;
+    const movedItem = {
+      ...rewriteSubtreePaths(item, from, to),
+      id: to,
+      path: to,
+      name: nextName,
+      extension: item.type === 'file' ? extNoDot(nextName) : undefined,
+    } satisfies FileItem;
+
+    const srcDir = getParentDir(from);
+    const destDir = getParentDir(to);
+
+    setFiles((prev) => {
+      const removed = removeItemsFromTree(prev, new Set([from]));
+      return insertItemToTree(removed, destDir, movedItem);
+    });
+
+    const srcCached = cache.get(srcDir);
+    if (srcCached) {
+      cache.set(srcDir, srcCached.filter((cachedItem) => normalizePath(cachedItem.path) !== from));
+    }
+
+    const destCached = cache.get(destDir);
+    if (destCached) {
+      const merged = destCached.filter((cachedItem) => normalizePath(cachedItem.path) !== to);
+      cache.set(destDir, sortFileItems([...merged, movedItem]));
+    }
+
+    if (item.type === 'folder') {
+      rewriteCachePathPrefix(from, to);
+    }
+  };
+
+  const applyLocalCopy = (item: FileItem, finalDestPath: string) => {
+    const from = normalizePath(item.path);
+    const to = normalizePath(finalDestPath);
+    const destDir = getParentDir(to);
+    const nextName = fileNameFromPath(to) || item.name;
+    const copiedItem = {
+      ...rewriteSubtreePaths(item, from, to),
+      id: to,
+      path: to,
+      name: nextName,
+      extension: item.type === 'file' ? extNoDot(nextName) : undefined,
+    } satisfies FileItem;
+
+    setFiles((prev) => insertItemToTree(prev, destDir, copiedItem));
+
+    const destCached = cache.get(destDir);
+    if (destCached && !destCached.some((cachedItem) => normalizePath(cachedItem.path) === to)) {
+      cache.set(destDir, sortFileItems([...destCached, copiedItem]));
+    }
+  };
+
+  const handleDelete = async (items: FileItem[]) => {
+    const client = protocol.client();
+    if (!client) {
+      notification.error('Delete failed', 'Connection is not ready.');
+      return;
+    }
+    if (items.length <= 0) return;
+
+    setDeleteLoading(true);
+    setDeleteDialogOpen(false);
+
+    try {
+      for (const item of items) {
+        await rpc.fs.delete({ path: item.path, recursive: item.type === 'folder' });
+      }
+
+      const pathsToRemove = new Set(items.map((item) => normalizePath(item.path)));
+      const removedRoots = Array.from(pathsToRemove);
+      const shouldRemovePath = (path: string) => {
+        const normalizedPath = normalizePath(path);
+        return removedRoots.some((root) => normalizedPath === root || normalizedPath.startsWith(`${root}/`));
+      };
+
+      setFiles((prev) => removeItemsFromTree(prev, pathsToRemove));
+
+      for (const key of Array.from(cache.keys())) {
+        if (shouldRemovePath(key)) {
+          cache.delete(key);
+          continue;
+        }
+        const cached = cache.get(key);
+        if (!cached) continue;
+        const nextCached = cached.filter((cachedItem) => !shouldRemovePath(cachedItem.path));
+        if (nextCached.length !== cached.length) {
+          cache.set(key, nextCached);
+        }
+      }
+
+      notification.success(
+        items.length === 1 ? 'Deleted' : 'Delete completed',
+        items.length === 1 ? `"${items[0]!.name}" deleted.` : `${items.length} items deleted.`,
+      );
+    } catch (e) {
+      notification.error('Delete failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleRename = async (item: FileItem, newName: string) => {
+    const client = protocol.client();
+    const trimmedName = newName.trim();
+    if (!client) {
+      notification.error('Rename failed', 'Connection is not ready.');
+      return;
+    }
+    if (!trimmedName) return;
+
+    if (trimmedName === item.name) {
+      setRenameDialogOpen(false);
+      return;
+    }
+
+    const parentDir = getParentDir(item.path);
+    const newPath = parentDir === '/' ? `/${trimmedName}` : `${parentDir}/${trimmedName}`;
+
+    setRenameLoading(true);
+    setRenameDialogOpen(false);
+
+    try {
+      await rpc.fs.rename({ oldPath: item.path, newPath });
+      applyLocalRelocate(item, newPath);
+      notification.success('Renamed', `"${item.name}" renamed to "${trimmedName}".`);
+    } catch (e) {
+      notification.error('Rename failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setRenameLoading(false);
+    }
+  };
+
+  const duplicateOne = async (
+    item: FileItem,
+  ): Promise<{ ok: true; newName: string } | { ok: false }> => {
+    const client = protocol.client();
+    if (!client) return { ok: false };
+
+    const parentDir = getParentDir(item.path);
+    const baseName = item.name;
+    const ext = baseName.includes('.') ? baseName.slice(baseName.lastIndexOf('.')) : '';
+    const nameWithoutExt = ext ? baseName.slice(0, baseName.lastIndexOf('.')) : baseName;
+    const newName = `${nameWithoutExt} (copy)${ext}`;
+    const destPath = parentDir === '/' ? `/${newName}` : `${parentDir}/${newName}`;
+
+    try {
+      await rpc.fs.copy({ sourcePath: item.path, destPath });
+      applyLocalCopy(item, destPath);
+      return { ok: true, newName };
+    } catch (e) {
+      notification.error('Duplicate failed', e instanceof Error ? e.message : String(e));
+      return { ok: false };
+    }
+  };
+
+  const handleMoveTo = async (item: FileItem, destDirPath: string) => {
+    const client = protocol.client();
+    if (!client) {
+      notification.error('Move failed', 'Connection is not ready.');
+      return;
+    }
+    if (!destDirPath.trim()) return;
+
+    const destDir = normalizePath(destDirPath);
+    const finalDestPath = destDir === '/' ? `/${item.name}` : `${destDir}/${item.name}`;
+    if (finalDestPath === normalizePath(item.path)) {
+      setMoveToDialogOpen(false);
+      return;
+    }
+
+    setMoveToLoading(true);
+    setMoveToDialogOpen(false);
+
+    try {
+      await rpc.fs.rename({ oldPath: item.path, newPath: finalDestPath });
+      applyLocalRelocate(item, finalDestPath);
+      notification.success('Moved', `"${item.name}" moved to "${finalDestPath}".`);
+    } catch (e) {
+      notification.error('Move failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setMoveToLoading(false);
+    }
+  };
+
+  const handleCopyTo = async (item: FileItem, destDirPath: string, destFileName: string) => {
+    const client = protocol.client();
+    const trimmedDestName = destFileName.trim();
+    if (!client) {
+      notification.error('Copy failed', 'Connection is not ready.');
+      return;
+    }
+    if (!destDirPath.trim() || !trimmedDestName) return;
+
+    const destDir = normalizePath(destDirPath);
+    const finalDestPath = destDir === '/' ? `/${trimmedDestName}` : `${destDir}/${trimmedDestName}`;
+    if (finalDestPath === normalizePath(item.path)) {
+      setCopyToDialogOpen(false);
+      return;
+    }
+
+    setCopyToLoading(true);
+    setCopyToDialogOpen(false);
+
+    try {
+      await rpc.fs.copy({ sourcePath: item.path, destPath: finalDestPath });
+      applyLocalCopy(item, finalDestPath);
+      notification.success('Copied', `"${item.name}" copied to "${finalDestPath}".`);
+    } catch (e) {
+      notification.error('Copy failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setCopyToLoading(false);
+    }
+  };
+
+  const ctxMenu: ContextMenuCallbacks = {
+    onDelete: (items) => {
+      setDeleteDialogItems(items);
+      setDeleteDialogOpen(true);
+    },
+    onRename: (item) => {
+      setRenameDialogItem(item);
+      setRenameDialogOpen(true);
+    },
+    onDuplicate: (items) => {
+      void (async () => {
+        if (duplicateLoading()) return;
+        if (!protocol.client()) {
+          notification.error('Duplicate failed', 'Connection is not ready.');
+          return;
+        }
+        setDuplicateLoading(true);
+        try {
+          let okCount = 0;
+          let lastNewName: string | null = null;
+          for (const item of items) {
+            const ret = await duplicateOne(item);
+            if (ret.ok) {
+              okCount += 1;
+              lastNewName = ret.newName;
+            }
+          }
+
+          if (okCount <= 0) return;
+          if (okCount === 1) {
+            notification.success('Duplicated', lastNewName ? `Created "${lastNewName}".` : 'Duplicate completed.');
+            return;
+          }
+          notification.success('Duplicate completed', `${okCount} items duplicated.`);
+        } finally {
+          setDuplicateLoading(false);
+        }
+      })();
+    },
+    onMoveTo: (items) => {
+      if (items.length > 0) {
+        setMoveToDialogItem(items[0]);
+        setMoveToDialogOpen(true);
+      }
+    },
+    onCopyTo: (items) => {
+      if (items.length > 0) {
+        setCopyToDialogItem(items[0]);
+        setCopyToDialogOpen(true);
+      }
+    },
+  };
 
   // -- preview --
   let previewReqSeq = 0;
@@ -475,11 +936,13 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
                 instanceId="chat-fab-files"
                 onNavigate={(path) => {
                   const target = normalizePath(path);
+                  setCurrentBrowserPath(target);
                   void (async () => {
                     await loadPathChain(target);
                   })();
                 }}
                 onOpen={(item) => void openPreview(item)}
+                contextMenuCallbacks={ctxMenu}
                 class="h-full border-0 rounded-none shadow-none"
               />
             )}
@@ -546,6 +1009,85 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
           </div>
         </div>
       </FloatingWindow>
+
+      <ConfirmDialog
+        open={deleteDialogOpen()}
+        onOpenChange={(open) => {
+          if (!open) setDeleteDialogOpen(false);
+        }}
+        title="Delete"
+        confirmText="Delete"
+        variant="destructive"
+        loading={deleteLoading()}
+        onConfirm={() => void handleDelete(deleteDialogItems())}
+      >
+        <div class="text-sm text-foreground">
+          <Show
+            when={deleteDialogItems().length === 1}
+            fallback={(
+              <>
+                Are you sure you want to delete <span class="font-semibold">{deleteDialogItems().length} items</span>?
+              </>
+            )}
+          >
+            Are you sure you want to delete <span class="font-semibold">"{deleteDialogItems()[0]?.name}"</span>?
+          </Show>
+        </div>
+      </ConfirmDialog>
+
+      <InputDialog
+        open={renameDialogOpen()}
+        title="Rename"
+        label="New name"
+        value={renameDialogItem()?.name ?? ''}
+        loading={renameLoading()}
+        onConfirm={(newName) => {
+          const item = renameDialogItem();
+          if (item) void handleRename(item, newName);
+        }}
+        onCancel={() => setRenameDialogOpen(false)}
+      />
+
+      <DirectoryPicker
+        open={moveToDialogOpen()}
+        onOpenChange={(open) => {
+          if (!open) setMoveToDialogOpen(false);
+        }}
+        files={files()}
+        initialPath={currentBrowserPath()}
+        homeLabel="Home"
+        title="Move To"
+        confirmText="Move"
+        onSelect={(dirPath) => {
+          const item = moveToDialogItem();
+          if (item) void handleMoveTo(item, dirPath);
+        }}
+      />
+
+      <FileSavePicker
+        open={copyToDialogOpen()}
+        onOpenChange={(open) => {
+          if (!open) setCopyToDialogOpen(false);
+        }}
+        files={files()}
+        initialPath={currentBrowserPath()}
+        homeLabel="Home"
+        initialFileName={copyToDialogItem()?.name ?? ''}
+        title="Copy To"
+        confirmText="Copy"
+        onSave={(dirPath, fileName) => {
+          const item = copyToDialogItem();
+          if (item) void handleCopyTo(item, dirPath, fileName);
+        }}
+      />
+
+      <Show when={duplicateLoading() || moveToLoading() || copyToLoading()}>
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 pointer-events-none">
+          <div class="bg-background border border-border rounded-lg shadow-lg px-4 py-3 text-sm">
+            {duplicateLoading() ? 'Duplicating...' : moveToLoading() ? 'Moving...' : 'Copying...'}
+          </div>
+        </div>
+      </Show>
     </>
   );
 }
