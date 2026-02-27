@@ -1049,7 +1049,7 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
 }
 
 .chat-tool-apply-patch-detail-line-del {
-  background: color-mix(in srgb, var(--destructive) 9%, transparent);
+  background: rgb(239 68 68 / 0.1);
 }
 
 .chat-tool-apply-patch-detail-line-meta {
