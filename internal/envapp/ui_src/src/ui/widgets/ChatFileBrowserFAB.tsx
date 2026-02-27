@@ -5,12 +5,26 @@ import { Motion } from 'solid-motionone';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { Folder } from '@floegence/floe-webapp-core/icons';
 import { FileBrowser, type ContextMenuCallbacks, type FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Button, ConfirmDialog, Dialog, DirectoryPicker, FileSavePicker, FloatingWindow } from '@floegence/floe-webapp-core/ui';
+import { ConfirmDialog, DirectoryPicker, FileSavePicker, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { useRedevenRpc, type FsFileInfo } from '../protocol/redeven_v1';
+import { useRedevenRpc } from '../protocol/redeven_v1';
 import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { previewModeByName, isLikelyTextContent, getExtDot, mimeFromExtDot } from '../utils/filePreview';
+import { InputDialog } from './InputDialog';
+import {
+  extNoDot,
+  fileNameFromPath,
+  getParentDir,
+  insertItemToTree,
+  normalizePath,
+  removeItemsFromTree,
+  rewriteCachePathPrefix,
+  rewriteSubtreePaths,
+  sortFileItems,
+  toFileItem,
+  withChildren,
+} from './FileBrowserShared';
 
 export interface ChatFileBrowserFABProps {
   workingDir: string;
@@ -20,75 +34,7 @@ export interface ChatFileBrowserFABProps {
   containerRef?: HTMLElement;
 }
 
-function InputDialog(props: {
-  open: boolean;
-  title: string;
-  label: string;
-  value: string;
-  placeholder?: string;
-  confirmText?: string;
-  cancelText?: string;
-  loading?: boolean;
-  onConfirm: (value: string) => void;
-  onCancel: () => void;
-}) {
-  const [inputValue, setInputValue] = createSignal(props.value);
-
-  createEffect(() => {
-    if (props.open) {
-      setInputValue(props.value);
-    }
-  });
-
-  return (
-    <Dialog
-      open={props.open}
-      onOpenChange={(open) => {
-        if (!open) props.onCancel();
-      }}
-      title={props.title}
-      footer={(
-        <div class="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={props.onCancel} disabled={props.loading}>
-            {props.cancelText ?? 'Cancel'}
-          </Button>
-          <Button size="sm" variant="default" onClick={() => props.onConfirm(inputValue())} loading={props.loading}>
-            {props.confirmText ?? 'Confirm'}
-          </Button>
-        </div>
-      )}
-    >
-      <div>
-        <label class="block text-xs text-muted-foreground mb-1">{props.label}</label>
-        <input
-          type="text"
-          class="w-full px-3 py-2 text-sm border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-          value={inputValue()}
-          placeholder={props.placeholder}
-          onInput={(e) => setInputValue(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !props.loading) {
-              props.onConfirm(inputValue());
-            } else if (e.key === 'Escape') {
-              props.onCancel();
-            }
-          }}
-          autofocus
-        />
-      </div>
-    </Dialog>
-  );
-}
-
 // ---- helpers ----
-
-function normalizePath(path: string): string {
-  const raw = String(path ?? '').trim();
-  if (!raw) return '/';
-  const p = raw.startsWith('/') ? raw : `/${raw}`;
-  if (p === '/') return '/';
-  return p.endsWith('/') ? p.replace(/\/+$/, '') || '/' : p;
-}
 
 function normalizeAbsolutePath(path: string): string {
   const raw = String(path ?? '').trim();
@@ -108,128 +54,6 @@ function toVirtualWorkingDirPath(workingDir: string, homePath?: string): string 
     return normalizePath(normalizedWorkingDirAbs.slice(fsRoot.length));
   }
   return normalized;
-}
-
-function extNoDot(name: string): string | undefined {
-  const idx = name.lastIndexOf('.');
-  if (idx <= 0) return undefined;
-  return name.slice(idx + 1).toLowerCase();
-}
-
-function toFileItem(entry: FsFileInfo): FileItem {
-  const isDir = !!entry.isDirectory;
-  const name = String(entry.name ?? '');
-  const p = String(entry.path ?? '');
-  const modifiedAtMs = Number(entry.modifiedAt ?? 0);
-  return {
-    id: p,
-    name,
-    type: isDir ? 'folder' : 'file',
-    path: p,
-    size: Number.isFinite(entry.size) ? entry.size : undefined,
-    modifiedAt: Number.isFinite(modifiedAtMs) && modifiedAtMs > 0 ? new Date(modifiedAtMs) : undefined,
-    extension: isDir ? undefined : extNoDot(name),
-  };
-}
-
-function sortFileItems(items: FileItem[]): FileItem[] {
-  return [...items].sort((a, b) =>
-    a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'folder' ? -1 : 1,
-  );
-}
-
-/** Recursively set children of a folder node inside a file tree. */
-function withChildren(tree: FileItem[], folderPath: string, children: FileItem[]): FileItem[] {
-  const target = folderPath.trim() || '/';
-  if (target === '/' || target === '') return children;
-
-  const visit = (items: FileItem[]): [FileItem[], boolean] => {
-    let changed = false;
-    const next = items.map((it) => {
-      if (it.type !== 'folder') return it;
-      if (it.path === target) {
-        changed = true;
-        return { ...it, children };
-      }
-      if (!it.children || it.children.length === 0) return it;
-      const [nextChildren, hit] = visit(it.children);
-      if (!hit) return it;
-      changed = true;
-      return { ...it, children: nextChildren };
-    });
-    return [changed ? next : items, changed];
-  };
-
-  const [result] = visit(tree);
-  return result;
-}
-
-function rewriteSubtreePaths(item: FileItem, fromBase: string, toBase: string): FileItem {
-  const from = normalizePath(fromBase);
-  const to = normalizePath(toBase);
-
-  const rewritePath = (path: string): string => {
-    const normalizedPath = normalizePath(path);
-    if (normalizedPath === from) return to;
-    if (normalizedPath.startsWith(`${from}/`)) return `${to}${normalizedPath.slice(from.length)}`;
-    return normalizedPath;
-  };
-
-  const nextPath = rewritePath(item.path);
-  const nextChildren = item.children?.map((child) => rewriteSubtreePaths(child, from, to));
-
-  return {
-    ...item,
-    id: nextPath,
-    path: nextPath,
-    children: nextChildren,
-  };
-}
-
-function removeItemsFromTree(tree: FileItem[], pathsToRemove: Set<string>): FileItem[] {
-  const visit = (items: FileItem[]): FileItem[] =>
-    items
-      .filter((item) => !pathsToRemove.has(normalizePath(item.path)))
-      .map((item) => {
-        if (item.type !== 'folder' || !item.children?.length) return item;
-        const nextChildren = visit(item.children);
-        if (nextChildren === item.children) return item;
-        return { ...item, children: nextChildren };
-      });
-
-  return visit(tree);
-}
-
-function insertItemToTree(tree: FileItem[], parentPath: string, item: FileItem): FileItem[] {
-  const targetParent = normalizePath(parentPath);
-  const targetItemPath = normalizePath(item.path);
-
-  if (targetParent === '/') {
-    if (tree.some((entry) => normalizePath(entry.path) === targetItemPath)) return tree;
-    return sortFileItems([...tree, item]);
-  }
-
-  const visit = (items: FileItem[]): [FileItem[], boolean] => {
-    let changed = false;
-    const next = items.map((entry) => {
-      if (entry.type !== 'folder') return entry;
-      if (normalizePath(entry.path) === targetParent) {
-        const children = entry.children ?? [];
-        if (children.some((child) => normalizePath(child.path) === targetItemPath)) return entry;
-        changed = true;
-        return { ...entry, children: sortFileItems([...children, item]) };
-      }
-      if (!entry.children?.length) return entry;
-      const [nextChildren, hit] = visit(entry.children);
-      if (!hit) return entry;
-      changed = true;
-      return { ...entry, children: nextChildren };
-    });
-    return [changed ? next : items, changed];
-  };
-
-  const [nextTree] = visit(tree);
-  return nextTree;
 }
 
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
@@ -358,44 +182,6 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
     }
   }
 
-  const getParentDir = (filePath: string): string => {
-    const p = normalizePath(filePath);
-    const lastSlash = p.lastIndexOf('/');
-    if (lastSlash <= 0) return '/';
-    return p.slice(0, lastSlash) || '/';
-  };
-
-  const fileNameFromPath = (path: string): string => {
-    const p = normalizePath(path);
-    if (p === '/') return '';
-    return p.slice(p.lastIndexOf('/') + 1);
-  };
-
-  const rewriteCachePathPrefix = (fromPrefix: string, toPrefix: string) => {
-    const from = normalizePath(fromPrefix);
-    const to = normalizePath(toPrefix);
-    if (from === to) return;
-
-    const captured: Array<[string, FileItem[]]> = [];
-    for (const [key, value] of cache.entries()) {
-      const normalizedKey = normalizePath(key);
-      if (normalizedKey === from || normalizedKey.startsWith(`${from}/`)) {
-        captured.push([normalizedKey, value]);
-      }
-    }
-
-    if (captured.length <= 0) return;
-
-    for (const [oldKey] of captured) {
-      cache.delete(oldKey);
-    }
-
-    for (const [oldKey, items] of captured) {
-      const newKey = oldKey === from ? to : `${to}${oldKey.slice(from.length)}`;
-      cache.set(newKey, sortFileItems(items.map((item) => rewriteSubtreePaths(item, from, to))));
-    }
-  };
-
   const applyLocalRelocate = (item: FileItem, finalDestPath: string) => {
     const from = normalizePath(item.path);
     const to = normalizePath(finalDestPath);
@@ -428,7 +214,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
     }
 
     if (item.type === 'folder') {
-      rewriteCachePathPrefix(from, to);
+      rewriteCachePathPrefix(cache, from, to);
     }
   };
 
