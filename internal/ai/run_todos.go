@@ -19,7 +19,18 @@ func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoIte
 	if endpointID == "" || threadID == "" {
 		return nil, errors.New("invalid thread context")
 	}
-	normalized, err := normalizeTodoItems(todos)
+	hydratedTodos, hydratedCount, missingCount, err := r.hydrateTodoContentFromSnapshot(ctx, endpointID, threadID, todos)
+	if err != nil {
+		return nil, err
+	}
+	if hydratedCount > 0 {
+		r.persistRunEvent("todos.args_hydrated", RealtimeStreamKindLifecycle, map[string]any{
+			"hydrated_count":          hydratedCount,
+			"missing_content_count":   missingCount,
+			"remaining_missing_count": max(0, missingCount-hydratedCount),
+		})
+	}
+	normalized, err := normalizeTodoItems(hydratedTodos)
 	if err != nil {
 		return nil, err
 	}
@@ -62,4 +73,54 @@ func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoIte
 		result["explanation"] = txt
 	}
 	return result, nil
+}
+
+func (r *run) hydrateTodoContentFromSnapshot(ctx context.Context, endpointID string, threadID string, todos []TodoItem) ([]TodoItem, int, int, error) {
+	if len(todos) == 0 {
+		return nil, 0, 0, nil
+	}
+	out := append([]TodoItem(nil), todos...)
+	missingContent := 0
+	for i := range out {
+		if strings.TrimSpace(out[i].Content) == "" {
+			missingContent++
+		}
+	}
+	if missingContent == 0 {
+		return out, 0, 0, nil
+	}
+	snapshot, err := r.threadsDB.GetThreadTodosSnapshot(ctx, endpointID, threadID)
+	if err != nil {
+		return nil, 0, missingContent, err
+	}
+	existingTodos, err := decodeTodoItemsJSON(snapshot.TodosJSON)
+	if err != nil {
+		return out, 0, missingContent, nil
+	}
+	contentByID := make(map[string]string, len(existingTodos))
+	for _, item := range existingTodos {
+		id := strings.TrimSpace(item.ID)
+		content := strings.TrimSpace(item.Content)
+		if id == "" || content == "" {
+			continue
+		}
+		contentByID[id] = content
+	}
+	hydrated := 0
+	for i := range out {
+		if strings.TrimSpace(out[i].Content) != "" {
+			continue
+		}
+		id := strings.TrimSpace(out[i].ID)
+		if id == "" {
+			continue
+		}
+		content := strings.TrimSpace(contentByID[id])
+		if content == "" {
+			continue
+		}
+		out[i].Content = content
+		hydrated++
+	}
+	return out, hydrated, missingContent, nil
 }
