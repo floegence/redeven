@@ -2729,43 +2729,29 @@ func (r *run) toolApplyPatch(ctx context.Context, patchText string) (any, error)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := applyUnifiedDiff(workingDirAbs, patchText); err != nil {
+	parsed, err := applyUnifiedDiff(workingDirAbs, patchText)
+	if err != nil {
 		return nil, err
 	}
 
-	filesChanged, hunks, additions, deletions := summarizeUnifiedDiff(patchText)
+	filesChanged, hunks, additions, deletions, files := summarizePatchFiles(parsed.files)
 	return map[string]any{
-		"files_changed": filesChanged,
-		"hunks":         hunks,
-		"additions":     additions,
-		"deletions":     deletions,
+		"files_changed":     filesChanged,
+		"hunks":             hunks,
+		"additions":         additions,
+		"deletions":         deletions,
+		"input_format":      string(parsed.inputFormat),
+		"normalized_format": string(parsed.normalizedFormat),
+		"files":             files,
 	}, nil
 }
 
 func summarizeUnifiedDiff(patchText string) (filesChanged int, hunks int, additions int, deletions int) {
-	diffs, err := parsePatchFiles(patchText)
+	parsed, err := parsePatchText(patchText)
 	if err != nil {
 		return 0, 0, 0, 0
 	}
-	filesChanged = len(diffs)
-	for _, fd := range diffs {
-		for _, h := range fd.hunks {
-			if len(h.lines) > 0 {
-				hunks++
-			}
-			for _, line := range h.lines {
-				if line == "" {
-					continue
-				}
-				switch line[0] {
-				case '+':
-					additions++
-				case '-':
-					deletions++
-				}
-			}
-		}
-	}
+	filesChanged, hunks, additions, deletions, _ = summarizePatchFiles(parsed.files)
 	return filesChanged, hunks, additions, deletions
 }
 

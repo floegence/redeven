@@ -876,9 +876,12 @@ type ApplyPatchFileSummary = {
   deletions: number;
 };
 
+type ApplyPatchFormat = 'begin_patch' | 'unified_diff' | 'unknown';
+
 type ApplyPatchDisplay = {
   patchText: string;
-  format: 'codex' | 'unified' | 'unknown';
+  inputFormat: ApplyPatchFormat;
+  normalizedFormat: ApplyPatchFormat;
   files: ApplyPatchFileSummary[];
   filesChanged: number;
   hunks: number;
@@ -1125,6 +1128,45 @@ function readOptionalNonNegativeInt(value: unknown): number | null {
   return Math.floor(parsed);
 }
 
+function readApplyPatchFormat(value: unknown): ApplyPatchFormat {
+  const format = String(value ?? '').trim().toLowerCase();
+  if (format === 'begin_patch') return 'begin_patch';
+  if (format === 'unified_diff') return 'unified_diff';
+  return 'unknown';
+}
+
+function parseApplyPatchFilesFromResult(value: unknown): ApplyPatchFileSummary[] {
+  if (!Array.isArray(value)) return [];
+  const files: ApplyPatchFileSummary[] = [];
+  for (const item of value) {
+    const rec = asRecord(item);
+    if (!rec) continue;
+    const changeRaw = String(rec.change ?? '').trim().toLowerCase();
+    const change: ApplyPatchChangeKind = (
+      changeRaw === 'added' ||
+      changeRaw === 'modified' ||
+      changeRaw === 'deleted' ||
+      changeRaw === 'renamed'
+    ) ? changeRaw : 'modified';
+    const oldPath = trimDiffPathPrefix(String(rec.old_path ?? rec.oldPath ?? ''));
+    const newPath = trimDiffPathPrefix(String(rec.new_path ?? rec.newPath ?? ''));
+    let path = trimDiffPathPrefix(String(rec.path ?? ''));
+    if (!path || path === '/dev/null') {
+      path = newPath && newPath !== '/dev/null' ? newPath : oldPath;
+    }
+    files.push({
+      path: path === '/dev/null' ? '' : path,
+      oldPath,
+      newPath,
+      change,
+      hunks: readOptionalNonNegativeInt(rec.hunks) ?? 0,
+      additions: readOptionalNonNegativeInt(rec.additions) ?? 0,
+      deletions: readOptionalNonNegativeInt(rec.deletions) ?? 0,
+    });
+  }
+  return files;
+}
+
 function buildApplyPatchDisplay(block: ToolCallBlockType): ApplyPatchDisplay | null {
   if (String(block.toolName ?? '').trim() !== APPLY_PATCH_TOOL_NAME) {
     return null;
@@ -1134,14 +1176,26 @@ function buildApplyPatchDisplay(block: ToolCallBlockType): ApplyPatchDisplay | n
   const rawPatchText = typeof args?.patch === 'string' ? args.patch : '';
   const patchText = normalizePatchTextForDisplay(rawPatchText).trim();
 
-  let format: ApplyPatchDisplay['format'] = 'unknown';
-  let files: ApplyPatchFileSummary[] = [];
+  let inferredInputFormat: ApplyPatchFormat = 'unknown';
+  let files: ApplyPatchFileSummary[] = parseApplyPatchFilesFromResult(result?.files);
   if (patchText.startsWith('*** Begin Patch')) {
-    format = 'codex';
-    files = parseCodexPatchFiles(patchText);
+    inferredInputFormat = 'begin_patch';
+    if (files.length === 0) {
+      files = parseCodexPatchFiles(patchText);
+    }
   } else if (patchText.includes('diff --git ')) {
-    format = 'unified';
-    files = parseUnifiedPatchFiles(patchText);
+    inferredInputFormat = 'unified_diff';
+    if (files.length === 0) {
+      files = parseUnifiedPatchFiles(patchText);
+    }
+  }
+
+  const resultInputFormat = readApplyPatchFormat(result?.input_format ?? result?.inputFormat);
+  const resultNormalizedFormat = readApplyPatchFormat(result?.normalized_format ?? result?.normalizedFormat);
+  const inputFormat = resultInputFormat === 'unknown' ? inferredInputFormat : resultInputFormat;
+  let normalizedFormat: ApplyPatchFormat = resultNormalizedFormat;
+  if (normalizedFormat === 'unknown') {
+    normalizedFormat = inputFormat === 'unknown' ? 'begin_patch' : inputFormat;
   }
 
   const derivedFilesChanged = files.length;
@@ -1156,7 +1210,8 @@ function buildApplyPatchDisplay(block: ToolCallBlockType): ApplyPatchDisplay | n
 
   return {
     patchText,
-    format,
+    inputFormat,
+    normalizedFormat,
     files,
     filesChanged,
     hunks,
@@ -1643,11 +1698,11 @@ async function copyToolText(text: string): Promise<boolean> {
   }
 }
 
-function applyPatchFormatLabel(format: ApplyPatchDisplay['format']): string {
+function applyPatchFormatLabel(format: ApplyPatchFormat): string {
   switch (format) {
-    case 'codex':
+    case 'begin_patch':
       return 'Begin Patch';
-    case 'unified':
+    case 'unified_diff':
       return 'Unified Diff';
     default:
       return 'Patch';
@@ -1713,7 +1768,14 @@ const ApplyPatchToolCard: Component<ApplyPatchToolCardProps> = (props) => {
       <div class="chat-tool-apply-patch-head">
         <div class="chat-tool-apply-patch-head-main">
           <span class="chat-tool-apply-patch-badge">Patch</span>
-          <span class="chat-tool-apply-patch-format">{applyPatchFormatLabel(props.display.format)}</span>
+          <span class="chat-tool-apply-patch-format">
+            Input {applyPatchFormatLabel(props.display.inputFormat)}
+          </span>
+          <Show when={props.display.normalizedFormat !== props.display.inputFormat}>
+            <span class="chat-tool-apply-patch-format chat-tool-apply-patch-format-normalized">
+              Normalized {applyPatchFormatLabel(props.display.normalizedFormat)}
+            </span>
+          </Show>
           <span class={cn('chat-tool-apply-patch-state', applyPatchStateClass(props.block.status))}>
             <Show when={props.block.status === 'pending' || props.block.status === 'running'}>
               <span class="chat-tool-apply-patch-state-loader">

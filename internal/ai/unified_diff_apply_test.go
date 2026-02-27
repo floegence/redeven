@@ -20,7 +20,7 @@ func TestApplyUnifiedDiff_AcceptsCodexBeginPatchAddFile(t *testing.T) {
 		"*** End Patch",
 	}, "\n")
 
-	if err := applyUnifiedDiff(workingDir, patch); err != nil {
+	if _, err := applyUnifiedDiff(workingDir, patch); err != nil {
 		t.Fatalf("applyUnifiedDiff: %v", err)
 	}
 	got, err := os.ReadFile(filepath.Join(workingDir, "note.txt"))
@@ -56,7 +56,7 @@ func TestApplyUnifiedDiff_CodexUpdateWithoutLineNumbers(t *testing.T) {
 		"*** End Patch",
 	}, "\n")
 
-	if err := applyUnifiedDiff(workingDir, patch); err != nil {
+	if _, err := applyUnifiedDiff(workingDir, patch); err != nil {
 		t.Fatalf("applyUnifiedDiff: %v", err)
 	}
 
@@ -96,5 +96,55 @@ func TestSummarizeUnifiedDiff_CodexPatch(t *testing.T) {
 			additions,
 			deletions,
 		)
+	}
+}
+
+func TestApplyUnifiedDiff_ReportsInputAndNormalizedFormat(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	patch := strings.Join([]string{
+		"diff --git a/note.txt b/note.txt",
+		"new file mode 100644",
+		"--- /dev/null",
+		"+++ b/note.txt",
+		"@@ -0,0 +1 @@",
+		"+hello",
+	}, "\n")
+
+	parsed, err := applyUnifiedDiff(workingDir, patch)
+	if err != nil {
+		t.Fatalf("applyUnifiedDiff: %v", err)
+	}
+	if parsed.inputFormat != patchInputFormatUnifiedDiff {
+		t.Fatalf("inputFormat=%q, want %q", parsed.inputFormat, patchInputFormatUnifiedDiff)
+	}
+	if parsed.normalizedFormat != patchInputFormatBeginPatch {
+		t.Fatalf("normalizedFormat=%q, want %q", parsed.normalizedFormat, patchInputFormatBeginPatch)
+	}
+}
+
+func TestApplyUnifiedDiff_RejectsAbsoluteAndEscapingPatchPaths(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	absolutePatch := strings.Join([]string{
+		"*** Begin Patch",
+		"*** Add File: /tmp/escape.txt",
+		"+hello",
+		"*** End Patch",
+	}, "\n")
+	if _, err := applyUnifiedDiff(workingDir, absolutePatch); err == nil || !strings.Contains(err.Error(), "invalid path") {
+		t.Fatalf("absolute patch err=%v, want invalid path", err)
+	}
+
+	escapePatch := strings.Join([]string{
+		"*** Begin Patch",
+		"*** Add File: ../escape.txt",
+		"+hello",
+		"*** End Patch",
+	}, "\n")
+	if _, err := applyUnifiedDiff(workingDir, escapePatch); err == nil || !strings.Contains(err.Error(), "invalid path") {
+		t.Fatalf("escape patch err=%v, want invalid path", err)
 	}
 }

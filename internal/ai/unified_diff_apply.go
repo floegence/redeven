@@ -33,19 +33,58 @@ type unifiedDiffFile struct {
 
 var unifiedDiffHunkHeaderRE = regexp.MustCompile(`^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@`)
 
+type patchInputFormat string
+
+const (
+	patchInputFormatBeginPatch  patchInputFormat = "begin_patch"
+	patchInputFormatUnifiedDiff patchInputFormat = "unified_diff"
+)
+
+type parsedPatch struct {
+	inputFormat      patchInputFormat
+	normalizedFormat patchInputFormat
+	files            []unifiedDiffFile
+}
+
+type patchFileSummary struct {
+	Path      string `json:"path"`
+	OldPath   string `json:"old_path"`
+	NewPath   string `json:"new_path"`
+	Change    string `json:"change"`
+	Hunks     int    `json:"hunks"`
+	Additions int    `json:"additions"`
+	Deletions int    `json:"deletions"`
+}
+
 func normalizePatchText(patchText string) string {
 	normalized := strings.ReplaceAll(patchText, "\r\n", "\n")
 	normalized = strings.ReplaceAll(normalized, "\r", "\n")
 	return normalized
 }
 
-func parsePatchFiles(patchText string) ([]unifiedDiffFile, error) {
+func parsePatchText(patchText string) (parsedPatch, error) {
 	normalized := normalizePatchText(patchText)
 	trimmed := strings.TrimSpace(normalized)
 	if strings.HasPrefix(trimmed, "*** Begin Patch") {
-		return parseCodexPatch(normalized)
+		files, err := parseCodexPatch(normalized)
+		if err != nil {
+			return parsedPatch{}, err
+		}
+		return parsedPatch{
+			inputFormat:      patchInputFormatBeginPatch,
+			normalizedFormat: patchInputFormatBeginPatch,
+			files:            files,
+		}, nil
 	}
-	return parseUnifiedDiff(normalized)
+	files, err := parseUnifiedDiff(normalized)
+	if err != nil {
+		return parsedPatch{}, err
+	}
+	return parsedPatch{
+		inputFormat:      patchInputFormatUnifiedDiff,
+		normalizedFormat: patchInputFormatBeginPatch,
+		files:            files,
+	}, nil
 }
 
 func isCodexPatchHeader(trimmedLine string) bool {
@@ -391,6 +430,68 @@ func parseUnifiedDiffHunkHeader(line string) (unifiedDiffHunk, error) {
 	}, nil
 }
 
+func summarizePatchFiles(files []unifiedDiffFile) (filesChanged int, hunks int, additions int, deletions int, summaries []patchFileSummary) {
+	filesChanged = len(files)
+	summaries = make([]patchFileSummary, 0, len(files))
+	for _, fd := range files {
+		oldPath := strings.TrimSpace(fd.oldPath)
+		newPath := strings.TrimSpace(fd.newPath)
+		path := newPath
+		if path == "" || path == "/dev/null" {
+			path = oldPath
+		}
+
+		fileHunks := 0
+		fileAdditions := 0
+		fileDeletions := 0
+		for _, h := range fd.hunks {
+			if len(h.lines) > 0 {
+				hunks++
+				fileHunks++
+			}
+			for _, line := range h.lines {
+				if line == "" {
+					continue
+				}
+				switch line[0] {
+				case '+':
+					additions++
+					fileAdditions++
+				case '-':
+					deletions++
+					fileDeletions++
+				}
+			}
+		}
+
+		summaries = append(summaries, patchFileSummary{
+			Path:      path,
+			OldPath:   oldPath,
+			NewPath:   newPath,
+			Change:    classifyPatchFileChange(fd),
+			Hunks:     fileHunks,
+			Additions: fileAdditions,
+			Deletions: fileDeletions,
+		})
+	}
+	return filesChanged, hunks, additions, deletions, summaries
+}
+
+func classifyPatchFileChange(fd unifiedDiffFile) string {
+	oldPath := strings.TrimSpace(fd.oldPath)
+	newPath := strings.TrimSpace(fd.newPath)
+	if fd.isDelete || newPath == "/dev/null" {
+		return "deleted"
+	}
+	if fd.isNew || oldPath == "/dev/null" {
+		return "added"
+	}
+	if oldPath != newPath {
+		return "renamed"
+	}
+	return "modified"
+}
+
 type patchFilePlan struct {
 	oldAbs   string
 	newAbs   string
@@ -400,22 +501,22 @@ type patchFilePlan struct {
 	contents []byte
 }
 
-func applyUnifiedDiff(workingDirAbs string, patchText string) error {
+func applyUnifiedDiff(workingDirAbs string, patchText string) (parsedPatch, error) {
 	workingDirAbs = filepath.Clean(strings.TrimSpace(workingDirAbs))
 	if workingDirAbs == "" || !filepath.IsAbs(workingDirAbs) {
-		return errors.New("invalid working dir")
+		return parsedPatch{}, errors.New("invalid working dir")
 	}
 
-	diffs, err := parsePatchFiles(patchText)
+	parsed, err := parsePatchText(patchText)
 	if err != nil {
-		return err
+		return parsedPatch{}, err
 	}
 
-	plans := make([]patchFilePlan, 0, len(diffs))
-	for _, fd := range diffs {
+	plans := make([]patchFilePlan, 0, len(parsed.files))
+	for _, fd := range parsed.files {
 		plan, err := buildPatchFilePlan(workingDirAbs, fd)
 		if err != nil {
-			return err
+			return parsedPatch{}, err
 		}
 		plans = append(plans, plan)
 	}
@@ -424,23 +525,23 @@ func applyUnifiedDiff(workingDirAbs string, patchText string) error {
 	for _, plan := range plans {
 		if plan.delete {
 			if err := os.Remove(plan.oldAbs); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
+				return parsedPatch{}, err
 			}
 			continue
 		}
 		if plan.write {
 			if err := os.MkdirAll(filepath.Dir(plan.newAbs), 0o755); err != nil {
-				return err
+				return parsedPatch{}, err
 			}
 			if err := atomicWriteFile(plan.newAbs, plan.contents, plan.perm); err != nil {
-				return err
+				return parsedPatch{}, err
 			}
 			if plan.oldAbs != "" && plan.oldAbs != plan.newAbs {
 				_ = os.Remove(plan.oldAbs)
 			}
 		}
 	}
-	return nil
+	return parsed, nil
 }
 
 func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan, error) {
@@ -450,8 +551,14 @@ func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan
 		return patchFilePlan{}, errors.New("invalid diff paths")
 	}
 
-	oldAbs := diffPathToAbs(workingDirAbs, oldPath)
-	newAbs := diffPathToAbs(workingDirAbs, newPath)
+	oldAbs, err := resolvePatchPath(workingDirAbs, oldPath)
+	if err != nil {
+		return patchFilePlan{}, err
+	}
+	newAbs, err := resolvePatchPath(workingDirAbs, newPath)
+	if err != nil {
+		return patchFilePlan{}, err
+	}
 
 	if fd.isDelete || newPath == "/dev/null" {
 		if oldPath == "/dev/null" {
@@ -503,15 +610,24 @@ func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan
 	}, nil
 }
 
-func diffPathToAbs(workingDirAbs string, raw string) string {
+func resolvePatchPath(workingDirAbs string, raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "/dev/null" {
-		return ""
+		return "", nil
 	}
 	if filepath.IsAbs(raw) {
-		return filepath.Clean(raw)
+		return "", fmt.Errorf("invalid path: absolute paths are not allowed in apply_patch: %s", raw)
 	}
-	return filepath.Clean(filepath.Join(workingDirAbs, raw))
+	abs := filepath.Clean(filepath.Join(workingDirAbs, raw))
+	rel, err := filepath.Rel(workingDirAbs, abs)
+	if err != nil {
+		return "", fmt.Errorf("invalid path: cannot resolve %q: %w", raw, err)
+	}
+	rel = filepath.Clean(rel)
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("invalid path: patch path escapes working directory: %s", raw)
+	}
+	return abs, nil
 }
 
 func applyUnifiedDiffHunksToBytes(original []byte, hunks []unifiedDiffHunk) ([]byte, error) {

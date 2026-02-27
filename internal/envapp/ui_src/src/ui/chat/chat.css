@@ -778,6 +778,12 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
   padding: 0.15rem 0.44rem;
 }
 
+.chat-tool-apply-patch-format-normalized {
+  border-color: color-mix(in srgb, var(--primary) 26%, var(--border));
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+}
+
 .chat-tool-apply-patch-state {
   display: inline-flex;
   align-items: center;

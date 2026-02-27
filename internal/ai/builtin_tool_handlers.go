@@ -338,7 +338,7 @@ func builtInToolDefinitions() []ToolDef {
 	defs := []ToolDef{
 		{
 			Name:             "apply_patch",
-			Description:      "Apply a patch to files on the local machine. Supports unified diff (diff --git) and Begin/End Patch formats. Paths are resolved relative to the run working directory unless absolute.",
+			Description:      "Apply a patch to files on the local machine. The canonical protocol is Begin/End Patch; unified diff (diff --git) inputs are normalized into the same execution path. Patch paths must be relative to the run working directory.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"patch": map[string]any{"type": "string"}}, "required": []string{"patch"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         true,

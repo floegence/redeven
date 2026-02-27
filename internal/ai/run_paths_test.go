@@ -152,6 +152,12 @@ func TestToolApplyPatch_CreatesFile(t *testing.T) {
 	if got := int(m["files_changed"].(int)); got != 1 {
 		t.Fatalf("files_changed=%d, want 1", got)
 	}
+	if got := anyToString(m["input_format"]); got != "unified_diff" {
+		t.Fatalf("input_format=%q, want %q", got, "unified_diff")
+	}
+	if got := anyToString(m["normalized_format"]); got != "begin_patch" {
+		t.Fatalf("normalized_format=%q, want %q", got, "begin_patch")
+	}
 	got, err := os.ReadFile(filepath.Join(workingDir, "note.txt"))
 	if err != nil {
 		t.Fatalf("read patched file: %v", err)
