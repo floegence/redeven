@@ -29,6 +29,26 @@ function normalizePath(path: string): string {
   return p.endsWith('/') ? p.replace(/\/+$/, '') || '/' : p;
 }
 
+function normalizeAbsolutePath(path: string): string {
+  const raw = String(path ?? '').trim();
+  if (!raw || !raw.startsWith('/')) return '';
+  return normalizePath(raw);
+}
+
+function toVirtualWorkingDirPath(workingDir: string, homePath?: string): string {
+  const normalized = normalizePath(workingDir);
+  const fsRoot = normalizeAbsolutePath(homePath ?? '');
+  if (!fsRoot || fsRoot === '/') return normalized;
+
+  const normalizedWorkingDirAbs = normalizeAbsolutePath(workingDir);
+  if (!normalizedWorkingDirAbs) return normalized;
+  if (normalizedWorkingDirAbs === fsRoot) return '/';
+  if (normalizedWorkingDirAbs.startsWith(`${fsRoot}/`)) {
+    return normalizePath(normalizedWorkingDirAbs.slice(fsRoot.length));
+  }
+  return normalized;
+}
+
 function extNoDot(name: string): string | undefined {
   const idx = name.lastIndexOf('.');
   if (idx <= 0) return undefined;
@@ -122,12 +142,12 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   let dirReqSeq = 0;
   let lastLoadedPath = '/';
 
-  const initialPath = createMemo(() => normalizePath(props.workingDir));
+  const initialPath = createMemo(() => toVirtualWorkingDirPath(props.workingDir, props.homePath));
 
   createEffect(() => {
     const wd = initialPath();
     const enabled = props.enabled ?? true;
-    if (!enabled || !wd || wd === '/') return;
+    if (!enabled || !wd) return;
     cache = new Map();
     setFiles([]);
     setResetSeq((n) => n + 1);
@@ -165,6 +185,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
     const p = normalizePath(path);
     const parts = p.split('/').filter(Boolean);
     const chain: string[] = ['/'];
+    let reachedTarget = p === '/';
     for (let i = 0; i < parts.length; i += 1) {
       chain.push(`/${parts.slice(0, i + 1).join('/')}`);
     }
@@ -172,9 +193,13 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
     try {
       for (const dir of chain) {
         const res = await loadDirOnce(dir, seq);
-        if (res === 'error') break;
+        if (res === 'error') {
+          reachedTarget = false;
+          break;
+        }
+        if (dir === p) reachedTarget = true;
       }
-      if (seq === dirReqSeq) lastLoadedPath = p;
+      if (seq === dirReqSeq) lastLoadedPath = reachedTarget ? p : '/';
     } finally {
       if (seq === dirReqSeq) setLoading(false);
     }
@@ -370,9 +395,9 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
       snapToEdge(fabLeft()!, fabTop()!);
     } else {
       // it was a click — open file browser
-      if (!untrack(initialPath) || untrack(initialPath) === '/') return;
       const wd = untrack(initialPath);
-      if (!untrack(() => files().length)) {
+      if (!wd) return;
+      if (!cache.has(wd) || lastLoadedPath !== wd) {
         void loadPathChain(wd);
       }
       setBrowserOpen(true);
