@@ -3,12 +3,12 @@ import { useDeck, useNotification, useResolvedFloeConfig } from '@floegence/floe
 import { ArrowRightLeft, Copy, Folder, Pencil, Sparkles, Trash } from '@floegence/floe-webapp-core/icons';
 import { FileBrowser, type ContextMenuCallbacks, type ContextMenuItem, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
-import { Button, ConfirmDialog, Dialog, DirectoryPicker, FileSavePicker, FloatingWindow } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, DirectoryPicker, FileSavePicker, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type { Client } from '@floegence/flowersec-core';
 import { DEFAULT_MAX_JSON_FRAME_BYTES, readJsonFrame, writeJsonFrame } from '@floegence/flowersec-core/framing';
 import { ByteReader, type YamuxStream } from '@floegence/flowersec-core/yamux';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
-import { useRedevenRpc, type FsFileInfo } from '../protocol/redeven_v1';
+import { useRedevenRpc } from '../protocol/redeven_v1';
 import { getExtDot, isLikelyTextContent, mimeFromExtDot, previewModeByName, type PreviewMode } from '../utils/filePreview';
 import { readFileBytesOnce, normalizeRespMeta, byteReaderFromStream, type FsReadFileStreamMeta, type FsReadFileStreamRespMeta } from '../utils/fileStreamReader';
 import { useEnvContext } from '../pages/EnvContext';
@@ -22,6 +22,20 @@ import {
   normalizeVirtualPath as normalizeAskFlowerVirtualPath,
   virtualPathToAbsolutePath,
 } from '../utils/askFlowerPath';
+import { InputDialog } from './InputDialog';
+import {
+  extNoDot,
+  getParentDir,
+  insertItemToTree,
+  normalizePath,
+  removeItemsFromTree,
+  rewriteCachePathPrefix,
+  rewriteSubtreePaths,
+  sortFileItems,
+  toFileItem,
+  updateItemInTree,
+  withChildren,
+} from './FileBrowserShared';
 
 type DirCache = Map<string, FileItem[]>;
 
@@ -31,66 +45,6 @@ type PathLoadResult = {
   status: PathLoadStatus;
   message?: string;
 };
-
-function InputDialog(props: {
-  open: boolean;
-  title: string;
-  label: string;
-  value: string;
-  placeholder?: string;
-  confirmText?: string;
-  cancelText?: string;
-  loading?: boolean;
-  onConfirm: (value: string) => void;
-  onCancel: () => void;
-}) {
-  const [inputValue, setInputValue] = createSignal(props.value);
-
-  createEffect(() => {
-    if (props.open) {
-      setInputValue(props.value);
-    }
-  });
-
-  return (
-    <Dialog
-      open={props.open}
-      onOpenChange={(open) => {
-        if (!open) props.onCancel();
-      }}
-      title={props.title}
-      footer={
-        <div class="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={props.onCancel} disabled={props.loading}>
-            {props.cancelText ?? 'Cancel'}
-          </Button>
-          <Button size="sm" variant="default" onClick={() => props.onConfirm(inputValue())} loading={props.loading}>
-            {props.confirmText ?? 'Confirm'}
-          </Button>
-        </div>
-      }
-    >
-      <div>
-        <label class="block text-xs text-muted-foreground mb-1">{props.label}</label>
-        <input
-          type="text"
-          class="w-full px-3 py-2 text-sm border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-          value={inputValue()}
-          placeholder={props.placeholder}
-          onInput={(e) => setInputValue(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !props.loading) {
-              props.onConfirm(inputValue());
-            } else if (e.key === 'Escape') {
-              props.onCancel();
-            }
-          }}
-          autofocus
-        />
-      </div>
-    </Dialog>
-  );
-}
 
 const JSON_FRAME_MAX_BYTES = DEFAULT_MAX_JSON_FRAME_BYTES;
 const MAX_PREVIEW_BYTES = 20 * 1024 * 1024;
@@ -102,20 +56,6 @@ const ASK_FLOWER_MAX_INLINE_SELECTION_CHARS = 10_000;
 
 export interface RemoteFileBrowserProps {
   widgetId?: string;
-}
-
-function extNoDot(name: string): string | undefined {
-  const idx = name.lastIndexOf('.');
-  if (idx <= 0) return undefined;
-  return name.slice(idx + 1).toLowerCase();
-}
-
-function normalizePath(path: string): string {
-  const raw = String(path ?? '').trim();
-  if (!raw) return '/';
-  const p = raw.startsWith('/') ? raw : `/${raw}`;
-  if (p === '/') return '/';
-  return p.endsWith('/') ? p.replace(/\/+$/, '') || '/' : p;
 }
 
 function classifyPathLoadError(err: unknown): PathLoadResult {
@@ -137,143 +77,6 @@ function classifyPathLoadError(err: unknown): PathLoadResult {
 
   const text = String(err ?? '').trim();
   return text ? { status: 'transport_error', message: text } : { status: 'transport_error' };
-}
-
-function toFileItem(entry: FsFileInfo): FileItem {
-  const isDir = !!entry.isDirectory;
-  const name = String(entry.name ?? '');
-  const p = String(entry.path ?? '');
-  const modifiedAtMs = Number(entry.modifiedAt ?? 0);
-  return {
-    id: p,
-    name,
-    type: isDir ? 'folder' : 'file',
-    path: p,
-    size: Number.isFinite(entry.size) ? entry.size : undefined,
-    modifiedAt: Number.isFinite(modifiedAtMs) && modifiedAtMs > 0 ? new Date(modifiedAtMs) : undefined,
-    extension: isDir ? undefined : extNoDot(name),
-  };
-}
-
-function sortFileItems(items: FileItem[]): FileItem[] {
-  return [...items].sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'folder' ? -1 : 1));
-}
-
-function rewriteSubtreePaths(item: FileItem, fromBase: string, toBase: string): FileItem {
-  const from = normalizePath(fromBase);
-  const to = normalizePath(toBase);
-
-  const rewritePath = (p: string): string => {
-    const n = normalizePath(p);
-    if (n === from) return to;
-    if (n.startsWith(from + '/')) return to + n.slice(from.length);
-    return n;
-  };
-
-  const nextPath = rewritePath(item.path);
-  const nextChildren = item.children?.map((c) => rewriteSubtreePaths(c, from, to));
-  return {
-    ...item,
-    path: nextPath,
-    id: nextPath,
-    children: nextChildren,
-  };
-}
-
-function withChildren(tree: FileItem[], folderPath: string, children: FileItem[]): FileItem[] {
-  const target = folderPath.trim() || '/';
-  if (target === '/' || target === '') {
-    return children;
-  }
-
-  const visit = (items: FileItem[]): [FileItem[], boolean] => {
-    let changed = false;
-    const next = items.map((it) => {
-      if (it.type !== 'folder') return it;
-      if (it.path === target) {
-        changed = true;
-        return { ...it, children };
-      }
-      if (!it.children || it.children.length === 0) return it;
-      const [nextChildren, hit] = visit(it.children);
-      if (!hit) return it;
-      changed = true;
-      return { ...it, children: nextChildren };
-    });
-    return [changed ? next : items, changed];
-  };
-
-  const [next] = visit(tree);
-  return next;
-}
-
-function removeItemsFromTree(tree: FileItem[], pathsToRemove: Set<string>): FileItem[] {
-  const visit = (items: FileItem[]): FileItem[] => {
-    return items
-      .filter((it) => !pathsToRemove.has(normalizePath(it.path)))
-      .map((it) => {
-        if (it.type !== 'folder' || !it.children?.length) return it;
-        const newChildren = visit(it.children);
-        if (newChildren === it.children) return it;
-        return { ...it, children: newChildren };
-      });
-  };
-  return visit(tree);
-}
-
-function updateItemInTree(tree: FileItem[], oldPath: string, updates: Partial<FileItem>): FileItem[] {
-  const targetPath = normalizePath(oldPath);
-  const visit = (items: FileItem[]): [FileItem[], boolean] => {
-    let changed = false;
-    const next = items.map((it) => {
-      if (normalizePath(it.path) === targetPath) {
-        changed = true;
-        return { ...it, ...updates };
-      }
-      if (it.type !== 'folder' || !it.children?.length) return it;
-      const [newChildren, hit] = visit(it.children);
-      if (!hit) return it;
-      changed = true;
-      return { ...it, children: newChildren };
-    });
-    return [changed ? next : items, changed];
-  };
-  const [next] = visit(tree);
-  return next;
-}
-
-function insertItemToTree(tree: FileItem[], parentPath: string, item: FileItem): FileItem[] {
-  const targetParent = normalizePath(parentPath);
-
-  if (targetParent === '/') {
-    if (tree.some((it) => normalizePath(it.path) === normalizePath(item.path))) {
-      return tree;
-    }
-    return sortFileItems([...tree, item]);
-  }
-
-  const visit = (items: FileItem[]): [FileItem[], boolean] => {
-    let changed = false;
-    const next = items.map((it) => {
-      if (it.type !== 'folder') return it;
-      if (normalizePath(it.path) === targetParent) {
-        const children = it.children ?? [];
-        if (children.some((c) => normalizePath(c.path) === normalizePath(item.path))) {
-          return it;
-        }
-        changed = true;
-        return { ...it, children: sortFileItems([...children, item]) };
-      }
-      if (!it.children?.length) return it;
-      const [newChildren, hit] = visit(it.children);
-      if (!hit) return it;
-      changed = true;
-      return { ...it, children: newChildren };
-    });
-    return [changed ? next : items, changed];
-  };
-  const [next] = visit(tree);
-  return next;
 }
 
 function downloadBlob(params: { name: string; blob: Blob }) {
@@ -789,42 +592,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     cache.delete(p);
   };
 
-  const getParentDir = (filePath: string): string => {
-    const p = normalizePath(filePath);
-    const lastSlash = p.lastIndexOf('/');
-    if (lastSlash <= 0) return '/';
-    return p.slice(0, lastSlash) || '/';
-  };
-
   const refreshDir = async (dirPath: string) => {
     invalidateDirCache(dirPath);
     const result = await loadPathChain(dirPath);
     if (result.status !== 'ok') notifyPathLoadFailure(result);
-  };
-
-  const rewriteCachePathPrefix = (fromPrefix: string, toPrefix: string) => {
-    const from = normalizePath(fromPrefix);
-    const to = normalizePath(toPrefix);
-    if (from === to) return;
-
-    const captured: Array<[string, FileItem[]]> = [];
-    for (const [key, value] of cache.entries()) {
-      const k = normalizePath(key);
-      if (k === from || k.startsWith(from + '/')) {
-        captured.push([k, value]);
-      }
-    }
-    if (captured.length === 0) return;
-
-    for (const [oldKey] of captured) {
-      cache.delete(oldKey);
-    }
-
-    for (const [oldKey, items] of captured) {
-      const newKey = oldKey === from ? to : to + oldKey.slice(from.length);
-      const rewritten = items.map((it) => rewriteSubtreePaths(it, from, to));
-      cache.set(newKey, sortFileItems(rewritten));
-    }
   };
 
   const applyLocalMove = (item: FileItem, destDir: string) => {
@@ -850,7 +621,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
 
     if (item.type === 'folder') {
-      rewriteCachePathPrefix(from, to);
+      rewriteCachePathPrefix(cache, from, to);
     }
   };
 
