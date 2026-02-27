@@ -4,7 +4,7 @@ import { Show } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { useChatContext } from '../ChatProvider';
-import type { Message } from '../types';
+import type { ChatAvatar, Message } from '../types';
 import { MessageAvatar } from './MessageAvatar';
 import { MessageBubble } from './MessageBubble';
 import { MessageMeta } from './MessageMeta';
@@ -21,7 +21,7 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
   const config = ctx.config;
 
   // Resolve avatar source based on role
-  const avatarSrc = () => {
+  const avatar = (): ChatAvatar | undefined => {
     const cfg = config();
     return props.message.role === 'user' ? cfg.userAvatar : cfg.assistantAvatar;
   };
@@ -59,7 +59,7 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
       <Show when={props.showAvatar !== false}>
         <MessageAvatar
           role={props.message.role}
-          src={avatarSrc()}
+          avatar={avatar()}
           isStreaming={isActiveAssistantStreaming()}
         />
       </Show>

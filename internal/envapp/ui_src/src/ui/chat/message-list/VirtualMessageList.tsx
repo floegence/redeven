@@ -229,7 +229,13 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   // ResizeObserver tracks per-item height changes from markdown/tool reflow.
   const resizeObserverMap = new Map<Element, string>();
   const resizeObserver = new ResizeObserver((entries) => {
-    let anyHeightChanged = false;
+    const updates: Array<{
+      index: number;
+      messageId: string;
+      nextHeight: number;
+      delta: number;
+      startOffset: number;
+    }> = [];
 
     for (const entry of entries) {
       const el = entry.target as HTMLElement;
@@ -249,14 +255,41 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
         continue;
       }
 
-      ctx.setMessageHeight(messageId, height);
-      virtualList.setItemHeight(index, height);
-      anyHeightChanged = true;
+      updates.push({
+        index,
+        messageId,
+        nextHeight: height,
+        delta: height - cachedHeight,
+        startOffset: virtualList.getItemOffset(index),
+      });
     }
 
-    if (!anyHeightChanged) return;
+    if (updates.length === 0) return;
 
-    updateDistanceToBottom();
+    const target = scrollContainerEl;
+    const keepViewportAnchor = followMode() === 'paused' && !!target;
+    const anchorScrollTop = keepViewportAnchor && target ? target.scrollTop : 0;
+    let scrollCompensation = 0;
+
+    if (keepViewportAnchor) {
+      for (const update of updates) {
+        if (update.startOffset < anchorScrollTop - 0.5) {
+          scrollCompensation += update.delta;
+        }
+      }
+    }
+
+    for (const update of updates) {
+      ctx.setMessageHeight(update.messageId, update.nextHeight);
+      virtualList.setItemHeight(update.index, update.nextHeight);
+    }
+
+    if (keepViewportAnchor && target && Math.abs(scrollCompensation) > 0.5) {
+      target.scrollTop = Math.max(0, anchorScrollTop + scrollCompensation);
+      prevScrollTop = target.scrollTop;
+    }
+
+    updateDistanceToBottom(target);
     if (followMode() === 'following') {
       scheduleFollowToBottom('auto');
     }

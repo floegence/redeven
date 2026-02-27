@@ -30,6 +30,7 @@ export interface UseVirtualListReturn {
   isAtBottom: () => boolean;
   visibleRange: () => { start: number; end: number };
   setItemHeight: (index: number, height: number) => void;
+  getItemOffset: (index: number) => number;
 }
 
 // Fenwick tree (Binary Indexed Tree) utilities for O(log n) prefix sum queries.
@@ -266,6 +267,13 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
     });
   }
 
+  function getItemOffset(index: number): number {
+    const n = count();
+    ensureSize(n);
+    const clampedIndex = Math.max(0, Math.min(index, n));
+    return prefixSum(bit, clampedIndex);
+  }
+
   // Scroll to a specific item index with alignment
   function scrollToIndex(index: number, align: 'start' | 'center' | 'end' = 'start'): void {
     if (!scrollEl) return;
@@ -356,5 +364,6 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
     isAtBottom: atBottom,
     visibleRange,
     setItemHeight,
+    getItemOffset,
   };
 }

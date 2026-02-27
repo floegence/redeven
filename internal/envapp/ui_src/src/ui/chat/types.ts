@@ -1,5 +1,7 @@
 // Chat module types — forked from @floegence/floe-webapp-core/chat for local customization.
 
+import type { Component } from 'solid-js';
+
 export interface TextBlock {
   type: 'text';
   content: string;
@@ -185,6 +187,8 @@ export type MessageBlock =
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 export type MessageStatus = 'sending' | 'streaming' | 'complete' | 'error';
+export type ChatAvatarRenderer = Component<{ role: MessageRole }>;
+export type ChatAvatar = string | ChatAvatarRenderer;
 
 export interface Message {
   id: string;
@@ -251,8 +255,8 @@ export const DEFAULT_VIRTUAL_LIST_CONFIG: VirtualListConfig = {
 
 export interface ChatConfig {
   virtualList?: Partial<VirtualListConfig>;
-  userAvatar?: string;
-  assistantAvatar?: string;
+  userAvatar?: ChatAvatar;
+  assistantAvatar?: ChatAvatar;
   placeholder?: string;
   allowAttachments?: boolean;
   acceptedFileTypes?: string;

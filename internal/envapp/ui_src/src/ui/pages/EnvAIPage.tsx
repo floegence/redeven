@@ -26,6 +26,7 @@ import {
   type ChatCallbacks,
   type ChatContextValue,
   type Message,
+  type MessageRole,
 } from '../chat';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
@@ -522,6 +523,10 @@ const UploadIcon: Component = () => (
     <polyline points="17 8 12 3 7 8" />
     <line x1="12" y1="3" x2="12" y2="15" />
   </svg>
+);
+
+const FlowerAssistantAvatar: Component<{ role: MessageRole }> = () => (
+  <FlowerIcon class="w-5 h-5 text-primary" />
 );
 
 function InlineButtonSnakeLoading() {
@@ -3533,7 +3538,7 @@ export function EnvAIPage() {
       <ChatProvider
         config={{
           placeholder: 'Describe what you want to do...',
-          assistantAvatar: `${import.meta.env.BASE_URL}flower.svg`,
+          assistantAvatar: FlowerAssistantAvatar,
           allowAttachments: canInteract(),
           maxAttachments: 5,
           maxAttachmentSize: 10 * 1024 * 1024,
