@@ -53,7 +53,6 @@ Example:
   "ai": {
     "execution_policy": {
       "require_user_approval": false,
-      "enforce_plan_mode_guard": false,
       "block_dangerous_commands": false
     },
     "current_model_id": "openai/gpt-5-mini",
@@ -99,19 +98,19 @@ Online research notes:
 Hard guardrails are controlled by `ai.execution_policy`:
 
 - `require_user_approval`: when true, mutating tool calls require explicit user approval.
-- `enforce_plan_mode_guard`: when true, mutating tools are hard-blocked in `plan` mode.
 - `block_dangerous_commands`: when true, dangerous `terminal.exec` commands are hard-blocked.
 
 Default values are intentionally permissive:
 
 - `require_user_approval = false`
-- `enforce_plan_mode_guard = false`
 - `block_dangerous_commands = false`
 
 Behavior summary:
 
 - `act` mode executes tools directly by default.
-- `plan` mode uses prompt-level guidance (analysis-first), not a hard readonly lock by default.
+- `plan` mode is strict readonly: mutating tool calls are blocked.
+- If edits are needed in `plan`, Flower should use `ask_user` to request switching the thread to `act`.
+- In no-user-interaction runs, Flower cannot ask for a mode switch and must finish with blockers in `task_complete`.
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.
 - `task_complete` is rejected when todo tracking is active and open todos still exist.

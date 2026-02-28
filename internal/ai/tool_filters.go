@@ -7,9 +7,8 @@ import (
 )
 
 func newModeToolFilter(cfg *config.AIConfig) ModeToolFilter {
-	return DefaultModeToolFilter{
-		EnforcePlanModeGuard: cfg.EffectiveEnforcePlanModeGuard(),
-	}
+	_ = cfg
+	return DefaultModeToolFilter{}
 }
 
 type allowlistModeToolFilter struct {

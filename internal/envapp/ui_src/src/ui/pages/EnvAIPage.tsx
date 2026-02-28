@@ -700,7 +700,7 @@ function ExecutionModeToggle(props: {
         type="button"
         class={btnClass(props.value === 'plan')}
         onClick={() => props.onChange('plan')}
-        title="Planning-first mode with soft guidance; execution may still happen based on policy"
+        title="Read-only planning mode: mutating actions are blocked; switch to Act for edits"
       >
         Plan
       </button>

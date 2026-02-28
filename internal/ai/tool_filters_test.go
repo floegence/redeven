@@ -6,7 +6,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/config"
 )
 
-func TestNewModeToolFilter_DefaultDoesNotBlockPlanMutatingTools(t *testing.T) {
+func TestNewModeToolFilter_DefaultBlocksPlanMutatingTools(t *testing.T) {
 	t.Parallel()
 
 	filter := newModeToolFilter(nil)
@@ -15,18 +15,27 @@ func TestNewModeToolFilter_DefaultDoesNotBlockPlanMutatingTools(t *testing.T) {
 		{Name: "apply_patch", Mutating: true},
 	}
 
-	filtered := filter.FilterToolsForMode(config.AIModePlan, tools)
-	if len(filtered) != 2 {
-		t.Fatalf("filtered len=%d, want 2", len(filtered))
+	filteredPlan := filter.FilterToolsForMode(config.AIModePlan, tools)
+	if len(filteredPlan) != 1 {
+		t.Fatalf("plan filtered len=%d, want 1", len(filteredPlan))
+	}
+	if filteredPlan[0].Name != "terminal.exec" {
+		t.Fatalf("plan filtered tool=%q, want %q", filteredPlan[0].Name, "terminal.exec")
+	}
+
+	filteredAct := filter.FilterToolsForMode(config.AIModeAct, tools)
+	if len(filteredAct) != 2 {
+		t.Fatalf("act filtered len=%d, want 2", len(filteredAct))
 	}
 }
 
-func TestNewModeToolFilter_EnforcedPlanGuardBlocksMutatingTools(t *testing.T) {
+func TestNewModeToolFilter_ExecutionPolicyDoesNotDisablePlanReadonly(t *testing.T) {
 	t.Parallel()
 
 	filter := newModeToolFilter(&config.AIConfig{
 		ExecutionPolicy: &config.AIExecutionPolicy{
-			EnforcePlanModeGuard: true,
+			RequireUserApproval:    true,
+			BlockDangerousCommands: true,
 		},
 	})
 	tools := []ToolDef{

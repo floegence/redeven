@@ -28,7 +28,7 @@ type AIConfig struct {
 	//
 	// Supported values:
 	// - "act": full tool execution flow (default)
-	// - "plan": planning-first mode (soft guidance by prompt)
+	// - "plan": planning-first mode with strict readonly execution (mutating actions are blocked)
 	Mode string `json:"mode,omitempty"`
 
 	// ToolRecoveryEnabled controls runtime-level recovery orchestration.
@@ -56,7 +56,6 @@ type AIConfig struct {
 	//
 	// Defaults are intentionally permissive:
 	// - no user approval requirement
-	// - no plan-mode hard guard
 	// - no dangerous-command hard block
 	ExecutionPolicy *AIExecutionPolicy `json:"execution_policy,omitempty"`
 
@@ -75,9 +74,6 @@ type AIConfig struct {
 type AIExecutionPolicy struct {
 	// RequireUserApproval controls whether mutating tool invocations require user approval.
 	RequireUserApproval bool `json:"require_user_approval"`
-
-	// EnforcePlanModeGuard controls whether mutating actions are hard-blocked in plan mode.
-	EnforcePlanModeGuard bool `json:"enforce_plan_mode_guard"`
 
 	// BlockDangerousCommands controls whether dangerous terminal commands are hard-blocked.
 	BlockDangerousCommands bool `json:"block_dangerous_commands"`
@@ -144,7 +140,6 @@ const (
 	defaultAIToolRecoveryFailOnRepeatedSignature = true
 
 	defaultAIRequireUserApproval   = false
-	defaultAIEnforcePlanModeGuard  = false
 	defaultAIBlockDangerousCommand = false
 
 	defaultAIWebSearchProvider                 = "prefer_openai"
@@ -465,13 +460,6 @@ func (c *AIConfig) EffectiveRequireUserApproval() bool {
 		return defaultAIRequireUserApproval
 	}
 	return c.ExecutionPolicy.RequireUserApproval
-}
-
-func (c *AIConfig) EffectiveEnforcePlanModeGuard() bool {
-	if c == nil || c.ExecutionPolicy == nil {
-		return defaultAIEnforcePlanModeGuard
-	}
-	return c.ExecutionPolicy.EnforcePlanModeGuard
 }
 
 func (c *AIConfig) EffectiveBlockDangerousCommands() bool {

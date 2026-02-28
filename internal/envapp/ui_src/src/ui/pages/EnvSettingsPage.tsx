@@ -48,7 +48,6 @@ type AIProviderModel = Readonly<{
 type AIProvider = Readonly<{ id: string; name?: string; type: AIProviderType; base_url?: string; models: AIProviderModel[] }>;
 type AIExecutionPolicy = Readonly<{
   require_user_approval?: boolean;
-  enforce_plan_mode_guard?: boolean;
   block_dangerous_commands?: boolean;
 }>;
 type AIConfig = Readonly<{
@@ -537,7 +536,6 @@ function defaultAIConfig(): AIConfig {
     web_search_provider: 'prefer_openai',
     execution_policy: {
       require_user_approval: false,
-      enforce_plan_mode_guard: false,
       block_dangerous_commands: false,
     },
     providers: [
@@ -1205,7 +1203,6 @@ export function EnvSettingsPage() {
   const [aiCurrentModelID, setAiCurrentModelID] = createSignal('openai/gpt-5.2-mini');
   const [aiPreservedFields, setAiPreservedFields] = createSignal<AIPreservedUIFields>({});
   const [aiRequireUserApproval, setAiRequireUserApproval] = createSignal(false);
-  const [aiEnforcePlanModeGuard, setAiEnforcePlanModeGuard] = createSignal(false);
   const [aiBlockDangerousCommands, setAiBlockDangerousCommands] = createSignal(false);
   const [aiWebSearchProvider, setAiWebSearchProvider] = createSignal<'prefer_openai' | 'brave' | 'disabled'>('prefer_openai');
   const [aiProviderDialogOpen, setAiProviderDialogOpen] = createSignal(false);
@@ -1410,7 +1407,6 @@ export function EnvSettingsPage() {
     }
     out.execution_policy = {
       require_user_approval: !!aiRequireUserApproval(),
-      enforce_plan_mode_guard: !!aiEnforcePlanModeGuard(),
       block_dangerous_commands: !!aiBlockDangerousCommands(),
     };
     return out as AIConfig;
@@ -1458,9 +1454,6 @@ export function EnvSettingsPage() {
       if (!isJSONObject(ep)) throw new Error('execution_policy must be an object.');
       if ((ep as any).require_user_approval !== undefined && typeof (ep as any).require_user_approval !== 'boolean') {
         throw new Error('execution_policy.require_user_approval must be a boolean.');
-      }
-      if ((ep as any).enforce_plan_mode_guard !== undefined && typeof (ep as any).enforce_plan_mode_guard !== 'boolean') {
-        throw new Error('execution_policy.enforce_plan_mode_guard must be a boolean.');
       }
       if ((ep as any).block_dangerous_commands !== undefined && typeof (ep as any).block_dangerous_commands !== 'boolean') {
         throw new Error('execution_policy.block_dangerous_commands must be a boolean.');
@@ -1588,7 +1581,6 @@ export function EnvSettingsPage() {
     const raw = isJSONObject(cfg) ? (cfg as any).execution_policy : null;
     return {
       require_user_approval: !!(isJSONObject(raw) ? (raw as any).require_user_approval : false),
-      enforce_plan_mode_guard: !!(isJSONObject(raw) ? (raw as any).enforce_plan_mode_guard : false),
       block_dangerous_commands: !!(isJSONObject(raw) ? (raw as any).block_dangerous_commands : false),
     };
   };
@@ -2292,7 +2284,6 @@ export function EnvSettingsPage() {
       const a = s.ai ?? defaultAIConfig();
       const executionPolicy = readAIExecutionPolicy(a);
       setAiRequireUserApproval(!!executionPolicy.require_user_approval);
-      setAiEnforcePlanModeGuard(!!executionPolicy.enforce_plan_mode_guard);
       setAiBlockDangerousCommands(!!executionPolicy.block_dangerous_commands);
       setAiPreservedFields(readAIPreservedFields(a));
       setAiWebSearchProvider(normalizeWebSearchProvider((a as any).web_search_provider));
@@ -2535,7 +2526,6 @@ export function EnvSettingsPage() {
       );
       const executionPolicy = readAIExecutionPolicy(v);
       setAiRequireUserApproval(!!executionPolicy.require_user_approval);
-      setAiEnforcePlanModeGuard(!!executionPolicy.enforce_plan_mode_guard);
       setAiBlockDangerousCommands(!!executionPolicy.block_dangerous_commands);
       setAiPreservedFields(readAIPreservedFields(v));
       setAiWebSearchProvider(normalizeWebSearchProvider((v as any).web_search_provider));
@@ -3926,7 +3916,7 @@ export function EnvSettingsPage() {
                 <div class="space-y-3">
                   <SubSectionHeader
                     title="Execution policy"
-                    description="Runtime guardrails for approvals, plan-mode blocking, and dangerous commands."
+                    description="Runtime guardrails for approvals and dangerous commands. Plan mode is always strict readonly."
                   />
                   <div class="space-y-2 p-4 rounded-lg border border-border bg-muted/20">
                     <div class="settings-policy-toggle-row">
@@ -3941,17 +3931,8 @@ export function EnvSettingsPage() {
                         size="sm"
                       />
                     </div>
-                    <div class="settings-policy-toggle-row">
-                      <Checkbox
-                        checked={aiEnforcePlanModeGuard()}
-                        onChange={(v) => {
-                          setAiEnforcePlanModeGuard(v);
-                          setAiDirty(true);
-                        }}
-                        disabled={!canInteract()}
-                        label="Enforce plan mode guard (block mutating tools in plan mode)"
-                        size="sm"
-                      />
+                    <div class="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                      Plan mode is always strict readonly. Mutating tools are blocked automatically, and edits require switching to Act mode.
                     </div>
                     <div class="settings-policy-toggle-row">
                       <Checkbox

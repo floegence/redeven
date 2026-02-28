@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -108,7 +109,26 @@ func runToolCall(t *testing.T, r *run, toolID string, args map[string]any, appro
 	}
 }
 
-func TestHandleToolCall_DefaultPolicy_AllowsMutatingInPlanModeWithoutApproval(t *testing.T) {
+func assertPlanMutatingBlocked(t *testing.T, outcome *toolCallOutcome, target string) {
+	t.Helper()
+	if outcome.Success {
+		t.Fatalf("mutating tool must be blocked in plan mode")
+	}
+	if outcome.ToolError == nil {
+		t.Fatalf("missing tool error for blocked mutating tool")
+	}
+	if outcome.ToolError.Code != aitools.ErrorCodePermissionDenied {
+		t.Fatalf("tool error code=%q, want %q", outcome.ToolError.Code, aitools.ErrorCodePermissionDenied)
+	}
+	if !strings.Contains(strings.ToLower(strings.TrimSpace(outcome.ToolError.Message)), "plan-mode readonly policy") {
+		t.Fatalf("tool error message=%q, want contains %q", outcome.ToolError.Message, "plan-mode readonly policy")
+	}
+	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+		t.Fatalf("target file should not be created, statErr=%v", statErr)
+	}
+}
+
+func TestHandleToolCall_DefaultPolicy_BlocksMutatingInPlanMode(t *testing.T) {
 	t.Parallel()
 
 	workspace := t.TempDir()
@@ -118,17 +138,7 @@ func TestHandleToolCall_DefaultPolicy_AllowsMutatingInPlanModeWithoutApproval(t 
 	outcome := runToolCall(t, r, "tool_plan_default", map[string]any{
 		"command": "printf 'plan default' > note.txt",
 	}, true, false)
-
-	if !outcome.Success {
-		t.Fatalf("tool should succeed, err=%+v", outcome.ToolError)
-	}
-	got, err := os.ReadFile(target)
-	if err != nil {
-		t.Fatalf("read created file: %v", err)
-	}
-	if string(got) != "plan default" {
-		t.Fatalf("file content=%q, want %q", string(got), "plan default")
-	}
+	assertPlanMutatingBlocked(t, outcome, target)
 }
 
 func TestHandleToolCall_RequireApproval_ActModeMutating(t *testing.T) {
@@ -156,58 +166,19 @@ func TestHandleToolCall_RequireApproval_ActModeMutating(t *testing.T) {
 	}
 }
 
-func TestHandleToolCall_RequireApproval_PlanModeMutatingWhenGuardDisabled(t *testing.T) {
+func TestHandleToolCall_PlanModeBlocksMutatingEvenWhenApprovalEnabled(t *testing.T) {
 	t.Parallel()
 
 	workspace := t.TempDir()
 	target := filepath.Join(workspace, "note.txt")
 
 	r := newPolicyTestRun(t, workspace, config.AIModePlan, &config.AIExecutionPolicy{
-		RequireUserApproval:  true,
-		EnforcePlanModeGuard: false,
+		RequireUserApproval: true,
 	}, "msg_plan_approval")
 	outcome := runToolCall(t, r, "tool_plan_approval", map[string]any{
 		"command": "printf 'plan approval' > note.txt",
-	}, true, true)
-
-	if !outcome.Success {
-		t.Fatalf("tool should succeed, err=%+v", outcome.ToolError)
-	}
-	got, err := os.ReadFile(target)
-	if err != nil {
-		t.Fatalf("read created file: %v", err)
-	}
-	if string(got) != "plan approval" {
-		t.Fatalf("file content=%q, want %q", string(got), "plan approval")
-	}
-}
-
-func TestHandleToolCall_EnforcePlanModeGuard_BlocksMutating(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	target := filepath.Join(workspace, "note.txt")
-
-	r := newPolicyTestRun(t, workspace, config.AIModePlan, &config.AIExecutionPolicy{
-		RequireUserApproval:  true,
-		EnforcePlanModeGuard: true,
-	}, "msg_plan_block")
-	outcome := runToolCall(t, r, "tool_plan_block", map[string]any{
-		"command": "printf 'blocked by plan guard' > note.txt",
 	}, true, false)
-
-	if outcome.Success {
-		t.Fatalf("mutating tool must be blocked by plan-mode guard")
-	}
-	if outcome.ToolError == nil {
-		t.Fatalf("missing tool error for blocked mutating tool")
-	}
-	if outcome.ToolError.Code != aitools.ErrorCodePermissionDenied {
-		t.Fatalf("tool error code=%q, want %q", outcome.ToolError.Code, aitools.ErrorCodePermissionDenied)
-	}
-	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
-		t.Fatalf("target file should not be created, statErr=%v", statErr)
-	}
+	assertPlanMutatingBlocked(t, outcome, target)
 }
 
 func TestHandleToolCall_DefaultPolicy_AllowsDangerousCommandPattern(t *testing.T) {

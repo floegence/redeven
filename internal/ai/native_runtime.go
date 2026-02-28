@@ -4430,12 +4430,24 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 	}
 	parts := []string{strings.Join(core, "\n"), strings.Join(runtime, "\n")}
 	if strings.TrimSpace(strings.ToLower(mode)) == config.AIModePlan {
-		parts = append(parts, strings.Join([]string{
-			"## Plan Mode Guidance",
+		planRules := []string{
+			"## Plan Mode Rules (Strict Readonly)",
 			"- Prioritize investigation, reasoning, and clear execution plans.",
-			"- Avoid mutating actions unless the user explicitly asks to execute changes now.",
-			"- If execution becomes necessary, state why and proceed with small verifiable steps.",
-		}, "\n"))
+			"- Plan mode is strict readonly: do NOT run any mutating action.",
+			"- Do NOT call apply_patch and do NOT run mutating terminal.exec commands.",
+		}
+		if allowUserInteraction {
+			planRules = append(planRules,
+				"- If edits are required, call ask_user and request the user to switch this thread to act mode.",
+				"- For this switch request, use reason_code=user_decision_required and keep required_from_user concrete.",
+			)
+		} else {
+			planRules = append(planRules,
+				"- User interaction is disabled in this run, so do NOT call ask_user.",
+				"- If edits are required, finish with task_complete and report blockers plus suggested parent actions.",
+			)
+		}
+		parts = append(parts, strings.Join(planRules, "\n"))
 	}
 	if len(availableSkills) > 0 {
 		parts = append(parts, buildSkillCatalogPrompt(availableSkills))

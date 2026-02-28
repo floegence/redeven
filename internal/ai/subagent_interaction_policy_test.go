@@ -152,3 +152,36 @@ func TestBuildLayeredSystemPrompt_NoUserInteractionOmitsAskUserGuidance(t *testi
 		t.Fatalf("no-user prompt missing disabled interaction guidance: %q", prompt)
 	}
 }
+
+func TestBuildLayeredSystemPrompt_PlanModeEnforcesReadonlyAndAskUserSwitch(t *testing.T) {
+	r := newRun(runOptions{
+		Log:    slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		FSRoot: t.TempDir(),
+	})
+	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "apply_patch"}, {Name: "task_complete"}, {Name: "ask_user"}}
+	contract := resolveRunCapabilityContract(r, tools)
+	prompt := r.buildLayeredSystemPrompt("objective", "plan", TaskComplexityStandard, 0, 8, true, tools, newRuntimeState("objective"), "", contract)
+	if !strings.Contains(prompt, "Plan mode is strict readonly: do NOT run any mutating action.") {
+		t.Fatalf("plan prompt missing strict readonly guidance: %q", prompt)
+	}
+	if !strings.Contains(prompt, "If edits are required, call ask_user and request the user to switch this thread to act mode.") {
+		t.Fatalf("plan prompt missing act switch guidance: %q", prompt)
+	}
+}
+
+func TestBuildLayeredSystemPrompt_PlanModeNoUserInteractionUsesTaskCompleteBlockers(t *testing.T) {
+	r := newRun(runOptions{
+		Log:               slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		FSRoot:            t.TempDir(),
+		NoUserInteraction: true,
+	})
+	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "task_complete"}}
+	contract := resolveRunCapabilityContract(r, tools)
+	prompt := r.buildLayeredSystemPrompt("objective", "plan", TaskComplexityStandard, 0, 8, true, tools, newRuntimeState("objective"), "", contract)
+	if !strings.Contains(prompt, "User interaction is disabled in this run, so do NOT call ask_user.") {
+		t.Fatalf("plan no-user prompt missing no-ask_user guidance: %q", prompt)
+	}
+	if !strings.Contains(prompt, "If edits are required, finish with task_complete and report blockers plus suggested parent actions.") {
+		t.Fatalf("plan no-user prompt missing blocker completion guidance: %q", prompt)
+	}
+}
