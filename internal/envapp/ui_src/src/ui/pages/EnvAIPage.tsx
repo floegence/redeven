@@ -526,7 +526,7 @@ const UploadIcon: Component = () => (
 );
 
 const FlowerAssistantAvatar: Component<{ role: MessageRole }> = () => (
-  <FlowerIcon class="w-5 h-5 text-primary" />
+  <FlowerIcon class="w-8 h-8 text-primary" />
 );
 
 function InlineButtonSnakeLoading() {

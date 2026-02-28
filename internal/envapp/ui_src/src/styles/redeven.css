@@ -66,6 +66,10 @@
   object-fit: contain !important;
 }
 
+.chat-message-avatar-assistant .chat-message-avatar-custom-wrapper {
+  border-radius: 0 !important;
+}
+
 /* Subtle top-edge fade above the input toolbar to separate it from the message list. */
 .chat-toolbar-separator {
   box-shadow: 0 -1px 3px 0 rgba(0, 0, 0, 0.04);
@@ -123,6 +127,7 @@
     transform: none !important;
   }
 
+  .chat-message-avatar-streaming .chat-message-avatar-custom-wrapper,
   .chat-message-avatar-streaming .chat-message-avatar-image-wrapper,
   .chat-message-avatar-streaming .chat-message-avatar-image {
     animation: none !important;
@@ -158,6 +163,7 @@
   }
 }
 
+.chat-message-avatar-streaming .chat-message-avatar-custom-wrapper,
 .chat-message-avatar-streaming .chat-message-avatar-image-wrapper {
   animation: redeven-flower-avatar-playful-rotate 2.4s cubic-bezier(0.33, 1, 0.68, 1) infinite;
   transform-origin: 50% 50%;
