@@ -94,7 +94,7 @@ func TestIntentRouting_SocialInputUsesSocialPathWithoutTools(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	thread, err := svc.CreateThread(ctx, &meta, "social test", "", "")
+	thread, err := svc.CreateThread(ctx, &meta, "social test", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestIntentRouting_CreativeInputUsesCreativePathWithoutTools(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	thread, err := svc.CreateThread(ctx, &meta, "creative test", "", "")
+	thread, err := svc.CreateThread(ctx, &meta, "creative test", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestIntentRouting_ContinuationWithOpenGoalStaysTask(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	thread, err := svc.CreateThread(ctx, &meta, "task test", "", "")
+	thread, err := svc.CreateThread(ctx, &meta, "task test", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}

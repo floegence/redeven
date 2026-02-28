@@ -22,6 +22,7 @@ const (
 type askUserSignal struct {
 	Question         string
 	Options          []string
+	Choices          []WaitingPromptChoice
 	ReasonCode       string
 	RequiredFromUser []string
 	EvidenceRefs     []string
@@ -38,9 +39,26 @@ func normalizeAskUserSignal(signal askUserSignal) askUserSignal {
 	normalized := askUserSignal{
 		Question:         strings.TrimSpace(signal.Question),
 		Options:          normalizeAskUserOptions(signal.Options),
+		Choices:          normalizeWaitingPromptChoices(signal.Choices),
 		ReasonCode:       normalizeAskUserReasonCode(signal.ReasonCode),
 		RequiredFromUser: normalizeAskUserStringList(signal.RequiredFromUser, 8, 200),
 		EvidenceRefs:     normalizeAskUserStringList(signal.EvidenceRefs, 12, 120),
+	}
+	if len(normalized.Choices) == 0 && len(normalized.Options) > 0 {
+		normalized.Choices = waitingPromptChoicesFromOptions(normalized.Options)
+	}
+	if len(normalized.Choices) > 0 {
+		labels := make([]string, 0, len(normalized.Choices))
+		for _, choice := range normalized.Choices {
+			label := strings.TrimSpace(choice.Label)
+			if label == "" {
+				continue
+			}
+			labels = append(labels, label)
+		}
+		if len(labels) > 0 {
+			normalized.Options = labels
+		}
 	}
 	return normalized
 }
@@ -94,6 +112,7 @@ func buildAskUserPolicyClassifierMessages(objective string, signal askUserSignal
 	payload := map[string]any{
 		"question":           normalizedSignal.Question,
 		"options":            normalizedSignal.Options,
+		"choices":            normalizedSignal.Choices,
 		"reason_code":        normalizedSignal.ReasonCode,
 		"required_from_user": normalizedSignal.RequiredFromUser,
 		"evidence_refs":      normalizedSignal.EvidenceRefs,

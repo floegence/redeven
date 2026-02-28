@@ -34,7 +34,7 @@ func TestExecutePreparedRun_InitializesThreadModelLock(t *testing.T) {
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 
-	th, err := svc.CreateThread(ctx, meta, "lock-init", "openai/gpt-5-mini", "")
+	th, err := svc.CreateThread(ctx, meta, "lock-init", "openai/gpt-5-mini", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}

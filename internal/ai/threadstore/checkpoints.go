@@ -485,14 +485,14 @@ func (s *Store) getThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, 
 	var t Thread
 	var modelLockedInt int
 	err := tx.QueryRowContext(ctx, `
-SELECT
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, working_dir, title,
-  run_status, run_updated_at_unix_ms, run_error,
-  waiting_prompt_id, waiting_message_id, waiting_tool_id,
-  created_by_user_public_id, created_by_user_email,
-  updated_by_user_public_id, updated_by_user_email,
-  created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
-FROM ai_threads
+	SELECT
+	  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
+	  run_status, run_updated_at_unix_ms, run_error,
+	  waiting_prompt_id, waiting_message_id, waiting_tool_id, waiting_choices_json,
+	  created_by_user_public_id, created_by_user_email,
+	  updated_by_user_public_id, updated_by_user_email,
+	  created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
+	FROM ai_threads
 WHERE endpoint_id = ? AND thread_id = ?
 `, endpointID, threadID).Scan(
 		&t.ThreadID,
@@ -500,6 +500,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		&t.NamespacePublicID,
 		&t.ModelID,
 		&modelLockedInt,
+		&t.ExecutionMode,
 		&t.WorkingDir,
 		&t.Title,
 		&t.RunStatus,
@@ -508,6 +509,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		&t.WaitingPromptID,
 		&t.WaitingMessageID,
 		&t.WaitingToolID,
+		&t.WaitingChoicesJSON,
 		&t.CreatedByUserPublicID,
 		&t.CreatedByUserEmail,
 		&t.UpdatedByUserPublicID,
@@ -862,21 +864,23 @@ func (s *Store) restoreThreadRowTx(ctx context.Context, tx *sql.Tx, endpointID s
 		return errors.New("thread snapshot mismatch")
 	}
 	_, err := tx.ExecContext(ctx, `
-UPDATE ai_threads
-SET namespace_public_id = ?,
-    model_id = ?,
-    model_locked = ?,
-    working_dir = ?,
-    title = ?,
-    run_status = ?,
-    run_updated_at_unix_ms = ?,
-    run_error = ?,
-    waiting_prompt_id = ?,
-    waiting_message_id = ?,
-    waiting_tool_id = ?,
-    created_by_user_public_id = ?,
-    created_by_user_email = ?,
-    updated_by_user_public_id = ?,
+	UPDATE ai_threads
+	SET namespace_public_id = ?,
+	    model_id = ?,
+	    model_locked = ?,
+	    execution_mode = ?,
+	    working_dir = ?,
+	    title = ?,
+	    run_status = ?,
+	    run_updated_at_unix_ms = ?,
+	    run_error = ?,
+	    waiting_prompt_id = ?,
+	    waiting_message_id = ?,
+	    waiting_tool_id = ?,
+	    waiting_choices_json = ?,
+	    created_by_user_public_id = ?,
+	    created_by_user_email = ?,
+	    updated_by_user_public_id = ?,
     updated_by_user_email = ?,
     created_at_unix_ms = ?,
     updated_at_unix_ms = ?,
@@ -887,6 +891,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		strings.TrimSpace(th.NamespacePublicID),
 		strings.TrimSpace(th.ModelID),
 		boolToInt(th.ModelLocked),
+		normalizeExecutionMode(strings.TrimSpace(th.ExecutionMode)),
 		strings.TrimSpace(th.WorkingDir),
 		strings.TrimSpace(th.Title),
 		normalizeRunStatus(th.RunStatus),
@@ -895,6 +900,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		strings.TrimSpace(th.WaitingPromptID),
 		strings.TrimSpace(th.WaitingMessageID),
 		strings.TrimSpace(th.WaitingToolID),
+		strings.TrimSpace(th.WaitingChoicesJSON),
 		strings.TrimSpace(th.CreatedByUserPublicID),
 		strings.TrimSpace(th.CreatedByUserEmail),
 		strings.TrimSpace(th.UpdatedByUserPublicID),

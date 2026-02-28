@@ -1689,6 +1689,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		r.persistRunEvent("ask_user.waiting", RealtimeStreamKindLifecycle, map[string]any{
 			"question":            question,
 			"options_count":       len(signal.Options),
+			"choices_count":       len(signal.Choices),
 			"reason_code":         signal.ReasonCode,
 			"required_inputs":     len(signal.RequiredFromUser),
 			"evidence_refs":       len(signal.EvidenceRefs),
@@ -1788,6 +1789,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			"gate_reason":           askReason,
 			"question_len":          len([]rune(strings.TrimSpace(signal.Question))),
 			"options_count":         len(signal.Options),
+			"choices_count":         len(signal.Choices),
 			"reason_code":           signal.ReasonCode,
 			"required_inputs_count": len(signal.RequiredFromUser),
 			"evidence_refs_count":   len(signal.EvidenceRefs),
@@ -2335,6 +2337,7 @@ mainLoop:
 			signal := askUserSignal{
 				Question:         extractSignalText(*askUserCall, "question"),
 				Options:          extractSignalStringList(*askUserCall, "options"),
+				Choices:          extractSignalWaitingChoices(*askUserCall, "choices"),
 				ReasonCode:       extractSignalText(*askUserCall, "reason_code"),
 				RequiredFromUser: extractSignalStringList(*askUserCall, "required_from_user"),
 				EvidenceRefs:     extractSignalStringList(*askUserCall, "evidence_refs"),
@@ -3873,6 +3876,13 @@ func extractSignalStringList(call ToolCall, key string) []string {
 	}
 }
 
+func extractSignalWaitingChoices(call ToolCall, key string) []WaitingPromptChoice {
+	if call.Args == nil {
+		return nil
+	}
+	return parseWaitingPromptChoicesAny(call.Args[key])
+}
+
 func normalizeAskUserOptions(options []string) []string {
 	if len(options) == 0 {
 		return nil
@@ -4380,6 +4390,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			"- required_from_user must list concrete user inputs needed to proceed.",
 			"- evidence_refs must reference relevant tool IDs when evidence is required.",
 			"- When calling ask_user, include 2-4 concise mutually exclusive options in `options` (best option first).",
+			"- For deterministic UI actions, include structured `choices` with optional `actions` (e.g. {type:\"set_mode\",mode:\"act\"}).",
 		)
 	} else {
 		core = append(core,
@@ -4440,6 +4451,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			planRules = append(planRules,
 				"- If edits are required, call ask_user and request the user to switch this thread to act mode.",
 				"- For this switch request, use reason_code=user_decision_required and keep required_from_user concrete.",
+				"- Include structured ask_user choices: one choice with label like \"Switch to Act mode\" and actions=[{type:\"set_mode\",mode:\"act\"}].",
 			)
 		} else {
 			planRules = append(planRules,
@@ -4653,7 +4665,21 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
 	signal = normalizeAskUserSignal(signal)
 	question := strings.TrimSpace(signal.Question)
 	source = strings.TrimSpace(source)
-	options := signal.Options
+	choices := normalizeWaitingPromptChoices(signal.Choices)
+	if len(choices) == 0 {
+		choices = waitingPromptChoicesFromOptions(signal.Options)
+	}
+	options := make([]string, 0, len(choices))
+	for _, choice := range choices {
+		label := strings.TrimSpace(choice.Label)
+		if label == "" {
+			continue
+		}
+		options = append(options, label)
+	}
+	if len(options) == 0 {
+		options = signal.Options
+	}
 	if question == "" {
 		return
 	}
@@ -4675,6 +4701,9 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
 	if len(options) > 0 {
 		args["options"] = append([]string(nil), options...)
 	}
+	if len(choices) > 0 {
+		args["choices"] = choices
+	}
 	result := map[string]any{
 		"question":           question,
 		"source":             source,
@@ -4685,6 +4714,9 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
 	}
 	if len(options) > 0 {
 		result["options"] = append([]string(nil), options...)
+	}
+	if len(choices) > 0 {
+		result["choices"] = choices
 	}
 	block := ToolCallBlock{
 		Type:     "tool-call",

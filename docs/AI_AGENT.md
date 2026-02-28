@@ -109,7 +109,9 @@ Behavior summary:
 
 - `act` mode executes tools directly by default.
 - `plan` mode is strict readonly: mutating tool calls are blocked.
+- Execution mode is a thread-level server state (`execution_mode`) and is authoritative for every run.
 - If edits are needed in `plan`, Flower should use `ask_user` to request switching the thread to `act`.
+- The mode-switch `ask_user` should include structured `choices` with action payloads (for example `actions=[{type:"set_mode",mode:"act"}]`) so the backend can apply mode changes deterministically.
 - In no-user-interaction runs, Flower cannot ask for a mode switch and must finish with blockers in `task_complete`.
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.

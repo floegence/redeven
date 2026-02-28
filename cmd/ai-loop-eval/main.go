@@ -528,7 +528,7 @@ func runTask(ctx context.Context, svc *ai.Service, modelID string, workspacePath
 		CanExecute:        true,
 		CanAdmin:          false,
 	}
-	thread, err := svc.CreateThread(ctx, meta, "eval-"+task.ID, modelID, workspacePath)
+	thread, err := svc.CreateThread(ctx, meta, "eval-"+task.ID, modelID, "", workspacePath)
 	if err != nil {
 		return taskResult{Variant: variant, Task: task, Score: scoreBreakdown{Overall: 0}}
 	}

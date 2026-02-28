@@ -8,6 +8,23 @@ export type wire_ai_waiting_prompt = {
   prompt_id: string;
   message_id: string;
   tool_id: string;
+  choices?: wire_ai_waiting_prompt_choice[];
+};
+
+export type wire_ai_waiting_prompt_action = {
+  type: string;
+  mode?: string;
+};
+
+export type wire_ai_waiting_prompt_choice = {
+  choice_id: string;
+  label: string;
+  actions?: wire_ai_waiting_prompt_action[];
+};
+
+export type wire_ai_waiting_prompt_response = {
+  prompt_id: string;
+  choice_id?: string;
 };
 
 export type wire_ai_send_user_turn_req = {
@@ -23,13 +40,15 @@ export type wire_ai_send_user_turn_req = {
     mode?: string;
   };
   expected_run_id?: string;
-  reply_to_waiting_prompt_id?: string;
+  waiting_response?: wire_ai_waiting_prompt_response;
 };
 
 export type wire_ai_send_user_turn_resp = {
   run_id: string;
   kind: string;
   consumed_waiting_prompt_id?: string;
+  applied_execution_mode?: string;
+  applied_waiting_choice_id?: string;
 };
 
 export type wire_ai_cancel_run_req = {
@@ -93,6 +112,7 @@ export type wire_ai_event_notify = {
   last_message_preview?: string;
   last_message_at_unix_ms?: number;
   active_run_id?: string;
+  execution_mode?: string;
 
   // transcript_reset only
   reset_reason?: string;

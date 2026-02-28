@@ -29,18 +29,20 @@ const (
 )
 
 type aiSendUserTurnReq struct {
-	ThreadID               string     `json:"thread_id"`
-	Model                  string     `json:"model,omitempty"`
-	Input                  RunInput   `json:"input"`
-	Options                RunOptions `json:"options"`
-	ExpectedRunID          string     `json:"expected_run_id,omitempty"`
-	ReplyToWaitingPromptID string     `json:"reply_to_waiting_prompt_id,omitempty"`
+	ThreadID        string                 `json:"thread_id"`
+	Model           string                 `json:"model,omitempty"`
+	Input           RunInput               `json:"input"`
+	Options         RunOptions             `json:"options"`
+	ExpectedRunID   string                 `json:"expected_run_id,omitempty"`
+	WaitingResponse *WaitingPromptResponse `json:"waiting_response,omitempty"`
 }
 
 type aiSendUserTurnResp struct {
 	RunID                   string `json:"run_id"`
 	Kind                    string `json:"kind"`
 	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
+	AppliedExecutionMode    string `json:"applied_execution_mode,omitempty"`
+	AppliedWaitingChoiceID  string `json:"applied_waiting_choice_id,omitempty"`
 }
 
 type aiRunCancelReq struct {
@@ -141,12 +143,12 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		resp, err := s.SendUserTurn(ctx, meta, SendUserTurnRequest{
-			ThreadID:               strings.TrimSpace(req.ThreadID),
-			Model:                  strings.TrimSpace(req.Model),
-			Input:                  req.Input,
-			Options:                req.Options,
-			ExpectedRunID:          strings.TrimSpace(req.ExpectedRunID),
-			ReplyToWaitingPromptID: strings.TrimSpace(req.ReplyToWaitingPromptID),
+			ThreadID:        strings.TrimSpace(req.ThreadID),
+			Model:           strings.TrimSpace(req.Model),
+			Input:           req.Input,
+			Options:         req.Options,
+			ExpectedRunID:   strings.TrimSpace(req.ExpectedRunID),
+			WaitingResponse: req.WaitingResponse,
 		})
 		if err != nil {
 			return nil, toAIRPCError(err)
@@ -155,6 +157,8 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 			RunID:                   strings.TrimSpace(resp.RunID),
 			Kind:                    strings.TrimSpace(resp.Kind),
 			ConsumedWaitingPromptID: strings.TrimSpace(resp.ConsumedWaitingPromptID),
+			AppliedExecutionMode:    strings.TrimSpace(resp.AppliedExecutionMode),
+			AppliedWaitingChoiceID:  strings.TrimSpace(resp.AppliedWaitingChoiceID),
 		}, nil
 	})
 

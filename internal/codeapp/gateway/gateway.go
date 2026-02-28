@@ -1651,7 +1651,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		th, err := g.ai.CreateThread(r.Context(), meta, body.Title, body.ModelID, body.WorkingDir)
+		th, err := g.ai.CreateThread(r.Context(), meta, body.Title, body.ModelID, body.ExecutionMode, body.WorkingDir)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
@@ -1721,7 +1721,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			if body.Title == nil && body.ModelID == nil {
+			if body.Title == nil && body.ModelID == nil && body.ExecutionMode == nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 				return
 			}
@@ -1742,6 +1742,16 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 						status = http.StatusNotFound
 					} else if errors.Is(err, ai.ErrModelSwitchRequiresExplicitRestart) || errors.Is(err, ai.ErrModelLockViolation) {
 						status = http.StatusConflict
+					}
+					writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+					return
+				}
+			}
+			if body.ExecutionMode != nil {
+				if err := g.ai.SetThreadExecutionMode(r.Context(), meta, threadID, *body.ExecutionMode); err != nil {
+					status := http.StatusBadRequest
+					if errors.Is(err, sql.ErrNoRows) {
+						status = http.StatusNotFound
 					}
 					writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 					return

@@ -344,7 +344,7 @@ func TestIntegration_NativeSDK_OpenAI_DoomLoopGuard_BlocksRepeat(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	th, err := svc.CreateThread(ctx, &meta, "hello", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "hello", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -607,7 +607,7 @@ func TestIntegration_NativeSDK_OpenAI_LengthFinishReason_ForcesRecovery(t *testi
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	th, err := svc.CreateThread(ctx, &meta, "hello", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "hello", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -794,7 +794,7 @@ func TestIntegration_NativeSDK_OpenAI_MissingExplicitCompletionDoesNotPolluteAss
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	th, err := svc.CreateThread(ctx, &meta, "hello", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "hello", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}

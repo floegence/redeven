@@ -13,7 +13,7 @@ func TestSetThreadModel_RejectsSwitchWhenThreadLocked(t *testing.T) {
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 
-	th, err := svc.CreateThread(ctx, meta, "locked-thread", "openai/gpt-5-mini", "")
+	th, err := svc.CreateThread(ctx, meta, "locked-thread", "openai/gpt-5-mini", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestSetThreadModel_RejectsSwitchWhenThreadActive(t *testing.T) {
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 
-	th, err := svc.CreateThread(ctx, meta, "active-thread", "openai/gpt-5-mini", "")
+	th, err := svc.CreateThread(ctx, meta, "active-thread", "openai/gpt-5-mini", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}

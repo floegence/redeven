@@ -266,9 +266,10 @@ export function EnvAppShell() {
     return cleaned;
   };
 
-  const createAskFlowerThread = async (params: { modelId: string; workingDir: string }): Promise<string> => {
+  const createAskFlowerThread = async (params: { modelId: string; workingDir: string; executionMode: 'act' | 'plan' }): Promise<string> => {
     const body: Record<string, unknown> = { title: '' };
     if (params.modelId) body.model_id = params.modelId;
+    body.execution_mode = params.executionMode;
     if (params.workingDir) body.working_dir = params.workingDir;
 
     const resp = await fetchGatewayJSON<CreateThreadResponse>('/_redeven_proxy/api/ai/threads', {
@@ -303,13 +304,14 @@ export function EnvAppShell() {
 
     try {
       const modelId = await resolveAskFlowerModel();
+      const executionMode = readPersistedExecutionMode();
       const suggestedWorkingDir = resolveSuggestedWorkingDirAbsolute({
         suggestedWorkingDirAbs: intent.suggestedWorkingDirAbs,
         suggestedWorkingDirVirtual: intent.suggestedWorkingDirVirtual,
         fsRootAbs: intent.fsRootAbs,
       });
       const validatedWorkingDir = await validateAskFlowerWorkingDir(suggestedWorkingDir);
-      const threadId = await createAskFlowerThread({ modelId, workingDir: validatedWorkingDir });
+      const threadId = await createAskFlowerThread({ modelId, workingDir: validatedWorkingDir, executionMode });
 
       const uploadedAttachments: Array<{ name: string; mimeType: string; url: string }> = [];
       for (const file of intent.pendingAttachments) {
@@ -345,7 +347,7 @@ export function EnvAppShell() {
         },
         options: {
           maxSteps: 10,
-          mode: readPersistedExecutionMode(),
+          mode: executionMode,
         },
       });
 

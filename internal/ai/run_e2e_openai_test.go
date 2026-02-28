@@ -87,7 +87,7 @@ func TestE2E_OpenAICompatibleBaseURL_StreamText(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	th, err := svc.CreateThread(ctx, &meta, "e2e", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "e2e", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}

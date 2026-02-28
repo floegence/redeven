@@ -330,6 +330,74 @@ func subagentsToolInputSchema() map[string]any {
 	}
 }
 
+func askUserToolInputSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"question": map[string]any{
+				"type":      "string",
+				"minLength": 1,
+			},
+			"options": map[string]any{
+				"type":     "array",
+				"minItems": 1,
+				"maxItems": 4,
+				"items":    map[string]any{"type": "string", "maxLength": 200},
+			},
+			"choices": map[string]any{
+				"type":     "array",
+				"minItems": 1,
+				"maxItems": 4,
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"choice_id": map[string]any{"type": "string", "maxLength": 64},
+						"label":     map[string]any{"type": "string", "maxLength": 200},
+						"actions": map[string]any{
+							"type":     "array",
+							"maxItems": 4,
+							"items": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"type": map[string]any{"type": "string", "enum": []string{"set_mode"}},
+									"mode": map[string]any{"type": "string", "enum": []string{"act", "plan"}},
+								},
+								"required":             []string{"type"},
+								"additionalProperties": false,
+							},
+						},
+					},
+					"required":             []string{"label"},
+					"additionalProperties": false,
+				},
+			},
+			"reason_code": map[string]any{
+				"type": "string",
+				"enum": []string{
+					"user_decision_required",
+					"permission_blocked",
+					"missing_external_input",
+					"conflicting_constraints",
+					"safety_confirmation",
+				},
+			},
+			"required_from_user": map[string]any{
+				"type":     "array",
+				"minItems": 1,
+				"maxItems": 8,
+				"items":    map[string]any{"type": "string", "maxLength": 200},
+			},
+			"evidence_refs": map[string]any{
+				"type":     "array",
+				"maxItems": 12,
+				"items":    map[string]any{"type": "string", "maxLength": 120},
+			},
+		},
+		"required":             []string{"question", "reason_code", "required_from_user", "evidence_refs"},
+		"additionalProperties": false,
+	}
+}
+
 func builtInToolDefinitions() []ToolDef {
 	toSchema := func(m map[string]any) json.RawMessage {
 		b, _ := json.Marshal(m)
@@ -404,7 +472,7 @@ func builtInToolDefinitions() []ToolDef {
 		{
 			Name:         "ask_user",
 			Description:  "Ask user for clarification only for true external blockers. Include reason_code, required_from_user, and evidence_refs for explainable policy checks.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"question": map[string]any{"type": "string"}, "options": map[string]any{"type": "array", "items": map[string]any{"type": "string", "maxLength": 200}, "minItems": 1, "maxItems": 4}, "reason_code": map[string]any{"type": "string", "enum": []string{"user_decision_required", "permission_blocked", "missing_external_input", "conflicting_constraints", "safety_confirmation"}}, "required_from_user": map[string]any{"type": "array", "items": map[string]any{"type": "string", "maxLength": 200}, "minItems": 1, "maxItems": 8}, "evidence_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string", "maxLength": 120}, "maxItems": 12}}, "required": []string{"question", "reason_code", "required_from_user", "evidence_refs"}, "additionalProperties": false}),
+			InputSchema:  toSchema(askUserToolInputSchema()),
 			ParallelSafe: true,
 			Mutating:     false,
 			Source:       "builtin",

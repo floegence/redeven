@@ -305,7 +305,7 @@ func TestIntegration_NativeSDK_OpenAI_ToolLoop_Succeeds(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	th, err := svc.CreateThread(ctx, &meta, "hello", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "hello", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -600,7 +600,7 @@ func TestIntegration_NativeSDK_OpenAI_MixedSignalsCompleteInSameTurn(t *testing.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	th, err := svc.CreateThread(ctx, &meta, "mixed signal", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "mixed signal", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}

@@ -51,6 +51,7 @@ func firstAskUserSignal(calls []ToolCall) (askUserSignal, bool) {
 		signal := askUserSignal{
 			Question:         extractSignalText(call, "question"),
 			Options:          extractSignalStringList(call, "options"),
+			Choices:          extractSignalWaitingChoices(call, "choices"),
 			ReasonCode:       extractSignalText(call, "reason_code"),
 			RequiredFromUser: extractSignalStringList(call, "required_from_user"),
 			EvidenceRefs:     extractSignalStringList(call, "evidence_refs"),

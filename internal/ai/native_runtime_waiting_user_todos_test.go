@@ -221,7 +221,7 @@ func TestIntegration_NativeSDK_OpenAI_AskUser_ClosesOpenTodosBeforeWaitingUser(t
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	th, err := svc.CreateThread(ctx, &meta, "todo closeout thread", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "todo closeout thread", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}

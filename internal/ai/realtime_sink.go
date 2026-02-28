@@ -481,6 +481,7 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 	db := s.threadsDB
 	persistTO := s.persistOpTO
 	activeRunID := strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)])
+	cfg := s.cfg
 	s.mu.Unlock()
 	if db == nil {
 		return
@@ -500,6 +501,11 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 	if activeRunID != "" {
 		runStatus, runError = activeThreadEffectiveRunState(th.RunStatus, th.RunError)
 	}
+	modeFallback := "act"
+	if cfg != nil {
+		modeFallback = cfg.EffectiveMode()
+	}
+	executionMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback)
 
 	ev := RealtimeEvent{
 		EventType:           RealtimeEventTypeThreadSummary,
@@ -514,6 +520,7 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 		LastMessagePreview:  strings.TrimSpace(th.LastMessagePreview),
 		LastMessageAtUnixMs: th.LastMessageAtUnixMs,
 		ActiveRunID:         activeRunID,
+		ExecutionMode:       executionMode,
 		WaitingPrompt:       waitingPromptFromThreadRecord(th, runStatus),
 	}
 	s.broadcastRealtimeEvent(ev)

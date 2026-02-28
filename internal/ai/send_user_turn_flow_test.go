@@ -75,7 +75,7 @@ func TestSendUserTurn_ExpectedRunChanged_DoesNotPersistMessage(t *testing.T) {
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 
-	th, err := svc.CreateThread(ctx, meta, "conflict", "", "")
+	th, err := svc.CreateThread(ctx, meta, "conflict", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestSendUserTurn_WaitingPromptMismatch_DoesNotPersistMessage(t *testing.T) 
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 
-	th, err := svc.CreateThread(ctx, meta, "waiting-prompt-mismatch", "", "")
+	th, err := svc.CreateThread(ctx, meta, "waiting-prompt-mismatch", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -145,6 +145,7 @@ func TestSendUserTurn_WaitingPromptMismatch_DoesNotPersistMessage(t *testing.T) 
 		waitingPromptID,
 		"msg_waiting_prompt_mismatch",
 		"tool_waiting_prompt_mismatch",
+		"",
 		meta.UserPublicID,
 		meta.UserEmail,
 	); err != nil {
@@ -164,11 +165,13 @@ func TestSendUserTurn_WaitingPromptMismatch_DoesNotPersistMessage(t *testing.T) 
 	}
 
 	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
-		ThreadID:               th.ThreadID,
-		Model:                  "openai/gpt-5-mini",
-		ReplyToWaitingPromptID: "wp_wrong_id",
-		Input:                  RunInput{Text: "reply with wrong waiting prompt id"},
-		Options:                RunOptions{MaxSteps: 1},
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		WaitingResponse: &WaitingPromptResponse{
+			PromptID: "wp_wrong_id",
+		},
+		Input:   RunInput{Text: "reply with wrong waiting prompt id"},
+		Options: RunOptions{MaxSteps: 1},
 	})
 	if !errors.Is(err, ErrWaitingPromptChanged) {
 		t.Fatalf("SendUserTurn wrong-id err=%v, want %v", err, ErrWaitingPromptChanged)
@@ -190,7 +193,7 @@ func TestSendUserTurn_WaitingPromptMatch_ReturnsConsumedPromptID(t *testing.T) {
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 
-	th, err := svc.CreateThread(ctx, meta, "waiting-prompt-match", "", "")
+	th, err := svc.CreateThread(ctx, meta, "waiting-prompt-match", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -205,6 +208,7 @@ func TestSendUserTurn_WaitingPromptMatch_ReturnsConsumedPromptID(t *testing.T) {
 		waitingPromptID,
 		"msg_waiting_prompt_match",
 		"tool_waiting_prompt_match",
+		"",
 		meta.UserPublicID,
 		meta.UserEmail,
 	); err != nil {
@@ -212,9 +216,11 @@ func TestSendUserTurn_WaitingPromptMatch_ReturnsConsumedPromptID(t *testing.T) {
 	}
 
 	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
-		ThreadID:               th.ThreadID,
-		Model:                  "openai/gpt-5-mini",
-		ReplyToWaitingPromptID: waitingPromptID,
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		WaitingResponse: &WaitingPromptResponse{
+			PromptID: waitingPromptID,
+		},
 		Input: RunInput{
 			Text: "reply with matching waiting prompt id",
 		},
@@ -239,6 +245,90 @@ func TestSendUserTurn_WaitingPromptMatch_ReturnsConsumedPromptID(t *testing.T) {
 	}
 }
 
+func TestSendUserTurn_WaitingChoiceSetMode_UpdatesThreadExecutionMode(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "waiting-choice-set-mode", "", "plan", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	const (
+		waitingPromptID = "wp_waiting_prompt_set_mode"
+		choiceID        = "switch_to_act"
+	)
+	waitingChoicesJSON := marshalWaitingPromptChoices([]WaitingPromptChoice{
+		{
+			ChoiceID: choiceID,
+			Label:    "Switch to Act mode",
+			Actions: []WaitingPromptAction{
+				{
+					Type: waitingPromptActionSetMode,
+					Mode: "act",
+				},
+			},
+		},
+	})
+	if waitingChoicesJSON == "" {
+		t.Fatalf("waitingChoicesJSON should not be empty")
+	}
+	if err := svc.threadsDB.UpdateThreadRunState(
+		ctx,
+		meta.EndpointID,
+		th.ThreadID,
+		"waiting_user",
+		"",
+		waitingPromptID,
+		"msg_waiting_prompt_set_mode",
+		"tool_waiting_prompt_set_mode",
+		waitingChoicesJSON,
+		meta.UserPublicID,
+		meta.UserEmail,
+	); err != nil {
+		t.Fatalf("UpdateThreadRunState waiting_user: %v", err)
+	}
+
+	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		WaitingResponse: &WaitingPromptResponse{
+			PromptID: waitingPromptID,
+			ChoiceID: choiceID,
+		},
+		Input: RunInput{
+			Text: "confirmed, switch to act and continue",
+		},
+		Options: RunOptions{MaxSteps: 1, Mode: "plan"},
+	})
+	if err != nil {
+		t.Fatalf("SendUserTurn: %v", err)
+	}
+	if got := strings.TrimSpace(resp.ConsumedWaitingPromptID); got != waitingPromptID {
+		t.Fatalf("ConsumedWaitingPromptID=%q, want %q", got, waitingPromptID)
+	}
+	if got := strings.TrimSpace(resp.AppliedWaitingChoiceID); got != choiceID {
+		t.Fatalf("AppliedWaitingChoiceID=%q, want %q", got, choiceID)
+	}
+	if got := strings.TrimSpace(resp.AppliedExecutionMode); got != "act" {
+		t.Fatalf("AppliedExecutionMode=%q, want %q", got, "act")
+	}
+
+	gotThread, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if gotThread == nil {
+		t.Fatalf("thread missing")
+	}
+	if got := strings.TrimSpace(gotThread.ExecutionMode); got != "act" {
+		t.Fatalf("thread execution_mode=%q, want %q", got, "act")
+	}
+}
+
 func TestExecutePreparedRun_WithPersistedUserMessage_ReusesPersistedMessageID(t *testing.T) {
 	t.Parallel()
 
@@ -246,7 +336,7 @@ func TestExecutePreparedRun_WithPersistedUserMessage_ReusesPersistedMessageID(t 
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 
-	th, err := svc.CreateThread(ctx, meta, "prepersist", "", "")
+	th, err := svc.CreateThread(ctx, meta, "prepersist", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -305,7 +395,7 @@ func TestSendUserTurn_ActiveRun_InterruptsAndStartsNewRun(t *testing.T) {
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 
-	th, err := svc.CreateThread(ctx, meta, "interrupt", "", "")
+	th, err := svc.CreateThread(ctx, meta, "interrupt", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -368,7 +458,7 @@ func TestSendUserTurn_ModelLockConflict_DoesNotPersistMessage(t *testing.T) {
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 
-	th, err := svc.CreateThread(ctx, meta, "model-lock-conflict", "openai/gpt-5-mini", "")
+	th, err := svc.CreateThread(ctx, meta, "model-lock-conflict", "openai/gpt-5-mini", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -404,7 +494,7 @@ func TestContextRepo_ListRecentDialogueTurns_IncludesPendingUserAfterTurns(t *te
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 
-	th, err := svc.CreateThread(ctx, meta, "pending-after-turn", "", "")
+	th, err := svc.CreateThread(ctx, meta, "pending-after-turn", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -471,7 +561,7 @@ func TestContextRepo_ListRecentDialogueTurns_PreservesOrphanUsersAroundReference
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 
-	th, err := svc.CreateThread(ctx, meta, "orphan-users-around-turn", "", "")
+	th, err := svc.CreateThread(ctx, meta, "orphan-users-around-turn", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}

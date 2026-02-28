@@ -855,6 +855,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		return nil, ErrThreadBusy
 	}
 	cfg := s.cfg
+	req.Options.Mode = normalizeRunMode(strings.TrimSpace(th.ExecutionMode), cfg.EffectiveMode())
 	uploadsDir := s.uploadsDir
 	db = s.threadsDB
 	messageID, err := newMessageID()
@@ -899,6 +900,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 					"",
 					"",
 					"",
+					"",
 					metaRef.UserPublicID,
 					metaRef.UserEmail,
 				)
@@ -925,10 +927,12 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		waitingPromptID := ""
 		waitingMessageID := ""
 		waitingToolID := ""
+		waitingChoicesJSON := ""
 		if waitingPrompt != nil {
 			waitingPromptID = strings.TrimSpace(waitingPrompt.PromptID)
 			waitingMessageID = strings.TrimSpace(waitingPrompt.MessageID)
 			waitingToolID = strings.TrimSpace(waitingPrompt.ToolID)
+			waitingChoicesJSON = marshalWaitingPromptChoices(waitingPrompt.Choices)
 		}
 		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
 		defer cancel()
@@ -941,6 +945,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 			waitingPromptID,
 			waitingMessageID,
 			waitingToolID,
+			waitingChoicesJSON,
 			metaRef.UserPublicID,
 			metaRef.UserEmail,
 		)
@@ -1706,7 +1711,7 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 
 	if db != nil && threadID != "" {
 		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", "", "", meta.UserPublicID, meta.UserEmail)
+		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", "", "", "", meta.UserPublicID, meta.UserEmail)
 		cancel()
 		s.broadcastThreadState(endpointID, threadID, runID, "canceled", "")
 		s.broadcastThreadSummary(endpointID, threadID)

@@ -2051,31 +2051,82 @@ func extractAskUserQuestionFromBlock(block any) string {
 	}
 }
 
-func extractAskUserToolIdentity(block any) (toolID string, askUser bool, waitingUser bool) {
+func extractStringListFromAny(value any) []string {
+	switch v := value.(type) {
+	case []string:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			text := strings.TrimSpace(item)
+			if text == "" {
+				continue
+			}
+			out = append(out, text)
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			text, ok := item.(string)
+			if !ok {
+				continue
+			}
+			text = strings.TrimSpace(text)
+			if text == "" {
+				continue
+			}
+			out = append(out, text)
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func extractAskUserChoices(args any, result any) []WaitingPromptChoice {
+	if m, ok := result.(map[string]any); ok && m != nil {
+		if choices := parseWaitingPromptChoicesAny(m["choices"]); len(choices) > 0 {
+			return choices
+		}
+		if options := extractStringListFromAny(m["options"]); len(options) > 0 {
+			return waitingPromptChoicesFromOptions(options)
+		}
+	}
+	if m, ok := args.(map[string]any); ok && m != nil {
+		if choices := parseWaitingPromptChoicesAny(m["choices"]); len(choices) > 0 {
+			return choices
+		}
+		if options := extractStringListFromAny(m["options"]); len(options) > 0 {
+			return waitingPromptChoicesFromOptions(options)
+		}
+	}
+	return nil
+}
+
+func extractAskUserToolIdentity(block any) (toolID string, askUser bool, waitingUser bool, choices []WaitingPromptChoice) {
 	switch v := block.(type) {
 	case ToolCallBlock:
 		if strings.TrimSpace(v.ToolName) != "ask_user" {
-			return "", false, false
+			return "", false, false, nil
 		}
-		return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result)
+		return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), extractAskUserChoices(v.Args, v.Result)
 	case *ToolCallBlock:
 		if v == nil || strings.TrimSpace(v.ToolName) != "ask_user" {
-			return "", false, false
+			return "", false, false, nil
 		}
-		return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result)
+		return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), extractAskUserChoices(v.Args, v.Result)
 	case map[string]any:
 		typ, _ := v["type"].(string)
 		if strings.TrimSpace(typ) != "tool-call" {
-			return "", false, false
+			return "", false, false, nil
 		}
 		toolName, _ := v["toolName"].(string)
 		if strings.TrimSpace(toolName) != "ask_user" {
-			return "", false, false
+			return "", false, false, nil
 		}
 		toolID, _ := v["toolId"].(string)
-		return strings.TrimSpace(toolID), true, extractAskUserWaitingFlag(v["result"])
+		return strings.TrimSpace(toolID), true, extractAskUserWaitingFlag(v["result"]), extractAskUserChoices(v["args"], v["result"])
 	default:
-		return "", false, false
+		return "", false, false, nil
 	}
 }
 
@@ -2114,22 +2165,24 @@ func (r *run) snapshotWaitingPrompt() *WaitingPrompt {
 		return nil
 	}
 	fallbackToolID := ""
+	fallbackChoices := []WaitingPromptChoice(nil)
 	for i := len(r.assistantBlocks) - 1; i >= 0; i-- {
-		toolID, askUser, waitingUser := extractAskUserToolIdentity(r.assistantBlocks[i])
+		toolID, askUser, waitingUser, choices := extractAskUserToolIdentity(r.assistantBlocks[i])
 		if !askUser || toolID == "" {
 			continue
 		}
 		if waitingUser {
-			return normalizeWaitingPrompt("", messageID, toolID)
+			return normalizeWaitingPrompt("", messageID, toolID, choices)
 		}
 		if fallbackToolID == "" {
 			fallbackToolID = toolID
+			fallbackChoices = choices
 		}
 	}
 	if fallbackToolID == "" {
 		return nil
 	}
-	return normalizeWaitingPrompt("", messageID, fallbackToolID)
+	return normalizeWaitingPrompt("", messageID, fallbackToolID, fallbackChoices)
 }
 
 func extractQuestionFromAny(value any) string {

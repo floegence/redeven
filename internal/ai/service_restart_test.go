@@ -40,19 +40,19 @@ func TestNewService_ResetsStaleActiveThreadRunStateAfterRestart(t *testing.T) {
 		t.Fatalf("NewService first: %v", err)
 	}
 
-	runningThread, err := svc.CreateThread(ctx, &meta, "running thread", "", "")
+	runningThread, err := svc.CreateThread(ctx, &meta, "running thread", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread running: %v", err)
 	}
-	waitingUserThread, err := svc.CreateThread(ctx, &meta, "waiting_user thread", "", "")
+	waitingUserThread, err := svc.CreateThread(ctx, &meta, "waiting_user thread", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread waiting_user: %v", err)
 	}
 
-	if err := svc.threadsDB.UpdateThreadRunState(ctx, meta.EndpointID, runningThread.ThreadID, "running", "", "", "", "", meta.UserPublicID, meta.UserEmail); err != nil {
+	if err := svc.threadsDB.UpdateThreadRunState(ctx, meta.EndpointID, runningThread.ThreadID, "running", "", "", "", "", "", meta.UserPublicID, meta.UserEmail); err != nil {
 		t.Fatalf("UpdateThreadRunState running: %v", err)
 	}
-	if err := svc.threadsDB.UpdateThreadRunState(ctx, meta.EndpointID, waitingUserThread.ThreadID, "waiting_user", "", "wp_waiting_seed", "msg_waiting_seed", "tool_waiting_seed", meta.UserPublicID, meta.UserEmail); err != nil {
+	if err := svc.threadsDB.UpdateThreadRunState(ctx, meta.EndpointID, waitingUserThread.ThreadID, "waiting_user", "", "wp_waiting_seed", "msg_waiting_seed", "tool_waiting_seed", "", meta.UserPublicID, meta.UserEmail); err != nil {
 		t.Fatalf("UpdateThreadRunState waiting_user: %v", err)
 	}
 

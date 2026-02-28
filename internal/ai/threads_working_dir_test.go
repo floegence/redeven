@@ -59,7 +59,7 @@ func TestService_CreateThread_AllowsWorkingDirOutsideRootDir(t *testing.T) {
 		CanAdmin:          false,
 	}
 
-	th, err := svc.CreateThread(context.Background(), meta, "test", "", outsideDir)
+	th, err := svc.CreateThread(context.Background(), meta, "test", "", "", outsideDir)
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}

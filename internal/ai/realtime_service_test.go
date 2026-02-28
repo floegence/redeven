@@ -145,7 +145,7 @@ func TestStartRunDetached_ImmediateCancelStillStopsRun(t *testing.T) {
 	svc := newRealtimeTestService(t, 2*time.Second)
 
 	ctx := context.Background()
-	th, err := svc.CreateThread(ctx, &meta, "hello", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "hello", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestListActiveThreadRuns_ReturnsDetachedRunSnapshot(t *testing.T) {
 	svc := newRealtimeTestService(t, 2*time.Second)
 
 	ctx := context.Background()
-	th, err := svc.CreateThread(ctx, &meta, "hello", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "hello", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}

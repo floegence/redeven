@@ -11,6 +11,8 @@ import type {
   AISetToolCollapsedResponse,
   AISendUserTurnRequest,
   AISendUserTurnResponse,
+  AIWaitingPromptAction,
+  AIWaitingPromptChoice,
   AISubscribeSummaryResponse,
   AISubscribeThreadRequest,
   AISubscribeThreadResponse,
@@ -43,6 +45,8 @@ import type {
   wire_ai_transcript_message_item,
   wire_ai_tool_approval_req,
   wire_ai_tool_approval_resp,
+  wire_ai_waiting_prompt_action,
+  wire_ai_waiting_prompt_choice,
   wire_ai_waiting_prompt,
 } from '../wire/ai';
 
@@ -53,6 +57,36 @@ function toAIActiveRun(raw: wire_ai_active_run): AIActiveRun {
   };
 }
 
+function normalizeExecutionMode(raw: unknown): 'act' | 'plan' | undefined {
+  const mode = String(raw ?? '').trim().toLowerCase();
+  if (mode === 'act' || mode === 'plan') return mode;
+  return undefined;
+}
+
+function fromWireAIWaitingPromptAction(raw: wire_ai_waiting_prompt_action): AIWaitingPromptAction | null {
+  const type = String(raw?.type ?? '').trim().toLowerCase();
+  if (!type) return null;
+  const mode = normalizeExecutionMode(raw?.mode);
+  return {
+    type,
+    mode,
+  };
+}
+
+function fromWireAIWaitingPromptChoice(raw: wire_ai_waiting_prompt_choice): AIWaitingPromptChoice | null {
+  const choiceId = String(raw?.choice_id ?? '').trim();
+  const label = String(raw?.label ?? '').trim();
+  if (!choiceId || !label) return null;
+  const actions = Array.isArray(raw?.actions)
+    ? raw.actions.map(fromWireAIWaitingPromptAction).filter(Boolean) as AIWaitingPromptAction[]
+    : [];
+  return {
+    choiceId,
+    label,
+    actions: actions.length > 0 ? actions : undefined,
+  };
+}
+
 function fromWireAIWaitingPrompt(raw: wire_ai_waiting_prompt | undefined): AIWaitingPrompt | undefined {
   const promptId = String(raw?.prompt_id ?? '').trim();
   const messageId = String(raw?.message_id ?? '').trim();
@@ -60,7 +94,15 @@ function fromWireAIWaitingPrompt(raw: wire_ai_waiting_prompt | undefined): AIWai
   if (!promptId || !messageId || !toolId) {
     return undefined;
   }
-  return { promptId, messageId, toolId };
+  const choices = Array.isArray(raw?.choices)
+    ? raw.choices.map(fromWireAIWaitingPromptChoice).filter(Boolean) as AIWaitingPromptChoice[]
+    : [];
+  return {
+    promptId,
+    messageId,
+    toolId,
+    choices: choices.length > 0 ? choices : undefined,
+  };
 }
 
 export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai_send_user_turn_req {
@@ -85,8 +127,12 @@ export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai
       mode: req.options?.mode ? String(req.options.mode).trim() : undefined,
     },
     expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
-    reply_to_waiting_prompt_id:
-      req.replyToWaitingPromptId?.trim() ? String(req.replyToWaitingPromptId).trim() : undefined,
+    waiting_response: req.waitingResponse?.promptId?.trim()
+      ? {
+          prompt_id: String(req.waitingResponse.promptId).trim(),
+          choice_id: req.waitingResponse.choiceId?.trim() ? String(req.waitingResponse.choiceId).trim() : undefined,
+        }
+      : undefined,
   };
 }
 
@@ -96,6 +142,8 @@ export function fromWireAISendUserTurnResponse(resp: wire_ai_send_user_turn_resp
     kind: String(resp?.kind ?? '').trim(),
     consumedWaitingPromptId:
       String(resp?.consumed_waiting_prompt_id ?? '').trim() || undefined,
+    appliedExecutionMode: normalizeExecutionMode(resp?.applied_execution_mode),
+    appliedWaitingChoiceId: String(resp?.applied_waiting_choice_id ?? '').trim() || undefined,
   };
 }
 
@@ -253,6 +301,7 @@ export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtime
     lastMessagePreview: typeof payload?.last_message_preview === 'string' ? payload.last_message_preview : undefined,
     lastMessageAtUnixMs: typeof payload?.last_message_at_unix_ms === 'number' ? payload.last_message_at_unix_ms : undefined,
     activeRunId: typeof payload?.active_run_id === 'string' ? payload.active_run_id : undefined,
+    executionMode: normalizeExecutionMode(payload?.execution_mode),
 
     resetReason: typeof payload?.reset_reason === 'string' ? payload.reset_reason : undefined,
     resetCheckpointId: typeof payload?.reset_checkpoint_id === 'string' ? payload.reset_checkpoint_id : undefined,

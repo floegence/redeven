@@ -94,9 +94,14 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	}
 	s.mu.Lock()
 	db := s.threadsDB
+	cfg := s.cfg
 	s.mu.Unlock()
 	if db == nil {
 		return nil, errors.New("threads store not ready")
+	}
+	modeFallback := "act"
+	if cfg != nil {
+		modeFallback = cfg.EffectiveMode()
 	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
@@ -126,6 +131,7 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 		Title:               strings.TrimSpace(th.Title),
 		ModelID:             strings.TrimSpace(th.ModelID),
 		ModelLocked:         th.ModelLocked,
+		ExecutionMode:       normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback),
 		WorkingDir:          workingDir,
 		RunStatus:           runStatus,
 		RunUpdatedAtUnixMs:  th.RunUpdatedAtUnixMs,
@@ -147,9 +153,14 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	}
 	s.mu.Lock()
 	db := s.threadsDB
+	cfg := s.cfg
 	s.mu.Unlock()
 	if db == nil {
 		return nil, errors.New("threads store not ready")
+	}
+	modeFallback := "act"
+	if cfg != nil {
+		modeFallback = cfg.EffectiveMode()
 	}
 
 	c, ok := threadstore.DecodeCursor(cursor)
@@ -177,6 +188,7 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 			Title:               strings.TrimSpace(t.Title),
 			ModelID:             strings.TrimSpace(t.ModelID),
 			ModelLocked:         t.ModelLocked,
+			ExecutionMode:       normalizeRunMode(strings.TrimSpace(t.ExecutionMode), modeFallback),
 			WorkingDir:          workingDir,
 			RunStatus:           runStatus,
 			RunUpdatedAtUnixMs:  t.RunUpdatedAtUnixMs,
@@ -191,7 +203,7 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	return out, nil
 }
 
-func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title string, modelID string, workingDir string) (*ThreadView, error) {
+func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title string, modelID string, executionMode string, workingDir string) (*ThreadView, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -212,6 +224,11 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 	}
 
 	modelID = strings.TrimSpace(modelID)
+	modeFallback := "act"
+	if cfg != nil {
+		modeFallback = cfg.EffectiveMode()
+	}
+	executionMode = normalizeRunMode(strings.TrimSpace(executionMode), modeFallback)
 	if modelID != "" {
 		if _, _, ok := strings.Cut(modelID, "/"); !ok {
 			return nil, errors.New("invalid model")
@@ -242,6 +259,7 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 		EndpointID:            strings.TrimSpace(meta.EndpointID),
 		NamespacePublicID:     strings.TrimSpace(meta.NamespacePublicID),
 		ModelID:               modelID,
+		ExecutionMode:         executionMode,
 		WorkingDir:            workingDirClean,
 		Title:                 strings.TrimSpace(title),
 		RunStatus:             "idle",
@@ -265,6 +283,7 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 		Title:               strings.TrimSpace(t.Title),
 		ModelID:             modelID,
 		ModelLocked:         false,
+		ExecutionMode:       executionMode,
 		WorkingDir:          workingDirClean,
 		RunStatus:           "idle",
 		RunUpdatedAtUnixMs:  0,
@@ -397,6 +416,54 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	return nil
 }
 
+func (s *Service) SetThreadExecutionMode(ctx context.Context, meta *session.Meta, threadID string, executionMode string) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if err := requireRWX(meta); err != nil {
+		return err
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return errors.New("missing thread_id")
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if endpointID == "" {
+		return errors.New("invalid request")
+	}
+
+	s.mu.Lock()
+	db := s.threadsDB
+	cfg := s.cfg
+	s.mu.Unlock()
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+
+	fallbackMode := "act"
+	if cfg != nil {
+		fallbackMode = cfg.EffectiveMode()
+	}
+	executionMode = normalizeRunMode(strings.TrimSpace(executionMode), fallbackMode)
+
+	th, err := db.GetThread(ctx, endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	if th == nil {
+		return sql.ErrNoRows
+	}
+	currentMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), fallbackMode)
+	if currentMode == executionMode {
+		return nil
+	}
+	if err := db.UpdateThreadExecutionMode(ctx, endpointID, threadID, executionMode); err != nil {
+		return err
+	}
+	s.broadcastThreadSummary(endpointID, threadID)
+	return nil
+}
+
 func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 	if s == nil {
 		return errors.New("nil service")
@@ -426,7 +493,7 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 	// allow the user to unblock the UI by marking it canceled.
 	if db != nil {
 		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", "", "", meta.UserPublicID, meta.UserEmail)
+		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", "", "", "", meta.UserPublicID, meta.UserEmail)
 		cancel()
 		s.broadcastThreadSummary(endpointID, threadID)
 	}

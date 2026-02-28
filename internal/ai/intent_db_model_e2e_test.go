@@ -107,7 +107,7 @@ func TestE2E_IntentRouting_DBConfiguredModelIdentityPrompt(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 
-		thread, createErr := svc.CreateThread(ctx, &meta, fmt.Sprintf("db-model-intent-e2e-%d", i), modelID, "")
+		thread, createErr := svc.CreateThread(ctx, &meta, fmt.Sprintf("db-model-intent-e2e-%d", i), modelID, "", "")
 		if createErr != nil {
 			cancel()
 			t.Fatalf("CreateThread(%d): %v", i, createErr)

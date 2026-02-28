@@ -22,9 +22,26 @@ type Model struct {
 }
 
 type WaitingPrompt struct {
-	PromptID  string `json:"prompt_id"`
-	MessageID string `json:"message_id"`
-	ToolID    string `json:"tool_id"`
+	PromptID  string                `json:"prompt_id"`
+	MessageID string                `json:"message_id"`
+	ToolID    string                `json:"tool_id"`
+	Choices   []WaitingPromptChoice `json:"choices,omitempty"`
+}
+
+type WaitingPromptChoice struct {
+	ChoiceID string                `json:"choice_id"`
+	Label    string                `json:"label"`
+	Actions  []WaitingPromptAction `json:"actions,omitempty"`
+}
+
+type WaitingPromptAction struct {
+	Type string `json:"type"`
+	Mode string `json:"mode,omitempty"`
+}
+
+type WaitingPromptResponse struct {
+	PromptID string `json:"prompt_id"`
+	ChoiceID string `json:"choice_id,omitempty"`
 }
 
 // --- HTTP API types (snake_case, stable) ---
@@ -39,6 +56,7 @@ type ThreadView struct {
 	Title               string         `json:"title"`
 	ModelID             string         `json:"model_id"`
 	ModelLocked         bool           `json:"model_locked"`
+	ExecutionMode       string         `json:"execution_mode"`
 	WorkingDir          string         `json:"working_dir"`
 	RunStatus           string         `json:"run_status"`
 	RunUpdatedAtUnixMs  int64          `json:"run_updated_at_unix_ms"`
@@ -56,9 +74,10 @@ type ListThreadsResponse struct {
 }
 
 type CreateThreadRequest struct {
-	Title      string `json:"title"`
-	ModelID    string `json:"model_id,omitempty"`
-	WorkingDir string `json:"working_dir,omitempty"`
+	Title         string `json:"title"`
+	ModelID       string `json:"model_id,omitempty"`
+	ExecutionMode string `json:"execution_mode,omitempty"`
+	WorkingDir    string `json:"working_dir,omitempty"`
 }
 
 type CreateThreadResponse struct {
@@ -66,8 +85,9 @@ type CreateThreadResponse struct {
 }
 
 type PatchThreadRequest struct {
-	Title   *string `json:"title,omitempty"`
-	ModelID *string `json:"model_id,omitempty"`
+	Title         *string `json:"title,omitempty"`
+	ModelID       *string `json:"model_id,omitempty"`
+	ExecutionMode *string `json:"execution_mode,omitempty"`
 }
 
 type ListThreadMessagesResponse struct {
@@ -384,6 +404,7 @@ type RealtimeEvent struct {
 	LastMessagePreview  string `json:"last_message_preview,omitempty"`
 	LastMessageAtUnixMs int64  `json:"last_message_at_unix_ms,omitempty"`
 	ActiveRunID         string `json:"active_run_id,omitempty"`
+	ExecutionMode       string `json:"execution_mode,omitempty"`
 
 	// Transcript reset events (EventType=transcript_reset).
 	ResetReason       string `json:"reset_reason,omitempty"`

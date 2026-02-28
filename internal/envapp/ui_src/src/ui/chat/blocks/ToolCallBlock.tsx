@@ -26,7 +26,12 @@ export interface ToolCallBlockProps {
 type AskUserDisplay = {
   question: string;
   source: string;
-  options: string[];
+  choices: AskUserChoiceDisplay[];
+};
+
+type AskUserChoiceDisplay = {
+  choiceId: string;
+  label: string;
 };
 
 // Chevron icon for collapse toggle (rotatable)
@@ -156,6 +161,29 @@ function normalizeAskUserOptions(value: unknown): string[] {
   return options;
 }
 
+function normalizeAskUserChoices(value: unknown): AskUserChoiceDisplay[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const out: AskUserChoiceDisplay[] = [];
+  const seenChoice = new Set<string>();
+  const seenLabel = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const label = asTrimmedString((item as any).label);
+    if (!label) continue;
+    const choiceId = asTrimmedString((item as any).choice_id ?? (item as any).choiceId) || `choice_${out.length + 1}`;
+    const choiceKey = choiceId.toLowerCase();
+    const labelKey = label.toLowerCase();
+    if (seenChoice.has(choiceKey) || seenLabel.has(labelKey)) continue;
+    seenChoice.add(choiceKey);
+    seenLabel.add(labelKey);
+    out.push({ choiceId, label });
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
 function buildAskUserDisplay(block: ToolCallBlockType): AskUserDisplay | null {
   if (String(block.toolName ?? '').trim() !== ASK_USER_TOOL_NAME) {
     return null;
@@ -166,13 +194,26 @@ function buildAskUserDisplay(block: ToolCallBlockType): AskUserDisplay | null {
   if (!question) {
     return null;
   }
+  const choicesFromResult = normalizeAskUserChoices(result?.choices);
+  const choicesFromArgs = normalizeAskUserChoices(args?.choices);
   const optionsFromResult = normalizeAskUserOptions(result?.options);
   const optionsFromArgs = normalizeAskUserOptions(args?.options);
   const source = asTrimmedString(result?.source);
+  const choices = choicesFromResult.length > 0
+    ? choicesFromResult
+    : choicesFromArgs.length > 0
+      ? choicesFromArgs
+      : (optionsFromResult.length > 0 ? optionsFromResult : optionsFromArgs).map((option, index) => ({
+          choiceId: `choice_${index + 1}`,
+          label: option,
+        }));
+  if (choices.length <= 0) {
+    return null;
+  }
   return {
     question,
     source,
-    options: optionsFromResult.length > 0 ? optionsFromResult : optionsFromArgs,
+    choices,
   };
 }
 
@@ -2978,15 +3019,21 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
   const [submitting, setSubmitting] = createSignal(false);
   const [submittedReply, setSubmittedReply] = createSignal('');
   const promptKey = createMemo(
-    () => `${props.messageId}\u001f${props.block.toolId}\u001f${props.display.question}\u001f${props.display.options.join('\u001f')}`,
+    () =>
+      `${props.messageId}\u001f${props.block.toolId}\u001f${props.display.question}\u001f${props.display.choices
+        .map((choice) => `${choice.choiceId}:${choice.label}`)
+        .join('\u001f')}`,
   );
   const sourceLabel = createMemo(() => humanizeAskUserSource(props.display.source));
+  const activeThreadId = createMemo(() => String(ai.activeThreadId() ?? '').trim());
+  const waitingPrompt = createMemo(() => ai.activeThreadWaitingPrompt());
+  const waitingPromptId = createMemo(() => String(waitingPrompt()?.prompt_id ?? '').trim());
   const interactiveAllowed = createMemo(() => {
-    const waitingPrompt = ai.activeThreadWaitingPrompt();
-    if (!waitingPrompt) return false;
+    const prompt = waitingPrompt();
+    if (!prompt) return false;
     return (
-      String(waitingPrompt.message_id ?? '').trim() === props.messageId &&
-      String(waitingPrompt.tool_id ?? '').trim() === String(props.block.toolId ?? '').trim()
+      String(prompt.message_id ?? '').trim() === props.messageId &&
+      String(prompt.tool_id ?? '').trim() === String(props.block.toolId ?? '').trim()
     );
   });
   const controlsDisabled = createMemo(() => submitting() || !interactiveAllowed());
@@ -3036,15 +3083,25 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
 
   const handleOptionSelect = (index: number) => {
     if (controlsDisabled()) return;
-    const option = props.display.options[index];
+    const option = props.display.choices[index];
     if (!option) return;
+    const tid = activeThreadId();
+    const promptId = waitingPromptId();
+    if (tid && promptId) {
+      ai.setPendingWaitingChoice(tid, promptId, option.choiceId);
+    }
     setSelectedOptionIndex(index);
     setUseCustomReply(false);
-    void submitReply(option);
+    void submitReply(option.label);
   };
 
   const handleCustomFocus = () => {
     if (controlsDisabled()) return;
+    const tid = activeThreadId();
+    const promptId = waitingPromptId();
+    if (tid && promptId) {
+      ai.setPendingWaitingChoice(tid, promptId, '');
+    }
     setUseCustomReply(true);
     setSelectedOptionIndex(-1);
   };
@@ -3083,8 +3140,8 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
       }>
         <>
           <div class="chat-tool-ask-user-options" role="radiogroup" aria-label="Ask user reply options">
-            <For each={props.display.options}>
-              {(option, index) => (
+            <For each={props.display.choices}>
+              {(choice, index) => (
                 <label
                   class={cn(
                     'chat-tool-ask-user-option-row',
@@ -3101,7 +3158,7 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
                     onChange={() => handleOptionSelect(index())}
                     disabled={controlsDisabled()}
                   />
-                  <span class="chat-tool-ask-user-option-text">{option}</span>
+                  <span class="chat-tool-ask-user-option-text">{choice.label}</span>
                 </label>
               )}
             </For>

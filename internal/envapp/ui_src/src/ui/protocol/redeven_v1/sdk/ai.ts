@@ -13,6 +13,23 @@ export type AIWaitingPrompt = {
   promptId: string;
   messageId: string;
   toolId: string;
+  choices?: AIWaitingPromptChoice[];
+};
+
+export type AIWaitingPromptAction = {
+  type: string;
+  mode?: 'act' | 'plan';
+};
+
+export type AIWaitingPromptChoice = {
+  choiceId: string;
+  label: string;
+  actions?: AIWaitingPromptAction[];
+};
+
+export type AIWaitingPromptResponse = {
+  promptId: string;
+  choiceId?: string;
 };
 
 export type AISendUserTurnRequest = {
@@ -32,13 +49,15 @@ export type AISendUserTurnRequest = {
     mode?: 'act' | 'plan';
   };
   expectedRunId?: string;
-  replyToWaitingPromptId?: string;
+  waitingResponse?: AIWaitingPromptResponse;
 };
 
 export type AISendUserTurnResponse = {
   runId: string;
   kind: string;
   consumedWaitingPromptId?: string;
+  appliedExecutionMode?: 'act' | 'plan';
+  appliedWaitingChoiceId?: string;
 };
 
 export type AICancelRunRequest = {
@@ -145,6 +164,7 @@ export type AIRealtimeEvent = {
   lastMessagePreview?: string;
   lastMessageAtUnixMs?: number;
   activeRunId?: string;
+  executionMode?: 'act' | 'plan';
 
   // transcript_reset only
   resetReason?: string;

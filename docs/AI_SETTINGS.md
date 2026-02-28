@@ -188,5 +188,7 @@ Operational behavior:
 
 - `act` mode is direct execution by default.
 - `plan` mode is always strict readonly. Mutating tool calls are blocked regardless of execution_policy toggles.
+- Execution mode is stored per thread (`execution_mode`) and enforced server-side for each run.
 - If edits are required in `plan`, Flower should ask the user to switch to `act` (when interaction is allowed).
+- For deterministic mode switching, the ask_user payload should include structured `choices` with `actions` (for example `{type:"set_mode",mode:"act"}`).
 - Settings UI exposes the available execution-policy switches under **Settings → Flower → Execution policy**.

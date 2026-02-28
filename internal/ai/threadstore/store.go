@@ -67,6 +67,7 @@ type Thread struct {
 	NamespacePublicID  string `json:"namespace_public_id"`
 	ModelID            string `json:"model_id"`
 	ModelLocked        bool   `json:"model_locked"`
+	ExecutionMode      string `json:"execution_mode"`
 	WorkingDir         string `json:"working_dir"`
 	Title              string `json:"title"`
 	RunStatus          string `json:"run_status"`
@@ -75,6 +76,7 @@ type Thread struct {
 	WaitingPromptID    string `json:"waiting_prompt_id"`
 	WaitingMessageID   string `json:"waiting_message_id"`
 	WaitingToolID      string `json:"waiting_tool_id"`
+	WaitingChoicesJSON string `json:"waiting_choices_json"`
 
 	CreatedByUserPublicID string `json:"created_by_user_public_id"`
 	CreatedByUserEmail    string `json:"created_by_user_email"`
@@ -181,9 +183,9 @@ func (s *Store) ListThreads(ctx context.Context, endpointID string, limit int, c
 
 	q := fmt.Sprintf(`
 SELECT
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, working_dir, title,
+  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
   run_status, run_updated_at_unix_ms, run_error,
-  waiting_prompt_id, waiting_message_id, waiting_tool_id,
+  waiting_prompt_id, waiting_message_id, waiting_tool_id, waiting_choices_json,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
@@ -210,6 +212,7 @@ LIMIT ?
 			&t.NamespacePublicID,
 			&t.ModelID,
 			&modelLockedInt,
+			&t.ExecutionMode,
 			&t.WorkingDir,
 			&t.Title,
 			&t.RunStatus,
@@ -218,6 +221,7 @@ LIMIT ?
 			&t.WaitingPromptID,
 			&t.WaitingMessageID,
 			&t.WaitingToolID,
+			&t.WaitingChoicesJSON,
 			&t.CreatedByUserPublicID,
 			&t.CreatedByUserEmail,
 			&t.UpdatedByUserPublicID,
@@ -260,9 +264,9 @@ func (s *Store) GetThread(ctx context.Context, endpointID string, threadID strin
 	var modelLockedInt int
 	err := s.db.QueryRowContext(ctx, `
 SELECT
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, working_dir, title,
+  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
   run_status, run_updated_at_unix_ms, run_error,
-  waiting_prompt_id, waiting_message_id, waiting_tool_id,
+  waiting_prompt_id, waiting_message_id, waiting_tool_id, waiting_choices_json,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
@@ -274,6 +278,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		&t.NamespacePublicID,
 		&t.ModelID,
 		&modelLockedInt,
+		&t.ExecutionMode,
 		&t.WorkingDir,
 		&t.Title,
 		&t.RunStatus,
@@ -282,6 +287,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		&t.WaitingPromptID,
 		&t.WaitingMessageID,
 		&t.WaitingToolID,
+		&t.WaitingChoicesJSON,
 		&t.CreatedByUserPublicID,
 		&t.CreatedByUserEmail,
 		&t.UpdatedByUserPublicID,
@@ -313,6 +319,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	t.EndpointID = strings.TrimSpace(t.EndpointID)
 	t.NamespacePublicID = strings.TrimSpace(t.NamespacePublicID)
 	t.ModelID = strings.TrimSpace(t.ModelID)
+	t.ExecutionMode = normalizeExecutionMode(t.ExecutionMode)
 	t.WorkingDir = strings.TrimSpace(t.WorkingDir)
 	t.Title = strings.TrimSpace(t.Title)
 	t.RunStatus = normalizeRunStatus(t.RunStatus)
@@ -320,6 +327,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	t.WaitingPromptID = strings.TrimSpace(t.WaitingPromptID)
 	t.WaitingMessageID = strings.TrimSpace(t.WaitingMessageID)
 	t.WaitingToolID = strings.TrimSpace(t.WaitingToolID)
+	t.WaitingChoicesJSON = strings.TrimSpace(t.WaitingChoicesJSON)
 	t.CreatedByUserPublicID = strings.TrimSpace(t.CreatedByUserPublicID)
 	t.CreatedByUserEmail = strings.TrimSpace(t.CreatedByUserEmail)
 	t.UpdatedByUserPublicID = strings.TrimSpace(t.UpdatedByUserPublicID)
@@ -341,21 +349,22 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	}
 
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO ai_threads(
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, working_dir, title,
-  run_status, run_updated_at_unix_ms, run_error,
-  waiting_prompt_id, waiting_message_id, waiting_tool_id,
-  created_by_user_public_id, created_by_user_email,
-  updated_by_user_public_id, updated_by_user_email,
-  created_at_unix_ms, updated_at_unix_ms,
-  last_message_at_unix_ms, last_message_preview
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`,
+	INSERT INTO ai_threads(
+	  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
+	  run_status, run_updated_at_unix_ms, run_error,
+	  waiting_prompt_id, waiting_message_id, waiting_tool_id, waiting_choices_json,
+	  created_by_user_public_id, created_by_user_email,
+	  updated_by_user_public_id, updated_by_user_email,
+	  created_at_unix_ms, updated_at_unix_ms,
+	  last_message_at_unix_ms, last_message_preview
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
 		t.ThreadID,
 		t.EndpointID,
 		t.NamespacePublicID,
 		t.ModelID,
 		boolToInt(t.ModelLocked),
+		t.ExecutionMode,
 		t.WorkingDir,
 		t.Title,
 		t.RunStatus,
@@ -364,6 +373,7 @@ INSERT INTO ai_threads(
 		t.WaitingPromptID,
 		t.WaitingMessageID,
 		t.WaitingToolID,
+		t.WaitingChoicesJSON,
 		t.CreatedByUserPublicID,
 		t.CreatedByUserEmail,
 		t.UpdatedByUserPublicID,
@@ -436,6 +446,35 @@ WHERE endpoint_id = ? AND thread_id = ?
 	return nil
 }
 
+func (s *Store) UpdateThreadExecutionMode(ctx context.Context, endpointID string, threadID string, executionMode string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	executionMode = normalizeExecutionMode(executionMode)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid request")
+	}
+
+	res, err := s.db.ExecContext(ctx, `
+UPDATE ai_threads
+SET execution_mode = ?
+WHERE endpoint_id = ? AND thread_id = ?
+`, executionMode, endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 func (s *Store) RenameThread(ctx context.Context, endpointID string, threadID string, title string, updatedByID string, updatedByEmail string) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
@@ -479,17 +518,26 @@ func normalizeRunStatus(status string) string {
 	}
 }
 
-func normalizeWaitingPromptForStatus(runStatus string, promptID string, messageID string, toolID string) (string, string, string) {
+func normalizeExecutionMode(mode string) string {
+	mode = strings.TrimSpace(strings.ToLower(mode))
+	if mode == "plan" {
+		return "plan"
+	}
+	return "act"
+}
+
+func normalizeWaitingPromptForStatus(runStatus string, promptID string, messageID string, toolID string, choicesJSON string) (string, string, string, string) {
 	promptID = strings.TrimSpace(promptID)
 	messageID = strings.TrimSpace(messageID)
 	toolID = strings.TrimSpace(toolID)
+	choicesJSON = strings.TrimSpace(choicesJSON)
 	if runStatus != "waiting_user" {
-		return "", "", ""
+		return "", "", "", ""
 	}
 	if promptID == "" || messageID == "" || toolID == "" {
-		return "", "", ""
+		return "", "", "", ""
 	}
-	return promptID, messageID, toolID
+	return promptID, messageID, toolID, choicesJSON
 }
 
 // ResetStaleActiveThreadRunStates marks startup-orphaned active thread states as canceled.
@@ -507,16 +555,17 @@ func (s *Store) ResetStaleActiveThreadRunStates(ctx context.Context) (int64, err
 	}
 	now := time.Now().UnixMilli()
 	res, err := s.db.ExecContext(ctx, `
-UPDATE ai_threads
-SET run_status = 'canceled',
-    run_updated_at_unix_ms = ?,
-    run_error = '',
-    waiting_prompt_id = '',
-    waiting_message_id = '',
-    waiting_tool_id = '',
-    updated_at_unix_ms = ?
-WHERE run_status IN ('accepted', 'running', 'waiting_approval', 'recovering', 'finalizing')
-`, now, now)
+	UPDATE ai_threads
+	SET run_status = 'canceled',
+	    run_updated_at_unix_ms = ?,
+	    run_error = '',
+	    waiting_prompt_id = '',
+	    waiting_message_id = '',
+	    waiting_tool_id = '',
+	    waiting_choices_json = '',
+	    updated_at_unix_ms = ?
+	WHERE run_status IN ('accepted', 'running', 'waiting_approval', 'recovering', 'finalizing')
+	`, now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -533,6 +582,7 @@ func (s *Store) UpdateThreadRunState(
 	waitingPromptID string,
 	waitingMessageID string,
 	waitingToolID string,
+	waitingChoicesJSON string,
 	updatedByID string,
 	updatedByEmail string,
 ) error {
@@ -553,25 +603,32 @@ func (s *Store) UpdateThreadRunState(
 	if runStatus != "failed" && runStatus != "timed_out" {
 		runError = ""
 	}
-	waitingPromptID, waitingMessageID, waitingToolID = normalizeWaitingPromptForStatus(runStatus, waitingPromptID, waitingMessageID, waitingToolID)
+	waitingPromptID, waitingMessageID, waitingToolID, waitingChoicesJSON = normalizeWaitingPromptForStatus(
+		runStatus,
+		waitingPromptID,
+		waitingMessageID,
+		waitingToolID,
+		waitingChoicesJSON,
+	)
 	if len(runError) > 600 {
 		runError = truncateRunes(runError, 600)
 	}
 
 	now := time.Now().UnixMilli()
 	res, err := s.db.ExecContext(ctx, `
-UPDATE ai_threads
-SET run_status = ?,
-    run_updated_at_unix_ms = ?,
-    run_error = ?,
-    waiting_prompt_id = ?,
-    waiting_message_id = ?,
-    waiting_tool_id = ?,
-    updated_at_unix_ms = ?,
-    updated_by_user_public_id = ?,
-    updated_by_user_email = ?
-WHERE endpoint_id = ? AND thread_id = ?
-`, runStatus, now, runError, waitingPromptID, waitingMessageID, waitingToolID, now, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
+	UPDATE ai_threads
+	SET run_status = ?,
+	    run_updated_at_unix_ms = ?,
+	    run_error = ?,
+	    waiting_prompt_id = ?,
+	    waiting_message_id = ?,
+	    waiting_tool_id = ?,
+	    waiting_choices_json = ?,
+	    updated_at_unix_ms = ?,
+	    updated_by_user_public_id = ?,
+	    updated_by_user_email = ?
+	WHERE endpoint_id = ? AND thread_id = ?
+	`, runStatus, now, runError, waitingPromptID, waitingMessageID, waitingToolID, strings.TrimSpace(waitingChoicesJSON), now, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
 	if err != nil {
 		return err
 	}
@@ -1581,7 +1638,7 @@ func migrateSchema(db *sql.DB) error {
 	if db == nil {
 		return errors.New("nil db")
 	}
-	const targetVersion = 12
+	const targetVersion = 13
 
 	var v int
 	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
@@ -1608,22 +1665,24 @@ WHERE type = 'table' AND name = 'ai_threads'
 	}
 	if exists == 0 {
 		if _, err := tx.Exec(`
-CREATE TABLE IF NOT EXISTS ai_threads (
-  thread_id TEXT PRIMARY KEY,
-  endpoint_id TEXT NOT NULL,
-  namespace_public_id TEXT NOT NULL DEFAULT '',
-  model_id TEXT NOT NULL DEFAULT '',
-  model_locked INTEGER NOT NULL DEFAULT 0,
-  working_dir TEXT NOT NULL DEFAULT '',
-  title TEXT NOT NULL DEFAULT '',
-  run_status TEXT NOT NULL DEFAULT 'idle',
-  run_updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  run_error TEXT NOT NULL DEFAULT '',
-  waiting_prompt_id TEXT NOT NULL DEFAULT '',
-  waiting_message_id TEXT NOT NULL DEFAULT '',
-  waiting_tool_id TEXT NOT NULL DEFAULT '',
-  created_by_user_public_id TEXT NOT NULL DEFAULT '',
-  created_by_user_email TEXT NOT NULL DEFAULT '',
+	CREATE TABLE IF NOT EXISTS ai_threads (
+	  thread_id TEXT PRIMARY KEY,
+	  endpoint_id TEXT NOT NULL,
+	  namespace_public_id TEXT NOT NULL DEFAULT '',
+	  model_id TEXT NOT NULL DEFAULT '',
+	  model_locked INTEGER NOT NULL DEFAULT 0,
+	  execution_mode TEXT NOT NULL DEFAULT 'act',
+	  working_dir TEXT NOT NULL DEFAULT '',
+	  title TEXT NOT NULL DEFAULT '',
+	  run_status TEXT NOT NULL DEFAULT 'idle',
+	  run_updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+	  run_error TEXT NOT NULL DEFAULT '',
+	  waiting_prompt_id TEXT NOT NULL DEFAULT '',
+	  waiting_message_id TEXT NOT NULL DEFAULT '',
+	  waiting_tool_id TEXT NOT NULL DEFAULT '',
+	  waiting_choices_json TEXT NOT NULL DEFAULT '',
+	  created_by_user_public_id TEXT NOT NULL DEFAULT '',
+	  created_by_user_email TEXT NOT NULL DEFAULT '',
   updated_by_user_public_id TEXT NOT NULL DEFAULT '',
   updated_by_user_email TEXT NOT NULL DEFAULT '',
   created_at_unix_ms INTEGER NOT NULL,
@@ -1633,6 +1692,14 @@ CREATE TABLE IF NOT EXISTS ai_threads (
 );
 CREATE INDEX IF NOT EXISTS idx_ai_threads_endpoint_updated ON ai_threads(endpoint_id, updated_at_unix_ms DESC, thread_id DESC);
 `); err != nil {
+			return err
+		}
+	}
+
+	if has, err := columnExists(tx, "ai_threads", "execution_mode"); err != nil {
+		return err
+	} else if !has {
+		if _, err := tx.Exec(`ALTER TABLE ai_threads ADD COLUMN execution_mode TEXT NOT NULL DEFAULT 'act'`); err != nil {
 			return err
 		}
 	}
@@ -1704,6 +1771,13 @@ CREATE INDEX IF NOT EXISTS idx_ai_threads_endpoint_updated ON ai_threads(endpoin
 		return err
 	} else if !has {
 		if _, err := tx.Exec(`ALTER TABLE ai_threads ADD COLUMN waiting_tool_id TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if has, err := columnExists(tx, "ai_threads", "waiting_choices_json"); err != nil {
+		return err
+	} else if !has {
+		if _, err := tx.Exec(`ALTER TABLE ai_threads ADD COLUMN waiting_choices_json TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}

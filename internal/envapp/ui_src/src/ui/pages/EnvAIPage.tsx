@@ -1890,7 +1890,8 @@ export function EnvAIPage() {
   const [hasMessages, setHasMessages] = createSignal(false);
   // Turns true immediately after send to keep instant feedback before run state events arrive.
   const [sendPending, setSendPending] = createSignal(false);
-  const [executionMode, setExecutionMode] = createSignal<ExecutionMode>(readPersistedExecutionMode());
+  const [draftExecutionMode, setDraftExecutionMode] = createSignal<ExecutionMode>(readPersistedExecutionMode());
+  const [threadExecutionModeOverrideById, setThreadExecutionModeOverrideById] = createSignal<Record<string, ExecutionMode>>({});
 
   let chat: ChatContextValue | null = null;
   const [chatReady, setChatReady] = createSignal(false);
@@ -2468,6 +2469,56 @@ export function EnvAIPage() {
     const status = String(ai.activeThread()?.run_status ?? '').trim().toLowerCase();
     return status === 'waiting_user';
   });
+  const executionMode = createMemo<ExecutionMode>(() => {
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    if (!tid) {
+      return normalizeExecutionMode(draftExecutionMode());
+    }
+    const overrides = threadExecutionModeOverrideById();
+    const override = overrides[tid];
+    if (override) {
+      return normalizeExecutionMode(override);
+    }
+    return normalizeExecutionMode(ai.activeThread()?.execution_mode);
+  });
+
+  createEffect(() => {
+    const overrides = threadExecutionModeOverrideById();
+    const keys = Object.keys(overrides);
+    if (keys.length === 0) return;
+    const thread = ai.activeThread();
+    if (!thread) return;
+    const tid = String(thread.thread_id ?? '').trim();
+    if (!tid) return;
+    const expected = overrides[tid];
+    if (!expected) return;
+    const serverMode = normalizeExecutionMode(thread.execution_mode);
+    if (serverMode !== expected) return;
+    setThreadExecutionModeOverrideById((prev) => {
+      if (!prev[tid]) return prev;
+      const next = { ...prev };
+      delete next[tid];
+      return next;
+    });
+  });
+
+  createEffect(() => {
+    const overrides = threadExecutionModeOverrideById();
+    const keys = Object.keys(overrides);
+    if (keys.length === 0) return;
+    const existing = new Set((ai.threads()?.threads ?? []).map((item) => String(item.thread_id ?? '').trim()).filter(Boolean));
+    let changed = false;
+    const next = { ...overrides };
+    for (const key of keys) {
+      if (existing.has(key)) continue;
+      delete next[key];
+      changed = true;
+    }
+    if (changed) {
+      setThreadExecutionModeOverrideById(next);
+    }
+  });
+
   const permissionReady = () => env.env.state === 'ready';
   const canRWX = createMemo(() => hasRWXPermissions(env.env()));
   const canRWXReady = createMemo(() => permissionReady() && canRWX());
@@ -2673,11 +2724,43 @@ export function EnvAIPage() {
     void loadWorkingDirRoot();
   });
 
-  const updateExecutionMode = (nextMode: ExecutionMode) => {
+  const updateExecutionMode = async (nextMode: ExecutionMode) => {
     const next = normalizeExecutionMode(nextMode);
-    setExecutionMode(next);
-    persistExecutionMode(next);
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    if (!tid) {
+      setDraftExecutionMode(next);
+      persistExecutionMode(next);
+      return;
+    }
+    if (!ensureRWX()) return;
+    if (executionMode() === next) return;
+
+    setThreadExecutionModeOverrideById((prev) => ({ ...prev, [tid]: next }));
+    try {
+      await fetchGatewayJSON<{ thread: any }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ execution_mode: next }),
+      });
+      setDraftExecutionMode(next);
+      persistExecutionMode(next);
+      ai.bumpThreadsSeq();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Failed to update execution mode', msg || 'Request failed.');
+      setThreadExecutionModeOverrideById((prev) => {
+        if (!prev[tid]) return prev;
+        const out = { ...prev };
+        delete out[tid];
+        return out;
+      });
+    }
   };
+  createEffect(() => {
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    if (tid) return;
+    const mode = normalizeExecutionMode(draftExecutionMode());
+    persistExecutionMode(mode);
+  });
 
   const isTerminalRunStatus = (status: string) =>
     status === 'success' || status === 'failed' || status === 'canceled' || status === 'timed_out' || status === 'waiting_user';
@@ -3329,7 +3412,7 @@ export function EnvAIPage() {
     let tid = ai.activeThreadId();
     if (!tid) {
       skipNextThreadLoad = true;
-      tid = await ai.ensureThreadForSend();
+      tid = await ai.ensureThreadForSend({ executionMode: executionMode() });
       if (!tid) {
         // Thread creation failed; do not leave the "preserve optimistic messages" flag armed.
         skipNextThreadLoad = false;
@@ -3347,10 +3430,16 @@ export function EnvAIPage() {
       mimeType: a.file.type,
       url: String(a.url ?? '').trim(),
     }));
-    const replyToWaitingPromptId =
-      tid === String(ai.activeThreadId() ?? '').trim()
-        ? String(ai.activeThreadWaitingPrompt()?.prompt_id ?? '').trim()
-        : '';
+    const activeTid = String(ai.activeThreadId() ?? '').trim();
+    const activeWaitingPrompt = tid === activeTid ? ai.activeThreadWaitingPrompt() : null;
+    const waitingPromptId = String(activeWaitingPrompt?.prompt_id ?? '').trim();
+    const waitingChoiceId = waitingPromptId ? ai.getPendingWaitingChoice(tid, waitingPromptId) : null;
+    const waitingResponse = waitingPromptId
+      ? {
+          promptId: waitingPromptId,
+          choiceId: waitingChoiceId || undefined,
+        }
+      : undefined;
 
     ai.markThreadPendingRun(tid);
 
@@ -3374,7 +3463,7 @@ export function EnvAIPage() {
           attachments: attIn,
         },
         options: { maxSteps: 10, mode: executionMode() },
-        replyToWaitingPromptId: replyToWaitingPromptId || undefined,
+        waitingResponse,
       } as const;
 
       const expected = String(ai.runIdForThread(tid) ?? '').trim();
@@ -3394,6 +3483,13 @@ export function EnvAIPage() {
       const consumedWaitingPromptId = String(resp.consumedWaitingPromptId ?? '').trim();
       if (consumedWaitingPromptId) {
         ai.consumeWaitingPrompt(tid, consumedWaitingPromptId);
+      }
+      const appliedExecutionModeRaw = String(resp.appliedExecutionMode ?? '').trim();
+      if (appliedExecutionModeRaw) {
+        const appliedExecutionMode = normalizeExecutionMode(appliedExecutionModeRaw);
+        setDraftExecutionMode(appliedExecutionMode);
+        persistExecutionMode(appliedExecutionMode);
+        setThreadExecutionModeOverrideById((prev) => ({ ...prev, [tid]: appliedExecutionMode }));
       }
       if (rid) {
         ai.confirmThreadRun(tid, rid);
@@ -3819,7 +3915,9 @@ export function EnvAIPage() {
                 <ExecutionModeToggle
                   value={executionMode()}
                   disabled={activeThreadRunning()}
-                  onChange={(mode) => updateExecutionMode(mode)}
+                  onChange={(mode) => {
+                    void updateExecutionMode(mode);
+                  }}
                 />
               </div>
             </div>

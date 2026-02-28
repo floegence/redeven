@@ -28,17 +28,31 @@ export type SettingsResponse = Readonly<{
 }>;
 
 export type ThreadRunStatus = 'idle' | 'accepted' | 'running' | 'waiting_approval' | 'recovering' | 'finalizing' | 'waiting_user' | 'success' | 'failed' | 'canceled' | 'timed_out';
+export type ExecutionMode = 'act' | 'plan';
+
+export type WaitingPromptActionView = Readonly<{
+  type: string;
+  mode?: ExecutionMode;
+}>;
+
+export type WaitingPromptChoiceView = Readonly<{
+  choice_id: string;
+  label: string;
+  actions?: WaitingPromptActionView[];
+}>;
 
 export type WaitingPromptView = Readonly<{
   prompt_id: string;
   message_id: string;
   tool_id: string;
+  choices?: WaitingPromptChoiceView[];
 }>;
 
 export type ThreadView = Readonly<{
   thread_id: string;
   title: string;
   model_id?: string;
+  execution_mode?: ExecutionMode;
   working_dir?: string;
   run_status?: ThreadRunStatus;
   run_updated_at_unix_ms?: number;
@@ -137,16 +151,66 @@ function normalizeThreadRunStatus(raw: string | null | undefined): ThreadRunStat
   return 'idle';
 }
 
+function normalizeExecutionMode(raw: unknown): ExecutionMode {
+  const mode = String(raw ?? '').trim().toLowerCase();
+  return mode === 'plan' ? 'plan' : 'act';
+}
+
+function normalizeWaitingPromptActions(raw: unknown): WaitingPromptActionView[] {
+  if (!Array.isArray(raw)) return [];
+  const out: WaitingPromptActionView[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const type = String((item as any).type ?? '').trim().toLowerCase();
+    if (!type) continue;
+    const mode = normalizeExecutionMode((item as any).mode);
+    out.push({
+      type,
+      mode: type === 'set_mode' ? mode : undefined,
+    });
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
+function normalizeWaitingPromptChoices(raw: unknown): WaitingPromptChoiceView[] {
+  if (!Array.isArray(raw)) return [];
+  const out: WaitingPromptChoiceView[] = [];
+  const seenChoice = new Set<string>();
+  const seenLabel = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const label = String((item as any).label ?? '').trim();
+    if (!label) continue;
+    const choiceID = String((item as any).choice_id ?? (item as any).choiceId ?? '').trim() || `choice_${out.length + 1}`;
+    const choiceKey = choiceID.toLowerCase();
+    const labelKey = label.toLowerCase();
+    if (seenChoice.has(choiceKey) || seenLabel.has(labelKey)) continue;
+    seenChoice.add(choiceKey);
+    seenLabel.add(labelKey);
+    const actions = normalizeWaitingPromptActions((item as any).actions);
+    out.push({
+      choice_id: choiceID,
+      label,
+      actions: actions.length > 0 ? actions : undefined,
+    });
+    if (out.length >= 4) break;
+  }
+  return out;
+}
+
 function normalizeWaitingPrompt(raw: any): WaitingPromptView | null {
   if (!raw || typeof raw !== 'object') return null;
   const promptID = String((raw as any).prompt_id ?? (raw as any).promptId ?? '').trim();
   const messageID = String((raw as any).message_id ?? (raw as any).messageId ?? '').trim();
   const toolID = String((raw as any).tool_id ?? (raw as any).toolId ?? '').trim();
   if (!promptID || !messageID || !toolID) return null;
+  const choices = normalizeWaitingPromptChoices((raw as any).choices);
   return {
     prompt_id: promptID,
     message_id: messageID,
     tool_id: toolID,
+    choices: choices.length > 0 ? choices : undefined,
   };
 }
 
@@ -181,7 +245,7 @@ export interface AIChatContextValue {
 
   // Thread creation (only create on-demand; never create an empty thread on navigation)
   creatingThread: Accessor<boolean>;
-  ensureThreadForSend: () => Promise<string | null>;
+  ensureThreadForSend: (opts?: { executionMode?: ExecutionMode }) => Promise<string | null>;
 
   // Draft working dir (applies to new chats; locked after thread creation)
   draftWorkingDir: Accessor<string>;
@@ -193,6 +257,8 @@ export interface AIChatContextValue {
   confirmThreadRun: (threadId: string, runId: string) => void;
   clearThreadPendingRun: (threadId: string) => void;
   consumeWaitingPrompt: (threadId: string, promptId: string) => void;
+  setPendingWaitingChoice: (threadId: string, promptId: string, choiceId: string) => void;
+  getPendingWaitingChoice: (threadId: string, promptId: string) => string | null;
   isThreadRunning: (threadId: string | null | undefined) => boolean;
   onRealtimeEvent: (handler: (event: AIRealtimeEvent) => void) => () => void;
 }
@@ -318,6 +384,7 @@ export function createAIChatContextValue(): AIChatContextValue {
   const [activeRunByThread, setActiveRunByThread] = createSignal<Record<string, string>>({});
   const [pendingRunByThread, setPendingRunByThread] = createSignal<Record<string, true>>({});
   const [waitingPromptByThread, setWaitingPromptByThread] = createSignal<Record<string, WaitingPromptView | null>>({});
+  const [pendingWaitingChoiceByPrompt, setPendingWaitingChoiceByPrompt] = createSignal<Record<string, string>>({});
 
   const realtimeListeners = new Set<(event: AIRealtimeEvent) => void>();
 
@@ -350,6 +417,55 @@ export function createAIChatContextValue(): AIChatContextValue {
     const list = threads()?.threads ?? [];
     const th = list.find((it) => String(it.thread_id ?? '').trim() === tid);
     return normalizeWaitingPrompt((th as any)?.waiting_prompt);
+  };
+
+  const waitingChoiceKey = (threadId: string, promptId: string): string => {
+    const tid = String(threadId ?? '').trim();
+    const pid = String(promptId ?? '').trim();
+    if (!tid || !pid) return '';
+    return `${tid}\u001f${pid}`;
+  };
+
+  const clearPendingWaitingChoicesForThread = (threadId: string, keepPromptId?: string) => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return;
+    const keep = String(keepPromptId ?? '').trim();
+    setPendingWaitingChoiceByPrompt((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      const prefix = `${tid}\u001f`;
+      for (const key of Object.keys(next)) {
+        if (!key.startsWith(prefix)) continue;
+        if (keep && key === `${prefix}${keep}`) continue;
+        delete next[key];
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  };
+
+  const setPendingWaitingChoice = (threadId: string, promptId: string, choiceId: string) => {
+    const key = waitingChoiceKey(threadId, promptId);
+    const choice = String(choiceId ?? '').trim();
+    if (!key) return;
+    if (!choice) {
+      setPendingWaitingChoiceByPrompt((prev) => {
+        if (!Object.prototype.hasOwnProperty.call(prev, key)) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+    setPendingWaitingChoiceByPrompt((prev) => ({ ...prev, [key]: choice }));
+  };
+
+  const getPendingWaitingChoice = (threadId: string, promptId: string): string | null => {
+    const key = waitingChoiceKey(threadId, promptId);
+    if (!key) return null;
+    const map = pendingWaitingChoiceByPrompt();
+    const choice = String(map[key] ?? '').trim();
+    return choice || null;
   };
 
   const markThreadPendingRun = (threadId: string) => {
@@ -390,6 +506,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const current = waitingPromptForThread(tid);
     if (!current || String(current.prompt_id ?? '').trim() !== pid) return;
     setWaitingPromptByThread((prev) => ({ ...prev, [tid]: null }));
+    clearPendingWaitingChoicesForThread(tid);
   };
 
   const isThreadRunning = (threadId: string | null | undefined): boolean => {
@@ -433,6 +550,11 @@ export function createAIChatContextValue(): AIChatContextValue {
         });
         clearThreadPendingRun(tid);
       }
+      if (waitingPrompt) {
+        clearPendingWaitingChoicesForThread(tid, waitingPrompt.prompt_id);
+      } else {
+        clearPendingWaitingChoicesForThread(tid);
+      }
       setWaitingPromptByThread((prev) => ({ ...prev, [tid]: waitingPrompt }));
 
       bumpThreadsSeq();
@@ -468,6 +590,11 @@ export function createAIChatContextValue(): AIChatContextValue {
         return next;
       });
       clearThreadPendingRun(tid);
+    }
+    if (waitingPrompt) {
+      clearPendingWaitingChoicesForThread(tid, waitingPrompt.prompt_id);
+    } else {
+      clearPendingWaitingChoicesForThread(tid);
     }
     setWaitingPromptByThread((prev) => ({ ...prev, [tid]: waitingPrompt }));
 
@@ -518,6 +645,7 @@ export function createAIChatContextValue(): AIChatContextValue {
       setActiveRunByThread({});
       setPendingRunByThread({});
       setWaitingPromptByThread({});
+      setPendingWaitingChoiceByPrompt({});
     });
   });
 
@@ -541,6 +669,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     setActiveRunByThread({});
     setPendingRunByThread({});
     setWaitingPromptByThread({});
+    setPendingWaitingChoiceByPrompt({});
   });
 
   // Reconcile run state with the thread list so UI never gets stuck if realtime events are dropped.
@@ -837,10 +966,11 @@ export function createAIChatContextValue(): AIChatContextValue {
   // Thread creation
   const [creatingThread, setCreatingThread] = createSignal(false);
 
-  const createThread = async (): Promise<ThreadView> => {
+  const createThread = async (opts?: { executionMode?: ExecutionMode }): Promise<ThreadView> => {
     const modelID = String(selectedModel() ?? '').trim();
     const body: any = { title: '' };
     if (modelID) body.model_id = modelID;
+    if (opts?.executionMode) body.execution_mode = normalizeExecutionMode(opts.executionMode);
     const workingDir = String(draftWorkingDir() ?? '').trim();
     if (workingDir) body.working_dir = workingDir;
     const resp = await fetchGatewayJSON<CreateThreadResponse>('/_redeven_proxy/api/ai/threads', {
@@ -850,7 +980,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     return resp.thread;
   };
 
-  const ensureThreadForSend = async (): Promise<string | null> => {
+  const ensureThreadForSend = async (opts?: { executionMode?: ExecutionMode }): Promise<string | null> => {
     if (protocol.status() !== 'connected') {
       notify.error('Not connected', 'Connecting to agent...');
       return null;
@@ -872,7 +1002,7 @@ export function createAIChatContextValue(): AIChatContextValue {
 
     setCreatingThread(true);
     try {
-      const th = await createThread();
+      const th = await createThread(opts);
       bumpThreadsSeq();
       selectThreadId(th.thread_id);
       return th.thread_id;
@@ -948,6 +1078,8 @@ export function createAIChatContextValue(): AIChatContextValue {
     confirmThreadRun,
     clearThreadPendingRun,
     consumeWaitingPrompt,
+    setPendingWaitingChoice,
+    getPendingWaitingChoice,
     isThreadRunning,
     onRealtimeEvent,
   };
