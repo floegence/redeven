@@ -328,3 +328,29 @@ func TestSnapshotAssistantMessageJSON_PrefersMarkdownOverAskUserQuestion(t *test
 		t.Fatalf("role=%v, want assistant", parsed["role"])
 	}
 }
+
+func TestSnapshotAssistantMessageJSONWithStatus_Streaming(t *testing.T) {
+	t.Parallel()
+
+	r := &run{
+		messageID:                "msg_streaming_snapshot",
+		assistantCreatedAtUnixMs: 1700000000002,
+		assistantBlocks: []any{
+			&persistedMarkdownBlock{Type: "markdown", Content: "streaming now"},
+		},
+	}
+
+	rawJSON, _, _, err := r.snapshotAssistantMessageJSONWithStatus("streaming")
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSONWithStatus: %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(rawJSON), &parsed); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	gotStatus, _ := parsed["status"].(string)
+	if strings.TrimSpace(gotStatus) != "streaming" {
+		t.Fatalf("status=%q, want streaming", gotStatus)
+	}
+}

@@ -1944,7 +1944,20 @@ func (r *run) emitPersistedToolBlockSet(idx int, block ToolCallBlock) {
 	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 }
 
-func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
+func normalizeSnapshotMessageStatus(status string) string {
+	switch strings.TrimSpace(strings.ToLower(status)) {
+	case "sending":
+		return "sending"
+	case "streaming":
+		return "streaming"
+	case "error":
+		return "error"
+	default:
+		return "complete"
+	}
+}
+
+func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, string, int64, error) {
 	if r == nil {
 		return "", "", 0, errors.New("nil run")
 	}
@@ -1978,7 +1991,7 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 		ID:        r.messageID,
 		Role:      "assistant",
 		Blocks:    blocks,
-		Status:    "complete",
+		Status:    normalizeSnapshotMessageStatus(status),
 		Timestamp: assistantAt,
 	}
 	b, err := json.Marshal(msg)
@@ -2013,6 +2026,10 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 		assistantText = askUserQuestion
 	}
 	return string(b), assistantText, assistantAt, nil
+}
+
+func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
+	return r.snapshotAssistantMessageJSONWithStatus("complete")
 }
 
 func extractAskUserQuestionFromBlock(block any) string {
