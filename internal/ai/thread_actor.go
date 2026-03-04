@@ -322,7 +322,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	}
 	expected := strings.TrimSpace(req.ExpectedRunID)
 	waitingResponse := normalizeWaitingPromptResponse(req.WaitingResponse)
-	activeRunID, activeRun := a.lookupActiveRun(endpointID, threadID)
+	activeRunID, _ := a.lookupActiveRun(endpointID, threadID)
 	if activeRunID != "" && expected != "" && expected != activeRunID {
 		return SendUserTurnResponse{}, ErrRunChanged
 	}
@@ -406,40 +406,6 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	req.Options.Mode = resolvedExecutionMode
 	appliedExecutionMode = resolvedExecutionMode
 
-	shouldAutoRewind := activeRunID != "" && consumedWaitingPromptID == "" && waitingResponse == nil
-	if shouldAutoRewind {
-		// Avoid a destructive rewind on invalid/empty input.
-		hasText := strings.TrimSpace(req.Input.Text) != ""
-		hasAttachment := false
-		for _, a := range req.Input.Attachments {
-			if strings.TrimSpace(a.URL) != "" {
-				hasAttachment = true
-				break
-			}
-		}
-		if !hasText && !hasAttachment {
-			return SendUserTurnResponse{}, errors.New("empty input")
-		}
-
-		_ = a.mgr.svc.CancelRun(meta, activeRunID)
-		if activeRun != nil && activeRun.doneCh != nil {
-			timer := time.NewTimer(3 * time.Second)
-			defer timer.Stop()
-			select {
-			case <-activeRun.doneCh:
-			case <-timer.C:
-			case <-ctx.Done():
-			}
-		}
-
-		cpID := checkpointIDForRun(activeRunID)
-		if strings.TrimSpace(cpID) != "" {
-			if _, err := a.mgr.svc.rewindThreadCheckpoint(ctx, meta, endpointID, threadID, cpID, "update_user_turn"); err != nil && !errors.Is(err, ErrNoCheckpoint) {
-				return SendUserTurnResponse{}, err
-			}
-		}
-	}
-
 	runID, err := NewRunID()
 	if err != nil {
 		return SendUserTurnResponse{}, err
@@ -466,10 +432,8 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	a.mgr.svc.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
 	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
 
-	if !shouldAutoRewind {
-		activeRunID, _ = a.lookupActiveRun(endpointID, threadID)
-	}
-	if activeRunID != "" && !shouldAutoRewind {
+	activeRunID, _ = a.lookupActiveRun(endpointID, threadID)
+	if activeRunID != "" {
 		if err := a.mgr.svc.CancelRun(meta, activeRunID); err != nil {
 			return SendUserTurnResponse{}, err
 		}

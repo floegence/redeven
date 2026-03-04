@@ -366,10 +366,12 @@ func (s *Store) RestoreThreadCheckpoint(ctx context.Context, endpointID string, 
 		return nil, fmt.Errorf("invalid derived_json: %w", err)
 	}
 
-	// Truncate append-only planes.
+	// Truncate append-only planes. Keep user transcript items even when they were
+	// appended after the checkpoint so user input is never dropped by stop/resend.
 	if _, err := tx.ExecContext(ctx, `
 DELETE FROM transcript_messages
 WHERE endpoint_id = ? AND thread_id = ? AND id > ?
+  AND LOWER(COALESCE(role, '')) <> 'user'
 `, endpointID, threadID, rec.TranscriptMaxID); err != nil {
 		return nil, err
 	}

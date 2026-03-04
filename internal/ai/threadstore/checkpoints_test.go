@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestThreadCheckpoint_RestoreReplacesDerivedAndTruncatesTranscript(t *testing.T) {
+func TestThreadCheckpoint_RestoreReplacesDerivedAndPreservesUserTranscript(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -178,6 +178,20 @@ func TestThreadCheckpoint_RestoreReplacesDerivedAndTruncatesTranscript(t *testin
 		t.Fatalf("AppendMessage after: %v", err)
 	}
 
+	if _, err := s.AppendMessage(ctx, endpointID, threadID, Message{
+		ThreadID:        threadID,
+		EndpointID:      endpointID,
+		MessageID:       "m_assistant_2",
+		Role:            "assistant",
+		Status:          "complete",
+		CreatedAtUnixMs: msg2At + 1,
+		UpdatedAtUnixMs: msg2At + 1,
+		TextContent:     "assistant after checkpoint",
+		MessageJSON:     `{"id":"m_assistant_2","role":"assistant","blocks":[{"type":"text","text":"assistant after checkpoint"}]}`,
+	}, "", ""); err != nil {
+		t.Fatalf("AppendMessage assistant after: %v", err)
+	}
+
 	if err := s.UpsertMemoryItem(ctx, MemoryItemRecord{
 		MemoryID:        "mem_1",
 		EndpointID:      endpointID,
@@ -279,8 +293,16 @@ func TestThreadCheckpoint_RestoreReplacesDerivedAndTruncatesTranscript(t *testin
 	if err != nil {
 		t.Fatalf("ListRecentTranscriptMessages: %v", err)
 	}
-	if len(msgs) != 1 || msgs[0].MessageID != "m_user_1" {
-		t.Fatalf("transcript=%v, want only baseline message", msgs)
+	if len(msgs) != 2 {
+		t.Fatalf("transcript=%v, want two preserved user messages", msgs)
+	}
+	if msgs[0].MessageID != "m_user_1" || msgs[1].MessageID != "m_user_2" {
+		t.Fatalf("transcript=%v, want m_user_1 then m_user_2", msgs)
+	}
+	for _, m := range msgs {
+		if m.MessageID == "m_assistant_2" {
+			t.Fatalf("assistant message appended after checkpoint should be removed: %+v", m)
+		}
 	}
 
 	mem, err := s.ListRecentMemoryItems(ctx, endpointID, threadID, 10)

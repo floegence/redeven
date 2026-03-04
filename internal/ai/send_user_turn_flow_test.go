@@ -400,6 +400,13 @@ func TestSendUserTurn_ActiveRun_InterruptsAndStartsNewRun(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
+	baseline, _, err := svc.persistUserMessage(ctx, meta, meta.EndpointID, th.ThreadID, RunInput{
+		Text: "baseline before interrupt",
+	})
+	if err != nil {
+		t.Fatalf("persistUserMessage baseline: %v", err)
+	}
+
 	activeRunID := "run_active_interrupt"
 	thKey := runThreadKey(meta.EndpointID, th.ThreadID)
 	if thKey == "" {
@@ -448,6 +455,24 @@ func TestSendUserTurn_ActiveRun_InterruptsAndStartsNewRun(t *testing.T) {
 	}
 	if len(msgs) == 0 {
 		t.Fatalf("expected persisted user message after interruption")
+	}
+
+	userMsgCount := 0
+	seenBaseline := false
+	for _, m := range msgs {
+		if m.Role != "user" {
+			continue
+		}
+		userMsgCount++
+		if m.MessageID == baseline.MessageID {
+			seenBaseline = true
+		}
+	}
+	if !seenBaseline {
+		t.Fatalf("baseline user message %q should be preserved after interruption", baseline.MessageID)
+	}
+	if userMsgCount != 2 {
+		t.Fatalf("expected two user messages after interruption resend, got %d", userMsgCount)
 	}
 }
 
