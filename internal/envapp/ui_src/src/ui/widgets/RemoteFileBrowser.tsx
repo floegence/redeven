@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
-import { useDeck, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
+import { useDeck, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { ArrowRightLeft, Copy, Folder, Pencil, Sparkles, Trash } from '@floegence/floe-webapp-core/icons';
 import { FileBrowser, type ContextMenuCallbacks, type ContextMenuItem, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
@@ -59,6 +59,15 @@ const ASK_FLOWER_MAX_ATTACHMENTS = 5;
 const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 const ASK_FLOWER_MAX_INLINE_SELECTION_CHARS = 10_000;
 const GIT_COMMIT_PAGE_SIZE = 50;
+const PAGE_SIDEBAR_DEFAULT_WIDTH = 240;
+const PAGE_SIDEBAR_MIN_WIDTH = 180;
+const PAGE_SIDEBAR_MAX_WIDTH = 520;
+const PAGE_SIDEBAR_WIDTH_STORAGE_KEY = 'redeven:remote-file-browser:page-sidebar-width';
+
+function normalizePageSidebarWidth(width: unknown): number {
+  const raw = typeof width === 'number' && Number.isFinite(width) ? width : PAGE_SIDEBAR_DEFAULT_WIDTH;
+  return Math.max(PAGE_SIDEBAR_MIN_WIDTH, Math.min(PAGE_SIDEBAR_MAX_WIDTH, Math.round(raw)));
+}
 
 export interface RemoteFileBrowserProps {
   widgetId?: string;
@@ -101,6 +110,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const ctx = useEnvContext();
   const deck = useDeck();
   const floe = useResolvedFloeConfig();
+  const layout = useLayout();
   const notification = useNotification();
 
   const envId = () => (ctx.env_id() ?? '').trim();
@@ -164,6 +174,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitHasMore, setGitHasMore] = createSignal(false);
   const [gitNextOffset, setGitNextOffset] = createSignal(0);
   const [selectedCommitHash, setSelectedCommitHash] = createSignal('');
+  const [gitHistorySidebarWidth, setGitHistorySidebarWidth] = createSignal(
+    normalizePageSidebarWidth(floe.persist.load<number>(PAGE_SIDEBAR_WIDTH_STORAGE_KEY, PAGE_SIDEBAR_DEFAULT_WIDTH))
+  );
+  const [gitHistorySidebarOpen, setGitHistorySidebarOpen] = createSignal(false);
 
   let activePreviewStream: YamuxStream | null = null;
   let activeObjectUrl: string | null = null;
@@ -408,12 +422,24 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const canEnterGitHistory = () => repoHistoryAvailable() && !repoInfoLoading();
+  const pageSidebarOpen = () => !layout.isMobile() || gitHistorySidebarOpen();
+
+  const setBrowserPageMode = (mode: BrowserPageMode) => {
+    setPageMode(mode);
+    if (mode === 'git_history' && layout.isMobile()) {
+      setGitHistorySidebarOpen(true);
+      return;
+    }
+    if (mode === 'files') {
+      setGitHistorySidebarOpen(false);
+    }
+  };
 
   const handlePageModeChange = (mode: BrowserPageMode) => {
     if (mode === 'git_history' && !canEnterGitHistory()) {
       return;
     }
-    setPageMode(mode);
+    setBrowserPageMode(mode);
   };
 
   const showPageSidebar = () => pageMode() === 'git_history';
@@ -431,6 +457,34 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   createEffect(() => {
+    floe.persist.debouncedSave(PAGE_SIDEBAR_WIDTH_STORAGE_KEY, gitHistorySidebarWidth());
+  });
+
+  let didInitMobileSidebar = false;
+  let prevMobile = false;
+  createEffect(() => {
+    const mobile = layout.isMobile();
+    if (!didInitMobileSidebar) {
+      didInitMobileSidebar = true;
+      prevMobile = mobile;
+      if (mobile && pageMode() === 'git_history') {
+        setGitHistorySidebarOpen(true);
+      }
+      return;
+    }
+
+    if (!prevMobile && mobile && pageMode() === 'git_history') {
+      setGitHistorySidebarOpen(true);
+    }
+
+    if (prevMobile && !mobile) {
+      setGitHistorySidebarOpen(false);
+    }
+
+    prevMobile = mobile;
+  });
+
+  createEffect(() => {
     const _ = envId();
     dirReqSeq += 1;
     cache = new Map();
@@ -439,7 +493,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setCurrentBrowserPath('/');
     setLastLoadedBrowserPath('/');
     setFsRootAbs('');
-    setPageMode('files');
+    setBrowserPageMode('files');
     setRepoInfo(null);
     setRepoInfoLoading(false);
     setRepoInfoError('');
@@ -1074,7 +1128,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   createEffect(() => {
     if (pageMode() === 'git_history' && !repoInfoLoading() && !repoHistoryAvailable()) {
-      setPageMode('files');
+      setBrowserPageMode('files');
     }
   });
 
@@ -1484,12 +1538,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         fallback={<div class="h-full" />}
       >
         {(id) => (
-          <div class="h-full min-h-0 flex overflow-hidden">
+          <div class="h-full min-h-0 flex overflow-hidden relative">
             <Show when={showPageSidebar()}>
               <GitHistoryPageSidebar
                 mode={pageMode()}
                 onModeChange={handlePageModeChange}
                 currentPath={currentBrowserPath()}
+                width={gitHistorySidebarWidth()}
+                open={pageSidebarOpen()}
+                resizable
+                onResize={(delta) => setGitHistorySidebarWidth((width) => normalizePageSidebarWidth(width + delta))}
+                onClose={() => setGitHistorySidebarOpen(false)}
                 repoInfo={repoInfo()}
                 repoInfoLoading={repoInfoLoading()}
                 repoInfoError={repoInfoError()}
@@ -1515,6 +1574,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                     repoInfo={repoInfo()}
                     repoInfoLoading={repoInfoLoading()}
                     selectedCommitHash={selectedCommitHash()}
+                    showSidebarToggle={layout.isMobile() && !gitHistorySidebarOpen()}
+                    onOpenSidebar={() => setGitHistorySidebarOpen(true)}
                   />
                 }
               >
@@ -1525,7 +1586,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       initialPath={readPersistedLastPath(id)}
                       initialViewMode="list"
                       homeLabel="Home"
-                      sidebarWidth={240}
+                      sidebarWidth={PAGE_SIDEBAR_DEFAULT_WIDTH}
+                      sidebarWidthStorageKey={PAGE_SIDEBAR_WIDTH_STORAGE_KEY}
                       persistenceKey={`files:${id}`}
                       instanceId={props.widgetId ? `redeven-files:${id}:${props.widgetId}` : `redeven-files:${id}`}
                       onNavigate={(path) => {
