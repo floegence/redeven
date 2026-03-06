@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  allGitBranches,
+  branchIdentity,
   branchStatusSummary,
   buildGitWorkbenchSubviewItems,
   changeSecondaryPath,
   compareHeadline,
+  findWorkspaceChangeByKey,
+  repoDisplayName,
   summarizeWorkspaceCount,
+  workspaceEntryKey,
   workspaceSectionCount,
 } from './gitWorkbench';
 
@@ -44,8 +49,31 @@ describe('gitWorkbench helpers', () => {
       .toContain('matches');
   });
 
-  it('formats rename path fallback', () => {
+  it('formats rename path fallback and repo display name', () => {
     expect(changeSecondaryPath({ oldPath: 'src/old.ts', newPath: 'src/new.ts' })).toBe('src/old.ts → src/new.ts');
     expect(changeSecondaryPath({ path: 'src/app.ts' })).toBe('src/app.ts');
+    expect(repoDisplayName('/workspace/repo')).toBe('repo');
+    expect(repoDisplayName('/')).toBe('Repository');
+  });
+
+  it('builds stable workspace and branch identities', () => {
+    const workspace = {
+      repoRootPath: '/',
+      summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+      staged: [{ section: 'staged', path: 'src/app.ts', patchPath: 'src/app.ts' }],
+      unstaged: [],
+      untracked: [],
+      conflicted: [],
+    };
+    expect(workspaceEntryKey(workspace.staged[0])).toBe('staged:src/app.ts');
+    expect(findWorkspaceChangeByKey(workspace, 'staged:src/app.ts')?.path).toBe('src/app.ts');
+
+    const branches = {
+      repoRootPath: '/',
+      local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
+      remote: [{ name: 'origin/main', fullName: 'refs/remotes/origin/main', kind: 'remote' }],
+    };
+    expect(branchIdentity(branches.local[0])).toBe('refs/heads/main');
+    expect(allGitBranches(branches)).toHaveLength(2);
   });
 });

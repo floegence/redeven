@@ -19,25 +19,35 @@ describe('git history layout wiring', () => {
     expect(src).toContain('resizable');
   });
 
-  it('renders git workbench explorer through the native SidebarPane shell', () => {
+  it('uses the native SidebarPane shell as a pure git selector rail', () => {
     const src = read('./GitWorkbenchSidebar.tsx');
 
     expect(src).toContain("import { SidebarItem, SidebarItemList, SidebarPane } from '@floegence/floe-webapp-core/layout';");
-    expect(src).toContain('title="Explorer"');
-    expect(src).toContain('headerActions={<GitHistoryModeSwitch');
+    expect(src).toContain('title="Git"');
+    expect(src).toContain('subviewTitle(props.subview)');
     expect(src).toContain('props.onClose?.();');
+    expect(src).not.toContain('GitSubviewSwitch');
+    expect(src).not.toContain('Refresh');
   });
 
   it('switches git subviews without awaiting a blocking refresh call', () => {
     const src = read('./RemoteFileBrowser.tsx');
     const start = src.indexOf('const handleGitSubviewChange = (view: GitWorkbenchSubview) => {');
     expect(start).toBeGreaterThanOrEqual(0);
-    const end = src.indexOf("const showPageSidebar = () => pageMode() === 'git';", start);
+    const end = src.indexOf("const showPageSidebar = () => pageMode() === 'git' && gitSubview() !== 'overview';", start);
     expect(end).toBeGreaterThan(start);
     const handler = src.slice(start, end);
 
     expect(handler).toContain('setGitSubview(view);');
     expect(handler).not.toContain('refreshGitWorkbench');
     expect(handler).not.toContain('await ');
+  });
+
+  it('keeps mode, refresh, and subview controls in the global git header', () => {
+    const src = read('./GitWorkbench.tsx');
+
+    expect(src).toContain('GitHistoryModeSwitch');
+    expect(src).toContain('GitSubviewSwitch');
+    expect(src).toContain('Refresh');
   });
 });
