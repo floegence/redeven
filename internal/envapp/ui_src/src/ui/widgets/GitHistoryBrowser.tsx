@@ -263,30 +263,32 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
             <Show when={commitDetail()} fallback={<div class="flex-1 px-4 py-5 text-xs text-muted-foreground">Select a commit from the sidebar to inspect details.</div>}>
               {(detail) => (
                 <>
-                  <div class="shrink-0 border-b border-border/70 px-4 py-3 space-y-2.5">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <span class="text-sm font-medium text-foreground">{detail().subject || '(no subject)'}</span>
-                      <span class="rounded-full border border-border/70 px-2 py-0.5 text-[11px] font-mono text-muted-foreground">{detail().shortHash}</span>
+                  <div class="shrink-0 border-b border-border/70 px-4 py-2.5 space-y-1.5">
+                    <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                      <span class="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{detail().subject || '(no subject)'}</span>
+                      <span class="shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-mono text-muted-foreground">{detail().shortHash}</span>
                     </div>
-                    <div class="text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <span>{detail().authorName || '-'}</span>
-                      <span>{formatDetailTime(detail().authorTimeMs)}</span>
+                    <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                      <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5">{detail().authorName || '-'}</span>
+                      <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5">{formatDetailTime(detail().authorTimeMs)}</span>
                       <Show when={detail().parents.length > 0}>
-                        <span class="font-mono">Parents: {detail().parents.map((item) => item.slice(0, 7)).join(', ')}</span>
+                        <span class="max-w-full truncate rounded-full border border-border/60 bg-muted/20 px-2 py-0.5 font-mono" title={detail().parents.map((item) => item.slice(0, 7)).join(', ')}>
+                          Parents {detail().parents.map((item) => item.slice(0, 7)).join(', ')}
+                        </span>
                       </Show>
                     </div>
                     <Show when={commitBodyText()}>
-                      <div class="space-y-1.5">
+                      <div class="space-y-1">
                         <pre
                           class={cn(
-                            'rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-[12px] leading-5 whitespace-pre-wrap break-words text-foreground',
+                            'rounded-md border border-border/70 bg-muted/25 px-3 py-2 text-[11px] leading-4.5 whitespace-pre-wrap break-words text-foreground',
                             commitBodyExpanded() ? 'overflow-auto' : 'overflow-hidden'
                           )}
                           style={commitBodyExpanded() ? undefined : { 'max-height': COMMIT_BODY_COLLAPSED_MAX_HEIGHT }}
                         >{commitBodyText()}</pre>
                         <Show when={hasExpandableCommitBody()}>
                           <div class="flex justify-end">
-                            <Button size="xs" variant="ghost" onClick={() => setCommitBodyExpanded((value) => !value)}>
+                            <Button size="xs" variant="ghost" class="h-5 px-1.5 text-[10px]" onClick={() => setCommitBodyExpanded((value) => !value)}>
                               {commitBodyExpanded() ? 'Show less' : 'Show more'}
                             </Button>
                           </div>
