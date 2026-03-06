@@ -123,3 +123,47 @@ func TestNormalizePatchPath(t *testing.T) {
 		t.Fatalf("path=%q, want src/main.txt", path)
 	}
 }
+
+func TestListCommits_PaginatesNewestFirst(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	page1, nextOffset, hasMore, err := svc.listCommits(context.Background(), repo, 0, 2)
+	if err != nil {
+		t.Fatalf("listCommits(page1): %v", err)
+	}
+	if !hasMore {
+		t.Fatalf("expected first page to have more commits")
+	}
+	if nextOffset != 2 {
+		t.Fatalf("nextOffset(page1)=%d, want 2", nextOffset)
+	}
+	if len(page1) != 2 {
+		t.Fatalf("len(page1)=%d, want 2", len(page1))
+	}
+	if page1[0].Hash != fixture.BinaryCommit || page1[1].Hash != fixture.RenameCommit {
+		t.Fatalf("unexpected page1 order: %+v", page1)
+	}
+
+	page2, nextOffset, hasMore, err := svc.listCommits(context.Background(), repo, nextOffset, 2)
+	if err != nil {
+		t.Fatalf("listCommits(page2): %v", err)
+	}
+	if hasMore {
+		t.Fatalf("expected second page to be terminal")
+	}
+	if nextOffset != 0 {
+		t.Fatalf("nextOffset(page2)=%d, want 0", nextOffset)
+	}
+	if len(page2) != 2 {
+		t.Fatalf("len(page2)=%d, want 2", len(page2))
+	}
+	if page2[0].Hash != fixture.UpdateCommit || page2[1].Hash != fixture.InitialCommit {
+		t.Fatalf("unexpected page2 order: %+v", page2)
+	}
+}

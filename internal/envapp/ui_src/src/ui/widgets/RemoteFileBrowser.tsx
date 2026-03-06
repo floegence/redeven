@@ -25,6 +25,7 @@ import {
 import { InputDialog } from './InputDialog';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
 import { GitHistoryPageSidebar } from './GitHistoryPageSidebar';
+import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 import {
   extNoDot,
   getParentDir,
@@ -48,7 +49,7 @@ type PathLoadResult = {
   message?: string;
 };
 
-type BrowserPageMode = 'files' | 'git_history';
+type BrowserPageMode = GitHistoryMode;
 
 const JSON_FRAME_MAX_BYTES = DEFAULT_MAX_JSON_FRAME_BYTES;
 const MAX_PREVIEW_BYTES = 20 * 1024 * 1024;
@@ -406,14 +407,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
+  const canEnterGitHistory = () => repoHistoryAvailable() && !repoInfoLoading();
+
   const handlePageModeChange = (mode: BrowserPageMode) => {
-    if (mode === 'git_history' && !repoHistoryAvailable()) {
+    if (mode === 'git_history' && !canEnterGitHistory()) {
       return;
     }
     setPageMode(mode);
   };
 
-  const showPageSidebar = () => pageMode() === 'git_history' || repoHistoryAvailable() || repoInfoLoading() || !!repoInfoError();
+  const showPageSidebar = () => pageMode() === 'git_history';
 
   const refreshGitSidebar = async () => {
     const nextInfo = await resolveRepoInfo(currentBrowserPath());
@@ -1546,6 +1549,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       }}
                       onOpen={(item) => void openPreview(item)}
                       onDragMove={(items, targetPath) => void handleDragMove(items, targetPath)}
+                      sidebarHeaderActions={
+                        <GitHistoryModeSwitch
+                          mode={pageMode()}
+                          onChange={handlePageModeChange}
+                          gitHistoryDisabled={!canEnterGitHistory()}
+                        />
+                      }
                       contextMenuCallbacks={ctxMenu}
                       overrideContextMenuItems={overrideContextMenuItems}
                       class="h-full border-0 rounded-none shadow-none"
