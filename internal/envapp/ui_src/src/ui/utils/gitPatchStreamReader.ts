@@ -1,5 +1,6 @@
 import type { Client } from '@floegence/flowersec-core';
 import { DEFAULT_MAX_JSON_FRAME_BYTES, readJsonFrame, writeJsonFrame } from '@floegence/flowersec-core/framing';
+import { redevenV1StreamKinds } from '../protocol/redeven_v1/streamKinds';
 import { byteReaderFromStream } from './fileStreamReader';
 
 export type GitReadCommitPatchStreamMeta = {
@@ -9,7 +10,22 @@ export type GitReadCommitPatchStreamMeta = {
   max_bytes?: number;
 };
 
-export type GitReadCommitPatchStreamRespMeta = {
+export type GitReadWorkspacePatchStreamMeta = {
+  repo_root_path: string;
+  section: string;
+  file_path?: string;
+  max_bytes?: number;
+};
+
+export type GitReadComparePatchStreamMeta = {
+  repo_root_path: string;
+  base_ref: string;
+  target_ref: string;
+  file_path?: string;
+  max_bytes?: number;
+};
+
+export type GitReadPatchStreamRespMeta = {
   ok: boolean;
   content_len?: number;
   truncated?: boolean;
@@ -19,7 +35,7 @@ export type GitReadCommitPatchStreamRespMeta = {
   };
 };
 
-export function normalizeGitPatchRespMeta(value: unknown): GitReadCommitPatchStreamRespMeta {
+export function normalizeGitPatchRespMeta(value: unknown): GitReadPatchStreamRespMeta {
   if (value == null || typeof value !== 'object') {
     throw new Error('Invalid response');
   }
@@ -40,15 +56,13 @@ export function normalizeGitPatchRespMeta(value: unknown): GitReadCommitPatchStr
   };
 }
 
-export async function readGitPatchTextOnce(params: {
+async function readGitPatchTextByStream(params: {
   client: Client;
-  repoRootPath: string;
-  commit: string;
-  filePath?: string;
-  maxBytes?: number;
+  streamKind: string;
+  request: Record<string, unknown>;
   signal?: AbortSignal;
-}): Promise<{ text: string; meta: GitReadCommitPatchStreamRespMeta }> {
-  const stream = await params.client.openStream('git/read_commit_patch');
+}): Promise<{ text: string; meta: GitReadPatchStreamRespMeta }> {
+  const stream = await params.client.openStream(params.streamKind);
   const reader = byteReaderFromStream(stream);
   let abortHandler: (() => void) | undefined;
 
@@ -70,13 +84,7 @@ export async function readGitPatchTextOnce(params: {
       params.signal.addEventListener('abort', abortHandler, { once: true });
     }
 
-    const req: GitReadCommitPatchStreamMeta = {
-      repo_root_path: params.repoRootPath,
-      commit: params.commit,
-      file_path: params.filePath,
-      max_bytes: params.maxBytes,
-    };
-    await writeJsonFrame((bytes) => stream.write(bytes), req);
+    await writeJsonFrame((bytes) => stream.write(bytes), params.request);
 
     const metaRaw = await readJsonFrame((n) => reader.readExactly(n), DEFAULT_MAX_JSON_FRAME_BYTES);
     const meta = normalizeGitPatchRespMeta(metaRaw);
@@ -108,4 +116,72 @@ export async function readGitPatchTextOnce(params: {
     } catch {
     }
   }
+}
+
+export async function readGitPatchTextOnce(params: {
+  client: Client;
+  repoRootPath: string;
+  commit: string;
+  filePath?: string;
+  maxBytes?: number;
+  signal?: AbortSignal;
+}): Promise<{ text: string; meta: GitReadPatchStreamRespMeta }> {
+  const req: GitReadCommitPatchStreamMeta = {
+    repo_root_path: params.repoRootPath,
+    commit: params.commit,
+    file_path: params.filePath,
+    max_bytes: params.maxBytes,
+  };
+  return readGitPatchTextByStream({
+    client: params.client,
+    streamKind: redevenV1StreamKinds.git.readCommitPatch,
+    request: req,
+    signal: params.signal,
+  });
+}
+
+export async function readWorkspaceGitPatchTextOnce(params: {
+  client: Client;
+  repoRootPath: string;
+  section: string;
+  filePath?: string;
+  maxBytes?: number;
+  signal?: AbortSignal;
+}): Promise<{ text: string; meta: GitReadPatchStreamRespMeta }> {
+  const req: GitReadWorkspacePatchStreamMeta = {
+    repo_root_path: params.repoRootPath,
+    section: params.section,
+    file_path: params.filePath,
+    max_bytes: params.maxBytes,
+  };
+  return readGitPatchTextByStream({
+    client: params.client,
+    streamKind: redevenV1StreamKinds.git.readWorkspacePatch,
+    request: req,
+    signal: params.signal,
+  });
+}
+
+export async function readCompareGitPatchTextOnce(params: {
+  client: Client;
+  repoRootPath: string;
+  baseRef: string;
+  targetRef: string;
+  filePath?: string;
+  maxBytes?: number;
+  signal?: AbortSignal;
+}): Promise<{ text: string; meta: GitReadPatchStreamRespMeta }> {
+  const req: GitReadComparePatchStreamMeta = {
+    repo_root_path: params.repoRootPath,
+    base_ref: params.baseRef,
+    target_ref: params.targetRef,
+    file_path: params.filePath,
+    max_bytes: params.maxBytes,
+  };
+  return readGitPatchTextByStream({
+    client: params.client,
+    streamKind: redevenV1StreamKinds.git.readComparePatch,
+    request: req,
+    signal: params.signal,
+  });
 }

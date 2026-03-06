@@ -1,4 +1,5 @@
 export { redevenV1TypeIds } from './typeIds';
+export { redevenV1StreamKinds } from './streamKinds';
 export { redevenV1Contract, type RedevenV1Rpc, createRedevenV1Rpc } from './contract';
 
 export * from './sdk/access';

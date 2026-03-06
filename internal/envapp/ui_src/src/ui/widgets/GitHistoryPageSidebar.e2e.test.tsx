@@ -47,7 +47,7 @@ describe('GitHistoryPageSidebar mobile drawer', () => {
         <ForceMobile mobile>
           <div class="relative h-[520px]">
             <GitHistoryPageSidebar
-              mode="git_history"
+              mode="git"
               onModeChange={() => {}}
               currentPath="/workspace/repo"
               width={240}

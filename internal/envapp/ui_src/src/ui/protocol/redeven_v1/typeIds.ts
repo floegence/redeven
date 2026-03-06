@@ -12,6 +12,10 @@ export const redevenV1TypeIds = {
     resolveRepo: 1101,
     listCommits: 1102,
     getCommitDetail: 1103,
+    getRepoSummary: 1104,
+    listWorkspaceChanges: 1105,
+    listBranches: 1106,
+    getBranchCompare: 1107,
   },
   terminal: {
     sessionCreate: 2001,

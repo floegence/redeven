@@ -3,6 +3,7 @@
 import type { Client } from '@floegence/flowersec-core';
 import { DEFAULT_MAX_JSON_FRAME_BYTES, readJsonFrame, writeJsonFrame } from '@floegence/flowersec-core/framing';
 import { ByteReader, type YamuxStream } from '@floegence/flowersec-core/yamux';
+import { redevenV1StreamKinds } from '../protocol/redeven_v1/streamKinds';
 
 export type FsReadFileStreamMeta = {
   path: string;
@@ -57,7 +58,7 @@ export async function readFileBytesOnce(params: {
   offset?: number;
   maxBytes?: number;
 }): Promise<{ bytes: Uint8Array<ArrayBuffer>; meta: FsReadFileStreamRespMeta }> {
-  const stream = await params.client.openStream('fs/read_file');
+  const stream = await params.client.openStream(redevenV1StreamKinds.fs.readFile);
   const reader = byteReaderFromStream(stream);
   try {
     const req: FsReadFileStreamMeta = {

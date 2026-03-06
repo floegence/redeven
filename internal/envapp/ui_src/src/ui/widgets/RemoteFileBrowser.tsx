@@ -8,7 +8,16 @@ import type { Client } from '@floegence/flowersec-core';
 import { DEFAULT_MAX_JSON_FRAME_BYTES, readJsonFrame, writeJsonFrame } from '@floegence/flowersec-core/framing';
 import { ByteReader, type YamuxStream } from '@floegence/flowersec-core/yamux';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
-import { useRedevenRpc, type GitCommitSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
+import {
+  useRedevenRpc,
+  type GitBranchSummary,
+  type GitCommitSummary,
+  type GitGetBranchCompareResponse,
+  type GitListBranchesResponse,
+  type GitListWorkspaceChangesResponse,
+  type GitRepoSummaryResponse,
+  type GitResolveRepoResponse,
+} from '../protocol/redeven_v1';
 import { getExtDot, isLikelyTextContent, mimeFromExtDot, previewModeByName, type PreviewMode } from '../utils/filePreview';
 import { readFileBytesOnce, normalizeRespMeta, byteReaderFromStream, type FsReadFileStreamMeta, type FsReadFileStreamRespMeta } from '../utils/fileStreamReader';
 import { useEnvContext } from '../pages/EnvContext';
@@ -24,8 +33,10 @@ import {
 } from '../utils/askFlowerPath';
 import { InputDialog } from './InputDialog';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
-import { GitHistoryPageSidebar } from './GitHistoryPageSidebar';
+import { GitWorkbench } from './GitWorkbench';
+import { GitWorkbenchSidebar } from './GitWorkbenchSidebar';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
+import { buildGitWorkbenchSubviewItems, type GitWorkbenchSubview } from '../utils/gitWorkbench';
 import {
   extNoDot,
   getParentDir,
@@ -178,6 +189,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     normalizePageSidebarWidth(floe.persist.load<number>(PAGE_SIDEBAR_WIDTH_STORAGE_KEY, PAGE_SIDEBAR_DEFAULT_WIDTH))
   );
   const [gitHistorySidebarOpen, setGitHistorySidebarOpen] = createSignal(false);
+  const [gitSubview, setGitSubview] = createSignal<GitWorkbenchSubview>('overview');
+  const [gitRepoSummary, setGitRepoSummary] = createSignal<GitRepoSummaryResponse | null>(null);
+  const [gitRepoSummaryLoading, setGitRepoSummaryLoading] = createSignal(false);
+  const [gitRepoSummaryError, setGitRepoSummaryError] = createSignal('');
+  const [gitWorkspace, setGitWorkspace] = createSignal<GitListWorkspaceChangesResponse | null>(null);
+  const [gitWorkspaceLoading, setGitWorkspaceLoading] = createSignal(false);
+  const [gitWorkspaceError, setGitWorkspaceError] = createSignal('');
+  const [gitBranches, setGitBranches] = createSignal<GitListBranchesResponse | null>(null);
+  const [gitBranchesLoading, setGitBranchesLoading] = createSignal(false);
+  const [gitBranchesError, setGitBranchesError] = createSignal('');
+  const [selectedGitBranchName, setSelectedGitBranchName] = createSignal('');
+  const [gitBranchCompare, setGitBranchCompare] = createSignal<GitGetBranchCompareResponse | null>(null);
+  const [gitBranchCompareLoading, setGitBranchCompareLoading] = createSignal(false);
+  const [gitBranchCompareError, setGitBranchCompareError] = createSignal('');
 
   let activePreviewStream: YamuxStream | null = null;
   let activeObjectUrl: string | null = null;
@@ -185,6 +210,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let dirReqSeq = 0;
   let repoReqSeq = 0;
   let gitListReqSeq = 0;
+  let gitRepoSummaryReqSeq = 0;
+  let gitWorkspaceReqSeq = 0;
+  let gitBranchesReqSeq = 0;
+  let gitBranchCompareReqSeq = 0;
   let lastGitRepoKey = '';
   let docxHost: HTMLDivElement | undefined;
   let previewContentEl: HTMLDivElement | undefined;
@@ -375,6 +404,142 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setSelectedCommitHash('');
   };
 
+  const resetGitWorkbenchData = () => {
+    gitRepoSummaryReqSeq += 1;
+    gitWorkspaceReqSeq += 1;
+    gitBranchesReqSeq += 1;
+    gitBranchCompareReqSeq += 1;
+    setGitSubview('overview');
+    setGitRepoSummary(null);
+    setGitRepoSummaryLoading(false);
+    setGitRepoSummaryError('');
+    setGitWorkspace(null);
+    setGitWorkspaceLoading(false);
+    setGitWorkspaceError('');
+    setGitBranches(null);
+    setGitBranchesLoading(false);
+    setGitBranchesError('');
+    setSelectedGitBranchName('');
+    setGitBranchCompare(null);
+    setGitBranchCompareLoading(false);
+    setGitBranchCompareError('');
+  };
+
+  const gitBranchIdentity = (branch: GitBranchSummary | null | undefined): string => String(branch?.fullName || branch?.name || '').trim();
+
+  const selectedGitBranch = () => {
+    const key = selectedGitBranchName();
+    if (!key) return null;
+    const local = gitBranches()?.local ?? [];
+    return local.find((branch) => gitBranchIdentity(branch) === key) ?? null;
+  };
+
+  const loadGitRepoSummary = async () => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    if (!repoRootPath || !protocol.client()) return;
+    const seq = ++gitRepoSummaryReqSeq;
+    setGitRepoSummaryLoading(true);
+    setGitRepoSummaryError('');
+    try {
+      const resp = await rpc.git.getRepoSummary({ repoRootPath });
+      if (seq !== gitRepoSummaryReqSeq) return;
+      setGitRepoSummary(resp);
+    } catch (err) {
+      if (seq !== gitRepoSummaryReqSeq) return;
+      setGitRepoSummary(null);
+      setGitRepoSummaryError(err instanceof Error ? err.message : String(err ?? 'Failed to load repository summary'));
+    } finally {
+      if (seq === gitRepoSummaryReqSeq) setGitRepoSummaryLoading(false);
+    }
+  };
+
+  const loadGitWorkspace = async () => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    if (!repoRootPath || !protocol.client()) return;
+    const seq = ++gitWorkspaceReqSeq;
+    setGitWorkspaceLoading(true);
+    setGitWorkspaceError('');
+    try {
+      const resp = await rpc.git.listWorkspaceChanges({ repoRootPath });
+      if (seq !== gitWorkspaceReqSeq) return;
+      setGitWorkspace(resp);
+    } catch (err) {
+      if (seq !== gitWorkspaceReqSeq) return;
+      setGitWorkspace(null);
+      setGitWorkspaceError(err instanceof Error ? err.message : String(err ?? 'Failed to load workspace changes'));
+    } finally {
+      if (seq === gitWorkspaceReqSeq) setGitWorkspaceLoading(false);
+    }
+  };
+
+  const loadGitBranchCompare = async (branch: GitBranchSummary | null | undefined) => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const branchRef = String(branch?.name ?? '').trim();
+    const baseRef = String(gitRepoSummary()?.headRef || repoInfo()?.headRef || 'HEAD').trim() || 'HEAD';
+    if (!repoRootPath || !branchRef || !protocol.client()) {
+      setGitBranchCompare(null);
+      setGitBranchCompareError('');
+      setGitBranchCompareLoading(false);
+      return;
+    }
+    const seq = ++gitBranchCompareReqSeq;
+    setGitBranchCompareLoading(true);
+    setGitBranchCompareError('');
+    try {
+      const resp = await rpc.git.getBranchCompare({ repoRootPath, baseRef, targetRef: branchRef, limit: 30 });
+      if (seq !== gitBranchCompareReqSeq) return;
+      setGitBranchCompare(resp);
+    } catch (err) {
+      if (seq !== gitBranchCompareReqSeq) return;
+      setGitBranchCompare(null);
+      setGitBranchCompareError(err instanceof Error ? err.message : String(err ?? 'Failed to load branch compare'));
+    } finally {
+      if (seq === gitBranchCompareReqSeq) setGitBranchCompareLoading(false);
+    }
+  };
+
+  const loadGitBranches = async () => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    if (!repoRootPath || !protocol.client()) return;
+    const seq = ++gitBranchesReqSeq;
+    setGitBranchesLoading(true);
+    setGitBranchesError('');
+    try {
+      const resp = await rpc.git.listBranches({ repoRootPath });
+      if (seq !== gitBranchesReqSeq) return;
+      setGitBranches(resp);
+      const currentKey = selectedGitBranchName();
+      const localBranches = resp.local ?? [];
+      const defaultBranch = localBranches.find((branch) => !branch.current) ?? localBranches.find((branch) => branch.current) ?? null;
+      const nextBranch = currentKey
+        ? localBranches.find((branch) => gitBranchIdentity(branch) === currentKey) ?? defaultBranch
+        : defaultBranch;
+      const nextKey = gitBranchIdentity(nextBranch);
+      setSelectedGitBranchName(nextKey);
+      void loadGitBranchCompare(nextBranch);
+    } catch (err) {
+      if (seq !== gitBranchesReqSeq) return;
+      setGitBranches(null);
+      setGitBranchesError(err instanceof Error ? err.message : String(err ?? 'Failed to load branches'));
+    } finally {
+      if (seq === gitBranchesReqSeq) setGitBranchesLoading(false);
+    }
+  };
+
+  const refreshGitWorkbench = async () => {
+    const nextInfo = await resolveRepoInfo(currentBrowserPath());
+    if (!nextInfo?.available) {
+      resetGitCommitSidebar();
+      resetGitWorkbenchData();
+      return;
+    }
+    lastGitRepoKey = '';
+    void loadGitRepoSummary();
+    void loadGitWorkspace();
+    void loadGitBranches();
+    void loadGitCommits(true);
+  };
+
   const loadGitCommits = async (reset: boolean) => {
     const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
     if (!repoRootPath || !protocol.client()) return;
@@ -426,7 +591,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const setBrowserPageMode = (mode: BrowserPageMode) => {
     setPageMode(mode);
-    if (mode === 'git_history' && layout.isMobile()) {
+    if (mode === 'git' && layout.isMobile()) {
       setGitHistorySidebarOpen(true);
       return;
     }
@@ -436,24 +601,23 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const handlePageModeChange = (mode: BrowserPageMode) => {
-    if (mode === 'git_history' && !canEnterGitHistory()) {
+    if (mode === 'git' && !canEnterGitHistory()) {
       return;
     }
     setBrowserPageMode(mode);
   };
 
-  const showPageSidebar = () => pageMode() === 'git_history';
+  const handleGitSubviewChange = (view: GitWorkbenchSubview) => {
+    setGitSubview(view);
+    if (view === 'history' && layout.isMobile()) {
+      setGitHistorySidebarOpen(true);
+    }
+  };
+
+  const showPageSidebar = () => pageMode() === 'git';
 
   const refreshGitSidebar = async () => {
-    const nextInfo = await resolveRepoInfo(currentBrowserPath());
-    if (!nextInfo?.available) {
-      resetGitCommitSidebar();
-      return;
-    }
-    if (pageMode() === 'git_history') {
-      lastGitRepoKey = '';
-      void loadGitCommits(true);
-    }
+    await refreshGitWorkbench();
   };
 
   createEffect(() => {
@@ -467,13 +631,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!didInitMobileSidebar) {
       didInitMobileSidebar = true;
       prevMobile = mobile;
-      if (mobile && pageMode() === 'git_history') {
+      if (mobile && pageMode() === 'git') {
         setGitHistorySidebarOpen(true);
       }
       return;
     }
 
-    if (!prevMobile && mobile && pageMode() === 'git_history') {
+    if (!prevMobile && mobile && pageMode() === 'git') {
       setGitHistorySidebarOpen(true);
     }
 
@@ -498,6 +662,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setRepoInfoLoading(false);
     setRepoInfoError('');
     resetGitCommitSidebar();
+    resetGitWorkbenchData();
     setDragMoveLoading(false);
     setFileBrowserResetSeq(0);
 
@@ -1127,7 +1292,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   createEffect(() => {
-    if (pageMode() === 'git_history' && !repoInfoLoading() && !repoHistoryAvailable()) {
+    if (pageMode() === 'git' && !repoInfoLoading() && !repoHistoryAvailable()) {
       setBrowserPageMode('files');
     }
   });
@@ -1136,17 +1301,21 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const mode = pageMode();
     const info = repoInfo();
     const repoKey = info?.available ? `${info.repoRootPath ?? ''}|${info.headCommit ?? ''}` : '';
-    if (mode !== 'git_history') {
+    if (mode !== 'git') {
       return;
     }
     if (!repoKey) {
       resetGitCommitSidebar();
+      resetGitWorkbenchData();
       return;
     }
     if (repoKey === lastGitRepoKey) {
       return;
     }
     lastGitRepoKey = repoKey;
+    void loadGitRepoSummary();
+    void loadGitWorkspace();
+    void loadGitBranches();
     void loadGitCommits(true);
   });
 
@@ -1540,18 +1709,29 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         {(id) => (
           <div class="h-full min-h-0 flex overflow-hidden relative">
             <Show when={showPageSidebar()}>
-              <GitHistoryPageSidebar
+              <GitWorkbenchSidebar
                 mode={pageMode()}
                 onModeChange={handlePageModeChange}
+                subview={gitSubview()}
+                subviewItems={buildGitWorkbenchSubviewItems({
+                  repoSummary: gitRepoSummary(),
+                  workspace: gitWorkspace(),
+                  branchesCount: (gitBranches()?.local.length ?? 0) + (gitBranches()?.remote.length ?? 0),
+                })}
+                onSubviewChange={handleGitSubviewChange}
                 currentPath={currentBrowserPath()}
                 width={gitHistorySidebarWidth()}
                 open={pageSidebarOpen()}
                 resizable
                 onResize={(delta) => setGitHistorySidebarWidth((width) => normalizePageSidebarWidth(width + delta))}
                 onClose={() => setGitHistorySidebarOpen(false)}
-                repoInfo={repoInfo()}
                 repoInfoLoading={repoInfoLoading()}
                 repoInfoError={repoInfoError()}
+                repoAvailable={repoHistoryAvailable()}
+                repoSummary={gitRepoSummary()}
+                repoSummaryLoading={gitRepoSummaryLoading()}
+                workspace={gitWorkspace()}
+                branches={gitBranches()}
                 commits={gitCommits()}
                 listLoading={gitListLoading()}
                 listLoadingMore={gitListLoadingMore()}
@@ -1568,14 +1748,36 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
               <Show
                 when={pageMode() === 'files'}
                 fallback={
-                  <GitHistoryBrowser
+                  <GitWorkbench
                     class="h-full"
                     currentPath={currentBrowserPath()}
                     repoInfo={repoInfo()}
                     repoInfoLoading={repoInfoLoading()}
+                    subview={gitSubview()}
+                    onSubviewChange={handleGitSubviewChange}
+                    repoSummary={gitRepoSummary()}
+                    repoSummaryLoading={gitRepoSummaryLoading()}
+                    repoSummaryError={gitRepoSummaryError()}
+                    workspace={gitWorkspace()}
+                    workspaceLoading={gitWorkspaceLoading()}
+                    workspaceError={gitWorkspaceError()}
+                    branches={gitBranches()}
+                    branchesLoading={gitBranchesLoading()}
+                    branchesError={gitBranchesError()}
+                    selectedBranch={selectedGitBranch()}
+                    selectedBranchName={selectedGitBranchName()}
+                    onSelectBranch={(branch) => {
+                      setSelectedGitBranchName(gitBranchIdentity(branch));
+                      void loadGitBranchCompare(branch);
+                    }}
+                    compare={gitBranchCompare()}
+                    compareLoading={gitBranchCompareLoading()}
+                    compareError={gitBranchCompareError()}
+                    commits={gitCommits()}
                     selectedCommitHash={selectedCommitHash()}
                     showSidebarToggle={layout.isMobile() && !gitHistorySidebarOpen()}
                     onOpenSidebar={() => setGitHistorySidebarOpen(true)}
+                    onRefresh={() => { void refreshGitWorkbench(); }}
                   />
                 }
               >

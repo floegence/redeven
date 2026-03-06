@@ -24,6 +24,10 @@ const (
 	TypeID_GIT_RESOLVE_REPO      uint32 = 1101
 	TypeID_GIT_LIST_COMMITS      uint32 = 1102
 	TypeID_GIT_GET_COMMIT_DETAIL uint32 = 1103
+	TypeID_GIT_GET_REPO_SUMMARY  uint32 = 1104
+	TypeID_GIT_LIST_WORKSPACE    uint32 = 1105
+	TypeID_GIT_LIST_BRANCHES     uint32 = 1106
+	TypeID_GIT_GET_BRANCH_DIFF   uint32 = 1107
 
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
@@ -107,7 +111,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if offset < 0 {
 			offset = 0
 		}
-		commits, nextOffset, hasMore, err := s.listCommits(ctx, repo, offset, limit)
+		commits, nextOffset, hasMore, err := s.listCommits(ctx, repo, req.Ref, offset, limit)
 		if err != nil {
 			return nil, classifyGitRPCError(err)
 		}
@@ -143,6 +147,78 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			Commit:       detail,
 			Files:        files,
 		}, nil
+	})
+
+	accessgate.RegisterTyped[getRepoSummaryReq, getRepoSummaryResp](r, TypeID_GIT_GET_REPO_SUMMARY, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getRepoSummaryReq) (*getRepoSummaryResp, error) {
+		if meta == nil || !meta.CanRead {
+			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		}
+		if req == nil {
+			req = &getRepoSummaryReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		summary, err := s.getRepoSummary(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		return summary, nil
+	})
+
+	accessgate.RegisterTyped[listWorkspaceChangesReq, listWorkspaceChangesResp](r, TypeID_GIT_LIST_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listWorkspaceChangesReq) (*listWorkspaceChangesResp, error) {
+		if meta == nil || !meta.CanRead {
+			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		}
+		if req == nil {
+			req = &listWorkspaceChangesReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		status, err := s.listWorkspaceChanges(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		return status, nil
+	})
+
+	accessgate.RegisterTyped[listBranchesReq, listBranchesResp](r, TypeID_GIT_LIST_BRANCHES, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listBranchesReq) (*listBranchesResp, error) {
+		if meta == nil || !meta.CanRead {
+			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		}
+		if req == nil {
+			req = &listBranchesReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		branches, err := s.listBranches(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		return branches, nil
+	})
+
+	accessgate.RegisterTyped[getBranchCompareReq, getBranchCompareResp](r, TypeID_GIT_GET_BRANCH_DIFF, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getBranchCompareReq) (*getBranchCompareResp, error) {
+		if meta == nil || !meta.CanRead {
+			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		}
+		if req == nil {
+			req = &getBranchCompareReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		compare, err := s.getBranchCompare(ctx, repo, req.BaseRef, req.TargetRef, req.Limit)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		return compare, nil
 	})
 }
 
@@ -334,8 +410,12 @@ func readGitOptional(ctx context.Context, repoRoot string, args ...string) strin
 	return string(out)
 }
 
-func (s *Service) listCommits(ctx context.Context, repo repoContext, offset int, limit int) ([]gitCommitSummary, int, bool, error) {
-	if strings.TrimSpace(repo.headCommit) == "" {
+func (s *Service) listCommits(ctx context.Context, repo repoContext, ref string, offset int, limit int) ([]gitCommitSummary, int, bool, error) {
+	resolvedRef, err := normalizeGitRefOrDefault(ref, "HEAD")
+	if err != nil {
+		return nil, 0, false, err
+	}
+	if strings.TrimSpace(repo.headCommit) == "" && resolvedRef == "HEAD" {
 		return nil, 0, false, nil
 	}
 	format := "%H%x00%h%x00%P%x00%an%x00%ae%x00%at%x00%s%x00%b%x1e"
@@ -345,7 +425,7 @@ func (s *Service) listCommits(ctx context.Context, repo repoContext, offset int,
 		"--max-count="+strconv.Itoa(limit+1),
 		"--skip="+strconv.Itoa(offset),
 		"--format="+format,
-		"HEAD",
+		resolvedRef,
 	)
 	if err != nil {
 		return nil, 0, false, err
@@ -831,6 +911,7 @@ type resolveRepoResp struct {
 
 type listCommitsReq struct {
 	RepoRootPath string `json:"repo_root_path"`
+	Ref          string `json:"ref,omitempty"`
 	Offset       int    `json:"offset,omitempty"`
 	Limit        int    `json:"limit,omitempty"`
 }

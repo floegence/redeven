@@ -133,7 +133,7 @@ func TestListCommits_PaginatesNewestFirst(t *testing.T) {
 		t.Fatalf("resolveExplicitRepo: %v", err)
 	}
 
-	page1, nextOffset, hasMore, err := svc.listCommits(context.Background(), repo, 0, 2)
+	page1, nextOffset, hasMore, err := svc.listCommits(context.Background(), repo, "", 0, 2)
 	if err != nil {
 		t.Fatalf("listCommits(page1): %v", err)
 	}
@@ -150,7 +150,7 @@ func TestListCommits_PaginatesNewestFirst(t *testing.T) {
 		t.Fatalf("unexpected page1 order: %+v", page1)
 	}
 
-	page2, nextOffset, hasMore, err := svc.listCommits(context.Background(), repo, nextOffset, 2)
+	page2, nextOffset, hasMore, err := svc.listCommits(context.Background(), repo, "", nextOffset, 2)
 	if err != nil {
 		t.Fatalf("listCommits(page2): %v", err)
 	}
@@ -165,5 +165,158 @@ func TestListCommits_PaginatesNewestFirst(t *testing.T) {
 	}
 	if page2[0].Hash != fixture.UpdateCommit || page2[1].Hash != fixture.InitialCommit {
 		t.Fatalf("unexpected page2 order: %+v", page2)
+	}
+}
+
+func TestParseWorkspaceStatusPorcelainV2(t *testing.T) {
+	t.Parallel()
+	raw := []byte(
+		"# branch.head main\x00" +
+			"# branch.upstream origin/main\x00" +
+			"# branch.ab +2 -1\x00" +
+			"1 M. N... 100644 100644 100644 abc def src/staged.txt\x00" +
+			"1 .M N... 100644 100644 100644 abc def src/unstaged.txt\x00" +
+			"2 R. N... 100644 100644 100644 abc def R100 src/new.txt\x00src/old.txt\x00" +
+			"u UU N... 100644 100644 100644 100644 aaa bbb ccc src/conflict.txt\x00" +
+			"? notes/todo.txt\x00",
+	)
+
+	snapshot := parseWorkspaceStatusPorcelainV2(raw)
+	if snapshot.HeadRef != "main" {
+		t.Fatalf("HeadRef=%q, want main", snapshot.HeadRef)
+	}
+	if snapshot.UpstreamRef != "origin/main" {
+		t.Fatalf("UpstreamRef=%q, want origin/main", snapshot.UpstreamRef)
+	}
+	if snapshot.AheadCount != 2 || snapshot.BehindCount != 1 {
+		t.Fatalf("ahead/behind=%d/%d, want 2/1", snapshot.AheadCount, snapshot.BehindCount)
+	}
+	if len(snapshot.Staged) != 2 {
+		t.Fatalf("staged=%d, want 2", len(snapshot.Staged))
+	}
+	if len(snapshot.Unstaged) != 1 {
+		t.Fatalf("unstaged=%d, want 1", len(snapshot.Unstaged))
+	}
+	if len(snapshot.Conflicted) != 1 {
+		t.Fatalf("conflicted=%d, want 1", len(snapshot.Conflicted))
+	}
+	if len(snapshot.Untracked) != 1 {
+		t.Fatalf("untracked=%d, want 1", len(snapshot.Untracked))
+	}
+	if snapshot.Staged[1].ChangeType != "renamed" || snapshot.Staged[1].OldPath != "src/old.txt" || snapshot.Staged[1].NewPath != "src/new.txt" {
+		t.Fatalf("unexpected rename item: %+v", snapshot.Staged[1])
+	}
+	if snapshot.Untracked[0].Path != "notes/todo.txt" {
+		t.Fatalf("unexpected untracked path: %+v", snapshot.Untracked[0])
+	}
+}
+
+func TestParseBranchListOutput(t *testing.T) {
+	t.Parallel()
+	out := []byte(
+		"refs/heads/main\x00main\x00abc123\x001706000000\x00Alice\x00Base commit\x00origin/main\x00[ahead 2, behind 1]\x1e" +
+			"refs/heads/feature/demo\x00feature/demo\x00def456\x001706000100\x00Bob\x00Feature commit\x00origin/feature/demo\x00[gone]\x1e" +
+			"refs/remotes/origin/main\x00origin/main\x00abc123\x001706000000\x00Alice\x00Remote base\x00\x00\x1e" +
+			"refs/remotes/origin/HEAD\x00origin/HEAD\x00abc123\x001706000000\x00Alice\x00HEAD\x00\x00\x1e",
+	)
+
+	local, remote := parseBranchListOutput(out, repoContext{headRef: "main"}, map[string]worktreeBinding{
+		"refs/heads/feature/demo": {Ref: "refs/heads/feature/demo", Path: "/tmp/feature-demo"},
+	})
+	if len(local) != 2 {
+		t.Fatalf("local=%d, want 2", len(local))
+	}
+	if len(remote) != 1 {
+		t.Fatalf("remote=%d, want 1", len(remote))
+	}
+	if !local[0].Current || local[0].AheadCount != 2 || local[0].BehindCount != 1 {
+		t.Fatalf("unexpected main branch summary: %+v", local[0])
+	}
+	if local[1].Name != "feature/demo" || !local[1].UpstreamGone || local[1].WorktreePath != "/tmp/feature-demo" {
+		t.Fatalf("unexpected feature branch summary: %+v", local[1])
+	}
+	if remote[0].Kind != "remote" || remote[0].Name != "origin/main" {
+		t.Fatalf("unexpected remote branch summary: %+v", remote[0])
+	}
+}
+
+func TestListBranches_ReportsWorktreeBinding(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
+	worktree := filepath.Join(t.TempDir(), "compare-wt")
+	runGitFixture(t, fixture.Root, "worktree", "add", worktree, compare.Branch)
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+	resp, err := svc.listBranches(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("listBranches: %v", err)
+	}
+	if resp.CurrentRef != compare.BaseBranch {
+		t.Fatalf("CurrentRef=%q, want %q", resp.CurrentRef, compare.BaseBranch)
+	}
+
+	var found bool
+	for _, branch := range resp.Local {
+		if branch.Name != compare.Branch {
+			continue
+		}
+		found = true
+		gotWorktree, err := filepath.EvalSymlinks(branch.WorktreePath)
+		if err != nil {
+			t.Fatalf("EvalSymlinks(branch.WorktreePath): %v", err)
+		}
+		wantWorktree, err := filepath.EvalSymlinks(worktree)
+		if err != nil {
+			t.Fatalf("EvalSymlinks(worktree): %v", err)
+		}
+		if filepath.Clean(gotWorktree) != filepath.Clean(wantWorktree) {
+			t.Fatalf("WorktreePath=%q, want %q", gotWorktree, wantWorktree)
+		}
+		if branch.Current {
+			t.Fatalf("feature branch should not be current: %+v", branch)
+		}
+	}
+	if !found {
+		t.Fatalf("expected branch %q in local list: %+v", compare.Branch, resp.Local)
+	}
+}
+
+func TestGetBranchCompare(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp, err := svc.getBranchCompare(context.Background(), repo, compare.BaseBranch, compare.Branch, 10)
+	if err != nil {
+		t.Fatalf("getBranchCompare: %v", err)
+	}
+	if resp.MergeBase != fixture.UpdateCommit {
+		t.Fatalf("MergeBase=%q, want %q", resp.MergeBase, fixture.UpdateCommit)
+	}
+	if resp.TargetAheadCount != 1 || resp.TargetBehindCount != 2 {
+		t.Fatalf("ahead/behind=%d/%d, want 1/2", resp.TargetAheadCount, resp.TargetBehindCount)
+	}
+	if len(resp.Commits) != 1 || resp.Commits[0].Hash != compare.Commit {
+		t.Fatalf("unexpected compare commits: %+v", resp.Commits)
+	}
+	foundFile := false
+	for _, file := range resp.Files {
+		if file.Path == compare.FilePath && file.ChangeType == "added" {
+			foundFile = true
+			break
+		}
+	}
+	if !foundFile {
+		t.Fatalf("expected compare file %q in diff files: %+v", compare.FilePath, resp.Files)
 	}
 }

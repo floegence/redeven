@@ -80,3 +80,52 @@ func createTestRepoFixture(t *testing.T) testRepoFixture {
 		BinaryCommit:  binary,
 	}
 }
+
+type comparisonBranchFixture struct {
+	BaseBranch string
+	Branch     string
+	Commit     string
+	FilePath   string
+}
+
+type workspaceChangesFixture struct {
+	TrackedPath   string
+	UntrackedPath string
+}
+
+func createComparisonBranchFixture(t *testing.T, root string, startPoint string) comparisonBranchFixture {
+	t.Helper()
+	baseBranch := runGitFixture(t, root, "rev-parse", "--abbrev-ref", "HEAD")
+	branchName := "feature/compare"
+	filePath := "feature/branch-only.txt"
+
+	runGitFixture(t, root, "checkout", "-b", branchName, startPoint)
+	writeFixtureFile(t, root, filePath, []byte("feature branch\n"))
+	runGitFixture(t, root, "add", filePath)
+	runGitFixture(t, root, "commit", "-m", "feature branch change")
+	commit := runGitFixture(t, root, "rev-parse", "HEAD")
+	runGitFixture(t, root, "checkout", baseBranch)
+
+	return comparisonBranchFixture{
+		BaseBranch: baseBranch,
+		Branch:     branchName,
+		Commit:     commit,
+		FilePath:   filePath,
+	}
+}
+
+func createWorkspaceChangesFixture(t *testing.T, root string) workspaceChangesFixture {
+	t.Helper()
+	trackedPath := "src/main.txt"
+	untrackedPath := "todo.txt"
+
+	writeFixtureFile(t, root, trackedPath, []byte("one\ntwo\nstaged\n"))
+	runGitFixture(t, root, "add", trackedPath)
+	writeFixtureFile(t, root, trackedPath, []byte("one\ntwo\nstaged\nunstaged\n"))
+	writeFixtureFile(t, root, untrackedPath, []byte("todo\n"))
+
+	return workspaceChangesFixture{
+		TrackedPath:   trackedPath,
+		UntrackedPath: untrackedPath,
+	}
+}

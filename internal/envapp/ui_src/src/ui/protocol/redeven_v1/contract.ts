@@ -24,7 +24,22 @@ import type {
 } from './sdk/ai';
 import type { AccessResumeRequest, AccessResumeResponse, AccessStatusResponse } from './sdk/access';
 import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsGetHomeResponse, FsListRequest, FsListResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
-import type { GitGetCommitDetailRequest, GitGetCommitDetailResponse, GitListCommitsRequest, GitListCommitsResponse, GitResolveRepoRequest, GitResolveRepoResponse } from './sdk/git';
+import type {
+  GitGetBranchCompareRequest,
+  GitGetBranchCompareResponse,
+  GitGetCommitDetailRequest,
+  GitGetCommitDetailResponse,
+  GitListBranchesRequest,
+  GitListBranchesResponse,
+  GitListCommitsRequest,
+  GitListCommitsResponse,
+  GitListWorkspaceChangesRequest,
+  GitListWorkspaceChangesResponse,
+  GitRepoSummaryRequest,
+  GitRepoSummaryResponse,
+  GitResolveRepoRequest,
+  GitResolveRepoResponse,
+} from './sdk/git';
 import type { SysMonitorRequest, SysMonitorSnapshot } from './sdk/monitor';
 import type { SessionsListActiveResponse } from './sdk/sessions';
 import type { SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgradeResponse } from './sdk/sys';
@@ -53,7 +68,22 @@ import {
 } from './codec/ai';
 import { fromWireAccessResumeResponse, fromWireAccessStatusResponse, toWireAccessResumeRequest } from './codec/access';
 import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsGetHomeResponse, fromWireFsListResponse, fromWireFsReadFileResponse, fromWireFsRenameResponse, fromWireFsWriteFileResponse, toWireFsCopyRequest, toWireFsDeleteRequest, toWireFsListRequest, toWireFsReadFileRequest, toWireFsRenameRequest, toWireFsWriteFileRequest } from './codec/fs';
-import { fromWireGitGetCommitDetailResponse, fromWireGitListCommitsResponse, fromWireGitResolveRepoResponse, toWireGitGetCommitDetailRequest, toWireGitListCommitsRequest, toWireGitResolveRepoRequest } from './codec/git';
+import {
+  fromWireGitGetBranchCompareResponse,
+  fromWireGitGetCommitDetailResponse,
+  fromWireGitGetRepoSummaryResponse,
+  fromWireGitListBranchesResponse,
+  fromWireGitListCommitsResponse,
+  fromWireGitListWorkspaceChangesResponse,
+  fromWireGitResolveRepoResponse,
+  toWireGitGetBranchCompareRequest,
+  toWireGitGetCommitDetailRequest,
+  toWireGitGetRepoSummaryRequest,
+  toWireGitListBranchesRequest,
+  toWireGitListCommitsRequest,
+  toWireGitListWorkspaceChangesRequest,
+  toWireGitResolveRepoRequest,
+} from './codec/git';
 import { fromWireSysMonitorResponse, toWireSysMonitorRequest } from './codec/monitor';
 import { fromWireSessionsListActiveResponse } from './codec/sessions';
 import { fromWireSysPingResponse, fromWireSysRestartResponse, fromWireSysUpgradeResponse, toWireSysRestartRequest, toWireSysUpgradeRequest } from './codec/sys';
@@ -82,7 +112,22 @@ import type {
   wire_ai_tool_approval_resp,
 } from './wire/ai';
 import type { wire_fs_copy_req, wire_fs_copy_resp, wire_fs_delete_req, wire_fs_delete_resp, wire_fs_get_home_resp, wire_fs_list_req, wire_fs_list_resp, wire_fs_read_file_req, wire_fs_read_file_resp, wire_fs_rename_req, wire_fs_rename_resp, wire_fs_write_file_req, wire_fs_write_file_resp } from './wire/fs';
-import type { wire_git_get_commit_detail_req, wire_git_get_commit_detail_resp, wire_git_list_commits_req, wire_git_list_commits_resp, wire_git_resolve_repo_req, wire_git_resolve_repo_resp } from './wire/git';
+import type {
+  wire_git_get_branch_compare_req,
+  wire_git_get_branch_compare_resp,
+  wire_git_get_commit_detail_req,
+  wire_git_get_commit_detail_resp,
+  wire_git_get_repo_summary_req,
+  wire_git_get_repo_summary_resp,
+  wire_git_list_branches_req,
+  wire_git_list_branches_resp,
+  wire_git_list_commits_req,
+  wire_git_list_commits_resp,
+  wire_git_list_workspace_changes_req,
+  wire_git_list_workspace_changes_resp,
+  wire_git_resolve_repo_req,
+  wire_git_resolve_repo_resp,
+} from './wire/git';
 import type { wire_sys_monitor_req, wire_sys_monitor_resp } from './wire/monitor';
 import type { wire_sessions_list_active_resp } from './wire/sessions';
 import type { wire_sys_ping_resp, wire_sys_restart_req, wire_sys_restart_resp, wire_sys_upgrade_req, wire_sys_upgrade_resp } from './wire/sys';
@@ -100,8 +145,12 @@ export type RedevenV1Rpc = {
   };
   git: {
     resolveRepo: (req: GitResolveRepoRequest) => Promise<GitResolveRepoResponse>;
+    getRepoSummary: (req: GitRepoSummaryRequest) => Promise<GitRepoSummaryResponse>;
+    listWorkspaceChanges: (req: GitListWorkspaceChangesRequest) => Promise<GitListWorkspaceChangesResponse>;
+    listBranches: (req: GitListBranchesRequest) => Promise<GitListBranchesResponse>;
     listCommits: (req: GitListCommitsRequest) => Promise<GitListCommitsResponse>;
     getCommitDetail: (req: GitGetCommitDetailRequest) => Promise<GitGetCommitDetailResponse>;
+    getBranchCompare: (req: GitGetBranchCompareRequest) => Promise<GitGetBranchCompareResponse>;
   };
   terminal: {
     createSession: (req: TerminalSessionCreateRequest) => Promise<TerminalSessionCreateResponse>;
@@ -205,6 +254,21 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const resp = await call<wire_git_resolve_repo_req, wire_git_resolve_repo_resp>(redevenV1TypeIds.git.resolveRepo, payload);
         return fromWireGitResolveRepoResponse(resp);
       },
+      getRepoSummary: async (req) => {
+        const payload = toWireGitGetRepoSummaryRequest(req);
+        const resp = await call<wire_git_get_repo_summary_req, wire_git_get_repo_summary_resp>(redevenV1TypeIds.git.getRepoSummary, payload);
+        return fromWireGitGetRepoSummaryResponse(resp);
+      },
+      listWorkspaceChanges: async (req) => {
+        const payload = toWireGitListWorkspaceChangesRequest(req);
+        const resp = await call<wire_git_list_workspace_changes_req, wire_git_list_workspace_changes_resp>(redevenV1TypeIds.git.listWorkspaceChanges, payload);
+        return fromWireGitListWorkspaceChangesResponse(resp);
+      },
+      listBranches: async (req) => {
+        const payload = toWireGitListBranchesRequest(req);
+        const resp = await call<wire_git_list_branches_req, wire_git_list_branches_resp>(redevenV1TypeIds.git.listBranches, payload);
+        return fromWireGitListBranchesResponse(resp);
+      },
       listCommits: async (req) => {
         const payload = toWireGitListCommitsRequest(req);
         const resp = await call<wire_git_list_commits_req, wire_git_list_commits_resp>(redevenV1TypeIds.git.listCommits, payload);
@@ -214,6 +278,11 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireGitGetCommitDetailRequest(req);
         const resp = await call<wire_git_get_commit_detail_req, wire_git_get_commit_detail_resp>(redevenV1TypeIds.git.getCommitDetail, payload);
         return fromWireGitGetCommitDetailResponse(resp);
+      },
+      getBranchCompare: async (req) => {
+        const payload = toWireGitGetBranchCompareRequest(req);
+        const resp = await call<wire_git_get_branch_compare_req, wire_git_get_branch_compare_resp>(redevenV1TypeIds.git.getBranchCompare, payload);
+        return fromWireGitGetBranchCompareResponse(resp);
       },
     },
     terminal: {
