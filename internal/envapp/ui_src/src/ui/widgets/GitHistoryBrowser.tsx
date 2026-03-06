@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'so
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Sidebar, SidebarContent, SidebarItem, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
+import { Menu } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
@@ -10,14 +11,15 @@ import { readGitPatchTextOnce } from '../utils/gitPatchStreamReader';
 
 const PATCH_MAX_BYTES = 2 * 1024 * 1024;
 const FILES_SIDEBAR_WIDTH = 280;
-const COMMIT_BODY_PREVIEW_LINES = 6;
-const COMMIT_BODY_COLLAPSED_MAX_HEIGHT = '8.5rem';
+const COMMIT_BODY_PREVIEW_LINES = 5;
 
 export interface GitHistoryBrowserProps {
   repoInfo?: GitResolveRepoResponse | null;
   repoInfoLoading?: boolean;
   currentPath: string;
   selectedCommitHash?: string;
+  showSidebarToggle?: boolean;
+  onOpenSidebar?: () => void;
   class?: string;
 }
 
@@ -233,8 +235,21 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
     }
   };
 
+  const showSidebarToggle = () => Boolean(props.showSidebarToggle && props.onOpenSidebar);
+
   return (
-    <div class={cn('h-full min-h-0 flex flex-col bg-background', props.class)}>
+    <div class={cn('relative h-full min-h-0 flex flex-col bg-background', props.class)}>
+      <Show when={showSidebarToggle()}>
+        <Button
+          size="xs"
+          variant="outline"
+          icon={Menu}
+          class="absolute left-3 top-3 z-10 h-7 w-7 px-0 shadow-sm bg-background/95 backdrop-blur-sm"
+          aria-label="Open commits sidebar"
+          title="Open commits sidebar"
+          onClick={props.onOpenSidebar}
+        />
+      </Show>
       <Show
         when={repoAvailable()}
         fallback={
@@ -263,7 +278,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
             <Show when={commitDetail()} fallback={<div class="flex-1 px-4 py-5 text-xs text-muted-foreground">Select a commit from the sidebar to inspect details.</div>}>
               {(detail) => (
                 <>
-                  <div class="shrink-0 border-b border-border/70 px-4 py-2.5 space-y-1.5">
+                  <div class={cn('shrink-0 border-b border-border/70 px-4 py-2.5 space-y-1.5', showSidebarToggle() && 'pl-14')}>
                     <div class="flex min-w-0 flex-wrap items-center gap-1.5">
                       <span class="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{detail().subject || '(no subject)'}</span>
                       <span class="shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-mono text-muted-foreground">{detail().shortHash}</span>
@@ -279,13 +294,17 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                     </div>
                     <Show when={commitBodyText()}>
                       <div class="space-y-1">
-                        <pre
+                        <div
                           class={cn(
                             'rounded-md border border-border/70 bg-muted/25 px-3 py-2 text-[11px] leading-4.5 whitespace-pre-wrap break-words text-foreground',
                             commitBodyExpanded() ? 'overflow-auto' : 'overflow-hidden'
                           )}
-                          style={commitBodyExpanded() ? undefined : { 'max-height': COMMIT_BODY_COLLAPSED_MAX_HEIGHT }}
-                        >{commitBodyText()}</pre>
+                          style={commitBodyExpanded() ? undefined : {
+                            display: '-webkit-box',
+                            '-webkit-box-orient': 'vertical',
+                            '-webkit-line-clamp': String(COMMIT_BODY_PREVIEW_LINES),
+                          }}
+                        >{commitBodyText()}</div>
                         <Show when={hasExpandableCommitBody()}>
                           <div class="flex justify-end">
                             <Button size="xs" variant="ghost" class="h-5 px-1.5 text-[10px]" onClick={() => setCommitBodyExpanded((value) => !value)}>
@@ -312,7 +331,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                   {(file) => (
                                     <SidebarItem
                                       active={selectedFileKey() === selectedFileIdentity(file)}
-                                      class="py-1"
+                                      class="py-0.5"
                                       icon={<span class={cn('inline-block size-2 rounded-full', gitChangeDotClass(file.changeType))} />}
                                       onClick={() => {
                                         setSelectedFileKey(selectedFileIdentity(file));
@@ -320,12 +339,8 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                       }}
                                     >
                                       <div class="flex min-w-0 items-center gap-2 text-left">
-                                        <span class="min-w-0 flex-1 truncate text-[11px] leading-5 text-current" title={fileSecondaryPath(file)}>{fileSecondaryPath(file)}</span>
-                                        <span class={cn('shrink-0 chat-tool-apply-patch-change', gitChangeClass(file.changeType))}>{gitChangeLabel(file.changeType)}</span>
-                                        <Show when={file.isBinary}>
-                                          <span class="shrink-0 text-[10px] text-muted-foreground/80">Binary</span>
-                                        </Show>
-                                        <span class="shrink-0 text-[10px] tabular-nums text-muted-foreground/80">{fileMetricsText(file)}</span>
+                                        <span class="min-w-0 flex-1 truncate text-[11px] leading-4 text-current" title={fileSecondaryPath(file)}>{fileSecondaryPath(file)}</span>
+                                        <span class="shrink-0 text-[10px] tabular-nums text-muted-foreground/80">{file.isBinary ? `Binary · ${fileMetricsText(file)}` : fileMetricsText(file)}</span>
                                       </div>
                                     </SidebarItem>
                                   )}
