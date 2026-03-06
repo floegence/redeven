@@ -3,6 +3,7 @@ export { redevenV1Contract, type RedevenV1Rpc, createRedevenV1Rpc } from './cont
 
 export * from './sdk/ai';
 export * from './sdk/fs';
+export * from './sdk/git';
 export * from './sdk/terminal';
 export * from './sdk/monitor';
 export * from './sdk/sessions';

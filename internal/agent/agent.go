@@ -30,6 +30,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/codeapp"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/fs"
+	"github.com/floegence/redeven-agent/internal/gitrepo"
 	"github.com/floegence/redeven-agent/internal/monitor"
 	"github.com/floegence/redeven-agent/internal/portforward"
 	"github.com/floegence/redeven-agent/internal/session"
@@ -805,6 +806,7 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 	}
 
 	fsSvc := fs.NewService(a.fsRoot)
+	gitRepoSvc := gitrepo.NewService(a.fsRoot)
 
 	srv, err := serve.New(serve.Options{
 		OnError: func(err error) {
@@ -820,12 +822,17 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 
 	// RPC stream
 	srv.Handle("rpc", func(ctx context.Context, stream io.ReadWriteCloser) {
-		a.serveRPCStream(ctx, stream, meta, fsSvc)
+		a.serveRPCStream(ctx, stream, meta, fsSvc, gitRepoSvc)
 	})
 
 	// FS read-file stream (binary, chunked)
 	srv.Handle("fs/read_file", func(ctx context.Context, stream io.ReadWriteCloser) {
 		fsSvc.ServeReadFileStream(ctx, stream, meta)
+	})
+
+	// Git commit patch stream (text diff, chunked)
+	srv.Handle("git/read_commit_patch", func(ctx context.Context, stream io.ReadWriteCloser) {
+		gitRepoSvc.ServeReadCommitPatchStream(ctx, stream, meta)
 	})
 
 	// Env App UI static assets are delivered over flowersec-proxy (Standard Mode only).
@@ -862,7 +869,7 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 	return srv.ServeSession(ctx, sess)
 }
 
-func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta, fsSvc *fs.Service) {
+func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta, fsSvc *fs.Service, gitRepoSvc *gitrepo.Service) {
 	router := rpc.NewRouter()
 	srv := rpc.NewServer(stream, router)
 	defer a.term.DetachSink(srv)
@@ -872,6 +879,9 @@ func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, m
 
 	// FS domain
 	fsSvc.Register(router, meta)
+
+	// Git repository domain
+	gitRepoSvc.Register(router, meta)
 
 	// Terminal domain
 	a.term.Register(router, meta, srv)

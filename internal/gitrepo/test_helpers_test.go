@@ -1,0 +1,82 @@
+package gitrepo
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+type testRepoFixture struct {
+	Root          string
+	InitialCommit string
+	UpdateCommit  string
+	RenameCommit  string
+	BinaryCommit  string
+}
+
+func runGitFixture(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Tester",
+		"GIT_AUTHOR_EMAIL=tester@example.com",
+		"GIT_COMMITTER_NAME=Tester",
+		"GIT_COMMITTER_EMAIL=tester@example.com",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(out))
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func writeFixtureFile(t *testing.T, root string, relative string, data []byte) {
+	t.Helper()
+	full := filepath.Join(root, filepath.FromSlash(relative))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", relative, err)
+	}
+	if err := os.WriteFile(full, data, 0o644); err != nil {
+		t.Fatalf("write %s: %v", relative, err)
+	}
+}
+
+func createTestRepoFixture(t *testing.T) testRepoFixture {
+	t.Helper()
+	root := t.TempDir()
+	runGitFixture(t, root, "init")
+	runGitFixture(t, root, "config", "user.name", "Tester")
+	runGitFixture(t, root, "config", "user.email", "tester@example.com")
+
+	writeFixtureFile(t, root, "README.md", []byte("hello\n"))
+	runGitFixture(t, root, "add", "README.md")
+	runGitFixture(t, root, "commit", "-m", "initial")
+	initial := runGitFixture(t, root, "rev-parse", "HEAD")
+
+	writeFixtureFile(t, root, "src/app.txt", []byte("one\ntwo\n"))
+	runGitFixture(t, root, "add", "src/app.txt")
+	runGitFixture(t, root, "commit", "-m", "update app")
+	update := runGitFixture(t, root, "rev-parse", "HEAD")
+
+	runGitFixture(t, root, "mv", "src/app.txt", "src/main.txt")
+	runGitFixture(t, root, "commit", "-m", "rename app")
+	rename := runGitFixture(t, root, "rev-parse", "HEAD")
+
+	if err := os.Remove(filepath.Join(root, "README.md")); err != nil {
+		t.Fatalf("remove README: %v", err)
+	}
+	writeFixtureFile(t, root, "bin/data.bin", []byte{0x00, 0x01, 0x02, 0x03, 0x04})
+	runGitFixture(t, root, "add", "-A")
+	runGitFixture(t, root, "commit", "-m", "binary cleanup")
+	binary := runGitFixture(t, root, "rev-parse", "HEAD")
+
+	return testRepoFixture{
+		Root:          root,
+		InitialCommit: initial,
+		UpdateCommit:  update,
+		RenameCommit:  rename,
+		BinaryCommit:  binary,
+	}
+}

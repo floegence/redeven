@@ -8,21 +8,26 @@ export const redevenV1TypeIds = {
     delete: 1006,
     getHome: 1010,
   },
+  git: {
+    resolveRepo: 1101,
+    listCommits: 1102,
+    getCommitDetail: 1103,
+  },
   terminal: {
     sessionCreate: 2001,
     sessionList: 2002,
     sessionAttach: 2003,
 
-    output: 2004, // notify (agent -> client)
-    resize: 2005, // notify (client -> agent)
-    input: 2006, // notify (client -> agent)
+    output: 2004,
+    resize: 2005,
+    input: 2006,
     history: 2007,
     clear: 2008,
 
     sessionDelete: 2009,
-    nameUpdate: 2010, // notify (agent -> client)
+    nameUpdate: 2010,
     sessionStats: 2011,
-    sessionsChanged: 2012, // notify (agent -> client)
+    sessionsChanged: 2012,
   },
   monitor: {
     sysMonitor: 3001,
@@ -31,7 +36,7 @@ export const redevenV1TypeIds = {
     sendUserTurn: 6001,
     runCancel: 6002,
     subscribeSummary: 6003,
-    event: 6004, // notify (agent -> client)
+    event: 6004,
     toolApproval: 6005,
     listMessages: 6006,
     getActiveRunSnapshot: 6007,

@@ -13,6 +13,7 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
+	"github.com/floegence/redeven-agent/internal/pathutil"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -255,63 +256,11 @@ func (s *Service) resolve(p string) (virtual string, real string, err error) {
 	if s == nil {
 		return "", "", errors.New("nil service")
 	}
-	root := strings.TrimSpace(s.root)
-	if root == "" {
-		return "", "", errors.New("empty root")
-	}
-
-	p = strings.TrimSpace(p)
-	if p == "" {
-		p = "/"
-	}
-
-	// Virtual paths are always POSIX-like absolute paths starting with "/".
-	// They are mapped to the configured filesystem root on the agent.
-	p = strings.ReplaceAll(p, "\\", "/")
-	if !strings.HasPrefix(p, "/") {
-		p = "/" + p
-	}
-
-	vp := path.Clean(p)
-	if vp == "." {
-		vp = "/"
-	}
-	if !strings.HasPrefix(vp, "/") {
-		vp = "/" + vp
-	}
-
-	rel := strings.TrimPrefix(vp, "/")
-	relOS := filepath.FromSlash(rel)
-	if relOS != "" && filepath.IsAbs(relOS) {
-		return "", "", errors.New("invalid absolute path")
-	}
-
-	abs := filepath.Clean(filepath.Join(root, relOS))
-	ok, err := isWithinRoot(abs, root)
-	if err != nil || !ok {
-		return "", "", errors.New("path escapes root")
-	}
-	return vp, abs, nil
-}
-
-func isWithinRoot(path string, root string) (bool, error) {
-	path = filepath.Clean(path)
-	root = filepath.Clean(root)
-	rel, err := filepath.Rel(root, path)
+	resolved, err := pathutil.ResolveVirtualPath(s.root, p)
 	if err != nil {
-		return false, err
+		return "", "", err
 	}
-	rel = filepath.Clean(rel)
-	if rel == "." {
-		return true, nil
-	}
-	if rel == ".." {
-		return false, nil
-	}
-	if strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return false, nil
-	}
-	return true, nil
+	return resolved.Virtual, resolved.Real, nil
 }
 
 func fileModeString(m fs.FileMode) string {

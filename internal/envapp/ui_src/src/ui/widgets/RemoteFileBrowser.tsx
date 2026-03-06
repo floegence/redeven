@@ -8,7 +8,7 @@ import type { Client } from '@floegence/flowersec-core';
 import { DEFAULT_MAX_JSON_FRAME_BYTES, readJsonFrame, writeJsonFrame } from '@floegence/flowersec-core/framing';
 import { ByteReader, type YamuxStream } from '@floegence/flowersec-core/yamux';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
-import { useRedevenRpc } from '../protocol/redeven_v1';
+import { useRedevenRpc, type GitResolveRepoResponse } from '../protocol/redeven_v1';
 import { getExtDot, isLikelyTextContent, mimeFromExtDot, previewModeByName, type PreviewMode } from '../utils/filePreview';
 import { readFileBytesOnce, normalizeRespMeta, byteReaderFromStream, type FsReadFileStreamMeta, type FsReadFileStreamRespMeta } from '../utils/fileStreamReader';
 import { useEnvContext } from '../pages/EnvContext';
@@ -23,6 +23,7 @@ import {
   virtualPathToAbsolutePath,
 } from '../utils/askFlowerPath';
 import { InputDialog } from './InputDialog';
+import { GitHistoryBrowser } from './GitHistoryBrowser';
 import {
   extNoDot,
   getParentDir,
@@ -45,6 +46,8 @@ type PathLoadResult = {
   status: PathLoadStatus;
   message?: string;
 };
+
+type BrowserPageMode = 'files' | 'git_history';
 
 const JSON_FRAME_MAX_BYTES = DEFAULT_MAX_JSON_FRAME_BYTES;
 const MAX_PREVIEW_BYTES = 20 * 1024 * 1024;
@@ -146,11 +149,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [lastLoadedBrowserPath, setLastLoadedBrowserPath] = createSignal('/');
 
   const [fsRootAbs, setFsRootAbs] = createSignal('');
+  const [pageMode, setPageMode] = createSignal<BrowserPageMode>('files');
+  const [repoInfo, setRepoInfo] = createSignal<GitResolveRepoResponse | null>(null);
+  const [repoInfoLoading, setRepoInfoLoading] = createSignal(false);
+  const [repoInfoError, setRepoInfoError] = createSignal('');
 
   let activePreviewStream: YamuxStream | null = null;
   let activeObjectUrl: string | null = null;
   let previewReqSeq = 0;
   let dirReqSeq = 0;
+  let repoReqSeq = 0;
   let docxHost: HTMLDivElement | undefined;
   let previewContentEl: HTMLDivElement | undefined;
   let previewAskMenuEl: HTMLDivElement | undefined;
@@ -281,6 +289,53 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     return root;
   };
 
+  const repoHistoryAvailable = () => Boolean(repoInfo()?.available && repoInfo()?.repoRootPath);
+
+  const resolveRepoInfo = async (path: string = currentBrowserPath()): Promise<GitResolveRepoResponse | null> => {
+    const client = protocol.client();
+    if (!client) {
+      repoReqSeq += 1;
+      setRepoInfo(null);
+      setRepoInfoLoading(false);
+      setRepoInfoError('');
+      return null;
+    }
+
+    const seq = ++repoReqSeq;
+    setRepoInfoLoading(true);
+    setRepoInfoError('');
+    try {
+      const resp = await rpc.git.resolveRepo({ path: normalizePath(path) });
+      if (seq !== repoReqSeq) return null;
+      const nextInfo: GitResolveRepoResponse = resp?.available
+        ? {
+            available: true,
+            repoRootPath: resp.repoRootPath,
+            headRef: resp.headRef,
+            headCommit: resp.headCommit,
+            dirty: resp.dirty,
+          }
+        : { available: false };
+      setRepoInfo(nextInfo);
+      return nextInfo;
+    } catch (err) {
+      if (seq !== repoReqSeq) return null;
+      const result = classifyPathLoadError(err);
+      if (result.status === 'invalid_path') {
+        setRepoInfo({ available: false });
+        setRepoInfoError('');
+      } else {
+        setRepoInfo(null);
+        setRepoInfoError(result.message ?? 'Failed to inspect Git repository.');
+      }
+      return null;
+    } finally {
+      if (seq === repoReqSeq) {
+        setRepoInfoLoading(false);
+      }
+    }
+  };
+
   createEffect(() => {
     const _ = envId();
     dirReqSeq += 1;
@@ -290,9 +345,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setCurrentBrowserPath('/');
     setLastLoadedBrowserPath('/');
     setFsRootAbs('');
+    setPageMode('files');
+    setRepoInfo(null);
+    setRepoInfoLoading(false);
+    setRepoInfoError('');
     setDragMoveLoading(false);
     setFileBrowserResetSeq(0);
 
+    repoReqSeq += 1;
     previewReqSeq += 1;
     cleanupPreview();
     setPreviewItem(null);
@@ -904,6 +964,26 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   createEffect(() => {
+    const id = envId();
+    const client = protocol.client();
+    const path = currentBrowserPath();
+    if (!id || !client) {
+      repoReqSeq += 1;
+      setRepoInfo(null);
+      setRepoInfoLoading(false);
+      setRepoInfoError('');
+      return;
+    }
+    void resolveRepoInfo(path);
+  });
+
+  createEffect(() => {
+    if (pageMode() === 'git_history' && !repoInfoLoading() && !repoHistoryAvailable()) {
+      setPageMode('files');
+    }
+  });
+
+  createEffect(() => {
     if (previewMode() !== 'docx') return;
     const it = previewItem();
     const bytes = previewBytes();
@@ -1291,43 +1371,92 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         fallback={<div class="h-full" />}
       >
         {(id) => (
-          <Show when={fileBrowserResetSeq() + 1} keyed>
-            {(_seq) => (
-              <FileBrowser
-                files={files()}
-                initialPath={readPersistedLastPath(id)}
-                initialViewMode="list"
-                homeLabel="Home"
-                sidebarWidth={240}
-                persistenceKey={`files:${id}`}
-                instanceId={props.widgetId ? `redeven-files:${id}:${props.widgetId}` : `redeven-files:${id}`}
-                onNavigate={(path) => {
-                  const targetPath = normalizePath(path);
-                  writePersistedLastPath(id, targetPath);
-                  setCurrentBrowserPath(targetPath);
-                  void (async () => {
-                    const result = await loadPathChain(targetPath);
-                    if (result.status === 'ok' || result.status === 'canceled') return;
-                    if (result.status === 'invalid_path') {
-                      const fallbackPath = normalizePath(lastLoadedBrowserPath());
-                      writePersistedLastPath(id, fallbackPath);
-                      setCurrentBrowserPath(fallbackPath);
-                      setFileBrowserResetSeq((n) => n + 1);
-                      const fallbackResult = await loadPathChain(fallbackPath);
-                      if (fallbackResult.status !== 'ok') notifyPathLoadFailure(fallbackResult);
-                      return;
-                    }
-                    notifyPathLoadFailure(result);
-                  })();
-                }}
-                onOpen={(item) => void openPreview(item)}
-                onDragMove={(items, targetPath) => void handleDragMove(items, targetPath)}
-                contextMenuCallbacks={ctxMenu}
-                overrideContextMenuItems={overrideContextMenuItems}
-                class="h-full border-0 rounded-none shadow-none"
-              />
-            )}
-          </Show>
+          <div class="h-full min-h-0 flex flex-col">
+            <div class="shrink-0 border-b border-border/70 bg-background/80 px-3 py-2">
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="text-sm font-medium text-foreground">Workspace Browser</div>
+                  <div class="text-[11px] text-muted-foreground truncate">
+                    {repoInfoLoading()
+                      ? 'Checking Git repository for the current path...'
+                      : repoHistoryAvailable()
+                        ? `Repository: ${repoInfo()?.repoRootPath ?? '/'}`
+                        : `Current path: ${currentBrowserPath() || '/'}`}
+                  </div>
+                </div>
+                <div class="shrink-0 flex items-center gap-2">
+                  <Button size="xs" variant={pageMode() === 'files' ? 'default' : 'outline'} onClick={() => setPageMode('files')}>
+                    Files
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant={pageMode() === 'git_history' ? 'default' : 'outline'}
+                    onClick={() => setPageMode('git_history')}
+                    disabled={!repoHistoryAvailable() || repoInfoLoading()}
+                    title={repoHistoryAvailable() ? 'Browse Git commit history.' : 'Git history is only available inside a Git repository.'}
+                  >
+                    Git History
+                  </Button>
+                </div>
+              </div>
+              <Show when={repoInfoError()}>
+                <div class="pt-2 text-[11px] text-error break-words">{repoInfoError()}</div>
+              </Show>
+            </div>
+
+            <div class="flex-1 min-h-0">
+              <Show
+                when={pageMode() === 'files'}
+                fallback={
+                  <GitHistoryBrowser
+                    class="h-full"
+                    currentPath={currentBrowserPath()}
+                    repoInfo={repoInfo()}
+                    repoInfoLoading={repoInfoLoading()}
+                    onRefreshRepoInfo={() => { void resolveRepoInfo(currentBrowserPath()); }}
+                  />
+                }
+              >
+                <Show when={fileBrowserResetSeq() + 1} keyed>
+                  {(_seq) => (
+                    <FileBrowser
+                      files={files()}
+                      initialPath={readPersistedLastPath(id)}
+                      initialViewMode="list"
+                      homeLabel="Home"
+                      sidebarWidth={240}
+                      persistenceKey={`files:${id}`}
+                      instanceId={props.widgetId ? `redeven-files:${id}:${props.widgetId}` : `redeven-files:${id}`}
+                      onNavigate={(path) => {
+                        const targetPath = normalizePath(path);
+                        writePersistedLastPath(id, targetPath);
+                        setCurrentBrowserPath(targetPath);
+                        void (async () => {
+                          const result = await loadPathChain(targetPath);
+                          if (result.status === 'ok' || result.status === 'canceled') return;
+                          if (result.status === 'invalid_path') {
+                            const fallbackPath = normalizePath(lastLoadedBrowserPath());
+                            writePersistedLastPath(id, fallbackPath);
+                            setCurrentBrowserPath(fallbackPath);
+                            setFileBrowserResetSeq((n) => n + 1);
+                            const fallbackResult = await loadPathChain(fallbackPath);
+                            if (fallbackResult.status !== 'ok') notifyPathLoadFailure(fallbackResult);
+                            return;
+                          }
+                          notifyPathLoadFailure(result);
+                        })();
+                      }}
+                      onOpen={(item) => void openPreview(item)}
+                      onDragMove={(items, targetPath) => void handleDragMove(items, targetPath)}
+                      contextMenuCallbacks={ctxMenu}
+                      overrideContextMenuItems={overrideContextMenuItems}
+                      class="h-full border-0 rounded-none shadow-none"
+                    />
+                  )}
+                </Show>
+              </Show>
+            </div>
+          </div>
         )}
       </Show>
 

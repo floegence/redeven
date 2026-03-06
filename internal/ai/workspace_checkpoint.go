@@ -10,11 +10,12 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/floegence/redeven-agent/internal/gitutil"
 )
 
 const (
@@ -102,35 +103,11 @@ func ensureAbsPathWithinRoot(rootAbs string, targetAbs string) (string, error) {
 }
 
 func runGitCombinedOutput(ctx context.Context, repoRoot string, env []string, args ...string) ([]byte, error) {
-	repoRoot = strings.TrimSpace(repoRoot)
-	if repoRoot == "" {
-		return nil, errors.New("missing repo root")
-	}
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repoRoot}, args...)...)
-	if len(env) > 0 {
-		cmd.Env = append([]string(nil), env...)
-	}
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		msg := strings.TrimSpace(string(out))
-		if msg == "" {
-			msg = err.Error()
-		}
-		return nil, fmt.Errorf("git %s failed: %s", strings.Join(args, " "), msg)
-	}
-	return out, nil
+	return gitutil.RunCombinedOutput(ctx, repoRoot, env, args...)
 }
 
 func gitShowTopLevel(ctx context.Context, dir string) (string, bool) {
-	out, err := runGitCombinedOutput(ctx, dir, nil, "rev-parse", "--show-toplevel")
-	if err != nil {
-		return "", false
-	}
-	root := strings.TrimSpace(string(out))
-	if root == "" {
-		return "", false
-	}
-	return filepath.Clean(root), true
+	return gitutil.ShowTopLevel(ctx, dir)
 }
 
 func parseZList(b []byte) []string {
