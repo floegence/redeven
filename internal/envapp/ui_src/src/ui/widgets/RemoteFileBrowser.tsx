@@ -8,7 +8,7 @@ import type { Client } from '@floegence/flowersec-core';
 import { DEFAULT_MAX_JSON_FRAME_BYTES, readJsonFrame, writeJsonFrame } from '@floegence/flowersec-core/framing';
 import { ByteReader, type YamuxStream } from '@floegence/flowersec-core/yamux';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
-import { useRedevenRpc, type GitResolveRepoResponse } from '../protocol/redeven_v1';
+import { useRedevenRpc, type GitCommitSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
 import { getExtDot, isLikelyTextContent, mimeFromExtDot, previewModeByName, type PreviewMode } from '../utils/filePreview';
 import { readFileBytesOnce, normalizeRespMeta, byteReaderFromStream, type FsReadFileStreamMeta, type FsReadFileStreamRespMeta } from '../utils/fileStreamReader';
 import { useEnvContext } from '../pages/EnvContext';
@@ -24,6 +24,7 @@ import {
 } from '../utils/askFlowerPath';
 import { InputDialog } from './InputDialog';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
+import { GitHistoryPageSidebar } from './GitHistoryPageSidebar';
 import {
   extNoDot,
   getParentDir,
@@ -56,6 +57,7 @@ const SNIFF_BYTES = 64 * 1024;
 const ASK_FLOWER_MAX_ATTACHMENTS = 5;
 const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 const ASK_FLOWER_MAX_INLINE_SELECTION_CHARS = 10_000;
+const GIT_COMMIT_PAGE_SIZE = 50;
 
 export interface RemoteFileBrowserProps {
   widgetId?: string;
@@ -154,11 +156,21 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [repoInfoLoading, setRepoInfoLoading] = createSignal(false);
   const [repoInfoError, setRepoInfoError] = createSignal('');
 
+  const [gitCommits, setGitCommits] = createSignal<GitCommitSummary[]>([]);
+  const [gitListLoading, setGitListLoading] = createSignal(false);
+  const [gitListLoadingMore, setGitListLoadingMore] = createSignal(false);
+  const [gitListError, setGitListError] = createSignal('');
+  const [gitHasMore, setGitHasMore] = createSignal(false);
+  const [gitNextOffset, setGitNextOffset] = createSignal(0);
+  const [selectedCommitHash, setSelectedCommitHash] = createSignal('');
+
   let activePreviewStream: YamuxStream | null = null;
   let activeObjectUrl: string | null = null;
   let previewReqSeq = 0;
   let dirReqSeq = 0;
   let repoReqSeq = 0;
+  let gitListReqSeq = 0;
+  let lastGitRepoKey = '';
   let docxHost: HTMLDivElement | undefined;
   let previewContentEl: HTMLDivElement | undefined;
   let previewAskMenuEl: HTMLDivElement | undefined;
@@ -336,6 +348,85 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
+  const resetGitCommitSidebar = () => {
+    gitListReqSeq += 1;
+    lastGitRepoKey = '';
+    setGitCommits([]);
+    setGitListLoading(false);
+    setGitListLoadingMore(false);
+    setGitListError('');
+    setGitHasMore(false);
+    setGitNextOffset(0);
+    setSelectedCommitHash('');
+  };
+
+  const loadGitCommits = async (reset: boolean) => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    if (!repoRootPath || !protocol.client()) return;
+    const seq = ++gitListReqSeq;
+    setGitListError('');
+    if (reset) {
+      setGitListLoading(true);
+    } else {
+      setGitListLoadingMore(true);
+    }
+    try {
+      const resp = await rpc.git.listCommits({
+        repoRootPath,
+        offset: reset ? 0 : gitNextOffset(),
+        limit: GIT_COMMIT_PAGE_SIZE,
+      });
+      if (seq !== gitListReqSeq) return;
+      const nextItems = Array.isArray(resp?.commits) ? resp.commits : [];
+      if (reset) {
+        setGitCommits(nextItems);
+      } else {
+        const seen = new Set(gitCommits().map((item) => item.hash));
+        setGitCommits([...gitCommits(), ...nextItems.filter((item) => !seen.has(item.hash))]);
+      }
+      setGitHasMore(Boolean(resp?.hasMore));
+      setGitNextOffset(Number(resp?.nextOffset ?? 0));
+      const allItems = reset ? nextItems : gitCommits();
+      const current = selectedCommitHash();
+      if ((reset || !allItems.some((item) => item.hash === current)) && nextItems.length > 0) {
+        setSelectedCommitHash(nextItems[0]!.hash);
+      }
+      if (reset && nextItems.length === 0) {
+        setSelectedCommitHash('');
+      }
+    } catch (err) {
+      if (seq !== gitListReqSeq) return;
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load commits');
+      setGitListError(message);
+    } finally {
+      if (seq === gitListReqSeq) {
+        setGitListLoading(false);
+        setGitListLoadingMore(false);
+      }
+    }
+  };
+
+  const handlePageModeChange = (mode: BrowserPageMode) => {
+    if (mode === 'git_history' && !repoHistoryAvailable()) {
+      return;
+    }
+    setPageMode(mode);
+  };
+
+  const showPageSidebar = () => pageMode() === 'git_history' || repoHistoryAvailable() || repoInfoLoading() || !!repoInfoError();
+
+  const refreshGitSidebar = async () => {
+    const nextInfo = await resolveRepoInfo(currentBrowserPath());
+    if (!nextInfo?.available) {
+      resetGitCommitSidebar();
+      return;
+    }
+    if (pageMode() === 'git_history') {
+      lastGitRepoKey = '';
+      void loadGitCommits(true);
+    }
+  };
+
   createEffect(() => {
     const _ = envId();
     dirReqSeq += 1;
@@ -349,6 +440,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setRepoInfo(null);
     setRepoInfoLoading(false);
     setRepoInfoError('');
+    resetGitCommitSidebar();
     setDragMoveLoading(false);
     setFileBrowserResetSeq(0);
 
@@ -984,6 +1076,24 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   createEffect(() => {
+    const mode = pageMode();
+    const info = repoInfo();
+    const repoKey = info?.available ? `${info.repoRootPath ?? ''}|${info.headCommit ?? ''}` : '';
+    if (mode !== 'git_history') {
+      return;
+    }
+    if (!repoKey) {
+      resetGitCommitSidebar();
+      return;
+    }
+    if (repoKey === lastGitRepoKey) {
+      return;
+    }
+    lastGitRepoKey = repoKey;
+    void loadGitCommits(true);
+  });
+
+  createEffect(() => {
     if (previewMode() !== 'docx') return;
     const it = previewItem();
     const bytes = previewBytes();
@@ -1371,40 +1481,28 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         fallback={<div class="h-full" />}
       >
         {(id) => (
-          <div class="h-full min-h-0 flex flex-col">
-            <div class="shrink-0 border-b border-border/70 bg-background/80 px-3 py-2">
-              <div class="flex items-center justify-between gap-3">
-                <div class="min-w-0">
-                  <div class="text-sm font-medium text-foreground">Workspace Browser</div>
-                  <div class="text-[11px] text-muted-foreground truncate">
-                    {repoInfoLoading()
-                      ? 'Checking Git repository for the current path...'
-                      : repoHistoryAvailable()
-                        ? `Repository: ${repoInfo()?.repoRootPath ?? '/'}`
-                        : `Current path: ${currentBrowserPath() || '/'}`}
-                  </div>
-                </div>
-                <div class="shrink-0 flex items-center gap-2">
-                  <Button size="xs" variant={pageMode() === 'files' ? 'default' : 'outline'} onClick={() => setPageMode('files')}>
-                    Files
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant={pageMode() === 'git_history' ? 'default' : 'outline'}
-                    onClick={() => setPageMode('git_history')}
-                    disabled={!repoHistoryAvailable() || repoInfoLoading()}
-                    title={repoHistoryAvailable() ? 'Browse Git commit history.' : 'Git history is only available inside a Git repository.'}
-                  >
-                    Git History
-                  </Button>
-                </div>
-              </div>
-              <Show when={repoInfoError()}>
-                <div class="pt-2 text-[11px] text-error break-words">{repoInfoError()}</div>
-              </Show>
-            </div>
+          <div class="h-full min-h-0 flex overflow-hidden">
+            <Show when={showPageSidebar()}>
+              <GitHistoryPageSidebar
+                mode={pageMode()}
+                onModeChange={handlePageModeChange}
+                currentPath={currentBrowserPath()}
+                repoInfo={repoInfo()}
+                repoInfoLoading={repoInfoLoading()}
+                repoInfoError={repoInfoError()}
+                commits={gitCommits()}
+                listLoading={gitListLoading()}
+                listLoadingMore={gitListLoadingMore()}
+                listError={gitListError()}
+                hasMore={gitHasMore()}
+                selectedCommitHash={selectedCommitHash()}
+                onSelectCommit={setSelectedCommitHash}
+                onLoadMore={() => void loadGitCommits(false)}
+                onRefresh={() => { void refreshGitSidebar(); }}
+              />
+            </Show>
 
-            <div class="flex-1 min-h-0">
+            <div class="flex-1 min-w-0 min-h-0">
               <Show
                 when={pageMode() === 'files'}
                 fallback={
@@ -1413,7 +1511,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                     currentPath={currentBrowserPath()}
                     repoInfo={repoInfo()}
                     repoInfoLoading={repoInfoLoading()}
-                    onRefreshRepoInfo={() => { void resolveRepoInfo(currentBrowserPath()); }}
+                    selectedCommitHash={selectedCommitHash()}
                   />
                 }
               >
