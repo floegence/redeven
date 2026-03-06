@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
+	"github.com/floegence/redeven-agent/internal/accessgate"
 	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/session"
 )
@@ -142,11 +142,15 @@ type aiSetToolCollapsedResp struct {
 }
 
 func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server) {
+	s.RegisterRPCWithAccessGate(r, meta, streamServer, nil)
+}
+
+func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server, gate *accessgate.Gate) {
 	if s == nil || r == nil {
 		return
 	}
 
-	rpctyped.Register[aiSendUserTurnReq, aiSendUserTurnResp](r, TypeID_AI_SEND_USER_TURN, func(ctx context.Context, req *aiSendUserTurnReq) (*aiSendUserTurnResp, error) {
+	accessgate.RegisterTyped[aiSendUserTurnReq, aiSendUserTurnResp](r, TypeID_AI_SEND_USER_TURN, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiSendUserTurnReq) (*aiSendUserTurnResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
@@ -180,7 +184,7 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 		}, nil
 	})
 
-	rpctyped.Register[aiRunCancelReq, aiRunCancelResp](r, TypeID_AI_RUN_CANCEL, func(_ context.Context, req *aiRunCancelReq) (*aiRunCancelResp, error) {
+	accessgate.RegisterTyped[aiRunCancelReq, aiRunCancelResp](r, TypeID_AI_RUN_CANCEL, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *aiRunCancelReq) (*aiRunCancelResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
@@ -205,7 +209,7 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 		return &aiRunCancelResp{OK: true}, nil
 	})
 
-	rpctyped.Register[aiToolApprovalReq, aiToolApprovalResp](r, TypeID_AI_TOOL_APPROVAL, func(_ context.Context, req *aiToolApprovalReq) (*aiToolApprovalResp, error) {
+	accessgate.RegisterTyped[aiToolApprovalReq, aiToolApprovalResp](r, TypeID_AI_TOOL_APPROVAL, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *aiToolApprovalReq) (*aiToolApprovalResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
@@ -218,7 +222,7 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 		return &aiToolApprovalResp{OK: true}, nil
 	})
 
-	rpctyped.Register[aiSubscribeSummaryReq, aiSubscribeSummaryResp](r, TypeID_AI_SUBSCRIBE_SUMMARY, func(_ context.Context, _ *aiSubscribeSummaryReq) (*aiSubscribeSummaryResp, error) {
+	accessgate.RegisterTyped[aiSubscribeSummaryReq, aiSubscribeSummaryResp](r, TypeID_AI_SUBSCRIBE_SUMMARY, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, _ *aiSubscribeSummaryReq) (*aiSubscribeSummaryResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
@@ -232,7 +236,7 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 		return &aiSubscribeSummaryResp{ActiveRuns: activeRuns}, nil
 	})
 
-	rpctyped.Register[aiSubscribeThreadReq, aiSubscribeThreadResp](r, TypeID_AI_SUBSCRIBE_THREAD, func(_ context.Context, req *aiSubscribeThreadReq) (*aiSubscribeThreadResp, error) {
+	accessgate.RegisterTyped[aiSubscribeThreadReq, aiSubscribeThreadResp](r, TypeID_AI_SUBSCRIBE_THREAD, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *aiSubscribeThreadReq) (*aiSubscribeThreadResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
@@ -253,7 +257,7 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 		return &aiSubscribeThreadResp{RunID: strings.TrimSpace(runID)}, nil
 	})
 
-	rpctyped.Register[aiThreadRewindReq, aiThreadRewindResp](r, TypeID_AI_THREAD_REWIND, func(ctx context.Context, req *aiThreadRewindReq) (*aiThreadRewindResp, error) {
+	accessgate.RegisterTyped[aiThreadRewindReq, aiThreadRewindResp](r, TypeID_AI_THREAD_REWIND, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiThreadRewindReq) (*aiThreadRewindResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
@@ -271,7 +275,7 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 		return &aiThreadRewindResp{OK: out.OK, CheckpointID: strings.TrimSpace(out.CheckpointID)}, nil
 	})
 
-	rpctyped.Register[aiStopThreadReq, aiStopThreadResp](r, TypeID_AI_STOP_THREAD, func(ctx context.Context, req *aiStopThreadReq) (*aiStopThreadResp, error) {
+	accessgate.RegisterTyped[aiStopThreadReq, aiStopThreadResp](r, TypeID_AI_STOP_THREAD, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiStopThreadReq) (*aiStopThreadResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
@@ -289,7 +293,7 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 		return &aiStopThreadResp{OK: out.OK, RecoveredFollowups: out.RecoveredFollowups}, nil
 	})
 
-	rpctyped.Register[aiListMessagesReq, aiListMessagesResp](r, TypeID_AI_MESSAGES_LIST, func(ctx context.Context, req *aiListMessagesReq) (*aiListMessagesResp, error) {
+	accessgate.RegisterTyped[aiListMessagesReq, aiListMessagesResp](r, TypeID_AI_MESSAGES_LIST, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiListMessagesReq) (*aiListMessagesResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
@@ -367,7 +371,7 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 		return out, nil
 	})
 
-	rpctyped.Register[aiGetActiveRunSnapshotReq, aiGetActiveRunSnapshotResp](r, TypeID_AI_ACTIVE_RUN_SNAPSHOT, func(ctx context.Context, req *aiGetActiveRunSnapshotReq) (*aiGetActiveRunSnapshotResp, error) {
+	accessgate.RegisterTyped[aiGetActiveRunSnapshotReq, aiGetActiveRunSnapshotResp](r, TypeID_AI_ACTIVE_RUN_SNAPSHOT, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiGetActiveRunSnapshotReq) (*aiGetActiveRunSnapshotResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
@@ -407,7 +411,7 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 		}, nil
 	})
 
-	rpctyped.Register[aiSetToolCollapsedReq, aiSetToolCollapsedResp](r, TypeID_AI_SET_TOOL_COLLAPSED, func(ctx context.Context, req *aiSetToolCollapsedReq) (*aiSetToolCollapsedResp, error) {
+	accessgate.RegisterTyped[aiSetToolCollapsedReq, aiSetToolCollapsedResp](r, TypeID_AI_SET_TOOL_COLLAPSED, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiSetToolCollapsedReq) (*aiSetToolCollapsedResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}

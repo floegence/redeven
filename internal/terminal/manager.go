@@ -16,7 +16,7 @@ import (
 	termgo "github.com/floegence/floeterm/terminal-go"
 	rpcwirev1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/rpc/v1"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
+	"github.com/floegence/redeven-agent/internal/accessgate"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -103,6 +103,10 @@ func NewManager(shell string, root string, log *slog.Logger) *Manager {
 }
 
 func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server) {
+	m.RegisterWithAccessGate(r, meta, streamServer, nil)
+}
+
+func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server, gate *accessgate.Gate) {
 	if m == nil || r == nil {
 		return
 	}
@@ -112,7 +116,7 @@ func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.
 	}
 
 	// Create session
-	rpctyped.Register[terminalCreateReq, terminalCreateResp](r, TypeID_TERMINAL_SESSION_CREATE, func(_ context.Context, req *terminalCreateReq) (*terminalCreateResp, error) {
+	accessgate.RegisterTyped[terminalCreateReq, terminalCreateResp](r, TypeID_TERMINAL_SESSION_CREATE, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalCreateReq) (*terminalCreateResp, error) {
 		if meta == nil || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
 		}
@@ -145,7 +149,7 @@ func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.
 	})
 
 	// List sessions
-	rpctyped.Register[terminalListReq, terminalListResp](r, TypeID_TERMINAL_SESSION_LIST, func(_ context.Context, _ *terminalListReq) (*terminalListResp, error) {
+	accessgate.RegisterTyped[terminalListReq, terminalListResp](r, TypeID_TERMINAL_SESSION_LIST, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, _ *terminalListReq) (*terminalListResp, error) {
 		if meta == nil || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
 		}
@@ -164,7 +168,7 @@ func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.
 	})
 
 	// Attach session: bind terminal output notifications to this RPC stream and register a connection.
-	rpctyped.Register[terminalAttachReq, terminalAttachResp](r, TypeID_TERMINAL_SESSION_ATTACH, func(_ context.Context, req *terminalAttachReq) (*terminalAttachResp, error) {
+	accessgate.RegisterTyped[terminalAttachReq, terminalAttachResp](r, TypeID_TERMINAL_SESSION_ATTACH, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalAttachReq) (*terminalAttachResp, error) {
 		if meta == nil || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
 		}
@@ -200,6 +204,9 @@ func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.
 
 	// Terminal input (notify)
 	r.Register(TypeID_TERMINAL_INPUT, func(_ context.Context, payload json.RawMessage) (json.RawMessage, *rpcwirev1.RpcError) {
+		if err := accessgate.RequireRPC(gate, meta, accessgate.RPCAccessProtected); err != nil {
+			return nil, rpc.ToWireError(err)
+		}
 		if meta == nil || !meta.CanExecute {
 			return nil, rpc.ToWireError(&rpc.Error{Code: 403, Message: "execute permission denied"})
 		}
@@ -215,6 +222,9 @@ func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.
 
 	// Resize (notify)
 	r.Register(TypeID_TERMINAL_RESIZE, func(_ context.Context, payload json.RawMessage) (json.RawMessage, *rpcwirev1.RpcError) {
+		if err := accessgate.RequireRPC(gate, meta, accessgate.RPCAccessProtected); err != nil {
+			return nil, rpc.ToWireError(err)
+		}
 		if meta == nil || !meta.CanExecute {
 			return nil, rpc.ToWireError(&rpc.Error{Code: 403, Message: "execute permission denied"})
 		}
@@ -229,7 +239,7 @@ func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.
 	})
 
 	// History
-	rpctyped.Register[terminalHistoryReq, terminalHistoryResp](r, TypeID_TERMINAL_HISTORY, func(_ context.Context, req *terminalHistoryReq) (*terminalHistoryResp, error) {
+	accessgate.RegisterTyped[terminalHistoryReq, terminalHistoryResp](r, TypeID_TERMINAL_HISTORY, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalHistoryReq) (*terminalHistoryResp, error) {
 		if meta == nil || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
 		}
@@ -268,7 +278,7 @@ func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.
 	})
 
 	// Session stats (history buffer size, etc.)
-	rpctyped.Register[terminalStatsReq, terminalStatsResp](r, TypeID_TERMINAL_SESSION_STATS, func(_ context.Context, req *terminalStatsReq) (*terminalStatsResp, error) {
+	accessgate.RegisterTyped[terminalStatsReq, terminalStatsResp](r, TypeID_TERMINAL_SESSION_STATS, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalStatsReq) (*terminalStatsResp, error) {
 		if meta == nil || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
 		}
@@ -299,7 +309,7 @@ func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.
 	})
 
 	// Clear history
-	rpctyped.Register[terminalClearReq, terminalClearResp](r, TypeID_TERMINAL_CLEAR, func(_ context.Context, req *terminalClearReq) (*terminalClearResp, error) {
+	accessgate.RegisterTyped[terminalClearReq, terminalClearResp](r, TypeID_TERMINAL_CLEAR, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalClearReq) (*terminalClearResp, error) {
 		if meta == nil || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
 		}
@@ -317,7 +327,7 @@ func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.
 	})
 
 	// Delete session
-	rpctyped.Register[terminalDeleteReq, terminalDeleteResp](r, TypeID_TERMINAL_SESSION_DELETE, func(_ context.Context, req *terminalDeleteReq) (*terminalDeleteResp, error) {
+	accessgate.RegisterTyped[terminalDeleteReq, terminalDeleteResp](r, TypeID_TERMINAL_SESSION_DELETE, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalDeleteReq) (*terminalDeleteResp, error) {
 		if meta == nil || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
 		}

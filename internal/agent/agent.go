@@ -26,6 +26,9 @@ import (
 	fsproxyprofile "github.com/floegence/flowersec/flowersec-go/proxy/profile"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
+	"github.com/floegence/redeven-agent/internal/accessgate"
+	"github.com/floegence/redeven-agent/internal/accessproxy"
+	"github.com/floegence/redeven-agent/internal/accessrpc"
 	"github.com/floegence/redeven-agent/internal/auditlog"
 	"github.com/floegence/redeven-agent/internal/codeapp"
 	"github.com/floegence/redeven-agent/internal/config"
@@ -85,6 +88,8 @@ type Options struct {
 	// This hook is intended for CLI UX (e.g., printing the environment access URL)
 	// and must not be used for authorization decisions.
 	OnControlConnected func()
+
+	AccessGate *accessgate.Gate
 }
 
 type Agent struct {
@@ -115,6 +120,7 @@ type Agent struct {
 	localUIEnabled        bool
 	localUIAllowedOrigin  []string
 	controlChannelEnabled bool
+	accessGate            *accessgate.Gate
 }
 
 // activeSession represents a server-side Flowersec channel session handled by the agent.
@@ -184,6 +190,7 @@ func New(opts Options) (*Agent, error) {
 		onControlConnected:    opts.OnControlConnected,
 		localUIEnabled:        opts.LocalUIEnabled,
 		controlChannelEnabled: opts.ControlChannelEnabled,
+		accessGate:            opts.AccessGate,
 		localUIAllowedOrigin: func() []string {
 			var out []string
 			for _, o := range opts.LocalUIAllowedOrigins {
@@ -525,8 +532,15 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	}
 	a.mu.Unlock()
 
+	if a.accessGate != nil && a.accessGate.Enabled() {
+		a.accessGate.RegisterChannel(metaCopy)
+	}
+
 	go func(meta *session.Meta) {
 		defer func() {
+			if a.accessGate != nil && a.accessGate.Enabled() {
+				a.accessGate.UnregisterChannel(channelID)
+			}
 			a.mu.Lock()
 			delete(a.sessions, channelID)
 			a.mu.Unlock()
@@ -722,6 +736,12 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess endpoint.Session, 
 		return errors.New("codeapp gateway not ready")
 	}
 
+	up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up)
+	if err != nil {
+		return err
+	}
+	defer cleanupUpstream()
+
 	srv, err := serve.New(serve.Options{
 		OnError: func(err error) {
 			if err == nil {
@@ -773,6 +793,12 @@ func (a *Agent) servePortForwardSession(ctx context.Context, sess endpoint.Sessi
 	if up == "" {
 		return errors.New("codeapp gateway not ready")
 	}
+
+	up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up)
+	if err != nil {
+		return err
+	}
+	defer cleanupUpstream()
 
 	srv, err := serve.New(serve.Options{
 		OnError: func(err error) {
@@ -827,12 +853,12 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 
 	// FS read-file stream (binary, chunked)
 	srv.Handle("fs/read_file", func(ctx context.Context, stream io.ReadWriteCloser) {
-		fsSvc.ServeReadFileStream(ctx, stream, meta)
+		fsSvc.ServeReadFileStreamWithAccessGate(ctx, stream, meta, a.accessGate)
 	})
 
 	// Git commit patch stream (text diff, chunked)
 	srv.Handle("git/read_commit_patch", func(ctx context.Context, stream io.ReadWriteCloser) {
-		gitRepoSvc.ServeReadCommitPatchStream(ctx, stream, meta)
+		gitRepoSvc.ServeReadCommitPatchStreamWithAccessGate(ctx, stream, meta, a.accessGate)
 	})
 
 	// Env App UI static assets are delivered over flowersec-proxy (Standard Mode only).
@@ -849,6 +875,11 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 		if up == "" {
 			return errors.New("codeapp gateway not ready")
 		}
+		up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up)
+		if err != nil {
+			return err
+		}
+		defer cleanupUpstream()
 		baseOrigin, err := a.code.ExternalOriginForEnvApp(meta.EndpointID)
 		if err != nil {
 			return err
@@ -874,32 +905,53 @@ func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, m
 	srv := rpc.NewServer(stream, router)
 	defer a.term.DetachSink(srv)
 
+	accessrpc.New(a.accessGate).Register(router, meta)
+
 	// Sys domain (health checks).
-	a.sys.Register(router, meta)
+	a.sys.RegisterWithAccessGate(router, meta, a.accessGate)
 
 	// FS domain
-	fsSvc.Register(router, meta)
+	fsSvc.RegisterWithAccessGate(router, meta, a.accessGate)
 
 	// Git repository domain
-	gitRepoSvc.Register(router, meta)
+	gitRepoSvc.RegisterWithAccessGate(router, meta, a.accessGate)
 
 	// Terminal domain
-	a.term.Register(router, meta, srv)
+	a.term.RegisterWithAccessGate(router, meta, srv, a.accessGate)
 
 	// Monitor domain
-	a.mon.Register(router, meta)
+	a.mon.RegisterWithAccessGate(router, meta, a.accessGate)
 
 	if a.code != nil {
 		if aiSvc := a.code.AI(); aiSvc != nil {
 			defer aiSvc.DetachRealtimeSink(srv)
-			aiSvc.RegisterRPC(router, meta, srv)
+			aiSvc.RegisterRPCWithAccessGate(router, meta, srv, a.accessGate)
 		}
 	}
 
 	// Sessions domain (active Flowersec channel sessions).
-	a.registerSessionsRPC(router, meta)
+	a.registerSessionsRPCWithAccessGate(router, meta, a.accessGate)
 
 	_ = srv.Serve(ctx)
+}
+
+func (a *Agent) prepareAccessProxyUpstream(ctx context.Context, meta *session.Meta, upstream string) (string, func(), error) {
+	if a == nil {
+		return upstream, func() {}, nil
+	}
+	proxy, err := accessproxy.New(accessproxy.Options{
+		Logger:   a.log,
+		Gate:     a.accessGate,
+		Meta:     *meta,
+		Upstream: upstream,
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	if err := proxy.Start(ctx); err != nil {
+		return "", nil, err
+	}
+	return strings.TrimSpace(proxy.URL()), func() { _ = proxy.Close() }, nil
 }
 
 func (a *Agent) markSessionConnected(channelID string, connectedAtUnixMs int64) {

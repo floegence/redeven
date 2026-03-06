@@ -48,6 +48,10 @@ export const redevenV1TypeIds = {
   sessions: {
     listActive: 5001,
   },
+  access: {
+    status: 4501,
+    resume: 4502,
+  },
   sys: {
     ping: 4001,
     upgrade: 4002,

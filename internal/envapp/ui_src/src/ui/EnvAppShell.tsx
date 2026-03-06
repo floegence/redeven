@@ -43,6 +43,7 @@ import { buildAskFlowerDraftMarkdown } from './utils/askFlowerContextTemplate';
 import { resolveSuggestedWorkingDirAbsolute } from './utils/askFlowerPath';
 import { fetchGatewayJSON } from './services/gatewayApi';
 import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
+import { consumeAccessResumeTokenFromWindow } from './accessResume';
 import {
   channelInitEntry,
   getEnvPublicIDFromSession,
@@ -386,6 +387,40 @@ export function EnvAppShell() {
   };
 
   let ensureInFlight: Promise<void> | null = null;
+  let accessResumeToken = typeof window !== 'undefined' ? consumeAccessResumeTokenFromWindow(window) : '';
+  let accessResumeClient: unknown = null;
+  let accessResumeInFlight: Promise<void> | null = null;
+
+  const ensureAccessResumed = async () => {
+    const client = protocol.client();
+    if (!client || protocol.status() !== 'connected') return;
+    if (accessResumeClient === client) return;
+    if (accessResumeInFlight) return accessResumeInFlight;
+
+    accessResumeInFlight = (async () => {
+      const status = await rpc.access.status();
+      if (!status.passwordRequired || status.unlocked) {
+        accessResumeClient = client;
+        setManualError(null);
+        return;
+      }
+
+      const token = String(accessResumeToken ?? '').trim();
+      if (!token) {
+        throw new Error('Access password required. Refresh and unlock again.');
+      }
+
+      await rpc.access.resume({ token });
+      accessResumeClient = client;
+      setManualError(null);
+    })();
+
+    try {
+      await accessResumeInFlight;
+    } finally {
+      accessResumeInFlight = null;
+    }
+  };
 
   const createGetGrant = () => async () => {
     const id = envId();
@@ -452,13 +487,31 @@ export function EnvAppShell() {
           },
         });
       }
-    } catch {
-      // protocol.error() will expose the last failure; avoid noisy rethrows here.
+      await ensureAccessResumed();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message) setManualError(message);
+      protocol.disconnect();
     }
   };
 
   const connect = async () => runConnect((config) => protocol.connect(config));
   const reconnect = async () => runConnect((config) => protocol.reconnect(config));
+
+  createEffect(() => {
+    const client = protocol.client();
+    const st = protocol.status();
+    if (st !== 'connected' || !client) {
+      accessResumeClient = null;
+      return;
+    }
+    if (accessResumeClient === client) return;
+    void ensureAccessResumed().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message) setManualError(message);
+      protocol.disconnect();
+    });
+  });
 
   const probe = async (): Promise<boolean> => {
     const startedAt = Date.now();

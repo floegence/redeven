@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
+	"github.com/floegence/redeven-agent/internal/accessgate"
 	"github.com/floegence/redeven-agent/internal/pathutil"
 	"github.com/floegence/redeven-agent/internal/session"
 )
@@ -44,11 +44,15 @@ func NewService(root string) *Service {
 }
 
 func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
+	s.RegisterWithAccessGate(r, meta, nil)
+}
+
+func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate *accessgate.Gate) {
 	if r == nil || s == nil {
 		return
 	}
 
-	rpctyped.Register[fsGetHomeReq, fsGetHomeResp](r, TypeID_FS_GET_HOME, func(_ctx context.Context, _ *fsGetHomeReq) (*fsGetHomeResp, error) {
+	accessgate.RegisterTyped[fsGetHomeReq, fsGetHomeResp](r, TypeID_FS_GET_HOME, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, _ *fsGetHomeReq) (*fsGetHomeResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -56,7 +60,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 		return &fsGetHomeResp{Path: s.root}, nil
 	})
 
-	rpctyped.Register[fsListReq, fsListResp](r, TypeID_FS_LIST, func(_ctx context.Context, req *fsListReq) (*fsListResp, error) {
+	accessgate.RegisterTyped[fsListReq, fsListResp](r, TypeID_FS_LIST, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsListReq) (*fsListResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -96,7 +100,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 		return &fsListResp{Entries: out}, nil
 	})
 
-	rpctyped.Register[fsReadFileReq, fsReadFileResp](r, TypeID_FS_READ_FILE, func(_ctx context.Context, req *fsReadFileReq) (*fsReadFileResp, error) {
+	accessgate.RegisterTyped[fsReadFileReq, fsReadFileResp](r, TypeID_FS_READ_FILE, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsReadFileReq) (*fsReadFileResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -120,7 +124,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 		}
 	})
 
-	rpctyped.Register[fsWriteFileReq, fsWriteFileResp](r, TypeID_FS_WRITE, func(_ctx context.Context, req *fsWriteFileReq) (*fsWriteFileResp, error) {
+	accessgate.RegisterTyped[fsWriteFileReq, fsWriteFileResp](r, TypeID_FS_WRITE, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsWriteFileReq) (*fsWriteFileResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -156,7 +160,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 		return &fsWriteFileResp{Success: true}, nil
 	})
 
-	rpctyped.Register[fsDeleteReq, fsDeleteResp](r, TypeID_FS_DELETE, func(_ctx context.Context, req *fsDeleteReq) (*fsDeleteResp, error) {
+	accessgate.RegisterTyped[fsDeleteReq, fsDeleteResp](r, TypeID_FS_DELETE, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsDeleteReq) (*fsDeleteResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -176,7 +180,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 		return &fsDeleteResp{Success: true}, nil
 	})
 
-	rpctyped.Register[fsRenameReq, fsRenameResp](r, TypeID_FS_RENAME, func(_ctx context.Context, req *fsRenameReq) (*fsRenameResp, error) {
+	accessgate.RegisterTyped[fsRenameReq, fsRenameResp](r, TypeID_FS_RENAME, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsRenameReq) (*fsRenameResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
@@ -209,7 +213,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 		return &fsRenameResp{Success: true, NewPath: vpNew}, nil
 	})
 
-	rpctyped.Register[fsCopyReq, fsCopyResp](r, TypeID_FS_COPY, func(_ctx context.Context, req *fsCopyReq) (*fsCopyResp, error) {
+	accessgate.RegisterTyped[fsCopyReq, fsCopyResp](r, TypeID_FS_COPY, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsCopyReq) (*fsCopyResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}

@@ -21,6 +21,7 @@ import (
 	"github.com/floegence/flowersec/flowersec-go/endpoint"
 	directv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/direct/v1"
 	"github.com/floegence/flowersec/flowersec-go/realtime/ws"
+	"github.com/floegence/redeven-agent/internal/accessgate"
 	"github.com/floegence/redeven-agent/internal/agent"
 	"github.com/floegence/redeven-agent/internal/codeapp/gateway"
 	"github.com/floegence/redeven-agent/internal/config"
@@ -52,6 +53,9 @@ type Options struct {
 
 	// Version is the agent build version (used by /api/local/agent/version/latest).
 	Version string
+
+	// AccessGate protects the local browser entry when password mode is enabled.
+	AccessGate *accessgate.Gate
 }
 
 type Server struct {
@@ -64,6 +68,7 @@ type Server struct {
 	gw *gateway.Gateway
 	a  *agent.Agent
 
+	accessGate     *accessgate.Gate
 	allowedOrigins []string
 
 	pendingMu sync.Mutex
@@ -122,6 +127,7 @@ func New(opts Options) (*Server, error) {
 		version:        strings.TrimSpace(opts.Version),
 		gw:             opts.Gateway,
 		a:              opts.Agent,
+		accessGate:     opts.AccessGate,
 		allowedOrigins: AllowedOriginsForPort(port),
 		pending:        make(map[string]pendingDirect),
 	}, nil
@@ -156,13 +162,16 @@ func (s *Server) Start(ctx context.Context) error {
 	// Keep them available to avoid noisy 404s in Local UI mode.
 	mux.HandleFunc("/favicon.ico", s.handleFavicon)
 	mux.HandleFunc("/logo.png", s.handleLogo)
+	mux.HandleFunc("/api/local/access/status", s.handleAccessStatus)
+	mux.HandleFunc("/api/local/access/unlock", s.handleAccessUnlock)
+	mux.HandleFunc("/api/local/access/logout", s.handleAccessLogout)
 	mux.HandleFunc("/api/local/runtime", s.handleRuntime)
 	mux.HandleFunc("/api/local/direct/connect_info", s.handleConnectInfo)
 	mux.HandleFunc("/api/local/environment", s.handleEnvironment)
 	mux.HandleFunc("/api/local/agent/version/latest", s.handleLatestVersion)
 	mux.HandleFunc("/_redeven_direct/ws", s.handleDirectWS)
 	// Reuse the existing gateway for Env App UI + management APIs.
-	mux.Handle("/_redeven_proxy/", s.gw)
+	mux.HandleFunc("/_redeven_proxy/", s.handleGateway)
 
 	s.srv = &http.Server{
 		Handler:           mux,
@@ -221,6 +230,313 @@ func (s *Server) Port() int {
 	return s.port
 }
 
+type apiResp struct {
+	OK    bool      `json:"ok"`
+	Error *apiError `json:"error,omitempty"`
+	Data  any       `json:"data,omitempty"`
+}
+
+type apiError struct {
+	Message string `json:"message"`
+}
+
+type accessStatusResp struct {
+	PasswordRequired bool `json:"password_required"`
+	Unlocked         bool `json:"unlocked"`
+}
+
+type accessUnlockReq struct {
+	Password string `json:"password"`
+}
+
+func (s *Server) accessEnabled() bool {
+	return s != nil && s.accessGate != nil && s.accessGate.Enabled()
+}
+
+func (s *Server) localAccessToken(r *http.Request) string {
+	if s == nil || r == nil {
+		return ""
+	}
+	c, err := r.Cookie(accessgate.LocalSessionCookieName)
+	if err != nil || c == nil {
+		return ""
+	}
+	return strings.TrimSpace(c.Value)
+}
+
+func (s *Server) hasLocalAccess(r *http.Request) bool {
+	if !s.accessEnabled() {
+		return true
+	}
+	token := s.localAccessToken(r)
+	if token == "" {
+		return false
+	}
+	return s.accessGate.IsLocalSessionValid(token)
+}
+
+func (s *Server) setLocalAccessCookie(w http.ResponseWriter, token string, expiresAtUnixMs int64) {
+	if w == nil || token == "" {
+		return
+	}
+	expiresAt := time.UnixMilli(expiresAtUnixMs)
+	http.SetCookie(w, &http.Cookie{
+		Name:     accessgate.LocalSessionCookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  expiresAt,
+	})
+}
+
+func (s *Server) clearLocalAccessCookie(w http.ResponseWriter) {
+	if w == nil {
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     accessgate.LocalSessionCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+	})
+}
+
+func (s *Server) requireLocalAccessAPI(w http.ResponseWriter, r *http.Request) bool {
+	if s.hasLocalAccess(r) {
+		return true
+	}
+	writeJSON(w, http.StatusLocked, apiResp{OK: false, Error: &apiError{Message: "access password required"}})
+	return false
+}
+
+func (s *Server) requireLocalAccessHTTP(w http.ResponseWriter, r *http.Request) bool {
+	if s.hasLocalAccess(r) {
+		return true
+	}
+	http.Error(w, "access password required", http.StatusLocked)
+	return false
+}
+
+func (s *Server) handleGateway(w http.ResponseWriter, r *http.Request) {
+	if s == nil || w == nil || r == nil {
+		return
+	}
+	if !s.requireLocalAccessHTTP(w, r) {
+		return
+	}
+	s.gw.ServeHTTP(w, r)
+}
+
+func writeHTML(w http.ResponseWriter, status int, body string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_, _ = io.WriteString(w, body)
+}
+
+func localAccessPageHTML() string {
+	return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Redeven Access</title>
+    <style>
+      :root { color-scheme: dark; }
+      @media (prefers-color-scheme: light) {
+        :root { color-scheme: light; }
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0b0b0b;
+        color: #f3f4f6;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        padding: 24px;
+      }
+      @media (prefers-color-scheme: light) {
+        body { background: #f8fafc; color: #111827; }
+      }
+      .card {
+        width: min(420px, 100%);
+        border: 1px solid rgba(148, 163, 184, 0.24);
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.82);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+        padding: 24px;
+      }
+      @media (prefers-color-scheme: light) {
+        .card { background: rgba(255, 255, 255, 0.94); }
+      }
+      h1 { margin: 0; font-size: 22px; }
+      p { margin: 10px 0 0; color: #cbd5e1; line-height: 1.5; }
+      @media (prefers-color-scheme: light) {
+        p { color: #475569; }
+      }
+      form { margin-top: 20px; }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        height: 44px;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        background: rgba(15, 23, 42, 0.65);
+        color: inherit;
+        padding: 0 14px;
+        font-size: 14px;
+      }
+      @media (prefers-color-scheme: light) {
+        input { background: #ffffff; }
+      }
+      button {
+        margin-top: 12px;
+        width: 100%;
+        height: 44px;
+        border: 0;
+        border-radius: 10px;
+        background: #2563eb;
+        color: white;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.6; cursor: wait; }
+      .status { margin-top: 12px; min-height: 20px; font-size: 13px; color: #fca5a5; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Enter access password</h1>
+      <p>This browser session is locked by the local agent. Enter the full password to continue.</p>
+      <form id="unlock_form">
+        <input id="password" type="password" autocomplete="current-password" placeholder="Password" autofocus />
+        <button id="submit_button" type="submit">Unlock</button>
+      </form>
+      <div id="status" class="status"></div>
+    </div>
+    <script>
+      const form = document.getElementById('unlock_form');
+      const passwordInput = document.getElementById('password');
+      const submitButton = document.getElementById('submit_button');
+      const statusNode = document.getElementById('status');
+
+      function setStatus(message) {
+        statusNode.textContent = String(message || '');
+      }
+
+      async function unlock(password) {
+        const resp = await fetch('/api/local/access/unlock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          body: JSON.stringify({ password }),
+        });
+        const text = await resp.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {}
+        if (!resp.ok || data?.ok === false) {
+          const msg = String(data?.error?.message || 'Unlock failed.');
+          throw new Error(msg);
+        }
+        return data?.data || data || {};
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const password = String(passwordInput.value || '');
+        submitButton.disabled = true;
+        setStatus('');
+        try {
+          const out = await unlock(password);
+          const token = String(out?.resume_token || '').trim();
+          const target = token
+            ? '/_redeven_proxy/env/#redeven_access_resume=' + encodeURIComponent(token)
+            : '/_redeven_proxy/env/';
+          window.location.replace(target);
+        } catch (error) {
+          setStatus(error instanceof Error ? error.message : String(error));
+          submitButton.disabled = false;
+          passwordInput.focus();
+          passwordInput.select();
+        }
+      });
+    </script>
+  </body>
+</html>`
+}
+
+func (s *Server) handleAccessStatus(w http.ResponseWriter, r *http.Request) {
+	if s == nil || w == nil || r == nil {
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: accessStatusResp{
+		PasswordRequired: s.accessEnabled(),
+		Unlocked:         s.hasLocalAccess(r),
+	}})
+}
+
+func (s *Server) handleAccessUnlock(w http.ResponseWriter, r *http.Request) {
+	if s == nil || w == nil || r == nil {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.accessEnabled() {
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"unlocked": true}})
+		return
+	}
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	var req accessUnlockReq
+	if err := dec.Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: &apiError{Message: "invalid json"}})
+		return
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: &apiError{Message: "invalid json"}})
+		return
+	}
+	result, err := s.accessGate.MintLocalSession(req.Password)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, apiResp{OK: false, Error: &apiError{Message: err.Error()}})
+		return
+	}
+	s.setLocalAccessCookie(w, result.SessionToken, result.SessionExpiresAtUnix)
+	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
+}
+
+func (s *Server) handleAccessLogout(w http.ResponseWriter, r *http.Request) {
+	if s == nil || w == nil || r == nil {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.accessEnabled() {
+		if token := s.localAccessToken(r); token != "" {
+			s.accessGate.RevokeLocalSession(token)
+		}
+	}
+	s.clearLocalAccessCookie(w)
+	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"ok": true}})
+}
+
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
 		return
@@ -229,7 +545,15 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, "/_redeven_proxy/env/", http.StatusFound)
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.accessEnabled() || s.hasLocalAccess(r) {
+		http.Redirect(w, r, "/_redeven_proxy/env/", http.StatusFound)
+		return
+	}
+	writeHTML(w, http.StatusOK, localAccessPageHTML())
 }
 
 func (s *Server) handleFavicon(w http.ResponseWriter, r *http.Request) {
@@ -271,6 +595,9 @@ type runtimeResp struct {
 
 func (s *Server) handleRuntime(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
+		return
+	}
+	if !s.requireLocalAccessAPI(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -350,6 +677,9 @@ func (s *Server) handleConnectInfo(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
 		return
 	}
+	if !s.requireLocalAccessAPI(w, r) {
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -420,6 +750,9 @@ func (s *Server) handleEnvironment(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
 		return
 	}
+	if !s.requireLocalAccessAPI(w, r) {
+		return
+	}
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -469,6 +802,9 @@ type latestVersionResp struct {
 
 func (s *Server) handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
+		return
+	}
+	if !s.requireLocalAccessAPI(w, r) {
 		return
 	}
 	if r.Method != http.MethodGet {
@@ -526,6 +862,9 @@ func (s *Server) consumePending(channelID string) (pendingDirect, bool) {
 
 func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
+		return
+	}
+	if !s.requireLocalAccessHTTP(w, r) {
 		return
 	}
 

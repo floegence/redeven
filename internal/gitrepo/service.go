@@ -14,7 +14,7 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/framing/jsonframe"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
+	"github.com/floegence/redeven-agent/internal/accessgate"
 	"github.com/floegence/redeven-agent/internal/gitutil"
 	"github.com/floegence/redeven-agent/internal/pathutil"
 	"github.com/floegence/redeven-agent/internal/session"
@@ -48,11 +48,15 @@ func NewService(root string) *Service {
 }
 
 func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
+	s.RegisterWithAccessGate(r, meta, nil)
+}
+
+func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate *accessgate.Gate) {
 	if r == nil || s == nil {
 		return
 	}
 
-	rpctyped.Register[resolveRepoReq, resolveRepoResp](r, TypeID_GIT_RESOLVE_REPO, func(ctx context.Context, req *resolveRepoReq) (*resolveRepoResp, error) {
+	accessgate.RegisterTyped[resolveRepoReq, resolveRepoResp](r, TypeID_GIT_RESOLVE_REPO, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *resolveRepoReq) (*resolveRepoResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -78,7 +82,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 		}, nil
 	})
 
-	rpctyped.Register[listCommitsReq, listCommitsResp](r, TypeID_GIT_LIST_COMMITS, func(ctx context.Context, req *listCommitsReq) (*listCommitsResp, error) {
+	accessgate.RegisterTyped[listCommitsReq, listCommitsResp](r, TypeID_GIT_LIST_COMMITS, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listCommitsReq) (*listCommitsResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -115,7 +119,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 		}, nil
 	})
 
-	rpctyped.Register[getCommitDetailReq, getCommitDetailResp](r, TypeID_GIT_GET_COMMIT_DETAIL, func(ctx context.Context, req *getCommitDetailReq) (*getCommitDetailResp, error) {
+	accessgate.RegisterTyped[getCommitDetailReq, getCommitDetailResp](r, TypeID_GIT_GET_COMMIT_DETAIL, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getCommitDetailReq) (*getCommitDetailResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
@@ -143,10 +147,29 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 }
 
 func (s *Service) ServeReadCommitPatchStream(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta) {
+	s.ServeReadCommitPatchStreamWithAccessGate(ctx, stream, meta, nil)
+}
+
+func (s *Service) ServeReadCommitPatchStreamWithAccessGate(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta, gate *accessgate.Gate) {
 	if stream == nil {
 		return
 	}
 	defer func() { _ = stream.Close() }()
+
+	if err := accessgate.RequireRPC(gate, meta, accessgate.RPCAccessProtected); err != nil {
+		rpcErr, _ := err.(*rpc.Error)
+		code := 423
+		message := "access password required"
+		if rpcErr != nil {
+			code = int(rpcErr.Code)
+			message = rpcErr.Message
+		}
+		_ = jsonframe.WriteJSONFrame(stream, readCommitPatchRespMeta{
+			Ok:    false,
+			Error: &streamError{Code: code, Message: message},
+		})
+		return
+	}
 
 	if meta == nil || !meta.CanRead {
 		_ = jsonframe.WriteJSONFrame(stream, readCommitPatchRespMeta{

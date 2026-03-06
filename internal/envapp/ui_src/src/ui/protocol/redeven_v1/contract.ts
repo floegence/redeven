@@ -22,6 +22,7 @@ import type {
   AIToolApprovalRequest,
   AIToolApprovalResponse,
 } from './sdk/ai';
+import type { AccessResumeRequest, AccessResumeResponse, AccessStatusResponse } from './sdk/access';
 import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsGetHomeResponse, FsListRequest, FsListResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
 import type { GitGetCommitDetailRequest, GitGetCommitDetailResponse, GitListCommitsRequest, GitListCommitsResponse, GitResolveRepoRequest, GitResolveRepoResponse } from './sdk/git';
 import type { SysMonitorRequest, SysMonitorSnapshot } from './sdk/monitor';
@@ -50,12 +51,14 @@ import {
   toWireAISetToolCollapsedRequest,
   toWireAIToolApprovalRequest,
 } from './codec/ai';
+import { fromWireAccessResumeResponse, fromWireAccessStatusResponse, toWireAccessResumeRequest } from './codec/access';
 import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsGetHomeResponse, fromWireFsListResponse, fromWireFsReadFileResponse, fromWireFsRenameResponse, fromWireFsWriteFileResponse, toWireFsCopyRequest, toWireFsDeleteRequest, toWireFsListRequest, toWireFsReadFileRequest, toWireFsRenameRequest, toWireFsWriteFileRequest } from './codec/fs';
 import { fromWireGitGetCommitDetailResponse, fromWireGitListCommitsResponse, fromWireGitResolveRepoResponse, toWireGitGetCommitDetailRequest, toWireGitListCommitsRequest, toWireGitResolveRepoRequest } from './codec/git';
 import { fromWireSysMonitorResponse, toWireSysMonitorRequest } from './codec/monitor';
 import { fromWireSessionsListActiveResponse } from './codec/sessions';
 import { fromWireSysPingResponse, fromWireSysRestartResponse, fromWireSysUpgradeResponse, toWireSysRestartRequest, toWireSysUpgradeRequest } from './codec/sys';
 import { fromWireTerminalNameUpdateNotify, fromWireTerminalOutputNotify, fromWireTerminalSessionAttachResponse, fromWireTerminalSessionCreateResponse, fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionListResponse, fromWireTerminalSessionStatsResponse, fromWireTerminalHistoryResponse, toWireTerminalInputNotify, toWireTerminalResizeNotify, toWireTerminalSessionAttachRequest, toWireTerminalSessionCreateRequest, toWireTerminalSessionDeleteRequest, toWireTerminalSessionStatsRequest, toWireTerminalHistoryRequest, toWireTerminalClearRequest, fromWireTerminalClearResponse, fromWireTerminalSessionsChangedNotify } from './codec/terminal';
+import type { wire_access_resume_req, wire_access_resume_resp, wire_access_status_resp } from './wire/access';
 import type {
   wire_ai_cancel_run_req,
   wire_ai_cancel_run_resp,
@@ -133,6 +136,10 @@ export type RedevenV1Rpc = {
   };
   sessions: {
     listActiveSessions: () => Promise<SessionsListActiveResponse>;
+  };
+  access: {
+    status: () => Promise<AccessStatusResponse>;
+    resume: (req: AccessResumeRequest) => Promise<AccessResumeResponse>;
   };
   sys: {
     ping: () => Promise<SysPingResponse>;
@@ -339,6 +346,17 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
       listActiveSessions: async () => {
         const resp = await call<Record<string, never>, wire_sessions_list_active_resp>(redevenV1TypeIds.sessions.listActive, {});
         return fromWireSessionsListActiveResponse(resp);
+      },
+    },
+    access: {
+      status: async () => {
+        const resp = await call<Record<string, never>, wire_access_status_resp>(redevenV1TypeIds.access.status, {});
+        return fromWireAccessStatusResponse(resp);
+      },
+      resume: async (req) => {
+        const payload = toWireAccessResumeRequest(req);
+        const resp = await call<wire_access_resume_req, wire_access_resume_resp>(redevenV1TypeIds.access.resume, payload);
+        return fromWireAccessResumeResponse(resp);
       },
     },
     sys: {

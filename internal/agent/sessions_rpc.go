@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
+	"github.com/floegence/redeven-agent/internal/accessgate"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -44,12 +44,12 @@ type sessionsActiveSession struct {
 	CanExecute bool `json:"can_execute"`
 }
 
-func (a *Agent) registerSessionsRPC(r *rpc.Router, meta *session.Meta) {
+func (a *Agent) registerSessionsRPCWithAccessGate(r *rpc.Router, meta *session.Meta, gate *accessgate.Gate) {
 	if a == nil || r == nil {
 		return
 	}
 
-	rpctyped.Register[sessionsListActiveReq, sessionsListActiveResp](r, TypeID_SESSIONS_LIST_ACTIVE, func(_ctx context.Context, _ *sessionsListActiveReq) (*sessionsListActiveResp, error) {
+	accessgate.RegisterTyped[sessionsListActiveReq, sessionsListActiveResp](r, TypeID_SESSIONS_LIST_ACTIVE, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, _ *sessionsListActiveReq) (*sessionsListActiveResp, error) {
 		// This is a read-only observability endpoint that returns session metadata.
 		// Gate it by read permission to avoid leaking user identities / connection metadata
 		// when the session is clamped to no permissions.

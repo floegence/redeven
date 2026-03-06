@@ -136,6 +136,9 @@ func runCmd(args []string) {
 	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read|read_only|execute_read_write (optional; applies when bootstrapping)")
 	modeRaw := fs.String("mode", "remote", "Run mode: remote|hybrid|local")
 	localUIPort := fs.Int("local-ui-port", defaultLocalUIPort, "Local UI port (default: 23998)")
+	password := fs.String("password", "", "Access password (not recommended; prefer --password-env or --password-file)")
+	passwordEnv := fs.String("password-env", "", "Environment variable name holding the access password")
+	passwordFile := fs.String("password-file", "", "File path holding the access password")
 	_ = fs.Parse(args)
 
 	mode, err := parseRunMode(*modeRaw)
@@ -181,6 +184,21 @@ func runCmd(args []string) {
 		os.Exit(1)
 	}
 	defer func() { _ = lk.Release() }()
+
+	runPassword, err := resolveRunPassword(runPasswordOptions{
+		password:     *password,
+		passwordEnv:  *passwordEnv,
+		passwordFile: *passwordFile,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "invalid password flags: %v\n", err)
+		os.Exit(2)
+	}
+	accessGate := newAccessGate(runPassword)
+	if err := verifyStartupAccessPassword(accessGate); err != nil {
+		fmt.Fprintf(os.Stderr, "password verification failed: %v\n", err)
+		os.Exit(1)
+	}
 
 	if bootstrapViaFlags {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -257,6 +275,7 @@ func runCmd(args []string) {
 		Commit:                Commit,
 		BuildTime:             BuildTime,
 		OnControlConnected:    announce,
+		AccessGate:            accessGate,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to init agent: %v\n", err)
@@ -294,6 +313,7 @@ func runCmd(args []string) {
 			Agent:      a,
 			ConfigPath: cfgPathAbs,
 			Version:    Version,
+			AccessGate: accessGate,
 		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to init local ui: %v\n", err)

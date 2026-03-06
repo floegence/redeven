@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
+	"github.com/floegence/redeven-agent/internal/accessgate"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -83,11 +83,15 @@ func NewService(opts Options) *Service {
 }
 
 func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
+	s.RegisterWithAccessGate(r, meta, nil)
+}
+
+func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate *accessgate.Gate) {
 	if s == nil || r == nil {
 		return
 	}
 
-	rpctyped.Register[pingReq, pingResp](r, TypeID_SYS_PING, func(_ctx context.Context, _ *pingReq) (*pingResp, error) {
+	accessgate.RegisterTyped[pingReq, pingResp](r, TypeID_SYS_PING, gate, meta, accessgate.RPCAccessPublic, func(_ctx context.Context, _ *pingReq) (*pingResp, error) {
 		return &pingResp{
 			ServerTimeMs:    time.Now().UnixMilli(),
 			AgentInstanceID: s.agentInstanceID,
@@ -97,7 +101,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 		}, nil
 	})
 
-	rpctyped.Register[UpgradeRequest, UpgradeResponse](r, TypeID_SYS_UPGRADE, func(ctx context.Context, req *UpgradeRequest) (*UpgradeResponse, error) {
+	accessgate.RegisterTyped[UpgradeRequest, UpgradeResponse](r, TypeID_SYS_UPGRADE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *UpgradeRequest) (*UpgradeResponse, error) {
 		if meta == nil || !meta.CanAdmin {
 			return nil, &rpc.Error{Code: 403, Message: "admin permission denied"}
 		}
@@ -110,7 +114,7 @@ func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
 		return s.upgrader.StartUpgrade(ctx, meta, req)
 	})
 
-	rpctyped.Register[RestartRequest, RestartResponse](r, TypeID_SYS_RESTART, func(ctx context.Context, req *RestartRequest) (*RestartResponse, error) {
+	accessgate.RegisterTyped[RestartRequest, RestartResponse](r, TypeID_SYS_RESTART, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *RestartRequest) (*RestartResponse, error) {
 		if meta == nil || !meta.CanAdmin {
 			return nil, &rpc.Error{Code: 403, Message: "admin permission denied"}
 		}

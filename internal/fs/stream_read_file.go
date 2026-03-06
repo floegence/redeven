@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/floegence/flowersec/flowersec-go/framing/jsonframe"
+	"github.com/floegence/flowersec/flowersec-go/rpc"
+	"github.com/floegence/redeven-agent/internal/accessgate"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -19,10 +21,32 @@ import (
 //  2. Agent -> Client: fs_read_file_resp_meta (length-prefixed JSON frame)
 //  3. Agent -> Client: raw file bytes (length = content_len), then close
 func (s *Service) ServeReadFileStream(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta) {
+	s.ServeReadFileStreamWithAccessGate(ctx, stream, meta, nil)
+}
+
+func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta, gate *accessgate.Gate) {
 	if stream == nil {
 		return
 	}
 	defer func() { _ = stream.Close() }()
+
+	if err := accessgate.RequireRPC(gate, meta, accessgate.RPCAccessProtected); err != nil {
+		rpcErr, _ := err.(*rpc.Error)
+		code := 423
+		message := "access password required"
+		if rpcErr != nil {
+			code = int(rpcErr.Code)
+			message = rpcErr.Message
+		}
+		_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+			Ok: false,
+			Error: &fsStreamError{
+				Code:    code,
+				Message: message,
+			},
+		})
+		return
+	}
 
 	// Enforce permissions from session_meta.
 	if meta == nil || !meta.CanRead {

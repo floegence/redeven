@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
+	"github.com/floegence/redeven-agent/internal/accessgate"
 	"github.com/floegence/redeven-agent/internal/session"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/load"
@@ -55,11 +55,15 @@ func NewService(log *slog.Logger) *Service {
 }
 
 func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
+	s.RegisterWithAccessGate(r, meta, nil)
+}
+
+func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate *accessgate.Gate) {
 	if s == nil || r == nil {
 		return
 	}
 
-	rpctyped.Register[sysMonitorReq, sysMonitorResp](r, TypeID_SYS_MONITOR, func(ctx context.Context, req *sysMonitorReq) (*sysMonitorResp, error) {
+	accessgate.RegisterTyped[sysMonitorReq, sysMonitorResp](r, TypeID_SYS_MONITOR, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *sysMonitorReq) (*sysMonitorResp, error) {
 		if meta == nil || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
 		}

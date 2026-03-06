@@ -70,7 +70,14 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess endpoint.Sessi
 	}
 	a.mu.Unlock()
 
+	if a.accessGate != nil && a.accessGate.Enabled() {
+		a.accessGate.RegisterChannel(metaCopy)
+	}
+
 	defer func() {
+		if a.accessGate != nil && a.accessGate.Enabled() {
+			a.accessGate.UnregisterChannel(channelID)
+		}
 		a.mu.Lock()
 		delete(a.sessions, channelID)
 		a.mu.Unlock()
