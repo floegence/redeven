@@ -166,3 +166,71 @@ func TestE2E_GitRepoPatchStream_Truncates(t *testing.T) {
 		t.Fatalf("unexpected truncation meta: %+v", meta)
 	}
 }
+
+func TestE2E_GitRepoRPC_ListCommitsPagination(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	svc := NewService(fixture.Root)
+	meta := &session.Meta{CanRead: true}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() { _ = serverConn.Close() })
+	t.Cleanup(func() { _ = clientConn.Close() })
+
+	router := rpc.NewRouter()
+	svc.Register(router, meta)
+	server := rpc.NewServer(serverConn, router)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Serve(ctx)
+	}()
+
+	client := rpc.NewClient(clientConn)
+
+	page1Payload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_LIST_COMMITS, []byte(`{"repo_root_path":"/","offset":0,"limit":2}`))
+	if err != nil {
+		t.Fatalf("list commits page1 call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("list commits page1 rpc error: %+v", rpcErr)
+	}
+	var page1 listCommitsResp
+	if err := json.Unmarshal(page1Payload, &page1); err != nil {
+		t.Fatalf("unmarshal page1: %v", err)
+	}
+	if !page1.HasMore || page1.NextOffset != 2 {
+		t.Fatalf("unexpected page1 paging: %+v", page1)
+	}
+	if len(page1.Commits) != 2 || page1.Commits[0].Hash != fixture.BinaryCommit || page1.Commits[1].Hash != fixture.RenameCommit {
+		t.Fatalf("unexpected page1 commits: %+v", page1.Commits)
+	}
+
+	page2Payload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_LIST_COMMITS, []byte(`{"repo_root_path":"/","offset":2,"limit":2}`))
+	if err != nil {
+		t.Fatalf("list commits page2 call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("list commits page2 rpc error: %+v", rpcErr)
+	}
+	var page2 listCommitsResp
+	if err := json.Unmarshal(page2Payload, &page2); err != nil {
+		t.Fatalf("unmarshal page2: %v", err)
+	}
+	if page2.HasMore || page2.NextOffset != 0 {
+		t.Fatalf("unexpected page2 paging: %+v", page2)
+	}
+	if len(page2.Commits) != 2 || page2.Commits[0].Hash != fixture.UpdateCommit || page2.Commits[1].Hash != fixture.InitialCommit {
+		t.Fatalf("unexpected page2 commits: %+v", page2.Commits)
+	}
+
+	cancel()
+	_ = clientConn.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("rpc server did not stop")
+	}
+}
