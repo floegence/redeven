@@ -104,28 +104,44 @@ type AppendThreadMessageRequest struct {
 	Format string `json:"format,omitempty"` // markdown|text (defaults to markdown for now)
 }
 
-type QueuedTurnAttachmentView struct {
+type FollowupAttachmentView struct {
 	Name     string `json:"name"`
 	MimeType string `json:"mime_type"`
+	URL      string `json:"url,omitempty"`
 }
 
-type QueuedTurnView struct {
-	QueueID         string                     `json:"queue_id"`
-	MessageID       string                     `json:"message_id"`
-	Text            string                     `json:"text"`
-	ModelID         string                     `json:"model_id,omitempty"`
-	ExecutionMode   string                     `json:"execution_mode,omitempty"`
-	Position        int                        `json:"position"`
-	CreatedAtUnixMs int64                      `json:"created_at_unix_ms"`
-	Attachments     []QueuedTurnAttachmentView `json:"attachments,omitempty"`
+type FollowupItemView struct {
+	FollowupID      string                   `json:"followup_id"`
+	Lane            string                   `json:"lane"`
+	MessageID       string                   `json:"message_id"`
+	Text            string                   `json:"text"`
+	ModelID         string                   `json:"model_id,omitempty"`
+	ExecutionMode   string                   `json:"execution_mode,omitempty"`
+	Position        int                      `json:"position"`
+	CreatedAtUnixMs int64                    `json:"created_at_unix_ms"`
+	Attachments     []FollowupAttachmentView `json:"attachments,omitempty"`
 }
 
-type ListQueuedTurnsResponse struct {
-	QueuedTurns []QueuedTurnView `json:"queued_turns"`
+type ListFollowupsResponse struct {
+	Revision     int64              `json:"revision"`
+	PausedReason string             `json:"paused_reason,omitempty"`
+	Queued       []FollowupItemView `json:"queued"`
+	Drafts       []FollowupItemView `json:"drafts"`
 }
 
-type PatchQueuedTurnRequest struct {
+type PatchFollowupRequest struct {
 	Text *string `json:"text,omitempty"`
+}
+
+type ReorderFollowupsRequest struct {
+	Lane               string   `json:"lane"`
+	OrderedFollowupIDs []string `json:"ordered_followup_ids"`
+	ExpectedRevision   *int64   `json:"expected_revision,omitempty"`
+}
+
+type StopThreadResponse struct {
+	OK                 bool               `json:"ok"`
+	RecoveredFollowups []FollowupItemView `json:"recovered_followups,omitempty"`
 }
 
 // RunStartRequest is the HTTP request body for starting an AI run.

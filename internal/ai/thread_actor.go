@@ -306,6 +306,9 @@ func (a *threadActor) loop() {
 			case cmdRewindThread:
 				resp, err := a.handleRewindThread(cmd.ctx, cmd.meta, cmd.req)
 				cmd.resp <- rewindThreadResult{resp: resp, err: err}
+			case cmdStopThread:
+				resp, err := a.handleStopThread(cmd.ctx, cmd.meta, cmd.req)
+				cmd.resp <- stopThreadResult{resp: resp, err: err}
 			case cmdMaybeStartQueuedTurn:
 				_ = a.handleMaybeStartQueuedTurn(context.Background())
 			}
@@ -346,6 +349,9 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 	if endpointID == "" || threadID == "" {
 		return errors.New("invalid request")
 	}
+	if a.mgr.svc.isQueuedDrainSuppressed(endpointID, threadID) {
+		return nil
+	}
 	if activeRunID, _ := a.lookupActiveRun(endpointID, threadID); activeRunID != "" {
 		return nil
 	}
@@ -376,7 +382,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 	}
 
 	tctx, cancel = context.WithTimeout(ctx, persistTO)
-	queued, err := db.ListQueuedTurns(tctx, endpointID, threadID, 1)
+	queued, err := db.ListFollowupsByLane(tctx, endpointID, threadID, threadstore.FollowupLaneQueued, 1)
 	cancel()
 	if err != nil {
 		return err
@@ -395,7 +401,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 		return err
 	}
 	dctx, dcancel := context.WithTimeout(ctx, persistTO)
-	delErr := db.DeleteQueuedTurn(dctx, endpointID, threadID, rec.QueueID)
+	_, delErr := db.DeleteFollowup(dctx, endpointID, threadID, rec.QueueID)
 	dcancel()
 	if delErr != nil && !errors.Is(delErr, sql.ErrNoRows) {
 		return delErr
@@ -472,7 +478,30 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		modeFallback = cfg.EffectiveMode()
 	}
 	resolvedExecutionMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback)
+	consumeSourceFollowup := func() {
+		if err := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, req.SourceFollowupID); err != nil && a.mgr.svc.log != nil {
+			a.mgr.svc.log.Warn("failed to consume source followup", "thread_id", threadID, "followup_id", strings.TrimSpace(req.SourceFollowupID), "error", err)
+		}
+	}
 	openWaitingPrompt := waitingPromptFromThreadRecord(th, th.RunStatus)
+	if openWaitingPrompt != nil && req.QueueAfterWaitingUser {
+		if waitingResponse != nil {
+			return SendUserTurnResponse{}, ErrWaitingUserQueueConflict
+		}
+		req.Options.Mode = resolvedExecutionMode
+		appliedExecutionMode = resolvedExecutionMode
+		queued, position, err := a.mgr.svc.enqueueQueuedTurn(ctx, meta, req)
+		if err != nil {
+			return SendUserTurnResponse{}, err
+		}
+		consumeSourceFollowup()
+		return SendUserTurnResponse{
+			Kind:                 "queued",
+			QueueID:              strings.TrimSpace(queued.QueueID),
+			QueuePosition:        position,
+			AppliedExecutionMode: appliedExecutionMode,
+		}, nil
+	}
 	if openWaitingPrompt != nil {
 		if waitingResponse == nil || strings.TrimSpace(openWaitingPrompt.PromptID) != strings.TrimSpace(waitingResponse.PromptID) {
 			return SendUserTurnResponse{}, ErrWaitingPromptChanged
@@ -517,6 +546,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		if err != nil {
 			return SendUserTurnResponse{}, err
 		}
+		consumeSourceFollowup()
 		return SendUserTurnResponse{
 			Kind:                    "queued",
 			QueueID:                 strings.TrimSpace(queued.QueueID),
@@ -562,6 +592,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	if err := a.mgr.svc.StartRunDetachedWithPersisted(meta, runID, startReq, persisted); err != nil {
 		return SendUserTurnResponse{}, err
 	}
+	consumeSourceFollowup()
 	return SendUserTurnResponse{
 		RunID:                   runID,
 		Kind:                    "start",

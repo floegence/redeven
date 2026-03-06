@@ -50,6 +50,8 @@ export type AISendUserTurnRequest = {
   };
   expectedRunId?: string;
   waitingResponse?: AIWaitingPromptResponse;
+  queueAfterWaitingUser?: boolean;
+  sourceFollowupId?: string;
 };
 
 export type AISendUserTurnResponse = {
@@ -90,6 +92,33 @@ export type AIThreadRewindRequest = {
 export type AIThreadRewindResponse = {
   ok: boolean;
   checkpointId?: string;
+};
+
+export type AIFollowupAttachment = {
+  name: string;
+  mimeType?: string;
+  url?: string;
+};
+
+export type AIFollowupItem = {
+  followupId: string;
+  lane: 'queued' | 'draft';
+  messageId: string;
+  text: string;
+  modelId?: string;
+  executionMode?: 'act' | 'plan';
+  position: number;
+  createdAtUnixMs: number;
+  attachments?: AIFollowupAttachment[];
+};
+
+export type AIStopThreadRequest = {
+  threadId: string;
+};
+
+export type AIStopThreadResponse = {
+  ok: boolean;
+  recoveredFollowups?: AIFollowupItem[];
 };
 
 export type AITranscriptMessageItem = {

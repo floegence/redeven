@@ -99,9 +99,10 @@ type Service struct {
 	resolveProviderKey  func(providerID string) (string, bool, error)
 	resolveWebSearchKey func(providerID string) (string, bool, error)
 
-	mu            sync.Mutex
-	activeRunByTh map[string]string // <endpoint_id>:<thread_id> -> run_id
-	runs          map[string]*run
+	mu                      sync.Mutex
+	activeRunByTh           map[string]string // <endpoint_id>:<thread_id> -> run_id
+	suppressQueuedDrainByTh map[string]bool
+	runs                    map[string]*run
 
 	threadMgr *threadManager
 
@@ -243,6 +244,7 @@ func NewService(opts Options) (*Service, error) {
 		realtimeSummaryEndpointBySRV: make(map[*rpc.Server]string),
 		realtimeByThread:             make(map[string]map[*rpc.Server]struct{}),
 		realtimeThreadBySRV:          make(map[*rpc.Server]string),
+		suppressQueuedDrainByTh:      make(map[string]bool),
 		uploadsDir:                   uploadsDir,
 		threadsDB:                    ts,
 		contextRepo:                  contextRepo,

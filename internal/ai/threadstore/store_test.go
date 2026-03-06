@@ -265,8 +265,8 @@ WHERE type = 'table' AND name = ?
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 15 {
-		t.Fatalf("user_version=%d, want 15", version)
+	if version != 16 {
+		t.Fatalf("user_version=%d, want 16", version)
 	}
 }
 
@@ -353,8 +353,8 @@ WHERE run_id = 'run_legacy'
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 15 {
-		t.Fatalf("user_version=%d, want 15", version)
+	if version != 16 {
+		t.Fatalf("user_version=%d, want 16", version)
 	}
 }
 
@@ -955,7 +955,7 @@ func anyToString(v any) string {
 	return ""
 }
 
-func TestStore_QueuedTurnsCRUDAndOrdering(t *testing.T) {
+func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 	t.Parallel()
 
 	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
@@ -970,11 +970,12 @@ func TestStore_QueuedTurnsCRUDAndOrdering(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	first, firstPos, err := s.EnqueueQueuedTurn(ctx, QueuedTurn{
-		QueueID:               "qt_1",
+	first, firstPos, firstRevision, err := s.CreateFollowup(ctx, QueuedTurn{
+		QueueID:               "fu_1",
 		EndpointID:            "env_queue",
 		ThreadID:              "th_queue",
 		ChannelID:             "ch_queue",
+		Lane:                  FollowupLaneQueued,
 		MessageID:             "m_queue_1",
 		ModelID:               "openai/gpt-5-mini",
 		TextContent:           "first queued turn",
@@ -985,7 +986,7 @@ func TestStore_QueuedTurnsCRUDAndOrdering(t *testing.T) {
 		CreatedAtUnixMs:       1000,
 	})
 	if err != nil {
-		t.Fatalf("EnqueueQueuedTurn first: %v", err)
+		t.Fatalf("CreateFollowup first: %v", err)
 	}
 	if firstPos != 1 {
 		t.Fatalf("firstPos=%d, want 1", firstPos)
@@ -993,12 +994,16 @@ func TestStore_QueuedTurnsCRUDAndOrdering(t *testing.T) {
 	if first.ChannelID != "ch_queue" {
 		t.Fatalf("first.ChannelID=%q, want ch_queue", first.ChannelID)
 	}
+	if firstRevision <= 0 {
+		t.Fatalf("firstRevision=%d, want > 0", firstRevision)
+	}
 
-	_, secondPos, err := s.EnqueueQueuedTurn(ctx, QueuedTurn{
-		QueueID:               "qt_2",
+	_, secondPos, secondRevision, err := s.CreateFollowup(ctx, QueuedTurn{
+		QueueID:               "fu_2",
 		EndpointID:            "env_queue",
 		ThreadID:              "th_queue",
 		ChannelID:             "ch_queue",
+		Lane:                  FollowupLaneQueued,
 		MessageID:             "m_queue_2",
 		ModelID:               "openai/gpt-5-mini",
 		TextContent:           "second queued turn",
@@ -1008,23 +1013,50 @@ func TestStore_QueuedTurnsCRUDAndOrdering(t *testing.T) {
 		CreatedAtUnixMs:       2000,
 	})
 	if err != nil {
-		t.Fatalf("EnqueueQueuedTurn second: %v", err)
+		t.Fatalf("CreateFollowup second: %v", err)
 	}
 	if secondPos != 2 {
 		t.Fatalf("secondPos=%d, want 2", secondPos)
 	}
+	if secondRevision <= firstRevision {
+		t.Fatalf("secondRevision=%d, want > %d", secondRevision, firstRevision)
+	}
 
-	count, err := s.CountQueuedTurns(ctx, "env_queue", "th_queue")
+	_, draftPos, draftRevision, err := s.CreateFollowup(ctx, QueuedTurn{
+		QueueID:               "fu_3",
+		EndpointID:            "env_queue",
+		ThreadID:              "th_queue",
+		ChannelID:             "ch_queue",
+		Lane:                  FollowupLaneDraft,
+		MessageID:             "m_draft_1",
+		ModelID:               "openai/gpt-5-mini",
+		TextContent:           "draft follow-up",
+		OptionsJSON:           `{"max_steps":2,"mode":"plan"}`,
+		CreatedByUserPublicID: "u_queue",
+		CreatedByUserEmail:    "u_queue@example.com",
+		CreatedAtUnixMs:       3000,
+	})
 	if err != nil {
-		t.Fatalf("CountQueuedTurns: %v", err)
+		t.Fatalf("CreateFollowup draft: %v", err)
+	}
+	if draftPos != 1 {
+		t.Fatalf("draftPos=%d, want 1", draftPos)
+	}
+	if draftRevision <= secondRevision {
+		t.Fatalf("draftRevision=%d, want > %d", draftRevision, secondRevision)
+	}
+
+	count, err := s.CountFollowupsByLane(ctx, "env_queue", "th_queue", FollowupLaneQueued)
+	if err != nil {
+		t.Fatalf("CountFollowupsByLane: %v", err)
 	}
 	if count != 2 {
 		t.Fatalf("count=%d, want 2", count)
 	}
 
-	counts, err := s.CountQueuedTurnsByThread(ctx, "env_queue", []string{"th_queue", "th_other"})
+	counts, err := s.CountFollowupsByThreadAndLane(ctx, "env_queue", []string{"th_queue", "th_other"}, FollowupLaneQueued)
 	if err != nil {
-		t.Fatalf("CountQueuedTurnsByThread: %v", err)
+		t.Fatalf("CountFollowupsByThreadAndLane: %v", err)
 	}
 	if counts["th_queue"] != 2 {
 		t.Fatalf("counts[th_queue]=%d, want 2", counts["th_queue"])
@@ -1033,63 +1065,110 @@ func TestStore_QueuedTurnsCRUDAndOrdering(t *testing.T) {
 		t.Fatalf("counts[th_other]=%d, want 0", counts["th_other"])
 	}
 
-	listed, err := s.ListQueuedTurns(ctx, "env_queue", "th_queue", 10)
+	queued, err := s.ListFollowupsByLane(ctx, "env_queue", "th_queue", FollowupLaneQueued, 10)
 	if err != nil {
-		t.Fatalf("ListQueuedTurns: %v", err)
+		t.Fatalf("ListFollowupsByLane queued: %v", err)
 	}
-	if len(listed) != 2 {
-		t.Fatalf("len(listed)=%d, want 2", len(listed))
+	if len(queued) != 2 {
+		t.Fatalf("len(queued)=%d, want 2", len(queued))
 	}
-	if listed[0].QueueID != "qt_1" || listed[1].QueueID != "qt_2" {
-		t.Fatalf("unexpected queue order: %+v", listed)
+	if queued[0].QueueID != "fu_1" || queued[1].QueueID != "fu_2" {
+		t.Fatalf("unexpected queued order: %+v", queued)
 	}
-	if listed[0].ChannelID != "ch_queue" {
-		t.Fatalf("listed[0].ChannelID=%q, want ch_queue", listed[0].ChannelID)
+	if queued[0].Lane != FollowupLaneQueued {
+		t.Fatalf("queued[0].Lane=%q, want %q", queued[0].Lane, FollowupLaneQueued)
 	}
 
-	got, err := s.GetQueuedTurn(ctx, "env_queue", "th_queue", "qt_1")
+	revision, err := s.GetThreadFollowupsRevision(ctx, "env_queue", "th_queue")
 	if err != nil {
-		t.Fatalf("GetQueuedTurn: %v", err)
+		t.Fatalf("GetThreadFollowupsRevision: %v", err)
 	}
-	if got == nil || got.MessageID != "m_queue_1" {
-		t.Fatalf("unexpected queued turn: %+v", got)
+	if revision != draftRevision {
+		t.Fatalf("revision=%d, want %d", revision, draftRevision)
 	}
 
-	if err := s.UpdateQueuedTurn(ctx, "env_queue", "th_queue", "qt_2", "updated second queued turn"); err != nil {
-		t.Fatalf("UpdateQueuedTurn: %v", err)
-	}
-	updated, err := s.GetQueuedTurn(ctx, "env_queue", "th_queue", "qt_2")
+	updatedRevision, err := s.UpdateFollowupText(ctx, "env_queue", "th_queue", "fu_2", "updated second follow-up")
 	if err != nil {
-		t.Fatalf("GetQueuedTurn updated: %v", err)
+		t.Fatalf("UpdateFollowupText: %v", err)
 	}
-	if updated == nil || updated.TextContent != "updated second queued turn" {
-		t.Fatalf("updated.TextContent=%q, want updated second queued turn", updated.TextContent)
+	if updatedRevision <= revision {
+		t.Fatalf("updatedRevision=%d, want > %d", updatedRevision, revision)
 	}
 
-	popped, err := s.PopNextQueuedTurn(ctx, "env_queue", "th_queue")
+	queued, err = s.ListFollowupsByLane(ctx, "env_queue", "th_queue", FollowupLaneQueued, 10)
 	if err != nil {
-		t.Fatalf("PopNextQueuedTurn: %v", err)
+		t.Fatalf("ListFollowupsByLane queued updated: %v", err)
 	}
-	if popped == nil || popped.QueueID != "qt_1" {
-		t.Fatalf("popped queue_id=%v, want qt_1", popped)
+	if queued[1].TextContent != "updated second follow-up" {
+		t.Fatalf("queued[1].TextContent=%q, want updated second follow-up", queued[1].TextContent)
 	}
 
-	remaining, err := s.ListQueuedTurns(ctx, "env_queue", "th_queue", 10)
+	reorderedRevision, err := s.ReorderFollowups(ctx, "env_queue", "th_queue", FollowupLaneQueued, []string{"fu_2", "fu_1"}, updatedRevision)
 	if err != nil {
-		t.Fatalf("ListQueuedTurns remaining: %v", err)
+		t.Fatalf("ReorderFollowups: %v", err)
 	}
-	if len(remaining) != 1 || remaining[0].QueueID != "qt_2" {
-		t.Fatalf("remaining=%+v, want only qt_2", remaining)
+	if reorderedRevision <= updatedRevision {
+		t.Fatalf("reorderedRevision=%d, want > %d", reorderedRevision, updatedRevision)
 	}
 
-	if err := s.DeleteQueuedTurn(ctx, "env_queue", "th_queue", "qt_2"); err != nil {
-		t.Fatalf("DeleteQueuedTurn: %v", err)
-	}
-	finalCount, err := s.CountQueuedTurns(ctx, "env_queue", "th_queue")
+	queued, err = s.ListFollowupsByLane(ctx, "env_queue", "th_queue", FollowupLaneQueued, 10)
 	if err != nil {
-		t.Fatalf("CountQueuedTurns final: %v", err)
+		t.Fatalf("ListFollowupsByLane queued reordered: %v", err)
 	}
-	if finalCount != 0 {
-		t.Fatalf("finalCount=%d, want 0", finalCount)
+	if queued[0].QueueID != "fu_2" || queued[1].QueueID != "fu_1" {
+		t.Fatalf("unexpected reordered queue: %+v", queued)
+	}
+
+	if _, err := s.ReorderFollowups(ctx, "env_queue", "th_queue", FollowupLaneQueued, []string{"fu_1", "fu_2"}, updatedRevision); !errors.Is(err, ErrFollowupsRevisionChanged) {
+		t.Fatalf("stale ReorderFollowups err=%v, want %v", err, ErrFollowupsRevisionChanged)
+	}
+
+	recovered, recoveredRevision, err := s.RecoverQueuedTurnsToDrafts(ctx, "env_queue", "th_queue")
+	if err != nil {
+		t.Fatalf("RecoverQueuedTurnsToDrafts: %v", err)
+	}
+	if len(recovered) != 2 {
+		t.Fatalf("len(recovered)=%d, want 2", len(recovered))
+	}
+	if recovered[0].QueueID != "fu_2" || recovered[1].QueueID != "fu_1" {
+		t.Fatalf("unexpected recovered followups: %+v", recovered)
+	}
+	if recoveredRevision <= reorderedRevision {
+		t.Fatalf("recoveredRevision=%d, want > %d", recoveredRevision, reorderedRevision)
+	}
+
+	finalQueued, err := s.CountFollowupsByLane(ctx, "env_queue", "th_queue", FollowupLaneQueued)
+	if err != nil {
+		t.Fatalf("CountFollowupsByLane queued final: %v", err)
+	}
+	if finalQueued != 0 {
+		t.Fatalf("finalQueued=%d, want 0", finalQueued)
+	}
+
+	drafts, err := s.ListFollowupsByLane(ctx, "env_queue", "th_queue", FollowupLaneDraft, 10)
+	if err != nil {
+		t.Fatalf("ListFollowupsByLane draft: %v", err)
+	}
+	if len(drafts) != 3 {
+		t.Fatalf("len(drafts)=%d, want 3", len(drafts))
+	}
+	if drafts[0].QueueID != "fu_3" || drafts[1].QueueID != "fu_2" || drafts[2].QueueID != "fu_1" {
+		t.Fatalf("unexpected draft order: %+v", drafts)
+	}
+
+	deletedRevision, err := s.DeleteFollowup(ctx, "env_queue", "th_queue", "fu_1")
+	if err != nil {
+		t.Fatalf("DeleteFollowup: %v", err)
+	}
+	if deletedRevision <= recoveredRevision {
+		t.Fatalf("deletedRevision=%d, want > %d", deletedRevision, recoveredRevision)
+	}
+
+	drafts, err = s.ListFollowupsByLane(ctx, "env_queue", "th_queue", FollowupLaneDraft, 10)
+	if err != nil {
+		t.Fatalf("ListFollowupsByLane draft after delete: %v", err)
+	}
+	if len(drafts) != 2 {
+		t.Fatalf("len(drafts)=%d, want 2", len(drafts))
 	}
 }

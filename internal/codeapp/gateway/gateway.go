@@ -1838,7 +1838,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"todos": out}})
 			return
 
-		case action == "queued_turns" && r.Method == http.MethodGet && len(parts) == 2:
+		case action == "followups" && r.Method == http.MethodGet && len(parts) == 2:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
@@ -1847,7 +1847,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
 				return
 			}
-			out, err := g.ai.ListQueuedTurns(r.Context(), meta, threadID, 100)
+			out, err := g.ai.ListFollowups(r.Context(), meta, threadID, 100)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
@@ -1859,7 +1859,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
 			return
 
-		case action == "queued_turns" && r.Method == http.MethodPatch && len(parts) == 3:
+		case action == "followups" && r.Method == http.MethodPatch && len(parts) == 3 && strings.TrimSpace(parts[2]) == "order":
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
@@ -1868,14 +1868,45 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
 				return
 			}
-			queueID := strings.TrimSpace(parts[2])
-			if queueID == "" {
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body ai.ReorderFollowupsRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := g.ai.ReorderFollowups(r.Context(), meta, threadID, body); err != nil {
+				status := http.StatusBadRequest
+				if errors.Is(err, ai.ErrFollowupsRevisionChanged) {
+					status = http.StatusConflict
+				}
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
+
+		case action == "followups" && r.Method == http.MethodPatch && len(parts) == 3:
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			followupID := strings.TrimSpace(parts[2])
+			if followupID == "" {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 				return
 			}
 			dec := json.NewDecoder(r.Body)
 			dec.DisallowUnknownFields()
-			var body ai.PatchQueuedTurnRequest
+			var body ai.PatchFollowupRequest
 			if err := dec.Decode(&body); err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 				return
@@ -1888,7 +1919,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 				return
 			}
-			if err := g.ai.UpdateQueuedTurn(r.Context(), meta, threadID, queueID, body); err != nil {
+			if err := g.ai.UpdateFollowup(r.Context(), meta, threadID, followupID, body); err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
 					status = http.StatusNotFound
@@ -1899,7 +1930,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true})
 			return
 
-		case action == "queued_turns" && r.Method == http.MethodDelete && len(parts) == 3:
+		case action == "followups" && r.Method == http.MethodDelete && len(parts) == 3:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
@@ -1908,12 +1939,12 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
 				return
 			}
-			queueID := strings.TrimSpace(parts[2])
-			if queueID == "" {
+			followupID := strings.TrimSpace(parts[2])
+			if followupID == "" {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 				return
 			}
-			if err := g.ai.DeleteQueuedTurn(r.Context(), meta, threadID, queueID); err != nil {
+			if err := g.ai.DeleteFollowup(r.Context(), meta, threadID, followupID); err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
 					status = http.StatusNotFound

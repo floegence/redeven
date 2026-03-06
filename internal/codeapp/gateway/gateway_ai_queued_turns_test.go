@@ -18,7 +18,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
-func TestGateway_AI_QueuedTurnsEndpoints(t *testing.T) {
+func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -31,7 +31,7 @@ func TestGateway_AI_QueuedTurnsEndpoints(t *testing.T) {
 		case <-time.After(3 * time.Second):
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"error":{"message":"forced stop for queued-turn test"}}`))
+		_, _ = w.Write([]byte(`{"error":{"message":"forced stop for followups test"}}`))
 	}))
 	defer providerServer.Close()
 
@@ -47,11 +47,11 @@ func TestGateway_AI_QueuedTurnsEndpoints(t *testing.T) {
 		},
 	}
 
-	channelID := "ch_test_ai_queued_turns_1"
+	channelID := "ch_test_ai_followups_1"
 	envOrigin := envOriginWithChannel(channelID)
 	meta := session.Meta{
 		ChannelID:         channelID,
-		EndpointID:        "env_queued_turns",
+		EndpointID:        "env_followups",
 		NamespacePublicID: "ns_test",
 		UserPublicID:      "u_test",
 		UserEmail:         "u_test@example.com",
@@ -103,7 +103,7 @@ func TestGateway_AI_QueuedTurnsEndpoints(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	thread, err := aiSvc.CreateThread(ctx, &meta, "queued turn thread", "", "", "")
+	thread, err := aiSvc.CreateThread(ctx, &meta, "followups thread", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -132,55 +132,71 @@ func TestGateway_AI_QueuedTurnsEndpoints(t *testing.T) {
 		t.Fatalf("active run did not start in time")
 	}
 
-	queuedResp, err := aiSvc.SendUserTurn(ctx, &meta, ai.SendUserTurnRequest{
+	queuedResp1, err := aiSvc.SendUserTurn(ctx, &meta, ai.SendUserTurnRequest{
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: ai.RunInput{
 			MessageID: "m_gateway_queue_1",
-			Text:      "queued via gateway test",
+			Text:      "first queued via gateway test",
 		},
 		Options: ai.RunOptions{MaxSteps: 1},
 	})
 	if err != nil {
-		t.Fatalf("SendUserTurn: %v", err)
+		t.Fatalf("SendUserTurn first: %v", err)
 	}
-	if queuedResp.Kind != "queued" {
-		t.Fatalf("queuedResp.Kind=%q, want queued", queuedResp.Kind)
+	queuedResp2, err := aiSvc.SendUserTurn(ctx, &meta, ai.SendUserTurnRequest{
+		ThreadID: thread.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: ai.RunInput{
+			MessageID: "m_gateway_queue_2",
+			Text:      "second queued via gateway test",
+		},
+		Options: ai.RunOptions{MaxSteps: 1},
+	})
+	if err != nil {
+		t.Fatalf("SendUserTurn second: %v", err)
 	}
-	queueID := strings.TrimSpace(queuedResp.QueueID)
-	if queueID == "" {
-		t.Fatalf("queueID is empty")
+	if queuedResp1.Kind != "queued" || queuedResp2.Kind != "queued" {
+		t.Fatalf("unexpected queued kinds: first=%q second=%q", queuedResp1.Kind, queuedResp2.Kind)
+	}
+	followupID1 := strings.TrimSpace(queuedResp1.QueueID)
+	followupID2 := strings.TrimSpace(queuedResp2.QueueID)
+	if followupID1 == "" || followupID2 == "" {
+		t.Fatalf("followup IDs should not be empty: %q %q", followupID1, followupID2)
 	}
 
+	var revision int64
 	{
-		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/queued_turns", nil)
+		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		gw.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
-			t.Fatalf("list queued turns status=%d body=%s", rr.Code, rr.Body.String())
+			t.Fatalf("list followups status=%d body=%s", rr.Code, rr.Body.String())
 		}
 		var resp struct {
 			OK   bool `json:"ok"`
 			Data struct {
-				QueuedTurns []struct {
-					QueueID string `json:"queue_id"`
-					Text    string `json:"text"`
-				} `json:"queued_turns"`
+				Revision int64 `json:"revision"`
+				Queued   []struct {
+					FollowupID string `json:"followup_id"`
+					Text       string `json:"text"`
+				} `json:"queued"`
+				Drafts []struct {
+					FollowupID string `json:"followup_id"`
+				} `json:"drafts"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-			t.Fatalf("unmarshal list queued turns: %v", err)
+			t.Fatalf("unmarshal list followups: %v", err)
 		}
-		if !resp.OK || len(resp.Data.QueuedTurns) != 1 {
-			t.Fatalf("unexpected queued turns response: %s", rr.Body.String())
+		if !resp.OK || len(resp.Data.Queued) != 2 || len(resp.Data.Drafts) != 0 {
+			t.Fatalf("unexpected followups response: %s", rr.Body.String())
 		}
-		if resp.Data.QueuedTurns[0].QueueID != queueID {
-			t.Fatalf("queue_id=%q, want %q", resp.Data.QueuedTurns[0].QueueID, queueID)
+		if resp.Data.Queued[0].FollowupID != followupID1 || resp.Data.Queued[1].FollowupID != followupID2 {
+			t.Fatalf("unexpected followup order: %+v", resp.Data.Queued)
 		}
-		if resp.Data.QueuedTurns[0].Text != "queued via gateway test" {
-			t.Fatalf("text=%q, want queued via gateway test", resp.Data.QueuedTurns[0].Text)
-		}
+		revision = resp.Data.Revision
 	}
 
 	{
@@ -202,52 +218,99 @@ func TestGateway_AI_QueuedTurnsEndpoints(t *testing.T) {
 		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("unmarshal get thread: %v", err)
 		}
-		if resp.Data.Thread.QueuedTurnCount != 1 {
-			t.Fatalf("queued_turn_count=%d, want 1", resp.Data.Thread.QueuedTurnCount)
+		if resp.Data.Thread.QueuedTurnCount != 2 {
+			t.Fatalf("queued_turn_count=%d, want 2", resp.Data.Thread.QueuedTurnCount)
+		}
+	}
+
+	{
+		body := bytes.NewBufferString(`{"lane":"queued","ordered_followup_ids":["` + followupID2 + `","` + followupID1 + `"],"expected_revision":` + jsonNumberString(revision) + `}`)
+		req := httptest.NewRequest(http.MethodPatch, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups/order", body)
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("reorder followups status=%d body=%s", rr.Code, rr.Body.String())
+		}
+	}
+
+	{
+		body := bytes.NewBufferString(`{"lane":"queued","ordered_followup_ids":["` + followupID1 + `","` + followupID2 + `"],"expected_revision":` + jsonNumberString(revision) + `}`)
+		req := httptest.NewRequest(http.MethodPatch, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups/order", body)
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+		if rr.Code != http.StatusConflict {
+			t.Fatalf("stale reorder status=%d body=%s", rr.Code, rr.Body.String())
+		}
+	}
+
+	{
+		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups", nil)
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("list followups after reorder status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var resp struct {
+			Data struct {
+				Queued []struct {
+					FollowupID string `json:"followup_id"`
+					Text       string `json:"text"`
+				} `json:"queued"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal list followups after reorder: %v", err)
+		}
+		if len(resp.Data.Queued) != 2 || resp.Data.Queued[0].FollowupID != followupID2 || resp.Data.Queued[1].FollowupID != followupID1 {
+			t.Fatalf("unexpected reordered followups response: %s", rr.Body.String())
 		}
 	}
 
 	{
 		body := bytes.NewBufferString(`{"text":"edited queued text"}`)
-		req := httptest.NewRequest(http.MethodPatch, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/queued_turns/"+queueID, body)
+		req := httptest.NewRequest(http.MethodPatch, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups/"+followupID2, body)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		gw.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
-			t.Fatalf("patch queued turn status=%d body=%s", rr.Code, rr.Body.String())
+			t.Fatalf("patch followup status=%d body=%s", rr.Code, rr.Body.String())
 		}
 	}
 
 	{
-		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/queued_turns", nil)
+		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		gw.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
-			t.Fatalf("list queued turns after patch status=%d body=%s", rr.Code, rr.Body.String())
+			t.Fatalf("list followups after patch status=%d body=%s", rr.Code, rr.Body.String())
 		}
 		var resp struct {
 			Data struct {
-				QueuedTurns []struct {
-					Text string `json:"text"`
-				} `json:"queued_turns"`
+				Queued []struct {
+					FollowupID string `json:"followup_id"`
+					Text       string `json:"text"`
+				} `json:"queued"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-			t.Fatalf("unmarshal list queued turns after patch: %v", err)
+			t.Fatalf("unmarshal list followups after patch: %v", err)
 		}
-		if len(resp.Data.QueuedTurns) != 1 || resp.Data.QueuedTurns[0].Text != "edited queued text" {
-			t.Fatalf("unexpected patched queued turns response: %s", rr.Body.String())
+		if len(resp.Data.Queued) != 2 || resp.Data.Queued[0].FollowupID != followupID2 || resp.Data.Queued[0].Text != "edited queued text" {
+			t.Fatalf("unexpected patched followups response: %s", rr.Body.String())
 		}
 	}
 
 	{
-		req := httptest.NewRequest(http.MethodDelete, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/queued_turns/"+queueID, nil)
+		req := httptest.NewRequest(http.MethodDelete, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups/"+followupID1, nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		gw.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
-			t.Fatalf("delete queued turn status=%d body=%s", rr.Code, rr.Body.String())
+			t.Fatalf("delete followup status=%d body=%s", rr.Code, rr.Body.String())
 		}
 	}
 
@@ -269,8 +332,13 @@ func TestGateway_AI_QueuedTurnsEndpoints(t *testing.T) {
 		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("unmarshal get thread after delete: %v", err)
 		}
-		if resp.Data.Thread.QueuedTurnCount != 0 {
-			t.Fatalf("queued_turn_count=%d, want 0", resp.Data.Thread.QueuedTurnCount)
+		if resp.Data.Thread.QueuedTurnCount != 1 {
+			t.Fatalf("queued_turn_count=%d, want 1", resp.Data.Thread.QueuedTurnCount)
 		}
 	}
+}
+
+func jsonNumberString(v int64) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }

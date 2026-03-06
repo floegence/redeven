@@ -496,7 +496,7 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 		cancel()
 		return
 	}
-	queuedTurnCount, countErr := db.CountQueuedTurns(ctx, endpointID, threadID)
+	queuedTurnCount, countErr := db.CountFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued)
 	cancel()
 	if countErr != nil {
 		return

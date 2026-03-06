@@ -2,6 +2,8 @@ import type {
   AIActiveRun,
   AICancelRunRequest,
   AICancelRunResponse,
+  AIFollowupAttachment,
+  AIFollowupItem,
   AIGetActiveRunSnapshotRequest,
   AIGetActiveRunSnapshotResponse,
   AIListMessagesRequest,
@@ -11,6 +13,8 @@ import type {
   AISetToolCollapsedResponse,
   AISendUserTurnRequest,
   AISendUserTurnResponse,
+  AIStopThreadRequest,
+  AIStopThreadResponse,
   AIWaitingPromptAction,
   AIWaitingPromptChoice,
   AISubscribeSummaryResponse,
@@ -29,6 +33,8 @@ import type {
   wire_ai_cancel_run_req,
   wire_ai_cancel_run_resp,
   wire_ai_event_notify,
+  wire_ai_followup_attachment,
+  wire_ai_followup_item,
   wire_ai_get_active_run_snapshot_req,
   wire_ai_get_active_run_snapshot_resp,
   wire_ai_list_messages_req,
@@ -37,6 +43,8 @@ import type {
   wire_ai_set_tool_collapsed_resp,
   wire_ai_send_user_turn_req,
   wire_ai_send_user_turn_resp,
+  wire_ai_stop_thread_req,
+  wire_ai_stop_thread_resp,
   wire_ai_subscribe_summary_resp,
   wire_ai_subscribe_thread_req,
   wire_ai_subscribe_thread_resp,
@@ -61,6 +69,42 @@ function normalizeExecutionMode(raw: unknown): 'act' | 'plan' | undefined {
   const mode = String(raw ?? '').trim().toLowerCase();
   if (mode === 'act' || mode === 'plan') return mode;
   return undefined;
+}
+
+
+function fromWireAIFollowupAttachment(raw: wire_ai_followup_attachment): AIFollowupAttachment | null {
+  const name = String(raw?.name ?? '').trim();
+  if (!name) return null;
+  const mimeType = String(raw?.mime_type ?? '').trim();
+  const url = String(raw?.url ?? '').trim();
+  return {
+    name,
+    mimeType: mimeType || undefined,
+    url: url || undefined,
+  };
+}
+
+function fromWireAIFollowupItem(raw: wire_ai_followup_item): AIFollowupItem | null {
+  const followupId = String(raw?.followup_id ?? '').trim();
+  const lane = String(raw?.lane ?? '').trim().toLowerCase();
+  const messageId = String(raw?.message_id ?? '').trim();
+  if (!followupId || (lane !== 'queued' && lane !== 'draft') || !messageId) {
+    return null;
+  }
+  const attachments = Array.isArray(raw?.attachments)
+    ? raw.attachments.map(fromWireAIFollowupAttachment).filter(Boolean) as AIFollowupAttachment[]
+    : [];
+  return {
+    followupId,
+    lane,
+    messageId,
+    text: String(raw?.text ?? ''),
+    modelId: String(raw?.model_id ?? '').trim() || undefined,
+    executionMode: normalizeExecutionMode(raw?.execution_mode),
+    position: Math.max(1, Math.floor(Number(raw?.position ?? 0) || 0)),
+    createdAtUnixMs: Math.max(0, Math.floor(Number(raw?.created_at_unix_ms ?? 0) || 0)),
+    attachments: attachments.length > 0 ? attachments : undefined,
+  };
 }
 
 function fromWireAIWaitingPromptAction(raw: wire_ai_waiting_prompt_action): AIWaitingPromptAction | null {
@@ -133,6 +177,8 @@ export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai
           choice_id: req.waitingResponse.choiceId?.trim() ? String(req.waitingResponse.choiceId).trim() : undefined,
         }
       : undefined,
+    queue_after_waiting_user: Boolean(req.queueAfterWaitingUser),
+    source_followup_id: req.sourceFollowupId?.trim() ? String(req.sourceFollowupId).trim() : undefined,
   };
 }
 
@@ -192,6 +238,23 @@ export function fromWireAIThreadRewindResponse(resp: wire_ai_thread_rewind_resp)
   return {
     ok,
     checkpointId: ok && checkpointId ? checkpointId : undefined,
+  };
+}
+
+
+export function toWireAIStopThreadRequest(req: AIStopThreadRequest): wire_ai_stop_thread_req {
+  return {
+    thread_id: String(req.threadId ?? '').trim(),
+  };
+}
+
+export function fromWireAIStopThreadResponse(resp: wire_ai_stop_thread_resp): AIStopThreadResponse {
+  const recoveredFollowups = Array.isArray(resp?.recovered_followups)
+    ? resp.recovered_followups.map(fromWireAIFollowupItem).filter(Boolean) as AIFollowupItem[]
+    : [];
+  return {
+    ok: Boolean(resp?.ok ?? false),
+    recoveredFollowups: recoveredFollowups.length > 0 ? recoveredFollowups : undefined,
   };
 }
 

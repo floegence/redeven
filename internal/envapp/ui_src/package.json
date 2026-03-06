@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview --host 0.0.0.0 --port 8096",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --environment=node"
   },
   "dependencies": {
     "@floegence/floe-webapp-core": "^0.33.3",
@@ -53,6 +54,7 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
-    "vite-plugin-solid": "^2.11.0"
+    "vite-plugin-solid": "^2.11.0",
+    "vitest": "^3.2.4"
   }
 }

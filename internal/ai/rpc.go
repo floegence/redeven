@@ -26,15 +26,18 @@ const (
 	TypeID_AI_SET_TOOL_COLLAPSED  uint32 = 6008
 	TypeID_AI_SUBSCRIBE_THREAD    uint32 = 6009
 	TypeID_AI_THREAD_REWIND       uint32 = 6010
+	TypeID_AI_STOP_THREAD         uint32 = 6011
 )
 
 type aiSendUserTurnReq struct {
-	ThreadID        string                 `json:"thread_id"`
-	Model           string                 `json:"model,omitempty"`
-	Input           RunInput               `json:"input"`
-	Options         RunOptions             `json:"options"`
-	ExpectedRunID   string                 `json:"expected_run_id,omitempty"`
-	WaitingResponse *WaitingPromptResponse `json:"waiting_response,omitempty"`
+	ThreadID              string                 `json:"thread_id"`
+	Model                 string                 `json:"model,omitempty"`
+	Input                 RunInput               `json:"input"`
+	Options               RunOptions             `json:"options"`
+	ExpectedRunID         string                 `json:"expected_run_id,omitempty"`
+	WaitingResponse       *WaitingPromptResponse `json:"waiting_response,omitempty"`
+	QueueAfterWaitingUser bool                   `json:"queue_after_waiting_user,omitempty"`
+	SourceFollowupID      string                 `json:"source_followup_id,omitempty"`
 }
 
 type aiSendUserTurnResp struct {
@@ -77,6 +80,15 @@ type aiThreadRewindReq struct {
 type aiThreadRewindResp struct {
 	OK           bool   `json:"ok"`
 	CheckpointID string `json:"checkpoint_id,omitempty"`
+}
+
+type aiStopThreadReq struct {
+	ThreadID string `json:"thread_id"`
+}
+
+type aiStopThreadResp struct {
+	OK                 bool               `json:"ok"`
+	RecoveredFollowups []FollowupItemView `json:"recovered_followups,omitempty"`
 }
 
 type aiListMessagesReq struct {
@@ -145,12 +157,14 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		resp, err := s.SendUserTurn(ctx, meta, SendUserTurnRequest{
-			ThreadID:        strings.TrimSpace(req.ThreadID),
-			Model:           strings.TrimSpace(req.Model),
-			Input:           req.Input,
-			Options:         req.Options,
-			ExpectedRunID:   strings.TrimSpace(req.ExpectedRunID),
-			WaitingResponse: req.WaitingResponse,
+			ThreadID:              strings.TrimSpace(req.ThreadID),
+			Model:                 strings.TrimSpace(req.Model),
+			Input:                 req.Input,
+			Options:               req.Options,
+			ExpectedRunID:         strings.TrimSpace(req.ExpectedRunID),
+			WaitingResponse:       req.WaitingResponse,
+			QueueAfterWaitingUser: req.QueueAfterWaitingUser,
+			SourceFollowupID:      strings.TrimSpace(req.SourceFollowupID),
 		})
 		if err != nil {
 			return nil, toAIRPCError(err)
@@ -255,6 +269,24 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 			return nil, toAIRPCError(err)
 		}
 		return &aiThreadRewindResp{OK: out.OK, CheckpointID: strings.TrimSpace(out.CheckpointID)}, nil
+	})
+
+	rpctyped.Register[aiStopThreadReq, aiStopThreadResp](r, TypeID_AI_STOP_THREAD, func(ctx context.Context, req *aiStopThreadReq) (*aiStopThreadResp, error) {
+		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
+			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
+		}
+		if req == nil {
+			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+		}
+		threadID := strings.TrimSpace(req.ThreadID)
+		if threadID == "" {
+			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
+		}
+		out, err := s.StopThread(ctx, meta, threadID)
+		if err != nil {
+			return nil, toAIRPCError(err)
+		}
+		return &aiStopThreadResp{OK: out.OK, RecoveredFollowups: out.RecoveredFollowups}, nil
 	})
 
 	rpctyped.Register[aiListMessagesReq, aiListMessagesResp](r, TypeID_AI_MESSAGES_LIST, func(ctx context.Context, req *aiListMessagesReq) (*aiListMessagesResp, error) {
@@ -435,7 +467,8 @@ func toAIRPCError(err error) *rpc.Error {
 		errors.Is(err, ErrRunChanged),
 		errors.Is(err, ErrWaitingPromptChanged),
 		errors.Is(err, ErrModelLockViolation),
-		errors.Is(err, ErrModelSwitchRequiresExplicitRestart):
+		errors.Is(err, ErrModelSwitchRequiresExplicitRestart),
+		errors.Is(err, ErrFollowupsRevisionChanged):
 		return &rpc.Error{Code: 409, Message: msg}
 	}
 

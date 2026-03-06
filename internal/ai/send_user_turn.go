@@ -12,14 +12,19 @@ import (
 
 var ErrRunChanged = errors.New("run changed")
 var ErrWaitingPromptChanged = errors.New("waiting prompt changed")
+var ErrWaitingUserQueueConflict = errors.New("waiting-user queue request conflicts with waiting response")
+var ErrFollowupsRevisionChanged = errors.New("followups revision changed")
+var ErrInvalidFollowupLane = errors.New("invalid followup lane")
 
 type SendUserTurnRequest struct {
-	ThreadID        string                 `json:"thread_id"`
-	Model           string                 `json:"model,omitempty"`
-	Input           RunInput               `json:"input"`
-	Options         RunOptions             `json:"options"`
-	ExpectedRunID   string                 `json:"expected_run_id,omitempty"`
-	WaitingResponse *WaitingPromptResponse `json:"waiting_response,omitempty"`
+	ThreadID              string                 `json:"thread_id"`
+	Model                 string                 `json:"model,omitempty"`
+	Input                 RunInput               `json:"input"`
+	Options               RunOptions             `json:"options"`
+	ExpectedRunID         string                 `json:"expected_run_id,omitempty"`
+	WaitingResponse       *WaitingPromptResponse `json:"waiting_response,omitempty"`
+	QueueAfterWaitingUser bool                   `json:"queue_after_waiting_user,omitempty"`
+	SourceFollowupID      string                 `json:"source_followup_id,omitempty"`
 }
 
 type SendUserTurnResponse struct {

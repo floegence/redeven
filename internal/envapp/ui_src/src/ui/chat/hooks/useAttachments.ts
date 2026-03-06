@@ -24,6 +24,7 @@ export interface UseAttachmentsReturn {
   isDragging: () => boolean;
   hasUploading: () => boolean;
   addFiles: (files: FileList | File[]) => void;
+  replaceAttachments: (nextAttachments: Attachment[]) => void;
   removeAttachment: (id: string) => void;
   clearAttachments: () => void;
   uploadAll: () => Promise<UploadAllResult>;
@@ -273,6 +274,14 @@ export function useAttachments(options: UseAttachmentsOptions = {}): UseAttachme
     setAttachments([]);
   }
 
+  /** Replace the entire attachment list. */
+  function replaceAttachments(nextAttachments: Attachment[]): void {
+    for (const attachment of attachments()) {
+      revokePreview(attachment);
+    }
+    setAttachments(Array.isArray(nextAttachments) ? nextAttachments.map((attachment) => ({ ...attachment })) : []);
+  }
+
   /** Open the native file picker dialog. */
   function openFilePicker(): void {
     const input = document.createElement('input');
@@ -351,6 +360,7 @@ export function useAttachments(options: UseAttachmentsOptions = {}): UseAttachme
     isDragging,
     hasUploading,
     addFiles,
+    replaceAttachments,
     removeAttachment,
     clearAttachments,
     uploadAll,

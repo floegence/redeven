@@ -115,6 +115,7 @@ type QueuedTurn struct {
 	ThreadID   string `json:"thread_id"`
 	EndpointID string `json:"endpoint_id"`
 	ChannelID  string `json:"channel_id"`
+	Lane       string `json:"lane"`
 
 	MessageID string `json:"message_id"`
 	ModelID   string `json:"model_id"`
@@ -126,7 +127,9 @@ type QueuedTurn struct {
 	CreatedByUserPublicID string `json:"created_by_user_public_id"`
 	CreatedByUserEmail    string `json:"created_by_user_email"`
 
+	SortIndex       int64 `json:"sort_index"`
 	CreatedAtUnixMs int64 `json:"created_at_unix_ms"`
+	UpdatedAtUnixMs int64 `json:"updated_at_unix_ms"`
 }
 
 type ThreadsCursor struct {
@@ -2096,7 +2099,7 @@ func migrateSchema(db *sql.DB) error {
 	if db == nil {
 		return errors.New("nil db")
 	}
-	const targetVersion = 15
+	const targetVersion = 16
 
 	var v int
 	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
@@ -2188,6 +2191,14 @@ CREATE INDEX IF NOT EXISTS idx_ai_threads_endpoint_updated ON ai_threads(endpoin
 		}
 	}
 
+	if has, err := columnExists(tx, "ai_threads", "followups_revision"); err != nil {
+		return err
+	} else if !has {
+		if _, err := tx.Exec(`ALTER TABLE ai_threads ADD COLUMN followups_revision INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+
 	if has, err := columnExists(tx, "ai_threads", "run_status"); err != nil {
 		return err
 	} else if !has {
@@ -2254,6 +2265,8 @@ CREATE TABLE IF NOT EXISTS ai_queued_turns (
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
   channel_id TEXT NOT NULL DEFAULT '',
+  lane TEXT NOT NULL DEFAULT 'queued',
+  sort_index INTEGER NOT NULL DEFAULT 0,
   message_id TEXT NOT NULL DEFAULT '',
   model_id TEXT NOT NULL DEFAULT '',
   text_content TEXT NOT NULL DEFAULT '',
@@ -2261,9 +2274,11 @@ CREATE TABLE IF NOT EXISTS ai_queued_turns (
   options_json TEXT NOT NULL DEFAULT '{}',
   created_by_user_public_id TEXT NOT NULL DEFAULT '',
   created_by_user_email TEXT NOT NULL DEFAULT '',
-  created_at_unix_ms INTEGER NOT NULL
+  created_at_unix_ms INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_ai_queued_turns_thread_created ON ai_queued_turns(endpoint_id, thread_id, created_at_unix_ms ASC, queue_id ASC);
+CREATE INDEX IF NOT EXISTS idx_ai_queued_turns_thread_lane_sort ON ai_queued_turns(endpoint_id, thread_id, lane, sort_index ASC, queue_id ASC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_queued_turns_message_id ON ai_queued_turns(endpoint_id, thread_id, message_id);
 `); err != nil {
 		return err
@@ -2274,6 +2289,54 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_queued_turns_message_id ON ai_queued_tu
 		if _, err := tx.Exec(`ALTER TABLE ai_queued_turns ADD COLUMN channel_id TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
+	}
+
+	if has, err := columnExists(tx, "ai_queued_turns", "lane"); err != nil {
+		return err
+	} else if !has {
+		if _, err := tx.Exec(`ALTER TABLE ai_queued_turns ADD COLUMN lane TEXT NOT NULL DEFAULT 'queued'`); err != nil {
+			return err
+		}
+	}
+	if has, err := columnExists(tx, "ai_queued_turns", "sort_index"); err != nil {
+		return err
+	} else if !has {
+		if _, err := tx.Exec(`ALTER TABLE ai_queued_turns ADD COLUMN sort_index INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if has, err := columnExists(tx, "ai_queued_turns", "updated_at_unix_ms"); err != nil {
+		return err
+	} else if !has {
+		if _, err := tx.Exec(`ALTER TABLE ai_queued_turns ADD COLUMN updated_at_unix_ms INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`UPDATE ai_queued_turns SET lane = 'queued' WHERE TRIM(COALESCE(lane, '')) = ''`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE ai_queued_turns SET updated_at_unix_ms = CASE WHEN updated_at_unix_ms <= 0 THEN created_at_unix_ms ELSE updated_at_unix_ms END`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+UPDATE ai_queued_turns AS cur
+SET sort_index = (
+  SELECT COUNT(1)
+  FROM ai_queued_turns AS other
+  WHERE other.endpoint_id = cur.endpoint_id
+    AND other.thread_id = cur.thread_id
+    AND LOWER(COALESCE(other.lane, 'queued')) = LOWER(COALESCE(cur.lane, 'queued'))
+    AND (
+      other.created_at_unix_ms < cur.created_at_unix_ms
+      OR (other.created_at_unix_ms = cur.created_at_unix_ms AND other.queue_id <= cur.queue_id)
+    )
+)
+WHERE sort_index <= 0
+`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_ai_queued_turns_thread_lane_sort ON ai_queued_turns(endpoint_id, thread_id, lane, sort_index ASC, queue_id ASC)`); err != nil {
+		return err
 	}
 
 	if msgExists == 0 {
@@ -2373,6 +2436,8 @@ CREATE TABLE IF NOT EXISTS ai_queued_turns (
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
   channel_id TEXT NOT NULL DEFAULT '',
+  lane TEXT NOT NULL DEFAULT 'queued',
+  sort_index INTEGER NOT NULL DEFAULT 0,
   message_id TEXT NOT NULL DEFAULT '',
   model_id TEXT NOT NULL DEFAULT '',
   text_content TEXT NOT NULL DEFAULT '',
@@ -2380,9 +2445,11 @@ CREATE TABLE IF NOT EXISTS ai_queued_turns (
   options_json TEXT NOT NULL DEFAULT '{}',
   created_by_user_public_id TEXT NOT NULL DEFAULT '',
   created_by_user_email TEXT NOT NULL DEFAULT '',
-  created_at_unix_ms INTEGER NOT NULL
+  created_at_unix_ms INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_ai_queued_turns_thread_created ON ai_queued_turns(endpoint_id, thread_id, created_at_unix_ms ASC, queue_id ASC);
+CREATE INDEX IF NOT EXISTS idx_ai_queued_turns_thread_lane_sort ON ai_queued_turns(endpoint_id, thread_id, lane, sort_index ASC, queue_id ASC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_queued_turns_message_id ON ai_queued_turns(endpoint_id, thread_id, message_id);
 
 CREATE TABLE IF NOT EXISTS ai_thread_checkpoints (

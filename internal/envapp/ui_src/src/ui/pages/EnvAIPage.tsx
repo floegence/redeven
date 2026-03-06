@@ -63,6 +63,18 @@ import {
   virtualPathToAbsolutePath,
 } from '../utils/askFlowerPath';
 import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';
+import {
+  composeFollowupOrder,
+  composerSnapshotHasContent,
+  moveFollowupByDelta,
+  reorderFollowupsByIDs,
+  reindexFollowups,
+  shouldAutoloadRecoveredFollowup,
+  type ComposerDraftSnapshot,
+  type FollowupItem,
+  type FollowupLane,
+  type ListFollowupsResponse,
+} from './followupsState';
 
 // ---- Working dir picker (directory tree utilities) ----
 
@@ -205,24 +217,11 @@ type RunContextEventsResponse = {
   has_more?: boolean;
 };
 
-type QueuedTurnAttachmentItem = {
-  name: string;
-  mime_type?: string;
-};
+type SendIntent = 'default' | 'queue_after_waiting_user';
+type AIChatInputDraftSnapshot = ComposerDraftSnapshot<Attachment>;
 
-type QueuedTurnItem = {
-  queue_id: string;
-  message_id: string;
-  text: string;
-  model_id?: string;
-  execution_mode?: ExecutionMode;
-  position: number;
-  created_at_unix_ms: number;
-  attachments?: QueuedTurnAttachmentItem[];
-};
-
-type ListQueuedTurnsResponse = {
-  queued_turns?: QueuedTurnItem[];
+type PendingDraftLoad = {
+  followup: FollowupItem;
 };
 
 const queuedTurnTimeFormatter = new Intl.DateTimeFormat('en-US', {
@@ -245,6 +244,9 @@ const ChatCapture: Component<{ onReady: (ctx: ChatContextValue) => void }> = (pr
 type AIChatInputApi = {
   applyDraftText: (nextText: string, mode: 'append' | 'replace') => void;
   addAttachmentFiles: (files: File[]) => void;
+  replaceDraft: (nextDraft: AIChatInputDraftSnapshot) => void;
+  snapshotDraft: () => AIChatInputDraftSnapshot;
+  clearDraft: () => void;
   focusInput: () => void;
 };
 
@@ -252,12 +254,14 @@ const AIChatInput: Component<{
   class?: string;
   placeholder?: string;
   disabled?: boolean;
+  waitingForUser?: boolean;
   workingDirLabel?: string;
   workingDirTitle?: string;
   workingDirLocked?: boolean;
   workingDirDisabled?: boolean;
   onPickWorkingDir?: () => void;
   onEditWorkingDir?: () => void;
+  onSendIntent?: (intent: SendIntent) => void;
   onApiReady?: (api: AIChatInputApi | null) => void;
 }> = (props) => {
   const ctx = useChatContext();
@@ -285,7 +289,6 @@ const AIChatInput: Component<{
     !sending() &&
     !attachments.hasUploading();
 
-  // Auto-resize textarea height (coalesce to at most once per frame).
   const adjustHeight = () => {
     const el = textareaRef;
     if (!el) return;
@@ -305,11 +308,54 @@ const AIChatInput: Component<{
     });
   };
 
-  const handleSend = async () => {
+  const focusComposer = () => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        textareaRef?.focus();
+      });
+      return;
+    }
+    textareaRef?.focus();
+  };
+
+  const snapshotDraft = (): AIChatInputDraftSnapshot => ({
+    text: text(),
+    attachments: attachments.attachments().map((attachment) => ({ ...attachment })),
+  });
+
+  const clearDraft = () => {
+    setText('');
+    attachments.clearAttachments();
+    if (textareaRef) textareaRef.style.height = 'auto';
+  };
+
+  const replaceDraft = (nextDraft: AIChatInputDraftSnapshot) => {
+    setText(String(nextDraft?.text ?? ''));
+    attachments.replaceAttachments(Array.isArray(nextDraft?.attachments) ? nextDraft.attachments : []);
+    if (textareaRef) textareaRef.style.height = 'auto';
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        scheduleAdjustHeight();
+        const el = textareaRef;
+        if (!el) return;
+        el.focus();
+        const cursor = el.value.length;
+        try {
+          el.setSelectionRange(cursor, cursor);
+        } catch {
+          // ignore cursor placement failures on older browsers
+        }
+      });
+      return;
+    }
+    scheduleAdjustHeight();
+    focusComposer();
+  };
+
+  const handleSend = async (intent: SendIntent = 'default') => {
     if (!canSend()) return;
 
     setSending(true);
-
     const content = text().trim();
     try {
       const upload = await attachments.uploadAll();
@@ -319,11 +365,8 @@ const AIChatInput: Component<{
       }
 
       const files = upload.attachments.filter((attachment) => attachment.status === 'uploaded');
-
-      setText('');
-      attachments.clearAttachments();
-      if (textareaRef) textareaRef.style.height = 'auto';
-
+      props.onSendIntent?.(intent);
+      clearDraft();
       await ctx.sendMessage(content, files);
     } finally {
       setSending(false);
@@ -331,9 +374,7 @@ const AIChatInput: Component<{
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    // IME composition in progress (e.g. CJK input) — let the IME handle Enter.
     if (e.isComposing) return;
-    // Enter to send (Shift+Enter for newline).
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
@@ -360,18 +401,23 @@ const AIChatInput: Component<{
       }),
     );
 
-    requestAnimationFrame(() => {
-      scheduleAdjustHeight();
-      const el = textareaRef;
-      if (!el) return;
-      el.focus();
-      const cursor = el.value.length;
-      try {
-        el.setSelectionRange(cursor, cursor);
-      } catch {
-        // ignore cursor placement failures on older browsers
-      }
-    });
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        scheduleAdjustHeight();
+        const el = textareaRef;
+        if (!el) return;
+        el.focus();
+        const cursor = el.value.length;
+        try {
+          el.setSelectionRange(cursor, cursor);
+        } catch {
+          // ignore cursor placement failures on older browsers
+        }
+      });
+      return;
+    }
+    scheduleAdjustHeight();
+    focusComposer();
   };
 
   const addAttachmentFiles = (files: File[]) => {
@@ -381,15 +427,16 @@ const AIChatInput: Component<{
   };
 
   const focusInput = () => {
-    requestAnimationFrame(() => {
-      textareaRef?.focus();
-    });
+    focusComposer();
   };
 
   createEffect(() => {
     props.onApiReady?.({
       applyDraftText,
       addAttachmentFiles,
+      replaceDraft,
+      snapshotDraft,
+      clearDraft,
       focusInput,
     });
   });
@@ -504,16 +551,35 @@ const AIChatInput: Component<{
 
         <div class="chat-input-toolbar-right">
           <span class="chat-input-hint">
-            <kbd>Enter</kbd> send &nbsp; <kbd>Shift+Enter</kbd> newline
+            <kbd>Enter</kbd> {props.waitingForUser ? 'reply now' : 'send'} &nbsp; <kbd>Shift+Enter</kbd> newline
           </span>
+
+          <Show when={props.waitingForUser}>
+            <button
+              type="button"
+              class="chat-input-secondary-action"
+              onClick={() => void handleSend('queue_after_waiting_user')}
+              disabled={!canSend()}
+              title="Queue for later"
+            >
+              Queue for later
+            </button>
+          </Show>
 
           <button
             type="button"
-            class={cn('chat-input-send-btn', canSend() && 'chat-input-send-btn-active')}
+            class={cn(
+              'chat-input-send-btn',
+              canSend() && 'chat-input-send-btn-active',
+              props.waitingForUser && 'chat-input-send-btn-expanded',
+            )}
             onClick={() => void handleSend()}
             disabled={!canSend()}
-            title="Send message"
+            title={props.waitingForUser ? 'Reply now' : 'Send message'}
           >
+            <Show when={props.waitingForUser}>
+              <span class="chat-input-send-btn-label">Reply now</span>
+            </Show>
             <SendIcon />
           </button>
         </div>
@@ -1923,15 +1989,29 @@ export function EnvAIPage() {
   const [sendPending, setSendPending] = createSignal(false);
   const [draftExecutionMode, setDraftExecutionMode] = createSignal<ExecutionMode>(readPersistedExecutionMode());
   const [threadExecutionModeOverrideById, setThreadExecutionModeOverrideById] = createSignal<Record<string, ExecutionMode>>({});
-  const [queuedTurns, setQueuedTurns] = createSignal<QueuedTurnItem[]>([]);
-  const [queuedTurnsLoading, setQueuedTurnsLoading] = createSignal(false);
-  const [queuedTurnsError, setQueuedTurnsError] = createSignal('');
-  const [queuedTurnEditOpen, setQueuedTurnEditOpen] = createSignal(false);
-  const [queuedTurnEditQueueId, setQueuedTurnEditQueueId] = createSignal('');
-  const [queuedTurnEditText, setQueuedTurnEditText] = createSignal('');
-  const [queuedTurnEditSaving, setQueuedTurnEditSaving] = createSignal(false);
-  const [queuedTurnDeletingId, setQueuedTurnDeletingId] = createSignal<string | null>(null);
-  let lastQueuedTurnsReq = 0;
+  const [queuedFollowups, setQueuedFollowups] = createSignal<FollowupItem[]>([]);
+  const [draftFollowups, setDraftFollowups] = createSignal<FollowupItem[]>([]);
+  const [followupsRevision, setFollowupsRevision] = createSignal<number | null>(null);
+  const [followupsPausedReason, setFollowupsPausedReason] = createSignal('');
+  const [followupsLoading, setFollowupsLoading] = createSignal(false);
+  const [followupsError, setFollowupsError] = createSignal('');
+  const [followupEditOpen, setFollowupEditOpen] = createSignal(false);
+  const [followupEditID, setFollowupEditID] = createSignal('');
+  const [followupEditLane, setFollowupEditLane] = createSignal<FollowupLane>('queued');
+  const [followupEditText, setFollowupEditText] = createSignal('');
+  const [followupEditSaving, setFollowupEditSaving] = createSignal(false);
+  const [followupDeletingID, setFollowupDeletingID] = createSignal<string | null>(null);
+  const [loadedDraftFollowupID, setLoadedDraftFollowupID] = createSignal('');
+  const [pendingDraftLoad, setPendingDraftLoad] = createSignal<PendingDraftLoad | null>(null);
+  const [draftLoadConfirmOpen, setDraftLoadConfirmOpen] = createSignal(false);
+  const [followupReorderingLane, setFollowupReorderingLane] = createSignal<FollowupLane | null>(null);
+  const [draggingFollowupID, setDraggingFollowupID] = createSignal('');
+  const [draggingFollowupLane, setDraggingFollowupLane] = createSignal<FollowupLane | null>(null);
+  let lastFollowupsReq = 0;
+  let nextSendIntent: SendIntent = 'default';
+  const sendIntentByMessageId = new Map<string, SendIntent>();
+  const sourceFollowupIDByMessageId = new Map<string, string>();
+  const draftSnapshotByMessageId = new Map<string, AIChatInputDraftSnapshot>();
 
   let chat: ChatContextValue | null = null;
   const [chatReady, setChatReady] = createSignal(false);
@@ -2511,16 +2591,21 @@ export function EnvAIPage() {
   });
   const activeQueuedTurnCount = createMemo(() => {
     const serverCount = Number(ai.activeThread()?.queued_turn_count ?? 0);
-    if (queuedTurnsLoading()) {
-      return Number.isFinite(serverCount) && serverCount > 0 ? serverCount : queuedTurns().length;
+    if (followupsLoading()) {
+      return Number.isFinite(serverCount) && serverCount > 0 ? serverCount : queuedFollowups().length;
     }
-    return queuedTurns().length;
+    return queuedFollowups().length;
   });
   const queuedTurnHint = createMemo(() =>
-    activeThreadWaitingUser()
-      ? 'Waiting for your reply before queued follow-ups can continue.'
+    followupsPausedReason() === 'waiting_user'
+      ? 'Paused until waiting input is resolved.'
       : 'Flower will send these automatically after the current run finishes.',
   );
+  const loadedDraftFollowup = createMemo(() => {
+    const followupID = String(loadedDraftFollowupID() ?? '').trim();
+    if (!followupID) return null;
+    return draftFollowups().find((item) => String(item.followup_id ?? '').trim() === followupID) ?? null;
+  });
   const executionMode = createMemo<ExecutionMode>(() => {
     const tid = String(ai.activeThreadId() ?? '').trim();
     if (!tid) {
@@ -3024,7 +3109,153 @@ export function EnvAIPage() {
     }
   };
 
-  const loadQueuedTurns = async (
+  const resetFollowupsState = () => {
+    setQueuedFollowups([]);
+    setDraftFollowups([]);
+    setFollowupsRevision(null);
+    setFollowupsPausedReason('');
+    setFollowupsError('');
+    setFollowupsLoading(false);
+    setFollowupEditOpen(false);
+    setFollowupEditID('');
+    setFollowupEditLane('queued');
+    setFollowupEditText('');
+    setFollowupDeletingID(null);
+    setFollowupReorderingLane(null);
+    setDraggingFollowupID('');
+    setDraggingFollowupLane(null);
+    setLoadedDraftFollowupID('');
+  };
+
+  const normalizePageFollowupLane = (raw: unknown): FollowupLane => {
+    const lane = String(raw ?? '').trim().toLowerCase();
+    return lane === 'draft' ? 'draft' : 'queued';
+  };
+
+  const normalizePageFollowup = (raw: Partial<FollowupItem>): FollowupItem | null => {
+    const followupID = String(raw?.followup_id ?? '').trim();
+    const messageID = String(raw?.message_id ?? '').trim();
+    if (!followupID || !messageID) return null;
+    const lane = normalizePageFollowupLane(raw?.lane);
+    const executionModeRaw = String(raw?.execution_mode ?? '').trim().toLowerCase();
+    return {
+      followup_id: followupID,
+      lane,
+      message_id: messageID,
+      text: String(raw?.text ?? ''),
+      model_id: String(raw?.model_id ?? '').trim() || undefined,
+      execution_mode: executionModeRaw === 'plan' ? 'plan' : executionModeRaw === 'act' ? 'act' : undefined,
+      position: Math.max(1, Math.floor(Number(raw?.position ?? 0) || 0)),
+      created_at_unix_ms: Math.max(0, Math.floor(Number(raw?.created_at_unix_ms ?? 0) || 0)),
+      attachments: Array.isArray(raw?.attachments) ? raw.attachments : undefined,
+    };
+  };
+
+  const stopFollowupToPageFollowup = (raw: any): FollowupItem | null => {
+    const followupID = String(raw?.followupId ?? '').trim();
+    const messageID = String(raw?.messageId ?? '').trim();
+    if (!followupID || !messageID) return null;
+    const lane = normalizePageFollowupLane(raw?.lane);
+    const executionModeRaw = String(raw?.executionMode ?? '').trim().toLowerCase();
+    return {
+      followup_id: followupID,
+      lane,
+      message_id: messageID,
+      text: String(raw?.text ?? ''),
+      model_id: String(raw?.modelId ?? '').trim() || undefined,
+      execution_mode: executionModeRaw === 'plan' ? 'plan' : executionModeRaw === 'act' ? 'act' : undefined,
+      position: Math.max(1, Math.floor(Number(raw?.position ?? 0) || 0)),
+      created_at_unix_ms: Math.max(0, Math.floor(Number(raw?.createdAtUnixMs ?? 0) || 0)),
+      attachments: Array.isArray(raw?.attachments)
+        ? raw.attachments.map((attachment: any) => ({
+            name: String(attachment?.name ?? ''),
+            mime_type: String(attachment?.mimeType ?? '').trim() || undefined,
+            url: String(attachment?.url ?? '').trim() || undefined,
+          }))
+        : undefined,
+    };
+  };
+
+  const restoreFollowupAttachments = (item: FollowupItem): Attachment[] => {
+    const attachments = Array.isArray(item.attachments) ? item.attachments : [];
+    const restored: Attachment[] = [];
+    for (const attachment of attachments) {
+      const name = String(attachment?.name ?? '').trim();
+      const mimeType = String(attachment?.mime_type ?? '').trim();
+      const url = String(attachment?.url ?? '').trim();
+      if (!name || !url) continue;
+      const file = mimeType ? new File([], name, { type: mimeType }) : new File([], name);
+      restored.push({
+        id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${name}-${url}`,
+        file,
+        type: mimeType.startsWith('image/') ? 'image' : 'file',
+        preview: mimeType.startsWith('image/') ? url : undefined,
+        uploadProgress: 100,
+        status: 'uploaded',
+        url,
+      });
+    }
+    return restored;
+  };
+
+  const applyLoadedDraftExecutionMode = (item: FollowupItem) => {
+    const executionModeRaw = String(item.execution_mode ?? '').trim().toLowerCase();
+    if (executionModeRaw !== 'act' && executionModeRaw !== 'plan') return;
+    const nextMode = executionModeRaw as ExecutionMode;
+    setDraftExecutionMode(nextMode);
+    persistExecutionMode(nextMode);
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    if (!tid) return;
+    setThreadExecutionModeOverrideById((prev) => ({ ...prev, [tid]: nextMode }));
+  };
+
+  const loadFollowupIntoComposer = (item: FollowupItem) => {
+    const inputApi = chatInputApi();
+    if (!inputApi) return;
+    inputApi.replaceDraft({
+      text: String(item.text ?? ''),
+      attachments: restoreFollowupAttachments(item),
+    });
+    setLoadedDraftFollowupID(String(item.followup_id ?? '').trim());
+    applyLoadedDraftExecutionMode(item);
+    inputApi.focusInput();
+  };
+
+  const requestLoadFollowup = (item: FollowupItem) => {
+    const inputApi = chatInputApi();
+    if (!inputApi) return;
+    const followupID = String(item.followup_id ?? '').trim();
+    if (followupID && followupID === String(loadedDraftFollowupID() ?? '').trim()) {
+      inputApi.focusInput();
+      return;
+    }
+    const snapshot = inputApi.snapshotDraft();
+    if (composerSnapshotHasContent(snapshot)) {
+      setPendingDraftLoad({ followup: item });
+      setDraftLoadConfirmOpen(true);
+      return;
+    }
+    loadFollowupIntoComposer(item);
+  };
+
+  const confirmLoadPendingDraft = () => {
+    const pending = pendingDraftLoad();
+    if (!pending) return;
+    setDraftLoadConfirmOpen(false);
+    setPendingDraftLoad(null);
+    loadFollowupIntoComposer(pending.followup);
+  };
+
+  const applyFollowupList = (lane: FollowupLane, items: FollowupItem[]) => {
+    const nextItems = reindexFollowups(items);
+    if (lane === 'queued') {
+      setQueuedFollowups(nextItems);
+      return;
+    }
+    setDraftFollowups(nextItems);
+  };
+
+  const loadFollowups = async (
     threadId: string,
     opts?: {
       silent?: boolean;
@@ -3032,93 +3263,199 @@ export function EnvAIPage() {
   ): Promise<void> => {
     const tid = String(threadId ?? '').trim();
     if (!tid) {
-      setQueuedTurns([]);
-      setQueuedTurnsError('');
-      setQueuedTurnsLoading(false);
+      resetFollowupsState();
       return;
     }
 
-    const reqNo = ++lastQueuedTurnsReq;
+    const reqNo = ++lastFollowupsReq;
     const silent = !!opts?.silent;
     if (!silent) {
-      setQueuedTurnsLoading(true);
-      setQueuedTurnsError('');
+      setFollowupsLoading(true);
+      setFollowupsError('');
     }
 
     try {
-      const resp = await fetchGatewayJSON<ListQueuedTurnsResponse>(
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/queued_turns`,
+      const resp = await fetchGatewayJSON<ListFollowupsResponse>(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/followups`,
         { method: 'GET' },
       );
-      if (reqNo !== lastQueuedTurnsReq) return;
+      if (reqNo !== lastFollowupsReq) return;
       if (tid !== String(ai.activeThreadId() ?? '').trim()) return;
-      setQueuedTurns(Array.isArray(resp?.queued_turns) ? resp.queued_turns : []);
-      setQueuedTurnsError('');
+
+      const queued = Array.isArray(resp?.queued)
+        ? reindexFollowups(resp.queued.map(normalizePageFollowup).filter((item): item is FollowupItem => !!item))
+        : [];
+      const drafts = Array.isArray(resp?.drafts)
+        ? reindexFollowups(resp.drafts.map(normalizePageFollowup).filter((item): item is FollowupItem => !!item))
+        : [];
+
+      setQueuedFollowups(queued);
+      setDraftFollowups(drafts);
+      setFollowupsRevision(Number.isFinite(Number(resp?.revision)) ? Number(resp?.revision) : null);
+      setFollowupsPausedReason(String(resp?.paused_reason ?? '').trim());
+      setFollowupsError('');
+
+      const loadedDraftID = String(loadedDraftFollowupID() ?? '').trim();
+      if (loadedDraftID && !drafts.some((item) => String(item.followup_id ?? '').trim() === loadedDraftID)) {
+        setLoadedDraftFollowupID('');
+      }
     } catch (e) {
-      if (reqNo !== lastQueuedTurnsReq) return;
+      if (reqNo !== lastFollowupsReq) return;
       if (tid !== String(ai.activeThreadId() ?? '').trim()) return;
       const msg = e instanceof Error ? e.message : String(e);
-      setQueuedTurns([]);
-      setQueuedTurnsError(msg || 'Request failed.');
+      setQueuedFollowups([]);
+      setDraftFollowups([]);
+      setFollowupsRevision(null);
+      setFollowupsPausedReason('');
+      setFollowupsError(msg || 'Request failed.');
     } finally {
-      if (reqNo === lastQueuedTurnsReq && !silent) {
-        setQueuedTurnsLoading(false);
+      if (reqNo === lastFollowupsReq && !silent) {
+        setFollowupsLoading(false);
       }
     }
   };
 
-  const openQueuedTurnEditor = (item: QueuedTurnItem) => {
-    setQueuedTurnEditQueueId(String(item.queue_id ?? '').trim());
-    setQueuedTurnEditText(String(item.text ?? ''));
-    setQueuedTurnEditOpen(true);
+  const openFollowupEditor = (item: FollowupItem) => {
+    setFollowupEditID(String(item.followup_id ?? '').trim());
+    setFollowupEditLane(normalizePageFollowupLane(item.lane));
+    setFollowupEditText(String(item.text ?? ''));
+    setFollowupEditOpen(true);
   };
 
-  const saveQueuedTurnEdit = async () => {
+  const saveFollowupEdit = async () => {
     const tid = String(ai.activeThreadId() ?? '').trim();
-    const queueID = String(queuedTurnEditQueueId() ?? '').trim();
-    if (!tid || !queueID) return;
+    const followupID = String(followupEditID() ?? '').trim();
+    if (!tid || !followupID) return;
     if (!ensureRWX()) return;
 
-    setQueuedTurnEditSaving(true);
+    setFollowupEditSaving(true);
     try {
       await fetchGatewayJSON<{ ok: boolean }>(
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/queued_turns/${encodeURIComponent(queueID)}`,
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/followups/${encodeURIComponent(followupID)}`,
         {
           method: 'PATCH',
-          body: JSON.stringify({ text: queuedTurnEditText() }),
+          body: JSON.stringify({ text: followupEditText() }),
         },
       );
-      setQueuedTurnEditOpen(false);
-      await loadQueuedTurns(tid, { silent: true });
+      setFollowupEditOpen(false);
+      await loadFollowups(tid, { silent: true });
       ai.bumpThreadsSeq();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to update queued follow-up', msg || 'Request failed.');
+      notify.error('Failed to update follow-up', msg || 'Request failed.');
     } finally {
-      setQueuedTurnEditSaving(false);
+      setFollowupEditSaving(false);
     }
   };
 
-  const deleteQueuedTurn = async (queueID: string) => {
+  const deleteFollowup = async (item: FollowupItem) => {
     const tid = String(ai.activeThreadId() ?? '').trim();
-    const qid = String(queueID ?? '').trim();
-    if (!tid || !qid) return;
+    const followupID = String(item.followup_id ?? '').trim();
+    if (!tid || !followupID) return;
     if (!ensureRWX()) return;
 
-    setQueuedTurnDeletingId(qid);
+    setFollowupDeletingID(followupID);
     try {
       await fetchGatewayJSON<{ ok: boolean }>(
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/queued_turns/${encodeURIComponent(qid)}`,
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/followups/${encodeURIComponent(followupID)}`,
         { method: 'DELETE' },
       );
-      await loadQueuedTurns(tid, { silent: true });
+      if (followupID === String(loadedDraftFollowupID() ?? '').trim()) {
+        setLoadedDraftFollowupID('');
+        chatInputApi()?.clearDraft();
+      }
+      await loadFollowups(tid, { silent: true });
       ai.bumpThreadsSeq();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to remove queued follow-up', msg || 'Request failed.');
+      notify.error('Failed to remove follow-up', msg || 'Request failed.');
     } finally {
-      setQueuedTurnDeletingId((current) => (current === qid ? null : current));
+      setFollowupDeletingID((current) => (current === followupID ? null : current));
     }
+  };
+
+  const commitFollowupOrder = async (lane: FollowupLane, nextItems: FollowupItem[]) => {
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    if (!tid) return;
+    if (!ensureRWX()) return;
+
+    const previousItems = lane === 'queued' ? queuedFollowups() : draftFollowups();
+    applyFollowupList(lane, nextItems);
+    setFollowupReorderingLane(lane);
+    try {
+      await fetchGatewayJSON<{ ok: boolean }>(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/followups/order`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            lane,
+            ordered_followup_ids: composeFollowupOrder(nextItems),
+            expected_revision: followupsRevision() ?? undefined,
+          }),
+        },
+      );
+      ai.bumpThreadsSeq();
+      await loadFollowups(tid, { silent: true });
+    } catch (e) {
+      applyFollowupList(lane, previousItems);
+      void loadFollowups(tid, { silent: true });
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Failed to reorder follow-ups', msg || 'Request failed.');
+    } finally {
+      setFollowupReorderingLane((current) => (current === lane ? null : current));
+      setDraggingFollowupID('');
+      setDraggingFollowupLane(null);
+    }
+  };
+
+  const moveFollowup = (lane: FollowupLane, index: number, delta: number) => {
+    const items = lane === 'queued' ? queuedFollowups() : draftFollowups();
+    const nextItems = moveFollowupByDelta(items, index, delta);
+    if (composeFollowupOrder(nextItems).join('|') === composeFollowupOrder(items).join('|')) {
+      return;
+    }
+    void commitFollowupOrder(lane, nextItems);
+  };
+
+  const handleFollowupDragStart = (lane: FollowupLane, followupID: string) => {
+    setDraggingFollowupLane(lane);
+    setDraggingFollowupID(String(followupID ?? '').trim());
+  };
+
+  const handleFollowupDragEnd = () => {
+    setDraggingFollowupID('');
+    setDraggingFollowupLane(null);
+  };
+
+  const handleFollowupDrop = (lane: FollowupLane, targetFollowupID: string) => {
+    const sourceFollowupID = String(draggingFollowupID() ?? '').trim();
+    if (!sourceFollowupID || draggingFollowupLane() !== lane || sourceFollowupID === targetFollowupID) {
+      handleFollowupDragEnd();
+      return;
+    }
+    const items = lane === 'queued' ? queuedFollowups() : draftFollowups();
+    const orderedIDs = composeFollowupOrder(items);
+    const fromIndex = orderedIDs.indexOf(sourceFollowupID);
+    const targetIndex = orderedIDs.indexOf(String(targetFollowupID ?? '').trim());
+    if (fromIndex === -1 || targetIndex === -1) {
+      handleFollowupDragEnd();
+      return;
+    }
+    orderedIDs.splice(fromIndex, 1);
+    orderedIDs.splice(targetIndex, 0, sourceFollowupID);
+    const nextItems = reorderFollowupsByIDs(items, orderedIDs);
+    void commitFollowupOrder(lane, nextItems);
+  };
+
+  const queueDraftForLater = async (item: FollowupItem) => {
+    if (!activeThreadWaitingUser()) return;
+    if (String(item.followup_id ?? '').trim() === String(loadedDraftFollowupID() ?? '').trim()) {
+      return;
+    }
+    await sendUserTurn(String(item.text ?? ''), restoreFollowupAttachments(item), {
+      sendIntent: 'queue_after_waiting_user',
+      sourceFollowupId: String(item.followup_id ?? '').trim(),
+    });
   };
 
   const cancelRunForThread = async (threadId: string, opts?: { notifyOnError?: boolean }): Promise<boolean> => {
@@ -3147,9 +3484,27 @@ export function EnvAIPage() {
   const stopRun = () => {
     const tid = String(ai.activeThreadId() ?? '').trim();
     if (!tid) return;
+    if (!ensureRWX()) return;
     setRunPhaseLabel('Stopping...');
-    void cancelRunForThread(tid, { notifyOnError: true }).then((ok) => {
-      if (!ok) setRunPhaseLabel('Working');
+    void rpc.ai.stopThread({ threadId: tid }).then(async (resp) => {
+      const recovered = Array.isArray(resp?.recoveredFollowups)
+        ? resp.recoveredFollowups.map(stopFollowupToPageFollowup).filter((item): item is FollowupItem => !!item)
+        : [];
+      setQueuedFollowups([]);
+      setFollowupsPausedReason('');
+      const inputApi = chatInputApi();
+      if (inputApi && shouldAutoloadRecoveredFollowup(recovered, inputApi.snapshotDraft())) {
+        loadFollowupIntoComposer(recovered[0]);
+      } else if (recovered.length > 0) {
+        notify.info('Run stopped', recovered.length === 1 ? 'Recovered 1 queued follow-up.' : `Recovered ${recovered.length} queued follow-ups.`);
+      }
+      await loadFollowups(tid, { silent: true });
+      ai.bumpThreadsSeq();
+      setRunPhaseLabel('Working');
+    }).catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Failed to stop run', msg || 'Request failed.');
+      setRunPhaseLabel('Working');
     });
   };
 
@@ -3162,9 +3517,7 @@ export function EnvAIPage() {
       setHasMessages(false);
       setRunPhaseLabel('Working');
       setThreadTodos(null);
-      setQueuedTurns([]);
-      setQueuedTurnsError('');
-      setQueuedTurnsLoading(false);
+      resetFollowupsState();
       resetThreadSubagents();
       resetContextTelemetryState();
       setTodosError('');
@@ -3180,6 +3533,7 @@ export function EnvAIPage() {
       setHasMessages(false);
       setRunPhaseLabel('Working');
       setThreadTodos(null);
+      resetFollowupsState();
       resetThreadSubagents();
       resetContextTelemetryState();
       setTodosError('');
@@ -3211,7 +3565,7 @@ export function EnvAIPage() {
       void loadActiveRunSnapshot(tidStr);
     });
     void loadThreadTodos(tid, { silent: false, notifyError: false });
-    void loadQueuedTurns(tidStr);
+    void loadFollowups(tidStr);
   });
 
   createEffect(() => {
@@ -3224,7 +3578,7 @@ export function EnvAIPage() {
       if (event.eventType === 'thread_summary') {
         const isActiveTid = tid === String(ai.activeThreadId() ?? '').trim();
         if (isActiveTid) {
-          void loadQueuedTurns(tid, { silent: true });
+          void loadFollowups(tid, { silent: true });
         }
         return;
       }
@@ -3533,7 +3887,13 @@ export function EnvAIPage() {
     };
   };
 
-  const sendUserTurn = async (content: string, attachments: Attachment[], userMessageId?: string) => {
+  type SendUserTurnOptions = {
+    userMessageId?: string;
+    sendIntent?: SendIntent;
+    sourceFollowupId?: string;
+  };
+
+  const sendUserTurn = async (content: string, attachments: Attachment[], opts: SendUserTurnOptions = {}) => {
     if (!chat) {
       notify.error('AI unavailable', 'Chat is not ready.');
       setSendPending(false);
@@ -3563,19 +3923,33 @@ export function EnvAIPage() {
       return;
     }
 
-    // ChatProvider already rendered the optimistic user message; ensure the message list is visible.
-    // sendPending is usually raised by onWillSend, this call keeps attachment-only flows responsive.
+    const userMessageId = String(opts.userMessageId ?? '').trim();
+    const sendIntent = userMessageId
+      ? (sendIntentByMessageId.get(userMessageId) ?? opts.sendIntent ?? 'default')
+      : (opts.sendIntent ?? 'default');
+    const sourceFollowupId = userMessageId
+      ? String(sourceFollowupIDByMessageId.get(userMessageId) ?? opts.sourceFollowupId ?? '').trim()
+      : String(opts.sourceFollowupId ?? '').trim();
+    const sourceDraftSnapshot = userMessageId ? draftSnapshotByMessageId.get(userMessageId) : undefined;
+
+    if (userMessageId) {
+      sendIntentByMessageId.delete(userMessageId);
+      sourceFollowupIDByMessageId.delete(userMessageId);
+      draftSnapshotByMessageId.delete(userMessageId);
+    }
+
     setHasMessages(true);
     setSendPending(true);
     setRunPhaseLabel('Planning...');
-    requestScrollToBottom('user');
+    if (userMessageId) {
+      requestScrollToBottom('user');
+    }
 
     let tid = ai.activeThreadId();
     if (!tid) {
       skipNextThreadLoad = true;
       tid = await ai.ensureThreadForSend({ executionMode: executionMode() });
       if (!tid) {
-        // Thread creation failed; do not leave the "preserve optimistic messages" flag armed.
         skipNextThreadLoad = false;
       }
     }
@@ -3585,28 +3959,28 @@ export function EnvAIPage() {
     }
 
     const userText = String(content ?? '').trim();
-    const uploaded = attachments.filter((a) => a.status === 'uploaded' && !!String(a.url ?? '').trim());
-    const attIn = uploaded.map((a) => ({
-      name: a.file.name,
-      mimeType: a.file.type,
-      url: String(a.url ?? '').trim(),
+    const uploaded = attachments.filter((attachment) => attachment.status === 'uploaded' && !!String(attachment.url ?? '').trim());
+    const attIn = uploaded.map((attachment) => ({
+      name: attachment.file.name,
+      mimeType: attachment.file.type,
+      url: String(attachment.url ?? '').trim(),
     }));
     const activeTid = String(ai.activeThreadId() ?? '').trim();
     const activeWaitingPrompt = tid === activeTid ? ai.activeThreadWaitingPrompt() : null;
     const waitingPromptId = String(activeWaitingPrompt?.prompt_id ?? '').trim();
     const waitingChoiceId = waitingPromptId ? ai.getPendingWaitingChoice(tid, waitingPromptId) : null;
-    const waitingResponse = waitingPromptId
-      ? {
-          promptId: waitingPromptId,
-          choiceId: waitingChoiceId || undefined,
-        }
-      : undefined;
+    const waitingResponse = sendIntent === 'queue_after_waiting_user'
+      ? undefined
+      : waitingPromptId
+        ? {
+            promptId: waitingPromptId,
+            choiceId: waitingChoiceId || undefined,
+          }
+        : undefined;
 
     ai.markThreadPendingRun(tid);
 
     try {
-      // Ensure the client is subscribed to thread-scoped events before sending so we don't miss
-      // the initial transcript/stream frames on a new chat.
       try {
         await rpc.ai.subscribeThread({ threadId: tid });
       } catch {
@@ -3614,17 +3988,18 @@ export function EnvAIPage() {
       }
 
       setRunPhaseLabel('Planning...');
-      const msgID = String(userMessageId ?? '').trim();
       const baseReq = {
         threadId: tid,
         model,
         input: {
-          messageId: msgID || undefined,
+          messageId: userMessageId || undefined,
           text: userText,
           attachments: attIn,
         },
         options: { maxSteps: 10, mode: executionMode() },
         waitingResponse,
+        queueAfterWaitingUser: sendIntent === 'queue_after_waiting_user' ? true : undefined,
+        sourceFollowupId: sourceFollowupId || undefined,
       } as const;
 
       const expected = String(ai.runIdForThread(tid) ?? '').trim();
@@ -3653,14 +4028,17 @@ export function EnvAIPage() {
         persistExecutionMode(appliedExecutionMode);
         setThreadExecutionModeOverrideById((prev) => ({ ...prev, [tid]: appliedExecutionMode }));
       }
+      if (sourceFollowupId) {
+        setLoadedDraftFollowupID((current) => (current === sourceFollowupId ? '' : current));
+      }
       if (responseKind === 'queued') {
         ai.clearThreadPendingRun(tid);
-        if (msgID) {
-          chat?.deleteMessage(msgID);
+        if (userMessageId) {
+          chat?.deleteMessage(userMessageId);
           setHasMessages((chat?.messages() ?? []).length > 0);
         }
         setRunPhaseLabel('Working');
-        void loadQueuedTurns(tid, { silent: true });
+        void loadFollowups(tid, { silent: true });
       }
       if (rid) {
         ai.confirmThreadRun(tid, rid);
@@ -3673,27 +4051,44 @@ export function EnvAIPage() {
       }
     } catch (e) {
       ai.clearThreadPendingRun(tid);
+      if (sourceFollowupId && sourceDraftSnapshot && chatInputApi()) {
+        chatInputApi()?.replaceDraft(sourceDraftSnapshot);
+        setLoadedDraftFollowupID(sourceFollowupId);
+        chatInputApi()?.focusInput();
+      }
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('AI failed', msg || 'Request failed.');
       setRunPhaseLabel('Working');
       void loadThreadMessages(tid);
+      void loadFollowups(tid, { silent: true });
     } finally {
       setSendPending(false);
     }
   };
 
   let sendUserTurnQueue: Promise<void> = Promise.resolve();
-  const enqueueSendUserTurn = (content: string, attachments: Attachment[], userMessageId?: string) => {
-    const task = sendUserTurnQueue.then(() => sendUserTurn(content, attachments, userMessageId));
+  const enqueueSendUserTurn = (content: string, attachments: Attachment[], opts: SendUserTurnOptions = {}) => {
+    const task = sendUserTurnQueue.then(() => sendUserTurn(content, attachments, opts));
     sendUserTurnQueue = task.catch(() => {});
     return task;
   };
 
   const callbacks: ChatCallbacks = {
-    onWillSend: (_content, _attachments, _userMessageId) => {
-      // Synchronous hook: called right after ChatProvider renders the optimistic user message.
-      // Raising sendPending here makes the working indicator appear in the same frame.
+    onWillSend: (content, attachments, userMessageId) => {
       if (import.meta.env.DEV) console.debug('[AI Chat] onWillSend fired at', performance.now().toFixed(1), 'ms');
+
+      const intent = nextSendIntent;
+      nextSendIntent = 'default';
+      sendIntentByMessageId.set(userMessageId, intent);
+
+      const sourceFollowupId = String(loadedDraftFollowupID() ?? '').trim();
+      if (sourceFollowupId) {
+        sourceFollowupIDByMessageId.set(userMessageId, sourceFollowupId);
+        draftSnapshotByMessageId.set(userMessageId, {
+          text: content,
+          attachments: attachments.map((attachment) => ({ ...attachment })),
+        });
+      }
 
       if (!canInteract()) return;
       setSendPending(true);
@@ -3713,7 +4108,7 @@ export function EnvAIPage() {
         setRunPhaseLabel('Working');
         return;
       }
-      await enqueueSendUserTurn(content, attachments, userMessageId);
+      await enqueueSendUserTurn(content, attachments, { userMessageId });
     },
     onUploadAttachment: uploadAttachment,
     onToolApproval: sendToolApproval,
@@ -4167,34 +4562,35 @@ export function EnvAIPage() {
             </Dialog>
 
             <Dialog
-              open={queuedTurnEditOpen()}
+              open={followupEditOpen()}
               onOpenChange={(open) => {
                 if (!open) {
-                  setQueuedTurnEditOpen(false);
-                  setQueuedTurnEditQueueId('');
-                  setQueuedTurnEditText('');
+                  setFollowupEditOpen(false);
+                  setFollowupEditID('');
+                  setFollowupEditLane('queued');
+                  setFollowupEditText('');
                   return;
                 }
-                setQueuedTurnEditOpen(true);
+                setFollowupEditOpen(true);
               }}
-              title="Edit Queued Follow-up"
+              title={followupEditLane() === 'draft' ? 'Edit Draft Follow-up' : 'Edit Queued Follow-up'}
               footer={
                 <div class="flex justify-end gap-2">
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setQueuedTurnEditOpen(false)}
-                    disabled={queuedTurnEditSaving()}
+                    onClick={() => setFollowupEditOpen(false)}
+                    disabled={followupEditSaving()}
                   >
                     Cancel
                   </Button>
                   <Button
                     size="sm"
                     variant="default"
-                    onClick={() => void saveQueuedTurnEdit()}
-                    disabled={queuedTurnEditSaving() || !String(queuedTurnEditText() ?? '').trim()}
+                    onClick={() => void saveFollowupEdit()}
+                    disabled={followupEditSaving() || !String(followupEditText() ?? '').trim()}
                   >
-                    <Show when={queuedTurnEditSaving()}>
+                    <Show when={followupEditSaving()}>
                       <span class="mr-1">
                         <InlineButtonSnakeLoading />
                       </span>
@@ -4208,37 +4604,55 @@ export function EnvAIPage() {
                 <div>
                   <label class="block text-xs font-medium mb-1.5">Message</label>
                   <textarea
-                    value={queuedTurnEditText()}
-                    onInput={(e) => setQueuedTurnEditText(e.currentTarget.value)}
+                    value={followupEditText()}
+                    onInput={(e) => setFollowupEditText(e.currentTarget.value)}
                     rows={6}
                     class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
-                    placeholder="Edit queued follow-up"
+                    placeholder={followupEditLane() === 'draft' ? 'Edit draft follow-up' : 'Edit queued follow-up'}
                   />
                   <p class="text-[11px] text-muted-foreground mt-1.5">
-                    This updates the queued message before Flower sends it.
+                    {followupEditLane() === 'draft'
+                      ? 'This updates the saved draft before you load or queue it again.'
+                      : 'This updates the queued message before Flower sends it.'}
                   </p>
                 </div>
               </div>
             </Dialog>
 
-            <Show when={activeQueuedTurnCount() > 0 || queuedTurnsLoading() || !!queuedTurnsError()}>
-              <div class="flower-queued-turns-panel">
+            <ConfirmDialog
+              open={draftLoadConfirmOpen()}
+              onOpenChange={(open) => {
+                setDraftLoadConfirmOpen(open);
+                if (!open) {
+                  setPendingDraftLoad(null);
+                }
+              }}
+              title="Replace Draft?"
+              confirmText="Load Draft"
+              onConfirm={() => confirmLoadPendingDraft()}
+            >
+              <div class="space-y-2">
+                <p class="text-sm">
+                  Loading <span class="font-semibold">{String(pendingDraftLoad()?.followup.text ?? '').trim() || 'this draft'}</span> will replace the current composer content.
+                </p>
+                <p class="text-xs text-muted-foreground">
+                  Your current unsent text and attachments will be discarded.
+                </p>
+              </div>
+            </ConfirmDialog>
+
+            <Show when={draftFollowups().length > 0}>
+              <div class="flower-queued-turns-panel flower-followups-drafts-panel">
                 <div class="flower-queued-turns-header">
                   <div class="flower-queued-turns-header-main">
-                    <span class="flower-queued-turns-title">Queued follow-ups</span>
-                    <span class="flower-queued-turns-count">{activeQueuedTurnCount()}</span>
+                    <span class="flower-queued-turns-title">Draft follow-ups</span>
+                    <span class="flower-queued-turns-count">{draftFollowups().length}</span>
                   </div>
-                  <div class="flower-queued-turns-hint">{queuedTurnHint()}</div>
+                  <div class="flower-queued-turns-hint">These stay under your control until you load them or queue them later.</div>
                 </div>
                 <div class="flower-queued-turns-list">
-                  <Show when={queuedTurnsError() && queuedTurns().length === 0}>
-                    <div class="flower-queued-turns-empty">{queuedTurnsError()}</div>
-                  </Show>
-                  <Show when={queuedTurnsLoading() && queuedTurns().length === 0 && !queuedTurnsError()}>
-                    <div class="flower-queued-turns-empty">Loading queued follow-ups...</div>
-                  </Show>
-                  <For each={queuedTurns()}>
-                    {(item) => {
+                  <For each={draftFollowups()}>
+                    {(item, index) => {
                       const attachments = () => Array.isArray(item.attachments) ? item.attachments : [];
                       const attachmentCount = () => attachments().length;
                       const attachmentLabel = () => attachmentCount() === 1 ? '1 attachment' : `${attachmentCount()} attachments`;
@@ -4247,13 +4661,189 @@ export function EnvAIPage() {
                         const mode = String(item.execution_mode ?? '').trim().toLowerCase();
                         return mode === 'plan' ? 'Plan' : mode === 'act' ? 'Act' : '';
                       };
-                      const queueID = () => String(item.queue_id ?? '').trim();
+                      const followupID = () => String(item.followup_id ?? '').trim();
                       const messageText = () => String(item.text ?? '').trim() || 'Attachment-only follow-up';
-                      const deleting = () => queuedTurnDeletingId() === queueID();
+                      const deleting = () => followupDeletingID() === followupID();
+                      const isLoaded = () => loadedDraftFollowupID() === followupID();
+                      const reorderDisabled = () => !canInteract() || !!followupReorderingLane() || isLoaded();
                       return (
-                        <div class="flower-queued-turn-item">
+                        <div
+                          class={cn('flower-queued-turn-item', isLoaded() && 'flower-followup-item-loaded')}
+                          draggable={!reorderDisabled()}
+                          onDragStart={() => handleFollowupDragStart('draft', followupID())}
+                          onDragEnd={() => handleFollowupDragEnd()}
+                          onDragOver={(e) => {
+                            if (draggingFollowupLane() !== 'draft') return;
+                            e.preventDefault();
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            handleFollowupDrop('draft', followupID());
+                          }}
+                        >
                           <div class="flower-queued-turn-item-main">
-                            <div class="flower-queued-turn-position">{item.position}</div>
+                            <div class="flower-followup-leading">
+                              <button
+                                type="button"
+                                class="flower-followup-drag-handle"
+                                disabled={reorderDisabled()}
+                                onMouseDown={(e) => e.preventDefault()}
+                                title="Drag to reorder"
+                              >
+                                ⋮⋮
+                              </button>
+                              <div class="flower-queued-turn-position">{item.position}</div>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                              <div class="flower-queued-turn-item-meta">
+                                <Show when={createdAtLabel()}>
+                                  <span class="flower-queued-turn-chip">{createdAtLabel()}</span>
+                                </Show>
+                                <Show when={executionModeLabel()}>
+                                  <span class="flower-queued-turn-chip">{executionModeLabel()}</span>
+                                </Show>
+                                <Show when={String(item.model_id ?? '').trim()}>
+                                  <span class="flower-queued-turn-chip truncate max-w-[14rem]" title={String(item.model_id ?? '').trim()}>
+                                    {String(item.model_id ?? '').trim()}
+                                  </span>
+                                </Show>
+                                <Show when={attachmentCount() > 0}>
+                                  <span class="flower-queued-turn-chip">{attachmentLabel()}</span>
+                                </Show>
+                                <Show when={isLoaded()}>
+                                  <span class="flower-followup-state-chip">Loaded</span>
+                                </Show>
+                              </div>
+                              <p class="flower-queued-turn-text" title={messageText()}>{messageText()}</p>
+                            </div>
+                          </div>
+                          <div class="flower-queued-turn-actions">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Move up"
+                              onClick={() => moveFollowup('draft', index(), -1)}
+                              disabled={reorderDisabled() || index() === 0}
+                            >
+                              <ChevronUp class="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Move down"
+                              onClick={() => moveFollowup('draft', index(), 1)}
+                              disabled={reorderDisabled() || index() === draftFollowups().length - 1}
+                            >
+                              <ChevronUp class="w-3.5 h-3.5 rotate-180" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={isLoaded() ? 'outline' : 'ghost'}
+                              title={isLoaded() ? 'Draft already loaded' : 'Load into editor'}
+                              onClick={() => requestLoadFollowup(item)}
+                              disabled={deleting()}
+                            >
+                              {isLoaded() ? 'Loaded' : 'Load'}
+                            </Button>
+                            <Show when={activeThreadWaitingUser() && !isLoaded()}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                title="Queue for later"
+                                onClick={() => void queueDraftForLater(item)}
+                                disabled={!canInteract() || deleting() || followupReorderingLane() === 'draft'}
+                              >
+                                Queue
+                              </Button>
+                            </Show>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Edit draft follow-up"
+                              onClick={() => openFollowupEditor(item)}
+                              disabled={!canInteract() || deleting() || isLoaded()}
+                            >
+                              <Pencil class="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Remove draft follow-up"
+                              onClick={() => void deleteFollowup(item)}
+                              disabled={!canInteract() || deleting() || isLoaded()}
+                            >
+                              <Trash class="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    }}
+                  </For>
+                </div>
+              </div>
+            </Show>
+
+            <Show when={activeQueuedTurnCount() > 0 || followupsLoading() || !!followupsError()}>
+              <div class="flower-queued-turns-panel">
+                <div class="flower-queued-turns-header">
+                  <div class="flower-queued-turns-header-main">
+                    <span class="flower-queued-turns-title">Queued follow-ups</span>
+                    <span class="flower-queued-turns-count">{activeQueuedTurnCount()}</span>
+                    <Show when={followupsPausedReason() === 'waiting_user'}>
+                      <span class="flower-followup-state-chip">Paused</span>
+                    </Show>
+                  </div>
+                  <div class="flower-queued-turns-hint">{queuedTurnHint()}</div>
+                </div>
+                <div class="flower-queued-turns-list">
+                  <Show when={followupsError() && queuedFollowups().length === 0}>
+                    <div class="flower-queued-turns-empty">{followupsError()}</div>
+                  </Show>
+                  <Show when={followupsLoading() && queuedFollowups().length === 0 && !followupsError()}>
+                    <div class="flower-queued-turns-empty">Loading queued follow-ups...</div>
+                  </Show>
+                  <For each={queuedFollowups()}>
+                    {(item, index) => {
+                      const attachments = () => Array.isArray(item.attachments) ? item.attachments : [];
+                      const attachmentCount = () => attachments().length;
+                      const attachmentLabel = () => attachmentCount() === 1 ? '1 attachment' : `${attachmentCount()} attachments`;
+                      const createdAtLabel = () => formatQueuedTurnTime(item.created_at_unix_ms);
+                      const executionModeLabel = () => {
+                        const mode = String(item.execution_mode ?? '').trim().toLowerCase();
+                        return mode === 'plan' ? 'Plan' : mode === 'act' ? 'Act' : '';
+                      };
+                      const followupID = () => String(item.followup_id ?? '').trim();
+                      const messageText = () => String(item.text ?? '').trim() || 'Attachment-only follow-up';
+                      const deleting = () => followupDeletingID() === followupID();
+                      const reorderDisabled = () => !canInteract() || !!followupReorderingLane();
+                      return (
+                        <div
+                          class="flower-queued-turn-item"
+                          draggable={!reorderDisabled()}
+                          onDragStart={() => handleFollowupDragStart('queued', followupID())}
+                          onDragEnd={() => handleFollowupDragEnd()}
+                          onDragOver={(e) => {
+                            if (draggingFollowupLane() !== 'queued') return;
+                            e.preventDefault();
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            handleFollowupDrop('queued', followupID());
+                          }}
+                        >
+                          <div class="flower-queued-turn-item-main">
+                            <div class="flower-followup-leading">
+                              <button
+                                type="button"
+                                class="flower-followup-drag-handle"
+                                disabled={reorderDisabled()}
+                                onMouseDown={(e) => e.preventDefault()}
+                                title="Drag to reorder"
+                              >
+                                ⋮⋮
+                              </button>
+                              <div class="flower-queued-turn-position">{item.position}</div>
+                            </div>
                             <div class="min-w-0 flex-1">
                               <div class="flower-queued-turn-item-meta">
                                 <Show when={createdAtLabel()}>
@@ -4278,8 +4868,26 @@ export function EnvAIPage() {
                             <Button
                               size="icon"
                               variant="ghost"
+                              title="Move up"
+                              onClick={() => moveFollowup('queued', index(), -1)}
+                              disabled={reorderDisabled() || index() === 0}
+                            >
+                              <ChevronUp class="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              title="Move down"
+                              onClick={() => moveFollowup('queued', index(), 1)}
+                              disabled={reorderDisabled() || index() === queuedFollowups().length - 1}
+                            >
+                              <ChevronUp class="w-3.5 h-3.5 rotate-180" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
                               title="Edit queued follow-up"
-                              onClick={() => openQueuedTurnEditor(item)}
+                              onClick={() => openFollowupEditor(item)}
                               disabled={!canInteract() || deleting()}
                             >
                               <Pencil class="w-3.5 h-3.5" />
@@ -4288,7 +4896,7 @@ export function EnvAIPage() {
                               size="icon"
                               variant="ghost"
                               title="Remove queued follow-up"
-                              onClick={() => void deleteQueuedTurn(queueID())}
+                              onClick={() => void deleteFollowup(item)}
                               disabled={!canInteract() || deleting()}
                             >
                               <Trash class="w-3.5 h-3.5" />
@@ -4304,6 +4912,7 @@ export function EnvAIPage() {
 
             <AIChatInput
               disabled={!canInteract()}
+              waitingForUser={activeThreadWaitingUser()}
               placeholder={chatInputPlaceholder()}
               workingDirLabel={workingDirLabel() || 'Working dir'}
               workingDirTitle={activeWorkingDir() || workingDirLabel() || 'Working dir'}
@@ -4311,6 +4920,9 @@ export function EnvAIPage() {
               workingDirDisabled={workingDirDisabled()}
               onPickWorkingDir={() => setWorkingDirPickerOpen(true)}
               onEditWorkingDir={() => openWorkingDirEditor()}
+              onSendIntent={(intent) => {
+                nextSendIntent = intent;
+              }}
               onApiReady={setChatInputApi}
             />
           </div>

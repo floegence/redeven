@@ -77,23 +77,20 @@ func unmarshalQueuedTurnOptions(raw string) RunOptions {
 	return out
 }
 
-func queuedTurnRecordToView(rec threadstore.QueuedTurn, position int) QueuedTurnView {
+func followupRecordToView(rec threadstore.QueuedTurn, position int) FollowupItemView {
 	attachments := unmarshalQueuedTurnAttachments(rec.AttachmentsJSON)
-	views := make([]QueuedTurnAttachmentView, 0, len(attachments))
+	views := make([]FollowupAttachmentView, 0, len(attachments))
 	for _, item := range attachments {
-		name := strings.TrimSpace(item.Name)
-		mimeType := strings.TrimSpace(item.MimeType)
-		if name == "" && mimeType == "" {
-			continue
-		}
-		views = append(views, QueuedTurnAttachmentView{
-			Name:     name,
-			MimeType: mimeType,
+		views = append(views, FollowupAttachmentView{
+			Name:     strings.TrimSpace(item.Name),
+			MimeType: strings.TrimSpace(item.MimeType),
+			URL:      strings.TrimSpace(item.URL),
 		})
 	}
 	options := unmarshalQueuedTurnOptions(rec.OptionsJSON)
-	view := QueuedTurnView{
-		QueueID:         strings.TrimSpace(rec.QueueID),
+	view := FollowupItemView{
+		FollowupID:      strings.TrimSpace(rec.QueueID),
+		Lane:            strings.TrimSpace(rec.Lane),
 		MessageID:       strings.TrimSpace(rec.MessageID),
 		Text:            strings.TrimSpace(rec.TextContent),
 		ModelID:         strings.TrimSpace(rec.ModelID),
@@ -181,6 +178,7 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		EndpointID:            strings.TrimSpace(meta.EndpointID),
 		ThreadID:              strings.TrimSpace(req.ThreadID),
 		ChannelID:             strings.TrimSpace(meta.ChannelID),
+		Lane:                  threadstore.FollowupLaneQueued,
 		MessageID:             messageID,
 		ModelID:               strings.TrimSpace(req.Model),
 		TextContent:           strings.TrimSpace(req.Input.Text),
@@ -193,7 +191,7 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 
 	pctx, cancel := context.WithTimeout(ctx, persistTO)
 	defer cancel()
-	queued, position, err := db.EnqueueQueuedTurn(pctx, rec)
+	queued, position, _, err := db.CreateFollowup(pctx, rec)
 	if err != nil {
 		return threadstore.QueuedTurn{}, 0, err
 	}
@@ -201,7 +199,31 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 	return queued, position, nil
 }
 
-func (s *Service) ListQueuedTurns(ctx context.Context, meta *session.Meta, threadID string, limit int) (*ListQueuedTurnsResponse, error) {
+func (s *Service) consumeSourceFollowup(ctx context.Context, meta *session.Meta, threadID string, followupID string) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	followupID = strings.TrimSpace(followupID)
+	if followupID == "" {
+		return nil
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	if _, err := db.DeleteFollowup(ctx, strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID), followupID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+	s.broadcastThreadSummary(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID))
+	return nil
+}
+
+func (s *Service) ListFollowups(ctx context.Context, meta *session.Meta, threadID string, limit int) (*ListFollowupsResponse, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -231,19 +253,41 @@ func (s *Service) ListQueuedTurns(ctx context.Context, meta *session.Meta, threa
 	if th == nil {
 		return nil, sql.ErrNoRows
 	}
-
-	list, err := db.ListQueuedTurns(ctx, endpointID, threadID, limit)
+	revision, err := db.GetThreadFollowupsRevision(ctx, endpointID, threadID)
 	if err != nil {
 		return nil, err
 	}
-	out := &ListQueuedTurnsResponse{QueuedTurns: make([]QueuedTurnView, 0, len(list))}
-	for i, rec := range list {
-		out.QueuedTurns = append(out.QueuedTurns, queuedTurnRecordToView(rec, i+1))
+	queued, err := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, limit)
+	if err != nil {
+		return nil, err
+	}
+	drafts, err := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneDraft, limit)
+	if err != nil {
+		return nil, err
+	}
+	pausedReason := ""
+	runStatus, _ := normalizeThreadRunState(th.RunStatus, th.RunError)
+	if NormalizeRunState(runStatus) == RunStateWaitingUser || waitingPromptFromThreadRecord(th, runStatus) != nil {
+		if len(queued) > 0 {
+			pausedReason = "waiting_user"
+		}
+	}
+	out := &ListFollowupsResponse{
+		Revision:     revision,
+		PausedReason: pausedReason,
+		Queued:       make([]FollowupItemView, 0, len(queued)),
+		Drafts:       make([]FollowupItemView, 0, len(drafts)),
+	}
+	for i, rec := range queued {
+		out.Queued = append(out.Queued, followupRecordToView(rec, i+1))
+	}
+	for i, rec := range drafts {
+		out.Drafts = append(out.Drafts, followupRecordToView(rec, i+1))
 	}
 	return out, nil
 }
 
-func (s *Service) UpdateQueuedTurn(ctx context.Context, meta *session.Meta, threadID string, queueID string, req PatchQueuedTurnRequest) error {
+func (s *Service) UpdateFollowup(ctx context.Context, meta *session.Meta, threadID string, followupID string, req PatchFollowupRequest) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
@@ -256,6 +300,10 @@ func (s *Service) UpdateQueuedTurn(ctx context.Context, meta *session.Meta, thre
 	if req.Text == nil {
 		return errors.New("missing fields")
 	}
+	text := strings.TrimSpace(*req.Text)
+	if text == "" {
+		return errors.New("missing fields")
+	}
 
 	s.mu.Lock()
 	db := s.threadsDB
@@ -263,15 +311,17 @@ func (s *Service) UpdateQueuedTurn(ctx context.Context, meta *session.Meta, thre
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
-
-	if err := db.UpdateQueuedTurn(ctx, strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID), strings.TrimSpace(queueID), strings.TrimSpace(*req.Text)); err != nil {
+	if _, err := db.UpdateFollowupText(ctx, strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID), strings.TrimSpace(followupID), text); err != nil {
+		if errors.Is(err, threadstore.ErrFollowupsRevisionChanged) {
+			return ErrFollowupsRevisionChanged
+		}
 		return err
 	}
 	s.broadcastThreadSummary(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID))
 	return nil
 }
 
-func (s *Service) DeleteQueuedTurn(ctx context.Context, meta *session.Meta, threadID string, queueID string) error {
+func (s *Service) DeleteFollowup(ctx context.Context, meta *session.Meta, threadID string, followupID string) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
@@ -288,10 +338,52 @@ func (s *Service) DeleteQueuedTurn(ctx context.Context, meta *session.Meta, thre
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
-
-	if err := db.DeleteQueuedTurn(ctx, strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID), strings.TrimSpace(queueID)); err != nil {
+	if _, err := db.DeleteFollowup(ctx, strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID), strings.TrimSpace(followupID)); err != nil {
 		return err
 	}
 	s.broadcastThreadSummary(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID))
+	return nil
+}
+
+func (s *Service) ReorderFollowups(ctx context.Context, meta *session.Meta, threadID string, req ReorderFollowupsRequest) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := requireRWX(meta); err != nil {
+		return err
+	}
+	lane := strings.TrimSpace(req.Lane)
+	if lane != threadstore.FollowupLaneQueued && lane != threadstore.FollowupLaneDraft {
+		return ErrInvalidFollowupLane
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid request")
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	expectedRevision := int64(0)
+	if req.ExpectedRevision != nil {
+		expectedRevision = *req.ExpectedRevision
+	}
+	if _, err := db.ReorderFollowups(ctx, endpointID, threadID, lane, req.OrderedFollowupIDs, expectedRevision); err != nil {
+		switch {
+		case errors.Is(err, threadstore.ErrFollowupsRevisionChanged):
+			return ErrFollowupsRevisionChanged
+		case errors.Is(err, threadstore.ErrInvalidFollowupOrder):
+			return errors.New("invalid followup order")
+		default:
+			return err
+		}
+	}
+	s.broadcastThreadSummary(endpointID, threadID)
 	return nil
 }

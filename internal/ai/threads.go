@@ -116,7 +116,7 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	if th == nil {
 		return nil, nil
 	}
-	queuedTurnCount, err := db.CountQueuedTurns(ctx, endpointID, threadID)
+	queuedTurnCount, err := db.CountFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +183,7 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	for _, t := range list {
 		threadIDs = append(threadIDs, strings.TrimSpace(t.ThreadID))
 	}
-	queuedTurnCounts, err := db.CountQueuedTurnsByThread(ctx, endpointID, threadIDs)
+	queuedTurnCounts, err := db.CountFollowupsByThreadAndLane(ctx, endpointID, threadIDs, threadstore.FollowupLaneQueued)
 	if err != nil {
 		return nil, err
 	}

@@ -41,6 +41,8 @@ export type wire_ai_send_user_turn_req = {
   };
   expected_run_id?: string;
   waiting_response?: wire_ai_waiting_prompt_response;
+  queue_after_waiting_user?: boolean;
+  source_followup_id?: string;
 };
 
 export type wire_ai_send_user_turn_resp = {
@@ -129,6 +131,33 @@ export type wire_ai_thread_rewind_req = {
 export type wire_ai_thread_rewind_resp = {
   ok: boolean;
   checkpoint_id?: string;
+};
+
+export type wire_ai_followup_attachment = {
+  name: string;
+  mime_type?: string;
+  url?: string;
+};
+
+export type wire_ai_followup_item = {
+  followup_id: string;
+  lane: string;
+  message_id: string;
+  text: string;
+  model_id?: string;
+  execution_mode?: string;
+  position: number;
+  created_at_unix_ms: number;
+  attachments?: wire_ai_followup_attachment[];
+};
+
+export type wire_ai_stop_thread_req = {
+  thread_id: string;
+};
+
+export type wire_ai_stop_thread_resp = {
+  ok: boolean;
+  recovered_followups?: wire_ai_followup_item[];
 };
 
 export type wire_ai_list_messages_req = {

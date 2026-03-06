@@ -1418,6 +1418,54 @@ a.chat-sources-cell-url:focus-visible {
   min-width: 0;
   flex: 1;
 }
+.flower-followup-leading {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.flower-followup-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 9999px;
+  border: 1px dashed color-mix(in srgb, var(--border) 76%, transparent);
+  background: color-mix(in srgb, var(--muted) 52%, transparent);
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1;
+  cursor: grab;
+}
+
+.flower-followup-drag-handle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.flower-followup-item-loaded {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 6%, var(--card)), color-mix(in srgb, var(--primary) 3%, var(--card)));
+}
+
+.flower-followup-state-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.25rem;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  padding: 0.0625rem 0.4375rem;
+  font-size: 0.625rem;
+  color: var(--primary);
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.flower-followups-drafts-panel {
+  border-color: color-mix(in srgb, var(--primary) 20%, var(--border));
+}
 
 .flower-queued-turn-position {
   display: inline-flex;
