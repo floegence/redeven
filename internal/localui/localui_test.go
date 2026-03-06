@@ -2,15 +2,19 @@ package localui
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/floegence/redeven-agent/internal/accessgate"
+	gatewaypkg "github.com/floegence/redeven-agent/internal/codeapp/gateway"
 	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven-agent/internal/session"
 )
 
 func writeTestConfig(t *testing.T) string {
@@ -30,12 +34,67 @@ func writeTestConfig(t *testing.T) string {
 	return cfgPath
 }
 
+type localUITestBackend struct{}
+
+func (localUITestBackend) ListSpaces(context.Context) ([]gatewaypkg.SpaceStatus, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (localUITestBackend) CreateSpace(context.Context, gatewaypkg.CreateSpaceRequest) (*gatewaypkg.SpaceStatus, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (localUITestBackend) UpdateSpace(context.Context, string, gatewaypkg.UpdateSpaceRequest) (*gatewaypkg.SpaceStatus, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (localUITestBackend) DeleteSpace(context.Context, string) error {
+	return errors.New("not implemented")
+}
+
+func (localUITestBackend) StartSpace(context.Context, string) (*gatewaypkg.SpaceStatus, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (localUITestBackend) StopSpace(context.Context, string) error {
+	return errors.New("not implemented")
+}
+
+func (localUITestBackend) ResolveCodeServerPort(context.Context, string) (int, error) {
+	return 0, errors.New("not implemented")
+}
+
+func newTestGateway(t *testing.T, cfgPath string) *gatewaypkg.Gateway {
+	t.Helper()
+	gw, err := gatewaypkg.New(gatewaypkg.Options{
+		Backend: localUITestBackend{},
+		DistFS: fstest.MapFS{
+			"env/index.html":  {Data: []byte("<html>env</html>")},
+			"env/favicon.svg": {Data: []byte("<svg>icon</svg>")},
+			"env/logo.png":    {Data: []byte("png")},
+		},
+		ConfigPath:         cfgPath,
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+		LocalUIAllowedOrigins: []string{
+			"http://localhost:23998",
+			"http://127.0.0.1:23998",
+			"http://[::1]:23998",
+		},
+	})
+	if err != nil {
+		t.Fatalf("gateway.New() error = %v", err)
+	}
+	return gw
+}
+
 func newTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 	t.Helper()
+	cfgPath := writeTestConfig(t)
 	return &Server{
-		configPath: writeTestConfig(t),
+		configPath: cfgPath,
 		version:    "dev",
 		accessGate: gate,
+		gw:         newTestGateway(t, cfgPath),
 		pending:    make(map[string]pendingDirect),
 	}
 }
@@ -56,7 +115,7 @@ func TestServer_handleRoot_redirectWhenUnlocked(t *testing.T) {
 	}
 }
 
-func TestServer_handleRoot_rendersAccessPageWhenLocked(t *testing.T) {
+func TestServer_handleRoot_redirectWhenLocked(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)
 
@@ -65,12 +124,33 @@ func TestServer_handleRoot_rendersAccessPageWhenLocked(t *testing.T) {
 	s.handleRoot(w, r)
 
 	res := w.Result()
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", res.StatusCode, http.StatusOK)
+	if res.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want %d", res.StatusCode, http.StatusFound)
 	}
-	body := w.Body.String()
-	if !strings.Contains(body, "Enter access password") {
-		t.Fatalf("body missing unlock title: %s", body)
+	if loc := res.Header.Get("Location"); loc != "/_redeven_proxy/env/" {
+		t.Fatalf("location = %q, want %q", loc, "/_redeven_proxy/env/")
+	}
+}
+
+func TestServer_handleGateway_allowsEnvAppShellWhenLocked(t *testing.T) {
+	gate := accessgate.New(accessgate.Options{Password: "secret"})
+	s := newTestServer(t, gate)
+
+	envReq := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/env/", nil)
+	envRes := httptest.NewRecorder()
+	s.handleGateway(envRes, envReq)
+	if envRes.Result().StatusCode != http.StatusOK {
+		t.Fatalf("env shell status = %d, want %d", envRes.Result().StatusCode, http.StatusOK)
+	}
+	if body := envRes.Body.String(); body != "<html>env</html>" {
+		t.Fatalf("env shell body = %q, want %q", body, "<html>env</html>")
+	}
+
+	apiReq := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/api/settings", nil)
+	apiRes := httptest.NewRecorder()
+	s.handleGateway(apiRes, apiReq)
+	if apiRes.Result().StatusCode != http.StatusLocked {
+		t.Fatalf("gateway api status = %d, want %d", apiRes.Result().StatusCode, http.StatusLocked)
 	}
 }
 

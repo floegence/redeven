@@ -97,6 +97,26 @@ func AllowedOriginsForPort(port int) []string {
 	}
 }
 
+func (s *Server) handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", s.handleRoot)
+	// Browsers may request these root-level assets regardless of the actual SPA base path.
+	// Keep them available to avoid noisy 404s in Local UI mode.
+	mux.HandleFunc("/favicon.ico", s.handleFavicon)
+	mux.HandleFunc("/logo.png", s.handleLogo)
+	mux.HandleFunc("/api/local/access/status", s.handleAccessStatus)
+	mux.HandleFunc("/api/local/access/unlock", s.handleAccessUnlock)
+	mux.HandleFunc("/api/local/access/logout", s.handleAccessLogout)
+	mux.HandleFunc("/api/local/runtime", s.handleRuntime)
+	mux.HandleFunc("/api/local/direct/connect_info", s.handleConnectInfo)
+	mux.HandleFunc("/api/local/environment", s.handleEnvironment)
+	mux.HandleFunc("/api/local/agent/version/latest", s.handleLatestVersion)
+	mux.HandleFunc("/_redeven_direct/ws", s.handleDirectWS)
+	// Reuse the existing gateway for Env App UI + management APIs.
+	mux.HandleFunc("/_redeven_proxy/", s.handleGateway)
+	return mux
+}
+
 func New(opts Options) (*Server, error) {
 	if opts.Agent == nil {
 		return nil, errors.New("missing Agent")
@@ -156,25 +176,8 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("listen %s: %w", addr6, err)
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", s.handleRoot)
-	// Browsers may request these root-level assets regardless of the actual SPA base path.
-	// Keep them available to avoid noisy 404s in Local UI mode.
-	mux.HandleFunc("/favicon.ico", s.handleFavicon)
-	mux.HandleFunc("/logo.png", s.handleLogo)
-	mux.HandleFunc("/api/local/access/status", s.handleAccessStatus)
-	mux.HandleFunc("/api/local/access/unlock", s.handleAccessUnlock)
-	mux.HandleFunc("/api/local/access/logout", s.handleAccessLogout)
-	mux.HandleFunc("/api/local/runtime", s.handleRuntime)
-	mux.HandleFunc("/api/local/direct/connect_info", s.handleConnectInfo)
-	mux.HandleFunc("/api/local/environment", s.handleEnvironment)
-	mux.HandleFunc("/api/local/agent/version/latest", s.handleLatestVersion)
-	mux.HandleFunc("/_redeven_direct/ws", s.handleDirectWS)
-	// Reuse the existing gateway for Env App UI + management APIs.
-	mux.HandleFunc("/_redeven_proxy/", s.handleGateway)
-
 	s.srv = &http.Server{
-		Handler:           mux,
+		Handler:           s.handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	s.ln4 = ln4
@@ -321,157 +324,30 @@ func (s *Server) requireLocalAccessHTTP(w http.ResponseWriter, r *http.Request) 
 	return false
 }
 
+func (s *Server) isPublicEnvAppRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	p := strings.TrimSpace(r.URL.Path)
+	return p == "/_redeven_proxy/env" || p == "/_redeven_proxy/env/" || strings.HasPrefix(p, "/_redeven_proxy/env/")
+}
+
 func (s *Server) handleGateway(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
 		return
 	}
-	if !s.requireLocalAccessHTTP(w, r) {
+	if s.gw == nil {
+		http.NotFound(w, r)
+		return
+	}
+	if s.accessEnabled() && !s.hasLocalAccess(r) && !s.isPublicEnvAppRequest(r) {
+		http.Error(w, "access password required", http.StatusLocked)
 		return
 	}
 	s.gw.ServeHTTP(w, r)
-}
-
-func writeHTML(w http.ResponseWriter, status int, body string) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(status)
-	_, _ = io.WriteString(w, body)
-}
-
-func localAccessPageHTML() string {
-	return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Redeven Access</title>
-    <style>
-      :root { color-scheme: dark; }
-      @media (prefers-color-scheme: light) {
-        :root { color-scheme: light; }
-      }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #0b0b0b;
-        color: #f3f4f6;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        padding: 24px;
-      }
-      @media (prefers-color-scheme: light) {
-        body { background: #f8fafc; color: #111827; }
-      }
-      .card {
-        width: min(420px, 100%);
-        border: 1px solid rgba(148, 163, 184, 0.24);
-        border-radius: 16px;
-        background: rgba(15, 23, 42, 0.82);
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
-        padding: 24px;
-      }
-      @media (prefers-color-scheme: light) {
-        .card { background: rgba(255, 255, 255, 0.94); }
-      }
-      h1 { margin: 0; font-size: 22px; }
-      p { margin: 10px 0 0; color: #cbd5e1; line-height: 1.5; }
-      @media (prefers-color-scheme: light) {
-        p { color: #475569; }
-      }
-      form { margin-top: 20px; }
-      input {
-        width: 100%;
-        box-sizing: border-box;
-        height: 44px;
-        border-radius: 10px;
-        border: 1px solid rgba(148, 163, 184, 0.28);
-        background: rgba(15, 23, 42, 0.65);
-        color: inherit;
-        padding: 0 14px;
-        font-size: 14px;
-      }
-      @media (prefers-color-scheme: light) {
-        input { background: #ffffff; }
-      }
-      button {
-        margin-top: 12px;
-        width: 100%;
-        height: 44px;
-        border: 0;
-        border-radius: 10px;
-        background: #2563eb;
-        color: white;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-      }
-      button:disabled { opacity: 0.6; cursor: wait; }
-      .status { margin-top: 12px; min-height: 20px; font-size: 13px; color: #fca5a5; white-space: pre-wrap; }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <h1>Enter access password</h1>
-      <p>This browser session is locked by the local agent. Enter the full password to continue.</p>
-      <form id="unlock_form">
-        <input id="password" type="password" autocomplete="current-password" placeholder="Password" autofocus />
-        <button id="submit_button" type="submit">Unlock</button>
-      </form>
-      <div id="status" class="status"></div>
-    </div>
-    <script>
-      const form = document.getElementById('unlock_form');
-      const passwordInput = document.getElementById('password');
-      const submitButton = document.getElementById('submit_button');
-      const statusNode = document.getElementById('status');
-
-      function setStatus(message) {
-        statusNode.textContent = String(message || '');
-      }
-
-      async function unlock(password) {
-        const resp = await fetch('/api/local/access/unlock', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          cache: 'no-store',
-          body: JSON.stringify({ password }),
-        });
-        const text = await resp.text();
-        let data = null;
-        try {
-          data = text ? JSON.parse(text) : null;
-        } catch {}
-        if (!resp.ok || data?.ok === false) {
-          const msg = String(data?.error?.message || 'Unlock failed.');
-          throw new Error(msg);
-        }
-        return data?.data || data || {};
-      }
-
-      form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const password = String(passwordInput.value || '');
-        submitButton.disabled = true;
-        setStatus('');
-        try {
-          const out = await unlock(password);
-          const token = String(out?.resume_token || '').trim();
-          const target = token
-            ? '/_redeven_proxy/env/#redeven_access_resume=' + encodeURIComponent(token)
-            : '/_redeven_proxy/env/';
-          window.location.replace(target);
-        } catch (error) {
-          setStatus(error instanceof Error ? error.message : String(error));
-          submitButton.disabled = false;
-          passwordInput.focus();
-          passwordInput.select();
-        }
-      });
-    </script>
-  </body>
-</html>`
 }
 
 func (s *Server) handleAccessStatus(w http.ResponseWriter, r *http.Request) {
@@ -549,11 +425,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !s.accessEnabled() || s.hasLocalAccess(r) {
-		http.Redirect(w, r, "/_redeven_proxy/env/", http.StatusFound)
-		return
-	}
-	writeHTML(w, http.StatusOK, localAccessPageHTML())
+	http.Redirect(w, r, "/_redeven_proxy/env/", http.StatusFound)
 }
 
 func (s *Server) handleFavicon(w http.ResponseWriter, r *http.Request) {
