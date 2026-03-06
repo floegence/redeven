@@ -2,7 +2,6 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'so
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Sidebar, SidebarContent, SidebarItem, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
-import { Menu } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
@@ -18,8 +17,6 @@ export interface GitHistoryBrowserProps {
   repoInfoLoading?: boolean;
   currentPath: string;
   selectedCommitHash?: string;
-  showSidebarToggle?: boolean;
-  onOpenSidebar?: () => void;
   class?: string;
 }
 
@@ -235,21 +232,9 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
     }
   };
 
-  const showSidebarToggle = () => Boolean(props.showSidebarToggle && props.onOpenSidebar);
 
   return (
     <div class={cn('relative h-full min-h-0 flex flex-col bg-background', props.class)}>
-      <Show when={showSidebarToggle()}>
-        <Button
-          size="xs"
-          variant="outline"
-          icon={Menu}
-          class="absolute left-3 top-3 z-10 h-7 w-7 px-0 shadow-sm bg-background/95 backdrop-blur-sm"
-          aria-label="Open commits sidebar"
-          title="Open commits sidebar"
-          onClick={props.onOpenSidebar}
-        />
-      </Show>
       <Show
         when={repoAvailable()}
         fallback={
@@ -278,7 +263,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
             <Show when={commitDetail()} fallback={<div class="flex-1 px-4 py-5 text-xs text-muted-foreground">Select a commit from the sidebar to inspect details.</div>}>
               {(detail) => (
                 <>
-                  <div class={cn('shrink-0 border-b border-border/70 px-4 py-2.5 space-y-1.5', showSidebarToggle() && 'pl-14')}>
+                  <div class="shrink-0 border-b border-border/70 px-4 py-2.5 space-y-1.5">
                     <div class="flex min-w-0 flex-wrap items-center gap-1.5">
                       <span class="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{detail().subject || '(no subject)'}</span>
                       <span class="shrink-0 rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-mono text-muted-foreground">{detail().shortHash}</span>

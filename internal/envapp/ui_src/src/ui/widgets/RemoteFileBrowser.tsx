@@ -17,6 +17,7 @@ import {
   type GitListWorkspaceChangesResponse,
   type GitRepoSummaryResponse,
   type GitResolveRepoResponse,
+  type GitWorkspaceChange,
 } from '../protocol/redeven_v1';
 import { getExtDot, isLikelyTextContent, mimeFromExtDot, previewModeByName, type PreviewMode } from '../utils/filePreview';
 import { readFileBytesOnce, normalizeRespMeta, byteReaderFromStream, type FsReadFileStreamMeta, type FsReadFileStreamRespMeta } from '../utils/fileStreamReader';
@@ -32,11 +33,18 @@ import {
   virtualPathToAbsolutePath,
 } from '../utils/askFlowerPath';
 import { InputDialog } from './InputDialog';
-import { GitHistoryBrowser } from './GitHistoryBrowser';
 import { GitWorkbench } from './GitWorkbench';
 import { GitWorkbenchSidebar } from './GitWorkbenchSidebar';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
-import { buildGitWorkbenchSubviewItems, type GitWorkbenchSubview } from '../utils/gitWorkbench';
+import {
+  branchIdentity,
+  findGitBranchByKey,
+  findWorkspaceChangeByKey,
+  pickDefaultGitBranch,
+  pickDefaultWorkspaceChange,
+  workspaceEntryKey,
+  type GitWorkbenchSubview,
+} from '../utils/gitWorkbench';
 import {
   extNoDot,
   getParentDir,
@@ -196,6 +204,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitWorkspace, setGitWorkspace] = createSignal<GitListWorkspaceChangesResponse | null>(null);
   const [gitWorkspaceLoading, setGitWorkspaceLoading] = createSignal(false);
   const [gitWorkspaceError, setGitWorkspaceError] = createSignal('');
+  const [selectedGitWorkspaceKey, setSelectedGitWorkspaceKey] = createSignal('');
   const [gitBranches, setGitBranches] = createSignal<GitListBranchesResponse | null>(null);
   const [gitBranchesLoading, setGitBranchesLoading] = createSignal(false);
   const [gitBranchesError, setGitBranchesError] = createSignal('');
@@ -416,6 +425,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitWorkspace(null);
     setGitWorkspaceLoading(false);
     setGitWorkspaceError('');
+    setSelectedGitWorkspaceKey('');
     setGitBranches(null);
     setGitBranchesLoading(false);
     setGitBranchesError('');
@@ -425,13 +435,30 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitBranchCompareError('');
   };
 
-  const gitBranchIdentity = (branch: GitBranchSummary | null | undefined): string => String(branch?.fullName || branch?.name || '').trim();
+  const selectedGitWorkspaceItem = () => findWorkspaceChangeByKey(gitWorkspace(), selectedGitWorkspaceKey());
 
-  const selectedGitBranch = () => {
-    const key = selectedGitBranchName();
-    if (!key) return null;
-    const local = gitBranches()?.local ?? [];
-    return local.find((branch) => gitBranchIdentity(branch) === key) ?? null;
+  const selectedGitBranch = () => findGitBranchByKey(gitBranches(), selectedGitBranchName());
+
+  const selectGitWorkspaceItem = (item: GitWorkspaceChange | null | undefined) => {
+    setSelectedGitWorkspaceKey(workspaceEntryKey(item));
+    if (layout.isMobile()) {
+      setGitHistorySidebarOpen(false);
+    }
+  };
+
+  const selectGitBranch = (branch: GitBranchSummary | null | undefined) => {
+    setSelectedGitBranchName(branchIdentity(branch));
+    void loadGitBranchCompare(branch);
+    if (layout.isMobile()) {
+      setGitHistorySidebarOpen(false);
+    }
+  };
+
+  const selectGitCommit = (hash: string) => {
+    setSelectedCommitHash(hash);
+    if (layout.isMobile()) {
+      setGitHistorySidebarOpen(false);
+    }
   };
 
   const loadGitRepoSummary = async () => {
@@ -463,9 +490,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const resp = await rpc.git.listWorkspaceChanges({ repoRootPath });
       if (seq !== gitWorkspaceReqSeq) return;
       setGitWorkspace(resp);
+      const currentKey = selectedGitWorkspaceKey();
+      const nextItem = findWorkspaceChangeByKey(resp, currentKey) ?? pickDefaultWorkspaceChange(resp);
+      setSelectedGitWorkspaceKey(workspaceEntryKey(nextItem));
     } catch (err) {
       if (seq !== gitWorkspaceReqSeq) return;
       setGitWorkspace(null);
+      setSelectedGitWorkspaceKey('');
       setGitWorkspaceError(err instanceof Error ? err.message : String(err ?? 'Failed to load workspace changes'));
     } finally {
       if (seq === gitWorkspaceReqSeq) setGitWorkspaceLoading(false);
@@ -509,17 +540,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (seq !== gitBranchesReqSeq) return;
       setGitBranches(resp);
       const currentKey = selectedGitBranchName();
-      const localBranches = resp.local ?? [];
-      const defaultBranch = localBranches.find((branch) => !branch.current) ?? localBranches.find((branch) => branch.current) ?? null;
-      const nextBranch = currentKey
-        ? localBranches.find((branch) => gitBranchIdentity(branch) === currentKey) ?? defaultBranch
-        : defaultBranch;
-      const nextKey = gitBranchIdentity(nextBranch);
-      setSelectedGitBranchName(nextKey);
+      const nextBranch = findGitBranchByKey(resp, currentKey) ?? pickDefaultGitBranch(resp);
+      setSelectedGitBranchName(branchIdentity(nextBranch));
       void loadGitBranchCompare(nextBranch);
     } catch (err) {
       if (seq !== gitBranchesReqSeq) return;
       setGitBranches(null);
+      setSelectedGitBranchName('');
       setGitBranchesError(err instanceof Error ? err.message : String(err ?? 'Failed to load branches'));
     } finally {
       if (seq === gitBranchesReqSeq) setGitBranchesLoading(false);
@@ -609,16 +636,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const handleGitSubviewChange = (view: GitWorkbenchSubview) => {
     setGitSubview(view);
-    if (view === 'history' && layout.isMobile()) {
-      setGitHistorySidebarOpen(true);
+    if (!layout.isMobile()) {
+      return;
     }
+    if (view === 'overview') {
+      setGitHistorySidebarOpen(false);
+      return;
+    }
+    setGitHistorySidebarOpen(true);
   };
 
-  const showPageSidebar = () => pageMode() === 'git';
-
-  const refreshGitSidebar = async () => {
-    await refreshGitWorkbench();
-  };
+  const showPageSidebar = () => pageMode() === 'git' && gitSubview() !== 'overview';
 
   createEffect(() => {
     floe.persist.debouncedSave(PAGE_SIDEBAR_WIDTH_STORAGE_KEY, gitHistorySidebarWidth());
@@ -1710,16 +1738,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           <div class="h-full min-h-0 flex overflow-hidden relative">
             <Show when={showPageSidebar()}>
               <GitWorkbenchSidebar
-                mode={pageMode()}
-                onModeChange={handlePageModeChange}
                 subview={gitSubview()}
-                subviewItems={buildGitWorkbenchSubviewItems({
-                  repoSummary: gitRepoSummary(),
-                  workspace: gitWorkspace(),
-                  branchesCount: (gitBranches()?.local.length ?? 0) + (gitBranches()?.remote.length ?? 0),
-                })}
-                onSubviewChange={handleGitSubviewChange}
-                currentPath={currentBrowserPath()}
                 width={gitHistorySidebarWidth()}
                 open={pageSidebarOpen()}
                 resizable
@@ -1728,19 +1747,24 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                 repoInfoLoading={repoInfoLoading()}
                 repoInfoError={repoInfoError()}
                 repoAvailable={repoHistoryAvailable()}
-                repoSummary={gitRepoSummary()}
-                repoSummaryLoading={gitRepoSummaryLoading()}
                 workspace={gitWorkspace()}
+                workspaceLoading={gitWorkspaceLoading()}
+                workspaceError={gitWorkspaceError()}
+                selectedWorkspaceKey={selectedGitWorkspaceKey()}
+                onSelectWorkspaceItem={selectGitWorkspaceItem}
                 branches={gitBranches()}
+                branchesLoading={gitBranchesLoading()}
+                branchesError={gitBranchesError()}
+                selectedBranchKey={selectedGitBranchName()}
+                onSelectBranch={selectGitBranch}
                 commits={gitCommits()}
                 listLoading={gitListLoading()}
                 listLoadingMore={gitListLoadingMore()}
                 listError={gitListError()}
                 hasMore={gitHasMore()}
                 selectedCommitHash={selectedCommitHash()}
-                onSelectCommit={setSelectedCommitHash}
+                onSelectCommit={selectGitCommit}
                 onLoadMore={() => void loadGitCommits(false)}
-                onRefresh={() => { void refreshGitSidebar(); }}
               />
             </Show>
 
@@ -1750,6 +1774,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                 fallback={
                   <GitWorkbench
                     class="h-full"
+                    mode={pageMode()}
+                    onModeChange={handlePageModeChange}
                     currentPath={currentBrowserPath()}
                     repoInfo={repoInfo()}
                     repoInfoLoading={repoInfoLoading()}
@@ -1761,15 +1787,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                     workspace={gitWorkspace()}
                     workspaceLoading={gitWorkspaceLoading()}
                     workspaceError={gitWorkspaceError()}
+                    selectedWorkspaceItem={selectedGitWorkspaceItem()}
                     branches={gitBranches()}
                     branchesLoading={gitBranchesLoading()}
                     branchesError={gitBranchesError()}
                     selectedBranch={selectedGitBranch()}
-                    selectedBranchName={selectedGitBranchName()}
-                    onSelectBranch={(branch) => {
-                      setSelectedGitBranchName(gitBranchIdentity(branch));
-                      void loadGitBranchCompare(branch);
-                    }}
                     compare={gitBranchCompare()}
                     compareLoading={gitBranchCompareLoading()}
                     compareError={gitBranchCompareError()}

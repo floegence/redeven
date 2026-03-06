@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 
+import { LayoutProvider } from '@floegence/floe-webapp-core';
+import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { redevenV1Contract } from '../protocol/redeven_v1';
 import { GitWorkbench } from './GitWorkbench';
 
 describe('GitWorkbench interactions', () => {
@@ -26,18 +29,25 @@ describe('GitWorkbench interactions', () => {
     document.body.innerHTML = '';
   });
 
-  it('keeps refresh and subview controls interactive while rendering overview state', () => {
+  it('keeps global git controls interactive and exposes the mobile selector toggle for detail views', () => {
     let refreshCount = 0;
     let openSidebarCount = 0;
     let nextSubview = '';
+    let nextMode = '';
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     const dispose = render(() => (
-      <div class="h-[640px]">
-        <GitWorkbench
-          currentPath="/workspace/repo"
-          subview="overview"
+      <LayoutProvider>
+        <ProtocolProvider contract={redevenV1Contract}>
+          <div class="h-[640px]">
+            <GitWorkbench
+          mode="git"
+          onModeChange={(value) => {
+            nextMode = value;
+          }}
+          currentPath="/workspace/repo/src"
+          subview="branches"
           onSubviewChange={(value) => {
             nextSubview = value;
           }}
@@ -45,6 +55,8 @@ describe('GitWorkbench interactions', () => {
             repoRootPath: '/workspace/repo',
             headRef: 'main',
             headCommit: 'abc1234',
+            aheadCount: 2,
+            behindCount: 1,
             workspaceSummary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
           }}
           workspace={{
@@ -60,10 +72,11 @@ describe('GitWorkbench interactions', () => {
             currentRef: 'main',
             local: [
               { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
-              { name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local' },
+              { name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local', authorTimeMs: Date.now() },
             ],
             remote: [],
           }}
+          selectedBranch={{ name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local', authorTimeMs: Date.now() }}
           compare={{
             repoRootPath: '/workspace/repo',
             baseRef: 'main',
@@ -81,8 +94,10 @@ describe('GitWorkbench interactions', () => {
           onRefresh={() => {
             refreshCount += 1;
           }}
-        />
-      </div>
+            />
+          </div>
+        </ProtocolProvider>
+      </LayoutProvider>
     ), host);
 
     try {
@@ -90,16 +105,21 @@ describe('GitWorkbench interactions', () => {
       expect(refreshButton).toBeTruthy();
       refreshButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-      const subviewButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Branches (2)'));
+      const subviewButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('History'));
       expect(subviewButton).toBeTruthy();
       subviewButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      const filesModeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Files');
+      expect(filesModeButton).toBeTruthy();
+      filesModeButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
       const openSidebarButton = host.querySelector('button[aria-label="Open Git sidebar"]');
       expect(openSidebarButton).toBeTruthy();
       openSidebarButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
       expect(refreshCount).toBe(1);
-      expect(nextSubview).toBe('branches');
+      expect(nextSubview).toBe('history');
+      expect(nextMode).toBe('files');
       expect(openSidebarCount).toBe(1);
     } finally {
       dispose();

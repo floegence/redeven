@@ -1,4 +1,14 @@
-import type { GitBranchSummary, GitCommitFileSummary, GitGetBranchCompareResponse, GitListWorkspaceChangesResponse, GitRepoSummaryResponse, GitWorkspaceChange, GitWorkspaceSection, GitWorkspaceSummary } from '../protocol/redeven_v1';
+import type {
+  GitBranchSummary,
+  GitCommitFileSummary,
+  GitGetBranchCompareResponse,
+  GitListBranchesResponse,
+  GitListWorkspaceChangesResponse,
+  GitRepoSummaryResponse,
+  GitWorkspaceChange,
+  GitWorkspaceSection,
+  GitWorkspaceSummary,
+} from '../protocol/redeven_v1';
 
 export type GitWorkbenchSubview = 'overview' | 'changes' | 'branches' | 'history';
 
@@ -7,6 +17,8 @@ export type GitWorkbenchSubviewItem = {
   label: string;
   count?: number;
 };
+
+export const WORKSPACE_SECTIONS: GitWorkspaceSection[] = ['staged', 'unstaged', 'untracked', 'conflicted'];
 
 export function summarizeWorkspaceCount(summary: GitWorkspaceSummary | null | undefined): number {
   return Number(summary?.stagedCount ?? 0)
@@ -27,6 +39,28 @@ export function buildGitWorkbenchSubviewItems(params: {
     { id: 'branches', label: 'Branches', count: params.branchesCount || undefined },
     { id: 'history', label: 'History' },
   ];
+}
+
+export function repoDisplayName(repoRootPath: string | null | undefined): string {
+  const pathValue = String(repoRootPath ?? '').trim();
+  if (!pathValue || pathValue === '/') return 'Repository';
+  const parts = pathValue.split('/').filter(Boolean);
+  return parts[parts.length - 1] || 'Repository';
+}
+
+export function workspaceSectionLabel(section: GitWorkspaceSection): string {
+  switch (section) {
+    case 'staged':
+      return 'Staged';
+    case 'unstaged':
+      return 'Unstaged';
+    case 'untracked':
+      return 'Untracked';
+    case 'conflicted':
+      return 'Conflicted';
+    default:
+      return section;
+  }
 }
 
 export function workspaceSectionCount(summary: GitWorkspaceSummary | null | undefined, section: GitWorkspaceSection): number {
@@ -63,6 +97,57 @@ export function workspaceSectionItems(
   }
 }
 
+export function workspaceEntryKey(item: GitWorkspaceChange | null | undefined): string {
+  if (!item) return '';
+  return `${item.section || ''}:${item.patchPath || item.path || item.newPath || item.oldPath || ''}`;
+}
+
+export function pickDefaultWorkspaceChange(workspace: GitListWorkspaceChangesResponse | null | undefined): GitWorkspaceChange | null {
+  for (const section of WORKSPACE_SECTIONS) {
+    const item = workspaceSectionItems(workspace, section)[0];
+    if (item) return item;
+  }
+  return null;
+}
+
+export function findWorkspaceChangeByKey(
+  workspace: GitListWorkspaceChangesResponse | null | undefined,
+  key: string | null | undefined,
+): GitWorkspaceChange | null {
+  const wanted = String(key ?? '').trim();
+  if (!wanted) return null;
+  for (const section of WORKSPACE_SECTIONS) {
+    const item = workspaceSectionItems(workspace, section).find((entry) => workspaceEntryKey(entry) === wanted);
+    if (item) return item;
+  }
+  return null;
+}
+
+export function branchIdentity(branch: GitBranchSummary | null | undefined): string {
+  return String(branch?.fullName || branch?.name || '').trim();
+}
+
+export function allGitBranches(branches: GitListBranchesResponse | null | undefined): GitBranchSummary[] {
+  return [...(branches?.local ?? []), ...(branches?.remote ?? [])];
+}
+
+export function findGitBranchByKey(
+  branches: GitListBranchesResponse | null | undefined,
+  key: string | null | undefined,
+): GitBranchSummary | null {
+  const wanted = String(key ?? '').trim();
+  if (!wanted) return null;
+  return allGitBranches(branches).find((branch) => branchIdentity(branch) === wanted) ?? null;
+}
+
+export function pickDefaultGitBranch(branches: GitListBranchesResponse | null | undefined): GitBranchSummary | null {
+  const local = branches?.local ?? [];
+  return local.find((branch) => !branch.current)
+    ?? local.find((branch) => branch.current)
+    ?? (branches?.remote ?? [])[0]
+    ?? null;
+}
+
 export function branchDisplayName(branch: GitBranchSummary | null | undefined): string {
   return String(branch?.name ?? '').trim() || '(unknown branch)';
 }
@@ -71,12 +156,13 @@ export function branchStatusSummary(branch: GitBranchSummary | null | undefined)
   if (!branch) return 'No branch selected';
   const parts: string[] = [];
   if (branch.current) parts.push('Current');
+  if (branch.kind === 'remote') parts.push('Remote');
   if (branch.upstreamRef) parts.push(`Upstream ${branch.upstreamRef}`);
   if (branch.upstreamGone) parts.push('Upstream gone');
   if ((branch.aheadCount ?? 0) > 0 || (branch.behindCount ?? 0) > 0) {
     parts.push(`↑${branch.aheadCount ?? 0} ↓${branch.behindCount ?? 0}`);
   }
-  if (branch.worktreePath) parts.push(`Worktree ${branch.worktreePath}`);
+  if (branch.worktreePath) parts.push('Linked worktree');
   return parts.join(' · ') || 'No extra status';
 }
 
