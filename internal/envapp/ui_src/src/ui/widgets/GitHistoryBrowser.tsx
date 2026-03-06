@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
+import { Sidebar, SidebarContent, SidebarItem, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitCommitSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
@@ -9,6 +10,8 @@ import { readGitPatchTextOnce } from '../utils/gitPatchStreamReader';
 
 const COMMIT_PAGE_SIZE = 50;
 const PATCH_MAX_BYTES = 2 * 1024 * 1024;
+const COMMIT_SIDEBAR_WIDTH = 320;
+const FILES_SIDEBAR_WIDTH = 280;
 
 export interface GitHistoryBrowserProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -46,6 +49,26 @@ function pickDefaultFile(files: GitCommitFileSummary[]): GitCommitFileSummary | 
 function selectedFileIdentity(file: GitCommitFileSummary | null | undefined): string {
   if (!file) return '';
   return String(file.patchPath || file.path || file.newPath || file.oldPath || '').trim();
+}
+
+function fileDisplayPath(file: GitCommitFileSummary | null | undefined): string {
+  if (!file) return '(unknown path)';
+  return String(file.path || file.newPath || file.oldPath || '').trim() || '(unknown path)';
+}
+
+function fileSecondaryPath(file: GitCommitFileSummary | null | undefined): string {
+  if (!file) return '';
+  if (file.changeType === 'renamed' && file.oldPath && file.newPath) {
+    return `${file.oldPath} → ${file.newPath}`;
+  }
+  if (file.changeType === 'copied' && file.oldPath && file.newPath) {
+    return `${file.oldPath} → ${file.newPath}`;
+  }
+  return fileDisplayPath(file);
+}
+
+function fileMetricsText(file: GitCommitFileSummary | null | undefined): string {
+  return `+${file?.additions ?? 0} / −${file?.deletions ?? 0}`;
 }
 
 export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
@@ -297,11 +320,11 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   };
 
   return (
-    <div class={cn('h-full min-h-0 flex flex-col', props.class)}>
+    <div class={cn('h-full min-h-0 flex flex-col bg-background', props.class)}>
       <Show
         when={repoAvailable()}
         fallback={
-          <div class="h-full flex items-center justify-center rounded-lg border border-dashed border-border/70 bg-muted/20 px-6 text-center">
+          <div class="h-full flex items-center justify-center border border-dashed border-border/70 bg-muted/15 px-6 text-center">
             <div class="max-w-md space-y-2">
               <div class="text-sm font-medium text-foreground">Git history is unavailable</div>
               <div class="text-xs text-muted-foreground">
@@ -313,208 +336,254 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
           </div>
         }
       >
-        <div class="flex items-center justify-between gap-3 px-3 py-2 border-b border-border/70 bg-background/80">
-          <div class="min-w-0 flex items-center gap-2 text-xs text-muted-foreground">
-            <span class="font-medium text-foreground truncate">{props.repoInfo?.repoRootPath}</span>
-            <Show when={props.repoInfo?.headRef}>
-              <span class="rounded-full border border-border/70 px-2 py-0.5">{props.repoInfo?.headRef}</span>
-            </Show>
-            <Show when={props.repoInfo?.headCommit}>
-              <span class="rounded-full border border-border/70 px-2 py-0.5 font-mono">{String(props.repoInfo?.headCommit ?? '').slice(0, 7)}</span>
-            </Show>
-            <Show when={props.repoInfo?.dirty}>
-              <span class="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-amber-700 dark:text-amber-300">Dirty</span>
-            </Show>
-          </div>
-          <Button size="xs" variant="outline" onClick={() => void handleRefresh()} disabled={listLoading() || detailLoading() || patchLoading()}>
-            Refresh
-          </Button>
-        </div>
-
-        <div class="flex-1 min-h-0 grid grid-cols-[320px_minmax(0,1fr)] gap-3 p-3 overflow-hidden">
-          <div class="min-h-0 rounded-lg border border-border/70 bg-background/40 flex flex-col overflow-hidden">
-            <div class="px-3 py-2 border-b border-border/70 flex items-center justify-between gap-2">
-              <div>
-                <div class="text-sm font-medium text-foreground">Commits</div>
-                <div class="text-[11px] text-muted-foreground">Current path: {props.currentPath || '/'}</div>
+        <>
+          <div class="shrink-0 border-b border-border/70 px-4 py-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 space-y-1.5">
+                <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span class="font-medium text-foreground truncate">{props.repoInfo?.repoRootPath}</span>
+                  <Show when={props.repoInfo?.headRef}>
+                    <span class="rounded-full border border-border/70 px-2 py-0.5">{props.repoInfo?.headRef}</span>
+                  </Show>
+                  <Show when={props.repoInfo?.headCommit}>
+                    <span class="rounded-full border border-border/70 px-2 py-0.5 font-mono">{String(props.repoInfo?.headCommit ?? '').slice(0, 7)}</span>
+                  </Show>
+                  <Show when={props.repoInfo?.dirty}>
+                    <span class="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-amber-700 dark:text-amber-300">Dirty</span>
+                  </Show>
+                </div>
+                <div class="text-[11px] text-muted-foreground truncate">Current path: {props.currentPath || '/'}</div>
               </div>
-              <div class="text-[11px] text-muted-foreground">{commits().length}</div>
+              <Button size="xs" variant="outline" onClick={() => void handleRefresh()} disabled={listLoading() || detailLoading() || patchLoading()}>
+                Refresh
+              </Button>
             </div>
-            <div class="flex-1 min-h-0 overflow-auto px-2 py-2 space-y-2">
+          </div>
+
+          <div class="flex-1 min-h-0 flex overflow-hidden">
+            <Sidebar width={COMMIT_SIDEBAR_WIDTH} class="h-full">
+              <SidebarContent class="h-full min-h-0 flex flex-col">
+                <div class="px-1 pb-1 text-[11px] text-muted-foreground">
+                  Browse repository history with commit navigation in the standard sidebar.
+                </div>
+                <SidebarSection
+                  title="Commits"
+                  actions={<span class="text-[11px] text-muted-foreground/80">{commits().length}</span>}
+                  class="min-h-0 flex-1"
+                >
+                  <div class="h-full min-h-0 flex flex-col">
+                    <Show
+                      when={!listLoading()}
+                      fallback={
+                        <div class="px-2.5 py-3 text-xs text-muted-foreground flex items-center gap-2">
+                          <SnakeLoader size="sm" />
+                          <span>Loading commits...</span>
+                        </div>
+                      }
+                    >
+                      <Show when={!listError()} fallback={<div class="px-2.5 py-3 text-xs text-error break-words">{listError()}</div>}>
+                        <Show when={commits().length > 0} fallback={<div class="px-2.5 py-3 text-xs text-muted-foreground">This repository has no commits yet.</div>}>
+                          <div class="h-full min-h-0 overflow-auto">
+                            <SidebarItemList>
+                              <For each={commits()}>
+                                {(commit) => (
+                                  <SidebarItem
+                                    active={selectedCommitHash() === commit.hash}
+                                    class="items-start py-2"
+                                    icon={<span class="mt-1 inline-block size-2 rounded-full bg-current" />}
+                                    onClick={() => setSelectedCommitHash(commit.hash)}
+                                  >
+                                    <div class="min-w-0 flex-1">
+                                      <div class="flex items-start justify-between gap-2">
+                                        <span class="min-w-0 flex-1 truncate text-[12px] leading-5 text-current">{commit.subject || '(no subject)'}</span>
+                                        <span class="shrink-0 text-[10px] text-muted-foreground/80">{formatRelativeTime(commit.authorTimeMs)}</span>
+                                      </div>
+                                      <div class="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground/80">
+                                        <span class="font-mono">{commit.shortHash}</span>
+                                        <span class="truncate">{commit.authorName || '-'}</span>
+                                      </div>
+                                      <Show when={commit.bodyPreview}>
+                                        <div class="mt-1 line-clamp-2 text-[10px] leading-4 text-muted-foreground/80">{commit.bodyPreview}</div>
+                                      </Show>
+                                    </div>
+                                  </SidebarItem>
+                                )}
+                              </For>
+                            </SidebarItemList>
+                          </div>
+                        </Show>
+                      </Show>
+                    </Show>
+                  </div>
+                </SidebarSection>
+
+                <Show when={hasMore()}>
+                  <div class="pt-1">
+                    <Button size="sm" variant="outline" class="w-full" onClick={() => void loadCommits(false)} loading={listLoadingMore()} disabled={listLoadingMore()}>
+                      Load More
+                    </Button>
+                  </div>
+                </Show>
+              </SidebarContent>
+            </Sidebar>
+
+            <div class="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
               <Show
-                when={!listLoading()}
+                when={!detailLoading()}
                 fallback={
-                  <div class="px-2 py-4 text-xs text-muted-foreground flex items-center gap-2">
+                  <div class="flex-1 flex items-center justify-center px-4 text-xs text-muted-foreground gap-2">
                     <SnakeLoader size="sm" />
-                    <span>Loading commits...</span>
+                    <span>Loading commit details...</span>
                   </div>
                 }
               >
-                <Show when={!listError()} fallback={<div class="px-2 py-4 text-xs text-error break-words">{listError()}</div>}>
-                  <Show when={commits().length > 0} fallback={<div class="px-2 py-4 text-xs text-muted-foreground">This repository has no commits yet.</div>}>
-                    <For each={commits()}>
-                      {(commit) => (
-                        <button
-                          type="button"
-                          class={cn(
-                            'w-full text-left rounded-lg border px-3 py-2 transition-colors',
-                            selectedCommitHash() === commit.hash
-                              ? 'border-primary/60 bg-primary/8'
-                              : 'border-border/70 bg-background hover:bg-muted/40',
-                          )}
-                          onClick={() => setSelectedCommitHash(commit.hash)}
-                        >
-                          <div class="flex items-start justify-between gap-3">
-                            <div class="min-w-0">
-                              <div class="text-sm font-medium text-foreground truncate">{commit.subject || '(no subject)'}</div>
-                              <div class="mt-1 text-[11px] text-muted-foreground font-mono">{commit.shortHash}</div>
-                            </div>
-                            <div class="shrink-0 text-[11px] text-muted-foreground">{formatRelativeTime(commit.authorTimeMs)}</div>
+                <Show when={!detailError()} fallback={<div class="flex-1 px-4 py-5 text-xs text-error break-words">{detailError()}</div>}>
+                  <Show when={commitDetail()} fallback={<div class="flex-1 px-4 py-5 text-xs text-muted-foreground">Select a commit from the sidebar to inspect details.</div>}>
+                    {(detail) => (
+                      <>
+                        <div class="shrink-0 border-b border-border/70 px-4 py-3 space-y-2.5">
+                          <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-sm font-medium text-foreground">{detail().subject || '(no subject)'}</span>
+                            <span class="rounded-full border border-border/70 px-2 py-0.5 text-[11px] font-mono text-muted-foreground">{detail().shortHash}</span>
                           </div>
-                          <Show when={commit.bodyPreview}>
-                            <div class="mt-2 text-[11px] text-muted-foreground line-clamp-2">{commit.bodyPreview}</div>
+                          <div class="text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span>{detail().authorName || '-'}</span>
+                            <span>{formatDetailTime(detail().authorTimeMs)}</span>
+                            <Show when={detail().parents.length > 0}>
+                              <span class="font-mono">Parents: {detail().parents.map((item) => item.slice(0, 7)).join(', ')}</span>
+                            </Show>
+                          </div>
+                          <Show when={detail().body}>
+                            <pre class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-[12px] leading-5 whitespace-pre-wrap break-words text-foreground overflow-auto">{detail().body}</pre>
                           </Show>
-                          <div class="mt-2 text-[11px] text-muted-foreground truncate">{commit.authorName || '-'}</div>
-                        </button>
-                      )}
-                    </For>
-                    <Show when={hasMore()}>
-                      <div class="pt-2">
-                        <Button size="sm" variant="outline" class="w-full" onClick={() => void loadCommits(false)} loading={listLoadingMore()} disabled={listLoadingMore()}>
-                          Load More
-                        </Button>
-                      </div>
-                    </Show>
+                        </div>
+
+                        <div class="flex-1 min-h-0 flex overflow-hidden">
+                          <Sidebar width={FILES_SIDEBAR_WIDTH} class="h-full">
+                            <SidebarContent class="h-full min-h-0 flex flex-col">
+                              <SidebarSection
+                                title="Changed Files"
+                                actions={<span class="text-[11px] text-muted-foreground/80">{commitFiles().length}</span>}
+                                class="min-h-0 flex-1"
+                              >
+                                <Show when={commitFiles().length > 0} fallback={<div class="px-2.5 py-3 text-xs text-muted-foreground">No changed files in this commit.</div>}>
+                                  <div class="h-full min-h-0 overflow-auto">
+                                    <SidebarItemList>
+                                      <For each={commitFiles()}>
+                                        {(file) => (
+                                          <SidebarItem
+                                            active={selectedFileKey() === selectedFileIdentity(file)}
+                                            class="items-start py-2"
+                                            icon={<span class={cn('mt-1 inline-block size-2 rounded-full', gitChangeDotClass(file.changeType))} />}
+                                            onClick={() => {
+                                              setSelectedFileKey(selectedFileIdentity(file));
+                                              setPatchExpanded(false);
+                                            }}
+                                          >
+                                            <div class="min-w-0 flex-1">
+                                              <div class="flex items-start justify-between gap-2">
+                                                <span class="min-w-0 flex-1 truncate text-[12px] leading-5 text-current">{gitFileDisplayName(fileDisplayPath(file))}</span>
+                                                <span class="shrink-0 text-[10px] text-muted-foreground/80">{fileMetricsText(file)}</span>
+                                              </div>
+                                              <div class="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground/80">
+                                                <span class={cn('chat-tool-apply-patch-change', gitChangeClass(file.changeType))}>{gitChangeLabel(file.changeType)}</span>
+                                                <Show when={file.isBinary}>
+                                                  <span>Binary</span>
+                                                </Show>
+                                              </div>
+                                              <div class="mt-1 truncate text-[10px] leading-4 text-muted-foreground/80" title={fileSecondaryPath(file)}>
+                                                {fileSecondaryPath(file)}
+                                              </div>
+                                            </div>
+                                          </SidebarItem>
+                                        )}
+                                      </For>
+                                    </SidebarItemList>
+                                  </div>
+                                </Show>
+                              </SidebarSection>
+                            </SidebarContent>
+                          </Sidebar>
+
+                          <div class="flex-1 min-w-0 min-h-0 overflow-auto px-4 py-3">
+                            <Show when={selectedFile()} fallback={<div class="chat-tool-apply-patch-detail-empty">Select a changed file to inspect its patch.</div>}>
+                              {(fileAccessor) => {
+                                const file = fileAccessor();
+                                return (
+                                  <div class="chat-tool-apply-patch-detail-panel">
+                                    <div class="chat-tool-apply-patch-detail-head">
+                                      <div class="chat-tool-apply-patch-detail-main">
+                                        <span class={cn('chat-tool-apply-patch-change', gitChangeClass(file.changeType))}>
+                                          {gitChangeLabel(file.changeType)}
+                                        </span>
+                                        <span class="chat-tool-apply-patch-detail-path" title={fileDisplayPath(file)}>
+                                          {fileDisplayPath(file)}
+                                        </span>
+                                        <span class="chat-tool-apply-patch-detail-metrics">
+                                          {fileMetricsText(file)}
+                                          <Show when={file.isBinary}>
+                                            <> · Binary</>
+                                          </Show>
+                                        </span>
+                                      </div>
+                                      <Button size="xs" variant="ghost" onClick={() => void handleCopyPatch()} disabled={!patchText() || patchLoading() || !!patchError()}>
+                                        {copied() ? 'Copied' : 'Copy Patch'}
+                                      </Button>
+                                    </div>
+
+                                    <Show when={(file.changeType === 'renamed' || file.changeType === 'copied') && file.oldPath && file.newPath}>
+                                      <div class="chat-tool-apply-patch-rename-row">
+                                        <span class="chat-tool-apply-patch-rename-path" title={file.oldPath}>{file.oldPath}</span>
+                                        <span class="chat-tool-apply-patch-rename-arrow">→</span>
+                                        <span class="chat-tool-apply-patch-rename-path" title={file.newPath}>{file.newPath}</span>
+                                      </div>
+                                    </Show>
+
+                                    <Show when={!file.isBinary} fallback={<div class="chat-tool-apply-patch-detail-empty">Binary file changed. Inline text diff is not available.</div>}>
+                                      <Show when={!patchLoading()} fallback={<div class="chat-tool-apply-patch-detail-empty flex items-center gap-2"><SnakeLoader size="sm" /><span>Loading patch...</span></div>}>
+                                        <Show when={!patchError()} fallback={<div class="chat-tool-apply-patch-error">{patchError()}</div>}>
+                                          <Show when={visiblePatchLines().length > 0} fallback={<div class="chat-tool-apply-patch-detail-empty">No inline diff lines available for this file.</div>}>
+                                            <div class="chat-tool-apply-patch-detail-code">
+                                              <For each={visiblePatchLines()}>
+                                                {(line) => (
+                                                  <div class={cn('chat-tool-apply-patch-detail-line', gitPatchRenderedLineClass(line))}>
+                                                    <span class="chat-tool-apply-patch-detail-line-num">{formatGitPatchLineNumber(line.oldLine)}</span>
+                                                    <span class="chat-tool-apply-patch-detail-line-num">{formatGitPatchLineNumber(line.newLine)}</span>
+                                                    <span class={cn('chat-tool-apply-patch-detail-line-text', gitPatchPreviewLineClass(line.text))}>{line.text}</span>
+                                                  </div>
+                                                )}
+                                              </For>
+                                            </div>
+                                          </Show>
+
+                                          <Show when={patchTruncated()}>
+                                            <div class="mt-2 text-[11px] text-muted-foreground">Patch preview is truncated.</div>
+                                          </Show>
+
+                                          <Show when={hasMorePatchLines()}>
+                                            <div class="chat-tool-apply-patch-toggle-row">
+                                              <button type="button" class="chat-tool-apply-patch-toggle-btn" onClick={() => setPatchExpanded((value) => !value)}>
+                                                {patchExpanded() ? 'Show less' : `Show all ${renderedPatchLines().length} lines`}
+                                              </button>
+                                            </div>
+                                          </Show>
+                                        </Show>
+                                      </Show>
+                                    </Show>
+                                  </div>
+                                );
+                              }}
+                            </Show>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </Show>
                 </Show>
               </Show>
             </div>
           </div>
-
-          <div class="min-h-0 rounded-lg border border-border/70 bg-background/40 flex flex-col overflow-hidden">
-            <Show when={!detailLoading()} fallback={<div class="px-4 py-5 text-xs text-muted-foreground flex items-center gap-2"><SnakeLoader size="sm" /><span>Loading commit details...</span></div>}>
-              <Show when={!detailError()} fallback={<div class="px-4 py-5 text-xs text-error break-words">{detailError()}</div>}>
-                <Show when={commitDetail()} fallback={<div class="px-4 py-5 text-xs text-muted-foreground">Select a commit to inspect details.</div>}>
-                  {(detail) => (
-                    <>
-                      <div class="px-4 py-3 border-b border-border/70 space-y-2">
-                        <div class="flex flex-wrap items-center gap-2">
-                          <span class="text-sm font-medium text-foreground">{detail().subject || '(no subject)'}</span>
-                          <span class="rounded-full border border-border/70 px-2 py-0.5 text-[11px] font-mono text-muted-foreground">{detail().shortHash}</span>
-                        </div>
-                        <div class="text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <span>{detail().authorName || '-'}</span>
-                          <span>{formatDetailTime(detail().authorTimeMs)}</span>
-                          <Show when={detail().parents.length > 0}>
-                            <span class="font-mono">Parents: {detail().parents.map((item) => item.slice(0, 7)).join(', ')}</span>
-                          </Show>
-                        </div>
-                        <Show when={detail().body}>
-                          <pre class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-[12px] leading-5 whitespace-pre-wrap break-words text-foreground overflow-auto">{detail().body}</pre>
-                        </Show>
-                      </div>
-
-                      <div class="px-4 py-3 border-b border-border/70 flex items-center gap-2 overflow-x-auto">
-                        <For each={commitFiles()}>
-                          {(file) => (
-                            <button
-                              type="button"
-                              class={cn(
-                                'shrink-0 flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors',
-                                selectedFileKey() === selectedFileIdentity(file)
-                                  ? 'border-primary/60 bg-primary/8'
-                                  : 'border-border/70 bg-background hover:bg-muted/40',
-                              )}
-                              onClick={() => {
-                                setSelectedFileKey(selectedFileIdentity(file));
-                                setPatchExpanded(false);
-                              }}
-                              title={file.path || file.newPath || file.oldPath || ''}
-                            >
-                              <span class={cn('chat-tool-apply-patch-tab-dot', gitChangeDotClass(file.changeType))} />
-                              <span>{gitFileDisplayName(file.path || file.newPath || file.oldPath)}</span>
-                            </button>
-                          )}
-                        </For>
-                      </div>
-
-                      <div class="flex-1 min-h-0 overflow-auto px-4 py-3">
-                        <Show when={selectedFile()} fallback={<div class="chat-tool-apply-patch-detail-empty">No changed files in this commit.</div>}>
-                          {(fileAccessor) => {
-                            const file = fileAccessor();
-                            return (
-                              <div class="chat-tool-apply-patch-detail-panel">
-                                <div class="chat-tool-apply-patch-detail-head">
-                                  <div class="chat-tool-apply-patch-detail-main">
-                                    <span class={cn('chat-tool-apply-patch-change', gitChangeClass(file.changeType))}>
-                                      {gitChangeLabel(file.changeType)}
-                                    </span>
-                                    <span class="chat-tool-apply-patch-detail-path" title={file.path || file.newPath || file.oldPath}>
-                                      {file.path || file.newPath || file.oldPath || '(unknown path)'}
-                                    </span>
-                                    <span class="chat-tool-apply-patch-detail-metrics">
-                                      +{file.additions ?? 0} / −{file.deletions ?? 0}
-                                      <Show when={file.isBinary}>
-                                        <> · Binary</>
-                                      </Show>
-                                    </span>
-                                  </div>
-                                  <Button size="xs" variant="ghost" onClick={() => void handleCopyPatch()} disabled={!patchText() || patchLoading() || !!patchError()}>
-                                    {copied() ? 'Copied' : 'Copy Patch'}
-                                  </Button>
-                                </div>
-
-                                <Show when={file.changeType === 'renamed' && file.oldPath && file.newPath}>
-                                  <div class="chat-tool-apply-patch-rename-row">
-                                    <span class="chat-tool-apply-patch-rename-path" title={file.oldPath}>{file.oldPath}</span>
-                                    <span class="chat-tool-apply-patch-rename-arrow">→</span>
-                                    <span class="chat-tool-apply-patch-rename-path" title={file.newPath}>{file.newPath}</span>
-                                  </div>
-                                </Show>
-
-                                <Show when={!file.isBinary} fallback={<div class="chat-tool-apply-patch-detail-empty">Binary file changed. Inline text diff is not available.</div>}>
-                                  <Show when={!patchLoading()} fallback={<div class="chat-tool-apply-patch-detail-empty flex items-center gap-2"><SnakeLoader size="sm" /><span>Loading patch...</span></div>}>
-                                    <Show when={!patchError()} fallback={<div class="chat-tool-apply-patch-error">{patchError()}</div>}>
-                                      <Show when={visiblePatchLines().length > 0} fallback={<div class="chat-tool-apply-patch-detail-empty">No inline diff lines available for this file.</div>}>
-                                        <div class="chat-tool-apply-patch-detail-code">
-                                          <For each={visiblePatchLines()}>
-                                            {(line) => (
-                                              <div class={cn('chat-tool-apply-patch-detail-line', gitPatchRenderedLineClass(line))}>
-                                                <span class="chat-tool-apply-patch-detail-line-num">{formatGitPatchLineNumber(line.oldLine)}</span>
-                                                <span class="chat-tool-apply-patch-detail-line-num">{formatGitPatchLineNumber(line.newLine)}</span>
-                                                <span class={cn('chat-tool-apply-patch-detail-line-text', gitPatchPreviewLineClass(line.text))}>{line.text}</span>
-                                              </div>
-                                            )}
-                                          </For>
-                                        </div>
-                                      </Show>
-
-                                      <Show when={patchTruncated()}>
-                                        <div class="mt-2 text-[11px] text-muted-foreground">Patch preview is truncated.</div>
-                                      </Show>
-
-                                      <Show when={hasMorePatchLines()}>
-                                        <div class="chat-tool-apply-patch-toggle-row">
-                                          <button type="button" class="chat-tool-apply-patch-toggle-btn" onClick={() => setPatchExpanded((value) => !value)}>
-                                            {patchExpanded() ? 'Show less' : `Show all ${renderedPatchLines().length} lines`}
-                                          </button>
-                                        </div>
-                                      </Show>
-                                    </Show>
-                                  </Show>
-                                </Show>
-                              </div>
-                            );
-                          }}
-                        </Show>
-                      </div>
-                    </>
-                  )}
-                </Show>
-              </Show>
-            </Show>
-          </div>
-        </div>
+        </>
       </Show>
     </div>
   );
