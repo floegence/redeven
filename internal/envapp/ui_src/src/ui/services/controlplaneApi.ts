@@ -42,6 +42,18 @@ export type LocalRuntimeInfo = {
   direct_ws_url?: string;
 };
 
+export type LocalAccessStatus = {
+  password_required: boolean;
+  unlocked: boolean;
+};
+
+export type LocalAccessUnlockResult = {
+  unlocked: boolean;
+  session_expires_at_unix_ms?: number;
+  resume_token?: string;
+  resume_expires_at_unix_ms?: number;
+};
+
 class APIError extends Error {
   readonly status: number;
   readonly code: string;
@@ -267,7 +279,43 @@ function isLoopbackOriginBestEffort(): boolean {
   }
 }
 
+function buildLocalDirectWSURLBestEffort(): string {
+  const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${scheme}//${window.location.host}/_redeven_direct/ws`;
+}
+
+async function fetchLocalJSON<T>(input: RequestInfo | URL, init: RequestInit & { bearerToken?: string }): Promise<T> {
+  return fetchJSON<T>(input, {
+    ...init,
+    credentials: init.credentials ?? 'same-origin',
+  });
+}
+
 let cachedLocalRuntime: LocalRuntimeInfo | null | undefined = undefined;
+
+export async function getLocalAccessStatus(): Promise<LocalAccessStatus | null> {
+  if (!isLoopbackOriginBestEffort()) return null;
+
+  try {
+    const out = await fetchLocalJSON<LocalAccessStatus>('/api/local/access/status', { method: 'GET' });
+    if (typeof out?.password_required === 'boolean' && typeof out?.unlocked === 'boolean') {
+      return out;
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
+export async function unlockLocalAccess(password: string): Promise<LocalAccessUnlockResult> {
+  const out = await fetchLocalJSON<LocalAccessUnlockResult>('/api/local/access/unlock', {
+    method: 'POST',
+    body: JSON.stringify({ password: String(password ?? '') }),
+  });
+  if (!out?.unlocked) throw new Error('Unlock failed');
+  return out;
+}
 
 export async function getLocalRuntime(): Promise<LocalRuntimeInfo | null> {
   if (cachedLocalRuntime !== undefined) return cachedLocalRuntime;
@@ -278,8 +326,18 @@ export async function getLocalRuntime(): Promise<LocalRuntimeInfo | null> {
     return null;
   }
 
+  const access = await getLocalAccessStatus();
+  if (access) {
+    cachedLocalRuntime = {
+      mode: 'local',
+      env_public_id: 'env_local',
+      direct_ws_url: buildLocalDirectWSURLBestEffort(),
+    };
+    return cachedLocalRuntime;
+  }
+
   try {
-    const out = await fetchJSON<LocalRuntimeInfo>('/api/local/runtime', { method: 'GET' });
+    const out = await fetchLocalJSON<LocalRuntimeInfo>('/api/local/runtime', { method: 'GET' });
     if (out && String((out as any).mode ?? '') === 'local') {
       cachedLocalRuntime = out;
       return out;
@@ -293,7 +351,7 @@ export async function getLocalRuntime(): Promise<LocalRuntimeInfo | null> {
 }
 
 export async function mintLocalDirectConnectInfo(): Promise<DirectConnectInfo> {
-  const out = await fetchJSON<DirectConnectInfo>('/api/local/direct/connect_info', { method: 'POST' });
+  const out = await fetchLocalJSON<DirectConnectInfo>('/api/local/direct/connect_info', { method: 'POST' });
   const wsURL = String((out as any)?.ws_url ?? '').trim();
   const channelID = String((out as any)?.channel_id ?? '').trim();
   if (!wsURL || !channelID) throw new Error('Invalid direct connect info');
@@ -306,8 +364,13 @@ export async function getEnvironment(envId: string): Promise<EnvironmentDetail |
 
   const local = await getLocalRuntime();
   if (local) {
-    const out = await fetchJSON<EnvironmentDetail>('/api/local/environment', { method: 'GET' });
-    return out ?? null;
+    try {
+      const out = await fetchLocalJSON<EnvironmentDetail>('/api/local/environment', { method: 'GET' });
+      return out ?? null;
+    } catch (error) {
+      if (error instanceof APIError && error.status === 423) return null;
+      throw error;
+    }
   }
 
   const out = await fetchJSONWithEnvSessionAutoRecover<EnvironmentDetail>(
@@ -330,8 +393,13 @@ export async function getAgentLatestVersion(envId: string): Promise<AgentLatestV
 
   const local = await getLocalRuntime();
   if (local) {
-    const out = await fetchJSON<AgentLatestVersion>('/api/local/agent/version/latest', { method: 'GET' });
-    return out ?? null;
+    try {
+      const out = await fetchLocalJSON<AgentLatestVersion>('/api/local/agent/version/latest', { method: 'GET' });
+      return out ?? null;
+    } catch (error) {
+      if (error instanceof APIError && error.status === 423) return null;
+      throw error;
+    }
   }
 
   const out = await fetchJSONWithEnvSessionAutoRecover<AgentLatestVersion>(

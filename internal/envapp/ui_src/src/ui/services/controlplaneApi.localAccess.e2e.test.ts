@@ -1,0 +1,80 @@
+// @vitest-environment jsdom
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify({ data: body }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+describe('controlplaneApi local access flow', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    window.history.replaceState(null, document.title, '/_redeven_proxy/env/');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('detects local runtime from public access status even while locked', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('/api/local/access/status');
+      expect(init?.credentials).toBe('same-origin');
+      return jsonResponse({ password_required: true, unlocked: false });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    const runtime = await mod.getLocalRuntime();
+
+    expect(runtime).toMatchObject({
+      mode: 'local',
+      env_public_id: 'env_local',
+    });
+    expect(String(runtime?.direct_ws_url ?? '')).toContain('/_redeven_direct/ws');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('posts unlock with same-origin credentials so the local session cookie can be stored', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('/api/local/access/unlock');
+      expect(init?.method).toBe('POST');
+      expect(init?.credentials).toBe('same-origin');
+      expect(String(init?.body)).toBe(JSON.stringify({ password: 'secret' }));
+      return jsonResponse({ unlocked: true, resume_token: 'resume123' });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    const out = await mod.unlockLocalAccess('secret');
+
+    expect(out).toEqual({ unlocked: true, resume_token: 'resume123' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses same-origin credentials when minting local direct connect info', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('/api/local/direct/connect_info');
+      expect(init?.method).toBe('POST');
+      expect(init?.credentials).toBe('same-origin');
+      return jsonResponse({
+        ws_url: 'ws://localhost/_redeven_direct/ws',
+        channel_id: 'ch_local',
+        e2ee_psk_b64u: 'secret',
+        channel_init_expire_at_unix_s: 1,
+        default_suite: 1,
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    const out = await mod.mintLocalDirectConnectInfo();
+
+    expect(out.channel_id).toBe('ch_local');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

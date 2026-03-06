@@ -47,12 +47,15 @@ import { consumeAccessResumeTokenFromWindow } from './accessResume';
 import {
   channelInitEntry,
   getEnvPublicIDFromSession,
+  getLocalAccessStatus,
   getLocalRuntime,
   getEnvironment,
   mintEnvProxyEntryTicket,
   mintLocalDirectConnectInfo,
   mintEnvEntryTicketForApp,
+  unlockLocalAccess,
   type EnvironmentDetail,
+  type LocalAccessStatus,
   type LocalRuntimeInfo,
 } from './services/controlplaneApi';
 
@@ -139,11 +142,30 @@ export function EnvAppShell() {
 
   const [localRuntime, setLocalRuntime] = createSignal<LocalRuntimeInfo | null>(null);
   const isLocalMode = createMemo(() => localRuntime() !== null);
+  const [localAccessStatus, setLocalAccessStatus] = createSignal<LocalAccessStatus | null>(null);
+  const [localAccessChecked, setLocalAccessChecked] = createSignal(false);
+  const [localAccessPassword, setLocalAccessPassword] = createSignal('');
+  const [localAccessError, setLocalAccessError] = createSignal<string | null>(null);
+  const [localAccessUnlocking, setLocalAccessUnlocking] = createSignal(false);
+  const [localAccessResumeToken, setLocalAccessResumeToken] = createSignal(
+    typeof window !== 'undefined' ? consumeAccessResumeTokenFromWindow(window) : '',
+  );
+  let localAccessPasswordInput: HTMLInputElement | undefined;
+
+  const localPasswordRequired = createMemo(() => Boolean(localAccessStatus()?.password_required));
+  const localAccessPending = createMemo(() => isLocalMode() && !localAccessChecked());
+  const localAccessLocked = createMemo(() => isLocalMode() && localPasswordRequired() && !String(localAccessResumeToken() ?? '').trim());
+  const localAccessGateVisible = createMemo(() => localAccessPending() || localAccessLocked());
 
   const [envId, setEnvId] = createSignal(getEnvPublicIDFromSession());
 
   const [env] = createResource<EnvironmentDetail | null, string | null>(
-    () => envId() || null,
+    () => {
+      const id = envId() || null;
+      if (!id) return null;
+      if (localAccessGateVisible()) return null;
+      return id;
+    },
     (id) => (id ? getEnvironment(id) : null),
   );
 
@@ -362,9 +384,24 @@ export function EnvAppShell() {
     }
   };
 
-  const status = createMemo(() => (manualError() ? 'error' : protocol.status()));
-  const connecting = () => protocol.status() === 'connecting';
-  const connectError = createMemo(() => manualError() ?? protocol.error()?.message ?? null);
+  const status = createMemo(() => {
+    if (localAccessLocked()) return 'disconnected';
+    if (manualError()) return 'error';
+    return protocol.status();
+  });
+  const statusLabel = createMemo(() => {
+    if (localAccessPending()) return 'Checking access';
+    if (localAccessLocked()) return 'Locked';
+    return undefined;
+  });
+  const connecting = () => !localAccessGateVisible() && protocol.status() === 'connecting';
+  const reconnectDisabled = createMemo(() => localAccessGateVisible() || connecting());
+  const reconnectLabel = createMemo(() => {
+    if (localAccessPending()) return 'Checking access';
+    if (localAccessLocked()) return 'Unlock required';
+    return connecting() ? 'Connecting...' : 'Reconnect';
+  });
+  const connectError = createMemo(() => (localAccessGateVisible() ? null : manualError() ?? protocol.error()?.message ?? null));
 
   const RECENT_AGENT_RX_MS = 10_000;
   const PROBE_TIMEOUT_MS = 1_200;
@@ -387,7 +424,6 @@ export function EnvAppShell() {
   };
 
   let ensureInFlight: Promise<void> | null = null;
-  let accessResumeToken = typeof window !== 'undefined' ? consumeAccessResumeTokenFromWindow(window) : '';
   let accessResumeClient: unknown = null;
   let accessResumeInFlight: Promise<void> | null = null;
 
@@ -401,17 +437,28 @@ export function EnvAppShell() {
       const status = await rpc.access.status();
       if (!status.passwordRequired || status.unlocked) {
         accessResumeClient = client;
+        setLocalAccessError(null);
         setManualError(null);
         return;
       }
 
-      const token = String(accessResumeToken ?? '').trim();
+      const token = String(localAccessResumeToken() ?? '').trim();
       if (!token) {
+        setLocalAccessError('Enter the access password to continue.');
         throw new Error('Access password required. Refresh and unlock again.');
       }
 
-      await rpc.access.resume({ token });
+      try {
+        await rpc.access.resume({ token });
+      } catch (error) {
+        if (isLocalMode()) {
+          setLocalAccessResumeToken('');
+          setLocalAccessError('Access password expired. Enter it again to continue.');
+        }
+        throw error;
+      }
       accessResumeClient = client;
+      setLocalAccessError(null);
       setManualError(null);
     })();
 
@@ -451,7 +498,7 @@ export function EnvAppShell() {
   };
 
   const runConnect = async (fn: (config: ProtocolConnectConfig) => Promise<void>) => {
-    if (connecting()) return;
+    if (connecting() || localAccessPending() || localAccessLocked()) return;
 
     const id = envId();
     if (!id) {
@@ -490,6 +537,10 @@ export function EnvAppShell() {
       await ensureAccessResumed();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (isLocalMode() && message.toLowerCase().includes('access password')) {
+        setLocalAccessResumeToken('');
+        setLocalAccessError('Enter the access password to continue.');
+      }
       if (message) setManualError(message);
       protocol.disconnect();
     }
@@ -498,7 +549,54 @@ export function EnvAppShell() {
   const connect = async () => runConnect((config) => protocol.connect(config));
   const reconnect = async () => runConnect((config) => protocol.reconnect(config));
 
+  const submitLocalAccessUnlock = async (event?: SubmitEvent) => {
+    event?.preventDefault();
+    if (localAccessUnlocking()) return;
+
+    setLocalAccessUnlocking(true);
+    setLocalAccessError(null);
+    setManualError(null);
+
+    try {
+      const out = await unlockLocalAccess(localAccessPassword());
+      const token = String(out?.resume_token ?? '').trim();
+      if (!token) {
+        throw new Error('Unlock succeeded but no resume token was returned.');
+      }
+
+      setLocalAccessResumeToken(token);
+      setLocalAccessPassword('');
+      accessResumeClient = null;
+
+      const nextStatus = await getLocalAccessStatus();
+      setLocalAccessStatus(nextStatus ?? { password_required: true, unlocked: true });
+      setLocalAccessChecked(true);
+
+      await connect();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setLocalAccessError(message || 'Unlock failed.');
+      queueMicrotask(() => {
+        localAccessPasswordInput?.focus();
+        localAccessPasswordInput?.select();
+      });
+    } finally {
+      setLocalAccessUnlocking(false);
+    }
+  };
+
   createEffect(() => {
+    if (!localAccessLocked()) return;
+    if (localAccessPending()) return;
+    queueMicrotask(() => localAccessPasswordInput?.focus());
+  });
+
+  createEffect(() => {
+    if (localAccessGateVisible()) {
+      accessResumeClient = null;
+      return;
+    }
+
     const client = protocol.client();
     const st = protocol.status();
     if (st !== 'connected' || !client) {
@@ -547,6 +645,7 @@ export function EnvAppShell() {
     if (ensureInFlight) return ensureInFlight;
 
     ensureInFlight = (async () => {
+      if (localAccessGateVisible()) return;
       if (connecting()) return;
 
       const st = protocol.status();
@@ -589,7 +688,7 @@ export function EnvAppShell() {
   let localReconnectBackoffMs = 500;
 
   const scheduleLocalReconnect = (reason: string) => {
-    if (!isLocalMode()) return;
+    if (!isLocalMode() || localAccessGateVisible()) return;
     if (localReconnectTimer !== null) return;
 
     const delay = Math.min(localReconnectBackoffMs, 30_000);
@@ -620,6 +719,14 @@ export function EnvAppShell() {
   createEffect(() => {
     if (!isLocalMode()) return;
 
+    if (localAccessGateVisible()) {
+      if (localReconnectTimer !== null) {
+        window.clearTimeout(localReconnectTimer);
+        localReconnectTimer = null;
+      }
+      return;
+    }
+
     const st = protocol.status();
     if (st === 'connected') {
       localReconnectBackoffMs = 500;
@@ -643,8 +750,13 @@ export function EnvAppShell() {
     layout.setSidebarCollapsed(true);
     void (async () => {
       const rt = await getLocalRuntime();
+      let localStatus: LocalAccessStatus | null = null;
       if (rt) {
         setLocalRuntime(rt);
+        localStatus = await getLocalAccessStatus();
+        setLocalAccessStatus(localStatus);
+        setLocalAccessChecked(true);
+
         const localEnvID = String((rt as any).env_public_id ?? '').trim() || 'env_local';
         try {
           sessionStorage.setItem('redeven_env_public_id', localEnvID);
@@ -654,6 +766,8 @@ export function EnvAppShell() {
         setEnvId(localEnvID);
       } else {
         setLocalRuntime(null);
+        setLocalAccessStatus(null);
+        setLocalAccessChecked(true);
         setEnvId(getEnvPublicIDFromSession());
       }
 
@@ -677,6 +791,11 @@ export function EnvAppShell() {
       layout.setSidebarActiveTab(initial, { openSidebar: false });
       initialTab = initial;
       setPersistReady(true);
+
+      if (rt && localStatus?.password_required && !String(localAccessResumeToken() ?? '').trim()) {
+        setManualError(null);
+        return;
+      }
 
       await connect();
     })();
@@ -862,6 +981,7 @@ export function EnvAppShell() {
   };
 
   const envName = () => {
+    if (isLocalMode() && localAccessGateVisible()) return 'Local agent';
     if (env.state !== 'ready') return 'Loading...';
     return env()?.name || 'Environment';
   };
@@ -1026,6 +1146,53 @@ export function EnvAppShell() {
     onCleanup(() => unregister());
   });
 
+  const localAccessGatePanel = () => (
+    <div class="flex h-full min-h-0 items-center justify-center bg-background px-4 py-6">
+      <Panel class="w-full max-w-md border-border shadow-sm">
+        <PanelContent class="flex flex-col gap-4 p-6">
+          <div class="space-y-2">
+            <div class="text-lg font-semibold text-foreground">Unlock local agent</div>
+            <p class="text-sm leading-6 text-muted-foreground">
+              Enter the full access password before this browser load can connect to the local agent.
+            </p>
+          </div>
+
+          <form class="flex flex-col gap-3" onSubmit={(event) => void submitLocalAccessUnlock(event)}>
+            <input
+              ref={localAccessPasswordInput}
+              type="password"
+              autocomplete="current-password"
+              placeholder="Access password"
+              value={localAccessPassword()}
+              onInput={(event) => setLocalAccessPassword(event.currentTarget.value)}
+              disabled={localAccessPending() || localAccessUnlocking()}
+              class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-[border,box-shadow] placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+            <button
+              type="submit"
+              disabled={localAccessPending() || localAccessUnlocking() || !localAccessPassword()}
+              class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {localAccessUnlocking() ? 'Unlocking...' : 'Unlock'}
+            </button>
+          </form>
+
+          <Show when={localAccessPending()}>
+            <div class="text-sm text-muted-foreground">Checking local access...</div>
+          </Show>
+
+          <Show when={localAccessError()}>
+            <div class="rounded-md border border-error/30 bg-error/5 px-3 py-2 text-sm text-error">{localAccessError()}</div>
+          </Show>
+
+          <div class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            Password verification stays inside the agent before any page connection is allowed.
+          </div>
+        </PanelContent>
+      </Panel>
+    </div>
+  );
+
   return (
     <EnvContext.Provider
       value={{
@@ -1104,7 +1271,7 @@ export function EnvAppShell() {
                 </BottomBarItem>
               </div>
               <div class="flex items-center gap-2">
-                <StatusIndicator status={status()} />
+                <StatusIndicator status={status()} label={statusLabel()} />
                 <Tooltip content={canViewAudit() ? 'Audit log' : 'Admin required'} placement="top" delay={0}>
                   <BottomBarItem
                     onClick={canViewAudit() ? () => setAuditOpen(true) : undefined}
@@ -1114,10 +1281,10 @@ export function EnvAppShell() {
                   </BottomBarItem>
                 </Tooltip>
                 <BottomBarItem
-                  onClick={connecting() ? undefined : () => void reconnect()}
-                  class={connecting() ? 'opacity-60 pointer-events-none' : undefined}
+                  onClick={reconnectDisabled() ? undefined : () => void reconnect()}
+                  class={reconnectDisabled() ? 'opacity-60 pointer-events-none' : undefined}
                 >
-                  {connecting() ? 'Connecting...' : 'Reconnect'}
+                  {reconnectLabel()}
                 </BottomBarItem>
               </div>
             </>
@@ -1134,7 +1301,9 @@ export function EnvAppShell() {
             </Show>
 
             <div class="flex-1 min-h-0 overflow-hidden relative">
-              <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />
+              <Show when={localAccessGateVisible()} fallback={<ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />}>
+                {localAccessGatePanel()}
+              </Show>
             </div>
           </div>
 

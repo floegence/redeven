@@ -194,8 +194,8 @@ func runCmd(args []string) {
 		fmt.Fprintf(os.Stderr, "invalid password flags: %v\n", err)
 		os.Exit(2)
 	}
-	accessGate := newAccessGate(runPassword)
-	if err := verifyStartupAccessPassword(accessGate); err != nil {
+	accessGate := newAccessGate(runPassword.password)
+	if err := verifyStartupAccessPassword(accessGate, runPassword.requireStartupVerification); err != nil {
 		fmt.Fprintf(os.Stderr, "password verification failed: %v\n", err)
 		os.Exit(1)
 	}
