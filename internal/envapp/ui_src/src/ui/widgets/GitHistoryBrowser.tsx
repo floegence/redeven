@@ -5,11 +5,13 @@ import { Sidebar, SidebarContent, SidebarItem, SidebarItemList, SidebarSection }
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
-import { GIT_PATCH_PREVIEW_LINES, formatGitPatchLineNumber, gitChangeClass, gitChangeDotClass, gitChangeLabel, gitFileDisplayName, gitPatchPreviewLineClass, gitPatchRenderedLineClass, parseGitPatchRenderedLines } from '../utils/gitPatch';
+import { GIT_PATCH_PREVIEW_LINES, formatGitPatchLineNumber, gitChangeClass, gitChangeDotClass, gitChangeLabel, gitPatchPreviewLineClass, gitPatchRenderedLineClass, parseGitPatchRenderedLines } from '../utils/gitPatch';
 import { readGitPatchTextOnce } from '../utils/gitPatchStreamReader';
 
 const PATCH_MAX_BYTES = 2 * 1024 * 1024;
 const FILES_SIDEBAR_WIDTH = 280;
+const COMMIT_BODY_PREVIEW_LINES = 6;
+const COMMIT_BODY_COLLAPSED_MAX_HEIGHT = '8.5rem';
 
 export interface GitHistoryBrowserProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -63,6 +65,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
 
   const [selectedFileKey, setSelectedFileKey] = createSignal('');
   const [patchText, setPatchText] = createSignal('');
+  const [commitBodyExpanded, setCommitBodyExpanded] = createSignal(false);
   const [patchTruncated, setPatchTruncated] = createSignal(false);
   const [patchLoading, setPatchLoading] = createSignal(false);
   const [patchError, setPatchError] = createSignal('');
@@ -81,6 +84,13 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
     return commitFiles().find((file) => selectedFileIdentity(file) === key) ?? null;
   });
   const renderedPatchLines = createMemo(() => parseGitPatchRenderedLines(patchText()));
+  const commitBodyText = createMemo(() => String(commitDetail()?.body ?? '').trim());
+  const hasExpandableCommitBody = createMemo(() => {
+    const body = commitBodyText();
+    if (!body) return false;
+    const logicalLines = body.split(/\r?\n/);
+    return logicalLines.length > COMMIT_BODY_PREVIEW_LINES || body.length > 360;
+  });
   const visiblePatchLines = createMemo(() => patchExpanded() ? renderedPatchLines() : renderedPatchLines().slice(0, GIT_PATCH_PREVIEW_LINES));
   const hasMorePatchLines = createMemo(() => renderedPatchLines().length > GIT_PATCH_PREVIEW_LINES);
 
@@ -194,6 +204,11 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   });
 
   createEffect(() => {
+    commitHash();
+    setCommitBodyExpanded(false);
+  });
+
+  createEffect(() => {
     const file = selectedFile();
     if (!file) {
       resetPatchState();
@@ -260,8 +275,23 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                         <span class="font-mono">Parents: {detail().parents.map((item) => item.slice(0, 7)).join(', ')}</span>
                       </Show>
                     </div>
-                    <Show when={detail().body}>
-                      <pre class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-[12px] leading-5 whitespace-pre-wrap break-words text-foreground overflow-auto">{detail().body}</pre>
+                    <Show when={commitBodyText()}>
+                      <div class="space-y-1.5">
+                        <pre
+                          class={cn(
+                            'rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-[12px] leading-5 whitespace-pre-wrap break-words text-foreground',
+                            commitBodyExpanded() ? 'overflow-auto' : 'overflow-hidden'
+                          )}
+                          style={commitBodyExpanded() ? undefined : { 'max-height': COMMIT_BODY_COLLAPSED_MAX_HEIGHT }}
+                        >{commitBodyText()}</pre>
+                        <Show when={hasExpandableCommitBody()}>
+                          <div class="flex justify-end">
+                            <Button size="xs" variant="ghost" onClick={() => setCommitBodyExpanded((value) => !value)}>
+                              {commitBodyExpanded() ? 'Show less' : 'Show more'}
+                            </Button>
+                          </div>
+                        </Show>
+                      </div>
                     </Show>
                   </div>
 
@@ -280,27 +310,20 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                   {(file) => (
                                     <SidebarItem
                                       active={selectedFileKey() === selectedFileIdentity(file)}
-                                      class="items-start py-2"
-                                      icon={<span class={cn('mt-1 inline-block size-2 rounded-full', gitChangeDotClass(file.changeType))} />}
+                                      class="py-1"
+                                      icon={<span class={cn('inline-block size-2 rounded-full', gitChangeDotClass(file.changeType))} />}
                                       onClick={() => {
                                         setSelectedFileKey(selectedFileIdentity(file));
                                         setPatchExpanded(false);
                                       }}
                                     >
-                                      <div class="min-w-0 flex-1">
-                                        <div class="flex items-start justify-between gap-2">
-                                          <span class="min-w-0 flex-1 truncate text-[12px] leading-5 text-current">{gitFileDisplayName(fileDisplayPath(file))}</span>
-                                          <span class="shrink-0 text-[10px] text-muted-foreground/80">{fileMetricsText(file)}</span>
-                                        </div>
-                                        <div class="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground/80">
-                                          <span class={cn('chat-tool-apply-patch-change', gitChangeClass(file.changeType))}>{gitChangeLabel(file.changeType)}</span>
-                                          <Show when={file.isBinary}>
-                                            <span>Binary</span>
-                                          </Show>
-                                        </div>
-                                        <div class="mt-1 truncate text-[10px] leading-4 text-muted-foreground/80" title={fileSecondaryPath(file)}>
-                                          {fileSecondaryPath(file)}
-                                        </div>
+                                      <div class="flex min-w-0 items-center gap-2 text-left">
+                                        <span class="min-w-0 flex-1 truncate text-[11px] leading-5 text-current" title={fileSecondaryPath(file)}>{fileSecondaryPath(file)}</span>
+                                        <span class={cn('shrink-0 chat-tool-apply-patch-change', gitChangeClass(file.changeType))}>{gitChangeLabel(file.changeType)}</span>
+                                        <Show when={file.isBinary}>
+                                          <span class="shrink-0 text-[10px] text-muted-foreground/80">Binary</span>
+                                        </Show>
+                                        <span class="shrink-0 text-[10px] tabular-nums text-muted-foreground/80">{fileMetricsText(file)}</span>
                                       </div>
                                     </SidebarItem>
                                   )}
