@@ -313,8 +313,9 @@ export async function unlockLocalAccess(password: string): Promise<LocalAccessUn
     method: 'POST',
     body: JSON.stringify({ password: String(password ?? '') }),
   });
-  if (!out?.unlocked) throw new Error('Unlock failed');
-  return out;
+  const unlocked = Boolean(out?.unlocked) || Boolean(String(out?.resume_token ?? '').trim());
+  if (!unlocked) throw new Error('Unlock failed');
+  return { ...out, unlocked: true };
 }
 
 export async function getLocalRuntime(): Promise<LocalRuntimeInfo | null> {

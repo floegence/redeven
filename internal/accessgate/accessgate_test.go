@@ -63,6 +63,9 @@ func TestGate_LocalSessionLifecycle(t *testing.T) {
 	if result == nil || result.SessionToken == "" {
 		t.Fatalf("MintLocalSession() missing token: %#v", result)
 	}
+	if !result.Unlocked {
+		t.Fatalf("MintLocalSession() should report unlocked: %#v", result)
+	}
 	if !gate.IsLocalSessionValid(result.SessionToken) {
 		t.Fatalf("local session should be valid")
 	}

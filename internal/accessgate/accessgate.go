@@ -42,6 +42,7 @@ type UnlockResult struct {
 }
 
 type LocalSessionResult struct {
+	Unlocked             bool   `json:"unlocked"`
 	SessionToken         string `json:"-"`
 	SessionExpiresAtUnix int64  `json:"session_expires_at_unix_ms,omitempty"`
 	ResumeToken          string `json:"resume_token,omitempty"`
@@ -213,7 +214,7 @@ func (g *Gate) UnlockChannel(channelID string, password string) (*UnlockResult, 
 
 func (g *Gate) MintLocalSession(password string) (*LocalSessionResult, error) {
 	if g == nil || !g.enabled {
-		return &LocalSessionResult{}, nil
+		return &LocalSessionResult{Unlocked: true}, nil
 	}
 	if !g.VerifyPassword(password) {
 		return nil, errors.New("invalid password")
@@ -245,6 +246,7 @@ func (g *Gate) MintLocalSession(password string) (*LocalSessionResult, error) {
 	}
 
 	return &LocalSessionResult{
+		Unlocked:             true,
 		SessionToken:         sessionToken,
 		SessionExpiresAtUnix: expiresAt.UnixMilli(),
 		ResumeToken:          resumeToken,

@@ -56,6 +56,16 @@ describe('controlplaneApi local access flow', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('accepts unlock responses that only return a resume token', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ resume_token: 'resume123' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    const out = await mod.unlockLocalAccess('secret');
+
+    expect(out).toEqual({ unlocked: true, resume_token: 'resume123' });
+  });
+
   it('uses same-origin credentials when minting local direct connect info', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe('/api/local/direct/connect_info');

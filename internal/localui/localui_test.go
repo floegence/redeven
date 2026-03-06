@@ -176,13 +176,14 @@ func TestServer_LocalAccessUnlockFlow(t *testing.T) {
 	var unlockBody struct {
 		OK   bool `json:"ok"`
 		Data struct {
+			Unlocked    bool   `json:"unlocked"`
 			ResumeToken string `json:"resume_token"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(unlockRes.Body.Bytes(), &unlockBody); err != nil {
 		t.Fatalf("decode unlock body error = %v", err)
 	}
-	if !unlockBody.OK || unlockBody.Data.ResumeToken == "" {
+	if !unlockBody.OK || !unlockBody.Data.Unlocked || unlockBody.Data.ResumeToken == "" {
 		t.Fatalf("unexpected unlock body: %#v", unlockBody)
 	}
 
