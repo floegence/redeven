@@ -46,11 +46,11 @@ export interface GitWorkbenchProps {
 function subviewLabel(view: GitWorkbenchSubview): string {
   switch (view) {
     case 'changes':
-      return 'Workspace Changes';
+      return 'Changes';
     case 'branches':
-      return 'Branch Explorer';
+      return 'Branches';
     case 'history':
-      return 'Commit History';
+      return 'History';
     default:
       return 'Overview';
   }
@@ -58,9 +58,10 @@ function subviewLabel(view: GitWorkbenchSubview): string {
 
 export function GitWorkbench(props: GitWorkbenchProps) {
   const repoLabel = () => repoDisplayName(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath);
+  const repoPath = () => String(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath || '/').trim() || '/';
   const changeCount = () => summarizeWorkspaceCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary);
   const headRef = () => String(props.repoSummary?.headRef || props.repoInfo?.headRef || '').trim();
-  const loadingBusy = () => Boolean(props.repoSummaryLoading || props.workspaceLoading || props.branchesLoading || props.compareLoading);
+  const loadingBusy = () => Boolean(props.repoInfoLoading || props.repoSummaryLoading || props.workspaceLoading || props.branchesLoading || props.compareLoading);
   const showMenuButton = () => Boolean(props.showSidebarToggle && props.onOpenSidebar);
 
   return (
@@ -72,8 +73,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             variant="outline"
             icon={Menu}
             class="absolute left-3 top-3 z-10 h-7 w-7 bg-background/95 px-0 shadow-sm backdrop-blur-sm"
-            aria-label="Open Git sidebar"
-            title="Open Git sidebar"
+            aria-label="Open browser sidebar"
+            title="Open browser sidebar"
             onClick={props.onOpenSidebar}
           />
         </Show>
@@ -87,11 +88,9 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               </Show>
             </div>
 
-            <div class="min-w-0">
+            <div class="min-w-0 space-y-1">
               <div class="truncate text-base font-semibold text-foreground">{repoLabel()}</div>
-              <div class="truncate text-[11px] text-muted-foreground" title={props.repoSummary?.repoRootPath || props.currentPath}>
-                {props.repoSummary?.repoRootPath || props.currentPath || '/'}
-              </div>
+              <div class="truncate text-[11px] text-muted-foreground" title={repoPath()}>{repoPath()}</div>
             </div>
 
             <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
@@ -105,13 +104,10 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               <Show when={props.repoSummary?.isWorktree}>
                 <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5">Linked worktree</span>
               </Show>
-              <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5" title={props.currentPath || '/'}>
-                Context {props.currentPath || '/'}
-              </span>
             </div>
           </div>
 
-          <Button size="xs" variant="outline" icon={Refresh} onClick={props.onRefresh} disabled={loadingBusy()}>
+          <Button size="xs" variant="outline" icon={Refresh} onClick={() => props.onRefresh?.()} disabled={!props.onRefresh || loadingBusy()}>
             Refresh
           </Button>
         </div>

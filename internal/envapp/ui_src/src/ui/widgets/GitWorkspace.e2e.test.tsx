@@ -4,7 +4,7 @@ import { LayoutProvider } from '@floegence/floe-webapp-core';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GitWorkbenchSidebar } from './GitWorkbenchSidebar';
+import { GitWorkspace } from './GitWorkspace';
 
 beforeEach(() => {
   Object.defineProperty(window, 'matchMedia', {
@@ -26,19 +26,29 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-describe('GitWorkbenchSidebar interactions', () => {
-  it('acts as selector-only content and closes after picking a workspace item', () => {
-    let selectedPath = '';
-    let closeCount = 0;
+describe('GitWorkspace interactions', () => {
+  it('keeps mode switching and git view switching pinned inside the shared sidebar shell', () => {
+    let nextMode = '';
+    let nextSubview = '';
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     const dispose = render(() => (
       <LayoutProvider>
-        <div class="relative h-[520px]">
-          <GitWorkbenchSidebar
-            subview="changes"
-            repoAvailable
+        <div class="h-[620px]">
+          <GitWorkspace
+            mode="git"
+            onModeChange={(mode) => {
+              nextMode = mode;
+            }}
+            subview="overview"
+            onSubviewChange={(view) => {
+              nextSubview = view;
+            }}
+            width={280}
+            open
+            currentPath="/workspace/repo/src"
+            repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
             repoSummary={{
               repoRootPath: '/workspace/repo',
               headRef: 'main',
@@ -50,9 +60,7 @@ describe('GitWorkbenchSidebar interactions', () => {
             workspace={{
               repoRootPath: '/workspace/repo',
               summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-              staged: [
-                { section: 'staged', changeType: 'modified', path: 'src/app.ts', patchPath: 'src/app.ts', additions: 3, deletions: 1 },
-              ],
+              staged: [],
               unstaged: [],
               untracked: [],
               conflicted: [],
@@ -60,32 +68,28 @@ describe('GitWorkbenchSidebar interactions', () => {
             branches={{
               repoRootPath: '/workspace/repo',
               currentRef: 'main',
-              local: [
-                { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
-              ],
+              local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
               remote: [],
             }}
-            selectedWorkspaceKey="staged:src/app.ts"
-            onSelectWorkspaceItem={(item) => {
-              selectedPath = String(item.path || '');
-            }}
-            onClose={() => {
-              closeCount += 1;
-            }}
+            commits={[]}
           />
         </div>
       </LayoutProvider>
     ), host);
 
     try {
-      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim() === 'Files')).toBe(false);
-      const itemButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('src/app.ts'));
-      expect(itemButton).toBeTruthy();
-      itemButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(host.textContent).toContain('Mode');
+      expect(host.textContent).toContain('View');
+      const historyButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim().startsWith('History'));
+      expect(historyButton).toBeTruthy();
+      historyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-      expect(host.textContent).toContain('Workspace Files');
-      expect(selectedPath).toBe('src/app.ts');
-      expect(closeCount).toBe(1);
+      const filesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Files'));
+      expect(filesButton).toBeTruthy();
+      filesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(nextSubview).toBe('history');
+      expect(nextMode).toBe('files');
     } finally {
       dispose();
     }

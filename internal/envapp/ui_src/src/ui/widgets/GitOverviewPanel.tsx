@@ -1,4 +1,4 @@
-import { Show } from 'solid-js';
+import { For, Show } from 'solid-js';
 import type {
   GitBranchSummary,
   GitGetBranchCompareResponse,
@@ -6,7 +6,7 @@ import type {
   GitListWorkspaceChangesResponse,
   GitRepoSummaryResponse,
 } from '../protocol/redeven_v1';
-import { branchDisplayName, branchStatusSummary, compareHeadline, repoDisplayName, summarizeWorkspaceCount } from '../utils/gitWorkbench';
+import { branchDisplayName, branchStatusSummary, compareHeadline, summarizeWorkspaceCount } from '../utils/gitWorkbench';
 
 export interface GitOverviewPanelProps {
   repoSummary?: GitRepoSummaryResponse | null;
@@ -28,7 +28,7 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
   return (
     <div class="h-full min-h-0 overflow-auto px-4 py-3">
       <Show when={!props.summaryLoading} fallback={<div class="text-xs text-muted-foreground">Loading repository summary...</div>}>
-        <Show when={!props.summaryError} fallback={<div class="text-xs text-error break-words">{props.summaryError}</div>}>
+        <Show when={!props.summaryError} fallback={<div class="text-xs break-words text-error">{props.summaryError}</div>}>
           <Show when={props.repoSummary} fallback={<div class="text-xs text-muted-foreground">Repository summary is unavailable.</div>}>
             {(summaryAccessor) => {
               const summary = summaryAccessor();
@@ -36,119 +36,125 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
               const workspaceCount = summarizeWorkspaceCount(workspaceSummary);
               const localBranches = props.branches?.local?.length ?? 0;
               const remoteBranches = props.branches?.remote?.length ?? 0;
+              const repoSignals = () => [
+                summary.headRef ? { label: 'Head', value: summary.headRef } : null,
+                summary.upstreamRef ? { label: 'Upstream', value: summary.upstreamRef } : null,
+                summary.detached ? { label: 'State', value: 'Detached HEAD' } : null,
+                summary.isWorktree ? { label: 'Checkout', value: 'Linked worktree' } : { label: 'Checkout', value: 'Primary checkout' },
+                { label: 'Stashes', value: String(summary.stashCount ?? 0) },
+                { label: 'Context', value: summaryValue(props.currentPath, '/') },
+              ].filter(Boolean) as { label: string; value: string }[];
+
               return (
                 <div class="space-y-4">
-                  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <div class="rounded-lg border border-border/70 bg-muted/15 p-4">
-                      <div class="text-[11px] uppercase tracking-wide text-muted-foreground">Repository</div>
-                      <div class="mt-2 text-lg font-semibold text-foreground">{repoDisplayName(summary.repoRootPath)}</div>
-                      <div class="mt-1 text-[11px] text-muted-foreground break-all">{summaryValue(summary.repoRootPath)}</div>
-                    </div>
-                    <div class="rounded-lg border border-border/70 bg-muted/15 p-4">
-                      <div class="text-[11px] uppercase tracking-wide text-muted-foreground">Workspace Attention</div>
-                      <div class="mt-2 text-lg font-semibold text-foreground">{workspaceCount}</div>
-                      <div class="mt-1 text-[11px] text-muted-foreground">{workspaceCount > 0 ? 'Files currently need review.' : 'Working tree is clean.'}</div>
-                    </div>
-                    <div class="rounded-lg border border-border/70 bg-muted/15 p-4">
-                      <div class="text-[11px] uppercase tracking-wide text-muted-foreground">Ahead / Behind</div>
-                      <div class="mt-2 text-lg font-semibold text-foreground">↑{summary.aheadCount ?? 0} ↓{summary.behindCount ?? 0}</div>
-                      <div class="mt-1 text-[11px] text-muted-foreground">{summary.upstreamRef ? `Tracking ${summary.upstreamRef}` : 'No upstream configured.'}</div>
-                    </div>
-                    <div class="rounded-lg border border-border/70 bg-muted/15 p-4">
-                      <div class="text-[11px] uppercase tracking-wide text-muted-foreground">Branch Coverage</div>
-                      <div class="mt-2 text-lg font-semibold text-foreground">{localBranches + remoteBranches}</div>
-                      <div class="mt-1 text-[11px] text-muted-foreground">{localBranches} local · {remoteBranches} remote</div>
-                    </div>
-                  </div>
-
-                  <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                    <div class="rounded-lg border border-border/70 bg-muted/15 p-4">
-                      <div class="text-[11px] uppercase tracking-wide text-muted-foreground">Repository State</div>
-                      <div class="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
-                        <div class="rounded-md border border-border/60 px-3 py-2">
-                          <div class="text-muted-foreground">Current ref</div>
-                          <div class="mt-1 text-sm font-medium text-foreground">{summaryValue(summary.headRef, summary.detached ? 'Detached HEAD' : '—')}</div>
-                        </div>
-                        <div class="rounded-md border border-border/60 px-3 py-2">
-                          <div class="text-muted-foreground">Worktree</div>
-                          <div class="mt-1 text-sm font-medium text-foreground">{summary.isWorktree ? 'Linked worktree' : 'Primary checkout'}</div>
-                        </div>
-                        <div class="rounded-md border border-border/60 px-3 py-2">
-                          <div class="text-muted-foreground">HEAD commit</div>
-                          <div class="mt-1 break-all text-sm font-medium text-foreground">{summary.headCommit ? summary.headCommit.slice(0, 7) : '—'}</div>
-                        </div>
-                        <div class="rounded-md border border-border/60 px-3 py-2">
-                          <div class="text-muted-foreground">Stashes</div>
-                          <div class="mt-1 text-sm font-medium text-foreground">{summary.stashCount ?? 0}</div>
+                  <div class="grid grid-cols-1 gap-3 xl:grid-cols-[1.35fr_1fr_1fr]">
+                    <section class="rounded-xl border border-border/70 bg-muted/15 p-4 shadow-sm">
+                      <div class="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Workspace Attention</div>
+                      <div class="mt-3 flex items-end gap-3">
+                        <div class="text-4xl font-semibold tracking-tight text-foreground">{workspaceCount}</div>
+                        <div class="pb-1 text-xs text-muted-foreground">
+                          {workspaceCount > 0 ? 'Files currently need review.' : 'Working tree is clean.'}
                         </div>
                       </div>
-                      <div class="mt-3 rounded-md border border-border/60 bg-background/60 px-3 py-2 text-[11px] text-muted-foreground">
-                        Current browser context: <span class="text-foreground">{summaryValue(props.currentPath, '/')}</span>
-                      </div>
-                    </div>
-
-                    <div class="rounded-lg border border-border/70 bg-muted/15 p-4">
-                      <div class="text-[11px] uppercase tracking-wide text-muted-foreground">Workspace Health</div>
-                      <div class="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                        <div class="rounded-md border border-border/60 px-3 py-2">
+                      <div class="mt-4 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+                        <div class="rounded-lg border border-border/60 bg-background/65 px-3 py-2">
                           <div class="text-muted-foreground">Staged</div>
                           <div class="mt-1 text-base font-semibold text-foreground">{workspaceSummary?.stagedCount ?? 0}</div>
                         </div>
-                        <div class="rounded-md border border-border/60 px-3 py-2">
+                        <div class="rounded-lg border border-border/60 bg-background/65 px-3 py-2">
                           <div class="text-muted-foreground">Unstaged</div>
                           <div class="mt-1 text-base font-semibold text-foreground">{workspaceSummary?.unstagedCount ?? 0}</div>
                         </div>
-                        <div class="rounded-md border border-border/60 px-3 py-2">
+                        <div class="rounded-lg border border-border/60 bg-background/65 px-3 py-2">
                           <div class="text-muted-foreground">Untracked</div>
                           <div class="mt-1 text-base font-semibold text-foreground">{workspaceSummary?.untrackedCount ?? 0}</div>
                         </div>
-                        <div class="rounded-md border border-border/60 px-3 py-2">
+                        <div class="rounded-lg border border-border/60 bg-background/65 px-3 py-2">
                           <div class="text-muted-foreground">Conflicted</div>
                           <div class="mt-1 text-base font-semibold text-foreground">{workspaceSummary?.conflictedCount ?? 0}</div>
                         </div>
                       </div>
-                    </div>
+                    </section>
+
+                    <section class="rounded-xl border border-border/70 bg-muted/15 p-4 shadow-sm">
+                      <div class="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Branch Sync</div>
+                      <div class="mt-3 text-2xl font-semibold tracking-tight text-foreground">↑{summary.aheadCount ?? 0} ↓{summary.behindCount ?? 0}</div>
+                      <div class="mt-1 text-[11px] text-muted-foreground">
+                        {summary.upstreamRef ? `Tracking ${summary.upstreamRef}` : 'No upstream configured.'}
+                      </div>
+                      <div class="mt-4 grid grid-cols-2 gap-2 text-[11px]">
+                        <div class="rounded-lg border border-border/60 bg-background/65 px-3 py-2">
+                          <div class="text-muted-foreground">Local branches</div>
+                          <div class="mt-1 text-base font-semibold text-foreground">{localBranches}</div>
+                        </div>
+                        <div class="rounded-lg border border-border/60 bg-background/65 px-3 py-2">
+                          <div class="text-muted-foreground">Remote branches</div>
+                          <div class="mt-1 text-base font-semibold text-foreground">{remoteBranches}</div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section class="rounded-xl border border-border/70 bg-muted/15 p-4 shadow-sm">
+                      <div class="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Selected Branch</div>
+                      <div class="mt-3 text-base font-semibold text-foreground">
+                        {props.selectedBranch ? branchDisplayName(props.selectedBranch) : 'No branch selected yet'}
+                      </div>
+                      <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
+                        {props.selectedBranch ? branchStatusSummary(props.selectedBranch) : 'Open Branches to inspect compare details for a target branch.'}
+                      </div>
+                      <Show when={props.selectedBranch?.subject}>
+                        <div class="mt-3 rounded-lg border border-border/60 bg-background/65 px-3 py-2 text-[11px] leading-5 text-foreground">
+                          {props.selectedBranch?.subject}
+                        </div>
+                      </Show>
+                    </section>
                   </div>
 
                   <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                    <div class="rounded-lg border border-border/70 bg-muted/15 p-4">
-                      <div class="text-[11px] uppercase tracking-wide text-muted-foreground">Selected Branch Focus</div>
-                      <div class="mt-3 text-sm font-medium text-foreground">{props.selectedBranch ? branchDisplayName(props.selectedBranch) : 'No branch selected yet'}</div>
-                      <div class="mt-1 text-[11px] text-muted-foreground">{props.selectedBranch ? branchStatusSummary(props.selectedBranch) : 'Pick a branch in the Branches view to inspect compare details.'}</div>
-                      <Show when={props.selectedBranch?.subject}>
-                        <div class="mt-3 rounded-md border border-border/60 bg-background/60 px-3 py-2 text-[11px] text-foreground">{props.selectedBranch?.subject}</div>
-                      </Show>
-                    </div>
+                    <section class="rounded-xl border border-border/70 bg-muted/15 p-4 shadow-sm">
+                      <div class="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Repository Signals</div>
+                      <div class="mt-3 flex flex-wrap gap-2">
+                        <For each={repoSignals()}>
+                          {(signal) => (
+                            <div class="rounded-full border border-border/60 bg-background/65 px-3 py-1.5 text-[11px] text-foreground">
+                              <span class="text-muted-foreground">{signal.label}</span>
+                              <span class="mx-1 text-muted-foreground/60">·</span>
+                              <span>{signal.value}</span>
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                    </section>
 
-                    <div class="rounded-lg border border-border/70 bg-muted/15 p-4">
-                      <div class="text-[11px] uppercase tracking-wide text-muted-foreground">Compare Snapshot</div>
+                    <section class="rounded-xl border border-border/70 bg-muted/15 p-4 shadow-sm">
+                      <div class="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Compare Snapshot</div>
                       <div class="mt-3 text-sm text-foreground">{compareHeadline(props.compare)}</div>
                       <Show when={props.compare}>
                         {(compareAccessor) => {
                           const compare = compareAccessor();
                           return (
-                            <div class="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                              <div class="rounded-md border border-border/60 px-3 py-2">
+                            <div class="mt-4 grid grid-cols-2 gap-2 text-[11px]">
+                              <div class="rounded-lg border border-border/60 bg-background/65 px-3 py-2">
                                 <div class="text-muted-foreground">Base</div>
                                 <div class="mt-1 text-sm font-medium text-foreground">{compare.baseRef}</div>
                               </div>
-                              <div class="rounded-md border border-border/60 px-3 py-2">
+                              <div class="rounded-lg border border-border/60 bg-background/65 px-3 py-2">
                                 <div class="text-muted-foreground">Target</div>
                                 <div class="mt-1 text-sm font-medium text-foreground">{compare.targetRef}</div>
                               </div>
-                              <div class="rounded-md border border-border/60 px-3 py-2">
-                                <div class="text-muted-foreground">Compare commits</div>
+                              <div class="rounded-lg border border-border/60 bg-background/65 px-3 py-2">
+                                <div class="text-muted-foreground">Commits</div>
                                 <div class="mt-1 text-sm font-medium text-foreground">{compare.commits.length}</div>
                               </div>
-                              <div class="rounded-md border border-border/60 px-3 py-2">
-                                <div class="text-muted-foreground">Changed files</div>
+                              <div class="rounded-lg border border-border/60 bg-background/65 px-3 py-2">
+                                <div class="text-muted-foreground">Files</div>
                                 <div class="mt-1 text-sm font-medium text-foreground">{compare.files.length}</div>
                               </div>
                             </div>
                           );
                         }}
                       </Show>
-                    </div>
+                    </section>
                   </div>
                 </div>
               );

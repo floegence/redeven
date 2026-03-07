@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { LayoutProvider } from '@floegence/floe-webapp-core';
+import { LayoutProvider, NotificationProvider } from '@floegence/floe-webapp-core';
 import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -37,9 +37,10 @@ describe('GitWorkbench interactions', () => {
 
     const dispose = render(() => (
       <LayoutProvider>
-        <ProtocolProvider contract={redevenV1Contract}>
-          <div class="h-[640px]">
-            <GitWorkbench
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitWorkbench
               currentPath="/workspace/repo/src"
               subview="branches"
               repoSummary={{
@@ -84,9 +85,10 @@ describe('GitWorkbench interactions', () => {
               onRefresh={() => {
                 refreshCount += 1;
               }}
-            />
-          </div>
-        </ProtocolProvider>
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
       </LayoutProvider>
     ), host);
 
@@ -95,13 +97,13 @@ describe('GitWorkbench interactions', () => {
       expect(refreshButton).toBeTruthy();
       refreshButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-      const openSidebarButton = host.querySelector('button[aria-label="Open Git sidebar"]');
+      const openSidebarButton = host.querySelector('button[aria-label="Open browser sidebar"]');
       expect(openSidebarButton).toBeTruthy();
       openSidebarButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
       expect(refreshCount).toBe(1);
       expect(openSidebarCount).toBe(1);
-      expect(host.textContent).toContain('Branch Explorer');
+      expect(host.textContent).toContain('Branches');
     } finally {
       dispose();
     }
