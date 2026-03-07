@@ -54,6 +54,15 @@ func TestServer_E2E_LockedUntilUnlock(t *testing.T) {
 		t.Fatalf("unexpected status body: %#v", statusBody)
 	}
 
+	envResp, err := http.Get(srv.URL() + "/_redeven_proxy/env/")
+	if err != nil {
+		t.Fatalf("GET env shell error = %v", err)
+	}
+	defer envResp.Body.Close()
+	if envResp.StatusCode != http.StatusOK {
+		t.Fatalf("env shell status = %d, want %d", envResp.StatusCode, http.StatusOK)
+	}
+
 	lockedResp, err := http.Get(srv.URL() + "/blocked")
 	if err != nil {
 		t.Fatalf("GET blocked path error = %v", err)

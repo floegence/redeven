@@ -8,6 +8,8 @@ const getLocalRuntimeMock = vi.fn();
 const getLocalAccessStatusMock = vi.fn();
 const unlockLocalAccessMock = vi.fn();
 const getEnvironmentMock = vi.fn();
+const getGatewayAccessStatusMock = vi.fn();
+const unlockGatewayAccessMock = vi.fn();
 const mintLocalDirectConnectInfoMock = vi.fn();
 const mintEnvProxyEntryTicketMock = vi.fn();
 const mintEnvEntryTicketForAppMock = vi.fn();
@@ -146,6 +148,8 @@ vi.mock('./utils/askFlowerPath', () => ({ resolveSuggestedWorkingDirAbsolute: ()
 vi.mock('./services/gatewayApi', () => ({
   fetchGatewayJSON: vi.fn(),
   gatewayRequestCredentials: () => 'same-origin',
+  getGatewayAccessStatus: getGatewayAccessStatusMock,
+  unlockGatewayAccess: unlockGatewayAccessMock,
 }));
 vi.mock('./services/sandboxWindowRegistry', () => ({ getSandboxWindowInfo: () => null }));
 vi.mock('./pages/EnvContext', () => ({ EnvContext: createContext({}) }));
@@ -185,6 +189,10 @@ beforeEach(() => {
     .mockResolvedValueOnce({ password_required: true, unlocked: false })
     .mockResolvedValueOnce({ password_required: true, unlocked: true });
   unlockLocalAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
+  getGatewayAccessStatusMock
+    .mockResolvedValueOnce({ password_required: true, unlocked: false })
+    .mockResolvedValueOnce({ password_required: true, unlocked: true });
+  unlockGatewayAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
   getEnvironmentMock.mockResolvedValue({
     public_id: 'env_local',
     name: 'Local agent',
@@ -281,6 +289,48 @@ describe('EnvAppShell local access gate', () => {
       expect(resumeCalls).toEqual(['resume123']);
       expect(host.textContent).not.toContain('Unlock local agent');
       expect(host.textContent).toContain('activity main');
+    } finally {
+      dispose();
+    }
+  });
+});
+
+
+describe('EnvAppShell remote access gate', () => {
+  it('waits for password unlock before connecting the remote agent', async () => {
+    getLocalRuntimeMock.mockResolvedValue(null);
+    getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      expect(host.textContent).toContain('Unlock agent');
+      expect(connectMock).not.toHaveBeenCalled();
+      expect(getEnvironmentMock).not.toHaveBeenCalled();
+
+      const input = host.querySelector('input[type="password"]') as HTMLInputElement | null;
+      expect(input).toBeTruthy();
+      input!.value = 'secret';
+      input!.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const form = host.querySelector('form');
+      expect(form).toBeTruthy();
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+      await flushAsync();
+      await flushAsync();
+
+      expect(unlockGatewayAccessMock).toHaveBeenCalledWith('secret');
+      expect(connectMock).toHaveBeenCalledTimes(1);
+      expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
+      expect(host.textContent).toContain('activity main');
+      expect(host.textContent).not.toContain('Unlock agent');
     } finally {
       dispose();
     }
