@@ -143,7 +143,10 @@ vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
 vi.mock('./widgets/AskFlowerComposerWindow', () => ({ AskFlowerComposerWindow: () => <div /> }));
 vi.mock('./utils/askFlowerContextTemplate', () => ({ buildAskFlowerDraftMarkdown: () => '' }));
 vi.mock('./utils/askFlowerPath', () => ({ resolveSuggestedWorkingDirAbsolute: () => '' }));
-vi.mock('./services/gatewayApi', () => ({ fetchGatewayJSON: vi.fn() }));
+vi.mock('./services/gatewayApi', () => ({
+  fetchGatewayJSON: vi.fn(),
+  gatewayRequestCredentials: () => 'same-origin',
+}));
 vi.mock('./services/sandboxWindowRegistry', () => ({ getSandboxWindowInfo: () => null }));
 vi.mock('./pages/EnvContext', () => ({ EnvContext: createContext({}) }));
 vi.mock('./pages/AIChatContext', () => ({
@@ -155,6 +158,16 @@ async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 afterEach(() => {
@@ -191,6 +204,50 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell local access gate', () => {
+
+  it('keeps the app blocked until access resume finishes', async () => {
+    const resumeDeferred = deferred<void>();
+    accessResumeMock.mockImplementationOnce(async ({ token }: { token: string }) => {
+      resumeCalls.push(token);
+      await resumeDeferred.promise;
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const input = host.querySelector('input[type="password"]') as HTMLInputElement | null;
+      expect(input).toBeTruthy();
+      input!.value = 'secret';
+      input!.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const form = host.querySelector('form');
+      expect(form).toBeTruthy();
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+      await flushAsync();
+      await flushAsync();
+
+      expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
+      expect(host.textContent).toContain('Preparing secure session');
+      expect(host.textContent).not.toContain('activity main');
+
+      resumeDeferred.resolve();
+      await flushAsync();
+      await flushAsync();
+
+      expect(host.textContent).toContain('activity main');
+      expect(host.textContent).not.toContain('Preparing secure session');
+    } finally {
+      dispose();
+    }
+  });
+
   it('waits for password unlock before connecting the local agent', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

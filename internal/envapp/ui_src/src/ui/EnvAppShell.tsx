@@ -41,7 +41,7 @@ import { AuditLogDialog } from './widgets/AuditLogDialog';
 import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
 import { buildAskFlowerDraftMarkdown } from './utils/askFlowerContextTemplate';
 import { resolveSuggestedWorkingDirAbsolute } from './utils/askFlowerPath';
-import { fetchGatewayJSON } from './services/gatewayApi';
+import { fetchGatewayJSON, gatewayRequestCredentials } from './services/gatewayApi';
 import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
 import { consumeAccessResumeTokenFromWindow } from './accessResume';
 import {
@@ -147,6 +147,7 @@ export function EnvAppShell() {
   const [localAccessPassword, setLocalAccessPassword] = createSignal('');
   const [localAccessError, setLocalAccessError] = createSignal<string | null>(null);
   const [localAccessUnlocking, setLocalAccessUnlocking] = createSignal(false);
+  const [localAccessChannelReady, setLocalAccessChannelReady] = createSignal(false);
   const [localAccessResumeToken, setLocalAccessResumeToken] = createSignal(
     typeof window !== 'undefined' ? consumeAccessResumeTokenFromWindow(window) : '',
   );
@@ -155,7 +156,10 @@ export function EnvAppShell() {
   const localPasswordRequired = createMemo(() => Boolean(localAccessStatus()?.password_required));
   const localAccessPending = createMemo(() => isLocalMode() && !localAccessChecked());
   const localAccessLocked = createMemo(() => isLocalMode() && localPasswordRequired() && !String(localAccessResumeToken() ?? '').trim());
-  const localAccessGateVisible = createMemo(() => localAccessPending() || localAccessLocked());
+  const localAccessResumePending = createMemo(
+    () => isLocalMode() && localPasswordRequired() && !localAccessPending() && !localAccessLocked() && !localAccessChannelReady(),
+  );
+  const localAccessGateVisible = createMemo(() => localAccessPending() || localAccessLocked() || localAccessResumePending());
 
   const [envId, setEnvId] = createSignal(getEnvPublicIDFromSession());
 
@@ -237,7 +241,7 @@ export function EnvAppShell() {
     const resp = await fetch('/_redeven_proxy/api/ai/uploads', {
       method: 'POST',
       body: form,
-      credentials: 'omit',
+      credentials: gatewayRequestCredentials(),
       cache: 'no-store',
     });
 
@@ -437,6 +441,7 @@ export function EnvAppShell() {
       const status = await rpc.access.status();
       if (!status.passwordRequired || status.unlocked) {
         accessResumeClient = client;
+        setLocalAccessChannelReady(true);
         setLocalAccessError(null);
         setManualError(null);
         return;
@@ -444,6 +449,7 @@ export function EnvAppShell() {
 
       const token = String(localAccessResumeToken() ?? '').trim();
       if (!token) {
+        setLocalAccessChannelReady(false);
         setLocalAccessError('Enter the access password to continue.');
         throw new Error('Access password required. Refresh and unlock again.');
       }
@@ -451,6 +457,7 @@ export function EnvAppShell() {
       try {
         await rpc.access.resume({ token });
       } catch (error) {
+        setLocalAccessChannelReady(false);
         if (isLocalMode()) {
           setLocalAccessResumeToken('');
           setLocalAccessError('Access password expired. Enter it again to continue.');
@@ -458,6 +465,7 @@ export function EnvAppShell() {
         throw error;
       }
       accessResumeClient = client;
+      setLocalAccessChannelReady(true);
       setLocalAccessError(null);
       setManualError(null);
     })();
@@ -511,6 +519,7 @@ export function EnvAppShell() {
 
     try {
       if (isLocalMode()) {
+        setLocalAccessChannelReady(false);
         const directInfo = await mintLocalDirectConnectInfo();
         await fn({
           mode: 'direct',
@@ -589,6 +598,13 @@ export function EnvAppShell() {
     if (!localAccessLocked()) return;
     if (localAccessPending()) return;
     queueMicrotask(() => localAccessPasswordInput?.focus());
+  });
+
+  createEffect(() => {
+    if (!isLocalMode() || !localPasswordRequired()) return;
+    if (protocol.status() !== 'connected') {
+      setLocalAccessChannelReady(false);
+    }
   });
 
   createEffect(() => {
@@ -756,6 +772,7 @@ export function EnvAppShell() {
         localStatus = await getLocalAccessStatus();
         setLocalAccessStatus(localStatus);
         setLocalAccessChecked(true);
+        setLocalAccessChannelReady(!Boolean(localStatus?.password_required));
 
         const localEnvID = String((rt as any).env_public_id ?? '').trim() || 'env_local';
         try {
@@ -768,6 +785,7 @@ export function EnvAppShell() {
         setLocalRuntime(null);
         setLocalAccessStatus(null);
         setLocalAccessChecked(true);
+        setLocalAccessChannelReady(true);
         setEnvId(getEnvPublicIDFromSession());
       }
 
@@ -1151,34 +1169,44 @@ export function EnvAppShell() {
       <Panel class="w-full max-w-md border-border shadow-sm">
         <PanelContent class="flex flex-col gap-4 p-6">
           <div class="space-y-2">
-            <div class="text-lg font-semibold text-foreground">Unlock local agent</div>
+            <div class="text-lg font-semibold text-foreground">{localAccessResumePending() ? 'Preparing secure session' : 'Unlock local agent'}</div>
             <p class="text-sm leading-6 text-muted-foreground">
-              Enter the full access password before this browser load can connect to the local agent.
+              {localAccessResumePending()
+                ? 'Verifying the password for this browser load and connecting to the local agent.'
+                : 'Enter the full access password before this browser load can connect to the local agent.'}
             </p>
           </div>
 
-          <form class="flex flex-col gap-3" onSubmit={(event) => void submitLocalAccessUnlock(event)}>
-            <input
-              ref={localAccessPasswordInput}
-              type="password"
-              autocomplete="current-password"
-              placeholder="Access password"
-              value={localAccessPassword()}
-              onInput={(event) => setLocalAccessPassword(event.currentTarget.value)}
-              disabled={localAccessPending() || localAccessUnlocking()}
-              class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-[border,box-shadow] placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
-            />
-            <button
-              type="submit"
-              disabled={localAccessPending() || localAccessUnlocking() || !localAccessPassword()}
-              class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {localAccessUnlocking() ? 'Unlocking...' : 'Unlock'}
-            </button>
-          </form>
+          <Show when={!localAccessResumePending()}>
+            <form class="flex flex-col gap-3" onSubmit={(event) => void submitLocalAccessUnlock(event)}>
+              <input
+                ref={localAccessPasswordInput}
+                type="password"
+                autocomplete="current-password"
+                placeholder="Access password"
+                value={localAccessPassword()}
+                onInput={(event) => setLocalAccessPassword(event.currentTarget.value)}
+                disabled={localAccessPending() || localAccessUnlocking()}
+                class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-[border,box-shadow] placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+              />
+              <button
+                type="submit"
+                disabled={localAccessPending() || localAccessUnlocking() || !localAccessPassword()}
+                class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {localAccessUnlocking() ? 'Unlocking...' : 'Unlock'}
+              </button>
+            </form>
+          </Show>
 
           <Show when={localAccessPending()}>
             <div class="text-sm text-muted-foreground">Checking local access...</div>
+          </Show>
+
+          <Show when={localAccessResumePending()}>
+            <div class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+              The page stays blocked until the direct agent session confirms the password for this browser load.
+            </div>
           </Show>
 
           <Show when={localAccessError()}>

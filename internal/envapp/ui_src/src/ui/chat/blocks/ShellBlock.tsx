@@ -3,6 +3,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { gatewayRequestCredentials } from '../../services/gatewayApi';
 
 export interface ShellBlockProps {
   command: string;
@@ -389,7 +390,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
 
     const resp = await fetch(terminalOutputURL(runID, toolID, metaOnly), {
       method: 'GET',
-      credentials: 'omit',
+      credentials: gatewayRequestCredentials(),
       cache: 'no-store',
     });
     const raw = await resp.text();

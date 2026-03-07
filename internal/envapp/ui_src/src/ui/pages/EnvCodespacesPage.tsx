@@ -19,6 +19,7 @@ import {
 import { useProtocol } from "@floegence/floe-webapp-protocol";
 import { useRedevenRpc, type FsFileInfo } from "../protocol/redeven_v1";
 import { getEnvPublicIDFromSession, getLocalRuntime, mintEnvEntryTicketForApp } from "../services/controlplaneApi";
+import { gatewayRequestCredentials } from "../services/gatewayApi";
 import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
 
 type SpaceStatus = Readonly<{
@@ -42,7 +43,12 @@ async function fetchGatewayJSON<T>(url: string, init: RequestInit): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
-  const resp = await fetch(url, { ...init, headers, credentials: "omit", cache: "no-store" });
+  const resp = await fetch(url, {
+    ...init,
+    headers,
+    credentials: init.credentials ?? gatewayRequestCredentials(),
+    cache: "no-store",
+  });
   const text = await resp.text();
   let data: any = null;
   try {

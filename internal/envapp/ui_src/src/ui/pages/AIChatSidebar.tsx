@@ -7,7 +7,7 @@ import { SidebarContent, SidebarSection } from '@floegence/floe-webapp-core/layo
 import { Button, Checkbox, ConfirmDialog, Dialog, ProcessingIndicator, SegmentedControl, Tooltip } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { Motion } from 'solid-motionone';
-import { fetchGatewayJSON } from '../services/gatewayApi';
+import { fetchGatewayJSON, gatewayRequestCredentials } from '../services/gatewayApi';
 import { useAIChatContext, type ListThreadsResponse, type ThreadRunStatus, type ThreadView } from './AIChatContext';
 import { useEnvContext } from './EnvContext';
 import { hasRWXPermissions } from './aiPermissions';
@@ -185,7 +185,7 @@ async function requestDeleteThread(threadID: string, force: boolean): Promise<De
   if (!tid) throw new Error('missing thread_id');
 
   const url = `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}${force ? '?force=true' : ''}`;
-  const resp = await fetch(url, { method: 'DELETE', credentials: 'omit', cache: 'no-store' });
+  const resp = await fetch(url, { method: 'DELETE', credentials: gatewayRequestCredentials(), cache: 'no-store' });
   const text = await resp.text();
   let data: any = null;
   try {
