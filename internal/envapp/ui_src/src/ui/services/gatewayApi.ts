@@ -1,8 +1,26 @@
+export function gatewayRequestCredentialsForHost(hostname: string): RequestCredentials {
+  const host = String(hostname ?? '').trim().toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' ? 'same-origin' : 'omit';
+}
+
+export function gatewayRequestCredentials(): RequestCredentials {
+  try {
+    return gatewayRequestCredentialsForHost(window.location.hostname);
+  } catch {
+    return 'omit';
+  }
+}
+
 export async function fetchGatewayJSON<T>(url: string, init: RequestInit): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
 
-  const resp = await fetch(url, { ...init, headers, credentials: 'omit', cache: 'no-store' });
+  const resp = await fetch(url, {
+    ...init,
+    headers,
+    credentials: init.credentials ?? gatewayRequestCredentials(),
+    cache: 'no-store',
+  });
   const text = await resp.text();
   let data: any = null;
   try {
@@ -14,4 +32,3 @@ export async function fetchGatewayJSON<T>(url: string, init: RequestInit): Promi
   if (data?.ok === false) throw new Error(String(data?.error ?? 'Request failed'));
   return (data?.data ?? data) as T;
 }
-
