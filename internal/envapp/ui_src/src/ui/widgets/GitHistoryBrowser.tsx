@@ -5,8 +5,8 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
 import { GitPatchViewer } from './GitPatchViewer';
 import { readGitPatchTextOnce } from '../utils/gitPatchStreamReader';
-import { gitChangeDotClass } from '../utils/gitPatch';
 import { changeMetricsText, changeSecondaryPath } from '../utils/gitWorkbench';
+import { gitChangeTone, gitToneBadgeClass, gitToneSelectableCardClass, gitToneSurfaceClass } from './GitChrome';
 
 const COMMIT_BODY_PREVIEW_LINES = 5;
 
@@ -114,7 +114,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   });
 
   return (
-    <div class={cn('relative h-full min-h-0 flex flex-col bg-background', props.class)}>
+    <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
       <Show
         when={repoAvailable()}
         fallback={
@@ -147,19 +147,19 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                   return (
                     <div class="flex-1 min-h-0 overflow-auto px-4 py-3">
                       <div class="space-y-4">
-                        <section class="rounded-xl border border-border/70 bg-muted/15 p-4 shadow-sm">
+                        <section class={cn('rounded-2xl border p-4 shadow-sm', gitToneSurfaceClass('brand'))}>
                           <div class="flex flex-wrap items-start justify-between gap-3">
                             <div class="min-w-0 flex-1">
                               <div class="text-base font-semibold text-foreground">{detail.subject || '(no subject)'}</div>
                               <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-                                <span class="rounded-full border border-border/60 bg-background/65 px-2 py-0.5 font-mono text-foreground">{detail.shortHash}</span>
-                                <span class="rounded-full border border-border/60 bg-background/65 px-2 py-0.5">{detail.authorName || '-'}</span>
+                                <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass('brand'))}>{detail.shortHash}</span>
+                                <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass('neutral'))}>{detail.authorName || '-'}</span>
                                 <Show when={detail.authorEmail}>
-                                  <span class="rounded-full border border-border/60 bg-background/65 px-2 py-0.5">{detail.authorEmail}</span>
+                                  <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass('neutral'))}>{detail.authorEmail}</span>
                                 </Show>
-                                <span class="rounded-full border border-border/60 bg-background/65 px-2 py-0.5">{formatDetailTime(detail.authorTimeMs)}</span>
+                                <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass('neutral'))}>{formatDetailTime(detail.authorTimeMs)}</span>
                                 <Show when={detail.parents.length > 0}>
-                                  <span class="rounded-full border border-border/60 bg-background/65 px-2 py-0.5" title={detail.parents.map((item) => item.slice(0, 7)).join(', ')}>
+                                  <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass('violet'))} title={detail.parents.map((item) => item.slice(0, 7)).join(', ')}>
                                     Parents {detail.parents.map((item) => item.slice(0, 7)).join(', ')}
                                   </span>
                                 </Show>
@@ -170,14 +170,12 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                           <Show when={commitBodyText()}>
                             <div class="mt-4 space-y-1">
                               <div
-                                class={cn(
-                                  'rounded-lg border border-border/60 bg-background/65 px-3 py-2 text-[11px] leading-5 whitespace-pre-wrap break-words text-foreground',
-                                  commitBodyExpanded() ? 'overflow-auto' : 'overflow-hidden'
-                                )}
+                                class="rounded-xl border border-border/60 bg-background/75 px-3 py-2 text-[11px] leading-5 whitespace-pre-wrap break-words text-foreground"
                                 style={commitBodyExpanded() ? undefined : {
                                   display: '-webkit-box',
                                   '-webkit-box-orient': 'vertical',
                                   '-webkit-line-clamp': String(COMMIT_BODY_PREVIEW_LINES),
+                                  overflow: 'hidden',
                                 }}
                               >{commitBodyText()}</div>
                               <Show when={hasExpandableCommitBody()}>
@@ -195,38 +193,33 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                           </Show>
                         </section>
 
-                        <section class="rounded-xl border border-border/70 bg-muted/15 p-4 shadow-sm">
+                        <section class={cn('rounded-2xl border p-4 shadow-sm', gitToneSurfaceClass('info'))}>
                           <div class="flex items-center justify-between gap-3">
                             <div>
                               <div class="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Changed Files</div>
                               <div class="mt-1 text-xs text-muted-foreground">Select a changed file to inspect its patch below.</div>
                             </div>
-                            <div class="rounded-full border border-border/60 bg-background/65 px-2.5 py-1 text-[10px] text-muted-foreground">{commitFiles().length}</div>
+                            <div class={cn('rounded-full border px-2.5 py-1 text-[10px] font-medium', gitToneBadgeClass('info'))}>{commitFiles().length}</div>
                           </div>
                           <Show when={commitFiles().length > 0} fallback={<div class="mt-4 text-xs text-muted-foreground">No changed files in this commit.</div>}>
-                            <div class="mt-4 max-h-72 space-y-2 overflow-auto pr-1">
+                            <div class="mt-4 max-h-[38vh] space-y-2 overflow-auto pr-1 sm:max-h-72">
                               <For each={commitFiles()}>
                                 {(file) => {
                                   const active = () => selectedFileKey() === selectedFileIdentity(file);
+                                  const tone = () => gitChangeTone(file.changeType);
                                   return (
                                     <button
                                       type="button"
-                                      class={cn(
-                                        'w-full rounded-lg border px-3 py-2 text-left transition-all duration-150',
-                                        active()
-                                          ? 'border-border bg-background text-foreground shadow-sm'
-                                          : 'border-border/50 bg-background/60 text-foreground hover:border-border hover:bg-background'
-                                      )}
+                                      class={cn('w-full rounded-xl border px-3 py-2.5 text-left transition-all duration-150', gitToneSelectableCardClass(tone(), active()))}
                                       onClick={() => setSelectedFileKey(selectedFileIdentity(file))}
                                     >
-                                      <div class="flex items-start gap-2">
-                                        <span class={cn('mt-1 inline-block size-2 rounded-full', gitChangeDotClass(file.changeType))} />
-                                        <div class="min-w-0 flex-1">
-                                          <div class="truncate text-[12px] font-medium" title={changeSecondaryPath(file)}>{changeSecondaryPath(file)}</div>
-                                          <div class="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
-                                            <span>{file.changeType || 'modified'}</span>
-                                            <span>{file.isBinary ? `Binary · ${changeMetricsText(file)}` : changeMetricsText(file)}</span>
-                                          </div>
+                                      <div class="min-w-0">
+                                        <div class="truncate text-[12px] font-medium text-current" title={changeSecondaryPath(file)}>{changeSecondaryPath(file)}</div>
+                                        <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                                          <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass(tone()))}>{file.changeType || 'modified'}</span>
+                                          <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass(file.isBinary ? 'warning' : 'neutral'))}>
+                                            {file.isBinary ? `Binary · ${changeMetricsText(file)}` : changeMetricsText(file)}
+                                          </span>
                                         </div>
                                       </div>
                                     </button>

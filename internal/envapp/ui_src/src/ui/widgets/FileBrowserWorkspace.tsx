@@ -16,6 +16,7 @@ import {
 import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
+import { gitToneBadgeClass, gitToneInsetClass } from './GitChrome';
 
 export interface FileBrowserWorkspaceProps {
   mode: GitHistoryMode;
@@ -70,7 +71,7 @@ function FileWorkspaceHeader(props: { showSidebarToggle?: boolean; onOpenSidebar
             Up
           </Button>
 
-          <div class="min-w-0 flex-1 rounded-lg border border-border/60 bg-muted/10 px-3 py-2">
+          <div class={cn('min-w-0 flex-1 rounded-xl border px-3 py-2', gitToneInsetClass('info'))}>
             <Breadcrumb class="min-w-0" />
           </div>
 
@@ -85,17 +86,33 @@ function FileWorkspaceHeader(props: { showSidebarToggle?: boolean; onOpenSidebar
           />
         </div>
 
-        <label class="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/10 px-3 py-2 text-xs text-muted-foreground focus-within:border-ring focus-within:ring-1 focus-within:ring-ring">
-          <Search class="size-3.5 shrink-0" />
-          <input
-            type="text"
-            value={browser.filterQuery()}
-            onInput={(event) => browser.setFilterQuery(event.currentTarget.value)}
-            placeholder="Filter files"
-            aria-label="Filter files"
-            class="min-w-0 flex-1 border-0 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/70"
-          />
-        </label>
+        <div class="flex flex-wrap items-center gap-2">
+          <label class="flex min-w-[220px] flex-1 items-center gap-2 rounded-xl border border-border/60 bg-muted/15 px-3 py-2 text-xs text-muted-foreground focus-within:border-ring focus-within:ring-1 focus-within:ring-ring">
+            <Search class="size-3.5 shrink-0" />
+            <input
+              type="text"
+              value={browser.filterQuery()}
+              onInput={(event) => browser.setFilterQuery(event.currentTarget.value)}
+              placeholder="Filter files"
+              aria-label="Filter files"
+              class="min-w-0 flex-1 border-0 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/70"
+            />
+          </label>
+
+          <span class={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium', gitToneBadgeClass('info'))}>
+            {browser.currentFiles().length} visible
+          </span>
+          <Show when={browser.selectedItems().size > 0}>
+            <span class={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium', gitToneBadgeClass('brand'))}>
+              {browser.selectedItems().size} selected
+            </span>
+          </Show>
+          <Show when={browser.filterQueryApplied().trim()}>
+            <span class={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-medium', gitToneBadgeClass('warning'))}>
+              Filter active
+            </span>
+          </Show>
+        </div>
       </div>
     </div>
   );
@@ -105,17 +122,23 @@ function FileWorkspaceStatusBar() {
   const browser = useFileBrowser();
 
   return (
-    <div class="flex items-center justify-between gap-3 border-t border-border/70 px-3 py-1 text-[10px] text-muted-foreground">
-      <div class="truncate">
-        {browser.currentFiles().length} items
+    <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/70 px-3 py-2 text-[10px] text-muted-foreground">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class={cn('inline-flex items-center rounded-full border px-2 py-1 font-medium', gitToneBadgeClass('neutral'))}>
+          {browser.currentFiles().length} items
+        </span>
         <Show when={browser.filterQueryApplied().trim()}>
-          <span> (filtered)</span>
+          <span class={cn('inline-flex items-center rounded-full border px-2 py-1 font-medium', gitToneBadgeClass('warning'))}>
+            Filtered view
+          </span>
         </Show>
         <Show when={browser.selectedItems().size > 0}>
-          <span> · {browser.selectedItems().size} selected</span>
+          <span class={cn('inline-flex items-center rounded-full border px-2 py-1 font-medium', gitToneBadgeClass('brand'))}>
+            {browser.selectedItems().size} selected
+          </span>
         </Show>
       </div>
-      <div class="max-w-[40%] truncate">{browser.currentPath()}</div>
+      <div class="max-w-full truncate text-right sm:max-w-[45%]">{browser.currentPath()}</div>
     </div>
   );
 }
@@ -149,7 +172,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   return (
     <BrowserWorkspaceShell
       title="Browser"
-      headerActions={<span class="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">Files</span>}
+      headerActions={<span class={cn('inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em]', gitToneBadgeClass('info'))}>Files</span>}
       width={props.width}
       open={props.open}
       resizable={props.resizable}
@@ -160,12 +183,14 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
       }}
       modeSwitcher={<GitHistoryModeSwitch mode={props.mode} onChange={props.onModeChange} gitHistoryDisabled={props.gitHistoryDisabled} class="w-full" />}
       sidebarBody={(
-        <div class="space-y-2">
+        <div class="flex h-full min-h-0 flex-col space-y-2">
           <div class="flex items-center justify-between px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">
             <span>Folders</span>
             <span>{browser.currentPath() === '/' ? 'Root' : 'Tree'}</span>
           </div>
-          <DirectoryTree instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="min-h-0" />
+          <div class={cn('min-h-0 flex-1 overflow-hidden rounded-xl border p-2', gitToneInsetClass('neutral'))}>
+            <DirectoryTree instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="min-h-0 h-full" />
+          </div>
         </div>
       )}
       content={(
@@ -176,7 +201,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
               contentScrollEl = el;
               browser.setScrollContainer(el);
             }}
-            class="flex-1 min-h-0 overflow-auto"
+            class="flex-1 min-h-0 overflow-auto bg-gradient-to-b from-background to-muted/[0.03]"
           >
             <Show when={browser.viewMode() === 'list'} fallback={<FileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
               <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />

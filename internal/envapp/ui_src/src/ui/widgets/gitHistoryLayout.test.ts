@@ -43,6 +43,28 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('props.modeSwitcher');
   });
 
+  it('keeps semantic sidebar controls and mobile-first grids in the new git chrome', () => {
+    const modeSrc = read('./GitHistoryModeSwitch.tsx');
+    const navSrc = read('./GitViewNav.tsx');
+    const sidebarSrc = read('./GitWorkbenchSidebar.tsx');
+    const overviewSrc = read('./GitOverviewPanel.tsx');
+    const branchesSrc = read('./GitBranchesPanel.tsx');
+
+    expect(modeSrc).toContain('role="radiogroup"');
+    expect(modeSrc).toContain('aria-label="Browser mode"');
+    expect(modeSrc).toContain('grid grid-cols-2');
+    expect(modeSrc).toContain('sm:inline-flex');
+
+    expect(navSrc).toContain('role="tablist"');
+    expect(navSrc).toContain('aria-label="Git views"');
+    expect(navSrc).toContain('gitToneSelectableCardClass');
+
+    expect(sidebarSrc).toContain('grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2');
+    expect(overviewSrc).toContain('mt-4 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2 xl:grid-cols-4');
+    expect(overviewSrc).toContain('mt-4 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2');
+    expect(branchesSrc).toContain('mt-4 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2');
+  });
+
   it('uses the dedicated git view navigation inside the git workspace shell', () => {
     const src = read('./GitWorkspace.tsx');
 

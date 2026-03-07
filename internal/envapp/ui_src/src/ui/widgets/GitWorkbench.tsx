@@ -16,6 +16,7 @@ import { GitOverviewPanel } from './GitOverviewPanel';
 import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
+import { gitSubviewTone, gitToneBadgeClass } from './GitChrome';
 
 export interface GitWorkbenchProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -63,6 +64,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
   const headRef = () => String(props.repoSummary?.headRef || props.repoInfo?.headRef || '').trim();
   const loadingBusy = () => Boolean(props.repoInfoLoading || props.repoSummaryLoading || props.workspaceLoading || props.branchesLoading || props.compareLoading);
   const showMenuButton = () => Boolean(props.showSidebarToggle && props.onOpenSidebar);
+  const subviewTone = () => gitSubviewTone(props.subview);
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
@@ -82,9 +84,11 @@ export function GitWorkbench(props: GitWorkbenchProps) {
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="min-w-0 flex-1 space-y-2.5">
             <div class="flex flex-wrap items-center gap-2 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground/70">
-              <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5 text-foreground/85">{subviewLabel(props.subview)}</span>
+              <span class={cn('rounded-full border px-2.5 py-0.5 text-[10px] font-medium normal-case tracking-normal', gitToneBadgeClass(subviewTone()))}>
+                {subviewLabel(props.subview)}
+              </span>
               <Show when={loadingBusy()}>
-                <span>Refreshing…</span>
+                <span class={cn('rounded-full border px-2.5 py-0.5 text-[10px] font-medium normal-case tracking-normal', gitToneBadgeClass('warning'))}>Refreshing…</span>
               </Show>
             </div>
 
@@ -95,14 +99,18 @@ export function GitWorkbench(props: GitWorkbenchProps) {
 
             <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
               <Show when={headRef()}>
-                <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5">{headRef()}</span>
+                <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass('brand'))}>{headRef()}</span>
               </Show>
-              <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5">{changeCount() > 0 ? `${changeCount()} changes` : 'Clean workspace'}</span>
+              <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass(changeCount() > 0 ? 'warning' : 'success'))}>
+                {changeCount() > 0 ? `${changeCount()} changes` : 'Clean workspace'}
+              </span>
               <Show when={typeof props.repoSummary?.aheadCount === 'number' || typeof props.repoSummary?.behindCount === 'number'}>
-                <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5">↑{props.repoSummary?.aheadCount ?? 0} ↓{props.repoSummary?.behindCount ?? 0}</span>
+                <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass('violet'))}>
+                  ↑{props.repoSummary?.aheadCount ?? 0} ↓{props.repoSummary?.behindCount ?? 0}
+                </span>
               </Show>
               <Show when={props.repoSummary?.isWorktree}>
-                <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5">Linked worktree</span>
+                <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass('info'))}>Linked worktree</span>
               </Show>
             </div>
           </div>

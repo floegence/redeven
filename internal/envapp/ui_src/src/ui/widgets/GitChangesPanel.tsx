@@ -4,6 +4,7 @@ import type { GitListWorkspaceChangesResponse, GitWorkspaceChange } from '../pro
 import { GitPatchViewer } from './GitPatchViewer';
 import { readWorkspaceGitPatchTextOnce } from '../utils/gitPatchStreamReader';
 import { changeMetricsText, changeSecondaryPath, summarizeWorkspaceCount, workspaceSectionLabel } from '../utils/gitWorkbench';
+import { gitChangeTone, gitToneBadgeClass, gitToneInsetClass, workspaceSectionTone } from './GitChrome';
 
 export interface GitChangesPanelProps {
   repoRootPath?: string;
@@ -18,7 +19,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const totalChanges = () => summarizeWorkspaceCount(props.workspace?.summary);
 
   return (
-    <div class="h-full min-h-0 flex flex-col overflow-hidden">
+    <div class="flex h-full min-h-0 flex-col overflow-hidden">
       <div class="shrink-0 border-b border-border/70 px-4 py-3">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="min-w-0">
@@ -34,12 +35,12 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
             {(itemAccessor) => {
               const item = itemAccessor();
               return (
-                <div class="min-w-0 max-w-full rounded-lg border border-border/70 bg-muted/15 px-3 py-2 text-right">
+                <div class={gitToneInsetClass(workspaceSectionTone(item.section)) + ' min-w-0 max-w-full rounded-xl border px-3 py-2 text-right'}>
                   <div class="truncate text-[11px] font-medium text-foreground" title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
                   <div class="mt-1 flex flex-wrap justify-end gap-1.5 text-[10px] text-muted-foreground">
-                    <span class="rounded-full border border-border/60 px-2 py-0.5">{workspaceSectionLabel((item.section || 'unstaged') as 'staged' | 'unstaged' | 'untracked' | 'conflicted')}</span>
-                    <span class="rounded-full border border-border/60 px-2 py-0.5">{item.changeType || 'modified'}</span>
-                    <span class="rounded-full border border-border/60 px-2 py-0.5">{changeMetricsText(item)}</span>
+                    <span class={gitToneBadgeClass(workspaceSectionTone(item.section)) + ' rounded-full border px-2 py-0.5 font-medium'}>{workspaceSectionLabel((item.section || 'unstaged') as 'staged' | 'unstaged' | 'untracked' | 'conflicted')}</span>
+                    <span class={gitToneBadgeClass(gitChangeTone(item.changeType)) + ' rounded-full border px-2 py-0.5 font-medium'}>{item.changeType || 'modified'}</span>
+                    <span class={gitToneBadgeClass('neutral') + ' rounded-full border px-2 py-0.5 font-medium'}>{changeMetricsText(item)}</span>
                   </div>
                 </div>
               );

@@ -80,6 +80,9 @@ describe('GitWorkspace interactions', () => {
     try {
       expect(host.textContent).toContain('Mode');
       expect(host.textContent).toContain('View');
+      expect(host.querySelectorAll('[role="radiogroup"][aria-label="Browser mode"]').length).toBe(1);
+      expect(host.querySelectorAll('[role="tablist"][aria-label="Git views"]').length).toBe(1);
+
       const historyButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim().startsWith('History'));
       expect(historyButton).toBeTruthy();
       historyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
