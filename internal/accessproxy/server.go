@@ -124,6 +124,17 @@ func (s *Server) URL() string {
 	return "http://" + s.ln.Addr().String()
 }
 
+func isPublicEnvAppRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	p := strings.TrimSpace(r.URL.Path)
+	return p == "/_redeven_proxy/env" || p == "/_redeven_proxy/env/" || strings.HasPrefix(p, "/_redeven_proxy/env/")
+}
+
 func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if s == nil || r == nil {
 		http.Error(w, "not ready", http.StatusServiceUnavailable)
@@ -134,7 +145,7 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleAccessAPI(w, r)
 		return
 	}
-	if s.gate != nil && s.gate.Enabled() && !s.gate.IsChannelUnlocked(strings.TrimSpace(s.meta.ChannelID)) {
+	if s.gate != nil && s.gate.Enabled() && !s.gate.IsChannelUnlocked(strings.TrimSpace(s.meta.ChannelID)) && !isPublicEnvAppRequest(r) {
 		http.Error(w, "access password required", http.StatusLocked)
 		return
 	}
