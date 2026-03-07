@@ -19,35 +19,36 @@ describe('git history layout wiring', () => {
     expect(src).toContain('resizable');
   });
 
-  it('uses the native SidebarPane shell as a pure git selector rail', () => {
+  it('uses the git sidebar as the single navigation surface for mode and view switching', () => {
     const src = read('./GitWorkbenchSidebar.tsx');
 
-    expect(src).toContain("import { SidebarItem, SidebarItemList, SidebarPane } from '@floegence/floe-webapp-core/layout';");
+    expect(src).toContain("import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';");
+    expect(src).toContain("import { GitSubviewSwitch } from './GitSubviewSwitch';");
     expect(src).toContain('title="Git"');
-    expect(src).toContain('subviewTitle(props.subview)');
+    expect(src).toContain('headerActions={<span class="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">Navigator</span>}');
     expect(src).toContain('props.onClose?.();');
-    expect(src).not.toContain('GitSubviewSwitch');
-    expect(src).not.toContain('Refresh');
   });
 
-  it('switches git subviews without awaiting a blocking refresh call', () => {
+  it('keeps the git sidebar mounted for overview so navigation stays in one place', () => {
     const src = read('./RemoteFileBrowser.tsx');
     const start = src.indexOf('const handleGitSubviewChange = (view: GitWorkbenchSubview) => {');
     expect(start).toBeGreaterThanOrEqual(0);
-    const end = src.indexOf("const showPageSidebar = () => pageMode() === 'git' && gitSubview() !== 'overview';", start);
+    const end = src.indexOf("const showPageSidebar = () => pageMode() === 'git';", start);
     expect(end).toBeGreaterThan(start);
     const handler = src.slice(start, end);
 
     expect(handler).toContain('setGitSubview(view);');
     expect(handler).not.toContain('refreshGitWorkbench');
     expect(handler).not.toContain('await ');
+    expect(src).toContain("const showPageSidebar = () => pageMode() === 'git';");
   });
 
-  it('keeps mode, refresh, and subview controls in the global git header', () => {
+  it('keeps the global git header focused on context and refresh only', () => {
     const src = read('./GitWorkbench.tsx');
 
-    expect(src).toContain('GitHistoryModeSwitch');
-    expect(src).toContain('GitSubviewSwitch');
     expect(src).toContain('Refresh');
+    expect(src).toContain('subviewLabel(props.subview)');
+    expect(src).not.toContain('GitHistoryModeSwitch');
+    expect(src).not.toContain('GitSubviewSwitch');
   });
 });

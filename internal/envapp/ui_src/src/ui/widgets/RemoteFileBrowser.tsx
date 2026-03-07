@@ -646,7 +646,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitHistorySidebarOpen(true);
   };
 
-  const showPageSidebar = () => pageMode() === 'git' && gitSubview() !== 'overview';
+  const showPageSidebar = () => pageMode() === 'git';
 
   createEffect(() => {
     floe.persist.debouncedSave(PAGE_SIDEBAR_WIDTH_STORAGE_KEY, gitHistorySidebarWidth());
@@ -1738,7 +1738,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           <div class="h-full min-h-0 flex overflow-hidden relative">
             <Show when={showPageSidebar()}>
               <GitWorkbenchSidebar
+                mode={pageMode()}
+                onModeChange={handlePageModeChange}
+                gitHistoryDisabled={!canEnterGitHistory()}
                 subview={gitSubview()}
+                onSubviewChange={handleGitSubviewChange}
                 width={gitHistorySidebarWidth()}
                 open={pageSidebarOpen()}
                 resizable
@@ -1747,6 +1751,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                 repoInfoLoading={repoInfoLoading()}
                 repoInfoError={repoInfoError()}
                 repoAvailable={repoHistoryAvailable()}
+                repoSummary={gitRepoSummary()}
                 workspace={gitWorkspace()}
                 workspaceLoading={gitWorkspaceLoading()}
                 workspaceError={gitWorkspaceError()}
@@ -1774,13 +1779,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                 fallback={
                   <GitWorkbench
                     class="h-full"
-                    mode={pageMode()}
-                    onModeChange={handlePageModeChange}
                     currentPath={currentBrowserPath()}
                     repoInfo={repoInfo()}
                     repoInfoLoading={repoInfoLoading()}
                     subview={gitSubview()}
-                    onSubviewChange={handleGitSubviewChange}
                     repoSummary={gitRepoSummary()}
                     repoSummaryLoading={gitRepoSummaryLoading()}
                     repoSummaryError={gitRepoSummaryError()}
@@ -1795,7 +1797,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                     compare={gitBranchCompare()}
                     compareLoading={gitBranchCompareLoading()}
                     compareError={gitBranchCompareError()}
-                    commits={gitCommits()}
                     selectedCommitHash={selectedCommitHash()}
                     showSidebarToggle={layout.isMobile() && !gitHistorySidebarOpen()}
                     onOpenSidebar={() => setGitHistorySidebarOpen(true)}
@@ -1840,6 +1841,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                           mode={pageMode()}
                           onChange={handlePageModeChange}
                           gitHistoryDisabled={!canEnterGitHistory()}
+                          class="w-full"
                         />
                       }
                       contextMenuCallbacks={ctxMenu}

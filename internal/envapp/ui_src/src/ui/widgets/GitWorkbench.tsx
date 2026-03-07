@@ -9,30 +9,19 @@ import type {
   GitListWorkspaceChangesResponse,
   GitRepoSummaryResponse,
   GitResolveRepoResponse,
-  GitCommitSummary,
   GitWorkspaceChange,
 } from '../protocol/redeven_v1';
-import {
-  buildGitWorkbenchSubviewItems,
-  repoDisplayName,
-  summarizeWorkspaceCount,
-  type GitWorkbenchSubview,
-} from '../utils/gitWorkbench';
-import { GitSubviewSwitch } from './GitSubviewSwitch';
-import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
+import { repoDisplayName, summarizeWorkspaceCount, type GitWorkbenchSubview } from '../utils/gitWorkbench';
 import { GitOverviewPanel } from './GitOverviewPanel';
 import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
 
 export interface GitWorkbenchProps {
-  mode: GitHistoryMode;
-  onModeChange: (mode: GitHistoryMode) => void;
   repoInfo?: GitResolveRepoResponse | null;
   repoInfoLoading?: boolean;
   currentPath: string;
   subview: GitWorkbenchSubview;
-  onSubviewChange: (value: GitWorkbenchSubview) => void;
   repoSummary?: GitRepoSummaryResponse | null;
   repoSummaryLoading?: boolean;
   repoSummaryError?: string;
@@ -47,7 +36,6 @@ export interface GitWorkbenchProps {
   compare?: GitGetBranchCompareResponse | null;
   compareLoading?: boolean;
   compareError?: string;
-  commits?: GitCommitSummary[];
   selectedCommitHash?: string;
   showSidebarToggle?: boolean;
   onOpenSidebar?: () => void;
@@ -55,28 +43,35 @@ export interface GitWorkbenchProps {
   class?: string;
 }
 
-export function GitWorkbench(props: GitWorkbenchProps) {
-  const subviewItems = () => buildGitWorkbenchSubviewItems({
-    repoSummary: props.repoSummary,
-    workspace: props.workspace,
-    branchesCount: (props.branches?.local.length ?? 0) + (props.branches?.remote.length ?? 0),
-  });
+function subviewLabel(view: GitWorkbenchSubview): string {
+  switch (view) {
+    case 'changes':
+      return 'Workspace Changes';
+    case 'branches':
+      return 'Branch Explorer';
+    case 'history':
+      return 'Commit History';
+    default:
+      return 'Overview';
+  }
+}
 
+export function GitWorkbench(props: GitWorkbenchProps) {
   const repoLabel = () => repoDisplayName(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath);
   const changeCount = () => summarizeWorkspaceCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary);
   const headRef = () => String(props.repoSummary?.headRef || props.repoInfo?.headRef || '').trim();
   const loadingBusy = () => Boolean(props.repoSummaryLoading || props.workspaceLoading || props.branchesLoading || props.compareLoading);
-  const showMenuButton = () => Boolean(props.showSidebarToggle && props.onOpenSidebar && props.subview !== 'overview');
+  const showMenuButton = () => Boolean(props.showSidebarToggle && props.onOpenSidebar);
 
   return (
-    <div class={cn('relative h-full min-h-0 flex flex-col bg-background', props.class)}>
-      <div class={cn('shrink-0 border-b border-border/70 px-4 py-3 space-y-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85', showMenuButton() && 'pl-14')}>
+    <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
+      <div class={cn('shrink-0 border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/85', showMenuButton() && 'pl-14')}>
         <Show when={showMenuButton()}>
           <Button
             size="xs"
             variant="outline"
             icon={Menu}
-            class="absolute left-3 top-3 z-10 h-7 w-7 px-0 shadow-sm bg-background/95 backdrop-blur-sm"
+            class="absolute left-3 top-3 z-10 h-7 w-7 bg-background/95 px-0 shadow-sm backdrop-blur-sm"
             aria-label="Open Git sidebar"
             title="Open Git sidebar"
             onClick={props.onOpenSidebar}
@@ -84,14 +79,18 @@ export function GitWorkbench(props: GitWorkbenchProps) {
         </Show>
 
         <div class="flex flex-wrap items-start justify-between gap-3">
-          <div class="min-w-0 flex-1 space-y-2">
-            <div class="flex flex-wrap items-center gap-2">
-              <GitHistoryModeSwitch mode={props.mode} onChange={props.onModeChange} />
-              <div class="min-w-0 flex-1">
-                <div class="truncate text-sm font-medium text-foreground">{repoLabel()}</div>
-                <div class="truncate text-[11px] text-muted-foreground" title={props.repoSummary?.repoRootPath || props.currentPath}>
-                  {props.repoSummary?.repoRootPath || props.currentPath || '/'}
-                </div>
+          <div class="min-w-0 flex-1 space-y-2.5">
+            <div class="flex flex-wrap items-center gap-2 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground/70">
+              <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5 text-foreground/85">{subviewLabel(props.subview)}</span>
+              <Show when={loadingBusy()}>
+                <span>Refreshing…</span>
+              </Show>
+            </div>
+
+            <div class="min-w-0">
+              <div class="truncate text-base font-semibold text-foreground">{repoLabel()}</div>
+              <div class="truncate text-[11px] text-muted-foreground" title={props.repoSummary?.repoRootPath || props.currentPath}>
+                {props.repoSummary?.repoRootPath || props.currentPath || '/'}
               </div>
             </div>
 
@@ -106,7 +105,9 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               <Show when={props.repoSummary?.isWorktree}>
                 <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5">Linked worktree</span>
               </Show>
-              <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5" title={props.currentPath || '/'}>Context {props.currentPath || '/'}</span>
+              <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-0.5" title={props.currentPath || '/'}>
+                Context {props.currentPath || '/'}
+              </span>
             </div>
           </div>
 
@@ -114,11 +115,9 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             Refresh
           </Button>
         </div>
-
-        <GitSubviewSwitch value={props.subview} items={subviewItems()} onChange={props.onSubviewChange} />
       </div>
 
-      <div class="flex-1 min-h-0 overflow-hidden">
+      <div class="min-h-0 flex-1 overflow-hidden">
         <Show when={props.subview === 'overview'}>
           <GitOverviewPanel
             repoSummary={props.repoSummary}
