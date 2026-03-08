@@ -92,20 +92,20 @@ export function gitToneSelectableCardClass(tone: GitChromeTone | undefined, acti
 
   switch (normalizeTone(tone)) {
     case 'info':
-      return `${interactiveBase} border-sky-500/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-sky-500/25 hover:bg-sky-500/[0.04]`;
+      return `${interactiveBase} border-sky-500/10 bg-background/70 text-foreground hover:border-sky-500/25 hover:bg-sky-500/[0.04]`;
     case 'brand':
-      return `${interactiveBase} border-indigo-500/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-indigo-500/25 hover:bg-indigo-500/[0.04]`;
+      return `${interactiveBase} border-indigo-500/10 bg-background/70 text-foreground hover:border-indigo-500/25 hover:bg-indigo-500/[0.04]`;
     case 'success':
-      return `${interactiveBase} border-success/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-success/25 hover:bg-success/[0.04]`;
+      return `${interactiveBase} border-success/10 bg-background/70 text-foreground hover:border-success/25 hover:bg-success/[0.04]`;
     case 'warning':
-      return `${interactiveBase} border-warning/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-warning/25 hover:bg-warning/[0.04]`;
+      return `${interactiveBase} border-warning/10 bg-background/70 text-foreground hover:border-warning/25 hover:bg-warning/[0.04]`;
     case 'danger':
-      return `${interactiveBase} border-error/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-error/25 hover:bg-error/[0.04]`;
+      return `${interactiveBase} border-error/10 bg-background/70 text-foreground hover:border-error/25 hover:bg-error/[0.04]`;
     case 'violet':
-      return `${interactiveBase} border-violet-500/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-violet-500/25 hover:bg-violet-500/[0.04]`;
+      return `${interactiveBase} border-violet-500/10 bg-background/70 text-foreground hover:border-violet-500/25 hover:bg-violet-500/[0.04]`;
     case 'neutral':
     default:
-      return `${interactiveBase} border-border/50 bg-background/60 text-foreground hover:-translate-y-px hover:border-border hover:bg-background`;
+      return `${interactiveBase} border-border/50 bg-background/60 text-foreground hover:border-border hover:bg-background`;
   }
 }
 

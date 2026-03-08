@@ -50,6 +50,8 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitToneSelectableCardClass('brand', true)).toContain('focus-visible:ring-2');
     expect(gitToneSelectableCardClass('info', false)).toContain('hover:bg-sky-500/[0.04]');
     expect(gitToneSelectableCardClass('info', false)).toContain('cursor-pointer');
+    expect(gitToneSelectableCardClass('info', false)).not.toContain('hover:-translate-y-px');
     expect(gitToneSelectableCardClass('neutral', false)).toContain('hover:bg-background');
+    expect(gitToneSelectableCardClass('neutral', false)).not.toContain('hover:-translate-y-px');
   });
 });
