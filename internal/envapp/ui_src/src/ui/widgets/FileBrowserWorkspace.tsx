@@ -3,7 +3,6 @@ import { cn, useFileBrowserDrag } from '@floegence/floe-webapp-core';
 import { Files as FilesIcon, Search, ArrowUp } from '@floegence/floe-webapp-core/icons';
 import {
   Breadcrumb,
-  DirectoryTree,
   FileBrowserProvider,
   FileContextMenu,
   FileGridView,
@@ -15,6 +14,7 @@ import {
 } from '@floegence/floe-webapp-core/file-browser';
 import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
+import { FileBrowserCurrentFolderCard, FileBrowserSidebarTree } from './FileBrowserSidebarTree';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 import { gitToneBadgeClass, gitToneInsetClass } from './GitChrome';
 
@@ -187,20 +187,29 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
       sidebarBodyClass="overflow-hidden"
       modeSwitcher={<GitHistoryModeSwitch mode={props.mode} onChange={props.onModeChange} gitHistoryDisabled={props.gitHistoryDisabled} class="w-full" />}
       sidebarBody={(
-        <div class="flex h-full min-h-0 flex-col">
-          <div class="flex items-center justify-between px-1 pb-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">
-            <span>Folders</span>
-            <span>{browser.currentPath() === '/' ? 'Root' : 'Tree'}</span>
+        <div class="flex h-full min-h-0 flex-col gap-1.5">
+          <FileBrowserCurrentFolderCard />
+
+          <div class="flex items-center justify-between px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">
+            <span>Folder Tree</span>
+            <span>{browser.currentPath() === '/' ? 'Root' : 'Compact depth'}</span>
           </div>
+
           <div
             ref={(el) => {
               treeScrollEl = el;
             }}
             data-testid="file-tree-scroll-region"
-            class="min-h-0 flex-1 overflow-auto overscroll-contain"
+            class="min-h-0 flex-1 overflow-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
           >
             <div class={cn('min-h-full rounded-lg border p-1.5', gitToneInsetClass('neutral'))}>
-              <DirectoryTree instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="min-h-full" />
+              <FileBrowserSidebarTree
+                instanceId={props.instanceId}
+                enableDragDrop={dragEnabled()}
+                sidebarOpen={props.open}
+                scrollContainer={() => treeScrollEl}
+                class="min-h-full"
+              />
             </div>
           </div>
         </div>
@@ -216,7 +225,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
               contentScrollEl = el;
               browser.setScrollContainer(el);
             }}
-            class="flex-1 min-h-0 overflow-auto bg-background"
+            class="min-h-0 flex-1 overflow-auto bg-background"
           >
             <Show when={browser.viewMode() === 'list'} fallback={<FileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
               <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />

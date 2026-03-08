@@ -47,13 +47,24 @@ describe('browser workspace layout wiring', () => {
   it('keeps the file tree on its own sidebar scroll container inside the shared shell', () => {
     const shellSrc = read('./BrowserWorkspaceShell.tsx');
     const workspaceSrc = read('./FileBrowserWorkspace.tsx');
+    const treeSrc = read('./FileBrowserSidebarTree.tsx');
 
     expect(shellSrc).toContain('sidebarBodyClass?: string;');
     expect(shellSrc).toContain("bodyClass={cn('py-0', props.sidebarBodyClass)}");
     expect(workspaceSrc).toContain('sidebarBodyClass="overflow-hidden"');
     expect(workspaceSrc).toContain('data-testid="file-tree-scroll-region"');
     expect(workspaceSrc).toContain('getSidebarScrollContainer: () => treeScrollEl');
-    expect(workspaceSrc).toContain('overflow-auto overscroll-contain');
+    expect(workspaceSrc).toContain('overflow-auto overflow-x-hidden overscroll-contain');
+    expect(workspaceSrc).toContain('[-webkit-overflow-scrolling:touch]');
+    expect(workspaceSrc).toContain('[touch-action:pan-y_pinch-zoom]');
+    expect(workspaceSrc).toContain('<FileBrowserCurrentFolderCard />');
+    expect(workspaceSrc).toContain('<FileBrowserSidebarTree');
+    expect(workspaceSrc).not.toContain('DirectoryTree');
+    expect(treeSrc).toContain('Current Folder');
+    expect(treeSrc).toContain('Depth');
+    expect(treeSrc).toContain('MAX_VISIBLE_DEPTH = 5');
+    expect(treeSrc).toContain('data-tree-row-path={props.item.path}');
+    expect(treeSrc).toContain("scrollIntoView({ block: 'nearest', inline: 'nearest' })");
     expect(workspaceSrc).not.toContain('getSidebarScrollContainer: () => sidebarScrollEl');
   });
 

@@ -23,6 +23,76 @@ function mockMatchMedia(matches: boolean) {
   });
 }
 
+function buildDeepFolderTree(): FileItem[] {
+  const deepestPath = '/workspace/customer-facing-platform/services/really-long-nested-feature/config/runtime/assets/icons';
+  return [
+    {
+      id: 'folder-workspace',
+      name: 'workspace',
+      type: 'folder',
+      path: '/workspace',
+      children: [
+        {
+          id: 'folder-customer-facing-platform',
+          name: 'customer-facing-platform',
+          type: 'folder',
+          path: '/workspace/customer-facing-platform',
+          children: [
+            {
+              id: 'folder-services',
+              name: 'services',
+              type: 'folder',
+              path: '/workspace/customer-facing-platform/services',
+              children: [
+                {
+                  id: 'folder-really-long-nested-feature',
+                  name: 'really-long-nested-feature',
+                  type: 'folder',
+                  path: '/workspace/customer-facing-platform/services/really-long-nested-feature',
+                  children: [
+                    {
+                      id: 'folder-config',
+                      name: 'config',
+                      type: 'folder',
+                      path: '/workspace/customer-facing-platform/services/really-long-nested-feature/config',
+                      children: [
+                        {
+                          id: 'folder-runtime',
+                          name: 'runtime',
+                          type: 'folder',
+                          path: '/workspace/customer-facing-platform/services/really-long-nested-feature/config/runtime',
+                          children: [
+                            {
+                              id: 'folder-assets',
+                              name: 'assets',
+                              type: 'folder',
+                              path: '/workspace/customer-facing-platform/services/really-long-nested-feature/config/runtime/assets',
+                              children: [
+                                {
+                                  id: 'folder-icons',
+                                  name: 'icons',
+                                  type: 'folder',
+                                  path: deepestPath,
+                                  children: [],
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    { id: 'file-readme', name: 'README.md', type: 'file', path: '/README.md' },
+  ];
+}
+
 beforeEach(() => {
   mockMatchMedia(false);
 
@@ -34,10 +104,16 @@ beforeEach(() => {
       disconnect() {}
     },
   });
+
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    writable: true,
+    value: vi.fn(),
+  });
 });
 
 afterEach(() => {
   document.body.innerHTML = '';
+  vi.restoreAllMocks();
 });
 
 describe('FileBrowserWorkspace interactions', () => {
@@ -150,8 +226,54 @@ describe('FileBrowserWorkspace interactions', () => {
       const scrollRegion = host.querySelector('[data-testid="file-tree-scroll-region"]');
       expect(scrollRegion).toBeTruthy();
       expect(scrollRegion?.className).toContain('overflow-auto');
+      expect(scrollRegion?.className).toContain('overflow-x-hidden');
+      expect(scrollRegion?.className).toContain('overscroll-contain');
+      expect(scrollRegion?.className).toContain('[-webkit-overflow-scrolling:touch]');
+      expect(scrollRegion?.className).toContain('[touch-action:pan-y_pinch-zoom]');
       expect(scrollRegion?.textContent).toContain('folder-0');
       expect(scrollRegion?.textContent).toContain('folder-23');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('expands deep ancestors and summarizes long current paths without breaking sidebar scrolling', async () => {
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={buildDeepFolderTree()}
+            currentPath="/workspace/customer-facing-platform/services/really-long-nested-feature/config/runtime/assets/icons"
+            initialPath="/workspace/customer-facing-platform/services/really-long-nested-feature/config/runtime/assets/icons"
+            persistenceKey="test-files-workspace-deep"
+            instanceId="test-files-workspace-deep"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await Promise.resolve();
+      const summary = host.querySelector('[data-testid="file-current-folder-summary"]');
+      const activeRow = host.querySelector('[data-tree-row-path="/workspace/customer-facing-platform/services/really-long-nested-feature/config/runtime/assets/icons"]');
+      expect(summary).toBeTruthy();
+      expect(summary?.textContent).toContain('Current Folder');
+      expect(summary?.textContent).toContain('icons');
+      expect(summary?.textContent).toContain('Depth 8');
+      expect(summary?.textContent).toContain('/workspace/customer-facing-platform/services/really-long-nested-feature/config/runtime/assets/icons');
+      expect(activeRow).toBeTruthy();
+      expect(activeRow?.textContent).toContain('icons');
+      expect(host.textContent).toContain('+2');
+      expect(scrollIntoView).toHaveBeenCalled();
     } finally {
       dispose();
     }
