@@ -154,7 +154,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   const drag = useFileBrowserDrag();
   const dragEnabled = () => Boolean(drag && props.onDragMove);
   let contentScrollEl: HTMLDivElement | null = null;
-  let sidebarScrollEl: HTMLDivElement | null = null;
+  let treeScrollEl: HTMLDivElement | null = null;
 
   onMount(() => {
     if (!dragEnabled() || !drag) return;
@@ -164,7 +164,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
       files: browser.files,
       onDragMove: props.onDragMove ? (items, targetPath) => props.onDragMove?.(items, targetPath) : undefined,
       getScrollContainer: () => contentScrollEl,
-      getSidebarScrollContainer: () => sidebarScrollEl,
+      getSidebarScrollContainer: () => treeScrollEl,
       optimisticRemove: browser.optimisticRemove,
       optimisticInsert: browser.optimisticInsert,
     });
@@ -184,18 +184,24 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
       resizable={props.resizable}
       onResize={props.onResize}
       onClose={props.onClose}
-      bodyRef={(el) => {
-        sidebarScrollEl = el;
-      }}
+      sidebarBodyClass="overflow-hidden"
       modeSwitcher={<GitHistoryModeSwitch mode={props.mode} onChange={props.onModeChange} gitHistoryDisabled={props.gitHistoryDisabled} class="w-full" />}
       sidebarBody={(
-        <div class="flex h-full min-h-0 flex-col space-y-1.5">
-          <div class="flex items-center justify-between px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">
+        <div class="flex h-full min-h-0 flex-col">
+          <div class="flex items-center justify-between px-1 pb-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">
             <span>Folders</span>
             <span>{browser.currentPath() === '/' ? 'Root' : 'Tree'}</span>
           </div>
-          <div class={cn('min-h-0 flex-1 overflow-hidden rounded-lg border p-1.5', gitToneInsetClass('neutral'))}>
-            <DirectoryTree instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="min-h-0 h-full" />
+          <div
+            ref={(el) => {
+              treeScrollEl = el;
+            }}
+            data-testid="file-tree-scroll-region"
+            class="min-h-0 flex-1 overflow-auto overscroll-contain"
+          >
+            <div class={cn('min-h-full rounded-lg border p-1.5', gitToneInsetClass('neutral'))}>
+              <DirectoryTree instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="min-h-full" />
+            </div>
           </div>
         </div>
       )}

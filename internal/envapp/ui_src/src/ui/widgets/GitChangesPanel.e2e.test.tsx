@@ -79,7 +79,6 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-
   it('keeps workspace summary and focused file in compact stacked sections', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -118,6 +117,39 @@ describe('GitChangesPanel interactions', () => {
       expect(host.textContent).toContain('Workspace Summary');
       expect(host.textContent).toContain('Focused File');
       expect(host.textContent).not.toContain('Focus stays here while diffs open in a separate floating surface.');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('uses compact empty-state copy when no workspace file is selected', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <div class="h-[620px]">
+            <GitChangesPanel
+              repoRootPath="/workspace/repo"
+              workspace={{
+                repoRootPath: '/workspace/repo',
+                summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                staged: [],
+                unstaged: [],
+                untracked: [],
+                conflicted: [],
+              }}
+            />
+          </div>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.textContent).toContain('Choose a workspace file');
+      expect(host.textContent).toContain('Select a file from the sidebar to load its floating diff.');
+      expect(host.textContent).not.toContain('No file selected');
     } finally {
       dispose();
     }

@@ -43,6 +43,20 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('props.modeSwitcher');
   });
 
+
+  it('keeps the file tree on its own sidebar scroll container inside the shared shell', () => {
+    const shellSrc = read('./BrowserWorkspaceShell.tsx');
+    const workspaceSrc = read('./FileBrowserWorkspace.tsx');
+
+    expect(shellSrc).toContain('sidebarBodyClass?: string;');
+    expect(shellSrc).toContain("bodyClass={cn('py-0', props.sidebarBodyClass)}");
+    expect(workspaceSrc).toContain('sidebarBodyClass="overflow-hidden"');
+    expect(workspaceSrc).toContain('data-testid="file-tree-scroll-region"');
+    expect(workspaceSrc).toContain('getSidebarScrollContainer: () => treeScrollEl');
+    expect(workspaceSrc).toContain('overflow-auto overscroll-contain');
+    expect(workspaceSrc).not.toContain('getSidebarScrollContainer: () => sidebarScrollEl');
+  });
+
   it('uses a compact mode switch and a rail-free shared browser shell', () => {
     const modeSrc = read('./GitHistoryModeSwitch.tsx');
     const shellSrc = read('./BrowserWorkspaceShell.tsx');
@@ -171,15 +185,42 @@ describe('browser workspace layout wiring', () => {
     expect(browserSrc).not.toContain('showSidebarToggle={layout.isMobile() && Boolean(props.widgetId)}');
   });
 
-  it('keeps the git content header focused on context, refresh, and an optional mobile sidebar button', () => {
+  it('keeps the git content header compact and aligned with the latest workspace language', () => {
     const src = read('./GitWorkbench.tsx');
 
     expect(src).toContain('Refresh');
     expect(src).toContain('showMobileSidebarButton');
     expect(src).toContain('onToggleSidebar');
     expect(src).toContain('Toggle browser sidebar');
-    expect(src).toContain('subviewLabel(props.subview)');
+    expect(src).toContain('Repository Context');
+    expect(src).toContain('Compact repo signals and actions for the current view.');
+    expect(src).toContain('Workspace Summary');
+    expect(src).toContain('Sync Status');
+    expect(src).toContain('Focused View');
     expect(src).not.toContain('GitHistoryModeSwitch');
     expect(src).not.toContain('GitSubviewSwitch');
   });
+
+  it('keeps git empty-state copy aligned with the compact review language', () => {
+    const overviewSrc = read('./GitOverviewPanel.tsx');
+    const changesSrc = read('./GitChangesPanel.tsx');
+    const branchesSrc = read('./GitBranchesPanel.tsx');
+    const historySrc = read('./GitHistoryBrowser.tsx');
+
+    expect(changesSrc).toContain('Choose a workspace file');
+    expect(changesSrc).toContain('Select a file from the sidebar to load its floating diff.');
+    expect(changesSrc).not.toContain('No file selected');
+
+    expect(overviewSrc).toContain('Choose a branch from the sidebar to load compare context.');
+    expect(overviewSrc).toContain('Branch compare details appear here after you pick a branch from the sidebar.');
+
+    expect(branchesSrc).toContain('Choose a branch from the sidebar to load compare context.');
+    expect(branchesSrc).toContain('Compare details appear here after you choose a branch from the sidebar.');
+    expect(branchesSrc).not.toContain('Select a branch from the sidebar to inspect compare details.');
+
+    expect(historySrc).toContain('Choose a commit from the sidebar to load its details.');
+    expect(historySrc).toContain('Commit details are unavailable.');
+    expect(historySrc).not.toContain('Select a commit from the sidebar to inspect its details.');
+  });
+
 });

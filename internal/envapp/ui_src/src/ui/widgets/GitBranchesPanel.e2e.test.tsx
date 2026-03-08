@@ -89,7 +89,6 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
-
   it('uses one compact branch summary card instead of a separate branch state panel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -136,6 +135,28 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).toContain('Linked worktree');
       expect(host.textContent).toContain('Compare Snapshot');
       expect(host.textContent).not.toContain('Branch State');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('uses compact empty-state copy before a branch is selected', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <div class="h-[640px]">
+            <GitBranchesPanel repoRootPath="/workspace/repo" />
+          </div>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.textContent).toContain('Choose a branch from the sidebar to load compare context.');
+      expect(host.textContent).not.toContain('Select a branch from the sidebar to inspect compare details.');
     } finally {
       dispose();
     }

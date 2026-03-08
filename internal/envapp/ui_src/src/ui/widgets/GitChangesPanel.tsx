@@ -65,7 +65,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                 </div>
 
                 <div class={cn('mt-2 rounded-xl border px-2 py-1.5 text-[11px] text-muted-foreground', gitToneInsetClass(totalChanges() > 0 ? 'warning' : 'success'))}>
-                  Select files from the Git sidebar; diffs open in a floating panel without moving this review surface.
+                  Choose a workspace file from the Git sidebar; floating diffs keep this review surface compact.
                 </div>
               </section>
 
@@ -75,10 +75,10 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                   fallback={
                     <div>
                       <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Focused File</div>
-                      <div class="mt-2 text-sm font-medium text-foreground">No file selected</div>
-                      <div class="mt-1 text-[11px] leading-5 text-muted-foreground">Select a file from the sidebar to open its diff.</div>
+                      <div class="mt-2 text-sm font-medium text-foreground">Choose a workspace file</div>
+                      <div class="mt-1 text-[11px] leading-5 text-muted-foreground">Select a file from the sidebar to load its floating diff.</div>
                       <div class={cn('mt-2 rounded-xl border px-2 py-1.5 text-[11px] text-muted-foreground', gitToneInsetClass('neutral'))}>
-                        The file preview stays compact here while the floating diff handles line-level inspection.
+                        Line-level inspection opens in a floating panel while this review surface stays compact.
                       </div>
                     </div>
                   }
@@ -107,7 +107,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
 
                         <div class={cn('mt-2 rounded-xl border px-2 py-1.5 text-[11px] text-muted-foreground', gitToneInsetClass(selectedSectionTone()))}>
                           {item.section === 'untracked'
-                            ? 'Untracked files do not have a Git patch yet, but you can still keep them in the current review queue.'
+                            ? 'Untracked files do not have a Git patch yet, but they can still stay in the current review queue.'
                             : 'Open the floating diff to inspect exact line changes without leaving the current review context.'}
                         </div>
                       </div>
@@ -125,7 +125,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
         onOpenChange={setDiffOpen}
         item={props.selectedItem}
         title="Workspace Diff"
-        emptyMessage={totalChanges() > 0 ? 'Select a workspace file from the Git sidebar to inspect its diff.' : 'Workspace is clean.'}
+        emptyMessage={totalChanges() > 0 ? 'Choose a workspace file to inspect its diff.' : 'Workspace is clean.'}
         unavailableMessage={(item) => (item.section === 'untracked' ? 'Untracked files do not have a Git patch yet.' : undefined)}
       />
     </div>

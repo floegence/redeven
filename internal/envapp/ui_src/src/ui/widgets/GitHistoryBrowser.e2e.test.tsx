@@ -120,7 +120,6 @@ describe('GitHistoryBrowser interactions', () => {
     }
   });
 
-
   it('collapses normalized commit message details to two lines and lets the user expand them', async () => {
     mockGetCommitDetail.mockResolvedValueOnce({
       repoRootPath: '/workspace/repo',
@@ -177,6 +176,32 @@ describe('GitHistoryBrowser interactions', () => {
       expect(toggleButton?.textContent).toContain('Show less');
       expect(toggleButton?.getAttribute('aria-expanded')).toBe('true');
       expect(messageBlock?.getAttribute('style') ?? '').not.toContain('-webkit-line-clamp');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('uses compact empty-state copy before a commit is selected', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <div class="h-[640px]">
+            <GitHistoryBrowser
+              repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: '3a47b67b1234567890' }}
+              currentPath="/workspace/repo/src"
+            />
+          </div>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(host.textContent).toContain('Choose a commit from the sidebar to load its details.');
+      expect(host.textContent).not.toContain('Select a commit from the sidebar to inspect its details.');
     } finally {
       dispose();
     }

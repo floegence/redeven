@@ -94,15 +94,15 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
                       <div>
                         <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Selected Branch</div>
                         <div class="mt-1 text-[11px] text-muted-foreground">
-                          {props.selectedBranch ? 'Branch context stays visible while you inspect compare details.' : 'Open Branches to inspect compare details.'}
+                          {props.selectedBranch ? 'Branch context stays visible while you inspect compare details.' : 'Choose a branch from the sidebar to load compare context.'}
                         </div>
                       </div>
                       <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass(compareTone()))}>↑{summary.aheadCount ?? 0} ↓{summary.behindCount ?? 0}</span>
                     </div>
 
-                    <div class="mt-2 text-sm font-semibold text-foreground">{props.selectedBranch ? branchDisplayName(props.selectedBranch) : 'No branch selected yet'}</div>
+                    <div class="mt-2 text-sm font-semibold text-foreground">{props.selectedBranch ? branchDisplayName(props.selectedBranch) : 'Choose a branch'}</div>
                     <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-                      {props.selectedBranch ? branchStatusSummary(props.selectedBranch) : 'Select a branch from the sidebar to populate compare context.'}
+                      {props.selectedBranch ? branchStatusSummary(props.selectedBranch) : 'Branch compare details appear here after you pick a branch from the sidebar.'}
                     </div>
                     <Show when={props.selectedBranch?.subject}>
                       <div class={cn('mt-2 rounded-xl border px-2.5 py-2 text-[11px] leading-5 text-foreground', gitToneInsetClass('violet'))}>
@@ -155,7 +155,7 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
                       </Show>
                     </div>
 
-                    <Show when={props.compare} fallback={<div class="mt-2 text-[11px] text-muted-foreground">Select a branch to load compare details.</div>}>
+                    <Show when={props.compare} fallback={<div class="mt-2 text-[11px] text-muted-foreground">Choose a branch from the sidebar to load compare details.</div>}>
                       {(compareAccessor) => {
                         const compare = compareAccessor();
                         return (

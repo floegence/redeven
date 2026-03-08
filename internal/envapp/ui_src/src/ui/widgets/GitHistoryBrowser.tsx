@@ -135,14 +135,14 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
               <div class="text-sm font-medium text-foreground">Git history is unavailable</div>
               <div class="text-xs text-muted-foreground">
                 {props.repoInfoLoading
-                  ? 'Checking whether the current directory belongs to a Git repository...'
-                  : `Current path ${props.currentPath || '/'} is not inside a Git repository.`}
+                  ? 'Checking repository context for the current path...'
+                  : `Current path ${props.currentPath || '/'} is outside a Git repository.`}
               </div>
             </div>
           </div>
         }
       >
-        <Show when={commitHash()} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Select a commit from the sidebar to inspect its details.</div>}>
+        <Show when={commitHash()} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Choose a commit from the sidebar to load its details.</div>}>
           <Show
             when={!detailLoading()}
             fallback={
@@ -153,7 +153,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
             }
           >
             <Show when={!detailError()} fallback={<div class="flex-1 px-3 py-4 text-xs break-words text-error">{detailError()}</div>}>
-              <Show when={commitDetail()} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Commit detail is unavailable.</div>}>
+              <Show when={commitDetail()} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Commit details are unavailable.</div>}>
                 {(detailAccessor) => {
                   const detail = detailAccessor();
                   return (
@@ -220,7 +220,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                               </div>
                               <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass('info'))}>{commitFiles().length}</span>
                             </div>
-                            <Show when={commitFiles().length > 0} fallback={<div class="mt-3 text-xs text-muted-foreground">No changed files in this commit.</div>}>
+                            <Show when={commitFiles().length > 0} fallback={<div class="mt-3 text-xs text-muted-foreground">No changed files are available for this commit.</div>}>
                               <div class="mt-2 grid grid-cols-1 gap-1.5 xl:grid-cols-2">
                                 <For each={commitFiles()}>
                                   {(file) => {

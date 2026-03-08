@@ -122,4 +122,38 @@ describe('FileBrowserWorkspace interactions', () => {
       dispose();
     }
   });
+
+  it('keeps the file tree on a dedicated sidebar scroll region', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={Array.from({ length: 24 }, (_, index) => ({ id: `folder-${index}`, name: `folder-${index}`, type: 'folder', path: `/folder-${index}`, children: [] }))}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-scroll"
+            instanceId="test-files-workspace-scroll"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const scrollRegion = host.querySelector('[data-testid="file-tree-scroll-region"]');
+      expect(scrollRegion).toBeTruthy();
+      expect(scrollRegion?.className).toContain('overflow-auto');
+      expect(scrollRegion?.textContent).toContain('folder-0');
+      expect(scrollRegion?.textContent).toContain('folder-23');
+    } finally {
+      dispose();
+    }
+  });
 });

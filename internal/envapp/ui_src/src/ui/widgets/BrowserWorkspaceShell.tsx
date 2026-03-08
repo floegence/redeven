@@ -14,6 +14,7 @@ export interface BrowserWorkspaceShellProps {
   navigation?: JSX.Element;
   navigationLabel?: string;
   sidebarBody: JSX.Element;
+  sidebarBodyClass?: string;
   content: JSX.Element;
   headerActions?: JSX.Element;
   class?: string;
@@ -31,7 +32,7 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
         onResize={props.onResize}
         onClose={props.onClose}
         class="h-full border-r border-border/70 bg-background"
-        bodyClass="py-0"
+        bodyClass={cn('py-0', props.sidebarBodyClass)}
         bodyRef={props.bodyRef}
       >
         <div class="flex h-full min-h-0 flex-col bg-background">

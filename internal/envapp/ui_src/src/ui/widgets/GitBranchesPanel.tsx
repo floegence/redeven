@@ -49,7 +49,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <Show when={!props.branchesLoading} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Loading branches...</div>}>
         <Show when={!props.branchesError} fallback={<div class="flex-1 px-3 py-4 text-xs break-words text-error">{props.branchesError}</div>}>
-          <Show when={props.selectedBranch} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Select a branch from the sidebar to inspect compare details.</div>}>
+          <Show when={props.selectedBranch} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Choose a branch from the sidebar to load compare context.</div>}>
             {(branchAccessor) => {
               const branch = branchAccessor();
               const branchTone = () => gitBranchTone(branch);
@@ -121,7 +121,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
                         <Show when={!props.compareLoading} fallback={<div class="mt-3 text-xs text-muted-foreground">Loading compare summary...</div>}>
                           <Show when={!props.compareError} fallback={<div class="mt-3 text-xs break-words text-error">{props.compareError}</div>}>
-                            <Show when={props.compare} fallback={<div class="mt-3 text-xs text-muted-foreground">Select a branch to load compare details.</div>}>
+                            <Show when={props.compare} fallback={<div class="mt-3 text-xs text-muted-foreground">Compare details appear here after you choose a branch from the sidebar.</div>}>
                               {(compareAccessor) => {
                                 const compare = compareAccessor();
                                 return (
@@ -161,7 +161,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
                         <Show when={!props.compareLoading} fallback={<div class="mt-3 text-xs text-muted-foreground">Loading compare files...</div>}>
                           <Show when={!props.compareError} fallback={<div class="mt-3 text-xs break-words text-error">{props.compareError}</div>}>
-                            <Show when={(props.compare?.files.length ?? 0) > 0} fallback={<div class="mt-3 text-xs text-muted-foreground">No changed files in compare.</div>}>
+                            <Show when={(props.compare?.files.length ?? 0) > 0} fallback={<div class="mt-3 text-xs text-muted-foreground">No compare files are available for this branch.</div>}>
                               <div class="mt-2 grid grid-cols-1 gap-1.5 xl:grid-cols-2">
                                 <For each={props.compare?.files ?? []}>
                                   {(file) => {
