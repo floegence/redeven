@@ -68,42 +68,44 @@ export function gitToneInsetClass(tone?: GitChromeTone): string {
 }
 
 export function gitToneSelectableCardClass(tone: GitChromeTone | undefined, active: boolean): string {
+  const interactiveBase = 'cursor-pointer min-h-[42px] select-none transition-[transform,border-color,background-color,box-shadow] duration-150 active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
+
   if (active) {
     switch (normalizeTone(tone)) {
       case 'info':
-        return 'cursor-pointer border-sky-500/35 bg-sky-500/[0.08] text-foreground shadow-sm ring-1 ring-sky-500/10';
+        return `${interactiveBase} border-sky-500/35 bg-sky-500/[0.08] text-foreground shadow-sm ring-1 ring-sky-500/10`;
       case 'brand':
-        return 'cursor-pointer border-indigo-500/35 bg-indigo-500/[0.08] text-foreground shadow-sm ring-1 ring-indigo-500/10';
+        return `${interactiveBase} border-indigo-500/35 bg-indigo-500/[0.08] text-foreground shadow-sm ring-1 ring-indigo-500/10`;
       case 'success':
-        return 'cursor-pointer border-success/35 bg-success/[0.08] text-foreground shadow-sm ring-1 ring-success/10';
+        return `${interactiveBase} border-success/35 bg-success/[0.08] text-foreground shadow-sm ring-1 ring-success/10`;
       case 'warning':
-        return 'cursor-pointer border-warning/35 bg-warning/[0.08] text-foreground shadow-sm ring-1 ring-warning/10';
+        return `${interactiveBase} border-warning/35 bg-warning/[0.08] text-foreground shadow-sm ring-1 ring-warning/10`;
       case 'danger':
-        return 'cursor-pointer border-error/35 bg-error/[0.08] text-foreground shadow-sm ring-1 ring-error/10';
+        return `${interactiveBase} border-error/35 bg-error/[0.08] text-foreground shadow-sm ring-1 ring-error/10`;
       case 'violet':
-        return 'cursor-pointer border-violet-500/35 bg-violet-500/[0.08] text-foreground shadow-sm ring-1 ring-violet-500/10';
+        return `${interactiveBase} border-violet-500/35 bg-violet-500/[0.08] text-foreground shadow-sm ring-1 ring-violet-500/10`;
       case 'neutral':
       default:
-        return 'cursor-pointer border-border bg-background text-foreground shadow-sm ring-1 ring-border/40';
+        return `${interactiveBase} border-border bg-background text-foreground shadow-sm ring-1 ring-border/40`;
     }
   }
 
   switch (normalizeTone(tone)) {
     case 'info':
-      return 'cursor-pointer border-sky-500/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-sky-500/25 hover:bg-sky-500/[0.04]';
+      return `${interactiveBase} border-sky-500/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-sky-500/25 hover:bg-sky-500/[0.04]`;
     case 'brand':
-      return 'cursor-pointer border-indigo-500/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-indigo-500/25 hover:bg-indigo-500/[0.04]';
+      return `${interactiveBase} border-indigo-500/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-indigo-500/25 hover:bg-indigo-500/[0.04]`;
     case 'success':
-      return 'cursor-pointer border-success/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-success/25 hover:bg-success/[0.04]';
+      return `${interactiveBase} border-success/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-success/25 hover:bg-success/[0.04]`;
     case 'warning':
-      return 'cursor-pointer border-warning/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-warning/25 hover:bg-warning/[0.04]';
+      return `${interactiveBase} border-warning/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-warning/25 hover:bg-warning/[0.04]`;
     case 'danger':
-      return 'cursor-pointer border-error/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-error/25 hover:bg-error/[0.04]';
+      return `${interactiveBase} border-error/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-error/25 hover:bg-error/[0.04]`;
     case 'violet':
-      return 'cursor-pointer border-violet-500/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-violet-500/25 hover:bg-violet-500/[0.04]';
+      return `${interactiveBase} border-violet-500/10 bg-background/70 text-foreground hover:-translate-y-px hover:border-violet-500/25 hover:bg-violet-500/[0.04]`;
     case 'neutral':
     default:
-      return 'cursor-pointer border-border/50 bg-background/60 text-foreground hover:-translate-y-px hover:border-border hover:bg-background';
+      return `${interactiveBase} border-border/50 bg-background/60 text-foreground hover:-translate-y-px hover:border-border hover:bg-background`;
   }
 }
 

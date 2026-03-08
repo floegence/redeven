@@ -148,8 +148,8 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                   return (
                     <>
                       <div class="flex-1 min-h-0 overflow-auto px-3 py-3">
-                        <div class="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
-                          <section class={cn('rounded-xl border p-2.5', gitToneSurfaceClass('brand'))}>
+                        <div class="grid grid-cols-1 gap-1.5 sm:gap-2 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+                          <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass('brand'))}>
                             <div class="flex flex-wrap items-start justify-between gap-2.5">
                               <div class="min-w-0 flex-1">
                                 <div class="text-sm font-semibold text-foreground">{detail.subject || '(no subject)'}</div>
@@ -170,9 +170,9 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                             </div>
 
                             <Show when={commitBodyText()}>
-                              <div class="mt-2.5 space-y-1">
+                              <div class="mt-2 space-y-1.5">
                                 <div
-                                  class="rounded-lg border border-border/60 bg-background/80 px-2.5 py-2 text-[11px] leading-5 whitespace-pre-wrap break-words text-foreground"
+                                  class="rounded-xl border border-border/60 bg-background/80 px-2.5 py-2 text-[11px] leading-5 whitespace-pre-wrap break-words text-foreground"
                                   style={commitBodyExpanded() ? undefined : {
                                     display: '-webkit-box',
                                     '-webkit-box-orient': 'vertical',
@@ -195,7 +195,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                             </Show>
                           </section>
 
-                          <section class={cn('rounded-xl border p-2.5', gitToneSurfaceClass('info'))}>
+                          <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass('info'))}>
                             <div class="flex flex-wrap items-center justify-between gap-2">
                               <div>
                                 <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Changed Files</div>
@@ -204,7 +204,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                               <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass('info'))}>{commitFiles().length}</span>
                             </div>
                             <Show when={commitFiles().length > 0} fallback={<div class="mt-3 text-xs text-muted-foreground">No changed files in this commit.</div>}>
-                              <div class="mt-2.5 space-y-1.5">
+                              <div class="mt-2 grid grid-cols-1 gap-1.5 xl:grid-cols-2">
                                 <For each={commitFiles()}>
                                   {(file) => {
                                     const active = () => selectedFileKey() === selectedFileIdentity(file);
@@ -212,7 +212,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                     return (
                                       <button
                                         type="button"
-                                        class={cn('w-full rounded-xl border px-2.5 py-1.5 text-left text-[12px] transition-all duration-150', gitToneSelectableCardClass(tone(), active()))}
+                                        class={cn('w-full rounded-xl border px-2.5 py-2 text-left text-[12px]', gitToneSelectableCardClass(tone(), active()))}
                                         onClick={() => openFileDiff(file)}
                                       >
                                         <div class="flex flex-wrap items-start justify-between gap-2">

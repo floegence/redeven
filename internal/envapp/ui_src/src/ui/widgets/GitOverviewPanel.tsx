@@ -49,9 +49,9 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
               ].filter(Boolean) as { label: string; value: string; tone: 'neutral' | 'info' | 'brand' | 'warning' | 'violet' }[];
 
               return (
-                <div class="space-y-2">
-                  <div class="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-                    <section class={cn('rounded-xl border p-2.5', gitToneSurfaceClass(workspaceCount > 0 ? 'warning' : 'success'))}>
+                <div class="space-y-1.5 sm:space-y-2">
+                  <div class="grid grid-cols-1 gap-1.5 sm:gap-2 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+                    <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass(workspaceCount > 0 ? 'warning' : 'success'))}>
                       <div class="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Workspace Attention</div>
@@ -62,32 +62,32 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
                         </span>
                       </div>
 
-                      <div class="mt-2 flex flex-wrap items-center gap-3">
-                        <div class="text-2xl font-semibold tracking-tight text-foreground">{workspaceCount}</div>
+                      <div class="mt-2 flex flex-wrap items-end gap-2.5">
+                        <div class="text-[24px] font-semibold tracking-tight text-foreground">{workspaceCount}</div>
                         <div class="text-[11px] text-muted-foreground">Review staged, unstaged, untracked, and conflicted changes.</div>
                       </div>
 
-                      <div class="mt-2.5 grid grid-cols-2 gap-2 text-[11px] xl:grid-cols-4">
-                        <div class={cn('rounded-lg border px-2.5 py-1.5', gitToneInsetClass(workspaceSectionTone('staged')))}>
+                      <div class="mt-2 grid grid-cols-2 gap-1.5 text-[11px] xl:grid-cols-4">
+                        <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass(workspaceSectionTone('staged')))}>
                           <div class="text-muted-foreground">Staged</div>
                           <div class="mt-0.5 text-sm font-semibold text-foreground">{workspaceSummary?.stagedCount ?? 0}</div>
                         </div>
-                        <div class={cn('rounded-lg border px-2.5 py-1.5', gitToneInsetClass(workspaceSectionTone('unstaged')))}>
+                        <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass(workspaceSectionTone('unstaged')))}>
                           <div class="text-muted-foreground">Unstaged</div>
                           <div class="mt-0.5 text-sm font-semibold text-foreground">{workspaceSummary?.unstagedCount ?? 0}</div>
                         </div>
-                        <div class={cn('rounded-lg border px-2.5 py-1.5', gitToneInsetClass(workspaceSectionTone('untracked')))}>
+                        <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass(workspaceSectionTone('untracked')))}>
                           <div class="text-muted-foreground">Untracked</div>
                           <div class="mt-0.5 text-sm font-semibold text-foreground">{workspaceSummary?.untrackedCount ?? 0}</div>
                         </div>
-                        <div class={cn('rounded-lg border px-2.5 py-1.5', gitToneInsetClass(workspaceSectionTone('conflicted')))}>
+                        <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass(workspaceSectionTone('conflicted')))}>
                           <div class="text-muted-foreground">Conflicted</div>
                           <div class="mt-0.5 text-sm font-semibold text-foreground">{workspaceSummary?.conflictedCount ?? 0}</div>
                         </div>
                       </div>
                     </section>
 
-                    <section class={cn('rounded-xl border p-2.5', gitToneSurfaceClass(props.selectedBranch ? 'violet' : 'neutral'))}>
+                    <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass(props.selectedBranch ? 'violet' : 'neutral'))}>
                       <div class="flex flex-wrap items-center justify-between gap-2">
                         <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass(props.selectedBranch ? 'violet' : 'neutral'))}>Selected Branch</span>
                         <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass(compareTone()))}>↑{summary.aheadCount ?? 0} ↓{summary.behindCount ?? 0}</span>
@@ -98,17 +98,17 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
                         {props.selectedBranch ? branchStatusSummary(props.selectedBranch) : 'Open Branches to inspect compare details.'}
                       </div>
                       <Show when={props.selectedBranch?.subject}>
-                        <div class={cn('mt-2.5 rounded-lg border px-2.5 py-1.5 text-[11px] leading-5 text-foreground', gitToneInsetClass('violet'))}>
+                        <div class={cn('mt-2 rounded-xl border px-2 py-1.5 text-[11px] leading-5 text-foreground', gitToneInsetClass('violet'))}>
                           {props.selectedBranch?.subject}
                         </div>
                       </Show>
 
-                      <div class="mt-2.5 grid grid-cols-2 gap-2 text-[11px]">
-                        <div class={cn('rounded-lg border px-2.5 py-1.5', gitToneInsetClass('brand'))}>
+                      <div class="mt-2 grid grid-cols-2 gap-1.5 text-[11px]">
+                        <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass('brand'))}>
                           <div class="text-muted-foreground">Local branches</div>
                           <div class="mt-0.5 text-sm font-semibold text-foreground">{localBranches}</div>
                         </div>
-                        <div class={cn('rounded-lg border px-2.5 py-1.5', gitToneInsetClass('violet'))}>
+                        <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass('violet'))}>
                           <div class="text-muted-foreground">Remote branches</div>
                           <div class="mt-0.5 text-sm font-semibold text-foreground">{remoteBranches}</div>
                         </div>
@@ -116,12 +116,18 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
                     </section>
                   </div>
 
-                  <section class={cn('rounded-xl border p-2.5', gitToneSurfaceClass('info'))}>
-                    <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Repository Signals</div>
+                  <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass('info'))}>
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Repository Signals</div>
+                        <div class="mt-1 text-[11px] text-muted-foreground">Fast repo context without leaving the current view.</div>
+                      </div>
+                      <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass('info'))}>{repoSignals().length} signals</span>
+                    </div>
                     <div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
                       <For each={repoSignals()}>
                         {(signal) => (
-                          <div class={cn('inline-flex min-w-0 items-center rounded-full border px-2.5 py-1 font-medium', gitToneBadgeClass(signal.tone))} title={signal.value}>
+                          <div class={cn('inline-flex min-w-0 max-w-full items-center rounded-full border px-2.5 py-1 font-medium', gitToneBadgeClass(signal.tone))} title={signal.value}>
                             <span class="font-medium">{signal.label}</span>
                             <span class="mx-1 opacity-60">·</span>
                             <span class="min-w-0 truncate">{signal.value}</span>
@@ -131,7 +137,7 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
                     </div>
                   </section>
 
-                  <section class={cn('rounded-xl border p-2.5', gitToneSurfaceClass(compareTone()))}>
+                  <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass(compareTone()))}>
                     <div class="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Compare Snapshot</div>
@@ -148,20 +154,20 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
                       {(compareAccessor) => {
                         const compare = compareAccessor();
                         return (
-                          <div class="mt-2.5 grid grid-cols-2 gap-2 text-[11px] lg:grid-cols-4">
-                            <div class={cn('rounded-lg border px-2.5 py-1.5', gitToneInsetClass('brand'))}>
+                          <div class="mt-2 grid grid-cols-2 gap-1.5 text-[11px] lg:grid-cols-4">
+                            <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass('brand'))}>
                               <div class="text-muted-foreground">Base</div>
                               <div class="mt-0.5 text-sm font-medium text-foreground">{compare.baseRef}</div>
                             </div>
-                            <div class={cn('rounded-lg border px-2.5 py-1.5', gitToneInsetClass('violet'))}>
+                            <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass('violet'))}>
                               <div class="text-muted-foreground">Target</div>
                               <div class="mt-0.5 text-sm font-medium text-foreground">{compare.targetRef}</div>
                             </div>
-                            <div class={cn('rounded-lg border px-2.5 py-1.5', gitToneInsetClass(compareTone()))}>
+                            <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass(compareTone()))}>
                               <div class="text-muted-foreground">Ahead / Behind</div>
                               <div class="mt-0.5 text-sm font-medium text-foreground">↑{compare.targetAheadCount ?? 0} ↓{compare.targetBehindCount ?? 0}</div>
                             </div>
-                            <div class={cn('rounded-lg border px-2.5 py-1.5', gitToneInsetClass('neutral'))}>
+                            <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass('neutral'))}>
                               <div class="text-muted-foreground">Merge base</div>
                               <div class="mt-0.5 text-sm font-medium text-foreground">{compare.mergeBase ? compare.mergeBase.slice(0, 7) : '—'}</div>
                             </div>
