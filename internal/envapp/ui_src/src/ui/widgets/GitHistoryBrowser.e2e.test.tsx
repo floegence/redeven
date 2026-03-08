@@ -58,7 +58,7 @@ beforeEach(() => {
       shortHash: '3a47b67b',
       parents: [],
       subject: 'Refine bootstrap',
-      body: 'Keep diff rendering stable.',
+      body: ['Refine bootstrap', '', 'Keep diff rendering stable.'].join('\n'),
     },
     files: [
       {
@@ -115,6 +115,68 @@ describe('GitHistoryBrowser interactions', () => {
       expect(document.body.textContent).toContain('+newValue');
       expect(document.body.textContent).not.toContain('No inline diff lines available');
       expect(mockGetCommitDetail).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+    }
+  });
+
+
+  it('collapses normalized commit message details to two lines and lets the user expand them', async () => {
+    mockGetCommitDetail.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo',
+      commit: {
+        hash: '9750efa31234567890',
+        shortHash: '9750efa3',
+        parents: ['ef07ecc1234567890'],
+        subject: 'fix(region): avoid route props spread recursion',
+        body: [
+          'fix(region): avoid route props spread recursion',
+          '',
+          'Move route props out of the recursive spread path.',
+          'Keep the branch shell stable during nested renders.',
+          'Preserve layout hydration ordering for portal bootstrap.',
+        ].join('\n'),
+      },
+      files: [],
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <div class="h-[640px]">
+            <GitHistoryBrowser
+              repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: '9750efa31234567890' }}
+              currentPath="/workspace/repo/src"
+              selectedCommitHash="9750efa31234567890"
+            />
+          </div>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const messageBlock = Array.from(host.querySelectorAll('div')).find((node) =>
+        node.className?.toString().includes('whitespace-pre-wrap') && node.textContent?.includes('Move route props out of the recursive spread path.'),
+      );
+      const toggleButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Show more'));
+
+      expect(messageBlock).toBeTruthy();
+      expect(messageBlock?.textContent).not.toContain('fix(region): avoid route props spread recursion');
+      expect(messageBlock?.getAttribute('style')).toContain('-webkit-line-clamp: 2');
+      expect(toggleButton).toBeTruthy();
+      expect(toggleButton?.getAttribute('aria-expanded')).toBe('false');
+
+      toggleButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(toggleButton?.textContent).toContain('Show less');
+      expect(toggleButton?.getAttribute('aria-expanded')).toBe('true');
+      expect(messageBlock?.getAttribute('style') ?? '').not.toContain('-webkit-line-clamp');
     } finally {
       dispose();
     }

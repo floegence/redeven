@@ -7,7 +7,8 @@ import { changeMetricsText, changeSecondaryPath, gitDiffEntryIdentity } from '..
 import { GitDiffDialog } from './GitDiffDialog';
 import { gitChangeTone, gitToneBadgeClass, gitToneSelectableCardClass, gitToneSurfaceClass } from './GitChrome';
 
-const COMMIT_BODY_PREVIEW_LINES = 5;
+const COMMIT_BODY_PREVIEW_LINES = 2;
+const COMMIT_BODY_PREVIEW_CHARS = 160;
 
 export interface GitHistoryBrowserProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -24,6 +25,16 @@ function formatDetailTime(ms?: number): string {
 
 function selectedFileIdentity(file: GitCommitFileSummary | null | undefined): string {
   return gitDiffEntryIdentity(file);
+}
+
+function normalizeCommitBody(detail: GitCommitDetail | null | undefined): string {
+  const body = String(detail?.body ?? '').trim();
+  if (!body) return '';
+  const subject = String(detail?.subject ?? '').trim();
+  if (!subject) return body;
+  const lines = body.split(/\r?\n/);
+  if (lines[0]?.trim() !== subject) return body;
+  return lines.slice(1).join('\n').trim();
 }
 
 export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
@@ -47,12 +58,12 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
     if (!key) return null;
     return commitFiles().find((file) => selectedFileIdentity(file) === key) ?? null;
   });
-  const commitBodyText = createMemo(() => String(commitDetail()?.body ?? '').trim());
+  const commitBodyText = createMemo(() => normalizeCommitBody(commitDetail()));
   const hasExpandableCommitBody = createMemo(() => {
     const body = commitBodyText();
     if (!body) return false;
     const logicalLines = body.split(/\r?\n/);
-    return logicalLines.length > COMMIT_BODY_PREVIEW_LINES || body.length > 360;
+    return logicalLines.length > COMMIT_BODY_PREVIEW_LINES || body.length > COMMIT_BODY_PREVIEW_CHARS;
   });
 
   const resetDetailState = () => {
@@ -148,7 +159,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                   return (
                     <>
                       <div class="flex-1 min-h-0 overflow-auto px-3 py-3">
-                        <div class="grid grid-cols-1 gap-1.5 sm:gap-2 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+                        <div class="space-y-1.5 sm:space-y-2">
                           <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass('brand'))}>
                             <div class="flex flex-wrap items-start justify-between gap-2.5">
                               <div class="min-w-0 flex-1">
@@ -171,19 +182,25 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
 
                             <Show when={commitBodyText()}>
                               <div class="mt-2 space-y-1.5">
+                                <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Message</div>
                                 <div
                                   class="rounded-xl border border-border/60 bg-background/80 px-2.5 py-2 text-[11px] leading-5 whitespace-pre-wrap break-words text-foreground"
-                                  style={commitBodyExpanded() ? undefined : {
-                                    display: '-webkit-box',
-                                    '-webkit-box-orient': 'vertical',
-                                    '-webkit-line-clamp': String(COMMIT_BODY_PREVIEW_LINES),
-                                    overflow: 'hidden',
-                                  }}
-                                >{commitBodyText()}</div>
+                                  style={commitBodyExpanded()
+                                    ? undefined
+                                    : {
+                                        display: '-webkit-box',
+                                        '-webkit-box-orient': 'vertical',
+                                        '-webkit-line-clamp': String(COMMIT_BODY_PREVIEW_LINES),
+                                        overflow: 'hidden',
+                                      }}
+                                >
+                                  {commitBodyText()}
+                                </div>
                                 <Show when={hasExpandableCommitBody()}>
                                   <div class="flex justify-end">
                                     <button
                                       type="button"
+                                      aria-expanded={commitBodyExpanded()}
                                       class="cursor-pointer text-[11px] text-muted-foreground transition-colors duration-150 hover:text-foreground"
                                       onClick={() => setCommitBodyExpanded((value) => !value)}
                                     >

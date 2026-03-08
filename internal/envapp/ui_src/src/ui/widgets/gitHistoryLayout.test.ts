@@ -83,6 +83,19 @@ describe('browser workspace layout wiring', () => {
     expect(historySrc).not.toContain('The selected file patch stays in the main detail surface');
   });
 
+
+  it('stacks commit message details above changed files and clamps the preview', () => {
+    const historySrc = read('./GitHistoryBrowser.tsx');
+
+    expect(historySrc).toContain('const COMMIT_BODY_PREVIEW_LINES = 2;');
+    expect(historySrc).toContain('const COMMIT_BODY_PREVIEW_CHARS = 160;');
+    expect(historySrc).toContain('body.split(/\\r?\\n/)');
+    expect(historySrc).toContain("lines.slice(1).join('\\n').trim()");
+    expect(historySrc).toContain('space-y-1.5 sm:space-y-2');
+    expect(historySrc).toContain('aria-expanded={commitBodyExpanded()}');
+    expect(historySrc).not.toContain('xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]');
+  });
+
   it('uses the dedicated git view navigation inside the git workspace shell', () => {
     const src = read('./GitWorkspace.tsx');
 
