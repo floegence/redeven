@@ -754,19 +754,21 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   createEffect(() => {
     const id = envId();
-    const nextPath = id ? readPersistedLastPath(id) : '/';
-    const nextMode = id ? readPersistedPageMode(id) : 'files';
-    const nextSubview = id ? readPersistedGitSubview(id) : 'overview';
+    const restored = untrack(() => ({
+      nextPath: id ? readPersistedLastPath(id) : '/',
+      nextMode: id ? readPersistedPageMode(id) : 'files',
+      nextSubview: id ? readPersistedGitSubview(id) : 'overview',
+    }));
 
     dirReqSeq += 1;
     cache = new Map();
     setFiles([]);
     setLoading(false);
-    setCurrentBrowserPath(nextPath);
+    setCurrentBrowserPath(restored.nextPath);
     setLastLoadedBrowserPath('/');
     setFsRootAbs('');
-    setGitSubview(nextSubview);
-    setBrowserPageMode(nextMode);
+    setGitSubview(restored.nextSubview);
+    setPageMode(restored.nextMode);
     closePageSidebar();
     setRepoInfo(null);
     setRepoInfoLoading(false);

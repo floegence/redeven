@@ -10,6 +10,7 @@ import { RemoteFileBrowser } from './RemoteFileBrowser';
 
 const widgetStateStore = vi.hoisted(() => ({
   values: {} as Record<string, Record<string, unknown>>,
+  updateCalls: [] as Array<{ widgetId: string; key: string; value: unknown }>,
 }));
 
 const mockRpc = vi.hoisted(() => ({
@@ -34,6 +35,7 @@ vi.mock('@floegence/floe-webapp-core', async () => {
     useDeck: () => ({
       getWidgetState: (widgetId: string) => widgetStateStore.values[widgetId] ?? {},
       updateWidgetState: (widgetId: string, key: string, value: unknown) => {
+        widgetStateStore.updateCalls.push({ widgetId, key, value });
         widgetStateStore.values[widgetId] = {
           ...(widgetStateStore.values[widgetId] ?? {}),
           [key]: value,
@@ -144,6 +146,7 @@ beforeEach(() => {
       gitSubviewByEnv: { 'env-1': 'history' },
     },
   };
+  widgetStateStore.updateCalls = [];
 
   mockRpc.fs.list.mockResolvedValue({ entries: [] });
   mockRpc.fs.getHome.mockResolvedValue({ path: '/Users/tester' });
@@ -212,6 +215,26 @@ describe('RemoteFileBrowser persistence', () => {
       expect(host.querySelector('[data-testid="files-workspace"]')).toBeNull();
       expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/workspace/repo/src', showHidden: false });
       expect(mockRpc.git.resolveRepo).toHaveBeenCalledWith({ path: '/workspace/repo/src' });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('does not rewrite widget persistence while restoring state on mount', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(widgetStateStore.updateCalls).toEqual([]);
     } finally {
       dispose();
     }
