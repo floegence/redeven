@@ -1155,6 +1155,52 @@ func TestGateway_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder(t *test
 	}
 }
 
+func TestGateway_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder_WithoutOrigin(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+	b := &stubBackend{
+		listSpaces: func(ctx context.Context) ([]SpaceStatus, error) {
+			return []SpaceStatus{{CodeSpaceID: "abc", WorkspacePath: "/tmp/ws"}}, nil
+		},
+		resolveCodeServerPort: func(ctx context.Context, codeSpaceID string) (int, error) {
+			return 0, errors.New("should not be called")
+		},
+	}
+	gw, err := New(Options{
+		Backend:            b,
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://ignored.local/", nil)
+	req.Host = "cs-abc.example.com"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	// Top-level navigation commonly omits Origin; the gateway should fall back to Host.
+	rr := httptest.NewRecorder()
+	gw.serveHTTP(rr, req)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusFound)
+	}
+
+	loc := rr.Header().Get("Location")
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("parse Location %q: %v", loc, err)
+	}
+	if got := u.Query().Get("folder"); got != "/tmp/ws" {
+		t.Fatalf("Location folder = %q, want %q (Location=%q)", got, "/tmp/ws", loc)
+	}
+}
+
 func TestGateway_CodeServerProxy_RequiresCodespaceOrigin(t *testing.T) {
 	t.Parallel()
 
