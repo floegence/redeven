@@ -19,6 +19,7 @@ import {
 import { useProtocol } from "@floegence/floe-webapp-protocol";
 import { useRedevenRpc, type FsFileInfo } from "../protocol/redeven_v1";
 import { getEnvPublicIDFromSession, getLocalRuntime, mintEnvEntryTicketForApp } from "../services/controlplaneApi";
+import { FLOE_APP_CODE } from "../services/floeproxyContract";
 import { gatewayRequestCredentials } from "../services/gatewayApi";
 import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
 
@@ -37,7 +38,6 @@ type SpaceStatus = Readonly<{
 
 type CodespaceBusyAction = "open" | "start" | "stop";
 
-const FLOE_APP_CODE = "com.floegence.redeven.code";
 
 async function fetchGatewayJSON<T>(url: string, init: RequestInit): Promise<T> {
   const headers = new Headers(init.headers);

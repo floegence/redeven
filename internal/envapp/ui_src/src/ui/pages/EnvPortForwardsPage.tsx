@@ -18,6 +18,7 @@ import {
 } from '@floegence/floe-webapp-core/ui';
 
 import { getEnvPublicIDFromSession, mintEnvEntryTicketForApp } from '../services/controlplaneApi';
+import { FLOE_APP_PORT_FORWARD } from '../services/floeproxyContract';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { registerSandboxWindow } from '../services/sandboxWindowRegistry';
 import { useEnvContext } from './EnvContext';
@@ -46,7 +47,6 @@ type PortForward = Readonly<{
   health: Health;
 }>;
 
-const FLOE_APP_PORT_FORWARD = 'com.floegence.redeven.portforward';
 
 // ============================================================================
 // Utility Functions

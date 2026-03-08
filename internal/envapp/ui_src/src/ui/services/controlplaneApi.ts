@@ -1,5 +1,7 @@
 import type { ChannelInitGrant, DirectConnectInfo } from '@floegence/flowersec-core';
 
+import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
+
 export interface Environment {
   public_id: string;
   name: string;
@@ -433,7 +435,7 @@ export async function mintEnvProxyEntryTicket(args: { endpointId: string; floeAp
         floe_app: floeApp,
         code_space_id: codeSpaceId,
         // Env App business RPC channel.
-        session_kind: 'envapp_rpc',
+        session_kind: SESSION_KIND_ENVAPP_RPC,
       }),
     },
     {
@@ -446,7 +448,7 @@ export async function mintEnvProxyEntryTicket(args: { endpointId: string; floeAp
   return t;
 }
 
-export async function mintEnvEntryTicketForApp(args: { envId: string; floeApp: string; codeSpaceId: string }): Promise<string> {
+export async function mintEnvEntryTicketForApp(args: { envId: string; floeApp: LauncherFloeApp; codeSpaceId: string }): Promise<string> {
   const envId = args.envId.trim();
   const floeApp = args.floeApp.trim();
   const codeSpaceId = args.codeSpaceId.trim();
@@ -461,12 +463,7 @@ export async function mintEnvEntryTicketForApp(args: { envId: string; floeApp: s
         floe_app: floeApp,
         code_space_id: codeSpaceId,
         // Codespaces and other app launches use dedicated session kinds on the data plane.
-        session_kind:
-          floeApp === 'com.floegence.redeven.code'
-            ? 'codeapp'
-            : floeApp === 'com.floegence.redeven.portforward'
-              ? 'portforward'
-              : 'app',
+        session_kind: sessionKindForLauncherApp(floeApp),
       }),
     },
     {

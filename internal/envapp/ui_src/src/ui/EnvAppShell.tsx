@@ -50,6 +50,7 @@ import {
 } from './services/gatewayApi';
 import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
 import { consumeAccessResumeTokenFromWindow } from './accessResume';
+import { CODE_SPACE_ID_ENV_UI, FLOE_APP_AGENT, FLOE_APP_CODE, FLOE_APP_PORT_FORWARD, type LauncherFloeApp } from './services/floeproxyContract';
 import {
   channelInitEntry,
   getEnvPublicIDFromSession,
@@ -65,8 +66,6 @@ import {
   type LocalRuntimeInfo,
 } from './services/controlplaneApi';
 
-const FLOE_APP_AGENT = 'com.floegence.redeven.agent';
-const CODE_SPACE_ID_ENV_UI = 'env-ui';
 
 const ACTIVE_TAB_STORAGE_KEY = 'redeven_envapp_active_tab';
 const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
@@ -929,20 +928,22 @@ export function EnvAppShell() {
       if (!info) return;
       if (ev.origin !== info.origin) return;
       if (floeApp !== info.floe_app || codeSpaceID !== info.code_space_id) return;
+      if (floeApp !== FLOE_APP_CODE && floeApp !== FLOE_APP_PORT_FORWARD) return;
 
+      const launcherFloeApp: LauncherFloeApp = floeApp;
       const envPublicID = envId();
       if (!envPublicID) return;
 
       void (async () => {
         try {
-          const entryTicket = await mintEnvEntryTicketForApp({ envId: envPublicID, floeApp, codeSpaceId: codeSpaceID });
+          const entryTicket = await mintEnvEntryTicketForApp({ envId: envPublicID, floeApp: launcherFloeApp, codeSpaceId: codeSpaceID });
           (ev.source as Window).postMessage(
             {
               type: 'redeven:boot_init',
               payload: {
                 v: 2,
                 env_public_id: envPublicID,
-                floe_app: floeApp,
+                floe_app: launcherFloeApp,
                 code_space_id: codeSpaceID,
                 app_path: info.app_path,
                 entry_ticket: entryTicket,

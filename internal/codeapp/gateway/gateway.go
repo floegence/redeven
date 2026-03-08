@@ -3255,17 +3255,37 @@ func externalOriginFromRequest(r *http.Request) (scheme string, host string, err
 		return "", "", errors.New("nil request")
 	}
 	origin := strings.TrimSpace(r.Header.Get("Origin"))
-	if origin == "" {
+	if origin != "" {
+		u, err := url.Parse(origin)
+		if err != nil || u == nil {
+			return "", "", errors.New("invalid origin")
+		}
+		scheme = strings.ToLower(strings.TrimSpace(u.Scheme))
+		host = strings.ToLower(strings.TrimSpace(u.Host))
+		if (scheme != "http" && scheme != "https") || host == "" {
+			return "", "", errors.New("invalid origin")
+		}
+		return scheme, host, nil
+	}
+
+	scheme = strings.ToLower(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")))
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	if scheme != "http" && scheme != "https" {
+		return "", "", errors.New("invalid origin")
+	}
+
+	host = strings.ToLower(strings.TrimSpace(r.Host))
+	if host == "" {
+		host = strings.ToLower(strings.TrimSpace(r.Header.Get("Host")))
+	}
+	if host == "" {
 		return "", "", errors.New("missing origin")
-	}
-	u, err := url.Parse(origin)
-	if err != nil || u == nil {
-		return "", "", errors.New("invalid origin")
-	}
-	scheme = strings.ToLower(strings.TrimSpace(u.Scheme))
-	host = strings.ToLower(strings.TrimSpace(u.Host))
-	if (scheme != "http" && scheme != "https") || host == "" {
-		return "", "", errors.New("invalid origin")
 	}
 	return scheme, host, nil
 }
