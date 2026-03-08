@@ -78,4 +78,48 @@ describe('GitChangesPanel interactions', () => {
       dispose();
     }
   });
+
+
+  it('keeps workspace summary and focused file in compact stacked sections', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <div class="h-[620px]">
+            <GitChangesPanel
+              repoRootPath="/workspace/repo"
+              workspace={{
+                repoRootPath: '/workspace/repo',
+                summary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
+                staged: [],
+                unstaged: [],
+                untracked: [],
+                conflicted: [],
+              }}
+              selectedItem={{
+                section: 'staged',
+                changeType: 'modified',
+                path: 'src/app.ts',
+                displayPath: 'src/app.ts',
+                additions: 3,
+                deletions: 1,
+                patchText: 'diff --git a/src/app.ts b/src/app.ts',
+              }}
+            />
+          </div>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.querySelectorAll('section')).toHaveLength(2);
+      expect(host.textContent).toContain('Workspace Summary');
+      expect(host.textContent).toContain('Focused File');
+      expect(host.textContent).not.toContain('Focus stays here while diffs open in a separate floating surface.');
+    } finally {
+      dispose();
+    }
+  });
 });
