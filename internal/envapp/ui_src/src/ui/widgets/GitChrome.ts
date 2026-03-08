@@ -10,103 +10,87 @@ function normalizeTone(tone: GitChromeTone | undefined): GitChromeTone {
 export function gitToneBadgeClass(tone?: GitChromeTone): string {
   switch (normalizeTone(tone)) {
     case 'info':
-      return 'border-sky-500/30 bg-sky-500/10 text-sky-700 shadow-[0_1px_0_rgba(255,255,255,0.05)_inset] dark:text-sky-300';
+      return 'border-sky-500/20 bg-background/90 text-sky-700 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] dark:text-sky-300';
     case 'brand':
-      return 'border-indigo-500/30 bg-indigo-500/10 text-indigo-700 shadow-[0_1px_0_rgba(255,255,255,0.05)_inset] dark:text-indigo-300';
+      return 'border-indigo-500/20 bg-background/90 text-indigo-700 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] dark:text-indigo-300';
     case 'success':
-      return 'border-success/30 bg-success/10 text-success shadow-[0_1px_0_rgba(255,255,255,0.05)_inset]';
+      return 'border-success/20 bg-background/90 text-success shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]';
     case 'warning':
-      return 'border-warning/30 bg-warning/10 text-warning shadow-[0_1px_0_rgba(255,255,255,0.05)_inset]';
+      return 'border-warning/25 bg-warning/[0.06] text-warning shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]';
     case 'danger':
-      return 'border-error/30 bg-error/10 text-error shadow-[0_1px_0_rgba(255,255,255,0.05)_inset]';
+      return 'border-error/25 bg-error/[0.06] text-error shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]';
     case 'violet':
-      return 'border-violet-500/30 bg-violet-500/10 text-violet-700 shadow-[0_1px_0_rgba(255,255,255,0.05)_inset] dark:text-violet-300';
+      return 'border-violet-500/20 bg-background/90 text-violet-700 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] dark:text-violet-300';
     case 'neutral':
     default:
-      return 'border-border/60 bg-background/85 text-foreground/85 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]';
+      return 'border-border/60 bg-background/90 text-foreground/85 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]';
   }
 }
 
 export function gitToneSurfaceClass(tone?: GitChromeTone): string {
   switch (normalizeTone(tone)) {
     case 'info':
-      return 'border-sky-500/20 bg-gradient-to-br from-sky-500/[0.06] via-background to-background shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
+      return 'border-border/70 bg-gradient-to-b from-background via-background to-muted/[0.06] shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] ring-1 ring-inset ring-sky-500/[0.05]';
     case 'brand':
-      return 'border-indigo-500/20 bg-gradient-to-br from-indigo-500/[0.06] via-background to-background shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
+      return 'border-border/70 bg-gradient-to-b from-background via-background to-muted/[0.06] shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] ring-1 ring-inset ring-indigo-500/[0.05]';
     case 'success':
-      return 'border-success/20 bg-gradient-to-br from-success/[0.08] via-background to-background shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
+      return 'border-border/70 bg-gradient-to-b from-background via-background to-muted/[0.06] shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] ring-1 ring-inset ring-success/10';
     case 'warning':
-      return 'border-warning/20 bg-gradient-to-br from-warning/[0.08] via-background to-background shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
+      return 'border-border/70 bg-gradient-to-b from-background via-background to-muted/[0.06] shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] ring-1 ring-inset ring-warning/10';
     case 'danger':
-      return 'border-error/20 bg-gradient-to-br from-error/[0.08] via-background to-background shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
+      return 'border-border/70 bg-gradient-to-b from-background via-background to-muted/[0.06] shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] ring-1 ring-inset ring-error/10';
     case 'violet':
-      return 'border-violet-500/20 bg-gradient-to-br from-violet-500/[0.06] via-background to-background shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
+      return 'border-border/70 bg-gradient-to-b from-background via-background to-muted/[0.06] shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] ring-1 ring-inset ring-violet-500/[0.05]';
     case 'neutral':
     default:
-      return 'border-border/70 bg-gradient-to-br from-background via-background to-muted/[0.18] shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
+      return 'border-border/70 bg-gradient-to-b from-background via-background to-muted/[0.06] shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] ring-1 ring-inset ring-border/35';
   }
 }
 
 export function gitToneInsetClass(tone?: GitChromeTone): string {
   switch (normalizeTone(tone)) {
     case 'info':
-      return 'border-sky-500/15 bg-background/85 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset]';
+      return 'border-border/60 bg-background/80 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset] ring-1 ring-inset ring-sky-500/[0.04]';
     case 'brand':
-      return 'border-indigo-500/15 bg-background/85 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset]';
+      return 'border-border/60 bg-background/80 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset] ring-1 ring-inset ring-indigo-500/[0.04]';
     case 'success':
-      return 'border-success/15 bg-background/85 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset]';
+      return 'border-border/60 bg-background/80 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset] ring-1 ring-inset ring-success/8';
     case 'warning':
-      return 'border-warning/15 bg-background/85 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset]';
+      return 'border-border/60 bg-background/80 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset] ring-1 ring-inset ring-warning/10';
     case 'danger':
-      return 'border-error/15 bg-background/85 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset]';
+      return 'border-border/60 bg-background/80 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset] ring-1 ring-inset ring-error/10';
     case 'violet':
-      return 'border-violet-500/15 bg-background/85 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset]';
+      return 'border-border/60 bg-background/80 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset] ring-1 ring-inset ring-violet-500/[0.04]';
     case 'neutral':
     default:
-      return 'border-border/60 bg-background/75 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset]';
+      return 'border-border/60 bg-background/80 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset] ring-1 ring-inset ring-border/30';
   }
 }
 
 export function gitToneSelectableCardClass(tone: GitChromeTone | undefined, active: boolean): string {
-  const interactiveBase = 'cursor-pointer min-h-[42px] select-none transition-[transform,border-color,background-color,box-shadow] duration-150 active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
+  const interactiveBase = 'cursor-pointer min-h-[42px] select-none transition-[border-color,background-color,box-shadow] duration-150 active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
 
   if (active) {
     switch (normalizeTone(tone)) {
       case 'info':
-        return `${interactiveBase} border-sky-500/35 bg-sky-500/[0.08] text-foreground shadow-sm ring-1 ring-sky-500/10`;
+        return `${interactiveBase} border-border bg-background text-foreground shadow-sm ring-1 ring-inset ring-sky-500/[0.10]`;
       case 'brand':
-        return `${interactiveBase} border-indigo-500/35 bg-indigo-500/[0.08] text-foreground shadow-sm ring-1 ring-indigo-500/10`;
+        return `${interactiveBase} border-border bg-background text-foreground shadow-sm ring-1 ring-inset ring-indigo-500/[0.10]`;
       case 'success':
-        return `${interactiveBase} border-success/35 bg-success/[0.08] text-foreground shadow-sm ring-1 ring-success/10`;
+        return `${interactiveBase} border-border bg-background text-foreground shadow-sm ring-1 ring-inset ring-success/12`;
       case 'warning':
-        return `${interactiveBase} border-warning/35 bg-warning/[0.08] text-foreground shadow-sm ring-1 ring-warning/10`;
+        return `${interactiveBase} border-border bg-background text-foreground shadow-sm ring-1 ring-inset ring-warning/12`;
       case 'danger':
-        return `${interactiveBase} border-error/35 bg-error/[0.08] text-foreground shadow-sm ring-1 ring-error/10`;
+        return `${interactiveBase} border-border bg-background text-foreground shadow-sm ring-1 ring-inset ring-error/12`;
       case 'violet':
-        return `${interactiveBase} border-violet-500/35 bg-violet-500/[0.08] text-foreground shadow-sm ring-1 ring-violet-500/10`;
+        return `${interactiveBase} border-border bg-background text-foreground shadow-sm ring-1 ring-inset ring-violet-500/[0.10]`;
       case 'neutral':
       default:
-        return `${interactiveBase} border-border bg-background text-foreground shadow-sm ring-1 ring-border/40`;
+        return `${interactiveBase} border-border bg-background text-foreground shadow-sm ring-1 ring-inset ring-border/40`;
     }
   }
 
-  switch (normalizeTone(tone)) {
-    case 'info':
-      return `${interactiveBase} border-sky-500/10 bg-background/70 text-foreground hover:border-sky-500/25 hover:bg-sky-500/[0.04]`;
-    case 'brand':
-      return `${interactiveBase} border-indigo-500/10 bg-background/70 text-foreground hover:border-indigo-500/25 hover:bg-indigo-500/[0.04]`;
-    case 'success':
-      return `${interactiveBase} border-success/10 bg-background/70 text-foreground hover:border-success/25 hover:bg-success/[0.04]`;
-    case 'warning':
-      return `${interactiveBase} border-warning/10 bg-background/70 text-foreground hover:border-warning/25 hover:bg-warning/[0.04]`;
-    case 'danger':
-      return `${interactiveBase} border-error/10 bg-background/70 text-foreground hover:border-error/25 hover:bg-error/[0.04]`;
-    case 'violet':
-      return `${interactiveBase} border-violet-500/10 bg-background/70 text-foreground hover:border-violet-500/25 hover:bg-violet-500/[0.04]`;
-    case 'neutral':
-    default:
-      return `${interactiveBase} border-border/50 bg-background/60 text-foreground hover:border-border hover:bg-background`;
-  }
+  return `${interactiveBase} border-border/50 bg-background/60 text-foreground hover:border-border/70 hover:bg-muted/35`;
 }
 
 export function gitSubviewTone(view: GitWorkbenchSubview): GitChromeTone {
