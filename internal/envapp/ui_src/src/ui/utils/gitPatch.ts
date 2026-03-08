@@ -1,3 +1,5 @@
+import { hasMeaningfulGitPatchText, normalizeGitPatchText } from './gitPatchText';
+
 export type GitPatchRenderedLineKind = 'add' | 'del' | 'context' | 'meta';
 
 export type GitPatchRenderedLine = {
@@ -11,7 +13,10 @@ export type GitPatchRenderedLine = {
 export const GIT_PATCH_PREVIEW_LINES = 220;
 
 export function parseGitPatchRenderedLines(patchText: string): GitPatchRenderedLine[] {
-  const lines = String(patchText ?? '').replace(/\r\n?/g, '\n').split('\n');
+  if (!hasMeaningfulGitPatchText(patchText)) {
+    return [];
+  }
+  const lines = normalizeGitPatchText(patchText).split('\n');
   const rendered: GitPatchRenderedLine[] = [];
   let oldLineNumber = 1;
   let newLineNumber = 1;

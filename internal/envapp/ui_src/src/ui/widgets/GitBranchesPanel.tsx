@@ -2,7 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import type { GitBranchSummary, GitCommitFileSummary, GitGetBranchCompareResponse } from '../protocol/redeven_v1';
-import { readCompareGitPatchTextOnce } from '../utils/gitPatchStreamReader';
+import { readCompareGitPatchTextOnce, readGitPatchWithFallback } from '../utils/gitPatchStreamReader';
 import { branchDisplayName, branchStatusSummary, changeMetricsText, changeSecondaryPath, compareHeadline } from '../utils/gitWorkbench';
 import { GitDiffDialog } from './GitDiffDialog';
 import { gitBranchTone, gitChangeTone, gitCompareTone, gitToneBadgeClass, gitToneInsetClass, gitToneSelectableCardClass, gitToneSurfaceClass } from './GitChrome';
@@ -209,18 +209,20 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       const client = protocol.client();
                       const compare = props.compare;
                       const repoRootPath = String(props.repoRootPath ?? '').trim();
-                      const filePath = String(item.patchPath || item.path || item.newPath || item.oldPath || '').trim();
-                      if (!client || !compare || !repoRootPath || !filePath) {
+                      if (!client || !compare || !repoRootPath) {
                         return { text: '', truncated: false };
                       }
-                      const resp = await readCompareGitPatchTextOnce({
-                        client,
-                        repoRootPath,
-                        baseRef: compare.baseRef,
-                        targetRef: compare.targetRef,
-                        filePath,
-                        maxBytes: 2 * 1024 * 1024,
-                        signal,
+                      const resp = await readGitPatchWithFallback({
+                        item,
+                        readByPath: (filePath) => readCompareGitPatchTextOnce({
+                          client,
+                          repoRootPath,
+                          baseRef: compare.baseRef,
+                          targetRef: compare.targetRef,
+                          filePath,
+                          maxBytes: 2 * 1024 * 1024,
+                          signal,
+                        }),
                       });
                       return { text: resp.text, truncated: resp.meta.truncated };
                     }}

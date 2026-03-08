@@ -2,6 +2,7 @@ import type { Client } from '@floegence/flowersec-core';
 import { DEFAULT_MAX_JSON_FRAME_BYTES, readJsonFrame, writeJsonFrame } from '@floegence/flowersec-core/framing';
 import { redevenV1StreamKinds } from '../protocol/redeven_v1/streamKinds';
 import { byteReaderFromStream } from './fileStreamReader';
+import { collectGitPatchPathCandidates, extractGitPatchSectionByPath, hasMeaningfulGitPatchText, type GitPatchPathLike } from './gitPatchText';
 
 export type GitReadCommitPatchStreamMeta = {
   repo_root_path: string;
@@ -185,3 +186,38 @@ export async function readCompareGitPatchTextOnce(params: {
     signal: params.signal,
   });
 }
+
+export type GitReadPatchResult = {
+  text: string;
+  meta: GitReadPatchStreamRespMeta;
+};
+
+export async function readGitPatchWithFallback(params: {
+  item: GitPatchPathLike | null | undefined;
+  readByPath: (filePath?: string) => Promise<GitReadPatchResult>;
+}): Promise<GitReadPatchResult> {
+  const candidates = collectGitPatchPathCandidates(params.item);
+  let blankResp: GitReadPatchResult | null = null;
+
+  for (const filePath of candidates) {
+    const resp = await params.readByPath(filePath);
+    if (hasMeaningfulGitPatchText(resp.text)) {
+      return resp;
+    }
+    blankResp = blankResp ?? resp;
+  }
+
+  const fallbackResp = await params.readByPath();
+  const extracted = extractGitPatchSectionByPath(fallbackResp.text, candidates);
+  if (hasMeaningfulGitPatchText(extracted)) {
+    return {
+      text: extracted,
+      meta: fallbackResp.meta,
+    };
+  }
+  if (hasMeaningfulGitPatchText(fallbackResp.text)) {
+    return fallbackResp;
+  }
+  return blankResp ?? fallbackResp;
+}
+

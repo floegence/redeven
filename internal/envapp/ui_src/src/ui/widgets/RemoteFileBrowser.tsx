@@ -82,10 +82,28 @@ const PAGE_SIDEBAR_DEFAULT_WIDTH = 240;
 const PAGE_SIDEBAR_MIN_WIDTH = 180;
 const PAGE_SIDEBAR_MAX_WIDTH = 520;
 const PAGE_SIDEBAR_WIDTH_STORAGE_KEY = 'redeven:remote-file-browser:page-sidebar-width';
+const PAGE_MODE_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:page-mode:';
+const GIT_SUBVIEW_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:git-subview:';
 
 function normalizePageSidebarWidth(width: unknown): number {
   const raw = typeof width === 'number' && Number.isFinite(width) ? width : PAGE_SIDEBAR_DEFAULT_WIDTH;
   return Math.max(PAGE_SIDEBAR_MIN_WIDTH, Math.min(PAGE_SIDEBAR_MAX_WIDTH, Math.round(raw)));
+}
+
+function normalizeBrowserPageMode(value: unknown): BrowserPageMode {
+  return value === 'git' ? 'git' : 'files';
+}
+
+function normalizeGitSubview(value: unknown): GitWorkbenchSubview {
+  switch (value) {
+    case 'changes':
+    case 'branches':
+    case 'history':
+    case 'overview':
+      return value;
+    default:
+      return 'overview';
+  }
 }
 
 export interface RemoteFileBrowserProps {
@@ -184,6 +202,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [pageMode, setPageMode] = createSignal<BrowserPageMode>('files');
   const [repoInfo, setRepoInfo] = createSignal<GitResolveRepoResponse | null>(null);
   const [repoInfoLoading, setRepoInfoLoading] = createSignal(false);
+  const [repoInfoResolved, setRepoInfoResolved] = createSignal(false);
   const [repoInfoError, setRepoInfoError] = createSignal('');
 
   const [gitCommits, setGitCommits] = createSignal<GitCommitSummary[]>([]);
@@ -342,6 +361,77 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     floe.persist.debouncedSave(`files:lastTargetPath:${eid}`, next);
   };
 
+
+  const readPersistedPageMode = (id: string): BrowserPageMode => {
+    const eid = id.trim();
+    if (!eid) return 'files';
+
+    if (props.widgetId) {
+      const state = deck.getWidgetState(props.widgetId);
+      const byEnv = (state as any).pageModeByEnv;
+      if (byEnv && typeof byEnv === 'object' && !Array.isArray(byEnv)) {
+        return normalizeBrowserPageMode((byEnv as any)[eid]);
+      }
+      return 'files';
+    }
+
+    return normalizeBrowserPageMode(floe.persist.load<string>(`${PAGE_MODE_STORAGE_KEY_PREFIX}${eid}`, 'files'));
+  };
+
+  const writePersistedPageMode = (id: string, mode: BrowserPageMode) => {
+    const eid = id.trim();
+    if (!eid) return;
+    const next = normalizeBrowserPageMode(mode);
+
+    if (props.widgetId) {
+      const state = deck.getWidgetState(props.widgetId);
+      const prevRaw = (state as any).pageModeByEnv;
+      const prev =
+        prevRaw && typeof prevRaw === 'object' && !Array.isArray(prevRaw)
+          ? (prevRaw as Record<string, BrowserPageMode>)
+          : {};
+      deck.updateWidgetState(props.widgetId, 'pageModeByEnv', { ...prev, [eid]: next });
+      return;
+    }
+
+    floe.persist.debouncedSave(`${PAGE_MODE_STORAGE_KEY_PREFIX}${eid}`, next);
+  };
+
+  const readPersistedGitSubview = (id: string): GitWorkbenchSubview => {
+    const eid = id.trim();
+    if (!eid) return 'overview';
+
+    if (props.widgetId) {
+      const state = deck.getWidgetState(props.widgetId);
+      const byEnv = (state as any).gitSubviewByEnv;
+      if (byEnv && typeof byEnv === 'object' && !Array.isArray(byEnv)) {
+        return normalizeGitSubview((byEnv as any)[eid]);
+      }
+      return 'overview';
+    }
+
+    return normalizeGitSubview(floe.persist.load<string>(`${GIT_SUBVIEW_STORAGE_KEY_PREFIX}${eid}`, 'overview'));
+  };
+
+  const writePersistedGitSubview = (id: string, view: GitWorkbenchSubview) => {
+    const eid = id.trim();
+    if (!eid) return;
+    const next = normalizeGitSubview(view);
+
+    if (props.widgetId) {
+      const state = deck.getWidgetState(props.widgetId);
+      const prevRaw = (state as any).gitSubviewByEnv;
+      const prev =
+        prevRaw && typeof prevRaw === 'object' && !Array.isArray(prevRaw)
+          ? (prevRaw as Record<string, GitWorkbenchSubview>)
+          : {};
+      deck.updateWidgetState(props.widgetId, 'gitSubviewByEnv', { ...prev, [eid]: next });
+      return;
+    }
+
+    floe.persist.debouncedSave(`${GIT_SUBVIEW_STORAGE_KEY_PREFIX}${eid}`, next);
+  };
+
   const resolveFsRootAbs = async (): Promise<string> => {
     const cached = normalizeAbsolutePath(fsRootAbs());
     if (cached) return cached;
@@ -363,12 +453,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       repoReqSeq += 1;
       setRepoInfo(null);
       setRepoInfoLoading(false);
+      setRepoInfoResolved(false);
       setRepoInfoError('');
       return null;
     }
 
     const seq = ++repoReqSeq;
     setRepoInfoLoading(true);
+    setRepoInfoResolved(false);
     setRepoInfoError('');
     try {
       const resp = await rpc.git.resolveRepo({ path: normalizePath(path) });
@@ -398,6 +490,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     } finally {
       if (seq === repoReqSeq) {
         setRepoInfoLoading(false);
+        setRepoInfoResolved(true);
       }
     }
   };
@@ -419,7 +512,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     gitWorkspaceReqSeq += 1;
     gitBranchesReqSeq += 1;
     gitBranchCompareReqSeq += 1;
-    setGitSubview('overview');
     setGitRepoSummary(null);
     setGitRepoSummaryLoading(false);
     setGitRepoSummaryError('');
@@ -620,7 +712,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const pageSidebarOpen = () => !layout.isMobile() || browserSidebarOpen();
 
   const setBrowserPageMode = (mode: BrowserPageMode) => {
-    setPageMode(mode);
+    const next = normalizeBrowserPageMode(mode);
+    setPageMode(next);
+    const id = envId();
+    if (id) {
+      writePersistedPageMode(id, next);
+    }
   };
 
   const handlePageModeChange = (mode: BrowserPageMode) => {
@@ -631,7 +728,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const handleGitSubviewChange = (view: GitWorkbenchSubview) => {
-    setGitSubview(view);
+    const next = normalizeGitSubview(view);
+    setGitSubview(next);
+    const id = envId();
+    if (id) {
+      writePersistedGitSubview(id, next);
+    }
   };
 
   createEffect(() => {
@@ -639,18 +741,24 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   createEffect(() => {
-    const _ = envId();
+    const id = envId();
+    const nextPath = id ? readPersistedLastPath(id) : '/';
+    const nextMode = id ? readPersistedPageMode(id) : 'files';
+    const nextSubview = id ? readPersistedGitSubview(id) : 'overview';
+
     dirReqSeq += 1;
     cache = new Map();
     setFiles([]);
     setLoading(false);
-    setCurrentBrowserPath('/');
+    setCurrentBrowserPath(nextPath);
     setLastLoadedBrowserPath('/');
     setFsRootAbs('');
-    setBrowserPageMode('files');
+    setGitSubview(nextSubview);
+    setBrowserPageMode(nextMode);
     setBrowserSidebarOpen(false);
     setRepoInfo(null);
     setRepoInfoLoading(false);
+    setRepoInfoResolved(false);
     setRepoInfoError('');
     resetGitCommitSidebar();
     resetGitWorkbenchData();
@@ -1283,7 +1391,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   createEffect(() => {
-    if (pageMode() === 'git' && !repoInfoLoading() && !repoHistoryAvailable()) {
+    if (pageMode() === 'git' && repoInfoResolved() && !repoInfoLoading() && !repoHistoryAvailable()) {
       setBrowserPageMode('files');
       if (layout.isMobile()) {
         setBrowserSidebarOpen(false);

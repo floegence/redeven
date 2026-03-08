@@ -3,7 +3,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
-import { readGitPatchTextOnce } from '../utils/gitPatchStreamReader';
+import { readGitPatchTextOnce, readGitPatchWithFallback } from '../utils/gitPatchStreamReader';
 import { changeMetricsText, changeSecondaryPath } from '../utils/gitWorkbench';
 import { GitDiffDialog } from './GitDiffDialog';
 import { gitChangeTone, gitToneBadgeClass, gitToneSelectableCardClass, gitToneSurfaceClass } from './GitChrome';
@@ -249,17 +249,19 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                           const client = protocol.client();
                           const repoRootPath = String(props.repoInfo?.repoRootPath ?? '').trim();
                           const hash = commitHash();
-                          const patchPath = String(item.patchPath || item.path || item.newPath || item.oldPath || '').trim();
-                          if (!client || !repoRootPath || !hash || !patchPath) {
+                          if (!client || !repoRootPath || !hash) {
                             return { text: '', truncated: false };
                           }
-                          const resp = await readGitPatchTextOnce({
-                            client,
-                            repoRootPath,
-                            commit: hash,
-                            filePath: patchPath,
-                            maxBytes: 2 * 1024 * 1024,
-                            signal,
+                          const resp = await readGitPatchWithFallback({
+                            item,
+                            readByPath: (filePath) => readGitPatchTextOnce({
+                              client,
+                              repoRootPath,
+                              commit: hash,
+                              filePath,
+                              maxBytes: 2 * 1024 * 1024,
+                              signal,
+                            }),
                           });
                           return { text: resp.text, truncated: resp.meta.truncated };
                         }}

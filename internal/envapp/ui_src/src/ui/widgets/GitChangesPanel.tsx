@@ -3,7 +3,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type { GitListWorkspaceChangesResponse, GitWorkspaceChange } from '../protocol/redeven_v1';
-import { readWorkspaceGitPatchTextOnce } from '../utils/gitPatchStreamReader';
+import { readGitPatchWithFallback, readWorkspaceGitPatchTextOnce } from '../utils/gitPatchStreamReader';
 import { changeMetricsText, changeSecondaryPath, summarizeWorkspaceCount, workspaceSectionLabel } from '../utils/gitWorkbench';
 import { GitDiffDialog } from './GitDiffDialog';
 import { gitChangeTone, gitToneBadgeClass, gitToneInsetClass, gitToneSurfaceClass, workspaceSectionTone } from './GitChrome';
@@ -135,17 +135,20 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
         loadPatch={async (item, signal) => {
           const client = protocol.client();
           const repoRootPath = String(props.repoRootPath ?? '').trim();
-          const filePath = String(item.patchPath || item.path || item.newPath || item.oldPath || '').trim();
-          if (!client || !repoRootPath || !item.section || !filePath) {
+          const section = item.section;
+          if (!client || !repoRootPath || !section) {
             return { text: '', truncated: false };
           }
-          const resp = await readWorkspaceGitPatchTextOnce({
-            client,
-            repoRootPath,
-            section: item.section,
-            filePath,
-            maxBytes: 2 * 1024 * 1024,
-            signal,
+          const resp = await readGitPatchWithFallback({
+            item,
+            readByPath: (filePath) => readWorkspaceGitPatchTextOnce({
+              client,
+              repoRootPath,
+              section,
+              filePath,
+              maxBytes: 2 * 1024 * 1024,
+              signal,
+            }),
           });
           return { text: resp.text, truncated: resp.meta.truncated };
         }}

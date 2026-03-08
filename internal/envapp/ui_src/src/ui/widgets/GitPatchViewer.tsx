@@ -13,6 +13,7 @@ import {
   parseGitPatchRenderedLines,
 } from '../utils/gitPatch';
 import { changeDisplayPath, changeMetricsText } from '../utils/gitWorkbench';
+import { hasMeaningfulGitPatchText } from '../utils/gitPatchText';
 
 export type GitPatchRenderable = GitCommitFileSummary | GitWorkspaceChange;
 
@@ -44,6 +45,7 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
   const renderedPatchLines = createMemo(() => parseGitPatchRenderedLines(patchText()));
   const visiblePatchLines = createMemo(() => patchExpanded() ? renderedPatchLines() : renderedPatchLines().slice(0, GIT_PATCH_PREVIEW_LINES));
   const hasMorePatchLines = createMemo(() => renderedPatchLines().length > GIT_PATCH_PREVIEW_LINES);
+  const canCopyPatch = createMemo(() => hasMeaningfulGitPatchText(patchText()) && !patchLoading() && !patchError());
   const unavailableMessage = createMemo(() => {
     const item = props.item;
     if (!item) return '';
@@ -140,7 +142,7 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
                     </Show>
                   </span>
                 </div>
-                <Button size="xs" variant="ghost" onClick={() => void handleCopyPatch()} disabled={!patchText() || patchLoading() || !!patchError()}>
+                <Button size="xs" variant="ghost" onClick={() => void handleCopyPatch()} disabled={!canCopyPatch()}>
                   {copied() ? 'Copied' : 'Copy Patch'}
                 </Button>
               </div>
