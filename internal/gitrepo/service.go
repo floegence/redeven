@@ -1,18 +1,13 @@
 package gitrepo
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/floegence/flowersec/flowersec-go/framing/jsonframe"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven-agent/internal/accessgate"
 	"github.com/floegence/redeven-agent/internal/gitutil"
@@ -31,8 +26,6 @@ const (
 
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
-	defaultPatchMaxBytes  = 2 * 1024 * 1024
-	hardPatchMaxBytes     = 16 * 1024 * 1024
 )
 
 type Service struct {
@@ -222,105 +215,6 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 	})
 }
 
-func (s *Service) ServeReadCommitPatchStream(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta) {
-	s.ServeReadCommitPatchStreamWithAccessGate(ctx, stream, meta, nil)
-}
-
-func (s *Service) ServeReadCommitPatchStreamWithAccessGate(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta, gate *accessgate.Gate) {
-	if stream == nil {
-		return
-	}
-	defer func() { _ = stream.Close() }()
-
-	if err := accessgate.RequireRPC(gate, meta, accessgate.RPCAccessProtected); err != nil {
-		rpcErr, _ := err.(*rpc.Error)
-		code := 423
-		message := "access password required"
-		if rpcErr != nil {
-			code = int(rpcErr.Code)
-			message = rpcErr.Message
-		}
-		_ = jsonframe.WriteJSONFrame(stream, readCommitPatchRespMeta{
-			Ok:    false,
-			Error: &streamError{Code: code, Message: message},
-		})
-		return
-	}
-
-	if meta == nil || !meta.CanRead {
-		_ = jsonframe.WriteJSONFrame(stream, readCommitPatchRespMeta{
-			Ok:    false,
-			Error: &streamError{Code: 403, Message: "read permission denied"},
-		})
-		return
-	}
-
-	reqBytes, err := jsonframe.ReadJSONFrame(stream, jsonframe.DefaultMaxJSONFrameBytes)
-	if err != nil {
-		return
-	}
-
-	var req readCommitPatchReq
-	if err := json.Unmarshal(reqBytes, &req); err != nil {
-		_ = jsonframe.WriteJSONFrame(stream, readCommitPatchRespMeta{
-			Ok:    false,
-			Error: &streamError{Code: 400, Message: "invalid request"},
-		})
-		return
-	}
-
-	repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
-	if err != nil {
-		rpcErr := classifyRepoRPCError(err)
-		_ = jsonframe.WriteJSONFrame(stream, readCommitPatchRespMeta{
-			Ok:    false,
-			Error: &streamError{Code: int(rpcErr.Code), Message: rpcErr.Message},
-		})
-		return
-	}
-
-	commit := strings.TrimSpace(req.Commit)
-	if commit == "" {
-		_ = jsonframe.WriteJSONFrame(stream, readCommitPatchRespMeta{
-			Ok:    false,
-			Error: &streamError{Code: 400, Message: "missing commit"},
-		})
-		return
-	}
-
-	filePath, err := normalizePatchPath(req.FilePath)
-	if err != nil {
-		_ = jsonframe.WriteJSONFrame(stream, readCommitPatchRespMeta{
-			Ok:    false,
-			Error: &streamError{Code: 400, Message: "invalid file_path"},
-		})
-		return
-	}
-
-	maxBytes := normalizePatchMaxBytes(req.MaxBytes)
-	patchBytes, truncated, err := s.readCommitPatchBytes(ctx, repo.repoRootReal, commit, filePath, maxBytes)
-	if err != nil {
-		rpcErr := classifyGitRPCError(err)
-		_ = jsonframe.WriteJSONFrame(stream, readCommitPatchRespMeta{
-			Ok:    false,
-			Error: &streamError{Code: int(rpcErr.Code), Message: rpcErr.Message},
-		})
-		return
-	}
-
-	if err := jsonframe.WriteJSONFrame(stream, readCommitPatchRespMeta{
-		Ok:         true,
-		ContentLen: int64(len(patchBytes)),
-		Truncated:  truncated,
-	}); err != nil {
-		return
-	}
-	if len(patchBytes) == 0 {
-		return
-	}
-	_, _ = stream.Write(patchBytes)
-}
-
 type repoContext struct {
 	repoRootReal    string
 	repoRootVirtual string
@@ -452,15 +346,24 @@ func (s *Service) getCommitDetail(ctx context.Context, repo repoContext, commit 
 	if len(details) == 0 {
 		return gitCommitDetail{}, nil, errors.New("commit not found")
 	}
-	statusOut, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "diff-tree", "--root", "--no-commit-id", "--name-status", "-r", "-M", "-C", commit)
+	entries, err := s.readGitDiffEntries(ctx, repo.repoRootReal,
+		"show",
+		"--format=",
+		"--patch",
+		"--find-renames",
+		"--find-copies",
+		"--no-ext-diff",
+		"--binary",
+		"--root",
+		commit,
+	)
 	if err != nil {
 		return gitCommitDetail{}, nil, err
 	}
-	numstatOut, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "show", "--format=", "--numstat", "--root", "-M", "-C", commit)
-	if err != nil {
-		return gitCommitDetail{}, nil, err
+	files := make([]gitCommitFileSummary, 0, len(entries))
+	for _, entry := range entries {
+		files = append(files, entry.toCommitFileSummary())
 	}
-	files := mergeCommitFileSummaries(parseNameStatusOutput(statusOut), parseNumstatOutput(numstatOut))
 	return details[0], files, nil
 }
 
@@ -543,318 +446,6 @@ func summarizeCommitBody(raw string) string {
 		return collapsed
 	}
 	return collapsed[:180] + "…"
-}
-
-type numstatEntry struct {
-	path      string
-	oldPath   string
-	newPath   string
-	additions int
-	deletions int
-	isBinary  bool
-}
-
-func parseNameStatusOutput(out []byte) []gitCommitFileSummary {
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	items := make([]gitCommitFileSummary, 0, len(lines))
-	seen := make(map[string]struct{})
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.Split(line, "\t")
-		if len(parts) < 2 {
-			continue
-		}
-		rawStatus := strings.TrimSpace(parts[0])
-		changeCode := byte(0)
-		if rawStatus != "" {
-			changeCode = rawStatus[0]
-		}
-		summary := gitCommitFileSummary{}
-		switch changeCode {
-		case 'A':
-			summary.ChangeType = "added"
-			summary.Path = strings.TrimSpace(parts[1])
-			summary.NewPath = summary.Path
-			summary.PatchPath = summary.Path
-		case 'D':
-			summary.ChangeType = "deleted"
-			summary.Path = strings.TrimSpace(parts[1])
-			summary.OldPath = summary.Path
-			summary.PatchPath = summary.Path
-		case 'R':
-			if len(parts) < 3 {
-				continue
-			}
-			summary.ChangeType = "renamed"
-			summary.OldPath = strings.TrimSpace(parts[1])
-			summary.NewPath = strings.TrimSpace(parts[2])
-			summary.Path = summary.NewPath
-			summary.PatchPath = summary.NewPath
-		case 'C':
-			if len(parts) < 3 {
-				continue
-			}
-			summary.ChangeType = "copied"
-			summary.OldPath = strings.TrimSpace(parts[1])
-			summary.NewPath = strings.TrimSpace(parts[2])
-			summary.Path = summary.NewPath
-			summary.PatchPath = summary.NewPath
-		default:
-			summary.ChangeType = "modified"
-			summary.Path = strings.TrimSpace(parts[1])
-			summary.NewPath = summary.Path
-			summary.PatchPath = summary.Path
-		}
-		key := summary.ChangeType + ":" + summary.Path + ":" + summary.OldPath + ":" + summary.NewPath
-		if _, exists := seen[key]; exists {
-			continue
-		}
-		seen[key] = struct{}{}
-		items = append(items, summary)
-	}
-	return items
-}
-
-func parseNumstatOutput(out []byte) []numstatEntry {
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	entries := make([]numstatEntry, 0, len(lines))
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\t", 3)
-		if len(parts) < 3 {
-			continue
-		}
-		entry := numstatEntry{}
-		if strings.TrimSpace(parts[0]) == "-" || strings.TrimSpace(parts[1]) == "-" {
-			entry.isBinary = true
-		} else {
-			entry.additions, _ = strconv.Atoi(strings.TrimSpace(parts[0]))
-			entry.deletions, _ = strconv.Atoi(strings.TrimSpace(parts[1]))
-		}
-		oldPath, newPath := parseNumstatPaths(parts[2])
-		entry.oldPath = oldPath
-		entry.newPath = newPath
-		entry.path = newPath
-		if entry.path == "" {
-			entry.path = oldPath
-		}
-		entries = append(entries, entry)
-	}
-	return entries
-}
-
-func parseNumstatPaths(raw string) (string, string) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", ""
-	}
-	if !strings.Contains(raw, " => ") {
-		return raw, raw
-	}
-	open := strings.Index(raw, "{")
-	close := strings.LastIndex(raw, "}")
-	if open >= 0 && close > open {
-		inside := raw[open+1 : close]
-		if strings.Contains(inside, " => ") {
-			parts := strings.SplitN(inside, " => ", 2)
-			prefix := raw[:open]
-			suffix := raw[close+1:]
-			return prefix + parts[0] + suffix, prefix + parts[1] + suffix
-		}
-	}
-	parts := strings.SplitN(raw, " => ", 2)
-	if len(parts) == 2 {
-		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
-	}
-	return raw, raw
-}
-
-func mergeCommitFileSummaries(base []gitCommitFileSummary, stats []numstatEntry) []gitCommitFileSummary {
-	if len(base) == 0 && len(stats) == 0 {
-		return nil
-	}
-	statByKey := make(map[string]numstatEntry, len(stats)*3)
-	for _, stat := range stats {
-		if stat.path != "" {
-			statByKey[stat.path] = stat
-		}
-		if stat.oldPath != "" {
-			statByKey[stat.oldPath] = stat
-		}
-		if stat.newPath != "" {
-			statByKey[stat.newPath] = stat
-		}
-	}
-	if len(base) == 0 {
-		base = make([]gitCommitFileSummary, 0, len(stats))
-		for _, stat := range stats {
-			changeType := "modified"
-			if stat.oldPath != "" && stat.newPath != "" && stat.oldPath != stat.newPath {
-				changeType = "renamed"
-			}
-			base = append(base, gitCommitFileSummary{
-				ChangeType: changeType,
-				Path:       stat.path,
-				OldPath:    stat.oldPath,
-				NewPath:    stat.newPath,
-				PatchPath:  preferredPatchPath(changeType, stat.oldPath, stat.newPath, stat.path),
-			})
-		}
-	}
-	for index := range base {
-		candidates := []string{base[index].Path, base[index].NewPath, base[index].OldPath}
-		for _, candidate := range candidates {
-			candidate = strings.TrimSpace(candidate)
-			if candidate == "" {
-				continue
-			}
-			stat, ok := statByKey[candidate]
-			if !ok {
-				continue
-			}
-			base[index].Additions = stat.additions
-			base[index].Deletions = stat.deletions
-			base[index].IsBinary = stat.isBinary
-			if base[index].OldPath == "" {
-				base[index].OldPath = stat.oldPath
-			}
-			if base[index].NewPath == "" {
-				base[index].NewPath = stat.newPath
-			}
-			if base[index].Path == "" {
-				base[index].Path = stat.path
-			}
-			if base[index].PatchPath == "" {
-				base[index].PatchPath = preferredPatchPath(base[index].ChangeType, base[index].OldPath, base[index].NewPath, base[index].Path)
-			}
-			break
-		}
-	}
-	return base
-}
-
-func preferredPatchPath(changeType string, oldPath string, newPath string, pathValue string) string {
-	switch strings.TrimSpace(changeType) {
-	case "deleted":
-		if oldPath != "" {
-			return oldPath
-		}
-	case "renamed", "copied", "added", "modified":
-		if newPath != "" {
-			return newPath
-		}
-	}
-	if pathValue != "" {
-		return pathValue
-	}
-	if newPath != "" {
-		return newPath
-	}
-	return oldPath
-}
-
-func normalizePatchPath(raw string) (string, error) {
-	raw = strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
-	if raw == "" {
-		return "", nil
-	}
-	if strings.HasPrefix(raw, "/") {
-		return "", errors.New("absolute path is not allowed")
-	}
-	normalized := path.Clean(raw)
-	if normalized == "." || normalized == "" {
-		return "", nil
-	}
-	if normalized == ".." || strings.HasPrefix(normalized, "../") {
-		return "", errors.New("path escapes repository")
-	}
-	return normalized, nil
-}
-
-func normalizePatchMaxBytes(value int64) int64 {
-	if value <= 0 {
-		return defaultPatchMaxBytes
-	}
-	if value > hardPatchMaxBytes {
-		return hardPatchMaxBytes
-	}
-	return value
-}
-
-func (s *Service) readCommitPatchBytes(ctx context.Context, repoRoot string, commit string, filePath string, maxBytes int64) ([]byte, bool, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	args := []string{"show", "--format=", "--patch", "--find-renames", "--find-copies", "--no-ext-diff", commit}
-	if filePath != "" {
-		args = append(args, "--", filePath)
-	}
-	cmd, err := gitutil.CommandContext(ctx, repoRoot, nil, args...)
-	if err != nil {
-		return nil, false, err
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, false, err
-	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		return nil, false, err
-	}
-
-	buf := make([]byte, 32*1024)
-	var out bytes.Buffer
-	truncated := false
-	for {
-		n, readErr := stdout.Read(buf)
-		if n > 0 {
-			remaining := maxBytes - int64(out.Len())
-			if remaining <= 0 {
-				truncated = true
-				cancel()
-				if cmd.Process != nil {
-					_ = cmd.Process.Kill()
-				}
-				break
-			}
-			if int64(n) > remaining {
-				_, _ = out.Write(buf[:remaining])
-				truncated = true
-				cancel()
-				if cmd.Process != nil {
-					_ = cmd.Process.Kill()
-				}
-				break
-			}
-			_, _ = out.Write(buf[:n])
-		}
-		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				break
-			}
-			return nil, false, readErr
-		}
-	}
-
-	waitErr := cmd.Wait()
-	if truncated {
-		return out.Bytes(), true, nil
-	}
-	if waitErr != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = waitErr.Error()
-		}
-		return nil, false, errors.New(msg)
-	}
-	return out.Bytes(), false, nil
 }
 
 func classifyRepoRPCError(err error) *rpc.Error {
@@ -957,31 +548,14 @@ type gitCommitDetail struct {
 }
 
 type gitCommitFileSummary struct {
-	ChangeType string `json:"change_type,omitempty"`
-	Path       string `json:"path,omitempty"`
-	OldPath    string `json:"old_path,omitempty"`
-	NewPath    string `json:"new_path,omitempty"`
-	PatchPath  string `json:"patch_path,omitempty"`
-	Additions  int    `json:"additions,omitempty"`
-	Deletions  int    `json:"deletions,omitempty"`
-	IsBinary   bool   `json:"is_binary,omitempty"`
-}
-
-type readCommitPatchReq struct {
-	RepoRootPath string `json:"repo_root_path"`
-	Commit       string `json:"commit"`
-	FilePath     string `json:"file_path,omitempty"`
-	MaxBytes     int64  `json:"max_bytes,omitempty"`
-}
-
-type readCommitPatchRespMeta struct {
-	Ok         bool         `json:"ok"`
-	ContentLen int64        `json:"content_len,omitempty"`
-	Truncated  bool         `json:"truncated,omitempty"`
-	Error      *streamError `json:"error,omitempty"`
-}
-
-type streamError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message,omitempty"`
+	ChangeType     string `json:"change_type,omitempty"`
+	Path           string `json:"path,omitempty"`
+	OldPath        string `json:"old_path,omitempty"`
+	NewPath        string `json:"new_path,omitempty"`
+	DisplayPath    string `json:"display_path,omitempty"`
+	PatchText      string `json:"patch_text,omitempty"`
+	PatchTruncated bool   `json:"patch_truncated,omitempty"`
+	Additions      int    `json:"additions,omitempty"`
+	Deletions      int    `json:"deletions,omitempty"`
+	IsBinary       bool   `json:"is_binary,omitempty"`
 }

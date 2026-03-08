@@ -2,6 +2,7 @@ package gitrepo
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -55,14 +56,94 @@ func (s *Service) listWorkspaceChanges(ctx context.Context, repo repoContext) (*
 	if err != nil {
 		return nil, err
 	}
+	staged, err := s.readWorkspaceDiffSection(ctx, repo.repoRootReal, "staged")
+	if err != nil {
+		return nil, err
+	}
+	unstaged, err := s.readWorkspaceDiffSection(ctx, repo.repoRootReal, "unstaged")
+	if err != nil {
+		return nil, err
+	}
+	conflicted, err := s.readWorkspaceDiffSection(ctx, repo.repoRootReal, "conflicted")
+	if err != nil {
+		return nil, err
+	}
+	untracked := decorateUntrackedWorkspaceChanges(status.Untracked)
+	summary := gitWorkspaceSummary{
+		StagedCount:     len(staged),
+		UnstagedCount:   len(unstaged),
+		UntrackedCount:  len(untracked),
+		ConflictedCount: len(conflicted),
+	}
 	return &listWorkspaceChangesResp{
 		RepoRootPath: repo.repoRootVirtual,
-		Summary:      status.Summary(),
-		Staged:       status.Staged,
-		Unstaged:     status.Unstaged,
-		Untracked:    status.Untracked,
-		Conflicted:   status.Conflicted,
+		Summary:      summary,
+		Staged:       staged,
+		Unstaged:     unstaged,
+		Untracked:    untracked,
+		Conflicted:   conflicted,
 	}, nil
+}
+
+func workspacePatchArgs(section string) ([]string, error) {
+	base := []string{"diff", "--patch", "--find-renames", "--find-copies", "--no-ext-diff", "--binary"}
+	switch section {
+	case "staged":
+		base = append(base, "--cached")
+	case "unstaged":
+	case "conflicted":
+		base = append(base, "--cc")
+	default:
+		return nil, errors.New("invalid section")
+	}
+	return base, nil
+}
+
+func (s *Service) readWorkspaceDiffSection(ctx context.Context, repoRoot string, section string) ([]gitWorkspaceChange, error) {
+	args, err := workspacePatchArgs(section)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := s.readGitDiffEntries(ctx, repoRoot, args...)
+	if err != nil {
+		return nil, err
+	}
+	changes := make([]gitWorkspaceChange, 0, len(entries))
+	for _, entry := range entries {
+		change := entry.toWorkspaceChange(section)
+		if section == "conflicted" {
+			change.ChangeType = "conflicted"
+		}
+		changes = append(changes, change)
+	}
+	return changes, nil
+}
+
+func decorateUntrackedWorkspaceChanges(items []gitWorkspaceChange) []gitWorkspaceChange {
+	if len(items) == 0 {
+		return nil
+	}
+	result := make([]gitWorkspaceChange, 0, len(items))
+	for _, item := range items {
+		result = append(result, gitWorkspaceChange{
+			Section:     "untracked",
+			ChangeType:  "added",
+			Path:        item.Path,
+			NewPath:     item.NewPath,
+			DisplayPath: firstNonEmptyPath(item.DisplayPath, item.Path, item.NewPath, item.OldPath),
+		})
+	}
+	return result
+}
+
+func firstNonEmptyPath(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (s *Service) readWorkspaceStatus(ctx context.Context, repoRoot string) (workspaceStatusSnapshot, error) {
@@ -109,19 +190,19 @@ func parseWorkspaceStatusPorcelainV2(out []byte) workspaceStatusSnapshot {
 			}
 			pathValue := strings.TrimSpace(fields[10])
 			snapshot.Conflicted = append(snapshot.Conflicted, gitWorkspaceChange{
-				Section:    "conflicted",
-				ChangeType: "conflicted",
-				Path:       pathValue,
-				PatchPath:  pathValue,
+				Section:     "conflicted",
+				ChangeType:  "conflicted",
+				Path:        pathValue,
+				DisplayPath: pathValue,
 			})
 		case strings.HasPrefix(token, "? "):
 			pathValue := strings.TrimSpace(token[2:])
 			snapshot.Untracked = append(snapshot.Untracked, gitWorkspaceChange{
-				Section:    "untracked",
-				ChangeType: "added",
-				Path:       pathValue,
-				NewPath:    pathValue,
-				PatchPath:  pathValue,
+				Section:     "untracked",
+				ChangeType:  "added",
+				Path:        pathValue,
+				NewPath:     pathValue,
+				DisplayPath: pathValue,
 			})
 		}
 	}
@@ -164,33 +245,33 @@ func applyTrackedWorkspaceRecord(snapshot *workspaceStatusSnapshot, xy string, p
 	worktreeStatus := xy[1]
 	if indexStatus == 'U' || worktreeStatus == 'U' {
 		snapshot.Conflicted = append(snapshot.Conflicted, gitWorkspaceChange{
-			Section:    "conflicted",
-			ChangeType: "conflicted",
-			Path:       pathValue,
-			OldPath:    oldPath,
-			NewPath:    newPath,
-			PatchPath:  preferredPatchPath("conflicted", oldPath, newPath, pathValue),
+			Section:     "conflicted",
+			ChangeType:  "conflicted",
+			Path:        pathValue,
+			OldPath:     oldPath,
+			NewPath:     newPath,
+			DisplayPath: firstNonEmptyPath(pathValue, newPath, oldPath),
 		})
 		return
 	}
 	if indexStatus != '.' {
 		snapshot.Staged = append(snapshot.Staged, gitWorkspaceChange{
-			Section:    "staged",
-			ChangeType: workspaceChangeType(indexStatus, oldPath, newPath),
-			Path:       pathValue,
-			OldPath:    oldPath,
-			NewPath:    newPath,
-			PatchPath:  preferredPatchPath(workspaceChangeType(indexStatus, oldPath, newPath), oldPath, newPath, pathValue),
+			Section:     "staged",
+			ChangeType:  workspaceChangeType(indexStatus, oldPath, newPath),
+			Path:        pathValue,
+			OldPath:     oldPath,
+			NewPath:     newPath,
+			DisplayPath: firstNonEmptyPath(pathValue, newPath, oldPath),
 		})
 	}
 	if worktreeStatus != '.' {
 		snapshot.Unstaged = append(snapshot.Unstaged, gitWorkspaceChange{
-			Section:    "unstaged",
-			ChangeType: workspaceChangeType(worktreeStatus, oldPath, newPath),
-			Path:       pathValue,
-			OldPath:    oldPath,
-			NewPath:    newPath,
-			PatchPath:  preferredPatchPath(workspaceChangeType(worktreeStatus, oldPath, newPath), oldPath, newPath, pathValue),
+			Section:     "unstaged",
+			ChangeType:  workspaceChangeType(worktreeStatus, oldPath, newPath),
+			Path:        pathValue,
+			OldPath:     oldPath,
+			NewPath:     newPath,
+			DisplayPath: firstNonEmptyPath(pathValue, newPath, oldPath),
 		})
 	}
 }

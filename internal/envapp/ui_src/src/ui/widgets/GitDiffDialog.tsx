@@ -10,7 +10,6 @@ export interface GitDiffDialogProps<T extends GitPatchRenderable> {
   description?: string;
   emptyMessage: string;
   unavailableMessage?: string | ((item: T) => string | undefined);
-  loadPatch: (item: T, signal: AbortSignal) => Promise<{ text: string; truncated?: boolean }>;
   class?: string;
 }
 
@@ -36,7 +35,6 @@ export function GitDiffDialog<T extends GitPatchRenderable>(props: GitDiffDialog
           item={props.item}
           emptyMessage={props.emptyMessage}
           unavailableMessage={props.unavailableMessage}
-          loadPatch={props.loadPatch}
         />
       </div>
     </Dialog>

@@ -51,7 +51,7 @@ describe('GitWorkbenchSidebar interactions', () => {
               repoRootPath: '/workspace/repo',
               summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
               staged: [
-                { section: 'staged', changeType: 'modified', path: 'src/app.ts', patchPath: 'src/app.ts', additions: 3, deletions: 1 },
+                { section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 3, deletions: 1 },
               ],
               unstaged: [],
               untracked: [],
@@ -65,7 +65,7 @@ describe('GitWorkbenchSidebar interactions', () => {
               ],
               remote: [],
             }}
-            selectedWorkspaceKey="staged:src/app.ts"
+            selectedWorkspaceKey="staged:modified:src/app.ts::"
             onSelectWorkspaceItem={(item) => {
               selectedPath = String(item.path || '');
             }}

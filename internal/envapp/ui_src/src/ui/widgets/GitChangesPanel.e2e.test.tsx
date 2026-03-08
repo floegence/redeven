@@ -1,11 +1,9 @@
 // @vitest-environment jsdom
 
 import { LayoutProvider, NotificationProvider } from '@floegence/floe-webapp-core';
-import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { redevenV1Contract } from '../protocol/redeven_v1';
 import { GitChangesPanel } from './GitChangesPanel';
 
 beforeEach(() => {
@@ -29,37 +27,43 @@ afterEach(() => {
 });
 
 describe('GitChangesPanel interactions', () => {
-  it('opens a floating diff dialog when a workspace file is explicitly inspected', () => {
+  it('opens a floating diff dialog and renders the embedded patch', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     const dispose = render(() => (
       <LayoutProvider>
         <NotificationProvider>
-          <ProtocolProvider contract={redevenV1Contract}>
-            <div class="h-[620px]">
-              <GitChangesPanel
-                repoRootPath="/workspace/repo"
-                workspace={{
-                  repoRootPath: '/workspace/repo',
-                  summary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
-                  staged: [],
-                  unstaged: [],
-                  untracked: [],
-                  conflicted: [],
-                }}
-                selectedItem={{
-                  section: 'staged',
-                  changeType: 'modified',
-                  path: 'src/app.ts',
-                  patchPath: 'src/app.ts',
-                  additions: 3,
-                  deletions: 1,
-                }}
-                inspectNonce={1}
-              />
-            </div>
-          </ProtocolProvider>
+          <div class="h-[620px]">
+            <GitChangesPanel
+              repoRootPath="/workspace/repo"
+              workspace={{
+                repoRootPath: '/workspace/repo',
+                summary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
+                staged: [],
+                unstaged: [],
+                untracked: [],
+                conflicted: [],
+              }}
+              selectedItem={{
+                section: 'staged',
+                changeType: 'modified',
+                path: 'src/app.ts',
+                displayPath: 'src/app.ts',
+                additions: 3,
+                deletions: 1,
+                patchText: [
+                  'diff --git a/src/app.ts b/src/app.ts',
+                  '--- a/src/app.ts',
+                  '+++ b/src/app.ts',
+                  '@@ -1 +1 @@',
+                  '-before',
+                  '+after',
+                ].join('\n'),
+              }}
+              inspectNonce={1}
+            />
+          </div>
         </NotificationProvider>
       </LayoutProvider>
     ), host);
@@ -69,6 +73,7 @@ describe('GitChangesPanel interactions', () => {
       expect(dialog).toBeTruthy();
       expect(document.body.textContent).toContain('Workspace Diff');
       expect(document.body.textContent).toContain('src/app.ts');
+      expect(document.body.textContent).toContain('+after');
     } finally {
       dispose();
     }

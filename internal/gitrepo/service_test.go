@@ -3,6 +3,7 @@ package gitrepo
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -84,6 +85,9 @@ func TestGetCommitDetail_RenameAndBinary(t *testing.T) {
 	if files[0].ChangeType != "renamed" || files[0].OldPath != "src/app.txt" || files[0].NewPath != "src/main.txt" {
 		t.Fatalf("unexpected rename summary: %+v", files[0])
 	}
+	if files[0].DisplayPath != "src/main.txt" || !strings.Contains(files[0].PatchText, "diff --git") || !strings.Contains(files[0].PatchText, "rename to src/main.txt") {
+		t.Fatalf("rename patch text not embedded correctly: %+v", files[0])
+	}
 
 	_, binaryFiles, err := svc.getCommitDetail(context.Background(), repo, fixture.BinaryCommit)
 	if err != nil {
@@ -96,10 +100,10 @@ func TestGetCommitDetail_RenameAndBinary(t *testing.T) {
 	foundDeleted := false
 	for _, file := range binaryFiles {
 		if file.Path == "bin/data.bin" && file.IsBinary {
-			foundBinary = true
+			foundBinary = strings.TrimSpace(file.PatchText) != ""
 		}
 		if file.Path == "README.md" && file.ChangeType == "deleted" {
-			foundDeleted = true
+			foundDeleted = strings.Contains(file.PatchText, "diff --git")
 		}
 	}
 	if !foundBinary {
@@ -110,17 +114,31 @@ func TestGetCommitDetail_RenameAndBinary(t *testing.T) {
 	}
 }
 
-func TestNormalizePatchPath(t *testing.T) {
+func TestListWorkspaceChanges_EmbedsPatchText(t *testing.T) {
 	t.Parallel()
-	if _, err := normalizePatchPath("../secret"); err == nil {
-		t.Fatalf("expected path escape to be rejected")
-	}
-	path, err := normalizePatchPath("src/main.txt")
+	fixture := createTestRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), "/")
 	if err != nil {
-		t.Fatalf("normalizePatchPath(valid): %v", err)
+		t.Fatalf("resolveExplicitRepo: %v", err)
 	}
-	if path != "src/main.txt" {
-		t.Fatalf("path=%q, want src/main.txt", path)
+
+	resp, err := svc.listWorkspaceChanges(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("listWorkspaceChanges: %v", err)
+	}
+	if len(resp.Staged) != 1 || !strings.Contains(resp.Staged[0].PatchText, "+staged") {
+		t.Fatalf("staged patch text not embedded: %+v", resp.Staged)
+	}
+	if len(resp.Unstaged) != 1 || !strings.Contains(resp.Unstaged[0].PatchText, "+unstaged") {
+		t.Fatalf("unstaged patch text not embedded: %+v", resp.Unstaged)
+	}
+	if len(resp.Untracked) != 1 || resp.Untracked[0].Path != workspace.UntrackedPath || strings.TrimSpace(resp.Untracked[0].PatchText) != "" {
+		t.Fatalf("unexpected untracked entry: %+v", resp.Untracked)
+	}
+	if resp.Staged[0].DisplayPath != workspace.TrackedPath || resp.Unstaged[0].DisplayPath != workspace.TrackedPath {
+		t.Fatalf("workspace display path mismatch: staged=%+v unstaged=%+v", resp.Staged[0], resp.Unstaged[0])
 	}
 }
 
@@ -312,7 +330,7 @@ func TestGetBranchCompare(t *testing.T) {
 	foundFile := false
 	for _, file := range resp.Files {
 		if file.Path == compare.FilePath && file.ChangeType == "added" {
-			foundFile = true
+			foundFile = strings.Contains(file.PatchText, "+feature branch") && strings.Contains(file.PatchText, compare.FilePath)
 			break
 		}
 	}

@@ -97,9 +97,14 @@ export function workspaceSectionItems(
   }
 }
 
+export function gitDiffEntryIdentity(item: GitWorkspaceChange | GitCommitFileSummary | null | undefined): string {
+  if (!item) return '';
+  return [item.changeType || '', item.path || '', item.oldPath || '', item.newPath || ''].join(':');
+}
+
 export function workspaceEntryKey(item: GitWorkspaceChange | null | undefined): string {
   if (!item) return '';
-  return `${item.section || ''}:${item.patchPath || item.path || item.newPath || item.oldPath || ''}`;
+  return `${item.section || ''}:${gitDiffEntryIdentity(item)}`;
 }
 
 export function pickDefaultWorkspaceChange(workspace: GitListWorkspaceChangesResponse | null | undefined): GitWorkspaceChange | null {
@@ -177,7 +182,7 @@ export function compareHeadline(compare: GitGetBranchCompareResponse | null | un
 }
 
 export function changeDisplayPath(change: GitWorkspaceChange | GitCommitFileSummary | null | undefined): string {
-  return String(change?.path || change?.newPath || change?.oldPath || '').trim() || '(unknown path)';
+  return String(change?.displayPath || change?.path || change?.newPath || change?.oldPath || '').trim() || '(unknown path)';
 }
 
 export function changeSecondaryPath(change: GitWorkspaceChange | GitCommitFileSummary | null | undefined): string {

@@ -856,19 +856,6 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 		fsSvc.ServeReadFileStreamWithAccessGate(ctx, stream, meta, a.accessGate)
 	})
 
-	// Git commit patch stream (text diff, chunked)
-	srv.Handle("git/read_commit_patch", func(ctx context.Context, stream io.ReadWriteCloser) {
-		gitRepoSvc.ServeReadCommitPatchStreamWithAccessGate(ctx, stream, meta, a.accessGate)
-	})
-
-	srv.Handle("git/read_workspace_patch", func(ctx context.Context, stream io.ReadWriteCloser) {
-		gitRepoSvc.ServeReadWorkspacePatchStreamWithAccessGate(ctx, stream, meta, a.accessGate)
-	})
-
-	srv.Handle("git/read_compare_patch", func(ctx context.Context, stream io.ReadWriteCloser) {
-		gitRepoSvc.ServeReadComparePatchStreamWithAccessGate(ctx, stream, meta, a.accessGate)
-	})
-
 	// Env App UI static assets are delivered over flowersec-proxy (Standard Mode only).
 	// Only enable the proxy handler for the reserved Env App code_space_id, and only when the
 	// session targets the bootstrapped Region environment.

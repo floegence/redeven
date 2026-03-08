@@ -3,13 +3,11 @@ package gitrepo
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/floegence/flowersec/flowersec-go/framing/jsonframe"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven-agent/internal/session"
 )
@@ -86,6 +84,9 @@ func TestE2E_GitRepoRPC_ResolveListDetail(t *testing.T) {
 	if len(detailResp.Files) != 1 || detailResp.Files[0].ChangeType != "renamed" {
 		t.Fatalf("unexpected detail files: %+v", detailResp.Files)
 	}
+	if !strings.Contains(detailResp.Files[0].PatchText, "rename to src/main.txt") || !strings.Contains(detailResp.Files[0].PatchText, "diff --git") {
+		t.Fatalf("detail patch text not embedded: %+v", detailResp.Files[0])
+	}
 
 	cancel()
 	_ = clientConn.Close()
@@ -93,77 +94,6 @@ func TestE2E_GitRepoRPC_ResolveListDetail(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatalf("rpc server did not stop")
-	}
-}
-
-func TestE2E_GitRepoPatchStream(t *testing.T) {
-	t.Parallel()
-	fixture := createTestRepoFixture(t)
-	svc := NewService(fixture.Root)
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() { _ = serverConn.Close() })
-	t.Cleanup(func() { _ = clientConn.Close() })
-
-	go svc.ServeReadCommitPatchStream(context.Background(), serverConn, &session.Meta{CanRead: true})
-
-	req := readCommitPatchReq{
-		RepoRootPath: "/",
-		Commit:       fixture.RenameCommit,
-		FilePath:     "src/main.txt",
-		MaxBytes:     1024 * 1024,
-	}
-	if err := jsonframe.WriteJSONFrame(clientConn, req); err != nil {
-		t.Fatalf("write request: %v", err)
-	}
-	metaBytes, err := jsonframe.ReadJSONFrame(clientConn, jsonframe.DefaultMaxJSONFrameBytes)
-	if err != nil {
-		t.Fatalf("read response meta: %v", err)
-	}
-	var meta readCommitPatchRespMeta
-	if err := json.Unmarshal(metaBytes, &meta); err != nil {
-		t.Fatalf("unmarshal response meta: %v", err)
-	}
-	if !meta.Ok || meta.ContentLen <= 0 {
-		t.Fatalf("unexpected patch meta: %+v", meta)
-	}
-	patch := make([]byte, meta.ContentLen)
-	if _, err := io.ReadFull(clientConn, patch); err != nil {
-		t.Fatalf("read patch: %v", err)
-	}
-	text := string(patch)
-	if !strings.Contains(text, "diff --git") || !strings.Contains(text, "src/main.txt") {
-		t.Fatalf("unexpected patch text: %s", text)
-	}
-}
-
-func TestE2E_GitRepoPatchStream_Truncates(t *testing.T) {
-	t.Parallel()
-	fixture := createTestRepoFixture(t)
-	svc := NewService(fixture.Root)
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() { _ = serverConn.Close() })
-	t.Cleanup(func() { _ = clientConn.Close() })
-
-	go svc.ServeReadCommitPatchStream(context.Background(), serverConn, &session.Meta{CanRead: true})
-
-	req := readCommitPatchReq{
-		RepoRootPath: "/",
-		Commit:       fixture.BinaryCommit,
-		MaxBytes:     32,
-	}
-	if err := jsonframe.WriteJSONFrame(clientConn, req); err != nil {
-		t.Fatalf("write request: %v", err)
-	}
-	metaBytes, err := jsonframe.ReadJSONFrame(clientConn, jsonframe.DefaultMaxJSONFrameBytes)
-	if err != nil {
-		t.Fatalf("read response meta: %v", err)
-	}
-	var meta readCommitPatchRespMeta
-	if err := json.Unmarshal(metaBytes, &meta); err != nil {
-		t.Fatalf("unmarshal response meta: %v", err)
-	}
-	if !meta.Ok || !meta.Truncated || meta.ContentLen != 32 {
-		t.Fatalf("unexpected truncation meta: %+v", meta)
 	}
 }
 
@@ -285,6 +215,12 @@ func TestE2E_GitRepoRPC_WorkbenchEndpoints(t *testing.T) {
 	if len(workspaceResp.Untracked) != 1 || workspaceResp.Untracked[0].Path != workspace.UntrackedPath {
 		t.Fatalf("unexpected untracked items: %+v", workspaceResp.Untracked)
 	}
+	if !strings.Contains(workspaceResp.Staged[0].PatchText, "+staged") || !strings.Contains(workspaceResp.Unstaged[0].PatchText, "+unstaged") {
+		t.Fatalf("workspace patch text not embedded: staged=%+v unstaged=%+v", workspaceResp.Staged[0], workspaceResp.Unstaged[0])
+	}
+	if strings.TrimSpace(workspaceResp.Untracked[0].PatchText) != "" {
+		t.Fatalf("untracked entry should not include patch text: %+v", workspaceResp.Untracked[0])
+	}
 
 	branchesPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_LIST_BRANCHES, []byte(`{"repo_root_path":"/"}`))
 	if err != nil {
@@ -338,88 +274,11 @@ func TestE2E_GitRepoRPC_WorkbenchEndpoints(t *testing.T) {
 	if len(compareResp.Commits) != 1 || compareResp.Commits[0].Hash != compare.Commit {
 		t.Fatalf("unexpected compare commits: %+v", compareResp.Commits)
 	}
-}
-
-func TestE2E_GitRepoWorkspacePatchStream(t *testing.T) {
-	t.Parallel()
-	fixture := createTestRepoFixture(t)
-	workspace := createWorkspaceChangesFixture(t, fixture.Root)
-	svc := NewService(fixture.Root)
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() { _ = serverConn.Close() })
-	t.Cleanup(func() { _ = clientConn.Close() })
-
-	go svc.ServeReadWorkspacePatchStream(context.Background(), serverConn, &session.Meta{CanRead: true})
-
-	req := readWorkspacePatchReq{
-		RepoRootPath: "/",
-		Section:      "staged",
-		FilePath:     workspace.TrackedPath,
-		MaxBytes:     1024 * 1024,
+	if len(compareResp.Files) != 1 || compareResp.Files[0].Path != compare.FilePath {
+		t.Fatalf("unexpected compare files: %+v", compareResp.Files)
 	}
-	if err := jsonframe.WriteJSONFrame(clientConn, req); err != nil {
-		t.Fatalf("write request: %v", err)
-	}
-	metaBytes, err := jsonframe.ReadJSONFrame(clientConn, jsonframe.DefaultMaxJSONFrameBytes)
-	if err != nil {
-		t.Fatalf("read response meta: %v", err)
-	}
-	var meta readCommitPatchRespMeta
-	if err := json.Unmarshal(metaBytes, &meta); err != nil {
-		t.Fatalf("unmarshal response meta: %v", err)
-	}
-	if !meta.Ok || meta.ContentLen <= 0 {
-		t.Fatalf("unexpected patch meta: %+v", meta)
-	}
-	patch := make([]byte, meta.ContentLen)
-	if _, err := io.ReadFull(clientConn, patch); err != nil {
-		t.Fatalf("read patch: %v", err)
-	}
-	text := string(patch)
-	if !strings.Contains(text, workspace.TrackedPath) || !strings.Contains(text, "+staged") {
-		t.Fatalf("unexpected workspace patch text: %s", text)
-	}
-}
-
-func TestE2E_GitRepoComparePatchStream(t *testing.T) {
-	t.Parallel()
-	fixture := createTestRepoFixture(t)
-	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
-	svc := NewService(fixture.Root)
-	serverConn, clientConn := net.Pipe()
-	t.Cleanup(func() { _ = serverConn.Close() })
-	t.Cleanup(func() { _ = clientConn.Close() })
-
-	go svc.ServeReadComparePatchStream(context.Background(), serverConn, &session.Meta{CanRead: true})
-
-	req := readComparePatchReq{
-		RepoRootPath: "/",
-		BaseRef:      compare.BaseBranch,
-		TargetRef:    compare.Branch,
-		FilePath:     compare.FilePath,
-		MaxBytes:     1024 * 1024,
-	}
-	if err := jsonframe.WriteJSONFrame(clientConn, req); err != nil {
-		t.Fatalf("write request: %v", err)
-	}
-	metaBytes, err := jsonframe.ReadJSONFrame(clientConn, jsonframe.DefaultMaxJSONFrameBytes)
-	if err != nil {
-		t.Fatalf("read response meta: %v", err)
-	}
-	var meta readCommitPatchRespMeta
-	if err := json.Unmarshal(metaBytes, &meta); err != nil {
-		t.Fatalf("unmarshal response meta: %v", err)
-	}
-	if !meta.Ok || meta.ContentLen <= 0 {
-		t.Fatalf("unexpected compare meta: %+v", meta)
-	}
-	patch := make([]byte, meta.ContentLen)
-	if _, err := io.ReadFull(clientConn, patch); err != nil {
-		t.Fatalf("read compare patch: %v", err)
-	}
-	text := string(patch)
-	if !strings.Contains(text, compare.FilePath) || !strings.Contains(text, "+feature branch") {
-		t.Fatalf("unexpected compare patch text: %s", text)
+	if !strings.Contains(compareResp.Files[0].PatchText, "+feature branch") || !strings.Contains(compareResp.Files[0].PatchText, compare.FilePath) {
+		t.Fatalf("compare patch text not embedded: %+v", compareResp.Files[0])
 	}
 }
 

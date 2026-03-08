@@ -1,9 +1,7 @@
 import { Show, createEffect, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type { GitListWorkspaceChangesResponse, GitWorkspaceChange } from '../protocol/redeven_v1';
-import { readGitPatchWithFallback, readWorkspaceGitPatchTextOnce } from '../utils/gitPatchStreamReader';
 import { changeMetricsText, changeSecondaryPath, summarizeWorkspaceCount, workspaceSectionLabel } from '../utils/gitWorkbench';
 import { GitDiffDialog } from './GitDiffDialog';
 import { gitChangeTone, gitToneBadgeClass, gitToneInsetClass, gitToneSurfaceClass, workspaceSectionTone } from './GitChrome';
@@ -18,7 +16,6 @@ export interface GitChangesPanelProps {
 }
 
 export function GitChangesPanel(props: GitChangesPanelProps) {
-  const protocol = useProtocol();
   const [diffOpen, setDiffOpen] = createSignal(false);
   const totalChanges = () => summarizeWorkspaceCount(props.workspace?.summary);
   const selectedSectionTone = () => workspaceSectionTone(props.selectedItem?.section);
@@ -132,26 +129,6 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
         title="Workspace Diff"
         emptyMessage={totalChanges() > 0 ? 'Select a workspace file from the Git sidebar to inspect its diff.' : 'Workspace is clean.'}
         unavailableMessage={(item) => item.section === 'untracked' ? 'Untracked files do not have a Git patch yet.' : undefined}
-        loadPatch={async (item, signal) => {
-          const client = protocol.client();
-          const repoRootPath = String(props.repoRootPath ?? '').trim();
-          const section = item.section;
-          if (!client || !repoRootPath || !section) {
-            return { text: '', truncated: false };
-          }
-          const resp = await readGitPatchWithFallback({
-            item,
-            readByPath: (filePath) => readWorkspaceGitPatchTextOnce({
-              client,
-              repoRootPath,
-              section,
-              filePath,
-              maxBytes: 2 * 1024 * 1024,
-              signal,
-            }),
-          });
-          return { text: resp.text, truncated: resp.meta.truncated };
-        }}
       />
     </div>
   );

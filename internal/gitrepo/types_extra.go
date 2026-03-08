@@ -26,15 +26,17 @@ type getRepoSummaryResp struct {
 }
 
 type gitWorkspaceChange struct {
-	Section    string `json:"section,omitempty"`
-	ChangeType string `json:"change_type,omitempty"`
-	Path       string `json:"path,omitempty"`
-	OldPath    string `json:"old_path,omitempty"`
-	NewPath    string `json:"new_path,omitempty"`
-	PatchPath  string `json:"patch_path,omitempty"`
-	Additions  int    `json:"additions,omitempty"`
-	Deletions  int    `json:"deletions,omitempty"`
-	IsBinary   bool   `json:"is_binary,omitempty"`
+	Section        string `json:"section,omitempty"`
+	ChangeType     string `json:"change_type,omitempty"`
+	Path           string `json:"path,omitempty"`
+	OldPath        string `json:"old_path,omitempty"`
+	NewPath        string `json:"new_path,omitempty"`
+	DisplayPath    string `json:"display_path,omitempty"`
+	PatchText      string `json:"patch_text,omitempty"`
+	PatchTruncated bool   `json:"patch_truncated,omitempty"`
+	Additions      int    `json:"additions,omitempty"`
+	Deletions      int    `json:"deletions,omitempty"`
+	IsBinary       bool   `json:"is_binary,omitempty"`
 }
 
 type listWorkspaceChangesReq struct {
@@ -94,19 +96,4 @@ type getBranchCompareResp struct {
 	TargetBehindCount int                    `json:"target_behind_count,omitempty"`
 	Commits           []gitCommitSummary     `json:"commits,omitempty"`
 	Files             []gitCommitFileSummary `json:"files,omitempty"`
-}
-
-type readWorkspacePatchReq struct {
-	RepoRootPath string `json:"repo_root_path"`
-	Section      string `json:"section"`
-	FilePath     string `json:"file_path,omitempty"`
-	MaxBytes     int64  `json:"max_bytes,omitempty"`
-}
-
-type readComparePatchReq struct {
-	RepoRootPath string `json:"repo_root_path"`
-	BaseRef      string `json:"base_ref"`
-	TargetRef    string `json:"target_ref"`
-	FilePath     string `json:"file_path,omitempty"`
-	MaxBytes     int64  `json:"max_bytes,omitempty"`
 }

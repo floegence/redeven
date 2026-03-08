@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GitHistoryBrowser } from './GitHistoryBrowser';
 
-const mockReadGitPatchTextOnce = vi.hoisted(() => vi.fn());
 const mockGetCommitDetail = vi.hoisted(() => vi.fn());
 
 vi.mock('@floegence/floe-webapp-protocol', async () => {
@@ -28,14 +27,6 @@ vi.mock('../protocol/redeven_v1', async () => {
         getCommitDetail: mockGetCommitDetail,
       },
     }),
-  };
-});
-
-vi.mock('../utils/gitPatchStreamReader', async () => {
-  const actual = await vi.importActual<typeof import('../utils/gitPatchStreamReader')>('../utils/gitPatchStreamReader');
-  return {
-    ...actual,
-    readGitPatchTextOnce: mockReadGitPatchTextOnce,
   };
 });
 
@@ -73,38 +64,19 @@ beforeEach(() => {
       {
         changeType: 'modified',
         path: 'src/app.ts',
-        patchPath: 'src/app.ts',
+        displayPath: 'src/app.ts',
         additions: 1,
         deletions: 1,
+        patchText: [
+          'diff --git a/src/app.ts b/src/app.ts',
+          '--- a/src/app.ts',
+          '+++ b/src/app.ts',
+          '@@ -1 +1 @@',
+          '-oldValue',
+          '+newValue',
+        ].join('\n'),
       },
     ],
-  });
-
-  mockReadGitPatchTextOnce.mockImplementation(async ({ filePath }: { filePath?: string }) => {
-    if (filePath) {
-      return {
-        text: '\n',
-        meta: { ok: true, content_len: 1 },
-      };
-    }
-    const patch = [
-      'diff --git a/src/app.ts b/src/app.ts',
-      '--- a/src/app.ts',
-      '+++ b/src/app.ts',
-      '@@ -1 +1 @@',
-      '-oldValue',
-      '+newValue',
-      'diff --git a/src/other.ts b/src/other.ts',
-      '--- a/src/other.ts',
-      '+++ b/src/other.ts',
-      '@@ -2 +2 @@',
-      '-otherOld',
-      '+otherNew',
-    ].join('\n');
-    return {
-      text: patch,
-      meta: { ok: true, content_len: patch.length },
-    };
   });
 });
 
@@ -114,7 +86,7 @@ afterEach(() => {
 });
 
 describe('GitHistoryBrowser interactions', () => {
-  it('shows extracted diff content when the file-scoped commit patch comes back blank', async () => {
+  it('renders commit diff directly from the commit detail payload', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -142,9 +114,7 @@ describe('GitHistoryBrowser interactions', () => {
       expect(document.body.textContent).toContain('Commit Diff');
       expect(document.body.textContent).toContain('+newValue');
       expect(document.body.textContent).not.toContain('No inline diff lines available');
-      expect(mockReadGitPatchTextOnce).toHaveBeenCalledTimes(2);
-      expect(mockReadGitPatchTextOnce.mock.calls[0]?.[0]?.filePath).toBe('src/app.ts');
-      expect(mockReadGitPatchTextOnce.mock.calls[1]?.[0]?.filePath).toBeUndefined();
+      expect(mockGetCommitDetail).toHaveBeenCalledTimes(1);
     } finally {
       dispose();
     }

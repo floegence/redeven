@@ -176,15 +176,22 @@ func (s *Service) getBranchCompare(ctx context.Context, repo repoContext, baseRe
 		return nil, err
 	}
 	compareRef := baseRef + "..." + targetRef
-	statusOut, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "diff", "--name-status", "-M", "-C", compareRef)
+	entries, err := s.readGitDiffEntries(ctx, repo.repoRootReal,
+		"diff",
+		"--patch",
+		"--find-renames",
+		"--find-copies",
+		"--no-ext-diff",
+		"--binary",
+		compareRef,
+	)
 	if err != nil {
 		return nil, err
 	}
-	numstatOut, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "diff", "--numstat", "-M", "-C", compareRef)
-	if err != nil {
-		return nil, err
+	files := make([]gitCommitFileSummary, 0, len(entries))
+	for _, entry := range entries {
+		files = append(files, entry.toCommitFileSummary())
 	}
-	files := mergeCommitFileSummaries(parseNameStatusOutput(statusOut), parseNumstatOutput(numstatOut))
 	return &getBranchCompareResp{
 		RepoRootPath:      repo.repoRootVirtual,
 		BaseRef:           baseRef,

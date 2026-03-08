@@ -43,7 +43,9 @@ export type GitWorkspaceChange = {
   path?: string;
   oldPath?: string;
   newPath?: string;
-  patchPath?: string;
+  displayPath?: string;
+  patchText?: string;
+  patchTruncated?: boolean;
   additions?: number;
   deletions?: number;
   isBinary?: boolean;
@@ -131,7 +133,9 @@ export type GitCommitFileSummary = {
   path?: string;
   oldPath?: string;
   newPath?: string;
-  patchPath?: string;
+  displayPath?: string;
+  patchText?: string;
+  patchTruncated?: boolean;
   additions?: number;
   deletions?: number;
   isBinary?: boolean;

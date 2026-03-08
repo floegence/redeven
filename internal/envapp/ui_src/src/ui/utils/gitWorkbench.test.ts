@@ -51,7 +51,7 @@ describe('gitWorkbench helpers', () => {
 
   it('formats rename path fallback and repo display name', () => {
     expect(changeSecondaryPath({ oldPath: 'src/old.ts', newPath: 'src/new.ts' })).toBe('src/old.ts → src/new.ts');
-    expect(changeSecondaryPath({ path: 'src/app.ts' })).toBe('src/app.ts');
+    expect(changeSecondaryPath({ path: 'src/app.ts', displayPath: 'src/app.ts' })).toBe('src/app.ts');
     expect(repoDisplayName('/workspace/repo')).toBe('repo');
     expect(repoDisplayName('/')).toBe('Repository');
   });
@@ -60,13 +60,13 @@ describe('gitWorkbench helpers', () => {
     const workspace = {
       repoRootPath: '/',
       summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-      staged: [{ section: 'staged', path: 'src/app.ts', patchPath: 'src/app.ts' }],
+      staged: [{ section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts' }],
       unstaged: [],
       untracked: [],
       conflicted: [],
     };
-    expect(workspaceEntryKey(workspace.staged[0])).toBe('staged:src/app.ts');
-    expect(findWorkspaceChangeByKey(workspace, 'staged:src/app.ts')?.path).toBe('src/app.ts');
+    expect(workspaceEntryKey(workspace.staged[0])).toBe('staged:modified:src/app.ts::');
+    expect(findWorkspaceChangeByKey(workspace, 'staged:modified:src/app.ts::')?.path).toBe('src/app.ts');
 
     const branches = {
       repoRootPath: '/',

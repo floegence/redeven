@@ -41,7 +41,9 @@ export type wire_git_workspace_change = {
   path?: string;
   old_path?: string;
   new_path?: string;
-  patch_path?: string;
+  display_path?: string;
+  patch_text?: string;
+  patch_truncated?: boolean;
   additions?: number;
   deletions?: number;
   is_binary?: boolean;
@@ -129,7 +131,9 @@ export type wire_git_commit_file_summary = {
   path?: string;
   old_path?: string;
   new_path?: string;
-  patch_path?: string;
+  display_path?: string;
+  patch_text?: string;
+  patch_truncated?: boolean;
   additions?: number;
   deletions?: number;
   is_binary?: boolean;

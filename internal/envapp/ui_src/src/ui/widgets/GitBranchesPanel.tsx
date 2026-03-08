@@ -1,9 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { useProtocol } from '@floegence/floe-webapp-protocol';
 import type { GitBranchSummary, GitCommitFileSummary, GitGetBranchCompareResponse } from '../protocol/redeven_v1';
-import { readCompareGitPatchTextOnce, readGitPatchWithFallback } from '../utils/gitPatchStreamReader';
-import { branchDisplayName, branchStatusSummary, changeMetricsText, changeSecondaryPath, compareHeadline } from '../utils/gitWorkbench';
+import { branchDisplayName, branchStatusSummary, changeMetricsText, changeSecondaryPath, compareHeadline, gitDiffEntryIdentity } from '../utils/gitWorkbench';
 import { GitDiffDialog } from './GitDiffDialog';
 import { gitBranchTone, gitChangeTone, gitCompareTone, gitToneBadgeClass, gitToneInsetClass, gitToneSelectableCardClass, gitToneSurfaceClass } from './GitChrome';
 
@@ -18,7 +16,7 @@ export interface GitBranchesPanelProps {
 }
 
 function compareFileKey(file: GitCommitFileSummary | null | undefined): string {
-  return String(file?.patchPath || file?.path || file?.newPath || file?.oldPath || '').trim();
+  return gitDiffEntryIdentity(file);
 }
 
 function formatAbsoluteTime(ms?: number): string {
@@ -27,7 +25,6 @@ function formatAbsoluteTime(ms?: number): string {
 }
 
 export function GitBranchesPanel(props: GitBranchesPanelProps) {
-  const protocol = useProtocol();
   const [selectedFileKey, setSelectedFileKey] = createSignal('');
   const [diffOpen, setDiffOpen] = createSignal(false);
 
@@ -205,27 +202,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     title="Branch Compare Diff"
                     description={props.compare ? `${props.compare.baseRef} → ${props.compare.targetRef}` : undefined}
                     emptyMessage="Open a compare file to inspect its diff."
-                    loadPatch={async (item, signal) => {
-                      const client = protocol.client();
-                      const compare = props.compare;
-                      const repoRootPath = String(props.repoRootPath ?? '').trim();
-                      if (!client || !compare || !repoRootPath) {
-                        return { text: '', truncated: false };
-                      }
-                      const resp = await readGitPatchWithFallback({
-                        item,
-                        readByPath: (filePath) => readCompareGitPatchTextOnce({
-                          client,
-                          repoRootPath,
-                          baseRef: compare.baseRef,
-                          targetRef: compare.targetRef,
-                          filePath,
-                          maxBytes: 2 * 1024 * 1024,
-                          signal,
-                        }),
-                      });
-                      return { text: resp.text, truncated: resp.meta.truncated };
-                    }}
                   />
                 </>
               );
