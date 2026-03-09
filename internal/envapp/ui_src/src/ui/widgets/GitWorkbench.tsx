@@ -82,7 +82,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
-      <div class="shrink-0 border-b border-border/60 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90">
+      <div class="shrink-0 border-b border-border/40 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90">
         <section class={cn('rounded-xl p-2 sm:p-2.5', gitToneSurfaceClass(subviewTone()))}>
           <div class="flex flex-wrap items-start justify-between gap-2">
             <div class="min-w-0 flex-1">

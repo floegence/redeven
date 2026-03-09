@@ -131,7 +131,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
       <Show
         when={repoAvailable()}
         fallback={
-          <div class="flex h-full items-center justify-center border border-dashed border-border/70 bg-muted/15 px-6 text-center">
+          <div class="flex h-full items-center justify-center rounded-lg bg-muted/[0.18] px-6 text-center">
             <div class="max-w-md space-y-2">
               <div class="text-sm font-medium text-foreground">Git history is unavailable</div>
               <div class="text-xs text-muted-foreground">

@@ -96,10 +96,11 @@ describe('browser workspace layout wiring', () => {
 
     expect(navSrc).toContain('role="tablist"');
     expect(navSrc).toContain('aria-label="Git views"');
-    expect(navSrc).toContain('rounded-lg border px-2.5 py-2');
-    expect(navSrc).toContain('border-border bg-background text-foreground shadow-sm');
-    expect(navSrc).toContain('border-transparent bg-transparent text-muted-foreground hover:border-transparent hover:bg-muted/50 hover:text-muted-foreground');
-    expect(navSrc).toContain('border-border bg-muted/70 text-foreground');
+    expect(navSrc).toContain('space-y-1 rounded-lg bg-muted/[0.18] p-1');
+    expect(navSrc).toContain('rounded-md px-2.5 py-2');
+    expect(navSrc).toContain('bg-background text-foreground shadow-sm');
+    expect(navSrc).toContain('bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground');
+    expect(navSrc).toContain('bg-muted/70 text-foreground');
     expect(navSrc).not.toContain('gitSubviewTone');
     expect(navSrc).not.toContain('gitToneBadgeClass');
     expect(navSrc).not.toContain('gitToneSelectableCardClass');
@@ -152,7 +153,8 @@ describe('browser workspace layout wiring', () => {
     expect(overviewSrc).toContain('Repository Signals');
     expect(overviewSrc).toContain('GitStatStrip');
     expect(overviewSrc).toContain('columnsClass="grid-cols-2 xl:grid-cols-4"');
-    expect(overviewSrc).toContain('overflow-hidden rounded-lg border border-border/45 bg-background/75');
+    expect(overviewSrc).toContain('space-y-1 rounded-lg bg-muted/[0.22] p-1');
+    expect(overviewSrc).toContain('rounded-md bg-background/70 px-2.5 py-2 text-[11px]');
     expect(overviewSrc).not.toContain('xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]');
     expect(overviewSrc).not.toContain('text-[24px] font-semibold tracking-tight');
 

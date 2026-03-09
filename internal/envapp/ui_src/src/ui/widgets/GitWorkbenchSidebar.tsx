@@ -364,7 +364,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                   </Show>
 
                   <Show when={props.hasMore}>
-                    <div class="mt-2 border-t border-border/50 pt-2">
+                    <div class="mt-2 pt-1">
                       <Button size="sm" variant="outline" class="w-full cursor-pointer" onClick={props.onLoadMore} loading={props.listLoadingMore} disabled={props.listLoadingMore}>
                         Load More
                       </Button>
