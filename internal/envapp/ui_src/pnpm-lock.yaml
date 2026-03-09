@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@floegence/flowersec-core': ^0.14.0
+  '@floegence/flowersec-core': ^0.14.1
   dompurify: ^3.3.2
   minimatch@^3.0.0: ^3.1.4
   minimatch@^5.0.0: ^5.1.8
@@ -16,17 +16,17 @@ importers:
   .:
     dependencies:
       '@floegence/floe-webapp-core':
-        specifier: ^0.33.10
-        version: 0.33.10(solid-js@1.9.11)
+        specifier: ^0.33.11
+        version: 0.33.11(solid-js@1.9.11)
       '@floegence/floe-webapp-protocol':
-        specifier: ^0.33.10
-        version: 0.33.10(solid-js@1.9.11)
+        specifier: ^0.33.11
+        version: 0.33.11(solid-js@1.9.11)
       '@floegence/floeterm-terminal-web':
         specifier: ^0.4.3
         version: 0.4.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@floegence/flowersec-core':
-        specifier: ^0.14.0
-        version: 0.14.0
+        specifier: ^0.14.1
+        version: 0.14.1
       '@fontsource/iosevka':
         specifier: ^5.2.5
         version: 5.2.5
@@ -389,13 +389,13 @@ packages:
   '@fast-csv/parse@4.3.6':
     resolution: {integrity: sha512-uRsLYksqpbDmWaSmzvJcuApSEe38+6NQZBUsuAyMZKqHxH0g1wcJgsKUvN3WC8tewaqFjBMMGrkHmC+T7k8LvA==}
 
-  '@floegence/floe-webapp-core@0.33.10':
-    resolution: {integrity: sha512-Y32h4MePsk5FUQmz/FkeMh8YfJu+n8WmUV7VHU+82KwNSK56mSDUAY13XyekwZcD9eg5J2WdceFe3a7Hd/Vnmw==}
+  '@floegence/floe-webapp-core@0.33.11':
+    resolution: {integrity: sha512-zq1igK9PyRLmw6XzPfTGzXsKfvvnoXhYHUCNwtyl3d26/A4fn1UDgVi0ZSHi7n6cIWPOnYXtltopLQrhyZDkug==}
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floe-webapp-protocol@0.33.10':
-    resolution: {integrity: sha512-MYQ2jy0QGRNXPEEGXt5yEFeI93vCCZOHrHOZrrSp10QnkcsWsEx0NLnKEaC2oTC3/gArH+ppMrjtD0E/dUeVQA==}
+  '@floegence/floe-webapp-protocol@0.33.11':
+    resolution: {integrity: sha512-2NRx/inaxWxPnCqbv9xu3SiaTwWQ51mnmuQ3as9vO8cv5UIhGLLN9LE1FTmErGf0pYH8MBlblE2BIJ51oLYW1Q==}
     peerDependencies:
       solid-js: ^1.8.0
 
@@ -405,8 +405,8 @@ packages:
       react: '>=18'
       react-dom: '>=18'
 
-  '@floegence/flowersec-core@0.14.0':
-    resolution: {integrity: sha512-/Esj5NbADvqQ3lTVRV4ADDxLXG8ZSDJyKnceZ2jroxIdZ/H/ZErLB3quXYbztItJ1Vt8o/7fg451eJ7X6xm5bg==}
+  '@floegence/flowersec-core@0.14.1':
+    resolution: {integrity: sha512-lyNGX+tFJG4LmRroUIZli+Esau+luoAOd3n+3n+poCwXOMitC4K8Hy+oOkSqWJsLWlUAMbjTYTmk6VCZpvQ68g==}
     engines: {node: ^20.0.0 || ^22.0.0 || >=24.0.0}
 
   '@fontsource/iosevka@5.2.5':
@@ -2439,7 +2439,7 @@ snapshots:
       lodash.isundefined: 3.0.1
       lodash.uniq: 4.5.0
 
-  '@floegence/floe-webapp-core@0.33.10(solid-js@1.9.11)':
+  '@floegence/floe-webapp-core@0.33.11(solid-js@1.9.11)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.3
@@ -2450,9 +2450,9 @@ snapshots:
       solid-motionone: 1.0.4(solid-js@1.9.11)
       tailwind-merge: 3.5.0
 
-  '@floegence/floe-webapp-protocol@0.33.10(solid-js@1.9.11)':
+  '@floegence/floe-webapp-protocol@0.33.11(solid-js@1.9.11)':
     dependencies:
-      '@floegence/flowersec-core': 0.14.0
+      '@floegence/flowersec-core': 0.14.1
       solid-js: 1.9.11
     transitivePeerDependencies:
       - bufferutil
@@ -2464,7 +2464,7 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  '@floegence/flowersec-core@0.14.0':
+  '@floegence/flowersec-core@0.14.1':
     dependencies:
       '@noble/ciphers': 0.6.0
       '@noble/curves': 1.9.7
