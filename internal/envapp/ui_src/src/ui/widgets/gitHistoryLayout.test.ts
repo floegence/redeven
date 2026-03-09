@@ -84,7 +84,7 @@ describe('browser workspace layout wiring', () => {
 
     expect(modeSrc).toContain('role="radiogroup"');
     expect(modeSrc).toContain('aria-label="Browser mode"');
-    expect(modeSrc).toContain('inline-flex w-full items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5');
+    expect(modeSrc).toContain('inline-flex w-full items-center gap-0.5 rounded-lg border border-border bg-muted/40 p-0.5 shadow-[0_1px_0_rgba(0,0,0,0.03)_inset]');
     expect(modeSrc).not.toContain('>Browse<');
     expect(modeSrc).not.toContain('>Inspect<');
 
@@ -96,10 +96,10 @@ describe('browser workspace layout wiring', () => {
 
     expect(navSrc).toContain('role="tablist"');
     expect(navSrc).toContain('aria-label="Git views"');
-    expect(navSrc).toContain('space-y-1 rounded-lg bg-muted/[0.18] p-1');
+    expect(navSrc).toContain('space-y-1 rounded-lg bg-muted/[0.14] p-1');
     expect(navSrc).toContain('rounded-md px-2.5 py-2');
-    expect(navSrc).toContain('bg-background text-foreground shadow-sm');
-    expect(navSrc).toContain('bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground');
+    expect(navSrc).toContain('border-l-[2px] border-primary bg-background text-foreground shadow-sm');
+    expect(navSrc).toContain('bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground hover:shadow-[0_1px_2px_rgba(0,0,0,0.04)]');
     expect(navSrc).toContain('bg-muted/70 text-foreground');
     expect(navSrc).not.toContain('gitSubviewTone');
     expect(navSrc).not.toContain('gitToneBadgeClass');
@@ -154,7 +154,7 @@ describe('browser workspace layout wiring', () => {
     expect(overviewSrc).toContain('GitStatStrip');
     expect(overviewSrc).toContain('columnsClass="grid-cols-2 xl:grid-cols-4"');
     expect(overviewSrc).toContain('space-y-1 rounded-lg bg-muted/[0.22] p-1');
-    expect(overviewSrc).toContain('rounded-md bg-background/70 px-2.5 py-2 text-[11px]');
+    expect(overviewSrc).toContain('rounded-md bg-background/70 px-2.5 py-2 text-[11px] transition-shadow duration-150 hover:shadow-sm');
     expect(overviewSrc).not.toContain('xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]');
     expect(overviewSrc).not.toContain('text-[24px] font-semibold tracking-tight');
 
@@ -238,10 +238,10 @@ describe('browser workspace layout wiring', () => {
 
     expect(dialogSrc).toContain('border-0 bg-card/98');
     expect(dialogSrc).not.toContain('border border-border');
-    expect(patchSrc).toContain('rounded-xl bg-muted/[0.16]');
-    expect(patchSrc).toContain('max-h-[24rem] overflow-auto rounded-xl bg-background/78 p-1');
+    expect(patchSrc).toContain('rounded-lg bg-muted/[0.16]');
+    expect(patchSrc).toContain('max-h-[28rem] overflow-auto rounded-lg bg-background/78 p-1');
     expect(patchSrc).not.toContain('chat-tool-apply-patch');
-    expect(patchUtilSrc).toContain("return 'bg-success/10';");
+    expect(patchUtilSrc).toContain("return 'border-l-[2px] border-l-success/60 bg-success/10';");
     expect(patchUtilSrc).toContain("return 'text-success';");
     expect(patchUtilSrc).not.toContain('chat-tool-apply-patch');
   });

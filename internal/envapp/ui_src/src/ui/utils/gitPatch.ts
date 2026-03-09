@@ -78,14 +78,14 @@ export function gitPatchPreviewLineClass(line: string): string {
 export function gitPatchRenderedLineClass(line: GitPatchRenderedLine): string {
   switch (line.kind) {
     case 'add':
-      return 'bg-success/10';
+      return 'border-l-[2px] border-l-success/60 bg-success/10';
     case 'del':
-      return 'bg-error/[0.10]';
+      return 'border-l-[2px] border-l-error/60 bg-error/[0.10]';
     case 'meta':
-      return 'bg-muted/55';
+      return 'border-l-[2px] border-l-muted-foreground/30 bg-muted/55';
     case 'context':
     default:
-      return 'bg-background/92';
+      return 'border-l-[2px] border-l-transparent bg-background/92';
   }
 }
 

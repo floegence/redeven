@@ -215,7 +215,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                       return (
                                         <button
                                           type="button"
-                                          class={cn('w-full rounded-xl px-2.5 py-1.5 text-left', gitToneSelectableCardClass(tone(), active()))}
+                                          class={cn('w-full rounded-lg px-2.5 py-1.5 text-left', gitToneSelectableCardClass(tone(), active()))}
                                           onClick={() => {
                                             props.onSelectWorkspaceItem?.(item);
                                             closeAfterPick();
@@ -264,7 +264,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                 return (
                                   <button
                                     type="button"
-                                    class={cn('w-full rounded-xl px-2.5 py-1.5 text-left', gitToneSelectableCardClass(tone(), active()))}
+                                    class={cn('w-full rounded-lg px-2.5 py-1.5 text-left', gitToneSelectableCardClass(tone(), active()))}
                                     onClick={() => {
                                       props.onSelectBranch?.(branch);
                                       closeAfterPick();
@@ -299,7 +299,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                 return (
                                   <button
                                     type="button"
-                                    class={cn('w-full rounded-xl px-2.5 py-1.5 text-left', gitToneSelectableCardClass('violet', active()))}
+                                    class={cn('w-full rounded-lg px-2.5 py-1.5 text-left', gitToneSelectableCardClass('violet', active()))}
                                     onClick={() => {
                                       props.onSelectBranch?.(branch);
                                       closeAfterPick();
@@ -337,7 +337,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                               return (
                                 <button
                                   type="button"
-                                  class={cn('w-full rounded-xl px-2.5 py-1.5 text-left', gitToneSelectableCardClass('brand', active()))}
+                                  class={cn('w-full rounded-lg px-2.5 py-1.5 text-left', gitToneSelectableCardClass('brand', active()))}
                                   onClick={() => {
                                     props.onSelectCommit?.(commit.hash);
                                     closeAfterPick();
@@ -347,7 +347,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                     <div class="min-w-0 flex-1">
                                       <div class="truncate text-[11.5px] font-medium text-current">{commit.subject || '(no subject)'}</div>
                                       <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-                                        <span class="font-mono text-foreground/80">{commit.shortHash}</span>
+                                        <span class="font-mono text-foreground/80 bg-muted/30 rounded px-1 py-0.5">{commit.shortHash}</span>
                                         <span aria-hidden="true">·</span>
                                         <span>{commit.authorName || '-'}</span>
                                       </div>

@@ -68,7 +68,7 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
         {(fileAccessor) => {
           const file = fileAccessor();
           return (
-            <div class="space-y-2.5 rounded-xl bg-muted/[0.16] p-2.5 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
+            <div class="space-y-2.5 rounded-lg bg-muted/[0.16] p-2.5 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0 flex-1 space-y-1">
                   <div class="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -95,7 +95,7 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
               <Show when={file.oldPath && file.newPath && file.oldPath !== file.newPath}>
                 <div class="flex min-w-0 items-center gap-1.5 rounded-lg bg-background/70 px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
                   <span class="min-w-0 truncate font-mono" title={file.oldPath}>{file.oldPath}</span>
-                  <span aria-hidden="true">→</span>
+                  <span aria-hidden="true" class="text-muted-foreground/60">→</span>
                   <span class="min-w-0 truncate font-mono" title={file.newPath}>{file.newPath}</span>
                 </div>
               </Show>
@@ -105,13 +105,13 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
                 fallback={<div class="rounded-lg bg-background/70 px-3 py-2 text-[11px] leading-5 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">{unavailableMessage() || 'Binary file changed. Inline text diff is not available.'}</div>}
               >
                 <Show when={visiblePatchLines().length > 0} fallback={<div class="rounded-lg bg-background/70 px-3 py-2 text-[11px] leading-5 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">No inline diff lines available for this file.</div>}>
-                  <div class="max-h-[24rem] overflow-auto rounded-xl bg-background/78 p-1 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
+                  <div class="max-h-[28rem] overflow-auto rounded-lg bg-background/78 p-1 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
                     <div class="space-y-px rounded-[10px] bg-muted/[0.20] p-px">
                       <For each={visiblePatchLines()}>
                         {(line) => (
                           <div class={cn('grid grid-cols-[2.6rem_2.6rem_minmax(0,1fr)] items-stretch overflow-hidden rounded-[9px]', gitPatchRenderedLineClass(line))}>
                             <span class="px-2 py-1 text-right font-mono text-[10px] leading-5 text-muted-foreground/72">{formatGitPatchLineNumber(line.oldLine)}</span>
-                            <span class="px-2 py-1 text-right font-mono text-[10px] leading-5 text-muted-foreground/72">{formatGitPatchLineNumber(line.newLine)}</span>
+                            <span class="border-r border-border/20 px-2 py-1 text-right font-mono text-[10px] leading-5 text-muted-foreground/72">{formatGitPatchLineNumber(line.newLine)}</span>
                             <span class={cn('block min-w-0 px-3 py-1 font-mono text-[11px] leading-5 whitespace-pre', gitPatchPreviewLineClass(line.text))}>{line.text}</span>
                           </div>
                         )}
@@ -128,7 +128,7 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
                   <div class="flex justify-center pt-0.5">
                     <button
                       type="button"
-                      class="cursor-pointer rounded-full bg-background/78 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] transition-colors duration-150 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1"
+                      class="cursor-pointer rounded-lg bg-background/78 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] transition-colors duration-150 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1"
                       onClick={() => setPatchExpanded((value) => !value)}
                     >
                       {patchExpanded() ? 'Show less' : `Show all ${renderedPatchLines().length} lines`}

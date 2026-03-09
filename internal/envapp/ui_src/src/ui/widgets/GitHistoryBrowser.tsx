@@ -225,7 +225,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                     return (
                                       <button
                                         type="button"
-                                        class={cn('w-full rounded-xl px-2.5 py-2 text-left text-[12px]', gitToneSelectableCardClass(tone(), active()))}
+                                        class={cn('w-full rounded-lg px-2.5 py-2 text-left text-[12px]', gitToneSelectableCardClass(tone(), active()))}
                                         onClick={() => openFileDiff(file)}
                                       >
                                         <div class="flex flex-wrap items-start justify-between gap-2">
