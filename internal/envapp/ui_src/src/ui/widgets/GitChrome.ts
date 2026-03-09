@@ -53,7 +53,7 @@ export function gitToneDotClass(tone?: GitChromeTone): string {
 }
 
 export function gitToneSurfaceClass(tone?: GitChromeTone): string {
-  const base = 'shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] border-l-[3px] bg-muted/[0.10]';
+  const base = 'border-l-[3px]';
   switch (normalizeTone(tone)) {
     case 'info':
       return `${base} border-l-sky-500/60`;

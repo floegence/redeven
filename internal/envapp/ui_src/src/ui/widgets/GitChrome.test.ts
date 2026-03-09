@@ -45,7 +45,7 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitBranchTone({ current: false, kind: 'local' } as any)).toBe('neutral');
   });
 
-  it('keeps git chrome surfaces with tone-specific accent borders and neutral background', () => {
+  it('keeps git chrome surfaces with tone-specific accent borders on transparent background', () => {
     expect(gitToneBadgeClass('warning')).toContain('bg-warning/12');
     expect(gitToneBadgeClass('warning')).toContain('text-warning');
     expect(gitToneBadgeClass('warning')).toContain('border-warning/20');
@@ -55,16 +55,12 @@ describe('GitChrome semantic tone helpers', () => {
 
     expect(gitToneSurfaceClass('brand')).toContain('border-l-[3px]');
     expect(gitToneSurfaceClass('brand')).toContain('border-l-primary/60');
-    expect(gitToneSurfaceClass('brand')).toContain('bg-muted/[0.10]');
-    expect(gitToneSurfaceClass('brand')).not.toContain('bg-primary');
+    expect(gitToneSurfaceClass('brand')).not.toContain('bg-');
     expect(gitToneSurfaceClass('warning')).toContain('border-l-warning/60');
-    expect(gitToneSurfaceClass('warning')).toContain('bg-muted/[0.10]');
-    expect(gitToneSurfaceClass('warning')).not.toContain('bg-warning');
-    expect(gitToneSurfaceClass('info')).toContain('bg-muted/[0.10]');
-    expect(gitToneSurfaceClass('info')).not.toContain('bg-sky');
-    expect(gitToneSurfaceClass('violet')).toContain('bg-muted/[0.10]');
-    expect(gitToneSurfaceClass('violet')).not.toContain('bg-violet');
-    expect(gitToneSurfaceClass('neutral')).toContain('bg-muted/[0.10]');
+    expect(gitToneSurfaceClass('warning')).not.toContain('bg-');
+    expect(gitToneSurfaceClass('info')).not.toContain('bg-');
+    expect(gitToneSurfaceClass('violet')).not.toContain('bg-');
+    expect(gitToneSurfaceClass('neutral')).not.toContain('bg-');
 
     expect(gitToneInsetClass('violet')).toContain('bg-background/70');
     expect(gitToneInsetClass('violet')).toContain('border border-border/30');

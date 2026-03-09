@@ -83,7 +83,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
       <div class="shrink-0 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90">
-        <section class="rounded-lg border border-border/60 bg-card p-2 shadow-sm sm:p-2.5">
+        <section class="rounded-lg border border-border/50 bg-muted/[0.18] p-2 shadow-sm sm:p-2.5">
           <div class="flex flex-wrap items-start justify-between gap-2">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5">
@@ -144,7 +144,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
         </section>
       </div>
 
-      <div class="flex-1 min-h-0 overflow-hidden bg-muted/[0.06]">
+      <div class="flex-1 min-h-0 overflow-hidden bg-muted/[0.10]">
         <Show when={props.subview === 'overview'}>
           <GitOverviewPanel
             repoSummary={props.repoSummary}
