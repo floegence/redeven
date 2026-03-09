@@ -16,7 +16,8 @@ import { GitOverviewPanel } from './GitOverviewPanel';
 import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
-import { gitSubviewTone, gitToneBadgeClass, gitToneInsetClass, gitToneSurfaceClass } from './GitChrome';
+import { gitSubviewTone, gitToneSurfaceClass } from './GitChrome';
+import { GitStatStrip } from './GitWorkbenchPrimitives';
 
 export interface GitWorkbenchProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -81,25 +82,29 @@ export function GitWorkbench(props: GitWorkbenchProps) {
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
-      <div class="shrink-0 border-b border-border/70 bg-gradient-to-b from-background via-background/95 to-muted/[0.03] px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90">
-        <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass(subviewTone()))}>
+      <div class="shrink-0 border-b border-border/60 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90">
+        <section class={cn('rounded-xl p-2 sm:p-2.5', gitToneSurfaceClass(subviewTone()))}>
           <div class="flex flex-wrap items-start justify-between gap-2">
             <div class="min-w-0 flex-1">
-              <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Repository Context</div>
-              <div class="mt-1 flex flex-wrap items-center gap-1.5">
-                <div class="max-w-full truncate text-sm font-semibold text-foreground">{repoLabel()}</div>
-                <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass(subviewTone()))}>
-                  {subviewLabel(props.subview)}
-                </span>
-                <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass(changeCount() > 0 ? 'warning' : 'success'))}>
-                  {changeCount() > 0 ? `${changeCount()} open` : 'Clean'}
-                </span>
+              <div class="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground/65">Repository Context</div>
+              <div class="mt-1 max-w-full truncate text-[13px] font-medium text-foreground">{repoLabel()}</div>
+              <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span>{changeCount() > 0 ? `${changeCount()} open` : 'Clean'}</span>
                 <Show when={loadingBusy()}>
-                  <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass('warning'))}>Refreshing…</span>
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>Refreshing…</span>
+                  </>
                 </Show>
               </div>
-              <div class="mt-1 text-[11px] text-muted-foreground">Compact repo signals and actions for the current view.</div>
-              <div class="mt-1 max-w-full truncate text-[11px] text-muted-foreground" title={repoPath()}>{repoPath()}</div>
+              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">Compact repo signals and actions for the current view.</div>
+              <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span>{subviewLabel(props.subview)}</span>
+                <span aria-hidden="true">·</span>
+                <span>{headRef() || 'Detached HEAD'}</span>
+                <span aria-hidden="true">·</span>
+                <span class="min-w-0 max-w-full truncate" title={repoPath()}>{repoPath()}</span>
+              </div>
             </div>
 
             <div class="flex shrink-0 flex-wrap items-center gap-2">
@@ -123,24 +128,16 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             </div>
           </div>
 
-          <div class="mt-2 grid grid-cols-2 gap-1.5 text-[11px] sm:grid-cols-4">
-            <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass(changeCount() > 0 ? 'warning' : 'success'))}>
-              <div class="text-muted-foreground">Workspace Summary</div>
-              <div class="mt-0.5 text-sm font-semibold text-foreground">{changeCount() > 0 ? `${changeCount()} open` : 'Clean'}</div>
-            </div>
-            <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass('neutral'))}>
-              <div class="text-muted-foreground">Sync Status</div>
-              <div class="mt-0.5 text-sm font-semibold text-foreground">↑{props.repoSummary?.aheadCount ?? 0} ↓{props.repoSummary?.behindCount ?? 0}</div>
-            </div>
-            <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass('brand'))}>
-              <div class="text-muted-foreground">Head Ref</div>
-              <div class="mt-0.5 truncate text-sm font-semibold text-foreground">{headRef() || 'Detached'}</div>
-            </div>
-            <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass(subviewTone()))}>
-              <div class="text-muted-foreground">Focused View</div>
-              <div class="mt-0.5 text-sm font-semibold text-foreground">{subviewSummaryLabel(props.subview)}</div>
-            </div>
-          </div>
+          <GitStatStrip
+            class="mt-2"
+            columnsClass="grid-cols-2 sm:grid-cols-4"
+            items={[
+              { label: 'Workspace Summary', value: changeCount() > 0 ? `${changeCount()} open` : 'Clean' },
+              { label: 'Sync Status', value: `↑${props.repoSummary?.aheadCount ?? 0} ↓${props.repoSummary?.behindCount ?? 0}` },
+              { label: 'Head Ref', value: headRef() || 'Detached' },
+              { label: 'Focused View', value: subviewSummaryLabel(props.subview) },
+            ]}
+          />
         </section>
       </div>
 

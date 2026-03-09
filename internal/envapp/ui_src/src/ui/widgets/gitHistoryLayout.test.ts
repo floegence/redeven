@@ -141,12 +141,16 @@ describe('browser workspace layout wiring', () => {
     expect(overviewSrc).toContain('Workspace Summary');
     expect(overviewSrc).toContain('Selected Branch');
     expect(overviewSrc).toContain('Repository Signals');
-    expect(overviewSrc).toContain('grid grid-cols-1 gap-1.5 text-[11px] sm:grid-cols-2 xl:grid-cols-3');
+    expect(overviewSrc).toContain('GitStatStrip');
+    expect(overviewSrc).toContain('columnsClass="grid-cols-2 xl:grid-cols-4"');
+    expect(overviewSrc).toContain('overflow-hidden rounded-lg border border-border/45 bg-background/75');
     expect(overviewSrc).not.toContain('xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]');
     expect(overviewSrc).not.toContain('text-[24px] font-semibold tracking-tight');
 
     expect(changesSrc).toContain('Workspace Summary');
     expect(changesSrc).toContain('Focused File');
+    expect(changesSrc).toContain('GitSubtleNote');
+    expect(changesSrc).toContain('columnsClass="grid-cols-2 lg:grid-cols-4"');
     expect(changesSrc).not.toContain('border-b border-border/70 px-3 py-2');
     expect(changesSrc).not.toContain('xl:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)]');
     expect(changesSrc).not.toContain('min-h-[148px]');
