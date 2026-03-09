@@ -189,11 +189,11 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
         >
           <Show
             when={hasChildren()}
-            fallback={<span class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground/45"><ChevronRight class="h-3 w-3 opacity-0" /></span>}
+            fallback={<span class="flex h-8 w-8 shrink-0 items-center justify-center rounded text-muted-foreground/45 sm:h-6 sm:w-6"><ChevronRight class="h-3 w-3 opacity-0" /></span>}
           >
             <button
               type="button"
-              class="flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1"
+              class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 sm:h-6 sm:w-6"
               aria-label={isExpanded() ? 'Collapse folder' : 'Expand folder'}
               aria-expanded={isExpanded()}
               onClick={handleToggleExpand}
@@ -208,7 +208,7 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
             }}
             type="button"
             data-tree-row-path={props.item.path}
-            class="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs text-foreground transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1"
+            class="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded px-1.5 py-2 text-left text-xs text-foreground transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 sm:py-1"
             aria-current={isCurrent() ? 'page' : undefined}
             title={props.item.path}
             onClick={handleNavigate}

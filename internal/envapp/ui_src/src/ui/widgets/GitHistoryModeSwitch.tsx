@@ -12,7 +12,7 @@ export interface GitHistoryModeSwitchProps {
 
 export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
   const buttonBaseClass =
-    'cursor-pointer rounded border px-2 py-1 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-55';
+    'cursor-pointer rounded border px-2 py-2 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-55 sm:py-1';
 
   return (
     <div
