@@ -16,7 +16,7 @@ import { GitOverviewPanel } from './GitOverviewPanel';
 import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
-import { gitSubviewTone, gitToneSurfaceClass } from './GitChrome';
+import { gitSubviewTone, gitToneActionButtonClass, gitToneSurfaceClass } from './GitChrome';
 import { GitStatStrip } from './GitWorkbenchPrimitives';
 
 export interface GitWorkbenchProps {
@@ -82,7 +82,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
-      <div class="shrink-0 border-b border-border/40 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90">
+      <div class="shrink-0 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90">
         <section class={cn('rounded-xl p-2 sm:p-2.5', gitToneSurfaceClass(subviewTone()))}>
           <div class="flex flex-wrap items-start justify-between gap-2">
             <div class="min-w-0 flex-1">
@@ -111,9 +111,9 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               <Show when={props.showMobileSidebarButton && props.onToggleSidebar}>
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   icon={History}
-                  class="shrink-0 cursor-pointer"
+                  class={cn('shrink-0', gitToneActionButtonClass())}
                   aria-label="Toggle browser sidebar"
                   onClick={props.onToggleSidebar}
                 >
@@ -121,7 +121,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 </Button>
               </Show>
               <Show when={props.onRefresh}>
-                <Button size="sm" variant="outline" class="shrink-0 cursor-pointer" icon={Refresh} onClick={props.onRefresh}>
+                <Button size="sm" variant="ghost" class={cn('shrink-0', gitToneActionButtonClass())} icon={Refresh} onClick={props.onRefresh}>
                   Refresh
                 </Button>
               </Show>

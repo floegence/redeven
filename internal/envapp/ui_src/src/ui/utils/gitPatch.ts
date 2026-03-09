@@ -66,26 +66,26 @@ export function formatGitPatchLineNumber(value: number | null): string {
 }
 
 export function gitPatchPreviewLineClass(line: string): string {
-  if (!line) return '';
-  if (line.startsWith('+') && !line.startsWith('+++')) return 'chat-tool-apply-patch-line-add';
-  if (line.startsWith('-') && !line.startsWith('---')) return 'chat-tool-apply-patch-line-del';
+  if (!line) return 'text-foreground';
+  if (line.startsWith('+') && !line.startsWith('+++')) return 'text-success';
+  if (line.startsWith('-') && !line.startsWith('---')) return 'text-error';
   if (line.startsWith('@@') || line.startsWith('diff --git ') || line.startsWith('--- ') || line.startsWith('+++ ')) {
-    return 'chat-tool-apply-patch-line-meta';
+    return 'text-muted-foreground/85';
   }
-  return '';
+  return 'text-foreground';
 }
 
 export function gitPatchRenderedLineClass(line: GitPatchRenderedLine): string {
   switch (line.kind) {
     case 'add':
-      return 'chat-tool-apply-patch-detail-line-add';
+      return 'bg-success/10';
     case 'del':
-      return 'chat-tool-apply-patch-detail-line-del';
+      return 'bg-error/[0.10]';
     case 'meta':
-      return 'chat-tool-apply-patch-detail-line-meta';
+      return 'bg-muted/55';
     case 'context':
     default:
-      return '';
+      return 'bg-background/92';
   }
 }
 
@@ -108,30 +108,32 @@ export function gitChangeLabel(change: string | undefined): string {
 export function gitChangeClass(change: string | undefined): string {
   switch (String(change ?? '').trim()) {
     case 'added':
-      return 'chat-tool-apply-patch-change-added';
+      return 'bg-success/12 text-success';
     case 'deleted':
-      return 'chat-tool-apply-patch-change-deleted';
+      return 'bg-error/12 text-error';
     case 'renamed':
-      return 'chat-tool-apply-patch-change-renamed';
+      return 'bg-violet-500/[0.10] text-violet-700 dark:text-violet-300';
     case 'copied':
+      return 'bg-primary/[0.10] text-primary';
     case 'modified':
     default:
-      return 'chat-tool-apply-patch-change-modified';
+      return 'bg-sky-500/[0.10] text-sky-700 dark:text-sky-300';
   }
 }
 
 export function gitChangeDotClass(change: string | undefined): string {
   switch (String(change ?? '').trim()) {
     case 'added':
-      return 'chat-tool-apply-patch-dot-added';
+      return 'bg-success';
     case 'deleted':
-      return 'chat-tool-apply-patch-dot-deleted';
+      return 'bg-error';
     case 'renamed':
-      return 'chat-tool-apply-patch-dot-renamed';
+      return 'bg-violet-500';
     case 'copied':
+      return 'bg-primary';
     case 'modified':
     default:
-      return 'chat-tool-apply-patch-dot-modified';
+      return 'bg-sky-500';
   }
 }
 
