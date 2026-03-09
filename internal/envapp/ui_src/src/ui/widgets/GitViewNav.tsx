@@ -11,7 +11,7 @@ export interface GitViewNavProps {
 
 export function GitViewNav(props: GitViewNavProps) {
   const buttonBaseClass =
-    'cursor-pointer flex w-full items-center justify-between gap-2 rounded px-2.5 py-1.5 text-left text-xs transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1';
+    'cursor-pointer flex w-full items-center justify-between gap-2 rounded px-2.5 py-2.5 text-left text-xs transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 sm:py-1.5';
   const badgeBaseClass =
     'inline-flex min-w-[1.5rem] items-center justify-center rounded px-1 py-0.5 text-[10px] font-medium tabular-nums transition-colors duration-150';
 

@@ -97,7 +97,8 @@ describe('browser workspace layout wiring', () => {
     expect(navSrc).toContain('role="tablist"');
     expect(navSrc).toContain('aria-label="Git views"');
     expect(navSrc).toContain('space-y-0.5 rounded-md bg-muted/[0.14] p-0.5');
-    expect(navSrc).toContain('rounded px-2.5 py-1.5');
+    expect(navSrc).toContain('rounded px-2.5 py-2.5');
+    expect(navSrc).toContain('sm:py-1.5');
     expect(navSrc).toContain('border-l-[2px] border-primary bg-background text-foreground shadow-sm');
     expect(navSrc).toContain('bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground');
     expect(navSrc).toContain('bg-muted/70 text-foreground');
@@ -244,7 +245,9 @@ describe('browser workspace layout wiring', () => {
     expect(dialogSrc).not.toContain('rounded-[20px]');
     expect(dialogSrc).not.toContain('rounded-xl');
     expect(patchSrc).toContain('rounded-md bg-muted/[0.16]');
-    expect(patchSrc).toContain('max-h-[28rem] overflow-auto rounded-md bg-background/78 p-0.5');
+    expect(patchSrc).toContain('max-h-[60vh]');
+    expect(patchSrc).toContain('sm:max-h-[28rem]');
+    expect(patchSrc).toContain('overflow-auto rounded-md bg-background/78 p-0.5');
     expect(patchSrc).not.toContain('chat-tool-apply-patch');
     expect(patchUtilSrc).toContain("return 'border-l-[2px] border-l-success/60 bg-success/10';");
     expect(patchUtilSrc).toContain("return 'text-success';");

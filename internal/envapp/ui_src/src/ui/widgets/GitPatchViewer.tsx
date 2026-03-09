@@ -105,7 +105,7 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
                 fallback={<div class="rounded-md bg-background/70 px-3 py-2 text-[11px] leading-5 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">{unavailableMessage() || 'Binary file changed. Inline text diff is not available.'}</div>}
               >
                 <Show when={visiblePatchLines().length > 0} fallback={<div class="rounded-md bg-background/70 px-3 py-2 text-[11px] leading-5 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">No inline diff lines available for this file.</div>}>
-                  <div class="max-h-[28rem] overflow-auto rounded-md bg-background/78 p-0.5 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
+                  <div class="max-h-[60vh] overflow-auto rounded-md bg-background/78 p-0.5 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] sm:max-h-[28rem]">
                     <div class="bg-muted/[0.20] p-px">
                       <For each={visiblePatchLines()}>
                         {(line) => (
@@ -128,7 +128,7 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
                   <div class="flex justify-center pt-0.5">
                     <button
                       type="button"
-                      class="cursor-pointer rounded-md bg-background/78 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] transition-colors duration-150 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1"
+                      class="cursor-pointer rounded-md bg-background/78 px-2.5 py-2 text-[11px] font-medium text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] transition-colors duration-150 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 sm:py-1"
                       onClick={() => setPatchExpanded((value) => !value)}
                     >
                       {patchExpanded() ? 'Show less' : `Show all ${renderedPatchLines().length} lines`}
