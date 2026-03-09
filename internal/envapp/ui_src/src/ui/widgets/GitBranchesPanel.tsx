@@ -47,7 +47,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   };
 
   return (
-    <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+    <div class="flex h-full min-h-0 flex-col overflow-hidden">
       <Show when={!props.branchesLoading} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Loading branches...</div>}>
         <Show when={!props.branchesError} fallback={<div class="flex-1 px-3 py-4 text-xs break-words text-error">{props.branchesError}</div>}>
           <Show when={props.selectedBranch} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Choose a branch from the sidebar to load compare context.</div>}>

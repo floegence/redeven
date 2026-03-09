@@ -30,7 +30,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   });
 
   return (
-    <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+    <div class="flex h-full min-h-0 flex-col overflow-hidden">
       <div class="flex-1 min-h-0 overflow-auto px-3 py-3">
         <Show when={!props.loading} fallback={<div class="text-xs text-muted-foreground">Loading workspace changes...</div>}>
           <Show when={!props.error} fallback={<div class="text-xs text-error">{props.error}</div>}>

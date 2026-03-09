@@ -53,23 +53,23 @@ export function gitToneDotClass(tone?: GitChromeTone): string {
 }
 
 export function gitToneSurfaceClass(tone?: GitChromeTone): string {
-  const base = 'shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] border-l-[3px]';
+  const base = 'shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] border-l-[3px] bg-muted/[0.10]';
   switch (normalizeTone(tone)) {
     case 'info':
-      return `${base} border-l-sky-500/60 bg-sky-500/[0.06]`;
+      return `${base} border-l-sky-500/60`;
     case 'brand':
-      return `${base} border-l-primary/60 bg-primary/[0.06]`;
+      return `${base} border-l-primary/60`;
     case 'success':
-      return `${base} border-l-success/60 bg-success/[0.06]`;
+      return `${base} border-l-success/60`;
     case 'warning':
-      return `${base} border-l-warning/60 bg-warning/[0.06]`;
+      return `${base} border-l-warning/60`;
     case 'danger':
-      return `${base} border-l-error/60 bg-error/[0.06]`;
+      return `${base} border-l-error/60`;
     case 'violet':
-      return `${base} border-l-violet-500/60 bg-violet-500/[0.06]`;
+      return `${base} border-l-violet-500/60`;
     case 'neutral':
     default:
-      return `${base} border-l-muted-foreground/25 bg-muted/[0.16]`;
+      return `${base} border-l-muted-foreground/25`;
   }
 }
 

@@ -127,7 +127,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   };
 
   return (
-    <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
+    <div class={cn('relative flex h-full min-h-0 flex-col', props.class)}>
       <Show
         when={repoAvailable()}
         fallback={

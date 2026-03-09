@@ -141,7 +141,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
         </section>
       </div>
 
-      <div class="flex-1 min-h-0 overflow-hidden bg-muted/[0.02]">
+      <div class="flex-1 min-h-0 overflow-hidden bg-muted/[0.06]">
         <Show when={props.subview === 'overview'}>
           <GitOverviewPanel
             repoSummary={props.repoSummary}
