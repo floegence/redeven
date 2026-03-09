@@ -8,26 +8,28 @@ function normalizeTone(tone: GitChromeTone | undefined): GitChromeTone {
 }
 
 const badgeBaseClass = 'shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
-const surfaceBaseClass = 'bg-muted/[0.18] shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
-const insetBaseClass = 'bg-background/65 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
+const surfaceBaseClass = 'bg-muted/[0.16] shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
+const insetBaseClass = 'bg-background/70 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
+const actionButtonBaseClass =
+  'cursor-pointer bg-background/72 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] transition-[background-color,color,box-shadow] duration-150 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
 
 export function gitToneBadgeClass(tone?: GitChromeTone): string {
   switch (normalizeTone(tone)) {
     case 'info':
-      return `${badgeBaseClass} border-sky-500/20 bg-sky-500/[0.05] text-sky-700 dark:text-sky-300`;
+      return `${badgeBaseClass} bg-sky-500/[0.08] text-sky-700 dark:text-sky-300`;
     case 'brand':
-      return `${badgeBaseClass} border-primary/20 bg-primary/[0.06] text-primary`;
+      return `${badgeBaseClass} bg-primary/[0.08] text-primary`;
     case 'success':
-      return `${badgeBaseClass} border-success/20 bg-success/10 text-success`;
+      return `${badgeBaseClass} bg-success/12 text-success`;
     case 'warning':
-      return `${badgeBaseClass} border-warning/20 bg-warning/10 text-warning`;
+      return `${badgeBaseClass} bg-warning/12 text-warning`;
     case 'danger':
-      return `${badgeBaseClass} border-error/20 bg-error/10 text-error`;
+      return `${badgeBaseClass} bg-error/12 text-error`;
     case 'violet':
-      return `${badgeBaseClass} border-violet-500/20 bg-violet-500/[0.05] text-violet-700 dark:text-violet-300`;
+      return `${badgeBaseClass} bg-violet-500/[0.08] text-violet-700 dark:text-violet-300`;
     case 'neutral':
     default:
-      return `${badgeBaseClass} border-border/50 bg-background/85 text-muted-foreground`;
+      return `${badgeBaseClass} bg-background/82 text-muted-foreground`;
   }
 }
 
@@ -59,14 +61,19 @@ export function gitToneInsetClass(_tone?: GitChromeTone): string {
   return insetBaseClass;
 }
 
+export function gitToneActionButtonClass(): string {
+  return actionButtonBaseClass;
+}
+
 export function gitToneSelectableCardClass(_tone: GitChromeTone | undefined, active: boolean): string {
-  const interactiveBase = 'cursor-pointer min-h-[42px] select-none transition-[background-color,box-shadow,color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
+  const interactiveBase =
+    'cursor-pointer min-h-[42px] select-none transition-[background-color,box-shadow,color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
 
   if (active) {
-    return `${interactiveBase} border-transparent bg-background text-foreground shadow-sm`;
+    return `${interactiveBase} bg-background/92 text-foreground shadow-sm`;
   }
 
-  return `${interactiveBase} border-transparent bg-transparent text-foreground hover:bg-background/70`;
+  return `${interactiveBase} bg-transparent text-foreground hover:bg-background/72`;
 }
 
 export function gitSubviewTone(view: GitWorkbenchSubview): GitChromeTone {

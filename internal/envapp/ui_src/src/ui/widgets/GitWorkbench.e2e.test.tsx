@@ -88,8 +88,10 @@ describe('GitWorkbench interactions', () => {
     ), host);
 
     try {
-      const refreshButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Refresh'));
+      const refreshButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Refresh')) as HTMLButtonElement | undefined;
       expect(refreshButton).toBeTruthy();
+      expect(refreshButton?.className).toContain('bg-background/72');
+      expect(refreshButton?.className).not.toContain('border-input');
       refreshButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
       expect(host.querySelector('button[aria-label="Toggle browser sidebar"]')).toBeNull();

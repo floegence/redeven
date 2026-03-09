@@ -223,8 +223,27 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('Workspace Summary');
     expect(src).toContain('Sync Status');
     expect(src).toContain('Focused View');
+    expect(src).toContain('gitToneActionButtonClass()');
+    expect(src).toContain('variant="ghost"');
+    expect(src).not.toContain('variant="outline"');
+    expect(src).not.toContain('border-b border-border/40');
     expect(src).not.toContain('GitHistoryModeSwitch');
     expect(src).not.toContain('GitSubviewSwitch');
+  });
+
+  it('keeps git diff surfaces borderless and detached from chat patch chrome', () => {
+    const dialogSrc = read('./GitDiffDialog.tsx');
+    const patchSrc = read('./GitPatchViewer.tsx');
+    const patchUtilSrc = read('../utils/gitPatch.ts');
+
+    expect(dialogSrc).toContain('border-0 bg-card/98');
+    expect(dialogSrc).not.toContain('border border-border');
+    expect(patchSrc).toContain('rounded-xl bg-muted/[0.16]');
+    expect(patchSrc).toContain('max-h-[24rem] overflow-auto rounded-xl bg-background/78 p-1');
+    expect(patchSrc).not.toContain('chat-tool-apply-patch');
+    expect(patchUtilSrc).toContain("return 'bg-success/10';");
+    expect(patchUtilSrc).toContain("return 'text-success';");
+    expect(patchUtilSrc).not.toContain('chat-tool-apply-patch');
   });
 
   it('keeps git empty-state copy aligned with the compact review language', () => {

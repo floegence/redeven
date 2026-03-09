@@ -1,6 +1,6 @@
-import { For, Show, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import { useNotification } from '@floegence/floe-webapp-core';
 import type { GitCommitFileSummary, GitWorkspaceChange } from '../protocol/redeven_v1';
 import {
   GIT_PATCH_PREVIEW_LINES,
@@ -11,8 +11,9 @@ import {
   gitPatchRenderedLineClass,
   parseGitPatchRenderedLines,
 } from '../utils/gitPatch';
-import { changeDisplayPath, changeMetricsText } from '../utils/gitWorkbench';
 import { hasMeaningfulGitPatchText } from '../utils/gitPatchText';
+import { changeDisplayPath, changeMetricsText } from '../utils/gitWorkbench';
+import { gitToneActionButtonClass } from './GitChrome';
 
 export type GitPatchRenderable = GitCommitFileSummary | GitWorkspaceChange;
 
@@ -41,6 +42,14 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
     return String(props.unavailableMessage ?? '');
   });
 
+  createEffect(() => {
+    props.item?.path;
+    props.item?.oldPath;
+    props.item?.newPath;
+    setPatchExpanded(false);
+    setCopied(false);
+  });
+
   const handleCopyPatch = async () => {
     const text = patchText();
     if (!text || !navigator?.clipboard?.writeText) return;
@@ -55,61 +64,73 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
 
   return (
     <div class={props.class}>
-      <Show when={props.item} fallback={<div class="chat-tool-apply-patch-detail-empty">{props.emptyMessage}</div>}>
+      <Show when={props.item} fallback={<div class="rounded-lg bg-background/70 px-3 py-2 text-[11px] leading-5 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">{props.emptyMessage}</div>}>
         {(fileAccessor) => {
           const file = fileAccessor();
           return (
-            <div class="chat-tool-apply-patch-detail-panel">
-              <div class="chat-tool-apply-patch-detail-head">
-                <div class="chat-tool-apply-patch-detail-main">
-                  <span class={`chat-tool-apply-patch-change ${gitChangeClass(file.changeType)}`}>
-                    {gitChangeLabel(file.changeType)}
-                  </span>
-                  <span class="chat-tool-apply-patch-detail-path" title={changeDisplayPath(file)}>
-                    {changeDisplayPath(file)}
-                  </span>
-                  <span class="chat-tool-apply-patch-detail-metrics">
-                    {changeMetricsText(file)}
-                    <Show when={file.isBinary}>
-                      <> · Binary</>
-                    </Show>
-                  </span>
+            <div class="space-y-2.5 rounded-xl bg-muted/[0.16] p-2.5 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0 flex-1 space-y-1">
+                  <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <span class={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium', gitChangeClass(file.changeType))}>
+                      {gitChangeLabel(file.changeType)}
+                    </span>
+                    <span class="min-w-0 max-w-full truncate font-mono text-[11px] text-foreground/90" title={changeDisplayPath(file)}>
+                      {changeDisplayPath(file)}
+                    </span>
+                    <span class="text-[10px] text-muted-foreground">
+                      {changeMetricsText(file)}
+                      <Show when={file.isBinary}>
+                        <> · Binary</>
+                      </Show>
+                    </span>
+                  </div>
                 </div>
-                <Button size="xs" variant="ghost" onClick={() => void handleCopyPatch()} disabled={!canCopyPatch()}>
+
+                <Button size="xs" variant="ghost" class={gitToneActionButtonClass()} onClick={() => void handleCopyPatch()} disabled={!canCopyPatch()}>
                   {copied() ? 'Copied' : 'Copy Patch'}
                 </Button>
               </div>
 
               <Show when={file.oldPath && file.newPath && file.oldPath !== file.newPath}>
-                <div class="chat-tool-apply-patch-rename-row">
-                  <span class="chat-tool-apply-patch-rename-path" title={file.oldPath}>{file.oldPath}</span>
-                  <span class="chat-tool-apply-patch-rename-arrow">→</span>
-                  <span class="chat-tool-apply-patch-rename-path" title={file.newPath}>{file.newPath}</span>
+                <div class="flex min-w-0 items-center gap-1.5 rounded-lg bg-background/70 px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
+                  <span class="min-w-0 truncate font-mono" title={file.oldPath}>{file.oldPath}</span>
+                  <span aria-hidden="true">→</span>
+                  <span class="min-w-0 truncate font-mono" title={file.newPath}>{file.newPath}</span>
                 </div>
               </Show>
 
-              <Show when={!file.isBinary && !unavailableMessage()} fallback={<div class="chat-tool-apply-patch-detail-empty">{unavailableMessage() || 'Binary file changed. Inline text diff is not available.'}</div>}>
-                <Show when={visiblePatchLines().length > 0} fallback={<div class="chat-tool-apply-patch-detail-empty">No inline diff lines available for this file.</div>}>
-                  <div class="chat-tool-apply-patch-detail-code">
-                    <For each={visiblePatchLines()}>
-                      {(line) => (
-                        <div class={`chat-tool-apply-patch-detail-line ${gitPatchRenderedLineClass(line)}`}>
-                          <span class="chat-tool-apply-patch-detail-line-num">{formatGitPatchLineNumber(line.oldLine)}</span>
-                          <span class="chat-tool-apply-patch-detail-line-num">{formatGitPatchLineNumber(line.newLine)}</span>
-                          <span class={`chat-tool-apply-patch-detail-line-text ${gitPatchPreviewLineClass(line.text)}`}>{line.text}</span>
-                        </div>
-                      )}
-                    </For>
+              <Show
+                when={!file.isBinary && !unavailableMessage()}
+                fallback={<div class="rounded-lg bg-background/70 px-3 py-2 text-[11px] leading-5 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">{unavailableMessage() || 'Binary file changed. Inline text diff is not available.'}</div>}
+              >
+                <Show when={visiblePatchLines().length > 0} fallback={<div class="rounded-lg bg-background/70 px-3 py-2 text-[11px] leading-5 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">No inline diff lines available for this file.</div>}>
+                  <div class="max-h-[24rem] overflow-auto rounded-xl bg-background/78 p-1 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
+                    <div class="space-y-px rounded-[10px] bg-muted/[0.20] p-px">
+                      <For each={visiblePatchLines()}>
+                        {(line) => (
+                          <div class={cn('grid grid-cols-[2.6rem_2.6rem_minmax(0,1fr)] items-stretch overflow-hidden rounded-[9px]', gitPatchRenderedLineClass(line))}>
+                            <span class="px-2 py-1 text-right font-mono text-[10px] leading-5 text-muted-foreground/72">{formatGitPatchLineNumber(line.oldLine)}</span>
+                            <span class="px-2 py-1 text-right font-mono text-[10px] leading-5 text-muted-foreground/72">{formatGitPatchLineNumber(line.newLine)}</span>
+                            <span class={cn('block min-w-0 px-3 py-1 font-mono text-[11px] leading-5 whitespace-pre', gitPatchPreviewLineClass(line.text))}>{line.text}</span>
+                          </div>
+                        )}
+                      </For>
+                    </div>
                   </div>
                 </Show>
 
                 <Show when={patchTruncated()}>
-                  <div class="mt-2 text-[11px] text-muted-foreground">Patch preview is truncated.</div>
+                  <div class="text-[11px] text-muted-foreground">Patch preview is truncated.</div>
                 </Show>
 
                 <Show when={hasMorePatchLines()}>
-                  <div class="chat-tool-apply-patch-toggle-row">
-                    <button type="button" class="chat-tool-apply-patch-toggle-btn cursor-pointer" onClick={() => setPatchExpanded((value) => !value)}>
+                  <div class="flex justify-center pt-0.5">
+                    <button
+                      type="button"
+                      class="cursor-pointer rounded-full bg-background/78 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] transition-colors duration-150 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1"
+                      onClick={() => setPatchExpanded((value) => !value)}
+                    >
                       {patchExpanded() ? 'Show less' : `Show all ${renderedPatchLines().length} lines`}
                     </button>
                   </div>

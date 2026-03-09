@@ -3,7 +3,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import type { GitBranchSummary, GitCommitFileSummary, GitGetBranchCompareResponse } from '../protocol/redeven_v1';
 import { branchDisplayName, branchStatusSummary, changeMetricsText, changeSecondaryPath, compareHeadline, gitDiffEntryIdentity } from '../utils/gitWorkbench';
 import { GitDiffDialog } from './GitDiffDialog';
-import { gitBranchTone, gitChangeTone, gitCompareTone, gitToneBadgeClass, gitToneSelectableCardClass } from './GitChrome';
+import { gitBranchTone, gitChangeTone, gitCompareTone, gitToneSelectableCardClass } from './GitChrome';
 import { GitSection, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
 
 export interface GitBranchesPanelProps {
@@ -145,7 +145,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                     return (
                                       <button
                                         type="button"
-                                        class={cn('w-full rounded-xl border px-2.5 py-2 text-left text-[12px]', gitToneSelectableCardClass(tone(), active()))}
+                                        class={cn('w-full rounded-xl px-2.5 py-2 text-left text-[12px]', gitToneSelectableCardClass(tone(), active()))}
                                         onClick={() => openFileDiff(file)}
                                       >
                                         <div class="flex flex-wrap items-start justify-between gap-2">

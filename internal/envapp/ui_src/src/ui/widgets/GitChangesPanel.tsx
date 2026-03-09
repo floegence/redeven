@@ -4,7 +4,7 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 import type { GitListWorkspaceChangesResponse, GitWorkspaceChange } from '../protocol/redeven_v1';
 import { changeMetricsText, changeSecondaryPath, summarizeWorkspaceCount, workspaceSectionLabel } from '../utils/gitWorkbench';
 import { GitDiffDialog } from './GitDiffDialog';
-import { workspaceSectionTone } from './GitChrome';
+import { gitToneActionButtonClass, workspaceSectionTone } from './GitChrome';
 import { GitSection, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
 
 export interface GitChangesPanelProps {
@@ -82,7 +82,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                             </div>
                           </div>
 
-                          <Button size="sm" variant="outline" class="cursor-pointer" onClick={() => setDiffOpen(true)}>
+                          <Button size="sm" variant="ghost" class={gitToneActionButtonClass()} onClick={() => setDiffOpen(true)}>
                             Open Diff
                           </Button>
                         </div>
