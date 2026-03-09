@@ -7,25 +7,27 @@ function normalizeTone(tone: GitChromeTone | undefined): GitChromeTone {
   return tone || 'neutral';
 }
 
-const badgeBaseClass = 'border-border/50 bg-background/85 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
+const badgeBaseClass = 'shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
 const surfaceBaseClass = 'border border-border/45 bg-background/80 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
 const insetBaseClass = 'border border-border/35 bg-muted/20 shadow-[0_1px_0_rgba(255,255,255,0.02)_inset]';
 
 export function gitToneBadgeClass(tone?: GitChromeTone): string {
   switch (normalizeTone(tone)) {
-    case 'success':
-      return `${badgeBaseClass} text-success`;
-    case 'warning':
-      return `${badgeBaseClass} text-warning`;
-    case 'danger':
-      return `${badgeBaseClass} text-error`;
-    case 'brand':
-    case 'violet':
     case 'info':
-      return `${badgeBaseClass} text-foreground/85`;
+      return `${badgeBaseClass} border-sky-500/20 bg-sky-500/[0.05] text-sky-700 dark:text-sky-300`;
+    case 'brand':
+      return `${badgeBaseClass} border-primary/20 bg-primary/[0.06] text-primary`;
+    case 'success':
+      return `${badgeBaseClass} border-success/20 bg-success/10 text-success`;
+    case 'warning':
+      return `${badgeBaseClass} border-warning/20 bg-warning/10 text-warning`;
+    case 'danger':
+      return `${badgeBaseClass} border-error/20 bg-error/10 text-error`;
+    case 'violet':
+      return `${badgeBaseClass} border-violet-500/20 bg-violet-500/[0.05] text-violet-700 dark:text-violet-300`;
     case 'neutral':
     default:
-      return `${badgeBaseClass} text-muted-foreground`;
+      return `${badgeBaseClass} border-border/50 bg-background/85 text-muted-foreground`;
   }
 }
 

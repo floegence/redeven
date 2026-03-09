@@ -44,10 +44,12 @@ describe('GitChrome semantic tone helpers', () => {
   });
 
   it('keeps git chrome surfaces calm while preserving minimal status emphasis', () => {
-    expect(gitToneBadgeClass('warning')).toContain('border-border/50');
-    expect(gitToneBadgeClass('warning')).toContain('bg-background/85');
+    expect(gitToneBadgeClass('warning')).toContain('border-warning/20');
+    expect(gitToneBadgeClass('warning')).toContain('bg-warning/10');
     expect(gitToneBadgeClass('warning')).toContain('text-warning');
-    expect(gitToneBadgeClass('brand')).toContain('text-foreground/85');
+    expect(gitToneBadgeClass('brand')).toContain('border-primary/20');
+    expect(gitToneBadgeClass('brand')).toContain('bg-primary/[0.06]');
+    expect(gitToneBadgeClass('brand')).toContain('text-primary');
 
     expect(gitToneSurfaceClass('brand')).toContain('border border-border/45 bg-background/80');
     expect(gitToneSurfaceClass('brand')).toContain('ring-border/20');

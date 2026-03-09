@@ -2,11 +2,15 @@ import { For, Show, createEffect, createMemo, onCleanup } from 'solid-js';
 import { cn, useFileBrowserDrag } from '@floegence/floe-webapp-core';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import { FolderIcon, FolderOpenIcon, useFileBrowser, type FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { gitToneBadgeClass, gitToneInsetClass } from './GitChrome';
 
 const MAX_VISIBLE_DEPTH = 5;
 const TREE_ROW_BASE_PADDING = 8;
 const TREE_ROW_DEPTH_STEP = 14;
+const FILE_TREE_PANEL_CLASS = 'rounded-lg border border-border/45 bg-muted/20 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
+const FILE_TREE_BADGE_CLASS = 'rounded-full border border-border/45 bg-background/85 px-2 py-0.5 text-[10px] font-medium text-muted-foreground';
+const FILE_TREE_ACCENT_BADGE_CLASS = 'rounded-full border border-primary/20 bg-primary/[0.05] px-2 py-0.5 text-[10px] font-medium text-primary/80';
+const FILE_TREE_TINY_BADGE_CLASS = 'rounded-full border border-border/40 bg-background/80 px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground';
+const FILE_TREE_TINY_ACCENT_BADGE_CLASS = 'rounded-full border border-primary/20 bg-primary/[0.05] px-1.5 py-0.5 text-[9px] font-medium text-primary/80';
 
 function getPathSegments(path: string): string[] {
   return path.split('/').filter(Boolean);
@@ -63,16 +67,14 @@ export function FileBrowserCurrentFolderCard(props: FileBrowserCurrentFolderCard
     return getFolderChildren(currentFolder()).length;
   });
   const folderCountLabel = createMemo(() => `${currentFolderCount()} folder${currentFolderCount() === 1 ? '' : 's'}`);
+  const depthOverflow = createMemo(() => currentDepth() > MAX_VISIBLE_DEPTH);
 
   return (
-    <section
-      data-testid="file-current-folder-summary"
-      class={cn('rounded-xl border px-2.5 py-2 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]', gitToneInsetClass(currentDepth() > MAX_VISIBLE_DEPTH ? 'brand' : 'info'), props.class)}
-    >
+    <section data-testid="file-current-folder-summary" class={cn(FILE_TREE_PANEL_CLASS, 'px-2.5 py-2', props.class)}>
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1">
-          <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Current Folder</div>
-          <div class="mt-1 truncate text-[12px] font-semibold text-foreground" title={browser.currentPath() === '/' ? 'Repository root' : browser.currentPath()}>
+          <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60">Current Folder</div>
+          <div class="mt-1 truncate text-[12px] font-medium text-foreground" title={browser.currentPath() === '/' ? 'Repository root' : browser.currentPath()}>
             {currentLabel()}
           </div>
           <div class="mt-1 max-h-8 overflow-hidden break-all text-[10px] leading-4 text-muted-foreground">
@@ -81,12 +83,8 @@ export function FileBrowserCurrentFolderCard(props: FileBrowserCurrentFolderCard
         </div>
 
         <div class="flex shrink-0 flex-wrap items-center justify-end gap-1">
-          <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass(currentDepth() > MAX_VISIBLE_DEPTH ? 'brand' : 'info'))}>
-            Depth {currentDepth()}
-          </span>
-          <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass('neutral'))}>
-            {folderCountLabel()}
-          </span>
+          <span class={depthOverflow() ? FILE_TREE_ACCENT_BADGE_CLASS : FILE_TREE_BADGE_CLASS}>Depth {currentDepth()}</span>
+          <span class={FILE_TREE_BADGE_CLASS}>{folderCountLabel()}</span>
         </div>
       </div>
     </section>
@@ -181,10 +179,10 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
         <div
           class={cn(
             'flex items-center gap-1 rounded-lg border border-transparent bg-transparent transition-colors duration-150',
-            isCurrent() && 'border-border/80 bg-muted/60 text-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]',
-            !isCurrent() && 'hover:bg-muted/45',
-            isDropTarget() && canAcceptDrop() && 'border-sky-500/30 bg-sky-500/[0.08]',
-            isDropTarget() && !canAcceptDrop() && 'border-error/30 bg-error/10',
+            isCurrent() && 'border-border/55 bg-muted/45 text-foreground',
+            !isCurrent() && 'hover:bg-muted/35',
+            isDropTarget() && canAcceptDrop() && 'border-primary/25 bg-primary/[0.06]',
+            isDropTarget() && !canAcceptDrop() && 'border-error/25 bg-error/[0.05]',
           )}
           onPointerEnter={handlePointerEnter}
           onPointerLeave={handlePointerLeave}
@@ -195,7 +193,7 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
           >
             <button
               type="button"
-              class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1"
+              class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1"
               aria-label={isExpanded() ? 'Collapse folder' : 'Expand folder'}
               aria-expanded={isExpanded()}
               onClick={handleToggleExpand}
@@ -216,14 +214,14 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
             onClick={handleNavigate}
             onContextMenu={handleContextMenu}
           >
-            <span class={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background/85 text-muted-foreground', isCurrent() && 'text-foreground')}>
+            <span class={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-border/45 bg-background/90 text-muted-foreground', isCurrent() && 'border-primary/20 bg-primary/[0.04] text-primary')}>
               <Show when={hasChildren() && isExpanded()} fallback={<FolderIcon class="h-3.5 w-3.5" />}>
                 <FolderOpenIcon class="h-3.5 w-3.5" />
               </Show>
             </span>
             <span class="min-w-0 flex-1 truncate font-medium">{props.item.name}</span>
             <Show when={compactDepthOverflow() > 0}>
-              <span class={cn('rounded-full border px-1.5 py-0.5 text-[9px] font-medium', gitToneBadgeClass('neutral'))}>
+              <span class={compactDepthOverflow() > 0 ? FILE_TREE_TINY_ACCENT_BADGE_CLASS : FILE_TREE_TINY_BADGE_CLASS}>
                 +{compactDepthOverflow()}
               </span>
             </Show>
@@ -301,11 +299,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
     <div class={cn('flex min-h-full flex-col', props.class)}>
       <Show
         when={rootFolders().length > 0}
-        fallback={(
-          <div class={cn('rounded-xl border px-2.5 py-2 text-[11px] text-muted-foreground', gitToneInsetClass('neutral'))}>
-            No folders in this location.
-          </div>
-        )}
+        fallback={<div class={cn(FILE_TREE_PANEL_CLASS, 'px-2.5 py-2 text-[11px] text-muted-foreground')}>No folders in this location.</div>}
       >
         <div class="space-y-0.5 pb-1">
           <For each={rootFolders()}>

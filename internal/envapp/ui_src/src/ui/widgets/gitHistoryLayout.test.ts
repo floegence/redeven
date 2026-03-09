@@ -51,6 +51,8 @@ describe('browser workspace layout wiring', () => {
 
     expect(shellSrc).toContain('sidebarBodyClass?: string;');
     expect(shellSrc).toContain("bodyClass={cn('py-0', props.sidebarBodyClass)}");
+    expect(shellSrc).not.toContain('rounded-2xl border border-border/60 bg-gradient-to-b');
+    expect(shellSrc).not.toContain('rounded-xl border border-border/60 bg-muted/[0.05]');
     expect(workspaceSrc).toContain('sidebarBodyClass="overflow-hidden"');
     expect(workspaceSrc).toContain('data-testid="file-tree-scroll-region"');
     expect(workspaceSrc).toContain('getSidebarScrollContainer: () => treeScrollEl');
@@ -60,8 +62,15 @@ describe('browser workspace layout wiring', () => {
     expect(workspaceSrc).toContain('<FileBrowserCurrentFolderCard />');
     expect(workspaceSrc).toContain('<FileBrowserSidebarTree');
     expect(workspaceSrc).not.toContain('DirectoryTree');
+    expect(workspaceSrc).not.toContain("from './GitChrome'");
+    expect(workspaceSrc).not.toContain('gitToneBadgeClass');
+    expect(workspaceSrc).not.toContain('gitToneInsetClass');
+    expect(workspaceSrc).not.toContain('Files</span>');
     expect(treeSrc).toContain('Current Folder');
     expect(treeSrc).toContain('Depth');
+    expect(treeSrc).not.toContain("from './GitChrome'");
+    expect(treeSrc).not.toContain('gitToneBadgeClass');
+    expect(treeSrc).not.toContain('gitToneInsetClass');
     expect(treeSrc).toContain('MAX_VISIBLE_DEPTH = 5');
     expect(treeSrc).toContain('data-tree-row-path={props.item.path}');
     expect(treeSrc).toContain("scrollIntoView({ block: 'nearest', inline: 'nearest' })");
