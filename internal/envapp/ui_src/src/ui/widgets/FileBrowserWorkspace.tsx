@@ -14,7 +14,7 @@ import {
 } from '@floegence/floe-webapp-core/file-browser';
 import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
-import { FileBrowserCurrentFolderCard, FileBrowserSidebarTree } from './FileBrowserSidebarTree';
+import { FileBrowserSidebarTree } from './FileBrowserSidebarTree';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 
 export interface FileBrowserWorkspaceProps {
@@ -188,8 +188,6 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
       modeSwitcher={<GitHistoryModeSwitch mode={props.mode} onChange={props.onModeChange} gitHistoryDisabled={props.gitHistoryDisabled} class="w-full" />}
       sidebarBody={(
         <div class="flex h-full min-h-0 flex-col gap-1.5">
-          <FileBrowserCurrentFolderCard />
-
           <div class="flex items-center justify-between px-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60">
             <span>Folder Tree</span>
             <span>{browser.currentPath() === '/' ? 'Root' : 'Compact depth'}</span>

@@ -263,13 +263,7 @@ describe('FileBrowserWorkspace interactions', () => {
 
     try {
       await Promise.resolve();
-      const summary = host.querySelector('[data-testid="file-current-folder-summary"]');
       const activeRow = host.querySelector('[data-tree-row-path="/workspace/customer-facing-platform/services/really-long-nested-feature/config/runtime/assets/icons"]');
-      expect(summary).toBeTruthy();
-      expect(summary?.textContent).toContain('Current Folder');
-      expect(summary?.textContent).toContain('icons');
-      expect(summary?.textContent).toContain('Depth 8');
-      expect(summary?.textContent).toContain('/workspace/customer-facing-platform/services/really-long-nested-feature/config/runtime/assets/icons');
       expect(activeRow).toBeTruthy();
       expect(activeRow?.textContent).toContain('icons');
       expect(host.textContent).toContain('+2');

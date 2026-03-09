@@ -7,22 +7,11 @@ const MAX_VISIBLE_DEPTH = 5;
 const TREE_ROW_BASE_PADDING = 8;
 const TREE_ROW_DEPTH_STEP = 12;
 const FILE_TREE_PANEL_CLASS = 'rounded-lg border border-border/45 bg-muted/20 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
-const FILE_TREE_BADGE_CLASS = 'rounded-full border border-border/45 bg-background/85 px-2 py-0.5 text-[10px] font-medium text-muted-foreground';
-const FILE_TREE_ACCENT_BADGE_CLASS = 'rounded-full border border-primary/20 bg-primary/[0.05] px-2 py-0.5 text-[10px] font-medium text-primary/80';
 const FILE_TREE_TINY_BADGE_CLASS = 'rounded-full border border-border/40 bg-background/80 px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground';
 const FILE_TREE_TINY_ACCENT_BADGE_CLASS = 'rounded-full border border-primary/20 bg-primary/[0.05] px-1.5 py-0.5 text-[9px] font-medium text-primary/80';
 
 function getPathSegments(path: string): string[] {
   return path.split('/').filter(Boolean);
-}
-
-function getPathDepth(path: string): number {
-  return getPathSegments(path).length;
-}
-
-function getPathLeaf(path: string): string {
-  const segments = getPathSegments(path);
-  return segments.at(-1) ?? 'Root';
 }
 
 function getAncestorPaths(path: string): string[] {
@@ -41,54 +30,6 @@ function buildFolderIndex(items: FileItem[], index: Map<string, FileItem> = new 
     if (item.children?.length) buildFolderIndex(item.children, index);
   }
   return index;
-}
-
-export interface FileBrowserCurrentFolderCardProps {
-  class?: string;
-}
-
-export function FileBrowserCurrentFolderCard(props: FileBrowserCurrentFolderCardProps) {
-  const browser = useFileBrowser();
-  const rootFolders = createMemo(() => browser.files().filter((item) => item.type === 'folder'));
-  const folderIndex = createMemo(() => buildFolderIndex(browser.files()));
-  const currentFolder = createMemo(() => {
-    const path = browser.currentPath();
-    if (path === '/') return null;
-    return folderIndex().get(path) ?? null;
-  });
-  const currentDepth = createMemo(() => getPathDepth(browser.currentPath()));
-  const currentLabel = createMemo(() => {
-    const path = browser.currentPath();
-    if (path === '/') return 'Root';
-    return currentFolder()?.name ?? getPathLeaf(path);
-  });
-  const currentFolderCount = createMemo(() => {
-    if (browser.currentPath() === '/') return rootFolders().length;
-    return getFolderChildren(currentFolder()).length;
-  });
-  const folderCountLabel = createMemo(() => `${currentFolderCount()} folder${currentFolderCount() === 1 ? '' : 's'}`);
-  const depthOverflow = createMemo(() => currentDepth() > MAX_VISIBLE_DEPTH);
-
-  return (
-    <section data-testid="file-current-folder-summary" class={cn(FILE_TREE_PANEL_CLASS, 'px-2.5 py-2', props.class)}>
-      <div class="flex items-start justify-between gap-2">
-        <div class="min-w-0 flex-1">
-          <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60">Current Folder</div>
-          <div class="mt-0.5 truncate text-xs font-medium text-foreground" title={browser.currentPath() === '/' ? 'Repository root' : browser.currentPath()}>
-            {currentLabel()}
-          </div>
-          <div class="mt-0.5 max-h-8 overflow-hidden break-all text-[10px] leading-4 text-muted-foreground">
-            {browser.currentPath() === '/' ? 'Repository root' : browser.currentPath()}
-          </div>
-        </div>
-
-        <div class="flex shrink-0 flex-wrap items-center justify-end gap-1">
-          <span class={depthOverflow() ? FILE_TREE_ACCENT_BADGE_CLASS : FILE_TREE_BADGE_CLASS}>Depth {currentDepth()}</span>
-          <span class={FILE_TREE_BADGE_CLASS}>{folderCountLabel()}</span>
-        </div>
-      </div>
-    </section>
-  );
 }
 
 export interface FileBrowserSidebarTreeProps {

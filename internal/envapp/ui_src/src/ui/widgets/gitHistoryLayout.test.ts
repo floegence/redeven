@@ -59,15 +59,15 @@ describe('browser workspace layout wiring', () => {
     expect(workspaceSrc).toContain('overflow-auto overflow-x-hidden overscroll-contain');
     expect(workspaceSrc).toContain('[-webkit-overflow-scrolling:touch]');
     expect(workspaceSrc).toContain('[touch-action:pan-y_pinch-zoom]');
-    expect(workspaceSrc).toContain('<FileBrowserCurrentFolderCard />');
+    expect(workspaceSrc).not.toContain('FileBrowserCurrentFolderCard');
     expect(workspaceSrc).toContain('<FileBrowserSidebarTree');
     expect(workspaceSrc).not.toContain('DirectoryTree');
     expect(workspaceSrc).not.toContain("from './GitChrome'");
     expect(workspaceSrc).not.toContain('gitToneBadgeClass');
     expect(workspaceSrc).not.toContain('gitToneInsetClass');
     expect(workspaceSrc).not.toContain('Files</span>');
-    expect(treeSrc).toContain('Current Folder');
-    expect(treeSrc).toContain('Depth');
+    expect(treeSrc).not.toContain('Current Folder');
+    expect(treeSrc).not.toContain('FileBrowserCurrentFolderCard');
     expect(treeSrc).not.toContain("from './GitChrome'");
     expect(treeSrc).not.toContain('gitToneBadgeClass');
     expect(treeSrc).not.toContain('gitToneInsetClass');
