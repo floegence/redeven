@@ -71,8 +71,10 @@ describe('GitChangesPanel interactions', () => {
     try {
       const dialog = document.querySelector('[role="dialog"]') as HTMLDivElement | null;
       expect(dialog).toBeTruthy();
-      expect(dialog?.className).toContain('border-0');
-      expect(dialog?.className).not.toContain('border border-border');
+      expect(dialog?.className).toContain('rounded-md');
+      expect(dialog?.className).toContain('border border-border');
+      expect(dialog?.className).not.toContain('border-0');
+      expect(dialog?.className).not.toContain('rounded-[20px]');
       const copyButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.includes('Copy Patch')) as HTMLButtonElement | undefined;
       expect(copyButton?.className).toContain('bg-background/72');
       expect(copyButton?.className).not.toContain('border-input');

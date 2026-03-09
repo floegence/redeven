@@ -23,7 +23,7 @@ export function GitDiffDialog<T extends GitPatchRenderable>(props: GitDiffDialog
       title={props.title ?? 'Diff'}
       description={props.description}
       class={cn(
-        'max-w-none overflow-hidden rounded-[20px] border-0 bg-card/98 p-0 shadow-[0_32px_100px_-12px_rgba(0,0,0,0.30),0_16px_40px_-8px_rgba(0,0,0,0.15)]',
+        'max-w-none overflow-hidden rounded-md p-0',
         '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
         '[&>div:first-child>button]:bg-transparent [&>div:first-child>button]:text-muted-foreground',
         '[&>div:first-child>button:hover]:bg-muted/80 [&>div:first-child>button:hover]:text-foreground',

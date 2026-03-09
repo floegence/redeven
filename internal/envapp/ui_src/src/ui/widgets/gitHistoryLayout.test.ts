@@ -231,15 +231,17 @@ describe('browser workspace layout wiring', () => {
     expect(src).not.toContain('GitSubviewSwitch');
   });
 
-  it('keeps git diff surfaces borderless and detached from chat patch chrome', () => {
+  it('keeps git diff surfaces aligned with floe-webapp dialog style', () => {
     const dialogSrc = read('./GitDiffDialog.tsx');
     const patchSrc = read('./GitPatchViewer.tsx');
     const patchUtilSrc = read('../utils/gitPatch.ts');
 
-    expect(dialogSrc).toContain('border-0 bg-card/98');
-    expect(dialogSrc).not.toContain('border border-border');
-    expect(patchSrc).toContain('rounded-lg bg-muted/[0.16]');
-    expect(patchSrc).toContain('max-h-[28rem] overflow-auto rounded-lg bg-background/78 p-1');
+    expect(dialogSrc).toContain('rounded-md p-0');
+    expect(dialogSrc).not.toContain('border-0');
+    expect(dialogSrc).not.toContain('rounded-[20px]');
+    expect(dialogSrc).not.toContain('rounded-xl');
+    expect(patchSrc).toContain('rounded-md bg-muted/[0.16]');
+    expect(patchSrc).toContain('max-h-[28rem] overflow-auto rounded-md bg-background/78 p-1');
     expect(patchSrc).not.toContain('chat-tool-apply-patch');
     expect(patchUtilSrc).toContain("return 'border-l-[2px] border-l-success/60 bg-success/10';");
     expect(patchUtilSrc).toContain("return 'text-success';");
