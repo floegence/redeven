@@ -5,7 +5,8 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
 import { changeMetricsText, changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench';
 import { GitDiffDialog } from './GitDiffDialog';
-import { gitChangeTone, gitToneBadgeClass, gitToneSelectableCardClass, gitToneSurfaceClass } from './GitChrome';
+import { gitChangeTone, gitToneSelectableCardClass } from './GitChrome';
+import { GitSection, GitSubtleNote } from './GitWorkbenchPrimitives';
 
 const COMMIT_BODY_PREVIEW_LINES = 2;
 const COMMIT_BODY_PREVIEW_CHARS = 160;
@@ -160,42 +161,44 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                     <>
                       <div class="flex-1 min-h-0 overflow-auto px-3 py-3">
                         <div class="space-y-1.5 sm:space-y-2">
-                          <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass('brand'))}>
-                            <div class="flex flex-wrap items-start justify-between gap-2.5">
-                              <div class="min-w-0 flex-1">
-                                <div class="text-sm font-semibold text-foreground">{detail.subject || '(no subject)'}</div>
-                                <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-                                  <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass('brand'))}>{detail.shortHash}</span>
-                                  <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass('neutral'))}>{detail.authorName || '-'}</span>
-                                  <Show when={detail.authorEmail}>
-                                    <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass('neutral'))}>{detail.authorEmail}</span>
-                                  </Show>
-                                  <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass('neutral'))}>{formatDetailTime(detail.authorTimeMs)}</span>
-                                  <Show when={detail.parents.length > 0}>
-                                    <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass('violet'))} title={detail.parents.map((item) => item.slice(0, 7)).join(', ')}>
-                                      Parents {detail.parents.map((item) => item.slice(0, 7)).join(', ')}
-                                    </span>
-                                  </Show>
-                                </div>
-                              </div>
+                          <GitSection label="Commit Summary" tone="brand">
+                            <div class="text-[12px] font-medium text-foreground">{detail.subject || '(no subject)'}</div>
+                            <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                              <span class="font-mono text-foreground/80">{detail.shortHash}</span>
+                              <span aria-hidden="true">·</span>
+                              <span>{detail.authorName || '-'}</span>
+                              <Show when={detail.authorEmail}>
+                                <>
+                                  <span aria-hidden="true">·</span>
+                                  <span>{detail.authorEmail}</span>
+                                </>
+                              </Show>
+                              <span aria-hidden="true">·</span>
+                              <span>{formatDetailTime(detail.authorTimeMs)}</span>
                             </div>
+                            <Show when={detail.parents.length > 0}>
+                              <div class="mt-1 text-[10px] text-muted-foreground" title={detail.parents.map((item) => item.slice(0, 7)).join(', ')}>
+                                Parents {detail.parents.map((item) => item.slice(0, 7)).join(', ')}
+                              </div>
+                            </Show>
 
                             <Show when={commitBodyText()}>
                               <div class="mt-2 space-y-1.5">
-                                <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Message</div>
-                                <div
-                                  class="rounded-xl border border-border/60 bg-background/80 px-2.5 py-2 text-[11px] leading-5 whitespace-pre-wrap break-words text-foreground"
-                                  style={commitBodyExpanded()
-                                    ? undefined
-                                    : {
-                                        display: '-webkit-box',
-                                        '-webkit-box-orient': 'vertical',
-                                        '-webkit-line-clamp': String(COMMIT_BODY_PREVIEW_LINES),
-                                        overflow: 'hidden',
-                                      }}
-                                >
-                                  {commitBodyText()}
-                                </div>
+                                <GitSubtleNote>
+                                  <div
+                                    class="whitespace-pre-wrap break-words text-foreground"
+                                    style={commitBodyExpanded()
+                                      ? undefined
+                                      : {
+                                          display: '-webkit-box',
+                                          '-webkit-box-orient': 'vertical',
+                                          '-webkit-line-clamp': String(COMMIT_BODY_PREVIEW_LINES),
+                                          overflow: 'hidden',
+                                        }}
+                                  >
+                                    {commitBodyText()}
+                                  </div>
+                                </GitSubtleNote>
                                 <Show when={hasExpandableCommitBody()}>
                                   <div class="flex justify-end">
                                     <button
@@ -210,18 +213,11 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 </Show>
                               </div>
                             </Show>
-                          </section>
+                          </GitSection>
 
-                          <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass('info'))}>
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Changed Files</div>
-                                <div class="mt-1 text-[11px] text-muted-foreground">Select a changed file to open its floating diff.</div>
-                              </div>
-                              <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass('info'))}>{commitFiles().length}</span>
-                            </div>
-                            <Show when={commitFiles().length > 0} fallback={<div class="mt-3 text-xs text-muted-foreground">No changed files are available for this commit.</div>}>
-                              <div class="mt-2 grid grid-cols-1 gap-1.5 xl:grid-cols-2">
+                          <GitSection label="Changed Files" description="Select a changed file to open its floating diff." aside={String(commitFiles().length)} tone="info">
+                            <Show when={commitFiles().length > 0} fallback={<div class="text-xs text-muted-foreground">No changed files are available for this commit.</div>}>
+                              <div class="grid grid-cols-1 gap-1.5 xl:grid-cols-2">
                                 <For each={commitFiles()}>
                                   {(file) => {
                                     const active = () => selectedFileKey() === selectedFileIdentity(file);
@@ -235,11 +231,10 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                         <div class="flex flex-wrap items-start justify-between gap-2">
                                           <div class="min-w-0 flex-1">
                                             <div class="truncate font-medium text-current" title={changeSecondaryPath(file)}>{changeSecondaryPath(file)}</div>
-                                            <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
-                                              <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass(tone()))}>{file.changeType || 'modified'}</span>
-                                              <span class={cn('rounded-full border px-2 py-0.5 font-medium', gitToneBadgeClass(file.isBinary ? 'warning' : 'neutral'))}>
-                                                {file.isBinary ? `Binary · ${changeMetricsText(file)}` : changeMetricsText(file)}
-                                              </span>
+                                            <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                                              <span class="capitalize">{file.changeType || 'modified'}</span>
+                                              <span aria-hidden="true">·</span>
+                                              <span>{file.isBinary ? `Binary · ${changeMetricsText(file)}` : changeMetricsText(file)}</span>
                                             </div>
                                           </div>
                                           <span class="text-[10px] font-medium text-muted-foreground">Open Diff</span>
@@ -250,7 +245,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 </For>
                               </div>
                             </Show>
-                          </section>
+                          </GitSection>
                         </div>
                       </div>
 

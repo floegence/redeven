@@ -159,9 +159,10 @@ describe('GitHistoryBrowser interactions', () => {
     try {
       await flush();
 
-      const messageBlock = Array.from(host.querySelectorAll('div')).find((node) =>
-        node.className?.toString().includes('whitespace-pre-wrap') && node.textContent?.includes('Move route props out of the recursive spread path.'),
-      );
+      const messageBlock = Array.from(host.querySelectorAll('div')).find((node) => {
+        const className = node.className?.toString?.() ?? '';
+        return className.includes('whitespace-pre-wrap') && node.textContent?.includes('Move route props out of the recursive spread path.');
+      });
       const toggleButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Show more'));
 
       expect(messageBlock).toBeTruthy();

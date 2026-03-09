@@ -8,7 +8,8 @@ import type {
   GitRepoSummaryResponse,
 } from '../protocol/redeven_v1';
 import { branchDisplayName, branchStatusSummary, compareHeadline, summarizeWorkspaceCount } from '../utils/gitWorkbench';
-import { gitCompareTone, gitToneBadgeClass, gitToneInsetClass, gitToneSurfaceClass, workspaceSectionTone } from './GitChrome';
+import { gitCompareTone } from './GitChrome';
+import { GitSection, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
 
 export interface GitOverviewPanelProps {
   repoSummary?: GitRepoSummaryResponse | null;
@@ -52,135 +53,92 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
 
               return (
                 <div class="space-y-1.5 sm:space-y-2">
-                  <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass(workspaceCount > 0 ? 'warning' : 'success'))}>
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Workspace Summary</div>
-                        <div class="mt-1 text-[11px] text-muted-foreground">{workspaceCount > 0 ? 'Files need review.' : 'Working tree is clean.'}</div>
-                      </div>
-                      <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass(workspaceCount > 0 ? 'warning' : 'success'))}>
-                        {workspaceCount > 0 ? `${workspaceCount} open` : 'Clean'}
-                      </span>
-                    </div>
-
-                    <div class="mt-2 grid grid-cols-2 gap-1.5 text-[11px] xl:grid-cols-4">
-                      <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass(workspaceSectionTone('staged')))}>
-                        <div class="text-muted-foreground">Staged</div>
-                        <div class="mt-0.5 text-sm font-semibold text-foreground">{workspaceSummary?.stagedCount ?? 0}</div>
-                      </div>
-                      <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass(workspaceSectionTone('unstaged')))}>
-                        <div class="text-muted-foreground">Unstaged</div>
-                        <div class="mt-0.5 text-sm font-semibold text-foreground">{workspaceSummary?.unstagedCount ?? 0}</div>
-                      </div>
-                      <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass(workspaceSectionTone('untracked')))}>
-                        <div class="text-muted-foreground">Untracked</div>
-                        <div class="mt-0.5 text-sm font-semibold text-foreground">{workspaceSummary?.untrackedCount ?? 0}</div>
-                      </div>
-                      <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass(workspaceSectionTone('conflicted')))}>
-                        <div class="text-muted-foreground">Conflicted</div>
-                        <div class="mt-0.5 text-sm font-semibold text-foreground">{workspaceSummary?.conflictedCount ?? 0}</div>
-                      </div>
-                    </div>
-
-                    <div class={cn('mt-2 rounded-xl border px-2 py-1.5 text-[11px] text-muted-foreground', gitToneInsetClass(workspaceCount > 0 ? 'warning' : 'success'))}>
+                  <GitSection
+                    label="Workspace Summary"
+                    description={workspaceCount > 0 ? 'Files need review.' : 'Working tree is clean.'}
+                    aside={workspaceCount > 0 ? `${workspaceCount} open` : 'Clean'}
+                    tone={workspaceCount > 0 ? 'warning' : 'success'}
+                  >
+                    <GitStatStrip
+                      columnsClass="grid-cols-2 xl:grid-cols-4"
+                      items={[
+                        { label: 'Staged', value: String(workspaceSummary?.stagedCount ?? 0) },
+                        { label: 'Unstaged', value: String(workspaceSummary?.unstagedCount ?? 0) },
+                        { label: 'Untracked', value: String(workspaceSummary?.untrackedCount ?? 0) },
+                        { label: 'Conflicted', value: String(workspaceSummary?.conflictedCount ?? 0) },
+                      ]}
+                    />
+                    <GitSubtleNote class="mt-2">
                       {workspaceCount > 0
                         ? 'Review staged, unstaged, untracked, and conflicted files from the Git sidebar.'
                         : 'No workspace changes are blocking the current review flow.'}
-                    </div>
-                  </section>
+                    </GitSubtleNote>
+                  </GitSection>
 
-                  <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass(props.selectedBranch ? 'violet' : 'neutral'))}>
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Selected Branch</div>
-                        <div class="mt-1 text-[11px] text-muted-foreground">
-                          {props.selectedBranch ? 'Branch context stays visible while you inspect compare details.' : 'Choose a branch from the sidebar to load compare context.'}
-                        </div>
-                      </div>
-                      <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass(compareTone()))}>↑{summary.aheadCount ?? 0} ↓{summary.behindCount ?? 0}</span>
-                    </div>
-
-                    <div class="mt-2 text-sm font-semibold text-foreground">{props.selectedBranch ? branchDisplayName(props.selectedBranch) : 'Choose a branch'}</div>
+                  <GitSection
+                    label="Selected Branch"
+                    description={props.selectedBranch ? 'Branch context stays visible while you inspect compare details.' : 'Choose a branch from the sidebar to load compare context.'}
+                    aside={`↑${summary.aheadCount ?? 0} ↓${summary.behindCount ?? 0}`}
+                    tone={props.selectedBranch ? 'violet' : 'neutral'}
+                  >
+                    <div class="text-[12px] font-medium text-foreground">{props.selectedBranch ? branchDisplayName(props.selectedBranch) : 'Choose a branch'}</div>
                     <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
                       {props.selectedBranch ? branchStatusSummary(props.selectedBranch) : 'Branch compare details appear here after you pick a branch from the sidebar.'}
                     </div>
                     <Show when={props.selectedBranch?.subject}>
-                      <div class={cn('mt-2 rounded-xl border px-2.5 py-2 text-[11px] leading-5 text-foreground', gitToneInsetClass('violet'))}>
-                        {props.selectedBranch?.subject}
-                      </div>
+                      <GitSubtleNote class="mt-2 text-foreground">{props.selectedBranch?.subject}</GitSubtleNote>
                     </Show>
+                    <GitStatStrip
+                      class="mt-2"
+                      columnsClass="grid-cols-2"
+                      items={[
+                        { label: 'Local branches', value: String(localBranches) },
+                        { label: 'Remote branches', value: String(remoteBranches) },
+                      ]}
+                    />
+                  </GitSection>
 
-                    <div class="mt-2 grid grid-cols-2 gap-1.5 text-[11px]">
-                      <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass('brand'))}>
-                        <div class="text-muted-foreground">Local branches</div>
-                        <div class="mt-0.5 text-sm font-semibold text-foreground">{localBranches}</div>
-                      </div>
-                      <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass('violet'))}>
-                        <div class="text-muted-foreground">Remote branches</div>
-                        <div class="mt-0.5 text-sm font-semibold text-foreground">{remoteBranches}</div>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass('info'))}>
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Repository Signals</div>
-                        <div class="mt-1 text-[11px] text-muted-foreground">Fast repo context without leaving the current view.</div>
-                      </div>
-                      <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass('info'))}>{repoSignals().length} signals</span>
-                    </div>
-                    <div class="mt-2 grid grid-cols-1 gap-1.5 text-[11px] sm:grid-cols-2 xl:grid-cols-3">
+                  <GitSection
+                    label="Repository Signals"
+                    description="Fast repo context without leaving the current view."
+                    aside={`${repoSignals().length} signals`}
+                    tone="info"
+                  >
+                    <div class="overflow-hidden rounded-lg border border-border/45 bg-background/75">
                       <For each={repoSignals()}>
-                        {(signal) => (
-                          <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass(signal.tone))} title={signal.value}>
-                            <div class="text-muted-foreground">{signal.label}</div>
-                            <div class="mt-0.5 truncate text-sm font-medium text-foreground">{signal.value}</div>
+                        {(signal, index) => (
+                          <div class={cn('flex items-start justify-between gap-3 px-2.5 py-2 text-[11px]', index() > 0 && 'border-t border-border/40')} title={signal.value}>
+                            <div class="shrink-0 text-muted-foreground/80">{signal.label}</div>
+                            <div class="min-w-0 flex-1 truncate text-right font-medium text-foreground">{signal.value}</div>
                           </div>
                         )}
                       </For>
                     </div>
-                  </section>
+                  </GitSection>
 
-                  <section class={cn('rounded-2xl border p-2 sm:p-2.5', gitToneSurfaceClass(compareTone()))}>
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div class="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/70">Compare Snapshot</div>
-                        <div class="mt-1 text-[11px] text-muted-foreground">{compareHeadline(props.compare)}</div>
-                      </div>
-                      <Show when={props.compare}>
-                        <span class={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', gitToneBadgeClass(compareTone()))}>
-                          {props.compare?.commits.length ?? 0} commits · {props.compare?.files.length ?? 0} files
-                        </span>
-                      </Show>
-                    </div>
-
-                    <Show when={props.compare} fallback={<div class="mt-2 text-[11px] text-muted-foreground">Choose a branch from the sidebar to load compare details.</div>}>
+                  <GitSection
+                    label="Compare Snapshot"
+                    description={compareHeadline(props.compare)}
+                    aside={props.compare ? `${props.compare.commits.length} commits · ${props.compare.files.length} files` : undefined}
+                    tone={compareTone()}
+                  >
+                    <Show when={props.compare} fallback={<div class="text-[11px] text-muted-foreground">Choose a branch from the sidebar to load compare details.</div>}>
                       {(compareAccessor) => {
                         const compare = compareAccessor();
                         return (
-                          <div class="mt-2 grid grid-cols-2 gap-1.5 text-[11px] lg:grid-cols-4">
-                            <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass('brand'))}>
-                              <div class="text-muted-foreground">Base</div>
-                              <div class="mt-0.5 text-sm font-medium text-foreground">{compare.baseRef}</div>
-                            </div>
-                            <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass('violet'))}>
-                              <div class="text-muted-foreground">Target</div>
-                              <div class="mt-0.5 text-sm font-medium text-foreground">{compare.targetRef}</div>
-                            </div>
-                            <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass(compareTone()))}>
-                              <div class="text-muted-foreground">Ahead / Behind</div>
-                              <div class="mt-0.5 text-sm font-medium text-foreground">↑{compare.targetAheadCount ?? 0} ↓{compare.targetBehindCount ?? 0}</div>
-                            </div>
-                            <div class={cn('rounded-xl border px-2 py-1.5', gitToneInsetClass('neutral'))}>
-                              <div class="text-muted-foreground">Merge base</div>
-                              <div class="mt-0.5 text-sm font-medium text-foreground">{compare.mergeBase ? compare.mergeBase.slice(0, 7) : '—'}</div>
-                            </div>
-                          </div>
+                          <GitStatStrip
+                            columnsClass="grid-cols-2 lg:grid-cols-4"
+                            items={[
+                              { label: 'Base', value: compare.baseRef },
+                              { label: 'Target', value: compare.targetRef },
+                              { label: 'Ahead / Behind', value: `↑${compare.targetAheadCount ?? 0} ↓${compare.targetBehindCount ?? 0}` },
+                              { label: 'Merge base', value: compare.mergeBase ? compare.mergeBase.slice(0, 7) : '—' },
+                            ]}
+                          />
                         );
                       }}
                     </Show>
-                  </section>
+                  </GitSection>
                 </div>
               );
             }}
