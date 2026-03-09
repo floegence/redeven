@@ -94,6 +94,14 @@ describe('browser workspace layout wiring', () => {
     expect(shellSrc).not.toContain('sidebarToggleIcon');
     expect(shellSrc).not.toContain('mobileSidebarToggleMode');
 
+    // Mobile sidebar must use absolute overlay (not SidebarPane's built-in)
+    expect(shellSrc).toContain('mobileOverlay={false}');
+    expect(shellSrc).toContain('mobileBackdrop={false}');
+    expect(shellSrc).toContain("isMobile() && 'absolute inset-y-0 left-0 z-30 shadow-xl max-w-[80vw]'");
+    expect(shellSrc).toContain('isMobile() ? MOBILE_SIDEBAR_WIDTH : props.width');
+    expect(shellSrc).toContain('bg-black/30');
+    expect(shellSrc).toContain('Close sidebar');
+
     expect(navSrc).toContain('role="tablist"');
     expect(navSrc).toContain('aria-label="Git views"');
     expect(navSrc).toContain('space-y-0.5 rounded-md bg-muted/[0.14] p-0.5');
