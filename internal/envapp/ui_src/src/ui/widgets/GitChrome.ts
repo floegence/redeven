@@ -106,10 +106,10 @@ export function gitToneSelectableCardClass(_tone: GitChromeTone | undefined, act
     'cursor-pointer select-none transition-[background-color,box-shadow,color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
 
   if (active) {
-    return `${interactiveBase} border-l-[2px] border-l-primary bg-background/92 text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]`;
+    return `${interactiveBase} border border-sidebar-accent/70 bg-sidebar-accent text-sidebar-accent-foreground shadow-sm font-medium`;
   }
 
-  return `${interactiveBase} bg-transparent text-foreground hover:bg-background/72 hover:shadow-sm`;
+  return `${interactiveBase} border border-transparent bg-transparent text-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground`;
 }
 
 export function gitSubviewTone(view: GitWorkbenchSubview): GitChromeTone {

@@ -86,7 +86,7 @@ afterEach(() => {
 });
 
 describe('GitHistoryBrowser interactions', () => {
-  it('renders commit diff directly from the commit detail payload', async () => {
+  it('renders commit patches inline from the commit detail payload', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -111,9 +111,10 @@ describe('GitHistoryBrowser interactions', () => {
       fileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(document.body.textContent).toContain('Commit Diff');
+      expect(document.body.textContent).toContain('Commit');
+      expect(document.body.textContent).toContain('Files in Commit');
+      expect(document.body.textContent).toContain('Copy Patch');
       expect(document.body.textContent).toContain('+newValue');
-      expect(document.body.textContent).not.toContain('No inline diff lines available');
       expect(mockGetCommitDetail).toHaveBeenCalledTimes(1);
     } finally {
       dispose();
@@ -182,7 +183,7 @@ describe('GitHistoryBrowser interactions', () => {
     }
   });
 
-  it('uses compact empty-state copy before a commit is selected', async () => {
+  it('uses left-rail guidance before a commit is selected', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -201,7 +202,7 @@ describe('GitHistoryBrowser interactions', () => {
 
     try {
       await flush();
-      expect(host.textContent).toContain('Choose a commit from the sidebar to load its details.');
+      expect(host.textContent).toContain('Choose a commit from the left rail to load its details.');
       expect(host.textContent).not.toContain('Select a commit from the sidebar to inspect its details.');
     } finally {
       dispose();

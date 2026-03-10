@@ -23,6 +23,9 @@ const (
 	TypeID_GIT_LIST_WORKSPACE    uint32 = 1105
 	TypeID_GIT_LIST_BRANCHES     uint32 = 1106
 	TypeID_GIT_GET_BRANCH_DIFF   uint32 = 1107
+	TypeID_GIT_STAGE_WORKSPACE   uint32 = 1108
+	TypeID_GIT_UNSTAGE_WORKSPACE uint32 = 1109
+	TypeID_GIT_COMMIT_WORKSPACE  uint32 = 1110
 
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
@@ -212,6 +215,58 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			return nil, classifyGitRPCError(err)
 		}
 		return compare, nil
+	})
+
+	accessgate.RegisterTyped[stageWorkspaceReq, stageWorkspaceResp](r, TypeID_GIT_STAGE_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *stageWorkspaceReq) (*stageWorkspaceResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &stageWorkspaceReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		if err := s.stageWorkspacePaths(ctx, repo, req.Paths); err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return &stageWorkspaceResp{RepoRootPath: repo.repoRootVirtual}, nil
+	})
+
+	accessgate.RegisterTyped[unstageWorkspaceReq, unstageWorkspaceResp](r, TypeID_GIT_UNSTAGE_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *unstageWorkspaceReq) (*unstageWorkspaceResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &unstageWorkspaceReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		if err := s.unstageWorkspacePaths(ctx, repo, req.Paths); err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return &unstageWorkspaceResp{RepoRootPath: repo.repoRootVirtual}, nil
+	})
+
+	accessgate.RegisterTyped[commitWorkspaceReq, commitWorkspaceResp](r, TypeID_GIT_COMMIT_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *commitWorkspaceReq) (*commitWorkspaceResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &commitWorkspaceReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.commitWorkspace(ctx, repo, req.Message)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
 	})
 }
 
@@ -488,6 +543,32 @@ func classifyGitRPCError(err error) *rpc.Error {
 	}
 }
 
+func classifyGitMutationRPCError(err error) *rpc.Error {
+	if err == nil {
+		return &rpc.Error{Code: 500, Message: "internal error"}
+	}
+	message := strings.TrimSpace(err.Error())
+	lower := strings.ToLower(message)
+	switch {
+	case strings.Contains(lower, "commit message is required"):
+		return &rpc.Error{Code: 400, Message: "commit message is required"}
+	case strings.Contains(lower, "no staged changes to commit"):
+		return &rpc.Error{Code: 400, Message: "no staged changes to commit"}
+	case strings.Contains(lower, "cannot unstage before the first commit"):
+		return &rpc.Error{Code: 400, Message: "cannot unstage before the first commit"}
+	case strings.Contains(lower, "invalid git path"):
+		return &rpc.Error{Code: 400, Message: "invalid path"}
+	case strings.Contains(lower, "please tell me who you are"):
+		return &rpc.Error{Code: 400, Message: "git user.name and user.email are required before committing"}
+	case strings.Contains(lower, "unable to auto-detect email address"):
+		return &rpc.Error{Code: 400, Message: "git user.name and user.email are required before committing"}
+	case strings.Contains(lower, "nothing to commit"):
+		return &rpc.Error{Code: 400, Message: "no staged changes to commit"}
+	default:
+		return classifyGitRPCError(err)
+	}
+}
+
 type resolveRepoReq struct {
 	Path string `json:"path"`
 }
@@ -517,6 +598,35 @@ type listCommitsResp struct {
 type getCommitDetailReq struct {
 	RepoRootPath string `json:"repo_root_path"`
 	Commit       string `json:"commit"`
+}
+
+type stageWorkspaceReq struct {
+	RepoRootPath string   `json:"repo_root_path"`
+	Paths        []string `json:"paths,omitempty"`
+}
+
+type stageWorkspaceResp struct {
+	RepoRootPath string `json:"repo_root_path"`
+}
+
+type unstageWorkspaceReq struct {
+	RepoRootPath string   `json:"repo_root_path"`
+	Paths        []string `json:"paths,omitempty"`
+}
+
+type unstageWorkspaceResp struct {
+	RepoRootPath string `json:"repo_root_path"`
+}
+
+type commitWorkspaceReq struct {
+	RepoRootPath string `json:"repo_root_path"`
+	Message      string `json:"message"`
+}
+
+type commitWorkspaceResp struct {
+	RepoRootPath string `json:"repo_root_path"`
+	HeadRef      string `json:"head_ref,omitempty"`
+	HeadCommit   string `json:"head_commit,omitempty"`
 }
 
 type getCommitDetailResp struct {

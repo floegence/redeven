@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe('GitChangesPanel interactions', () => {
-  it('opens a floating diff dialog and renders the embedded patch', () => {
+  it('renders only the selected section as a compact file table', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -36,32 +36,20 @@ describe('GitChangesPanel interactions', () => {
         <NotificationProvider>
           <div class="h-[620px]">
             <GitChangesPanel
-              repoRootPath="/workspace/repo"
+              repoSummary={{
+                repoRootPath: '/workspace/repo',
+                headRef: 'main',
+                workspaceSummary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 1, conflictedCount: 0 },
+              }}
               workspace={{
                 repoRootPath: '/workspace/repo',
-                summary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
-                staged: [],
-                unstaged: [],
-                untracked: [],
+                summary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 1, conflictedCount: 0 },
+                staged: [{ section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 3, deletions: 1 }],
+                unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts', additions: 4, deletions: 2 }],
+                untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 }],
                 conflicted: [],
               }}
-              selectedItem={{
-                section: 'staged',
-                changeType: 'modified',
-                path: 'src/app.ts',
-                displayPath: 'src/app.ts',
-                additions: 3,
-                deletions: 1,
-                patchText: [
-                  'diff --git a/src/app.ts b/src/app.ts',
-                  '--- a/src/app.ts',
-                  '+++ b/src/app.ts',
-                  '@@ -1 +1 @@',
-                  '-before',
-                  '+after',
-                ].join('\n'),
-              }}
-              inspectNonce={1}
+              selectedSection="unstaged"
             />
           </div>
         </NotificationProvider>
@@ -69,24 +57,19 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
-      const dialog = document.querySelector('[role="dialog"]') as HTMLDivElement | null;
-      expect(dialog).toBeTruthy();
-      expect(dialog?.className).toContain('rounded-md');
-      expect(dialog?.className).toContain('border border-border');
-      expect(dialog?.className).not.toContain('border-0');
-      expect(dialog?.className).not.toContain('rounded-[20px]');
-      const copyButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.includes('Copy Patch')) as HTMLButtonElement | undefined;
-      expect(copyButton?.className).toContain('bg-background/72');
-      expect(copyButton?.className).not.toContain('border-input');
-      expect(document.body.textContent).toContain('Workspace Diff');
-      expect(document.body.textContent).toContain('src/app.ts');
-      expect(document.body.textContent).toContain('+after');
+      expect(host.textContent).toContain('Unstaged');
+      expect(host.textContent).toContain('Path');
+      expect(host.textContent).toContain('Status');
+      expect(host.textContent).toContain('src/next.ts');
+      expect(host.textContent).toContain('+ Stage');
+      expect(host.textContent).not.toContain('Patch');
+      expect(host.textContent).not.toContain('Ready to Commit');
     } finally {
       dispose();
     }
   });
 
-  it('keeps workspace summary and focused file in compact stacked sections', () => {
+  it('opens the commit dialog and lists staged files there', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -95,58 +78,21 @@ describe('GitChangesPanel interactions', () => {
         <NotificationProvider>
           <div class="h-[620px]">
             <GitChangesPanel
-              repoRootPath="/workspace/repo"
-              workspace={{
+              repoSummary={{
                 repoRootPath: '/workspace/repo',
-                summary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
-                staged: [],
-                unstaged: [],
-                untracked: [],
-                conflicted: [],
+                headRef: 'main',
+                workspaceSummary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
               }}
-              selectedItem={{
-                section: 'staged',
-                changeType: 'modified',
-                path: 'src/app.ts',
-                displayPath: 'src/app.ts',
-                additions: 3,
-                deletions: 1,
-                patchText: 'diff --git a/src/app.ts b/src/app.ts',
-              }}
-            />
-          </div>
-        </NotificationProvider>
-      </LayoutProvider>
-    ), host);
-
-    try {
-      expect(host.querySelectorAll('section')).toHaveLength(2);
-      expect(host.textContent).toContain('Workspace Summary');
-      expect(host.textContent).toContain('Focused File');
-      expect(host.textContent).not.toContain('Focus stays here while diffs open in a separate floating surface.');
-    } finally {
-      dispose();
-    }
-  });
-
-  it('uses compact empty-state copy when no workspace file is selected', () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    const dispose = render(() => (
-      <LayoutProvider>
-        <NotificationProvider>
-          <div class="h-[620px]">
-            <GitChangesPanel
-              repoRootPath="/workspace/repo"
               workspace={{
                 repoRootPath: '/workspace/repo',
                 summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-                staged: [],
+                staged: [{ section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 3, deletions: 1 }],
                 unstaged: [],
                 untracked: [],
                 conflicted: [],
               }}
+              selectedSection="staged"
+              commitMessage="ship it"
             />
           </div>
         </NotificationProvider>
@@ -154,9 +100,102 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
-      expect(host.textContent).toContain('Choose a workspace file');
-      expect(host.textContent).toContain('Select a file from the sidebar to load its floating diff.');
-      expect(host.textContent).not.toContain('No file selected');
+      const commitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Commit...'));
+      expect(commitButton).toBeTruthy();
+      commitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(document.body.textContent).toContain('Commit staged changes');
+      expect(document.body.textContent).toContain('src/app.ts');
+      expect(document.body.textContent).toContain('Message');
+      expect(document.querySelector('[role="dialog"]')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('shows the section-specific empty state copy', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <div class="h-[620px]">
+            <GitChangesPanel
+              repoSummary={{
+                repoRootPath: '/workspace/repo',
+                headRef: 'main',
+                workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+              }}
+              workspace={{
+                repoRootPath: '/workspace/repo',
+                summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                staged: [],
+                unstaged: [],
+                untracked: [],
+                conflicted: [],
+              }}
+              selectedSection="staged"
+            />
+          </div>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.textContent).toContain('No staged files yet. Stage files from the pending sections, then open the commit dialog.');
+      expect(host.textContent).not.toContain('Choose a file from the staged or pending lists to inspect its patch.');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('opens the diff dialog when the file name is clicked', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <div class="h-[620px]">
+            <GitChangesPanel
+              repoSummary={{
+                repoRootPath: '/workspace/repo',
+                headRef: 'main',
+                workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+              }}
+              workspace={{
+                repoRootPath: '/workspace/repo',
+                summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+                staged: [],
+                unstaged: [{
+                  section: 'unstaged',
+                  changeType: 'modified',
+                  path: 'src/next.ts',
+                  displayPath: 'src/next.ts',
+                  additions: 4,
+                  deletions: 2,
+                  patchText: ['@@ -1,2 +1,2 @@', '-oldLine();', '+newLine();'].join('\n'),
+                }],
+                untracked: [],
+                conflicted: [],
+              }}
+              selectedSection="unstaged"
+            />
+          </div>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const fileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('src/next.ts'));
+      expect(fileButton).toBeTruthy();
+      fileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(document.body.textContent).toContain('Workspace Diff');
+      expect(document.body.textContent).toContain('src/next.ts');
+      expect(document.body.textContent).toContain('newLine();');
+      expect(document.querySelector('[role="dialog"]')).toBeTruthy();
     } finally {
       dispose();
     }

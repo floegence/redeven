@@ -10,14 +10,14 @@ import type {
   GitRepoSummaryResponse,
   GitResolveRepoResponse,
   GitWorkspaceChange,
+  GitWorkspaceSection,
 } from '../protocol/redeven_v1';
-import { repoDisplayName, summarizeWorkspaceCount, type GitWorkbenchSubview } from '../utils/gitWorkbench';
-import { GitOverviewPanel } from './GitOverviewPanel';
+import { repoDisplayName, summarizePendingWorkspaceCount, summarizeWorkspaceCount, syncStatusLabel, type GitWorkbenchSubview } from '../utils/gitWorkbench';
 import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
 import { gitSubviewTone, gitToneActionButtonClass, gitToneDotClass } from './GitChrome';
-import { GitStatStrip } from './GitWorkbenchPrimitives';
+import { GitMetaPill } from './GitWorkbenchPrimitives';
 
 export interface GitWorkbenchProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -30,8 +30,12 @@ export interface GitWorkbenchProps {
   workspace?: GitListWorkspaceChangesResponse | null;
   workspaceLoading?: boolean;
   workspaceError?: string;
+  selectedWorkspaceSection?: GitWorkspaceSection;
+  onSelectWorkspaceSection?: (section: GitWorkspaceSection) => void;
   selectedWorkspaceItem?: GitWorkspaceChange | null;
-  workspaceInspectNonce?: number;
+  onSelectWorkspaceItem?: (item: GitWorkspaceChange) => void;
+  busyWorkspaceKey?: string;
+  busyWorkspaceAction?: 'stage' | 'unstage' | '';
   branches?: GitListBranchesResponse | null;
   branchesLoading?: boolean;
   branchesError?: string;
@@ -40,6 +44,12 @@ export interface GitWorkbenchProps {
   compareLoading?: boolean;
   compareError?: string;
   selectedCommitHash?: string;
+  commitMessage?: string;
+  commitBusy?: boolean;
+  onCommitMessageChange?: (value: string) => void;
+  onCommit?: (message: string) => void;
+  onStageSelected?: (item: GitWorkspaceChange) => void;
+  onUnstageSelected?: (item: GitWorkspaceChange) => void;
   showMobileSidebarButton?: boolean;
   onToggleSidebar?: () => void;
   onRefresh?: () => void;
@@ -53,118 +63,97 @@ function subviewLabel(view: GitWorkbenchSubview): string {
     case 'branches':
       return 'Branches';
     case 'history':
-      return 'History';
+      return 'Graph';
     default:
-      return 'Overview';
+      return 'Changes';
   }
 }
 
-function subviewSummaryLabel(view: GitWorkbenchSubview): string {
-  switch (view) {
-    case 'changes':
-      return 'Workspace Summary';
-    case 'branches':
-      return 'Branch Scope';
-    case 'history':
-      return 'Commit History';
-    default:
-      return 'Overview Summary';
-  }
+function normalizeSubview(view: GitWorkbenchSubview): GitWorkbenchSubview {
+  return view === 'overview' ? 'changes' : view;
 }
 
 export function GitWorkbench(props: GitWorkbenchProps) {
   const repoLabel = () => repoDisplayName(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath);
   const repoPath = () => String(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath || '/').trim() || '/';
   const changeCount = () => summarizeWorkspaceCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary);
+  const pendingCount = () => summarizePendingWorkspaceCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary);
   const headRef = () => String(props.repoSummary?.headRef || props.repoInfo?.headRef || '').trim();
   const loadingBusy = () => Boolean(props.repoInfoLoading || props.repoSummaryLoading || props.workspaceLoading || props.branchesLoading || props.compareLoading);
-  const subviewTone = () => gitSubviewTone(props.subview);
+  const activeSubview = () => normalizeSubview(props.subview);
+  const subviewTone = () => gitSubviewTone(activeSubview());
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
-      <div class="shrink-0 border-b border-border/40 bg-muted/[0.35] shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] px-3 py-2 backdrop-blur">
-        <section class="space-y-1.5">
-          <div class="flex flex-wrap items-start justify-between gap-2">
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-1.5">
-                <span class={cn('h-2 w-2 shrink-0 rounded-full', gitToneDotClass(subviewTone()))} aria-hidden="true" />
-                <div class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Repository Context</div>
-              </div>
-              <div class="mt-0.5 max-w-full truncate text-sm font-semibold text-foreground">{repoLabel()}</div>
-              <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] tracking-wide text-muted-foreground">
-                <span>{changeCount() > 0 ? `${changeCount()} open` : 'Clean'}</span>
-                <span aria-hidden="true">·</span>
-                <span>{subviewLabel(props.subview)}</span>
-                <span aria-hidden="true">·</span>
-                <span>{headRef() || 'Detached HEAD'}</span>
-                <Show when={loadingBusy()}>
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span>Refreshing…</span>
-                  </>
-                </Show>
-              </div>
-            </div>
-
-            <div class="flex shrink-0 items-center gap-1.5">
-              <Show when={props.showMobileSidebarButton && props.onToggleSidebar}>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  icon={History}
-                  class={cn('shrink-0', gitToneActionButtonClass())}
-                  aria-label="Toggle browser sidebar"
-                  onClick={props.onToggleSidebar}
-                >
-                  Sidebar
-                </Button>
-              </Show>
-              <Show when={props.onRefresh}>
-                <Button size="xs" variant="ghost" class={cn('shrink-0', gitToneActionButtonClass())} icon={Refresh} onClick={props.onRefresh}>
-                  Refresh
-                </Button>
+      <div class="shrink-0 border-b border-border/45 bg-background/95 px-3 py-2.5 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] backdrop-blur">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class={cn('h-2 w-2 shrink-0 rounded-full', gitToneDotClass(subviewTone()))} aria-hidden="true" />
+              <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/70">{subviewLabel(activeSubview())}</div>
+              <GitMetaPill tone={subviewTone()}>{headRef() || 'Detached HEAD'}</GitMetaPill>
+              <GitMetaPill tone={changeCount() > 0 ? 'warning' : 'success'}>
+                {changeCount() > 0 ? `${changeCount()} changes` : 'Clean workspace'}
+              </GitMetaPill>
+              <Show when={pendingCount() > 0}>
+                <GitMetaPill tone="warning">{pendingCount()} pending</GitMetaPill>
               </Show>
             </div>
+            <div class="mt-2 max-w-full truncate text-base font-semibold tracking-tight text-foreground">{repoLabel()}</div>
+            <div class="mt-1 max-w-full truncate text-[11px] text-muted-foreground">{repoPath()}</div>
           </div>
 
-          <GitStatStrip
-            columnsClass="grid-cols-2 sm:grid-cols-4"
-            items={[
-              { label: 'Workspace Summary', value: changeCount() > 0 ? `${changeCount()} open` : 'Clean' },
-              { label: 'Sync Status', value: `↑${props.repoSummary?.aheadCount ?? 0} ↓${props.repoSummary?.behindCount ?? 0}` },
-              { label: 'Head Ref', value: headRef() || 'Detached' },
-              { label: 'Focused View', value: subviewSummaryLabel(props.subview) },
-            ]}
-          />
-        </section>
+          <div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+            <Show when={props.repoSummary && (props.repoSummary.aheadCount || props.repoSummary.behindCount)}>
+              <GitMetaPill tone="info">{syncStatusLabel(props.repoSummary?.aheadCount, props.repoSummary?.behindCount)}</GitMetaPill>
+            </Show>
+            <Show when={loadingBusy()}>
+              <GitMetaPill tone="neutral">Refreshing…</GitMetaPill>
+            </Show>
+            <Show when={props.showMobileSidebarButton && props.onToggleSidebar}>
+              <Button
+                size="xs"
+                variant="ghost"
+                icon={History}
+                class={cn('shrink-0', gitToneActionButtonClass())}
+                aria-label="Toggle browser sidebar"
+                onClick={props.onToggleSidebar}
+              >
+                Sidebar
+              </Button>
+            </Show>
+            <Show when={props.onRefresh}>
+              <Button size="xs" variant="ghost" class={cn('shrink-0', gitToneActionButtonClass())} icon={Refresh} onClick={props.onRefresh}>
+                Refresh
+              </Button>
+            </Show>
+          </div>
+        </div>
       </div>
 
       <div class="flex-1 min-h-0 overflow-hidden">
-        <Show when={props.subview === 'overview'}>
-          <GitOverviewPanel
-            repoSummary={props.repoSummary}
-            summaryLoading={props.repoSummaryLoading}
-            summaryError={props.repoSummaryError}
-            workspace={props.workspace}
-            branches={props.branches}
-            selectedBranch={props.selectedBranch}
-            compare={props.compare}
-            currentPath={props.currentPath}
-          />
-        </Show>
-
-        <Show when={props.subview === 'changes'}>
+        <Show when={activeSubview() === 'changes'}>
           <GitChangesPanel
-            repoRootPath={props.repoSummary?.repoRootPath}
+            repoSummary={props.repoSummary}
             workspace={props.workspace}
+            selectedSection={props.selectedWorkspaceSection}
+            onSelectSection={props.onSelectWorkspaceSection}
             selectedItem={props.selectedWorkspaceItem}
+            onSelectItem={props.onSelectWorkspaceItem}
+            busyWorkspaceKey={props.busyWorkspaceKey}
+            busyWorkspaceAction={props.busyWorkspaceAction}
             loading={props.workspaceLoading}
             error={props.workspaceError}
-            inspectNonce={props.workspaceInspectNonce}
+            commitMessage={props.commitMessage}
+            onCommitMessageChange={props.onCommitMessageChange}
+            onCommit={props.onCommit}
+            commitBusy={props.commitBusy}
+            onStageSelected={props.onStageSelected}
+            onUnstageSelected={props.onUnstageSelected}
           />
         </Show>
 
-        <Show when={props.subview === 'branches'}>
+        <Show when={activeSubview() === 'branches'}>
           <GitBranchesPanel
             repoRootPath={props.repoSummary?.repoRootPath}
             selectedBranch={props.selectedBranch}
@@ -176,7 +165,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
           />
         </Show>
 
-        <Show when={props.subview === 'history'}>
+        <Show when={activeSubview() === 'history'}>
           <GitHistoryBrowser
             class="h-full"
             currentPath={props.currentPath}

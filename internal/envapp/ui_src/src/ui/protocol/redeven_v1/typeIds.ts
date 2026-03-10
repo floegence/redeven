@@ -16,6 +16,9 @@ export const redevenV1TypeIds = {
     listWorkspaceChanges: 1105,
     listBranches: 1106,
     getBranchCompare: 1107,
+    stageWorkspace: 1108,
+    unstageWorkspace: 1109,
+    commitWorkspace: 1110,
   },
   terminal: {
     sessionCreate: 2001,

@@ -115,16 +115,16 @@ describe('browser workspace layout wiring', () => {
     expect(navSrc).not.toContain('gitToneSelectableCardClass');
   });
 
-  it('uses floating diff dialogs instead of inline patch sections', () => {
+  it('keeps changes on a dialog-based diff flow while branches and history stay inline', () => {
     const changesSrc = read('./GitChangesPanel.tsx');
     const branchesSrc = read('./GitBranchesPanel.tsx');
     const historySrc = read('./GitHistoryBrowser.tsx');
 
     expect(changesSrc).toContain("import { GitDiffDialog } from './GitDiffDialog';");
-    expect(branchesSrc).toContain("import { GitDiffDialog } from './GitDiffDialog';");
-    expect(historySrc).toContain("import { GitDiffDialog } from './GitDiffDialog';");
-    expect(branchesSrc).not.toContain('The selected file patch stays in the main detail surface');
-    expect(historySrc).not.toContain('The selected file patch stays in the main detail surface');
+    expect(branchesSrc).toContain("import { GitPatchViewer } from './GitPatchViewer';");
+    expect(historySrc).toContain("import { GitPatchViewer } from './GitPatchViewer';");
+    expect(branchesSrc).not.toContain("import { GitDiffDialog } from './GitDiffDialog';");
+    expect(historySrc).not.toContain("import { GitDiffDialog } from './GitDiffDialog';");
   });
 
 
@@ -135,21 +135,22 @@ describe('browser workspace layout wiring', () => {
     expect(historySrc).toContain('const COMMIT_BODY_PREVIEW_CHARS = 160;');
     expect(historySrc).toContain('body.split(/\\r?\\n/)');
     expect(historySrc).toContain("lines.slice(1).join('\\n').trim()");
-    expect(historySrc).toContain('space-y-1.5 sm:space-y-2');
+    expect(historySrc).toContain('Commit Overview');
+    expect(historySrc).toContain('Files in Commit');
+    expect(historySrc).toContain('Patch Preview');
+    expect(historySrc).toContain('xl:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]');
     expect(historySrc).toContain('aria-expanded={commitBodyExpanded()}');
-    expect(historySrc).not.toContain('xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]');
   });
 
   it('stacks branch compare details into compact vertical sections', () => {
     const branchesSrc = read('./GitBranchesPanel.tsx');
 
-    expect(branchesSrc).toContain('space-y-1.5 sm:space-y-2');
-    expect(branchesSrc).toContain('Compare Snapshot');
-    expect(branchesSrc).toContain('Reference');
-    expect(branchesSrc).toContain('Latest commit');
-    expect(branchesSrc).toContain('Linked worktree');
-    expect(branchesSrc).not.toContain('Branch State');
-    expect(branchesSrc).not.toContain('xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]');
+    expect(branchesSrc).toContain('Branch Snapshot');
+    expect(branchesSrc).toContain('Compare Summary');
+    expect(branchesSrc).toContain('Commit Range');
+    expect(branchesSrc).toContain('Changed Files');
+    expect(branchesSrc).toContain('Diff Inspector');
+    expect(branchesSrc).toContain('xl:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)]');
   });
 
 
@@ -167,13 +168,15 @@ describe('browser workspace layout wiring', () => {
     expect(overviewSrc).not.toContain('xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]');
     expect(overviewSrc).not.toContain('text-[24px] font-semibold tracking-tight');
 
-    expect(changesSrc).toContain('Workspace Summary');
-    expect(changesSrc).toContain('Focused File');
-    expect(changesSrc).toContain('GitSubtleNote');
-    expect(changesSrc).toContain('columnsClass="grid-cols-2 lg:grid-cols-4"');
+    expect(changesSrc).toContain('Commit...');
+    expect(changesSrc).toContain('Path');
+    expect(changesSrc).toContain('Status');
+    expect(changesSrc).toContain('GitCommitDialog');
+    expect(changesSrc).toContain('GitDiffDialog');
+    expect(changesSrc).toContain('bg-muted/30');
+    expect(changesSrc).toContain('variant={item.section === \'staged\' ? \'outline\' : \'default\'}');
+    expect(changesSrc).toContain('sticky right-0');
     expect(changesSrc).not.toContain('border-b border-border/70 px-3 py-2');
-    expect(changesSrc).not.toContain('xl:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)]');
-    expect(changesSrc).not.toContain('min-h-[148px]');
     expect(changesSrc).not.toContain('text-[24px] font-semibold tracking-tight');
   });
 
@@ -188,18 +191,18 @@ describe('browser workspace layout wiring', () => {
   it('keeps the git sidebar labels and density aligned with the compact workspace language', () => {
     const src = read('./GitWorkbenchSidebar.tsx');
 
-    expect(src).toContain('Overview Summary');
-    expect(src).toContain('Workspace Summary');
-    expect(src).toContain('Branch Scope');
-    expect(src).toContain('Commit History');
-    expect(src).toContain('Local Branches');
-    expect(src).toContain('Remote Branches');
-    expect(src).toContain('Quick counts and repository context.');
-    expect(src).toContain('Choose a file to open its floating diff.');
+    expect(src).toContain('Changes');
+    expect(src).toContain('Branches');
+    expect(src).toContain('Commit Graph');
+    expect(src).toContain('Local');
+    expect(src).toContain('Remote');
+    expect(src).toContain('Use section cards to open the matching file table in the main pane.');
+    expect(src).toContain('Recent history with merge structure.');
     expect(src).toContain('space-y-1.5 sm:space-y-2');
-    expect(src).not.toContain('Workspace Files');
-    expect(src).not.toContain('History loaded');
-    expect(src).not.toContain('No files in this group.');
+    expect(src).toContain('WORKSPACE_REVIEW_SECTIONS');
+    expect(src).toContain('No files in this section.');
+    expect(src).toContain('gitToneSelectableCardClass(tone(), active())');
+    expect(src).toContain('text-sidebar-accent-foreground/75');
     expect(src).not.toContain('text-lg font-semibold tracking-tight');
   });
 
@@ -227,18 +230,15 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('showMobileSidebarButton');
     expect(src).toContain('onToggleSidebar');
     expect(src).toContain('Toggle browser sidebar');
-    expect(src).toContain('Repository Context');
+    expect(src).toContain('Clean workspace');
     expect(src).not.toContain('Compact repo signals and actions for the current view.');
-    expect(src).toContain('Workspace Summary');
-    expect(src).toContain('Sync Status');
-    expect(src).toContain('Focused View');
+    expect(src).toContain('pending');
+    expect(src).toContain('GitMetaPill');
     expect(src).toContain('gitToneActionButtonClass()');
     expect(src).toContain('variant="ghost"');
-    expect(src).toContain('bg-muted/[0.35]');
-    expect(src).not.toContain('bg-card');
+    expect(src).toContain('bg-background/95');
     expect(src).not.toContain("gitToneSurfaceClass(subviewTone())");
     expect(src).not.toContain('variant="outline"');
-    expect(src).not.toContain('rounded-lg border border-border/50 bg-muted/[0.18]');
     expect(src).not.toContain('GitHistoryModeSwitch');
     expect(src).not.toContain('GitSubviewSwitch');
   });
@@ -252,10 +252,10 @@ describe('browser workspace layout wiring', () => {
     expect(dialogSrc).not.toContain('border-0');
     expect(dialogSrc).not.toContain('rounded-[20px]');
     expect(dialogSrc).not.toContain('rounded-xl');
-    expect(patchSrc).toContain('rounded-md bg-muted/[0.16]');
+    expect(patchSrc).toContain('rounded-md border border-border/55 bg-card p-3');
     expect(patchSrc).toContain('max-h-[60vh]');
     expect(patchSrc).toContain('sm:max-h-[28rem]');
-    expect(patchSrc).toContain('overflow-auto rounded-md bg-background/78 p-0.5');
+    expect(patchSrc).toContain('overflow-auto rounded-md border border-border/55 bg-background p-1');
     expect(patchSrc).not.toContain('chat-tool-apply-patch');
     expect(patchUtilSrc).toContain("return 'border-l-[2px] border-l-success/60 bg-success/10';");
     expect(patchUtilSrc).toContain("return 'text-success';");
@@ -268,18 +268,18 @@ describe('browser workspace layout wiring', () => {
     const branchesSrc = read('./GitBranchesPanel.tsx');
     const historySrc = read('./GitHistoryBrowser.tsx');
 
-    expect(changesSrc).toContain('Choose a workspace file');
-    expect(changesSrc).toContain('Select a file from the sidebar to load its floating diff.');
-    expect(changesSrc).not.toContain('No file selected');
+    expect(changesSrc).toContain('No staged files yet. Stage files from the pending sections, then open the commit dialog.');
+    expect(changesSrc).toContain('No unstaged files in this repository.');
+    expect(changesSrc).not.toContain('Choose a file from the staged or pending lists to inspect its patch.');
 
     expect(overviewSrc).toContain('Choose a branch from the sidebar to load compare context.');
     expect(overviewSrc).toContain('Branch compare details appear here after you pick a branch from the sidebar.');
 
-    expect(branchesSrc).toContain('Choose a branch from the sidebar to load compare context.');
-    expect(branchesSrc).toContain('Compare details appear here after you choose a branch from the sidebar.');
+    expect(branchesSrc).toContain('Choose a branch from the left rail to inspect compare details.');
+    expect(branchesSrc).toContain('Choose a branch from the left rail to load compare data.');
     expect(branchesSrc).not.toContain('Select a branch from the sidebar to inspect compare details.');
 
-    expect(historySrc).toContain('Choose a commit from the sidebar to load its details.');
+    expect(historySrc).toContain('Choose a commit from the left rail to load its details.');
     expect(historySrc).toContain('Commit details are unavailable.');
     expect(historySrc).not.toContain('Select a commit from the sidebar to inspect its details.');
   });

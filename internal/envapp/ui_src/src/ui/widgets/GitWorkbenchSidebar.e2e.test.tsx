@@ -27,8 +27,8 @@ afterEach(() => {
 });
 
 describe('GitWorkbenchSidebar interactions', () => {
-  it('acts as selector-only content and closes after picking a workspace item', () => {
-    let selectedPath = '';
+  it('uses section cards instead of file rows in changes mode', () => {
+    let selectedSection = '';
     let closeCount = 0;
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -45,27 +45,19 @@ describe('GitWorkbenchSidebar interactions', () => {
               headCommit: 'abc1234',
               aheadCount: 1,
               behindCount: 0,
-              workspaceSummary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+              workspaceSummary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 1, conflictedCount: 0 },
             }}
             workspace={{
               repoRootPath: '/workspace/repo',
-              summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-              staged: [
-                { section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 3, deletions: 1 },
-              ],
-              unstaged: [],
-              untracked: [],
+              summary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 1, conflictedCount: 0 },
+              staged: [{ section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 3, deletions: 1 }],
+              unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts', additions: 4, deletions: 2 }],
+              untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 }],
               conflicted: [],
             }}
-            branches={{
-              repoRootPath: '/workspace/repo',
-              currentRef: 'main',
-              local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
-              remote: [],
-            }}
-            selectedWorkspaceKey="staged:modified:src/app.ts::"
-            onSelectWorkspaceItem={(item) => {
-              selectedPath = String(item.path || '');
+            selectedWorkspaceSection="unstaged"
+            onSelectWorkspaceSection={(section) => {
+              selectedSection = section;
             }}
             onClose={() => {
               closeCount += 1;
@@ -76,21 +68,25 @@ describe('GitWorkbenchSidebar interactions', () => {
     ), host);
 
     try {
-      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim() === 'Files')).toBe(false);
-      const itemButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('src/app.ts'));
-      expect(itemButton).toBeTruthy();
-      itemButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const activeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Unstaged')) as HTMLButtonElement | undefined;
+      const sectionButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Untracked'));
+      expect(activeButton?.className).toContain('bg-sidebar-accent');
+      expect(sectionButton).toBeTruthy();
+      sectionButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-      expect(host.textContent).toContain('Workspace Summary');
-      expect(host.textContent).not.toContain('Workspace Files');
-      expect(selectedPath).toBe('src/app.ts');
+      expect(host.textContent).toContain('Changes');
+      expect(host.textContent).toContain('main');
+      expect(host.textContent).toContain('Unstaged');
+      expect(host.textContent).toContain('Untracked');
+      expect(host.textContent).not.toContain('src/app.ts');
+      expect(selectedSection).toBe('untracked');
       expect(closeCount).toBe(1);
     } finally {
       dispose();
     }
   });
 
-  it('renders compact overview metrics with the unified git language', () => {
+  it('renders the commit graph rail inside the history sidebar', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -98,41 +94,23 @@ describe('GitWorkbenchSidebar interactions', () => {
       <LayoutProvider>
         <div class="relative h-[520px]">
           <GitWorkbenchSidebar
-            subview="overview"
+            subview="history"
             repoAvailable
-            repoSummary={{
-              repoRootPath: '/workspace/repo',
-              headRef: 'main',
-              headCommit: 'abc1234',
-              stashCount: 2,
-              aheadCount: 0,
-              behindCount: 0,
-              workspaceSummary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
-            }}
-            branches={{
-              repoRootPath: '/workspace/repo',
-              currentRef: 'main',
-              local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
-              remote: [{ name: 'origin/main', fullName: 'refs/remotes/origin/main', kind: 'remote', current: false }],
-            }}
             commits={[
               { hash: '1111111111111111', shortHash: '11111111', parents: ['0000000000000000'], subject: 'First commit', authorName: 'Alice', authorEmail: 'alice@example.com', authorTimeMs: Date.now() - 120000 },
-              { hash: '2222222222222222', shortHash: '22222222', parents: ['1111111111111111'], subject: 'Second commit', authorName: 'Bob', authorEmail: 'bob@example.com', authorTimeMs: Date.now() - 240000 },
+              { hash: '2222222222222222', shortHash: '22222222', parents: ['1111111111111111', '9999999999999999'], subject: 'Merge feature', authorName: 'Bob', authorEmail: 'bob@example.com', authorTimeMs: Date.now() - 240000 },
             ]}
+            selectedCommitHash="2222222222222222"
           />
         </div>
       </LayoutProvider>
     ), host);
 
     try {
-      expect(host.textContent).toContain('Overview Summary');
-      expect(host.textContent).toContain('Quick counts and repository context.');
-      expect(host.textContent).toContain('Workspace Summary');
-      expect(host.textContent).toContain('Branch Scope');
-      expect(host.textContent).toContain('Commit History');
-      expect(host.textContent).toContain('Stashes');
-      expect(host.textContent).not.toContain('Workspace Files');
-      expect(host.textContent).not.toContain('History loaded');
+      expect(host.textContent).toContain('Commit Graph');
+      expect(host.textContent).toContain('Recent history with merge structure.');
+      expect(host.textContent).toContain('Merge x2');
+      expect(host.querySelectorAll('svg')).not.toHaveLength(0);
     } finally {
       dispose();
     }

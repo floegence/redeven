@@ -4,9 +4,9 @@ import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
 import { changeMetricsText, changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench';
-import { GitDiffDialog } from './GitDiffDialog';
+import { GitPatchViewer } from './GitPatchViewer';
 import { gitChangeTone, gitToneSelectableCardClass } from './GitChrome';
-import { GitSection, GitSubtleNote } from './GitWorkbenchPrimitives';
+import { GitMetaPill, GitSection, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
 
 const COMMIT_BODY_PREVIEW_LINES = 2;
 const COMMIT_BODY_PREVIEW_CHARS = 160;
@@ -48,7 +48,6 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const [detailError, setDetailError] = createSignal('');
   const [selectedFileKey, setSelectedFileKey] = createSignal('');
   const [commitBodyExpanded, setCommitBodyExpanded] = createSignal(false);
-  const [diffOpen, setDiffOpen] = createSignal(false);
 
   let detailReqSeq = 0;
 
@@ -73,7 +72,6 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
     setSelectedFileKey('');
     setDetailError('');
     setDetailLoading(false);
-    setDiffOpen(false);
   };
 
   const loadCommitDetail = async (hash: string) => {
@@ -88,7 +86,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
       const files = Array.isArray(resp?.files) ? resp.files : [];
       setCommitDetail(resp?.commit ?? null);
       setCommitFiles(files);
-      setSelectedFileKey('');
+      setSelectedFileKey(files[0] ? selectedFileIdentity(files[0]) : '');
     } catch (err) {
       if (seq !== detailReqSeq) return;
       setDetailError(err instanceof Error ? err.message : String(err ?? 'Failed to load commit detail'));
@@ -96,9 +94,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
       setCommitFiles([]);
       setSelectedFileKey('');
     } finally {
-      if (seq === detailReqSeq) {
-        setDetailLoading(false);
-      }
+      if (seq === detailReqSeq) setDetailLoading(false);
     }
   };
 
@@ -118,13 +114,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   createEffect(() => {
     commitHash();
     setCommitBodyExpanded(false);
-    setDiffOpen(false);
   });
-
-  const openFileDiff = (file: GitCommitFileSummary) => {
-    setSelectedFileKey(selectedFileIdentity(file));
-    setDiffOpen(true);
-  };
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col', props.class)}>
@@ -143,7 +133,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
           </div>
         }
       >
-        <Show when={commitHash()} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Choose a commit from the sidebar to load its details.</div>}>
+        <Show when={commitHash()} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Choose a commit from the left rail to load its details.</div>}>
           <Show
             when={!detailLoading()}
             fallback={
@@ -158,32 +148,28 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                 {(detailAccessor) => {
                   const detail = detailAccessor();
                   return (
-                    <>
-                      <div class="flex-1 min-h-0 overflow-auto px-3 py-3">
-                        <div class="space-y-1.5 sm:space-y-2">
-                          <GitSection label="Commit Summary" tone="brand">
-                            <div class="text-xs font-medium text-foreground">{detail.subject || '(no subject)'}</div>
-                            <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-                              <span class="font-mono text-foreground/80">{detail.shortHash}</span>
-                              <span aria-hidden="true">·</span>
-                              <span>{detail.authorName || '-'}</span>
-                              <Show when={detail.authorEmail}>
-                                <>
-                                  <span aria-hidden="true">·</span>
-                                  <span>{detail.authorEmail}</span>
-                                </>
-                              </Show>
-                              <span aria-hidden="true">·</span>
-                              <span>{formatDetailTime(detail.authorTimeMs)}</span>
+                    <div class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
+                      <div class="space-y-3">
+                        <GitSection label="Commit Overview" description={detail.subject || '(no subject)'} aside={detail.shortHash} tone="brand">
+                          <div class="space-y-3">
+                            <div class="flex flex-wrap items-center gap-1.5">
+                              <GitMetaPill tone="brand">{detail.shortHash}</GitMetaPill>
+                              <GitMetaPill tone="info">{detail.authorName || 'Unknown author'}</GitMetaPill>
+                              <GitMetaPill tone="neutral">{commitFiles().length} file{commitFiles().length === 1 ? '' : 's'}</GitMetaPill>
                             </div>
-                            <Show when={detail.parents.length > 0}>
-                              <div class="mt-0.5 text-[10px] text-muted-foreground" title={detail.parents.map((item) => item.slice(0, 7)).join(', ')}>
-                                Parents {detail.parents.map((item) => item.slice(0, 7)).join(', ')}
-                              </div>
-                            </Show>
+
+                            <GitStatStrip
+                              columnsClass="grid-cols-1 sm:grid-cols-2"
+                              items={[
+                                { label: 'Author', value: detail.authorName || '-' },
+                                { label: 'When', value: formatDetailTime(detail.authorTimeMs) },
+                                { label: 'Parents', value: detail.parents.length > 0 ? detail.parents.map((item) => item.slice(0, 7)).join(', ') : 'Root commit' },
+                                { label: 'Files', value: String(commitFiles().length) },
+                              ]}
+                            />
 
                             <Show when={commitBodyText()}>
-                              <div class="mt-2 space-y-1.5">
+                              <div class="space-y-1.5">
                                 <GitSubtleNote>
                                   <div
                                     class="whitespace-pre-wrap break-words text-foreground"
@@ -213,51 +199,59 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 </Show>
                               </div>
                             </Show>
-                          </GitSection>
+                          </div>
+                        </GitSection>
 
-                          <GitSection label="Changed Files" description="Select a changed file to open its floating diff." aside={String(commitFiles().length)} tone="info">
-                            <Show when={commitFiles().length > 0} fallback={<div class="text-xs text-muted-foreground">No changed files are available for this commit.</div>}>
-                              <div class="grid grid-cols-1 gap-0.5">
-                                <For each={commitFiles()}>
-                                  {(file) => {
-                                    const active = () => selectedFileKey() === selectedFileIdentity(file);
-                                    const tone = () => gitChangeTone(file.changeType);
-                                    return (
-                                      <button
-                                        type="button"
-                                        class={cn('w-full rounded-md px-2.5 py-2.5 text-left text-xs sm:py-1.5', gitToneSelectableCardClass(tone(), active()))}
-                                        onClick={() => openFileDiff(file)}
-                                      >
-                                        <div class="flex flex-wrap items-start justify-between gap-2">
-                                          <div class="min-w-0 flex-1">
-                                            <div class="truncate font-medium text-current" title={changeSecondaryPath(file)}>{changeSecondaryPath(file)}</div>
-                                            <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-                                              <span class="capitalize">{file.changeType || 'modified'}</span>
-                                              <span aria-hidden="true">·</span>
-                                              <span>{file.isBinary ? `Binary · ${changeMetricsText(file)}` : changeMetricsText(file)}</span>
+                        <div class="grid gap-3 xl:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]">
+                          <GitSection label="Files in Commit" description="Select a file to inspect the patch without losing the commit context." aside={String(commitFiles().length)} tone="info">
+                            <Show when={commitFiles().length > 0} fallback={<GitSubtleNote>No changed files are available for this commit.</GitSubtleNote>}>
+                              <div class="space-y-2">
+                                <div class="max-h-[24rem] overflow-auto pr-1">
+                                  <div class="grid grid-cols-1 gap-1">
+                                    <For each={commitFiles()}>
+                                      {(file) => {
+                                        const active = () => selectedFileKey() === selectedFileIdentity(file);
+                                        const tone = () => gitChangeTone(file.changeType);
+                                        return (
+                                          <button
+                                            type="button"
+                                            class={cn('w-full rounded-lg px-3 py-2.5 text-left text-xs', gitToneSelectableCardClass(tone(), active()))}
+                                            onClick={() => setSelectedFileKey(selectedFileIdentity(file))}
+                                          >
+                                            <div class="space-y-1">
+                                              <div class="truncate font-medium text-current" title={changeSecondaryPath(file)}>{changeSecondaryPath(file)}</div>
+                                              <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                                                <GitMetaPill tone={tone()} class="capitalize">{file.changeType || 'modified'}</GitMetaPill>
+                                                <span>{file.isBinary ? `Binary · ${changeMetricsText(file)}` : changeMetricsText(file)}</span>
+                                              </div>
                                             </div>
-                                          </div>
-                                          <span class="text-[10px] font-medium text-muted-foreground">Open Diff</span>
-                                        </div>
-                                      </button>
-                                    );
-                                  }}
-                                </For>
+                                          </button>
+                                        );
+                                      }}
+                                    </For>
+                                  </div>
+                                </div>
+                                <GitSubtleNote>Commit selection stays on the left rail, while file inspection stays here so you can review one commit deeply without losing your place.</GitSubtleNote>
                               </div>
                             </Show>
                           </GitSection>
+
+                          <GitSection
+                            class="min-h-[24rem]"
+                            label="Patch Preview"
+                            description={selectedFile() ? changeSecondaryPath(selectedFile()) : 'Choose a changed file to render its patch preview.'}
+                            aside={selectedFile() ? changeMetricsText(selectedFile()) : 'No file'}
+                            tone={selectedFile() ? gitChangeTone(selectedFile()?.changeType) : 'neutral'}
+                          >
+                            <GitPatchViewer
+                              item={selectedFile()}
+                              emptyMessage="Select a changed file to inspect its patch."
+                              unavailableMessage={(file) => (file.isBinary ? 'Binary file changed. Inline text diff is not available.' : undefined)}
+                            />
+                          </GitSection>
                         </div>
                       </div>
-
-                      <GitDiffDialog
-                        open={diffOpen()}
-                        onOpenChange={setDiffOpen}
-                        item={selectedFile()}
-                        title="Commit Diff"
-                        description={detail.shortHash}
-                        emptyMessage="Open a changed file to inspect its diff."
-                      />
-                    </>
+                    </div>
                   );
                 }}
               </Show>

@@ -1,5 +1,7 @@
 import type {
   GitBranchSummary,
+  GitCommitWorkspaceRequest,
+  GitCommitWorkspaceResponse,
   GitCommitDetail,
   GitCommitFileSummary,
   GitCommitSummary,
@@ -11,6 +13,10 @@ import type {
   GitListBranchesResponse,
   GitListCommitsRequest,
   GitListCommitsResponse,
+  GitStageWorkspaceRequest,
+  GitStageWorkspaceResponse,
+  GitUnstageWorkspaceRequest,
+  GitUnstageWorkspaceResponse,
   GitListWorkspaceChangesRequest,
   GitListWorkspaceChangesResponse,
   GitRepoSummaryRequest,
@@ -22,6 +28,8 @@ import type {
 } from '../sdk/git';
 import type {
   wire_git_branch_summary,
+  wire_git_commit_workspace_req,
+  wire_git_commit_workspace_resp,
   wire_git_commit_detail,
   wire_git_commit_file_summary,
   wire_git_commit_summary,
@@ -35,6 +43,10 @@ import type {
   wire_git_list_branches_resp,
   wire_git_list_commits_req,
   wire_git_list_commits_resp,
+  wire_git_stage_workspace_req,
+  wire_git_stage_workspace_resp,
+  wire_git_unstage_workspace_req,
+  wire_git_unstage_workspace_resp,
   wire_git_list_workspace_changes_req,
   wire_git_list_workspace_changes_resp,
   wire_git_resolve_repo_req,
@@ -191,6 +203,32 @@ export function fromWireGitListWorkspaceChangesResponse(resp: wire_git_list_work
   };
 }
 
+export function toWireGitStageWorkspaceRequest(req: GitStageWorkspaceRequest): wire_git_stage_workspace_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    paths: Array.isArray(req.paths) ? req.paths.map((item) => String(item)) : undefined,
+  };
+}
+
+export function fromWireGitStageWorkspaceResponse(resp: wire_git_stage_workspace_resp): GitStageWorkspaceResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+  };
+}
+
+export function toWireGitUnstageWorkspaceRequest(req: GitUnstageWorkspaceRequest): wire_git_unstage_workspace_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    paths: Array.isArray(req.paths) ? req.paths.map((item) => String(item)) : undefined,
+  };
+}
+
+export function fromWireGitUnstageWorkspaceResponse(resp: wire_git_unstage_workspace_resp): GitUnstageWorkspaceResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+  };
+}
+
 export function toWireGitListBranchesRequest(req: GitListBranchesRequest): wire_git_list_branches_req {
   return {
     repo_root_path: req.repoRootPath,
@@ -259,5 +297,20 @@ export function fromWireGitGetBranchCompareResponse(resp: wire_git_get_branch_co
     targetBehindCount: typeof resp?.target_behind_count === 'number' ? resp.target_behind_count : undefined,
     commits: Array.isArray(resp?.commits) ? resp.commits.map(fromWireGitCommitSummary) : [],
     files: Array.isArray(resp?.files) ? resp.files.map(fromWireGitCommitFileSummary) : [],
+  };
+}
+
+export function toWireGitCommitWorkspaceRequest(req: GitCommitWorkspaceRequest): wire_git_commit_workspace_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    message: req.message,
+  };
+}
+
+export function fromWireGitCommitWorkspaceResponse(resp: wire_git_commit_workspace_resp): GitCommitWorkspaceResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
+    headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
   };
 }
