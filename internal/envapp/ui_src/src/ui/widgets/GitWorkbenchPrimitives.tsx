@@ -54,7 +54,7 @@ export function GitStatStrip(props: GitStatStripProps) {
     <div class={cn('grid gap-0.5 rounded-md bg-muted/[0.12] p-0.5 text-[11px]', props.columnsClass || 'grid-cols-2 lg:grid-cols-4', props.class)}>
       <For each={props.items}>
         {(item) => (
-          <div class="rounded bg-background/70 px-2 py-1.5 transition-shadow duration-150 hover:shadow-sm">
+          <div class="rounded bg-muted/50 px-2 py-1.5 transition-shadow duration-150 hover:shadow-sm">
             <div class="text-[10px] text-muted-foreground/75">{item.label}</div>
             <div class="mt-0.5 text-[11px] font-medium tracking-tight text-foreground">{item.value}</div>
             <Show when={item.hint}>

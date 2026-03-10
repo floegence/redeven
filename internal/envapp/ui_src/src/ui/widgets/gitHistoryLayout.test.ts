@@ -234,7 +234,7 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('Focused View');
     expect(src).toContain('gitToneActionButtonClass()');
     expect(src).toContain('variant="ghost"');
-    expect(src).toContain('bg-gradient-to-b from-background to-background/95');
+    expect(src).toContain('bg-muted/[0.35]');
     expect(src).not.toContain('bg-card');
     expect(src).not.toContain("gitToneSurfaceClass(subviewTone())");
     expect(src).not.toContain('variant="outline"');
