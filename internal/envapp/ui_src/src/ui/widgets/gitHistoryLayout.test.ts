@@ -147,6 +147,9 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain("selectedBranchSubview?: GitBranchSubview;");
     expect(branchesSrc).toContain('compactBranchContext');
     expect(branchesSrc).toContain('Using the current workspace status.');
+    expect(branchesSrc).toContain('getCommitDetail');
+    expect(branchesSrc).toContain('ChevronRight');
+    expect(branchesSrc).toContain('Files in Commit');
     expect(branchesSrc).toContain('Compare branches');
     expect(branchesSrc).toContain('Changed Files');
     expect(branchesSrc).toContain('Load More');

@@ -852,10 +852,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setGitNextOffset(Number(resp?.nextOffset ?? 0));
       const allItems = reset ? nextItems : gitCommits();
       const current = selectedCommitHash();
-      if ((reset || !allItems.some((item) => item.hash === current)) && nextItems.length > 0) {
-        setSelectedCommitHash(nextItems[0]!.hash);
-      }
-      if (reset && nextItems.length === 0) {
+      if (current && !allItems.some((item) => item.hash === current)) {
         setSelectedCommitHash('');
       }
     } catch (err) {

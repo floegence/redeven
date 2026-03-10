@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
+import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { useRedevenRpc, type GitBranchSummary, type GitCommitFileSummary, type GitCommitSummary, type GitGetBranchCompareResponse, type GitListBranchesResponse, type GitListWorkspaceChangesResponse, type GitRepoSummaryResponse, type GitWorkspaceChange, type GitWorkspaceSection } from '../protocol/redeven_v1';
@@ -282,87 +283,234 @@ function BranchStatusTable(props: BranchStatusTableProps) {
   );
 }
 
+type BranchHistoryCommitDetailState = {
+  files: GitCommitFileSummary[];
+  loading: boolean;
+  error: string;
+  loaded: boolean;
+};
+
+function summarizeCommitFileChanges(files: GitCommitFileSummary[]): { additions: number; deletions: number } {
+  return files.reduce<{ additions: number; deletions: number }>((acc, file) => ({
+    additions: acc.additions + Number(file.additions ?? 0),
+    deletions: acc.deletions + Number(file.deletions ?? 0),
+  }), { additions: 0, deletions: 0 });
+}
+
 function HistoryList(props: Pick<
   GitBranchesPanelProps,
-  'selectedBranch' | 'commits' | 'listLoading' | 'listLoadingMore' | 'listError' | 'hasMore' | 'selectedCommitHash' | 'onSelectCommit' | 'onLoadMore'
+  'repoRootPath' | 'selectedBranch' | 'commits' | 'listLoading' | 'listLoadingMore' | 'listError' | 'hasMore' | 'selectedCommitHash' | 'onSelectCommit' | 'onLoadMore'
 >) {
+  const rpc = useRedevenRpc();
+
+  const [commitDetails, setCommitDetails] = createSignal<Record<string, BranchHistoryCommitDetailState>>({});
+  const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
+  const [diffDialogItem, setDiffDialogItem] = createSignal<GitCommitFileSummary | null>(null);
+
+  const expandedCommitHash = createMemo(() => String(props.selectedCommitHash ?? '').trim());
+  const repoRootPath = createMemo(() => String(props.repoRootPath ?? '').trim());
+  const selectedDiffKey = () => gitDiffEntryIdentity(diffDialogItem());
+
+  const toggleCommit = (hash: string) => {
+    props.onSelectCommit?.(expandedCommitHash() === hash ? '' : hash);
+  };
+
+  createEffect(() => {
+    repoRootPath();
+    props.selectedBranch?.fullName;
+    setCommitDetails({});
+    setDiffDialogItem(null);
+    setDiffDialogOpen(false);
+  });
+
+  createEffect(() => {
+    const repo = repoRootPath();
+    const hash = expandedCommitHash();
+    if (!repo || !hash) return;
+    const existing = commitDetails()[hash];
+    if (existing?.loading || existing?.loaded) return;
+
+    setCommitDetails((prev) => ({
+      ...prev,
+      [hash]: { files: [], loading: true, error: '', loaded: false },
+    }));
+
+    void rpc.git.getCommitDetail({ repoRootPath: repo, commit: hash }).then((resp) => {
+      const files = Array.isArray(resp?.files) ? resp.files : [];
+      setCommitDetails((prev) => ({
+        ...prev,
+        [hash]: { files, loading: false, error: '', loaded: true },
+      }));
+    }).catch((err) => {
+      setCommitDetails((prev) => ({
+        ...prev,
+        [hash]: {
+          files: [],
+          loading: false,
+          error: err instanceof Error ? err.message : String(err ?? 'Failed to load commit detail'),
+          loaded: true,
+        },
+      }));
+    });
+  });
+
   return (
-    <div class="flex h-full min-h-0 flex-col overflow-hidden">
-      <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
-        <div class="flex min-h-0 flex-1 flex-col gap-3">
-          <Show
-            when={!props.listLoading}
-            fallback={(
-              <div class="flex items-center gap-2 px-1 py-3 text-xs text-muted-foreground">
-                <SnakeLoader size="sm" />
-                <span>Loading commit history...</span>
-              </div>
-            )}
-          >
-            <Show when={!props.listError} fallback={<div class="px-1 py-3 text-xs break-words text-error">{props.listError}</div>}>
-              <div class="min-h-0 flex-1">
-                <Show
-                  when={(props.commits?.length ?? 0) > 0}
-                  fallback={<GitSubtleNote>No commit history is available for this branch.</GitSubtleNote>}
-                >
-                  <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
-                    <div class="min-h-0 flex-1 overflow-auto">
-                      <table class="w-full min-w-[42rem] text-xs md:min-w-0">
-                        <thead class="sticky top-0 z-10 bg-muted/30 backdrop-blur">
-                          <tr class="border-b border-border/60 text-left text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                            <th class="px-3 py-2.5 font-medium">Commit</th>
-                            <th class="px-3 py-2.5 font-medium">Author</th>
-                            <th class="px-3 py-2.5 font-medium">When</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <For each={props.commits ?? []}>
-                            {(commit) => {
-                              const active = () => props.selectedCommitHash === commit.hash;
-                              return (
-                                <tr
-                                  class={cn(
-                                    'cursor-pointer border-b border-border/45 last:border-b-0',
-                                    active() ? 'bg-muted/45' : 'hover:bg-muted/25'
-                                  )}
-                                  onClick={() => props.onSelectCommit?.(commit.hash)}
-                                >
-                                  <td class="px-3 py-2.5 align-top">
-                                    <div class="min-w-0">
-                                      <div class="truncate text-xs font-medium text-foreground">{commit.subject || '(no subject)'}</div>
-                                      <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-                                        <GitMetaPill tone="neutral">{commit.shortHash}</GitMetaPill>
-                                        <Show when={(commit.parents?.length ?? 0) > 1}>
-                                          <GitMetaPill tone="violet">Merge x{commit.parents?.length}</GitMetaPill>
-                                        </Show>
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td class="px-3 py-2.5 align-top text-muted-foreground">{commit.authorName || 'Unknown author'}</td>
-                                  <td class="px-3 py-2.5 align-top text-muted-foreground">{formatAbsoluteTime(commit.authorTimeMs)}</td>
-                                </tr>
-                              );
-                            }}
-                          </For>
-                        </tbody>
-                      </table>
+    <>
+      <div class="flex h-full min-h-0 flex-col overflow-hidden">
+        <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
+          <div class="flex min-h-0 flex-1 flex-col gap-3">
+            <Show
+              when={!props.listLoading}
+              fallback={(
+                <div class="flex items-center gap-2 px-1 py-3 text-xs text-muted-foreground">
+                  <SnakeLoader size="sm" />
+                  <span>Loading commit history...</span>
+                </div>
+              )}
+            >
+              <Show when={!props.listError} fallback={<div class="px-1 py-3 text-xs break-words text-error">{props.listError}</div>}>
+                <div class="min-h-0 flex-1">
+                  <Show
+                    when={(props.commits?.length ?? 0) > 0}
+                    fallback={<GitSubtleNote>No commit history is available for this branch.</GitSubtleNote>}
+                  >
+                    <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
+                      <div class="min-h-0 flex-1 overflow-auto">
+                        <table class="w-full min-w-[42rem] text-xs md:min-w-0">
+                          <thead class="sticky top-0 z-10 bg-muted/30 backdrop-blur">
+                            <tr class="border-b border-border/60 text-left text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                              <th class="px-3 py-2.5 font-medium">Commit</th>
+                              <th class="px-3 py-2.5 font-medium">Author</th>
+                              <th class="px-3 py-2.5 font-medium">When</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <For each={props.commits ?? []}>
+                              {(commit) => {
+                                const expanded = () => expandedCommitHash() === commit.hash;
+                                const detail = () => commitDetails()[commit.hash];
+                                const files = () => detail()?.files ?? [];
+                                const fileTotals = createMemo(() => summarizeCommitFileChanges(files()));
+                                return (
+                                  <>
+                                    <tr
+                                      class={cn(
+                                        'cursor-pointer border-b border-border/45',
+                                        expanded() ? 'bg-muted/30' : 'hover:bg-muted/25'
+                                      )}
+                                      onClick={() => toggleCommit(commit.hash)}
+                                    >
+                                      <td class="px-3 py-2.5 align-top">
+                                        <div class="flex min-w-0 items-start gap-2">
+                                          <button
+                                            type="button"
+                                            aria-label={expanded() ? 'Collapse commit' : 'Expand commit'}
+                                            aria-expanded={expanded()}
+                                            class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border/40 bg-background/80 text-muted-foreground transition-colors duration-150 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              toggleCommit(commit.hash);
+                                            }}
+                                          >
+                                            <ChevronRight class={cn('h-3 w-3 transition-transform duration-150', expanded() && 'rotate-90')} />
+                                          </button>
+                                          <div class="min-w-0">
+                                            <div class="truncate text-xs font-medium text-foreground">{commit.subject || '(no subject)'}</div>
+                                            <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                                              <GitMetaPill tone="neutral">{commit.shortHash}</GitMetaPill>
+                                              <Show when={(commit.parents?.length ?? 0) > 1}>
+                                                <GitMetaPill tone="violet">Merge x{commit.parents?.length}</GitMetaPill>
+                                              </Show>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td class="px-3 py-2.5 align-top text-muted-foreground">{commit.authorName || 'Unknown author'}</td>
+                                      <td class="px-3 py-2.5 align-top text-muted-foreground">{formatAbsoluteTime(commit.authorTimeMs)}</td>
+                                    </tr>
+
+                                    <Show when={expanded()}>
+                                      <tr class="border-b border-border/45 bg-background/70 last:border-b-0">
+                                        <td colSpan={3} class="px-3 pb-3 pt-0">
+                                          <div class="ml-7 mt-2 space-y-2 rounded-md border border-border/45 bg-background/88 p-2.5">
+                                            <Show
+                                              when={!detail()?.loading}
+                                              fallback={(
+                                                <div class="flex items-center gap-2 px-1 py-2 text-xs text-muted-foreground">
+                                                  <SnakeLoader size="sm" />
+                                                  <span>Loading changed files...</span>
+                                                </div>
+                                              )}
+                                            >
+                                              <Show when={!detail()?.error} fallback={<div class="px-1 py-2 text-xs text-error">{detail()?.error}</div>}>
+                                                <Show
+                                                  when={files().length > 0}
+                                                  fallback={<GitSubtleNote>No changed files are available for this commit.</GitSubtleNote>}
+                                                >
+                                                  <div class="space-y-2">
+                                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                                      <div class="flex flex-wrap items-center gap-2">
+                                                        <div class="text-xs font-medium text-foreground">Files in Commit</div>
+                                                        <GitMetaPill tone="neutral">{files().length} file{files().length === 1 ? '' : 's'}</GitMetaPill>
+                                                        <div class="text-[11px] text-muted-foreground">
+                                                          <GitChangeMetrics additions={fileTotals().additions} deletions={fileTotals().deletions} />
+                                                        </div>
+                                                      </div>
+                                                      <div class="text-[11px] text-muted-foreground">Select a file to inspect the diff.</div>
+                                                    </div>
+
+                                                    <BranchCompareFilesTable
+                                                      items={files()}
+                                                      selectedKey={selectedDiffKey()}
+                                                      onOpenDiff={(item) => {
+                                                        setDiffDialogItem(item);
+                                                        setDiffDialogOpen(true);
+                                                      }}
+                                                    />
+                                                  </div>
+                                                </Show>
+                                              </Show>
+                                            </Show>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    </Show>
+                                  </>
+                                );
+                              }}
+                            </For>
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
+                  </Show>
+                </div>
+
+                <Show when={props.hasMore}>
+                  <div class="pt-1">
+                    <Button size="sm" variant="ghost" class={cn('w-full', gitToneActionButtonClass())} onClick={props.onLoadMore} loading={props.listLoadingMore} disabled={props.listLoadingMore}>
+                      Load More
+                    </Button>
                   </div>
                 </Show>
-              </div>
-
-              <Show when={props.hasMore}>
-                <div class="pt-1">
-                  <Button size="sm" variant="ghost" class={cn('w-full', gitToneActionButtonClass())} onClick={props.onLoadMore} loading={props.listLoadingMore} disabled={props.listLoadingMore}>
-                    Load More
-                  </Button>
-                </div>
               </Show>
             </Show>
-          </Show>
+          </div>
         </div>
       </div>
-    </div>
+
+      <GitDiffDialog
+        open={diffDialogOpen()}
+        onOpenChange={(open) => {
+          setDiffDialogOpen(open);
+          if (!open) setDiffDialogItem(null);
+        }}
+        item={diffDialogItem()}
+        title="Commit Diff"
+        description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected file diff.'}
+        emptyMessage="Select a changed file to inspect its diff."
+      />
+    </>
   );
 }
 
@@ -798,6 +946,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
               <Show when={branchSubview() === 'history'} fallback={renderStatus()}>
                 <HistoryList
+                  repoRootPath={compareRepoRootPath()}
                   selectedBranch={props.selectedBranch}
                   commits={props.commits}
                   listLoading={props.listLoading}

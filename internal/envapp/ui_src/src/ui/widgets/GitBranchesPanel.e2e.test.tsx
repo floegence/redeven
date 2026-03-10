@@ -5,10 +5,38 @@ import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockGetCommitDetail = vi.fn();
+
+vi.mock('../protocol/redeven_v1', async () => {
+  const actual = await vi.importActual<typeof import('../protocol/redeven_v1')>('../protocol/redeven_v1');
+  return {
+    ...actual,
+    useRedevenRpc: () => ({
+      git: {
+        getCommitDetail: mockGetCommitDetail,
+        getBranchCompare: vi.fn(),
+        listWorkspaceChanges: vi.fn(),
+      },
+    }),
+  };
+});
+
 import { redevenV1Contract } from '../protocol/redeven_v1';
 import { GitBranchesPanel } from './GitBranchesPanel';
 
 beforeEach(() => {
+  mockGetCommitDetail.mockReset();
+  mockGetCommitDetail.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    commit: {
+      hash: '2222222222222222',
+      shortHash: '22222222',
+      parents: ['1111111111111111'],
+      subject: 'Merge feature',
+    },
+    files: [],
+  });
+
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     value: vi.fn().mockImplementation((query: string) => ({
@@ -92,9 +120,29 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
-  it('shows the full commit history list when branch history is selected', () => {
+  it('shows expandable commit files and opens diffs from branch history', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
+
+    mockGetCommitDetail.mockResolvedValue({
+      repoRootPath: '/workspace/repo',
+      commit: {
+        hash: '2222222222222222',
+        shortHash: '22222222',
+        parents: ['1111111111111111', '9999999999999999'],
+        subject: 'Merge feature',
+      },
+      files: [
+        {
+          changeType: 'modified',
+          path: 'src/history.ts',
+          displayPath: 'src/history.ts',
+          additions: 8,
+          deletions: 3,
+          patchText: '@@ -1 +1 @@\n-history\n+history updated',
+        },
+      ],
+    });
 
     const dispose = render(() => (
       <LayoutProvider>
@@ -125,10 +173,24 @@ describe('GitBranchesPanel interactions', () => {
     ), host);
 
     try {
+      await Promise.resolve();
+      await Promise.resolve();
+
       expect(host.textContent).toContain('First commit');
       expect(host.textContent).toContain('Merge feature');
       expect(host.textContent).toContain('11111111');
-      expect(host.textContent).not.toContain('Using the current workspace status.');
+      expect(host.textContent).toContain('Files in Commit');
+      expect(host.textContent).toContain('src/history.ts');
+      expect(host.textContent).toContain('+8');
+      expect(host.textContent).toContain('-3');
+
+      const diffButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('View Diff')) as HTMLButtonElement | undefined;
+      expect(diffButton).toBeTruthy();
+      diffButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      await Promise.resolve();
+      expect(document.body.textContent).toContain('Commit Diff');
+      expect(document.body.textContent).toContain('history updated');
     } finally {
       dispose();
     }
