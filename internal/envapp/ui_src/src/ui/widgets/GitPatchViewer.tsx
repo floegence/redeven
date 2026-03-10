@@ -14,6 +14,7 @@ import {
 import { hasMeaningfulGitPatchText } from '../utils/gitPatchText';
 import { changeDisplayPath, changeMetricsText } from '../utils/gitWorkbench';
 import { gitToneActionButtonClass } from './GitChrome';
+import { GitMetaPill } from './GitWorkbenchPrimitives';
 
 export type GitPatchRenderable = GitCommitFileSummary | GitWorkspaceChange;
 
@@ -64,26 +65,24 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
 
   return (
     <div class={props.class}>
-      <Show when={props.item} fallback={<div class="rounded-md bg-background/70 px-3 py-2 text-[11px] leading-5 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">{props.emptyMessage}</div>}>
+      <Show when={props.item} fallback={<div class="rounded-md border border-border/45 bg-muted/[0.14] px-3 py-2 text-xs leading-5 text-muted-foreground">{props.emptyMessage}</div>}>
         {(fileAccessor) => {
           const file = fileAccessor();
           return (
-            <div class="space-y-2 rounded-md bg-muted/[0.16] p-2 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
-              <div class="flex items-start justify-between gap-2">
+            <div class="space-y-3 rounded-md border border-border/55 bg-card p-3">
+              <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 flex-1 space-y-1">
                   <div class="flex min-w-0 flex-wrap items-center gap-1.5">
                     <span class={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium', gitChangeClass(file.changeType))}>
                       {gitChangeLabel(file.changeType)}
                     </span>
+                    <GitMetaPill tone="neutral">{changeMetricsText(file)}</GitMetaPill>
                     <span class="min-w-0 max-w-full truncate font-mono text-[11px] text-foreground/90" title={changeDisplayPath(file)}>
                       {changeDisplayPath(file)}
                     </span>
-                    <span class="text-[10px] text-muted-foreground">
-                      {changeMetricsText(file)}
-                      <Show when={file.isBinary}>
-                        <> · Binary</>
-                      </Show>
-                    </span>
+                    <Show when={file.isBinary}>
+                      <GitMetaPill tone="warning">Binary</GitMetaPill>
+                    </Show>
                   </div>
                 </div>
 
@@ -93,7 +92,7 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
               </div>
 
               <Show when={file.oldPath && file.newPath && file.oldPath !== file.newPath}>
-                <div class="flex min-w-0 items-center gap-1.5 rounded-md bg-background/70 px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
+                <div class="flex min-w-0 items-center gap-1.5 rounded-md border border-border/45 bg-muted/[0.14] px-2.5 py-1.5 text-[11px] text-muted-foreground">
                   <span class="min-w-0 truncate font-mono" title={file.oldPath}>{file.oldPath}</span>
                   <span aria-hidden="true" class="text-muted-foreground/60">→</span>
                   <span class="min-w-0 truncate font-mono" title={file.newPath}>{file.newPath}</span>
@@ -102,10 +101,10 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
 
               <Show
                 when={!file.isBinary && !unavailableMessage()}
-                fallback={<div class="rounded-md bg-background/70 px-3 py-2 text-[11px] leading-5 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">{unavailableMessage() || 'Binary file changed. Inline text diff is not available.'}</div>}
+                fallback={<div class="rounded-md border border-border/45 bg-muted/[0.14] px-3 py-2 text-[11px] leading-5 text-muted-foreground">{unavailableMessage() || 'Binary file changed. Inline text diff is not available.'}</div>}
               >
-                <Show when={visiblePatchLines().length > 0} fallback={<div class="rounded-md bg-background/70 px-3 py-2 text-[11px] leading-5 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">No inline diff lines available for this file.</div>}>
-                  <div class="max-h-[60vh] overflow-auto rounded-md bg-background/78 p-0.5 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] sm:max-h-[28rem]">
+                <Show when={visiblePatchLines().length > 0} fallback={<div class="rounded-md border border-border/45 bg-muted/[0.14] px-3 py-2 text-[11px] leading-5 text-muted-foreground">No inline diff lines available for this file.</div>}>
+                  <div class="max-h-[60vh] overflow-auto rounded-md border border-border/55 bg-background p-1 sm:max-h-[28rem]">
                     <div class="bg-muted/[0.20] p-px">
                       <For each={visiblePatchLines()}>
                         {(line) => (
@@ -128,7 +127,7 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
                   <div class="flex justify-center pt-0.5">
                     <button
                       type="button"
-                      class="cursor-pointer rounded-md bg-background/78 px-2.5 py-2 text-[11px] font-medium text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] transition-colors duration-150 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 sm:py-1"
+                      class="cursor-pointer rounded-md border border-border/45 bg-muted/[0.14] px-2.5 py-2 text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 sm:py-1"
                       onClick={() => setPatchExpanded((value) => !value)}
                     >
                       {patchExpanded() ? 'Show less' : `Show all ${renderedPatchLines().length} lines`}

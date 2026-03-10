@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe('GitBranchesPanel interactions', () => {
-  it('opens compare diff directly from the embedded patch payload', () => {
+  it('renders compare patches inline from the embedded payload', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -81,7 +81,8 @@ describe('GitBranchesPanel interactions', () => {
       expect(fileButton).toBeTruthy();
       fileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-      expect(document.body.textContent).toContain('Branch Compare Diff');
+      expect(document.body.textContent).toContain('Changed Files');
+      expect(document.body.textContent).toContain('Copy Patch');
       expect(document.body.textContent).toContain('+feature branch');
       expect(document.body.textContent).not.toContain('No inline diff lines available');
     } finally {
@@ -89,7 +90,7 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
-  it('uses one compact branch summary card instead of a separate branch state panel', () => {
+  it('stacks branch, compare, commit range, and changed files vertically', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -105,7 +106,6 @@ describe('GitBranchesPanel interactions', () => {
                 kind: 'local',
                 current: true,
                 upstreamRef: 'origin/feature/demo',
-                worktreePath: '/workspace/repo-worktree',
                 headCommit: 'abc1234def5678',
                 subject: 'Feature branch change',
                 authorTimeMs: 1706000000000,
@@ -119,7 +119,7 @@ describe('GitBranchesPanel interactions', () => {
                 targetAheadCount: 1,
                 targetBehindCount: 0,
                 mergeBase: 'ff00aa11223344',
-                commits: [],
+                commits: [{ hash: 'abc1234def5678', shortHash: 'abc1234', parents: ['base123'], subject: 'Feature branch change', authorName: 'Alice', authorTimeMs: 1706000000000 }],
                 files: [],
               }}
             />
@@ -129,18 +129,18 @@ describe('GitBranchesPanel interactions', () => {
     ), host);
 
     try {
-      expect(host.querySelectorAll('section')).toHaveLength(3);
-      expect(host.textContent).toContain('Reference');
-      expect(host.textContent).toContain('Latest commit');
-      expect(host.textContent).toContain('Linked worktree');
-      expect(host.textContent).toContain('Compare Snapshot');
-      expect(host.textContent).not.toContain('Branch State');
+      expect(host.querySelectorAll('section')).toHaveLength(5);
+      expect(host.textContent).toContain('Branch Snapshot');
+      expect(host.textContent).toContain('Compare Summary');
+      expect(host.textContent).toContain('Commit Range');
+      expect(host.textContent).toContain('Changed Files');
+      expect(host.textContent).toContain('Diff Inspector');
     } finally {
       dispose();
     }
   });
 
-  it('uses compact empty-state copy before a branch is selected', () => {
+  it('uses the left-rail empty-state copy before a branch is selected', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -155,7 +155,7 @@ describe('GitBranchesPanel interactions', () => {
     ), host);
 
     try {
-      expect(host.textContent).toContain('Choose a branch from the sidebar to load compare context.');
+      expect(host.textContent).toContain('Choose a branch from the left rail to inspect compare details.');
       expect(host.textContent).not.toContain('Select a branch from the sidebar to inspect compare details.');
     } finally {
       dispose();

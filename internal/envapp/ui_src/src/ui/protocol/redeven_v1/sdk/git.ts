@@ -64,6 +64,35 @@ export type GitListWorkspaceChangesResponse = {
   conflicted: GitWorkspaceChange[];
 };
 
+export type GitStageWorkspaceRequest = {
+  repoRootPath: string;
+  paths?: string[];
+};
+
+export type GitStageWorkspaceResponse = {
+  repoRootPath: string;
+};
+
+export type GitUnstageWorkspaceRequest = {
+  repoRootPath: string;
+  paths?: string[];
+};
+
+export type GitUnstageWorkspaceResponse = {
+  repoRootPath: string;
+};
+
+export type GitCommitWorkspaceRequest = {
+  repoRootPath: string;
+  message: string;
+};
+
+export type GitCommitWorkspaceResponse = {
+  repoRootPath: string;
+  headRef?: string;
+  headCommit?: string;
+};
+
 export type GitBranchSummary = {
   name?: string;
   fullName?: string;

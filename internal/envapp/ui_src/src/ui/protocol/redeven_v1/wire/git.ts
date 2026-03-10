@@ -62,6 +62,35 @@ export type wire_git_list_workspace_changes_resp = {
   conflicted: wire_git_workspace_change[];
 };
 
+export type wire_git_stage_workspace_req = {
+  repo_root_path: string;
+  paths?: string[];
+};
+
+export type wire_git_stage_workspace_resp = {
+  repo_root_path: string;
+};
+
+export type wire_git_unstage_workspace_req = {
+  repo_root_path: string;
+  paths?: string[];
+};
+
+export type wire_git_unstage_workspace_resp = {
+  repo_root_path: string;
+};
+
+export type wire_git_commit_workspace_req = {
+  repo_root_path: string;
+  message: string;
+};
+
+export type wire_git_commit_workspace_resp = {
+  repo_root_path: string;
+  head_ref?: string;
+  head_commit?: string;
+};
+
 export type wire_git_branch_summary = {
   name?: string;
   full_name?: string;

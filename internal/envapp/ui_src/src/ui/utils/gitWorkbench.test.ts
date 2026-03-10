@@ -24,10 +24,9 @@ describe('gitWorkbench helpers', () => {
     });
 
     expect(items).toEqual([
-      { id: 'overview', label: 'Overview' },
       { id: 'changes', label: 'Changes', count: 4 },
       { id: 'branches', label: 'Branches', count: 5 },
-      { id: 'history', label: 'History' },
+      { id: 'history', label: 'Graph' },
     ]);
   });
 

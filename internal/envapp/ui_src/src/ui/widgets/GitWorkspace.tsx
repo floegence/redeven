@@ -7,6 +7,7 @@ import type {
   GitRepoSummaryResponse,
   GitResolveRepoResponse,
   GitWorkspaceChange,
+  GitWorkspaceSection,
 } from '../protocol/redeven_v1';
 import { buildGitWorkbenchSubviewItems, type GitWorkbenchSubview } from '../utils/gitWorkbench';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
@@ -37,10 +38,14 @@ export interface GitWorkspaceProps {
   workspace?: GitListWorkspaceChangesResponse | null;
   workspaceLoading?: boolean;
   workspaceError?: string;
+  selectedWorkspaceSection?: GitWorkspaceSection;
+  onSelectWorkspaceSection?: (section: GitWorkspaceSection) => void;
   selectedWorkspaceItem?: GitWorkspaceChange | null;
-  selectedWorkspaceKey?: string;
-  workspaceInspectNonce?: number;
   onSelectWorkspaceItem?: (item: GitWorkspaceChange) => void;
+  onStageWorkspaceItem?: (item: GitWorkspaceChange) => void;
+  onUnstageWorkspaceItem?: (item: GitWorkspaceChange) => void;
+  busyWorkspaceKey?: string;
+  busyWorkspaceAction?: 'stage' | 'unstage' | '';
   branches?: GitListBranchesResponse | null;
   branchesLoading?: boolean;
   branchesError?: string;
@@ -58,6 +63,10 @@ export interface GitWorkspaceProps {
   selectedCommitHash?: string;
   onSelectCommit?: (hash: string) => void;
   onLoadMore?: () => void;
+  commitMessage?: string;
+  commitBusy?: boolean;
+  onCommitMessageChange?: (value: string) => void;
+  onCommit?: (message: string) => void;
   showMobileSidebarButton?: boolean;
   onToggleSidebar?: () => void;
   onRefresh?: () => void;
@@ -94,8 +103,8 @@ export function GitWorkspace(props: GitWorkspaceProps) {
           workspace={props.workspace}
           workspaceLoading={props.workspaceLoading}
           workspaceError={props.workspaceError}
-          selectedWorkspaceKey={props.selectedWorkspaceKey}
-          onSelectWorkspaceItem={props.onSelectWorkspaceItem}
+          selectedWorkspaceSection={props.selectedWorkspaceSection}
+          onSelectWorkspaceSection={props.onSelectWorkspaceSection}
           branches={props.branches}
           branchesLoading={props.branchesLoading}
           branchesError={props.branchesError}
@@ -124,8 +133,12 @@ export function GitWorkspace(props: GitWorkspaceProps) {
           workspace={props.workspace}
           workspaceLoading={props.workspaceLoading}
           workspaceError={props.workspaceError}
+          selectedWorkspaceSection={props.selectedWorkspaceSection}
+          onSelectWorkspaceSection={props.onSelectWorkspaceSection}
           selectedWorkspaceItem={props.selectedWorkspaceItem}
-          workspaceInspectNonce={props.workspaceInspectNonce}
+          onSelectWorkspaceItem={props.onSelectWorkspaceItem}
+          busyWorkspaceKey={props.busyWorkspaceKey}
+          busyWorkspaceAction={props.busyWorkspaceAction}
           branches={props.branches}
           branchesLoading={props.branchesLoading}
           branchesError={props.branchesError}
@@ -134,6 +147,12 @@ export function GitWorkspace(props: GitWorkspaceProps) {
           compareLoading={props.compareLoading}
           compareError={props.compareError}
           selectedCommitHash={props.selectedCommitHash}
+          commitMessage={props.commitMessage}
+          commitBusy={props.commitBusy}
+          onCommitMessageChange={props.onCommitMessageChange}
+          onCommit={props.onCommit}
+          onStageSelected={props.onStageWorkspaceItem}
+          onUnstageSelected={props.onUnstageWorkspaceItem}
           showMobileSidebarButton={props.showMobileSidebarButton}
           onToggleSidebar={props.onToggleSidebar}
           onRefresh={props.onRefresh}

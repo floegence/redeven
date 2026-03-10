@@ -97,9 +97,10 @@ describe('GitWorkbench interactions', () => {
       expect(host.querySelector('button[aria-label="Toggle browser sidebar"]')).toBeNull();
       expect(refreshCount).toBe(1);
       expect(host.textContent).toContain('Branches');
-      expect(host.textContent).toContain('Repository Context');
-      expect(host.textContent).toContain('Workspace Summary');
-      expect(host.textContent).toContain('Focused View');
+      expect(host.textContent).toContain('/workspace/repo');
+      expect(host.textContent).toContain('3 changes');
+      expect(host.textContent).toContain('2 pending');
+      expect(host.textContent).toContain('Branch Snapshot');
     } finally {
       dispose();
     }

@@ -8,30 +8,28 @@ import type {
   GitListBranchesResponse,
   GitListWorkspaceChangesResponse,
   GitRepoSummaryResponse,
-  GitWorkspaceChange,
+  GitWorkspaceSection,
 } from '../protocol/redeven_v1';
 import {
-  WORKSPACE_SECTIONS,
+  WORKSPACE_REVIEW_SECTIONS,
   branchDisplayName,
   branchIdentity,
   branchStatusSummary,
-  changeMetricsText,
-  changeSecondaryPath,
   summarizeWorkspaceCount,
-  workspaceEntryKey,
   workspaceSectionCount,
-  workspaceSectionItems,
+  workspaceHealthLabel,
   workspaceSectionLabel,
   type GitWorkbenchSubview,
 } from '../utils/gitWorkbench';
 import {
   gitBranchTone,
-  gitSubviewTone,
+  gitToneBadgeClass,
   gitToneActionButtonClass,
   gitToneSelectableCardClass,
   workspaceSectionTone,
 } from './GitChrome';
-import { GitSection, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
+import { GitCommitGraph } from './GitCommitGraph';
+import { GitMetaPill, GitSection, GitSubtleNote } from './GitWorkbenchPrimitives';
 
 export interface GitWorkbenchSidebarProps {
   subview: GitWorkbenchSubview;
@@ -43,8 +41,8 @@ export interface GitWorkbenchSidebarProps {
   workspace?: GitListWorkspaceChangesResponse | null;
   workspaceLoading?: boolean;
   workspaceError?: string;
-  selectedWorkspaceKey?: string;
-  onSelectWorkspaceItem?: (item: GitWorkspaceChange) => void;
+  selectedWorkspaceSection?: GitWorkspaceSection;
+  onSelectWorkspaceSection?: (section: GitWorkspaceSection) => void;
   branches?: GitListBranchesResponse | null;
   branchesLoading?: boolean;
   branchesError?: string;
@@ -61,87 +59,41 @@ export interface GitWorkbenchSidebarProps {
   class?: string;
 }
 
-function formatRelativeTime(ms?: number): string {
-  if (!ms || !Number.isFinite(ms)) return '-';
-  const diff = Date.now() - ms;
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  if (days > 30) return new Date(ms).toLocaleDateString();
-  if (days > 0) return `${days}d ago`;
-  if (hours > 0) return `${hours}h ago`;
-  if (minutes > 0) return `${minutes}m ago`;
-  if (seconds > 5) return `${seconds}s ago`;
-  return 'now';
+function normalizeSubview(view: GitWorkbenchSubview): GitWorkbenchSubview {
+  return view === 'overview' ? 'changes' : view;
 }
 
 function selectorLabel(view: GitWorkbenchSubview): string {
-  switch (view) {
-    case 'changes':
-      return 'Workspace Summary';
+  switch (normalizeSubview(view)) {
     case 'branches':
-      return 'Branch Scope';
+      return 'Branches';
     case 'history':
-      return 'Commit History';
+      return 'Commit Graph';
+    case 'changes':
     default:
-      return 'Overview Summary';
+      return 'Changes';
   }
 }
 
 function selectorDescription(view: GitWorkbenchSubview): string {
-  switch (view) {
-    case 'overview':
-      return 'Quick counts and repository context.';
-    case 'changes':
-      return 'Choose a file to open its floating diff.';
+  switch (normalizeSubview(view)) {
     case 'branches':
-      return 'Choose a branch to load compare context.';
+      return 'Pick a branch and compare it in the main pane.';
     case 'history':
-      return 'Choose a commit to inspect changed files.';
-    default:
-      return '';
-  }
-}
-
-function overviewBadgeLabel(repoSummary?: GitRepoSummaryResponse | null): string {
-  const headRef = String(repoSummary?.headRef ?? '').trim();
-  if (headRef) return headRef;
-  if (repoSummary?.detached) return 'Detached';
-  return 'Ready';
-}
-
-function cardCountLabel(
-  view: GitWorkbenchSubview,
-  workspaceCount: number,
-  branchCount: number,
-  commitCount: number,
-  repoSummary?: GitRepoSummaryResponse | null,
-): string | number {
-  switch (view) {
+      return 'Pick a commit to inspect it on the right.';
     case 'changes':
-      return workspaceCount;
-    case 'branches':
-      return branchCount;
-    case 'history':
-      return commitCount;
-    case 'overview':
     default:
-      return overviewBadgeLabel(repoSummary);
+      return 'Use section cards to open the matching file table in the main pane.';
   }
 }
 
 export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
-  const closeAfterPick = () => {
-    props.onClose?.();
-  };
-
+  const closeAfterPick = () => props.onClose?.();
+  const activeSubview = () => normalizeSubview(props.subview);
   const workspaceCount = () => summarizeWorkspaceCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary);
   const localBranchCount = () => props.branches?.local.length ?? 0;
   const remoteBranchCount = () => props.branches?.remote.length ?? 0;
-  const branchCount = () => localBranchCount() + remoteBranchCount();
   const commitCount = () => props.commits?.length ?? 0;
-  const sidebarTone = () => gitSubviewTone(props.subview);
 
   return (
     <div class={cn('space-y-1.5 sm:space-y-2', props.class)}>
@@ -152,213 +104,154 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
         <Show when={!props.repoInfoError} fallback={<div class="py-3 text-xs break-words text-error">{props.repoInfoError}</div>}>
           <Show when={props.repoAvailable} fallback={<div class="py-3 text-xs text-muted-foreground">Current path is not inside a Git repository.</div>}>
             <div class="space-y-1.5 sm:space-y-2">
-              <GitSection
-                label={selectorLabel(props.subview)}
-                description={selectorDescription(props.subview)}
-                aside={String(cardCountLabel(props.subview, workspaceCount(), branchCount(), commitCount(), props.repoSummary))}
-                tone={sidebarTone()}
-              />
+              <div class="px-1 pb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/65">
+                {selectorLabel(activeSubview())}
+              </div>
+              <div class="px-1 text-[11px] text-muted-foreground">
+                {selectorDescription(activeSubview())}
+              </div>
 
-              <Show when={props.subview === 'overview'}>
-                <GitStatStrip
-                  columnsClass="grid-cols-2"
-                  items={[
-                    {
-                      label: 'Workspace Summary',
-                      value: String(workspaceCount()),
-                      hint: workspaceCount() > 0 ? 'Files need review' : 'Working tree is clean',
-                    },
-                    {
-                      label: 'Branch Scope',
-                      value: String(branchCount()),
-                      hint: `${localBranchCount()} local · ${remoteBranchCount()} remote`,
-                    },
-                    {
-                      label: 'Commit History',
-                      value: String(commitCount()),
-                      hint: 'Recent commits loaded',
-                    },
-                    {
-                      label: 'Stashes',
-                      value: String(props.repoSummary?.stashCount ?? 0),
-                      hint: 'Saved work',
-                    },
-                  ]}
-                />
-              </Show>
-
-              <Show when={props.subview === 'changes'}>
+              <Show when={activeSubview() === 'changes'}>
                 <Show
                   when={!props.workspaceLoading}
                   fallback={<div class="flex items-center gap-2 py-3 text-xs text-muted-foreground"><SnakeLoader size="sm" /><span>Loading workspace changes...</span></div>}
                 >
                   <Show when={!props.workspaceError} fallback={<div class="py-3 text-xs break-words text-error">{props.workspaceError}</div>}>
-                    <div class="space-y-1.5 sm:space-y-2">
-                      <For each={WORKSPACE_SECTIONS}>
-                        {(section) => {
-                          const items = () => workspaceSectionItems(props.workspace, section);
-                          const tone = () => workspaceSectionTone(section);
-                          return (
-                            <GitSection
-                              label={workspaceSectionLabel(section)}
-                              aside={String(workspaceSectionCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary, section))}
-                              tone={tone()}
-                            >
-                              <Show
-                                when={items().length > 0}
-                                fallback={<GitSubtleNote>No files in this section.</GitSubtleNote>}
+                    <div class="rounded-md border border-border/65 bg-card p-2.5">
+                      <div class="flex items-start justify-between gap-2 px-0.5">
+                        <div class="min-w-0 flex-1">
+                          <div class="text-xs font-medium text-foreground">{props.repoSummary?.headRef || 'HEAD'}</div>
+                          <div class="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                            {workspaceHealthLabel(props.workspace?.summary ?? props.repoSummary?.workspaceSummary)}
+                          </div>
+                        </div>
+                        <GitMetaPill tone={workspaceCount() > 0 ? 'warning' : 'success'}>
+                          {workspaceCount() > 0 ? `${workspaceCount()} open` : 'Clean'}
+                        </GitMetaPill>
+                      </div>
+
+                      <div class="mt-2 grid grid-cols-1 gap-1">
+                        <For each={WORKSPACE_REVIEW_SECTIONS}>
+                          {(section) => {
+                            const count = () => workspaceSectionCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary, section);
+                            const tone = () => workspaceSectionTone(section);
+                            const active = () => props.selectedWorkspaceSection === section;
+                            return (
+                              <button
+                                type="button"
+                                class={cn('w-full rounded-md px-2.5 py-2 text-left text-xs', gitToneSelectableCardClass(tone(), active()))}
+                                onClick={() => {
+                                  props.onSelectWorkspaceSection?.(section);
+                                  closeAfterPick();
+                                }}
                               >
-                                <div class="space-y-1">
-                                  <For each={items()}>
-                                    {(item) => {
-                                      const active = () => props.selectedWorkspaceKey === workspaceEntryKey(item);
-                                      return (
-                                        <button
-                                          type="button"
-                                          class={cn('w-full rounded-md px-2.5 py-2.5 text-left sm:py-1.5', gitToneSelectableCardClass(tone(), active()))}
-                                          onClick={() => {
-                                            props.onSelectWorkspaceItem?.(item);
-                                            closeAfterPick();
-                                          }}
-                                        >
-                                          <div class="min-w-0">
-                                            <div class="truncate text-[11.5px] font-medium text-current" title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
-                                            <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-                                              <span class="capitalize">{item.changeType || 'modified'}</span>
-                                              <span aria-hidden="true">·</span>
-                                              <span>{changeMetricsText(item)}</span>
-                                            </div>
-                                          </div>
-                                        </button>
-                                      );
-                                    }}
-                                  </For>
+                                <div class="flex items-start justify-between gap-2">
+                                  <div class="min-w-0 flex-1">
+                                    <div class="font-medium text-current">{workspaceSectionLabel(section)}</div>
+                                    <div class={cn('mt-0.5 text-[10px] leading-relaxed', active() ? 'text-sidebar-accent-foreground/75' : 'text-muted-foreground')}>
+                                      {count() === 0 ? 'No files in this section.' : `${count()} file${count() === 1 ? '' : 's'} available.`}
+                                    </div>
+                                  </div>
+                                  <span
+                                    class={cn(
+                                      'inline-flex min-w-[1.75rem] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-semibold',
+                                      active() ? 'bg-background/15 text-sidebar-accent-foreground' : gitToneBadgeClass(tone())
+                                    )}
+                                  >
+                                    {count()}
+                                  </span>
                                 </div>
-                              </Show>
-                            </GitSection>
-                          );
-                        }}
-                      </For>
+                              </button>
+                            );
+                          }}
+                        </For>
+                      </div>
                     </div>
                   </Show>
                 </Show>
               </Show>
 
-              <Show when={props.subview === 'branches'}>
+              <Show when={activeSubview() === 'branches'}>
                 <Show
                   when={!props.branchesLoading}
                   fallback={<div class="flex items-center gap-2 py-3 text-xs text-muted-foreground"><SnakeLoader size="sm" /><span>Loading branches...</span></div>}
                 >
                   <Show when={!props.branchesError} fallback={<div class="py-3 text-xs break-words text-error">{props.branchesError}</div>}>
-                    <div class="space-y-1.5 sm:space-y-2">
-                      <GitSection label="Local Branches" aside={String(localBranchCount())} tone="brand">
-                        <Show
-                          when={localBranchCount() > 0}
-                          fallback={<GitSubtleNote>No local branches.</GitSubtleNote>}
-                        >
-                          <div class="space-y-1">
-                            <For each={props.branches?.local ?? []}>
-                              {(branch) => {
-                                const tone = () => gitBranchTone(branch);
-                                const active = () => props.selectedBranchKey === branchIdentity(branch);
-                                return (
-                                  <button
-                                    type="button"
-                                    class={cn('w-full rounded-md px-2.5 py-2.5 text-left sm:py-1.5', gitToneSelectableCardClass(tone(), active()))}
-                                    onClick={() => {
-                                      props.onSelectBranch?.(branch);
-                                      closeAfterPick();
-                                    }}
-                                  >
-                                    <div class="min-w-0">
-                                      <div class="flex items-center gap-2">
-                                        <span class="min-w-0 flex-1 truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</span>
-                                        <Show when={branch.current}>
-                                          <span class="text-[10px] text-muted-foreground">Current</span>
-                                        </Show>
-                                      </div>
-                                      <div class="mt-0.5 truncate text-[10px] text-muted-foreground">{branchStatusSummary(branch)}</div>
-                                    </div>
-                                  </button>
-                                );
-                              }}
-                            </For>
-                          </div>
-                        </Show>
-                      </GitSection>
-
-                      <GitSection label="Remote Branches" aside={String(remoteBranchCount())} tone="violet">
-                        <Show
-                          when={remoteBranchCount() > 0}
-                          fallback={<GitSubtleNote>No remote branches.</GitSubtleNote>}
-                        >
-                          <div class="space-y-1">
-                            <For each={props.branches?.remote ?? []}>
-                              {(branch) => {
-                                const active = () => props.selectedBranchKey === branchIdentity(branch);
-                                return (
-                                  <button
-                                    type="button"
-                                    class={cn('w-full rounded-md px-2.5 py-2.5 text-left sm:py-1.5', gitToneSelectableCardClass('violet', active()))}
-                                    onClick={() => {
-                                      props.onSelectBranch?.(branch);
-                                      closeAfterPick();
-                                    }}
-                                  >
-                                    <div class="truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</div>
-                                    <div class="mt-0.5 truncate text-[10px] text-muted-foreground">{branch.subject || branchStatusSummary(branch)}</div>
-                                  </button>
-                                );
-                              }}
-                            </For>
-                          </div>
-                        </Show>
-                      </GitSection>
-                    </div>
-                  </Show>
-                </Show>
-              </Show>
-
-              <Show when={props.subview === 'history'}>
-                <GitSection label="Recent Commits" aside={String(commitCount())} tone="brand">
-                  <Show
-                    when={!props.listLoading}
-                    fallback={<div class="flex items-center gap-2 py-3 text-xs text-muted-foreground"><SnakeLoader size="sm" /><span>Loading commits...</span></div>}
-                  >
-                    <Show when={!props.listError} fallback={<div class="py-3 text-xs break-words text-error">{props.listError}</div>}>
-                      <Show
-                        when={commitCount() > 0}
-                        fallback={<GitSubtleNote>This repository has no commits yet.</GitSubtleNote>}
-                      >
+                    <GitSection label="Local" description="Branches in this checkout." aside={String(localBranchCount())} tone="brand">
+                      <Show when={localBranchCount() > 0} fallback={<GitSubtleNote>No local branches.</GitSubtleNote>}>
                         <div class="space-y-1">
-                          <For each={props.commits ?? []}>
-                            {(commit) => {
-                              const active = () => props.selectedCommitHash === commit.hash;
+                          <For each={props.branches?.local ?? []}>
+                            {(branch) => {
+                              const tone = () => gitBranchTone(branch);
+                              const active = () => props.selectedBranchKey === branchIdentity(branch);
                               return (
                                 <button
                                   type="button"
-                                  class={cn('w-full rounded-md px-2.5 py-2.5 text-left sm:py-1.5', gitToneSelectableCardClass('brand', active()))}
+                                  class={cn('w-full rounded-lg px-3 py-2.5 text-left', gitToneSelectableCardClass(tone(), active()))}
                                   onClick={() => {
-                                    props.onSelectCommit?.(commit.hash);
+                                    props.onSelectBranch?.(branch);
                                     closeAfterPick();
                                   }}
                                 >
-                                  <div class="flex items-start justify-between gap-2">
-                                    <div class="min-w-0 flex-1">
-                                      <div class="truncate text-[11.5px] font-medium text-current">{commit.subject || '(no subject)'}</div>
-                                      <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-                                        <span class="font-mono text-foreground/80 bg-muted/30 rounded px-1 py-0.5">{commit.shortHash}</span>
-                                        <span aria-hidden="true">·</span>
-                                        <span>{commit.authorName || '-'}</span>
-                                      </div>
-                                    </div>
-                                    <span class="text-[10px] text-muted-foreground">{formatRelativeTime(commit.authorTimeMs)}</span>
+                                  <div class="flex items-center gap-2">
+                                    <span class="min-w-0 flex-1 truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</span>
+                                    <Show when={branch.current}>
+                                      <span class="rounded bg-primary/[0.12] px-1.5 py-0.5 text-[10px] font-medium text-primary">Current</span>
+                                    </Show>
                                   </div>
+                                  <div class="mt-0.5 truncate text-[10px] text-muted-foreground">{branchStatusSummary(branch)}</div>
                                 </button>
                               );
                             }}
                           </For>
                         </div>
+                      </Show>
+                    </GitSection>
+
+                    <GitSection label="Remote" description="Tracking and shared refs." aside={String(remoteBranchCount())} tone="violet">
+                      <Show when={remoteBranchCount() > 0} fallback={<GitSubtleNote>No remote branches.</GitSubtleNote>}>
+                        <div class="space-y-1">
+                          <For each={props.branches?.remote ?? []}>
+                            {(branch) => {
+                              const active = () => props.selectedBranchKey === branchIdentity(branch);
+                              return (
+                                <button
+                                  type="button"
+                                  class={cn('w-full rounded-lg px-3 py-2.5 text-left', gitToneSelectableCardClass('violet', active()))}
+                                  onClick={() => {
+                                    props.onSelectBranch?.(branch);
+                                    closeAfterPick();
+                                  }}
+                                >
+                                  <div class="truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</div>
+                                  <div class="mt-0.5 truncate text-[10px] text-muted-foreground">{branch.subject || branchStatusSummary(branch)}</div>
+                                </button>
+                              );
+                            }}
+                          </For>
+                        </div>
+                      </Show>
+                    </GitSection>
+                  </Show>
+                </Show>
+              </Show>
+
+              <Show when={activeSubview() === 'history'}>
+                <GitSection label="Commit Graph" description="Recent history with merge structure." aside={String(commitCount())} tone="brand">
+                  <Show
+                    when={!props.listLoading}
+                    fallback={<div class="flex items-center gap-2 py-3 text-xs text-muted-foreground"><SnakeLoader size="sm" /><span>Loading commits...</span></div>}
+                  >
+                    <Show when={!props.listError} fallback={<div class="py-3 text-xs break-words text-error">{props.listError}</div>}>
+                      <Show when={commitCount() > 0} fallback={<GitSubtleNote>This repository has no commits yet.</GitSubtleNote>}>
+                        <GitCommitGraph
+                          commits={props.commits ?? []}
+                          selectedCommitHash={props.selectedCommitHash}
+                          onSelect={(hash) => {
+                            props.onSelectCommit?.(hash);
+                            closeAfterPick();
+                          }}
+                        />
                       </Show>
                     </Show>
                   </Show>

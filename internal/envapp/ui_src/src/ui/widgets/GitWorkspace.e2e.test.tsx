@@ -45,7 +45,7 @@ describe('GitWorkspace interactions', () => {
             onModeChange={(mode) => {
               nextMode = mode;
             }}
-            subview="overview"
+            subview="changes"
             onSubviewChange={(view) => {
               nextSubview = view;
             }}
@@ -87,7 +87,7 @@ describe('GitWorkspace interactions', () => {
       expect(host.querySelectorAll('[role="radiogroup"][aria-label="Browser mode"]').length).toBe(1);
       expect(host.querySelectorAll('[role="tablist"][aria-label="Git views"]').length).toBe(1);
 
-      const historyButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim().startsWith('History'));
+      const historyButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim().startsWith('Graph'));
       expect(historyButton).toBeTruthy();
       historyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
@@ -113,7 +113,7 @@ describe('GitWorkspace interactions', () => {
           <GitWorkspace
             mode="git"
             onModeChange={() => {}}
-            subview="overview"
+            subview="changes"
             onSubviewChange={() => {}}
             width={280}
             open={false}
@@ -166,7 +166,7 @@ describe('GitWorkspace interactions', () => {
           <GitWorkspace
             mode="git"
             onModeChange={() => {}}
-            subview="overview"
+            subview="changes"
             onSubviewChange={() => {}}
             width={280}
             open={false}

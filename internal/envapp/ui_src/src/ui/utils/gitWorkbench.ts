@@ -19,10 +19,17 @@ export type GitWorkbenchSubviewItem = {
 };
 
 export const WORKSPACE_SECTIONS: GitWorkspaceSection[] = ['staged', 'unstaged', 'untracked', 'conflicted'];
+export const WORKSPACE_REVIEW_SECTIONS: GitWorkspaceSection[] = ['unstaged', 'untracked', 'conflicted', 'staged'];
 
 export function summarizeWorkspaceCount(summary: GitWorkspaceSummary | null | undefined): number {
   return Number(summary?.stagedCount ?? 0)
     + Number(summary?.unstagedCount ?? 0)
+    + Number(summary?.untrackedCount ?? 0)
+    + Number(summary?.conflictedCount ?? 0);
+}
+
+export function summarizePendingWorkspaceCount(summary: GitWorkspaceSummary | null | undefined): number {
+  return Number(summary?.unstagedCount ?? 0)
     + Number(summary?.untrackedCount ?? 0)
     + Number(summary?.conflictedCount ?? 0);
 }
@@ -34,10 +41,9 @@ export function buildGitWorkbenchSubviewItems(params: {
 }): GitWorkbenchSubviewItem[] {
   const summary = params.workspace?.summary ?? params.repoSummary?.workspaceSummary;
   return [
-    { id: 'overview', label: 'Overview' },
     { id: 'changes', label: 'Changes', count: summarizeWorkspaceCount(summary) || undefined },
     { id: 'branches', label: 'Branches', count: params.branchesCount || undefined },
-    { id: 'history', label: 'History' },
+    { id: 'history', label: 'Graph' },
   ];
 }
 
@@ -115,6 +121,13 @@ export function pickDefaultWorkspaceChange(workspace: GitListWorkspaceChangesRes
   return null;
 }
 
+export function pickDefaultWorkspaceSection(workspace: GitListWorkspaceChangesResponse | null | undefined): GitWorkspaceSection {
+  for (const section of WORKSPACE_REVIEW_SECTIONS) {
+    if (workspaceSectionItems(workspace, section).length > 0) return section;
+  }
+  return 'unstaged';
+}
+
 export function findWorkspaceChangeByKey(
   workspace: GitListWorkspaceChangesResponse | null | undefined,
   key: string | null | undefined,
@@ -181,6 +194,25 @@ export function compareHeadline(compare: GitGetBranchCompareResponse | null | un
   return `Target branch is ahead by ${ahead} and behind by ${behind} commits.`;
 }
 
+export function syncStatusLabel(ahead?: number, behind?: number): string {
+  const aheadCount = Number(ahead ?? 0);
+  const behindCount = Number(behind ?? 0);
+  if (aheadCount <= 0 && behindCount <= 0) return 'Up to date';
+  if (aheadCount > 0 && behindCount <= 0) return `${aheadCount} outgoing`;
+  if (behindCount > 0 && aheadCount <= 0) return `${behindCount} incoming`;
+  return `${aheadCount} outgoing, ${behindCount} incoming`;
+}
+
+export function workspaceHealthLabel(summary: GitWorkspaceSummary | null | undefined): string {
+  const total = summarizeWorkspaceCount(summary);
+  if (total <= 0) return 'Working tree is clean.';
+  const staged = Number(summary?.stagedCount ?? 0);
+  const pending = summarizePendingWorkspaceCount(summary);
+  if (staged > 0 && pending > 0) return `${staged} staged, ${pending} pending review.`;
+  if (staged > 0) return `${staged} staged and ready to commit.`;
+  return `${pending} pending change${pending === 1 ? '' : 's'} to review.`;
+}
+
 export function changeDisplayPath(change: GitWorkspaceChange | GitCommitFileSummary | null | undefined): string {
   return String(change?.displayPath || change?.path || change?.newPath || change?.oldPath || '').trim() || '(unknown path)';
 }
@@ -195,4 +227,12 @@ export function changeSecondaryPath(change: GitWorkspaceChange | GitCommitFileSu
 
 export function changeMetricsText(change: GitWorkspaceChange | GitCommitFileSummary | null | undefined): string {
   return `+${change?.additions ?? 0} / −${change?.deletions ?? 0}`;
+}
+
+export function workspaceMutationPaths(change: GitWorkspaceChange | null | undefined): string[] {
+  if (!change) return [];
+  const values = [change.path, change.newPath, change.oldPath]
+    .map((item) => String(item ?? '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(values));
 }

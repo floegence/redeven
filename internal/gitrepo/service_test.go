@@ -142,6 +142,81 @@ func TestListWorkspaceChanges_EmbedsPatchText(t *testing.T) {
 	}
 }
 
+func TestStageAndUnstageWorkspacePaths(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	if err := svc.stageWorkspacePaths(context.Background(), repo, []string{workspace.TrackedPath, workspace.UntrackedPath}); err != nil {
+		t.Fatalf("stageWorkspacePaths: %v", err)
+	}
+	stagedResp, err := svc.listWorkspaceChanges(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("listWorkspaceChanges(after stage): %v", err)
+	}
+	if stagedResp.Summary.StagedCount != 2 || stagedResp.Summary.UnstagedCount != 0 || stagedResp.Summary.UntrackedCount != 0 {
+		t.Fatalf("unexpected staged summary: %+v", stagedResp.Summary)
+	}
+
+	if err := svc.unstageWorkspacePaths(context.Background(), repo, []string{workspace.UntrackedPath}); err != nil {
+		t.Fatalf("unstageWorkspacePaths: %v", err)
+	}
+	unstagedResp, err := svc.listWorkspaceChanges(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("listWorkspaceChanges(after unstage): %v", err)
+	}
+	if unstagedResp.Summary.StagedCount != 1 || unstagedResp.Summary.UntrackedCount != 1 {
+		t.Fatalf("unexpected unstaged summary: %+v", unstagedResp.Summary)
+	}
+}
+
+func TestCommitWorkspace_UsesStagedChanges(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	if err := svc.stageWorkspacePaths(context.Background(), repo, []string{workspace.TrackedPath, workspace.UntrackedPath}); err != nil {
+		t.Fatalf("stageWorkspacePaths: %v", err)
+	}
+	commitResp, err := svc.commitWorkspace(context.Background(), repo, "ship staged workspace changes")
+	if err != nil {
+		t.Fatalf("commitWorkspace: %v", err)
+	}
+	if strings.TrimSpace(commitResp.HeadCommit) == "" {
+		t.Fatalf("expected head commit after commit")
+	}
+
+	updatedRepo, err := svc.resolveExplicitRepo(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo(after commit): %v", err)
+	}
+	workspaceResp, err := svc.listWorkspaceChanges(context.Background(), updatedRepo)
+	if err != nil {
+		t.Fatalf("listWorkspaceChanges(after commit): %v", err)
+	}
+	if workspaceResp.Summary.StagedCount != 0 || workspaceResp.Summary.UnstagedCount != 0 || workspaceResp.Summary.UntrackedCount != 0 {
+		t.Fatalf("expected clean workspace after commit: %+v", workspaceResp.Summary)
+	}
+
+	commits, _, _, err := svc.listCommits(context.Background(), updatedRepo, "", 0, 1)
+	if err != nil {
+		t.Fatalf("listCommits(after commit): %v", err)
+	}
+	if len(commits) != 1 || commits[0].Subject != "ship staged workspace changes" {
+		t.Fatalf("unexpected latest commit: %+v", commits)
+	}
+}
+
 func TestListCommits_PaginatesNewestFirst(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)

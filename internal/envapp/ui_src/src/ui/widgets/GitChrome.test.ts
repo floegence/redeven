@@ -71,22 +71,20 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitToneAccentColor('neutral')).toBe('text-muted-foreground');
   });
 
-  it('uses one quiet selection style for selectable git items', () => {
-    expect(gitToneSelectableCardClass('brand', true)).toContain('bg-background/92');
-    expect(gitToneSelectableCardClass('brand', true)).toContain('shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.06)]');
-    expect(gitToneSelectableCardClass('brand', true)).toContain('border-l-[2px]');
-    expect(gitToneSelectableCardClass('brand', true)).toContain('border-l-primary');
-    expect(gitToneSelectableCardClass('brand', true)).not.toContain('border-transparent');
-    expect(gitToneSelectableCardClass('brand', true)).not.toContain('ring-indigo-500/[0.10]');
+  it('uses a strong sidebar-accent selection style for selectable git items', () => {
+    expect(gitToneSelectableCardClass('brand', true)).toContain('bg-sidebar-accent');
+    expect(gitToneSelectableCardClass('brand', true)).toContain('text-sidebar-accent-foreground');
+    expect(gitToneSelectableCardClass('brand', true)).toContain('border-sidebar-accent/70');
+    expect(gitToneSelectableCardClass('brand', true)).toContain('shadow-sm');
+    expect(gitToneSelectableCardClass('brand', true)).toContain('font-medium');
     expect(gitToneSelectableCardClass('brand', true)).toContain('cursor-pointer');
-    expect(gitToneSelectableCardClass('brand', true)).not.toContain('min-h-[38px]');
     expect(gitToneSelectableCardClass('brand', true)).toContain('focus-visible:ring-2');
 
-    expect(gitToneSelectableCardClass('info', false)).toContain('hover:bg-background/72');
-    expect(gitToneSelectableCardClass('info', false)).toContain('hover:shadow-sm');
-    expect(gitToneSelectableCardClass('info', false)).not.toContain('hover:bg-sky-500/[0.04]');
+    expect(gitToneSelectableCardClass('info', false)).toContain('border border-transparent');
+    expect(gitToneSelectableCardClass('info', false)).toContain('hover:bg-sidebar-accent/70');
+    expect(gitToneSelectableCardClass('info', false)).toContain('hover:text-sidebar-accent-foreground');
     expect(gitToneSelectableCardClass('info', false)).toContain('cursor-pointer');
-    expect(gitToneSelectableCardClass('neutral', false)).not.toContain('border-transparent');
+    expect(gitToneSelectableCardClass('neutral', false)).toContain('border-transparent');
     expect(gitToneSelectableCardClass('neutral', false)).not.toContain('hover:-translate-y-px');
   });
 
