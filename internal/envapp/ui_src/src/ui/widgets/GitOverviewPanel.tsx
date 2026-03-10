@@ -103,7 +103,7 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
                     aside={`${repoSignals().length} signals`}
                     tone="info"
                   >
-                    <div class="space-y-0.5 rounded-md bg-muted/[0.22] p-0.5">
+                    <div class="space-y-0.5 rounded-md bg-muted/[0.12] p-0.5">
                       <For each={repoSignals()}>
                         {(signal) => (
                           <div class="flex items-start justify-between gap-3 rounded bg-background/70 px-2 py-1.5 text-[11px] transition-shadow duration-150 hover:shadow-sm" title={signal.value}>

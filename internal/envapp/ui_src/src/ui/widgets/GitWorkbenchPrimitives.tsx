@@ -51,7 +51,7 @@ export interface GitStatStripProps {
 
 export function GitStatStrip(props: GitStatStripProps) {
   return (
-    <div class={cn('grid gap-0.5 rounded-md bg-muted/[0.22] p-0.5 text-[11px]', props.columnsClass || 'grid-cols-2 lg:grid-cols-4', props.class)}>
+    <div class={cn('grid gap-0.5 rounded-md bg-muted/[0.12] p-0.5 text-[11px]', props.columnsClass || 'grid-cols-2 lg:grid-cols-4', props.class)}>
       <For each={props.items}>
         {(item) => (
           <div class="rounded bg-background/70 px-2 py-1.5 transition-shadow duration-150 hover:shadow-sm">

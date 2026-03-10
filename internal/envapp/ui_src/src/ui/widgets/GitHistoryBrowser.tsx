@@ -217,7 +217,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
 
                           <GitSection label="Changed Files" description="Select a changed file to open its floating diff." aside={String(commitFiles().length)} tone="info">
                             <Show when={commitFiles().length > 0} fallback={<div class="text-xs text-muted-foreground">No changed files are available for this commit.</div>}>
-                              <div class="grid grid-cols-1 gap-1 xl:grid-cols-2">
+                              <div class="grid grid-cols-1 gap-0.5">
                                 <For each={commitFiles()}>
                                   {(file) => {
                                     const active = () => selectedFileKey() === selectedFileIdentity(file);

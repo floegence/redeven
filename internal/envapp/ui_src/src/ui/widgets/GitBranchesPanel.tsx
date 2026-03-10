@@ -137,7 +137,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                         <Show when={!props.compareLoading} fallback={<div class="text-xs text-muted-foreground">Loading compare files...</div>}>
                           <Show when={!props.compareError} fallback={<div class="text-xs break-words text-error">{props.compareError}</div>}>
                             <Show when={(props.compare?.files.length ?? 0) > 0} fallback={<div class="text-xs text-muted-foreground">No compare files are available for this branch.</div>}>
-                              <div class="grid grid-cols-1 gap-1 xl:grid-cols-2">
+                              <div class="grid grid-cols-1 gap-0.5">
                                 <For each={props.compare?.files ?? []}>
                                   {(file) => {
                                     const active = () => selectedFileKey() === compareFileKey(file);

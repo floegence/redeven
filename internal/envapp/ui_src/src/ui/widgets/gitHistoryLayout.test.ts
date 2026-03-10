@@ -162,7 +162,7 @@ describe('browser workspace layout wiring', () => {
     expect(overviewSrc).toContain('Repository Signals');
     expect(overviewSrc).toContain('GitStatStrip');
     expect(overviewSrc).toContain('columnsClass="grid-cols-2 xl:grid-cols-4"');
-    expect(overviewSrc).toContain('space-y-0.5 rounded-md bg-muted/[0.22] p-0.5');
+    expect(overviewSrc).toContain('space-y-0.5 rounded-md bg-muted/[0.12] p-0.5');
     expect(overviewSrc).toContain('rounded bg-background/70 px-2 py-1.5 text-[11px] transition-shadow duration-150 hover:shadow-sm');
     expect(overviewSrc).not.toContain('xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]');
     expect(overviewSrc).not.toContain('text-[24px] font-semibold tracking-tight');
@@ -234,7 +234,7 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('Focused View');
     expect(src).toContain('gitToneActionButtonClass()');
     expect(src).toContain('variant="ghost"');
-    expect(src).toContain('border-b border-border/40');
+    expect(src).toContain('bg-gradient-to-b from-background to-background/95');
     expect(src).not.toContain('bg-card');
     expect(src).not.toContain("gitToneSurfaceClass(subviewTone())");
     expect(src).not.toContain('variant="outline"');

@@ -82,16 +82,16 @@ export function GitWorkbench(props: GitWorkbenchProps) {
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
-      <div class="shrink-0 border-b border-border/40 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90">
+      <div class="shrink-0 border-b border-border/40 bg-gradient-to-b from-background to-background/95 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset] px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90">
         <section class="space-y-1.5">
           <div class="flex flex-wrap items-start justify-between gap-2">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-1.5">
-                <span class={cn('h-1.5 w-1.5 shrink-0 rounded-full', gitToneDotClass(subviewTone()))} aria-hidden="true" />
+                <span class={cn('h-2 w-2 shrink-0 rounded-full', gitToneDotClass(subviewTone()))} aria-hidden="true" />
                 <div class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">Repository Context</div>
               </div>
-              <div class="mt-0.5 max-w-full truncate text-xs font-medium text-foreground">{repoLabel()}</div>
-              <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+              <div class="mt-0.5 max-w-full truncate text-sm font-semibold text-foreground">{repoLabel()}</div>
+              <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] tracking-wide text-muted-foreground">
                 <span>{changeCount() > 0 ? `${changeCount()} open` : 'Clean'}</span>
                 <span aria-hidden="true">·</span>
                 <span>{subviewLabel(props.subview)}</span>
