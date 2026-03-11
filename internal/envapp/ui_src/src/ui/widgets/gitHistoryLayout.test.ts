@@ -59,6 +59,9 @@ describe('browser workspace layout wiring', () => {
     expect(workspaceSrc).toContain('overflow-auto overflow-x-hidden overscroll-contain');
     expect(workspaceSrc).toContain('[-webkit-overflow-scrolling:touch]');
     expect(workspaceSrc).toContain('[touch-action:pan-y_pinch-zoom]');
+    expect(workspaceSrc).toContain('redeven-file-list-compact');
+    expect(workspaceSrc).toContain('border-b border-border/60 bg-background/95 px-2.5 py-1.5');
+    expect(workspaceSrc).toContain('text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60');
     expect(workspaceSrc).not.toContain('FileBrowserCurrentFolderCard');
     expect(workspaceSrc).toContain('<FileBrowserSidebarTree');
     expect(workspaceSrc).not.toContain('DirectoryTree');
@@ -74,6 +77,9 @@ describe('browser workspace layout wiring', () => {
     expect(treeSrc).toContain('MAX_VISIBLE_DEPTH = 5');
     expect(treeSrc).toContain('data-tree-row-path={props.item.path}');
     expect(treeSrc).toContain("scrollIntoView({ block: 'nearest', inline: 'nearest' })");
+    expect(treeSrc).toContain('group flex items-center rounded-md py-0.5 text-xs');
+    expect(treeSrc).toContain('h-3.5 w-3.5 shrink-0');
+    expect(treeSrc).toContain('gap-1 rounded py-0.5 pl-1 pr-1.5 text-left text-xs');
     expect(workspaceSrc).not.toContain('getSidebarScrollContainer: () => sidebarScrollEl');
   });
 

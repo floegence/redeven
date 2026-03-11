@@ -203,6 +203,27 @@
   transform-box: fill-box;
 }
 
+.redeven-file-list-compact > div:first-child {
+  font-size: 0.625rem;
+}
+
+.redeven-file-list-compact > div:first-child button {
+  padding: 0.375rem 0.625rem;
+}
+
+.redeven-file-list-compact > div:last-child > div > button {
+  height: 2rem;
+  font-size: 0.75rem;
+}
+
+.redeven-file-list-compact > div:last-child > div > button > div {
+  padding: 0.375rem 0.625rem;
+}
+
+.redeven-file-list-compact > div:last-child > div > button > div:first-child {
+  gap: 0.375rem;
+}
+
 /* Reduce global overlay loader size to better match the compact Env App style. */
 .floe-loader-ambient + [role='status'] {
   width: 2.25rem;

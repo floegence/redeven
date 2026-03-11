@@ -6,9 +6,8 @@ import { FolderIcon, FolderOpenIcon, useFileBrowser, type FileItem } from '@floe
 const MAX_VISIBLE_DEPTH = 5;
 const TREE_ROW_BASE_PADDING = 8;
 const TREE_ROW_DEPTH_STEP = 12;
-const FILE_TREE_PANEL_CLASS = 'rounded-lg border border-border/45 bg-muted/20 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]';
-const FILE_TREE_TINY_BADGE_CLASS = 'rounded-full border border-border/40 bg-background/80 px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground';
-const FILE_TREE_TINY_ACCENT_BADGE_CLASS = 'rounded-full border border-primary/20 bg-primary/[0.05] px-1.5 py-0.5 text-[9px] font-medium text-primary/80';
+const FILE_TREE_TINY_BADGE_CLASS = 'rounded-full border border-border/40 bg-background/80 px-1 py-0 text-[8px] font-medium leading-4 text-muted-foreground';
+const FILE_TREE_TINY_ACCENT_BADGE_CLASS = 'rounded-full border border-primary/20 bg-primary/[0.05] px-1 py-0 text-[8px] font-medium leading-4 text-primary/80';
 
 function getPathSegments(path: string): string[] {
   return path.split('/').filter(Boolean);
@@ -115,63 +114,58 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
   };
 
   return (
-    <div class="space-y-0.5">
-      <div class="py-0.5" style={{ 'padding-left': rowPaddingLeft() }}>
-        <div
-          class={cn(
-            'flex items-center gap-0.5 rounded-md border border-transparent bg-transparent transition-colors duration-150',
-            isCurrent() && 'border-border/55 bg-muted/45 text-foreground',
-            !isCurrent() && 'hover:bg-muted/35',
-            isDropTarget() && canAcceptDrop() && 'border-primary/25 bg-primary/[0.06]',
-            isDropTarget() && !canAcceptDrop() && 'border-error/25 bg-error/[0.05]',
-          )}
-          onPointerEnter={handlePointerEnter}
-          onPointerLeave={handlePointerLeave}
-        >
-          <Show
-            when={hasChildren()}
-            fallback={<span class="flex h-8 w-8 shrink-0 items-center justify-center rounded text-muted-foreground/45 sm:h-6 sm:w-6"><ChevronRight class="h-3 w-3 opacity-0" /></span>}
-          >
-            <button
-              type="button"
-              class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 sm:h-6 sm:w-6"
-              aria-label={isExpanded() ? 'Collapse folder' : 'Expand folder'}
-              aria-expanded={isExpanded()}
-              onClick={handleToggleExpand}
-            >
-              <ChevronRight class={cn('h-3 w-3 transition-transform duration-150', isExpanded() && 'rotate-90')} />
-            </button>
-          </Show>
-
+    <div class="flex flex-col">
+      <div
+        class={cn(
+          'group flex items-center rounded-md py-0.5 text-xs transition-all duration-150 ease-out',
+          isCurrent() ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : 'hover:bg-sidebar-accent/60',
+          isDropTarget() && canAcceptDrop() && 'bg-primary/15 outline outline-2 outline-primary/60 shadow-sm shadow-primary/10',
+          isDropTarget() && !canAcceptDrop() && 'bg-error/10 outline outline-2 outline-dashed outline-error/50',
+        )}
+        style={{ 'padding-left': rowPaddingLeft() }}
+        onPointerEnter={handlePointerEnter}
+        onPointerLeave={handlePointerLeave}
+      >
+        <Show when={hasChildren()} fallback={<span class="h-3.5 w-3.5 shrink-0" />}>
           <button
-            ref={(el) => {
-              props.registerRow(props.item.path, el);
-            }}
             type="button"
-            data-tree-row-path={props.item.path}
-            class="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded px-1.5 py-2 text-left text-xs text-foreground transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 sm:py-1"
-            aria-current={isCurrent() ? 'page' : undefined}
-            title={props.item.path}
-            onClick={handleNavigate}
-            onContextMenu={handleContextMenu}
+            class="flex h-3.5 w-3.5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground transition-transform duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring focus-visible:ring-inset"
+            aria-label={isExpanded() ? 'Collapse folder' : 'Expand folder'}
+            aria-expanded={isExpanded()}
+            onClick={handleToggleExpand}
           >
-            <span class={cn('flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground', isCurrent() && 'text-primary')}>
-              <Show when={hasChildren() && isExpanded()} fallback={<FolderIcon class="h-3.5 w-3.5" />}>
-                <FolderOpenIcon class="h-3.5 w-3.5" />
-              </Show>
-            </span>
-            <span class="min-w-0 flex-1 truncate font-medium">{props.item.name}</span>
-            <Show when={compactDepthOverflow() > 0}>
-              <span class={compactDepthOverflow() > 0 ? FILE_TREE_TINY_ACCENT_BADGE_CLASS : FILE_TREE_TINY_BADGE_CLASS}>
-                +{compactDepthOverflow()}
-              </span>
-            </Show>
+            <ChevronRight class={cn('h-3 w-3 opacity-50 transition-transform duration-150', isExpanded() && 'rotate-90')} />
           </button>
-        </div>
+        </Show>
+
+        <button
+          ref={(el) => {
+            props.registerRow(props.item.path, el);
+          }}
+          type="button"
+          data-tree-row-path={props.item.path}
+          class="flex min-w-0 flex-1 cursor-pointer items-center gap-1 rounded py-0.5 pl-1 pr-1.5 text-left text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring focus-visible:ring-inset"
+          aria-current={isCurrent() ? 'page' : undefined}
+          title={props.item.path}
+          onClick={handleNavigate}
+          onContextMenu={handleContextMenu}
+        >
+          <span class={cn('flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground', isCurrent() && 'text-sidebar-accent-foreground')}>
+            <Show when={hasChildren() && isExpanded()} fallback={<FolderIcon class="h-3.5 w-3.5" />}>
+              <FolderOpenIcon class="h-3.5 w-3.5" />
+            </Show>
+          </span>
+          <span class="min-w-0 flex-1 truncate">{props.item.name}</span>
+          <Show when={compactDepthOverflow() > 0}>
+            <span class={compactDepthOverflow() > 0 ? FILE_TREE_TINY_ACCENT_BADGE_CLASS : FILE_TREE_TINY_BADGE_CLASS}>
+              +{compactDepthOverflow()}
+            </span>
+          </Show>
+        </button>
       </div>
 
       <Show when={hasChildren() && isExpanded()}>
-        <div class="space-y-0.5">
+        <div class="flex flex-col">
           <For each={childFolders()}>
             {(child) => (
               <FileBrowserSidebarTreeRow
@@ -240,9 +234,9 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
     <div class={cn('flex min-h-full flex-col', props.class)}>
       <Show
         when={rootFolders().length > 0}
-        fallback={<div class={cn(FILE_TREE_PANEL_CLASS, 'px-2.5 py-2 text-[11px] text-muted-foreground')}>No folders in this location.</div>}
+        fallback={<div class="px-0.5 py-1.5 text-[11px] text-muted-foreground">No folders in this location.</div>}
       >
-        <div class="space-y-0.5 pb-1">
+        <div class="flex flex-col pb-0.5">
           <For each={rootFolders()}>
             {(item) => (
               <FileBrowserSidebarTreeRow
