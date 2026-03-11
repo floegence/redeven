@@ -56,70 +56,66 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
   };
 
   return (
-    <div class="shrink-0 border-b border-border/60 bg-background/95 px-3 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/90">
-      <div class="space-y-2">
-        <div class="flex flex-wrap items-center gap-2">
-          <Show when={props.showMobileSidebarButton && props.onToggleSidebar}>
-            <Button
-              size="xs"
-              variant="outline"
-              icon={FilesIcon}
-              class="cursor-pointer"
-              aria-label="Toggle browser sidebar"
-              onClick={props.onToggleSidebar}
-            >
-              Sidebar
-            </Button>
-          </Show>
-
-          <Button size="xs" variant="outline" icon={ArrowUp} class="cursor-pointer" onClick={browser.navigateUp} disabled={!canNavigateUp()}>
-            Up
+    <div class="shrink-0 border-b border-border/60 bg-background/95 px-2.5 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-background/90">
+      <div class="flex flex-wrap items-center gap-2">
+        <Show when={props.showMobileSidebarButton && props.onToggleSidebar}>
+          <Button
+            size="xs"
+            variant="outline"
+            icon={FilesIcon}
+            class="cursor-pointer"
+            aria-label="Toggle browser sidebar"
+            onClick={props.onToggleSidebar}
+          >
+            Sidebar
           </Button>
+        </Show>
 
-          <div class="min-w-0 flex-1 rounded-lg border border-border/50 bg-background px-3 py-2 shadow-sm">
-            <Breadcrumb class="min-w-0" />
-          </div>
+        <Button size="xs" variant="outline" icon={ArrowUp} class="cursor-pointer" onClick={browser.navigateUp} disabled={!canNavigateUp()}>
+          Up
+        </Button>
 
-          <SegmentedControl
-            size="sm"
-            value={browser.viewMode()}
-            onChange={(value) => browser.setViewMode(value === 'grid' ? 'grid' : 'list')}
-            options={[
-              { value: 'list', label: 'List' },
-              { value: 'grid', label: 'Grid' },
-            ]}
+        <div class="min-w-0 flex-1 rounded-md border border-border/50 bg-background px-2.5 py-1.5 shadow-sm">
+          <Breadcrumb class="min-w-0" />
+        </div>
+
+        <label class="flex min-w-[200px] flex-1 items-center gap-1.5 rounded-md border border-border/50 bg-background px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring sm:max-w-[15rem] sm:flex-none">
+          <Search class="size-3.5 shrink-0" />
+          <input
+            type="text"
+            value={browser.filterQuery()}
+            onInput={(event) => browser.setFilterQuery(event.currentTarget.value)}
+            placeholder="Filter files"
+            aria-label="Filter files"
+            class="min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground/70"
           />
-        </div>
+        </label>
 
-        <div class="flex flex-wrap items-center gap-2">
-          <label class="flex min-w-[220px] flex-1 items-center gap-2 rounded-lg border border-border/50 bg-background px-3 py-2 text-xs text-muted-foreground shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring">
-            <Search class="size-3.5 shrink-0" />
-            <input
-              type="text"
-              value={browser.filterQuery()}
-              onInput={(event) => browser.setFilterQuery(event.currentTarget.value)}
-              placeholder="Filter files"
-              aria-label="Filter files"
-              class="min-w-0 flex-1 border-0 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/70"
-            />
-          </label>
-        </div>
+        <SegmentedControl
+          size="sm"
+          value={browser.viewMode()}
+          onChange={(value) => browser.setViewMode(value === 'grid' ? 'grid' : 'list')}
+          options={[
+            { value: 'list', label: 'List' },
+            { value: 'grid', label: 'Grid' },
+          ]}
+        />
+      </div>
 
-        <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-          <span>{browser.currentFiles().length} visible</span>
-          <Show when={browser.selectedItems().size > 0}>
-            <>
-              <span aria-hidden="true">·</span>
-              <span class="text-primary/80">{browser.selectedItems().size} selected</span>
-            </>
-          </Show>
-          <Show when={browser.filterQueryApplied().trim()}>
-            <>
-              <span aria-hidden="true">·</span>
-              <span>Filter active</span>
-            </>
-          </Show>
-        </div>
+      <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+        <span>{browser.currentFiles().length} visible</span>
+        <Show when={browser.selectedItems().size > 0}>
+          <>
+            <span aria-hidden="true">·</span>
+            <span class="text-primary/80">{browser.selectedItems().size} selected</span>
+          </>
+        </Show>
+        <Show when={browser.filterQueryApplied().trim()}>
+          <>
+            <span aria-hidden="true">·</span>
+            <span>Filter active</span>
+          </>
+        </Show>
       </div>
     </div>
   );
@@ -129,7 +125,7 @@ function FileWorkspaceStatusBar() {
   const browser = useFileBrowser();
 
   return (
-    <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-3 py-1.5 text-[10px] text-muted-foreground">
+    <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-2.5 py-1 text-[10px] text-muted-foreground">
       <div class="flex flex-wrap items-center gap-1.5">
         <span>{browser.currentFiles().length} items</span>
         <Show when={browser.filterQueryApplied().trim()}>
@@ -188,7 +184,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
       modeSwitcher={<GitHistoryModeSwitch mode={props.mode} onChange={props.onModeChange} gitHistoryDisabled={props.gitHistoryDisabled} class="w-full" />}
       sidebarBody={(
         <div class="flex h-full min-h-0 flex-col gap-1.5">
-          <div class="flex items-center justify-between px-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60">
+          <div class="flex items-center justify-between px-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
             <span>Folder Tree</span>
             <span>{browser.currentPath() === '/' ? 'Root' : 'Compact depth'}</span>
           </div>
@@ -224,7 +220,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             class="min-h-0 flex-1 overflow-auto bg-background"
           >
             <Show when={browser.viewMode() === 'list'} fallback={<FileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
-              <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />
+              <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full redeven-file-list-compact" />
             </Show>
           </div>
           <FileWorkspaceStatusBar />
