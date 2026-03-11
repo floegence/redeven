@@ -6,6 +6,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetCommitDetail = vi.fn();
+const mockGetBranchCompare = vi.fn();
 
 vi.mock('../protocol/redeven_v1', async () => {
   const actual = await vi.importActual<typeof import('../protocol/redeven_v1')>('../protocol/redeven_v1');
@@ -14,7 +15,7 @@ vi.mock('../protocol/redeven_v1', async () => {
     useRedevenRpc: () => ({
       git: {
         getCommitDetail: mockGetCommitDetail,
-        getBranchCompare: vi.fn(),
+        getBranchCompare: mockGetBranchCompare,
         listWorkspaceChanges: vi.fn(),
       },
     }),
@@ -26,6 +27,7 @@ import { GitBranchesPanel } from './GitBranchesPanel';
 
 beforeEach(() => {
   mockGetCommitDetail.mockReset();
+  mockGetBranchCompare.mockReset();
   mockGetCommitDetail.mockResolvedValue({
     repoRootPath: '/workspace/repo',
     commit: {
@@ -35,6 +37,25 @@ beforeEach(() => {
       subject: 'Merge feature',
     },
     files: [],
+  });
+  mockGetBranchCompare.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    baseRef: 'main',
+    targetRef: 'feature/demo',
+    aheadCount: 1,
+    behindCount: 0,
+    mergeBase: 'abc1234',
+    commits: [],
+    files: [
+      {
+        changeType: 'modified',
+        path: 'src/compare.ts',
+        displayPath: 'src/compare.ts',
+        additions: 12,
+        deletions: 4,
+        patchText: '@@ -1 +1 @@\n-before\n+after',
+      },
+    ],
   });
 
   Object.defineProperty(window, 'matchMedia', {
@@ -244,6 +265,65 @@ describe('GitBranchesPanel interactions', () => {
       await Promise.resolve();
       expect(document.body.textContent).toContain('Commit Diff');
       expect(document.body.textContent).toContain('history updated');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps compare dialog scrolling inside the changed files table region', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={{
+                  name: 'feature/demo',
+                  fullName: 'refs/heads/feature/demo',
+                  kind: 'local',
+                }}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    { name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local' },
+                  ],
+                  remote: [],
+                }}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const compareButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Compare')) as HTMLButtonElement | undefined;
+      expect(compareButton).toBeTruthy();
+      compareButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(document.body.textContent).toContain('Compare branches');
+      expect(document.body.textContent).toContain('Changed Files');
+      expect(document.body.textContent).toContain('src/compare.ts');
+
+      const dialogRoot = Array.from(document.body.querySelectorAll('[role="dialog"]')).find((node) => node.textContent?.includes('Compare branches')) as HTMLDivElement | undefined;
+      expect(dialogRoot).toBeTruthy();
+      expect(dialogRoot?.className).toContain('[&>div:last-child]:overflow-hidden');
+      expect(dialogRoot?.className).toContain('[&>div:last-child]:flex');
+      expect(dialogRoot?.className).toContain('[&>div:last-child]:p-0');
+
+      const changedFilesScrollRegion = Array.from(dialogRoot?.querySelectorAll('div') ?? []).find((node) => node.className.includes('min-h-0 flex-1 overflow-auto')) as HTMLDivElement | undefined;
+      expect(changedFilesScrollRegion).toBeTruthy();
     } finally {
       dispose();
     }
