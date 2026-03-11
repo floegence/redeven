@@ -122,8 +122,8 @@ describe('browser workspace layout wiring', () => {
 
     expect(changesSrc).toContain("import { GitDiffDialog } from './GitDiffDialog';");
     expect(branchesSrc).toContain("import { GitDiffDialog } from './GitDiffDialog';");
-    expect(historySrc).toContain("import { GitPatchViewer } from './GitPatchViewer';");
-    expect(historySrc).not.toContain("import { GitDiffDialog } from './GitDiffDialog';");
+    expect(historySrc).toContain("import { GitDiffDialog } from './GitDiffDialog';");
+    expect(historySrc).not.toContain("import { GitPatchViewer } from './GitPatchViewer';");
   });
 
 
@@ -136,8 +136,9 @@ describe('browser workspace layout wiring', () => {
     expect(historySrc).toContain("lines.slice(1).join('\\n').trim()");
     expect(historySrc).toContain('Commit Overview');
     expect(historySrc).toContain('Files in Commit');
-    expect(historySrc).toContain('Patch Preview');
-    expect(historySrc).toContain('xl:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]');
+    expect(historySrc).not.toContain('Patch Preview');
+    expect(historySrc).toContain('Click a file to inspect its diff in a dialog.');
+    expect(historySrc).toContain('Commit Diff');
     expect(historySrc).toContain('aria-expanded={commitBodyExpanded()}');
   });
 

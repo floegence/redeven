@@ -3,10 +3,10 @@ import { cn } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
-import { changeMetricsText, changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench';
-import { GitPatchViewer } from './GitPatchViewer';
-import { gitChangeTone, gitToneSelectableCardClass } from './GitChrome';
-import { GitMetaPill, GitSection, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
+import { changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench';
+import { gitChangeTone, gitToneDotClass } from './GitChrome';
+import { GitDiffDialog } from './GitDiffDialog';
+import { GitChangeMetrics, GitMetaPill, GitSection, GitSubtleNote } from './GitWorkbenchPrimitives';
 
 const COMMIT_BODY_PREVIEW_LINES = 2;
 const COMMIT_BODY_PREVIEW_CHARS = 160;
@@ -46,18 +46,14 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const [commitFiles, setCommitFiles] = createSignal<GitCommitFileSummary[]>([]);
   const [detailLoading, setDetailLoading] = createSignal(false);
   const [detailError, setDetailError] = createSignal('');
-  const [selectedFileKey, setSelectedFileKey] = createSignal('');
   const [commitBodyExpanded, setCommitBodyExpanded] = createSignal(false);
+  const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
+  const [diffDialogItem, setDiffDialogItem] = createSignal<GitCommitFileSummary | null>(null);
 
   let detailReqSeq = 0;
 
   const repoAvailable = createMemo(() => Boolean(props.repoInfo?.available && props.repoInfo?.repoRootPath));
   const commitHash = createMemo(() => String(props.selectedCommitHash ?? '').trim());
-  const selectedFile = createMemo<GitCommitFileSummary | null>(() => {
-    const key = selectedFileKey();
-    if (!key) return null;
-    return commitFiles().find((file) => selectedFileIdentity(file) === key) ?? null;
-  });
   const commitBodyText = createMemo(() => normalizeCommitBody(commitDetail()));
   const hasExpandableCommitBody = createMemo(() => {
     const body = commitBodyText();
@@ -69,9 +65,10 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const resetDetailState = () => {
     setCommitDetail(null);
     setCommitFiles([]);
-    setSelectedFileKey('');
     setDetailError('');
     setDetailLoading(false);
+    setDiffDialogItem(null);
+    setDiffDialogOpen(false);
   };
 
   const loadCommitDetail = async (hash: string) => {
@@ -86,13 +83,11 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
       const files = Array.isArray(resp?.files) ? resp.files : [];
       setCommitDetail(resp?.commit ?? null);
       setCommitFiles(files);
-      setSelectedFileKey(files[0] ? selectedFileIdentity(files[0]) : '');
     } catch (err) {
       if (seq !== detailReqSeq) return;
       setDetailError(err instanceof Error ? err.message : String(err ?? 'Failed to load commit detail'));
       setCommitDetail(null);
       setCommitFiles([]);
-      setSelectedFileKey('');
     } finally {
       if (seq === detailReqSeq) setDetailLoading(false);
     }
@@ -114,6 +109,14 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   createEffect(() => {
     commitHash();
     setCommitBodyExpanded(false);
+    setDiffDialogItem(null);
+    setDiffDialogOpen(false);
+  });
+
+  createEffect(() => {
+    if (!diffDialogOpen()) return;
+    if (diffDialogItem()) return;
+    setDiffDialogOpen(false);
   });
 
   return (
@@ -150,24 +153,17 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                   return (
                     <div class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
                       <div class="space-y-3">
-                        <GitSection label="Commit Overview" description={detail.subject || '(no subject)'} aside={detail.shortHash} tone="brand">
-                          <div class="space-y-3">
-                            <div class="flex flex-wrap items-center gap-1.5">
-                              <GitMetaPill tone="brand">{detail.shortHash}</GitMetaPill>
-                              <GitMetaPill tone="info">{detail.authorName || 'Unknown author'}</GitMetaPill>
-                              <GitMetaPill tone="neutral">{commitFiles().length} file{commitFiles().length === 1 ? '' : 's'}</GitMetaPill>
+                        <GitSection label="Commit Overview" aside={detail.shortHash} tone="brand">
+                          <div class="space-y-2">
+                            <div class="space-y-1">
+                              <div class="text-sm font-medium leading-snug text-foreground">{detail.subject || '(no subject)'}</div>
+                              <div class="flex flex-wrap items-center gap-1.5">
+                                <GitMetaPill tone="info">{detail.authorName || 'Unknown author'}</GitMetaPill>
+                                <GitMetaPill tone="neutral">{formatDetailTime(detail.authorTimeMs)}</GitMetaPill>
+                                <GitMetaPill tone="neutral">{commitFiles().length} file{commitFiles().length === 1 ? '' : 's'}</GitMetaPill>
+                                <GitMetaPill tone="neutral">{detail.parents.length > 0 ? `${detail.parents.length} parent${detail.parents.length === 1 ? '' : 's'}` : 'Root commit'}</GitMetaPill>
+                              </div>
                             </div>
-
-                            <GitStatStrip
-                              columnsClass="grid-cols-1 sm:grid-cols-2"
-                              items={[
-                                { label: 'Author', value: detail.authorName || '-' },
-                                { label: 'When', value: formatDetailTime(detail.authorTimeMs) },
-                                { label: 'Parents', value: detail.parents.length > 0 ? detail.parents.map((item) => item.slice(0, 7)).join(', ') : 'Root commit' },
-                                { label: 'Files', value: String(commitFiles().length) },
-                              ]}
-                            />
-
                             <Show when={commitBodyText()}>
                               <div class="space-y-1.5">
                                 <GitSubtleNote>
@@ -202,54 +198,75 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                           </div>
                         </GitSection>
 
-                        <div class="grid gap-3 xl:grid-cols-[minmax(280px,0.72fr)_minmax(0,1.28fr)]">
-                          <GitSection label="Files in Commit" description="Select a file to inspect the patch without losing the commit context." aside={String(commitFiles().length)} tone="info">
-                            <Show when={commitFiles().length > 0} fallback={<GitSubtleNote>No changed files are available for this commit.</GitSubtleNote>}>
-                              <div class="space-y-2">
-                                <div class="max-h-[24rem] overflow-auto pr-1">
-                                  <div class="grid grid-cols-1 gap-1">
+                        <GitSection label="Files in Commit" description="Click a file to inspect its diff in a dialog." aside={String(commitFiles().length)} tone="info">
+                          <Show when={commitFiles().length > 0} fallback={<GitSubtleNote>No changed files are available for this commit.</GitSubtleNote>}>
+                            <div class="overflow-hidden rounded-md border border-border/65 bg-card">
+                              <div class="min-h-0 overflow-auto">
+                                <table class="w-full min-w-[42rem] text-xs md:min-w-0">
+                                  <thead class="sticky top-0 z-10 bg-muted/30 backdrop-blur">
+                                    <tr class="border-b border-border/60 text-left text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                                      <th class="px-3 py-2.5 font-medium">Path</th>
+                                      <th class="px-3 py-2.5 font-medium">Status</th>
+                                      <th class="px-3 py-2.5 font-medium">Changes</th>
+                                      <th class="sticky right-0 z-20 border-l border-border/50 bg-muted/30 px-3 py-2.5 text-right font-medium">Action</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
                                     <For each={commitFiles()}>
                                       {(file) => {
-                                        const active = () => selectedFileKey() === selectedFileIdentity(file);
                                         const tone = () => gitChangeTone(file.changeType);
+                                        const active = () => selectedFileIdentity(diffDialogItem()) === selectedFileIdentity(file) && diffDialogOpen();
                                         return (
-                                          <button
-                                            type="button"
-                                            class={cn('w-full rounded-lg px-3 py-2.5 text-left text-xs', gitToneSelectableCardClass(tone(), active()))}
-                                            onClick={() => setSelectedFileKey(selectedFileIdentity(file))}
+                                          <tr
+                                            aria-selected={active()}
+                                            class={`group border-b border-border/45 last:border-b-0 ${active() ? 'bg-muted/45' : 'bg-transparent hover:bg-muted/25'}`}
                                           >
-                                            <div class="space-y-1">
-                                              <div class="truncate font-medium text-current" title={changeSecondaryPath(file)}>{changeSecondaryPath(file)}</div>
-                                              <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-                                                <GitMetaPill tone={tone()} class="capitalize">{file.changeType || 'modified'}</GitMetaPill>
-                                                <span>{file.isBinary ? `Binary · ${changeMetricsText(file)}` : changeMetricsText(file)}</span>
+                                            <td class="px-3 py-2.5 align-top">
+                                              <div class="min-w-0">
+                                                <button
+                                                  type="button"
+                                                  class="block max-w-full cursor-pointer truncate text-left text-xs font-medium text-foreground underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                                                  title={changeSecondaryPath(file)}
+                                                  onClick={() => {
+                                                    setDiffDialogItem(file);
+                                                    setDiffDialogOpen(true);
+                                                  }}
+                                                >
+                                                  {changeSecondaryPath(file)}
+                                                </button>
                                               </div>
-                                            </div>
-                                          </button>
+                                            </td>
+                                            <td class="px-3 py-2.5 align-top">
+                                              <div class="inline-flex items-center gap-1.5 text-xs text-foreground">
+                                                <span class={cn('h-1.5 w-1.5 rounded-full', gitToneDotClass(tone()))} aria-hidden="true" />
+                                                <GitMetaPill tone={tone()} class="capitalize">{file.changeType || 'modified'}</GitMetaPill>
+                                              </div>
+                                            </td>
+                                            <td class="px-3 py-2.5 align-top">
+                                              <GitChangeMetrics additions={file.additions} deletions={file.deletions} />
+                                            </td>
+                                            <td class={`sticky right-0 z-10 border-l border-border/45 px-3 py-2.5 text-right align-top shadow-[-1px_0_0_rgba(0,0,0,0.03)] ${active() ? 'bg-muted/45' : 'bg-card group-hover:bg-muted/25'}`}>
+                                              <button
+                                                type="button"
+                                                class="inline-flex min-w-[5.5rem] items-center justify-center rounded-sm border border-input bg-background px-2.5 py-1.5 text-[11px] font-medium text-foreground shadow-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                                                onClick={() => {
+                                                  setDiffDialogItem(file);
+                                                  setDiffDialogOpen(true);
+                                                }}
+                                              >
+                                                View Diff
+                                              </button>
+                                            </td>
+                                          </tr>
                                         );
                                       }}
                                     </For>
-                                  </div>
-                                </div>
-                                <GitSubtleNote>Commit selection stays on the left rail, while file inspection stays here so you can review one commit deeply without losing your place.</GitSubtleNote>
+                                  </tbody>
+                                </table>
                               </div>
-                            </Show>
-                          </GitSection>
-
-                          <GitSection
-                            class="min-h-[24rem]"
-                            label="Patch Preview"
-                            description={selectedFile() ? changeSecondaryPath(selectedFile()) : 'Choose a changed file to render its patch preview.'}
-                            aside={selectedFile() ? changeMetricsText(selectedFile()) : 'No file'}
-                            tone={selectedFile() ? gitChangeTone(selectedFile()?.changeType) : 'neutral'}
-                          >
-                            <GitPatchViewer
-                              item={selectedFile()}
-                              emptyMessage="Select a changed file to inspect its patch."
-                              unavailableMessage={(file) => (file.isBinary ? 'Binary file changed. Inline text diff is not available.' : undefined)}
-                            />
-                          </GitSection>
-                        </div>
+                            </div>
+                          </Show>
+                        </GitSection>
                       </div>
                     </div>
                   );
@@ -259,6 +276,19 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
           </Show>
         </Show>
       </Show>
+
+      <GitDiffDialog
+        open={diffDialogOpen()}
+        onOpenChange={(open) => {
+          setDiffDialogOpen(open);
+          if (!open) setDiffDialogItem(null);
+        }}
+        item={diffDialogItem()}
+        title="Commit Diff"
+        description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected file diff.'}
+        emptyMessage="Select a changed file to inspect its diff."
+        unavailableMessage={(file) => (file.isBinary ? 'Binary file changed. Inline text diff is not available.' : undefined)}
+      />
     </div>
   );
 }
