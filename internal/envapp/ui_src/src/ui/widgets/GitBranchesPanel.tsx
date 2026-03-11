@@ -141,7 +141,7 @@ interface BranchCompareFilesTableProps {
 
 function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
   return (
-    <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
+    <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
       <Show
         when={props.items.length > 0}
         fallback={(
@@ -216,7 +216,7 @@ interface BranchStatusTableProps {
 
 function BranchStatusTable(props: BranchStatusTableProps) {
   return (
-    <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
+    <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
       <Show
         when={props.items.length > 0}
         fallback={(
@@ -371,12 +371,12 @@ function HistoryList(props: Pick<
               )}
             >
               <Show when={!props.listError} fallback={<div class="px-1 py-3 text-xs break-words text-error">{props.listError}</div>}>
-                <div class="min-h-0 flex-1">
+                <div class="flex min-h-0 flex-1 overflow-hidden">
                   <Show
                     when={(props.commits?.length ?? 0) > 0}
                     fallback={<GitSubtleNote>No commit history is available for this branch.</GitSubtleNote>}
                   >
-                    <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
+                    <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
                       <div class="min-h-0 flex-1 overflow-auto">
                         <table class="w-full min-w-[42rem] text-xs md:min-w-0">
                           <thead class="sticky top-0 z-10 bg-muted/30 backdrop-blur">
@@ -612,11 +612,11 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
           '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
           '[&>div:first-child>button]:bg-transparent [&>div:first-child>button]:text-muted-foreground',
           '[&>div:first-child>button:hover]:bg-muted/80 [&>div:first-child>button:hover]:text-foreground',
-          '[&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:overflow-hidden [&>div:last-child]:p-0',
+          '[&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:!overflow-hidden [&>div:last-child]:!p-0',
           layout.isMobile() ? 'h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none' : 'max-h-[88vh] w-[min(1100px,94vw)]',
         )}
       >
-        <div class="flex h-full min-h-0 flex-col">
+        <div class="flex min-h-0 flex-1 flex-col">
           <div class="flex shrink-0 flex-col gap-2 px-4 pb-1">
             <div class="grid gap-3 md:grid-cols-2">
               <label class="space-y-1">
@@ -671,7 +671,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
                           <div class="text-[11px] text-muted-foreground">Open any file to inspect the diff.</div>
                         </div>
 
-                        <div class="min-h-0 flex-1">
+                        <div class="flex min-h-0 flex-1 overflow-hidden">
                           <BranchCompareFilesTable
                             items={compareFiles()}
                             selectedKey={selectedKey()}
@@ -886,7 +886,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             </section>
 
             <Show when={visibleStatusWorkspace()}>
-              <div class="min-h-0 flex-1">
+              <div class="flex min-h-0 flex-1 overflow-hidden">
                 <BranchStatusTable
                   items={visibleStatusItems()}
                   selectedKey={visibleStatusKey()}

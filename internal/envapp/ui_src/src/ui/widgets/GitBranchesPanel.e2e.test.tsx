@@ -318,9 +318,9 @@ describe('GitBranchesPanel interactions', () => {
 
       const dialogRoot = Array.from(document.body.querySelectorAll('[role="dialog"]')).find((node) => node.textContent?.includes('Compare branches')) as HTMLDivElement | undefined;
       expect(dialogRoot).toBeTruthy();
-      expect(dialogRoot?.className).toContain('[&>div:last-child]:overflow-hidden');
+      expect(dialogRoot?.className).toContain('[&>div:last-child]:!overflow-hidden');
       expect(dialogRoot?.className).toContain('[&>div:last-child]:flex');
-      expect(dialogRoot?.className).toContain('[&>div:last-child]:p-0');
+      expect(dialogRoot?.className).toContain('[&>div:last-child]:!p-0');
 
       const changedFilesScrollRegion = Array.from(dialogRoot?.querySelectorAll('div') ?? []).find((node) => node.className.includes('min-h-0 flex-1 overflow-auto')) as HTMLDivElement | undefined;
       expect(changedFilesScrollRegion).toBeTruthy();
