@@ -108,9 +108,9 @@ describe('GitWorkbenchSidebar interactions', () => {
 
     try {
       expect(host.textContent).toContain('Commit Graph');
-      expect(host.textContent).toContain('Recent history with merge structure.');
       expect(host.textContent).toContain('Merge x2');
       expect(host.querySelectorAll('svg')).not.toHaveLength(0);
+      expect(host.textContent).not.toContain('Recent history with merge structure.');
     } finally {
       dispose();
     }

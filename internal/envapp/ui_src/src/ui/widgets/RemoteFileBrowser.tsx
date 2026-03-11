@@ -54,6 +54,7 @@ import {
   workspaceMutationPaths,
   type GitWorkbenchSubview,
 } from '../utils/gitWorkbench';
+import { buildGitMutationRefreshPlan, type GitMutationRefreshKind } from '../utils/gitMutationRefresh';
 import {
   extNoDot,
   getParentDir,
@@ -95,6 +96,17 @@ const PAGE_MODE_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:page-mode:';
 const GIT_SUBVIEW_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:git-subview:';
 
 type GitMutationScope = 'stage' | 'unstage' | 'commit' | 'fetch' | 'pull' | 'push' | 'checkout' | '';
+
+type GitMutationRepoResponse = {
+  repoRootPath: string;
+  headRef?: string;
+  headCommit?: string;
+};
+
+type GitLoadOptions = {
+  silent?: boolean;
+  repoRootPath?: string;
+};
 
 function normalizePageSidebarWidth(width: unknown): number {
   const raw = typeof width === 'number' && Number.isFinite(width) ? width : PAGE_SIDEBAR_DEFAULT_WIDTH;
@@ -460,7 +472,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const repoHistoryAvailable = () => Boolean(repoInfo()?.available && repoInfo()?.repoRootPath);
 
-  const resolveRepoInfo = async (path: string = currentBrowserPath()): Promise<GitResolveRepoResponse | null> => {
+  const resolveActiveRepoRootPath = (overridePath?: string): string => {
+    const candidate = String(overridePath ?? repoInfo()?.repoRootPath ?? '').trim();
+    return candidate;
+  };
+
+  const resolveRepoInfo = async (path: string = currentBrowserPath(), options: { silent?: boolean } = {}): Promise<GitResolveRepoResponse | null> => {
     const client = protocol.client();
     if (!client) {
       repoReqSeq += 1;
@@ -472,9 +489,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
 
     const seq = ++repoReqSeq;
-    setRepoInfoLoading(true);
-    setRepoInfoResolved(false);
-    setRepoInfoError('');
+    if (!options.silent) {
+      setRepoInfoLoading(true);
+      setRepoInfoResolved(false);
+      setRepoInfoError('');
+    }
     try {
       const resp = await rpc.git.resolveRepo({ path: normalizePath(path) });
       if (seq !== repoReqSeq) return null;
@@ -492,16 +511,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     } catch (err) {
       if (seq !== repoReqSeq) return null;
       const result = classifyPathLoadError(err);
-      if (result.status === 'invalid_path') {
-        setRepoInfo({ available: false });
-        setRepoInfoError('');
+      if (!options.silent) {
+        if (result.status === 'invalid_path') {
+          setRepoInfo({ available: false });
+          setRepoInfoError('');
+        } else {
+          setRepoInfo(null);
+          setRepoInfoError(result.message ?? 'Failed to inspect Git repository.');
+        }
       } else {
-        setRepoInfo(null);
-        setRepoInfoError(result.message ?? 'Failed to inspect Git repository.');
+        notification.warning('Git refresh incomplete', result.message ?? 'Failed to inspect the updated repository state.');
       }
       return null;
     } finally {
-      if (seq === repoReqSeq) {
+      if (!options.silent && seq === repoReqSeq) {
         setRepoInfoLoading(false);
         setRepoInfoResolved(true);
       }
@@ -751,9 +774,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           }
           : prev));
         setGitCommitMessage('');
-        void loadGitRepoSummary();
-        void loadGitBranches();
-        void loadGitCommits(true);
+        void refreshGitStateAfterMutation('commit', resp);
         notification.success('Committed', `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
       },
     );
@@ -766,22 +787,62 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     return '';
   };
 
-  const refreshGitRepoStateAfterMutation = async () => {
-    const nextInfo = await resolveRepoInfo(currentBrowserPath());
-    if (!nextInfo?.available) {
-      resetGitCommitSidebar();
-      resetGitWorkbenchData();
-      return;
+  const applyGitMutationRepoState = (resp: GitMutationRepoResponse) => {
+    const repoRootPath = String(resp.repoRootPath ?? '').trim() || resolveActiveRepoRootPath();
+    const nextHeadRef = typeof resp.headRef === 'string' ? resp.headRef : undefined;
+    const nextHeadCommit = typeof resp.headCommit === 'string' ? resp.headCommit : undefined;
+    const nextRepoKey = repoRootPath ? `${repoRootPath}|${nextHeadCommit ?? (repoInfo()?.headCommit ?? '')}` : '';
+
+    if (nextRepoKey) {
+      lastGitRepoKey = nextRepoKey;
     }
-    lastGitRepoKey = '';
-    await Promise.all([
-      loadGitRepoSummary(),
-      loadGitWorkspace(),
-      loadGitBranches(),
-    ]);
-    if (gitSubview() === 'history' || (gitSubview() === 'branches' && selectedGitBranchSubview() === 'history')) {
+
+    setRepoInfo((prev) => (prev
+      ? {
+        ...prev,
+        available: true,
+        repoRootPath: repoRootPath || prev.repoRootPath,
+        headRef: nextHeadRef ?? prev.headRef,
+        headCommit: nextHeadCommit ?? prev.headCommit,
+      }
+      : prev));
+
+    setGitRepoSummary((prev) => (prev
+      ? {
+        ...prev,
+        repoRootPath: repoRootPath || prev.repoRootPath,
+        headRef: nextHeadRef ?? prev.headRef,
+        headCommit: nextHeadCommit ?? prev.headCommit,
+      }
+      : prev));
+  };
+
+  const refreshGitStateAfterMutation = async (kind: GitMutationRefreshKind, resp: GitMutationRepoResponse) => {
+    applyGitMutationRepoState(resp);
+
+    const repoRootPath = String(resp.repoRootPath ?? '').trim() || resolveActiveRepoRootPath();
+    if (!repoRootPath) return;
+
+    const plan = buildGitMutationRefreshPlan(kind, {
+      subview: gitSubview(),
+      branchSubview: selectedGitBranchSubview(),
+    });
+
+    const refreshes: Array<Promise<unknown>> = [];
+    if (plan.refreshRepoSummary) {
+      refreshes.push(loadGitRepoSummary({ silent: true, repoRootPath }));
+    }
+    if (plan.refreshWorkspace) {
+      refreshes.push(loadGitWorkspace({ silent: true, repoRootPath }));
+    }
+    if (plan.refreshBranches) {
+      refreshes.push(loadGitBranches({ silent: true, repoRootPath }));
+    }
+    await Promise.all(refreshes);
+
+    if (plan.refreshCommits) {
       lastGitCommitContextKey = '';
-      await loadGitCommits(true, currentGitCommitRef());
+      await loadGitCommits(true, currentGitCommitRef(), { silent: true, repoRootPath });
     }
   };
 
@@ -792,8 +853,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       'fetch',
       'repo:fetch',
       () => rpc.git.fetchRepo({ repoRootPath }),
-      () => {
-        void refreshGitRepoStateAfterMutation();
+      (resp) => {
+        void refreshGitStateAfterMutation('fetch', resp);
         notification.success('Fetched', 'Remote refs were updated.');
       },
     );
@@ -807,7 +868,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       'repo:pull',
       () => rpc.git.pullRepo({ repoRootPath }),
       (resp) => {
-        void refreshGitRepoStateAfterMutation();
+        void refreshGitStateAfterMutation('pull', resp);
         notification.success('Pulled', `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
       },
     );
@@ -821,7 +882,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       'repo:push',
       () => rpc.git.pushRepo({ repoRootPath }),
       (resp) => {
-        void refreshGitRepoStateAfterMutation();
+        void refreshGitStateAfterMutation('push', resp);
         notification.success('Pushed', `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
       },
     );
@@ -840,58 +901,76 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         kind: branch.kind,
       }),
       (resp) => {
-        void refreshGitRepoStateAfterMutation();
+        void refreshGitStateAfterMutation('checkout', resp);
         notification.success('Checked out', `${resp.headRef || branch.name || 'branch'} is now active.`);
       },
     );
   };
 
-  const loadGitRepoSummary = async () => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+  const loadGitRepoSummary = async (options: GitLoadOptions = {}) => {
+    const repoRootPath = resolveActiveRepoRootPath(options.repoRootPath);
     if (!repoRootPath || !protocol.client()) return;
     const seq = ++gitRepoSummaryReqSeq;
-    setGitRepoSummaryLoading(true);
-    setGitRepoSummaryError('');
+    if (!options.silent) {
+      setGitRepoSummaryLoading(true);
+      setGitRepoSummaryError('');
+    }
     try {
       const resp = await rpc.git.getRepoSummary({ repoRootPath });
       if (seq !== gitRepoSummaryReqSeq) return;
       setGitRepoSummary(resp);
+      return resp;
     } catch (err) {
       if (seq !== gitRepoSummaryReqSeq) return;
-      setGitRepoSummary(null);
-      setGitRepoSummaryError(err instanceof Error ? err.message : String(err ?? 'Failed to load repository summary'));
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load repository summary');
+      if (!options.silent) {
+        setGitRepoSummary(null);
+        setGitRepoSummaryError(message);
+      } else {
+        notification.warning('Git refresh incomplete', message);
+      }
     } finally {
-      if (seq === gitRepoSummaryReqSeq) setGitRepoSummaryLoading(false);
+      if (!options.silent && seq === gitRepoSummaryReqSeq) setGitRepoSummaryLoading(false);
     }
   };
 
-  const loadGitWorkspace = async () => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+  const loadGitWorkspace = async (options: GitLoadOptions = {}) => {
+    const repoRootPath = resolveActiveRepoRootPath(options.repoRootPath);
     if (!repoRootPath || !protocol.client()) return;
     const seq = ++gitWorkspaceReqSeq;
-    setGitWorkspaceLoading(true);
-    setGitWorkspaceError('');
+    if (!options.silent) {
+      setGitWorkspaceLoading(true);
+      setGitWorkspaceError('');
+    }
     try {
       const resp = await rpc.git.listWorkspaceChanges({ repoRootPath });
       if (seq !== gitWorkspaceReqSeq) return;
       applyWorkspaceSnapshot(resp);
+      return resp;
     } catch (err) {
       if (seq !== gitWorkspaceReqSeq) return;
-      setGitWorkspace(null);
-      setSelectedGitWorkspaceSection('unstaged');
-      setSelectedGitWorkspaceKey('');
-      setGitWorkspaceError(err instanceof Error ? err.message : String(err ?? 'Failed to load workspace changes'));
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load workspace changes');
+      if (!options.silent) {
+        setGitWorkspace(null);
+        setSelectedGitWorkspaceSection('unstaged');
+        setSelectedGitWorkspaceKey('');
+        setGitWorkspaceError(message);
+      } else {
+        notification.warning('Git refresh incomplete', message);
+      }
     } finally {
-      if (seq === gitWorkspaceReqSeq) setGitWorkspaceLoading(false);
+      if (!options.silent && seq === gitWorkspaceReqSeq) setGitWorkspaceLoading(false);
     }
   };
 
-  const loadGitBranches = async () => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+  const loadGitBranches = async (options: GitLoadOptions = {}) => {
+    const repoRootPath = resolveActiveRepoRootPath(options.repoRootPath);
     if (!repoRootPath || !protocol.client()) return;
     const seq = ++gitBranchesReqSeq;
-    setGitBranchesLoading(true);
-    setGitBranchesError('');
+    if (!options.silent) {
+      setGitBranchesLoading(true);
+      setGitBranchesError('');
+    }
     try {
       const resp = await rpc.git.listBranches({ repoRootPath });
       if (seq !== gitBranchesReqSeq) return;
@@ -900,13 +979,19 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const nextBranch = findGitBranchByKey(resp, currentKey) ?? pickDefaultGitBranch(resp);
       setSelectedGitBranchName(branchIdentity(nextBranch));
       setSelectedGitBranchSubview((prev) => (prev === 'history' ? 'history' : 'status'));
+      return resp;
     } catch (err) {
       if (seq !== gitBranchesReqSeq) return;
-      setGitBranches(null);
-      setSelectedGitBranchName('');
-      setGitBranchesError(err instanceof Error ? err.message : String(err ?? 'Failed to load branches'));
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load branches');
+      if (!options.silent) {
+        setGitBranches(null);
+        setSelectedGitBranchName('');
+        setGitBranchesError(message);
+      } else {
+        notification.warning('Git refresh incomplete', message);
+      }
     } finally {
-      if (seq === gitBranchesReqSeq) setGitBranchesLoading(false);
+      if (!options.silent && seq === gitBranchesReqSeq) setGitBranchesLoading(false);
     }
   };
 
@@ -924,17 +1009,19 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     void loadGitBranches();
   };
 
-  const loadGitCommits = async (reset: boolean, ref = gitCommitListRef()) => {
-    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+  const loadGitCommits = async (reset: boolean, ref = gitCommitListRef(), options: GitLoadOptions = {}) => {
+    const repoRootPath = resolveActiveRepoRootPath(options.repoRootPath);
     if (!repoRootPath || !protocol.client()) return;
     const seq = ++gitListReqSeq;
     const nextRef = String(ref ?? '').trim();
-    setGitListError('');
-    if (reset) {
-      setGitCommitListRef(nextRef);
-      setGitListLoading(true);
-    } else {
-      setGitListLoadingMore(true);
+    if (!options.silent) {
+      setGitListError('');
+      if (reset) {
+        setGitCommitListRef(nextRef);
+        setGitListLoading(true);
+      } else {
+        setGitListLoadingMore(true);
+      }
     }
     try {
       const resp = await rpc.git.listCommits({
@@ -958,12 +1045,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (current && !allItems.some((item) => item.hash === current)) {
         setSelectedCommitHash('');
       }
+      if (reset) {
+        setGitCommitListRef(nextRef);
+      }
+      return resp;
     } catch (err) {
       if (seq !== gitListReqSeq) return;
       const message = err instanceof Error ? err.message : String(err ?? 'Failed to load commits');
-      setGitListError(message);
+      if (!options.silent) {
+        setGitListError(message);
+      } else {
+        notification.warning('Git refresh incomplete', message);
+      }
     } finally {
-      if (seq === gitListReqSeq) {
+      if (!options.silent && seq === gitListReqSeq) {
         setGitListLoading(false);
         setGitListLoadingMore(false);
       }

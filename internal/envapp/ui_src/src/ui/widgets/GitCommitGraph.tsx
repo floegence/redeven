@@ -204,7 +204,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
     <div class={cn('overflow-hidden rounded-md border border-border/55 bg-card', props.class)}>
       <div class="relative">
         <svg
-          class="pointer-events-none absolute inset-y-0 left-0 z-0 border-r border-border/40 bg-muted/[0.14]"
+          class="pointer-events-none absolute inset-y-0 left-0 z-10 border-r border-border/40 bg-muted/[0.14]"
           width={width()}
           height={height()}
           viewBox={`0 0 ${width()} ${height()}`}
@@ -307,16 +307,23 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                   data-graph-columns={row.columns}
                   style={{ 'grid-template-columns': `${width()}px minmax(0, 1fr)` }}
                   class={cn(
-                    'grid w-full cursor-pointer appearance-none items-stretch bg-transparent text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
-                    selected() ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'hover:bg-muted/[0.28]',
+                    'group relative grid w-full cursor-pointer appearance-none items-stretch overflow-hidden bg-transparent text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
+                    selected() ? 'text-sidebar-accent-foreground' : 'text-foreground',
                   )}
                   onClick={() => props.onSelect?.(row.commit.hash)}
                 >
-                  <div style={{ height: `${ROW_HEIGHT}px` }} aria-hidden="true" />
+                  <div
+                    aria-hidden="true"
+                    class={cn(
+                      'absolute inset-0 z-0 transition-colors duration-150',
+                      selected() ? 'bg-sidebar-accent' : 'bg-transparent group-hover:bg-muted/[0.28]',
+                    )}
+                  />
+                  <div style={{ height: `${ROW_HEIGHT}px` }} class="relative z-20" aria-hidden="true" />
                   <div
                     style={{ height: `${ROW_HEIGHT}px` }}
                     class={cn(
-                      'min-w-0 px-3 py-1.5',
+                      'relative z-20 min-w-0 px-3 py-1.5',
                       'flex flex-col justify-center',
                       rowIndex() === rowCount() - 1 ? '' : 'border-b border-border/40',
                     )}

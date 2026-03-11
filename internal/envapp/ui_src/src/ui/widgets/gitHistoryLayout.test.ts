@@ -203,13 +203,22 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('Local');
     expect(src).toContain('Remote');
     expect(src).toContain('Pick a branch to inspect its status or history in the main pane.');
-    expect(src).toContain('Recent history with merge structure.');
+    expect(src).not.toContain('Recent history with merge structure.');
     expect(src).toContain('space-y-1.5 sm:space-y-2');
     expect(src).toContain('WORKSPACE_REVIEW_SECTIONS');
     expect(src).toContain('No files in this section.');
     expect(src).toContain('gitToneSelectableCardClass(tone(), active())');
     expect(src).toContain('text-sidebar-accent-foreground/75');
     expect(src).not.toContain('text-lg font-semibold tracking-tight');
+  });
+
+  it('keeps the commit graph rails above row selection backgrounds', () => {
+    const src = read('./GitCommitGraph.tsx');
+
+    expect(src).toContain('absolute inset-y-0 left-0 z-10 border-r border-border/40 bg-muted/[0.14]');
+    expect(src).toContain('absolute inset-0 z-0 transition-colors duration-150');
+    expect(src).toContain('relative z-20 min-w-0 px-3 py-1.5');
+    expect(src).toContain('group relative grid w-full cursor-pointer appearance-none items-stretch overflow-hidden');
   });
 
 

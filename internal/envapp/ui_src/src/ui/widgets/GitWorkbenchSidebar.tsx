@@ -93,7 +93,6 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
   const workspaceCount = () => summarizeWorkspaceCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary);
   const localBranchCount = () => props.branches?.local.length ?? 0;
   const remoteBranchCount = () => props.branches?.remote.length ?? 0;
-  const commitCount = () => props.commits?.length ?? 0;
 
   return (
     <div class={cn('space-y-1.5 sm:space-y-2', props.class)}>
@@ -237,33 +236,31 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
               </Show>
 
               <Show when={activeSubview() === 'history'}>
-                <GitSection label="Commit Graph" description="Recent history with merge structure." aside={String(commitCount())} tone="brand">
-                  <Show
-                    when={!props.listLoading}
-                    fallback={<div class="flex items-center gap-2 py-3 text-xs text-muted-foreground"><SnakeLoader size="sm" /><span>Loading commits...</span></div>}
-                  >
-                    <Show when={!props.listError} fallback={<div class="py-3 text-xs break-words text-error">{props.listError}</div>}>
-                      <Show when={commitCount() > 0} fallback={<GitSubtleNote>This repository has no commits yet.</GitSubtleNote>}>
-                        <GitCommitGraph
-                          commits={props.commits ?? []}
-                          selectedCommitHash={props.selectedCommitHash}
-                          onSelect={(hash) => {
-                            props.onSelectCommit?.(hash);
-                            closeAfterPick();
-                          }}
-                        />
-                      </Show>
+                <Show
+                  when={!props.listLoading}
+                  fallback={<div class="flex items-center gap-2 py-3 text-xs text-muted-foreground"><SnakeLoader size="sm" /><span>Loading commits...</span></div>}
+                >
+                  <Show when={!props.listError} fallback={<div class="py-3 text-xs break-words text-error">{props.listError}</div>}>
+                    <Show when={(props.commits?.length ?? 0) > 0} fallback={<GitSubtleNote>This repository has no commits yet.</GitSubtleNote>}>
+                      <GitCommitGraph
+                        commits={props.commits ?? []}
+                        selectedCommitHash={props.selectedCommitHash}
+                        onSelect={(hash) => {
+                          props.onSelectCommit?.(hash);
+                          closeAfterPick();
+                        }}
+                      />
                     </Show>
                   </Show>
+                </Show>
 
-                  <Show when={props.hasMore}>
-                    <div class="mt-2 pt-1">
-                      <Button size="sm" variant="ghost" class={cn('w-full', gitToneActionButtonClass())} onClick={props.onLoadMore} loading={props.listLoadingMore} disabled={props.listLoadingMore}>
-                        Load More
-                      </Button>
-                    </div>
-                  </Show>
-                </GitSection>
+                <Show when={props.hasMore}>
+                  <div class="pt-1">
+                    <Button size="sm" variant="ghost" class={cn('w-full', gitToneActionButtonClass())} onClick={props.onLoadMore} loading={props.listLoadingMore} disabled={props.listLoadingMore}>
+                      Load More
+                    </Button>
+                  </div>
+                </Show>
               </Show>
             </div>
           </Show>

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { LayoutProvider } from '@floegence/floe-webapp-core';
-import { createResource } from 'solid-js';
+import { createEffect, createResource } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,6 +11,27 @@ import { RemoteFileBrowser } from './RemoteFileBrowser';
 const widgetStateStore = vi.hoisted(() => ({
   values: {} as Record<string, Record<string, unknown>>,
   updateCalls: [] as Array<{ widgetId: string; key: string; value: unknown }>,
+}));
+
+const notificationStore = vi.hoisted(() => ({
+  success: [] as Array<{ title: string; message?: string }>,
+  error: [] as Array<{ title: string; message?: string }>,
+  warning: [] as Array<{ title: string; message?: string }>,
+  info: [] as Array<{ title: string; message?: string }>,
+}));
+
+const gitWorkspaceRenderStore = vi.hoisted(() => ({
+  snapshots: [] as Array<{
+    repoInfoLoading: boolean;
+    repoSummaryLoading: boolean;
+    workspaceLoading: boolean;
+    branchesLoading: boolean;
+    listLoading: boolean;
+    fetchBusy: boolean;
+    pullBusy: boolean;
+    pushBusy: boolean;
+    checkoutBusy: boolean;
+  }>,
 }));
 
 const mockRpc = vi.hoisted(() => ({
@@ -25,6 +46,10 @@ const mockRpc = vi.hoisted(() => ({
     listBranches: vi.fn(),
     getBranchCompare: vi.fn(),
     listCommits: vi.fn(),
+    fetchRepo: vi.fn(),
+    pullRepo: vi.fn(),
+    pushRepo: vi.fn(),
+    checkoutBranch: vi.fn(),
   },
 }));
 
@@ -52,10 +77,18 @@ vi.mock('@floegence/floe-webapp-core', async () => {
       isMobile: () => false,
     }),
     useNotification: () => ({
-      error: () => {},
-      success: () => {},
-      warning: () => {},
-      info: () => {},
+      error: (title: string, message?: string) => {
+        notificationStore.error.push({ title, message });
+      },
+      success: (title: string, message?: string) => {
+        notificationStore.success.push({ title, message });
+      },
+      warning: (title: string, message?: string) => {
+        notificationStore.warning.push({ title, message });
+      },
+      info: (title: string, message?: string) => {
+        notificationStore.info.push({ title, message });
+      },
     }),
   };
 });
@@ -86,9 +119,57 @@ vi.mock('./FileBrowserWorkspace', () => ({
 }));
 
 vi.mock('./GitWorkspace', () => ({
-  GitWorkspace: (props: { mode: string; currentPath: string; subview: string }) => (
-    <div data-testid="git-workspace">git:{props.mode}:{props.subview}:{props.currentPath}</div>
-  ),
+  GitWorkspace: (props: {
+    mode: string;
+    currentPath: string;
+    subview: string;
+    repoInfoLoading?: boolean;
+    repoSummaryLoading?: boolean;
+    workspaceLoading?: boolean;
+    branchesLoading?: boolean;
+    listLoading?: boolean;
+    fetchBusy?: boolean;
+    pullBusy?: boolean;
+    pushBusy?: boolean;
+    checkoutBusy?: boolean;
+    onFetch?: () => void;
+    onPull?: () => void;
+    onPush?: () => void;
+    onCheckoutBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
+  }) => {
+    createEffect(() => {
+      gitWorkspaceRenderStore.snapshots.push({
+        repoInfoLoading: Boolean(props.repoInfoLoading),
+        repoSummaryLoading: Boolean(props.repoSummaryLoading),
+        workspaceLoading: Boolean(props.workspaceLoading),
+        branchesLoading: Boolean(props.branchesLoading),
+        listLoading: Boolean(props.listLoading),
+        fetchBusy: Boolean(props.fetchBusy),
+        pullBusy: Boolean(props.pullBusy),
+        pushBusy: Boolean(props.pushBusy),
+        checkoutBusy: Boolean(props.checkoutBusy),
+      });
+    });
+
+    return (
+      <div data-testid="git-workspace">
+        <div>git:{props.mode}:{props.subview}:{props.currentPath}</div>
+        <button type="button" onClick={() => props.onFetch?.()}>mock-fetch</button>
+        <button type="button" onClick={() => props.onPull?.()}>mock-pull</button>
+        <button type="button" onClick={() => props.onPush?.()}>mock-push</button>
+        <button
+          type="button"
+          onClick={() => props.onCheckoutBranch?.({
+            name: 'feature/demo',
+            fullName: 'refs/heads/feature/demo',
+            kind: 'local',
+          })}
+        >
+          mock-checkout
+        </button>
+      </div>
+    );
+  },
 }));
 
 async function flush() {
@@ -147,6 +228,11 @@ beforeEach(() => {
     },
   };
   widgetStateStore.updateCalls = [];
+  notificationStore.success = [];
+  notificationStore.error = [];
+  notificationStore.warning = [];
+  notificationStore.info = [];
+  gitWorkspaceRenderStore.snapshots = [];
 
   mockRpc.fs.list.mockResolvedValue({ entries: [] });
   mockRpc.fs.getHome.mockResolvedValue({ path: '/Users/tester' });
@@ -188,6 +274,26 @@ beforeEach(() => {
     commits: [{ hash: 'abc1234', shortHash: 'abc1234', parents: [], subject: 'Initial commit' }],
     hasMore: false,
     nextOffset: 0,
+  });
+  mockRpc.git.fetchRepo.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    headRef: 'main',
+    headCommit: 'abc1234',
+  });
+  mockRpc.git.pullRepo.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    headRef: 'main',
+    headCommit: 'def5678',
+  });
+  mockRpc.git.pushRepo.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    headRef: 'main',
+    headCommit: 'abc1234',
+  });
+  mockRpc.git.checkoutBranch.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    headRef: 'feature/demo',
+    headCommit: 'fedcba9',
   });
 });
 
@@ -235,6 +341,72 @@ describe('RemoteFileBrowser persistence', () => {
     try {
       await flush();
       expect(widgetStateStore.updateCalls).toEqual([]);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps repository sync actions on local busy states and shows success toasts', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      gitWorkspaceRenderStore.snapshots = [];
+
+      const fetchButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-fetch') as HTMLButtonElement | undefined;
+      expect(fetchButton).toBeTruthy();
+      fetchButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.git.fetchRepo).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo' });
+      expect(notificationStore.success).toContainEqual({ title: 'Fetched', message: 'Remote refs were updated.' });
+      expect(gitWorkspaceRenderStore.snapshots.length).toBeGreaterThan(0);
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => item.fetchBusy)).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading && !item.repoSummaryLoading && !item.workspaceLoading && !item.branchesLoading && !item.listLoading)).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps checkout on local busy state and shows a toast without global reload flags', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      gitWorkspaceRenderStore.snapshots = [];
+
+      const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-checkout') as HTMLButtonElement | undefined;
+      expect(checkoutButton).toBeTruthy();
+      checkoutButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.git.checkoutBranch).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo',
+        name: 'feature/demo',
+        fullName: 'refs/heads/feature/demo',
+        kind: 'local',
+      });
+      expect(notificationStore.success).toContainEqual({ title: 'Checked out', message: 'feature/demo is now active.' });
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => item.checkoutBusy)).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading && !item.repoSummaryLoading && !item.workspaceLoading && !item.branchesLoading && !item.listLoading)).toBe(true);
     } finally {
       dispose();
     }
