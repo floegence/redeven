@@ -651,16 +651,16 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
             </div>
           </div>
 
-          <div class="min-h-0 flex-1 overflow-auto px-4 pb-4">
+          <div class="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4">
             <Show
               when={!loading()}
-              fallback={<div class="flex h-full min-h-[16rem] items-center gap-2 text-xs text-muted-foreground"><SnakeLoader size="sm" /><span>Loading branch compare...</span></div>}
+              fallback={<div class="flex min-h-0 flex-1 items-center gap-2 text-xs text-muted-foreground"><SnakeLoader size="sm" /><span>Loading branch compare...</span></div>}
             >
-              <Show when={!error()} fallback={<div class="flex h-full min-h-[16rem] items-center text-xs text-error">{error()}</div>}>
-                <Show when={compare()} fallback={<div class="flex h-full min-h-[16rem] items-center text-xs text-muted-foreground">Choose two branches to inspect file changes.</div>}>
+              <Show when={!error()} fallback={<div class="flex min-h-0 flex-1 items-center text-xs text-error">{error()}</div>}>
+                <Show when={compare()} fallback={<div class="flex min-h-0 flex-1 items-center text-xs text-muted-foreground">Choose two branches to inspect file changes.</div>}>
                   {(compareAccessor) => (
-                    <div class="flex min-h-0 flex-col gap-3">
-                      <div class="flex min-h-[18rem] flex-col gap-2">
+                    <div class="flex min-h-0 flex-1 flex-col gap-3">
+                      <div class="flex min-h-0 flex-1 flex-col gap-2">
                         <div class="flex flex-wrap items-center justify-between gap-2">
                           <div class="flex flex-wrap items-center gap-2">
                             <div class="text-xs font-medium text-foreground">Changed Files</div>
@@ -671,7 +671,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
                           <div class="text-[11px] text-muted-foreground">Open any file to inspect the diff.</div>
                         </div>
 
-                        <div class="min-h-[18rem] flex-1">
+                        <div class="min-h-0 flex-1">
                           <BranchCompareFilesTable
                             items={compareFiles()}
                             selectedKey={selectedKey()}

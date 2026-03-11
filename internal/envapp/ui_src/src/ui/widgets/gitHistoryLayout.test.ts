@@ -156,6 +156,9 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('Load More');
     expect(branchesSrc).toContain('View Diff');
     expect(branchesSrc).toContain('Checkout');
+    expect(branchesSrc).toContain('flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4');
+    expect(branchesSrc).toContain('flex min-h-0 flex-1 flex-col gap-3');
+    expect(branchesSrc).toContain('min-h-0 flex-1 overflow-auto');
     expect(branchesSrc).not.toContain('Subject');
   });
 
@@ -216,8 +219,9 @@ describe('browser workspace layout wiring', () => {
     const src = read('./GitCommitGraph.tsx');
 
     expect(src).toContain('absolute inset-y-0 left-0 z-10 border-r border-border/40 bg-muted/[0.14]');
-    expect(src).toContain('absolute inset-0 z-0 transition-colors duration-150');
-    expect(src).toContain('relative z-20 min-w-0 px-3 py-1.5');
+    expect(src).not.toContain('absolute inset-0 z-0 transition-colors duration-150');
+    expect(src).toContain('relative z-20 min-w-0 px-3 py-1.5 transition-colors duration-150');
+    expect(src).toContain("selected() ? 'bg-sidebar-accent' : 'bg-transparent group-hover:bg-muted/[0.28]'");
     expect(src).toContain('group relative grid w-full cursor-pointer appearance-none items-stretch overflow-hidden');
   });
 

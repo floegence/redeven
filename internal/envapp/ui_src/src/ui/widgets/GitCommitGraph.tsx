@@ -312,19 +312,13 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                   )}
                   onClick={() => props.onSelect?.(row.commit.hash)}
                 >
-                  <div
-                    aria-hidden="true"
-                    class={cn(
-                      'absolute inset-0 z-0 transition-colors duration-150',
-                      selected() ? 'bg-sidebar-accent' : 'bg-transparent group-hover:bg-muted/[0.28]',
-                    )}
-                  />
                   <div style={{ height: `${ROW_HEIGHT}px` }} class="relative z-20" aria-hidden="true" />
                   <div
                     style={{ height: `${ROW_HEIGHT}px` }}
                     class={cn(
-                      'relative z-20 min-w-0 px-3 py-1.5',
+                      'relative z-20 min-w-0 px-3 py-1.5 transition-colors duration-150',
                       'flex flex-col justify-center',
+                      selected() ? 'bg-sidebar-accent' : 'bg-transparent group-hover:bg-muted/[0.28]',
                       rowIndex() === rowCount() - 1 ? '' : 'border-b border-border/40',
                     )}
                   >
