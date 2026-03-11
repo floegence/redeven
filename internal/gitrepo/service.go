@@ -26,6 +26,10 @@ const (
 	TypeID_GIT_STAGE_WORKSPACE   uint32 = 1108
 	TypeID_GIT_UNSTAGE_WORKSPACE uint32 = 1109
 	TypeID_GIT_COMMIT_WORKSPACE  uint32 = 1110
+	TypeID_GIT_FETCH_REPO        uint32 = 1111
+	TypeID_GIT_PULL_REPO         uint32 = 1112
+	TypeID_GIT_PUSH_REPO         uint32 = 1113
+	TypeID_GIT_CHECKOUT_BRANCH   uint32 = 1114
 
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
@@ -263,6 +267,78 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			return nil, classifyRepoRPCError(err)
 		}
 		resp, err := s.commitWorkspace(ctx, repo, req.Message)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
+
+	accessgate.RegisterTyped[fetchRepoReq, fetchRepoResp](r, TypeID_GIT_FETCH_REPO, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fetchRepoReq) (*fetchRepoResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &fetchRepoReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.fetchRepo(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
+
+	accessgate.RegisterTyped[pullRepoReq, pullRepoResp](r, TypeID_GIT_PULL_REPO, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *pullRepoReq) (*pullRepoResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &pullRepoReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.pullRepo(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
+
+	accessgate.RegisterTyped[pushRepoReq, pushRepoResp](r, TypeID_GIT_PUSH_REPO, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *pushRepoReq) (*pushRepoResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &pushRepoReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.pushRepo(ctx, repo)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
+
+	accessgate.RegisterTyped[checkoutBranchReq, checkoutBranchResp](r, TypeID_GIT_CHECKOUT_BRANCH, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *checkoutBranchReq) (*checkoutBranchResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &checkoutBranchReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.checkoutBranch(ctx, repo, req.Name, req.FullName, req.Kind)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
 		}

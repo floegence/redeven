@@ -155,8 +155,8 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('Changed Files');
     expect(branchesSrc).toContain('Load More');
     expect(branchesSrc).toContain('View Diff');
+    expect(branchesSrc).toContain('Checkout');
     expect(branchesSrc).not.toContain('Subject');
-    expect(branchesSrc).not.toContain('Checkout');
   });
 
 

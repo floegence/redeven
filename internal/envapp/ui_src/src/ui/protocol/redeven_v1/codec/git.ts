@@ -1,10 +1,14 @@
 import type {
+  GitCheckoutBranchRequest,
+  GitCheckoutBranchResponse,
   GitBranchSummary,
   GitCommitWorkspaceRequest,
   GitCommitWorkspaceResponse,
   GitCommitDetail,
   GitCommitFileSummary,
   GitCommitSummary,
+  GitFetchRepoRequest,
+  GitFetchRepoResponse,
   GitGetBranchCompareRequest,
   GitGetBranchCompareResponse,
   GitGetCommitDetailRequest,
@@ -20,6 +24,10 @@ import type {
   GitUnstageWorkspaceResponse,
   GitListWorkspaceChangesRequest,
   GitListWorkspaceChangesResponse,
+  GitPullRepoRequest,
+  GitPullRepoResponse,
+  GitPushRepoRequest,
+  GitPushRepoResponse,
   GitRepoSummaryRequest,
   GitRepoSummaryResponse,
   GitResolveRepoRequest,
@@ -28,12 +36,16 @@ import type {
   GitWorkspaceSummary,
 } from '../sdk/git';
 import type {
+  wire_git_checkout_branch_req,
+  wire_git_checkout_branch_resp,
   wire_git_branch_summary,
   wire_git_commit_workspace_req,
   wire_git_commit_workspace_resp,
   wire_git_commit_detail,
   wire_git_commit_file_summary,
   wire_git_commit_summary,
+  wire_git_fetch_repo_req,
+  wire_git_fetch_repo_resp,
   wire_git_get_branch_compare_req,
   wire_git_get_branch_compare_resp,
   wire_git_get_commit_detail_req,
@@ -51,6 +63,10 @@ import type {
   wire_git_unstage_workspace_resp,
   wire_git_list_workspace_changes_req,
   wire_git_list_workspace_changes_resp,
+  wire_git_pull_repo_req,
+  wire_git_pull_repo_resp,
+  wire_git_push_repo_req,
+  wire_git_push_repo_resp,
   wire_git_resolve_repo_req,
   wire_git_resolve_repo_resp,
   wire_git_workspace_change,
@@ -323,6 +339,65 @@ export function toWireGitCommitWorkspaceRequest(req: GitCommitWorkspaceRequest):
 }
 
 export function fromWireGitCommitWorkspaceResponse(resp: wire_git_commit_workspace_resp): GitCommitWorkspaceResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
+    headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
+  };
+}
+
+export function toWireGitFetchRepoRequest(req: GitFetchRepoRequest): wire_git_fetch_repo_req {
+  return {
+    repo_root_path: req.repoRootPath,
+  };
+}
+
+export function fromWireGitFetchRepoResponse(resp: wire_git_fetch_repo_resp): GitFetchRepoResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
+    headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
+  };
+}
+
+export function toWireGitPullRepoRequest(req: GitPullRepoRequest): wire_git_pull_repo_req {
+  return {
+    repo_root_path: req.repoRootPath,
+  };
+}
+
+export function fromWireGitPullRepoResponse(resp: wire_git_pull_repo_resp): GitPullRepoResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
+    headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
+  };
+}
+
+export function toWireGitPushRepoRequest(req: GitPushRepoRequest): wire_git_push_repo_req {
+  return {
+    repo_root_path: req.repoRootPath,
+  };
+}
+
+export function fromWireGitPushRepoResponse(resp: wire_git_push_repo_resp): GitPushRepoResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
+    headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
+  };
+}
+
+export function toWireGitCheckoutBranchRequest(req: GitCheckoutBranchRequest): wire_git_checkout_branch_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    name: typeof req.name === 'string' ? req.name : undefined,
+    full_name: typeof req.fullName === 'string' ? req.fullName : undefined,
+    kind: typeof req.kind === 'string' ? req.kind : undefined,
+  };
+}
+
+export function fromWireGitCheckoutBranchResponse(resp: wire_git_checkout_branch_resp): GitCheckoutBranchResponse {
   return {
     repoRootPath: String(resp?.repo_root_path ?? ''),
     headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,

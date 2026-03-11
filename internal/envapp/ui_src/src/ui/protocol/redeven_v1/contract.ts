@@ -25,8 +25,12 @@ import type {
 import type { AccessResumeRequest, AccessResumeResponse, AccessStatusResponse } from './sdk/access';
 import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsGetHomeResponse, FsListRequest, FsListResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
 import type {
+  GitCheckoutBranchRequest,
+  GitCheckoutBranchResponse,
   GitCommitWorkspaceRequest,
   GitCommitWorkspaceResponse,
+  GitFetchRepoRequest,
+  GitFetchRepoResponse,
   GitGetBranchCompareRequest,
   GitGetBranchCompareResponse,
   GitGetCommitDetailRequest,
@@ -37,6 +41,10 @@ import type {
   GitListCommitsResponse,
   GitListWorkspaceChangesRequest,
   GitListWorkspaceChangesResponse,
+  GitPullRepoRequest,
+  GitPullRepoResponse,
+  GitPushRepoRequest,
+  GitPushRepoResponse,
   GitRepoSummaryRequest,
   GitRepoSummaryResponse,
   GitResolveRepoRequest,
@@ -75,23 +83,31 @@ import {
 import { fromWireAccessResumeResponse, fromWireAccessStatusResponse, toWireAccessResumeRequest } from './codec/access';
 import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsGetHomeResponse, fromWireFsListResponse, fromWireFsReadFileResponse, fromWireFsRenameResponse, fromWireFsWriteFileResponse, toWireFsCopyRequest, toWireFsDeleteRequest, toWireFsListRequest, toWireFsReadFileRequest, toWireFsRenameRequest, toWireFsWriteFileRequest } from './codec/fs';
 import {
+  fromWireGitCheckoutBranchResponse,
   fromWireGitCommitWorkspaceResponse,
+  fromWireGitFetchRepoResponse,
   fromWireGitGetBranchCompareResponse,
   fromWireGitGetCommitDetailResponse,
   fromWireGitGetRepoSummaryResponse,
   fromWireGitListBranchesResponse,
   fromWireGitListCommitsResponse,
   fromWireGitListWorkspaceChangesResponse,
+  fromWireGitPullRepoResponse,
+  fromWireGitPushRepoResponse,
   fromWireGitResolveRepoResponse,
   fromWireGitStageWorkspaceResponse,
   fromWireGitUnstageWorkspaceResponse,
+  toWireGitCheckoutBranchRequest,
   toWireGitCommitWorkspaceRequest,
+  toWireGitFetchRepoRequest,
   toWireGitGetBranchCompareRequest,
   toWireGitGetCommitDetailRequest,
   toWireGitGetRepoSummaryRequest,
   toWireGitListBranchesRequest,
   toWireGitListCommitsRequest,
   toWireGitListWorkspaceChangesRequest,
+  toWireGitPullRepoRequest,
+  toWireGitPushRepoRequest,
   toWireGitResolveRepoRequest,
   toWireGitStageWorkspaceRequest,
   toWireGitUnstageWorkspaceRequest,
@@ -125,8 +141,12 @@ import type {
 } from './wire/ai';
 import type { wire_fs_copy_req, wire_fs_copy_resp, wire_fs_delete_req, wire_fs_delete_resp, wire_fs_get_home_resp, wire_fs_list_req, wire_fs_list_resp, wire_fs_read_file_req, wire_fs_read_file_resp, wire_fs_rename_req, wire_fs_rename_resp, wire_fs_write_file_req, wire_fs_write_file_resp } from './wire/fs';
 import type {
+  wire_git_checkout_branch_req,
+  wire_git_checkout_branch_resp,
   wire_git_commit_workspace_req,
   wire_git_commit_workspace_resp,
+  wire_git_fetch_repo_req,
+  wire_git_fetch_repo_resp,
   wire_git_get_branch_compare_req,
   wire_git_get_branch_compare_resp,
   wire_git_get_commit_detail_req,
@@ -139,6 +159,10 @@ import type {
   wire_git_list_commits_resp,
   wire_git_list_workspace_changes_req,
   wire_git_list_workspace_changes_resp,
+  wire_git_pull_repo_req,
+  wire_git_pull_repo_resp,
+  wire_git_push_repo_req,
+  wire_git_push_repo_resp,
   wire_git_resolve_repo_req,
   wire_git_resolve_repo_resp,
   wire_git_stage_workspace_req,
@@ -168,6 +192,10 @@ export type RedevenV1Rpc = {
     stageWorkspace: (req: GitStageWorkspaceRequest) => Promise<GitStageWorkspaceResponse>;
     unstageWorkspace: (req: GitUnstageWorkspaceRequest) => Promise<GitUnstageWorkspaceResponse>;
     commitWorkspace: (req: GitCommitWorkspaceRequest) => Promise<GitCommitWorkspaceResponse>;
+    fetchRepo: (req: GitFetchRepoRequest) => Promise<GitFetchRepoResponse>;
+    pullRepo: (req: GitPullRepoRequest) => Promise<GitPullRepoResponse>;
+    pushRepo: (req: GitPushRepoRequest) => Promise<GitPushRepoResponse>;
+    checkoutBranch: (req: GitCheckoutBranchRequest) => Promise<GitCheckoutBranchResponse>;
     listBranches: (req: GitListBranchesRequest) => Promise<GitListBranchesResponse>;
     listCommits: (req: GitListCommitsRequest) => Promise<GitListCommitsResponse>;
     getCommitDetail: (req: GitGetCommitDetailRequest) => Promise<GitGetCommitDetailResponse>;
@@ -299,6 +327,26 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireGitCommitWorkspaceRequest(req);
         const resp = await call<wire_git_commit_workspace_req, wire_git_commit_workspace_resp>(redevenV1TypeIds.git.commitWorkspace, payload);
         return fromWireGitCommitWorkspaceResponse(resp);
+      },
+      fetchRepo: async (req) => {
+        const payload = toWireGitFetchRepoRequest(req);
+        const resp = await call<wire_git_fetch_repo_req, wire_git_fetch_repo_resp>(redevenV1TypeIds.git.fetchRepo, payload);
+        return fromWireGitFetchRepoResponse(resp);
+      },
+      pullRepo: async (req) => {
+        const payload = toWireGitPullRepoRequest(req);
+        const resp = await call<wire_git_pull_repo_req, wire_git_pull_repo_resp>(redevenV1TypeIds.git.pullRepo, payload);
+        return fromWireGitPullRepoResponse(resp);
+      },
+      pushRepo: async (req) => {
+        const payload = toWireGitPushRepoRequest(req);
+        const resp = await call<wire_git_push_repo_req, wire_git_push_repo_resp>(redevenV1TypeIds.git.pushRepo, payload);
+        return fromWireGitPushRepoResponse(resp);
+      },
+      checkoutBranch: async (req) => {
+        const payload = toWireGitCheckoutBranchRequest(req);
+        const resp = await call<wire_git_checkout_branch_req, wire_git_checkout_branch_resp>(redevenV1TypeIds.git.checkoutBranch, payload);
+        return fromWireGitCheckoutBranchResponse(resp);
       },
       listBranches: async (req) => {
         const payload = toWireGitListBranchesRequest(req);

@@ -100,6 +100,49 @@ export type wire_git_commit_workspace_resp = {
   head_commit?: string;
 };
 
+export type wire_git_fetch_repo_req = {
+  repo_root_path: string;
+};
+
+export type wire_git_fetch_repo_resp = {
+  repo_root_path: string;
+  head_ref?: string;
+  head_commit?: string;
+};
+
+export type wire_git_pull_repo_req = {
+  repo_root_path: string;
+};
+
+export type wire_git_pull_repo_resp = {
+  repo_root_path: string;
+  head_ref?: string;
+  head_commit?: string;
+};
+
+export type wire_git_push_repo_req = {
+  repo_root_path: string;
+};
+
+export type wire_git_push_repo_resp = {
+  repo_root_path: string;
+  head_ref?: string;
+  head_commit?: string;
+};
+
+export type wire_git_checkout_branch_req = {
+  repo_root_path: string;
+  name?: string;
+  full_name?: string;
+  kind?: string;
+};
+
+export type wire_git_checkout_branch_resp = {
+  repo_root_path: string;
+  head_ref?: string;
+  head_commit?: string;
+};
+
 export type wire_git_branch_summary = {
   name?: string;
   full_name?: string;

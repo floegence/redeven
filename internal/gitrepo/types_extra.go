@@ -52,6 +52,49 @@ type listWorkspaceChangesResp struct {
 	Conflicted   []gitWorkspaceChange `json:"conflicted,omitempty"`
 }
 
+type fetchRepoReq struct {
+	RepoRootPath string `json:"repo_root_path"`
+}
+
+type fetchRepoResp struct {
+	RepoRootPath string `json:"repo_root_path"`
+	HeadRef      string `json:"head_ref,omitempty"`
+	HeadCommit   string `json:"head_commit,omitempty"`
+}
+
+type pullRepoReq struct {
+	RepoRootPath string `json:"repo_root_path"`
+}
+
+type pullRepoResp struct {
+	RepoRootPath string `json:"repo_root_path"`
+	HeadRef      string `json:"head_ref,omitempty"`
+	HeadCommit   string `json:"head_commit,omitempty"`
+}
+
+type pushRepoReq struct {
+	RepoRootPath string `json:"repo_root_path"`
+}
+
+type pushRepoResp struct {
+	RepoRootPath string `json:"repo_root_path"`
+	HeadRef      string `json:"head_ref,omitempty"`
+	HeadCommit   string `json:"head_commit,omitempty"`
+}
+
+type checkoutBranchReq struct {
+	RepoRootPath string `json:"repo_root_path"`
+	Name         string `json:"name,omitempty"`
+	FullName     string `json:"full_name,omitempty"`
+	Kind         string `json:"kind,omitempty"`
+}
+
+type checkoutBranchResp struct {
+	RepoRootPath string `json:"repo_root_path"`
+	HeadRef      string `json:"head_ref,omitempty"`
+	HeadCommit   string `json:"head_commit,omitempty"`
+}
+
 type listBranchesReq struct {
 	RepoRootPath string `json:"repo_root_path"`
 }

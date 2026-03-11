@@ -277,6 +277,149 @@ func TestCommitWorkspace_UsesStagedChanges(t *testing.T) {
 	}
 }
 
+func TestFetchRepo_UpdatesRemoteTrackingRefs(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	remote := createRemoteSyncFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp, err := svc.fetchRepo(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("fetchRepo: %v", err)
+	}
+	if resp.HeadRef != remote.BaseBranch {
+		t.Fatalf("HeadRef=%q, want %q", resp.HeadRef, remote.BaseBranch)
+	}
+	remoteHead := runGitFixture(t, fixture.Root, "rev-parse", "refs/remotes/origin/"+remote.BaseBranch)
+	if remoteHead != remote.IncomingCommit {
+		t.Fatalf("remote tracking head=%q, want %q", remoteHead, remote.IncomingCommit)
+	}
+}
+
+func TestPullRepo_FastForwardsCurrentBranch(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	remote := createRemoteSyncFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp, err := svc.pullRepo(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("pullRepo: %v", err)
+	}
+	if resp.HeadCommit != remote.IncomingCommit {
+		t.Fatalf("HeadCommit=%q, want %q", resp.HeadCommit, remote.IncomingCommit)
+	}
+	localHead := runGitFixture(t, fixture.Root, "rev-parse", "HEAD")
+	if localHead != remote.IncomingCommit {
+		t.Fatalf("local HEAD=%q, want %q", localHead, remote.IncomingCommit)
+	}
+}
+
+func TestPushRepo_PushesCurrentBranch(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	remote := createRemoteSyncFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+	if _, err := svc.pullRepo(context.Background(), repo); err != nil {
+		t.Fatalf("pullRepo: %v", err)
+	}
+
+	writeFixtureFile(t, fixture.Root, "src/pushed.txt", []byte("push me\n"))
+	runGitFixture(t, fixture.Root, "add", "src/pushed.txt")
+	runGitFixture(t, fixture.Root, "commit", "-m", "push local change")
+
+	updatedRepo, err := svc.resolveExplicitRepo(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo(after commit): %v", err)
+	}
+	resp, err := svc.pushRepo(context.Background(), updatedRepo)
+	if err != nil {
+		t.Fatalf("pushRepo: %v", err)
+	}
+	localHead := runGitFixture(t, fixture.Root, "rev-parse", "HEAD")
+	remoteHead := runGitFixture(t, remote.RemoteRoot, "rev-parse", "refs/heads/"+remote.BaseBranch)
+	if resp.HeadCommit != localHead {
+		t.Fatalf("HeadCommit=%q, want %q", resp.HeadCommit, localHead)
+	}
+	if remoteHead != localHead {
+		t.Fatalf("remote HEAD=%q, want %q", remoteHead, localHead)
+	}
+}
+
+func TestCheckoutBranch_ChecksOutLocalBranch(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp, err := svc.checkoutBranch(context.Background(), repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if err != nil {
+		t.Fatalf("checkoutBranch(local): %v", err)
+	}
+	if resp.HeadRef != compare.Branch {
+		t.Fatalf("HeadRef=%q, want %q", resp.HeadRef, compare.Branch)
+	}
+	current := runGitFixture(t, fixture.Root, "rev-parse", "--abbrev-ref", "HEAD")
+	if current != compare.Branch {
+		t.Fatalf("current branch=%q, want %q", current, compare.Branch)
+	}
+}
+
+func TestCheckoutBranch_RemoteCreatesTrackingBranch(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	remote := createRemoteSyncFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+	if _, err := svc.fetchRepo(context.Background(), repo); err != nil {
+		t.Fatalf("fetchRepo: %v", err)
+	}
+	repo, err = svc.resolveExplicitRepo(context.Background(), "/")
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo(after fetch): %v", err)
+	}
+
+	remoteName := "origin/" + remote.RemoteFeatureBranch
+	resp, err := svc.checkoutBranch(context.Background(), repo, remoteName, "refs/remotes/"+remoteName, "remote")
+	if err != nil {
+		t.Fatalf("checkoutBranch(remote): %v", err)
+	}
+	if resp.HeadRef != remote.RemoteFeatureBranch {
+		t.Fatalf("HeadRef=%q, want %q", resp.HeadRef, remote.RemoteFeatureBranch)
+	}
+	current := runGitFixture(t, fixture.Root, "rev-parse", "--abbrev-ref", "HEAD")
+	if current != remote.RemoteFeatureBranch {
+		t.Fatalf("current branch=%q, want %q", current, remote.RemoteFeatureBranch)
+	}
+	upstream := runGitFixture(t, fixture.Root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+	if upstream != remoteName {
+		t.Fatalf("upstream=%q, want %q", upstream, remoteName)
+	}
+	localHead := runGitFixture(t, fixture.Root, "rev-parse", "HEAD")
+	if localHead != remote.RemoteFeatureCommit {
+		t.Fatalf("local HEAD=%q, want %q", localHead, remote.RemoteFeatureCommit)
+	}
+}
+
 func TestListCommits_PaginatesNewestFirst(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)

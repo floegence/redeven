@@ -9,6 +9,11 @@ import (
 	"github.com/floegence/redeven-agent/internal/gitutil"
 )
 
+type checkoutBranchTarget struct {
+	LocalName  string
+	RemoteName string
+}
+
 func normalizeGitPathspecs(paths []string) ([]string, error) {
 	if len(paths) == 0 {
 		return nil, nil
@@ -97,4 +102,154 @@ func (s *Service) commitWorkspace(ctx context.Context, repo repoContext, message
 		HeadRef:      updatedRepo.headRef,
 		HeadCommit:   updatedRepo.headCommit,
 	}, nil
+}
+
+func (s *Service) fetchRepo(ctx context.Context, repo repoContext) (*fetchRepoResp, error) {
+	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "fetch", "--all", "--prune"); err != nil {
+		return nil, err
+	}
+	updatedRepo, err := s.loadRepoContext(ctx, repo.repoRootReal, repo.repoRootVirtual)
+	if err != nil {
+		return nil, err
+	}
+	return &fetchRepoResp{
+		RepoRootPath: updatedRepo.repoRootVirtual,
+		HeadRef:      updatedRepo.headRef,
+		HeadCommit:   updatedRepo.headCommit,
+	}, nil
+}
+
+func (s *Service) pullRepo(ctx context.Context, repo repoContext) (*pullRepoResp, error) {
+	if strings.TrimSpace(repo.headRef) == "" || repo.headRef == "HEAD" {
+		return nil, errors.New("cannot pull while HEAD is detached")
+	}
+	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "pull", "--ff-only"); err != nil {
+		return nil, err
+	}
+	updatedRepo, err := s.loadRepoContext(ctx, repo.repoRootReal, repo.repoRootVirtual)
+	if err != nil {
+		return nil, err
+	}
+	return &pullRepoResp{
+		RepoRootPath: updatedRepo.repoRootVirtual,
+		HeadRef:      updatedRepo.headRef,
+		HeadCommit:   updatedRepo.headCommit,
+	}, nil
+}
+
+func (s *Service) pushRepo(ctx context.Context, repo repoContext) (*pushRepoResp, error) {
+	if strings.TrimSpace(repo.headRef) == "" || repo.headRef == "HEAD" {
+		return nil, errors.New("cannot push while HEAD is detached")
+	}
+	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "push"); err != nil {
+		return nil, err
+	}
+	updatedRepo, err := s.loadRepoContext(ctx, repo.repoRootReal, repo.repoRootVirtual)
+	if err != nil {
+		return nil, err
+	}
+	return &pushRepoResp{
+		RepoRootPath: updatedRepo.repoRootVirtual,
+		HeadRef:      updatedRepo.headRef,
+		HeadCommit:   updatedRepo.headCommit,
+	}, nil
+}
+
+func (s *Service) checkoutBranch(ctx context.Context, repo repoContext, name string, fullName string, kind string) (*checkoutBranchResp, error) {
+	target, err := normalizeCheckoutBranchTarget(name, fullName, kind)
+	if err != nil {
+		return nil, err
+	}
+	args := []string{"checkout"}
+	switch {
+	case target.RemoteName != "":
+		localRef := "refs/heads/" + target.LocalName
+		remoteRef := "refs/remotes/" + target.RemoteName
+		switch {
+		case gitRefExists(ctx, repo.repoRootReal, localRef):
+			args = append(args, target.LocalName)
+		case gitRefExists(ctx, repo.repoRootReal, remoteRef):
+			args = append(args, "--track", "-b", target.LocalName, remoteRef)
+		default:
+			return nil, errors.New("target branch does not exist")
+		}
+	default:
+		localRef := "refs/heads/" + target.LocalName
+		if !gitRefExists(ctx, repo.repoRootReal, localRef) {
+			return nil, errors.New("target branch does not exist")
+		}
+		args = append(args, target.LocalName)
+	}
+
+	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
+		return nil, err
+	}
+	updatedRepo, err := s.loadRepoContext(ctx, repo.repoRootReal, repo.repoRootVirtual)
+	if err != nil {
+		return nil, err
+	}
+	return &checkoutBranchResp{
+		RepoRootPath: updatedRepo.repoRootVirtual,
+		HeadRef:      updatedRepo.headRef,
+		HeadCommit:   updatedRepo.headCommit,
+	}, nil
+}
+
+func gitRefExists(ctx context.Context, repoRoot string, ref string) bool {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return false
+	}
+	_, err := gitutil.RunCombinedOutput(ctx, repoRoot, nil, "show-ref", "--verify", "--quiet", ref)
+	return err == nil
+}
+
+func normalizeCheckoutBranchTarget(name string, fullName string, kind string) (checkoutBranchTarget, error) {
+	fullName = strings.TrimSpace(fullName)
+	switch {
+	case strings.HasPrefix(fullName, "refs/heads/"):
+		localName, err := normalizeGitRef(strings.TrimPrefix(fullName, "refs/heads/"))
+		if err != nil {
+			return checkoutBranchTarget{}, err
+		}
+		return checkoutBranchTarget{LocalName: localName}, nil
+	case strings.HasPrefix(fullName, "refs/remotes/"):
+		remoteName, err := normalizeGitRef(strings.TrimPrefix(fullName, "refs/remotes/"))
+		if err != nil {
+			return checkoutBranchTarget{}, err
+		}
+		localName := trackingBranchNameFromRemote(remoteName)
+		if localName == "" {
+			return checkoutBranchTarget{}, errors.New("invalid remote branch")
+		}
+		return checkoutBranchTarget{LocalName: localName, RemoteName: remoteName}, nil
+	}
+
+	switch strings.TrimSpace(kind) {
+	case "remote":
+		remoteName, err := normalizeGitRef(name)
+		if err != nil {
+			return checkoutBranchTarget{}, err
+		}
+		localName := trackingBranchNameFromRemote(remoteName)
+		if localName == "" {
+			return checkoutBranchTarget{}, errors.New("invalid remote branch")
+		}
+		return checkoutBranchTarget{LocalName: localName, RemoteName: remoteName}, nil
+	default:
+		localName, err := normalizeGitRef(name)
+		if err != nil {
+			return checkoutBranchTarget{}, err
+		}
+		return checkoutBranchTarget{LocalName: localName}, nil
+	}
+}
+
+func trackingBranchNameFromRemote(remoteName string) string {
+	remoteName = strings.TrimSpace(remoteName)
+	slash := strings.Index(remoteName, "/")
+	if slash <= 0 || slash >= len(remoteName)-1 {
+		return ""
+	}
+	return remoteName[slash+1:]
 }

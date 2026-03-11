@@ -58,6 +58,7 @@ afterEach(() => {
 
 describe('GitBranchesPanel interactions', () => {
   it('renders status as the default branch detail view', () => {
+    let checkoutCount = 0;
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -100,6 +101,9 @@ describe('GitBranchesPanel interactions', () => {
                   ],
                   remote: [],
                 }}
+                onCheckoutBranch={() => {
+                  checkoutCount += 1;
+                }}
               />
             </div>
           </ProtocolProvider>
@@ -111,10 +115,59 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).toContain('Status');
       expect(host.textContent).toContain('History');
       expect(host.textContent).toContain('Compare');
+      expect(host.textContent).toContain('Checkout');
       expect(host.textContent).toContain('src/linked.ts');
       expect(host.textContent).toContain('Staged');
       expect(host.textContent).toContain('View Diff');
       expect(host.textContent).not.toContain('pending review');
+      const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
+      expect(checkoutButton).toBeTruthy();
+      expect(checkoutButton?.disabled).toBe(true);
+      expect(checkoutCount).toBe(0);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('enables checkout for a non-current remote branch', () => {
+    let checkoutBranch: string | undefined;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={{
+                  name: 'origin/feature/demo',
+                  fullName: 'refs/remotes/origin/feature/demo',
+                  kind: 'remote',
+                }}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
+                  remote: [{ name: 'origin/feature/demo', fullName: 'refs/remotes/origin/feature/demo', kind: 'remote' }],
+                }}
+                onCheckoutBranch={(branch) => {
+                  checkoutBranch = branch.name;
+                }}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
+      expect(checkoutButton).toBeTruthy();
+      expect(checkoutButton?.disabled).toBe(false);
+      checkoutButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(checkoutBranch).toBe('origin/feature/demo');
     } finally {
       dispose();
     }

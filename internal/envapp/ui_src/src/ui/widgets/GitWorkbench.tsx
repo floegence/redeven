@@ -50,6 +50,8 @@ export interface GitWorkbenchProps {
   selectedCommitHash?: string;
   onSelectCommit?: (hash: string) => void;
   onLoadMore?: () => void;
+  checkoutBusy?: boolean;
+  onCheckoutBranch?: (branch: GitBranchSummary) => void;
   commitMessage?: string;
   commitBusy?: boolean;
   onCommitMessageChange?: (value: string) => void;
@@ -57,6 +59,12 @@ export interface GitWorkbenchProps {
   onStageSelected?: (item: GitWorkspaceChange) => void;
   onUnstageSelected?: (item: GitWorkspaceChange) => void;
   onBulkAction?: (section: GitWorkspaceSection) => void;
+  fetchBusy?: boolean;
+  pullBusy?: boolean;
+  pushBusy?: boolean;
+  onFetch?: () => void;
+  onPull?: () => void;
+  onPush?: () => void;
   showMobileSidebarButton?: boolean;
   onToggleSidebar?: () => void;
   onRefresh?: () => void;
@@ -87,6 +95,12 @@ export function GitWorkbench(props: GitWorkbenchProps) {
   const loadingBusy = () => Boolean(props.repoInfoLoading || props.repoSummaryLoading || props.workspaceLoading || props.branchesLoading);
   const activeSubview = () => normalizeSubview(props.subview);
   const subviewTone = () => gitSubviewTone(activeSubview());
+  const detachedHead = () => Boolean(props.repoSummary?.detached) || headRef() === '' || headRef() === 'HEAD';
+  const repoActionsDisabled = () => Boolean(
+    props.repoInfoLoading
+    || !(props.repoInfo?.available ?? Boolean(props.repoSummary?.repoRootPath))
+    || !(props.repoInfo?.repoRootPath || props.repoSummary?.repoRootPath)
+  );
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
@@ -117,6 +131,39 @@ export function GitWorkbench(props: GitWorkbenchProps) {
           </GitLabelBlock>
 
           <div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5 self-start">
+            <Show when={props.onFetch}>
+              <Button
+                size="xs"
+                variant="ghost"
+                class={cn('shrink-0', gitToneActionButtonClass())}
+                disabled={repoActionsDisabled() || props.fetchBusy}
+                onClick={props.onFetch}
+              >
+                {props.fetchBusy ? 'Fetching...' : 'Fetch'}
+              </Button>
+            </Show>
+            <Show when={props.onPull}>
+              <Button
+                size="xs"
+                variant="ghost"
+                class={cn('shrink-0', gitToneActionButtonClass())}
+                disabled={repoActionsDisabled() || detachedHead() || props.pullBusy}
+                onClick={props.onPull}
+              >
+                {props.pullBusy ? 'Pulling...' : 'Pull'}
+              </Button>
+            </Show>
+            <Show when={props.onPush}>
+              <Button
+                size="xs"
+                variant="ghost"
+                class={cn('shrink-0', gitToneActionButtonClass())}
+                disabled={repoActionsDisabled() || detachedHead() || props.pushBusy}
+                onClick={props.onPush}
+              >
+                {props.pushBusy ? 'Pushing...' : 'Push'}
+              </Button>
+            </Show>
             <Show when={props.showMobileSidebarButton && props.onToggleSidebar}>
               <Button
                 size="xs"
@@ -182,6 +229,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             selectedCommitHash={props.selectedCommitHash}
             onSelectCommit={props.onSelectCommit}
             onLoadMore={props.onLoadMore}
+            checkoutBusy={props.checkoutBusy}
+            onCheckoutBranch={props.onCheckoutBranch}
           />
         </Show>
 

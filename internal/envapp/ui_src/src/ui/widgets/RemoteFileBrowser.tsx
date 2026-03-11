@@ -94,6 +94,8 @@ const PAGE_SIDEBAR_WIDTH_STORAGE_KEY = 'redeven:remote-file-browser:page-sidebar
 const PAGE_MODE_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:page-mode:';
 const GIT_SUBVIEW_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:git-subview:';
 
+type GitMutationScope = 'stage' | 'unstage' | 'commit' | 'fetch' | 'pull' | 'push' | 'checkout' | '';
+
 function normalizePageSidebarWidth(width: unknown): number {
   const raw = typeof width === 'number' && Number.isFinite(width) ? width : PAGE_SIDEBAR_DEFAULT_WIDTH;
   return Math.max(PAGE_SIDEBAR_MIN_WIDTH, Math.min(PAGE_SIDEBAR_MAX_WIDTH, Math.round(raw)));
@@ -241,7 +243,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [selectedGitBranchName, setSelectedGitBranchName] = createSignal('');
   const [selectedGitBranchSubview, setSelectedGitBranchSubview] = createSignal<GitBranchSubview>('status');
   const [gitCommitMessage, setGitCommitMessage] = createSignal('');
-  const [gitMutationScope, setGitMutationScope] = createSignal<'stage' | 'unstage' | 'commit' | ''>('');
+  const [gitMutationScope, setGitMutationScope] = createSignal<GitMutationScope>('');
   const [gitMutationKey, setGitMutationKey] = createSignal('');
 
   let activePreviewStream: YamuxStream | null = null;
@@ -610,8 +612,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const formatGitFileCountLabel = (count: number): string => (count === 1 ? '1 file' : `${count} files`);
 
-  const runGitWorkspaceMutation = async <T,>(
-    scope: 'stage' | 'unstage' | 'commit',
+  const runGitMutation = async <T,>(
+    scope: GitMutationScope,
     key: string,
     action: () => Promise<T>,
     onSuccess: (result: T) => void,
@@ -628,7 +630,21 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err ?? 'Request failed.');
-      const title = scope === 'commit' ? 'Commit failed' : scope === 'stage' ? 'Stage failed' : 'Unstage failed';
+      const title = scope === 'commit'
+        ? 'Commit failed'
+        : scope === 'stage'
+          ? 'Stage failed'
+          : scope === 'unstage'
+            ? 'Unstage failed'
+            : scope === 'fetch'
+              ? 'Fetch failed'
+              : scope === 'pull'
+                ? 'Pull failed'
+                : scope === 'push'
+                  ? 'Push failed'
+                  : scope === 'checkout'
+                    ? 'Checkout failed'
+                    : 'Git request failed';
       notification.error(title, message || 'Request failed.');
       return false;
     } finally {
@@ -640,7 +656,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const handleStageWorkspacePaths = async (sourceSection: GitWorkspaceSection, paths: string[], key: string, count: number) => {
     const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
     if (!repoRootPath) return;
-    await runGitWorkspaceMutation(
+    await runGitMutation(
       'stage',
       key,
       () => rpc.git.stageWorkspace({ repoRootPath, paths: paths.length > 0 ? paths : undefined }),
@@ -659,7 +675,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const handleUnstageWorkspacePaths = async (paths: string[], key: string, count: number) => {
     const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
     if (!repoRootPath) return;
-    await runGitWorkspaceMutation(
+    await runGitMutation(
       'unstage',
       key,
       () => rpc.git.unstageWorkspace({ repoRootPath, paths: paths.length > 0 ? paths : undefined }),
@@ -703,7 +719,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       notification.error('Missing commit message', 'Write a commit message before committing staged changes.');
       return;
     }
-    await runGitWorkspaceMutation(
+    await runGitMutation(
       'commit',
       'commit',
       () => rpc.git.commitWorkspace({ repoRootPath, message: trimmed }),
@@ -739,6 +755,93 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         void loadGitBranches();
         void loadGitCommits(true);
         notification.success('Committed', `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
+      },
+    );
+  };
+
+  const currentGitCommitRef = (): string => {
+    if (gitSubview() === 'branches' && selectedGitBranchSubview() === 'history') {
+      return String(selectedGitBranch()?.name ?? '').trim();
+    }
+    return '';
+  };
+
+  const refreshGitRepoStateAfterMutation = async () => {
+    const nextInfo = await resolveRepoInfo(currentBrowserPath());
+    if (!nextInfo?.available) {
+      resetGitCommitSidebar();
+      resetGitWorkbenchData();
+      return;
+    }
+    lastGitRepoKey = '';
+    await Promise.all([
+      loadGitRepoSummary(),
+      loadGitWorkspace(),
+      loadGitBranches(),
+    ]);
+    if (gitSubview() === 'history' || (gitSubview() === 'branches' && selectedGitBranchSubview() === 'history')) {
+      lastGitCommitContextKey = '';
+      await loadGitCommits(true, currentGitCommitRef());
+    }
+  };
+
+  const handleFetchRepo = async () => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    if (!repoRootPath) return;
+    await runGitMutation(
+      'fetch',
+      'repo:fetch',
+      () => rpc.git.fetchRepo({ repoRootPath }),
+      () => {
+        void refreshGitRepoStateAfterMutation();
+        notification.success('Fetched', 'Remote refs were updated.');
+      },
+    );
+  };
+
+  const handlePullRepo = async () => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    if (!repoRootPath) return;
+    await runGitMutation(
+      'pull',
+      'repo:pull',
+      () => rpc.git.pullRepo({ repoRootPath }),
+      (resp) => {
+        void refreshGitRepoStateAfterMutation();
+        notification.success('Pulled', `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
+      },
+    );
+  };
+
+  const handlePushRepo = async () => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    if (!repoRootPath) return;
+    await runGitMutation(
+      'push',
+      'repo:push',
+      () => rpc.git.pushRepo({ repoRootPath }),
+      (resp) => {
+        void refreshGitRepoStateAfterMutation();
+        notification.success('Pushed', `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
+      },
+    );
+  };
+
+  const handleCheckoutBranch = async (branch: GitBranchSummary) => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    if (!repoRootPath) return;
+    await runGitMutation(
+      'checkout',
+      branchIdentity(branch),
+      () => rpc.git.checkoutBranch({
+        repoRootPath,
+        name: branch.name,
+        fullName: branch.fullName,
+        kind: branch.kind,
+      }),
+      (resp) => {
+        void refreshGitRepoStateAfterMutation();
+        notification.success('Checked out', `${resp.headRef || branch.name || 'branch'} is now active.`);
       },
     );
   };
@@ -2063,6 +2166,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                   commitBusy={gitMutationScope() === 'commit'}
                   onCommitMessageChange={setGitCommitMessage}
                   onCommit={(message) => { void handleCommitWorkspace(message); }}
+                  fetchBusy={gitMutationScope() === 'fetch'}
+                  pullBusy={gitMutationScope() === 'pull'}
+                  pushBusy={gitMutationScope() === 'push'}
+                  checkoutBusy={gitMutationScope() === 'checkout'}
+                  onFetch={() => { void handleFetchRepo(); }}
+                  onPull={() => { void handlePullRepo(); }}
+                  onPush={() => { void handlePushRepo(); }}
+                  onCheckoutBranch={(branch) => { void handleCheckoutBranch(branch); }}
                   showMobileSidebarButton={layout.isMobile() && Boolean(props.widgetId)}
                   onToggleSidebar={togglePageSidebar}
                   onRefresh={() => { void refreshGitWorkbench(); }}

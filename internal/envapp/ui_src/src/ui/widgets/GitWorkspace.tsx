@@ -66,6 +66,14 @@ export interface GitWorkspaceProps {
   commitBusy?: boolean;
   onCommitMessageChange?: (value: string) => void;
   onCommit?: (message: string) => void;
+  fetchBusy?: boolean;
+  pullBusy?: boolean;
+  pushBusy?: boolean;
+  checkoutBusy?: boolean;
+  onFetch?: () => void;
+  onPull?: () => void;
+  onPush?: () => void;
+  onCheckoutBranch?: (branch: GitBranchSummary) => void;
   showMobileSidebarButton?: boolean;
   onToggleSidebar?: () => void;
   onRefresh?: () => void;
@@ -152,6 +160,8 @@ export function GitWorkspace(props: GitWorkspaceProps) {
           hasMore={props.hasMore}
           onSelectCommit={props.onSelectCommit}
           onLoadMore={props.onLoadMore}
+          checkoutBusy={props.checkoutBusy}
+          onCheckoutBranch={props.onCheckoutBranch}
           commitMessage={props.commitMessage}
           commitBusy={props.commitBusy}
           onCommitMessageChange={props.onCommitMessageChange}
@@ -159,6 +169,12 @@ export function GitWorkspace(props: GitWorkspaceProps) {
           onStageSelected={props.onStageWorkspaceItem}
           onUnstageSelected={props.onUnstageWorkspaceItem}
           onBulkAction={props.onBulkWorkspaceAction}
+          fetchBusy={props.fetchBusy}
+          pullBusy={props.pullBusy}
+          pushBusy={props.pushBusy}
+          onFetch={props.onFetch}
+          onPull={props.onPull}
+          onPush={props.onPush}
           showMobileSidebarButton={props.showMobileSidebarButton}
           onToggleSidebar={props.onToggleSidebar}
           onRefresh={props.onRefresh}

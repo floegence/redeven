@@ -44,6 +44,8 @@ export interface GitBranchesPanelProps {
   selectedCommitHash?: string;
   onSelectCommit?: (hash: string) => void;
   onLoadMore?: () => void;
+  checkoutBusy?: boolean;
+  onCheckoutBranch?: (branch: GitBranchSummary) => void;
 }
 
 function formatAbsoluteTime(ms?: number): string {
@@ -727,6 +729,13 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const visibleStatusKey = () => gitDiffEntryIdentity(diffDialogItem());
   const visibleStatusCount = () => summarizeWorkspaceCount(visibleStatusWorkspace()?.summary);
   const statusEmptyState = () => branchStatusEmptyState(props.selectedBranch);
+  const checkoutDisabled = () => Boolean(
+    !props.selectedBranch
+    || props.checkoutBusy
+    || props.selectedBranch.current
+    || (props.selectedBranch.kind === 'local' && props.selectedBranch.worktreePath)
+  );
+  const checkoutLabel = () => (props.checkoutBusy ? 'Checking Out...' : 'Checkout');
 
   createEffect(() => {
     const branch = props.selectedBranch;
@@ -922,26 +931,40 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       <div class="text-[11px] leading-relaxed text-muted-foreground">{branchStatusSummary(props.selectedBranch)}</div>
                     </GitLabelBlock>
 
-                    <div class="inline-flex rounded-md border border-border/65 bg-muted/[0.14] p-0.5" role="tablist" aria-label="Branch detail tabs">
-                      <For each={(['status', 'history'] as GitBranchSubview[])}>
-                        {(view) => {
-                          const active = () => branchSubview() === view;
-                          return (
-                            <button
-                              type="button"
-                              role="tab"
-                              aria-selected={active()}
-                              class={cn(
-                                'rounded px-3 py-1.5 text-xs font-medium transition-colors duration-150',
-                                active() ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm' : 'text-muted-foreground hover:bg-background/80 hover:text-foreground'
-                              )}
-                              onClick={() => props.onSelectBranchSubview?.(view)}
-                            >
-                              {branchSubviewLabel(view)}
-                            </button>
-                          );
-                        }}
-                      </For>
+                    <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      <Show when={props.onCheckoutBranch}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          class="rounded-md bg-background/80"
+                          disabled={checkoutDisabled()}
+                          onClick={() => props.selectedBranch && props.onCheckoutBranch?.(props.selectedBranch)}
+                        >
+                          {checkoutLabel()}
+                        </Button>
+                      </Show>
+
+                      <div class="inline-flex rounded-md border border-border/65 bg-muted/[0.14] p-0.5" role="tablist" aria-label="Branch detail tabs">
+                        <For each={(['status', 'history'] as GitBranchSubview[])}>
+                          {(view) => {
+                            const active = () => branchSubview() === view;
+                            return (
+                              <button
+                                type="button"
+                                role="tab"
+                                aria-selected={active()}
+                                class={cn(
+                                  'rounded px-3 py-1.5 text-xs font-medium transition-colors duration-150',
+                                  active() ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm' : 'text-muted-foreground hover:bg-background/80 hover:text-foreground'
+                                )}
+                                onClick={() => props.onSelectBranchSubview?.(view)}
+                              >
+                                {branchSubviewLabel(view)}
+                              </button>
+                            );
+                          }}
+                        </For>
+                      </div>
                     </div>
                   </div>
                 </div>

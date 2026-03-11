@@ -102,6 +102,49 @@ export type GitCommitWorkspaceResponse = {
   headCommit?: string;
 };
 
+export type GitFetchRepoRequest = {
+  repoRootPath: string;
+};
+
+export type GitFetchRepoResponse = {
+  repoRootPath: string;
+  headRef?: string;
+  headCommit?: string;
+};
+
+export type GitPullRepoRequest = {
+  repoRootPath: string;
+};
+
+export type GitPullRepoResponse = {
+  repoRootPath: string;
+  headRef?: string;
+  headCommit?: string;
+};
+
+export type GitPushRepoRequest = {
+  repoRootPath: string;
+};
+
+export type GitPushRepoResponse = {
+  repoRootPath: string;
+  headRef?: string;
+  headCommit?: string;
+};
+
+export type GitCheckoutBranchRequest = {
+  repoRootPath: string;
+  name?: string;
+  fullName?: string;
+  kind?: 'local' | 'remote' | string;
+};
+
+export type GitCheckoutBranchResponse = {
+  repoRootPath: string;
+  headRef?: string;
+  headCommit?: string;
+};
+
 export type GitBranchSummary = {
   name?: string;
   fullName?: string;

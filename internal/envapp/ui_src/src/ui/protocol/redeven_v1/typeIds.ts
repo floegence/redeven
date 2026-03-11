@@ -19,6 +19,10 @@ export const redevenV1TypeIds = {
     stageWorkspace: 1108,
     unstageWorkspace: 1109,
     commitWorkspace: 1110,
+    fetchRepo: 1111,
+    pullRepo: 1112,
+    pushRepo: 1113,
+    checkoutBranch: 1114,
   },
   terminal: {
     sessionCreate: 2001,

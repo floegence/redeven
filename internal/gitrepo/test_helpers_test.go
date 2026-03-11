@@ -97,6 +97,14 @@ type workspaceConflictFixture struct {
 	ConflictPath string
 }
 
+type remoteSyncFixture struct {
+	RemoteRoot          string
+	BaseBranch          string
+	IncomingCommit      string
+	RemoteFeatureBranch string
+	RemoteFeatureCommit string
+}
+
 func createComparisonBranchFixture(t *testing.T, root string, startPoint string) comparisonBranchFixture {
 	t.Helper()
 	baseBranch := runGitFixture(t, root, "rev-parse", "--abbrev-ref", "HEAD")
@@ -165,4 +173,41 @@ func createWorkspaceConflictFixture(t *testing.T, root string) workspaceConflict
 	}
 
 	return workspaceConflictFixture{ConflictPath: conflictPath}
+}
+
+func createRemoteSyncFixture(t *testing.T, root string) remoteSyncFixture {
+	t.Helper()
+	baseBranch := runGitFixture(t, root, "rev-parse", "--abbrev-ref", "HEAD")
+	tempRoot := t.TempDir()
+	remoteRoot := filepath.Join(tempRoot, "origin.git")
+	cloneRoot := filepath.Join(tempRoot, "origin-clone")
+	featureBranch := "feature/remote-checkout"
+
+	runGitFixture(t, tempRoot, "init", "--bare", remoteRoot)
+	runGitFixture(t, root, "remote", "add", "origin", remoteRoot)
+	runGitFixture(t, root, "push", "-u", "origin", baseBranch)
+	runGitFixture(t, tempRoot, "clone", remoteRoot, cloneRoot)
+	runGitFixture(t, cloneRoot, "config", "user.name", "Tester")
+	runGitFixture(t, cloneRoot, "config", "user.email", "tester@example.com")
+
+	writeFixtureFile(t, cloneRoot, "remote/incoming.txt", []byte("incoming\n"))
+	runGitFixture(t, cloneRoot, "add", "remote/incoming.txt")
+	runGitFixture(t, cloneRoot, "commit", "-m", "remote incoming")
+	incomingCommit := runGitFixture(t, cloneRoot, "rev-parse", "HEAD")
+	runGitFixture(t, cloneRoot, "push", "origin", baseBranch)
+
+	runGitFixture(t, cloneRoot, "checkout", "-b", featureBranch)
+	writeFixtureFile(t, cloneRoot, "remote/checkout.txt", []byte("remote checkout branch\n"))
+	runGitFixture(t, cloneRoot, "add", "remote/checkout.txt")
+	runGitFixture(t, cloneRoot, "commit", "-m", "remote checkout branch")
+	remoteFeatureCommit := runGitFixture(t, cloneRoot, "rev-parse", "HEAD")
+	runGitFixture(t, cloneRoot, "push", "-u", "origin", featureBranch)
+
+	return remoteSyncFixture{
+		RemoteRoot:          remoteRoot,
+		BaseBranch:          baseBranch,
+		IncomingCommit:      incomingCommit,
+		RemoteFeatureBranch: featureBranch,
+		RemoteFeatureCommit: remoteFeatureCommit,
+	}
 }
