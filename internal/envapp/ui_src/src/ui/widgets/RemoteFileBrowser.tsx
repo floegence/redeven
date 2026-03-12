@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup, untrack } from 'solid-js';
 import { useDeck, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
+import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
 import { ArrowRightLeft, Copy, Folder, Pencil, Sparkles, Trash } from '@floegence/floe-webapp-core/icons';
 import { type ContextMenuCallbacks, type ContextMenuItem, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
@@ -2207,123 +2208,137 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       >
         {(id) => (
           <div class="h-full min-h-0">
-            <Show
-              when={pageMode() === 'files'}
-              fallback={
-                <GitWorkspace
-                  class="h-full"
-                  mode={pageMode()}
-                  onModeChange={handlePageModeChange}
-                  gitHistoryDisabled={!canEnterGitHistory()}
-                  subview={gitSubview()}
-                  onSubviewChange={handleGitSubviewChange}
-                  width={browserSidebarWidth()}
-                  open={pageSidebarOpen()}
-                  resizable
-                  onResize={(delta) => setBrowserSidebarWidth((width) => normalizePageSidebarWidth(width + delta))}
-                  onClose={closePageSidebar}
-                  currentPath={currentBrowserPath()}
-                  repoInfo={repoInfo()}
-                  repoInfoLoading={repoInfoLoading()}
-                  repoInfoError={repoInfoError()}
-                  repoSummary={gitRepoSummary()}
-                  repoSummaryLoading={gitRepoSummaryLoading()}
-                  repoSummaryError={gitRepoSummaryError()}
-                  workspace={gitWorkspace()}
-                  workspaceLoading={gitWorkspaceLoading()}
-                  workspaceError={gitWorkspaceError()}
-                  selectedWorkspaceSection={selectedGitWorkspaceSection()}
-                  onSelectWorkspaceSection={selectGitWorkspaceSection}
-                  selectedWorkspaceItem={selectedGitWorkspaceItem()}
-                  onSelectWorkspaceItem={selectGitWorkspaceItem}
-                  onStageWorkspaceItem={handleStageWorkspaceItem}
-                  onUnstageWorkspaceItem={handleUnstageWorkspaceItem}
-                  onBulkWorkspaceAction={handleBulkWorkspaceAction}
-                  busyWorkspaceKey={gitMutationKey()}
-                  busyWorkspaceAction={busyWorkspaceAction()}
-                  branches={gitBranches()}
-                  branchesLoading={gitBranchesLoading()}
-                  branchesError={gitBranchesError()}
-                  selectedBranch={selectedGitBranch()}
-                  selectedBranchKey={selectedGitBranchName()}
-                  onSelectBranch={selectGitBranch}
-                  selectedBranchSubview={selectedGitBranchSubview()}
-                  onSelectBranchSubview={selectGitBranchSubview}
-                  commits={gitCommits()}
-                  listLoading={gitListLoading()}
-                  listLoadingMore={gitListLoadingMore()}
-                  listError={gitListError()}
-                  hasMore={gitHasMore()}
-                  selectedCommitHash={selectedCommitHash()}
-                  onSelectCommit={selectGitCommit}
-                  onLoadMore={() => void loadGitCommits(false)}
-                  commitMessage={gitCommitMessage()}
-                  commitBusy={gitMutationScope() === 'commit'}
-                  onCommitMessageChange={setGitCommitMessage}
-                  onCommit={(message) => { void handleCommitWorkspace(message); }}
-                  fetchBusy={gitMutationScope() === 'fetch'}
-                  pullBusy={gitMutationScope() === 'pull'}
-                  pushBusy={gitMutationScope() === 'push'}
-                  checkoutBusy={gitMutationScope() === 'checkout'}
-                  onFetch={() => { void handleFetchRepo(); }}
-                  onPull={() => { void handlePullRepo(); }}
-                  onPush={() => { void handlePushRepo(); }}
-                  onCheckoutBranch={(branch) => { void handleCheckoutBranch(branch); }}
-                  showMobileSidebarButton={layout.isMobile() && Boolean(props.widgetId)}
-                  onToggleSidebar={togglePageSidebar}
-                  onRefresh={() => { void refreshGitWorkbench(); }}
-                />
-              }
-            >
-              <FileBrowserWorkspace
-                class="h-full"
-                mode={pageMode()}
-                onModeChange={handlePageModeChange}
-                gitHistoryDisabled={!canEnterGitHistory()}
-                files={files()}
-                currentPath={currentBrowserPath()}
-                initialPath={readPersistedLastPath(id)}
-                homePath={agentHomePathAbs() || undefined}
-                persistenceKey={`files:${id}`}
-                instanceId={props.widgetId ? `redeven-files:${id}:${props.widgetId}` : `redeven-files:${id}`}
-                resetKey={fileBrowserResetSeq()}
-                width={browserSidebarWidth()}
-                open={pageSidebarOpen()}
-                resizable
-                onResize={(delta) => setBrowserSidebarWidth((width) => normalizePageSidebarWidth(width + delta))}
-                onClose={closePageSidebar}
-                showMobileSidebarButton={layout.isMobile() && Boolean(props.widgetId)}
-                onToggleSidebar={togglePageSidebar}
-                onNavigate={(path) => {
-                  const targetPath = normalizePath(path);
-                  writePersistedLastPath(id, targetPath);
-                  setCurrentBrowserPath(targetPath);
-                  void (async () => {
-                    const result = await loadPathChain(targetPath);
-                    if (result.status === 'ok' || result.status === 'canceled') return;
-                    if (result.status === 'invalid_path') {
-                      const fallbackPath = normalizePath(lastLoadedBrowserPath());
-                      writePersistedLastPath(id, fallbackPath);
-                      setCurrentBrowserPath(fallbackPath);
-                      setFileBrowserResetSeq((n) => n + 1);
-                      const fallbackResult = await loadPathChain(fallbackPath);
-                      if (fallbackResult.status !== 'ok') notifyPathLoadFailure(fallbackResult);
-                      return;
-                    }
-                    notifyPathLoadFailure(result);
-                  })();
-                }}
-                onPathChange={(_path, source) => {
-                  if (source === 'user' && layout.isMobile()) {
-                    closePageSidebar();
-                  }
-                }}
-                onOpen={(item) => void openPreview(item)}
-                onDragMove={(items, targetPath) => void handleDragMove(items, targetPath)}
-                contextMenuCallbacks={ctxMenu}
-                overrideContextMenuItems={overrideContextMenuItems}
-              />
-            </Show>
+            <KeepAliveStack
+              class="h-full"
+              activeId={pageMode()}
+              lazyMount
+              keepMounted
+              views={[
+                {
+                  id: 'files',
+                  class: 'h-full',
+                  render: () => (
+                    <FileBrowserWorkspace
+                      class="h-full"
+                      mode={pageMode()}
+                      onModeChange={handlePageModeChange}
+                      gitHistoryDisabled={!canEnterGitHistory()}
+                      files={files()}
+                      currentPath={currentBrowserPath()}
+                      initialPath={readPersistedLastPath(id)}
+                      homePath={agentHomePathAbs() || undefined}
+                      persistenceKey={`files:${id}`}
+                      instanceId={props.widgetId ? `redeven-files:${id}:${props.widgetId}` : `redeven-files:${id}`}
+                      resetKey={fileBrowserResetSeq()}
+                      width={browserSidebarWidth()}
+                      open={pageSidebarOpen()}
+                      resizable
+                      onResize={(delta) => setBrowserSidebarWidth((width) => normalizePageSidebarWidth(width + delta))}
+                      onClose={closePageSidebar}
+                      showMobileSidebarButton={layout.isMobile() && Boolean(props.widgetId)}
+                      onToggleSidebar={togglePageSidebar}
+                      onNavigate={(path) => {
+                        const targetPath = normalizePath(path);
+                        writePersistedLastPath(id, targetPath);
+                        setCurrentBrowserPath(targetPath);
+                        void (async () => {
+                          const result = await loadPathChain(targetPath);
+                          if (result.status === 'ok' || result.status === 'canceled') return;
+                          if (result.status === 'invalid_path') {
+                            const fallbackPath = normalizePath(lastLoadedBrowserPath());
+                            writePersistedLastPath(id, fallbackPath);
+                            setCurrentBrowserPath(fallbackPath);
+                            setFileBrowserResetSeq((n) => n + 1);
+                            const fallbackResult = await loadPathChain(fallbackPath);
+                            if (fallbackResult.status !== 'ok') notifyPathLoadFailure(fallbackResult);
+                            return;
+                          }
+                          notifyPathLoadFailure(result);
+                        })();
+                      }}
+                      onPathChange={(_path, source) => {
+                        if (source === 'user' && layout.isMobile()) {
+                          closePageSidebar();
+                        }
+                      }}
+                      onOpen={(item) => void openPreview(item)}
+                      onDragMove={(items, targetPath) => void handleDragMove(items, targetPath)}
+                      contextMenuCallbacks={ctxMenu}
+                      overrideContextMenuItems={overrideContextMenuItems}
+                    />
+                  ),
+                },
+                {
+                  id: 'git',
+                  class: 'h-full',
+                  render: () => (
+                    <GitWorkspace
+                      class="h-full"
+                      mode={pageMode()}
+                      onModeChange={handlePageModeChange}
+                      gitHistoryDisabled={!canEnterGitHistory()}
+                      subview={gitSubview()}
+                      onSubviewChange={handleGitSubviewChange}
+                      width={browserSidebarWidth()}
+                      open={pageSidebarOpen()}
+                      resizable
+                      onResize={(delta) => setBrowserSidebarWidth((width) => normalizePageSidebarWidth(width + delta))}
+                      onClose={closePageSidebar}
+                      currentPath={currentBrowserPath()}
+                      repoInfo={repoInfo()}
+                      repoInfoLoading={repoInfoLoading()}
+                      repoInfoError={repoInfoError()}
+                      repoSummary={gitRepoSummary()}
+                      repoSummaryLoading={gitRepoSummaryLoading()}
+                      repoSummaryError={gitRepoSummaryError()}
+                      workspace={gitWorkspace()}
+                      workspaceLoading={gitWorkspaceLoading()}
+                      workspaceError={gitWorkspaceError()}
+                      selectedWorkspaceSection={selectedGitWorkspaceSection()}
+                      onSelectWorkspaceSection={selectGitWorkspaceSection}
+                      selectedWorkspaceItem={selectedGitWorkspaceItem()}
+                      onSelectWorkspaceItem={selectGitWorkspaceItem}
+                      onStageWorkspaceItem={handleStageWorkspaceItem}
+                      onUnstageWorkspaceItem={handleUnstageWorkspaceItem}
+                      onBulkWorkspaceAction={handleBulkWorkspaceAction}
+                      busyWorkspaceKey={gitMutationKey()}
+                      busyWorkspaceAction={busyWorkspaceAction()}
+                      branches={gitBranches()}
+                      branchesLoading={gitBranchesLoading()}
+                      branchesError={gitBranchesError()}
+                      selectedBranch={selectedGitBranch()}
+                      selectedBranchKey={selectedGitBranchName()}
+                      onSelectBranch={selectGitBranch}
+                      selectedBranchSubview={selectedGitBranchSubview()}
+                      onSelectBranchSubview={selectGitBranchSubview}
+                      commits={gitCommits()}
+                      listLoading={gitListLoading()}
+                      listLoadingMore={gitListLoadingMore()}
+                      listError={gitListError()}
+                      hasMore={gitHasMore()}
+                      selectedCommitHash={selectedCommitHash()}
+                      onSelectCommit={selectGitCommit}
+                      onLoadMore={() => void loadGitCommits(false)}
+                      commitMessage={gitCommitMessage()}
+                      commitBusy={gitMutationScope() === 'commit'}
+                      onCommitMessageChange={setGitCommitMessage}
+                      onCommit={(message) => { void handleCommitWorkspace(message); }}
+                      fetchBusy={gitMutationScope() === 'fetch'}
+                      pullBusy={gitMutationScope() === 'pull'}
+                      pushBusy={gitMutationScope() === 'push'}
+                      checkoutBusy={gitMutationScope() === 'checkout'}
+                      onFetch={() => { void handleFetchRepo(); }}
+                      onPull={() => { void handlePullRepo(); }}
+                      onPush={() => { void handlePushRepo(); }}
+                      onCheckoutBranch={(branch) => { void handleCheckoutBranch(branch); }}
+                      showMobileSidebarButton={layout.isMobile() && Boolean(props.widgetId)}
+                      onToggleSidebar={togglePageSidebar}
+                      onRefresh={() => { void refreshGitWorkbench(); }}
+                    />
+                  ),
+                },
+              ]}
+            />
           </div>
         )}
       </Show>

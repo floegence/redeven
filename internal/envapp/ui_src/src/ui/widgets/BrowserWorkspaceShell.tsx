@@ -23,7 +23,6 @@ export interface BrowserWorkspaceShellProps {
   sidebarBody: JSX.Element;
   sidebarBodyClass?: string;
   content: JSX.Element;
-  headerActions?: JSX.Element;
   class?: string;
 }
 
@@ -47,7 +46,6 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
         title={props.title ?? 'Browser'}
         headerActions={
           <>
-            {props.headerActions}
             <Show when={isMobile() && props.onClose}>
               <button
                 type="button"

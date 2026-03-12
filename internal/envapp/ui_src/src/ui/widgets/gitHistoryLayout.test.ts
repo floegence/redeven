@@ -21,8 +21,12 @@ describe('browser workspace layout wiring', () => {
   it('routes files mode and git mode through dedicated unified workspace shells', () => {
     const src = read('./RemoteFileBrowser.tsx');
 
+    expect(src).toContain("import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';");
     expect(src).toContain("import { FileBrowserWorkspace } from './FileBrowserWorkspace';");
     expect(src).toContain("import { GitWorkspace } from './GitWorkspace';");
+    expect(src).toContain('<KeepAliveStack');
+    expect(src).toContain('activeId={pageMode()}');
+    expect(src).toContain('keepMounted');
     expect(src).toContain('<FileBrowserWorkspace');
     expect(src).toContain('<GitWorkspace');
     expect(src).not.toContain('sidebarHeaderActions={');
@@ -41,6 +45,8 @@ describe('browser workspace layout wiring', () => {
 
     expect(src).toContain('Mode');
     expect(src).toContain('props.modeSwitcher');
+    expect(src).not.toContain('headerActions?: JSX.Element;');
+    expect(src).not.toContain('{props.headerActions}');
   });
 
 
@@ -223,6 +229,8 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain("import { GitViewNav } from './GitViewNav';");
     expect(src).toContain('navigationLabel="View"');
     expect(src).toContain('<GitViewNav');
+    expect(src).not.toContain('headerActions=');
+    expect(src).not.toContain("from './GitChrome'");
   });
 
   it('keeps the git sidebar labels and density aligned with the compact workspace language', () => {
