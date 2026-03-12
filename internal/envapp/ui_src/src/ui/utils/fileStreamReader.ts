@@ -1,8 +1,7 @@
 // 流式文件读取工具函数，从 RemoteFileBrowser 提取共享
 
 import type { Client } from '@floegence/flowersec-core';
-import { DEFAULT_MAX_JSON_FRAME_BYTES, readJsonFrame, writeJsonFrame } from '@floegence/flowersec-core/framing';
-import { ByteReader, type YamuxStream } from '@floegence/flowersec-core/yamux';
+import { openJsonFrameChannel, readNBytes, type JsonFrameChannel } from '@floegence/flowersec-core/streamio';
 import { redevenV1StreamKinds } from '../protocol/redeven_v1/streamKinds';
 
 export type FsReadFileStreamMeta = {
@@ -40,16 +39,46 @@ export function normalizeRespMeta(v: unknown): FsReadFileStreamRespMeta {
   return { ok, file_size: fileSize, content_len: contentLen, truncated, error };
 }
 
-export function byteReaderFromStream(stream: YamuxStream): ByteReader {
-  return new ByteReader(async () => {
-    try {
-      return await stream.read();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg === 'eof') return null;
-      throw e;
+async function closeChannelBestEffort(channel: JsonFrameChannel): Promise<void> {
+  try {
+    await channel.close();
+  } catch {
+  }
+}
+
+function cloneToOwnedBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(new ArrayBuffer(bytes.byteLength));
+  out.set(bytes);
+  return out;
+}
+
+export async function openReadFileStreamChannel(params: {
+  client: Client;
+  path: string;
+  offset?: number;
+  maxBytes?: number;
+}): Promise<{ channel: JsonFrameChannel; meta: FsReadFileStreamRespMeta }> {
+  const channel = await openJsonFrameChannel(params.client, redevenV1StreamKinds.fs.readFile);
+  try {
+    const req: FsReadFileStreamMeta = {
+      path: params.path,
+      offset: params.offset ?? 0,
+      max_bytes: params.maxBytes ?? 0,
+    };
+    await channel.writeFrame(req);
+
+    const meta = await channel.readFrame<FsReadFileStreamRespMeta>({ assert: normalizeRespMeta });
+    if (!meta.ok) {
+      const code = meta.error?.code ?? 0;
+      const msg = meta.error?.message ?? 'Failed to read file';
+      throw new Error(code ? `${msg} (${code})` : msg);
     }
-  });
+
+    return { channel, meta };
+  } catch (error) {
+    await closeChannelBestEffort(channel);
+    throw error;
+  }
 }
 
 export async function readFileBytesOnce(params: {
@@ -58,38 +87,12 @@ export async function readFileBytesOnce(params: {
   offset?: number;
   maxBytes?: number;
 }): Promise<{ bytes: Uint8Array<ArrayBuffer>; meta: FsReadFileStreamRespMeta }> {
-  const stream = await params.client.openStream(redevenV1StreamKinds.fs.readFile);
-  const reader = byteReaderFromStream(stream);
+  const { channel, meta } = await openReadFileStreamChannel(params);
   try {
-    const req: FsReadFileStreamMeta = {
-      path: params.path,
-      offset: params.offset ?? 0,
-      max_bytes: params.maxBytes ?? 0,
-    };
-    await writeJsonFrame((b) => stream.write(b), req);
-
-    const metaRaw = await readJsonFrame((n) => reader.readExactly(n), DEFAULT_MAX_JSON_FRAME_BYTES);
-    const meta = normalizeRespMeta(metaRaw);
-    if (!meta.ok) {
-      const code = meta.error?.code ?? 0;
-      const msg = meta.error?.message ?? 'Failed to read file';
-      throw new Error(code ? `${msg} (${code})` : msg);
-    }
-
     const want = Math.max(0, Math.floor(Number(meta.content_len ?? 0)));
-    const out = new Uint8Array(new ArrayBuffer(want));
-    let off = 0;
-    while (off < want) {
-      const take = Math.min(64 * 1024, want - off);
-      const chunk = await reader.readExactly(take);
-      out.set(chunk, off);
-      off += chunk.length;
-    }
-    return { bytes: out, meta };
+    const bytes = cloneToOwnedBytes(await readNBytes(channel.reader, want));
+    return { bytes, meta };
   } finally {
-    try {
-      await stream.close();
-    } catch {
-    }
+    await closeChannelBestEffort(channel);
   }
 }

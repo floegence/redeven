@@ -5,8 +5,7 @@ import { type ContextMenuCallbacks, type ContextMenuItem, type FileItem } from '
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button, ConfirmDialog, DirectoryPicker, FileSavePicker, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type { Client } from '@floegence/flowersec-core';
-import { DEFAULT_MAX_JSON_FRAME_BYTES, readJsonFrame, writeJsonFrame } from '@floegence/flowersec-core/framing';
-import { ByteReader, type YamuxStream } from '@floegence/flowersec-core/yamux';
+import type { JsonFrameChannel } from '@floegence/flowersec-core/streamio';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import {
   useRedevenRpc,
@@ -20,7 +19,7 @@ import {
   type GitWorkspaceSection,
 } from '../protocol/redeven_v1';
 import { getExtDot, isLikelyTextContent, mimeFromExtDot, previewModeByName, type PreviewMode } from '../utils/filePreview';
-import { readFileBytesOnce, normalizeRespMeta, byteReaderFromStream, type FsReadFileStreamMeta, type FsReadFileStreamRespMeta } from '../utils/fileStreamReader';
+import { readFileBytesOnce, openReadFileStreamChannel, type FsReadFileStreamRespMeta } from '../utils/fileStreamReader';
 import { useEnvContext } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
 import {
@@ -76,7 +75,6 @@ type PathLoadResult = {
 
 type BrowserPageMode = GitHistoryMode;
 
-const JSON_FRAME_MAX_BYTES = DEFAULT_MAX_JSON_FRAME_BYTES;
 const MAX_PREVIEW_BYTES = 20 * 1024 * 1024;
 const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
 const SNIFF_BYTES = 64 * 1024;
@@ -254,7 +252,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitMutationScope, setGitMutationScope] = createSignal<GitMutationScope>('');
   const [gitMutationKey, setGitMutationKey] = createSignal('');
 
-  let activePreviewStream: YamuxStream | null = null;
+  let activePreviewChannel: JsonFrameChannel | null = null;
   let activeObjectUrl: string | null = null;
   let previewReqSeq = 0;
   let dirReqSeq = 0;
@@ -270,16 +268,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let previewAskMenuEl: HTMLDivElement | undefined;
 
   const cleanupPreview = () => {
-    if (activePreviewStream) {
+    if (activePreviewChannel) {
       try {
-        activePreviewStream.reset(new Error('canceled'));
+        activePreviewChannel.stream.reset(new Error('canceled'));
       } catch {
       }
       try {
-        void activePreviewStream.close();
+        void activePreviewChannel.close();
       } catch {
       }
-      activePreviewStream = null;
+      activePreviewChannel = null;
     }
     if (activeObjectUrl) {
       try {
@@ -1246,58 +1244,54 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
     try {
       const wantBytes = baseMode === 'binary' ? SNIFF_BYTES : maxBytes;
+      let out = new Uint8Array(new ArrayBuffer(0));
+      let truncated = false;
+      let mime = 'application/octet-stream';
 
-      const stream = await client.openStream('fs/read_file');
-      activePreviewStream = stream;
-      const reader = byteReaderFromStream(stream);
-
-      const req: FsReadFileStreamMeta = { path: item.path, offset: 0, max_bytes: wantBytes };
-      await writeJsonFrame((b) => stream.write(b), req);
-      const metaRaw = await readJsonFrame((n) => reader.readExactly(n), JSON_FRAME_MAX_BYTES);
-      const meta = normalizeRespMeta(metaRaw);
-
-      if (seq !== previewReqSeq) return;
-
-      if (!meta.ok) {
-        const code = meta.error?.code ?? 0;
-        const msg = meta.error?.message ?? 'Failed to load file';
-        throw new Error(code ? `${msg} (${code})` : msg);
-      }
-
-      const contentLen = Math.max(0, Math.floor(Number(meta.content_len ?? 0)));
-      const out = new Uint8Array(new ArrayBuffer(contentLen));
-      let off = 0;
-      while (off < contentLen) {
-        if (seq !== previewReqSeq) return;
-        const take = Math.min(64 * 1024, contentLen - off);
-        const chunk = await reader.readExactly(take);
-        out.set(chunk, off);
-        off += chunk.length;
-      }
-
+      const { channel, meta } = await openReadFileStreamChannel({
+        client,
+        path: item.path,
+        offset: 0,
+        maxBytes: wantBytes,
+      });
+      activePreviewChannel = channel;
       try {
-        await stream.close();
-      } catch {
-      } finally {
-        if (activePreviewStream === stream) activePreviewStream = null;
-      }
+        if (seq !== previewReqSeq) return;
 
-      if (seq !== previewReqSeq) return;
-
-      const truncated = !!meta.truncated;
-      setPreviewBytes(out);
-      setPreviewTruncated(truncated);
-
-      const extDot = getExtDot(item.name);
-      const mime = mimeFromExtDot(extDot) ?? 'application/octet-stream';
-
-      if (baseMode === 'text') {
-        const text = new TextDecoder('utf-8', { fatal: false }).decode(out);
-        setPreviewText(text);
-        if (truncated) {
-          setPreviewMessage('Showing partial content (truncated).');
+        const contentLen = Math.max(0, Math.floor(Number(meta.content_len ?? 0)));
+        out = new Uint8Array(new ArrayBuffer(contentLen));
+        let off = 0;
+        while (off < contentLen) {
+          if (seq !== previewReqSeq) return;
+          const take = Math.min(64 * 1024, contentLen - off);
+          const chunk = await channel.reader.readExactly(take);
+          out.set(chunk, off);
+          off += chunk.length;
         }
-        return;
+
+        if (seq !== previewReqSeq) return;
+
+        truncated = !!meta.truncated;
+        setPreviewBytes(out);
+        setPreviewTruncated(truncated);
+
+        const extDot = getExtDot(item.name);
+        mime = mimeFromExtDot(extDot) ?? 'application/octet-stream';
+
+        if (baseMode === 'text') {
+          const text = new TextDecoder('utf-8', { fatal: false }).decode(out);
+          setPreviewText(text);
+          if (truncated) {
+            setPreviewMessage('Showing partial content (truncated).');
+          }
+          return;
+        }
+      } finally {
+        try {
+          await channel.close();
+        } catch {
+        }
+        if (activePreviewChannel === channel) activePreviewChannel = null;
       }
 
       if (baseMode === 'image') {
