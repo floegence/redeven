@@ -7,13 +7,13 @@ import { changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench
 import { gitChangePathClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import {
-  GIT_CHANGED_FILES_ACTION_BUTTON_CLASS,
   GIT_CHANGED_FILES_CELL_CLASS,
   GIT_CHANGED_FILES_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_HEAD_CLASS,
   GIT_CHANGED_FILES_HEADER_ROW_CLASS,
   GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_TABLE_CLASS,
+  GitChangedFilesActionButton,
   GitChangeMetrics,
   GitChangeStatusPill,
   GitLabelBlock,
@@ -264,19 +264,14 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                             <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeStatusPill change={file.changeType} /></td>
                                             <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={file.additions} deletions={file.deletions} /></td>
                                             <td class={gitChangedFilesStickyCellClass(active())}>
-                                              <button
-                                                type="button"
-                                                class={cn(
-                                                  'inline-flex items-center border border-input bg-background font-medium text-foreground shadow-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
-                                                  GIT_CHANGED_FILES_ACTION_BUTTON_CLASS,
-                                                )}
+                                              <GitChangedFilesActionButton
                                                 onClick={() => {
                                                   setDiffDialogItem(file);
                                                   setDiffDialogOpen(true);
                                                 }}
                                               >
                                                 View Diff
-                                              </button>
+                                              </GitChangedFilesActionButton>
                                             </td>
                                           </tr>
                                         );

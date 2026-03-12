@@ -16,13 +16,13 @@ import { GitCommitDialog } from './GitCommitDialog';
 import { GitDiffDialog } from './GitDiffDialog';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
-  GIT_CHANGED_FILES_ACTION_BUTTON_CLASS,
   GIT_CHANGED_FILES_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_HEAD_CLASS,
   GIT_CHANGED_FILES_HEADER_ROW_CLASS,
   GIT_CHANGED_FILES_SECONDARY_PATH_CLASS,
   GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_TABLE_CLASS,
+  GitChangedFilesActionButton,
   GitChangeMetrics,
   GitChangeStatusPill,
   GitLabelBlock,
@@ -148,19 +148,16 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                       </td>
                       <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>
                       <td class={gitChangedFilesStickyCellClass(active())}>
-                        <Button
-                          size="xs"
-                          variant={item.section === 'staged' ? 'outline' : 'default'}
-                          class={GIT_CHANGED_FILES_ACTION_BUTTON_CLASS}
+                        <GitChangedFilesActionButton
                           onClick={(event) => {
                             event.stopPropagation();
                             props.onAction?.(item);
                           }}
-                          loading={busy()}
+                          busy={busy()}
                           disabled={busy()}
                         >
                           {listItemActionLabel(item)}
-                        </Button>
+                        </GitChangedFilesActionButton>
                       </td>
                     </tr>
                   );

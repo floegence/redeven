@@ -102,14 +102,14 @@ export function GitSubtleNote(props: GitSubtleNoteProps) {
   return <div class={cn('rounded-md border border-border/45 bg-muted/[0.16] px-2.5 py-2 text-xs leading-relaxed text-muted-foreground', props.class)}>{props.children}</div>;
 }
 
-export const GIT_CHANGED_FILES_TABLE_CLASS = 'w-full text-[11px] leading-[1.1rem]';
+export const GIT_CHANGED_FILES_TABLE_CLASS = 'w-full text-[11px] leading-4';
 export const GIT_CHANGED_FILES_HEAD_CLASS = 'sticky top-0 z-10 bg-muted/30 backdrop-blur';
 export const GIT_CHANGED_FILES_HEADER_ROW_CLASS = 'border-b border-border/60 text-left text-[10px] uppercase tracking-[0.14em] text-muted-foreground';
-export const GIT_CHANGED_FILES_HEADER_CELL_CLASS = 'px-2.5 py-1.5 font-medium';
-export const GIT_CHANGED_FILES_CELL_CLASS = 'px-2.5 py-1.5 align-top';
-export const GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS = 'sticky right-0 z-20 border-l border-border/50 bg-muted/30 px-2.5 py-1.5 text-right font-medium';
+export const GIT_CHANGED_FILES_HEADER_CELL_CLASS = 'px-2.5 py-1 font-medium';
+export const GIT_CHANGED_FILES_CELL_CLASS = 'px-2.5 py-1 align-top';
+export const GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS = 'sticky right-0 z-20 border-l border-border/50 bg-muted/30 px-2.5 py-1 text-right font-medium';
 export const GIT_CHANGED_FILES_SECONDARY_PATH_CLASS = 'mt-px truncate text-[10px] leading-3.5 text-muted-foreground';
-export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'h-6 min-w-[5rem] justify-center rounded-sm px-2 text-[10px]';
+export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex items-center whitespace-nowrap text-[11px] font-medium text-primary underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:pointer-events-none disabled:opacity-45';
 
 export function gitChangedFilesRowClass(active: boolean): string {
   return active
@@ -119,8 +119,8 @@ export function gitChangedFilesRowClass(active: boolean): string {
 
 export function gitChangedFilesStickyCellClass(active: boolean): string {
   return active
-    ? 'sticky right-0 z-10 border-l border-border/45 bg-muted/40 px-2.5 py-1.5 text-right align-top shadow-[-1px_0_0_rgba(0,0,0,0.03)]'
-    : 'sticky right-0 z-10 border-l border-border/45 bg-card px-2.5 py-1.5 text-right align-top shadow-[-1px_0_0_rgba(0,0,0,0.03)] group-hover:bg-muted/20';
+    ? 'sticky right-0 z-10 border-l border-border/45 bg-muted/40 px-2.5 py-1 text-right align-top shadow-[-1px_0_0_rgba(0,0,0,0.03)]'
+    : 'sticky right-0 z-10 border-l border-border/45 bg-card px-2.5 py-1 text-right align-top shadow-[-1px_0_0_rgba(0,0,0,0.03)] group-hover:bg-muted/20';
 }
 
 export interface GitMetaPillProps {
@@ -147,6 +147,29 @@ export function GitChangeStatusPill(props: GitChangeStatusPillProps) {
     <GitMetaPill tone={gitChangeTone(props.change ?? undefined)} class={cn('whitespace-nowrap', props.class)}>
       {gitChangeLabel(props.change ?? undefined)}
     </GitMetaPill>
+  );
+}
+
+export interface GitChangedFilesActionButtonProps {
+  children: JSX.Element;
+  class?: string;
+  type?: 'button' | 'submit' | 'reset';
+  disabled?: boolean;
+  busy?: boolean;
+  onClick?: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>;
+}
+
+export function GitChangedFilesActionButton(props: GitChangedFilesActionButtonProps) {
+  return (
+    <button
+      type={props.type ?? 'button'}
+      disabled={Boolean(props.disabled || props.busy)}
+      aria-busy={props.busy || undefined}
+      class={cn(GIT_CHANGED_FILES_ACTION_BUTTON_CLASS, props.class)}
+      onClick={props.onClick}
+    >
+      {props.children}
+    </button>
   );
 }
 

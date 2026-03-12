@@ -24,13 +24,13 @@ import { gitBranchTone, gitChangePathClass, gitCompareTone, gitToneActionButtonC
 import { GitDiffDialog } from './GitDiffDialog';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
-  GIT_CHANGED_FILES_ACTION_BUTTON_CLASS,
   GIT_CHANGED_FILES_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_HEAD_CLASS,
   GIT_CHANGED_FILES_HEADER_ROW_CLASS,
   GIT_CHANGED_FILES_SECONDARY_PATH_CLASS,
   GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_TABLE_CLASS,
+  GitChangedFilesActionButton,
   GitChangeMetrics,
   GitChangeStatusPill,
   GitLabelBlock,
@@ -206,9 +206,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
                       </td>
                       <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>
                       <td class={gitChangedFilesStickyCellClass(active())}>
-                        <Button size="xs" variant="outline" class={GIT_CHANGED_FILES_ACTION_BUTTON_CLASS} onClick={() => props.onOpenDiff?.(item)}>
-                          View Diff
-                        </Button>
+                        <GitChangedFilesActionButton onClick={() => props.onOpenDiff?.(item)}>View Diff</GitChangedFilesActionButton>
                       </td>
                     </tr>
                   );
@@ -280,9 +278,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                       </td>
                       <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>
                       <td class={gitChangedFilesStickyCellClass(active())}>
-                        <Button size="xs" variant="outline" class={GIT_CHANGED_FILES_ACTION_BUTTON_CLASS} onClick={() => props.onOpenDiff?.(item)}>
-                          View Diff
-                        </Button>
+                        <GitChangedFilesActionButton onClick={() => props.onOpenDiff?.(item)}>View Diff</GitChangedFilesActionButton>
                       </td>
                     </tr>
                   );
