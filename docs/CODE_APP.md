@@ -9,9 +9,11 @@ This document describes the **Code App** implementation in the Redeven agent:
 ## What runs where
 
 - Browser side:
-  - A runtime-mode proxy is created in the top-level sandbox window.
-  - A Service Worker forwards `fetch()` to the runtime via `postMessage + MessageChannel`.
-  - An injected script patches same-origin `WebSocket` so it also goes through `flowersec-proxy/ws`.
+  - A trusted launcher origin (`cs-*` or `pf-*`) exchanges the one-time `entry_ticket` for `grant_client`.
+  - The browser then navigates to a controller origin (`rt-*`) that owns the real Flowersec proxy runtime.
+  - The controller origin loads the actual app in an `app-*` iframe, so the untrusted app is not same-origin with the runtime/controller window.
+  - An app-origin Service Worker forwards `fetch()` through a cross-origin bridge to the controller runtime.
+  - The injected script patches same-origin `WebSocket` so it also goes through `flowersec-proxy/ws`, but it now uses `registerCodeAppProxyBridge()` instead of reading `window.top.__flowersecProxyRuntime`.
 
 - Agent side:
   - The agent starts one `code-server` process per `code_space_id` (localhost only).
@@ -143,7 +145,7 @@ This is conservative: code-server is not designed to enforce a partial permissio
     - `~/.redeven/apps/code/spaces/<code_space_id>/codeserver/user-data/logs/<timestamp>/`
 
 - "Handshake timed out":
-  - Ensure the sandbox subdomain can load `/_redeven_boot/` and `/_redeven_sw.js`.
+  - Ensure the launcher/controller bootstrap can load `/_redeven_boot/`, and the app origin can load `/_redeven_app/` plus `/_redeven_app_sw.js`.
   - Ensure popups are allowed.
   - If you refreshed the codespace window after the bootstrap cleared the URL hash, the page must re-request a fresh `entry_ticket` from its opener (Env App). Reopen the codespace from the Env App if the opener is gone.
   - Ensure the agent is online and reachable via the Flowersec tunnel.

@@ -17,6 +17,10 @@ Browser side:
   - The runtime forwards HTTP/WS traffic over Flowersec E2EE to the agent.
 - The bootstrap then loads the Env App UI via a same-origin iframe:
   - `/_redeven_proxy/env/`
+- This same-origin iframe pattern is specific to the trusted Env App origin.
+  - Codespace and port-forward windows opened from Env App use a different path:
+    `cs-*` / `pf-*` trusted launcher -> `rt-*` controller origin -> `app-*` untrusted app origin.
+  - The untrusted app never runs on the same origin as the Env App runtime/controller window.
 
 Agent side:
 
