@@ -6,9 +6,8 @@ import type {
   GitRepoSummaryResponse,
   GitResolveRepoResponse,
   GitWorkspaceChange,
-  GitWorkspaceSection,
 } from '../protocol/redeven_v1';
-import { buildGitWorkbenchSubviewItems, type GitBranchSubview, type GitWorkbenchSubview } from '../utils/gitWorkbench';
+import { buildGitWorkbenchSubviewItems, type GitBranchSubview, type GitWorkbenchSubview, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 import { GitViewNav } from './GitViewNav';
@@ -37,13 +36,13 @@ export interface GitWorkspaceProps {
   workspace?: GitListWorkspaceChangesResponse | null;
   workspaceLoading?: boolean;
   workspaceError?: string;
-  selectedWorkspaceSection?: GitWorkspaceSection;
-  onSelectWorkspaceSection?: (section: GitWorkspaceSection) => void;
+  selectedWorkspaceSection?: GitWorkspaceViewSection;
+  onSelectWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
   selectedWorkspaceItem?: GitWorkspaceChange | null;
   onSelectWorkspaceItem?: (item: GitWorkspaceChange) => void;
   onStageWorkspaceItem?: (item: GitWorkspaceChange) => void;
   onUnstageWorkspaceItem?: (item: GitWorkspaceChange) => void;
-  onBulkWorkspaceAction?: (section: GitWorkspaceSection) => void;
+  onBulkWorkspaceAction?: (section: GitWorkspaceViewSection) => void;
   busyWorkspaceKey?: string;
   busyWorkspaceAction?: 'stage' | 'unstage' | '';
   branches?: GitListBranchesResponse | null;

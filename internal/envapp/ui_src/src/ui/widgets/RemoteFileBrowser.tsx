@@ -36,14 +36,19 @@ import {
   branchIdentity,
   findGitBranchByKey,
   findWorkspaceChangeByKey,
+  isGitWorkspaceSection,
   recountWorkspaceSummary,
   summarizeWorkspaceCount,
   type GitBranchSubview,
+  type GitWorkspaceViewSection,
   pickDefaultGitBranch,
   pickDefaultWorkspaceChange,
-  pickDefaultWorkspaceSection,
+  pickDefaultWorkspaceViewSection,
   unstageWorkspaceDestination,
-  workspaceSectionActionKey,
+  workspaceViewSectionActionKey,
+  workspaceViewSectionForItem,
+  workspaceViewSectionHasItem,
+  workspaceViewSectionItems,
   workspaceSectionItems,
   workspaceEntryKey,
   workspaceMutationPaths,
@@ -241,7 +246,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitWorkspace, setGitWorkspace] = createSignal<GitListWorkspaceChangesResponse | null>(null);
   const [gitWorkspaceLoading, setGitWorkspaceLoading] = createSignal(false);
   const [gitWorkspaceError, setGitWorkspaceError] = createSignal('');
-  const [selectedGitWorkspaceSection, setSelectedGitWorkspaceSection] = createSignal<GitWorkspaceSection>('unstaged');
+  const [selectedGitWorkspaceSection, setSelectedGitWorkspaceSection] = createSignal<GitWorkspaceViewSection>('changes');
   const [selectedGitWorkspaceKey, setSelectedGitWorkspaceKey] = createSignal('');
   const [gitBranches, setGitBranches] = createSignal<GitListBranchesResponse | null>(null);
   const [gitBranchesLoading, setGitBranchesLoading] = createSignal(false);
@@ -550,7 +555,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitWorkspace(null);
     setGitWorkspaceLoading(false);
     setGitWorkspaceError('');
-    setSelectedGitWorkspaceSection('unstaged');
+    setSelectedGitWorkspaceSection('changes');
     setSelectedGitWorkspaceKey('');
     setGitBranches(null);
     setGitBranchesLoading(false);
@@ -572,29 +577,27 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitRepoSummary((prev) => (prev ? { ...prev, workspaceSummary: nextWorkspace.summary } : prev));
     setRepoInfo((prev) => (prev ? { ...prev, dirty: summarizeWorkspaceCount(nextWorkspace.summary) > 0 } : prev));
 
-    const nextSection = selectedGitWorkspaceSection() || pickDefaultWorkspaceSection(nextWorkspace);
+    const nextSection = selectedGitWorkspaceSection() || pickDefaultWorkspaceViewSection(nextWorkspace);
     setSelectedGitWorkspaceSection(nextSection);
     const currentKey = selectedGitWorkspaceKey();
     const scopedCurrentItem = findWorkspaceChangeByKey(nextWorkspace, currentKey);
-    const nextItem = scopedCurrentItem?.section === nextSection
+    const nextItem = workspaceViewSectionHasItem(nextSection, scopedCurrentItem)
       ? scopedCurrentItem
-      : workspaceSectionItems(nextWorkspace, nextSection)[0] ?? pickDefaultWorkspaceChange(nextWorkspace);
+      : workspaceViewSectionItems(nextWorkspace, nextSection)[0] ?? pickDefaultWorkspaceChange(nextWorkspace);
     setSelectedGitWorkspaceKey(workspaceEntryKey(nextItem));
   };
 
   const selectGitWorkspaceItem = (item: GitWorkspaceChange | null | undefined) => {
-    if (item?.section) {
-      setSelectedGitWorkspaceSection(item.section as GitWorkspaceSection);
-    }
+    setSelectedGitWorkspaceSection(workspaceViewSectionForItem(item));
     setSelectedGitWorkspaceKey(workspaceEntryKey(item));
     if (layout.isMobile()) {
       closePageSidebar();
     }
   };
 
-  const selectGitWorkspaceSection = (section: GitWorkspaceSection) => {
+  const selectGitWorkspaceSection = (section: GitWorkspaceViewSection) => {
     setSelectedGitWorkspaceSection(section);
-    const firstItem = workspaceSectionItems(gitWorkspace(), section)[0] ?? null;
+    const firstItem = workspaceViewSectionItems(gitWorkspace(), section)[0] ?? null;
     setSelectedGitWorkspaceKey(workspaceEntryKey(firstItem));
     if (layout.isMobile()) {
       closePageSidebar();
@@ -671,21 +674,28 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
-  const handleStageWorkspacePaths = async (sourceSection: GitWorkspaceSection, paths: string[], key: string, count: number) => {
+  const handleStageWorkspacePaths = async (sourceSections: GitWorkspaceSection[], paths: string[], key: string, count: number) => {
     const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
     if (!repoRootPath) return;
+    const uniqueSourceSections = Array.from(new Set(sourceSections));
     await runGitMutation(
       'stage',
       key,
       () => rpc.git.stageWorkspace({ repoRootPath, paths: paths.length > 0 ? paths : undefined }),
       () => {
-        const nextWorkspace = applyWorkspaceSectionMutation(gitWorkspace(), {
-          sourceSection,
-          paths,
-          destinationSection: 'staged',
-        });
+        const nextWorkspace = uniqueSourceSections.reduce(
+          (workspace, sourceSection) => applyWorkspaceSectionMutation(workspace, {
+            sourceSection,
+            paths,
+            destinationSection: 'staged',
+          }),
+          gitWorkspace(),
+        );
         applyWorkspaceSnapshot(nextWorkspace);
-        notification.success(sourceSection === 'untracked' ? 'Tracked' : 'Staged', `${formatGitFileCountLabel(count)} moved into the index.`);
+        notification.success(
+          uniqueSourceSections.length === 1 && uniqueSourceSections[0] === 'untracked' ? 'Tracked' : 'Staged',
+          `${formatGitFileCountLabel(count)} moved into the index.`,
+        );
       },
     );
   };
@@ -710,23 +720,26 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const handleStageWorkspaceItem = (item: GitWorkspaceChange) => {
-    const sourceSection = (item.section as GitWorkspaceSection | undefined) ?? selectedGitWorkspaceSection();
-    setSelectedGitWorkspaceSection(sourceSection);
-    void handleStageWorkspacePaths(sourceSection, workspaceMutationPaths(item), workspaceEntryKey(item), 1);
+    const sourceSection = isGitWorkspaceSection(item.section) ? item.section : 'unstaged';
+    setSelectedGitWorkspaceSection(workspaceViewSectionForItem(item));
+    void handleStageWorkspacePaths([sourceSection], workspaceMutationPaths(item), workspaceEntryKey(item), 1);
   };
 
   const handleUnstageWorkspaceItem = (item: GitWorkspaceChange) => void handleUnstageWorkspacePaths(workspaceMutationPaths(item), workspaceEntryKey(item), 1);
 
-  const handleBulkWorkspaceAction = (section: GitWorkspaceSection) => {
-    const items = workspaceSectionItems(gitWorkspace(), section);
+  const handleBulkWorkspaceAction = (section: GitWorkspaceViewSection) => {
+    const items = workspaceViewSectionItems(gitWorkspace(), section);
     if (items.length === 0) return;
     setSelectedGitWorkspaceSection(section);
     const paths = Array.from(new Set(items.flatMap((item) => workspaceMutationPaths(item))));
     if (section === 'staged') {
-      void handleUnstageWorkspacePaths(paths, workspaceSectionActionKey(section), items.length);
+      void handleUnstageWorkspacePaths(paths, workspaceViewSectionActionKey(section), items.length);
       return;
     }
-    void handleStageWorkspacePaths(section, paths, workspaceSectionActionKey(section), items.length);
+    const sourceSections = section === 'changes'
+      ? Array.from(new Set(items.map((item) => (isGitWorkspaceSection(item.section) ? item.section : 'unstaged'))))
+      : [section];
+    void handleStageWorkspacePaths(sourceSections, paths, workspaceViewSectionActionKey(section), items.length);
   };
 
   const handleCommitWorkspace = async (message: string) => {
@@ -947,7 +960,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const message = err instanceof Error ? err.message : String(err ?? 'Failed to load workspace changes');
       if (!options.silent) {
         setGitWorkspace(null);
-        setSelectedGitWorkspaceSection('unstaged');
+        setSelectedGitWorkspaceSection('changes');
         setSelectedGitWorkspaceKey('');
         setGitWorkspaceError(message);
       } else {

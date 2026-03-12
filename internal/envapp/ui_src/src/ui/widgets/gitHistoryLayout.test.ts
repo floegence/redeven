@@ -224,7 +224,7 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('Pick a branch to inspect its status or history in the main pane.');
     expect(src).not.toContain('Recent history with merge structure.');
     expect(src).toContain('space-y-1.5 sm:space-y-2');
-    expect(src).toContain('WORKSPACE_REVIEW_SECTIONS');
+    expect(src).toContain('WORKSPACE_VIEW_SECTIONS');
     expect(src).toContain('No files in this section.');
     expect(src).toContain('gitToneSelectableCardClass(tone(), active())');
     expect(src).toContain('text-sidebar-accent-foreground/75');
@@ -314,7 +314,7 @@ describe('browser workspace layout wiring', () => {
     const historySrc = read('./GitHistoryBrowser.tsx');
 
     expect(changesSrc).toContain('No staged files yet. Stage files from the pending sections, then open the commit dialog.');
-    expect(changesSrc).toContain('No unstaged files in this repository.');
+    expect(changesSrc).toContain('No pending files in this repository.');
     expect(changesSrc).not.toContain('Choose a file from the staged or pending lists to inspect its patch.');
 
     expect(overviewSrc).toContain('Choose a branch from the sidebar to load compare context.');

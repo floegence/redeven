@@ -1,14 +1,15 @@
 import { For, Show, createEffect, createSignal } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import type { GitListWorkspaceChangesResponse, GitRepoSummaryResponse, GitWorkspaceChange, GitWorkspaceSection } from '../protocol/redeven_v1';
+import type { GitListWorkspaceChangesResponse, GitRepoSummaryResponse, GitWorkspaceChange } from '../protocol/redeven_v1';
 import {
   changeSecondaryPath,
-  pickDefaultWorkspaceSection,
-  workspaceBulkActionLabel,
+  pickDefaultWorkspaceViewSection,
   workspaceEntryKey,
-  workspaceSectionActionKey,
-  workspaceSectionItems,
-  workspaceSectionLabel,
+  workspaceViewBulkActionLabel,
+  workspaceViewSectionActionKey,
+  workspaceViewSectionItems,
+  workspaceViewSectionLabel,
+  type GitWorkspaceViewSection,
 } from '../utils/gitWorkbench';
 import { gitChangePathClass, gitChangeTone, gitToneDotClass, workspaceSectionTone } from './GitChrome';
 import { GitCommitDialog } from './GitCommitDialog';
@@ -18,8 +19,8 @@ import { GitChangeMetrics, GitLabelBlock, GitMetaPill, GitPrimaryTitle, GitSubtl
 export interface GitChangesPanelProps {
   repoSummary?: GitRepoSummaryResponse | null;
   workspace?: GitListWorkspaceChangesResponse | null;
-  selectedSection?: GitWorkspaceSection;
-  onSelectSection?: (section: GitWorkspaceSection) => void;
+  selectedSection?: GitWorkspaceViewSection;
+  onSelectSection?: (section: GitWorkspaceViewSection) => void;
   selectedItem?: GitWorkspaceChange | null;
   onSelectItem?: (item: GitWorkspaceChange) => void;
   busyWorkspaceKey?: string;
@@ -32,7 +33,7 @@ export interface GitChangesPanelProps {
   commitBusy?: boolean;
   onStageSelected?: (item: GitWorkspaceChange) => void;
   onUnstageSelected?: (item: GitWorkspaceChange) => void;
-  onBulkAction?: (section: GitWorkspaceSection) => void;
+  onBulkAction?: (section: GitWorkspaceViewSection) => void;
 }
 
 function itemPath(item: GitWorkspaceChange): string {
@@ -43,26 +44,25 @@ function listItemActionLabel(item: GitWorkspaceChange): string {
   return item.section === 'staged' ? 'Unstage' : '+ Stage';
 }
 
-function sectionItems(workspace: GitListWorkspaceChangesResponse | null | undefined, section: GitWorkspaceSection): GitWorkspaceChange[] {
-  return workspaceSectionItems(workspace, section);
+function sectionItems(workspace: GitListWorkspaceChangesResponse | null | undefined, section: GitWorkspaceViewSection): GitWorkspaceChange[] {
+  return workspaceViewSectionItems(workspace, section);
 }
 
-function emptySectionMessage(section: GitWorkspaceSection): string {
+function emptySectionMessage(section: GitWorkspaceViewSection): string {
   switch (section) {
     case 'staged':
       return 'No staged files yet. Stage files from the pending sections, then open the commit dialog.';
-    case 'untracked':
-      return 'No untracked files in this repository.';
+    case 'changes':
+      return 'No pending files in this repository.';
     case 'conflicted':
       return 'No conflicted files right now.';
-    case 'unstaged':
     default:
-      return 'No unstaged files in this repository.';
+      return 'No files in this section.';
   }
 }
 
 interface WorkspaceTableProps {
-  section: GitWorkspaceSection;
+  section: GitWorkspaceViewSection;
   items: GitWorkspaceChange[];
   selectedKey?: string;
   onSelectItem?: (item: GitWorkspaceChange) => void;
@@ -99,7 +99,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                   const active = () => props.selectedKey === workspaceEntryKey(item);
                   const action = () => (item.section === 'staged' ? 'unstage' : 'stage');
                   const busy = () => (
-                    (props.busyWorkspaceKey === workspaceEntryKey(item) || props.busyWorkspaceKey === workspaceSectionActionKey(props.section))
+                    (props.busyWorkspaceKey === workspaceEntryKey(item) || props.busyWorkspaceKey === workspaceViewSectionActionKey(props.section))
                     && props.busyWorkspaceAction === action()
                   );
                   return (
@@ -165,18 +165,18 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitWorkspaceChange | null>(null);
 
-  const selectedSection = () => props.selectedSection ?? pickDefaultWorkspaceSection(props.workspace);
+  const selectedSection = () => props.selectedSection ?? pickDefaultWorkspaceViewSection(props.workspace);
   const visibleItems = () => sectionItems(props.workspace, selectedSection());
   const stagedItems = () => sectionItems(props.workspace, 'staged');
   const stagedCount = () => stagedItems().length;
   const selectedTone = () => workspaceSectionTone(selectedSection());
-  const visibleSectionLabel = () => workspaceSectionLabel(selectedSection());
+  const visibleSectionLabel = () => workspaceViewSectionLabel(selectedSection());
   const diffItem = () => diffDialogItem() ?? props.selectedItem ?? null;
   const selectedKey = () => workspaceEntryKey(diffItem());
   const canCommit = () => stagedCount() > 0 && String(props.commitMessage ?? '').trim().length > 0 && !props.commitBusy;
-  const bulkActionLabel = () => workspaceBulkActionLabel(selectedSection());
+  const bulkActionLabel = () => workspaceViewBulkActionLabel(selectedSection());
   const bulkAction = () => (selectedSection() === 'staged' ? 'unstage' : 'stage');
-  const bulkActionBusy = () => props.busyWorkspaceKey === workspaceSectionActionKey(selectedSection()) && props.busyWorkspaceAction === bulkAction();
+  const bulkActionBusy = () => props.busyWorkspaceKey === workspaceViewSectionActionKey(selectedSection()) && props.busyWorkspaceAction === bulkAction();
 
   createEffect(() => {
     if (!commitDialogOpen()) return;

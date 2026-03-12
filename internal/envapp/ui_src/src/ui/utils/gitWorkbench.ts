@@ -12,6 +12,7 @@ import type {
 
 export type GitWorkbenchSubview = 'overview' | 'changes' | 'branches' | 'history';
 export type GitBranchSubview = 'status' | 'history';
+export type GitWorkspaceViewSection = GitWorkspaceSection | 'changes';
 
 export type GitWorkbenchSubviewItem = {
   id: GitWorkbenchSubview;
@@ -21,6 +22,7 @@ export type GitWorkbenchSubviewItem = {
 
 export const WORKSPACE_SECTIONS: GitWorkspaceSection[] = ['staged', 'unstaged', 'untracked', 'conflicted'];
 export const WORKSPACE_REVIEW_SECTIONS: GitWorkspaceSection[] = ['unstaged', 'untracked', 'conflicted', 'staged'];
+export const WORKSPACE_VIEW_SECTIONS: GitWorkspaceViewSection[] = ['changes', 'conflicted', 'staged'];
 
 export function summarizeWorkspaceCount(summary: GitWorkspaceSummary | null | undefined): number {
   return Number(summary?.stagedCount ?? 0)
@@ -70,6 +72,11 @@ export function workspaceSectionLabel(section: GitWorkspaceSection): string {
   }
 }
 
+export function workspaceViewSectionLabel(section: GitWorkspaceViewSection): string {
+  if (section === 'changes') return 'Changes';
+  return workspaceSectionLabel(section);
+}
+
 export function workspaceBulkActionLabel(section: GitWorkspaceSection): string {
   switch (section) {
     case 'staged':
@@ -83,7 +90,16 @@ export function workspaceBulkActionLabel(section: GitWorkspaceSection): string {
   }
 }
 
+export function workspaceViewBulkActionLabel(section: GitWorkspaceViewSection): string {
+  if (section === 'changes') return 'Stage All';
+  return workspaceBulkActionLabel(section);
+}
+
 export function workspaceSectionActionKey(section: GitWorkspaceSection): string {
+  return `section:${section}`;
+}
+
+export function workspaceViewSectionActionKey(section: GitWorkspaceViewSection): string {
   return `section:${section}`;
 }
 
@@ -113,6 +129,13 @@ export function workspaceSectionCount(summary: GitWorkspaceSummary | null | unde
   }
 }
 
+export function workspaceViewSectionCount(summary: GitWorkspaceSummary | null | undefined, section: GitWorkspaceViewSection): number {
+  if (section === 'changes') {
+    return Number(summary?.unstagedCount ?? 0) + Number(summary?.untrackedCount ?? 0);
+  }
+  return workspaceSectionCount(summary, section);
+}
+
 export function workspaceSectionItems(
   workspace: GitListWorkspaceChangesResponse | null | undefined,
   section: GitWorkspaceSection,
@@ -130,6 +153,36 @@ export function workspaceSectionItems(
     default:
       return [];
   }
+}
+
+export function workspaceViewSectionItems(
+  workspace: GitListWorkspaceChangesResponse | null | undefined,
+  section: GitWorkspaceViewSection,
+): GitWorkspaceChange[] {
+  if (section === 'changes') {
+    return [
+      ...workspaceSectionItems(workspace, 'unstaged'),
+      ...workspaceSectionItems(workspace, 'untracked'),
+    ];
+  }
+  return workspaceSectionItems(workspace, section);
+}
+
+export function workspaceViewSectionForItem(
+  item: GitWorkspaceChange | null | undefined,
+): GitWorkspaceViewSection {
+  const section = String(item?.section ?? '').trim();
+  if (section === 'unstaged' || section === 'untracked') return 'changes';
+  if (section === 'staged' || section === 'conflicted') return section;
+  return 'changes';
+}
+
+export function workspaceViewSectionHasItem(
+  section: GitWorkspaceViewSection,
+  item: GitWorkspaceChange | null | undefined,
+): boolean {
+  if (!item) return false;
+  return workspaceViewSectionForItem(item) === section;
 }
 
 export function gitDiffEntryIdentity(item: GitWorkspaceChange | GitCommitFileSummary | null | undefined): string {
@@ -155,6 +208,15 @@ export function pickDefaultWorkspaceSection(workspace: GitListWorkspaceChangesRe
     if (workspaceSectionItems(workspace, section).length > 0) return section;
   }
   return 'unstaged';
+}
+
+export function pickDefaultWorkspaceViewSection(
+  workspace: GitListWorkspaceChangesResponse | null | undefined,
+): GitWorkspaceViewSection {
+  for (const section of WORKSPACE_VIEW_SECTIONS) {
+    if (workspaceViewSectionItems(workspace, section).length > 0) return section;
+  }
+  return 'changes';
 }
 
 export function findWorkspaceChangeByKey(
@@ -264,6 +326,10 @@ export function workspaceMutationPaths(change: GitWorkspaceChange | null | undef
     .map((item) => String(item ?? '').trim())
     .filter(Boolean);
   return Array.from(new Set(values));
+}
+
+export function isGitWorkspaceSection(value: unknown): value is GitWorkspaceSection {
+  return WORKSPACE_SECTIONS.includes(value as GitWorkspaceSection);
 }
 
 export function recountWorkspaceSummary(workspace: GitListWorkspaceChangesResponse | null | undefined): GitWorkspaceSummary {
