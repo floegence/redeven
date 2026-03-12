@@ -11,8 +11,8 @@
     "test": "vitest run --environment=node"
   },
   "dependencies": {
-    "@floegence/floe-webapp-core": "^0.34.0",
-    "@floegence/floe-webapp-protocol": "^0.34.0",
+    "@floegence/floe-webapp-core": "^0.35.0",
+    "@floegence/floe-webapp-protocol": "^0.35.0",
     "@floegence/floeterm-terminal-web": "^0.4.3",
     "@floegence/flowersec-core": "^0.15.0",
     "@fontsource/iosevka": "^5.2.5",

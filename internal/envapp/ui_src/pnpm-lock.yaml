@@ -16,11 +16,11 @@ importers:
   .:
     dependencies:
       '@floegence/floe-webapp-core':
-        specifier: ^0.34.0
-        version: 0.34.0(solid-js@1.9.11)
+        specifier: ^0.35.0
+        version: 0.35.0(solid-js@1.9.11)
       '@floegence/floe-webapp-protocol':
-        specifier: ^0.34.0
-        version: 0.34.0(solid-js@1.9.11)
+        specifier: ^0.35.0
+        version: 0.35.0(solid-js@1.9.11)
       '@floegence/floeterm-terminal-web':
         specifier: ^0.4.3
         version: 0.4.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -389,13 +389,13 @@ packages:
   '@fast-csv/parse@4.3.6':
     resolution: {integrity: sha512-uRsLYksqpbDmWaSmzvJcuApSEe38+6NQZBUsuAyMZKqHxH0g1wcJgsKUvN3WC8tewaqFjBMMGrkHmC+T7k8LvA==}
 
-  '@floegence/floe-webapp-core@0.34.0':
-    resolution: {integrity: sha512-CpwcP/X0JsBSpzYpZXMCBUhJevyBVYA5W5UpM0ku+2lj/sGE4C2SOQk7bRD/EkBeE51I6zgOT+50Jkp4M9TvfQ==}
+  '@floegence/floe-webapp-core@0.35.0':
+    resolution: {integrity: sha512-ks0IBlvHqA4VRG4VkptKHC1Tsgdr/UipYFKADRrNATVmYAQ5TAN3xirGS9eprf2BSlguTlSVhAuqebu0yyKMnw==}
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floe-webapp-protocol@0.34.0':
-    resolution: {integrity: sha512-AW4H3VnZkpHY3UOLiS6+DexfUR2Ys+JYM6cKbAcIf6zc1nqV5Wc6btoMRRD1KSPiTSIvBzJAwQV4tf3Ggn/T7A==}
+  '@floegence/floe-webapp-protocol@0.35.0':
+    resolution: {integrity: sha512-lApuXXxypoy37Yq4krj9VMUew+Wfv4xVPD9OeQ4CJxoQ5qKlVz5N+Fzl96yQjUnFXEl5Oc6aVErG3Nvhk7Ek0g==}
     peerDependencies:
       solid-js: ^1.8.0
 
@@ -2439,7 +2439,7 @@ snapshots:
       lodash.isundefined: 3.0.1
       lodash.uniq: 4.5.0
 
-  '@floegence/floe-webapp-core@0.34.0(solid-js@1.9.11)':
+  '@floegence/floe-webapp-core@0.35.0(solid-js@1.9.11)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.3
@@ -2450,7 +2450,7 @@ snapshots:
       solid-motionone: 1.0.4(solid-js@1.9.11)
       tailwind-merge: 3.5.0
 
-  '@floegence/floe-webapp-protocol@0.34.0(solid-js@1.9.11)':
+  '@floegence/floe-webapp-protocol@0.35.0(solid-js@1.9.11)':
     dependencies:
       '@floegence/flowersec-core': 0.15.0
       solid-js: 1.9.11
