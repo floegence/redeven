@@ -24,9 +24,11 @@ import { gitBranchTone, gitChangePathClass, gitCompareTone, gitToneActionButtonC
 import { GitDiffDialog } from './GitDiffDialog';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
+  GIT_CHANGED_FILES_ACTION_BUTTON_CLASS,
   GIT_CHANGED_FILES_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_HEAD_CLASS,
   GIT_CHANGED_FILES_HEADER_ROW_CLASS,
+  GIT_CHANGED_FILES_SECONDARY_PATH_CLASS,
   GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_TABLE_CLASS,
   GitChangeMetrics,
@@ -195,7 +197,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
                             {compareFilePath(item)}
                           </button>
                           <Show when={changeSecondaryPath(item) !== compareFilePath(item)}>
-                            <div class="mt-0.5 truncate text-[10px] text-muted-foreground" title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
+                            <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
                           </Show>
                         </div>
                       </td>
@@ -204,7 +206,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
                       </td>
                       <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>
                       <td class={gitChangedFilesStickyCellClass(active())}>
-                        <Button size="xs" variant="outline" class="min-w-[5.5rem] justify-center rounded-sm" onClick={() => props.onOpenDiff?.(item)}>
+                        <Button size="xs" variant="outline" class={GIT_CHANGED_FILES_ACTION_BUTTON_CLASS} onClick={() => props.onOpenDiff?.(item)}>
                           View Diff
                         </Button>
                       </td>
@@ -268,7 +270,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                             {worktreeFilePath(item)}
                           </button>
                           <Show when={changeSecondaryPath(item) !== worktreeFilePath(item)}>
-                            <div class="mt-0.5 truncate text-[10px] text-muted-foreground" title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
+                            <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
                           </Show>
                         </div>
                       </td>
@@ -278,7 +280,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                       </td>
                       <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>
                       <td class={gitChangedFilesStickyCellClass(active())}>
-                        <Button size="xs" variant="outline" class="min-w-[5.5rem] justify-center rounded-sm" onClick={() => props.onOpenDiff?.(item)}>
+                        <Button size="xs" variant="outline" class={GIT_CHANGED_FILES_ACTION_BUTTON_CLASS} onClick={() => props.onOpenDiff?.(item)}>
                           View Diff
                         </Button>
                       </td>

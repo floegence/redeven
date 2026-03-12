@@ -7,6 +7,7 @@ import { changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench
 import { gitChangePathClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import {
+  GIT_CHANGED_FILES_ACTION_BUTTON_CLASS,
   GIT_CHANGED_FILES_CELL_CLASS,
   GIT_CHANGED_FILES_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_HEAD_CLASS,
@@ -265,7 +266,10 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                             <td class={gitChangedFilesStickyCellClass(active())}>
                                               <button
                                                 type="button"
-                                                class="inline-flex min-w-[5.5rem] items-center justify-center rounded-sm border border-input bg-background px-2.5 py-1.5 text-[11px] font-medium text-foreground shadow-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                                                class={cn(
+                                                  'inline-flex items-center border border-input bg-background font-medium text-foreground shadow-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
+                                                  GIT_CHANGED_FILES_ACTION_BUTTON_CLASS,
+                                                )}
                                                 onClick={() => {
                                                   setDiffDialogItem(file);
                                                   setDiffDialogOpen(true);

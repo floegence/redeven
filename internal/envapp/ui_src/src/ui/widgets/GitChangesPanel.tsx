@@ -16,9 +16,11 @@ import { GitCommitDialog } from './GitCommitDialog';
 import { GitDiffDialog } from './GitDiffDialog';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
+  GIT_CHANGED_FILES_ACTION_BUTTON_CLASS,
   GIT_CHANGED_FILES_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_HEAD_CLASS,
   GIT_CHANGED_FILES_HEADER_ROW_CLASS,
+  GIT_CHANGED_FILES_SECONDARY_PATH_CLASS,
   GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_TABLE_CLASS,
   GitChangeMetrics,
@@ -137,7 +139,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                             {itemPath(item)}
                           </button>
                           <Show when={changeSecondaryPath(item) !== itemPath(item)}>
-                            <div class="mt-0.5 truncate text-[10px] text-muted-foreground" title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
+                            <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
                           </Show>
                         </div>
                       </td>
@@ -149,7 +151,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                         <Button
                           size="xs"
                           variant={item.section === 'staged' ? 'outline' : 'default'}
-                          class={item.section === 'staged' ? 'min-w-[5.5rem] justify-center rounded-sm' : 'min-w-[5.5rem] justify-center rounded-sm'}
+                          class={GIT_CHANGED_FILES_ACTION_BUTTON_CLASS}
                           onClick={(event) => {
                             event.stopPropagation();
                             props.onAction?.(item);

@@ -205,6 +205,9 @@ describe('browser workspace layout wiring', () => {
     expect(changesSrc).toContain('GitDiffDialog');
     expect(changesSrc).toContain('GIT_CHANGED_FILES_TABLE_CLASS');
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_HEAD_CLASS = 'sticky top-0 z-10 bg-muted/30 backdrop-blur';");
+    expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_HEADER_CELL_CLASS = 'px-2.5 py-1.5 font-medium';");
+    expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_CELL_CLASS = 'px-2.5 py-1.5 align-top';");
+    expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'h-6 min-w-[5rem] justify-center rounded-sm px-2 text-[10px]';");
     expect(changesSrc).toContain('variant={item.section === \'staged\' ? \'outline\' : \'default\'}');
     expect(primitivesSrc).toContain('sticky right-0 z-10 border-l border-border/45');
     expect(changesSrc).not.toContain('border-b border-border/70 px-3 py-2');
