@@ -295,8 +295,10 @@ describe('browser workspace layout wiring', () => {
     expect(patchSrc).toContain('minmax(max-content,1fr)');
     expect(patchSrc).toContain('grid-cols-[2.25rem_2.25rem_minmax(max-content,1fr)]');
     expect(patchSrc).not.toContain('chat-tool-apply-patch');
-    expect(patchUtilSrc).toContain("return 'border-l-[2px] border-l-success/60 bg-success/10';");
-    expect(patchUtilSrc).toContain("return 'text-success';");
+    expect(patchUtilSrc).toContain("return 'border-l-[2px] border-l-emerald-600/45 bg-emerald-500/12 dark:border-l-success/60 dark:bg-success/10';");
+    expect(patchUtilSrc).toContain("return 'border-l-[2px] border-l-red-600/45 bg-red-500/12 dark:border-l-error/60 dark:bg-error/10';");
+    expect(patchUtilSrc).toContain("return 'text-emerald-700 dark:text-emerald-300';");
+    expect(patchUtilSrc).toContain("return 'text-red-700 dark:text-red-300';");
     expect(patchUtilSrc).not.toContain('chat-tool-apply-patch');
   });
 
