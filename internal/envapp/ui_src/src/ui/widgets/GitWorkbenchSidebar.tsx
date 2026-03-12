@@ -8,17 +8,17 @@ import type {
   GitListBranchesResponse,
   GitListWorkspaceChangesResponse,
   GitRepoSummaryResponse,
-  GitWorkspaceSection,
 } from '../protocol/redeven_v1';
 import {
-  WORKSPACE_REVIEW_SECTIONS,
+  WORKSPACE_VIEW_SECTIONS,
   branchDisplayName,
   branchIdentity,
   branchStatusSummary,
   summarizeWorkspaceCount,
   workspaceHealthLabel,
-  workspaceSectionCount,
-  workspaceSectionLabel,
+  workspaceViewSectionCount,
+  workspaceViewSectionLabel,
+  type GitWorkspaceViewSection,
   type GitWorkbenchSubview,
 } from '../utils/gitWorkbench';
 import {
@@ -41,8 +41,8 @@ export interface GitWorkbenchSidebarProps {
   workspace?: GitListWorkspaceChangesResponse | null;
   workspaceLoading?: boolean;
   workspaceError?: string;
-  selectedWorkspaceSection?: GitWorkspaceSection;
-  onSelectWorkspaceSection?: (section: GitWorkspaceSection) => void;
+  selectedWorkspaceSection?: GitWorkspaceViewSection;
+  onSelectWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
   branches?: GitListBranchesResponse | null;
   branchesLoading?: boolean;
   branchesError?: string;
@@ -130,9 +130,9 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                       </div>
 
                       <div class="mt-2 grid grid-cols-1 gap-1">
-                        <For each={WORKSPACE_REVIEW_SECTIONS}>
+                        <For each={WORKSPACE_VIEW_SECTIONS}>
                           {(section) => {
-                            const count = () => workspaceSectionCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary, section);
+                            const count = () => workspaceViewSectionCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary, section);
                             const tone = () => workspaceSectionTone(section);
                             const active = () => props.selectedWorkspaceSection === section;
                             return (
@@ -146,7 +146,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                               >
                                 <div class="flex items-start justify-between gap-2">
                                   <div class="min-w-0 flex-1">
-                                    <div class="font-medium text-current">{workspaceSectionLabel(section)}</div>
+                                    <div class="font-medium text-current">{workspaceViewSectionLabel(section)}</div>
                                     <div class={cn('mt-0.5 text-[10px] leading-relaxed', active() ? 'text-sidebar-accent-foreground/75' : 'text-muted-foreground')}>
                                       {count() === 0 ? 'No files in this section.' : `${count()} file${count() === 1 ? '' : 's'} available.`}
                                     </div>

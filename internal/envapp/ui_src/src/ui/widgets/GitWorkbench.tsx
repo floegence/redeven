@@ -10,9 +10,8 @@ import type {
   GitRepoSummaryResponse,
   GitResolveRepoResponse,
   GitWorkspaceChange,
-  GitWorkspaceSection,
 } from '../protocol/redeven_v1';
-import { repoDisplayName, syncStatusLabel, type GitBranchSubview, type GitWorkbenchSubview } from '../utils/gitWorkbench';
+import { repoDisplayName, syncStatusLabel, type GitBranchSubview, type GitWorkbenchSubview, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
 import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
@@ -30,8 +29,8 @@ export interface GitWorkbenchProps {
   workspace?: GitListWorkspaceChangesResponse | null;
   workspaceLoading?: boolean;
   workspaceError?: string;
-  selectedWorkspaceSection?: GitWorkspaceSection;
-  onSelectWorkspaceSection?: (section: GitWorkspaceSection) => void;
+  selectedWorkspaceSection?: GitWorkspaceViewSection;
+  onSelectWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
   selectedWorkspaceItem?: GitWorkspaceChange | null;
   onSelectWorkspaceItem?: (item: GitWorkspaceChange) => void;
   busyWorkspaceKey?: string;
@@ -58,7 +57,7 @@ export interface GitWorkbenchProps {
   onCommit?: (message: string) => void;
   onStageSelected?: (item: GitWorkspaceChange) => void;
   onUnstageSelected?: (item: GitWorkspaceChange) => void;
-  onBulkAction?: (section: GitWorkspaceSection) => void;
+  onBulkAction?: (section: GitWorkspaceViewSection) => void;
   fetchBusy?: boolean;
   pullBusy?: boolean;
   pushBusy?: boolean;

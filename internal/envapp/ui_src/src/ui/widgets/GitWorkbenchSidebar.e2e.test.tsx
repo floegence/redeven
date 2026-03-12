@@ -55,7 +55,7 @@ describe('GitWorkbenchSidebar interactions', () => {
               untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 }],
               conflicted: [],
             }}
-            selectedWorkspaceSection="unstaged"
+            selectedWorkspaceSection="changes"
             onSelectWorkspaceSection={(section) => {
               selectedSection = section;
             }}
@@ -68,18 +68,20 @@ describe('GitWorkbenchSidebar interactions', () => {
     ), host);
 
     try {
-      const activeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Unstaged')) as HTMLButtonElement | undefined;
-      const sectionButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Untracked'));
+      const activeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Changes')) as HTMLButtonElement | undefined;
+      const sectionButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Staged'));
       expect(activeButton?.className).toContain('bg-sidebar-accent');
       expect(sectionButton).toBeTruthy();
       sectionButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
       expect(host.textContent).toContain('Changes');
       expect(host.textContent).toContain('main');
-      expect(host.textContent).toContain('Unstaged');
-      expect(host.textContent).toContain('Untracked');
+      expect(host.textContent).toContain('Conflicted');
+      expect(host.textContent).toContain('Staged');
+      expect(host.textContent).not.toContain('Untracked');
+      expect(host.textContent).not.toContain('Unstaged');
       expect(host.textContent).not.toContain('src/app.ts');
-      expect(selectedSection).toBe('untracked');
+      expect(selectedSection).toBe('staged');
       expect(closeCount).toBe(1);
     } finally {
       dispose();

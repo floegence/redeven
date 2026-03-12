@@ -9,12 +9,16 @@ import {
   changeSecondaryPath,
   compareHeadline,
   findWorkspaceChangeByKey,
+  pickDefaultWorkspaceViewSection,
   repoDisplayName,
   summarizeWorkspaceCount,
   unstageWorkspaceDestination,
-  workspaceBulkActionLabel,
   workspaceEntryKey,
   workspaceSectionCount,
+  workspaceViewBulkActionLabel,
+  workspaceViewSectionCount,
+  workspaceViewSectionForItem,
+  workspaceViewSectionItems,
 } from './gitWorkbench';
 
 describe('gitWorkbench helpers', () => {
@@ -41,6 +45,7 @@ describe('gitWorkbench helpers', () => {
     expect(workspaceSectionCount(summary, 'unstaged')).toBe(3);
     expect(workspaceSectionCount(summary, 'untracked')).toBe(4);
     expect(workspaceSectionCount(summary, 'conflicted')).toBe(1);
+    expect(workspaceViewSectionCount(summary, 'changes')).toBe(7);
   });
 
   it('formats branch status and compare summary text', () => {
@@ -78,6 +83,22 @@ describe('gitWorkbench helpers', () => {
     };
     expect(branchIdentity(branches.local[0])).toBe('refs/heads/main');
     expect(allGitBranches(branches)).toHaveLength(2);
+  });
+
+  it('combines unstaged and untracked files into the changes view', () => {
+    const workspace = {
+      repoRootPath: '/',
+      summary: { stagedCount: 1, unstagedCount: 1, untrackedCount: 1, conflictedCount: 1 },
+      staged: [{ section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts' }],
+      unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts' }],
+      untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt' }],
+      conflicted: [{ section: 'conflicted', changeType: 'modified', path: 'src/conflict.ts', displayPath: 'src/conflict.ts' }],
+    };
+
+    expect(workspaceViewSectionItems(workspace, 'changes').map((item) => item.path)).toEqual(['src/next.ts', 'notes.txt']);
+    expect(workspaceViewSectionForItem(workspace.untracked[0])).toBe('changes');
+    expect(workspaceViewSectionForItem(workspace.conflicted[0])).toBe('conflicted');
+    expect(pickDefaultWorkspaceViewSection(workspace)).toBe('changes');
   });
 });
 
@@ -127,8 +148,8 @@ describe('gitWorkbench workspace mutations', () => {
   });
 
   it('maps bulk button labels to the visible section', () => {
-    expect(workspaceBulkActionLabel('unstaged')).toBe('Stage All');
-    expect(workspaceBulkActionLabel('untracked')).toBe('Track All');
-    expect(workspaceBulkActionLabel('staged')).toBe('Unstage All');
+    expect(workspaceViewBulkActionLabel('changes')).toBe('Stage All');
+    expect(workspaceViewBulkActionLabel('conflicted')).toBe('Stage All');
+    expect(workspaceViewBulkActionLabel('staged')).toBe('Unstage All');
   });
 });

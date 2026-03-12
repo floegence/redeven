@@ -144,6 +144,8 @@ export function gitSubviewTone(view: GitWorkbenchSubview): GitChromeTone {
 
 export function workspaceSectionTone(section: GitWorkspaceSection | string | undefined): GitChromeTone {
   switch (String(section ?? '').trim()) {
+    case 'changes':
+      return 'warning';
     case 'staged':
       return 'success';
     case 'unstaged':
