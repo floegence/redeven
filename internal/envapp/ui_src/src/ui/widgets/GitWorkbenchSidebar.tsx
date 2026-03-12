@@ -11,6 +11,7 @@ import type {
 } from '../protocol/redeven_v1';
 import {
   WORKSPACE_VIEW_SECTIONS,
+  branchContextSummary,
   branchDisplayName,
   branchIdentity,
   branchStatusSummary,
@@ -192,13 +193,13 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                     closeAfterPick();
                                   }}
                                 >
-                                  <div class="flex items-center gap-2">
+                                  <div class="grid min-h-5 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                                     <span class="min-w-0 flex-1 truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</span>
                                     <Show when={branch.current}>
                                       <span class="rounded bg-primary/[0.12] px-1.5 py-0.5 text-[10px] font-medium text-primary">Current</span>
                                     </Show>
                                   </div>
-                                  <div class="mt-0.5 truncate text-[10px] text-muted-foreground">{branchStatusSummary(branch)}</div>
+                                  <div class="mt-0.5 min-h-4 truncate text-[10px] text-muted-foreground" title={branchStatusSummary(branch)}>{branchContextSummary(branch)}</div>
                                 </button>
                               );
                             }}

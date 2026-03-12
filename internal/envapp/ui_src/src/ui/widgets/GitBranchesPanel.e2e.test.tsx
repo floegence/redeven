@@ -138,6 +138,8 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).toContain('Compare');
       expect(host.textContent).toContain('Checkout');
       expect(host.textContent).toContain('src/linked.ts');
+      expect(host.textContent).toContain('Upstream origin/feature/demo');
+      expect(host.textContent).not.toContain('Current · Upstream origin/feature/demo');
       expect(host.textContent).toContain('Staged');
       expect(host.textContent).toContain('View Diff');
       expect(host.textContent).not.toContain('pending review');

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   allGitBranches,
+  branchContextSummary,
   applyWorkspaceSectionMutation,
   branchIdentity,
   branchStatusSummary,
@@ -51,6 +52,8 @@ describe('gitWorkbench helpers', () => {
   it('formats branch status and compare summary text', () => {
     expect(branchStatusSummary({ current: true, upstreamRef: 'origin/main', aheadCount: 2, behindCount: 1, worktreePath: '/wt' }))
       .toContain('Current');
+    expect(branchContextSummary({ current: true, upstreamRef: 'origin/main', aheadCount: 2, behindCount: 1, worktreePath: '/wt' }))
+      .toBe('Upstream origin/main · ↑2 ↓1 · Linked worktree');
     expect(compareHeadline({ repoRootPath: '/', baseRef: 'main', targetRef: 'feature', targetAheadCount: 3, targetBehindCount: 0, commits: [], files: [] }))
       .toContain('Compared branch is ahead by 3');
     expect(compareHeadline({ repoRootPath: '/', baseRef: 'main', targetRef: 'feature', targetAheadCount: 0, targetBehindCount: 0, commits: [], files: [] }))

@@ -6,6 +6,7 @@ import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { useRedevenRpc, type GitBranchSummary, type GitCommitFileSummary, type GitCommitSummary, type GitGetBranchCompareResponse, type GitListBranchesResponse, type GitListWorkspaceChangesResponse, type GitRepoSummaryResponse, type GitWorkspaceChange, type GitWorkspaceSection } from '../protocol/redeven_v1';
 import {
   allGitBranches,
+  branchContextSummary,
   branchDisplayName,
   branchIdentity,
   branchStatusSummary,
@@ -924,18 +925,20 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       label="Branch"
                       tone={gitBranchTone(props.selectedBranch)}
                       meta={
-                        <>
+                        <div class="flex min-h-5 items-center gap-1.5">
                           <Show when={props.selectedBranch?.current}>
                             <GitMetaPill tone="success">Current</GitMetaPill>
                           </Show>
                           <Show when={props.selectedBranch?.kind === 'remote'}>
                             <GitMetaPill tone="violet">Remote</GitMetaPill>
                           </Show>
-                        </>
+                        </div>
                       }
                     >
                       <GitPrimaryTitle>{branchDisplayName(props.selectedBranch)}</GitPrimaryTitle>
-                      <div class="text-[11px] leading-relaxed text-muted-foreground">{branchStatusSummary(props.selectedBranch)}</div>
+                      <div class="min-h-[2rem] text-[11px] leading-relaxed line-clamp-2 text-muted-foreground" title={branchStatusSummary(props.selectedBranch)}>
+                        {branchContextSummary(props.selectedBranch)}
+                      </div>
                     </GitLabelBlock>
 
                     <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">

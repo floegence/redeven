@@ -161,6 +161,7 @@ describe('browser workspace layout wiring', () => {
     const branchesSrc = read('./GitBranchesPanel.tsx');
 
     expect(branchesSrc).toContain("selectedBranchSubview?: GitBranchSubview;");
+    expect(branchesSrc).toContain('branchContextSummary');
     expect(branchesSrc).toContain('compactBranchContext');
     expect(branchesSrc).toContain('Using the current workspace status.');
     expect(branchesSrc).toContain('getCommitDetail');
@@ -179,6 +180,8 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('[&>div:last-child]:!p-0');
     expect(branchesSrc).toContain('flex min-h-0 flex-1 flex-col');
     expect(branchesSrc).toContain('flex min-h-0 flex-1 overflow-hidden');
+    expect(branchesSrc).toContain('flex min-h-5 items-center gap-1.5');
+    expect(branchesSrc).toContain('min-h-[2rem] text-[11px] leading-relaxed line-clamp-2 text-muted-foreground');
     expect(branchesSrc).not.toContain('Subject');
   });
 
@@ -235,6 +238,8 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('space-y-1.5 sm:space-y-2');
     expect(src).toContain('WORKSPACE_VIEW_SECTIONS');
     expect(src).toContain('No files in this section.');
+    expect(src).toContain('grid min-h-5 grid-cols-[minmax(0,1fr)_auto] items-center gap-2');
+    expect(src).toContain('min-h-4 truncate text-[10px] text-muted-foreground');
     expect(src).toContain('gitToneSelectableCardClass(tone(), active())');
     expect(src).toContain('text-sidebar-accent-foreground/75');
     expect(src).not.toContain('text-lg font-semibold tracking-tight');

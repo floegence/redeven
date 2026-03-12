@@ -261,17 +261,25 @@ export function branchDisplayName(branch: GitBranchSummary | null | undefined): 
   return String(branch?.name ?? '').trim() || '(unknown branch)';
 }
 
-export function branchStatusSummary(branch: GitBranchSummary | null | undefined): string {
+export function branchContextSummary(branch: GitBranchSummary | null | undefined): string {
   if (!branch) return 'No branch selected';
   const parts: string[] = [];
-  if (branch.current) parts.push('Current');
-  if (branch.kind === 'remote') parts.push('Remote');
   if (branch.upstreamRef) parts.push(`Upstream ${branch.upstreamRef}`);
   if (branch.upstreamGone) parts.push('Upstream gone');
   if ((branch.aheadCount ?? 0) > 0 || (branch.behindCount ?? 0) > 0) {
     parts.push(`↑${branch.aheadCount ?? 0} ↓${branch.behindCount ?? 0}`);
   }
   if (branch.worktreePath) parts.push('Linked worktree');
+  return parts.join(' · ') || 'No extra status';
+}
+
+export function branchStatusSummary(branch: GitBranchSummary | null | undefined): string {
+  if (!branch) return 'No branch selected';
+  const parts: string[] = [];
+  if (branch.current) parts.push('Current');
+  if (branch.kind === 'remote') parts.push('Remote');
+  const context = branchContextSummary(branch);
+  if (context !== 'No extra status') parts.push(context);
   return parts.join(' · ') || 'No extra status';
 }
 
