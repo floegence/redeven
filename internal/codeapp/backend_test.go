@@ -29,13 +29,14 @@ func TestService_CreateUpdateDeleteSpace_MetadataOnly(t *testing.T) {
 		PortMin:  20000,
 		PortMax:  20010,
 	})
+	ws := t.TempDir()
 	svc := &Service{
-		stateDir: stateDir,
-		reg:      reg,
-		runner:   runner,
+		stateDir:     stateDir,
+		agentHomeDir: ws,
+		reg:          reg,
+		runner:       runner,
 	}
 
-	ws := t.TempDir()
 	ctx := context.Background()
 
 	created, err := svc.CreateSpace(ctx, gateway.CreateSpaceRequest{
@@ -78,8 +79,12 @@ func TestService_CreateUpdateDeleteSpace_MetadataOnly(t *testing.T) {
 	if sp == nil || sp.WorkspacePath == "" {
 		t.Fatalf("GetSpace returned nil/empty: %+v", sp)
 	}
-	if filepath.Clean(sp.WorkspacePath) != filepath.Clean(ws) {
-		t.Fatalf("workspace_path = %q, want %q", sp.WorkspacePath, ws)
+	wantWorkspacePath, err := filepath.EvalSymlinks(ws)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(workspace): %v", err)
+	}
+	if filepath.Clean(sp.WorkspacePath) != filepath.Clean(wantWorkspacePath) {
+		t.Fatalf("workspace_path = %q, want %q", sp.WorkspacePath, wantWorkspacePath)
 	}
 
 	prevUpdated := sp.UpdatedAtUnixMs
@@ -145,16 +150,17 @@ func TestService_CreateSpace_GeneratesValidIDWhenMissing(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = reg.Close() })
 
+	ws := t.TempDir()
 	svc := &Service{
-		stateDir: stateDir,
-		reg:      reg,
+		stateDir:     stateDir,
+		agentHomeDir: ws,
+		reg:          reg,
 		runner: codeserver.NewRunner(codeserver.RunnerOptions{
 			StateDir: stateDir,
 			PortMin:  20000,
 			PortMax:  20010,
 		}),
 	}
-	ws := t.TempDir()
 
 	created, err := svc.CreateSpace(context.Background(), gateway.CreateSpaceRequest{
 		Path: ws,

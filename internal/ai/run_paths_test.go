@@ -32,39 +32,35 @@ func TestResolveToolPath(t *testing.T) {
 
 	t.Run("accepts absolute path", func(t *testing.T) {
 		t.Parallel()
-		resolved, err := resolveToolPath(target, root)
+		resolved, err := resolveToolPath(target, root, root)
 		if err != nil {
 			t.Fatalf("resolveToolPath: %v", err)
 		}
-		if filepath.Clean(resolved) != filepath.Clean(target) {
+		if canonicalPath(resolved) != canonicalPath(target) {
 			t.Fatalf("resolved=%q, want=%q", resolved, target)
 		}
 	})
 
 	t.Run("resolves relative path against working_dir_abs", func(t *testing.T) {
 		t.Parallel()
-		resolved, err := resolveToolPath("sub/dir", root)
+		resolved, err := resolveToolPath("sub/dir", root, root)
 		if err != nil {
 			t.Fatalf("resolveToolPath: %v", err)
 		}
 		want := filepath.Join(root, "sub", "dir")
-		if filepath.Clean(resolved) != filepath.Clean(want) {
+		if canonicalPath(resolved) != canonicalPath(want) {
 			t.Fatalf("resolved=%q, want=%q", resolved, want)
 		}
 	})
 
-	t.Run("expands tilde to home directory", func(t *testing.T) {
+	t.Run("expands tilde to agent home directory", func(t *testing.T) {
 		t.Parallel()
-		home, err := os.UserHomeDir()
-		if err != nil {
-			t.Fatalf("UserHomeDir: %v", err)
-		}
-		resolved, err := resolveToolPath("~/", root)
+		resolved, err := resolveToolPath("~/", root, root)
 		if err != nil {
 			t.Fatalf("resolveToolPath: %v", err)
 		}
-		if filepath.Clean(resolved) != filepath.Clean(home) {
-			t.Fatalf("resolved=%q, want home=%q", resolved, home)
+		if canonicalPath(resolved) != canonicalPath(root) {
+			t.Fatalf("resolved=%q, want agent home=%q", resolved, root)
 		}
 	})
 }
@@ -73,7 +69,7 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 	t.Parallel()
 
 	workingDir := t.TempDir()
-	r := &run{fsRoot: workingDir, shell: "bash"}
+	r := &run{agentHomeDir: workingDir, workingDir: workingDir, shell: "bash"}
 
 	t.Run("passes stdin to the command", func(t *testing.T) {
 		t.Parallel()
@@ -132,7 +128,7 @@ func TestToolApplyPatch_CreatesFile(t *testing.T) {
 	t.Parallel()
 
 	workingDir := t.TempDir()
-	r := &run{fsRoot: workingDir}
+	r := &run{agentHomeDir: workingDir, workingDir: workingDir}
 	patch := strings.Join([]string{
 		"diff --git a/note.txt b/note.txt",
 		"new file mode 100644",

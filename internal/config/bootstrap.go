@@ -24,10 +24,10 @@ type BootstrapArgs struct {
 
 	ConfigPath string
 
-	RootDir   string
-	Shell     string
-	LogFormat string
-	LogLevel  string
+	AgentHomeDir string
+	Shell        string
+	LogFormat    string
+	LogLevel     string
 
 	// PermissionPolicyPreset is an optional preset used to write permission_policy into the config.
 	// If empty, bootstrap preserves the existing permission_policy when possible, otherwise uses defaults.
@@ -85,9 +85,9 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 		}
 	}
 
-	rootDir := strings.TrimSpace(args.RootDir)
-	if rootDir == "" && prev != nil {
-		rootDir = strings.TrimSpace(prev.RootDir)
+	agentHomeDir := strings.TrimSpace(args.AgentHomeDir)
+	if agentHomeDir == "" && prev != nil {
+		agentHomeDir = strings.TrimSpace(prev.AgentHomeDir)
 	}
 
 	shell := strings.TrimSpace(args.Shell)
@@ -112,7 +112,7 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 		Direct:              direct,
 		AI:                  nil,
 		PermissionPolicy:    nil,
-		RootDir:             rootDir,
+		AgentHomeDir:        agentHomeDir,
 		Shell:               shell,
 		LogFormat:           logFormat,
 		LogLevel:            logLevel,

@@ -98,7 +98,7 @@ function contextChipLabel(item: AskFlowerContextItem): string {
   if (item.selectionChars > 0) {
     return `${item.selectionChars} chars selected`;
   }
-  return item.workingDir || '/';
+  return item.workingDir || 'Working directory unavailable';
 }
 
 function contextChipIcon(item: AskFlowerContextItem): 'folder' | 'file' | 'terminal' {
@@ -153,8 +153,6 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     if (!intent) return '';
     return resolveSuggestedWorkingDirAbsolute({
       suggestedWorkingDirAbs: intent.suggestedWorkingDirAbs,
-      suggestedWorkingDirVirtual: intent.suggestedWorkingDirVirtual,
-      fsRootAbs: intent.fsRootAbs,
     });
   });
 
@@ -363,7 +361,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                           <span class="text-foreground/70">Terminal:</span>{' '}
                           {(item as Extract<AskFlowerContextItem, { kind: 'terminal_selection' }>).selectionChars > 0
                             ? `${(item as Extract<AskFlowerContextItem, { kind: 'terminal_selection' }>).selectionChars} chars`
-                            : (item as Extract<AskFlowerContextItem, { kind: 'terminal_selection' }>).workingDir || '/'}
+                            : (item as Extract<AskFlowerContextItem, { kind: 'terminal_selection' }>).workingDir || 'Working directory unavailable'}
                         </Show>
                       </div>
                     )}

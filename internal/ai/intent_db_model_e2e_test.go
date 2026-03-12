@@ -77,7 +77,7 @@ func TestE2E_IntentRouting_DBConfiguredModelIdentityPrompt(t *testing.T) {
 	svc, err := NewService(Options{
 		Logger:              logger,
 		StateDir:            t.TempDir(),
-		FSRoot:              t.TempDir(),
+		AgentHomeDir:        t.TempDir(),
 		Shell:               "bash",
 		Config:              cfg.AI,
 		RunMaxWallTime:      2 * time.Minute,

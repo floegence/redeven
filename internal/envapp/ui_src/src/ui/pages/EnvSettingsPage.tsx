@@ -197,7 +197,7 @@ type SettingsResponse = Readonly<{
       e2ee_psk_set: boolean;
     }>;
   }>;
-  runtime: Readonly<{ root_dir: string; shell: string }>;
+  runtime: Readonly<{ agent_home_dir: string; shell: string }>;
   logging: Readonly<{ log_format: string; log_level: string }>;
   codespaces: Readonly<{ code_server_port_min: number; code_server_port_max: number }>;
   permission_policy: PermissionPolicy | null;
@@ -1172,7 +1172,7 @@ export function EnvSettingsPage() {
   const [aiDirty, setAiDirty] = createSignal(false);
 
   // Runtime fields
-  const [rootDir, setRootDir] = createSignal('');
+  const [agentHomeDir, setAgentHomeDir] = createSignal('');
   const [shell, setShell] = createSignal('');
 
   // Logging fields
@@ -1315,7 +1315,7 @@ export function EnvSettingsPage() {
   const configJSONText = createMemo(() => JSON.stringify({ config_path: configPath() || '' }, null, 2));
   const connectionJSONText = createMemo(() => JSON.stringify(settings()?.connection ?? null, null, 2));
 
-  const buildRuntimePatch = () => ({ root_dir: String(rootDir() ?? ''), shell: String(shell() ?? '') });
+  const buildRuntimePatch = () => ({ agent_home_dir: String(agentHomeDir() ?? ''), shell: String(shell() ?? '') });
   const buildLoggingPatch = () => ({ log_format: String(logFormat() ?? ''), log_level: String(logLevel() ?? '') });
   const buildCodespacesPatch = () => {
     if (useDefaultCodePorts()) return { code_server_port_min: 0, code_server_port_max: 0 };
@@ -2247,9 +2247,9 @@ export function EnvSettingsPage() {
 
     if (!runtimeDirty()) {
       const r = s.runtime;
-      setRootDir(String(r?.root_dir ?? ''));
+      setAgentHomeDir(String(r?.agent_home_dir ?? ''));
       setShell(String(r?.shell ?? ''));
-      setRuntimeJSON(JSON.stringify({ root_dir: String(r?.root_dir ?? ''), shell: String(r?.shell ?? '') }, null, 2));
+      setRuntimeJSON(JSON.stringify({ agent_home_dir: String(r?.agent_home_dir ?? ''), shell: String(r?.shell ?? '') }, null, 2));
     }
 
     if (!loggingDirty()) {
@@ -2385,10 +2385,10 @@ export function EnvSettingsPage() {
     try {
       const v = parseJSONOrThrow(runtimeJSON());
       if (!isJSONObject(v)) throw new Error('Runtime JSON must be an object.');
-      if (typeof (v as any).root_dir !== 'string' || typeof (v as any).shell !== 'string') {
-        throw new Error('Runtime JSON must include "root_dir" and "shell" as strings.');
+      if (typeof (v as any).agent_home_dir !== 'string' || typeof (v as any).shell !== 'string') {
+        throw new Error('Runtime JSON must include "agent_home_dir" and "shell" as strings.');
       }
-      setRootDir(String((v as any).root_dir ?? ''));
+      setAgentHomeDir(String((v as any).agent_home_dir ?? ''));
       setShell(String((v as any).shell ?? ''));
       setRuntimeView('ui');
     } catch (e) {
@@ -3221,11 +3221,11 @@ export function EnvSettingsPage() {
           >
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <FieldLabel hint="default: user home">root_dir</FieldLabel>
+                <FieldLabel hint="default: user home">agent_home_dir</FieldLabel>
                 <Input
-                  value={rootDir()}
+                  value={agentHomeDir()}
                   onInput={(e) => {
-                    setRootDir(e.currentTarget.value);
+                    setAgentHomeDir(e.currentTarget.value);
                     setRuntimeDirty(true);
                   }}
                   placeholder="/home/user"

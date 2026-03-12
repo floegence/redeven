@@ -36,7 +36,7 @@ func TestE2E_OpenAICompatibleBaseURL_StreamText(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	stateDir := t.TempDir()
-	fsRoot := t.TempDir()
+	agentHomeDir := t.TempDir()
 
 	cfg := &config.AIConfig{
 		Providers: []config.AIProvider{
@@ -66,7 +66,7 @@ func TestE2E_OpenAICompatibleBaseURL_StreamText(t *testing.T) {
 	svc, err := NewService(Options{
 		Logger:              logger,
 		StateDir:            stateDir,
-		FSRoot:              fsRoot,
+		AgentHomeDir:        agentHomeDir,
 		Shell:               "bash",
 		Config:              cfg,
 		RunMaxWallTime:      2 * time.Minute,

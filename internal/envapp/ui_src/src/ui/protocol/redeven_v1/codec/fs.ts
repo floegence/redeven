@@ -3,7 +3,7 @@ import type {
   wire_fs_copy_resp,
   wire_fs_delete_req,
   wire_fs_delete_resp,
-  wire_fs_get_home_resp,
+  wire_fs_get_path_context_resp,
   wire_fs_list_req,
   wire_fs_list_resp,
   wire_fs_read_file_req,
@@ -18,7 +18,7 @@ import type {
   FsCopyResponse,
   FsDeleteRequest,
   FsDeleteResponse,
-  FsGetHomeResponse,
+  FsPathContextResponse,
   FsListRequest,
   FsListResponse,
   FsReadFileRequest,
@@ -118,7 +118,6 @@ export function fromWireFsCopyResponse(resp: wire_fs_copy_resp): FsCopyResponse 
   };
 }
 
-export function fromWireFsGetHomeResponse(resp: wire_fs_get_home_resp): FsGetHomeResponse {
-  return { path: String(resp?.path ?? '') };
+export function fromWireFsPathContextResponse(resp: wire_fs_get_path_context_resp): FsPathContextResponse {
+  return { agentHomePathAbs: String(resp?.agent_home_path_abs ?? '') };
 }
-

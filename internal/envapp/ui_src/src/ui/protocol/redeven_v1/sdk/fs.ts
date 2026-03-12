@@ -10,8 +10,8 @@ export interface FsFileInfo {
   permissions?: string;
 }
 
-export interface FsGetHomeResponse {
-  path: string;
+export interface FsPathContextResponse {
+  agentHomePathAbs: string;
 }
 
 export interface FsListRequest {
@@ -73,4 +73,3 @@ export interface FsCopyResponse {
   success: boolean;
   newPath: string;
 }
-

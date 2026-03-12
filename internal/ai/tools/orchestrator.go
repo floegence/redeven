@@ -4,16 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/floegence/redeven-agent/internal/pathutil"
 )
 
 // Invocation carries the minimum context required for error classification and retry hints.
 type Invocation struct {
-	ToolName   string
-	Args       map[string]any
-	WorkingDir string
+	ToolName     string
+	Args         map[string]any
+	WorkingDir   string
+	AgentHomeDir string
 }
 
 type invalidArgumentsError interface {
@@ -90,7 +92,7 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 	case strings.Contains(lower, "must be absolute") || strings.Contains(lower, "invalid path") || strings.Contains(lower, "invalid cwd"):
 		out.Code = ErrorCodeInvalidPath
 		out.Retryable = true
-		out.SuggestedFixes = []string{"Use a valid filesystem path.", "Relative paths are resolved against working_dir_abs; '~/' resolves to the current user home directory."}
+		out.SuggestedFixes = []string{"Use a valid filesystem path.", "Relative paths are resolved against working_dir_abs; '~/' resolves to the configured agent home directory."}
 	case strings.Contains(lower, "not found"):
 		out.Code = ErrorCodeNotFound
 		out.Retryable = false
@@ -125,7 +127,7 @@ func normalizeArgs(inv Invocation) map[string]any {
 		if raw == "" {
 			return
 		}
-		next, ok := normalizePathValue(raw, inv.WorkingDir)
+		next, ok := normalizePathValue(raw, inv.WorkingDir, inv.AgentHomeDir)
 		if !ok || next == raw {
 			return
 		}
@@ -149,27 +151,12 @@ func normalizeArgs(inv Invocation) map[string]any {
 	return clone
 }
 
-func normalizePathValue(raw string, workingDir string) (string, bool) {
+func normalizePathValue(raw string, workingDir string, agentHomeDir string) (string, bool) {
 	candidate := strings.TrimSpace(raw)
 	if candidate == "" {
 		return "", false
 	}
 	original := candidate
-	if candidate == "~" || strings.HasPrefix(candidate, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", false
-		}
-		home = strings.TrimSpace(home)
-		if home == "" {
-			return "", false
-		}
-		if candidate == "~" {
-			candidate = home
-		} else {
-			candidate = filepath.Join(home, strings.TrimPrefix(candidate, "~/"))
-		}
-	}
 	if !filepath.IsAbs(candidate) {
 		base := strings.TrimSpace(workingDir)
 		if base == "" {
@@ -181,8 +168,8 @@ func normalizePathValue(raw string, workingDir string) (string, bool) {
 		}
 		candidate = filepath.Join(base, candidate)
 	}
-	clean := filepath.Clean(candidate)
-	if clean == "" {
+	clean, err := pathutil.ResolveTargetScopedPath(candidate, agentHomeDir)
+	if err != nil || clean == "" {
 		return "", false
 	}
 	if clean == original {

@@ -18,16 +18,16 @@ func TestRunIdleWatchdog_DoesNotCancelWhileToolBusy(t *testing.T) {
 	meta := &session.Meta{CanRead: true, CanWrite: true, CanExecute: true}
 
 	r := newRun(runOptions{
-		Log:         slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		FSRoot:      root,
-		Shell:       "bash",
-		SessionMeta: meta,
-		RunID:       "run_test_idle_watchdog",
-		ChannelID:   "ch_test",
-		EndpointID:  "env_test",
-		ThreadID:    "th_test",
-		MessageID:   "m_test",
-		IdleTimeout: 150 * time.Millisecond,
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: root,
+		Shell:        "bash",
+		SessionMeta:  meta,
+		RunID:        "run_test_idle_watchdog",
+		ChannelID:    "ch_test",
+		EndpointID:   "env_test",
+		ThreadID:     "th_test",
+		MessageID:    "m_test",
+		IdleTimeout:  150 * time.Millisecond,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())

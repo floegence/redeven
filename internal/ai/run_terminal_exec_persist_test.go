@@ -167,10 +167,10 @@ func TestHandleToolCall_TerminalExec_AlwaysEmitsOutputRefForStatusFrames(t *test
 	)
 
 	r := newRun(runOptions{
-		Log:    slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		RunID:  runID,
-		FSRoot: workspace,
-		Shell:  "bash",
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		RunID:        runID,
+		AgentHomeDir: workspace,
+		Shell:        "bash",
 		SessionMeta: &session.Meta{
 			CanRead:    true,
 			CanWrite:   true,
@@ -257,10 +257,10 @@ func TestHandleToolCall_PendingFrameVisibleInSnapshotImmediately(t *testing.T) {
 
 	var r *run
 	r = newRun(runOptions{
-		Log:    slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		RunID:  runID,
-		FSRoot: workspace,
-		Shell:  "bash",
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		RunID:        runID,
+		AgentHomeDir: workspace,
+		Shell:        "bash",
 		SessionMeta: &session.Meta{
 			CanRead:    true,
 			CanWrite:   true,

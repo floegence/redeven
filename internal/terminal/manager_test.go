@@ -1,39 +1,46 @@
 package terminal
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestResolveCwd(t *testing.T) {
+func mustEvalPath(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q): %v", path, err)
+	}
+	return filepath.Clean(resolved)
+}
+
+func TestResolveWorkingDir(t *testing.T) {
 	root := t.TempDir()
 	m := NewManager("/bin/bash", root, nil)
 
-	// Empty -> root
-	got, err := m.resolveCwd("")
+	got, err := m.resolveWorkingDir("")
 	if err != nil {
-		t.Fatalf("resolveCwd(empty) error: %v", err)
+		t.Fatalf("resolveWorkingDir(empty) error: %v", err)
 	}
-	if filepath.Clean(got) != filepath.Clean(root) {
-		t.Fatalf("resolveCwd(empty) = %q, want %q", got, root)
+	if mustEvalPath(t, got) != mustEvalPath(t, root) {
+		t.Fatalf("resolveWorkingDir(empty) = %q, want %q", got, root)
 	}
 
-	// Relative inside
-	got, err = m.resolveCwd("sub")
-	if err != nil {
-		t.Fatalf("resolveCwd(rel) error: %v", err)
-	}
-	want := filepath.Join(root, "sub")
-	if filepath.Clean(got) != filepath.Clean(want) {
-		t.Fatalf("resolveCwd(rel) = %q, want %q", got, want)
+	sub := filepath.Join(root, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
 	}
 
-	// Escape should fail
-	got, err = m.resolveCwd("/../../..")
+	got, err = m.resolveWorkingDir(sub)
 	if err != nil {
-		t.Fatalf("resolveCwd(clamp) error: %v", err)
+		t.Fatalf("resolveWorkingDir(existing dir) error: %v", err)
 	}
-	if filepath.Clean(got) != filepath.Clean(root) {
-		t.Fatalf("resolveCwd(clamp) = %q, want %q", got, root)
+	if mustEvalPath(t, got) != mustEvalPath(t, sub) {
+		t.Fatalf("resolveWorkingDir(existing dir) = %q, want %q", got, sub)
+	}
+
+	if _, err := m.resolveWorkingDir("/../../.."); err == nil {
+		t.Fatalf("expected out-of-scope path to fail")
 	}
 }

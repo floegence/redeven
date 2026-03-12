@@ -69,6 +69,13 @@ export function withChildren(tree: FileItem[], folderPath: string, children: Fil
   return nextTree;
 }
 
+export function withChildrenAtRoot(tree: FileItem[], folderPath: string, children: FileItem[], rootPath: string): FileItem[] {
+  const target = normalizePath(folderPath);
+  const normalizedRoot = normalizePath(rootPath);
+  if (target === normalizedRoot) return children;
+  return withChildren(tree, target, children);
+}
+
 export function rewriteSubtreePaths(item: FileItem, fromBase: string, toBase: string): FileItem {
   const from = normalizePath(fromBase);
   const to = normalizePath(toBase);
@@ -123,11 +130,12 @@ export function updateItemInTree(tree: FileItem[], oldPath: string, updates: Par
   return nextTree;
 }
 
-export function insertItemToTree(tree: FileItem[], parentPath: string, item: FileItem): FileItem[] {
+export function insertItemToTree(tree: FileItem[], parentPath: string, item: FileItem, rootPath = '/'): FileItem[] {
   const targetParent = normalizePath(parentPath);
   const targetItemPath = normalizePath(item.path);
+  const normalizedRoot = normalizePath(rootPath);
 
-  if (targetParent === '/') {
+  if (targetParent === normalizedRoot) {
     if (tree.some((entry) => normalizePath(entry.path) === targetItemPath)) return tree;
     return sortFileItems([...tree, item]);
   }

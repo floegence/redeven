@@ -408,8 +408,6 @@ export function EnvAppShell() {
       const executionMode = readPersistedExecutionMode();
       const suggestedWorkingDir = resolveSuggestedWorkingDirAbsolute({
         suggestedWorkingDirAbs: intent.suggestedWorkingDirAbs,
-        suggestedWorkingDirVirtual: intent.suggestedWorkingDirVirtual,
-        fsRootAbs: intent.fsRootAbs,
       });
       const validatedWorkingDir = await validateAskFlowerWorkingDir(suggestedWorkingDir);
       const threadId = await createAskFlowerThread({ modelId, workingDir: validatedWorkingDir, executionMode });

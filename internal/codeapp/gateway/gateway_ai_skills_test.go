@@ -43,10 +43,10 @@ description: test skill
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:   logger,
-		StateDir: stateDir,
-		FSRoot:   workspace,
-		Shell:    "bash",
+		Logger:       logger,
+		StateDir:     stateDir,
+		AgentHomeDir: workspace,
+		Shell:        "bash",
 		Config: &config.AIConfig{Providers: []config.AIProvider{{
 			ID:      "openai",
 			Name:    "OpenAI",
@@ -170,10 +170,10 @@ func TestGateway_AISkills_PermissionModel(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:   logger,
-		StateDir: stateDir,
-		FSRoot:   workspace,
-		Shell:    "bash",
+		Logger:       logger,
+		StateDir:     stateDir,
+		AgentHomeDir: workspace,
+		Shell:        "bash",
 		Config: &config.AIConfig{Providers: []config.AIProvider{{
 			ID:      "openai",
 			Name:    "OpenAI",
@@ -287,10 +287,10 @@ description: Install Codex skills
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:   logger,
-		StateDir: stateDir,
-		FSRoot:   workspace,
-		Shell:    "bash",
+		Logger:       logger,
+		StateDir:     stateDir,
+		AgentHomeDir: workspace,
+		Shell:        "bash",
 		Config: &config.AIConfig{Providers: []config.AIProvider{{
 			ID:      "openai",
 			Name:    "OpenAI",

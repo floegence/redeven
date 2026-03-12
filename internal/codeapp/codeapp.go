@@ -19,6 +19,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/codeapp/ui"
 	"github.com/floegence/redeven-agent/internal/config"
 	envui "github.com/floegence/redeven-agent/internal/envapp/ui"
+	"github.com/floegence/redeven-agent/internal/pathutil"
 	"github.com/floegence/redeven-agent/internal/portforward"
 	pfregistry "github.com/floegence/redeven-agent/internal/portforward/registry"
 	"github.com/floegence/redeven-agent/internal/session"
@@ -43,8 +44,8 @@ type Options struct {
 	CodeServerPortMax int
 
 	// Env/App-level context (used by AI tools).
-	FSRoot string
-	Shell  string
+	AgentHomeDir string
+	Shell        string
 
 	AIConfig *config.AIConfig
 	Audit    *auditlog.Store
@@ -56,8 +57,9 @@ type Options struct {
 }
 
 type Service struct {
-	log      *slog.Logger
-	stateDir string
+	log          *slog.Logger
+	stateDir     string
+	agentHomeDir string
 
 	// controlplane base (scheme + <region>.<base-domain>)
 	cpScheme string
@@ -87,6 +89,10 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 	if err := os.MkdirAll(stateAbs, 0o700); err != nil {
+		return nil, err
+	}
+	agentHomeDir, err := pathutil.CanonicalizeExistingDirAbs(opts.AgentHomeDir)
+	if err != nil {
 		return nil, err
 	}
 
@@ -145,25 +151,26 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	})
 
 	svc := &Service{
-		log:         logger,
-		stateDir:    stateAbs,
-		cpScheme:    cpScheme,
-		cpHost:      cpHost,
-		codePortMin: portMin,
-		codePortMax: portMax,
-		reg:         reg,
-		pf:          pfSvc,
-		runner:      runner,
+		log:          logger,
+		stateDir:     stateAbs,
+		agentHomeDir: agentHomeDir,
+		cpScheme:     cpScheme,
+		cpHost:       cpHost,
+		codePortMin:  portMin,
+		codePortMax:  portMax,
+		reg:          reg,
+		pf:           pfSvc,
+		runner:       runner,
 	}
 
 	secrets := settings.NewSecretsStore(filepath.Join(stateAbs, "secrets.json"))
 
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:   logger,
-		StateDir: stateAbs,
-		FSRoot:   strings.TrimSpace(opts.FSRoot),
-		Shell:    strings.TrimSpace(opts.Shell),
-		Config:   opts.AIConfig,
+		Logger:       logger,
+		StateDir:     stateAbs,
+		AgentHomeDir: agentHomeDir,
+		Shell:        strings.TrimSpace(opts.Shell),
+		Config:       opts.AIConfig,
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			return secrets.GetAIProviderAPIKey(providerID)
 		},

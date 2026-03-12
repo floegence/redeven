@@ -165,7 +165,7 @@ func TestIntegration_NativeSDK_OpenAI_AskUser_ClosesOpenTodosBeforeWaitingUser(t
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	stateDir := t.TempDir()
-	fsRoot := t.TempDir()
+	agentHomeDir := t.TempDir()
 
 	mock := &openAIWaitingUserTodosCloseoutMock{}
 	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
@@ -200,7 +200,7 @@ func TestIntegration_NativeSDK_OpenAI_AskUser_ClosesOpenTodosBeforeWaitingUser(t
 	svc, err := NewService(Options{
 		Logger:              logger,
 		StateDir:            stateDir,
-		FSRoot:              fsRoot,
+		AgentHomeDir:        agentHomeDir,
 		Shell:               "bash",
 		Config:              cfg,
 		RunMaxWallTime:      30 * time.Second,

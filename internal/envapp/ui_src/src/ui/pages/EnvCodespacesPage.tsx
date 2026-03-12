@@ -226,9 +226,10 @@ function sortFileItems(items: FileItem[]): FileItem[] {
   return [...items].sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "folder" ? -1 : 1));
 }
 
-function withChildren(tree: FileItem[], folderPath: string, children: FileItem[]): FileItem[] {
-  const target = folderPath.trim() || "/";
-  if (target === "/" || target === "") {
+function withChildren(tree: FileItem[], folderPath: string, children: FileItem[], rootPath = "/"): FileItem[] {
+  const target = normalizePath(folderPath);
+  const normalizedRoot = normalizePath(rootPath);
+  if (target === normalizedRoot || target === "") {
     return children;
   }
 
@@ -603,8 +604,8 @@ export function EnvCodespacesPage() {
     if (!protocol.client()) return;
     void (async () => {
       try {
-        const resp = await rpc.fs.getHome();
-        const home = String(resp?.path ?? "").trim();
+        const resp = await rpc.fs.getPathContext();
+        const home = String(resp?.agentHomePathAbs ?? "").trim();
         if (home) setHomePath(home);
       } catch {
         // ignore
@@ -618,10 +619,11 @@ export function EnvCodespacesPage() {
     if (!client) return;
 
     const p = normalizePath(path);
+    const scopedRootPath = normalizePath(homePath() ?? "") || p;
 
     // If cached, update the tree from cache.
     if (cache.has(p)) {
-      setFiles((prev) => withChildren(prev, p, cache.get(p)!));
+      setFiles((prev) => withChildren(prev, p, cache.get(p)!, scopedRootPath));
       return;
     }
 
@@ -630,7 +632,7 @@ export function EnvCodespacesPage() {
       const entries = resp?.entries ?? [];
       const items = sortFileItems(entries.map(toFileItem).filter((item) => item.type === "folder"));
       cache.set(p, items);
-      setFiles((prev) => withChildren(prev, p, items));
+      setFiles((prev) => withChildren(prev, p, items, scopedRootPath));
     } catch (e) {
       // ignore errors for now
     }
@@ -641,9 +643,9 @@ export function EnvCodespacesPage() {
     const client = protocol.client();
     if (!client) return;
 
-    const p = "/";
+    const p = normalizePath(homePath() ?? "");
+    if (!p) return;
     if (cache.has(p)) {
-      // Root is cached; set directly.
       setFiles(cache.get(p)!);
       return;
     }
@@ -661,11 +663,10 @@ export function EnvCodespacesPage() {
 
   const handleLoadDir = (path: string) => {
     const p = normalizePath(path);
-    if (p === "/") {
-      // Root: init or refresh.
+    const home = normalizePath(homePath() ?? "");
+    if (!p || (home && p === home)) {
       void loadRootDir();
     } else {
-      // Non-root: load and update subtree.
       void loadDir(p);
     }
   };

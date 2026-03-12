@@ -11,6 +11,13 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { previewModeByName, isLikelyTextContent, getExtDot, mimeFromExtDot } from '../utils/filePreview';
+import {
+  mapContextMenuCallbacksToAbsolute,
+  mapFileItemToAbsolutePath,
+  mapFileItemsToDisplayPath,
+  toFileBrowserAbsolutePath,
+  toFileBrowserDisplayPath,
+} from '../utils/fileBrowserDisplayPath';
 import { InputDialog } from './InputDialog';
 import {
   extNoDot,
@@ -23,7 +30,7 @@ import {
   rewriteSubtreePaths,
   sortFileItems,
   toFileItem,
-  withChildren,
+  withChildrenAtRoot,
 } from './FileBrowserShared';
 
 export interface ChatFileBrowserFABProps {
@@ -40,20 +47,6 @@ function normalizeAbsolutePath(path: string): string {
   const raw = String(path ?? '').trim();
   if (!raw || !raw.startsWith('/')) return '';
   return normalizePath(raw);
-}
-
-function toVirtualWorkingDirPath(workingDir: string, homePath?: string): string {
-  const normalized = normalizePath(workingDir);
-  const fsRoot = normalizeAbsolutePath(homePath ?? '');
-  if (!fsRoot || fsRoot === '/') return normalized;
-
-  const normalizedWorkingDirAbs = normalizeAbsolutePath(workingDir);
-  if (!normalizedWorkingDirAbs) return normalized;
-  if (normalizedWorkingDirAbs === fsRoot) return '/';
-  if (normalizedWorkingDirAbs.startsWith(`${fsRoot}/`)) {
-    return normalizePath(normalizedWorkingDirAbs.slice(fsRoot.length));
-  }
-  return normalized;
 }
 
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
@@ -75,7 +68,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   const [files, setFiles] = createSignal<FileItem[]>([]);
   const [loading, setLoading] = createSignal(false);
   const [resetSeq, setResetSeq] = createSignal(0);
-  const [currentBrowserPath, setCurrentBrowserPath] = createSignal('/');
+  const [currentBrowserPath, setCurrentBrowserPath] = createSignal('');
 
   // -- preview state --
   const [previewOpen, setPreviewOpen] = createSignal(false);
@@ -116,9 +109,13 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   // -- dir loading plumbing --
   let cache = new Map<string, FileItem[]>();
   let dirReqSeq = 0;
-  let lastLoadedPath = '/';
+  let lastLoadedPath = '';
 
-  const initialPath = createMemo(() => toVirtualWorkingDirPath(props.workingDir, props.homePath));
+  const initialPath = createMemo(() => normalizePath(props.workingDir));
+  const browserRootPath = createMemo(() => normalizeAbsolutePath(props.homePath ?? props.workingDir) || initialPath());
+  const browserHomeLabel = createMemo(() => (normalizeAbsolutePath(props.homePath ?? '') ? 'Home' : 'Working Dir'));
+  const displayFiles = createMemo(() => mapFileItemsToDisplayPath(files(), browserRootPath()));
+  const displayInitialPath = createMemo(() => toFileBrowserDisplayPath(initialPath(), browserRootPath()));
 
   createEffect(() => {
     const wd = initialPath();
@@ -134,9 +131,10 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   async function loadDirOnce(path: string, seq: number): Promise<'ok' | 'error'> {
     if (seq !== dirReqSeq) return 'ok';
     const p = normalizePath(path);
+    const scopedRootPath = normalizePath(browserRootPath() || p);
 
     if (cache.has(p)) {
-      if (seq === dirReqSeq) setFiles((prev) => withChildren(prev, p, cache.get(p)!));
+      if (seq === dirReqSeq) setFiles((prev) => withChildrenAtRoot(prev, p, cache.get(p)!, scopedRootPath));
       return 'ok';
     }
 
@@ -149,7 +147,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
       const items = sortFileItems(entries.map(toFileItem));
       if (seq !== dirReqSeq) return 'ok';
       cache.set(p, items);
-      if (seq === dirReqSeq) setFiles((prev) => withChildren(prev, p, items));
+      if (seq === dirReqSeq) setFiles((prev) => withChildrenAtRoot(prev, p, items, scopedRootPath));
       return 'ok';
     } catch {
       return 'error';
@@ -160,11 +158,15 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
     if (!protocol.client()) return;
     const seq = ++dirReqSeq;
     const p = normalizePath(path);
-    const parts = p.split('/').filter(Boolean);
-    const chain: string[] = ['/'];
-    let reachedTarget = p === '/';
-    for (let i = 0; i < parts.length; i += 1) {
-      chain.push(`/${parts.slice(0, i + 1).join('/')}`);
+    const root = normalizeAbsolutePath(props.homePath ?? props.workingDir) || p;
+    const rel = p === root ? '' : p.startsWith(`${root}/`) ? p.slice(root.length) : '';
+    const parts = rel.split('/').filter(Boolean);
+    const chain: string[] = [root];
+    let reachedTarget = p === root;
+    let cursor = root;
+    for (const part of parts) {
+      cursor = cursor === '/' ? `/${part}` : `${cursor}/${part}`;
+      chain.push(cursor);
     }
     setLoading(true);
     try {
@@ -176,7 +178,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
         }
         if (dir === p) reachedTarget = true;
       }
-      if (seq === dirReqSeq) lastLoadedPath = reachedTarget ? p : '/';
+      if (seq === dirReqSeq) lastLoadedPath = reachedTarget ? p : root;
     } finally {
       if (seq === dirReqSeq) setLoading(false);
     }
@@ -185,6 +187,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   const applyLocalRelocate = (item: FileItem, finalDestPath: string) => {
     const from = normalizePath(item.path);
     const to = normalizePath(finalDestPath);
+    const scopedRootPath = normalizePath(browserRootPath() || getParentDir(from));
     const nextName = fileNameFromPath(to) || item.name;
     const movedItem = {
       ...rewriteSubtreePaths(item, from, to),
@@ -199,7 +202,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
 
     setFiles((prev) => {
       const removed = removeItemsFromTree(prev, new Set([from]));
-      return insertItemToTree(removed, destDir, movedItem);
+      return insertItemToTree(removed, destDir, movedItem, scopedRootPath);
     });
 
     const srcCached = cache.get(srcDir);
@@ -222,6 +225,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
     const from = normalizePath(item.path);
     const to = normalizePath(finalDestPath);
     const destDir = getParentDir(to);
+    const scopedRootPath = normalizePath(browserRootPath() || destDir);
     const nextName = fileNameFromPath(to) || item.name;
     const copiedItem = {
       ...rewriteSubtreePaths(item, from, to),
@@ -231,7 +235,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
       extension: item.type === 'file' ? extNoDot(nextName) : undefined,
     } satisfies FileItem;
 
-    setFiles((prev) => insertItemToTree(prev, destDir, copiedItem));
+    setFiles((prev) => insertItemToTree(prev, destDir, copiedItem, scopedRootPath));
 
     const destCached = cache.get(destDir);
     if (destCached && !destCached.some((cachedItem) => normalizePath(cachedItem.path) === to)) {
@@ -453,6 +457,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
       }
     },
   };
+  const displayContextMenuCallbacks = createMemo(() => mapContextMenuCallbacksToAbsolute(ctxMenu, browserRootPath()));
 
   // -- preview --
   let previewReqSeq = 0;
@@ -713,22 +718,22 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
           <Show when={resetSeq() + 1} keyed>
             {(_seq) => (
               <FileBrowser
-                files={files()}
-                initialPath={initialPath()}
+                files={displayFiles()}
+                initialPath={displayInitialPath()}
                 initialViewMode="list"
-                homeLabel="Home"
+                homeLabel={browserHomeLabel()}
                 sidebarWidth={200}
                 persistenceKey="chat-fab-files"
                 instanceId="chat-fab-files"
                 onNavigate={(path) => {
-                  const target = normalizePath(path);
+                  const target = toFileBrowserAbsolutePath(path, browserRootPath()) || browserRootPath();
                   setCurrentBrowserPath(target);
                   void (async () => {
                     await loadPathChain(target);
                   })();
                 }}
-                onOpen={(item) => void openPreview(item)}
-                contextMenuCallbacks={ctxMenu}
+                onOpen={(item) => void openPreview(mapFileItemToAbsolutePath(item, browserRootPath()))}
+                contextMenuCallbacks={displayContextMenuCallbacks()}
                 class="h-full border-0 rounded-none shadow-none"
               />
             )}

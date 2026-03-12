@@ -6,7 +6,7 @@ export const redevenV1TypeIds = {
     rename: 1004,
     copy: 1005,
     delete: 1006,
-    getHome: 1010,
+    getPathContext: 1010,
   },
   git: {
     resolveRepo: 1101,

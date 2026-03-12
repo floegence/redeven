@@ -48,7 +48,7 @@ func newIntentRoutingService(t *testing.T, mock *openAIMock) (*Service, session.
 	svc, err := NewService(Options{
 		Logger:              slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo})),
 		StateDir:            t.TempDir(),
-		FSRoot:              t.TempDir(),
+		AgentHomeDir:        t.TempDir(),
 		Shell:               "bash",
 		Config:              cfg,
 		RunMaxWallTime:      30 * time.Second,

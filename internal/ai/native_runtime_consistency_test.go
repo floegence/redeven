@@ -69,12 +69,12 @@ func TestFinalizeIfContextCanceled_DoesNotAppendNotice(t *testing.T) {
 func TestBuiltInToolHandler_CanceledApproval_MapsToAborted(t *testing.T) {
 	t.Parallel()
 
-	fsRoot := t.TempDir()
+	agentHomeDir := t.TempDir()
 	r := newRun(runOptions{
-		Log:         slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		FSRoot:      fsRoot,
-		Shell:       "bash",
-		SessionMeta: &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: agentHomeDir,
+		Shell:        "bash",
+		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
 	})
 	h := &builtInToolHandler{r: r, toolName: "terminal.exec"}
 
@@ -100,10 +100,10 @@ func TestBuiltInToolHandler_CanceledApproval_MapsToAborted(t *testing.T) {
 func TestBuiltInToolHandler_ApprovalTimeout_MapsToTimeout(t *testing.T) {
 	t.Parallel()
 
-	fsRoot := t.TempDir()
+	agentHomeDir := t.TempDir()
 	r := newRun(runOptions{
 		Log:                 slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		FSRoot:              fsRoot,
+		AgentHomeDir:        agentHomeDir,
 		Shell:               "bash",
 		AIConfig:            &config.AIConfig{ExecutionPolicy: &config.AIExecutionPolicy{RequireUserApproval: true}},
 		SessionMeta:         &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
@@ -285,13 +285,13 @@ func TestIntegration_NativeSDK_OpenAI_DoomLoopGuard_BlocksRepeat(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	stateDir := t.TempDir()
-	fsRoot := t.TempDir()
-	if err := os.WriteFile(filepath.Join(fsRoot, "sample.txt"), []byte("hello"), 0o600); err != nil {
+	agentHomeDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(agentHomeDir, "sample.txt"), []byte("hello"), 0o600); err != nil {
 		t.Fatalf("write sample file: %v", err)
 	}
 
 	finalToken := "OPENAI_DOOM_LOOP_OK"
-	mock := &openAIDoomLoopGuardMock{finalToken: finalToken, fsPath: fsRoot}
+	mock := &openAIDoomLoopGuardMock{finalToken: finalToken, fsPath: agentHomeDir}
 	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
 	t.Cleanup(srv.Close)
 
@@ -323,7 +323,7 @@ func TestIntegration_NativeSDK_OpenAI_DoomLoopGuard_BlocksRepeat(t *testing.T) {
 	svc, err := NewService(Options{
 		Logger:              logger,
 		StateDir:            stateDir,
-		FSRoot:              fsRoot,
+		AgentHomeDir:        agentHomeDir,
 		Shell:               "bash",
 		Config:              cfg,
 		RunMaxWallTime:      30 * time.Second,
@@ -545,13 +545,13 @@ func TestIntegration_NativeSDK_OpenAI_LengthFinishReason_ForcesRecovery(t *testi
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	stateDir := t.TempDir()
-	fsRoot := t.TempDir()
-	if err := os.WriteFile(filepath.Join(fsRoot, "sample.txt"), []byte("hello"), 0o600); err != nil {
+	agentHomeDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(agentHomeDir, "sample.txt"), []byte("hello"), 0o600); err != nil {
 		t.Fatalf("write sample file: %v", err)
 	}
 
 	mock := &openAILengthFinishReasonMock{
-		fsPath:       fsRoot,
+		fsPath:       agentHomeDir,
 		partialToken: "OPENAI_LEN_PARTIAL",
 		finalToken:   "OPENAI_LEN_FINAL_OK",
 	}
@@ -586,7 +586,7 @@ func TestIntegration_NativeSDK_OpenAI_LengthFinishReason_ForcesRecovery(t *testi
 	svc, err := NewService(Options{
 		Logger:              logger,
 		StateDir:            stateDir,
-		FSRoot:              fsRoot,
+		AgentHomeDir:        agentHomeDir,
 		Shell:               "bash",
 		Config:              cfg,
 		RunMaxWallTime:      30 * time.Second,
@@ -737,7 +737,7 @@ func TestIntegration_NativeSDK_OpenAI_MissingExplicitCompletionDoesNotPolluteAss
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	stateDir := t.TempDir()
-	fsRoot := t.TempDir()
+	agentHomeDir := t.TempDir()
 
 	mock := &openAINoToolTextOnlyMock{
 		replyToken: "PRELIM_ANALYSIS_ONLY",
@@ -773,7 +773,7 @@ func TestIntegration_NativeSDK_OpenAI_MissingExplicitCompletionDoesNotPolluteAss
 	svc, err := NewService(Options{
 		Logger:              logger,
 		StateDir:            stateDir,
-		FSRoot:              fsRoot,
+		AgentHomeDir:        agentHomeDir,
 		Shell:               "bash",
 		Config:              cfg,
 		RunMaxWallTime:      30 * time.Second,

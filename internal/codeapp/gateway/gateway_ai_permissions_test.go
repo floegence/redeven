@@ -33,11 +33,11 @@ func TestGateway_AI_Permissions_RequireRWX(t *testing.T) {
 	}
 
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:   logger,
-		StateDir: stateDir,
-		FSRoot:   stateDir,
-		Shell:    "bash",
-		Config:   cfg,
+		Logger:       logger,
+		StateDir:     stateDir,
+		AgentHomeDir: stateDir,
+		Shell:        "bash",
+		Config:       cfg,
 		ResolveProviderAPIKey: func(string) (string, bool, error) {
 			return "sk-test", true, nil
 		},

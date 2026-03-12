@@ -697,10 +697,10 @@ func TestGateway_SettingsUpdate_ReturnsAIUpdateMeta(t *testing.T) {
 		}},
 	}
 	aiSvc, err := ai.NewService(ai.Options{
-		StateDir: t.TempDir(),
-		FSRoot:   t.TempDir(),
-		Shell:    "/bin/sh",
-		Config:   aiCfg,
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "/bin/sh",
+		Config:       aiCfg,
 	})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)

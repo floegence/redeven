@@ -35,6 +35,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/fs"
 	"github.com/floegence/redeven-agent/internal/gitrepo"
 	"github.com/floegence/redeven-agent/internal/monitor"
+	"github.com/floegence/redeven-agent/internal/pathutil"
 	"github.com/floegence/redeven-agent/internal/portforward"
 	"github.com/floegence/redeven-agent/internal/session"
 	syssvc "github.com/floegence/redeven-agent/internal/sys"
@@ -102,7 +103,7 @@ type Agent struct {
 	commit    string
 	buildTime string
 
-	fsRoot string
+	agentHomeAbs string
 
 	term *terminal.Manager
 	mon  *monitor.Service
@@ -141,15 +142,15 @@ func New(opts Options) (*Agent, error) {
 		return nil, err
 	}
 
-	root := strings.TrimSpace(opts.Config.RootDir)
-	if root == "" {
+	agentHomeDir := strings.TrimSpace(opts.Config.AgentHomeDir)
+	if agentHomeDir == "" {
 		home, _ := os.UserHomeDir()
-		root = strings.TrimSpace(home)
+		agentHomeDir = strings.TrimSpace(home)
 	}
-	if root == "" {
-		root = "."
+	if agentHomeDir == "" {
+		return nil, errors.New("missing agent home dir")
 	}
-	rootAbs, err := filepath.Abs(root)
+	agentHomeAbs, err := pathutil.CanonicalizeExistingDirAbs(agentHomeDir)
 	if err != nil {
 		return nil, err
 	}
@@ -183,8 +184,8 @@ func New(opts Options) (*Agent, error) {
 		version:               strings.TrimSpace(opts.Version),
 		commit:                strings.TrimSpace(opts.Commit),
 		buildTime:             strings.TrimSpace(opts.BuildTime),
-		fsRoot:                rootAbs,
-		term:                  terminal.NewManager(shell, rootAbs, logger),
+		agentHomeAbs:          agentHomeAbs,
+		term:                  terminal.NewManager(shell, agentHomeAbs, logger),
 		mon:                   monitor.NewService(logger),
 		sessions:              make(map[string]*activeSession),
 		onControlConnected:    opts.OnControlConnected,
@@ -227,7 +228,7 @@ func New(opts Options) (*Agent, error) {
 		ControlplaneBaseURL:   strings.TrimSpace(opts.Config.ControlplaneBaseURL),
 		CodeServerPortMin:     opts.Config.CodeServerPortMin,
 		CodeServerPortMax:     opts.Config.CodeServerPortMax,
-		FSRoot:                rootAbs,
+		AgentHomeDir:          agentHomeAbs,
 		Shell:                 shell,
 		AIConfig:              opts.Config.AI,
 		Audit:                 auditStore,
@@ -294,7 +295,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		"build_time", a.buildTime,
 		"environment_id", a.cfg.EnvironmentID,
 		"controlplane", a.cfg.ControlplaneBaseURL,
-		"fs_root", a.fsRoot,
+		"agent_home_abs", a.agentHomeAbs,
 		"goos", runtime.GOOS,
 		"goarch", runtime.GOARCH,
 	)
@@ -831,8 +832,8 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 		return errors.New("missing session")
 	}
 
-	fsSvc := fs.NewService(a.fsRoot)
-	gitRepoSvc := gitrepo.NewService(a.fsRoot)
+	fsSvc := fs.NewService(a.agentHomeAbs)
+	gitRepoSvc := gitrepo.NewService(a.agentHomeAbs)
 
 	srv, err := serve.New(serve.Options{
 		OnError: func(err error) {

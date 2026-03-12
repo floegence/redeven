@@ -139,7 +139,7 @@ func TestSplitSignalsByPolicy_BlocksAskUserWhenDisallowed(t *testing.T) {
 func TestBuildLayeredSystemPrompt_NoUserInteractionOmitsAskUserGuidance(t *testing.T) {
 	r := newRun(runOptions{
 		Log:               slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		FSRoot:            t.TempDir(),
+		AgentHomeDir:      t.TempDir(),
 		NoUserInteraction: true,
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "task_complete"}}
@@ -155,8 +155,8 @@ func TestBuildLayeredSystemPrompt_NoUserInteractionOmitsAskUserGuidance(t *testi
 
 func TestBuildLayeredSystemPrompt_PlanModeEnforcesReadonlyAndAskUserSwitch(t *testing.T) {
 	r := newRun(runOptions{
-		Log:    slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		FSRoot: t.TempDir(),
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: t.TempDir(),
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "apply_patch"}, {Name: "task_complete"}, {Name: "ask_user"}}
 	contract := resolveRunCapabilityContract(r, tools)
@@ -172,7 +172,7 @@ func TestBuildLayeredSystemPrompt_PlanModeEnforcesReadonlyAndAskUserSwitch(t *te
 func TestBuildLayeredSystemPrompt_PlanModeNoUserInteractionUsesTaskCompleteBlockers(t *testing.T) {
 	r := newRun(runOptions{
 		Log:               slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		FSRoot:            t.TempDir(),
+		AgentHomeDir:      t.TempDir(),
 		NoUserInteraction: true,
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "task_complete"}}

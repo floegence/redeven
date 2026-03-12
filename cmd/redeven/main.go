@@ -89,7 +89,7 @@ func bootstrapCmd(args []string) {
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
 	envToken := fs.String("env-token", "", "Environment token (raw token; 'Bearer <token>' is also accepted)")
 
-	rootDir := fs.String("root-dir", "", "Filesystem root dir (default: user home dir)")
+	agentHomeDir := fs.String("agent-home-dir", "", "Agent home dir used for filesystem-facing features (default: user home dir)")
 	shell := fs.String("shell", "", "Shell command (default: $SHELL or /bin/bash)")
 
 	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read|read_only|execute_read_write (empty: keep existing; default: execute_read_write)")
@@ -113,7 +113,7 @@ func bootstrapCmd(args []string) {
 		ControlplaneBaseURL:    *controlplane,
 		EnvironmentID:          *envID,
 		EnvironmentToken:       *envToken,
-		RootDir:                *rootDir,
+		AgentHomeDir:           *agentHomeDir,
 		Shell:                  *shell,
 		LogFormat:              *logFormat,
 		LogLevel:               *logLevel,

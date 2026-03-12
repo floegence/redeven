@@ -57,10 +57,10 @@ import { hasRWXPermissions } from './aiPermissions';
 import type { AskFlowerIntent } from './askFlowerIntent';
 import { buildAskFlowerDraftMarkdown, mergeAskFlowerDraft } from '../utils/askFlowerContextTemplate';
 import {
-  absolutePathToVirtualPath,
+  expandHomeDisplayPath,
   normalizeAbsolutePath as normalizeAskFlowerAbsolutePath,
   resolveSuggestedWorkingDirAbsolute,
-  virtualPathToAbsolutePath,
+  toHomeDisplayPath,
 } from '../utils/askFlowerPath';
 import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';
 import {
@@ -80,17 +80,13 @@ import {
 
 type DirCache = Map<string, FileItem[]>;
 
-function normalizeVirtualPath(path: string): string {
-  const raw = String(path ?? '').trim();
-  if (!raw) return '/';
-  const p = raw.startsWith('/') ? raw : `/${raw}`;
-  if (p === '/') return '/';
-  return p.endsWith('/') ? p.replace(/\/+$/, '') || '/' : p;
+function normalizeBrowserPath(path: string): string {
+  return normalizeAskFlowerAbsolutePath(path) || '';
 }
 
 function toFolderFileItem(entry: FsFileInfo): FileItem {
   const name = String(entry.name ?? '');
-  const p = normalizeVirtualPath(String(entry.path ?? ''));
+  const p = normalizeBrowserPath(String(entry.path ?? ''));
   const modifiedAtMs = Number(entry.modifiedAt ?? 0);
   return {
     id: p,
@@ -105,9 +101,10 @@ function sortFileItems(items: FileItem[]): FileItem[] {
   return [...items].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function withChildren(tree: FileItem[], folderPath: string, children: FileItem[]): FileItem[] {
-  const target = folderPath.trim() || '/';
-  if (target === '/' || target === '') {
+function withChildren(tree: FileItem[], folderPath: string, children: FileItem[], rootPath = '/'): FileItem[] {
+  const target = normalizeBrowserPath(folderPath);
+  const normalizedRoot = normalizeBrowserPath(rootPath);
+  if (!target || target === normalizedRoot) {
     return children;
   }
 
@@ -132,42 +129,13 @@ function withChildren(tree: FileItem[], folderPath: string, children: FileItem[]
   return next;
 }
 
-function virtualToRealPath(virtualPath: string, rootAbs?: string): string {
-  const root = String(rootAbs ?? '').trim();
-  if (!root) return normalizeVirtualPath(virtualPath);
-  return virtualPathToAbsolutePath(virtualPath, root) || normalizeVirtualPath(virtualPath);
-}
-
-function realToVirtualPath(realPath: string, rootAbs?: string): string {
-  const root = String(rootAbs ?? '').trim();
-  if (!root) return '/';
-  return absolutePathToVirtualPath(realPath, root);
-}
-
-function toUserDisplayPath(realPath: string, rootAbs?: string): string {
-  const p = String(realPath ?? '').trim();
-  if (!p) return '';
-  const root = String(rootAbs ?? '').trim().replace(/\/+$/, '') || '';
-  if (!root || root === '/' || !p.startsWith(root)) return p;
-  const rel = p.slice(root.length);
-  return '~' + (rel || '');
-}
-
 function normalizeWorkingDirInputText(input: string, rootAbs?: string): string {
   const raw = String(input ?? '').trim();
   if (!raw) return '';
-
-  const root = String(rootAbs ?? '').trim().replace(/\/+$/, '') || '';
-  if (raw === '~') return root;
-  if (raw.startsWith('~/') || raw.startsWith('~\\')) {
-    const vp = normalizeVirtualPath(raw.slice(1).replace(/\\/g, '/'));
-    return virtualToRealPath(vp, root);
+  if (raw.startsWith('~')) {
+    return expandHomeDisplayPath(raw, rootAbs);
   }
-  if (!raw.startsWith('/')) {
-    const vp = normalizeVirtualPath(raw);
-    return virtualToRealPath(vp, root);
-  }
-  return raw;
+  return normalizeAskFlowerAbsolutePath(raw);
 }
 
 type ExecutionMode = 'act' | 'plan';
@@ -2034,8 +2002,8 @@ export function EnvAIPage() {
     if (!protocol.client()) return;
     void (async () => {
       try {
-        const resp = await rpc.fs.getHome();
-        const home = String(resp?.path ?? '').trim();
+        const resp = await rpc.fs.getPathContext();
+        const home = String(resp?.agentHomePathAbs ?? '').trim();
         if (home) setHomePath(home);
       } catch {
         // ignore
@@ -2085,15 +2053,6 @@ export function EnvAIPage() {
           ai.setDraftWorkingDir(validCurrent);
         }
         return;
-      }
-
-      const legacyCandidate = virtualToRealPath(currentRaw, root);
-      if (legacyCandidate && legacyCandidate !== currentRaw) {
-        const validLegacy = await validateWorkingDirSilently(legacyCandidate);
-        if (validLegacy) {
-          ai.setDraftWorkingDir(validLegacy);
-          return;
-        }
       }
 
       ai.setDraftWorkingDir(root);
@@ -2696,7 +2655,7 @@ export function EnvAIPage() {
     }
     return String(ai.draftWorkingDir() ?? '').trim();
   });
-  const workingDirLabel = createMemo(() => toUserDisplayPath(activeWorkingDir(), homePath()));
+  const workingDirLabel = createMemo(() => toHomeDisplayPath(activeWorkingDir(), homePath()));
   const workingDirLocked = createMemo(() => !!String(ai.activeThreadId() ?? '').trim());
   const workingDirDisabled = createMemo(
     () =>
@@ -2705,7 +2664,7 @@ export function EnvAIPage() {
       ai.creatingThread() ||
       !String(homePath() ?? '').trim(),
   );
-  const workingDirPickerInitialPath = createMemo(() => realToVirtualPath(activeWorkingDir(), homePath()));
+  const workingDirPickerInitialPath = createMemo(() => normalizeAskFlowerAbsolutePath(activeWorkingDir()) || String(homePath() ?? '').trim());
 
   const applyAskFlowerIntent = (intent: AskFlowerIntent): boolean => {
     const inputApi = chatInputApi();
@@ -2713,9 +2672,6 @@ export function EnvAIPage() {
 
     const suggestedWorkingDirAbs = resolveSuggestedWorkingDirAbsolute({
       suggestedWorkingDirAbs: intent.suggestedWorkingDirAbs,
-      suggestedWorkingDirVirtual: intent.suggestedWorkingDirVirtual,
-      fsRootAbs: intent.fsRootAbs,
-      fallbackFsRootAbs: homePath(),
     });
     const includeSuggestedWorkingDir = workingDirLocked() && !!suggestedWorkingDirAbs;
 
@@ -2804,7 +2760,8 @@ export function EnvAIPage() {
 
   const loadWorkingDirRoot = async () => {
     if (!protocol.client()) return;
-    const p = '/';
+    const p = normalizeAskFlowerAbsolutePath(homePath() ?? '');
+    if (!p) return;
     if (workingDirCache.has(p)) {
       setWorkingDirFiles(workingDirCache.get(p)!);
       return;
@@ -2826,9 +2783,11 @@ export function EnvAIPage() {
 
   const loadWorkingDirDir = async (path: string) => {
     if (!protocol.client()) return;
-    const p = normalizeVirtualPath(path);
+    const p = normalizeAskFlowerAbsolutePath(path);
+    const scopedRootPath = normalizeAskFlowerAbsolutePath(homePath() ?? '') || p;
+    if (!p) return;
     if (workingDirCache.has(p)) {
-      setWorkingDirFiles((prev) => withChildren(prev, p, workingDirCache.get(p)!));
+      setWorkingDirFiles((prev) => withChildren(prev, p, workingDirCache.get(p)!, scopedRootPath));
       return;
     }
     try {
@@ -2840,15 +2799,16 @@ export function EnvAIPage() {
           .map((e) => toFolderFileItem(e as FsFileInfo)),
       );
       workingDirCache.set(p, items);
-      setWorkingDirFiles((prev) => withChildren(prev, p, items));
+      setWorkingDirFiles((prev) => withChildren(prev, p, items, scopedRootPath));
     } catch {
       // ignore
     }
   };
 
   const handleWorkingDirExpand = (path: string) => {
-    const p = normalizeVirtualPath(path);
-    if (p === '/') {
+    const p = normalizeAskFlowerAbsolutePath(path);
+    const home = normalizeAskFlowerAbsolutePath(homePath() ?? '');
+    if (!p || (home && p === home)) {
       void loadWorkingDirRoot();
       return;
     }
@@ -4501,10 +4461,12 @@ export function EnvAIPage() {
               title="Select Working Directory"
               confirmText="Select"
               onExpand={handleWorkingDirExpand}
-              onSelect={(virtualPath) => {
+              onSelect={(selectedPath) => {
                 if (workingDirLocked()) return;
-                const realPath = virtualToRealPath(virtualPath, homePath());
-                ai.setDraftWorkingDir(realPath);
+                const realPath = normalizeAskFlowerAbsolutePath(selectedPath);
+                if (realPath) {
+                  ai.setDraftWorkingDir(realPath);
+                }
               }}
             />
 
@@ -4552,7 +4514,7 @@ export function EnvAIPage() {
                     class="w-full"
                   />
                   <p class="text-[11px] text-muted-foreground mt-1.5">
-                    Use an absolute path. <span class="font-mono">~</span> maps to Home (<span class="font-mono">root_dir</span>). Relative paths are resolved against Home.
+                    Use an absolute path. <span class="font-mono">~</span> maps to Home (<span class="font-mono">agent_home_dir</span>).
                   </p>
                   <Show when={workingDirEditError()}>
                     <p class="text-[11px] text-error mt-1.5">{workingDirEditError()}</p>

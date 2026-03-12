@@ -1,5 +1,5 @@
-export type wire_fs_get_home_req = Record<string, never>;
-export type wire_fs_get_home_resp = { path: string };
+export type wire_fs_get_path_context_req = Record<string, never>;
+export type wire_fs_get_path_context_resp = { agent_home_path_abs: string };
 
 export type wire_fs_list_req = {
   path: string;
@@ -64,4 +64,3 @@ export type wire_fs_copy_resp = {
   success: boolean;
   new_path: string;
 };
-

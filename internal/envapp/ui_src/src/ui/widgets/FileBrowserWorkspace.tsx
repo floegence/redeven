@@ -1,4 +1,4 @@
-import { Show, onCleanup, onMount } from 'solid-js';
+import { Show, createMemo, onCleanup, onMount } from 'solid-js';
 import { useFileBrowserDrag } from '@floegence/floe-webapp-core';
 import { Files as FilesIcon, Search, ArrowUp } from '@floegence/floe-webapp-core/icons';
 import {
@@ -16,6 +16,14 @@ import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { FileBrowserSidebarTree } from './FileBrowserSidebarTree';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
+import {
+  mapContextMenuCallbacksToAbsolute,
+  mapContextMenuItemsToAbsolute,
+  mapFileItemToAbsolutePath,
+  mapFileItemsToDisplayPath,
+  toFileBrowserAbsolutePath,
+  toFileBrowserDisplayPath,
+} from '../utils/fileBrowserDisplayPath';
 
 export interface FileBrowserWorkspaceProps {
   mode: GitHistoryMode;
@@ -24,6 +32,7 @@ export interface FileBrowserWorkspaceProps {
   files: FileItem[];
   currentPath: string;
   initialPath: string;
+  homePath?: string;
   persistenceKey?: string;
   instanceId: string;
   resetKey: number;
@@ -125,7 +134,7 @@ function FileWorkspaceStatusBar() {
   const browser = useFileBrowser();
 
   return (
-    <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-2.5 py-1 text-[10px] text-muted-foreground">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-2.5 py-1 text-[10px] text-muted-foreground">
       <div class="flex flex-wrap items-center gap-1.5">
         <span>{browser.currentFiles().length} items</span>
         <Show when={browser.filterQueryApplied().trim()}>
@@ -141,7 +150,9 @@ function FileWorkspaceStatusBar() {
           </>
         </Show>
       </div>
-      <div class="max-w-full truncate text-right sm:max-w-[45%]">{browser.currentPath()}</div>
+      <div class="max-w-full truncate text-right sm:max-w-[45%]">
+        {browser.currentPath() === '/' ? browser.homeLabel() : browser.currentPath()}
+      </div>
     </div>
   );
 }
@@ -186,7 +197,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
         <div class="flex h-full min-h-0 flex-col gap-1.5">
           <div class="flex items-center justify-between px-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
             <span>Folder Tree</span>
-            <span>{browser.currentPath() === '/' ? 'Root' : 'Compact depth'}</span>
+            <span>{browser.currentPath() === '/' ? browser.homeLabel() : 'Compact depth'}</span>
           </div>
 
           <div
@@ -235,17 +246,27 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
 export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
   void props.resetKey;
 
+  const displayFiles = createMemo(() => mapFileItemsToDisplayPath(props.files, props.homePath));
+  const displayCurrentPath = createMemo(() => toFileBrowserDisplayPath(props.currentPath, props.homePath));
+  const displayInitialPath = createMemo(() => toFileBrowserDisplayPath(props.initialPath, props.homePath));
+  const displayContextMenuCallbacks = createMemo(() => mapContextMenuCallbacksToAbsolute(props.contextMenuCallbacks, props.homePath));
+  const displayOverrideContextMenuItems = createMemo(() => mapContextMenuItemsToAbsolute(props.overrideContextMenuItems, props.homePath));
+
+  const toAbsolutePath = (path: string): string => {
+    return toFileBrowserAbsolutePath(path, props.homePath) || props.currentPath || props.homePath || '';
+  };
+
   return (
     <FileBrowserProvider
-      files={props.files}
-      path={props.currentPath}
-      initialPath={props.initialPath}
+      files={displayFiles()}
+      path={displayCurrentPath()}
+      initialPath={displayInitialPath()}
       initialViewMode="list"
       persistenceKey={props.persistenceKey}
       homeLabel="Home"
-      onNavigate={props.onNavigate}
-      onPathChange={props.onPathChange}
-      onOpen={props.onOpen}
+      onNavigate={(path) => props.onNavigate?.(toAbsolutePath(path))}
+      onPathChange={(path, source) => props.onPathChange?.(toAbsolutePath(path), source)}
+      onOpen={(item) => props.onOpen?.(mapFileItemToAbsolutePath(item, props.homePath))}
     >
       <FileBrowserWorkspaceInner
         mode={props.mode}
@@ -259,9 +280,14 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
         showMobileSidebarButton={props.showMobileSidebarButton}
         onToggleSidebar={props.onToggleSidebar}
         instanceId={props.instanceId}
-        onDragMove={props.onDragMove}
-        contextMenuCallbacks={props.contextMenuCallbacks}
-        overrideContextMenuItems={props.overrideContextMenuItems}
+        onDragMove={props.onDragMove
+          ? (items, targetPath) => props.onDragMove?.(
+              items.map((item) => mapFileItemToAbsolutePath(item, props.homePath)),
+              toAbsolutePath(targetPath),
+            )
+          : undefined}
+        contextMenuCallbacks={displayContextMenuCallbacks()}
+        overrideContextMenuItems={displayOverrideContextMenuItems()}
         class={props.class}
       />
     </FileBrowserProvider>

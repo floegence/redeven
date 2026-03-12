@@ -15,7 +15,7 @@ func (r *run) ensureSkillManager() *skillManager {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.skillManager == nil {
-		r.skillManager = newSkillManager(r.fsRoot, r.stateDir)
+		r.skillManager = newSkillManager(r.agentHomeDir, r.stateDir)
 		r.skillManager.Discover()
 	}
 	return r.skillManager

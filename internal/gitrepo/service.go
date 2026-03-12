@@ -36,22 +36,15 @@ const (
 )
 
 type Service struct {
-	root string
+	agentHomeAbs string
 }
 
-func NewService(root string) *Service {
-	root = strings.TrimSpace(root)
-	if root == "" {
-		root = "."
+func NewService(agentHomeAbs string) *Service {
+	resolved, err := pathutil.CanonicalizeExistingDirAbs(agentHomeAbs)
+	if err != nil {
+		panic(err)
 	}
-	if abs, err := filepath.Abs(root); err == nil {
-		root = abs
-	}
-	if eval, err := filepath.EvalSymlinks(root); err == nil {
-		root = eval
-	}
-	root = filepath.Clean(root)
-	return &Service{root: root}
+	return &Service{agentHomeAbs: resolved}
 }
 
 func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
@@ -356,18 +349,21 @@ type repoContext struct {
 	dirty        bool
 }
 
-func (s *Service) resolveRepoForPath(ctx context.Context, virtualPath string) (repoContext, bool, error) {
-	resolved, err := pathutil.ResolveVirtualPath(s.root, virtualPath)
+func (s *Service) resolveRepoForPath(ctx context.Context, path string) (repoContext, bool, error) {
+	if strings.TrimSpace(path) == "" {
+		path = s.agentHomeAbs
+	}
+	resolved, err := pathutil.ResolveExistingScopedPath(path, s.agentHomeAbs)
 	if err != nil {
 		return repoContext{}, false, err
 	}
-	stat, err := os.Stat(resolved.Real)
+	stat, err := os.Stat(resolved)
 	if err != nil {
 		return repoContext{}, false, err
 	}
-	targetDir := resolved.Real
+	targetDir := resolved
 	if !stat.IsDir() {
-		targetDir = filepath.Dir(resolved.Real)
+		targetDir = filepath.Dir(resolved)
 	}
 	repoRootReal, ok := gitutil.ShowTopLevel(ctx, targetDir)
 	if !ok {
@@ -376,7 +372,7 @@ func (s *Service) resolveRepoForPath(ctx context.Context, virtualPath string) (r
 	if eval, err := filepath.EvalSymlinks(repoRootReal); err == nil {
 		repoRootReal = filepath.Clean(eval)
 	}
-	withinRoot, err := pathutil.IsWithinRoot(repoRootReal, s.root)
+	withinRoot, err := pathutil.IsWithinScope(repoRootReal, s.agentHomeAbs)
 	if err != nil {
 		return repoContext{}, false, err
 	}
@@ -413,7 +409,7 @@ func (s *Service) validateRepoRootPath(ctx context.Context, repoRootPath string)
 	if eval, err := filepath.EvalSymlinks(repoRootReal); err == nil {
 		repoRootReal = filepath.Clean(eval)
 	}
-	withinRoot, err := pathutil.IsWithinRoot(repoRootReal, s.root)
+	withinRoot, err := pathutil.IsWithinScope(repoRootReal, s.agentHomeAbs)
 	if err != nil {
 		return "", err
 	}

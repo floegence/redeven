@@ -25,12 +25,8 @@ import { useEnvContext } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
 import {
   deriveAbsoluteWorkingDirFromItems,
-  deriveVirtualWorkingDirFromItems,
   dirnameAbsolute,
-  dirnameVirtual,
   normalizeAbsolutePath,
-  normalizeVirtualPath as normalizeAskFlowerVirtualPath,
-  virtualPathToAbsolutePath,
 } from '../utils/askFlowerPath';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
@@ -66,7 +62,7 @@ import {
   sortFileItems,
   toFileItem,
   updateItemInTree,
-  withChildren,
+  withChildrenAtRoot,
 } from './FileBrowserShared';
 
 type DirCache = Map<string, FileItem[]>;
@@ -218,10 +214,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [copyToDialogItem, setCopyToDialogItem] = createSignal<FileItem | null>(null);
   const [copyToLoading, setCopyToLoading] = createSignal(false);
 
-  const [currentBrowserPath, setCurrentBrowserPath] = createSignal('/');
-  const [lastLoadedBrowserPath, setLastLoadedBrowserPath] = createSignal('/');
+  const [currentBrowserPath, setCurrentBrowserPath] = createSignal('');
+  const [lastLoadedBrowserPath, setLastLoadedBrowserPath] = createSignal('');
 
-  const [fsRootAbs, setFsRootAbs] = createSignal('');
+  const [agentHomePathAbs, setAgentHomePathAbs] = createSignal('');
   const [pageMode, setPageMode] = createSignal<BrowserPageMode>('files');
   const [repoInfo, setRepoInfo] = createSignal<GitResolveRepoResponse | null>(null);
   const [repoInfoLoading, setRepoInfoLoading] = createSignal(false);
@@ -315,7 +311,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const readPersistedLastPath = (id: string): string => {
     const eid = id.trim();
-    if (!eid) return '/';
+    if (!eid) return '';
 
     if (props.widgetId) {
       const state = deck.getWidgetState(props.widgetId);
@@ -324,10 +320,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         const saved = (byEnv as any)[eid];
         if (typeof saved === 'string' && saved.trim()) return normalizePath(saved);
       }
-      return '/';
+      return '';
     }
 
-    return normalizePath(floe.persist.load<string>(`files:lastPath:${eid}`, '/'));
+    const saved = floe.persist.load<string>(`files:lastPath:${eid}`, '');
+    return saved ? normalizePath(saved) : '';
   };
 
   const writePersistedLastPath = (id: string, path: string) => {
@@ -458,15 +455,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const resolveFsRootAbs = async (): Promise<string> => {
-    const cached = normalizeAbsolutePath(fsRootAbs());
+    const cached = normalizeAbsolutePath(agentHomePathAbs());
     if (cached) return cached;
 
-    const resp = await rpc.fs.getHome();
-    const root = normalizeAbsolutePath(String(resp?.path ?? '').trim());
+    const resp = await rpc.fs.getPathContext();
+    const root = normalizeAbsolutePath(String(resp?.agentHomePathAbs ?? '').trim());
     if (!root) {
       throw new Error('Failed to resolve home directory.');
     }
-    setFsRootAbs(root);
+    setAgentHomePathAbs(root);
     return root;
   };
 
@@ -1111,7 +1108,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   createEffect(() => {
     const id = envId();
     const restored = untrack(() => ({
-      nextPath: id ? readPersistedLastPath(id) : '/',
+      nextPath: id ? readPersistedLastPath(id) : '',
       nextMode: id ? readPersistedPageMode(id) : 'files',
       nextSubview: id ? readPersistedGitSubview(id) : 'changes',
     }));
@@ -1121,8 +1118,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setFiles([]);
     setLoading(false);
     setCurrentBrowserPath(restored.nextPath);
-    setLastLoadedBrowserPath('/');
-    setFsRootAbs('');
+    setLastLoadedBrowserPath('');
+    setAgentHomePathAbs('');
     setGitSubview(restored.nextSubview);
     setPageMode(restored.nextMode);
     closePageSidebar();
@@ -1146,8 +1143,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (seq !== dirReqSeq) return { status: 'canceled' };
 
     const p = normalizePath(path);
+    const scopedRootPath = normalizePath(agentHomePathAbs() || p);
     if (cache.has(p)) {
-      if (seq === dirReqSeq) setFiles((prev) => withChildren(prev, p, cache.get(p)!));
+      if (seq === dirReqSeq) setFiles((prev) => withChildrenAtRoot(prev, p, cache.get(p)!, scopedRootPath));
       return { status: 'ok' };
     }
 
@@ -1166,7 +1164,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (seq !== dirReqSeq) return { status: 'canceled' };
       cache.set(p, items);
 
-      if (seq === dirReqSeq) setFiles((prev) => withChildren(prev, p, items));
+      if (seq === dirReqSeq) setFiles((prev) => withChildrenAtRoot(prev, p, items, scopedRootPath));
       return { status: 'ok' };
     } catch (e) {
       if (seq !== dirReqSeq) return { status: 'canceled' };
@@ -1179,12 +1177,29 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return { status: 'transport_error', message: 'Connection is not ready.' };
     }
 
+    let rootPath = '';
+    try {
+      rootPath = normalizePath(await resolveFsRootAbs());
+    } catch (e) {
+      return {
+        status: 'transport_error',
+        message: e instanceof Error ? e.message : 'Failed to resolve home directory.',
+      };
+    }
+
     const seq = ++dirReqSeq;
     const p = normalizePath(path);
-    const parts = p.split('/').filter(Boolean);
-    const chain: string[] = ['/'];
-    for (let i = 0; i < parts.length; i += 1) {
-      chain.push(`/${parts.slice(0, i + 1).join('/')}`);
+    if (p !== rootPath && !p.startsWith(`${rootPath}/`)) {
+      return { status: 'invalid_path', message: 'Path is outside agent home.' };
+    }
+
+    const rel = p === rootPath ? '' : p.slice(rootPath.length);
+    const parts = rel.split('/').filter(Boolean);
+    const chain: string[] = [rootPath];
+    let cursor = rootPath;
+    for (const part of parts) {
+      cursor = cursor === '/' ? `/${part}` : `${cursor}/${part}`;
+      chain.push(cursor);
     }
 
     setLoading(true);
@@ -1444,11 +1459,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const applyLocalMove = (item: FileItem, destDir: string) => {
     const from = normalizePath(item.path);
     const to = destDir === '/' ? `/${item.name}` : `${destDir}/${item.name}`;
+    const scopedRootPath = normalizePath(agentHomePathAbs() || getParentDir(from));
     const movedItem = rewriteSubtreePaths(item, from, to);
 
     setFiles((prev) => {
       const removed = removeItemsFromTree(prev, new Set([from]));
-      return insertItemToTree(removed, destDir, movedItem);
+      return insertItemToTree(removed, destDir, movedItem, scopedRootPath);
     });
 
     const srcDir = getParentDir(from);
@@ -1617,6 +1633,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       : baseName;
     const newName = `${nameWithoutExt} (copy)${ext}`;
     const destPath = parentDir === '/' ? `/${newName}` : `${parentDir}/${newName}`;
+    const scopedRootPath = normalizePath(agentHomePathAbs() || parentDir);
 
     try {
       await rpc.fs.copy({ sourcePath: item.path, destPath });
@@ -1627,7 +1644,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         path: destPath,
         extension: item.type === 'file' ? extNoDot(newName) : undefined,
       };
-      setFiles((prev) => insertItemToTree(prev, parentDir, newItem));
+      setFiles((prev) => insertItemToTree(prev, parentDir, newItem, scopedRootPath));
       const cached = cache.get(parentDir);
       if (cached && !cached.some((c) => normalizePath(c.path) === normalizePath(destPath))) {
         cache.set(parentDir, sortFileItems([...cached, newItem]));
@@ -1691,6 +1708,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     try {
       await rpc.fs.copy({ sourcePath: item.path, destPath: finalDestPath });
       const destDir = getParentDir(finalDestPath);
+      const scopedRootPath = normalizePath(agentHomePathAbs() || destDir);
       const newName = finalDestPath.split('/').pop() ?? item.name;
       const newItem: FileItem = {
         ...item,
@@ -1703,7 +1721,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (destCached) {
         if (!destCached.some((c) => normalizePath(c.path) === normalizePath(finalDestPath))) {
           cache.set(destDir, sortFileItems([...destCached, newItem]));
-          setFiles((prev) => insertItemToTree(prev, destDir, newItem));
+          setFiles((prev) => insertItemToTree(prev, destDir, newItem, scopedRootPath));
         }
       }
       writePersistedTargetPath(envId(), destDir);
@@ -1720,29 +1738,34 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!protocol.client()) return;
     const id = envId();
     if (!id) return;
-    const rememberedPath = normalizePath(currentBrowserPath());
-    const persistedPath = untrack(() => readPersistedLastPath(id));
-    const startPath = rememberedPath !== '/' ? rememberedPath : persistedPath;
-    setCurrentBrowserPath(startPath);
     void (async () => {
+      let rootPath = '';
+      try {
+        rootPath = normalizePath(await resolveFsRootAbs());
+      } catch (e) {
+        notifyPathLoadFailure({
+          status: 'transport_error',
+          message: e instanceof Error ? e.message : 'Failed to resolve home directory.',
+        });
+        return;
+      }
+
+      const rememberedPath = normalizeAbsolutePath(currentBrowserPath());
+      const persistedPath = normalizeAbsolutePath(untrack(() => readPersistedLastPath(id)));
+      const startPath = rememberedPath || persistedPath || rootPath;
+      setCurrentBrowserPath(startPath);
+
       const result = await loadPathChain(startPath);
       if (result.status === 'ok' || result.status === 'canceled') return;
-      if (result.status === 'invalid_path' && startPath !== '/') {
-        writePersistedLastPath(id, '/');
-        setCurrentBrowserPath('/');
+      if (result.status === 'invalid_path' && startPath !== rootPath) {
+        writePersistedLastPath(id, rootPath);
+        setCurrentBrowserPath(rootPath);
         setFileBrowserResetSeq((n) => n + 1);
-        const rootResult = await loadPathChain('/');
+        const rootResult = await loadPathChain(rootPath);
         if (rootResult.status !== 'ok') notifyPathLoadFailure(rootResult);
         return;
       }
       notifyPathLoadFailure(result);
-    })();
-
-    void (async () => {
-      try {
-        await resolveFsRootAbs();
-      } catch {
-      }
     })();
   });
 
@@ -1750,7 +1773,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const id = envId();
     const client = protocol.client();
     const path = currentBrowserPath();
-    if (!id || !client) {
+    if (!id || !client || !path.trim()) {
       repoReqSeq += 1;
       setRepoInfo(null);
       setRepoInfoLoading(false);
@@ -1881,15 +1904,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     ctx.openAskFlowerComposer(intent);
   };
 
-  const toAbsolutePath = (path: string, rootAbs: string): string => {
-    const normalizedPath = normalizeAskFlowerVirtualPath(path);
-    return virtualPathToAbsolutePath(normalizedPath, rootAbs);
-  };
+  const toAbsolutePath = (path: string): string => normalizeAbsolutePath(path);
 
-  const toFileContextItems = (items: FileItem[], rootAbs: string): AskFlowerIntent['contextItems'] =>
+  const toFileContextItems = (items: FileItem[]): AskFlowerIntent['contextItems'] =>
     items
       .map((item) => {
-        const absolutePath = toAbsolutePath(item.path, rootAbs);
+        const absolutePath = toAbsolutePath(item.path);
         if (!absolutePath) return null;
         return {
           kind: 'file_path' as const,
@@ -1905,7 +1925,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   ): Promise<{ file: File | null; note?: string }> => {
     if (item.type !== 'file') return { file: null };
 
-    const normalizedPath = normalizeAskFlowerVirtualPath(item.path);
+    const normalizedPath = normalizeAbsolutePath(item.path);
     const declaredSize = typeof item.size === 'number' && Number.isFinite(item.size) ? Math.max(0, Math.floor(item.size)) : null;
     if (declaredSize != null && declaredSize > ASK_FLOWER_ATTACHMENT_MAX_BYTES) {
       return {
@@ -1950,15 +1970,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const normalizedItems = items.filter((item) => String(item.path ?? '').trim());
     if (normalizedItems.length <= 0) return;
 
-    let rootAbs = '';
-    try {
-      rootAbs = await resolveFsRootAbs();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      notification.error('Ask Flower unavailable', msg || 'Failed to resolve home directory.');
-      return;
-    }
-
     const notes: string[] = [];
     const pendingAttachments: File[] = [];
     const fileCandidates = normalizedItems.filter((item) => item.type === 'file');
@@ -1984,31 +1995,25 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
     }
 
-    const contextItems = toFileContextItems(normalizedItems, rootAbs);
+    const contextItems = toFileContextItems(normalizedItems);
     if (contextItems.length <= 0) {
       notification.error('Ask Flower unavailable', 'Failed to resolve selected file paths.');
       return;
     }
 
-    const suggestedWorkingDirVirtual = deriveVirtualWorkingDirFromItems(
-      normalizedItems.map((item) => ({ path: item.path, isDirectory: item.type === 'folder' })),
-      currentBrowserPath(),
-    );
     const absoluteItems = normalizedItems
       .map((item) => ({
-        path: toAbsolutePath(item.path, rootAbs),
+        path: normalizeAbsolutePath(item.path),
         isDirectory: item.type === 'folder',
       }))
       .filter((item) => item.path);
-    const suggestedWorkingDirAbs = deriveAbsoluteWorkingDirFromItems(absoluteItems, rootAbs);
+    const suggestedWorkingDirAbs = deriveAbsoluteWorkingDirFromItems(absoluteItems, currentBrowserPath());
 
     dispatchAskFlowerIntent({
       id: crypto.randomUUID(),
       source: 'file_browser',
       mode: 'append',
       suggestedWorkingDirAbs: suggestedWorkingDirAbs || undefined,
-      suggestedWorkingDirVirtual: suggestedWorkingDirVirtual || undefined,
-      fsRootAbs: rootAbs,
       contextItems,
       pendingAttachments,
       notes,
@@ -2041,17 +2046,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const item = previewItem();
     if (!item || item.type !== 'file') return null;
 
-    let rootAbs = '';
-    try {
-      rootAbs = await resolveFsRootAbs();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      notification.error('Ask Flower unavailable', msg || 'Failed to resolve home directory.');
-      return null;
-    }
-
-    const virtualPath = normalizeAskFlowerVirtualPath(item.path);
-    const absolutePath = virtualPathToAbsolutePath(virtualPath, rootAbs);
+    const absolutePath = normalizeAbsolutePath(item.path);
     if (!absolutePath) {
       notification.error('Ask Flower unavailable', 'Failed to resolve file path.');
       return null;
@@ -2080,8 +2075,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       source: 'file_preview',
       mode: 'append',
       suggestedWorkingDirAbs: dirnameAbsolute(absolutePath),
-      suggestedWorkingDirVirtual: dirnameVirtual(virtualPath),
-      fsRootAbs: rootAbs,
       contextItems,
       pendingAttachments,
       notes,
@@ -2283,6 +2276,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                 files={files()}
                 currentPath={currentBrowserPath()}
                 initialPath={readPersistedLastPath(id)}
+                homePath={agentHomePathAbs() || undefined}
                 persistenceKey={`files:${id}`}
                 instanceId={props.widgetId ? `redeven-files:${id}:${props.widgetId}` : `redeven-files:${id}`}
                 resetKey={fileBrowserResetSeq()}
@@ -2507,7 +2501,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         files={files()}
         initialPath={readPersistedTargetPath(envId()) ?? currentBrowserPath()}
         homeLabel="Home"
-        homePath={fsRootAbs() || undefined}
+        homePath={agentHomePathAbs() || undefined}
         title="Move To"
         confirmText="Move"
         onSelect={(dirPath) => {
@@ -2525,7 +2519,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         files={files()}
         initialPath={readPersistedTargetPath(envId()) ?? currentBrowserPath()}
         homeLabel="Home"
-        homePath={fsRootAbs() || undefined}
+        homePath={agentHomePathAbs() || undefined}
         initialFileName={copyToDialogItem()?.name ?? ''}
         title="Copy To"
         confirmText="Copy"

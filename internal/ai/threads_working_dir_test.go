@@ -4,14 +4,13 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"testing"
 
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
-func TestService_CreateThread_AllowsWorkingDirOutsideRootDir(t *testing.T) {
+func TestService_CreateThread_RejectsWorkingDirOutsideAgentHome(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -33,11 +32,11 @@ func TestService_CreateThread_AllowsWorkingDirOutsideRootDir(t *testing.T) {
 	}
 
 	svc, err := NewService(Options{
-		Logger:   logger,
-		StateDir: stateDir,
-		FSRoot:   rootDir,
-		Shell:    "bash",
-		Config:   cfg,
+		Logger:       logger,
+		StateDir:     stateDir,
+		AgentHomeDir: rootDir,
+		Shell:        "bash",
+		Config:       cfg,
 		ResolveProviderAPIKey: func(string) (string, bool, error) {
 			return "sk-test", true, nil
 		},
@@ -59,14 +58,7 @@ func TestService_CreateThread_AllowsWorkingDirOutsideRootDir(t *testing.T) {
 		CanAdmin:          false,
 	}
 
-	th, err := svc.CreateThread(context.Background(), meta, "test", "", "", outsideDir)
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	if th == nil {
-		t.Fatalf("CreateThread returned nil thread")
-	}
-	if filepath.Clean(th.WorkingDir) != filepath.Clean(outsideDir) {
-		t.Fatalf("working_dir=%q, want %q", th.WorkingDir, outsideDir)
+	if _, err := svc.CreateThread(context.Background(), meta, "test", "", "", outsideDir); err == nil {
+		t.Fatalf("expected CreateThread to reject outside working_dir")
 	}
 }

@@ -23,15 +23,17 @@ import (
 	aitools "github.com/floegence/redeven-agent/internal/ai/tools"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/knowledge"
+	"github.com/floegence/redeven-agent/internal/pathutil"
 	"github.com/floegence/redeven-agent/internal/session"
 	"github.com/floegence/redeven-agent/internal/websearch"
 )
 
 type runOptions struct {
-	Log      *slog.Logger
-	StateDir string
-	FSRoot   string
-	Shell    string
+	Log          *slog.Logger
+	StateDir     string
+	AgentHomeDir string
+	WorkingDir   string
+	Shell        string
 
 	AIConfig *config.AIConfig
 
@@ -69,11 +71,12 @@ type runOptions struct {
 type run struct {
 	log *slog.Logger
 
-	stateDir string
-	fsRoot   string
-	shell    string
-	cfg      *config.AIConfig
-	runMode  string
+	stateDir     string
+	agentHomeDir string
+	workingDir   string
+	shell        string
+	cfg          *config.AIConfig
+	runMode      string
 
 	sessionMeta         *session.Meta
 	resolveProviderKey  func(providerID string) (string, bool, error)
@@ -166,10 +169,17 @@ func newRun(opts runOptions) *run {
 		}
 	}
 
+	agentHomeDir := strings.TrimSpace(opts.AgentHomeDir)
+	workingDir := strings.TrimSpace(opts.WorkingDir)
+	if workingDir == "" {
+		workingDir = agentHomeDir
+	}
+
 	r := &run{
 		log:                     opts.Log,
 		stateDir:                strings.TrimSpace(opts.StateDir),
-		fsRoot:                  strings.TrimSpace(opts.FSRoot),
+		agentHomeDir:            agentHomeDir,
+		workingDir:              workingDir,
 		shell:                   strings.TrimSpace(opts.Shell),
 		cfg:                     opts.AIConfig,
 		sessionMeta:             runMeta,
@@ -1711,7 +1721,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 
 	meta, err := r.sessionMetaForTool()
 	if err != nil {
-		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.fsRoot}, err)
+		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
 		setToolError(toolErr, "")
 		return outcome, nil
 	}
@@ -1806,7 +1816,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Tool execution timed out", Retryable: true}, "")
 			return outcome, nil
 		}
-		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.fsRoot}, toolErrRaw)
+		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, toolErrRaw)
 		recoveryAction := ""
 		if aitools.ShouldRetryWithNormalizedArgs(toolErr) {
 			recoveryAction = "retry_with_normalized_args"
@@ -2720,42 +2730,32 @@ var (
 )
 
 func (r *run) workingDirAbs() (string, error) {
-	workingDir := strings.TrimSpace(r.fsRoot)
+	workingDir := strings.TrimSpace(r.workingDir)
+	if workingDir == "" {
+		workingDir = strings.TrimSpace(r.agentHomeDir)
+	}
 	if workingDir == "" {
 		return "", errEmptyWorkingDir
 	}
-	workingDir = filepath.Clean(workingDir)
-	if !filepath.IsAbs(workingDir) {
-		abs, err := filepath.Abs(workingDir)
-		if err != nil {
-			return "", errInvalidWorkingDir
-		}
-		workingDir = filepath.Clean(abs)
+	resolved, err := pathutil.ResolveExistingScopedDir(workingDir, r.agentHomeDir)
+	if err != nil {
+		return "", errInvalidWorkingDir
 	}
-	return workingDir, nil
+	return resolved, nil
 }
 
-func resolveToolPath(raw string, workingDirAbs string) (string, error) {
+func resolveToolPath(raw string, workingDirAbs string, agentHomeDir string) (string, error) {
 	candidate := strings.TrimSpace(raw)
 	if candidate == "" {
 		return "", errInvalidToolPath
 	}
 	if candidate == "~" || strings.HasPrefix(candidate, "~/") {
-		home, err := os.UserHomeDir()
+		normalized, err := pathutil.NormalizeUserPathInput(candidate, agentHomeDir)
 		if err != nil {
 			return "", errInvalidToolPath
 		}
-		home = strings.TrimSpace(home)
-		if home == "" {
-			return "", errInvalidToolPath
-		}
-		if candidate == "~" {
-			candidate = home
-		} else {
-			candidate = filepath.Join(home, strings.TrimPrefix(candidate, "~/"))
-		}
-	}
-	if !filepath.IsAbs(candidate) {
+		candidate = normalized
+	} else if !filepath.IsAbs(candidate) {
 		base := strings.TrimSpace(workingDirAbs)
 		if base == "" {
 			return "", errToolPathMustAbsolute
@@ -2766,11 +2766,14 @@ func resolveToolPath(raw string, workingDirAbs string) (string, error) {
 		}
 		candidate = filepath.Join(base, candidate)
 	}
-	candidate = filepath.Clean(candidate)
-	if !filepath.IsAbs(candidate) {
-		return "", errToolPathMustAbsolute
+	resolved, err := pathutil.ResolveTargetScopedPath(candidate, agentHomeDir)
+	if err != nil {
+		if strings.TrimSpace(err.Error()) == "path must be absolute" {
+			return "", errToolPathMustAbsolute
+		}
+		return "", errInvalidToolPath
 	}
-	return candidate, nil
+	return resolved, nil
 }
 
 func mapToolCwdError(err error) error {
@@ -2854,7 +2857,7 @@ func (r *run) toolTerminalExec(ctx context.Context, command string, stdin string
 	if cwd == "" {
 		cwd = workingDirAbs
 	}
-	cwdAbs, err := resolveToolPath(cwd, workingDirAbs)
+	cwdAbs, err := resolveToolPath(cwd, workingDirAbs, r.agentHomeDir)
 	if err != nil {
 		return nil, mapToolCwdError(err)
 	}

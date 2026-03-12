@@ -64,7 +64,7 @@ func TestService_ResumeUnlocksProtectedRPC(t *testing.T) {
 		t.Fatalf("unexpected initial status: %#v", status)
 	}
 
-	if _, err := rpctyped.Call[struct{}, map[string]string](ctx, client, fs.TypeID_FS_GET_HOME, &struct{}{}); err == nil {
+	if _, err := rpctyped.Call[struct{}, map[string]string](ctx, client, fs.TypeID_FS_GET_PATH_CONTEXT, &struct{}{}); err == nil {
 		t.Fatalf("expected protected RPC to fail before resume")
 	} else {
 		var callErr *rpc.CallError
@@ -80,11 +80,11 @@ func TestService_ResumeUnlocksProtectedRPC(t *testing.T) {
 		t.Fatalf("access.resume error = %v", err)
 	}
 
-	home, err := rpctyped.Call[struct{}, map[string]string](ctx, client, fs.TypeID_FS_GET_HOME, &struct{}{})
+	pathContext, err := rpctyped.Call[struct{}, map[string]string](ctx, client, fs.TypeID_FS_GET_PATH_CONTEXT, &struct{}{})
 	if err != nil {
-		t.Fatalf("fs.get_home after resume error = %v", err)
+		t.Fatalf("fs.get_path_context after resume error = %v", err)
 	}
-	if home == nil || (*home)["path"] == "" {
-		t.Fatalf("fs.get_home returned empty path")
+	if pathContext == nil || (*pathContext)["agent_home_path_abs"] == "" {
+		t.Fatalf("fs.get_path_context returned empty agent_home_path_abs")
 	}
 }

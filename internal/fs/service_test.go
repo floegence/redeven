@@ -1,48 +1,48 @@
 package fs
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
+
+func mustEvalPath(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q): %v", path, err)
+	}
+	return filepath.Clean(resolved)
+}
 
 func TestServiceResolve(t *testing.T) {
 	root := t.TempDir()
 	s := NewService(root)
 
-	// Empty -> root
-	vp, p, err := s.resolve("")
+	// Empty -> agent home
+	p, err := s.resolveExistingDir("")
 	if err != nil {
 		t.Fatalf("resolve(empty) error: %v", err)
 	}
-	if vp != "/" {
-		t.Fatalf("resolve(empty) virtual = %q, want %q", vp, "/")
-	}
-	if filepath.Clean(p) != filepath.Clean(root) {
+	if mustEvalPath(t, p) != mustEvalPath(t, root) {
 		t.Fatalf("resolve(empty) = %q, want %q", p, root)
 	}
 
-	// Relative inside
-	vp, p, err = s.resolve("a/b")
-	if err != nil {
-		t.Fatalf("resolve(rel) error: %v", err)
-	}
-	if vp != "/a/b" {
-		t.Fatalf("resolve(rel) virtual = %q, want %q", vp, "/a/b")
-	}
-	want := filepath.Join(root, "a", "b")
-	if filepath.Clean(p) != filepath.Clean(want) {
-		t.Fatalf("resolve(rel) = %q, want %q", p, want)
+	child := filepath.Join(root, "a", "b")
+	if err := os.MkdirAll(child, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
 	}
 
-	// Clamps above-root virtual paths back to "/".
-	vp, p, err = s.resolve("/../../..")
+	// Existing absolute path inside scope
+	p, err = s.resolveExistingDir(child)
 	if err != nil {
-		t.Fatalf("resolve(clamp) error: %v", err)
+		t.Fatalf("resolve(existing dir) error: %v", err)
 	}
-	if vp != "/" {
-		t.Fatalf("resolve(clamp) virtual = %q, want %q", vp, "/")
+	if mustEvalPath(t, p) != mustEvalPath(t, child) {
+		t.Fatalf("resolve(existing dir) = %q, want %q", p, child)
 	}
-	if filepath.Clean(p) != filepath.Clean(root) {
-		t.Fatalf("resolve(clamp) real = %q, want %q", p, root)
+
+	if _, err := s.resolveExistingDir("/../../.."); err == nil {
+		t.Fatalf("expected out-of-scope path to fail")
 	}
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/floegence/redeven-agent/internal/codeapp/gateway"
 	"github.com/floegence/redeven-agent/internal/codeapp/registry"
+	"github.com/floegence/redeven-agent/internal/pathutil"
 )
 
 func (s *Service) ListSpaces(ctx context.Context) ([]gateway.SpaceStatus, error) {
@@ -63,13 +64,12 @@ func (s *Service) CreateSpace(ctx context.Context, req gateway.CreateSpaceReques
 	// Process path (required field).
 	workspacePath := strings.TrimSpace(req.Path)
 	if workspacePath == "" {
-		home, _ := os.UserHomeDir()
-		workspacePath = strings.TrimSpace(home)
+		workspacePath = strings.TrimSpace(s.agentHomeDir)
 	}
 	if workspacePath == "" {
 		return nil, errors.New("missing path")
 	}
-	abs, err := filepath.Abs(workspacePath)
+	abs, err := pathutil.ResolveExistingScopedDir(workspacePath, s.agentHomeDir)
 	if err != nil {
 		return nil, err
 	}

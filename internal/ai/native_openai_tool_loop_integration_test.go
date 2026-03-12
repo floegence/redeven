@@ -246,13 +246,13 @@ func TestIntegration_NativeSDK_OpenAI_ToolLoop_Succeeds(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	stateDir := t.TempDir()
-	fsRoot := t.TempDir()
-	if err := os.WriteFile(filepath.Join(fsRoot, "sample.txt"), []byte("hello"), 0o600); err != nil {
+	agentHomeDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(agentHomeDir, "sample.txt"), []byte("hello"), 0o600); err != nil {
 		t.Fatalf("write sample file: %v", err)
 	}
 
 	finalToken := "OPENAI_TOOL_LOOP_OK"
-	mock := &openAIToolLoopMock{finalToken: finalToken, fsPath: fsRoot}
+	mock := &openAIToolLoopMock{finalToken: finalToken, fsPath: agentHomeDir}
 	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
 	t.Cleanup(srv.Close)
 
@@ -284,7 +284,7 @@ func TestIntegration_NativeSDK_OpenAI_ToolLoop_Succeeds(t *testing.T) {
 	svc, err := NewService(Options{
 		Logger:              logger,
 		StateDir:            stateDir,
-		FSRoot:              fsRoot,
+		AgentHomeDir:        agentHomeDir,
 		Shell:               "bash",
 		Config:              cfg,
 		RunMaxWallTime:      30 * time.Second,
@@ -545,7 +545,7 @@ func TestIntegration_NativeSDK_OpenAI_MixedSignalsCompleteInSameTurn(t *testing.
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	stateDir := t.TempDir()
-	fsRoot := t.TempDir()
+	agentHomeDir := t.TempDir()
 
 	mock := &openAIMixedSignalSameTurnMock{}
 	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
@@ -579,7 +579,7 @@ func TestIntegration_NativeSDK_OpenAI_MixedSignalsCompleteInSameTurn(t *testing.
 	svc, err := NewService(Options{
 		Logger:              logger,
 		StateDir:            stateDir,
-		FSRoot:              fsRoot,
+		AgentHomeDir:        agentHomeDir,
 		Shell:               "bash",
 		Config:              cfg,
 		RunMaxWallTime:      30 * time.Second,

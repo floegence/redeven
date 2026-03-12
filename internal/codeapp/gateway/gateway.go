@@ -27,6 +27,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/ai"
 	"github.com/floegence/redeven-agent/internal/auditlog"
 	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven-agent/internal/pathutil"
 	"github.com/floegence/redeven-agent/internal/portforward"
 	pfregistry "github.com/floegence/redeven-agent/internal/portforward/registry"
 	"github.com/floegence/redeven-agent/internal/session"
@@ -427,8 +428,8 @@ type settingsDirectView struct {
 }
 
 type settingsRuntimeView struct {
-	RootDir string `json:"root_dir"`
-	Shell   string `json:"shell"`
+	AgentHomeDir string `json:"agent_home_dir"`
+	Shell        string `json:"shell"`
 }
 
 type settingsLoggingView struct {
@@ -479,8 +480,8 @@ func toSettingsView(cfg *config.Config, configPath string, secrets *settings.Sec
 			Direct:              direct,
 		}
 		out.Runtime = settingsRuntimeView{
-			RootDir: strings.TrimSpace(cfg.RootDir),
-			Shell:   strings.TrimSpace(cfg.Shell),
+			AgentHomeDir: strings.TrimSpace(cfg.AgentHomeDir),
+			Shell:        strings.TrimSpace(cfg.Shell),
 		}
 		out.Logging = settingsLoggingView{
 			LogFormat: strings.TrimSpace(cfg.LogFormat),
@@ -810,8 +811,8 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		type settingsUpdateReq struct {
-			RootDir *string `json:"root_dir,omitempty"`
-			Shell   *string `json:"shell,omitempty"`
+			AgentHomeDir *string `json:"agent_home_dir,omitempty"`
+			Shell        *string `json:"shell,omitempty"`
 
 			LogFormat *string `json:"log_format,omitempty"`
 			LogLevel  *string `json:"log_level,omitempty"`
@@ -835,7 +836,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if body.RootDir == nil && body.Shell == nil &&
+		if body.AgentHomeDir == nil && body.Shell == nil &&
 			body.LogFormat == nil && body.LogLevel == nil &&
 			body.CodeServerPortMin == nil && body.CodeServerPortMax == nil &&
 			len(body.PermissionPolicy) == 0 && len(body.AI) == 0 {
@@ -891,8 +892,8 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 
 		auditDetail := map[string]any{}
-		if body.RootDir != nil {
-			auditDetail["root_dir"] = strings.TrimSpace(*body.RootDir)
+		if body.AgentHomeDir != nil {
+			auditDetail["agent_home_dir"] = strings.TrimSpace(*body.AgentHomeDir)
 		}
 		if body.Shell != nil {
 			auditDetail["shell"] = strings.TrimSpace(*body.Shell)
@@ -931,8 +932,14 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		var updated *config.Config
 		persist := func() error {
 			cfg, err := g.updateConfigLocked(func(c *config.Config) error {
-				if body.RootDir != nil {
-					c.RootDir = strings.TrimSpace(*body.RootDir)
+				if body.AgentHomeDir != nil {
+					raw := strings.TrimSpace(*body.AgentHomeDir)
+					if raw != "" {
+						if _, err := pathutil.CanonicalizeExistingDirAbs(raw); err != nil {
+							return err
+						}
+					}
+					c.AgentHomeDir = raw
 				}
 				if body.Shell != nil {
 					c.Shell = strings.TrimSpace(*body.Shell)

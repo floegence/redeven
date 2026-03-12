@@ -199,6 +199,51 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
+  it('treats homePath as the navigation root and maps navigate-up back to the absolute home path', async () => {
+    let navigatedPath = '';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={[
+              { id: 'folder-src', name: 'src', type: 'folder', path: '/Users/tester/src', children: [] },
+              { id: 'file-readme', name: 'README.md', type: 'file', path: '/Users/tester/README.md' },
+            ]}
+            currentPath="/Users/tester/src"
+            initialPath="/Users/tester/src"
+            homePath="/Users/tester"
+            persistenceKey="test-files-workspace-home-root"
+            instanceId="test-files-workspace-home-root"
+            resetKey={0}
+            width={260}
+            open
+            onNavigate={(path) => {
+              navigatedPath = path;
+            }}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const upButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Up'));
+      expect(upButton).toBeTruthy();
+      upButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(navigatedPath).toBe('/Users/tester');
+      expect(host.textContent).toContain('Home');
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps the file tree on a dedicated sidebar scroll region', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

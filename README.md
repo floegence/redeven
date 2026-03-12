@@ -88,7 +88,7 @@ What bootstrap writes by default:
 
 ### `floe_app = com.floegence.redeven.agent`
 
-- File system RPC (`list/read/write/delete/get_home`) + `fs/read_file` stream
+- File system RPC (`list/read/write/delete/get_path_context`) + `fs/read_file` stream
 - Terminal RPC (`create/list/attach`) with bidirectional data notifications
 - Monitor RPC (CPU/network/process snapshots)
 - Agent-bundled Env App UI assets

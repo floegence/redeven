@@ -67,7 +67,7 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 	aiSvc, err := ai.NewService(ai.Options{
 		Logger:           logger,
 		StateDir:         stateDir,
-		FSRoot:           stateDir,
+		AgentHomeDir:     stateDir,
 		Shell:            "bash",
 		Config:           cfg,
 		RunMaxWallTime:   6 * time.Second,

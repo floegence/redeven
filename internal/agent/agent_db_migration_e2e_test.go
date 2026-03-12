@@ -20,10 +20,10 @@ func TestAgentRun_MigratesLegacyThreadstoreE2E(t *testing.T) {
 	stateDir := t.TempDir()
 	cfgPath := filepath.Join(stateDir, "config.json")
 	cfg := &config.Config{
-		RootDir:   stateDir,
-		Shell:     "/bin/sh",
-		LogFormat: "text",
-		LogLevel:  "error",
+		AgentHomeDir: stateDir,
+		Shell:        "/bin/sh",
+		LogFormat:    "text",
+		LogLevel:     "error",
 	}
 	if err := config.Save(cfgPath, cfg); err != nil {
 		t.Fatalf("config.Save: %v", err)

@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -18,29 +17,25 @@ import (
 )
 
 const (
-	TypeID_FS_LIST      uint32 = 1001
-	TypeID_FS_READ_FILE uint32 = 1002
-	TypeID_FS_WRITE     uint32 = 1003
-	TypeID_FS_RENAME    uint32 = 1004
-	TypeID_FS_COPY      uint32 = 1005
-	TypeID_FS_DELETE    uint32 = 1006
-	TypeID_FS_GET_HOME  uint32 = 1010
+	TypeID_FS_LIST             uint32 = 1001
+	TypeID_FS_READ_FILE        uint32 = 1002
+	TypeID_FS_WRITE            uint32 = 1003
+	TypeID_FS_RENAME           uint32 = 1004
+	TypeID_FS_COPY             uint32 = 1005
+	TypeID_FS_DELETE           uint32 = 1006
+	TypeID_FS_GET_PATH_CONTEXT uint32 = 1010
 )
 
 type Service struct {
-	root string
+	agentHomeAbs string
 }
 
-func NewService(root string) *Service {
-	root = strings.TrimSpace(root)
-	if root == "" {
-		root = "."
+func NewService(agentHomeAbs string) *Service {
+	resolved, err := pathutil.CanonicalizeExistingDirAbs(agentHomeAbs)
+	if err != nil {
+		panic(err)
 	}
-	if abs, err := filepath.Abs(root); err == nil {
-		root = abs
-	}
-	root = filepath.Clean(root)
-	return &Service{root: root}
+	return &Service{agentHomeAbs: resolved}
 }
 
 func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
@@ -52,24 +47,23 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return
 	}
 
-	accessgate.RegisterTyped[fsGetHomeReq, fsGetHomeResp](r, TypeID_FS_GET_HOME, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, _ *fsGetHomeReq) (*fsGetHomeResp, error) {
+	accessgate.RegisterTyped[fsGetPathContextReq, fsGetPathContextResp](r, TypeID_FS_GET_PATH_CONTEXT, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, _ *fsGetPathContextReq) (*fsGetPathContextResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
-		// Return the real filesystem root path configured for this agent.
-		return &fsGetHomeResp{Path: s.root}, nil
+		return &fsGetPathContextResp{AgentHomePathAbs: s.agentHomeAbs}, nil
 	})
 
 	accessgate.RegisterTyped[fsListReq, fsListResp](r, TypeID_FS_LIST, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsListReq) (*fsListResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
-		vp, p, err := s.resolve(req.Path)
+		dirAbs, err := s.resolveExistingDir(req.Path)
 		if err != nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
 		}
 
-		ents, err := os.ReadDir(p)
+		ents, err := os.ReadDir(dirAbs)
 		if err != nil {
 			return nil, &rpc.Error{Code: 404, Message: "not found"}
 		}
@@ -85,7 +79,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			if err != nil {
 				continue
 			}
-			full := path.Join(vp, name)
+			full := filepath.Join(dirAbs, name)
 			mod := info.ModTime()
 			out = append(out, fsFileInfo{
 				Name:        name,
@@ -104,7 +98,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
-		_, p, err := s.resolve(req.Path)
+		p, err := s.resolveExistingPath(req.Path)
 		if err != nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
 		}
@@ -128,7 +122,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
-		_, p, err := s.resolve(req.Path)
+		p, err := s.resolveTargetPath(req.Path)
 		if err != nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
 		}
@@ -164,7 +158,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
-		_, p, err := s.resolve(req.Path)
+		p, err := s.resolveExistingPath(req.Path)
 		if err != nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
 		}
@@ -184,11 +178,11 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
-		vpOld, pOld, err := s.resolve(req.OldPath)
+		pOld, err := s.resolveExistingPath(req.OldPath)
 		if err != nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid old_path"}
 		}
-		vpNew, pNew, err := s.resolve(req.NewPath)
+		pNew, err := s.resolveTargetPath(req.NewPath)
 		if err != nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid new_path"}
 		}
@@ -209,19 +203,18 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err := os.Rename(pOld, pNew); err != nil {
 			return nil, &rpc.Error{Code: 500, Message: "rename failed"}
 		}
-		_ = vpOld // suppress unused warning
-		return &fsRenameResp{Success: true, NewPath: vpNew}, nil
+		return &fsRenameResp{Success: true, NewPath: pNew}, nil
 	})
 
 	accessgate.RegisterTyped[fsCopyReq, fsCopyResp](r, TypeID_FS_COPY, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsCopyReq) (*fsCopyResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
-		_, pSrc, err := s.resolve(req.SourcePath)
+		pSrc, err := s.resolveExistingPath(req.SourcePath)
 		if err != nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid source_path"}
 		}
-		vpDest, pDest, err := s.resolve(req.DestPath)
+		pDest, err := s.resolveTargetPath(req.DestPath)
 		if err != nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid dest_path"}
 		}
@@ -252,19 +245,38 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 				return nil, &rpc.Error{Code: 500, Message: "copy failed: " + err.Error()}
 			}
 		}
-		return &fsCopyResp{Success: true, NewPath: vpDest}, nil
+		return &fsCopyResp{Success: true, NewPath: pDest}, nil
 	})
 }
 
-func (s *Service) resolve(p string) (virtual string, real string, err error) {
+func (s *Service) resolveExistingPath(path string) (string, error) {
 	if s == nil {
-		return "", "", errors.New("nil service")
+		return "", errors.New("nil service")
 	}
-	resolved, err := pathutil.ResolveVirtualPath(s.root, p)
-	if err != nil {
-		return "", "", err
+	if strings.TrimSpace(path) == "" {
+		path = s.agentHomeAbs
 	}
-	return resolved.Virtual, resolved.Real, nil
+	return pathutil.ResolveExistingScopedPath(path, s.agentHomeAbs)
+}
+
+func (s *Service) resolveExistingDir(path string) (string, error) {
+	if s == nil {
+		return "", errors.New("nil service")
+	}
+	if strings.TrimSpace(path) == "" {
+		path = s.agentHomeAbs
+	}
+	return pathutil.ResolveExistingScopedDir(path, s.agentHomeAbs)
+}
+
+func (s *Service) resolveTargetPath(path string) (string, error) {
+	if s == nil {
+		return "", errors.New("nil service")
+	}
+	if strings.TrimSpace(path) == "" {
+		return "", errors.New("missing path")
+	}
+	return pathutil.ResolveTargetScopedPath(path, s.agentHomeAbs)
 }
 
 func fileModeString(m fs.FileMode) string {
@@ -274,10 +286,10 @@ func fileModeString(m fs.FileMode) string {
 
 // --- wire types (snake_case JSON) ---
 
-type fsGetHomeReq struct{}
+type fsGetPathContextReq struct{}
 
-type fsGetHomeResp struct {
-	Path string `json:"path"`
+type fsGetPathContextResp struct {
+	AgentHomePathAbs string `json:"agent_home_path_abs"`
 }
 
 type fsListReq struct {

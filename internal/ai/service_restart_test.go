@@ -14,7 +14,7 @@ func TestNewService_ResetsStaleActiveThreadRunStateAfterRestart(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
-	fsRoot := t.TempDir()
+	agentHomeDir := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	meta := session.Meta{
@@ -31,10 +31,10 @@ func TestNewService_ResetsStaleActiveThreadRunStateAfterRestart(t *testing.T) {
 	ctx := context.Background()
 
 	svc, err := NewService(Options{
-		Logger:   logger,
-		StateDir: stateDir,
-		FSRoot:   fsRoot,
-		Shell:    "bash",
+		Logger:       logger,
+		StateDir:     stateDir,
+		AgentHomeDir: agentHomeDir,
+		Shell:        "bash",
 	})
 	if err != nil {
 		t.Fatalf("NewService first: %v", err)
@@ -61,10 +61,10 @@ func TestNewService_ResetsStaleActiveThreadRunStateAfterRestart(t *testing.T) {
 	}
 
 	restarted, err := NewService(Options{
-		Logger:   logger,
-		StateDir: stateDir,
-		FSRoot:   fsRoot,
-		Shell:    "bash",
+		Logger:       logger,
+		StateDir:     stateDir,
+		AgentHomeDir: agentHomeDir,
+		Shell:        "bash",
 	})
 	if err != nil {
 		t.Fatalf("NewService second: %v", err)

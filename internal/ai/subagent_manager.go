@@ -1165,7 +1165,7 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 		child := newRun(runOptions{
 			Log:                   m.parent.log,
 			StateDir:              m.parent.stateDir,
-			FSRoot:                m.parent.fsRoot,
+			AgentHomeDir:          m.parent.agentHomeDir,
 			Shell:                 m.parent.shell,
 			AIConfig:              m.parent.cfg,
 			SessionMeta:           m.parent.sessionMeta,

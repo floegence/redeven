@@ -17,7 +17,7 @@ func newTestService(t *testing.T, cfg *config.AIConfig) *Service {
 	svc, err := NewService(Options{
 		Logger:           slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug})),
 		StateDir:         t.TempDir(),
-		FSRoot:           t.TempDir(),
+		AgentHomeDir:     t.TempDir(),
 		Shell:            "/bin/bash",
 		Config:           cfg,
 		PersistOpTimeout: 2 * time.Second,

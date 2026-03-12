@@ -337,7 +337,7 @@ func main() {
 
 	service, err := ai.NewService(ai.Options{
 		StateDir:              stateDir,
-		FSRoot:                workspacePath,
+		AgentHomeDir:          workspacePath,
 		Shell:                 "bash",
 		Config:                cfg.AI,
 		RunMaxWallTime:        3 * time.Minute,

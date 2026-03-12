@@ -108,7 +108,7 @@ func newRealtimeTestService(t *testing.T, delay time.Duration) *Service {
 	svc, err := NewService(Options{
 		Logger:              logger,
 		StateDir:            t.TempDir(),
-		FSRoot:              t.TempDir(),
+		AgentHomeDir:        t.TempDir(),
 		Shell:               "bash",
 		Config:              cfg,
 		RunMaxWallTime:      30 * time.Second,

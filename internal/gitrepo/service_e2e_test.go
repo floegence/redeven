@@ -54,7 +54,9 @@ func TestE2E_GitRepoRPC_ResolveListDetail(t *testing.T) {
 
 	client := rpc.NewClient(clientConn)
 
-	resolvePayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_RESOLVE_REPO, []byte(`{"path":"/src"}`))
+	resolvePayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_RESOLVE_REPO, mustMarshalJSON(t, resolveRepoReq{
+		Path: filepath.Join(fixture.Root, "src"),
+	}))
 	if err != nil {
 		t.Fatalf("resolve repo call: %v", err)
 	}

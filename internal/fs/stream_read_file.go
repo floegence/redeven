@@ -90,7 +90,7 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 		return
 	}
 
-	_, realPath, err := s.resolve(req.Path)
+	realPath, err := s.resolveExistingPath(req.Path)
 	if err != nil {
 		_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
 			Ok: false,

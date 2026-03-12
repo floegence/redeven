@@ -18,9 +18,9 @@ import (
 func newPolicyTestRun(t *testing.T, workspace string, mode string, policy *config.AIExecutionPolicy, messageID string) *run {
 	t.Helper()
 	r := newRun(runOptions{
-		Log:    slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		FSRoot: workspace,
-		Shell:  "bash",
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: workspace,
+		Shell:        "bash",
 		AIConfig: &config.AIConfig{
 			ExecutionPolicy: policy,
 		},
@@ -227,9 +227,9 @@ func TestHandleToolCall_PlanModeAllowsReadonlyFindPipeEgrepWithoutApproval(t *te
 	}
 
 	r := newRun(runOptions{
-		Log:    slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		FSRoot: workspace,
-		Shell:  "bash",
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: workspace,
+		Shell:        "bash",
 		SessionMeta: &session.Meta{
 			CanRead:    true,
 			CanWrite:   true,

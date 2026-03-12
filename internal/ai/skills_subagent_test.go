@@ -207,7 +207,7 @@ This content should appear in overlay.`
 		t.Fatalf("write skill file: %v", err)
 	}
 
-	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), FSRoot: workspace})
+	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), AgentHomeDir: workspace})
 	r.skillManager = newSkillManager(workspace, workspace)
 	r.skillManager.userHome = workspace
 	r.skillManager.Discover()
@@ -303,11 +303,11 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 		CanAdmin:          true,
 	}
 	r := newRun(runOptions{
-		Log:         slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		FSRoot:      workspace,
-		Shell:       "bash",
-		AIConfig:    cfg,
-		SessionMeta: meta,
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: workspace,
+		Shell:        "bash",
+		AIConfig:     cfg,
+		SessionMeta:  meta,
 		ResolveProviderKey: func(providerID string) (string, bool, error) {
 			if strings.TrimSpace(providerID) == "openai" {
 				return "sk-test", true, nil
@@ -572,11 +572,11 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 
 	var resolverCalled atomic.Bool
 	r := newRun(runOptions{
-		Log:         slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		FSRoot:      workspace,
-		Shell:       "bash",
-		AIConfig:    cfg,
-		SessionMeta: meta,
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: workspace,
+		Shell:        "bash",
+		AIConfig:     cfg,
+		SessionMeta:  meta,
 		ResolveProviderKey: func(providerID string) (string, bool, error) {
 			if strings.TrimSpace(providerID) == "openai" {
 				return "sk-test", true, nil
@@ -667,9 +667,9 @@ func TestSubagentManager_ManageActions(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{
-		Log:    slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		FSRoot: t.TempDir(),
-		RunID:  "run_manage_actions",
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: t.TempDir(),
+		RunID:        "run_manage_actions",
 	})
 	mgr := newSubagentManager(r)
 	r.subagentManager = mgr
@@ -865,7 +865,7 @@ func TestSubagentManager_ManageActions(t *testing.T) {
 func TestSubagentManager_CreateRejectsLegacyTaskID(t *testing.T) {
 	t.Parallel()
 
-	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), FSRoot: t.TempDir()})
+	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), AgentHomeDir: t.TempDir()})
 	mgr := newSubagentManager(r)
 	r.subagentManager = mgr
 
@@ -895,7 +895,7 @@ func TestSubagentManager_CreateRejectsLegacyTaskID(t *testing.T) {
 func TestSubagentManager_CreateRequiresPromptContract(t *testing.T) {
 	t.Parallel()
 
-	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), FSRoot: t.TempDir()})
+	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), AgentHomeDir: t.TempDir()})
 	mgr := newSubagentManager(r)
 	r.subagentManager = mgr
 
@@ -933,7 +933,7 @@ Use this handler skill.`, skillName)
 		t.Fatalf("write skill file: %v", err)
 	}
 
-	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), FSRoot: workspace})
+	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), AgentHomeDir: workspace})
 	r.skillManager = newSkillManager(workspace, workspace)
 	r.skillManager.userHome = workspace
 	r.skillManager.Discover()

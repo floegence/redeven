@@ -37,7 +37,7 @@ const gitWorkspaceRenderStore = vi.hoisted(() => ({
 const mockRpc = vi.hoisted(() => ({
   fs: {
     list: vi.fn(),
-    getHome: vi.fn(),
+    getPathContext: vi.fn(),
   },
   git: {
     resolveRepo: vi.fn(),
@@ -235,7 +235,7 @@ beforeEach(() => {
   gitWorkspaceRenderStore.snapshots = [];
 
   mockRpc.fs.list.mockResolvedValue({ entries: [] });
-  mockRpc.fs.getHome.mockResolvedValue({ path: '/Users/tester' });
+  mockRpc.fs.getPathContext.mockResolvedValue({ agentHomePathAbs: '/workspace' });
   mockRpc.git.resolveRepo.mockResolvedValue({
     available: true,
     repoRootPath: '/workspace/repo',

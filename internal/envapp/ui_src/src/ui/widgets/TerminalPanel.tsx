@@ -621,6 +621,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [searchResultCount, setSearchResultCount] = createSignal(0);
   const [searchResultIndex, setSearchResultIndex] = createSignal(-1);
   const [panelHasFocus, setPanelHasFocus] = createSignal(false);
+  const [agentHomePathAbs, setAgentHomePathAbs] = createSignal('');
   const [terminalAskMenu, setTerminalAskMenu] = createSignal<{
     x: number;
     y: number;
@@ -648,6 +649,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (viewActive()) return;
     // Reset focus state when the view becomes inactive to avoid stale focus affecting autoFocus decisions.
     setPanelHasFocus(false);
+  });
+
+  createEffect(() => {
+    if (!connected()) return;
+    void (async () => {
+      try {
+        const resp = await rpc.fs.getPathContext();
+        const home = normalizeAskFlowerAbsolutePath(String(resp?.agentHomePathAbs ?? '').trim());
+        if (home) setAgentHomePathAbs(home);
+      } catch {
+        // ignore
+      }
+    })();
   });
 
   createEffect(() => {
@@ -887,7 +901,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setError(null);
     try {
       const nextIndex = (sessions()?.length ?? 0) + 1;
-      const session = await sessionsCoordinator.createSession(`Terminal ${nextIndex}`, '/', 80, 24);
+      const session = await sessionsCoordinator.createSession(`Terminal ${nextIndex}`, agentHomePathAbs() || '', 80, 24);
       if (!session?.id) throw new Error('Invalid create response');
 
       setActiveSessionId(session.id);
@@ -1155,7 +1169,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const resolvedSession = activeSession ?? sessions()[0] ?? null;
     if (!resolvedSession) return;
 
-    const workingDir = normalizeAskFlowerAbsolutePath(String(resolvedSession.workingDir ?? '').trim()) || '/';
+    const workingDir = normalizeAskFlowerAbsolutePath(String(resolvedSession.workingDir ?? '').trim())
+      || normalizeAskFlowerAbsolutePath(agentHomePathAbs())
+      || '';
     const core = coreRegistry.get(resolvedSession.id) ?? getActiveCore();
 
     let selection = '';

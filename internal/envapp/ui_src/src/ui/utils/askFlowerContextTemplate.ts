@@ -23,7 +23,7 @@ function buildContextSection(item: AskFlowerContextItem): string {
     return `- Selected text from \`${item.path}\`:\n\n\`\`\`text\n${body}\n\`\`\``;
   }
 
-  const wd = String(item.workingDir ?? '').trim() || '/';
+  const wd = String(item.workingDir ?? '').trim() || 'Working directory unavailable';
   const selection = String(item.selection ?? '').trim();
   if (!selection) {
     return `- Terminal working directory: \`${wd}\``;
@@ -61,8 +61,6 @@ export function buildAskFlowerDraftMarkdown(params: {
   if (includeSuggestedWorkingDir) {
     const suggested = resolveSuggestedWorkingDirAbsolute({
       suggestedWorkingDirAbs: intent.suggestedWorkingDirAbs,
-      suggestedWorkingDirVirtual: intent.suggestedWorkingDirVirtual,
-      fsRootAbs: intent.fsRootAbs,
     });
     if (suggested) {
       sections.push(`Suggested working directory: \`${suggested}\``);

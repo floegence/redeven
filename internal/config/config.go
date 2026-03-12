@@ -27,9 +27,9 @@ type Config struct {
 	// It is designed to limit the effective permissions even if the control-plane grants more.
 	PermissionPolicy *PermissionPolicy `json:"permission_policy,omitempty"`
 
-	// RootDir is the filesystem root for FS/terminal operations.
-	// If empty, the agent picks a safe default (user home dir).
-	RootDir string `json:"root_dir,omitempty"`
+	// AgentHomeDir is the configured filesystem scope for user-facing features.
+	// If empty, the agent picks a safe default (the current user home dir).
+	AgentHomeDir string `json:"agent_home_dir,omitempty"`
 
 	// Shell is the shell command used for terminal sessions.
 	// If empty, the agent picks a default (SHELL or /bin/bash).

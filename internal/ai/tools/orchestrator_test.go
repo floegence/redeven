@@ -2,6 +2,7 @@ package tools
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -24,7 +25,8 @@ func TestClassifyError_InvalidPathProducesNormalizedArgs(t *testing.T) {
 	t.Parallel()
 
 	inv := Invocation{
-		ToolName: "terminal.exec",
+		ToolName:     "terminal.exec",
+		AgentHomeDir: "/tmp",
 		Args: map[string]any{
 			"cwd": "/tmp/workspace/../workspace/docs/",
 		},
@@ -39,7 +41,11 @@ func TestClassifyError_InvalidPathProducesNormalizedArgs(t *testing.T) {
 	if !toolErr.Retryable {
 		t.Fatalf("retryable=false, want true")
 	}
-	want := filepath.Clean("/tmp/workspace/docs")
+	tmpRoot, err := filepath.EvalSymlinks(filepath.Clean(string(os.PathSeparator) + "tmp"))
+	if err != nil {
+		t.Fatalf("EvalSymlinks(/tmp): %v", err)
+	}
+	want := filepath.Join(tmpRoot, "workspace", "docs")
 	if got := toolErr.NormalizedArgs["cwd"]; got != want {
 		t.Fatalf("normalized cwd=%v, want=%v", got, want)
 	}
@@ -50,8 +56,9 @@ func TestClassifyError_InvalidPathNormalizesRelativePath(t *testing.T) {
 
 	root := t.TempDir()
 	inv := Invocation{
-		ToolName:   "terminal.exec",
-		WorkingDir: root,
+		ToolName:     "terminal.exec",
+		WorkingDir:   root,
+		AgentHomeDir: root,
 		Args: map[string]any{
 			"workdir": "docs/readme.md",
 		},
@@ -63,7 +70,11 @@ func TestClassifyError_InvalidPathNormalizesRelativePath(t *testing.T) {
 	if toolErr.Code != ErrorCodeInvalidPath {
 		t.Fatalf("code=%q, want=%q", toolErr.Code, ErrorCodeInvalidPath)
 	}
-	want := filepath.Clean(filepath.Join(root, "docs/readme.md"))
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(root): %v", err)
+	}
+	want := filepath.Join(resolvedRoot, "docs", "readme.md")
 	if got := toolErr.NormalizedArgs["workdir"]; got != want {
 		t.Fatalf("normalized workdir=%v, want=%v", got, want)
 	}

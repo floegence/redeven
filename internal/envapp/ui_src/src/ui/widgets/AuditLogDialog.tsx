@@ -118,7 +118,7 @@ function formatActionSecondary(e: AgentAuditEntry): string {
   }
   if (action === 'settings_update') {
     const updated: string[] = [];
-    if (detail.root_dir) updated.push('root_dir');
+    if (detail.agent_home_dir) updated.push('agent_home_dir');
     if (detail.shell) updated.push('shell');
     if (detail.log_format) updated.push('log_format');
     if (detail.log_level) updated.push('log_level');

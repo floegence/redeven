@@ -22,7 +22,7 @@ func TestResolveRepoForPath(t *testing.T) {
 	fixture := createTestRepoFixture(t)
 	svc := NewService(fixture.Root)
 
-	repo, available, err := svc.resolveRepoForPath(context.Background(), "/src")
+	repo, available, err := svc.resolveRepoForPath(context.Background(), filepath.Join(fixture.Root, "src"))
 	if err != nil {
 		t.Fatalf("resolveRepoForPath: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestResolveRepoForPath(t *testing.T) {
 func TestResolveRepoForPath_NonRepository(t *testing.T) {
 	t.Parallel()
 	svc := NewService(t.TempDir())
-	_, available, err := svc.resolveRepoForPath(context.Background(), "/")
+	_, available, err := svc.resolveRepoForPath(context.Background(), "")
 	if err != nil {
 		t.Fatalf("resolveRepoForPath(non-repo): %v", err)
 	}
@@ -58,7 +58,7 @@ func TestResolveRepoForPath_Worktree(t *testing.T) {
 	runGitFixture(t, fixture.Root, "worktree", "add", worktree, branch)
 
 	svc := NewService(worktree)
-	repo, available, err := svc.resolveRepoForPath(context.Background(), "/")
+	repo, available, err := svc.resolveRepoForPath(context.Background(), worktree)
 	if err != nil {
 		t.Fatalf("resolveRepoForPath(worktree): %v", err)
 	}

@@ -9,11 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/floegence/redeven-agent/internal/ai/threadstore"
+	"github.com/floegence/redeven-agent/internal/pathutil"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -128,7 +128,7 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 
 	workingDir := strings.TrimSpace(th.WorkingDir)
 	if workingDir == "" {
-		workingDir = strings.TrimSpace(s.fsRoot)
+		workingDir = strings.TrimSpace(s.agentHomeDir)
 	}
 
 	return &ThreadView{
@@ -196,7 +196,7 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 		}
 		workingDir := strings.TrimSpace(t.WorkingDir)
 		if workingDir == "" {
-			workingDir = strings.TrimSpace(s.fsRoot)
+			workingDir = strings.TrimSpace(s.agentHomeDir)
 		}
 		out.Threads = append(out.Threads, ThreadView{
 			ThreadID:            strings.TrimSpace(t.ThreadID),
@@ -259,12 +259,12 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 		}
 	}
 
-	fallbackWorkingDir := strings.TrimSpace(s.fsRoot)
+	fallbackWorkingDir := strings.TrimSpace(s.agentHomeDir)
 	workingDir = strings.TrimSpace(workingDir)
 	if workingDir == "" {
 		workingDir = fallbackWorkingDir
 	}
-	workingDirClean, err := validateThreadWorkingDir(workingDir)
+	workingDirClean, err := validateThreadWorkingDir(workingDir, strings.TrimSpace(s.agentHomeDir))
 	if err != nil {
 		return nil, err
 	}
@@ -317,35 +317,35 @@ func (s *Service) ValidateWorkingDir(workingDir string) (string, error) {
 	if s == nil {
 		return "", errors.New("nil service")
 	}
-	fallbackWorkingDir := strings.TrimSpace(s.fsRoot)
+	fallbackWorkingDir := strings.TrimSpace(s.agentHomeDir)
 	workingDir = strings.TrimSpace(workingDir)
 	if workingDir == "" {
 		workingDir = fallbackWorkingDir
 	}
-	return validateThreadWorkingDir(workingDir)
+	return validateThreadWorkingDir(workingDir, fallbackWorkingDir)
 }
 
-func validateThreadWorkingDir(workingDir string) (string, error) {
-	workingDir = strings.TrimSpace(workingDir)
-	if workingDir == "" {
+func validateThreadWorkingDir(workingDir string, agentHomeDir string) (string, error) {
+	if strings.TrimSpace(workingDir) == "" {
 		return "", errors.New("missing working_dir")
 	}
-	workingDir = filepath.Clean(workingDir)
-	if !filepath.IsAbs(workingDir) {
-		return "", errors.New("working_dir must be absolute")
-	}
-
-	info, err := os.Stat(workingDir)
+	resolved, err := pathutil.ResolveExistingScopedDir(workingDir, agentHomeDir)
 	if err != nil {
-		if os.IsNotExist(err) {
+		msg := strings.TrimSpace(err.Error())
+		switch {
+		case msg == "path must be absolute":
+			return "", errors.New("working_dir must be absolute")
+		case msg == "path escapes agent home":
+			return "", errors.New("working_dir must stay within agent home")
+		case errors.Is(err, os.ErrNotExist):
 			return "", errors.New("working_dir does not exist")
+		case msg == "path must be a directory":
+			return "", errors.New("working_dir must be a directory")
+		default:
+			return "", errors.New("working_dir is not accessible")
 		}
-		return "", errors.New("working_dir is not accessible")
 	}
-	if !info.IsDir() {
-		return "", errors.New("working_dir must be a directory")
-	}
-	return workingDir, nil
+	return resolved, nil
 }
 
 func (s *Service) RenameThread(ctx context.Context, meta *session.Meta, threadID string, title string) error {

@@ -23,7 +23,7 @@ import type {
   AIToolApprovalResponse,
 } from './sdk/ai';
 import type { AccessResumeRequest, AccessResumeResponse, AccessStatusResponse } from './sdk/access';
-import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsGetHomeResponse, FsListRequest, FsListResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
+import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsListRequest, FsListResponse, FsPathContextResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
 import type {
   GitCheckoutBranchRequest,
   GitCheckoutBranchResponse,
@@ -81,7 +81,7 @@ import {
   toWireAIToolApprovalRequest,
 } from './codec/ai';
 import { fromWireAccessResumeResponse, fromWireAccessStatusResponse, toWireAccessResumeRequest } from './codec/access';
-import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsGetHomeResponse, fromWireFsListResponse, fromWireFsReadFileResponse, fromWireFsRenameResponse, fromWireFsWriteFileResponse, toWireFsCopyRequest, toWireFsDeleteRequest, toWireFsListRequest, toWireFsReadFileRequest, toWireFsRenameRequest, toWireFsWriteFileRequest } from './codec/fs';
+import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsListResponse, fromWireFsPathContextResponse, fromWireFsReadFileResponse, fromWireFsRenameResponse, fromWireFsWriteFileResponse, toWireFsCopyRequest, toWireFsDeleteRequest, toWireFsListRequest, toWireFsReadFileRequest, toWireFsRenameRequest, toWireFsWriteFileRequest } from './codec/fs';
 import {
   fromWireGitCheckoutBranchResponse,
   fromWireGitCommitWorkspaceResponse,
@@ -139,7 +139,7 @@ import type {
   wire_ai_tool_approval_req,
   wire_ai_tool_approval_resp,
 } from './wire/ai';
-import type { wire_fs_copy_req, wire_fs_copy_resp, wire_fs_delete_req, wire_fs_delete_resp, wire_fs_get_home_resp, wire_fs_list_req, wire_fs_list_resp, wire_fs_read_file_req, wire_fs_read_file_resp, wire_fs_rename_req, wire_fs_rename_resp, wire_fs_write_file_req, wire_fs_write_file_resp } from './wire/fs';
+import type { wire_fs_copy_req, wire_fs_copy_resp, wire_fs_delete_req, wire_fs_delete_resp, wire_fs_get_path_context_resp, wire_fs_list_req, wire_fs_list_resp, wire_fs_read_file_req, wire_fs_read_file_resp, wire_fs_rename_req, wire_fs_rename_resp, wire_fs_write_file_req, wire_fs_write_file_resp } from './wire/fs';
 import type {
   wire_git_checkout_branch_req,
   wire_git_checkout_branch_resp,
@@ -177,7 +177,7 @@ import type { wire_terminal_clear_req, wire_terminal_clear_resp, wire_terminal_h
 
 export type RedevenV1Rpc = {
   fs: {
-    getHome: () => Promise<FsGetHomeResponse>;
+    getPathContext: () => Promise<FsPathContextResponse>;
     list: (req: FsListRequest) => Promise<FsListResponse>;
     readFile: (req: FsReadFileRequest) => Promise<FsReadFileResponse>;
     writeFile: (req: FsWriteFileRequest) => Promise<FsWriteFileResponse>;
@@ -262,9 +262,9 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
 
   return {
     fs: {
-      getHome: async () => {
-        const resp = await call<Record<string, never>, wire_fs_get_home_resp>(redevenV1TypeIds.fs.getHome, {});
-        return fromWireFsGetHomeResponse(resp);
+      getPathContext: async () => {
+        const resp = await call<Record<string, never>, wire_fs_get_path_context_resp>(redevenV1TypeIds.fs.getPathContext, {});
+        return fromWireFsPathContextResponse(resp);
       },
       list: async (req) => {
         const payload = toWireFsListRequest(req);

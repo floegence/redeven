@@ -25,6 +25,7 @@ import (
 	contextstore "github.com/floegence/redeven-agent/internal/ai/context/store"
 	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven-agent/internal/pathutil"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -40,8 +41,8 @@ type Options struct {
 	Logger   *slog.Logger
 	StateDir string
 
-	FSRoot string
-	Shell  string
+	AgentHomeDir string
+	Shell        string
 
 	Config *config.AIConfig
 
@@ -83,9 +84,9 @@ type Options struct {
 type Service struct {
 	log *slog.Logger
 
-	stateDir string
-	fsRoot   string
-	shell    string
+	stateDir     string
+	agentHomeDir string
+	shell        string
 
 	cfg *config.AIConfig
 
@@ -156,8 +157,12 @@ func NewService(opts Options) (*Service, error) {
 	if strings.TrimSpace(opts.StateDir) == "" {
 		return nil, errors.New("missing StateDir")
 	}
-	if strings.TrimSpace(opts.FSRoot) == "" {
-		return nil, errors.New("missing FSRoot")
+	if strings.TrimSpace(opts.AgentHomeDir) == "" {
+		return nil, errors.New("missing AgentHomeDir")
+	}
+	agentHomeDir, err := pathutil.CanonicalizeExistingDirAbs(opts.AgentHomeDir)
+	if err != nil {
+		return nil, err
 	}
 
 	logger := opts.Logger
@@ -227,7 +232,7 @@ func NewService(opts Options) (*Service, error) {
 	svc := &Service{
 		log:                          logger,
 		stateDir:                     strings.TrimSpace(opts.StateDir),
-		fsRoot:                       strings.TrimSpace(opts.FSRoot),
+		agentHomeDir:                 agentHomeDir,
 		shell:                        strings.TrimSpace(opts.Shell),
 		cfg:                          opts.Config,
 		persistOpTO:                  persistTO,
@@ -253,7 +258,7 @@ func NewService(opts Options) (*Service, error) {
 		memoryExtractor:              memoryExtractor,
 		snapshotCompactor:            snapshotCompactor,
 		capabilityResolver:           capabilityResolver,
-		skillManager:                 newSkillManager(strings.TrimSpace(opts.FSRoot), strings.TrimSpace(opts.StateDir)),
+		skillManager:                 newSkillManager(agentHomeDir, strings.TrimSpace(opts.StateDir)),
 	}
 	if svc.skillManager != nil {
 		svc.skillManager.Discover()
@@ -839,7 +844,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 
 	runWorkingDir := strings.TrimSpace(th.WorkingDir)
 	if runWorkingDir == "" {
-		runWorkingDir = strings.TrimSpace(s.fsRoot)
+		runWorkingDir = strings.TrimSpace(s.agentHomeDir)
 	}
 
 	s.mu.Lock()
@@ -869,7 +874,8 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	r := newRun(runOptions{
 		Log:                 s.log,
 		StateDir:            s.stateDir,
-		FSRoot:              runWorkingDir,
+		AgentHomeDir:        s.agentHomeDir,
+		WorkingDir:          runWorkingDir,
 		Shell:               s.shell,
 		AIConfig:            cfg,
 		SessionMeta:         metaRef,

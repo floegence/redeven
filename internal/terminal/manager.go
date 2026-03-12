@@ -7,8 +7,6 @@ import (
 	"errors"
 	"log/slog"
 	"os"
-	"path"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +15,7 @@ import (
 	rpcwirev1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/rpc/v1"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven-agent/internal/accessgate"
+	"github.com/floegence/redeven-agent/internal/pathutil"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -38,8 +37,8 @@ const (
 )
 
 type Manager struct {
-	root string
-	log  *slog.Logger
+	agentHomeAbs string
+	log          *slog.Logger
 
 	term *termgo.Manager
 
@@ -73,17 +72,17 @@ func (r fixedShellResolver) ResolveShell(logger termgo.Logger) string {
 	return termgo.DefaultShellResolver{}.ResolveShell(logger)
 }
 
-func NewManager(shell string, root string, log *slog.Logger) *Manager {
-	if abs, err := filepath.Abs(strings.TrimSpace(root)); err == nil && abs != "" {
-		root = abs
+func NewManager(shell string, agentHomeAbs string, log *slog.Logger) *Manager {
+	resolved, err := pathutil.CanonicalizeExistingDirAbs(agentHomeAbs)
+	if err != nil {
+		panic(err)
 	}
-	root = filepath.Clean(root)
 	if log == nil {
 		log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
 
 	m := &Manager{
-		root:            root,
+		agentHomeAbs:    resolved,
 		log:             log,
 		writers:         make(map[*rpc.Server]*sinkWriter),
 		byServer:        make(map[*rpc.Server]map[string]string),
@@ -130,7 +129,7 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, &rpc.Error{Code: 400, Message: "cols and rows are required"}
 		}
 
-		workingDirAbs, err := m.resolveCwd(req.WorkingDir)
+		workingDirAbs, err := m.resolveWorkingDir(req.WorkingDir)
 		if err != nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid working_dir"}
 		}
@@ -142,10 +141,7 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, &rpc.Error{Code: 500, Message: "failed to create terminal session"}
 		}
 
-		info := sess.ToSessionInfo()
-		info.WorkingDir = m.virtualPathFromAbs(info.WorkingDir)
-
-		return &terminalCreateResp{Session: toWireSessionInfo(info)}, nil
+		return &terminalCreateResp{Session: toWireSessionInfo(sess.ToSessionInfo())}, nil
 	})
 
 	// List sessions
@@ -160,9 +156,7 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			if s == nil {
 				continue
 			}
-			info := s.ToSessionInfo()
-			info.WorkingDir = m.virtualPathFromAbs(info.WorkingDir)
-			out = append(out, toWireSessionInfo(info))
+			out = append(out, toWireSessionInfo(s.ToSessionInfo()))
 		}
 		return &terminalListResp{Sessions: out}, nil
 	})
@@ -523,7 +517,7 @@ func (m *Manager) broadcastNameUpdate(sessionID string, newName string, workingD
 	payload := terminalNameUpdatePayload{
 		SessionID:  sessionID,
 		NewName:    newName,
-		WorkingDir: m.virtualPathFromAbs(workingDir),
+		WorkingDir: workingDir,
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -822,84 +816,14 @@ type terminalDeleteResp struct {
 	OK bool `json:"ok"`
 }
 
-// --- virtual working dir helpers ---
-
-func (m *Manager) resolveCwd(cwd string) (string, error) {
+func (m *Manager) resolveWorkingDir(workingDir string) (string, error) {
 	if m == nil {
 		return "", errors.New("nil manager")
 	}
-	cwd = strings.TrimSpace(cwd)
-	if cwd == "" {
-		cwd = "/"
+	if strings.TrimSpace(workingDir) == "" {
+		workingDir = m.agentHomeAbs
 	}
-
-	// Virtual paths are POSIX-like absolute paths starting with "/".
-	cwd = strings.ReplaceAll(cwd, "\\", "/")
-	if !strings.HasPrefix(cwd, "/") {
-		cwd = "/" + cwd
-	}
-
-	vp := path.Clean(cwd)
-	if vp == "." {
-		vp = "/"
-	}
-	if !strings.HasPrefix(vp, "/") {
-		vp = "/" + vp
-	}
-
-	rel := strings.TrimPrefix(vp, "/")
-	relOS := filepath.FromSlash(rel)
-	if relOS != "" && filepath.IsAbs(relOS) {
-		return "", errors.New("invalid absolute path")
-	}
-
-	abs := filepath.Clean(filepath.Join(m.root, relOS))
-	ok, err := isWithinRoot(abs, m.root)
-	if err != nil || !ok {
-		return "", errors.New("path escapes root")
-	}
-	return abs, nil
-}
-
-func (m *Manager) virtualPathFromAbs(abs string) string {
-	abs = filepath.Clean(strings.TrimSpace(abs))
-	root := filepath.Clean(m.root)
-	if abs == "" || root == "" {
-		return "/"
-	}
-
-	rel, err := filepath.Rel(root, abs)
-	if err != nil {
-		return "/"
-	}
-	rel = filepath.Clean(rel)
-	if rel == "." {
-		return "/"
-	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return "/"
-	}
-	return "/" + filepath.ToSlash(rel)
-}
-
-func isWithinRoot(path string, root string) (bool, error) {
-	path = filepath.Clean(path)
-	root = filepath.Clean(root)
-	rel, err := filepath.Rel(root, path)
-	if err != nil {
-		return false, err
-	}
-	rel = filepath.Clean(rel)
-	if rel == "." {
-		return true, nil
-	}
-	if rel == ".." {
-		return false, nil
-	}
-	if strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return false, nil
-	}
-	return true, nil
+	return pathutil.ResolveExistingScopedDir(workingDir, m.agentHomeAbs)
 }
 
 // --- async notify sink ---
