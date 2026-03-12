@@ -10,7 +10,7 @@ import {
   workspaceSectionItems,
   workspaceSectionLabel,
 } from '../utils/gitWorkbench';
-import { gitChangeTone, gitToneDotClass, workspaceSectionTone } from './GitChrome';
+import { gitChangePathClass, gitChangeTone, gitToneDotClass, workspaceSectionTone } from './GitChrome';
 import { GitCommitDialog } from './GitCommitDialog';
 import { GitDiffDialog } from './GitDiffDialog';
 import { GitChangeMetrics, GitLabelBlock, GitMetaPill, GitPrimaryTitle, GitSubtleNote } from './GitWorkbenchPrimitives';
@@ -112,7 +112,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                         <div class="min-w-0">
                           <button
                             type="button"
-                            class="block max-w-full cursor-pointer truncate text-left text-xs font-medium text-foreground underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                            class={`block max-w-full cursor-pointer truncate text-left text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
                             title={changeSecondaryPath(item)}
                             onClick={(event) => {
                               event.stopPropagation();

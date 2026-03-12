@@ -20,7 +20,7 @@ import {
   workspaceSectionLabel,
   type GitBranchSubview,
 } from '../utils/gitWorkbench';
-import { gitBranchTone, gitChangeTone, gitCompareTone, gitToneActionButtonClass, gitToneBadgeClass, gitToneDotClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
+import { gitBranchTone, gitChangePathClass, gitChangeTone, gitCompareTone, gitToneActionButtonClass, gitToneBadgeClass, gitToneDotClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import { GitChangeMetrics, GitLabelBlock, GitMetaPill, GitPrimaryTitle, GitSubtleNote } from './GitWorkbenchPrimitives';
 
@@ -173,7 +173,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
                         <div class="min-w-0">
                           <button
                             type="button"
-                            class="block max-w-full cursor-pointer truncate text-left text-xs font-medium text-foreground underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                            class={`block max-w-full cursor-pointer truncate text-left text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
                             title={changeSecondaryPath(item)}
                             onClick={() => props.onOpenDiff?.(item)}
                           >
@@ -249,7 +249,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                         <div class="min-w-0">
                           <button
                             type="button"
-                            class="block max-w-full cursor-pointer truncate text-left text-xs font-medium text-foreground underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                            class={`block max-w-full cursor-pointer truncate text-left text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
                             title={changeSecondaryPath(item)}
                             onClick={() => props.onOpenDiff?.(item)}
                           >

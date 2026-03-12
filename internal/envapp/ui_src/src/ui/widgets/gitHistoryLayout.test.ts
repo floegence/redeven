@@ -125,11 +125,16 @@ describe('browser workspace layout wiring', () => {
     const changesSrc = read('./GitChangesPanel.tsx');
     const branchesSrc = read('./GitBranchesPanel.tsx');
     const historySrc = read('./GitHistoryBrowser.tsx');
+    const commitDialogSrc = read('./GitCommitDialog.tsx');
 
     expect(changesSrc).toContain("import { GitDiffDialog } from './GitDiffDialog';");
     expect(branchesSrc).toContain("import { GitDiffDialog } from './GitDiffDialog';");
     expect(historySrc).toContain("import { GitDiffDialog } from './GitDiffDialog';");
     expect(historySrc).not.toContain("import { GitPatchViewer } from './GitPatchViewer';");
+    expect(changesSrc).toContain('gitChangePathClass(item.changeType)');
+    expect(branchesSrc).toContain('gitChangePathClass(item.changeType)');
+    expect(historySrc).toContain('gitChangePathClass(file.changeType)');
+    expect(commitDialogSrc).toContain('gitChangePathClass(item.changeType)');
   });
 
 

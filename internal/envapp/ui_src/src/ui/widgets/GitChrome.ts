@@ -97,6 +97,22 @@ export function gitToneAccentColor(tone?: GitChromeTone): string {
   }
 }
 
+export function gitChangePathClass(change: string | undefined): string {
+  switch (String(change ?? '').trim()) {
+    case 'added':
+      return 'text-emerald-700 dark:text-emerald-300';
+    case 'deleted':
+      return 'text-red-700 dark:text-red-300';
+    case 'renamed':
+      return 'text-violet-700 dark:text-violet-300';
+    case 'copied':
+      return 'text-primary';
+    case 'modified':
+    default:
+      return 'text-sky-700 dark:text-sky-300';
+  }
+}
+
 export function gitToneActionButtonClass(): string {
   return actionButtonBaseClass;
 }

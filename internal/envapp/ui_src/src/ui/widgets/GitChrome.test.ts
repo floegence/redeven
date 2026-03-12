@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   gitBranchTone,
+  gitChangePathClass,
   gitChangeTone,
   gitCompareTone,
   gitSubviewTone,
@@ -43,6 +44,12 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitBranchTone({ current: true, kind: 'local' } as any)).toBe('brand');
     expect(gitBranchTone({ current: false, kind: 'remote' } as any)).toBe('violet');
     expect(gitBranchTone({ current: false, kind: 'local' } as any)).toBe('neutral');
+
+    expect(gitChangePathClass('modified')).toBe('text-sky-700 dark:text-sky-300');
+    expect(gitChangePathClass('deleted')).toBe('text-red-700 dark:text-red-300');
+    expect(gitChangePathClass('added')).toBe('text-emerald-700 dark:text-emerald-300');
+    expect(gitChangePathClass('renamed')).toBe('text-violet-700 dark:text-violet-300');
+    expect(gitChangePathClass('copied')).toBe('text-primary');
   });
 
   it('keeps git chrome surfaces with tone-specific accent borders on transparent background', () => {

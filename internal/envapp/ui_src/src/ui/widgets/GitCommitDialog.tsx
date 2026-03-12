@@ -1,6 +1,7 @@
 import { For, createMemo } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitWorkspaceChange } from '../protocol/redeven_v1';
+import { gitChangePathClass } from './GitChrome';
 import { GitChangeMetrics, GitStatStrip } from './GitWorkbenchPrimitives';
 
 export interface GitCommitDialogProps {
@@ -68,7 +69,7 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
                   {(item) => (
                     <tr class="border-b border-border/45 last:border-b-0">
                       <td class="px-3 py-2.5">
-                        <div class="truncate text-xs font-medium text-foreground" title={itemPath(item)}>{itemPath(item)}</div>
+                        <div class={`truncate text-xs font-medium ${gitChangePathClass(item.changeType)}`} title={itemPath(item)}>{itemPath(item)}</div>
                       </td>
                       <td class="px-3 py-2.5 capitalize text-muted-foreground">{item.changeType || 'modified'}</td>
                       <td class="px-3 py-2.5"><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>

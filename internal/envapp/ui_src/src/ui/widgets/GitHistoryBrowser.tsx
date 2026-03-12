@@ -4,7 +4,7 @@ import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
 import { changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench';
-import { gitChangeTone, gitToneDotClass } from './GitChrome';
+import { gitChangePathClass, gitChangeTone, gitToneDotClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import { GitChangeMetrics, GitLabelBlock, GitMetaPill, GitPrimaryTitle, GitSubtleNote } from './GitWorkbenchPrimitives';
 
@@ -235,7 +235,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                               <div class="min-w-0">
                                                 <button
                                                   type="button"
-                                                  class="block max-w-full cursor-pointer truncate text-left text-xs font-medium text-foreground underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                                                  class={`block max-w-full cursor-pointer truncate text-left text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(file.changeType)}`}
                                                   title={changeSecondaryPath(file)}
                                                   onClick={() => {
                                                     setDiffDialogItem(file);
