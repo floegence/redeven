@@ -25,12 +25,25 @@ func CommandContext(ctx context.Context, repoRoot string, env []string, args ...
 
 // RunCombinedOutput runs git and returns combined stdout/stderr with normalized errors.
 func RunCombinedOutput(ctx context.Context, repoRoot string, env []string, args ...string) ([]byte, error) {
+	return runCombinedOutput(ctx, repoRoot, env, nil, args...)
+}
+
+// RunCombinedOutputAllowExitCodes runs git and treats selected exit codes as success.
+func RunCombinedOutputAllowExitCodes(ctx context.Context, repoRoot string, env []string, allowedExitCodes []int, args ...string) ([]byte, error) {
+	return runCombinedOutput(ctx, repoRoot, env, allowedExitCodes, args...)
+}
+
+func runCombinedOutput(ctx context.Context, repoRoot string, env []string, allowedExitCodes []int, args ...string) ([]byte, error) {
 	cmd, err := CommandContext(ctx, repoRoot, env, args...)
 	if err != nil {
 		return nil, err
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && containsExitCode(allowedExitCodes, exitErr.ExitCode()) {
+			return out, nil
+		}
 		msg := strings.TrimSpace(string(out))
 		if msg == "" {
 			msg = err.Error()
@@ -38,6 +51,15 @@ func RunCombinedOutput(ctx context.Context, repoRoot string, env []string, args 
 		return nil, fmt.Errorf("git %s failed: %s", strings.Join(args, " "), msg)
 	}
 	return out, nil
+}
+
+func containsExitCode(allowedExitCodes []int, code int) bool {
+	for _, allowed := range allowedExitCodes {
+		if allowed == code {
+			return true
+		}
+	}
+	return false
 }
 
 // ShowTopLevel resolves the git worktree root for dir.

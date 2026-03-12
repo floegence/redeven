@@ -68,7 +68,10 @@ func (s *Service) listWorkspaceChanges(ctx context.Context, repo repoContext) (*
 	if err != nil {
 		return nil, err
 	}
-	untracked := decorateUntrackedWorkspaceChanges(status.Untracked)
+	untracked, err := s.readUntrackedWorkspaceChanges(ctx, repo.repoRootReal, status.Untracked)
+	if err != nil {
+		return nil, err
+	}
 	summary := gitWorkspaceSummary{
 		StagedCount:     len(staged),
 		UnstagedCount:   len(unstaged),
@@ -162,21 +165,73 @@ func workspaceSectionMatchKeys(item gitWorkspaceChange) []string {
 	}
 }
 
-func decorateUntrackedWorkspaceChanges(items []gitWorkspaceChange) []gitWorkspaceChange {
-	if len(items) == 0 {
-		return nil
+func decorateUntrackedWorkspaceChange(item gitWorkspaceChange) gitWorkspaceChange {
+	pathValue := firstNonEmptyPath(item.Path, item.NewPath, item.DisplayPath, item.OldPath)
+	return gitWorkspaceChange{
+		Section:     "untracked",
+		ChangeType:  "added",
+		Path:        pathValue,
+		NewPath:     firstNonEmptyPath(item.NewPath, pathValue),
+		DisplayPath: firstNonEmptyPath(item.DisplayPath, pathValue, item.NewPath, item.OldPath),
 	}
-	result := make([]gitWorkspaceChange, 0, len(items))
-	for _, item := range items {
-		result = append(result, gitWorkspaceChange{
-			Section:     "untracked",
-			ChangeType:  "added",
-			Path:        item.Path,
-			NewPath:     item.NewPath,
-			DisplayPath: firstNonEmptyPath(item.DisplayPath, item.Path, item.NewPath, item.OldPath),
-		})
+}
+
+func (s *Service) readUntrackedWorkspaceChanges(ctx context.Context, repoRoot string, statusItems []gitWorkspaceChange) ([]gitWorkspaceChange, error) {
+	if len(statusItems) == 0 {
+		return nil, nil
 	}
-	return result
+
+	changes := make([]gitWorkspaceChange, 0, len(statusItems))
+	for _, item := range statusItems {
+		change, err := s.readUntrackedWorkspaceChange(ctx, repoRoot, item)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, change)
+	}
+	return changes, nil
+}
+
+func (s *Service) readUntrackedWorkspaceChange(ctx context.Context, repoRoot string, item gitWorkspaceChange) (gitWorkspaceChange, error) {
+	change := decorateUntrackedWorkspaceChange(item)
+	targetPath := firstNonEmptyPath(change.Path, change.NewPath, change.DisplayPath)
+	if targetPath == "" {
+		return change, nil
+	}
+
+	entries, rawPatch, err := s.readGitDiffEntriesWithAllowedExitCodes(
+		ctx,
+		repoRoot,
+		[]int{1},
+		"diff",
+		"--no-index",
+		"--patch",
+		"--no-ext-diff",
+		"--binary",
+		"--",
+		"/dev/null",
+		targetPath,
+	)
+	if err != nil {
+		return gitWorkspaceChange{}, err
+	}
+	if len(entries) == 0 {
+		return change, nil
+	}
+
+	for _, entry := range entries {
+		change.Additions += entry.Additions
+		change.Deletions += entry.Deletions
+	}
+	if len(entries) == 1 {
+		entry := entries[0]
+		change.Path = firstNonEmptyPath(change.Path, entry.Path, entry.NewPath, entry.OldPath)
+		change.NewPath = firstNonEmptyPath(entry.NewPath, change.NewPath, change.Path)
+		change.DisplayPath = firstNonEmptyPath(change.DisplayPath, entry.DisplayPath, entry.Path, change.Path, change.NewPath)
+		change.IsBinary = entry.IsBinary
+	}
+	change.PatchText, change.PatchTruncated = truncateEmbeddedPatchText(strings.TrimSpace(string(rawPatch)), embeddedGitDiffEntryMaxBytes)
+	return change, nil
 }
 
 func firstNonEmptyPath(values ...string) string {

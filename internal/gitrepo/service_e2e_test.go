@@ -254,8 +254,8 @@ func TestE2E_GitRepoRPC_WorkbenchEndpoints(t *testing.T) {
 	if !strings.Contains(workspaceResp.Staged[0].PatchText, "+staged") || !strings.Contains(workspaceResp.Unstaged[0].PatchText, "+unstaged") {
 		t.Fatalf("workspace patch text not embedded: staged=%+v unstaged=%+v", workspaceResp.Staged[0], workspaceResp.Unstaged[0])
 	}
-	if strings.TrimSpace(workspaceResp.Untracked[0].PatchText) != "" {
-		t.Fatalf("untracked entry should not include patch text: %+v", workspaceResp.Untracked[0])
+	if !strings.Contains(workspaceResp.Untracked[0].PatchText, "diff --git a/todo.txt b/todo.txt") || !strings.Contains(workspaceResp.Untracked[0].PatchText, "+todo") {
+		t.Fatalf("untracked entry should include patch text: %+v", workspaceResp.Untracked[0])
 	}
 
 	branchesPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_LIST_BRANCHES, mustMarshalJSON(t, listBranchesReq{

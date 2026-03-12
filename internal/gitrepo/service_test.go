@@ -141,8 +141,14 @@ func TestListWorkspaceChanges_EmbedsPatchText(t *testing.T) {
 	if len(resp.Unstaged) != 1 || !strings.Contains(resp.Unstaged[0].PatchText, "+unstaged") {
 		t.Fatalf("unstaged patch text not embedded: %+v", resp.Unstaged)
 	}
-	if len(resp.Untracked) != 1 || resp.Untracked[0].Path != workspace.UntrackedPath || strings.TrimSpace(resp.Untracked[0].PatchText) != "" {
+	if len(resp.Untracked) != 1 || resp.Untracked[0].Path != workspace.UntrackedPath {
 		t.Fatalf("unexpected untracked entry: %+v", resp.Untracked)
+	}
+	if !strings.Contains(resp.Untracked[0].PatchText, "diff --git a/todo.txt b/todo.txt") || !strings.Contains(resp.Untracked[0].PatchText, "+todo") {
+		t.Fatalf("untracked patch text not embedded: %+v", resp.Untracked[0])
+	}
+	if resp.Untracked[0].Additions != 1 || resp.Untracked[0].Deletions != 0 {
+		t.Fatalf("unexpected untracked metrics: %+v", resp.Untracked[0])
 	}
 	if resp.Staged[0].DisplayPath != workspace.TrackedPath || resp.Unstaged[0].DisplayPath != workspace.TrackedPath {
 		t.Fatalf("workspace display path mismatch: staged=%+v unstaged=%+v", resp.Staged[0], resp.Unstaged[0])

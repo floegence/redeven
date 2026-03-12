@@ -56,11 +56,19 @@ func (entry gitDiffEntryData) toWorkspaceChange(section string) gitWorkspaceChan
 }
 
 func (s *Service) readGitDiffEntries(ctx context.Context, repoRoot string, args ...string) ([]gitDiffEntryData, error) {
-	out, err := gitutil.RunCombinedOutput(ctx, repoRoot, nil, args...)
+	entries, _, err := s.readGitDiffEntriesWithAllowedExitCodes(ctx, repoRoot, nil, args...)
 	if err != nil {
 		return nil, err
 	}
-	return parseGitDiffEntries(out), nil
+	return entries, nil
+}
+
+func (s *Service) readGitDiffEntriesWithAllowedExitCodes(ctx context.Context, repoRoot string, allowedExitCodes []int, args ...string) ([]gitDiffEntryData, []byte, error) {
+	out, err := gitutil.RunCombinedOutputAllowExitCodes(ctx, repoRoot, nil, allowedExitCodes, args...)
+	if err != nil {
+		return nil, nil, err
+	}
+	return parseGitDiffEntries(out), out, nil
 }
 
 func parseGitDiffEntries(out []byte) []gitDiffEntryData {

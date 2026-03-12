@@ -240,4 +240,57 @@ describe('GitChangesPanel interactions', () => {
       dispose();
     }
   });
+
+  it('renders untracked diff content when the file includes patch text', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <div class="h-[620px]">
+            <GitChangesPanel
+              workspace={{
+                repoRootPath: '/workspace/repo',
+                summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 1, conflictedCount: 0 },
+                staged: [],
+                unstaged: [],
+                untracked: [{
+                  section: 'untracked',
+                  changeType: 'added',
+                  path: 'docs/architecture/global-control-plane.md',
+                  displayPath: 'docs/architecture/global-control-plane.md',
+                  additions: 2,
+                  deletions: 0,
+                  patchText: [
+                    'diff --git a/docs/architecture/global-control-plane.md b/docs/architecture/global-control-plane.md',
+                    'new file mode 100644',
+                    '--- /dev/null',
+                    '+++ b/docs/architecture/global-control-plane.md',
+                    '@@ -0,0 +1,2 @@',
+                    '+# Control Plane',
+                    '+More details',
+                  ].join('\n'),
+                }],
+                conflicted: [],
+              }}
+              selectedSection="untracked"
+            />
+          </div>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const fileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('global-control-plane.md'));
+      expect(fileButton).toBeTruthy();
+      fileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(document.body.textContent).toContain('Workspace Diff');
+      expect(document.body.textContent).toContain('Control Plane');
+      expect(document.body.textContent).toContain('More details');
+    } finally {
+      dispose();
+    }
+  });
 });
