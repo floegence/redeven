@@ -15,7 +15,7 @@ const actionButtonBaseClass =
 export function gitToneBadgeClass(tone?: GitChromeTone): string {
   switch (normalizeTone(tone)) {
     case 'info':
-      return `${badgeBaseClass} border-sky-500/20 bg-sky-500/[0.08] text-sky-700 dark:text-sky-300`;
+      return `${badgeBaseClass} border-blue-500/25 bg-blue-500/10 text-blue-700 dark:border-sky-500/20 dark:bg-sky-500/[0.08] dark:text-sky-300`;
     case 'brand':
       return `${badgeBaseClass} border-primary/20 bg-primary/[0.08] text-primary`;
     case 'success':
@@ -110,7 +110,7 @@ export function gitChangePathClass(change: string | undefined): string {
       return 'text-primary';
     case 'modified':
     default:
-      return 'text-sky-700 dark:text-sky-300';
+      return 'text-blue-700 dark:text-sky-300';
   }
 }
 

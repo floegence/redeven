@@ -52,7 +52,7 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitBranchTone({ current: false, kind: 'remote' } as any)).toBe('violet');
     expect(gitBranchTone({ current: false, kind: 'local' } as any)).toBe('neutral');
 
-    expect(gitChangePathClass('modified')).toBe('text-sky-700 dark:text-sky-300');
+    expect(gitChangePathClass('modified')).toBe('text-blue-700 dark:text-sky-300');
     expect(gitChangePathClass('conflicted')).toBe('text-red-700 dark:text-red-300');
     expect(gitChangePathClass('deleted')).toBe('text-red-700 dark:text-red-300');
     expect(gitChangePathClass('added')).toBe('text-emerald-700 dark:text-emerald-300');
@@ -61,6 +61,10 @@ describe('GitChrome semantic tone helpers', () => {
   });
 
   it('keeps git chrome surfaces with tone-specific accent borders on transparent background', () => {
+    expect(gitToneBadgeClass('info')).toContain('border-blue-500/25');
+    expect(gitToneBadgeClass('info')).toContain('bg-blue-500/10');
+    expect(gitToneBadgeClass('info')).toContain('text-blue-700');
+    expect(gitToneBadgeClass('info')).toContain('dark:text-sky-300');
     expect(gitToneBadgeClass('warning')).toContain('bg-warning/12');
     expect(gitToneBadgeClass('warning')).toContain('text-warning');
     expect(gitToneBadgeClass('warning')).toContain('border-warning/20');

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { LayoutProvider } from '@floegence/floe-webapp-core';
-import { createEffect, createResource } from 'solid-js';
+import { createEffect, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -32,6 +32,13 @@ const gitWorkspaceRenderStore = vi.hoisted(() => ({
     pushBusy: boolean;
     checkoutBusy: boolean;
   }>,
+}));
+
+const workspaceLifecycleStore = vi.hoisted(() => ({
+  filesMounts: 0,
+  filesUnmounts: 0,
+  gitMounts: 0,
+  gitUnmounts: 0,
 }));
 
 const mockRpc = vi.hoisted(() => ({
@@ -113,9 +120,25 @@ vi.mock('../protocol/redeven_v1', async () => {
 });
 
 vi.mock('./FileBrowserWorkspace', () => ({
-  FileBrowserWorkspace: (props: { mode: string; currentPath: string }) => (
-    <div data-testid="files-workspace">files:{props.mode}:{props.currentPath}</div>
-  ),
+  FileBrowserWorkspace: (props: { mode: string; currentPath: string; onModeChange?: (mode: string) => void }) => {
+    const [localCount, setLocalCount] = createSignal(0);
+
+    onMount(() => {
+      workspaceLifecycleStore.filesMounts += 1;
+    });
+
+    onCleanup(() => {
+      workspaceLifecycleStore.filesUnmounts += 1;
+    });
+
+    return (
+      <div data-testid="files-workspace">
+        <div>files:{props.mode}:{props.currentPath}:{localCount()}</div>
+        <button type="button" onClick={() => setLocalCount((count) => count + 1)}>mock-files-bump</button>
+        <button type="button" onClick={() => props.onModeChange?.('git')}>mock-to-git</button>
+      </div>
+    );
+  },
 }));
 
 vi.mock('./GitWorkspace', () => ({
@@ -123,6 +146,7 @@ vi.mock('./GitWorkspace', () => ({
     mode: string;
     currentPath: string;
     subview: string;
+    onModeChange?: (mode: string) => void;
     repoInfoLoading?: boolean;
     repoSummaryLoading?: boolean;
     workspaceLoading?: boolean;
@@ -137,6 +161,14 @@ vi.mock('./GitWorkspace', () => ({
     onPush?: () => void;
     onCheckoutBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
   }) => {
+    onMount(() => {
+      workspaceLifecycleStore.gitMounts += 1;
+    });
+
+    onCleanup(() => {
+      workspaceLifecycleStore.gitUnmounts += 1;
+    });
+
     createEffect(() => {
       gitWorkspaceRenderStore.snapshots.push({
         repoInfoLoading: Boolean(props.repoInfoLoading),
@@ -154,6 +186,7 @@ vi.mock('./GitWorkspace', () => ({
     return (
       <div data-testid="git-workspace">
         <div>git:{props.mode}:{props.subview}:{props.currentPath}</div>
+        <button type="button" onClick={() => props.onModeChange?.('files')}>mock-to-files</button>
         <button type="button" onClick={() => props.onFetch?.()}>mock-fetch</button>
         <button type="button" onClick={() => props.onPull?.()}>mock-pull</button>
         <button type="button" onClick={() => props.onPush?.()}>mock-push</button>
@@ -233,6 +266,10 @@ beforeEach(() => {
   notificationStore.warning = [];
   notificationStore.info = [];
   gitWorkspaceRenderStore.snapshots = [];
+  workspaceLifecycleStore.filesMounts = 0;
+  workspaceLifecycleStore.filesUnmounts = 0;
+  workspaceLifecycleStore.gitMounts = 0;
+  workspaceLifecycleStore.gitUnmounts = 0;
 
   mockRpc.fs.list.mockResolvedValue({ entries: [] });
   mockRpc.fs.getPathContext.mockResolvedValue({ agentHomePathAbs: '/workspace' });
@@ -317,8 +354,13 @@ describe('RemoteFileBrowser persistence', () => {
 
     try {
       await flush();
-      expect(host.querySelector('[data-testid="git-workspace"]')?.textContent).toContain('git:git:history:/workspace/repo/src');
-      expect(host.querySelector('[data-testid="files-workspace"]')).toBeNull();
+      const gitWorkspace = host.querySelector('[data-testid="git-workspace"]') as HTMLDivElement | null;
+      const filesWorkspace = host.querySelector('[data-testid="files-workspace"]') as HTMLDivElement | null;
+
+      expect(gitWorkspace?.textContent).toContain('git:git:history:/workspace/repo/src');
+      expect(gitWorkspace?.parentElement?.style.display).toBe('block');
+      expect(filesWorkspace).toBeTruthy();
+      expect(filesWorkspace?.parentElement?.style.display).toBe('none');
       expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/workspace/repo/src', showHidden: false });
       expect(mockRpc.git.resolveRepo).toHaveBeenCalledWith({ path: '/workspace/repo/src' });
     } finally {
@@ -341,6 +383,63 @@ describe('RemoteFileBrowser persistence', () => {
     try {
       await flush();
       expect(widgetStateStore.updateCalls).toEqual([]);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps the files workspace mounted after switching away so local state survives the round trip', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const filesWorkspace = host.querySelector('[data-testid="files-workspace"]') as HTMLDivElement | null;
+      expect(filesWorkspace).toBeTruthy();
+      expect(workspaceLifecycleStore.filesMounts).toBe(1);
+      expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
+      expect(filesWorkspace?.parentElement?.style.display).toBe('block');
+
+      const bumpButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-files-bump') as HTMLButtonElement | undefined;
+      const toGitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-to-git') as HTMLButtonElement | undefined;
+      expect(bumpButton).toBeTruthy();
+      expect(toGitButton).toBeTruthy();
+
+      bumpButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      toGitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      const gitWorkspace = host.querySelector('[data-testid="git-workspace"]') as HTMLDivElement | null;
+      expect(gitWorkspace).toBeTruthy();
+      expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
+      expect(workspaceLifecycleStore.gitMounts).toBe(1);
+      expect(filesWorkspace?.parentElement?.style.display).toBe('none');
+      expect(gitWorkspace?.parentElement?.style.display).toBe('block');
+
+      const toFilesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-to-files') as HTMLButtonElement | undefined;
+      expect(toFilesButton).toBeTruthy();
+      toFilesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(workspaceLifecycleStore.filesMounts).toBe(1);
+      expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
+      expect(filesWorkspace?.parentElement?.style.display).toBe('block');
+      expect(filesWorkspace?.textContent).toContain('files:files:/workspace/repo/src:1');
     } finally {
       dispose();
     }
