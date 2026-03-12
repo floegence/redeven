@@ -1,10 +1,8 @@
-import type { ProxyRuntime } from "@floegence/flowersec-core/proxy";
 import { installWebSocketPatch } from "@floegence/flowersec-core/proxy";
+import { registerCodeAppProxyBridge, REDEVEN_APP_PROXY_SW_SUFFIX } from "./runtimeBridge";
 
 // This script is injected into code-server HTML responses by our custom Service Worker.
 // It MUST be an external script (no inline) to satisfy code-server's strict CSP.
-
-const RUNTIME_GLOBAL = "__flowersecProxyRuntime";
 
 const ERR_SW_REGISTER_DISABLED = "service worker register is disabled by flowersec-proxy runtime";
 
@@ -20,8 +18,6 @@ const ERR_SW_REGISTER_DISABLED = "service worker register is disabled by flowers
 //   registration to avoid noisy user-facing errors.
 const CODE_SERVER_WEBVIEW_SW_SUFFIX = "/out/vs/workbench/contrib/webview/browser/pre/service-worker.js";
 const CODE_SERVER_PWA_SW_SUFFIX = "/out/browser/serviceWorker.js";
-const REDEVEN_PROXY_SW_SUFFIX = "/_redeven_sw.js";
-
 // Redeven patches the code-server webview pre Service Worker script (served from code-server)
 // to add a fallback proxy path: if the upstream SW does not call respondWith, it asks
 // the page (this injected script) to forward the request to the Redeven proxy SW.
@@ -170,7 +166,7 @@ async function uninstallConflictingServiceWorkersBestEffort(): Promise<void> {
 
     const controllerScriptURL = String(sw.controller?.scriptURL ?? "").trim();
     const controllerIsCodeServerPwa = isServiceWorkerScriptPathSuffix(controllerScriptURL, CODE_SERVER_PWA_SW_SUFFIX);
-    const controllerIsRedevenProxy = isServiceWorkerScriptPathSuffix(controllerScriptURL, REDEVEN_PROXY_SW_SUFFIX);
+    const controllerIsRedevenProxy = isServiceWorkerScriptPathSuffix(controllerScriptURL, REDEVEN_APP_PROXY_SW_SUFFIX);
     if (!controllerIsCodeServerPwa || controllerIsRedevenProxy) {
       // Either we're already on the correct controller or the controller is unrelated.
       // Still try to uninstall stale code-server registrations below.
@@ -210,24 +206,22 @@ async function uninstallConflictingServiceWorkersBestEffort(): Promise<void> {
   }
 }
 
-function getProxyRuntime(): ProxyRuntime | null {
-  const top = window.top as unknown as Record<string, unknown> | null;
-  if (!top) return null;
-  const rt = top[RUNTIME_GLOBAL];
-  if (!rt) return null;
-  return rt as ProxyRuntime;
-}
-
 try {
   void uninstallConflictingServiceWorkersBestEffort();
-  const rt = getProxyRuntime();
-  if (rt) {
-    patchServiceWorkerRegisterForCodeServer();
-    installWebviewPreProxyFetchForwarder();
+  const bridge = registerCodeAppProxyBridge();
+  window.addEventListener(
+    "pagehide",
+    () => {
+      bridge.dispose();
+    },
+    { once: true },
+  );
 
-    // Route same-origin WebSocket connections through flowersec-proxy/ws streams.
-    installWebSocketPatch({ runtime: rt });
-  }
+  patchServiceWorkerRegisterForCodeServer();
+  installWebviewPreProxyFetchForwarder();
+
+  // Route same-origin WebSocket connections through flowersec-proxy/ws streams.
+  installWebSocketPatch({ runtime: bridge.runtime });
 } catch {
   // Best-effort: failing to patch should not break the page render.
 }
