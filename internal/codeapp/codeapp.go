@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,9 +60,10 @@ type Service struct {
 	stateDir     string
 	agentHomeDir string
 
-	// controlplane base (scheme + <region>.<base-domain>)
-	cpScheme string
-	cpHost   string
+	// controlplane origin is the Region Portal base (scheme + <region>.<base-domain>).
+	// Trusted launcher origins are derived from it as:
+	//   <sandbox_id>.<region>.<base-sandbox-domain>
+	cpOrigin controlplaneOrigin
 
 	codePortMin int
 	codePortMax int
@@ -96,7 +96,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 
-	cpScheme, cpHost, err := parseControlplaneBase(strings.TrimSpace(opts.ControlplaneBaseURL))
+	cpOrigin, err := parseControlplaneBase(strings.TrimSpace(opts.ControlplaneBaseURL))
 	if err != nil {
 		return nil, err
 	}
@@ -154,8 +154,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		log:          logger,
 		stateDir:     stateAbs,
 		agentHomeDir: agentHomeDir,
-		cpScheme:     cpScheme,
-		cpHost:       cpHost,
+		cpOrigin:     cpOrigin,
 		codePortMin:  portMin,
 		codePortMax:  portMax,
 		reg:          reg,
@@ -263,9 +262,6 @@ func (s *Service) ExternalOriginForCodeSpace(codeSpaceID string) (string, error)
 	if s == nil {
 		return "", errors.New("nil service")
 	}
-	if strings.TrimSpace(s.cpScheme) == "" || strings.TrimSpace(s.cpHost) == "" {
-		return "", errors.New("controlplane base not configured")
-	}
 	id := strings.TrimSpace(codeSpaceID)
 	if id == "" {
 		return "", errors.New("missing codeSpaceID")
@@ -273,15 +269,12 @@ func (s *Service) ExternalOriginForCodeSpace(codeSpaceID string) (string, error)
 	if !IsValidCodeSpaceID(id) {
 		return "", fmt.Errorf("invalid codeSpaceID: %q", id)
 	}
-	return fmt.Sprintf("%s://cs-%s.%s", s.cpScheme, id, s.cpHost), nil
+	return s.cpOrigin.trustedLauncherOrigin("cs-" + id)
 }
 
 func (s *Service) ExternalOriginForPortForward(forwardID string) (string, error) {
 	if s == nil {
 		return "", errors.New("nil service")
-	}
-	if strings.TrimSpace(s.cpScheme) == "" || strings.TrimSpace(s.cpHost) == "" {
-		return "", errors.New("controlplane base not configured")
 	}
 	id := strings.TrimSpace(forwardID)
 	if id == "" {
@@ -290,21 +283,18 @@ func (s *Service) ExternalOriginForPortForward(forwardID string) (string, error)
 	if !portforward.IsValidForwardID(id) {
 		return "", fmt.Errorf("invalid forwardID: %q", id)
 	}
-	return fmt.Sprintf("%s://pf-%s.%s", s.cpScheme, id, s.cpHost), nil
+	return s.cpOrigin.trustedLauncherOrigin("pf-" + id)
 }
 
 func (s *Service) ExternalOriginForEnvApp(envPublicID string) (string, error) {
 	if s == nil {
 		return "", errors.New("nil service")
 	}
-	if strings.TrimSpace(s.cpScheme) == "" || strings.TrimSpace(s.cpHost) == "" {
-		return "", errors.New("controlplane base not configured")
-	}
 	sandboxID, err := envSandboxIDFromEnvPublicID(envPublicID)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s://%s.%s", s.cpScheme, sandboxID, s.cpHost), nil
+	return s.cpOrigin.trustedLauncherOrigin(sandboxID)
 }
 
 func envSandboxIDFromEnvPublicID(envPublicID string) (string, error) {
@@ -333,29 +323,6 @@ func envSandboxIDFromEnvPublicID(envPublicID string) (string, error) {
 		return "", fmt.Errorf("invalid envPublicID: %q", envPublicID)
 	}
 	return "env-" + suffix, nil
-}
-
-func parseControlplaneBase(raw string) (scheme string, host string, err error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		// Local UI mode does not require a control plane. Keep the service usable
-		// without a configured controlplane base.
-		return "", "", nil
-	}
-
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "", "", err
-	}
-	scheme = strings.ToLower(strings.TrimSpace(u.Scheme))
-	if scheme != "http" && scheme != "https" {
-		return "", "", fmt.Errorf("unsupported ControlplaneBaseURL scheme: %q", u.Scheme)
-	}
-	host = strings.ToLower(strings.TrimSpace(u.Host))
-	if host == "" {
-		return "", "", errors.New("invalid ControlplaneBaseURL host")
-	}
-	return scheme, host, nil
 }
 
 func normalizePortRange(min int, max int) (int, int) {

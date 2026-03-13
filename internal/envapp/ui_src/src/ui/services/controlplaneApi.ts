@@ -1,6 +1,7 @@
 import type { ChannelInitGrant, DirectConnectInfo } from '@floegence/flowersec-core';
 
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
+import { portalOriginFromSandboxLocation } from './sandboxOrigins';
 
 export interface Environment {
   public_id: string;
@@ -143,12 +144,7 @@ function currentEnvAppReturnToBestEffort(): string {
 }
 
 function portalOriginFromSandboxOriginBestEffort(): string {
-  const proto = window.location.protocol;
-  const portSuffix = window.location.port ? `:${window.location.port}` : '';
-  const host = window.location.hostname.toLowerCase();
-  // Map <sandbox-id>.<region>.<base-domain> to <region>.<base-domain>.
-  const rest = host.split('.').slice(1).join('.') || host;
-  return `${proto}//${rest}${portSuffix}`;
+  return portalOriginFromSandboxLocation(window.location);
 }
 
 function buildPortalEnvRecoverURL(envPublicID: string): string {

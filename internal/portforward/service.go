@@ -283,7 +283,7 @@ func randomForwardID() string {
 	// 12 chars base32-ish (lowercase alnum).
 	//
 	// forward_id must be a DNS-safe label, and the external sandbox host is:
-	//   pf-<forward_id>.<region>.<base>
+	//   pf-<forward_id>.<region>.<base-sandbox-domain>
 	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)

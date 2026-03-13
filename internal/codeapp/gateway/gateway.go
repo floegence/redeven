@@ -282,7 +282,8 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Hardening: only allow management APIs from the Env App origin (env-<env_id>.<region>).
+		// Hardening: only allow management APIs from the Env App trusted launcher origin
+		// (env-<env_id>.<region>.<base-sandbox-domain>).
 		// Do not expose them to codespace origins (code-server is untrusted).
 		if originRole != originRoleEnv {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -293,8 +294,8 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(p, "/_redeven_proxy/") {
 		// Hardening: keep UI surfaces separated by origin.
-		// - env-<env_id>.<region> serves Env App UI only
-		// - cs-<id>.<region> serves inject.js only (no Env App UI)
+		// - env-<env_id>.<region>.<base-sandbox-domain> serves Env App UI only
+		// - cs-<id>.<region>.<base-sandbox-domain> serves inject.js only (no Env App UI)
 		switch {
 		case strings.HasPrefix(p, "/_redeven_proxy/env"):
 			if originRole != originRoleEnv {

@@ -20,6 +20,7 @@ import {
 import { getEnvPublicIDFromSession, mintEnvEntryTicketForApp } from '../services/controlplaneApi';
 import { FLOE_APP_PORT_FORWARD } from '../services/floeproxyContract';
 import { fetchGatewayJSON } from '../services/gatewayApi';
+import { trustedLauncherOriginFromSandboxLocation } from '../services/sandboxOrigins';
 import { registerSandboxWindow } from '../services/sandboxWindowRegistry';
 import { useEnvContext } from './EnvContext';
 
@@ -81,12 +82,7 @@ function fmtTime(ms: number): string {
 }
 
 function portForwardOrigin(forwardID: string): string {
-  const scheme = window.location.protocol;
-  const host = window.location.hostname.toLowerCase();
-  const port = window.location.port ? `:${window.location.port}` : '';
-  const parts = host.split('.');
-  const restHost = parts.slice(1).join('.') || host;
-  return `${scheme}//pf-${forwardID}.${restHost}${port}`;
+  return trustedLauncherOriginFromSandboxLocation(window.location, 'pf', forwardID);
 }
 
 function base64UrlEncode(raw: string): string {

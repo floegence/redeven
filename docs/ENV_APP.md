@@ -12,7 +12,7 @@ Key points:
 
 Browser side:
 
-- A sandbox bootstrap window (`env-<env_id>.<region>.<base-domain>`) creates a runtime-mode proxy:
+- A sandbox bootstrap window (`env-<env_id>.<region>.<base-sandbox-domain>`, for example `env-demo.dev.redeven-sandbox.test`) creates a runtime-mode proxy:
   - A Service Worker forwards `fetch()` to the proxy runtime via `postMessage + MessageChannel`.
   - The runtime forwards HTTP/WS traffic over Flowersec E2EE to the agent.
 - The bootstrap then loads the Env App UI via a same-origin iframe:
@@ -71,7 +71,7 @@ The Env App UI manages local codespaces via the agent local gateway API:
 
 When opening a codespace, the Env App mints a one-time ticket for `com.floegence.redeven.code`, then opens:
 
-- `https://cs-<code_space_id>.<region>.<base-domain>/_redeven_boot/#redeven=<b64url(init)>`
+- `https://cs-<code_space_id>.<region>.<base-sandbox-domain>/_redeven_boot/#redeven=<b64url(init)>`
 
 Notes:
 

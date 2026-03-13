@@ -65,6 +65,7 @@ import {
   type LocalAccessStatus,
   type LocalRuntimeInfo,
 } from './services/controlplaneApi';
+import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
 
 
 const ACTIVE_TAB_STORAGE_KEY = 'redeven_envapp_active_tab';
@@ -1116,27 +1117,19 @@ export function EnvAppShell() {
   };
 
   function consoleOrigin(): string {
-    // Env App runs on a sandbox subdomain (env-<id>.<region>.<base>).
-    // Console is served on the base domain (<base>).
-    const proto = window.location.protocol;
-    const host = window.location.hostname.trim().toLowerCase();
-    const port = window.location.port ? `:${window.location.port}` : '';
-    const parts = host.split('.');
-
-    // sandbox_id.<region>.<base>
-    if (parts.length >= 4 && (parts[0].startsWith('env-') || parts[0].startsWith('cs-'))) {
-      parts.shift();
-      parts.shift();
-      return `${proto}//${parts.join('.')}${port}`;
+    try {
+      return portalOriginFromSandboxLocation(window.location);
+    } catch {
+      const proto = window.location.protocol;
+      const host = window.location.hostname.trim().toLowerCase();
+      const port = window.location.port ? `:${window.location.port}` : '';
+      const parts = host.split('.');
+      if (parts.length >= 3) {
+        parts.shift();
+        return `${proto}//${parts.join('.')}${port}`;
+      }
+      return `${proto}//${host}${port}`;
     }
-
-    // <region>.<base>
-    if (parts.length >= 3) {
-      parts.shift();
-      return `${proto}//${parts.join('.')}${port}`;
-    }
-
-    return `${proto}//${host}${port}`;
   }
 
   // Env App command palette commands (navigation + common actions).

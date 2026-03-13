@@ -21,6 +21,7 @@ import { useRedevenRpc, type FsFileInfo } from "../protocol/redeven_v1";
 import { getEnvPublicIDFromSession, getLocalRuntime, mintEnvEntryTicketForApp } from "../services/controlplaneApi";
 import { FLOE_APP_CODE } from "../services/floeproxyContract";
 import { gatewayRequestCredentials } from "../services/gatewayApi";
+import { trustedLauncherOriginFromSandboxLocation } from "../services/sandboxOrigins";
 import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
 
 type SpaceStatus = Readonly<{
@@ -90,12 +91,7 @@ function fmtRelativeTime(ms: number): string {
 }
 
 function codespaceOrigin(codeSpaceID: string): string {
-  const scheme = window.location.protocol;
-  const host = window.location.hostname.toLowerCase();
-  const port = window.location.port ? `:${window.location.port}` : "";
-  const parts = host.split(".");
-  const restHost = parts.slice(1).join(".") || host;
-  return `${scheme}//cs-${codeSpaceID}.${restHost}${port}`;
+  return trustedLauncherOriginFromSandboxLocation(window.location, "cs", codeSpaceID);
 }
 
 function base64UrlEncode(raw: string): string {

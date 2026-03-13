@@ -331,7 +331,7 @@ func randomCodeSpaceID() string {
 	// 12 chars base32-ish (lowercase alnum).
 	//
 	// Note: code_space_id must be a DNS-safe label, and the external sandbox host is:
-	//   cs-<code_space_id>.<region>.<base>
+	//   cs-<code_space_id>.<region>.<base-sandbox-domain>
 	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
