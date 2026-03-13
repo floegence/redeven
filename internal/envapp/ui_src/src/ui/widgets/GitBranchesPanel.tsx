@@ -819,7 +819,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                 </div>
               </div>
 
-              <div class="mt-2.5 pl-4">
+              <div class="mt-1.5 pl-3">
                 <Show
                   when={!visibleStatusLoading()}
                   fallback={(
@@ -848,7 +848,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       )}
                     >
                       {(workspaceAccessor) => (
-                        <div class="grid gap-1 rounded-md bg-background/40 p-1 text-[11px] grid-cols-2 xl:grid-cols-4">
+                        <div class="grid gap-0.5 rounded-md bg-background/40 p-0.5 text-[11px] grid-cols-2 xl:grid-cols-4">
                           <For each={(['unstaged', 'untracked', 'conflicted', 'staged'] as GitWorkspaceSection[])}>
                             {(section) => {
                               const active = () => selectedStatusSection() === section;
@@ -857,19 +857,19 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                 <button
                                   type="button"
                                   class={cn(
-                                    'w-full rounded-md border border-border/45 bg-background/88 px-2.5 py-1.5 text-left text-xs transition-[background-color,border-color,box-shadow,color] duration-150 hover:shadow-sm',
+                                    'w-full rounded-md border border-border/45 bg-background/88 px-2 py-1 text-left text-xs transition-[background-color,border-color,box-shadow,color] duration-150 hover:shadow-sm',
                                     gitToneSelectableCardClass(workspaceSectionTone(section), active())
                                   )}
                                   onClick={() => setSelectedStatusSection(section)}
                                 >
-                                  <div class="flex min-h-[3.6rem] flex-col justify-between gap-1">
-                                      <div class="flex items-center justify-between gap-2">
+                                  <div class="flex min-h-[1.85rem] flex-col justify-center gap-0.5">
+                                      <div class="flex items-center justify-between gap-1.5">
                                       <div class={cn('min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.14em]', active() ? 'text-current opacity-80' : 'text-muted-foreground/80')}>
                                         {workspaceSectionLabel(section)}
                                       </div>
                                       <div
                                         class={cn(
-                                          'shrink-0 text-sm font-semibold tabular-nums',
+                                          'shrink-0 text-[12px] font-semibold tabular-nums leading-none',
                                           active() ? 'text-current' : 'text-foreground'
                                         )}
                                       >
@@ -877,7 +877,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                       </div>
                                     </div>
 
-                                    <div class={cn('text-[10px] leading-relaxed', active() ? 'text-current opacity-70' : 'text-muted-foreground')}>
+                                    <div class={cn('truncate text-[10px] leading-tight', active() ? 'text-current opacity-70' : 'text-muted-foreground')}>
                                         {count() === 0 ? 'No files to review.' : `${count()} file${count() === 1 ? '' : 's'} ready.`}
                                     </div>
                                   </div>
