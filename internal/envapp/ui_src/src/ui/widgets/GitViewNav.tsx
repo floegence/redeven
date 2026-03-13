@@ -28,7 +28,7 @@ export function GitViewNav(props: GitViewNavProps) {
               class={cn(
                 buttonBaseClass,
                 active()
-                  ? 'border-l-[2px] border-primary bg-background text-foreground shadow-sm font-medium'
+                  ? 'border-l-[2px] git-browser-selection-surface git-browser-selection-nav font-medium'
                   : 'bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground',
               )}
               onClick={() => props.onChange(item.id)}
@@ -38,7 +38,7 @@ export function GitViewNav(props: GitViewNavProps) {
                 class={cn(
                   badgeBaseClass,
                   active()
-                    ? 'bg-muted/70 text-foreground'
+                    ? 'bg-white/10 text-current'
                     : 'bg-background/70 text-muted-foreground',
                 )}
               >

@@ -123,7 +123,7 @@ export function gitToneSelectableCardClass(_tone: GitChromeTone | undefined, act
     'cursor-pointer select-none border transition-[background-color,border-color,box-shadow,color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
 
   if (active) {
-    return `${interactiveBase} border-sidebar-accent/80 bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_1px_2px_rgba(15,23,42,0.08)]`;
+    return `${interactiveBase} git-browser-selection-surface`;
   }
 
   return `${interactiveBase} border-border/45 bg-transparent text-foreground hover:border-sidebar-accent/55 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground`;

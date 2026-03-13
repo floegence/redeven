@@ -90,11 +90,8 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitToneAccentColor('neutral')).toBe('text-muted-foreground');
   });
 
-  it('uses a strong sidebar-accent selection style for selectable git items', () => {
-    expect(gitToneSelectableCardClass('brand', true)).toContain('bg-sidebar-accent');
-    expect(gitToneSelectableCardClass('brand', true)).toContain('text-sidebar-accent-foreground');
-    expect(gitToneSelectableCardClass('brand', true)).toContain('border-sidebar-accent/80');
-    expect(gitToneSelectableCardClass('brand', true)).toContain('shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_1px_2px_rgba(15,23,42,0.08)]');
+  it('uses the dedicated git browser blue-black selection surface for selectable items', () => {
+    expect(gitToneSelectableCardClass('brand', true)).toContain('git-browser-selection-surface');
     expect(gitToneSelectableCardClass('brand', true)).toContain('cursor-pointer');
     expect(gitToneSelectableCardClass('brand', true)).toContain('focus-visible:ring-2');
 

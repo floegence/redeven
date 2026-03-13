@@ -863,21 +863,21 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                   onClick={() => setSelectedStatusSection(section)}
                                 >
                                   <div class="flex min-h-[3.6rem] flex-col justify-between gap-1">
-                                    <div class="flex items-center justify-between gap-2">
-                                      <div class={cn('min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.14em]', active() ? 'text-sidebar-accent-foreground/80' : 'text-muted-foreground/80')}>
+                                      <div class="flex items-center justify-between gap-2">
+                                      <div class={cn('min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.14em]', active() ? 'text-current opacity-80' : 'text-muted-foreground/80')}>
                                         {workspaceSectionLabel(section)}
                                       </div>
                                       <div
                                         class={cn(
                                           'shrink-0 text-sm font-semibold tabular-nums',
-                                          active() ? 'text-sidebar-accent-foreground' : 'text-foreground'
+                                          active() ? 'text-current' : 'text-foreground'
                                         )}
                                       >
                                         {count()}
                                       </div>
                                     </div>
 
-                                    <div class={cn('text-[10px] leading-relaxed', active() ? 'text-sidebar-accent-foreground/70' : 'text-muted-foreground')}>
+                                    <div class={cn('text-[10px] leading-relaxed', active() ? 'text-current opacity-70' : 'text-muted-foreground')}>
                                         {count() === 0 ? 'No files to review.' : `${count()} file${count() === 1 ? '' : 's'} ready.`}
                                     </div>
                                   </div>
@@ -965,7 +965,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                 aria-selected={active()}
                                 class={cn(
                                   'rounded px-3 py-1.5 text-xs font-medium transition-colors duration-150',
-                                  active() ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm' : 'text-muted-foreground hover:bg-background/80 hover:text-foreground'
+                                  active() ? 'git-browser-selection-chip' : 'text-muted-foreground hover:bg-background/80 hover:text-foreground'
                                 )}
                                 onClick={() => props.onSelectBranchSubview?.(view)}
                               >

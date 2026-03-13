@@ -70,7 +70,7 @@ describe('GitWorkbenchSidebar interactions', () => {
     try {
       const activeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Changes')) as HTMLButtonElement | undefined;
       const sectionButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Staged'));
-      expect(activeButton?.className).toContain('bg-sidebar-accent');
+      expect(activeButton?.className).toContain('git-browser-selection-surface');
       expect(sectionButton).toBeTruthy();
       sectionButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 

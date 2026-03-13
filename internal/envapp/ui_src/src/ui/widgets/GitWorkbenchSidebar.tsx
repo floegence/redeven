@@ -148,14 +148,14 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                 <div class="flex items-start justify-between gap-2">
                                   <div class="min-w-0 flex-1">
                                     <div class="font-medium text-current">{workspaceViewSectionLabel(section)}</div>
-                                    <div class={cn('mt-0.5 text-[10px] leading-relaxed', active() ? 'text-sidebar-accent-foreground/75' : 'text-muted-foreground')}>
+                                    <div class={cn('mt-0.5 text-[10px] leading-relaxed', active() ? 'text-current opacity-75' : 'text-muted-foreground')}>
                                       {count() === 0 ? 'No files in this section.' : `${count()} file${count() === 1 ? '' : 's'} available.`}
                                     </div>
                                   </div>
                                   <span
                                     class={cn(
                                       'inline-flex min-w-[1.75rem] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-semibold',
-                                      active() ? 'bg-background/15 text-sidebar-accent-foreground' : gitToneBadgeClass(tone())
+                                      active() ? 'bg-white/10 text-current' : gitToneBadgeClass(tone())
                                     )}
                                   >
                                     {count()}
@@ -196,10 +196,10 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                   <div class="grid min-h-5 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                                     <span class="min-w-0 flex-1 truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</span>
                                     <Show when={branch.current}>
-                                      <span class="rounded bg-primary/[0.12] px-1.5 py-0.5 text-[10px] font-medium text-primary">Current</span>
+                                      <span class={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', active() ? 'bg-white/10 text-current' : 'bg-primary/[0.12] text-primary')}>Current</span>
                                     </Show>
                                   </div>
-                                  <div class="mt-0.5 min-h-4 truncate text-[10px] text-muted-foreground" title={branchStatusSummary(branch)}>{branchContextSummary(branch)}</div>
+                                  <div class={cn('mt-0.5 min-h-4 truncate text-[10px]', active() ? 'text-current opacity-75' : 'text-muted-foreground')} title={branchStatusSummary(branch)}>{branchContextSummary(branch)}</div>
                                 </button>
                               );
                             }}
@@ -224,7 +224,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                   }}
                                 >
                                   <div class="truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</div>
-                                  <div class="mt-0.5 truncate text-[10px] text-muted-foreground">{branch.subject || branchStatusSummary(branch)}</div>
+                                  <div class={cn('mt-0.5 truncate text-[10px]', active() ? 'text-current opacity-75' : 'text-muted-foreground')}>{branch.subject || branchStatusSummary(branch)}</div>
                                 </button>
                               );
                             }}
