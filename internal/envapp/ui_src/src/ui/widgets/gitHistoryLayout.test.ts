@@ -300,6 +300,36 @@ describe('browser workspace layout wiring', () => {
     expect(src).not.toContain('GitSubviewSwitch');
   });
 
+  it('routes git browser loading states through one centered shared pane', () => {
+    const primitivesSrc = read('./GitWorkbenchPrimitives.tsx');
+    const changesSrc = read('./GitChangesPanel.tsx');
+    const branchesSrc = read('./GitBranchesPanel.tsx');
+    const historySrc = read('./GitHistoryBrowser.tsx');
+    const sidebarSrc = read('./GitWorkbenchSidebar.tsx');
+
+    expect(primitivesSrc).toContain('export interface GitStatePaneProps');
+    expect(primitivesSrc).toContain('flex w-full min-h-0 flex-1 items-center justify-center');
+    expect(primitivesSrc).toContain('<SnakeLoader size="sm"');
+
+    expect(changesSrc).toContain('GitStatePane');
+    expect(changesSrc).toContain('Loading workspace changes...');
+
+    expect(branchesSrc).toContain('GitStatePane');
+    expect(branchesSrc).toContain('Loading commit history...');
+    expect(branchesSrc).toContain('Loading branch compare...');
+    expect(branchesSrc).toContain('Loading branch status...');
+    expect(branchesSrc).not.toContain("import { SnakeLoader } from '@floegence/floe-webapp-core/loading';");
+
+    expect(historySrc).toContain('GitStatePane');
+    expect(historySrc).toContain('Loading commit details...');
+    expect(historySrc).not.toContain("import { SnakeLoader } from '@floegence/floe-webapp-core/loading';");
+
+    expect(sidebarSrc).toContain('GitStatePane');
+    expect(sidebarSrc).toContain('Checking repository...');
+    expect(sidebarSrc).toContain('Loading commits...');
+    expect(sidebarSrc).not.toContain("import { SnakeLoader } from '@floegence/floe-webapp-core/loading';");
+  });
+
   it('keeps git diff surfaces aligned with floe-webapp dialog style', () => {
     const dialogSrc = read('./GitDiffDialog.tsx');
     const patchSrc = read('./GitPatchViewer.tsx');

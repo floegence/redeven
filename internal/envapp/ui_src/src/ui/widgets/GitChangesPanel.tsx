@@ -28,6 +28,7 @@ import {
   GitLabelBlock,
   GitMetaPill,
   GitPrimaryTitle,
+  GitStatePane,
   GitSubtleNote,
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
@@ -206,8 +207,8 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
       <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
-        <Show when={!props.loading} fallback={<div class="flex flex-1 items-center text-xs text-muted-foreground">Loading workspace changes...</div>}>
-          <Show when={!props.error} fallback={<div class="flex flex-1 items-center text-xs text-error">{props.error}</div>}>
+        <Show when={!props.loading} fallback={<GitStatePane loading message="Loading workspace changes..." />}>
+          <Show when={!props.error} fallback={<GitStatePane tone="error" message={props.error} />}>
             <div class="flex min-h-0 flex-1 flex-col gap-3">
               <div class="shrink-0 rounded-md border border-border/70 bg-card px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]">
                 <div class="flex flex-wrap items-start justify-between gap-3">

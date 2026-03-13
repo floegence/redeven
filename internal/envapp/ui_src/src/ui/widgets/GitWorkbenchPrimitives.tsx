@@ -1,5 +1,6 @@
 import { For, Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { gitChangeLabel, gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneSurfaceClass, type GitChromeTone } from './GitChrome';
 
 export interface GitSectionProps {
@@ -100,6 +101,49 @@ export interface GitSubtleNoteProps {
 
 export function GitSubtleNote(props: GitSubtleNoteProps) {
   return <div class={cn('rounded-md border border-border/45 bg-muted/[0.16] px-2.5 py-2 text-xs leading-relaxed text-muted-foreground', props.class)}>{props.children}</div>;
+}
+
+export interface GitStatePaneProps {
+  message: JSX.Element;
+  detail?: JSX.Element;
+  loading?: boolean;
+  tone?: 'muted' | 'error';
+  surface?: boolean;
+  class?: string;
+  contentClass?: string;
+}
+
+export function GitStatePane(props: GitStatePaneProps) {
+  const tone = () => props.tone ?? 'muted';
+  const surfaceClass = () => {
+    if (!props.surface) return '';
+    if (tone() === 'error') return 'rounded-md border border-error/20 bg-error/5';
+    return 'rounded-md border border-border/45 bg-background/72';
+  };
+
+  return (
+    <div
+      class={cn(
+        'flex w-full min-h-0 flex-1 items-center justify-center px-3 py-4 text-center',
+        surfaceClass(),
+        props.class,
+      )}
+    >
+      <div class={cn('flex max-w-sm flex-col items-center justify-center gap-2', props.contentClass)}>
+        <Show when={props.loading}>
+          <SnakeLoader size="sm" class={cn('shrink-0', tone() === 'error' ? 'text-error' : 'text-muted-foreground')} />
+        </Show>
+        <div class={cn('text-xs leading-relaxed break-words', tone() === 'error' ? 'text-error' : 'text-muted-foreground')}>
+          {props.message}
+        </div>
+        <Show when={props.detail}>
+          <div class={cn('text-[11px] leading-relaxed break-words', tone() === 'error' ? 'text-error/90' : 'text-muted-foreground/80')}>
+            {props.detail}
+          </div>
+        </Show>
+      </div>
+    </div>
+  );
 }
 
 export const GIT_CHANGED_FILES_TABLE_CLASS = 'w-full text-[11px] leading-4';

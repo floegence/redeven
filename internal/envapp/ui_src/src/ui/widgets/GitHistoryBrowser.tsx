@@ -1,6 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
 import { changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench';
@@ -19,6 +18,7 @@ import {
   GitLabelBlock,
   GitMetaPill,
   GitPrimaryTitle,
+  GitStatePane,
   GitSubtleNote,
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
@@ -155,14 +155,9 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
         <Show when={commitHash()} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Choose a commit from the left rail to load its details.</div>}>
           <Show
             when={!detailLoading()}
-            fallback={
-              <div class="flex flex-1 items-center justify-center gap-2 px-4 text-xs text-muted-foreground">
-                <SnakeLoader size="sm" />
-                <span>Loading commit details...</span>
-              </div>
-            }
+            fallback={<GitStatePane loading message="Loading commit details..." class="px-4" />}
           >
-            <Show when={!detailError()} fallback={<div class="flex-1 px-3 py-4 text-xs break-words text-error">{detailError()}</div>}>
+            <Show when={!detailError()} fallback={<GitStatePane tone="error" message={detailError()} class="px-3 py-4" />}>
               <Show when={commitDetail()} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Commit details are unavailable.</div>}>
                 {(detailAccessor) => {
                   const detail = detailAccessor();

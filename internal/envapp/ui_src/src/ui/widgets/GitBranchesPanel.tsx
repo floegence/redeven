@@ -1,7 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
-import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { useRedevenRpc, type GitBranchSummary, type GitCommitFileSummary, type GitCommitSummary, type GitGetBranchCompareResponse, type GitListBranchesResponse, type GitListWorkspaceChangesResponse, type GitRepoSummaryResponse, type GitWorkspaceChange, type GitWorkspaceSection } from '../protocol/redeven_v1';
 import {
@@ -37,6 +36,7 @@ import {
   GitLabelBlock,
   GitMetaPill,
   GitPrimaryTitle,
+  GitStatePane,
   GitSubtleNote,
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
@@ -371,14 +371,9 @@ function HistoryList(props: Pick<
           <div class="flex min-h-0 flex-1 flex-col gap-3">
             <Show
               when={!props.listLoading}
-              fallback={(
-                <div class="flex items-center gap-2 px-1 py-3 text-xs text-muted-foreground">
-                  <SnakeLoader size="sm" />
-                  <span>Loading commit history...</span>
-                </div>
-              )}
+              fallback={<GitStatePane loading message="Loading commit history..." class="px-1" />}
             >
-              <Show when={!props.listError} fallback={<div class="px-1 py-3 text-xs break-words text-error">{props.listError}</div>}>
+              <Show when={!props.listError} fallback={<GitStatePane tone="error" message={props.listError} class="px-1" />}>
                 <div class="flex min-h-0 flex-1 overflow-hidden">
                   <Show
                     when={(props.commits?.length ?? 0) > 0}
@@ -445,14 +440,9 @@ function HistoryList(props: Pick<
                                           <div class="ml-7 mt-2 space-y-2 rounded-md border border-border/45 bg-background/88 p-2.5">
                                             <Show
                                               when={!detail()?.loading}
-                                              fallback={(
-                                                <div class="flex items-center gap-2 px-1 py-2 text-xs text-muted-foreground">
-                                                  <SnakeLoader size="sm" />
-                                                  <span>Loading changed files...</span>
-                                                </div>
-                                              )}
+                                              fallback={<GitStatePane loading message="Loading changed files..." surface class="min-h-[5rem] px-1 py-2" />}
                                             >
-                                              <Show when={!detail()?.error} fallback={<div class="px-1 py-2 text-xs text-error">{detail()?.error}</div>}>
+                                              <Show when={!detail()?.error} fallback={<GitStatePane tone="error" message={detail()?.error} surface class="min-h-[5rem] px-1 py-2" />}>
                                                 <Show
                                                   when={files().length > 0}
                                                   fallback={<GitSubtleNote>No changed files are available for this commit.</GitSubtleNote>}
@@ -662,10 +652,10 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
           <div class="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-2 pb-4">
             <Show
               when={!loading()}
-              fallback={<div class="flex min-h-0 flex-1 items-center gap-2 text-xs text-muted-foreground"><SnakeLoader size="sm" /><span>Loading branch compare...</span></div>}
+              fallback={<GitStatePane loading message="Loading branch compare..." />}
             >
-              <Show when={!error()} fallback={<div class="flex min-h-0 flex-1 items-center text-xs text-error">{error()}</div>}>
-                <Show when={compare()} fallback={<div class="flex min-h-0 flex-1 items-center text-xs text-muted-foreground">Choose two branches to inspect file changes.</div>}>
+              <Show when={!error()} fallback={<GitStatePane tone="error" message={error()} />}>
+                <Show when={compare()} fallback={<GitStatePane message="Choose two branches to inspect file changes." />}>
                   {(compareAccessor) => (
                     <div class="flex min-h-0 flex-1 flex-col gap-3">
                       <div class="flex min-h-0 flex-1 flex-col gap-2">
@@ -822,14 +812,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               <div class="mt-1.5 pl-3">
                 <Show
                   when={!visibleStatusLoading()}
-                  fallback={(
-                    <div class="flex items-center gap-2 rounded-md border border-border/45 bg-background/70 px-2.5 py-2 text-xs text-muted-foreground">
-                      <SnakeLoader size="sm" />
-                      <span>Loading branch status...</span>
-                    </div>
-                  )}
+                  fallback={<GitStatePane loading message="Loading branch status..." surface class="py-2" />}
                 >
-                  <Show when={!visibleStatusError()} fallback={<div class="rounded-md border border-error/20 bg-error/5 px-2.5 py-2 text-xs break-words text-error">{visibleStatusError()}</div>}>
+                  <Show when={!visibleStatusError()} fallback={<GitStatePane tone="error" message={visibleStatusError()} surface class="py-2" />}>
                     <Show
                       when={visibleStatusWorkspace()}
                       fallback={(
@@ -913,8 +898,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
-      <Show when={!props.branchesLoading} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Loading branches...</div>}>
-        <Show when={!props.branchesError} fallback={<div class="flex-1 px-3 py-4 text-xs break-words text-error">{props.branchesError}</div>}>
+      <Show when={!props.branchesLoading} fallback={<GitStatePane loading message="Loading branches..." class="px-3 py-4" />}>
+        <Show when={!props.branchesError} fallback={<GitStatePane tone="error" message={props.branchesError} class="px-3 py-4" />}>
           <Show when={props.selectedBranch} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Choose a branch from the sidebar to inspect its status or history.</div>}>
             <div class="flex h-full min-h-0 flex-col overflow-hidden">
               <div class="shrink-0 px-3 py-3 sm:px-4 sm:py-4">

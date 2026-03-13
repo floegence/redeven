@@ -1,6 +1,5 @@
 import { For, Show } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type {
   GitBranchSummary,
@@ -30,7 +29,7 @@ import {
   workspaceSectionTone,
 } from './GitChrome';
 import { GitCommitGraph } from './GitCommitGraph';
-import { GitMetaPill, GitSection, GitSubtleNote } from './GitWorkbenchPrimitives';
+import { GitMetaPill, GitSection, GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
 
 export interface GitWorkbenchSidebarProps {
   subview: GitWorkbenchSubview;
@@ -99,7 +98,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
     <div class={cn('space-y-1.5 sm:space-y-2', props.class)}>
       <Show
         when={!props.repoInfoLoading}
-        fallback={<div class="flex items-center gap-2 py-3 text-xs text-muted-foreground"><SnakeLoader size="sm" /><span>Checking repository...</span></div>}
+        fallback={<GitStatePane loading message="Checking repository..." class="min-h-[4.5rem] py-3" />}
       >
         <Show when={!props.repoInfoError} fallback={<div class="py-3 text-xs break-words text-error">{props.repoInfoError}</div>}>
           <Show when={props.repoAvailable} fallback={<div class="py-3 text-xs text-muted-foreground">Current path is not inside a Git repository.</div>}>
@@ -114,7 +113,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
               <Show when={activeSubview() === 'changes'}>
                 <Show
                   when={!props.workspaceLoading}
-                  fallback={<div class="flex items-center gap-2 py-3 text-xs text-muted-foreground"><SnakeLoader size="sm" /><span>Loading workspace changes...</span></div>}
+                  fallback={<GitStatePane loading message="Loading workspace changes..." class="min-h-[4.5rem] py-3" />}
                 >
                   <Show when={!props.workspaceError} fallback={<div class="py-3 text-xs break-words text-error">{props.workspaceError}</div>}>
                     <div class="rounded-md border border-border/65 bg-card p-2.5">
@@ -174,7 +173,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
               <Show when={activeSubview() === 'branches'}>
                 <Show
                   when={!props.branchesLoading}
-                  fallback={<div class="flex items-center gap-2 py-3 text-xs text-muted-foreground"><SnakeLoader size="sm" /><span>Loading branches...</span></div>}
+                  fallback={<GitStatePane loading message="Loading branches..." class="min-h-[4.5rem] py-3" />}
                 >
                   <Show when={!props.branchesError} fallback={<div class="py-3 text-xs break-words text-error">{props.branchesError}</div>}>
                     <GitSection label="Local" description="Branches in this checkout." aside={String(localBranchCount())} tone="brand">
@@ -239,7 +238,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
               <Show when={activeSubview() === 'history'}>
                 <Show
                   when={!props.listLoading}
-                  fallback={<div class="flex items-center gap-2 py-3 text-xs text-muted-foreground"><SnakeLoader size="sm" /><span>Loading commits...</span></div>}
+                  fallback={<GitStatePane loading message="Loading commits..." class="min-h-[4.5rem] py-3" />}
                 >
                   <Show when={!props.listError} fallback={<div class="py-3 text-xs break-words text-error">{props.listError}</div>}>
                     <Show when={(props.commits?.length ?? 0) > 0} fallback={<GitSubtleNote>This repository has no commits yet.</GitSubtleNote>}>
