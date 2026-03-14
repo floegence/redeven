@@ -4,19 +4,19 @@
 ![Node Version](https://img.shields.io/badge/Node.js-20-339933?logo=node.js)
 ![Architecture](https://img.shields.io/badge/Architecture-E2EE%20Endpoint-5B2CFF)
 
-Redeven Agent is the **endpoint runtime** in the Redeven + Flowersec architecture.
-It runs on the user machine, receives session grants from the Redeven service, and serves encrypted RPC/streams over Flowersec.
+Redeven Agent is the endpoint runtime in the Redeven + Flowersec architecture.
+It runs on the user machine, receives session grants from the Redeven service, and serves encrypted RPC and streams over Flowersec.
 
-> This repository is designed to be open-source and auditable, so users can inspect exactly what runs locally.
+> This repository is intended to stay open-source and auditable. Public docs in this repo describe only the agent runtime, its local behavior, and the public release contract.
 
-## Why Redeven Agent
+## Why the agent exists
 
-- **E2EE by design**: business traffic is encrypted end-to-end between browser and endpoint.
-- **Clear trust boundary**: session metadata and encrypted application bytes are separated by design.
-- **Local-first runtime**: files, terminals, monitoring, and code-server run on the user machine.
-- **Auditable behavior**: release and verification flow are documented and reproducible.
+- End-to-end encrypted browser sessions terminate on the endpoint, not on the control plane.
+- Session metadata and encrypted application bytes are intentionally separated.
+- Local capabilities such as files, terminals, monitoring, and code-server run on the user machine.
+- Public release artifacts and verification steps are reproducible from this repository.
 
-## Architecture at a Glance
+## Architecture at a glance
 
 ```text
                         (management channel, direct)
@@ -28,12 +28,12 @@ Browser (Sandbox)  <========== Flowersec Tunnel ==========>  Redeven Agent
                            (data-plane bytes only)
 ```
 
-Management channel and E2EE session transport are intentionally split:
+Management channel and E2EE transport are split by design:
 
-- **Management channel**: authenticate, authorize, issue grants, deliver `session_meta`.
-- **E2EE transport**: forward encrypted bytes; tunnel cannot decrypt application data.
+- Management channel: authenticate, authorize, issue grants, deliver `session_meta`
+- E2EE transport: forward encrypted bytes; tunnel cannot decrypt application data
 
-## Quick Start (2 Minutes)
+## Build and run
 
 ### Prerequisites
 
@@ -51,16 +51,16 @@ go build -o redeven ./cmd/redeven
 
 Notes:
 
-- `internal/**/dist/` is generated and embedded via Go `embed`.
+- `internal/**/dist/` assets are generated and embedded via Go `embed`.
 - Generated `dist` assets are not checked into git.
 
-### Enable local guardrails (recommended)
+### Enable local guardrails
 
 ```bash
 ./scripts/install_git_hooks.sh
 ```
 
-This enables the repository pre-commit hook that runs `scripts/open_source_hygiene_check.sh --staged`.
+The pre-commit hook runs `scripts/open_source_hygiene_check.sh --staged`.
 
 ### Bootstrap and run
 
@@ -73,112 +73,104 @@ This enables the repository pre-commit hook that runs `scripts/open_source_hygie
 ./redeven run
 ```
 
-What bootstrap writes by default:
+By default bootstrap writes:
 
-- Config path: `~/.redeven/config.json`
-- Default local permission cap: `execute_read_write`
+- `~/.redeven/config.json`
+- local permission cap preset `execute_read_write`
 
-### Success checklist
+Expected result:
 
-- `redeven run` starts without config validation errors.
-- The Redeven service shows the endpoint online.
-- Env App can open and perform basic file/terminal actions through E2EE sessions.
+- `redeven run` starts without config validation errors
+- the Redeven service shows the endpoint online
+- Env App can open basic file and terminal actions over E2EE sessions
 
-## What You Get Today
+## Current capability surfaces
 
 ### `floe_app = com.floegence.redeven.agent`
 
-- File system RPC (`list/read/write/delete/get_path_context`) + `fs/read_file` stream
+- File system RPC (`list/read/write/delete/get_path_context`) and `fs/read_file` stream
 - Terminal RPC (`create/list/attach`) with bidirectional data notifications
-- Monitor RPC (CPU/network/process snapshots)
+- Monitor RPC (CPU, network, process snapshots)
 - Agent-bundled Env App UI assets
-- Optional Flower (on-device AI assistant; Go Native SDK runtime + Go tool executor)
+- Optional Flower runtime
 
-Details:
+See:
 
-- Env App: [`docs/ENV_APP.md`](docs/ENV_APP.md)
-- Flower: [`docs/AI_AGENT.md`](docs/AI_AGENT.md)
+- [`docs/ENV_APP.md`](docs/ENV_APP.md)
+- [`docs/AI_AGENT.md`](docs/AI_AGENT.md)
 
 ### `floe_app = com.floegence.redeven.code`
 
 - code-server over Flowersec E2EE proxy (`flowersec-proxy/http1`, `flowersec-proxy/ws`)
-- Agent-bundled inject script for CSP-safe WebSocket/fetch proxying
-- Local codespace lifecycle management via agent local gateway
+- Agent-bundled inject script for CSP-safe proxying
+- Local codespace lifecycle management through the agent gateway
 
-Details:
+See:
 
-- Code App: [`docs/CODE_APP.md`](docs/CODE_APP.md)
+- [`docs/CODE_APP.md`](docs/CODE_APP.md)
 
-## Security Model
+## Security model
 
-- The agent **does not trust browser-claimed permissions**.
-- Effective permissions come from:
-  - server-issued `session_meta`
-  - intersected with the local `permission_policy` cap
-- Capability behavior is explicit and documented:
+- The agent does not trust browser-claimed permissions.
+- Effective permissions come from server-issued `session_meta`, clamped by local `permission_policy`.
+- Capability-to-permission behavior is documented in:
   - [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md)
   - [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md)
-- Config contains sensitive material (including E2EE PSK); keep local files private (`chmod 600`).
+- Local config contains sensitive material, including E2EE PSKs; keep local files private.
 
-## Data and State on Disk
+## Local state
 
-Default state directory is derived from config path:
+Default state directory is derived from the config path:
 
 - Config: `~/.redeven/config.json`
 - State dir: `~/.redeven/`
 
 Common local files:
 
-- `~/.redeven/config.json` (runtime config)
-- `~/.redeven/agent.lock` (single-process lock for one state dir)
-- `~/.redeven/secrets.json` (local secrets such as AI provider API keys)
-- `~/.redeven/audit/events.jsonl` (audit metadata log)
-- `~/.redeven/apps/code/...` (code-server spaces and logs)
+- `~/.redeven/config.json`
+- `~/.redeven/agent.lock`
+- `~/.redeven/secrets.json`
+- `~/.redeven/audit/events.jsonl`
+- `~/.redeven/apps/code/...`
 
 Multi-environment mode uses isolated state per environment:
 
 - `~/.redeven/envs/<env_public_id>/config.json`
 
-## Operations and Release
+## Release contract
 
-- GitHub Release remains the source of truth for versioned binaries and checksums.
+- GitHub Release is the source of truth for versioned binaries and checksums.
 - On `v*` tag push, `Release Agent` publishes GitHub Release assets, checksums, signatures, and release notes.
 - `scripts/install.sh` resolves versions from GitHub Releases and downloads release assets directly from GitHub.
-- This public repository documents only the public release contract. Any downstream packaging or deployment wrappers are intentionally out of scope here.
+- This public repository does not document downstream private packaging or deployment wrappers.
 
-Release details:
+Details:
 
 - [`docs/RELEASE.md`](docs/RELEASE.md)
 
-## Documentation Map
+## Documentation map
 
-- **Env App runtime**: [`docs/ENV_APP.md`](docs/ENV_APP.md)
-- **Code App runtime**: [`docs/CODE_APP.md`](docs/CODE_APP.md)
-- **Flower runtime and behavior**: [`docs/AI_AGENT.md`](docs/AI_AGENT.md)
-- **Flower settings and secrets model**: [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md)
-- **Capability-to-permission contract**: [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md)
-- **Local permission policy**: [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md)
-- **Release and artifact verification**: [`docs/RELEASE.md`](docs/RELEASE.md)
+- Env App runtime: [`docs/ENV_APP.md`](docs/ENV_APP.md)
+- Code App runtime: [`docs/CODE_APP.md`](docs/CODE_APP.md)
+- Flower runtime and behavior: [`docs/AI_AGENT.md`](docs/AI_AGENT.md)
+- Flower settings and secrets: [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md)
+- Capability-to-permission contract: [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md)
+- Local permission policy: [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md)
+- Release and artifact verification: [`docs/RELEASE.md`](docs/RELEASE.md)
 
-## FAQ / Troubleshooting
+## Troubleshooting
 
 ### `bootstrap failed` or `missing direct connect info`
 
-- Verify `--controlplane`, `--env-id`, and `--env-token` are correct.
+- Verify `--controlplane`, `--env-id`, and `--env-token`.
 - Confirm the Redeven environment is reachable and can issue bootstrap credentials.
 
 ### Code App says `code-server binary not found`
 
-- Install `code-server` locally, or set `REDEVEN_CODE_SERVER_BIN` to an absolute path.
-- See detailed binary resolution and platform notes in [`docs/CODE_APP.md`](docs/CODE_APP.md).
+- Install `code-server`, or set `REDEVEN_CODE_SERVER_BIN` to an absolute path.
+- See [`docs/CODE_APP.md`](docs/CODE_APP.md) for details.
 
 ### Codespace page shows `Missing init payload`
 
-- Open codespace from Env App (Codespaces page), not by directly visiting sandbox URL.
-- If opener context is gone after refresh, reopen from Env App to mint a new entry ticket.
-
-## Roadmap (Near Term)
-
-- Add more `floe_app` surfaces on top of the same control/data-plane contract.
-- Continue hardening runtime permissions and auditability.
-- Improve operational diagnostics for endpoint-side troubleshooting.
+- Open codespace from Env App instead of visiting the sandbox URL directly.
+- If opener context is gone after refresh, reopen from Env App so a new entry ticket can be minted.

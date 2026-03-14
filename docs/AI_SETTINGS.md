@@ -1,57 +1,37 @@
-# Flower Settings & Secrets (Recommended Design)
+# Flower Settings & Secrets
 
-This document describes the recommended, stable design for **Flower (AI assistant) configuration management** in the Redeven agent.
+This document describes the current configuration and local secret model for Flower in Redeven Agent.
 
-Goals:
+## Goals
 
-- Intuitive UI: users **paste API keys directly**, never configure env var names.
-- Safe storage: secrets are stored locally, never written to `config.json`, never returned to the UI.
-- Deterministic runtime: the effective API key is always the one configured in the local secrets store.
-- Multi-provider: configure multiple providers and their keys at the same time.
-- Native SDK runtime: OpenAI/Anthropic calls are executed by Go provider adapters (wire model id stays `<provider_id>/<model_name>`).
+- Users paste API keys directly instead of configuring environment-variable names.
+- Secrets are stored locally and never written into `config.json`.
+- Provider and model selection stay deterministic on the wire.
+- The runtime uses native Go SDK adapters.
 
-Non-goals:
+Backward compatibility for older AI settings layouts is intentionally out of scope.
 
-- Backward compatibility for older AI settings layouts (project is still in development; we keep configs clean).
+## 1. Config vs secrets
 
----
+Flower deliberately splits non-secret settings and secrets into two local files:
 
-## 1. Config vs Secrets (Two-File Model)
+1. `~/.redeven/config.json`
+   - bootstrap connection data
+   - provider registry
+   - allowed models
+   - execution policy
 
-We deliberately split configuration into two local files:
+2. `~/.redeven/secrets.json`
+   - provider API keys
+   - future user secrets
 
-1) `~/.redeven/config.json` (non-secret settings)
+The UI never receives stored plaintext secrets back from the agent. It only gets derived state such as `key_set=true`.
 
-- Bootstrap connection fields + local preferences.
-- Contains AI provider registry and allowed models.
-- Must **never** contain provider API keys.
+## 2. Provider registry
 
-2) `~/.redeven/secrets.json` (user-provided secrets, chmod `0600`)
+Providers are stored in `config.json` with a stable internal id and a mutable display name.
 
-- Stores AI provider API keys (and future user secrets).
-- Never returned in plaintext; UI only gets derived status (e.g. `key_set=true/false`).
-
-This separation keeps the UI intuitive and reduces the blast radius of accidental logs / bug reports.
-
----
-
-## 2. Provider Registry (Stable ID + Display Name)
-
-### 2.1 Why a stable internal provider id?
-
-Provider keys are stored in `secrets.json` keyed by `provider_id`. If the id were user-editable, a rename would silently break:
-
-- model routing (`<provider_id>/<model_name>`)
-- key lookup (secrets are keyed by id)
-
-So we use:
-
-- `provider.id`: stable internal key (generated automatically by the UI; not user-editable)
-- `provider.name`: human-friendly display name (editable; safe to change any time)
-
-This is the common “immutable primary key + mutable display name” pattern.
-
-### 2.2 Provider schema (stored in `config.json`)
+Example:
 
 ```json
 {
@@ -62,111 +42,69 @@ This is the common “immutable primary key + mutable display name” pattern.
 }
 ```
 
-Notes:
+Rules:
 
-- `type` is one of: `openai` | `anthropic` | `moonshot` | `chatglm` | `deepseek` | `qwen` | `openai_compatible`
-- `base_url` is optional for `openai`/`anthropic`, and required for `moonshot` / `chatglm` / `deepseek` / `qwen` / `openai_compatible`
-- `moonshot` / `chatglm` / `deepseek` / `qwen` / `openai_compatible` run via OpenAI-compatible endpoints on the configured `base_url`
-- Provider auth env var names are intentionally **not configurable** in config or UI
+- `provider.id` is stable and is used for secret lookup and wire model ids.
+- `provider.name` is user-facing and can be changed.
+- `type` is one of:
+  - `openai`
+  - `anthropic`
+  - `moonshot`
+  - `chatglm`
+  - `deepseek`
+  - `qwen`
+  - `openai_compatible`
+- `base_url` is optional for native providers and required for OpenAI-compatible providers that need a custom endpoint.
 
----
-
-## 3. Model Registry (Provider-Owned, Stable on Wire)
+## 3. Model registry
 
 The wire model id remains:
 
-```
+```text
 <provider_id>/<model_name>
 ```
 
-But the config keeps `current_model_id` at the AI root, and stores models under each provider:
+Models are stored under each provider in `config.json`, while `current_model_id` lives at the AI root and determines the default model for new chats.
 
-```json
-{
-  "current_model_id": "openai/gpt-5-mini",
-  "providers": [
-    {
-      "id": "openai",
-      "type": "openai",
-      "name": "OpenAI",
-      "models": [
-        {
-          "model_name": "gpt-5-mini",
-          "context_window": 400000,
-          "max_output_tokens": 128000,
-          "effective_context_window_percent": 95
-        },
-        {
-          "model_name": "gpt-5",
-          "context_window": 400000,
-          "max_output_tokens": 128000
-        }
-      ]
-    }
-  ]
-}
-```
+Important rules:
 
-Rules:
+- `providers[].models[]` is the allow-list exposed to the UI.
+- `current_model_id` must reference one allowed wire id.
+- If the stored `current_model_id` becomes invalid, the runtime falls back to the first available model.
+- `model_name` must not contain `/`.
+- `context_window` is used by runtime budgeting.
+- `max_output_tokens` and `effective_context_window_percent` are optional overrides.
 
-- `providers[].models[]` is the allow-list shown in the Chat UI.
-- `current_model_id` must point to one allowed model id (`<provider_id>/<model_name>`).
-- When `current_model_id` is missing/invalid after provider/model edits, the system falls back to the first available model.
-- `model_name` must not contain `/` (wire id uses `/` as a delimiter).
-- `context_window` controls the model context size used by runtime context budgeting.
-- For `openai_compatible` providers, `context_window` is required for every model.
-- `max_output_tokens` is optional; when set it overrides runtime output-token capability.
-- `effective_context_window_percent` is optional (default `95`), used to derive effective input window from `context_window`.
-- The agent derives the wire id as `provider.id + "/" + model_name` when talking to runtime providers and when returning `/api/ai/models`.
+Each thread stores its own selected `model_id`; switching threads follows the thread selection instead of a global session override.
 
-Thread-level selection:
+## 4. Runtime key handling
 
-- Each chat thread stores its selected `model_id` (wire id).
-- New chats start with `current_model_id`.
-- Switching threads automatically follows the thread's `model_id`.
+For each run the Go runtime:
 
----
+1. resolves the API key from `secrets.json` by `provider_id`
+2. initializes the provider SDK client
+3. never writes the key back into `config.json` or API responses
 
-## 4. API Key Handling (Go Native Runtime)
+## 5. UI behavior
 
-Key points:
+Current Settings UI behavior is:
 
-- The UI never asks users to pick an env var name.
-- For each run, the Go runtime:
-  1) resolves key by `provider_id` from `secrets.json`
-  2) initializes provider SDK client with that key (`openai-go` / `anthropic-sdk-go`)
-  3) never writes key back to `config.json` or API responses
+- Add Provider generates a provider id automatically.
+- Provider id is shown as read-only.
+- API keys are stored locally and shown only as status (`Key set` / `Key not set`).
+- Models are configured inside each provider entry.
+- Chat shows a single model selector rendered as `<provider name> / <model_name>`.
 
----
+## 6. Permissions
 
-## 5. UI Flow (Env App → Settings → Flower)
+Current permission policy is:
 
-- Providers:
-  - “Add Provider” generates a provider id automatically.
-  - Users edit `name`, `type`, `base_url`.
-  - Provider id is displayed read-only (useful for debugging / advanced JSON edits).
-- Current model:
-  - A single `current_model_id` controls which model is used by default for new chats.
-  - Chat model selection automatically updates `current_model_id`.
-- API keys:
-  - Stored locally in `secrets.json`, never shown again.
-  - UI shows `Key set / Key not set`, with `Save key` and `Clear`.
-- Models:
-  - Configured inside each provider as `models[]` (`model_name` only).
-  - Chat header shows a single **Model** selector (no separate provider dropdown), displayed as `<provider name> / <model_name>`.
+- Running Flower requires `read + write + execute`.
+- Updating settings or secrets requires `admin`.
 
----
+This keeps local secret writes behind endpoint-owner or admin control.
 
-## 6. Permissions (Current Policy)
-
-- Running AI: requires `read + write + execute` permission (RWX / "full").
-- Editing settings or updating keys: requires `admin` permission (local endpoint owner / admin only).
-
-This keeps local secret writes protected while ensuring Flower only runs in fully-privileged (RWX) sessions.
-
----
-
-## 7. Execution Policy (Runtime Guardrails)
+## 7. Execution policy
 
 `ai.execution_policy` defines optional hard guardrails:
 
@@ -179,16 +117,11 @@ This keeps local secret writes protected while ensuring Flower only runs in full
 }
 ```
 
-Default values are intentionally permissive (all `false`):
+Current behavior:
 
-- `require_user_approval`: when enabled, mutating tools require explicit approval.
-- `block_dangerous_commands`: when enabled, dangerous `terminal.exec` commands are hard-blocked.
+- `act` mode executes directly unless a guardrail blocks a tool call.
+- `plan` mode is always readonly.
+- Execution mode is stored per thread and enforced server-side.
+- If a task in `plan` requires edits, Flower must ask for a mode switch when interaction is allowed.
 
-Operational behavior:
-
-- `act` mode is direct execution by default.
-- `plan` mode is always strict readonly. Mutating tool calls are blocked regardless of execution_policy toggles.
-- Execution mode is stored per thread (`execution_mode`) and enforced server-side for each run.
-- If edits are required in `plan`, Flower should ask the user to switch to `act` (when interaction is allowed).
-- For deterministic mode switching, the ask_user payload should include structured `choices` with `actions` (for example `{type:"set_mode",mode:"act"}`).
-- Settings UI exposes the available execution-policy switches under **Settings → Flower → Execution policy**.
+The execution-policy UI is exposed under Settings → Flower → Execution policy.

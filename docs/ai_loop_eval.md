@@ -1,39 +1,39 @@
 # AI Loop Evaluation Workflow
 
-This document defines the validation workflow for Redeven Agent loop/profile selection.
+This document describes the current validation workflow for loop and prompt profile selection in Redeven Agent.
 
 The workflow is gate-first:
 
-1. replay known failure trajectories,
-2. evaluate matrix variants with real model + real tools,
-3. compare against open-source baselines (`codex`, `cline`, `opencode`),
-4. block recommendation when hard gates are not met.
+1. replay known failure trajectories
+2. evaluate profile variants with real models and real tools
+3. compare results against open-source baselines
+4. block default promotion when hard gates are not met
 
-## Entry Points
+## Entry points
 
-### Matrix evaluation (ranking only)
+### Matrix ranking
 
 ```bash
-./scripts/eval_ai_loop_matrix.sh /Users/tangjianyin/Downloads/code/openclaw
+./scripts/eval_ai_loop_matrix.sh /abs/path/to/target-repo
 ```
 
-### Full hard gate workflow (recommended for default promotion)
+### Full hard-gate evaluation
 
 ```bash
-./scripts/eval_gate.sh /Users/tangjianyin/Downloads/code/openclaw
+./scripts/eval_gate.sh /abs/path/to/target-repo
 ```
 
 ## Inputs
 
 Environment variables:
 
-- `TOP_K`: number of variants promoted from stage1 to stage2 (default `6`)
-- `MAX_VARIANTS`: cap evaluated variants (`0` means all variants)
-- `TASK_SPEC_PATH`: task spec yaml path (default `eval/tasks/default.yaml`)
-- `BASELINE_PATH`: baseline json path (default `eval/baselines/open_source_best.json`)
-- `ENFORCE_GATE`: set `1` to fail command when hard gate rejects
+- `TOP_K`
+- `MAX_VARIANTS`
+- `TASK_SPEC_PATH`
+- `BASELINE_PATH`
+- `ENFORCE_GATE`
 
-CLI flags (`cmd/ai-loop-eval`):
+CLI flags from `cmd/ai-loop-eval`:
 
 - `--task-spec`
 - `--baseline`
@@ -43,9 +43,9 @@ CLI flags (`cmd/ai-loop-eval`):
 - `--min-fallback-free-rate`
 - `--min-accuracy`
 
-## Variant Matrix
+## Variant matrix
 
-Prompt profiles (`6`):
+Prompt profiles:
 
 - `natural_evidence_v2`
 - `concise_direct_v1`
@@ -54,32 +54,32 @@ Prompt profiles (`6`):
 - `recovery_heavy_v1`
 - `minimal_progress_v1`
 
-Loop profiles (`4`):
+Loop profiles:
 
 - `adaptive_default_v2`
 - `fast_exit_v1`
 - `deep_analysis_v1`
 - `conservative_recovery_v1`
 
-Total variants: `6 x 4 = 24`.
+## Task specs
 
-## Task Specs
-
-Tasks are loaded from YAML (`eval/tasks/default.yaml`) and support:
+Tasks are loaded from YAML under `eval/tasks/` and support:
 
 - stage (`screen` / `deep`)
 - category (`failure_real` / `generic`)
-- required evidence, required keywords, forbidden phrases
-- hard fail events (for example `turn.loop.exhausted`)
+- required evidence
+- required keywords
+- forbidden phrases
+- hard-fail events
 
-## Hard Gate
+## Hard gate
 
 Hard gate compares each variant against:
 
-1. absolute thresholds,
-2. best metrics across open-source baseline sources.
+1. absolute thresholds
+2. best metrics across configured open-source baselines
 
-Gate metrics:
+Metrics currently used by the gate:
 
 - `pass_rate`
 - `loop_safety_rate`
@@ -89,19 +89,14 @@ Gate metrics:
 
 Gate output is written into `report.json` under `gate` and `variant_metrics`.
 
-If `--enforce-gate` is enabled:
+## Replay validation
 
-- no passing variant => command exits non-zero,
-- recommended variant failing gate => command exits non-zero.
+`cmd/ai-loop-replay` replays message logs and rejects known anti-patterns such as:
 
-## Replay Validation
+- fallback final text
+- tool-heavy runs without a concrete conclusion
 
-`cmd/ai-loop-replay` replays message logs and fails on known anti-patterns:
-
-- fallback final text (`loop limit`, `No response`, etc.),
-- tool-heavy runs without concrete conclusion.
-
-Fixtures:
+Fixtures live in:
 
 - `eval/replay_cases/loop_exhausted_fail.message.log.json`
 - `eval/replay_cases/normal_pass.message.log.json`
@@ -114,13 +109,13 @@ Default output directory:
 
 Artifacts:
 
-- `report.json`: full structured results, gate decisions, per-variant metrics.
-- `report.md`: human-readable ranking + gate summary.
-- `state/`: temporary runtime state for this evaluation run.
+- `report.json`
+- `report.md`
+- `state/`
 
-## Current Runtime Default
+## Current runtime default
 
 - Prompt profile: `natural_evidence_v2`
 - Loop profile: `fast_exit_v1`
 
-Any future default update should be done only after `scripts/eval_gate.sh` passes.
+Any future default update should be made only after `scripts/eval_gate.sh` passes.
