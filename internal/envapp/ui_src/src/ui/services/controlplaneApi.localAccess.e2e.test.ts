@@ -87,4 +87,45 @@ describe('controlplaneApi local access flow', () => {
     expect(out.channel_id).toBe('ch_local');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('redeems entry tickets via the Flowersec browser helper contract', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('/v1/channel/init/entry?endpoint_id=env_demo');
+      expect(init?.method).toBe('POST');
+      expect(init?.credentials).toBe('omit');
+      const headers = new Headers(init?.headers);
+      expect(headers.get('Authorization')).toBe('Bearer ticket-1');
+      expect(JSON.parse(String(init?.body))).toEqual({ endpoint_id: 'env_demo', floe_app: 'com.floegence.redeven.agent' });
+      return new Response(
+        JSON.stringify({
+          grant_client: {
+            tunnel_url: 'wss://example.com/ws',
+            channel_id: 'ch_remote',
+            token: 'token',
+            role: 1,
+            idle_timeout_seconds: 10,
+            channel_init_expire_at_unix_s: 1,
+            e2ee_psk_b64u: 'secret',
+            allowed_suites: [1],
+            default_suite: 1,
+          },
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    const out = await mod.channelInitEntry({
+      endpointId: 'env_demo',
+      floeApp: 'com.floegence.redeven.agent',
+      entryTicket: 'ticket-1',
+    });
+
+    expect(out.channel_id).toBe('ch_remote');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

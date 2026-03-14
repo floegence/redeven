@@ -1,4 +1,5 @@
 import type { ChannelInitGrant, DirectConnectInfo } from '@floegence/flowersec-core';
+import { requestEntryChannelGrant } from '@floegence/flowersec-core/browser';
 
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
 import { portalOriginFromSandboxLocation } from './sandboxOrigins';
@@ -451,14 +452,12 @@ export async function channelInitEntry(args: { endpointId: string; floeApp: stri
   const entryTicket = args.entryTicket.trim();
   if (!endpointId || !floeApp || !entryTicket) throw new Error('Invalid request');
 
-  const out = await fetchJSON<{ grant_client: ChannelInitGrant }>(
-    `/v1/channel/init/entry?endpoint_id=${encodeURIComponent(endpointId)}`,
-    {
-      method: 'POST',
-      bearerToken: entryTicket,
-      body: JSON.stringify({ endpoint_id: endpointId, floe_app: floeApp }),
+  return requestEntryChannelGrant({
+    endpointId,
+    entryTicket,
+    credentials: 'omit',
+    payload: {
+      floe_app: floeApp,
     },
-  );
-  if (!out?.grant_client) throw new Error('Invalid channel init response');
-  return out.grant_client;
+  });
 }

@@ -143,6 +143,12 @@ export function EnvAppShell() {
   const notify = useNotification();
 
   type ProtocolConnectConfig = Parameters<typeof protocol.connect>[0];
+  const reconnectPolicy = {
+    enabled: true,
+    maxAttempts: 1_000_000,
+    initialDelayMs: 500,
+    maxDelayMs: 30_000,
+  } as const;
 
   widgetRegistry.registerAll(redevenDeckWidgets);
 
@@ -588,27 +594,21 @@ export function EnvAppShell() {
     try {
       if (isLocalMode()) {
         setLocalAccessChannelReady(false);
-        const directInfo = await mintLocalDirectConnectInfo();
         await fn({
           mode: 'direct',
-          directInfo,
+          getDirectInfo: mintLocalDirectConnectInfo,
           observer,
-          // Direct mode requires a fresh connect_info (channel_id/psk) per attempt.
-          // Disable protocol-level autoReconnect (it reuses directInfo) and let the shell re-mint.
-          autoReconnect: { enabled: false },
+          connect: {
+            keepaliveIntervalMs: 15_000,
+          },
+          autoReconnect: reconnectPolicy,
         });
       } else {
         await fn({
           mode: 'tunnel',
           getGrant: createGetGrant(),
           observer,
-          autoReconnect: {
-            enabled: true,
-            // Env App should be resilient to agent restarts and transient network issues.
-            maxAttempts: 1_000_000,
-            initialDelayMs: 500,
-            maxDelayMs: 30_000,
-          },
+          autoReconnect: reconnectPolicy,
         });
       }
       await ensureAccessResumed();
@@ -770,70 +770,6 @@ export function EnvAppShell() {
 
     return ensureInFlight;
   };
-
-  // Local UI mode reconnect: directInfo cannot be reused across reconnects (agent restarts, consumed channel_id).
-  // Keep a small backoff loop that re-mints connect_info via the local HTTP API.
-  let localReconnectTimer: number | null = null;
-  let localReconnectBackoffMs = 500;
-
-  const scheduleLocalReconnect = (reason: string) => {
-    if (!isLocalMode() || accessGateVisible()) return;
-    if (localReconnectTimer !== null) return;
-
-    const delay = Math.min(localReconnectBackoffMs, 30_000);
-    const jitter = Math.floor(Math.random() * Math.min(200, Math.max(1, Math.floor(delay / 5))));
-    localReconnectTimer = window.setTimeout(() => {
-      localReconnectTimer = null;
-      if (!isLocalMode()) return;
-      if (protocol.status() === 'connected' || protocol.status() === 'connecting') return;
-
-      void (async () => {
-        // If we never successfully connected, protocol.reconnect() might reject; fall back to connect().
-        if (!protocol.client()) {
-          await connect();
-        } else {
-          await reconnect();
-        }
-      })().finally(() => {
-        localReconnectBackoffMs = Math.min(localReconnectBackoffMs * 2, 30_000);
-        if (isLocalMode() && protocol.status() !== 'connected' && protocol.status() !== 'connecting') {
-          scheduleLocalReconnect('retry');
-        }
-      });
-    }, delay + jitter);
-
-    console.debug('[envapp] local reconnect scheduled', { reason, delayMs: delay + jitter });
-  };
-
-  createEffect(() => {
-    if (!isLocalMode()) return;
-
-    if (accessGateVisible()) {
-      if (localReconnectTimer !== null) {
-        window.clearTimeout(localReconnectTimer);
-        localReconnectTimer = null;
-      }
-      return;
-    }
-
-    const st = protocol.status();
-    if (st === 'connected') {
-      localReconnectBackoffMs = 500;
-      if (localReconnectTimer !== null) {
-        window.clearTimeout(localReconnectTimer);
-        localReconnectTimer = null;
-      }
-      return;
-    }
-    if (st === 'error' || st === 'disconnected') {
-      scheduleLocalReconnect(st);
-    }
-  });
-
-  onCleanup(() => {
-    if (localReconnectTimer !== null) window.clearTimeout(localReconnectTimer);
-    localReconnectTimer = null;
-  });
 
   onMount(() => {
     layout.setSidebarCollapsed(true);

@@ -16,7 +16,7 @@ const mintEnvEntryTicketForAppMock = vi.fn();
 const channelInitEntryMock = vi.fn();
 const getEnvPublicIDFromSessionMock = vi.fn(() => '');
 
-const connectMock = vi.fn(async () => {
+const connectMock = vi.fn(async (_config: Record<string, unknown>) => {
   protocolStatus = 'connected';
   protocolClient = { id: 'client-1' };
 });
@@ -284,7 +284,21 @@ describe('EnvAppShell local access gate', () => {
 
       expect(unlockLocalAccessMock).toHaveBeenCalledWith('secret');
       expect(connectMock).toHaveBeenCalledTimes(1);
-      expect(mintLocalDirectConnectInfoMock).toHaveBeenCalledTimes(1);
+      const localConnectConfig = connectMock.mock.calls[0]?.[0];
+      expect(localConnectConfig).toMatchObject({
+        mode: 'direct',
+        observer: expect.any(Object),
+        connect: { keepaliveIntervalMs: 15_000 },
+        getDirectInfo: expect.any(Function),
+        autoReconnect: {
+          enabled: true,
+          maxAttempts: 1_000_000,
+          initialDelayMs: 500,
+          maxDelayMs: 30_000,
+        },
+      });
+      expect(localConnectConfig).not.toHaveProperty('directInfo');
+      expect(mintLocalDirectConnectInfoMock).not.toHaveBeenCalled();
       expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
       expect(resumeCalls).toEqual(['resume123']);
       expect(host.textContent).not.toContain('Unlock local agent');
@@ -328,6 +342,18 @@ describe('EnvAppShell remote access gate', () => {
 
       expect(unlockGatewayAccessMock).toHaveBeenCalledWith('secret');
       expect(connectMock).toHaveBeenCalledTimes(1);
+      const remoteConnectConfig = connectMock.mock.calls[0]?.[0];
+      expect(remoteConnectConfig).toMatchObject({
+        mode: 'tunnel',
+        observer: expect.any(Object),
+        getGrant: expect.any(Function),
+        autoReconnect: {
+          enabled: true,
+          maxAttempts: 1_000_000,
+          initialDelayMs: 500,
+          maxDelayMs: 30_000,
+        },
+      });
       expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
       expect(host.textContent).toContain('activity main');
       expect(host.textContent).not.toContain('Unlock agent');
