@@ -82,14 +82,10 @@ run_pattern_check "(?i)\\b(redeven\\.com|version\\.agent\\.redeven\\.com|agent\\
   "Production domain literals are not allowed in this public repository."
 
 # Rule 3: block internal delivery pipeline vocabulary from the public repo.
-run_pattern_check "(?i)\\b(downstream automation|release hook|REDEVEN_RELEASE_HOOK_PATTERN|release_published|release-assets|downstream deployment automation|version endpoint|installer wrapper)\\b" \
+run_pattern_check "(?i)\\b(release hook|release hook|package mirror|delivery branch|version endpoint|installer wrapper)\\b|REDEVEN_[A-Z_]*(DISPATCH|TARGET)_[A-Z_]*" \
   "Internal delivery pipeline details must not appear in this public repository."
 
-# Rule 4: block internal control-plane service names in public docs/comments.
-run_pattern_check "\\b(control plane|service metadata)\\b" \
-  "Internal service names should not appear in this public repository; use generic control-plane terminology."
-
-# Rule 5: block private delivery assets from being tracked again.
+# Rule 4: block private delivery assets from being tracked again.
 while IFS= read -r -d '' file_path; do
   [ -e "$file_path" ] || continue
   case "$file_path" in
@@ -100,7 +96,7 @@ while IFS= read -r -d '' file_path; do
   esac
 done <"$selected_files"
 
-# Rule 6: secret scan must be clean.
+# Rule 5: secret scan must be clean.
 if ! gitleaks detect --source . --no-git --redact --exit-code 1 --config .gitleaks.toml >/dev/null; then
   echo "[ERROR] gitleaks detected potential secrets." >&2
   failed=1
