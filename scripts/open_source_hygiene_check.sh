@@ -82,14 +82,14 @@ run_pattern_check "(?i)\\b(redeven\\.com|version\\.agent\\.redeven\\.com|agent\\
   "Production domain literals are not allowed in this public repository."
 
 # Rule 3: block internal delivery pipeline vocabulary from the public repo.
-run_pattern_check "(?i)\\b(release hook|release hook|package mirror|delivery branch|version endpoint|installer wrapper)\\b|REDEVEN_[A-Z_]*(DISPATCH|TARGET)_[A-Z_]*" \
+run_pattern_check "(?i)\\b(release hook|package mirror|delivery branch|version endpoint|installer wrapper)\\b|REDEVEN_[A-Z_]*(DISPATCH|TARGET)_[A-Z_]*" \
   "Internal delivery pipeline details must not appear in this public repository."
 
 # Rule 4: block private delivery assets from being tracked again.
 while IFS= read -r -d '' file_path; do
   [ -e "$file_path" ] || continue
   case "$file_path" in
-    deployment/private-delivery/workers/*|scripts/publish_delivery_branch.sh|scripts/sync_release_assets.sh)
+    deployment/*/workers/*|scripts/*release*branch*.sh|scripts/*sync*to*r2*.sh)
       echo "[ERROR] Private delivery assets do not belong in this public repository: $file_path" >&2
       failed=1
       ;;
