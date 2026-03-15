@@ -301,21 +301,22 @@ describe('GitBranchesPanel interactions', () => {
       expect(deleteCount).toBe(1);
       expect(document.body.textContent).toContain('Delete Branch');
       expect(document.body.textContent).toContain('/workspace/repo-linked');
-      expect(document.body.textContent).toContain('Files discarded');
-      expect(document.body.textContent).toContain('1 file');
-      expect(document.body.textContent).toContain('1 untracked');
-      expect(document.body.textContent).toContain('Safe delete ready');
-      expect(document.body.textContent).toContain('Delete Confirmation');
-      expect(document.body.textContent).toContain('Approve permanent file discard');
+      expect(document.body.textContent).toContain('Delete the local branch reference for');
+      expect(document.body.textContent).toContain('Remove the linked worktree at');
+      expect(document.body.textContent).toContain('Uncommitted changes in that worktree will be discarded (1 untracked).');
+      expect(document.body.textContent).not.toContain('Files discarded');
+      expect(document.body.textContent).not.toContain('Safe delete ready');
+      expect(document.body.textContent).not.toContain('Delete Confirmation');
+      expect(document.body.textContent).not.toContain('Approve permanent file discard');
       expect(document.body.textContent).not.toContain('scratch.txt');
       expect(host.textContent).toContain('linked worktree');
       expect(host.textContent).toContain('/workspace/repo-linked');
       const footer = Array.from(document.body.querySelectorAll('div')).find((node) => node.className.includes('border-t border-border/60 bg-background/88 px-4 pt-3 pb-4')) as HTMLDivElement | undefined;
-      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Discard Changes, Delete Worktree and Branch') as HTMLButtonElement | undefined;
+      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete Branch and Worktree') as HTMLButtonElement | undefined;
       expect(footer).toBeTruthy();
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.className).toContain('w-full');
-      expect(confirmButton?.disabled).toBe(true);
+      expect(confirmButton?.disabled).toBe(false);
     } finally {
       dispose();
     }
@@ -446,11 +447,12 @@ describe('GitBranchesPanel interactions', () => {
 
       expect(requestedBranch).toBe('feature/demo');
       expect(document.body.textContent).toContain('Delete Branch');
-      expect(document.body.textContent).toContain('Delete base main');
-      expect(document.body.textContent).toContain('Files discarded');
-      expect(document.body.textContent).toContain('None');
-      expect(document.body.textContent).toContain('Safe delete ready');
-      expect(document.body.textContent).toContain('Delete Confirmation');
+      expect(document.body.textContent).toContain('Delete the local branch reference for');
+      expect(document.body.textContent).toContain('Leave your current worktree and uncommitted files untouched.');
+      expect(document.body.textContent).not.toContain('Delete base main');
+      expect(document.body.textContent).not.toContain('Files discarded');
+      expect(document.body.textContent).not.toContain('Safe delete ready');
+      expect(document.body.textContent).not.toContain('Delete Confirmation');
       const footer = Array.from(document.body.querySelectorAll('div')).find((node) => node.className.includes('border-t border-border/60 bg-background/88 px-4 pt-3 pb-4')) as HTMLDivElement | undefined;
       const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete Branch') as HTMLButtonElement | undefined;
       expect(footer).toBeTruthy();
