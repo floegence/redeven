@@ -272,6 +272,61 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
+  it('stacks branch actions into full-width rows for narrow layouts', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px] w-[320px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={{
+                  name: 'feature/mobile',
+                  fullName: 'refs/heads/feature/mobile',
+                  kind: 'local',
+                  worktreePath: '/workspace/repo-mobile',
+                }}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    { name: 'feature/mobile', fullName: 'refs/heads/feature/mobile', kind: 'local', worktreePath: '/workspace/repo-mobile' },
+                  ],
+                  remote: [],
+                }}
+                onCheckoutBranch={() => {}}
+                onDeleteBranch={() => {}}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const branchHeader = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('sm:flex-row sm:flex-wrap sm:items-start sm:justify-between')) as HTMLDivElement | undefined;
+      const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
+      const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
+      const tablist = host.querySelector('[aria-label="Branch detail tabs"]') as HTMLDivElement | null;
+      const disabledReason = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('sm:text-right') && node.textContent?.includes('This branch is checked out in a linked worktree: /workspace/repo-mobile')) as HTMLDivElement | undefined;
+
+      expect(branchHeader).toBeTruthy();
+      expect(checkoutButton?.className).toContain('flex-1');
+      expect(deleteButton?.className).toContain('flex-1');
+      expect(tablist?.className).toContain('grid');
+      expect(tablist?.className).toContain('w-full');
+      expect(tablist?.className).toContain('grid-cols-2');
+      expect(disabledReason?.className).toContain('w-full');
+      expect(disabledReason?.className).toContain('sm:text-right');
+    } finally {
+      dispose();
+    }
+  });
+
   it('opens a confirmation dialog before deleting a local branch', async () => {
     let deletedBranch: string | undefined;
     const host = document.createElement('div');

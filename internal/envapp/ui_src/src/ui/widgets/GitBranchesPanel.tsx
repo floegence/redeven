@@ -926,7 +926,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             <div class="flex h-full min-h-0 flex-col overflow-hidden">
               <div class="shrink-0 px-3 py-3 sm:px-4 sm:py-4">
                 <div class="rounded-md border border-border/70 bg-card px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]">
-                  <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                     <GitLabelBlock
                       class="min-w-0 flex-1"
                       label="Branch"
@@ -948,33 +948,35 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       </div>
                     </GitLabelBlock>
 
-                    <div class="flex shrink-0 flex-col items-end gap-1.5">
-                      <div class="flex flex-wrap items-center justify-end gap-2">
-                        <Show when={props.onCheckoutBranch}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            class="rounded-md bg-background/80"
-                            disabled={checkoutDisabled()}
-                            onClick={() => props.selectedBranch && props.onCheckoutBranch?.(props.selectedBranch)}
-                          >
-                            {checkoutLabel()}
-                          </Button>
-                        </Show>
+                    <div class="flex w-full min-w-0 flex-col gap-1.5 sm:w-auto sm:min-w-fit sm:items-end">
+                      <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                        <div class="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+                          <Show when={props.onCheckoutBranch}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              class="flex-1 rounded-md bg-background/80 sm:flex-none"
+                              disabled={checkoutDisabled()}
+                              onClick={() => props.selectedBranch && props.onCheckoutBranch?.(props.selectedBranch)}
+                            >
+                              {checkoutLabel()}
+                            </Button>
+                          </Show>
 
-                        <Show when={deleteAvailable()}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            class="rounded-md bg-background/80 text-destructive hover:text-destructive"
-                            disabled={deleteDisabled()}
-                            onClick={() => setDeleteDialogOpen(true)}
-                          >
-                            {deleteLabel()}
-                          </Button>
-                        </Show>
+                          <Show when={deleteAvailable()}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              class="flex-1 rounded-md bg-background/80 text-destructive hover:text-destructive sm:flex-none"
+                              disabled={deleteDisabled()}
+                              onClick={() => setDeleteDialogOpen(true)}
+                            >
+                              {deleteLabel()}
+                            </Button>
+                          </Show>
+                        </div>
 
-                        <div class="inline-flex rounded-md border border-border/65 bg-muted/[0.14] p-0.5" role="tablist" aria-label="Branch detail tabs">
+                        <div class="grid w-full grid-cols-2 rounded-md border border-border/65 bg-muted/[0.14] p-0.5 sm:inline-flex sm:w-auto" role="tablist" aria-label="Branch detail tabs">
                           <For each={(['status', 'history'] as GitBranchSubview[])}>
                             {(view) => {
                               const active = () => branchSubview() === view;
@@ -984,7 +986,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                   role="tab"
                                   aria-selected={active()}
                                   class={cn(
-                                    'rounded px-3 py-1.5 text-xs font-medium transition-colors duration-150',
+                                    'rounded px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150',
                                     active() ? 'git-browser-selection-chip' : 'text-muted-foreground hover:bg-background/80 hover:text-foreground'
                                   )}
                                   onClick={() => props.onSelectBranchSubview?.(view)}
@@ -998,7 +1000,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       </div>
 
                       <Show when={deleteDisabledReason()}>
-                        <div class="max-w-[24rem] text-right text-[11px] leading-relaxed text-muted-foreground">
+                        <div class="w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[24rem] sm:text-right">
                           {deleteDisabledReason()}
                         </div>
                       </Show>

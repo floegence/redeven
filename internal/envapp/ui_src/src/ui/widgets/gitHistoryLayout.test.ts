@@ -189,6 +189,14 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('flex min-h-0 flex-1 overflow-hidden');
     expect(branchesSrc).toContain('flex min-h-5 items-center gap-1.5');
     expect(branchesSrc).toContain('min-h-[2rem] text-[11px] leading-relaxed line-clamp-2 text-muted-foreground');
+    expect(branchesSrc).toContain('flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between');
+    expect(branchesSrc).toContain('flex w-full min-w-0 flex-col gap-1.5 sm:w-auto sm:min-w-fit sm:items-end');
+    expect(branchesSrc).toContain('flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end');
+    expect(branchesSrc).toContain('flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end');
+    expect(branchesSrc).toContain('class="flex-1 rounded-md bg-background/80 sm:flex-none"');
+    expect(branchesSrc).toContain('class="flex-1 rounded-md bg-background/80 text-destructive hover:text-destructive sm:flex-none"');
+    expect(branchesSrc).toContain('grid w-full grid-cols-2 rounded-md border border-border/65 bg-muted/[0.14] p-0.5 sm:inline-flex sm:w-auto');
+    expect(branchesSrc).toContain('w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[24rem] sm:text-right');
     expect(branchesSrc).not.toContain('Subject');
   });
 
