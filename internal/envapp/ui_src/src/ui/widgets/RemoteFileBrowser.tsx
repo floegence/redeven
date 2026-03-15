@@ -28,6 +28,7 @@ import {
   dirnameAbsolute,
   normalizeAbsolutePath,
 } from '../utils/askFlowerPath';
+import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from '../utils/fileBrowserClipboard';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
@@ -153,6 +154,13 @@ function visibleBrowserPath(path: string, rootPath: string): string {
 
   return normalizedPath;
 }
+
+const ClipboardIcon = (props: { class?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class={props.class}>
+    <rect width="14" height="16" x="5" y="4" rx="2" />
+    <path d="M9 4.5h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v.5a1 1 0 0 0 1 1Z" />
+  </svg>
+);
 
 export interface RemoteFileBrowserProps {
   widgetId?: string;
@@ -2315,6 +2323,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     });
   };
 
+  const handleCopyName = (items: FileItem[]) => {
+    void (async () => {
+      try {
+        const result = await copyFileBrowserItemNames(items);
+        notification.success('Copied', describeCopiedFileBrowserItemNames(result));
+      } catch (e) {
+        notification.error('Copy failed', e instanceof Error ? e.message : String(e));
+      }
+    })();
+  };
+
   const ctxMenu: ContextMenuCallbacks = {
     onDelete: (items: FileItem[]) => {
       setDeleteDialogItems(items);
@@ -2363,6 +2382,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         setCopyToDialogOpen(true);
       }
     },
+    onCopyName: (items: FileItem[]) => {
+      handleCopyName(items);
+    },
   };
 
   const overrideContextMenuItems: ContextMenuItem[] = [
@@ -2382,6 +2404,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       type: 'duplicate',
       icon: (props) => <Copy class={props.class} />,
       shortcut: 'Cmd+D',
+    },
+    {
+      id: 'copy-name',
+      label: 'Copy Name',
+      type: 'copy-name',
+      icon: (props) => <ClipboardIcon class={props.class} />,
     },
     {
       id: 'copy-to',

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { LayoutProvider } from '@floegence/floe-webapp-core';
+import type { ContextMenuCallbacks, ContextMenuItem, FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { createEffect, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,6 +19,10 @@ const notificationStore = vi.hoisted(() => ({
   error: [] as Array<{ title: string; message?: string }>,
   warning: [] as Array<{ title: string; message?: string }>,
   info: [] as Array<{ title: string; message?: string }>,
+}));
+
+const clipboardStore = vi.hoisted(() => ({
+  writeText: vi.fn(),
 }));
 
 const gitWorkspaceRenderStore = vi.hoisted(() => ({
@@ -128,8 +133,16 @@ vi.mock('./FileBrowserWorkspace', () => ({
     resetKey?: number;
     toolbarEndActions?: JSX.Element;
     onModeChange?: (mode: string) => void;
+    contextMenuCallbacks?: ContextMenuCallbacks;
+    overrideContextMenuItems?: ContextMenuItem[];
   }) => {
     const [localCount, setLocalCount] = createSignal(0);
+    const copyNameTarget: FileItem = {
+      id: '/workspace/repo/src/.env',
+      name: '.env',
+      type: 'file',
+      path: '/workspace/repo/src/.env',
+    };
 
     onMount(() => {
       workspaceLifecycleStore.filesMounts += 1;
@@ -145,6 +158,14 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <div>{props.toolbarEndActions}</div>
         <button type="button" onClick={() => setLocalCount((count) => count + 1)}>mock-files-bump</button>
         <button type="button" onClick={() => props.onModeChange?.('git')}>mock-to-git</button>
+        {props.overrideContextMenuItems?.some((item) => item.type === 'copy-name') ? (
+          <button
+            type="button"
+            onClick={() => props.contextMenuCallbacks?.onCopyName?.([copyNameTarget])}
+          >
+            mock-copy-name
+          </button>
+        ) : null}
       </div>
     );
   },
@@ -288,11 +309,19 @@ beforeEach(() => {
   notificationStore.error = [];
   notificationStore.warning = [];
   notificationStore.info = [];
+  clipboardStore.writeText.mockReset();
   gitWorkspaceRenderStore.snapshots = [];
   workspaceLifecycleStore.filesMounts = 0;
   workspaceLifecycleStore.filesUnmounts = 0;
   workspaceLifecycleStore.gitMounts = 0;
   workspaceLifecycleStore.gitUnmounts = 0;
+
+  Object.defineProperty(window.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: clipboardStore.writeText,
+    },
+  });
 
   mockRpc.fs.list.mockResolvedValue({ entries: [] });
   mockRpc.fs.getPathContext.mockResolvedValue({ agentHomePathAbs: '/workspace' });
@@ -546,6 +575,42 @@ describe('RemoteFileBrowser persistence', () => {
         key: 'lastPathByEnv',
         value: { 'env-1': '/workspace/src' },
       });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('copies the selected file name from the file browser context menu', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    clipboardStore.writeText.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const copyNameButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-copy-name') as HTMLButtonElement | undefined;
+      expect(copyNameButton).toBeTruthy();
+
+      copyNameButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(clipboardStore.writeText).toHaveBeenCalledWith('.env');
+      expect(notificationStore.success).toContainEqual({ title: 'Copied', message: '".env" copied to clipboard.' });
     } finally {
       dispose();
     }

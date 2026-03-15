@@ -83,6 +83,9 @@ export function mapContextMenuCallbacksToAbsolute(
     onDuplicate: callbacks.onDuplicate
       ? (items) => callbacks.onDuplicate?.(mapFileItemsToAbsolutePath(items, rootPathAbs))
       : undefined,
+    onCopyName: callbacks.onCopyName
+      ? (items) => callbacks.onCopyName?.(mapFileItemsToAbsolutePath(items, rootPathAbs))
+      : undefined,
     onCopyTo: callbacks.onCopyTo
       ? (items) => callbacks.onCopyTo?.(mapFileItemsToAbsolutePath(items, rootPathAbs))
       : undefined,

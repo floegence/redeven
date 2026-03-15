@@ -18,6 +18,7 @@ import {
   toFileBrowserAbsolutePath,
   toFileBrowserDisplayPath,
 } from '../utils/fileBrowserDisplayPath';
+import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from '../utils/fileBrowserClipboard';
 import { InputDialog } from './InputDialog';
 import {
   extNoDot,
@@ -405,6 +406,17 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
     }
   };
 
+  const handleCopyName = (items: FileItem[]) => {
+    void (async () => {
+      try {
+        const result = await copyFileBrowserItemNames(items);
+        notification.success('Copied', describeCopiedFileBrowserItemNames(result));
+      } catch (e) {
+        notification.error('Copy failed', e instanceof Error ? e.message : String(e));
+      }
+    })();
+  };
+
   const ctxMenu: ContextMenuCallbacks = {
     onDelete: (items) => {
       setDeleteDialogItems(items);
@@ -455,6 +467,9 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
         setCopyToDialogItem(items[0]);
         setCopyToDialogOpen(true);
       }
+    },
+    onCopyName: (items) => {
+      handleCopyName(items);
     },
   };
   const displayContextMenuCallbacks = createMemo(() => mapContextMenuCallbacksToAbsolute(ctxMenu, browserRootPath()));
