@@ -40,7 +40,7 @@ describe('buildCommitGraphRows', () => {
 });
 
 describe('GitCommitGraph layout', () => {
-  it('anchors nodes to the commit subject row and keeps SVG height explicit', () => {
+  it('keeps static rails separate from per-row graph segments', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -54,13 +54,18 @@ describe('GitCommitGraph layout', () => {
     }), host);
 
     try {
-      const svg = host.querySelector('svg');
-      expect(svg?.getAttribute('class')).toContain('absolute top-0 left-0');
-      expect(svg?.getAttribute('style')).toContain('height: 102px;');
-      expect(svg?.getAttribute('height')).toBe('102');
+      const rails = host.querySelector('[data-commit-graph-rails]') as SVGSVGElement | null;
+      expect(rails?.getAttribute('class')).toContain('absolute top-0 left-0');
+      expect(rails?.getAttribute('style')).toContain('height: 102px;');
+      expect(rails?.getAttribute('height')).toBe('102');
+      expect(rails?.querySelectorAll('circle')).toHaveLength(0);
 
-      const outerNodes = Array.from(host.querySelectorAll('circle[r="6.5"]'));
-      expect(outerNodes.map((node) => node.getAttribute('cy'))).toEqual(['10', '44', '78']);
+      const rowSegments = host.querySelectorAll('[data-commit-graph-segment]');
+      expect(rowSegments).toHaveLength(3);
+      expect((rowSegments[0] as SVGSVGElement | undefined)?.getAttribute('height')).toBe('34');
+
+      const outerNodes = Array.from(host.querySelectorAll('[data-commit-graph-node]'));
+      expect(outerNodes.map((node) => node.getAttribute('cy'))).toEqual(['10', '10', '10']);
 
       const content = host.querySelector('[data-commit-graph-row="commit003"] > div.relative.z-20.grid.min-w-0') as HTMLDivElement | null;
       expect(content).toBeTruthy();
@@ -69,6 +74,9 @@ describe('GitCommitGraph layout', () => {
       expect(content?.getAttribute('style')).toContain('padding-bottom: 6px;');
       expect(content?.getAttribute('style')).toContain('grid-template-rows: 14px 10px;');
       expect(content?.getAttribute('style')).toContain('gap: 1px;');
+
+      const firstSubject = host.querySelector('[data-commit-graph-subject="commit003"]');
+      expect(firstSubject?.textContent).toBe('Latest commit');
     } finally {
       dispose();
     }

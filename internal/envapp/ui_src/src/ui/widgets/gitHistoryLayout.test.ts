@@ -257,11 +257,14 @@ describe('browser workspace layout wiring', () => {
     const src = read('./GitCommitGraph.tsx');
 
     expect(src).toContain('absolute top-0 left-0 z-10 border-r border-border/40 bg-muted/[0.14]');
-    expect(src).toContain("style={{ height: `${height()}px` }}");
-    expect(src).not.toContain('absolute inset-0 z-0 transition-colors duration-150');
+    expect(src).toContain('data-commit-graph-rails');
+    expect(src).toContain('data-commit-graph-segment={row.commit.hash}');
+    expect(src).toContain('data-commit-graph-node={props.row.commit.hash}');
+    expect(src).toContain('pointer-events-none absolute inset-0 overflow-visible');
     expect(src).toContain('const SUBJECT_ROW_HEIGHT = 14;');
     expect(src).toContain('const META_ROW_HEIGHT = 10;');
     expect(src).toContain('const NODE_CENTER_Y = ROW_TOP_PADDING + SUBJECT_ROW_HEIGHT / 2;');
+    expect(src).toContain('const CONNECTOR_OVERSCAN = 0.75;');
     expect(src).toContain('relative z-20 grid min-w-0 px-3 transition-colors duration-150');
     expect(src).toContain("selected() ? 'bg-sidebar-accent' : 'bg-transparent group-hover:bg-muted/[0.28]'");
     expect(src).toContain('group relative grid w-full cursor-pointer appearance-none items-stretch overflow-hidden');

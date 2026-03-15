@@ -27,6 +27,7 @@ const ROW_TOP_PADDING = 3;
 const ROW_GAP = 1;
 const ROW_BOTTOM_PADDING = ROW_HEIGHT - ROW_TOP_PADDING - SUBJECT_ROW_HEIGHT - ROW_GAP - META_ROW_HEIGHT;
 const NODE_CENTER_Y = ROW_TOP_PADDING + SUBJECT_ROW_HEIGHT / 2;
+const CONNECTOR_OVERSCAN = 0.75;
 
 const LANE_STROKE_COLORS = [
   'color-mix(in srgb, var(--primary) 78%, transparent)',
@@ -54,24 +55,20 @@ function laneX(index: number): number {
   return GRAPH_PADDING_X + index * LANE_WIDTH + LANE_WIDTH / 2;
 }
 
-function rowTop(index: number): number {
-  return index * ROW_HEIGHT;
+function graphWidth(columns: number): number {
+  return Math.max(columns, 1) * LANE_WIDTH + GRAPH_PADDING_X * 2;
 }
 
-function rowNodeCenter(index: number): number {
-  return rowTop(index) + NODE_CENTER_Y;
+function graphHeight(rowCount: number): number {
+  return Math.max(rowCount * ROW_HEIGHT, ROW_HEIGHT);
 }
 
-function rowBottom(index: number): number {
-  return rowTop(index) + ROW_HEIGHT;
+function rowSegmentTop(rowIndex: number): number {
+  return rowIndex === 0 ? 0 : -CONNECTOR_OVERSCAN;
 }
 
-function rowLineTop(index: number): number {
-  return index === 0 ? rowTop(index) : rowTop(index) - 0.75;
-}
-
-function rowLineBottom(index: number, rowCount: number): number {
-  return index === rowCount - 1 ? rowBottom(index) : rowBottom(index) + 0.75;
+function rowSegmentBottom(rowIndex: number, rowCount: number): number {
+  return rowIndex === rowCount - 1 ? ROW_HEIGHT : ROW_HEIGHT + CONNECTOR_OVERSCAN;
 }
 
 function uniqueParents(parents: string[] | undefined): string[] {
@@ -117,10 +114,6 @@ function transitionPath(fromLane: number, toLane: number, fromY: number, toY: nu
 
 function laneByHash(lanes: CommitGraphLane[], hash: string): CommitGraphLane | undefined {
   return lanes.find((lane) => lane.hash === hash);
-}
-
-function graphWidth(columns: number): number {
-  return Math.max(columns, 1) * LANE_WIDTH + GRAPH_PADDING_X * 2;
 }
 
 export function buildCommitGraphRows(commits: GitCommitSummary[]): CommitGraphRow[] {
@@ -203,8 +196,14 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
   const rowCount = createMemo(() => rows().length);
   const columns = createMemo(() => rows()[0]?.columns ?? 1);
   const width = createMemo(() => graphWidth(columns()));
-  const height = createMemo(() => Math.max(rows().length * ROW_HEIGHT, ROW_HEIGHT));
-  const rowSpacerStyle = {
+  const height = createMemo(() => graphHeight(rowCount()));
+  const railStyle = createMemo(() => ({
+    height: `${height()}px`,
+  }));
+  const rowStyle = createMemo(() => ({
+    'grid-template-columns': `${width()}px minmax(0, 1fr)`,
+  }));
+  const graphCellStyle = {
     height: `${ROW_HEIGHT}px`,
   };
   const rowContentStyle = {
@@ -219,8 +218,9 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
     <div class={cn('overflow-hidden rounded-md border border-border/55 bg-card', props.class)}>
       <div class="relative">
         <svg
+          data-commit-graph-rails
           class="pointer-events-none absolute top-0 left-0 z-10 border-r border-border/40 bg-muted/[0.14]"
-          style={{ height: `${height()}px` }}
+          style={railStyle()}
           width={width()}
           height={height()}
           viewBox={`0 0 ${width()} ${height()}`}
@@ -239,79 +239,9 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
               />
             )}
           </For>
-
-          <For each={rows()}>
-            {(row, rowIndex) => (
-              <>
-                <For each={row.beforeLanes}>
-                  {(laneState, beforeIndex) => {
-                    if (laneState.hash === row.commit.hash) return null;
-                    const afterIndex = row.afterLanes.findIndex((entry) => entry.hash === laneState.hash);
-                    if (afterIndex >= 0) {
-                      return (
-                        <path
-                          d={transitionPath(beforeIndex(), afterIndex, rowLineTop(rowIndex()), rowLineBottom(rowIndex(), rowCount()))}
-                          fill="none"
-                          stroke={laneStrokeColor(laneState.colorIndex)}
-                          stroke-width="1.65"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        />
-                      );
-                    }
-                    return (
-                      <path
-                        d={`M ${laneX(beforeIndex())} ${rowLineTop(rowIndex())} L ${laneX(beforeIndex())} ${rowNodeCenter(rowIndex())}`}
-                        fill="none"
-                        stroke={laneStrokeColor(laneState.colorIndex)}
-                        stroke-width="1.65"
-                        stroke-linecap="round"
-                      />
-                    );
-                  }}
-                </For>
-
-                <ShowCommitTransitions row={row} rowIndex={rowIndex()} rowCount={rowCount()} />
-
-                <For each={row.afterLanes}>
-                  {(laneState, afterIndex) => {
-                    const beforeIndex = row.beforeLanes.findIndex((entry) => entry.hash === laneState.hash);
-                    if (beforeIndex >= 0) return null;
-                    if (row.parents.includes(laneState.hash)) return null;
-                    return (
-                      <path
-                        d={`M ${laneX(afterIndex())} ${rowNodeCenter(rowIndex())} L ${laneX(afterIndex())} ${rowLineBottom(rowIndex(), rowCount())}`}
-                        fill="none"
-                        stroke={laneStrokeColor(laneState.colorIndex)}
-                        stroke-width="1.65"
-                        stroke-linecap="round"
-                      />
-                    );
-                  }}
-                </For>
-
-                <circle
-                  cx={laneX(row.lane)}
-                  cy={rowNodeCenter(rowIndex())}
-                  r={NODE_RADIUS + 2.25}
-                  fill={props.selectedCommitHash === row.commit.hash ? 'var(--background)' : 'color-mix(in srgb, var(--background) 90%, transparent)'}
-                  stroke={props.selectedCommitHash === row.commit.hash ? 'color-mix(in srgb, var(--primary) 35%, transparent)' : 'var(--background)'}
-                  stroke-width="1.2"
-                />
-                <circle
-                  cx={laneX(row.lane)}
-                  cy={rowNodeCenter(rowIndex())}
-                  r={NODE_RADIUS}
-                  fill={laneFillColor(row.nodeColorIndex)}
-                  stroke="var(--background)"
-                  stroke-width="1.2"
-                />
-              </>
-            )}
-          </For>
         </svg>
 
-        <div class="relative z-10">
+        <div class="relative z-20">
           <For each={rows()}>
             {(row, rowIndex) => {
               const selected = () => props.selectedCommitHash === row.commit.hash;
@@ -321,14 +251,27 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                   type="button"
                   data-commit-graph-row={row.commit.hash}
                   data-graph-columns={row.columns}
-                  style={{ 'grid-template-columns': `${width()}px minmax(0, 1fr)` }}
+                  style={rowStyle()}
                   class={cn(
                     'group relative grid w-full cursor-pointer appearance-none items-stretch overflow-hidden bg-transparent text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
                     selected() ? 'text-sidebar-accent-foreground' : 'text-foreground',
                   )}
                   onClick={() => props.onSelect?.(row.commit.hash)}
                 >
-                  <div style={rowSpacerStyle} class="relative z-20" aria-hidden="true" />
+                  <div style={graphCellStyle} class="relative z-20" aria-hidden="true">
+                    {/* Keep dynamic graph drawing inside the row box so it cannot drift from row layout. */}
+                    <svg
+                      data-commit-graph-segment={row.commit.hash}
+                      class="pointer-events-none absolute inset-0 overflow-visible"
+                      width={width()}
+                      height={ROW_HEIGHT}
+                      viewBox={`0 0 ${width()} ${ROW_HEIGHT}`}
+                      aria-hidden="true"
+                    >
+                      <CommitRowSegment row={row} rowIndex={rowIndex()} rowCount={rowCount()} selected={selected()} />
+                    </svg>
+                  </div>
+
                   <div
                     style={rowContentStyle}
                     class={cn(
@@ -338,7 +281,10 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                     )}
                   >
                     <div class="flex items-center gap-2 leading-none">
-                      <span class={cn('min-w-0 flex-1 truncate text-[11px] font-medium', selected() ? 'text-sidebar-accent-foreground' : 'text-foreground')}>
+                      <span
+                        data-commit-graph-subject={row.commit.hash}
+                        class={cn('min-w-0 flex-1 truncate text-[11px] font-medium', selected() ? 'text-sidebar-accent-foreground' : 'text-foreground')}
+                      >
                         {row.commit.subject || '(no subject)'}
                       </span>
                       <span
@@ -348,11 +294,16 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                             ? 'bg-background/18 text-sidebar-accent-foreground/82'
                             : 'bg-muted/[0.26] text-muted-foreground',
                         )}
-                        >
-                          {row.commit.shortHash}
-                        </span>
+                      >
+                        {row.commit.shortHash}
+                      </span>
                     </div>
-                    <div class={cn('flex flex-wrap items-center gap-1 text-[9px] leading-none', selected() ? 'text-sidebar-accent-foreground/72' : 'text-muted-foreground')}>
+                    <div
+                      class={cn(
+                        'flex flex-wrap items-center gap-1 text-[9px] leading-none',
+                        selected() ? 'text-sidebar-accent-foreground/72' : 'text-muted-foreground',
+                      )}
+                    >
                       <span class="truncate">{row.commit.authorName || 'Unknown author'}</span>
                       <span aria-hidden="true">·</span>
                       <span>{formatRelativeTime(row.commit.authorTimeMs)}</span>
@@ -380,20 +331,51 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
   );
 }
 
-function ShowCommitTransitions(props: { row: CommitGraphRow; rowIndex: number; rowCount: number }) {
+function CommitRowSegment(props: { row: CommitGraphRow; rowIndex: number; rowCount: number; selected: boolean }) {
   const lane = () => props.row.lane;
   const currentX = () => laneX(lane());
   const currentColor = () => laneStrokeColor(props.row.nodeColorIndex);
+  const lineTop = () => rowSegmentTop(props.rowIndex);
+  const lineBottom = () => rowSegmentBottom(props.rowIndex, props.rowCount);
 
   return (
     <>
+      <For each={props.row.beforeLanes}>
+        {(laneState, beforeIndex) => {
+          if (laneState.hash === props.row.commit.hash) return null;
+          const afterIndex = props.row.afterLanes.findIndex((entry) => entry.hash === laneState.hash);
+          if (afterIndex >= 0) {
+            return (
+              <path
+                d={transitionPath(beforeIndex(), afterIndex, lineTop(), lineBottom())}
+                fill="none"
+                stroke={laneStrokeColor(laneState.colorIndex)}
+                stroke-width="1.65"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            );
+          }
+          return (
+            <path
+              d={`M ${laneX(beforeIndex())} ${lineTop()} L ${laneX(beforeIndex())} ${NODE_CENTER_Y}`}
+              fill="none"
+              stroke={laneStrokeColor(laneState.colorIndex)}
+              stroke-width="1.65"
+              stroke-linecap="round"
+            />
+          );
+        }}
+      </For>
+
       <path
-        d={`M ${currentX()} ${rowLineTop(props.rowIndex)} L ${currentX()} ${rowNodeCenter(props.rowIndex)}`}
+        d={`M ${currentX()} ${lineTop()} L ${currentX()} ${NODE_CENTER_Y}`}
         fill="none"
         stroke={currentColor()}
         stroke-width="1.85"
         stroke-linecap="round"
       />
+
       <For each={props.row.parents}>
         {(parent, index) => {
           const parentLane = props.row.afterLanes.findIndex((entry) => entry.hash === parent);
@@ -402,7 +384,7 @@ function ShowCommitTransitions(props: { row: CommitGraphRow; rowIndex: number; r
           const colorIndex = index() === 0 ? props.row.nodeColorIndex : (laneState?.colorIndex ?? props.row.nodeColorIndex);
           return (
             <path
-              d={transitionPath(lane(), parentLane, rowNodeCenter(props.rowIndex), rowLineBottom(props.rowIndex, props.rowCount))}
+              d={transitionPath(lane(), parentLane, NODE_CENTER_Y, lineBottom())}
               fill="none"
               stroke={laneStrokeColor(colorIndex)}
               stroke-width={index() === 0 ? '1.95' : '1.65'}
@@ -412,6 +394,41 @@ function ShowCommitTransitions(props: { row: CommitGraphRow; rowIndex: number; r
           );
         }}
       </For>
+
+      <For each={props.row.afterLanes}>
+        {(laneState, afterIndex) => {
+          const beforeIndex = props.row.beforeLanes.findIndex((entry) => entry.hash === laneState.hash);
+          if (beforeIndex >= 0) return null;
+          if (props.row.parents.includes(laneState.hash)) return null;
+          return (
+            <path
+              d={`M ${laneX(afterIndex())} ${NODE_CENTER_Y} L ${laneX(afterIndex())} ${lineBottom()}`}
+              fill="none"
+              stroke={laneStrokeColor(laneState.colorIndex)}
+              stroke-width="1.65"
+              stroke-linecap="round"
+            />
+          );
+        }}
+      </For>
+
+      <circle
+        data-commit-graph-node={props.row.commit.hash}
+        r={NODE_RADIUS + 2.25}
+        cx={currentX()}
+        cy={NODE_CENTER_Y}
+        fill={props.selected ? 'var(--background)' : 'color-mix(in srgb, var(--background) 90%, transparent)'}
+        stroke={props.selected ? 'color-mix(in srgb, var(--primary) 35%, transparent)' : 'var(--background)'}
+        stroke-width="1.2"
+      />
+      <circle
+        r={NODE_RADIUS}
+        cx={currentX()}
+        cy={NODE_CENTER_Y}
+        fill={laneFillColor(props.row.nodeColorIndex)}
+        stroke="var(--background)"
+        stroke-width="1.2"
+      />
     </>
   );
 }
