@@ -302,8 +302,14 @@ describe('GitBranchesPanel interactions', () => {
       expect(document.body.textContent).toContain('Delete Branch Review');
       expect(document.body.textContent).toContain('/workspace/repo-linked');
       expect(document.body.textContent).toContain('scratch.txt');
+      expect(document.body.textContent).toContain('Final checkpoint');
+      expect(document.body.textContent).toContain('Approve permanent file discard');
       expect(host.textContent).toContain('linked worktree');
       expect(host.textContent).toContain('/workspace/repo-linked');
+      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Discard Changes, Delete Worktree and Branch') as HTMLButtonElement | undefined;
+      expect(confirmButton).toBeTruthy();
+      expect(confirmButton?.className).toContain('w-full');
+      expect(confirmButton?.disabled).toBe(true);
     } finally {
       dispose();
     }
@@ -435,8 +441,10 @@ describe('GitBranchesPanel interactions', () => {
       expect(requestedBranch).toBe('feature/demo');
       expect(document.body.textContent).toContain('Delete Branch');
       expect(document.body.textContent).toContain('Delete base main');
+      expect(document.body.textContent).toContain('Final action');
       const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete Branch') as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
+      expect(confirmButton?.className).toContain('w-full');
       confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       expect(confirmedBranch).toBe('feature/demo');
     } finally {
