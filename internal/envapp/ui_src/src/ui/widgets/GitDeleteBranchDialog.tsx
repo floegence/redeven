@@ -1,12 +1,12 @@
-import { Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Files, Shield, Trash } from '@floegence/floe-webapp-core/icons';
-import { Button, Checkbox, Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button, Checkbox, Dialog, Input } from '@floegence/floe-webapp-core/ui';
 import type { GitBranchSummary, GitPreviewDeleteBranchResponse, GitWorkspaceChange } from '../protocol/redeven_v1';
 import { branchDisplayName, gitDiffEntryIdentity, summarizeWorkspaceCount } from '../utils/gitWorkbench';
 import { GitDiffDialog } from './GitDiffDialog';
 import { GitWorkspaceStatusTable } from './GitWorkspaceStatusTable';
-import { GitLabelBlock, GitMetaPill, GitPrimaryTitle, GitSection, GitStatePane, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
+import { GitChecklistItem, GitLabelBlock, GitMetaPill, GitPrimaryTitle, GitSection, GitStatePane, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
 
 export type GitDeleteBranchDialogState = 'idle' | 'previewing' | 'deleting';
 
@@ -26,60 +26,6 @@ export interface GitDeleteBranchDialogProps {
   onClose: () => void;
   onRetryPreview?: (branch: GitBranchSummary) => void;
   onConfirm?: (branch: GitBranchSummary, options: GitDeleteBranchDialogConfirmOptions) => void;
-}
-
-interface DeleteReviewStepProps {
-  step: string;
-  title: string;
-  detail: JSX.Element;
-  ready?: boolean;
-  emphasis?: 'neutral' | 'danger';
-  children: JSX.Element;
-}
-
-function DeleteReviewStep(props: DeleteReviewStepProps) {
-  const emphasis = () => props.emphasis ?? 'neutral';
-
-  return (
-    <div
-      class={cn(
-        'rounded-lg border px-3 py-3 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]',
-        props.ready
-          ? 'border-success/25 bg-success/10'
-          : emphasis() === 'danger'
-            ? 'border-error/20 bg-background/80'
-            : 'border-border/50 bg-background/72',
-      )}
-    >
-      <div class="flex items-start gap-3">
-        <div
-          class={cn(
-            'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold',
-            props.ready
-              ? 'border-success/20 bg-success/12 text-success'
-              : emphasis() === 'danger'
-                ? 'border-error/20 bg-error/10 text-error'
-                : 'border-border/50 bg-muted/[0.2] text-muted-foreground',
-          )}
-        >
-          {props.step}
-        </div>
-
-        <div class="min-w-0 flex-1 space-y-2">
-          <div class="space-y-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="text-xs font-semibold text-foreground">{props.title}</div>
-              <GitMetaPill tone={props.ready ? 'success' : emphasis() === 'danger' ? 'danger' : 'neutral'}>
-                {props.ready ? 'Ready' : 'Required'}
-              </GitMetaPill>
-            </div>
-            <div class="text-[11px] leading-relaxed text-muted-foreground">{props.detail}</div>
-          </div>
-          {props.children}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function flattenLinkedWorktreeItems(preview: GitPreviewDeleteBranchResponse | null | undefined): GitWorkspaceChange[] {
@@ -160,9 +106,9 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
   };
 
   const deleteStatusValue = () => {
-    if (blockingReason() || safeDeleteBlocked()) return <span class="text-warning">Blocked</span>;
-    if (canConfirm()) return <span class="text-success">Ready to delete</span>;
-    return <span class="text-warning">Review required</span>;
+    if (blockingReason() || safeDeleteBlocked()) return <GitMetaPill tone="warning">Blocked</GitMetaPill>;
+    if (canConfirm()) return <GitMetaPill tone="success">Ready to delete</GitMetaPill>;
+    return <GitMetaPill tone="warning">Review required</GitMetaPill>;
   };
 
   const changeImpactLabel = () => {
@@ -181,7 +127,7 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
         }}
         title={requiresWorktreeRemoval() ? 'Delete Branch Review' : 'Delete Branch'}
         description={requiresWorktreeRemoval()
-          ? 'Review the linked worktree, verify pending files, and complete the final checkpoint before cleanup.'
+          ? 'Review the linked worktree, verify pending files, and complete every required confirmation step before cleanup.'
           : 'Confirm the local branch deletion after reviewing the safe delete status.'}
         footer={(
           <div class="border-t border-border/60 bg-background/88 px-4 pt-3 pb-4 backdrop-blur supports-[backdrop-filter]:bg-background/78">
@@ -383,106 +329,98 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
                       </GitSection>
 
                       <Show when={requiresWorktreeRemoval()}>
-                        <section class="overflow-hidden rounded-xl border border-error/30 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_transparent_52%),linear-gradient(180deg,rgba(255,99,99,0.12),rgba(255,99,99,0.04))] shadow-[0_12px_40px_rgba(120,18,18,0.10)] ring-1 ring-error/10">
-                          <div class="space-y-4 px-4 py-4 sm:px-5">
-                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                              <div class="flex min-w-0 items-start gap-3">
-                                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-error/25 bg-background/75 text-error shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
-                                  <Trash class="h-4 w-4" />
-                                </div>
-                                <div class="min-w-0 space-y-1">
-                                  <div class="flex flex-wrap items-center gap-2">
-                                    <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-error">Final checkpoint</div>
-                                    <GitMetaPill tone={canConfirm() ? 'danger' : 'warning'}>{deleteReadinessLabel()}</GitMetaPill>
-                                  </div>
-                                  <div class="text-sm font-semibold tracking-tight text-foreground">Confirm Destructive Actions</div>
-                                  <div class="text-[11px] leading-relaxed text-muted-foreground">
-                                    This cleanup removes the linked worktree and permanently discards every uncommitted file shown in this review.
-                                  </div>
-                                </div>
-                              </div>
-                              <div class="rounded-md border border-error/20 bg-background/75 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground sm:max-w-[15rem]">
-                                The footer action stays disabled until each required step below is marked ready.
-                              </div>
+                        <GitSection
+                          label="Delete Confirmation"
+                          tone="danger"
+                          description="Complete every acknowledgement before the destructive action unlocks."
+                          aside={<GitMetaPill tone={canConfirm() ? 'danger' : 'warning'}>{deleteReadinessLabel()}</GitMetaPill>}
+                          bodyClass="space-y-3"
+                        >
+                          <GitSubtleNote class="border-border/55 bg-background/72 text-foreground">
+                            <div class="flex items-start gap-2">
+                              <Trash class="mt-0.5 h-3.5 w-3.5 shrink-0 text-error" />
+                              <span>
+                                This cleanup removes the linked worktree and permanently discards every uncommitted file shown in this review. The footer action stays disabled until each required checkpoint is ready.
+                              </span>
                             </div>
+                          </GitSubtleNote>
 
-                            <GitStatStrip
-                              columnsClass="grid-cols-1 gap-1 sm:grid-cols-3"
-                              class="bg-background/20"
-                              items={[
-                                { label: 'Branch action', value: 'Delete local branch' },
-                                { label: 'Worktree action', value: 'Remove linked worktree' },
-                                { label: 'File impact', value: changeImpactLabel() },
-                              ]}
-                            />
+                          <GitStatStrip
+                            columnsClass="grid-cols-1 gap-1 sm:grid-cols-3"
+                            items={[
+                              { label: 'Branch action', value: 'Delete local branch' },
+                              { label: 'Worktree action', value: 'Remove linked worktree' },
+                              { label: 'File impact', value: changeImpactLabel() },
+                            ]}
+                          />
 
-                            <div class="space-y-2.5">
-                              <DeleteReviewStep
-                                step="1"
-                                title="Approve linked worktree removal"
-                                detail={`The linked worktree at ${linkedWorktreePath()} will be deleted together with this branch.`}
-                                ready={confirmWorktreeRemoval()}
+                          <div class="space-y-2">
+                            <GitChecklistItem
+                              index="1"
+                              title="Approve linked worktree removal"
+                              detail={`The linked worktree at ${linkedWorktreePath()} will be deleted together with this branch.`}
+                              tone="warning"
+                              complete={confirmWorktreeRemoval()}
+                            >
+                              <Checkbox
+                                checked={confirmWorktreeRemoval()}
+                                onChange={setConfirmWorktreeRemoval}
+                                label={`I understand the linked worktree at ${linkedWorktreePath()} will be removed.`}
+                                size="sm"
+                              />
+                            </GitChecklistItem>
+
+                            <GitChecklistItem
+                              index="2"
+                              title="Approve permanent file discard"
+                              detail="Any staged, unstaged, untracked, or conflicted files inside that worktree will be lost."
+                              tone="danger"
+                              complete={confirmDiscardChanges()}
+                            >
+                              <Checkbox
+                                checked={confirmDiscardChanges()}
+                                onChange={setConfirmDiscardChanges}
+                                label="I understand uncommitted changes in that worktree will be permanently discarded."
+                                size="sm"
+                              />
+                            </GitChecklistItem>
+
+                            <Show when={requiresDiscardConfirmation()}>
+                              <GitChecklistItem
+                                index="3"
+                                title="Type the branch name"
+                                detail={(
+                                  <>
+                                    Type <span class="font-semibold text-foreground">{branchName()}</span> to complete the final destructive gate.
+                                  </>
+                                )}
+                                tone="danger"
+                                complete={typedBranchName().trim() === branchName()}
                               >
-                                <Checkbox
-                                  checked={confirmWorktreeRemoval()}
-                                  onChange={setConfirmWorktreeRemoval}
-                                  label={`I understand the linked worktree at ${linkedWorktreePath()} will be removed.`}
-                                  size="sm"
-                                />
-                              </DeleteReviewStep>
-
-                              <DeleteReviewStep
-                                step="2"
-                                title="Approve permanent file discard"
-                                detail="Any staged, unstaged, untracked, or conflicted files inside that worktree will be lost."
-                                ready={confirmDiscardChanges()}
-                                emphasis="danger"
-                              >
-                                <Checkbox
-                                  checked={confirmDiscardChanges()}
-                                  onChange={setConfirmDiscardChanges}
-                                  label="I understand uncommitted changes in that worktree will be permanently discarded."
-                                  size="sm"
-                                />
-                              </DeleteReviewStep>
-
-                              <Show when={requiresDiscardConfirmation()}>
-                                <DeleteReviewStep
-                                  step="3"
-                                  title="Type the branch name"
-                                  detail={(
-                                    <>
-                                      Type <span class="font-semibold text-foreground">{branchName()}</span> to complete the final destructive gate.
-                                    </>
-                                  )}
-                                  ready={typedBranchName().trim() === branchName()}
-                                  emphasis="danger"
-                                >
-                                  <div class="space-y-2">
-                                    <label class="block text-[11px] font-medium text-foreground">
-                                      Expected value: <span class="font-semibold">{branchName()}</span>
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={typedBranchName()}
-                                      class={cn(
-                                        'w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-colors duration-150 focus:outline-none focus:ring-2',
-                                        typedBranchName().trim() === branchName()
-                                          ? 'border-success/35 focus:ring-success/30'
-                                          : 'border-error/25 focus:ring-error/25',
-                                      )}
-                                      placeholder={branchName()}
-                                      onInput={(event) => setTypedBranchName(event.currentTarget.value)}
-                                    />
-                                    <div class="text-[10px] leading-relaxed text-muted-foreground">
-                                      The destructive action will only unlock when the typed branch name matches exactly.
-                                    </div>
+                                <div class="space-y-2">
+                                  <label class="block text-[11px] font-medium text-foreground">
+                                    Expected value: <span class="font-semibold">{branchName()}</span>
+                                  </label>
+                                  <Input
+                                    value={typedBranchName()}
+                                    size="sm"
+                                    class={cn(
+                                      'w-full font-mono',
+                                      typedBranchName().trim() === branchName()
+                                        ? 'border-success/35 focus:border-success/35 focus:ring-success/25'
+                                        : 'border-error/25 focus:border-error/30 focus:ring-error/25',
+                                    )}
+                                    placeholder={branchName()}
+                                    onInput={(event) => setTypedBranchName(event.currentTarget.value)}
+                                  />
+                                  <div class="text-[10px] leading-relaxed text-muted-foreground">
+                                    The destructive action will only unlock when the typed branch name matches exactly.
                                   </div>
-                                </DeleteReviewStep>
-                              </Show>
-                            </div>
+                                </div>
+                              </GitChecklistItem>
+                            </Show>
                           </div>
-                        </section>
+                        </GitSection>
                       </Show>
 
                       <Show when={!requiresWorktreeRemoval()}>

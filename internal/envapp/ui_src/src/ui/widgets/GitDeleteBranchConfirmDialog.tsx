@@ -39,8 +39,8 @@ export function GitDeleteBranchConfirmDialog(props: GitDeleteBranchConfirmDialog
   );
 
   const deleteStatusValue = () => {
-    if (!preview()?.safeDeleteAllowed || blockingReason()) return <span class="text-warning">Blocked</span>;
-    return <span class="text-success">Ready to delete</span>;
+    if (!preview()?.safeDeleteAllowed || blockingReason()) return <GitMetaPill tone="warning">Blocked</GitMetaPill>;
+    return <GitMetaPill tone="success">Ready to delete</GitMetaPill>;
   };
 
   return (
@@ -175,19 +175,31 @@ export function GitDeleteBranchConfirmDialog(props: GitDeleteBranchConfirmDialog
                   </Show>
                 </GitSection>
 
-                <div class="rounded-lg border border-error/20 bg-error/5 px-3 py-3">
-                  <div class="flex items-start gap-3">
-                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-error/20 bg-background/75 text-error">
-                      <Trash class="h-3.5 w-3.5" />
-                    </div>
-                    <div class="space-y-1">
-                      <div class="text-xs font-semibold text-foreground">Final action</div>
-                      <div class="text-[11px] leading-relaxed text-muted-foreground">
+                <GitSection
+                  label="Delete Confirmation"
+                  tone="warning"
+                  description="This flow removes only the local branch reference."
+                  aside={<GitMetaPill tone={canConfirm() ? 'warning' : 'neutral'}>Local branch only</GitMetaPill>}
+                  bodyClass="space-y-3"
+                >
+                  <GitStatStrip
+                    columnsClass="grid-cols-1 gap-1 sm:grid-cols-3"
+                    items={[
+                      { label: 'Branch action', value: 'Delete local branch' },
+                      { label: 'Worktree action', value: 'No linked worktree cleanup' },
+                      { label: 'File impact', value: 'Keep current files' },
+                    ]}
+                  />
+
+                  <GitSubtleNote class="border-border/55 bg-background/72 text-foreground">
+                    <div class="flex items-start gap-2">
+                      <Trash class="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+                      <span>
                         Confirming this dialog deletes the local branch reference only. No linked worktree cleanup or file discard is involved.
-                      </div>
+                      </span>
                     </div>
-                  </div>
-                </div>
+                  </GitSubtleNote>
+                </GitSection>
               </div>
             </Show>
           </Show>

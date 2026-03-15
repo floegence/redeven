@@ -1,7 +1,7 @@
 import { For, Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
-import { gitChangeLabel, gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneSurfaceClass, type GitChromeTone } from './GitChrome';
+import { gitChangeLabel, gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneInsetClass, gitToneSurfaceClass, type GitChromeTone } from './GitChrome';
 
 export interface GitSectionProps {
   label: string;
@@ -101,6 +101,53 @@ export interface GitSubtleNoteProps {
 
 export function GitSubtleNote(props: GitSubtleNoteProps) {
   return <div class={cn('rounded-md border border-border/45 bg-muted/[0.16] px-2.5 py-2 text-xs leading-relaxed text-muted-foreground', props.class)}>{props.children}</div>;
+}
+
+export interface GitChecklistItemProps {
+  index?: JSX.Element;
+  title: JSX.Element;
+  detail?: JSX.Element;
+  tone?: GitChromeTone;
+  complete?: boolean;
+  required?: boolean;
+  class?: string;
+  bodyClass?: string;
+  children?: JSX.Element;
+}
+
+export function GitChecklistItem(props: GitChecklistItemProps) {
+  const statusTone = () => (props.complete ? 'success' : props.tone ?? 'neutral');
+  const statusLabel = () => {
+    if (props.complete) return 'Ready';
+    if (props.required === false) return 'Optional';
+    return 'Required';
+  };
+
+  return (
+    <div class={cn('rounded-md px-3 py-3', gitToneInsetClass(statusTone()), props.class)}>
+      <div class="flex items-start gap-3">
+        <div class={cn('mt-0.5 inline-flex min-h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold', gitToneBadgeClass(statusTone()))}>
+          {props.index ?? '•'}
+        </div>
+
+        <div class="min-w-0 flex-1 space-y-2">
+          <div class="space-y-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="text-xs font-semibold text-foreground">{props.title}</div>
+              <GitMetaPill tone={statusTone()}>{statusLabel()}</GitMetaPill>
+            </div>
+            <Show when={props.detail}>
+              <div class="text-[11px] leading-relaxed text-muted-foreground">{props.detail}</div>
+            </Show>
+          </div>
+
+          <Show when={props.children}>
+            <div class={cn('space-y-2', props.bodyClass)}>{props.children}</div>
+          </Show>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export interface GitStatePaneProps {
