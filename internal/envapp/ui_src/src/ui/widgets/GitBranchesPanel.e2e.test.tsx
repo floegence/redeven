@@ -302,11 +302,14 @@ describe('GitBranchesPanel interactions', () => {
       expect(document.body.textContent).toContain('Delete Branch Review');
       expect(document.body.textContent).toContain('/workspace/repo-linked');
       expect(document.body.textContent).toContain('scratch.txt');
+      expect(document.body.textContent).toContain('Safe delete ready');
       expect(document.body.textContent).toContain('Final checkpoint');
       expect(document.body.textContent).toContain('Approve permanent file discard');
       expect(host.textContent).toContain('linked worktree');
       expect(host.textContent).toContain('/workspace/repo-linked');
+      const footer = Array.from(document.body.querySelectorAll('div')).find((node) => node.className.includes('border-t border-border/60 bg-background/88 px-4 pt-3 pb-4')) as HTMLDivElement | undefined;
       const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Discard Changes, Delete Worktree and Branch') as HTMLButtonElement | undefined;
+      expect(footer).toBeTruthy();
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.className).toContain('w-full');
       expect(confirmButton?.disabled).toBe(true);
@@ -441,8 +444,11 @@ describe('GitBranchesPanel interactions', () => {
       expect(requestedBranch).toBe('feature/demo');
       expect(document.body.textContent).toContain('Delete Branch');
       expect(document.body.textContent).toContain('Delete base main');
+      expect(document.body.textContent).toContain('Safe delete ready');
       expect(document.body.textContent).toContain('Final action');
+      const footer = Array.from(document.body.querySelectorAll('div')).find((node) => node.className.includes('border-t border-border/60 bg-background/88 px-4 pt-3 pb-4')) as HTMLDivElement | undefined;
       const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete Branch') as HTMLButtonElement | undefined;
+      expect(footer).toBeTruthy();
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.className).toContain('w-full');
       confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));

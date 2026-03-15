@@ -159,6 +159,12 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
     return canConfirm() ? 'Ready to delete' : 'Review required';
   };
 
+  const deleteStatusValue = () => {
+    if (blockingReason() || safeDeleteBlocked()) return <span class="text-warning">Blocked</span>;
+    if (canConfirm()) return <span class="text-success">Ready to delete</span>;
+    return <span class="text-warning">Review required</span>;
+  };
+
   const changeImpactLabel = () => {
     const count = linkedWorkspaceCount();
     if (!requiresWorktreeRemoval()) return 'No linked worktree cleanup';
@@ -178,40 +184,42 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
           ? 'Review the linked worktree, verify pending files, and complete the final checkpoint before cleanup.'
           : 'Confirm the local branch deletion after reviewing the safe delete status.'}
         footer={(
-          <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-            <Button size="sm" variant="outline" class="w-full sm:w-auto" disabled={loading() || deleting()} onClick={props.onClose}>
-              Cancel
-            </Button>
-            <Show when={props.previewError && props.branch}>
+          <div class="border-t border-border/60 bg-background/88 px-4 pt-3 pb-4 backdrop-blur supports-[backdrop-filter]:bg-background/78">
+            <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+              <Button size="sm" variant="outline" class="w-full sm:w-auto" disabled={loading() || deleting()} onClick={props.onClose}>
+                Cancel
+              </Button>
+              <Show when={props.previewError && props.branch}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  class="w-full sm:w-auto"
+                  disabled={loading() || deleting()}
+                  onClick={() => props.branch && props.onRetryPreview?.(props.branch)}
+                >
+                  Retry Review
+                </Button>
+              </Show>
               <Button
                 size="sm"
-                variant="outline"
+                variant="destructive"
                 class="w-full sm:w-auto"
-                disabled={loading() || deleting()}
-                onClick={() => props.branch && props.onRetryPreview?.(props.branch)}
+                disabled={!canConfirm()}
+                loading={deleting()}
+                onClick={() => {
+                  const branch = props.branch;
+                  const currentPreview = preview();
+                  if (!branch || !currentPreview) return;
+                  props.onConfirm?.(branch, {
+                    removeLinkedWorktree: Boolean(currentPreview.requiresWorktreeRemoval),
+                    discardLinkedWorktreeChanges: Boolean(currentPreview.requiresDiscardConfirmation),
+                    planFingerprint: currentPreview.planFingerprint,
+                  });
+                }}
               >
-                Retry Review
+                {confirmLabel()}
               </Button>
-            </Show>
-            <Button
-              size="sm"
-              variant="destructive"
-              class="w-full sm:w-auto"
-              disabled={!canConfirm()}
-              loading={deleting()}
-              onClick={() => {
-                const branch = props.branch;
-                const currentPreview = preview();
-                if (!branch || !currentPreview) return;
-                props.onConfirm?.(branch, {
-                  removeLinkedWorktree: Boolean(currentPreview.requiresWorktreeRemoval),
-                  discardLinkedWorktreeChanges: Boolean(currentPreview.requiresDiscardConfirmation),
-                  planFingerprint: currentPreview.planFingerprint,
-                });
-              }}
-            >
-              {confirmLabel()}
-            </Button>
+            </div>
           </div>
         )}
         class={cn(
@@ -261,7 +269,7 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
                       items={[
                         { label: 'Branch', value: branchName() },
                         { label: 'Worktree', value: linkedWorktree()?.worktreePath || 'No linked worktree' },
-                        { label: 'Delete status', value: deleteReadinessLabel() },
+                        { label: 'Delete status', value: deleteStatusValue() },
                         { label: 'Files to review', value: requiresWorktreeRemoval() ? fileCountLabel(linkedWorkspaceCount()) : 'No review required' },
                       ]}
                     />
@@ -354,8 +362,16 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
                           when={preview()?.safeDeleteAllowed}
                           fallback={<GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{preview()?.safeDeleteReason || 'Safe delete is blocked.'}</GitSubtleNote>}
                         >
-                          <GitSubtleNote class="border-success/25 bg-success/10 text-success-foreground">
-                            Git safe delete is ready. The branch can be removed with `git branch -d` once the review checkpoint is complete.
+                          <GitSubtleNote class="border-success/30 bg-success/14 text-foreground">
+                            <div class="flex items-start gap-2">
+                              <Shield class="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+                              <div class="space-y-1">
+                                <div class="text-[11px] font-semibold text-success">Safe delete ready</div>
+                                <div class="text-[11px] leading-relaxed text-muted-foreground">
+                                  Git can remove this branch with `git branch -d` once the review checkpoint is complete.
+                                </div>
+                              </div>
+                            </div>
                           </GitSubtleNote>
                         </Show>
                         <Show when={blockingReason()}>

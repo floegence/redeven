@@ -38,6 +38,11 @@ export function GitDeleteBranchConfirmDialog(props: GitDeleteBranchConfirmDialog
     && !blockingReason(),
   );
 
+  const deleteStatusValue = () => {
+    if (!preview()?.safeDeleteAllowed || blockingReason()) return <span class="text-warning">Blocked</span>;
+    return <span class="text-success">Ready to delete</span>;
+  };
+
   return (
     <Dialog
       open={props.open}
@@ -47,40 +52,42 @@ export function GitDeleteBranchConfirmDialog(props: GitDeleteBranchConfirmDialog
       title="Delete Branch"
       description="Confirm the local branch deletion after reviewing the safe delete status."
       footer={(
-        <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-          <Button size="sm" variant="outline" class="w-full sm:w-auto" disabled={loading() || deleting()} onClick={props.onClose}>
-            Cancel
-          </Button>
-          <Show when={props.previewError && props.branch}>
+        <div class="border-t border-border/60 bg-background/88 px-4 pt-3 pb-4 backdrop-blur supports-[backdrop-filter]:bg-background/78">
+          <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+            <Button size="sm" variant="outline" class="w-full sm:w-auto" disabled={loading() || deleting()} onClick={props.onClose}>
+              Cancel
+            </Button>
+            <Show when={props.previewError && props.branch}>
+              <Button
+                size="sm"
+                variant="outline"
+                class="w-full sm:w-auto"
+                disabled={loading() || deleting()}
+                onClick={() => props.branch && props.onRetryPreview?.(props.branch)}
+              >
+                Retry Review
+              </Button>
+            </Show>
             <Button
               size="sm"
-              variant="outline"
+              variant="destructive"
               class="w-full sm:w-auto"
-              disabled={loading() || deleting()}
-              onClick={() => props.branch && props.onRetryPreview?.(props.branch)}
+              disabled={!canConfirm()}
+              loading={deleting()}
+              onClick={() => {
+                const branch = props.branch;
+                const currentPreview = preview();
+                if (!branch || !currentPreview) return;
+                props.onConfirm?.(branch, {
+                  removeLinkedWorktree: false,
+                  discardLinkedWorktreeChanges: false,
+                  planFingerprint: currentPreview.planFingerprint,
+                });
+              }}
             >
-              Retry Review
+              Delete Branch
             </Button>
-          </Show>
-          <Button
-            size="sm"
-            variant="destructive"
-            class="w-full sm:w-auto"
-            disabled={!canConfirm()}
-            loading={deleting()}
-            onClick={() => {
-              const branch = props.branch;
-              const currentPreview = preview();
-              if (!branch || !currentPreview) return;
-              props.onConfirm?.(branch, {
-                removeLinkedWorktree: false,
-                discardLinkedWorktreeChanges: false,
-                planFingerprint: currentPreview.planFingerprint,
-              });
-            }}
-          >
-            Delete Branch
-          </Button>
+          </div>
         </div>
       )}
       class={cn(
@@ -125,7 +132,7 @@ export function GitDeleteBranchConfirmDialog(props: GitDeleteBranchConfirmDialog
                     items={[
                       { label: 'Branch', value: branchName() },
                       { label: 'Scope', value: 'Local branch only' },
-                      { label: 'Delete status', value: preview()?.safeDeleteAllowed && !blockingReason() ? 'Ready' : 'Blocked' },
+                      { label: 'Delete status', value: deleteStatusValue() },
                     ]}
                   />
                 </GitSection>
@@ -148,8 +155,16 @@ export function GitDeleteBranchConfirmDialog(props: GitDeleteBranchConfirmDialog
                     when={preview()?.safeDeleteAllowed}
                     fallback={<GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{preview()?.safeDeleteReason || 'Safe delete is blocked.'}</GitSubtleNote>}
                   >
-                    <GitSubtleNote class="border-success/25 bg-success/10 text-success-foreground">
-                      Safe delete is ready. Git can remove this branch with `git branch -d`.
+                    <GitSubtleNote class="border-success/30 bg-success/14 text-foreground">
+                      <div class="flex items-start gap-2">
+                        <Shield class="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+                        <div class="space-y-1">
+                          <div class="text-[11px] font-semibold text-success">Safe delete ready</div>
+                          <div class="text-[11px] leading-relaxed text-muted-foreground">
+                            Git can remove this branch with `git branch -d`.
+                          </div>
+                        </div>
+                      </div>
                     </GitSubtleNote>
                   </Show>
                   <Show when={blockingReason()}>
