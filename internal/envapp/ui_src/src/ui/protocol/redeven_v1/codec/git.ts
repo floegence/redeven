@@ -92,15 +92,6 @@ function fromWireGitWorkspaceSummary(resp: wire_git_workspace_summary | undefine
   };
 }
 
-function toWireGitWorkspaceSummary(req: GitWorkspaceSummary): wire_git_workspace_summary {
-  return {
-    staged_count: typeof req.stagedCount === 'number' ? req.stagedCount : undefined,
-    unstaged_count: typeof req.unstagedCount === 'number' ? req.unstagedCount : undefined,
-    untracked_count: typeof req.untrackedCount === 'number' ? req.untrackedCount : undefined,
-    conflicted_count: typeof req.conflictedCount === 'number' ? req.conflictedCount : undefined,
-  };
-}
-
 function fromWireGitWorkspaceChange(resp: wire_git_workspace_change): GitWorkspaceChange {
   return {
     section: typeof resp?.section === 'string' ? resp.section : undefined,

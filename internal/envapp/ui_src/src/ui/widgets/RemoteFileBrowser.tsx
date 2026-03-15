@@ -21,7 +21,7 @@ import {
   type GitWorkspaceSection,
 } from '../protocol/redeven_v1';
 import { getExtDot, isLikelyTextContent, mimeFromExtDot, previewModeByName, type PreviewMode } from '../utils/filePreview';
-import { readFileBytesOnce, openReadFileStreamChannel, type FsReadFileStreamRespMeta } from '../utils/fileStreamReader';
+import { readFileBytesOnce, openReadFileStreamChannel } from '../utils/fileStreamReader';
 import { useEnvContext } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
 import {
@@ -52,7 +52,6 @@ import {
   workspaceViewSectionForItem,
   workspaceViewSectionHasItem,
   workspaceViewSectionItems,
-  workspaceSectionItems,
   workspaceEntryKey,
   workspaceMutationPaths,
   type GitWorkbenchSubview,
@@ -242,7 +241,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const [moveToDialogOpen, setMoveToDialogOpen] = createSignal(false);
   const [moveToDialogItem, setMoveToDialogItem] = createSignal<FileItem | null>(null);
-  const [moveToLoading, setMoveToLoading] = createSignal(false);
+  const [, setMoveToLoading] = createSignal(false);
 
   const [duplicateLoading, setDuplicateLoading] = createSignal(false);
 
@@ -251,7 +250,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const [copyToDialogOpen, setCopyToDialogOpen] = createSignal(false);
   const [copyToDialogItem, setCopyToDialogItem] = createSignal<FileItem | null>(null);
-  const [copyToLoading, setCopyToLoading] = createSignal(false);
+  const [, setCopyToLoading] = createSignal(false);
 
   const [currentBrowserPath, setCurrentBrowserPath] = createSignal('');
   const [lastLoadedBrowserPath, setLastLoadedBrowserPath] = createSignal('');
@@ -1304,7 +1303,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
     setBrowserSidebarOpen(open);
   };
-  const openPageSidebar = () => setMobileSidebarOpen(true);
   const closePageSidebar = () => setMobileSidebarOpen(false);
   const togglePageSidebar = () => setMobileSidebarOpen(!mobileSidebarOpen());
   const pageSidebarOpen = () => !layout.isMobile() || mobileSidebarOpen();
@@ -1768,17 +1766,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     } finally {
       setDownloadLoading(false);
     }
-  };
-
-  const invalidateDirCache = (dirPath: string) => {
-    const p = normalizePath(dirPath);
-    cache.delete(p);
-  };
-
-  const refreshDir = async (dirPath: string) => {
-    invalidateDirCache(dirPath);
-    const result = await loadPathChain(dirPath);
-    if (result.status !== 'ok') notifyPathLoadFailure(result);
   };
 
   const applyLocalMove = (item: FileItem, destDir: string) => {

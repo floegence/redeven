@@ -271,13 +271,13 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
         }
       } finally {
         inFlight = false;
-        if (destroyed) return;
+      }
+      if (destroyed) return;
 
-        const next = queuedContent;
-        queuedContent = null;
-        if (next && next.content !== requested) {
-          scheduleRender(next.content, next.force);
-        }
+      const next = queuedContent;
+      queuedContent = null;
+      if (next && next.content !== requested) {
+        scheduleRender(next.content, next.force);
       }
     })();
   };

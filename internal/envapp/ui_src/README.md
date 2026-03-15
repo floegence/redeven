@@ -18,6 +18,7 @@ From this directory:
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm run lint
 pnpm run typecheck
 pnpm run build
 ```

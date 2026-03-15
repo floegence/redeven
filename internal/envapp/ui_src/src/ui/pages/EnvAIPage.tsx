@@ -51,7 +51,6 @@ import {
   type SubagentView,
   type ThreadTodoItem,
   type ThreadTodosView,
-  type TodoStatus,
 } from './aiDataNormalizers';
 import { hasRWXPermissions } from './aiPermissions';
 import type { AskFlowerIntent } from './askFlowerIntent';
@@ -2066,7 +2065,6 @@ export function EnvAIPage() {
   let lastMessagesReq = 0;
   let lastTodosReq = 0;
   let skipNextThreadLoad = false;
-  let activeTranscriptThreadId = '';
   let activeTranscriptCursor = 0; // max transcript_messages.id seen for the active thread
   let activeTranscriptBaselineLoaded = false;
   let activeRealtimeEventSeq = 0;
@@ -2560,11 +2558,6 @@ export function EnvAIPage() {
       ? 'Paused until waiting input is resolved.'
       : 'Flower will send these automatically after the current run finishes.',
   );
-  const loadedDraftFollowup = createMemo(() => {
-    const followupID = String(loadedDraftFollowupID() ?? '').trim();
-    if (!followupID) return null;
-    return draftFollowups().find((item) => String(item.followup_id ?? '').trim() === followupID) ?? null;
-  });
   const executionMode = createMemo<ExecutionMode>(() => {
     const tid = String(ai.activeThreadId() ?? '').trim();
     if (!tid) {
@@ -2864,9 +2857,7 @@ export function EnvAIPage() {
 
   const normalizeMessageID = (m: any): string => String(m?.id ?? '').trim();
 
-  const resetActiveTranscriptCursor = (threadId: string) => {
-    const tid = String(threadId ?? '').trim();
-    activeTranscriptThreadId = tid;
+  const resetActiveTranscriptCursor = (_threadId: string) => {
     activeTranscriptCursor = 0;
     activeTranscriptBaselineLoaded = false;
     activeRealtimeEventSeq = 0;
@@ -3416,29 +3407,6 @@ export function EnvAIPage() {
       sendIntent: 'queue_after_waiting_user',
       sourceFollowupId: String(item.followup_id ?? '').trim(),
     });
-  };
-
-  const cancelRunForThread = async (threadId: string, opts?: { notifyOnError?: boolean }): Promise<boolean> => {
-    const tid = String(threadId ?? '').trim();
-    if (!tid) return false;
-    if (!ensureRWX()) return false;
-
-    const rid = String(ai.runIdForThread(tid) ?? '').trim();
-    if (!rid && !ai.isThreadRunning(tid)) {
-      return true;
-    }
-
-    try {
-      await rpc.ai.cancelRun({ runId: rid || undefined, threadId: rid ? undefined : tid || undefined });
-      ai.bumpThreadsSeq();
-      return true;
-    } catch (e) {
-      if (opts?.notifyOnError !== false) {
-        const msg = e instanceof Error ? e.message : String(e);
-        notify.error('Failed to stop run', msg || 'Request failed.');
-      }
-      return false;
-    }
   };
 
   const stopRun = () => {

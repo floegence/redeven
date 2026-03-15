@@ -110,14 +110,6 @@ function defaultCompareTarget(branches: GitListBranchesResponse | null | undefin
   return names[0] ?? 'main';
 }
 
-function compactBranchContext(branch: GitBranchSummary | null | undefined): string {
-  if (!branch) return '';
-  if (branch.current) return 'Using the current workspace status.';
-  if (branch.worktreePath) return 'Using the linked worktree status.';
-  if (branch.kind === 'remote') return 'Status is unavailable until this branch is checked out locally.';
-  return 'Status is unavailable until this branch is checked out.';
-}
-
 function branchStatusEmptyState(branch: GitBranchSummary | null | undefined): {
   title: string;
   detail: string;
@@ -336,8 +328,8 @@ function HistoryList(props: Pick<
   };
 
   createEffect(() => {
-    repoRootPath();
-    props.selectedBranch?.fullName;
+    void repoRootPath();
+    void props.selectedBranch?.fullName;
     setCommitDetails({});
     setDiffDialogItem(null);
     setDiffDialogOpen(false);

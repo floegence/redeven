@@ -624,7 +624,7 @@ export function EnvCodespacesPage() {
       const items = sortFileItems(entries.map(toFileItem).filter((item) => item.type === "folder"));
       cache.set(p, items);
       setFiles((prev) => withChildren(prev, p, items, scopedRootPath));
-    } catch (e) {
+    } catch {
       // ignore errors for now
     }
   };
@@ -647,7 +647,7 @@ export function EnvCodespacesPage() {
       const items = sortFileItems(entries.map(toFileItem).filter((item) => item.type === "folder"));
       cache.set(p, items);
       setFiles(items);
-    } catch (e) {
+    } catch {
       // ignore errors for now
     }
   };
@@ -678,7 +678,7 @@ export function EnvCodespacesPage() {
       });
       await refetch();
       setCreateDialogOpen(false);
-      notification.success("Codespace created", name ? `Created \"${name}\"` : "Codespace created successfully");
+      notification.success("Codespace created", name ? `Created "${name}"` : "Codespace created successfully");
     } catch (e) {
       notification.error("Failed to create", e instanceof Error ? e.message : String(e));
     } finally {
@@ -692,7 +692,7 @@ export function EnvCodespacesPage() {
     try {
       await fetchGatewayJSON<SpaceStatus>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/start`, { method: "POST" });
       await refetch();
-      notification.success("Started", `Codespace \"${space.name || space.code_space_id}\" is now running`);
+      notification.success("Started", `Codespace "${space.name || space.code_space_id}" is now running`);
     } catch (e) {
       notification.error("Failed to start", e instanceof Error ? e.message : String(e));
     } finally {
@@ -706,7 +706,7 @@ export function EnvCodespacesPage() {
     try {
       await fetchGatewayJSON<void>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/stop`, { method: "POST" });
       await refetch();
-      notification.success("Stopped", `Codespace \"${space.name || space.code_space_id}\" has been stopped`);
+      notification.success("Stopped", `Codespace "${space.name || space.code_space_id}" has been stopped`);
     } catch (e) {
       notification.error("Failed to stop", e instanceof Error ? e.message : String(e));
     } finally {
@@ -724,7 +724,7 @@ export function EnvCodespacesPage() {
       await refetch();
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
-      notification.success("Deleted", `Codespace \"${target.name || target.code_space_id}\" has been deleted`);
+      notification.success("Deleted", `Codespace "${target.name || target.code_space_id}" has been deleted`);
     } catch (e) {
       notification.error("Failed to delete", e instanceof Error ? e.message : String(e));
     } finally {

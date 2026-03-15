@@ -43,9 +43,9 @@ export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchView
   });
 
   createEffect(() => {
-    props.item?.path;
-    props.item?.oldPath;
-    props.item?.newPath;
+    void props.item?.path;
+    void props.item?.oldPath;
+    void props.item?.newPath;
     setPatchExpanded(false);
     setCopied(false);
   });
