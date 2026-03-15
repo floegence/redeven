@@ -2,6 +2,17 @@ package ai
 
 import "testing"
 
+func testAskUserSignal(question string) askUserSignal {
+	return askUserSignal{
+		Questions: []RequestUserInputQuestion{{
+			ID:       "question_1",
+			Header:   question,
+			Question: question,
+			IsOther:  true,
+		}},
+	}
+}
+
 func TestEvaluateAskUserGate(t *testing.T) {
 	t.Parallel()
 
@@ -9,84 +20,74 @@ func TestEvaluateAskUserGate(t *testing.T) {
 		t.Fatalf("empty question => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate(askUserSignal{
-		Question: "Should I proceed?",
-	}, runtimeState{}, TaskComplexitySimple); pass || reason != "missing_reason_code" {
+	if pass, reason := evaluateAskUserGate(testAskUserSignal("Should I proceed?"), runtimeState{}, TaskComplexitySimple); pass || reason != "missing_reason_code" {
 		t.Fatalf("missing reason_code => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate(askUserSignal{
-		Question:   "Should I proceed?",
-		ReasonCode: AskUserReasonUserDecisionRequired,
-	}, runtimeState{}, TaskComplexitySimple); pass || reason != "missing_required_from_user" {
+	signal := testAskUserSignal("Should I proceed?")
+	signal.ReasonCode = AskUserReasonUserDecisionRequired
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexitySimple); pass || reason != "missing_required_from_user" {
 		t.Fatalf("missing required_from_user => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate(askUserSignal{
-		Question:         "I need a permission decision.",
-		ReasonCode:       AskUserReasonPermissionBlocked,
-		RequiredFromUser: []string{"Approve elevated execution."},
-	}, runtimeState{}, TaskComplexitySimple); pass || reason != "missing_evidence_refs" {
+	signal = testAskUserSignal("I need a permission decision.")
+	signal.ReasonCode = AskUserReasonPermissionBlocked
+	signal.RequiredFromUser = []string{"Approve elevated execution."}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexitySimple); pass || reason != "missing_evidence_refs" {
 		t.Fatalf("missing evidence refs => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate(askUserSignal{
-		Question:         "I need a permission decision.",
-		ReasonCode:       AskUserReasonPermissionBlocked,
-		RequiredFromUser: []string{"Approve elevated execution."},
-		EvidenceRefs:     []string{"tool_missing"},
-	}, runtimeState{ToolCallLedger: map[string]string{"tool_1": "failed"}}, TaskComplexitySimple); pass || reason != "unresolved_evidence_refs" {
+	signal = testAskUserSignal("I need a permission decision.")
+	signal.ReasonCode = AskUserReasonPermissionBlocked
+	signal.RequiredFromUser = []string{"Approve elevated execution."}
+	signal.EvidenceRefs = []string{"tool_missing"}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{ToolCallLedger: map[string]string{"tool_1": "failed"}}, TaskComplexitySimple); pass || reason != "unresolved_evidence_refs" {
 		t.Fatalf("unresolved evidence refs => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate(askUserSignal{
-		Question:         "I need a permission decision.",
-		ReasonCode:       AskUserReasonPermissionBlocked,
-		RequiredFromUser: []string{"Approve elevated execution."},
-		EvidenceRefs:     []string{"tool_1"},
-	}, runtimeState{ToolCallLedger: map[string]string{"tool_1": "completed"}}, TaskComplexitySimple); pass || reason != "permission_reason_without_blocked_evidence" {
+	signal = testAskUserSignal("I need a permission decision.")
+	signal.ReasonCode = AskUserReasonPermissionBlocked
+	signal.RequiredFromUser = []string{"Approve elevated execution."}
+	signal.EvidenceRefs = []string{"tool_1"}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{ToolCallLedger: map[string]string{"tool_1": "completed"}}, TaskComplexitySimple); pass || reason != "permission_reason_without_blocked_evidence" {
 		t.Fatalf("permission reason without blocked evidence => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate(askUserSignal{
-		Question:         "I need permission to continue with a privileged command.",
-		ReasonCode:       AskUserReasonPermissionBlocked,
-		RequiredFromUser: []string{"Approve elevated execution."},
-		EvidenceRefs:     []string{"tool:tool_perm"},
-	}, runtimeState{
+	signal = testAskUserSignal("I need permission to continue with a privileged command.")
+	signal.ReasonCode = AskUserReasonPermissionBlocked
+	signal.RequiredFromUser = []string{"Approve elevated execution."}
+	signal.EvidenceRefs = []string{"tool:tool_perm"}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{
 		ToolCallLedger: map[string]string{"tool_perm": "failed"},
 	}, TaskComplexityStandard); !pass || reason != "ok" {
 		t.Fatalf("valid signal => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate(askUserSignal{
-		Question:         "I need your decision on deployment order.",
-		ReasonCode:       AskUserReasonUserDecisionRequired,
-		RequiredFromUser: []string{"Pick canary-first or full rollout."},
-	}, runtimeState{
+	signal = testAskUserSignal("I need your decision on deployment order.")
+	signal.ReasonCode = AskUserReasonUserDecisionRequired
+	signal.RequiredFromUser = []string{"Pick canary-first or full rollout."}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{
 		TodoPolicy:       TodoPolicyRequired,
 		MinimumTodoItems: 3,
 	}, TaskComplexityStandard); pass || reason != todoRequirementMissingPolicyRequired {
 		t.Fatalf("required todo policy without snapshot => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate(askUserSignal{
-		Question:         "I need your decision on deployment order.",
-		ReasonCode:       AskUserReasonUserDecisionRequired,
-		RequiredFromUser: []string{"Pick canary-first or full rollout."},
-	}, runtimeState{
+	signal = testAskUserSignal("I need your decision on deployment order.")
+	signal.ReasonCode = AskUserReasonUserDecisionRequired
+	signal.RequiredFromUser = []string{"Pick canary-first or full rollout."}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{
 		TodoTrackingEnabled: true,
 		TodoOpenCount:       2,
 	}, TaskComplexityStandard); pass || reason != "pending_todos_without_blocker" {
 		t.Fatalf("pending todos without blocker => pass=%v reason=%q", pass, reason)
 	}
 
-	if pass, reason := evaluateAskUserGate(askUserSignal{
-		Question:         "Need approval for a privileged command.",
-		ReasonCode:       AskUserReasonPermissionBlocked,
-		RequiredFromUser: []string{"Approve elevated execution."},
-		EvidenceRefs:     []string{"tool_1"},
-	}, runtimeState{
+	signal = testAskUserSignal("Need approval for a privileged command.")
+	signal.ReasonCode = AskUserReasonPermissionBlocked
+	signal.RequiredFromUser = []string{"Approve elevated execution."}
+	signal.EvidenceRefs = []string{"tool_1"}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{
 		ToolCallLedger:      map[string]string{"tool_1": "failed"},
 		TodoTrackingEnabled: true,
 		TodoOpenCount:       1,

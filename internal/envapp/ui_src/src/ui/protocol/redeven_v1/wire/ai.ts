@@ -4,27 +4,47 @@ export type wire_ai_attachment = {
   url: string;
 };
 
-export type wire_ai_waiting_prompt = {
-  prompt_id: string;
-  message_id: string;
-  tool_id: string;
-  choices?: wire_ai_waiting_prompt_choice[];
-};
-
-export type wire_ai_waiting_prompt_action = {
+export type wire_ai_request_user_input_action = {
   type: string;
   mode?: string;
 };
 
-export type wire_ai_waiting_prompt_choice = {
-  choice_id: string;
+export type wire_ai_request_user_input_option = {
+  option_id: string;
   label: string;
-  actions?: wire_ai_waiting_prompt_action[];
+  description?: string;
+  actions?: wire_ai_request_user_input_action[];
 };
 
-export type wire_ai_waiting_prompt_response = {
+export type wire_ai_request_user_input_question = {
+  id: string;
+  header: string;
+  question: string;
+  is_other: boolean;
+  is_secret: boolean;
+  options?: wire_ai_request_user_input_option[];
+};
+
+export type wire_ai_waiting_prompt = {
   prompt_id: string;
-  choice_id?: string;
+  message_id: string;
+  tool_id: string;
+  reason_code?: string;
+  required_from_user?: string[];
+  evidence_refs?: string[];
+  public_summary?: string;
+  contains_secret?: boolean;
+  questions?: wire_ai_request_user_input_question[];
+};
+
+export type wire_ai_request_user_input_answer = {
+  selected_option_id?: string;
+  answers?: string[];
+};
+
+export type wire_ai_request_user_input_response = {
+  prompt_id: string;
+  answers: Record<string, wire_ai_request_user_input_answer>;
 };
 
 export type wire_ai_send_user_turn_req = {
@@ -40,7 +60,6 @@ export type wire_ai_send_user_turn_req = {
     mode?: string;
   };
   expected_run_id?: string;
-  waiting_response?: wire_ai_waiting_prompt_response;
   queue_after_waiting_user?: boolean;
   source_followup_id?: string;
 };
@@ -52,7 +71,30 @@ export type wire_ai_send_user_turn_resp = {
   queue_position?: number;
   consumed_waiting_prompt_id?: string;
   applied_execution_mode?: string;
-  applied_waiting_choice_id?: string;
+};
+
+export type wire_ai_submit_structured_prompt_response_req = {
+  thread_id: string;
+  model?: string;
+  response: wire_ai_request_user_input_response;
+  input: {
+    message_id?: string;
+    text: string;
+    attachments: wire_ai_attachment[];
+  };
+  options: {
+    max_steps: number;
+    mode?: string;
+  };
+  expected_run_id?: string;
+  source_followup_id?: string;
+};
+
+export type wire_ai_submit_structured_prompt_response_resp = {
+  run_id: string;
+  kind: string;
+  consumed_waiting_prompt_id?: string;
+  applied_execution_mode?: string;
 };
 
 export type wire_ai_cancel_run_req = {

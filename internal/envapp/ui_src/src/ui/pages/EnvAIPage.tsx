@@ -3928,15 +3928,6 @@ export function EnvAIPage() {
     const activeTid = String(ai.activeThreadId() ?? '').trim();
     const activeWaitingPrompt = tid === activeTid ? ai.activeThreadWaitingPrompt() : null;
     const waitingPromptId = String(activeWaitingPrompt?.prompt_id ?? '').trim();
-    const waitingChoiceId = waitingPromptId ? ai.getPendingWaitingChoice(tid, waitingPromptId) : null;
-    const waitingResponse = sendIntent === 'queue_after_waiting_user'
-      ? undefined
-      : waitingPromptId
-        ? {
-            promptId: waitingPromptId,
-            choiceId: waitingChoiceId || undefined,
-          }
-        : undefined;
 
     ai.markThreadPendingRun(tid);
 
@@ -3957,7 +3948,6 @@ export function EnvAIPage() {
           attachments: attIn,
         },
         options: { maxSteps: 10, mode: executionMode() },
-        waitingResponse,
         queueAfterWaitingUser: sendIntent === 'queue_after_waiting_user' ? true : undefined,
         sourceFollowupId: sourceFollowupId || undefined,
       } as const;
@@ -3980,6 +3970,10 @@ export function EnvAIPage() {
       const consumedWaitingPromptId = String(resp.consumedWaitingPromptId ?? '').trim();
       if (consumedWaitingPromptId) {
         ai.consumeWaitingPrompt(tid, consumedWaitingPromptId);
+      } else if (waitingPromptId && sendIntent !== 'queue_after_waiting_user') {
+        ai.clearThreadPendingRun(tid);
+        notify.error('Input required', 'Resolve the requested input before sending a new message.');
+        return;
       }
       const appliedExecutionModeRaw = String(resp.appliedExecutionMode ?? '').trim();
       if (appliedExecutionModeRaw) {

@@ -3,16 +3,17 @@ package ai
 import "strings"
 
 type runCapabilityContract struct {
-	AllowUserInteraction  bool     `json:"allow_user_interaction"`
-	AllowToolApprovalWait bool     `json:"allow_tool_approval_wait"`
-	AllowedSignals        []string `json:"allowed_signals"`
-	AllowedTools          []string `json:"allowed_tools"`
-	PromptProfile         string   `json:"prompt_profile"`
+	AllowUserInteraction           bool     `json:"allow_user_interaction"`
+	AllowToolApprovalWait          bool     `json:"allow_tool_approval_wait"`
+	AllowedSignals                 []string `json:"allowed_signals"`
+	AllowedTools                   []string `json:"allowed_tools"`
+	PromptProfile                  string   `json:"prompt_profile"`
+	SupportsAskUserQuestionBatches bool     `json:"supports_ask_user_question_batches"`
 
 	allowedSignalSet map[string]struct{}
 }
 
-func resolveRunCapabilityContract(r *run, tools []ToolDef) runCapabilityContract {
+func resolveRunCapabilityContract(r *run, tools []ToolDef, supportsAskUserQuestionBatches bool) runCapabilityContract {
 	allowUserInteraction := true
 	if r != nil && r.noUserInteraction {
 		allowUserInteraction = false
@@ -38,12 +39,13 @@ func resolveRunCapabilityContract(r *run, tools []ToolDef) runCapabilityContract
 	}
 
 	contract := runCapabilityContract{
-		AllowUserInteraction:  allowUserInteraction,
-		AllowToolApprovalWait: allowUserInteraction,
-		AllowedSignals:        append([]string(nil), allowedSignals...),
-		AllowedTools:          append([]string(nil), allowedTools...),
-		PromptProfile:         runPromptProfileMainInteractive,
-		allowedSignalSet:      make(map[string]struct{}, len(allowedSignals)),
+		AllowUserInteraction:           allowUserInteraction,
+		AllowToolApprovalWait:          allowUserInteraction,
+		AllowedSignals:                 append([]string(nil), allowedSignals...),
+		AllowedTools:                   append([]string(nil), allowedTools...),
+		PromptProfile:                  runPromptProfileMainInteractive,
+		SupportsAskUserQuestionBatches: supportsAskUserQuestionBatches,
+		allowedSignalSet:               make(map[string]struct{}, len(allowedSignals)),
 	}
 	if !allowUserInteraction {
 		contract.PromptProfile = runPromptProfileSubagentAutonomous
@@ -72,10 +74,11 @@ func (c runCapabilityContract) allowsSignal(name string) bool {
 
 func (c runCapabilityContract) eventPayload() map[string]any {
 	return map[string]any{
-		"allow_user_interaction":   c.AllowUserInteraction,
-		"allow_tool_approval_wait": c.AllowToolApprovalWait,
-		"allowed_signals":          append([]string(nil), c.AllowedSignals...),
-		"allowed_tools":            append([]string(nil), c.AllowedTools...),
-		"prompt_profile":           strings.TrimSpace(c.PromptProfile),
+		"allow_user_interaction":             c.AllowUserInteraction,
+		"allow_tool_approval_wait":           c.AllowToolApprovalWait,
+		"allowed_signals":                    append([]string(nil), c.AllowedSignals...),
+		"allowed_tools":                      append([]string(nil), c.AllowedTools...),
+		"prompt_profile":                     strings.TrimSpace(c.PromptProfile),
+		"supports_ask_user_question_batches": c.SupportsAskUserQuestionBatches,
 	}
 }

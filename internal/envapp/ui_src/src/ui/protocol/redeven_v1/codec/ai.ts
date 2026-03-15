@@ -13,10 +13,15 @@ import type {
   AISetToolCollapsedResponse,
   AISendUserTurnRequest,
   AISendUserTurnResponse,
+  AISubmitStructuredPromptResponseRequest,
+  AISubmitStructuredPromptResponseResponse,
   AIStopThreadRequest,
   AIStopThreadResponse,
-  AIWaitingPromptAction,
-  AIWaitingPromptChoice,
+  AIRequestUserInputAction,
+  AIRequestUserInputAnswer,
+  AIRequestUserInputOption,
+  AIRequestUserInputPrompt,
+  AIRequestUserInputQuestion,
   AISubscribeSummaryResponse,
   AISubscribeThreadRequest,
   AISubscribeThreadResponse,
@@ -26,7 +31,6 @@ import type {
   AIToolApprovalResponse,
   AITranscriptMessageItem,
   AIThreadRunStatus,
-  AIWaitingPrompt,
 } from '../sdk/ai';
 import type {
   wire_ai_active_run,
@@ -43,6 +47,8 @@ import type {
   wire_ai_set_tool_collapsed_resp,
   wire_ai_send_user_turn_req,
   wire_ai_send_user_turn_resp,
+  wire_ai_submit_structured_prompt_response_req,
+  wire_ai_submit_structured_prompt_response_resp,
   wire_ai_stop_thread_req,
   wire_ai_stop_thread_resp,
   wire_ai_subscribe_summary_resp,
@@ -53,8 +59,10 @@ import type {
   wire_ai_transcript_message_item,
   wire_ai_tool_approval_req,
   wire_ai_tool_approval_resp,
-  wire_ai_waiting_prompt_action,
-  wire_ai_waiting_prompt_choice,
+  wire_ai_request_user_input_action,
+  wire_ai_request_user_input_answer,
+  wire_ai_request_user_input_option,
+  wire_ai_request_user_input_question,
   wire_ai_waiting_prompt,
 } from '../wire/ai';
 
@@ -107,7 +115,7 @@ function fromWireAIFollowupItem(raw: wire_ai_followup_item): AIFollowupItem | nu
   };
 }
 
-function fromWireAIWaitingPromptAction(raw: wire_ai_waiting_prompt_action): AIWaitingPromptAction | null {
+function fromWireAIRequestUserInputAction(raw: wire_ai_request_user_input_action): AIRequestUserInputAction | null {
   const type = String(raw?.type ?? '').trim().toLowerCase();
   if (!type) return null;
   const mode = normalizeExecutionMode(raw?.mode);
@@ -117,35 +125,72 @@ function fromWireAIWaitingPromptAction(raw: wire_ai_waiting_prompt_action): AIWa
   };
 }
 
-function fromWireAIWaitingPromptChoice(raw: wire_ai_waiting_prompt_choice): AIWaitingPromptChoice | null {
-  const choiceId = String(raw?.choice_id ?? '').trim();
+function fromWireAIRequestUserInputOption(raw: wire_ai_request_user_input_option): AIRequestUserInputOption | null {
+  const optionId = String(raw?.option_id ?? '').trim();
   const label = String(raw?.label ?? '').trim();
-  if (!choiceId || !label) return null;
+  if (!optionId || !label) return null;
   const actions = Array.isArray(raw?.actions)
-    ? raw.actions.map(fromWireAIWaitingPromptAction).filter(Boolean) as AIWaitingPromptAction[]
+    ? raw.actions.map(fromWireAIRequestUserInputAction).filter(Boolean) as AIRequestUserInputAction[]
     : [];
   return {
-    choiceId,
+    optionId,
     label,
+    description: String(raw?.description ?? '').trim() || undefined,
     actions: actions.length > 0 ? actions : undefined,
   };
 }
 
-function fromWireAIWaitingPrompt(raw: wire_ai_waiting_prompt | undefined): AIWaitingPrompt | undefined {
+function fromWireAIRequestUserInputQuestion(raw: wire_ai_request_user_input_question): AIRequestUserInputQuestion | null {
+  const id = String(raw?.id ?? '').trim();
+  const header = String(raw?.header ?? '').trim();
+  const question = String(raw?.question ?? '').trim();
+  if (!id || !header || !question) return null;
+  const options = Array.isArray(raw?.options)
+    ? raw.options.map(fromWireAIRequestUserInputOption).filter(Boolean) as AIRequestUserInputOption[]
+    : [];
+  return {
+    id,
+    header,
+    question,
+    isOther: Boolean(raw?.is_other),
+    isSecret: Boolean(raw?.is_secret),
+    options: options.length > 0 ? options : undefined,
+  };
+}
+
+function fromWireAIWaitingPrompt(raw: wire_ai_waiting_prompt | undefined): AIRequestUserInputPrompt | undefined {
   const promptId = String(raw?.prompt_id ?? '').trim();
   const messageId = String(raw?.message_id ?? '').trim();
   const toolId = String(raw?.tool_id ?? '').trim();
   if (!promptId || !messageId || !toolId) {
     return undefined;
   }
-  const choices = Array.isArray(raw?.choices)
-    ? raw.choices.map(fromWireAIWaitingPromptChoice).filter(Boolean) as AIWaitingPromptChoice[]
+  const questions = Array.isArray(raw?.questions)
+    ? raw.questions.map(fromWireAIRequestUserInputQuestion).filter(Boolean) as AIRequestUserInputQuestion[]
     : [];
   return {
     promptId,
     messageId,
     toolId,
-    choices: choices.length > 0 ? choices : undefined,
+    reasonCode: String(raw?.reason_code ?? '').trim() || undefined,
+    requiredFromUser: Array.isArray(raw?.required_from_user)
+      ? raw.required_from_user.map((item) => String(item ?? '').trim()).filter(Boolean)
+      : undefined,
+    evidenceRefs: Array.isArray(raw?.evidence_refs)
+      ? raw.evidence_refs.map((item) => String(item ?? '').trim()).filter(Boolean)
+      : undefined,
+    publicSummary: String(raw?.public_summary ?? '').trim() || undefined,
+    containsSecret: Boolean(raw?.contains_secret),
+    questions: questions.length > 0 ? questions : undefined,
+  };
+}
+
+function toWireAIRequestUserInputAnswer(answer: AIRequestUserInputAnswer): wire_ai_request_user_input_answer {
+  return {
+    selected_option_id: String(answer?.selectedOptionId ?? '').trim() || undefined,
+    answers: Array.isArray(answer?.answers)
+      ? answer.answers.map((item) => String(item ?? '').trim()).filter(Boolean)
+      : [],
   };
 }
 
@@ -171,12 +216,6 @@ export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai
       mode: req.options?.mode ? String(req.options.mode).trim() : undefined,
     },
     expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
-    waiting_response: req.waitingResponse?.promptId?.trim()
-      ? {
-          prompt_id: String(req.waitingResponse.promptId).trim(),
-          choice_id: req.waitingResponse.choiceId?.trim() ? String(req.waitingResponse.choiceId).trim() : undefined,
-        }
-      : undefined,
     queue_after_waiting_user: Boolean(req.queueAfterWaitingUser),
     source_followup_id: req.sourceFollowupId?.trim() ? String(req.sourceFollowupId).trim() : undefined,
   };
@@ -191,7 +230,51 @@ export function fromWireAISendUserTurnResponse(resp: wire_ai_send_user_turn_resp
     consumedWaitingPromptId:
       String(resp?.consumed_waiting_prompt_id ?? '').trim() || undefined,
     appliedExecutionMode: normalizeExecutionMode(resp?.applied_execution_mode),
-    appliedWaitingChoiceId: String(resp?.applied_waiting_choice_id ?? '').trim() || undefined,
+  };
+}
+
+export function toWireAISubmitStructuredPromptResponseRequest(req: AISubmitStructuredPromptResponseRequest): wire_ai_submit_structured_prompt_response_req {
+  const answers: Record<string, wire_ai_request_user_input_answer> = {};
+  for (const [questionId, answer] of Object.entries(req.response?.answers ?? {})) {
+    const qid = String(questionId ?? '').trim();
+    if (!qid) continue;
+    answers[qid] = toWireAIRequestUserInputAnswer(answer);
+  }
+  return {
+    thread_id: String(req.threadId ?? '').trim(),
+    model: req.model?.trim() ? req.model.trim() : undefined,
+    response: {
+      prompt_id: String(req.response?.promptId ?? '').trim(),
+      answers,
+    },
+    input: {
+      message_id: req.input?.messageId?.trim() ? String(req.input.messageId).trim() : undefined,
+      text: String(req.input?.text ?? ''),
+      attachments: Array.isArray(req.input?.attachments)
+        ? req.input.attachments
+            .map((it) => ({
+              name: String(it?.name ?? ''),
+              mime_type: String(it?.mimeType ?? ''),
+              url: String(it?.url ?? ''),
+            }))
+            .filter((it) => !!it.url.trim())
+        : [],
+    },
+    options: {
+      max_steps: Number(req.options?.maxSteps ?? 0),
+      mode: req.options?.mode ? String(req.options.mode).trim() : undefined,
+    },
+    expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
+    source_followup_id: req.sourceFollowupId?.trim() ? String(req.sourceFollowupId).trim() : undefined,
+  };
+}
+
+export function fromWireAISubmitStructuredPromptResponseResponse(resp: wire_ai_submit_structured_prompt_response_resp): AISubmitStructuredPromptResponseResponse {
+  return {
+    runId: String(resp?.run_id ?? '').trim(),
+    kind: String(resp?.kind ?? '').trim(),
+    consumedWaitingPromptId: String(resp?.consumed_waiting_prompt_id ?? '').trim() || undefined,
+    appliedExecutionMode: normalizeExecutionMode(resp?.applied_execution_mode),
   };
 }
 

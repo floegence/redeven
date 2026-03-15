@@ -369,7 +369,7 @@ func classifyStreamKind(streamEvent any) RealtimeStreamKind {
 func (s *Service) broadcastThreadState(endpointID string, threadID string, runID string, runStatus string, runErr string) {
 	runStatus = strings.TrimSpace(runStatus)
 	runErr = strings.TrimSpace(runErr)
-	var waitingPrompt *WaitingPrompt
+	var waitingPrompt *RequestUserInputPrompt
 	if s != nil {
 		s.mu.Lock()
 		db := s.threadsDB
@@ -383,7 +383,7 @@ func (s *Service) broadcastThreadState(endpointID string, threadID string, runID
 			th, err := db.GetThread(ctx, strings.TrimSpace(endpointID), strings.TrimSpace(threadID))
 			cancel()
 			if err == nil && th != nil {
-				waitingPrompt = waitingPromptFromThreadRecord(th, runStatus)
+				waitingPrompt = requestUserInputPromptFromThreadRecord(th, runStatus)
 			}
 		}
 	}
@@ -527,7 +527,7 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 		ActiveRunID:         activeRunID,
 		ExecutionMode:       executionMode,
 		QueuedTurnCount:     queuedTurnCount,
-		WaitingPrompt:       waitingPromptFromThreadRecord(th, runStatus),
+		WaitingPrompt:       requestUserInputPromptFromThreadRecord(th, runStatus),
 	}
 	s.broadcastRealtimeEvent(ev)
 }

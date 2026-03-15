@@ -749,7 +749,7 @@ type preparedRun struct {
 	db                   *threadstore.Store
 	messageID            string
 	r                    *run
-	updateThreadRunState func(status string, runErr string, waitingPrompt *WaitingPrompt)
+	updateThreadRunState func(status string, runErr string, waitingPrompt *RequestUserInputPrompt)
 }
 
 func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter) error {
@@ -906,9 +906,6 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 					string(RunStateFinalizing),
 					"",
 					"",
-					"",
-					"",
-					"",
 					metaRef.UserPublicID,
 					metaRef.UserEmail,
 				)
@@ -924,7 +921,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	s.runs[runID] = r
 	s.mu.Unlock()
 
-	updateThreadRunState := func(status string, runErr string, waitingPrompt *WaitingPrompt) {
+	updateThreadRunState := func(status string, runErr string, waitingPrompt *RequestUserInputPrompt) {
 		if db == nil {
 			return
 		}
@@ -932,16 +929,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		if status == "" {
 			status = "failed"
 		}
-		waitingPromptID := ""
-		waitingMessageID := ""
-		waitingToolID := ""
-		waitingChoicesJSON := ""
-		if waitingPrompt != nil {
-			waitingPromptID = strings.TrimSpace(waitingPrompt.PromptID)
-			waitingMessageID = strings.TrimSpace(waitingPrompt.MessageID)
-			waitingToolID = strings.TrimSpace(waitingPrompt.ToolID)
-			waitingChoicesJSON = marshalWaitingPromptChoices(waitingPrompt.Choices)
-		}
+		waitingUserInputJSON := marshalRequestUserInputPrompt(waitingPrompt)
 		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
 		defer cancel()
 		_ = db.UpdateThreadRunState(
@@ -950,10 +938,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 			threadID,
 			status,
 			runErr,
-			waitingPromptID,
-			waitingMessageID,
-			waitingToolID,
-			waitingChoicesJSON,
+			waitingUserInputJSON,
 			metaRef.UserPublicID,
 			metaRef.UserEmail,
 		)
@@ -1076,7 +1061,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			return
 		}
 		runStatus, runStatusErr := deriveThreadRunState(r.getEndReason(), r.getFinalizationReason(), retErr)
-		var waitingPrompt *WaitingPrompt
+		var waitingPrompt *RequestUserInputPrompt
 		if NormalizeRunState(runStatus) == RunStateWaitingUser {
 			waitingPrompt = r.snapshotWaitingPrompt()
 		}
@@ -1090,8 +1075,8 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		}
 	}()
 
+	effectiveCurrentInput := deriveEffectiveCurrentUserInput(req.Input)
 	pctx, cancelPersist := context.WithTimeout(context.Background(), persistTO)
-	rawUserInputText := strings.TrimSpace(req.Input.Text)
 	existingOpenGoal := ""
 	if s.contextRepo != nil && s.contextRepo.Ready() {
 		goal, goalErr := s.contextRepo.GetOpenGoal(pctx, endpointID, threadID)
@@ -1132,8 +1117,8 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		"thread_locked":   prepared.threadModelLocked,
 	})
 
-	policyDecision := classifyRunPolicy(rawUserInputText, req.Input.Attachments, existingOpenGoal, func() (runPolicyDecision, error) {
-		decision, classifyErr := s.classifyRunPolicyByModel(ctx, resolvedModel, rawUserInputText, existingOpenGoal)
+	policyDecision := classifyRunPolicy(effectiveCurrentInput.PublicText, req.Input.Attachments, existingOpenGoal, func() (runPolicyDecision, error) {
+		decision, classifyErr := s.classifyRunPolicyByModel(ctx, resolvedModel, effectiveCurrentInput.PublicText, existingOpenGoal)
 		if classifyErr != nil && r.log != nil {
 			r.log.Warn("model policy classification failed",
 				"thread_id", threadID,
@@ -1183,11 +1168,11 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	// open_goal is only updated by task intent explicit user input.
 	// social intent keeps existing open_goal unchanged.
 	openGoal := strings.TrimSpace(existingOpenGoal)
-	if req.Options.Intent == RunIntentTask && rawUserInputText != "" {
+	if req.Options.Intent == RunIntentTask && effectiveCurrentInput.PublicText != "" {
 		if existingOpenGoal != "" && strings.TrimSpace(policyDecision.ObjectiveMode) == RunObjectiveModeContinue {
 			openGoal = strings.TrimSpace(existingOpenGoal)
 		} else {
-			openGoal = rawUserInputText
+			openGoal = effectiveCurrentInput.PublicText
 		}
 	}
 	effectiveInput := req.Input
@@ -1304,7 +1289,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			ThreadID:       threadID,
 			RunID:          runID,
 			Objective:      strings.TrimSpace(openGoal),
-			UserInput:      rawUserInputText,
+			UserInput:      effectiveCurrentInput.PublicText,
 			Attachments:    attachments,
 			Capability:     modelCapability,
 			MaxInputTokens: req.Options.MaxInputTokens,
@@ -1317,7 +1302,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			promptPack = pack
 		}
 	}
-	historyForRun := promptPackToHistory(promptPack, rawUserInputText)
+	historyForRun := promptPackToHistory(promptPack, effectiveCurrentInput.PublicText)
 
 	runReq := RunRequest{
 		Model:           model,
@@ -1580,21 +1565,47 @@ func promptPackToHistory(pack contextmodel.PromptPack, currentUserInput string) 
 	return history
 }
 
+type effectiveCurrentUserInput struct {
+	MessageID          string
+	PublicText         string
+	StructuredResponse *RequestUserInputResponseRecord
+}
+
+func deriveEffectiveCurrentUserInput(input RunInput) effectiveCurrentUserInput {
+	out := effectiveCurrentUserInput{
+		MessageID:  strings.TrimSpace(input.MessageID),
+		PublicText: strings.TrimSpace(input.Text),
+	}
+	if input.StructuredResponse != nil {
+		record := *input.StructuredResponse
+		out.StructuredResponse = &record
+		summary := strings.TrimSpace(record.PublicSummary)
+		switch {
+		case summary != "" && out.PublicText != "":
+			out.PublicText = summary + "\n\n" + out.PublicText
+		case summary != "":
+			out.PublicText = summary
+		}
+	}
+	return out
+}
+
 func defaultModelCapability(providerID string, modelName string) contextmodel.ModelCapability {
 	providerID = strings.TrimSpace(providerID)
 	modelName = strings.TrimSpace(modelName)
 	cap := contextmodel.ModelCapability{
-		ProviderID:               providerID,
-		ModelName:                modelName,
-		SupportsTools:            true,
-		SupportsParallelTools:    false,
-		SupportsStrictJSONSchema: true,
-		SupportsImageInput:       true,
-		SupportsFileInput:        true,
-		SupportsReasoningTokens:  true,
-		MaxContextTokens:         128000,
-		MaxOutputTokens:          4096,
-		PreferredToolSchemaMode:  "json_schema",
+		ProviderID:                     providerID,
+		ModelName:                      modelName,
+		SupportsTools:                  true,
+		SupportsParallelTools:          false,
+		SupportsStrictJSONSchema:       true,
+		SupportsImageInput:             true,
+		SupportsFileInput:              true,
+		SupportsReasoningTokens:        true,
+		SupportsAskUserQuestionBatches: true,
+		MaxContextTokens:               128000,
+		MaxOutputTokens:                4096,
+		PreferredToolSchemaMode:        "json_schema",
 	}
 	if strings.Contains(strings.ToLower(modelName), "mini") {
 		cap.MaxContextTokens = 64000
@@ -1722,7 +1733,7 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 
 	if db != nil && threadID != "" {
 		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", "", "", "", meta.UserPublicID, meta.UserEmail)
+		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", meta.UserPublicID, meta.UserEmail)
 		cancel()
 		s.broadcastThreadState(endpointID, threadID, runID, "canceled", "")
 		s.broadcastThreadSummary(endpointID, threadID)

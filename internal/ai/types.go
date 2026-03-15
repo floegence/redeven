@@ -21,27 +21,90 @@ type Model struct {
 	Label string `json:"label,omitempty"`
 }
 
-type WaitingPrompt struct {
-	PromptID  string                `json:"prompt_id"`
-	MessageID string                `json:"message_id"`
-	ToolID    string                `json:"tool_id"`
-	Choices   []WaitingPromptChoice `json:"choices,omitempty"`
+type RequestUserInputPrompt struct {
+	PromptID          string                     `json:"prompt_id"`
+	MessageID         string                     `json:"message_id"`
+	ToolID            string                     `json:"tool_id"`
+	ReasonCode        string                     `json:"reason_code,omitempty"`
+	RequiredFromUser  []string                   `json:"required_from_user,omitempty"`
+	EvidenceRefs      []string                   `json:"evidence_refs,omitempty"`
+	Questions         []RequestUserInputQuestion `json:"questions,omitempty"`
+	PublicSummary     string                     `json:"public_summary,omitempty"`
+	ContainsSecret    bool                       `json:"contains_secret,omitempty"`
 }
 
-type WaitingPromptChoice struct {
-	ChoiceID string                `json:"choice_id"`
-	Label    string                `json:"label"`
-	Actions  []WaitingPromptAction `json:"actions,omitempty"`
+type RequestUserInputQuestion struct {
+	ID       string                   `json:"id"`
+	Header   string                   `json:"header"`
+	Question string                   `json:"question"`
+	IsOther  bool                     `json:"is_other"`
+	IsSecret bool                     `json:"is_secret"`
+	Options  []RequestUserInputOption `json:"options,omitempty"`
 }
 
-type WaitingPromptAction struct {
+type RequestUserInputOption struct {
+	OptionID    string                   `json:"option_id"`
+	Label       string                   `json:"label"`
+	Description string                   `json:"description,omitempty"`
+	Actions     []RequestUserInputAction `json:"actions,omitempty"`
+}
+
+type RequestUserInputAction struct {
 	Type string `json:"type"`
 	Mode string `json:"mode,omitempty"`
 }
 
-type WaitingPromptResponse struct {
-	PromptID string `json:"prompt_id"`
-	ChoiceID string `json:"choice_id,omitempty"`
+type RequestUserInputResponse struct {
+	PromptID string                            `json:"prompt_id"`
+	Answers  map[string]RequestUserInputAnswer `json:"answers"`
+}
+
+type RequestUserInputAnswer struct {
+	SelectedOptionID string   `json:"selected_option_id,omitempty"`
+	Answers          []string `json:"answers,omitempty"`
+}
+
+type RequestUserInputResolvedQuestion struct {
+	QuestionID          string   `json:"question_id"`
+	Header              string   `json:"header,omitempty"`
+	Question            string   `json:"question,omitempty"`
+	SelectedOptionID    string   `json:"selected_option_id,omitempty"`
+	SelectedOptionLabel string   `json:"selected_option_label,omitempty"`
+	Answers             []string `json:"answers,omitempty"`
+	PublicSummary       string   `json:"public_summary,omitempty"`
+	ContainsSecret      bool     `json:"contains_secret,omitempty"`
+}
+
+type RequestUserInputResponseRecord struct {
+	PromptID         string                             `json:"prompt_id"`
+	ToolID           string                             `json:"tool_id,omitempty"`
+	ReasonCode       string                             `json:"reason_code,omitempty"`
+	Responses        []RequestUserInputResolvedQuestion `json:"responses,omitempty"`
+	PublicSummary    string                             `json:"public_summary,omitempty"`
+	ContainsSecret   bool                               `json:"contains_secret,omitempty"`
+	ResponseMessageID string                            `json:"response_message_id,omitempty"`
+}
+
+type RequestUserInputSecretAnswer struct {
+	QuestionID string   `json:"question_id"`
+	Answers    []string `json:"answers,omitempty"`
+}
+
+type SubmitStructuredPromptResponseRequest struct {
+	ThreadID         string                   `json:"thread_id"`
+	Model            string                   `json:"model,omitempty"`
+	Response         RequestUserInputResponse `json:"response"`
+	Input            RunInput                 `json:"input"`
+	Options          RunOptions               `json:"options"`
+	ExpectedRunID    string                   `json:"expected_run_id,omitempty"`
+	SourceFollowupID string                   `json:"source_followup_id,omitempty"`
+}
+
+type SubmitStructuredPromptResponseResponse struct {
+	RunID                   string `json:"run_id"`
+	Kind                    string `json:"kind"`
+	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
+	AppliedExecutionMode    string `json:"applied_execution_mode,omitempty"`
 }
 
 // --- HTTP API types (snake_case, stable) ---
@@ -62,7 +125,7 @@ type ThreadView struct {
 	RunStatus           string         `json:"run_status"`
 	RunUpdatedAtUnixMs  int64          `json:"run_updated_at_unix_ms"`
 	RunError            string         `json:"run_error,omitempty"`
-	WaitingPrompt       *WaitingPrompt `json:"waiting_prompt,omitempty"`
+	WaitingPrompt       *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
 	CreatedAtUnixMs     int64          `json:"created_at_unix_ms"`
 	UpdatedAtUnixMs     int64          `json:"updated_at_unix_ms"`
 	LastMessageAtUnixMs int64          `json:"last_message_at_unix_ms"`
@@ -177,9 +240,11 @@ type RunInput struct {
 	//
 	// When set, the agent will prefer this id over generating a new one so the UI can keep a stable
 	// message id across optimistic rendering, realtime events, and history backfill.
-	MessageID   string            `json:"message_id,omitempty"`
-	Text        string            `json:"text"`
-	Attachments []RunAttachmentIn `json:"attachments"`
+	MessageID           string                        `json:"message_id,omitempty"`
+	Text                string                        `json:"text"`
+	Attachments         []RunAttachmentIn             `json:"attachments"`
+	StructuredResponse  *RequestUserInputResponseRecord `json:"-"`
+	SecretAnswers       []RequestUserInputSecretAnswer  `json:"-"`
 }
 
 type RunAttachmentIn struct {
@@ -433,7 +498,7 @@ type RealtimeEvent struct {
 	StreamEvent   any                    `json:"stream_event,omitempty"`
 	RunStatus     string                 `json:"run_status,omitempty"`
 	RunError      string                 `json:"run_error,omitempty"`
-	WaitingPrompt *WaitingPrompt         `json:"waiting_prompt,omitempty"`
+	WaitingPrompt *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
 
 	// Transcript message events (EventType=transcript_message).
 	MessageRowID int64           `json:"message_row_id,omitempty"`

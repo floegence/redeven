@@ -19,20 +19,22 @@ type RetrieveOptions struct {
 	UserInput  string
 
 	MaxTurns             int
+	MaxStructuredUserInputs int
 	MaxExecutionEvidence int
 	MaxMemoryItems       int
 }
 
 // RetrievalResult is the normalized retrieval output consumed by packer.
 type RetrievalResult struct {
-	RecentDialogue      []model.DialogueTurn
-	ExecutionEvidence   []model.ExecutionEvidence
-	ActiveConstraints   []string
-	PendingTodos        []model.MemoryItem
-	Blockers            []model.MemoryItem
-	LongTermMemory      []model.MemoryItem
-	ThreadSnapshot      string
-	MemoryRecallHitRate float64
+	RecentDialogue        []model.DialogueTurn
+	RecentStructuredUserInputs []model.StructuredUserInput
+	ExecutionEvidence     []model.ExecutionEvidence
+	ActiveConstraints     []string
+	PendingTodos          []model.MemoryItem
+	Blockers              []model.MemoryItem
+	LongTermMemory        []model.MemoryItem
+	ThreadSnapshot        string
+	MemoryRecallHitRate   float64
 }
 
 type Retriever struct {
@@ -58,12 +60,20 @@ func (r *Retriever) Retrieve(ctx context.Context, opts RetrieveOptions) (Retriev
 	if maxExec <= 0 {
 		maxExec = 20
 	}
+	maxStructured := opts.MaxStructuredUserInputs
+	if maxStructured <= 0 {
+		maxStructured = 16
+	}
 	maxMem := opts.MaxMemoryItems
 	if maxMem <= 0 {
 		maxMem = 40
 	}
 
 	turns, err := r.repo.ListRecentDialogueTurns(ctx, opts.EndpointID, opts.ThreadID, maxTurns)
+	if err != nil {
+		return result, err
+	}
+	structuredInputs, err := r.repo.ListRecentStructuredUserInputs(ctx, opts.EndpointID, opts.ThreadID, maxStructured)
 	if err != nil {
 		return result, err
 	}
@@ -125,6 +135,7 @@ func (r *Retriever) Retrieve(ctx context.Context, opts RetrieveOptions) (Retriev
 	}
 
 	result.RecentDialogue = turns
+	result.RecentStructuredUserInputs = structuredInputs
 	result.ExecutionEvidence = execEvidence
 	result.ActiveConstraints = dedupeStrings(constraints)
 	result.PendingTodos = pending

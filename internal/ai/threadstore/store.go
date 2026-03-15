@@ -62,21 +62,18 @@ func (s *Store) Close() error {
 }
 
 type Thread struct {
-	ThreadID           string `json:"thread_id"`
-	EndpointID         string `json:"endpoint_id"`
-	NamespacePublicID  string `json:"namespace_public_id"`
-	ModelID            string `json:"model_id"`
-	ModelLocked        bool   `json:"model_locked"`
-	ExecutionMode      string `json:"execution_mode"`
-	WorkingDir         string `json:"working_dir"`
-	Title              string `json:"title"`
-	RunStatus          string `json:"run_status"`
-	RunUpdatedAtUnixMs int64  `json:"run_updated_at_unix_ms"`
-	RunError           string `json:"run_error"`
-	WaitingPromptID    string `json:"waiting_prompt_id"`
-	WaitingMessageID   string `json:"waiting_message_id"`
-	WaitingToolID      string `json:"waiting_tool_id"`
-	WaitingChoicesJSON string `json:"waiting_choices_json"`
+	ThreadID             string `json:"thread_id"`
+	EndpointID           string `json:"endpoint_id"`
+	NamespacePublicID    string `json:"namespace_public_id"`
+	ModelID              string `json:"model_id"`
+	ModelLocked          bool   `json:"model_locked"`
+	ExecutionMode        string `json:"execution_mode"`
+	WorkingDir           string `json:"working_dir"`
+	Title                string `json:"title"`
+	RunStatus            string `json:"run_status"`
+	RunUpdatedAtUnixMs   int64  `json:"run_updated_at_unix_ms"`
+	RunError             string `json:"run_error"`
+	WaitingUserInputJSON string `json:"waiting_user_input_json"`
 
 	CreatedByUserPublicID string `json:"created_by_user_public_id"`
 	CreatedByUserEmail    string `json:"created_by_user_email"`
@@ -222,7 +219,7 @@ func (s *Store) ListThreads(ctx context.Context, endpointID string, limit int, c
 SELECT
   thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
   run_status, run_updated_at_unix_ms, run_error,
-  waiting_prompt_id, waiting_message_id, waiting_tool_id, waiting_choices_json,
+  waiting_user_input_json,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
@@ -255,10 +252,7 @@ LIMIT ?
 			&t.RunStatus,
 			&t.RunUpdatedAtUnixMs,
 			&t.RunError,
-			&t.WaitingPromptID,
-			&t.WaitingMessageID,
-			&t.WaitingToolID,
-			&t.WaitingChoicesJSON,
+			&t.WaitingUserInputJSON,
 			&t.CreatedByUserPublicID,
 			&t.CreatedByUserEmail,
 			&t.UpdatedByUserPublicID,
@@ -303,7 +297,7 @@ func (s *Store) GetThread(ctx context.Context, endpointID string, threadID strin
 SELECT
   thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
   run_status, run_updated_at_unix_ms, run_error,
-  waiting_prompt_id, waiting_message_id, waiting_tool_id, waiting_choices_json,
+  waiting_user_input_json,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
@@ -321,10 +315,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		&t.RunStatus,
 		&t.RunUpdatedAtUnixMs,
 		&t.RunError,
-		&t.WaitingPromptID,
-		&t.WaitingMessageID,
-		&t.WaitingToolID,
-		&t.WaitingChoicesJSON,
+		&t.WaitingUserInputJSON,
 		&t.CreatedByUserPublicID,
 		&t.CreatedByUserEmail,
 		&t.UpdatedByUserPublicID,
@@ -361,10 +352,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	t.Title = strings.TrimSpace(t.Title)
 	t.RunStatus = normalizeRunStatus(t.RunStatus)
 	t.RunError = strings.TrimSpace(t.RunError)
-	t.WaitingPromptID = strings.TrimSpace(t.WaitingPromptID)
-	t.WaitingMessageID = strings.TrimSpace(t.WaitingMessageID)
-	t.WaitingToolID = strings.TrimSpace(t.WaitingToolID)
-	t.WaitingChoicesJSON = strings.TrimSpace(t.WaitingChoicesJSON)
+	t.WaitingUserInputJSON = strings.TrimSpace(t.WaitingUserInputJSON)
 	t.CreatedByUserPublicID = strings.TrimSpace(t.CreatedByUserPublicID)
 	t.CreatedByUserEmail = strings.TrimSpace(t.CreatedByUserEmail)
 	t.UpdatedByUserPublicID = strings.TrimSpace(t.UpdatedByUserPublicID)
@@ -389,12 +377,12 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	INSERT INTO ai_threads(
 	  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
 	  run_status, run_updated_at_unix_ms, run_error,
-	  waiting_prompt_id, waiting_message_id, waiting_tool_id, waiting_choices_json,
+	  waiting_user_input_json,
 	  created_by_user_public_id, created_by_user_email,
 	  updated_by_user_public_id, updated_by_user_email,
 	  created_at_unix_ms, updated_at_unix_ms,
 	  last_message_at_unix_ms, last_message_preview
-	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		t.ThreadID,
 		t.EndpointID,
@@ -407,10 +395,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		t.RunStatus,
 		t.RunUpdatedAtUnixMs,
 		t.RunError,
-		t.WaitingPromptID,
-		t.WaitingMessageID,
-		t.WaitingToolID,
-		t.WaitingChoicesJSON,
+		t.WaitingUserInputJSON,
 		t.CreatedByUserPublicID,
 		t.CreatedByUserEmail,
 		t.UpdatedByUserPublicID,
@@ -563,18 +548,12 @@ func normalizeExecutionMode(mode string) string {
 	return "act"
 }
 
-func normalizeWaitingPromptForStatus(runStatus string, promptID string, messageID string, toolID string, choicesJSON string) (string, string, string, string) {
-	promptID = strings.TrimSpace(promptID)
-	messageID = strings.TrimSpace(messageID)
-	toolID = strings.TrimSpace(toolID)
-	choicesJSON = strings.TrimSpace(choicesJSON)
+func normalizeWaitingUserInputJSONForStatus(runStatus string, waitingUserInputJSON string) string {
+	waitingUserInputJSON = strings.TrimSpace(waitingUserInputJSON)
 	if runStatus != "waiting_user" {
-		return "", "", "", ""
+		return ""
 	}
-	if promptID == "" || messageID == "" || toolID == "" {
-		return "", "", "", ""
-	}
-	return promptID, messageID, toolID, choicesJSON
+	return waitingUserInputJSON
 }
 
 // ResetStaleActiveThreadRunStates marks startup-orphaned active thread states as canceled.
@@ -596,10 +575,7 @@ func (s *Store) ResetStaleActiveThreadRunStates(ctx context.Context) (int64, err
 	SET run_status = 'canceled',
 	    run_updated_at_unix_ms = ?,
 	    run_error = '',
-	    waiting_prompt_id = '',
-	    waiting_message_id = '',
-	    waiting_tool_id = '',
-	    waiting_choices_json = '',
+	    waiting_user_input_json = '',
 	    updated_at_unix_ms = ?
 	WHERE run_status IN ('accepted', 'running', 'waiting_approval', 'recovering', 'finalizing')
 	`, now, now)
@@ -616,10 +592,7 @@ func (s *Store) UpdateThreadRunState(
 	threadID string,
 	runStatus string,
 	runError string,
-	waitingPromptID string,
-	waitingMessageID string,
-	waitingToolID string,
-	waitingChoicesJSON string,
+	waitingUserInputJSON string,
 	updatedByID string,
 	updatedByEmail string,
 ) error {
@@ -640,13 +613,7 @@ func (s *Store) UpdateThreadRunState(
 	if runStatus != "failed" && runStatus != "timed_out" {
 		runError = ""
 	}
-	waitingPromptID, waitingMessageID, waitingToolID, waitingChoicesJSON = normalizeWaitingPromptForStatus(
-		runStatus,
-		waitingPromptID,
-		waitingMessageID,
-		waitingToolID,
-		waitingChoicesJSON,
-	)
+	waitingUserInputJSON = normalizeWaitingUserInputJSONForStatus(runStatus, waitingUserInputJSON)
 	if len(runError) > 600 {
 		runError = truncateRunes(runError, 600)
 	}
@@ -657,15 +624,12 @@ func (s *Store) UpdateThreadRunState(
 	SET run_status = ?,
 	    run_updated_at_unix_ms = ?,
 	    run_error = ?,
-	    waiting_prompt_id = ?,
-	    waiting_message_id = ?,
-	    waiting_tool_id = ?,
-	    waiting_choices_json = ?,
+	    waiting_user_input_json = ?,
 	    updated_at_unix_ms = ?,
 	    updated_by_user_public_id = ?,
 	    updated_by_user_email = ?
 	WHERE endpoint_id = ? AND thread_id = ?
-	`, runStatus, now, runError, waitingPromptID, waitingMessageID, waitingToolID, strings.TrimSpace(waitingChoicesJSON), now, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
+	`, runStatus, now, runError, strings.TrimSpace(waitingUserInputJSON), now, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
 	if err != nil {
 		return err
 	}
@@ -702,6 +666,12 @@ func (s *Store) DeleteThread(ctx context.Context, endpointID string, threadID st
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM conversation_turns WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM structured_user_inputs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM memory_items WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {

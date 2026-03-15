@@ -9,27 +9,47 @@ export type AIActiveRun = {
   runId: string;
 };
 
-export type AIWaitingPrompt = {
-  promptId: string;
-  messageId: string;
-  toolId: string;
-  choices?: AIWaitingPromptChoice[];
-};
-
-export type AIWaitingPromptAction = {
+export type AIRequestUserInputAction = {
   type: string;
   mode?: 'act' | 'plan';
 };
 
-export type AIWaitingPromptChoice = {
-  choiceId: string;
+export type AIRequestUserInputOption = {
+  optionId: string;
   label: string;
-  actions?: AIWaitingPromptAction[];
+  description?: string;
+  actions?: AIRequestUserInputAction[];
 };
 
-export type AIWaitingPromptResponse = {
+export type AIRequestUserInputQuestion = {
+  id: string;
+  header: string;
+  question: string;
+  isOther: boolean;
+  isSecret: boolean;
+  options?: AIRequestUserInputOption[];
+};
+
+export type AIRequestUserInputPrompt = {
   promptId: string;
-  choiceId?: string;
+  messageId: string;
+  toolId: string;
+  reasonCode?: string;
+  requiredFromUser?: string[];
+  evidenceRefs?: string[];
+  publicSummary?: string;
+  containsSecret?: boolean;
+  questions?: AIRequestUserInputQuestion[];
+};
+
+export type AIRequestUserInputAnswer = {
+  selectedOptionId?: string;
+  answers: string[];
+};
+
+export type AIRequestUserInputResponse = {
+  promptId: string;
+  answers: Record<string, AIRequestUserInputAnswer>;
 };
 
 export type AISendUserTurnRequest = {
@@ -49,7 +69,6 @@ export type AISendUserTurnRequest = {
     mode?: 'act' | 'plan';
   };
   expectedRunId?: string;
-  waitingResponse?: AIWaitingPromptResponse;
   queueAfterWaitingUser?: boolean;
   sourceFollowupId?: string;
 };
@@ -61,7 +80,34 @@ export type AISendUserTurnResponse = {
   queuePosition?: number;
   consumedWaitingPromptId?: string;
   appliedExecutionMode?: 'act' | 'plan';
-  appliedWaitingChoiceId?: string;
+};
+
+export type AISubmitStructuredPromptResponseRequest = {
+  threadId: string;
+  model?: string;
+  response: AIRequestUserInputResponse;
+  input: {
+    messageId?: string;
+    text: string;
+    attachments: Array<{
+      name: string;
+      mimeType: string;
+      url: string;
+    }>;
+  };
+  options: {
+    maxSteps: number;
+    mode?: 'act' | 'plan';
+  };
+  expectedRunId?: string;
+  sourceFollowupId?: string;
+};
+
+export type AISubmitStructuredPromptResponseResponse = {
+  runId: string;
+  kind: string;
+  consumedWaitingPromptId?: string;
+  appliedExecutionMode?: 'act' | 'plan';
 };
 
 export type AICancelRunRequest = {
@@ -183,7 +229,7 @@ export type AIRealtimeEvent = {
   streamEvent?: StreamEvent;
   runStatus?: AIThreadRunStatus;
   runError?: string;
-  waitingPrompt?: AIWaitingPrompt;
+  waitingPrompt?: AIRequestUserInputPrompt;
 
   // transcript_message only
   messageRowId?: number;

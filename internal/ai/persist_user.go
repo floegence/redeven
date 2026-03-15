@@ -16,6 +16,7 @@ func buildUserMessageJSON(messageID string, input RunInput, uploadsDir string, c
 	}
 
 	blocks := make([]any, 0, 8)
+	textParts := make([]string, 0, 2)
 
 	// Attachments first (aligned with ChatProvider.createUserMessageBlocks()).
 	for _, a := range input.Attachments {
@@ -58,9 +59,28 @@ func buildUserMessageJSON(messageID string, input RunInput, uploadsDir string, c
 		})
 	}
 
+	if input.StructuredResponse != nil {
+		record := *input.StructuredResponse
+		record.ResponseMessageID = id
+		summary := strings.TrimSpace(record.PublicSummary)
+		blocks = append(blocks, persistedRequestUserInputResponseBlock{
+			Type:           "request_user_input_response",
+			PromptID:       strings.TrimSpace(record.PromptID),
+			ToolID:         strings.TrimSpace(record.ToolID),
+			ReasonCode:     strings.TrimSpace(record.ReasonCode),
+			Responses:      append([]RequestUserInputResolvedQuestion(nil), record.Responses...),
+			PublicSummary:  summary,
+			ContainsSecret: record.ContainsSecret,
+		})
+		if summary != "" {
+			textParts = append(textParts, summary)
+		}
+	}
+
 	text := strings.TrimSpace(input.Text)
 	if text != "" {
 		blocks = append(blocks, persistedTextBlock{Type: "text", Content: text})
+		textParts = append(textParts, text)
 	}
 	if len(blocks) == 0 {
 		return "", "", errors.New("empty input")
@@ -77,5 +97,5 @@ func buildUserMessageJSON(messageID string, input RunInput, uploadsDir string, c
 	if err != nil {
 		return "", "", err
 	}
-	return string(b), text, nil
+	return string(b), strings.TrimSpace(strings.Join(textParts, "\n\n")), nil
 }

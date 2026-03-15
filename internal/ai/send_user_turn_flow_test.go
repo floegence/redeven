@@ -11,6 +11,7 @@ import (
 	"time"
 
 	contextmodel "github.com/floegence/redeven-agent/internal/ai/context/model"
+	promptpacker "github.com/floegence/redeven-agent/internal/ai/context/packer"
 	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
@@ -123,7 +124,7 @@ func TestSendUserTurn_ExpectedRunChanged_DoesNotPersistMessage(t *testing.T) {
 	}
 }
 
-func TestSendUserTurn_WaitingPromptMismatch_DoesNotPersistMessage(t *testing.T) {
+func TestSubmitStructuredPromptResponse_WaitingPromptMismatch_DoesNotPersistMessage(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -135,22 +136,17 @@ func TestSendUserTurn_WaitingPromptMismatch_DoesNotPersistMessage(t *testing.T) 
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	const waitingPromptID = "wp_waiting_prompt_mismatch"
-	if err := svc.threadsDB.UpdateThreadRunState(
-		ctx,
-		meta.EndpointID,
-		th.ThreadID,
-		"waiting_user",
-		"",
-		waitingPromptID,
+	waitingPrompt := testSingleQuestionPrompt(
 		"msg_waiting_prompt_mismatch",
 		"tool_waiting_prompt_mismatch",
-		"",
-		meta.UserPublicID,
-		meta.UserEmail,
-	); err != nil {
-		t.Fatalf("UpdateThreadRunState waiting_user: %v", err)
+		"question_1",
+		"Choose a direction.",
+		nil,
+	)
+	if waitingPrompt == nil {
+		t.Fatalf("waitingPrompt should not be nil")
 	}
+	seedWaitingUserPrompt(t, svc, ctx, meta, th.ThreadID, waitingPrompt)
 
 	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
 		ThreadID: th.ThreadID,
@@ -160,21 +156,24 @@ func TestSendUserTurn_WaitingPromptMismatch_DoesNotPersistMessage(t *testing.T) 
 		},
 		Options: RunOptions{MaxSteps: 1},
 	})
-	if !errors.Is(err, ErrWaitingPromptChanged) {
-		t.Fatalf("SendUserTurn err=%v, want %v", err, ErrWaitingPromptChanged)
+	if !errors.Is(err, ErrWaitingUserQueueConflict) {
+		t.Fatalf("SendUserTurn err=%v, want %v", err, ErrWaitingUserQueueConflict)
 	}
 
-	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+	_, err = svc.SubmitStructuredPromptResponse(ctx, meta, SubmitStructuredPromptResponseRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
-		WaitingResponse: &WaitingPromptResponse{
+		Response: RequestUserInputResponse{
 			PromptID: "wp_wrong_id",
+			Answers: map[string]RequestUserInputAnswer{
+				"question_1": {Answers: []string{"wrong prompt"}},
+			},
 		},
 		Input:   RunInput{Text: "reply with wrong waiting prompt id"},
 		Options: RunOptions{MaxSteps: 1},
 	})
 	if !errors.Is(err, ErrWaitingPromptChanged) {
-		t.Fatalf("SendUserTurn wrong-id err=%v, want %v", err, ErrWaitingPromptChanged)
+		t.Fatalf("SubmitStructuredPromptResponse wrong-id err=%v, want %v", err, ErrWaitingPromptChanged)
 	}
 
 	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
@@ -186,7 +185,7 @@ func TestSendUserTurn_WaitingPromptMismatch_DoesNotPersistMessage(t *testing.T) 
 	}
 }
 
-func TestSendUserTurn_WaitingPromptMatch_ReturnsConsumedPromptID(t *testing.T) {
+func TestSubmitStructuredPromptResponse_WaitingPromptMatch_ReturnsConsumedPromptID(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -198,42 +197,37 @@ func TestSendUserTurn_WaitingPromptMatch_ReturnsConsumedPromptID(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	const waitingPromptID = "wp_waiting_prompt_match"
-	if err := svc.threadsDB.UpdateThreadRunState(
-		ctx,
-		meta.EndpointID,
-		th.ThreadID,
-		"waiting_user",
-		"",
-		waitingPromptID,
+	waitingPrompt := testSingleQuestionPrompt(
 		"msg_waiting_prompt_match",
 		"tool_waiting_prompt_match",
-		"",
-		meta.UserPublicID,
-		meta.UserEmail,
-	); err != nil {
-		t.Fatalf("UpdateThreadRunState waiting_user: %v", err)
+		"question_1",
+		"Choose a direction.",
+		nil,
+	)
+	if waitingPrompt == nil {
+		t.Fatalf("waitingPrompt should not be nil")
 	}
+	seedWaitingUserPrompt(t, svc, ctx, meta, th.ThreadID, waitingPrompt)
 
-	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+	resp, err := svc.SubmitStructuredPromptResponse(ctx, meta, SubmitStructuredPromptResponseRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
-		WaitingResponse: &WaitingPromptResponse{
-			PromptID: waitingPromptID,
-		},
+		Response: testResponseForPrompt(waitingPrompt, map[string]RequestUserInputAnswer{
+			"question_1": {Answers: []string{"reply with matching waiting prompt id"}},
+		}),
 		Input: RunInput{
 			Text: "reply with matching waiting prompt id",
 		},
 		Options: RunOptions{MaxSteps: 1},
 	})
 	if err != nil {
-		t.Fatalf("SendUserTurn: %v", err)
+		t.Fatalf("SubmitStructuredPromptResponse: %v", err)
 	}
-	if got := strings.TrimSpace(resp.ConsumedWaitingPromptID); got != waitingPromptID {
-		t.Fatalf("ConsumedWaitingPromptID=%q, want %q", got, waitingPromptID)
+	if got := strings.TrimSpace(resp.ConsumedWaitingPromptID); got != waitingPrompt.PromptID {
+		t.Fatalf("ConsumedWaitingPromptID=%q, want %q", got, waitingPrompt.PromptID)
 	}
 	if strings.TrimSpace(resp.RunID) == "" {
-		t.Fatalf("SendUserTurn run_id is empty")
+		t.Fatalf("SubmitStructuredPromptResponse run_id is empty")
 	}
 
 	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
@@ -245,7 +239,7 @@ func TestSendUserTurn_WaitingPromptMatch_ReturnsConsumedPromptID(t *testing.T) {
 	}
 }
 
-func TestSendUserTurn_WaitingChoiceSetMode_UpdatesThreadExecutionMode(t *testing.T) {
+func TestSubmitStructuredPromptResponse_WaitingChoiceSetMode_UpdatesThreadExecutionMode(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -257,61 +251,52 @@ func TestSendUserTurn_WaitingChoiceSetMode_UpdatesThreadExecutionMode(t *testing
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	const (
-		waitingPromptID = "wp_waiting_prompt_set_mode"
-		choiceID        = "switch_to_act"
-	)
-	waitingChoicesJSON := marshalWaitingPromptChoices([]WaitingPromptChoice{
-		{
-			ChoiceID: choiceID,
-			Label:    "Switch to Act mode",
-			Actions: []WaitingPromptAction{
-				{
-					Type: waitingPromptActionSetMode,
-					Mode: "act",
+	waitingPrompt := testRequestUserInputPrompt(
+		"msg_waiting_prompt_set_mode",
+		"tool_waiting_prompt_set_mode",
+		AskUserReasonUserDecisionRequired,
+		[]RequestUserInputQuestion{
+			{
+				ID:       "mode_decision",
+				Header:   "Execution mode",
+				Question: "Switch to Act mode?",
+				IsOther:  false,
+				Options: []RequestUserInputOption{
+					{
+						OptionID: "switch_to_act",
+						Label:    "Switch to Act mode",
+						Actions: []RequestUserInputAction{
+							{
+								Type: requestUserInputActionSetMode,
+								Mode: "act",
+							},
+						},
+					},
 				},
 			},
 		},
-	})
-	if waitingChoicesJSON == "" {
-		t.Fatalf("waitingChoicesJSON should not be empty")
+	)
+	if waitingPrompt == nil {
+		t.Fatalf("waitingPrompt should not be nil")
 	}
-	if err := svc.threadsDB.UpdateThreadRunState(
-		ctx,
-		meta.EndpointID,
-		th.ThreadID,
-		"waiting_user",
-		"",
-		waitingPromptID,
-		"msg_waiting_prompt_set_mode",
-		"tool_waiting_prompt_set_mode",
-		waitingChoicesJSON,
-		meta.UserPublicID,
-		meta.UserEmail,
-	); err != nil {
-		t.Fatalf("UpdateThreadRunState waiting_user: %v", err)
-	}
+	seedWaitingUserPrompt(t, svc, ctx, meta, th.ThreadID, waitingPrompt)
 
-	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+	resp, err := svc.SubmitStructuredPromptResponse(ctx, meta, SubmitStructuredPromptResponseRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
-		WaitingResponse: &WaitingPromptResponse{
-			PromptID: waitingPromptID,
-			ChoiceID: choiceID,
-		},
+		Response: testResponseForPrompt(waitingPrompt, map[string]RequestUserInputAnswer{
+			"mode_decision": {SelectedOptionID: "switch_to_act"},
+		}),
 		Input: RunInput{
 			Text: "confirmed, switch to act and continue",
 		},
 		Options: RunOptions{MaxSteps: 1, Mode: "plan"},
 	})
 	if err != nil {
-		t.Fatalf("SendUserTurn: %v", err)
+		t.Fatalf("SubmitStructuredPromptResponse: %v", err)
 	}
-	if got := strings.TrimSpace(resp.ConsumedWaitingPromptID); got != waitingPromptID {
-		t.Fatalf("ConsumedWaitingPromptID=%q, want %q", got, waitingPromptID)
-	}
-	if got := strings.TrimSpace(resp.AppliedWaitingChoiceID); got != choiceID {
-		t.Fatalf("AppliedWaitingChoiceID=%q, want %q", got, choiceID)
+	if got := strings.TrimSpace(resp.ConsumedWaitingPromptID); got != waitingPrompt.PromptID {
+		t.Fatalf("ConsumedWaitingPromptID=%q, want %q", got, waitingPrompt.PromptID)
 	}
 	if got := strings.TrimSpace(resp.AppliedExecutionMode); got != "act" {
 		t.Fatalf("AppliedExecutionMode=%q, want %q", got, "act")
@@ -326,6 +311,210 @@ func TestSendUserTurn_WaitingChoiceSetMode_UpdatesThreadExecutionMode(t *testing
 	}
 	if got := strings.TrimSpace(gotThread.ExecutionMode); got != "act" {
 		t.Fatalf("thread execution_mode=%q, want %q", got, "act")
+	}
+}
+
+func TestSubmitStructuredPromptResponse_PromptOnlyPersistsStructuredResponseContext(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "prompt-only-structured-response", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	waitingPrompt := testRequestUserInputPrompt(
+		"msg_prompt_only",
+		"tool_prompt_only",
+		AskUserReasonUserDecisionRequired,
+		[]RequestUserInputQuestion{
+			{
+				ID:       "direction",
+				Header:   "Direction",
+				Question: "Choose a direction.",
+				IsOther:  false,
+				Options: []RequestUserInputOption{
+					{OptionID: "proceed", Label: "Proceed"},
+				},
+			},
+		},
+	)
+	if waitingPrompt == nil {
+		t.Fatalf("waitingPrompt should not be nil")
+	}
+	seedWaitingUserPrompt(t, svc, ctx, meta, th.ThreadID, waitingPrompt)
+
+	resp, err := svc.SubmitStructuredPromptResponse(ctx, meta, SubmitStructuredPromptResponseRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Response: testResponseForPrompt(waitingPrompt, map[string]RequestUserInputAnswer{
+			"direction": {SelectedOptionID: "proceed"},
+		}),
+		Input:   RunInput{},
+		Options: RunOptions{MaxSteps: 1},
+	})
+	if err != nil {
+		t.Fatalf("SubmitStructuredPromptResponse: %v", err)
+	}
+	if strings.TrimSpace(resp.RunID) == "" {
+		t.Fatalf("SubmitStructuredPromptResponse run_id is empty")
+	}
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	var userMsg *threadstore.Message
+	for i := range msgs {
+		if msgs[i].Role == "user" {
+			userMsg = &msgs[i]
+			break
+		}
+	}
+	if userMsg == nil {
+		t.Fatalf("expected persisted user message")
+	}
+	if got := strings.TrimSpace(userMsg.TextContent); got != "Direction: Proceed." {
+		t.Fatalf("user text_content=%q, want %q", got, "Direction: Proceed.")
+	}
+	if !strings.Contains(userMsg.MessageJSON, "\"request_user_input_response\"") {
+		t.Fatalf("user message json missing structured response block: %s", userMsg.MessageJSON)
+	}
+
+	structured, err := svc.contextRepo.ListRecentStructuredUserInputs(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListRecentStructuredUserInputs: %v", err)
+	}
+	if len(structured) != 1 {
+		t.Fatalf("len(structured)=%d, want 1", len(structured))
+	}
+	if structured[0].ResponseMessageID != userMsg.MessageID {
+		t.Fatalf("structured response_message_id=%q, want %q", structured[0].ResponseMessageID, userMsg.MessageID)
+	}
+	if structured[0].SelectedOptionID != "proceed" {
+		t.Fatalf("structured selected_option_id=%q, want %q", structured[0].SelectedOptionID, "proceed")
+	}
+	if structured[0].PublicSummary != "Direction: Proceed." {
+		t.Fatalf("structured public_summary=%q, want %q", structured[0].PublicSummary, "Direction: Proceed.")
+	}
+}
+
+func TestSubmitStructuredPromptResponse_SecretAnswerDoesNotLeakToTranscriptOrStructuredProjection(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "secret-structured-response", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	waitingPrompt := testRequestUserInputPrompt(
+		"msg_secret_prompt",
+		"tool_secret_prompt",
+		AskUserReasonMissingExternalInput,
+		[]RequestUserInputQuestion{
+			{
+				ID:       "api_key",
+				Header:   "API key",
+				Question: "Provide the API key.",
+				IsOther:  true,
+				IsSecret: true,
+			},
+		},
+	)
+	if waitingPrompt == nil {
+		t.Fatalf("waitingPrompt should not be nil")
+	}
+	seedWaitingUserPrompt(t, svc, ctx, meta, th.ThreadID, waitingPrompt)
+
+	const secretValue = "super-secret-token"
+	resp, err := svc.SubmitStructuredPromptResponse(ctx, meta, SubmitStructuredPromptResponseRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Response: testResponseForPrompt(waitingPrompt, map[string]RequestUserInputAnswer{
+			"api_key": {Answers: []string{secretValue}},
+		}),
+		Input:   RunInput{},
+		Options: RunOptions{MaxSteps: 1},
+	})
+	if err != nil {
+		t.Fatalf("SubmitStructuredPromptResponse: %v", err)
+	}
+	if strings.TrimSpace(resp.RunID) == "" {
+		t.Fatalf("SubmitStructuredPromptResponse run_id is empty")
+	}
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	var userMsg *threadstore.Message
+	for i := range msgs {
+		if msgs[i].Role == "user" {
+			userMsg = &msgs[i]
+			break
+		}
+	}
+	if userMsg == nil {
+		t.Fatalf("expected persisted user message")
+	}
+	if strings.Contains(userMsg.TextContent, secretValue) {
+		t.Fatalf("user text_content leaked secret: %q", userMsg.TextContent)
+	}
+	if strings.Contains(userMsg.MessageJSON, secretValue) {
+		t.Fatalf("user message json leaked secret: %s", userMsg.MessageJSON)
+	}
+	if !strings.Contains(userMsg.TextContent, "secret provided") {
+		t.Fatalf("user text_content=%q, want redacted summary", userMsg.TextContent)
+	}
+
+	secrets, err := svc.threadsDB.ListRequestUserInputSecretAnswers(ctx, meta.EndpointID, th.ThreadID, userMsg.MessageID)
+	if err != nil {
+		t.Fatalf("ListRequestUserInputSecretAnswers: %v", err)
+	}
+	if len(secrets) != 1 || len(secrets[0].Answers) != 1 || secrets[0].Answers[0] != secretValue {
+		t.Fatalf("secret answers=%+v, want raw secret stored separately", secrets)
+	}
+
+	structured, err := svc.contextRepo.ListRecentStructuredUserInputs(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListRecentStructuredUserInputs: %v", err)
+	}
+	if len(structured) != 1 {
+		t.Fatalf("len(structured)=%d, want 1", len(structured))
+	}
+	if strings.Contains(structured[0].PublicSummary, secretValue) {
+		t.Fatalf("structured public_summary leaked secret: %q", structured[0].PublicSummary)
+	}
+	if len(structured[0].Answers) != 0 {
+		t.Fatalf("structured answers should be empty for secret input, got %+v", structured[0].Answers)
+	}
+	if !structured[0].ContainsSecret {
+		t.Fatalf("structured contains_secret=false, want true")
+	}
+
+	pack, err := svc.contextPacker.BuildPromptPack(ctx, promptpacker.BuildInput{
+		EndpointID: meta.EndpointID,
+		ThreadID:   th.ThreadID,
+		RunID:      "run_secret_projection_check",
+		Objective:  "use the provided API key safely",
+		UserInput:  "",
+		Capability: contextmodel.ModelCapability{SupportsAskUserQuestionBatches: true, MaxContextTokens: 2048},
+	})
+	if err != nil {
+		t.Fatalf("BuildPromptPack: %v", err)
+	}
+	if len(pack.RecentStructuredUserInputs) == 0 {
+		t.Fatalf("expected structured projection in prompt pack")
+	}
+	if got := pack.RecentStructuredUserInputs[0]; strings.Contains(got.PublicSummary, secretValue) || strings.Join(got.Answers, " ") != "" {
+		t.Fatalf("prompt pack leaked secret: %+v", got)
 	}
 }
 

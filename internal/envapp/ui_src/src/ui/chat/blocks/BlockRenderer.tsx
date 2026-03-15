@@ -158,6 +158,28 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
         }}
       </Match>
 
+      <Match when={props.block.type === 'request_user_input_response' && props.block}>
+        {(block) => {
+          const b = block() as {
+            public_summary?: string;
+            responses?: Array<{ public_summary?: string }>;
+            contains_secret?: boolean;
+          };
+          const summary = String(b.public_summary ?? '').trim()
+            || (Array.isArray(b.responses)
+              ? b.responses.map((item) => String(item?.public_summary ?? '').trim()).filter(Boolean).join(' ')
+              : '');
+          return (
+            <div class="chat-tool-ask-user-submitted">
+              <span class="chat-tool-ask-user-submitted-label">Input Submitted</span>
+              <p class="chat-tool-ask-user-submitted-text">
+                {summary || (b.contains_secret ? 'Secret input submitted.' : 'Structured input submitted.')}
+              </p>
+            </div>
+          );
+        }}
+      </Match>
+
       {/* Lazy-loaded blocks wrapped in Suspense */}
       <Match when={props.block.type === 'code' && props.block}>
         {(block) => {

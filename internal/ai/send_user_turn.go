@@ -22,7 +22,6 @@ type SendUserTurnRequest struct {
 	Input                 RunInput               `json:"input"`
 	Options               RunOptions             `json:"options"`
 	ExpectedRunID         string                 `json:"expected_run_id,omitempty"`
-	WaitingResponse       *WaitingPromptResponse `json:"waiting_response,omitempty"`
 	QueueAfterWaitingUser bool                   `json:"queue_after_waiting_user,omitempty"`
 	SourceFollowupID      string                 `json:"source_followup_id,omitempty"`
 }
@@ -34,7 +33,6 @@ type SendUserTurnResponse struct {
 	QueuePosition           int    `json:"queue_position,omitempty"`
 	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
 	AppliedExecutionMode    string `json:"applied_execution_mode,omitempty"`
-	AppliedWaitingChoiceID  string `json:"applied_waiting_choice_id,omitempty"`
 }
 
 type persistedUserMessage struct {
@@ -67,6 +65,31 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 		return SendUserTurnResponse{}, errors.New("thread actor not ready")
 	}
 	return actor.SendUserTurn(ctx, meta, req)
+}
+
+func (s *Service) SubmitStructuredPromptResponse(ctx context.Context, meta *session.Meta, req SubmitStructuredPromptResponseRequest) (SubmitStructuredPromptResponseResponse, error) {
+	if s == nil {
+		return SubmitStructuredPromptResponseResponse{}, errors.New("nil service")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := requireRWX(meta); err != nil {
+		return SubmitStructuredPromptResponseResponse{}, err
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	threadID := strings.TrimSpace(req.ThreadID)
+	if endpointID == "" || threadID == "" {
+		return SubmitStructuredPromptResponseResponse{}, errors.New("invalid request")
+	}
+	if s.threadMgr == nil {
+		return SubmitStructuredPromptResponseResponse{}, errors.New("thread manager not ready")
+	}
+	actor := s.threadMgr.Get(endpointID, threadID)
+	if actor == nil {
+		return SubmitStructuredPromptResponseResponse{}, errors.New("thread actor not ready")
+	}
+	return actor.SubmitStructuredPromptResponse(ctx, meta, req)
 }
 
 func isSafeClientMessageID(raw string) bool {
@@ -179,18 +202,87 @@ func (s *Service) persistUserMessage(ctx context.Context, meta *session.Meta, en
 		if getErr != nil {
 			return persistedUserMessage{}, input, err
 		}
-		return persistedUserMessage{
+		persisted := persistedUserMessage{
 			MessageID:       messageID,
 			RowID:           existingRow,
 			MessageJSON:     existingJSON,
 			CreatedAtUnixMs: now,
-		}, input, nil
+		}
+		if err := s.persistStructuredUserInputContext(ctx, endpointID, threadID, persisted.MessageID, input, now); err != nil {
+			return persistedUserMessage{}, input, err
+		}
+		return persisted, input, nil
 	}
 
-	return persistedUserMessage{
+	persisted := persistedUserMessage{
 		MessageID:       messageID,
 		RowID:           rowID,
 		MessageJSON:     userJSON,
 		CreatedAtUnixMs: now,
-	}, input, nil
+	}
+	if err := s.persistStructuredUserInputContext(ctx, endpointID, threadID, persisted.MessageID, input, now); err != nil {
+		return persistedUserMessage{}, input, err
+	}
+	return persisted, input, nil
+}
+
+func (s *Service) persistStructuredUserInputContext(ctx context.Context, endpointID string, threadID string, messageID string, input RunInput, createdAtUnixMs int64) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if input.StructuredResponse == nil {
+		return nil
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	persistTO := s.persistOpTO
+	s.mu.Unlock()
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+	record := *input.StructuredResponse
+	record.ResponseMessageID = strings.TrimSpace(messageID)
+	structured := make([]threadstore.StructuredUserInputRecord, 0, len(record.Responses))
+	for _, response := range record.Responses {
+		structured = append(structured, threadstore.StructuredUserInputRecord{
+			EndpointID:          endpointID,
+			ThreadID:            threadID,
+			ResponseMessageID:   strings.TrimSpace(messageID),
+			PromptID:            strings.TrimSpace(record.PromptID),
+			ToolID:              strings.TrimSpace(record.ToolID),
+			ReasonCode:          strings.TrimSpace(record.ReasonCode),
+			QuestionID:          strings.TrimSpace(response.QuestionID),
+			Header:              strings.TrimSpace(response.Header),
+			QuestionText:        strings.TrimSpace(response.Question),
+			SelectedOptionID:    strings.TrimSpace(response.SelectedOptionID),
+			SelectedOptionLabel: strings.TrimSpace(response.SelectedOptionLabel),
+			Answers:             append([]string(nil), response.Answers...),
+			PublicSummary:       strings.TrimSpace(response.PublicSummary),
+			ContainsSecret:      response.ContainsSecret,
+			CreatedAtUnixMs:     createdAtUnixMs,
+		})
+	}
+	secretRecords := make([]threadstore.RequestUserInputSecretAnswerRecord, 0, len(input.SecretAnswers))
+	for _, secret := range input.SecretAnswers {
+		secretRecords = append(secretRecords, threadstore.RequestUserInputSecretAnswerRecord{
+			EndpointID:        endpointID,
+			ThreadID:          threadID,
+			ResponseMessageID: strings.TrimSpace(messageID),
+			QuestionID:        strings.TrimSpace(secret.QuestionID),
+			Answers:           append([]string(nil), secret.Answers...),
+			CreatedAtUnixMs:   createdAtUnixMs,
+		})
+	}
+	pctx, cancel := context.WithTimeout(ctx, persistTO)
+	defer cancel()
+	if err := db.ReplaceStructuredUserInputs(pctx, endpointID, threadID, strings.TrimSpace(messageID), structured); err != nil {
+		return err
+	}
+	if err := db.ReplaceRequestUserInputSecretAnswers(pctx, endpointID, threadID, strings.TrimSpace(messageID), secretRecords); err != nil {
+		return err
+	}
+	return nil
 }

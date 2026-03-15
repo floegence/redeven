@@ -64,8 +64,8 @@ VALUES('q_1', 'env_1', 'th_1', 'ch_1', 'msg_1', 'openai/gpt-5-mini', 'queued fol
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 16 {
-		t.Fatalf("user_version=%d, want 16", version)
+	if version != 17 {
+		t.Fatalf("user_version=%d, want 17", version)
 	}
 
 	var indexExists int

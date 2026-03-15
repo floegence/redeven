@@ -145,7 +145,7 @@ func (m *openAIWaitingUserTodosCloseoutMock) handle(w http.ResponseWriter, r *ht
 						"id":        "fc_waiting_user_todos_2",
 						"call_id":   "call_waiting_user_todos_2",
 						"name":      "ask_user",
-						"arguments": `{"question":"Which option should I pick, A or B?","reason_code":"user_decision_required","required_from_user":["Choose option A or B."],"evidence_refs":[]}`,
+						"arguments": `{"questions":[{"id":"question_1","header":"Choose an option","question":"Which option should I pick, A or B?","is_other":false,"is_secret":false,"options":[{"option_id":"option_a","label":"A","description":"Proceed with option A"},{"option_id":"option_b","label":"B","description":"Proceed with option B"}]}],"reason_code":"user_decision_required","required_from_user":["Choose option A or B."],"evidence_refs":[]}`,
 					},
 				},
 				"usage": map[string]any{

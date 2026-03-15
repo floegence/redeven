@@ -334,40 +334,48 @@ func askUserToolInputSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"question": map[string]any{
-				"type":      "string",
-				"minLength": 1,
-			},
-			"options": map[string]any{
+			"questions": map[string]any{
 				"type":     "array",
 				"minItems": 1,
-				"maxItems": 4,
-				"items":    map[string]any{"type": "string", "maxLength": 200},
-			},
-			"choices": map[string]any{
-				"type":     "array",
-				"minItems": 1,
-				"maxItems": 4,
+				"maxItems": 5,
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"choice_id": map[string]any{"type": "string", "maxLength": 64},
-						"label":     map[string]any{"type": "string", "maxLength": 200},
-						"actions": map[string]any{
+						"id":        map[string]any{"type": "string", "maxLength": 80},
+						"header":    map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
+						"question":  map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
+						"is_other":  map[string]any{"type": "boolean"},
+						"is_secret": map[string]any{"type": "boolean"},
+						"options": map[string]any{
 							"type":     "array",
+							"minItems": 1,
 							"maxItems": 4,
 							"items": map[string]any{
 								"type": "object",
 								"properties": map[string]any{
-									"type": map[string]any{"type": "string", "enum": []string{"set_mode"}},
-									"mode": map[string]any{"type": "string", "enum": []string{"act", "plan"}},
+									"option_id":   map[string]any{"type": "string", "maxLength": 64},
+									"label":       map[string]any{"type": "string", "maxLength": 200},
+									"description": map[string]any{"type": "string", "maxLength": 240},
+									"actions": map[string]any{
+										"type":     "array",
+										"maxItems": 4,
+										"items": map[string]any{
+											"type": "object",
+											"properties": map[string]any{
+												"type": map[string]any{"type": "string", "enum": []string{"set_mode"}},
+												"mode": map[string]any{"type": "string", "enum": []string{"act", "plan"}},
+											},
+											"required":             []string{"type"},
+											"additionalProperties": false,
+										},
+									},
 								},
-								"required":             []string{"type"},
+								"required":             []string{"option_id", "label"},
 								"additionalProperties": false,
 							},
 						},
 					},
-					"required":             []string{"label"},
+					"required":             []string{"id", "header", "question", "is_other", "is_secret"},
 					"additionalProperties": false,
 				},
 			},
@@ -393,7 +401,7 @@ func askUserToolInputSchema() map[string]any {
 				"items":    map[string]any{"type": "string", "maxLength": 120},
 			},
 		},
-		"required":             []string{"question", "reason_code", "required_from_user", "evidence_refs"},
+		"required":             []string{"questions", "reason_code", "required_from_user", "evidence_refs"},
 		"additionalProperties": false,
 	}
 }

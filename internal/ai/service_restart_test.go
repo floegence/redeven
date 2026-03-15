@@ -49,10 +49,14 @@ func TestNewService_ResetsStaleActiveThreadRunStateAfterRestart(t *testing.T) {
 		t.Fatalf("CreateThread waiting_user: %v", err)
 	}
 
-	if err := svc.threadsDB.UpdateThreadRunState(ctx, meta.EndpointID, runningThread.ThreadID, "running", "", "", "", "", "", meta.UserPublicID, meta.UserEmail); err != nil {
+	if err := svc.threadsDB.UpdateThreadRunState(ctx, meta.EndpointID, runningThread.ThreadID, "running", "", "", meta.UserPublicID, meta.UserEmail); err != nil {
 		t.Fatalf("UpdateThreadRunState running: %v", err)
 	}
-	if err := svc.threadsDB.UpdateThreadRunState(ctx, meta.EndpointID, waitingUserThread.ThreadID, "waiting_user", "", "wp_waiting_seed", "msg_waiting_seed", "tool_waiting_seed", "", meta.UserPublicID, meta.UserEmail); err != nil {
+	waitingPrompt := testSingleQuestionPrompt("msg_waiting_seed", "tool_waiting_seed", "question_1", "Need your input.", nil)
+	if waitingPrompt == nil {
+		t.Fatalf("waitingPrompt should not be nil")
+	}
+	if err := svc.threadsDB.UpdateThreadRunState(ctx, meta.EndpointID, waitingUserThread.ThreadID, "waiting_user", "", mustTestWaitingUserInputJSON(t, waitingPrompt), meta.UserPublicID, meta.UserEmail); err != nil {
 		t.Fatalf("UpdateThreadRunState waiting_user: %v", err)
 	}
 

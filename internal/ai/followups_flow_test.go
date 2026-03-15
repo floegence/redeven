@@ -22,37 +22,28 @@ func TestSendUserTurn_WaitingUserQueueAfterWaitingUser_QueuesWithoutConsumingPro
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	const waitingPromptID = "wp_queue_after_waiting_user"
-	if err := svc.threadsDB.UpdateThreadRunState(
-		ctx,
-		meta.EndpointID,
-		th.ThreadID,
-		"waiting_user",
-		"",
-		waitingPromptID,
+	waitingPrompt := testSingleQuestionPrompt(
 		"msg_waiting_user_queue_later",
 		"tool_waiting_user_queue_later",
-		"",
-		meta.UserPublicID,
-		meta.UserEmail,
-	); err != nil {
-		t.Fatalf("UpdateThreadRunState waiting_user: %v", err)
+		"queue_decision",
+		"Choose how to proceed.",
+		nil,
+	)
+	if waitingPrompt == nil {
+		t.Fatalf("waitingPrompt should not be nil")
 	}
+	seedWaitingUserPrompt(t, svc, ctx, meta, th.ThreadID, waitingPrompt)
 
 	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
-		ThreadID:              th.ThreadID,
-		Model:                 "openai/gpt-5-mini",
-		QueueAfterWaitingUser: true,
-		WaitingResponse: &WaitingPromptResponse{
-			PromptID: waitingPromptID,
-		},
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
 		Input: RunInput{
-			Text: "conflicting queue later request",
+			Text: "send immediately while waiting",
 		},
 		Options: RunOptions{MaxSteps: 1},
 	})
 	if !errors.Is(err, ErrWaitingUserQueueConflict) {
-		t.Fatalf("SendUserTurn conflicting queue-later err=%v, want %v", err, ErrWaitingUserQueueConflict)
+		t.Fatalf("SendUserTurn immediate err=%v, want %v", err, ErrWaitingUserQueueConflict)
 	}
 
 	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
@@ -99,8 +90,8 @@ func TestSendUserTurn_WaitingUserQueueAfterWaitingUser_QueuesWithoutConsumingPro
 	if got := strings.TrimSpace(threadRecord.RunStatus); got != "waiting_user" {
 		t.Fatalf("RunStatus=%q, want waiting_user", got)
 	}
-	if got := strings.TrimSpace(threadRecord.WaitingPromptID); got != waitingPromptID {
-		t.Fatalf("WaitingPromptID=%q, want %q", got, waitingPromptID)
+	if got := requestUserInputPromptFromThreadRecord(threadRecord, threadRecord.RunStatus); got == nil || got.PromptID != waitingPrompt.PromptID {
+		t.Fatalf("waiting prompt mismatch: %+v", got)
 	}
 
 	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)

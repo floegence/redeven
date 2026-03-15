@@ -24,14 +24,23 @@ export interface ToolCallBlockProps {
 }
 
 type AskUserDisplay = {
-  question: string;
   source: string;
-  choices: AskUserChoiceDisplay[];
+  questions: AskUserQuestionDisplay[];
 };
 
-type AskUserChoiceDisplay = {
-  choiceId: string;
+type AskUserOptionDisplay = {
+  optionId: string;
   label: string;
+  description?: string;
+};
+
+type AskUserQuestionDisplay = {
+  id: string;
+  header: string;
+  question: string;
+  isOther: boolean;
+  isSecret: boolean;
+  options: AskUserOptionDisplay[];
 };
 
 // Chevron icon for collapse toggle (rotatable)
@@ -143,42 +152,28 @@ function asTrimmedString(value: unknown): string {
   return value.trim();
 }
 
-function normalizeAskUserOptions(value: unknown): string[] {
+function normalizeAskUserOptions(value: unknown): AskUserOptionDisplay[] {
   if (!Array.isArray(value)) {
     return [];
   }
-  const seen = new Set<string>();
-  const options: string[] = [];
-  for (const item of value) {
-    const text = asTrimmedString(item);
-    if (!text) continue;
-    const key = text.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    options.push(text);
-    if (options.length >= 4) break;
-  }
-  return options;
-}
-
-function normalizeAskUserChoices(value: unknown): AskUserChoiceDisplay[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  const out: AskUserChoiceDisplay[] = [];
-  const seenChoice = new Set<string>();
+  const out: AskUserOptionDisplay[] = [];
+  const seenOption = new Set<string>();
   const seenLabel = new Set<string>();
   for (const item of value) {
     if (!item || typeof item !== 'object') continue;
     const label = asTrimmedString((item as any).label);
     if (!label) continue;
-    const choiceId = asTrimmedString((item as any).choice_id ?? (item as any).choiceId) || `choice_${out.length + 1}`;
-    const choiceKey = choiceId.toLowerCase();
+    const optionId = asTrimmedString((item as any).option_id ?? (item as any).optionId) || `option_${out.length + 1}`;
+    const optionKey = optionId.toLowerCase();
     const labelKey = label.toLowerCase();
-    if (seenChoice.has(choiceKey) || seenLabel.has(labelKey)) continue;
-    seenChoice.add(choiceKey);
+    if (seenOption.has(optionKey) || seenLabel.has(labelKey)) continue;
+    seenOption.add(optionKey);
     seenLabel.add(labelKey);
-    out.push({ choiceId, label });
+    out.push({
+      optionId,
+      label,
+      description: asTrimmedString((item as any).description) || undefined,
+    });
     if (out.length >= 4) break;
   }
   return out;
@@ -190,30 +185,40 @@ function buildAskUserDisplay(block: ToolCallBlockType): AskUserDisplay | null {
   }
   const args = asRecord(block.args);
   const result = asRecord(block.result);
-  const question = asTrimmedString(args?.question) || asTrimmedString(result?.question);
-  if (!question) {
-    return null;
-  }
-  const choicesFromResult = normalizeAskUserChoices(result?.choices);
-  const choicesFromArgs = normalizeAskUserChoices(args?.choices);
-  const optionsFromResult = normalizeAskUserOptions(result?.options);
-  const optionsFromArgs = normalizeAskUserOptions(args?.options);
   const source = asTrimmedString(result?.source);
-  const choices = choicesFromResult.length > 0
-    ? choicesFromResult
-    : choicesFromArgs.length > 0
-      ? choicesFromArgs
-      : (optionsFromResult.length > 0 ? optionsFromResult : optionsFromArgs).map((option, index) => ({
-          choiceId: `choice_${index + 1}`,
-          label: option,
-        }));
-  if (choices.length <= 0) {
+
+  const readQuestions = (value: unknown): AskUserQuestionDisplay[] => {
+    if (!Array.isArray(value)) return [];
+    const out: AskUserQuestionDisplay[] = [];
+    for (const item of value) {
+      if (!item || typeof item !== 'object') continue;
+      const id = asTrimmedString((item as any).id) || `question_${out.length + 1}`;
+      const header = asTrimmedString((item as any).header);
+      const question = asTrimmedString((item as any).question);
+      if (!header || !question) continue;
+      const options = normalizeAskUserOptions((item as any).options);
+      out.push({
+        id,
+        header,
+        question,
+        isOther: Boolean((item as any).is_other),
+        isSecret: Boolean((item as any).is_secret),
+        options,
+      });
+      if (out.length >= 5) break;
+    }
+    return out;
+  };
+
+  const questionsFromResult = readQuestions(result?.questions);
+  const questionsFromArgs = readQuestions(args?.questions);
+  const questions = questionsFromResult.length > 0 ? questionsFromResult : questionsFromArgs;
+  if (questions.length <= 0) {
     return null;
   }
   return {
-    question,
     source,
-    choices,
+    questions,
   };
 }
 
@@ -3011,23 +3016,23 @@ interface AskUserToolCardProps {
 }
 
 const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
-  const ctx = useChatContext();
   const ai = useAIChatContext();
-  const [selectedOptionIndex, setSelectedOptionIndex] = createSignal<number>(-1);
-  const [useCustomReply, setUseCustomReply] = createSignal(false);
-  const [customReply, setCustomReply] = createSignal('');
   const [submitting, setSubmitting] = createSignal(false);
-  const [submittedReply, setSubmittedReply] = createSignal('');
   const promptKey = createMemo(
     () =>
-      `${props.messageId}\u001f${props.block.toolId}\u001f${props.display.question}\u001f${props.display.choices
-        .map((choice) => `${choice.choiceId}:${choice.label}`)
+      `${props.messageId}\u001f${props.block.toolId}\u001f${props.display.questions
+        .map((question) => `${question.id}:${question.question}:${question.options.map((option) => option.optionId).join('|')}`)
         .join('\u001f')}`,
   );
   const sourceLabel = createMemo(() => humanizeAskUserSource(props.display.source));
   const activeThreadId = createMemo(() => String(ai.activeThreadId() ?? '').trim());
   const waitingPrompt = createMemo(() => ai.activeThreadWaitingPrompt());
   const waitingPromptId = createMemo(() => String(waitingPrompt()?.prompt_id ?? '').trim());
+  const promptDrafts = createMemo(() => {
+    const tid = activeThreadId();
+    const promptId = waitingPromptId();
+    return tid && promptId ? ai.getStructuredPromptDrafts(tid, promptId) : {};
+  });
   const interactiveAllowed = createMemo(() => {
     const prompt = waitingPrompt();
     if (!prompt) return false;
@@ -3037,19 +3042,31 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
     );
   });
   const controlsDisabled = createMemo(() => submitting() || !interactiveAllowed());
-  const canSubmitCustomReply = createMemo(
-    () => useCustomReply() && customReply().trim().length > 0 && !controlsDisabled(),
-  );
-  const resolvedReplyLabel = createMemo(() => (submittedReply() ? 'Reply sent' : 'Input resolved'));
-  const resolvedReplyText = createMemo(() => submittedReply() || 'This request has been handled.');
+  const resolvedReplyText = createMemo(() => 'This request has been handled.');
+  const currentQuestions = createMemo(() => {
+    const prompt = waitingPrompt();
+    if (interactiveAllowed() && Array.isArray(prompt?.questions) && prompt.questions.length > 0) {
+      return prompt.questions.map((question) => ({
+        id: question.id,
+        header: question.header,
+        question: question.question,
+        isOther: Boolean(question.is_other),
+        isSecret: Boolean(question.is_secret),
+        options: Array.isArray(question.options)
+          ? question.options.map((option) => ({
+              optionId: option.option_id,
+              label: option.label,
+              description: option.description,
+            }))
+          : [],
+      }));
+    }
+    return props.display.questions;
+  });
 
   createEffect(() => {
     promptKey();
-    setSelectedOptionIndex(-1);
-    setUseCustomReply(false);
-    setCustomReply('');
     setSubmitting(false);
-    setSubmittedReply('');
   });
 
   createEffect(() => {
@@ -3058,67 +3075,43 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
       setSubmitting(false);
       return;
     }
-    if (!ctx.isWorking()) {
-      setSubmitting(false);
-    }
   });
 
-  const submitReply = async (value: string) => {
-    const content = asTrimmedString(value);
-    if (!content || controlsDisabled()) {
-      return;
-    }
+  const setQuestionDraft = (questionId: string, next: { selectedOptionId?: string; answers?: string[] }) => {
+    const tid = activeThreadId();
+    const promptId = waitingPromptId();
+    if (!tid || !promptId) return;
+    ai.setStructuredPromptDraft(tid, promptId, questionId, {
+      selectedOptionId: String(next.selectedOptionId ?? '').trim() || undefined,
+      answers: Array.isArray(next.answers) ? next.answers.map((item) => String(item ?? '').trim()).filter(Boolean) : [],
+    });
+  };
+
+  const questionAnswered = (question: AskUserQuestionDisplay): boolean => {
+    const draft = promptDrafts()[question.id];
+    if (!draft) return false;
+    return Boolean(String(draft.selectedOptionId ?? '').trim()) || draft.answers.length > 0;
+  };
+
+  const unansweredQuestions = createMemo(() => currentQuestions().filter((question) => !questionAnswered(question)));
+  const canSubmit = createMemo(() => interactiveAllowed() && unansweredQuestions().length === 0 && !submitting());
+
+  const handleSubmit = async () => {
+    if (!canSubmit()) return;
+    const tid = activeThreadId();
+    const promptId = waitingPromptId();
+    if (!tid || !promptId) return;
     setSubmitting(true);
-    setSubmittedReply(content);
     try {
-      await ctx.sendMessage(content, []);
+      await ai.submitStructuredPromptResponse({
+        threadId: tid,
+        promptId,
+        answers: promptDrafts(),
+      });
     } catch (error) {
-      console.error('ask_user reply submit failed', error);
+      console.error('structured prompt submit failed', error);
       setSubmitting(false);
-    } finally {
-      // Do not clear submitting here.
-      // The card only closes after server ACK updates waiting_prompt state.
     }
-  };
-
-  const handleOptionSelect = (index: number) => {
-    if (controlsDisabled()) return;
-    const option = props.display.choices[index];
-    if (!option) return;
-    const tid = activeThreadId();
-    const promptId = waitingPromptId();
-    if (tid && promptId) {
-      ai.setPendingWaitingChoice(tid, promptId, option.choiceId);
-    }
-    setSelectedOptionIndex(index);
-    setUseCustomReply(false);
-    void submitReply(option.label);
-  };
-
-  const handleCustomFocus = () => {
-    if (controlsDisabled()) return;
-    const tid = activeThreadId();
-    const promptId = waitingPromptId();
-    if (tid && promptId) {
-      ai.setPendingWaitingChoice(tid, promptId, '');
-    }
-    setUseCustomReply(true);
-    setSelectedOptionIndex(-1);
-  };
-
-  const handleCustomInput = (value: string) => {
-    setCustomReply(value);
-    if (!useCustomReply()) {
-      setUseCustomReply(true);
-      setSelectedOptionIndex(-1);
-    }
-  };
-
-  const handleCustomSubmit = async () => {
-    if (!canSubmitCustomReply()) {
-      return;
-    }
-    await submitReply(customReply());
   };
 
   return (
@@ -3130,82 +3123,73 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
         </Show>
       </div>
 
-      <p class="chat-tool-ask-user-question">{props.display.question}</p>
+      <For each={currentQuestions()}>
+        {(question) => {
+          const draft = createMemo(() => promptDrafts()[question.id] ?? { answers: [] });
+          return (
+            <div class="chat-tool-ask-user-question-group">
+              <p class="chat-tool-ask-user-question">{question.question}</p>
+              <Show when={question.options.length > 0}>
+                <div class="chat-tool-ask-user-options" role="radiogroup" aria-label={question.header}>
+                  <For each={question.options}>
+                    {(option) => (
+                      <label
+                        class={cn(
+                          'chat-tool-ask-user-option-row',
+                          draft().selectedOptionId === option.optionId && 'chat-tool-ask-user-option-row-selected',
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          class="chat-tool-ask-user-option-radio"
+                          name={`ask-user-reply-${props.block.toolId}-${question.id}`}
+                          checked={draft().selectedOptionId === option.optionId}
+                          onChange={() => setQuestionDraft(question.id, { selectedOptionId: option.optionId, answers: draft().answers })}
+                          disabled={controlsDisabled()}
+                        />
+                        <span class="chat-tool-ask-user-option-text">{option.label}</span>
+                      </label>
+                    )}
+                  </For>
+                </div>
+              </Show>
+              <Show when={question.isOther || question.options.length === 0}>
+                <input
+                  type={question.isSecret ? 'password' : 'text'}
+                  class="chat-tool-ask-user-custom-input"
+                  value={draft().answers[0] ?? ''}
+                  onInput={(event) => setQuestionDraft(question.id, { selectedOptionId: draft().selectedOptionId, answers: [event.currentTarget.value] })}
+                  placeholder={question.isSecret ? 'Enter secret value' : 'Type your answer'}
+                  aria-label={question.header}
+                  disabled={controlsDisabled()}
+                />
+              </Show>
+            </div>
+          );
+        }}
+      </For>
 
       <Show when={interactiveAllowed()} fallback={
         <div class="chat-tool-ask-user-submitted">
-          <span class="chat-tool-ask-user-submitted-label">{resolvedReplyLabel()}</span>
+          <span class="chat-tool-ask-user-submitted-label">Input resolved</span>
           <p class="chat-tool-ask-user-submitted-text">{resolvedReplyText()}</p>
         </div>
       }>
-        <>
-          <div class="chat-tool-ask-user-options" role="radiogroup" aria-label="Ask user reply options">
-            <For each={props.display.choices}>
-              {(choice, index) => (
-                <label
-                  class={cn(
-                    'chat-tool-ask-user-option-row',
-                    !useCustomReply() &&
-                      selectedOptionIndex() === index() &&
-                      'chat-tool-ask-user-option-row-selected',
-                  )}
-                >
-                  <input
-                    type="radio"
-                    class="chat-tool-ask-user-option-radio"
-                    name={`ask-user-reply-${props.block.toolId}`}
-                    checked={!useCustomReply() && selectedOptionIndex() === index()}
-                    onChange={() => handleOptionSelect(index())}
-                    disabled={controlsDisabled()}
-                  />
-                  <span class="chat-tool-ask-user-option-text">{choice.label}</span>
-                </label>
-              )}
-            </For>
-
-            <label
-              class={cn(
-                'chat-tool-ask-user-option-row chat-tool-ask-user-custom-row',
-                useCustomReply() && 'chat-tool-ask-user-custom-row-active',
-              )}
-            >
-              <input
-                type="radio"
-                class="chat-tool-ask-user-option-radio"
-                name={`ask-user-reply-${props.block.toolId}`}
-                checked={useCustomReply()}
-                onChange={() => handleCustomFocus()}
-                disabled={controlsDisabled()}
-              />
-              <div class="chat-tool-ask-user-custom-main">
-                <input
-                  class="chat-tool-ask-user-custom-input"
-                  value={customReply()}
-                  onFocus={() => handleCustomFocus()}
-                  onInput={(event) => handleCustomInput(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      void handleCustomSubmit();
-                    }
-                  }}
-                  placeholder="None of above"
-                  aria-label="Custom ask user reply"
-                  disabled={controlsDisabled()}
-                />
-                <button
-                  type="button"
-                  class="chat-tool-ask-user-custom-submit"
-                  disabled={!canSubmitCustomReply()}
-                  onClick={() => void handleCustomSubmit()}
-                >
-                  Send
-                </button>
-              </div>
-            </label>
-          </div>
-          <p class="chat-tool-ask-user-hint">Select one reply, or type your own and send.</p>
-        </>
+        <div class="chat-tool-ask-user-submit-row">
+          <button
+            type="button"
+            class="chat-tool-ask-user-custom-submit"
+            disabled={!canSubmit()}
+            onClick={() => void handleSubmit()}
+          >
+            Submit
+          </button>
+          <p class="chat-tool-ask-user-hint">
+            {unansweredQuestions().length > 0
+              ? `Answer ${unansweredQuestions().length} more question${unansweredQuestions().length === 1 ? '' : 's'} before submitting.`
+              : 'Select or type answers, then submit explicitly.'}
+          </p>
+        </div>
       </Show>
 
       <Show when={props.block.error}>

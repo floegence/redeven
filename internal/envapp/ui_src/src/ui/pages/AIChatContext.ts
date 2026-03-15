@@ -35,17 +35,37 @@ export type WaitingPromptActionView = Readonly<{
   mode?: ExecutionMode;
 }>;
 
-export type WaitingPromptChoiceView = Readonly<{
-  choice_id: string;
+export type WaitingPromptOptionView = Readonly<{
+  option_id: string;
   label: string;
+  description?: string;
   actions?: WaitingPromptActionView[];
+}>;
+
+export type WaitingPromptQuestionView = Readonly<{
+  id: string;
+  header: string;
+  question: string;
+  is_other: boolean;
+  is_secret: boolean;
+  options?: WaitingPromptOptionView[];
 }>;
 
 export type WaitingPromptView = Readonly<{
   prompt_id: string;
   message_id: string;
   tool_id: string;
-  choices?: WaitingPromptChoiceView[];
+  reason_code?: string;
+  required_from_user?: string[];
+  evidence_refs?: string[];
+  public_summary?: string;
+  contains_secret?: boolean;
+  questions?: WaitingPromptQuestionView[];
+}>;
+
+export type StructuredPromptAnswerDraft = Readonly<{
+  selectedOptionId?: string;
+  answers: string[];
 }>;
 
 export type ThreadView = Readonly<{
@@ -174,28 +194,56 @@ function normalizeWaitingPromptActions(raw: unknown): WaitingPromptActionView[] 
   return out;
 }
 
-function normalizeWaitingPromptChoices(raw: unknown): WaitingPromptChoiceView[] {
+function normalizeWaitingPromptOptions(raw: unknown): WaitingPromptOptionView[] {
   if (!Array.isArray(raw)) return [];
-  const out: WaitingPromptChoiceView[] = [];
-  const seenChoice = new Set<string>();
+  const out: WaitingPromptOptionView[] = [];
+  const seenOption = new Set<string>();
   const seenLabel = new Set<string>();
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const label = String((item as any).label ?? '').trim();
     if (!label) continue;
-    const choiceID = String((item as any).choice_id ?? (item as any).choiceId ?? '').trim() || `choice_${out.length + 1}`;
-    const choiceKey = choiceID.toLowerCase();
+    const optionID = String((item as any).option_id ?? (item as any).optionId ?? '').trim() || `option_${out.length + 1}`;
+    const optionKey = optionID.toLowerCase();
     const labelKey = label.toLowerCase();
-    if (seenChoice.has(choiceKey) || seenLabel.has(labelKey)) continue;
-    seenChoice.add(choiceKey);
+    if (seenOption.has(optionKey) || seenLabel.has(labelKey)) continue;
+    seenOption.add(optionKey);
     seenLabel.add(labelKey);
     const actions = normalizeWaitingPromptActions((item as any).actions);
     out.push({
-      choice_id: choiceID,
+      option_id: optionID,
       label,
+      description: String((item as any).description ?? '').trim() || undefined,
       actions: actions.length > 0 ? actions : undefined,
     });
     if (out.length >= 4) break;
+  }
+  return out;
+}
+
+function normalizeWaitingPromptQuestions(raw: unknown): WaitingPromptQuestionView[] {
+  if (!Array.isArray(raw)) return [];
+  const out: WaitingPromptQuestionView[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const id = String((item as any).id ?? '').trim();
+    const header = String((item as any).header ?? '').trim();
+    const question = String((item as any).question ?? '').trim();
+    if (!id || !header || !question) continue;
+    const key = id.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const options = normalizeWaitingPromptOptions((item as any).options);
+    out.push({
+      id,
+      header,
+      question,
+      is_other: Boolean((item as any).is_other),
+      is_secret: Boolean((item as any).is_secret),
+      options: options.length > 0 ? options : undefined,
+    });
+    if (out.length >= 5) break;
   }
   return out;
 }
@@ -206,12 +254,21 @@ function normalizeWaitingPrompt(raw: any): WaitingPromptView | null {
   const messageID = String((raw as any).message_id ?? (raw as any).messageId ?? '').trim();
   const toolID = String((raw as any).tool_id ?? (raw as any).toolId ?? '').trim();
   if (!promptID || !messageID || !toolID) return null;
-  const choices = normalizeWaitingPromptChoices((raw as any).choices);
+  const questions = normalizeWaitingPromptQuestions((raw as any).questions);
   return {
     prompt_id: promptID,
     message_id: messageID,
     tool_id: toolID,
-    choices: choices.length > 0 ? choices : undefined,
+    reason_code: String((raw as any).reason_code ?? (raw as any).reasonCode ?? '').trim() || undefined,
+    required_from_user: Array.isArray((raw as any).required_from_user)
+      ? (raw as any).required_from_user.map((item: unknown) => String(item ?? '').trim()).filter(Boolean)
+      : undefined,
+    evidence_refs: Array.isArray((raw as any).evidence_refs)
+      ? (raw as any).evidence_refs.map((item: unknown) => String(item ?? '').trim()).filter(Boolean)
+      : undefined,
+    public_summary: String((raw as any).public_summary ?? (raw as any).publicSummary ?? '').trim() || undefined,
+    contains_secret: Boolean((raw as any).contains_secret ?? (raw as any).containsSecret),
+    questions: questions.length > 0 ? questions : undefined,
   };
 }
 
@@ -258,8 +315,18 @@ export interface AIChatContextValue {
   confirmThreadRun: (threadId: string, runId: string) => void;
   clearThreadPendingRun: (threadId: string) => void;
   consumeWaitingPrompt: (threadId: string, promptId: string) => void;
-  setPendingWaitingChoice: (threadId: string, promptId: string, choiceId: string) => void;
-  getPendingWaitingChoice: (threadId: string, promptId: string) => string | null;
+  setStructuredPromptDraft: (threadId: string, promptId: string, questionId: string, draft: StructuredPromptAnswerDraft | null) => void;
+  getStructuredPromptDrafts: (threadId: string, promptId: string) => Record<string, StructuredPromptAnswerDraft>;
+  submitStructuredPromptResponse: (args: {
+    threadId: string;
+    promptId: string;
+    answers: Record<string, StructuredPromptAnswerDraft>;
+    messageId?: string;
+    text?: string;
+    attachments?: Array<{ name: string; mimeType: string; url: string }>;
+    expectedRunId?: string;
+    sourceFollowupId?: string;
+  }) => Promise<{ runId?: string; consumedWaitingPromptId?: string; appliedExecutionMode?: ExecutionMode }>;
   isThreadRunning: (threadId: string | null | undefined) => boolean;
   onRealtimeEvent: (handler: (event: AIRealtimeEvent) => void) => () => void;
 }
@@ -385,7 +452,7 @@ export function createAIChatContextValue(): AIChatContextValue {
   const [activeRunByThread, setActiveRunByThread] = createSignal<Record<string, string>>({});
   const [pendingRunByThread, setPendingRunByThread] = createSignal<Record<string, true>>({});
   const [waitingPromptByThread, setWaitingPromptByThread] = createSignal<Record<string, WaitingPromptView | null>>({});
-  const [pendingWaitingChoiceByPrompt, setPendingWaitingChoiceByPrompt] = createSignal<Record<string, string>>({});
+  const [structuredPromptDraftsByPrompt, setStructuredPromptDraftsByPrompt] = createSignal<Record<string, Record<string, StructuredPromptAnswerDraft>>>({});
 
   const realtimeListeners = new Set<(event: AIRealtimeEvent) => void>();
 
@@ -420,7 +487,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     return normalizeWaitingPrompt((th as any)?.waiting_prompt);
   };
 
-  const waitingChoiceKey = (threadId: string, promptId: string): string => {
+  const waitingPromptKey = (threadId: string, promptId: string): string => {
     const tid = String(threadId ?? '').trim();
     const pid = String(promptId ?? '').trim();
     if (!tid || !pid) return '';
@@ -431,7 +498,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const tid = String(threadId ?? '').trim();
     if (!tid) return;
     const keep = String(keepPromptId ?? '').trim();
-    setPendingWaitingChoiceByPrompt((prev) => {
+    setStructuredPromptDraftsByPrompt((prev) => {
       let changed = false;
       const next = { ...prev };
       const prefix = `${tid}\u001f`;
@@ -445,28 +512,109 @@ export function createAIChatContextValue(): AIChatContextValue {
     });
   };
 
-  const setPendingWaitingChoice = (threadId: string, promptId: string, choiceId: string) => {
-    const key = waitingChoiceKey(threadId, promptId);
-    const choice = String(choiceId ?? '').trim();
+  const setStructuredPromptDraft = (threadId: string, promptId: string, questionId: string, draft: StructuredPromptAnswerDraft | null) => {
+    const key = waitingPromptKey(threadId, promptId);
+    const qid = String(questionId ?? '').trim();
     if (!key) return;
-    if (!choice) {
-      setPendingWaitingChoiceByPrompt((prev) => {
-        if (!Object.prototype.hasOwnProperty.call(prev, key)) return prev;
+    if (!qid) return;
+    if (!draft) {
+      setStructuredPromptDraftsByPrompt((prev) => {
+        const current = prev[key];
+        if (!current || !Object.prototype.hasOwnProperty.call(current, qid)) return prev;
         const next = { ...prev };
-        delete next[key];
+        const promptDrafts = { ...current };
+        delete promptDrafts[qid];
+        if (Object.keys(promptDrafts).length === 0) delete next[key];
+        else next[key] = promptDrafts;
         return next;
       });
       return;
     }
-    setPendingWaitingChoiceByPrompt((prev) => ({ ...prev, [key]: choice }));
+    const normalized: StructuredPromptAnswerDraft = {
+      selectedOptionId: String(draft.selectedOptionId ?? '').trim() || undefined,
+      answers: Array.isArray(draft.answers) ? draft.answers.map((item) => String(item ?? '').trim()).filter(Boolean) : [],
+    };
+    setStructuredPromptDraftsByPrompt((prev) => ({
+      ...prev,
+      [key]: {
+        ...(prev[key] ?? {}),
+        [qid]: normalized,
+      },
+    }));
   };
 
-  const getPendingWaitingChoice = (threadId: string, promptId: string): string | null => {
-    const key = waitingChoiceKey(threadId, promptId);
-    if (!key) return null;
-    const map = pendingWaitingChoiceByPrompt();
-    const choice = String(map[key] ?? '').trim();
-    return choice || null;
+  const getStructuredPromptDrafts = (threadId: string, promptId: string): Record<string, StructuredPromptAnswerDraft> => {
+    const key = waitingPromptKey(threadId, promptId);
+    if (!key) return {};
+    return structuredPromptDraftsByPrompt()[key] ?? {};
+  };
+
+  const submitStructuredPromptResponse: AIChatContextValue['submitStructuredPromptResponse'] = async (args) => {
+    const tid = String(args.threadId ?? '').trim();
+    const promptId = String(args.promptId ?? '').trim();
+    if (!tid || !promptId) {
+      throw new Error('Missing thread or prompt.');
+    }
+    const model = String(selectedModel() ?? '').trim();
+    if (!model) {
+      throw new Error('Missing model.');
+    }
+    const answers: Record<string, { selectedOptionId?: string; answers: string[] }> = {};
+    for (const [questionId, draft] of Object.entries(args.answers ?? {})) {
+      const qid = String(questionId ?? '').trim();
+      if (!qid) continue;
+      answers[qid] = {
+        selectedOptionId: String(draft?.selectedOptionId ?? '').trim() || undefined,
+        answers: Array.isArray(draft?.answers) ? draft.answers.map((item) => String(item ?? '').trim()).filter(Boolean) : [],
+      };
+    }
+
+    markThreadPendingRun(tid);
+    try {
+      try {
+        await rpc.ai.subscribeThread({ threadId: tid });
+      } catch {
+        // Best effort.
+      }
+      const resp = await rpc.ai.submitStructuredPromptResponse({
+        threadId: tid,
+        model,
+        response: {
+          promptId,
+          answers,
+        },
+        input: {
+          messageId: String(args.messageId ?? '').trim() || undefined,
+          text: String(args.text ?? ''),
+          attachments: Array.isArray(args.attachments) ? args.attachments : [],
+        },
+        options: {
+          maxSteps: 10,
+          mode: activeThread()?.execution_mode ?? 'act',
+        },
+        expectedRunId: String(args.expectedRunId ?? '').trim() || undefined,
+        sourceFollowupId: String(args.sourceFollowupId ?? '').trim() || undefined,
+      });
+      const consumedPromptId = String(resp.consumedWaitingPromptId ?? '').trim();
+      if (consumedPromptId) {
+        consumeWaitingPrompt(tid, consumedPromptId);
+      }
+      const rid = String(resp.runId ?? '').trim();
+      if (rid) {
+        confirmThreadRun(tid, rid);
+      } else {
+        clearThreadPendingRun(tid);
+      }
+      bumpThreadsSeq();
+      return {
+        runId: rid || undefined,
+        consumedWaitingPromptId: consumedPromptId || undefined,
+        appliedExecutionMode: resp.appliedExecutionMode,
+      };
+    } catch (error) {
+      clearThreadPendingRun(tid);
+      throw error;
+    }
   };
 
   const markThreadPendingRun = (threadId: string) => {
@@ -646,7 +794,7 @@ export function createAIChatContextValue(): AIChatContextValue {
       setActiveRunByThread({});
       setPendingRunByThread({});
       setWaitingPromptByThread({});
-      setPendingWaitingChoiceByPrompt({});
+      setStructuredPromptDraftsByPrompt({});
     });
   });
 
@@ -670,7 +818,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     setActiveRunByThread({});
     setPendingRunByThread({});
     setWaitingPromptByThread({});
-    setPendingWaitingChoiceByPrompt({});
+    setStructuredPromptDraftsByPrompt({});
   });
 
   // Reconcile run state with the thread list so UI never gets stuck if realtime events are dropped.
@@ -1079,8 +1227,9 @@ export function createAIChatContextValue(): AIChatContextValue {
     confirmThreadRun,
     clearThreadPendingRun,
     consumeWaitingPrompt,
-    setPendingWaitingChoice,
-    getPendingWaitingChoice,
+    setStructuredPromptDraft,
+    getStructuredPromptDrafts,
+    submitStructuredPromptResponse,
     isThreadRunning,
     onRealtimeEvent,
   };

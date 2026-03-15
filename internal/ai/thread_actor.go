@@ -117,6 +117,18 @@ type sendUserTurnResult struct {
 	err  error
 }
 
+type cmdSubmitStructuredPromptResponse struct {
+	ctx  context.Context
+	meta *session.Meta
+	req  SubmitStructuredPromptResponseRequest
+	resp chan submitStructuredPromptResponseResult
+}
+
+type submitStructuredPromptResponseResult struct {
+	resp SubmitStructuredPromptResponseResponse
+	err  error
+}
+
 type cmdRewindThread struct {
 	ctx  context.Context
 	meta *session.Meta
@@ -234,6 +246,34 @@ func (a *threadActor) SendUserTurn(ctx context.Context, meta *session.Meta, req 
 	}
 }
 
+func (a *threadActor) SubmitStructuredPromptResponse(ctx context.Context, meta *session.Meta, req SubmitStructuredPromptResponseRequest) (SubmitStructuredPromptResponseResponse, error) {
+	if a == nil {
+		return SubmitStructuredPromptResponseResponse{}, errors.New("thread actor not ready")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ch := make(chan submitStructuredPromptResponseResult, 1)
+	cmd := cmdSubmitStructuredPromptResponse{ctx: ctx, meta: meta, req: req, resp: ch}
+
+	select {
+	case <-a.stopCh:
+		return SubmitStructuredPromptResponseResponse{}, errors.New("thread actor closed")
+	case <-ctx.Done():
+		return SubmitStructuredPromptResponseResponse{}, ctx.Err()
+	case a.inbox <- cmd:
+	}
+
+	select {
+	case <-a.stopCh:
+		return SubmitStructuredPromptResponseResponse{}, errors.New("thread actor closed")
+	case <-ctx.Done():
+		return SubmitStructuredPromptResponseResponse{}, ctx.Err()
+	case res := <-ch:
+		return res.resp, res.err
+	}
+}
+
 func (a *threadActor) RewindThread(ctx context.Context, meta *session.Meta, req RewindThreadRequest) (RewindThreadResponse, error) {
 	if a == nil {
 		return RewindThreadResponse{}, errors.New("thread actor not ready")
@@ -303,6 +343,9 @@ func (a *threadActor) loop() {
 			case cmdSendUserTurn:
 				resp, err := a.handleSendUserTurn(cmd.ctx, cmd.meta, cmd.req)
 				cmd.resp <- sendUserTurnResult{resp: resp, err: err}
+			case cmdSubmitStructuredPromptResponse:
+				resp, err := a.handleSubmitStructuredPromptResponse(cmd.ctx, cmd.meta, cmd.req)
+				cmd.resp <- submitStructuredPromptResponseResult{resp: resp, err: err}
 			case cmdRewindThread:
 				resp, err := a.handleRewindThread(cmd.ctx, cmd.meta, cmd.req)
 				cmd.resp <- rewindThreadResult{resp: resp, err: err}
@@ -377,7 +420,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 		return nil
 	}
 	runStatus, _ := normalizeThreadRunState(th.RunStatus, th.RunError)
-	if NormalizeRunState(runStatus) == RunStateWaitingUser || waitingPromptFromThreadRecord(th, runStatus) != nil {
+	if NormalizeRunState(runStatus) == RunStateWaitingUser || requestUserInputPromptFromThreadRecord(th, runStatus) != nil {
 		return nil
 	}
 
@@ -433,15 +476,12 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		return SendUserTurnResponse{}, errors.New("invalid request")
 	}
 	expected := strings.TrimSpace(req.ExpectedRunID)
-	waitingResponse := normalizeWaitingPromptResponse(req.WaitingResponse)
 	activeRunID, _ := a.lookupActiveRun(endpointID, threadID)
 	if activeRunID != "" && expected != "" && expected != activeRunID {
 		return SendUserTurnResponse{}, ErrRunChanged
 	}
 
-	consumedWaitingPromptID := ""
 	appliedExecutionMode := ""
-	appliedWaitingChoiceID := ""
 	a.mgr.svc.mu.Lock()
 	db := a.mgr.svc.threadsDB
 	persistTO := a.mgr.svc.persistOpTO
@@ -483,11 +523,8 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 			a.mgr.svc.log.Warn("failed to consume source followup", "thread_id", threadID, "followup_id", strings.TrimSpace(req.SourceFollowupID), "error", err)
 		}
 	}
-	openWaitingPrompt := waitingPromptFromThreadRecord(th, th.RunStatus)
-	if openWaitingPrompt != nil && req.QueueAfterWaitingUser {
-		if waitingResponse != nil {
-			return SendUserTurnResponse{}, ErrWaitingUserQueueConflict
-		}
+	openPrompt := requestUserInputPromptFromThreadRecord(th, th.RunStatus)
+	if openPrompt != nil && req.QueueAfterWaitingUser {
 		req.Options.Mode = resolvedExecutionMode
 		appliedExecutionMode = resolvedExecutionMode
 		queued, position, err := a.mgr.svc.enqueueQueuedTurn(ctx, meta, req)
@@ -502,41 +539,8 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 			AppliedExecutionMode: appliedExecutionMode,
 		}, nil
 	}
-	if openWaitingPrompt != nil {
-		if waitingResponse == nil || strings.TrimSpace(openWaitingPrompt.PromptID) != strings.TrimSpace(waitingResponse.PromptID) {
-			return SendUserTurnResponse{}, ErrWaitingPromptChanged
-		}
-		consumedWaitingPromptID = strings.TrimSpace(openWaitingPrompt.PromptID)
-		if strings.TrimSpace(waitingResponse.ChoiceID) != "" {
-			selectedChoice, ok := waitingPromptChoiceByID(openWaitingPrompt.Choices, waitingResponse.ChoiceID)
-			if !ok || selectedChoice == nil {
-				return SendUserTurnResponse{}, ErrWaitingPromptChanged
-			}
-			appliedWaitingChoiceID = strings.TrimSpace(selectedChoice.ChoiceID)
-			nextExecutionMode := resolvedExecutionMode
-			for _, action := range selectedChoice.Actions {
-				normalizedAction, ok := normalizeWaitingPromptAction(action)
-				if !ok {
-					continue
-				}
-				if normalizedAction.Type == waitingPromptActionSetMode {
-					nextExecutionMode = normalizeRunMode(normalizedAction.Mode, resolvedExecutionMode)
-				}
-			}
-			if nextExecutionMode != resolvedExecutionMode {
-				uctx, ucancel := context.WithTimeout(ctx, persistTO)
-				if err := db.UpdateThreadExecutionMode(uctx, endpointID, threadID, nextExecutionMode); err != nil {
-					ucancel()
-					return SendUserTurnResponse{}, err
-				}
-				ucancel()
-				resolvedExecutionMode = nextExecutionMode
-				th.ExecutionMode = nextExecutionMode
-				a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
-			}
-		}
-	} else if waitingResponse != nil {
-		return SendUserTurnResponse{}, ErrWaitingPromptChanged
+	if openPrompt != nil {
+		return SendUserTurnResponse{}, ErrWaitingUserQueueConflict
 	}
 	req.Options.Mode = resolvedExecutionMode
 	appliedExecutionMode = resolvedExecutionMode
@@ -548,12 +552,10 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		}
 		consumeSourceFollowup()
 		return SendUserTurnResponse{
-			Kind:                    "queued",
-			QueueID:                 strings.TrimSpace(queued.QueueID),
-			QueuePosition:           position,
-			ConsumedWaitingPromptID: consumedWaitingPromptID,
-			AppliedExecutionMode:    appliedExecutionMode,
-			AppliedWaitingChoiceID:  appliedWaitingChoiceID,
+			Kind:                 "queued",
+			QueueID:              strings.TrimSpace(queued.QueueID),
+			QueuePosition:        position,
+			AppliedExecutionMode: appliedExecutionMode,
 		}, nil
 	}
 
@@ -594,11 +596,165 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	}
 	consumeSourceFollowup()
 	return SendUserTurnResponse{
+		RunID:                runID,
+		Kind:                 "start",
+		AppliedExecutionMode: appliedExecutionMode,
+	}, nil
+}
+
+func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, meta *session.Meta, req SubmitStructuredPromptResponseRequest) (SubmitStructuredPromptResponseResponse, error) {
+	if a == nil || a.mgr == nil || a.mgr.svc == nil {
+		return SubmitStructuredPromptResponseResponse{}, errors.New("service not ready")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := requireRWX(meta); err != nil {
+		return SubmitStructuredPromptResponseResponse{}, err
+	}
+	if !a.mgr.svc.Enabled() {
+		return SubmitStructuredPromptResponseResponse{}, ErrNotConfigured
+	}
+
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if endpointID == "" || endpointID != strings.TrimSpace(a.endpointID) {
+		return SubmitStructuredPromptResponseResponse{}, errors.New("invalid request")
+	}
+	threadID := strings.TrimSpace(req.ThreadID)
+	if threadID == "" || threadID != strings.TrimSpace(a.threadID) {
+		return SubmitStructuredPromptResponseResponse{}, errors.New("invalid request")
+	}
+	expected := strings.TrimSpace(req.ExpectedRunID)
+	activeRunID, _ := a.lookupActiveRun(endpointID, threadID)
+	if activeRunID != "" && expected != "" && expected != activeRunID {
+		return SubmitStructuredPromptResponseResponse{}, ErrRunChanged
+	}
+
+	a.mgr.svc.mu.Lock()
+	db := a.mgr.svc.threadsDB
+	persistTO := a.mgr.svc.persistOpTO
+	cfg := a.mgr.svc.cfg
+	a.mgr.svc.mu.Unlock()
+	if db == nil {
+		return SubmitStructuredPromptResponseResponse{}, errors.New("threads store not ready")
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+	tctx, cancel := context.WithTimeout(ctx, persistTO)
+	th, err := db.GetThread(tctx, endpointID, threadID)
+	cancel()
+	if err != nil {
+		return SubmitStructuredPromptResponseResponse{}, err
+	}
+	if th == nil {
+		return SubmitStructuredPromptResponseResponse{}, errors.New("thread not found")
+	}
+	requestedModel := strings.TrimSpace(req.Model)
+	if th.ModelLocked {
+		lockedModelID := strings.TrimSpace(th.ModelID)
+		if lockedModelID == "" {
+			return SubmitStructuredPromptResponseResponse{}, ErrModelLockViolation
+		}
+		if requestedModel != "" && requestedModel != lockedModelID {
+			return SubmitStructuredPromptResponseResponse{}, ErrModelSwitchRequiresExplicitRestart
+		}
+		req.Model = lockedModelID
+	}
+	modeFallback := "act"
+	if cfg != nil {
+		modeFallback = cfg.EffectiveMode()
+	}
+	resolvedExecutionMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback)
+	consumeSourceFollowup := func() {
+		if err := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, req.SourceFollowupID); err != nil && a.mgr.svc.log != nil {
+			a.mgr.svc.log.Warn("failed to consume source followup", "thread_id", threadID, "followup_id", strings.TrimSpace(req.SourceFollowupID), "error", err)
+		}
+	}
+	openPrompt := requestUserInputPromptFromThreadRecord(th, th.RunStatus)
+	if openPrompt == nil {
+		return SubmitStructuredPromptResponseResponse{}, ErrWaitingPromptChanged
+	}
+	validatedResponse, err := validateRequestUserInputResponse(openPrompt, &req.Response)
+	if err != nil {
+		return SubmitStructuredPromptResponseResponse{}, err
+	}
+	responseRecord, secretAnswers, err := buildRequestUserInputResponseRecord(*openPrompt, *validatedResponse, req.Input.MessageID)
+	if err != nil {
+		return SubmitStructuredPromptResponseResponse{}, err
+	}
+	req.Input.StructuredResponse = &responseRecord
+	req.Input.SecretAnswers = secretAnswers
+
+	nextExecutionMode := resolvedExecutionMode
+	for _, question := range openPrompt.Questions {
+		answer := validatedResponse.Answers[question.ID]
+		option, ok := requestUserInputOptionByID(&question, answer.SelectedOptionID)
+		if !ok || option == nil {
+			continue
+		}
+		for _, action := range option.Actions {
+			normalizedAction, ok := normalizeRequestUserInputAction(action)
+			if !ok {
+				continue
+			}
+			if normalizedAction.Type == requestUserInputActionSetMode {
+				nextExecutionMode = normalizeRunMode(normalizedAction.Mode, resolvedExecutionMode)
+			}
+		}
+	}
+	if nextExecutionMode != resolvedExecutionMode {
+		uctx, ucancel := context.WithTimeout(ctx, persistTO)
+		if err := db.UpdateThreadExecutionMode(uctx, endpointID, threadID, nextExecutionMode); err != nil {
+			ucancel()
+			return SubmitStructuredPromptResponseResponse{}, err
+		}
+		ucancel()
+		resolvedExecutionMode = nextExecutionMode
+		a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
+	}
+	req.Options.Mode = resolvedExecutionMode
+
+	if activeRunID != "" {
+		return SubmitStructuredPromptResponseResponse{}, ErrRunChanged
+	}
+	runID, err := NewRunID()
+	if err != nil {
+		return SubmitStructuredPromptResponseResponse{}, err
+	}
+	checkpointID := checkpointIDForRun(runID)
+	if strings.TrimSpace(checkpointID) == "" {
+		return SubmitStructuredPromptResponseResponse{}, errors.New("missing checkpoint id")
+	}
+	cctx, cancel := context.WithTimeout(ctx, persistTO)
+	_, cpErr := db.CreateThreadCheckpoint(cctx, endpointID, threadID, checkpointID, runID, threadstore.CheckpointKindPreRun)
+	cancel()
+	if cpErr != nil {
+		return SubmitStructuredPromptResponseResponse{}, cpErr
+	}
+	persisted, normalizedInput, err := a.mgr.svc.persistUserMessage(ctx, meta, endpointID, threadID, req.Input)
+	if err != nil {
+		return SubmitStructuredPromptResponseResponse{}, err
+	}
+	req.Input = normalizedInput
+	a.mgr.svc.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
+	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
+
+	startReq := RunStartRequest{
+		ThreadID: threadID,
+		Model:    strings.TrimSpace(req.Model),
+		Input:    req.Input,
+		Options:  req.Options,
+	}
+	if err := a.mgr.svc.StartRunDetachedWithPersisted(meta, runID, startReq, persisted); err != nil {
+		return SubmitStructuredPromptResponseResponse{}, err
+	}
+	consumeSourceFollowup()
+	return SubmitStructuredPromptResponseResponse{
 		RunID:                   runID,
 		Kind:                    "start",
-		ConsumedWaitingPromptID: consumedWaitingPromptID,
-		AppliedExecutionMode:    appliedExecutionMode,
-		AppliedWaitingChoiceID:  appliedWaitingChoiceID,
+		ConsumedWaitingPromptID: strings.TrimSpace(openPrompt.PromptID),
+		AppliedExecutionMode:    resolvedExecutionMode,
 	}, nil
 }
 

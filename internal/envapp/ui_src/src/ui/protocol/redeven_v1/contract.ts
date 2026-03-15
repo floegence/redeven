@@ -10,6 +10,8 @@ import type {
   AIListMessagesResponse,
   AISendUserTurnRequest,
   AISendUserTurnResponse,
+  AISubmitStructuredPromptResponseRequest,
+  AISubmitStructuredPromptResponseResponse,
   AISetToolCollapsedRequest,
   AISetToolCollapsedResponse,
   AIStopThreadRequest,
@@ -68,6 +70,7 @@ import {
   fromWireAIGetActiveRunSnapshotResponse,
   fromWireAIListMessagesResponse,
   fromWireAISendUserTurnResponse,
+  fromWireAISubmitStructuredPromptResponseResponse,
   fromWireAISubscribeSummaryResponse,
   fromWireAISubscribeThreadResponse,
   fromWireAIThreadRewindResponse,
@@ -78,6 +81,7 @@ import {
   toWireAIGetActiveRunSnapshotRequest,
   toWireAIListMessagesRequest,
   toWireAISendUserTurnRequest,
+  toWireAISubmitStructuredPromptResponseRequest,
   toWireAISubscribeThreadRequest,
   toWireAIThreadRewindRequest,
   toWireAIStopThreadRequest,
@@ -135,6 +139,8 @@ import type {
   wire_ai_list_messages_resp,
   wire_ai_send_user_turn_req,
   wire_ai_send_user_turn_resp,
+  wire_ai_submit_structured_prompt_response_req,
+  wire_ai_submit_structured_prompt_response_resp,
   wire_ai_set_tool_collapsed_req,
   wire_ai_set_tool_collapsed_resp,
   wire_ai_stop_thread_req,
@@ -233,6 +239,7 @@ export type RedevenV1Rpc = {
   ai: {
     cancelRun: (req: AICancelRunRequest) => Promise<AICancelRunResponse>;
     sendUserTurn: (req: AISendUserTurnRequest) => Promise<AISendUserTurnResponse>;
+    submitStructuredPromptResponse: (req: AISubmitStructuredPromptResponseRequest) => Promise<AISubmitStructuredPromptResponseResponse>;
     subscribeSummary: () => Promise<AISubscribeSummaryResponse>;
     subscribeThread: (req: AISubscribeThreadRequest) => Promise<AISubscribeThreadResponse>;
     threadRewind: (req: AIThreadRewindRequest) => Promise<AIThreadRewindResponse>;
@@ -461,6 +468,11 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireAISendUserTurnRequest(req);
         const resp = await call<wire_ai_send_user_turn_req, wire_ai_send_user_turn_resp>(redevenV1TypeIds.ai.sendUserTurn, payload);
         return fromWireAISendUserTurnResponse(resp);
+      },
+      submitStructuredPromptResponse: async (req) => {
+        const payload = toWireAISubmitStructuredPromptResponseRequest(req);
+        const resp = await call<wire_ai_submit_structured_prompt_response_req, wire_ai_submit_structured_prompt_response_resp>(redevenV1TypeIds.ai.submitStructuredPromptResponse, payload);
+        return fromWireAISubmitStructuredPromptResponseResponse(resp);
       },
       cancelRun: async (req) => {
         const payload = toWireAICancelRunRequest(req);

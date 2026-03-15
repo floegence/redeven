@@ -36,3 +36,13 @@ type persistedFileBlock struct {
 	MimeType string `json:"mimeType"`
 	URL      string `json:"url,omitempty"`
 }
+
+type persistedRequestUserInputResponseBlock struct {
+	Type          string                             `json:"type"` // "request_user_input_response"
+	PromptID      string                             `json:"prompt_id"`
+	ToolID        string                             `json:"tool_id,omitempty"`
+	ReasonCode    string                             `json:"reason_code,omitempty"`
+	Responses     []RequestUserInputResolvedQuestion `json:"responses,omitempty"`
+	PublicSummary string                             `json:"public_summary,omitempty"`
+	ContainsSecret bool                              `json:"contains_secret,omitempty"`
+}

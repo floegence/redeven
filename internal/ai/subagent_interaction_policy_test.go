@@ -93,7 +93,7 @@ func TestResolveRunCapabilityContract_NoUserInteraction(t *testing.T) {
 		{Name: "terminal.exec"},
 	}
 	r := &run{noUserInteraction: true}
-	contract := resolveRunCapabilityContract(r, tools)
+	contract := resolveRunCapabilityContract(r, tools, false)
 	if contract.AllowUserInteraction {
 		t.Fatalf("expected no user interaction")
 	}
@@ -117,7 +117,15 @@ func TestSplitSignalsByPolicy_BlocksAskUserWhenDisallowed(t *testing.T) {
 		},
 	}
 	calls := []ToolCall{
-		{Name: "ask_user", ID: "tool_ask", Args: map[string]any{"question": "Need input"}},
+		{Name: "ask_user", ID: "tool_ask", Args: map[string]any{
+			"questions": []map[string]any{{
+				"id":        "question_1",
+				"header":    "Need input",
+				"question":  "Need input",
+				"is_other":  true,
+				"is_secret": false,
+			}},
+		}},
 		{Name: "task_complete", ID: "tool_done", Args: map[string]any{"result": "ok"}},
 		{Name: "terminal.exec", ID: "tool_exec", Args: map[string]any{"command": "pwd"}},
 	}
@@ -143,7 +151,7 @@ func TestBuildLayeredSystemPrompt_NoUserInteractionOmitsAskUserGuidance(t *testi
 		NoUserInteraction: true,
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "task_complete"}}
-	contract := resolveRunCapabilityContract(r, tools)
+	contract := resolveRunCapabilityContract(r, tools, false)
 	prompt := r.buildLayeredSystemPrompt("objective", "act", TaskComplexityStandard, 0, 8, true, tools, newRuntimeState("objective"), "", contract)
 	if strings.Contains(prompt, "call ask_user") || strings.Contains(prompt, "ask_user is unavailable") || strings.Contains(prompt, "Do not attempt ask_user") {
 		t.Fatalf("no-user prompt should not include ask_user guidance: %q", prompt)
@@ -159,7 +167,7 @@ func TestBuildLayeredSystemPrompt_PlanModeEnforcesReadonlyAndAskUserSwitch(t *te
 		AgentHomeDir: t.TempDir(),
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "apply_patch"}, {Name: "task_complete"}, {Name: "ask_user"}}
-	contract := resolveRunCapabilityContract(r, tools)
+	contract := resolveRunCapabilityContract(r, tools, false)
 	prompt := r.buildLayeredSystemPrompt("objective", "plan", TaskComplexityStandard, 0, 8, true, tools, newRuntimeState("objective"), "", contract)
 	if !strings.Contains(prompt, "Plan mode is strict readonly: do NOT run any mutating action.") {
 		t.Fatalf("plan prompt missing strict readonly guidance: %q", prompt)
@@ -176,7 +184,7 @@ func TestBuildLayeredSystemPrompt_PlanModeNoUserInteractionUsesTaskCompleteBlock
 		NoUserInteraction: true,
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "task_complete"}}
-	contract := resolveRunCapabilityContract(r, tools)
+	contract := resolveRunCapabilityContract(r, tools, false)
 	prompt := r.buildLayeredSystemPrompt("objective", "plan", TaskComplexityStandard, 0, 8, true, tools, newRuntimeState("objective"), "", contract)
 	if !strings.Contains(prompt, "User interaction is disabled in this run, so do NOT call ask_user.") {
 		t.Fatalf("plan no-user prompt missing no-ask_user guidance: %q", prompt)

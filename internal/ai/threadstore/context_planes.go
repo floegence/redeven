@@ -70,6 +70,35 @@ type ContextSnapshotRecord struct {
 	CreatedAtUnixMs  int64   `json:"created_at_unix_ms"`
 }
 
+type StructuredUserInputRecord struct {
+	ID                  int64    `json:"id"`
+	EndpointID          string   `json:"endpoint_id"`
+	ThreadID            string   `json:"thread_id"`
+	ResponseMessageID   string   `json:"response_message_id"`
+	PromptID            string   `json:"prompt_id"`
+	ToolID              string   `json:"tool_id"`
+	ReasonCode          string   `json:"reason_code"`
+	QuestionID          string   `json:"question_id"`
+	Header              string   `json:"header"`
+	QuestionText        string   `json:"question_text"`
+	SelectedOptionID    string   `json:"selected_option_id"`
+	SelectedOptionLabel string   `json:"selected_option_label"`
+	Answers             []string `json:"answers,omitempty"`
+	PublicSummary       string   `json:"public_summary"`
+	ContainsSecret      bool     `json:"contains_secret"`
+	CreatedAtUnixMs     int64    `json:"created_at_unix_ms"`
+}
+
+type RequestUserInputSecretAnswerRecord struct {
+	ID                int64    `json:"id"`
+	EndpointID        string   `json:"endpoint_id"`
+	ThreadID          string   `json:"thread_id"`
+	ResponseMessageID string   `json:"response_message_id"`
+	QuestionID        string   `json:"question_id"`
+	Answers           []string `json:"answers,omitempty"`
+	CreatedAtUnixMs   int64    `json:"created_at_unix_ms"`
+}
+
 // ProviderCapabilityRecord caches capability json by provider/model.
 type ProviderCapabilityRecord struct {
 	ProviderID      string `json:"provider_id"`
@@ -1073,6 +1102,235 @@ WHERE provider_id = ? AND model_name = ?
 	return &rec, nil
 }
 
+func (s *Store) ReplaceStructuredUserInputs(ctx context.Context, endpointID string, threadID string, responseMessageID string, records []StructuredUserInputRecord) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	responseMessageID = strings.TrimSpace(responseMessageID)
+	if endpointID == "" || threadID == "" || responseMessageID == "" {
+		return errors.New("invalid request")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `
+DELETE FROM structured_user_inputs
+WHERE endpoint_id = ? AND thread_id = ? AND response_message_id = ?
+`, endpointID, threadID, responseMessageID); err != nil {
+		return err
+	}
+	for _, rec := range records {
+		if strings.TrimSpace(rec.QuestionID) == "" {
+			continue
+		}
+		answersJSON := "[]"
+		if len(rec.Answers) > 0 {
+			if raw, err := json.Marshal(rec.Answers); err == nil {
+				answersJSON = string(raw)
+			}
+		}
+		createdAt := rec.CreatedAtUnixMs
+		if createdAt <= 0 {
+			createdAt = time.Now().UnixMilli()
+		}
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO structured_user_inputs(
+  endpoint_id, thread_id, response_message_id,
+  prompt_id, tool_id, reason_code, question_id,
+  header, question_text,
+  selected_option_id, selected_option_label,
+  answers_json, public_summary, contains_secret, created_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, endpointID, threadID, responseMessageID, strings.TrimSpace(rec.PromptID), strings.TrimSpace(rec.ToolID), strings.TrimSpace(rec.ReasonCode), strings.TrimSpace(rec.QuestionID), strings.TrimSpace(rec.Header), strings.TrimSpace(rec.QuestionText), strings.TrimSpace(rec.SelectedOptionID), strings.TrimSpace(rec.SelectedOptionLabel), strings.TrimSpace(answersJSON), strings.TrimSpace(rec.PublicSummary), boolToInt(rec.ContainsSecret), createdAt); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ListRecentStructuredUserInputs(ctx context.Context, endpointID string, threadID string, limit int) ([]StructuredUserInputRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return nil, errors.New("invalid request")
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, endpoint_id, thread_id, response_message_id,
+       prompt_id, tool_id, reason_code, question_id,
+       header, question_text,
+       selected_option_id, selected_option_label,
+       answers_json, public_summary, contains_secret, created_at_unix_ms
+FROM structured_user_inputs
+WHERE endpoint_id = ? AND thread_id = ?
+ORDER BY id DESC
+LIMIT ?
+`, endpointID, threadID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	tmp := make([]StructuredUserInputRecord, 0, limit)
+	for rows.Next() {
+		var (
+			rec         StructuredUserInputRecord
+			answersJSON string
+			secretInt   int
+		)
+		if err := rows.Scan(&rec.ID, &rec.EndpointID, &rec.ThreadID, &rec.ResponseMessageID, &rec.PromptID, &rec.ToolID, &rec.ReasonCode, &rec.QuestionID, &rec.Header, &rec.QuestionText, &rec.SelectedOptionID, &rec.SelectedOptionLabel, &answersJSON, &rec.PublicSummary, &secretInt, &rec.CreatedAtUnixMs); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(answersJSON) != "" {
+			var answers []string
+			if err := json.Unmarshal([]byte(answersJSON), &answers); err == nil {
+				rec.Answers = answers
+			}
+		}
+		rec.ContainsSecret = secretInt != 0
+		tmp = append(tmp, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]StructuredUserInputRecord, 0, len(tmp))
+	for i := len(tmp) - 1; i >= 0; i-- {
+		out = append(out, tmp[i])
+	}
+	return out, nil
+}
+
+func (s *Store) ReplaceRequestUserInputSecretAnswers(ctx context.Context, endpointID string, threadID string, responseMessageID string, records []RequestUserInputSecretAnswerRecord) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	responseMessageID = strings.TrimSpace(responseMessageID)
+	if endpointID == "" || threadID == "" || responseMessageID == "" {
+		return errors.New("invalid request")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `
+DELETE FROM request_user_input_secret_answers
+WHERE endpoint_id = ? AND thread_id = ? AND response_message_id = ?
+`, endpointID, threadID, responseMessageID); err != nil {
+		return err
+	}
+	now := time.Now().UnixMilli()
+	for _, rec := range records {
+		questionID := strings.TrimSpace(rec.QuestionID)
+		if questionID == "" {
+			continue
+		}
+		createdAt := rec.CreatedAtUnixMs
+		if createdAt <= 0 {
+			createdAt = now
+		}
+		for idx, answer := range rec.Answers {
+			answer = strings.TrimSpace(answer)
+			if answer == "" {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `
+INSERT INTO request_user_input_secret_answers(
+  endpoint_id, thread_id, response_message_id,
+  question_id, answer_index, answer_text, created_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?)
+`, endpointID, threadID, responseMessageID, questionID, idx, answer, createdAt); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ListRequestUserInputSecretAnswers(ctx context.Context, endpointID string, threadID string, responseMessageID string) ([]RequestUserInputSecretAnswerRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	responseMessageID = strings.TrimSpace(responseMessageID)
+	if endpointID == "" || threadID == "" || responseMessageID == "" {
+		return nil, errors.New("invalid request")
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT question_id, answer_text, created_at_unix_ms
+FROM request_user_input_secret_answers
+WHERE endpoint_id = ? AND thread_id = ? AND response_message_id = ?
+ORDER BY question_id ASC, answer_index ASC
+`, endpointID, threadID, responseMessageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	grouped := map[string]*RequestUserInputSecretAnswerRecord{}
+	order := make([]string, 0, 8)
+	for rows.Next() {
+		var (
+			questionID string
+			answerText string
+			createdAt  int64
+		)
+		if err := rows.Scan(&questionID, &answerText, &createdAt); err != nil {
+			return nil, err
+		}
+		questionID = strings.TrimSpace(questionID)
+		answerText = strings.TrimSpace(answerText)
+		if questionID == "" || answerText == "" {
+			continue
+		}
+		rec := grouped[questionID]
+		if rec == nil {
+			rec = &RequestUserInputSecretAnswerRecord{
+				EndpointID:        endpointID,
+				ThreadID:          threadID,
+				ResponseMessageID: responseMessageID,
+				QuestionID:        questionID,
+				CreatedAtUnixMs:   createdAt,
+			}
+			grouped[questionID] = rec
+			order = append(order, questionID)
+		}
+		rec.Answers = append(rec.Answers, answerText)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]RequestUserInputSecretAnswerRecord, 0, len(order))
+	for _, questionID := range order {
+		if rec := grouped[questionID]; rec != nil {
+			out = append(out, *rec)
+		}
+	}
+	return out, nil
+}
+
 func (s *Store) DeleteThreadContextData(ctx context.Context, endpointID string, threadID string) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
@@ -1088,6 +1346,8 @@ func (s *Store) DeleteThreadContextData(ctx context.Context, endpointID string, 
 	queries := []string{
 		`DELETE FROM conversation_turns WHERE endpoint_id = ? AND thread_id = ?`,
 		`DELETE FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ?`,
+		`DELETE FROM structured_user_inputs WHERE endpoint_id = ? AND thread_id = ?`,
+		`DELETE FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`,
 		`DELETE FROM memory_items WHERE endpoint_id = ? AND thread_id = ?`,
 		`DELETE FROM context_snapshots WHERE endpoint_id = ? AND thread_id = ?`,
 		`DELETE FROM execution_spans WHERE endpoint_id = ? AND thread_id = ?`,

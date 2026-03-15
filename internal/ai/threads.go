@@ -55,8 +55,8 @@ func activeThreadEffectiveRunState(status string, runError string) (string, stri
 	return string(RunStateRunning), ""
 }
 
-func threadWaitingPromptView(t *threadstore.Thread, effectiveRunStatus string) *WaitingPrompt {
-	return waitingPromptFromThreadRecord(t, effectiveRunStatus)
+func threadWaitingPromptView(t *threadstore.Thread, effectiveRunStatus string) *RequestUserInputPrompt {
+	return requestUserInputPromptFromThreadRecord(t, effectiveRunStatus)
 }
 
 func (s *Service) activeThreadRunSet(endpointID string) map[string]struct{} {
@@ -510,7 +510,7 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 	// allow the user to unblock the UI by marking it canceled.
 	if db != nil {
 		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", "", "", "", meta.UserPublicID, meta.UserEmail)
+		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", meta.UserPublicID, meta.UserEmail)
 		cancel()
 		s.broadcastThreadSummary(endpointID, threadID)
 	}

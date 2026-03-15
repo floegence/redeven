@@ -21,3 +21,14 @@ func anyToString(v any) string {
 		return ""
 	}
 }
+
+func anyToBool(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case string:
+		return x == "true" || x == "TRUE" || x == "True"
+	default:
+		return false
+	}
+}

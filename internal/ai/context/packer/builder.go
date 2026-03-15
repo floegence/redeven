@@ -61,13 +61,14 @@ func (b *Builder) BuildPromptPack(ctx context.Context, in BuildInput) (model.Pro
 	}
 
 	retrieved, err := b.retriever.Retrieve(ctx, retriever.RetrieveOptions{
-		EndpointID:           strings.TrimSpace(in.EndpointID),
-		ThreadID:             strings.TrimSpace(in.ThreadID),
-		Objective:            strings.TrimSpace(in.Objective),
-		UserInput:            strings.TrimSpace(in.UserInput),
-		MaxTurns:             16,
-		MaxExecutionEvidence: 30,
-		MaxMemoryItems:       80,
+		EndpointID:              strings.TrimSpace(in.EndpointID),
+		ThreadID:                strings.TrimSpace(in.ThreadID),
+		Objective:               strings.TrimSpace(in.Objective),
+		UserInput:               strings.TrimSpace(in.UserInput),
+		MaxTurns:                16,
+		MaxStructuredUserInputs: 24,
+		MaxExecutionEvidence:    30,
+		MaxMemoryItems:          80,
 	})
 	if err != nil {
 		return pack, err
@@ -105,6 +106,7 @@ func (b *Builder) BuildPromptPack(ctx context.Context, in BuildInput) (model.Pro
 	pack.Objective = objective
 	pack.ActiveConstraints = append([]string(nil), retrieved.ActiveConstraints...)
 	pack.RecentDialogue = append([]model.DialogueTurn(nil), retrieved.RecentDialogue...)
+	pack.RecentStructuredUserInputs = append([]model.StructuredUserInput(nil), retrieved.RecentStructuredUserInputs...)
 	pack.ExecutionEvidence = append([]model.ExecutionEvidence(nil), retrieved.ExecutionEvidence...)
 	pack.PendingTodos = pendingTodos
 	pack.Blockers = append([]model.MemoryItem(nil), retrieved.Blockers...)
@@ -142,11 +144,12 @@ func splitSectionBudget(total int) map[string]int {
 		total = 128000
 	}
 	sections := map[string]float64{
-		"system":    0.15,
-		"objective": 0.20,
-		"dialogue":  0.30,
-		"execution": 0.25,
-		"long_term": 0.10,
+		"system":     0.15,
+		"objective":  0.18,
+		"dialogue":   0.24,
+		"structured": 0.08,
+		"execution":  0.25,
+		"long_term":  0.10,
 	}
 	out := make(map[string]int, len(sections))
 	for key, ratio := range sections {
@@ -176,6 +179,22 @@ func enforceSectionBudget(pack model.PromptPack, budget map[string]int) model.Pr
 		dialogue[i], dialogue[j] = dialogue[j], dialogue[i]
 	}
 	out.RecentDialogue = dialogue
+
+	structuredBudget := budget["structured"]
+	structured := make([]model.StructuredUserInput, 0, len(out.RecentStructuredUserInputs))
+	for i := len(out.RecentStructuredUserInputs) - 1; i >= 0; i-- {
+		item := out.RecentStructuredUserInputs[i]
+		cost := textTokens(item.Header) + textTokens(item.Question) + textTokens(item.SelectedOptionLabel) + textTokens(strings.Join(item.Answers, "\n")) + textTokens(item.PublicSummary)
+		if structuredBudget-cost < 0 {
+			continue
+		}
+		structuredBudget -= cost
+		structured = append(structured, item)
+	}
+	for i, j := 0, len(structured)-1; i < j; i, j = i+1, j-1 {
+		structured[i], structured[j] = structured[j], structured[i]
+	}
+	out.RecentStructuredUserInputs = structured
 
 	execBudget := budget["execution"]
 	execOut := make([]model.ExecutionEvidence, 0, len(out.ExecutionEvidence))
@@ -214,6 +233,15 @@ func collectSectionTokens(pack model.PromptPack) map[string]int {
 		dialogue += textTokens(turn.AssistantText)
 	}
 	usage["dialogue"] = dialogue
+	structuredTokens := 0
+	for _, item := range pack.RecentStructuredUserInputs {
+		structuredTokens += textTokens(item.Header)
+		structuredTokens += textTokens(item.Question)
+		structuredTokens += textTokens(item.SelectedOptionLabel)
+		structuredTokens += textTokens(strings.Join(item.Answers, "\n"))
+		structuredTokens += textTokens(item.PublicSummary)
+	}
+	usage["structured"] = structuredTokens
 	execTokens := 0
 	for _, ev := range pack.ExecutionEvidence {
 		execTokens += textTokens(ev.Summary)

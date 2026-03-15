@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 16
+	threadstoreCurrentSchemaVersion = 17
 )
 
 func initSchema(db *sql.DB) error {
@@ -39,6 +39,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 13, ToVersion: 14, Apply: migrateThreadstoreToV14},
 			{FromVersion: 14, ToVersion: 15, Apply: migrateThreadstoreToV15},
 			{FromVersion: 15, ToVersion: 16, Apply: migrateThreadstoreToV16},
+			{FromVersion: 16, ToVersion: 17, Apply: migrateThreadstoreToV17},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -169,6 +170,16 @@ func migrateThreadstoreToV16(tx *sql.Tx) error {
 	return ensureFollowupLaneColumnsTx(tx)
 }
 
+func migrateThreadstoreToV17(tx *sql.Tx) error {
+	if err := ensureAIThreadsWaitingUserInputJSONTx(tx); err != nil {
+		return err
+	}
+	if err := ensureStructuredUserInputTablesTx(tx); err != nil {
+		return err
+	}
+	return ensureRequestUserInputSecretAnswersTableTx(tx)
+}
+
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "model_id", `ALTER TABLE ai_threads ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`)
 }
@@ -222,6 +233,10 @@ func ensureAIThreadsWaitingPromptColumnsTx(tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func ensureAIThreadsWaitingUserInputJSONTx(tx *sql.Tx) error {
+	return ensureColumnTx(tx, "ai_threads", "waiting_user_input_json", `ALTER TABLE ai_threads ADD COLUMN waiting_user_input_json TEXT NOT NULL DEFAULT ''`)
 }
 
 func ensureRunStateTablesTx(tx *sql.Tx) error {
@@ -285,6 +300,52 @@ CREATE TABLE IF NOT EXISTS ai_thread_state (
 		return err
 	}
 	return nil
+}
+
+func ensureStructuredUserInputTablesTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS structured_user_inputs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  response_message_id TEXT NOT NULL,
+  prompt_id TEXT NOT NULL DEFAULT '',
+  tool_id TEXT NOT NULL DEFAULT '',
+  reason_code TEXT NOT NULL DEFAULT '',
+  question_id TEXT NOT NULL,
+  header TEXT NOT NULL DEFAULT '',
+  question_text TEXT NOT NULL DEFAULT '',
+  selected_option_id TEXT NOT NULL DEFAULT '',
+  selected_option_label TEXT NOT NULL DEFAULT '',
+  answers_json TEXT NOT NULL DEFAULT '[]',
+  public_summary TEXT NOT NULL DEFAULT '',
+  contains_secret INTEGER NOT NULL DEFAULT 0,
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(endpoint_id, thread_id, response_message_id, question_id)
+);
+CREATE INDEX IF NOT EXISTS idx_structured_user_inputs_recent
+ON structured_user_inputs(endpoint_id, thread_id, id DESC);
+`)
+	return err
+}
+
+func ensureRequestUserInputSecretAnswersTableTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS request_user_input_secret_answers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  response_message_id TEXT NOT NULL,
+  question_id TEXT NOT NULL,
+  answer_index INTEGER NOT NULL,
+  answer_text TEXT NOT NULL DEFAULT '',
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(endpoint_id, thread_id, response_message_id, question_id, answer_index)
+);
+CREATE INDEX IF NOT EXISTS idx_request_user_input_secret_answers_message
+ON request_user_input_secret_answers(endpoint_id, thread_id, response_message_id, question_id, answer_index);
+`)
+	return err
 }
 
 func ensureContextPlaneTablesTx(tx *sql.Tx) error {
@@ -540,6 +601,8 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"ai_queued_turns",
 		"transcript_messages",
 		"conversation_turns",
+		"structured_user_inputs",
+		"request_user_input_secret_answers",
 		"execution_spans",
 		"memory_items",
 		"memory_embeddings",
@@ -557,7 +620,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 	}
 
 	requiredColumns := map[string][]string{
-		"ai_threads":      {"model_id", "model_locked", "execution_mode", "working_dir", "followups_revision", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_prompt_id", "waiting_message_id", "waiting_tool_id", "waiting_choices_json"},
+		"ai_threads":      {"model_id", "model_locked", "execution_mode", "working_dir", "followups_revision", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json"},
 		"ai_queued_turns": {"channel_id", "lane", "sort_index", "updated_at_unix_ms"},
 	}
 	for tableName, columns := range requiredColumns {
@@ -579,6 +642,8 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"idx_ai_queued_turns_thread_lane_sort",
 		"idx_ai_queued_turns_message_id",
 		"idx_transcript_messages_thread_id",
+		"idx_structured_user_inputs_recent",
+		"idx_request_user_input_secret_answers_message",
 	}
 	for _, indexName := range requiredIndexes {
 		exists, err := sqliteutil.IndexExistsTx(tx, indexName)

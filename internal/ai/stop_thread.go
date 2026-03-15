@@ -156,7 +156,7 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 		}
 	} else {
 		uctx, ucancel := context.WithTimeout(ctx, persistTO)
-		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", "", "", "", meta.UserPublicID, meta.UserEmail)
+		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", meta.UserPublicID, meta.UserEmail)
 		ucancel()
 		a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
 	}

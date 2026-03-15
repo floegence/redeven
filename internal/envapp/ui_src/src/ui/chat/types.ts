@@ -118,6 +118,25 @@ export interface SourcesBlock {
   sources: Array<{ title: string; url: string }>;
 }
 
+export interface RequestUserInputResponseBlock {
+  type: 'request_user_input_response';
+  prompt_id: string;
+  tool_id?: string;
+  reason_code?: string;
+  responses?: Array<{
+    question_id: string;
+    header?: string;
+    question?: string;
+    selected_option_id?: string;
+    selected_option_label?: string;
+    answers?: string[];
+    public_summary?: string;
+    contains_secret?: boolean;
+  }>;
+  public_summary?: string;
+  contains_secret?: boolean;
+}
+
 export type SubagentStatus =
   | 'queued'
   | 'running'
@@ -183,6 +202,7 @@ export type MessageBlock =
   | ToolCallBlock
   | TodosBlock
   | SourcesBlock
+  | RequestUserInputResponseBlock
   | SubagentBlock;
 
 export type MessageRole = 'user' | 'assistant' | 'system';

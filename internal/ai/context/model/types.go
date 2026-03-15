@@ -14,6 +14,7 @@ type ModelCapability struct {
 	SupportsImageInput       bool   `json:"supports_image_input"`
 	SupportsFileInput        bool   `json:"supports_file_input"`
 	SupportsReasoningTokens  bool   `json:"supports_reasoning_tokens"`
+	SupportsAskUserQuestionBatches bool `json:"supports_ask_user_question_batches"`
 	MaxContextTokens         int    `json:"max_context_tokens"`
 	MaxOutputTokens          int    `json:"max_output_tokens"`
 	PreferredToolSchemaMode  string `json:"preferred_tool_schema_mode"`
@@ -85,6 +86,22 @@ type AttachmentManifest struct {
 	Mode     string `json:"mode"`
 }
 
+type StructuredUserInput struct {
+	ResponseMessageID   string   `json:"response_message_id"`
+	PromptID            string   `json:"prompt_id"`
+	ToolID              string   `json:"tool_id,omitempty"`
+	ReasonCode          string   `json:"reason_code,omitempty"`
+	QuestionID          string   `json:"question_id"`
+	Header              string   `json:"header,omitempty"`
+	Question            string   `json:"question"`
+	SelectedOptionID    string   `json:"selected_option_id,omitempty"`
+	SelectedOptionLabel string   `json:"selected_option_label,omitempty"`
+	Answers             []string `json:"answers,omitempty"`
+	PublicSummary       string   `json:"public_summary,omitempty"`
+	ContainsSecret      bool     `json:"contains_secret,omitempty"`
+	CreatedAtUnixMs     int64    `json:"created_at_unix_ms"`
+}
+
 // PromptPack is the canonical model context envelope.
 type PromptPack struct {
 	ThreadID                  string               `json:"thread_id"`
@@ -93,6 +110,7 @@ type PromptPack struct {
 	Objective                 string               `json:"objective"`
 	ActiveConstraints         []string             `json:"active_constraints"`
 	RecentDialogue            []DialogueTurn       `json:"recent_dialogue"`
+	RecentStructuredUserInputs []StructuredUserInput `json:"recent_structured_user_inputs"`
 	ExecutionEvidence         []ExecutionEvidence  `json:"execution_evidence"`
 	PendingTodos              []MemoryItem         `json:"pending_todos"`
 	Blockers                  []MemoryItem         `json:"blockers"`
@@ -113,6 +131,11 @@ func (p PromptPack) ApproxText() string {
 			parts = append(parts, txt)
 		}
 		if txt := strings.TrimSpace(turn.AssistantText); txt != "" {
+			parts = append(parts, txt)
+		}
+	}
+	for _, item := range p.RecentStructuredUserInputs {
+		if txt := strings.TrimSpace(item.PublicSummary); txt != "" {
 			parts = append(parts, txt)
 		}
 	}

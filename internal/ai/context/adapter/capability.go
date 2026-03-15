@@ -64,6 +64,7 @@ func capabilitiesEquivalent(a model.ModelCapability, b model.ModelCapability) bo
 		a.SupportsImageInput == b.SupportsImageInput &&
 		a.SupportsFileInput == b.SupportsFileInput &&
 		a.SupportsReasoningTokens == b.SupportsReasoningTokens &&
+		a.SupportsAskUserQuestionBatches == b.SupportsAskUserQuestionBatches &&
 		a.MaxContextTokens == b.MaxContextTokens &&
 		a.MaxOutputTokens == b.MaxOutputTokens &&
 		a.PreferredToolSchemaMode == b.PreferredToolSchemaMode
@@ -82,48 +83,55 @@ func defaultCapability(provider config.AIProvider, modelName string) model.Model
 	providerType := strings.ToLower(strings.TrimSpace(provider.Type))
 	modelLower := strings.ToLower(strings.TrimSpace(modelName))
 	cap := model.ModelCapability{
-		ProviderType:             providerType,
-		ResolverVersion:          capabilityResolverVersion,
-		SupportsTools:            true,
-		SupportsParallelTools:    false,
-		SupportsStrictJSONSchema: true,
-		SupportsImageInput:       true,
-		SupportsFileInput:        true,
-		SupportsReasoningTokens:  true,
-		MaxContextTokens:         128000,
-		MaxOutputTokens:          4096,
-		PreferredToolSchemaMode:  "json_schema",
+		ProviderType:                   providerType,
+		ResolverVersion:                capabilityResolverVersion,
+		SupportsTools:                  true,
+		SupportsParallelTools:          false,
+		SupportsStrictJSONSchema:       true,
+		SupportsImageInput:             true,
+		SupportsFileInput:              true,
+		SupportsReasoningTokens:        true,
+		SupportsAskUserQuestionBatches: true,
+		MaxContextTokens:               128000,
+		MaxOutputTokens:                4096,
+		PreferredToolSchemaMode:        "json_schema",
 	}
 
 	switch providerType {
 	case "anthropic":
 		cap.SupportsParallelTools = false
 		cap.SupportsStrictJSONSchema = false
+		cap.SupportsAskUserQuestionBatches = false
 		cap.PreferredToolSchemaMode = "relaxed_json"
 		cap.MaxContextTokens = 200000
 		cap.MaxOutputTokens = 8192
 	case "moonshot":
 		cap.SupportsStrictJSONSchema = false
+		cap.SupportsAskUserQuestionBatches = false
 		cap.PreferredToolSchemaMode = "relaxed_json"
 		cap.MaxContextTokens = 256000
 		cap.MaxOutputTokens = 16384
 	case "chatglm":
 		cap.SupportsStrictJSONSchema = false
+		cap.SupportsAskUserQuestionBatches = false
 		cap.PreferredToolSchemaMode = "relaxed_json"
 		cap.MaxContextTokens = 200000
 		cap.MaxOutputTokens = 16000
 	case "deepseek":
 		cap.SupportsStrictJSONSchema = false
+		cap.SupportsAskUserQuestionBatches = false
 		cap.PreferredToolSchemaMode = "relaxed_json"
 		cap.MaxContextTokens = 128000
 		cap.MaxOutputTokens = 64000
 	case "qwen":
 		cap.SupportsStrictJSONSchema = false
+		cap.SupportsAskUserQuestionBatches = false
 		cap.PreferredToolSchemaMode = "relaxed_json"
 		cap.MaxContextTokens = 262144
 		cap.MaxOutputTokens = 65536
 	case "openai_compatible":
 		cap.SupportsStrictJSONSchema = false
+		cap.SupportsAskUserQuestionBatches = false
 		cap.PreferredToolSchemaMode = "relaxed_json"
 		cap.MaxContextTokens = 64000
 		cap.MaxOutputTokens = 4096

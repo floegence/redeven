@@ -200,11 +200,27 @@ func TestSnapshotAssistantMessageJSON_UsesAskUserQuestionWhenMarkdownEmpty(t *te
 				ToolName: "ask_user",
 				ToolID:   "tool_ask_user_waiting",
 				Args: map[string]any{
-					"question": question,
+					"questions": []any{
+						map[string]any{
+							"id":        "question_1",
+							"header":    question,
+							"question":  question,
+							"is_other":  true,
+							"is_secret": false,
+						},
+					},
 				},
 				Status: ToolCallStatusSuccess,
 				Result: map[string]any{
-					"question":     question,
+					"questions": []any{
+						map[string]any{
+							"id":        "question_1",
+							"header":    question,
+							"question":  question,
+							"is_other":  true,
+							"is_secret": false,
+						},
+					},
 					"source":       "model_signal",
 					"waiting_user": true,
 				},
@@ -227,7 +243,7 @@ func TestSnapshotAssistantMessageJSON_UsesAskUserQuestionWhenMarkdownEmpty(t *te
 	}
 }
 
-func TestSnapshotWaitingPrompt_ExtractsStructuredChoices(t *testing.T) {
+func TestSnapshotWaitingPrompt_ExtractsStructuredQuestions(t *testing.T) {
 	t.Parallel()
 
 	r := &run{
@@ -238,21 +254,55 @@ func TestSnapshotWaitingPrompt_ExtractsStructuredChoices(t *testing.T) {
 				ToolName: "ask_user",
 				ToolID:   "tool_waiting_prompt_structured",
 				Status:   ToolCallStatusSuccess,
-				Result: map[string]any{
-					"question":     "Need your confirmation",
-					"waiting_user": true,
-					"choices": []any{
+				Args: map[string]any{
+					"reason_code":        AskUserReasonUserDecisionRequired,
+					"required_from_user": []any{"Choose execution mode"},
+					"evidence_refs":      []any{"tool_approval_1"},
+					"questions": []any{
 						map[string]any{
-							"choice_id": "switch_to_act",
-							"label":     "Switch to Act mode",
-							"actions": []any{
+							"id":        "mode_decision",
+							"header":    "Execution mode",
+							"question":  "Need your confirmation",
+							"is_other":  false,
+							"is_secret": false,
+							"options": []any{
 								map[string]any{
-									"type": "set_mode",
-									"mode": "act",
+									"option_id": "switch_to_act",
+									"label":     "Switch to Act mode",
+									"actions": []any{
+										map[string]any{
+											"type": "set_mode",
+											"mode": "act",
+										},
+									},
 								},
 							},
 						},
 					},
+				},
+				Result: map[string]any{
+					"questions": []any{
+						map[string]any{
+							"id":        "mode_decision",
+							"header":    "Execution mode",
+							"question":  "Need your confirmation",
+							"is_other":  false,
+							"is_secret": false,
+							"options": []any{
+								map[string]any{
+									"option_id": "switch_to_act",
+									"label":     "Switch to Act mode",
+									"actions": []any{
+										map[string]any{
+											"type": "set_mode",
+											"mode": "act",
+										},
+									},
+								},
+							},
+						},
+					},
+					"waiting_user": true,
 				},
 			},
 		},
@@ -268,22 +318,37 @@ func TestSnapshotWaitingPrompt_ExtractsStructuredChoices(t *testing.T) {
 	if got := strings.TrimSpace(prompt.ToolID); got != "tool_waiting_prompt_structured" {
 		t.Fatalf("ToolID=%q, want %q", got, "tool_waiting_prompt_structured")
 	}
-	if len(prompt.Choices) != 1 {
-		t.Fatalf("choices len=%d, want 1", len(prompt.Choices))
+	if got := strings.TrimSpace(prompt.ReasonCode); got != AskUserReasonUserDecisionRequired {
+		t.Fatalf("ReasonCode=%q, want %q", got, AskUserReasonUserDecisionRequired)
 	}
-	if got := strings.TrimSpace(prompt.Choices[0].ChoiceID); got != "switch_to_act" {
-		t.Fatalf("choice_id=%q, want %q", got, "switch_to_act")
+	if len(prompt.RequiredFromUser) != 1 || prompt.RequiredFromUser[0] != "Choose execution mode" {
+		t.Fatalf("RequiredFromUser=%v", prompt.RequiredFromUser)
 	}
-	if got := strings.TrimSpace(prompt.Choices[0].Label); got != "Switch to Act mode" {
+	if len(prompt.EvidenceRefs) != 1 || prompt.EvidenceRefs[0] != "tool_approval_1" {
+		t.Fatalf("EvidenceRefs=%v", prompt.EvidenceRefs)
+	}
+	if len(prompt.Questions) != 1 {
+		t.Fatalf("questions len=%d, want 1", len(prompt.Questions))
+	}
+	if got := strings.TrimSpace(prompt.Questions[0].ID); got != "mode_decision" {
+		t.Fatalf("question id=%q, want %q", got, "mode_decision")
+	}
+	if len(prompt.Questions[0].Options) != 1 {
+		t.Fatalf("options len=%d, want 1", len(prompt.Questions[0].Options))
+	}
+	if got := strings.TrimSpace(prompt.Questions[0].Options[0].OptionID); got != "switch_to_act" {
+		t.Fatalf("option id=%q, want %q", got, "switch_to_act")
+	}
+	if got := strings.TrimSpace(prompt.Questions[0].Options[0].Label); got != "Switch to Act mode" {
 		t.Fatalf("label=%q, want %q", got, "Switch to Act mode")
 	}
-	if len(prompt.Choices[0].Actions) != 1 {
-		t.Fatalf("actions len=%d, want 1", len(prompt.Choices[0].Actions))
+	if len(prompt.Questions[0].Options[0].Actions) != 1 {
+		t.Fatalf("actions len=%d, want 1", len(prompt.Questions[0].Options[0].Actions))
 	}
-	if got := strings.TrimSpace(prompt.Choices[0].Actions[0].Type); got != waitingPromptActionSetMode {
-		t.Fatalf("action type=%q, want %q", got, waitingPromptActionSetMode)
+	if got := strings.TrimSpace(prompt.Questions[0].Options[0].Actions[0].Type); got != requestUserInputActionSetMode {
+		t.Fatalf("action type=%q, want %q", got, requestUserInputActionSetMode)
 	}
-	if got := strings.TrimSpace(prompt.Choices[0].Actions[0].Mode); got != "act" {
+	if got := strings.TrimSpace(prompt.Questions[0].Options[0].Actions[0].Mode); got != "act" {
 		t.Fatalf("action mode=%q, want %q", got, "act")
 	}
 }
@@ -301,7 +366,15 @@ func TestSnapshotAssistantMessageJSON_PrefersMarkdownOverAskUserQuestion(t *test
 				"toolName": "ask_user",
 				"toolId":   "tool_ask_user_waiting",
 				"args": map[string]any{
-					"question": "Please provide more details",
+					"questions": []any{
+						map[string]any{
+							"id":        "question_1",
+							"header":    "Please provide more details",
+							"question":  "Please provide more details",
+							"is_other":  true,
+							"is_secret": false,
+						},
+					},
 				},
 			},
 		},

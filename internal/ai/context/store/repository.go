@@ -101,6 +101,35 @@ func (r *Repository) ListRecentDialogueTurns(ctx context.Context, endpointID str
 	return trimDialogueTurns(out, limit), nil
 }
 
+func (r *Repository) ListRecentStructuredUserInputs(ctx context.Context, endpointID string, threadID string, limit int) ([]model.StructuredUserInput, error) {
+	if !r.Ready() {
+		return nil, errors.New("repository not ready")
+	}
+	records, err := r.db.ListRecentStructuredUserInputs(ctx, endpointID, threadID, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]model.StructuredUserInput, 0, len(records))
+	for _, rec := range records {
+		out = append(out, model.StructuredUserInput{
+			ResponseMessageID:   strings.TrimSpace(rec.ResponseMessageID),
+			PromptID:            strings.TrimSpace(rec.PromptID),
+			ToolID:              strings.TrimSpace(rec.ToolID),
+			ReasonCode:          strings.TrimSpace(rec.ReasonCode),
+			QuestionID:          strings.TrimSpace(rec.QuestionID),
+			Header:              strings.TrimSpace(rec.Header),
+			Question:            strings.TrimSpace(rec.QuestionText),
+			SelectedOptionID:    strings.TrimSpace(rec.SelectedOptionID),
+			SelectedOptionLabel: strings.TrimSpace(rec.SelectedOptionLabel),
+			Answers:             append([]string(nil), rec.Answers...),
+			PublicSummary:       strings.TrimSpace(rec.PublicSummary),
+			ContainsSecret:      rec.ContainsSecret,
+			CreatedAtUnixMs:     rec.CreatedAtUnixMs,
+		})
+	}
+	return out, nil
+}
+
 func (r *Repository) listFallbackDialogue(ctx context.Context, endpointID string, threadID string, limit int) ([]model.DialogueTurn, error) {
 	messages, err := r.db.ListRecentTranscriptMessages(ctx, endpointID, threadID, limit*2)
 	if err != nil {

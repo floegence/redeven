@@ -39,12 +39,14 @@ type ThreadCheckpointRecord struct {
 }
 
 type threadCheckpointDerivedSnapshot struct {
-	MemoryItems      []MemoryItemRecord      `json:"memory_items"`
-	ThreadTodos      *ThreadTodosSnapshot    `json:"thread_todos,omitempty"`
-	ThreadState      *ThreadState            `json:"thread_state,omitempty"`
-	ContextSnapshots []ContextSnapshotRecord `json:"context_snapshots"`
-	ExecutionSpans   []ExecutionSpanRecord   `json:"execution_spans"`
-	RunIDs           []string                `json:"run_ids"`
+	MemoryItems               []MemoryItemRecord                `json:"memory_items"`
+	ThreadTodos               *ThreadTodosSnapshot              `json:"thread_todos,omitempty"`
+	ThreadState               *ThreadState                      `json:"thread_state,omitempty"`
+	ContextSnapshots          []ContextSnapshotRecord           `json:"context_snapshots"`
+	ExecutionSpans            []ExecutionSpanRecord             `json:"execution_spans"`
+	StructuredUserInputs      []StructuredUserInputRecord       `json:"structured_user_inputs"`
+	RequestUserInputSecrets   []RequestUserInputSecretAnswerRecord `json:"request_user_input_secret_answers"`
+	RunIDs                    []string                          `json:"run_ids"`
 }
 
 func normalizeCheckpointKind(kind string) string {
@@ -490,7 +492,7 @@ func (s *Store) getThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, 
 	SELECT
 	  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
 	  run_status, run_updated_at_unix_ms, run_error,
-	  waiting_prompt_id, waiting_message_id, waiting_tool_id, waiting_choices_json,
+	  waiting_user_input_json,
 	  created_by_user_public_id, created_by_user_email,
 	  updated_by_user_public_id, updated_by_user_email,
 	  created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
@@ -508,10 +510,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		&t.RunStatus,
 		&t.RunUpdatedAtUnixMs,
 		&t.RunError,
-		&t.WaitingPromptID,
-		&t.WaitingMessageID,
-		&t.WaitingToolID,
-		&t.WaitingChoicesJSON,
+		&t.WaitingUserInputJSON,
 		&t.CreatedByUserPublicID,
 		&t.CreatedByUserEmail,
 		&t.UpdatedByUserPublicID,
@@ -533,12 +532,14 @@ WHERE endpoint_id = ? AND thread_id = ?
 
 func (s *Store) snapshotThreadDerivedTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (threadCheckpointDerivedSnapshot, error) {
 	out := threadCheckpointDerivedSnapshot{
-		MemoryItems:      nil,
-		ThreadTodos:      nil,
-		ThreadState:      nil,
-		ContextSnapshots: nil,
-		ExecutionSpans:   nil,
-		RunIDs:           nil,
+		MemoryItems:             nil,
+		ThreadTodos:             nil,
+		ThreadState:             nil,
+		ContextSnapshots:        nil,
+		ExecutionSpans:          nil,
+		StructuredUserInputs:    nil,
+		RequestUserInputSecrets: nil,
+		RunIDs:                  nil,
 	}
 
 	// Memory items.
@@ -691,6 +692,89 @@ ORDER BY started_at_unix_ms ASC, span_id ASC
 	}
 	_ = erows.Close()
 
+	suiRows, err := tx.QueryContext(ctx, `
+SELECT id, endpoint_id, thread_id, response_message_id,
+       prompt_id, tool_id, reason_code, question_id,
+       header, question_text,
+       selected_option_id, selected_option_label,
+       answers_json, public_summary, contains_secret, created_at_unix_ms
+FROM structured_user_inputs
+WHERE endpoint_id = ? AND thread_id = ?
+ORDER BY id ASC
+`, endpointID, threadID)
+	if err != nil {
+		return out, err
+	}
+	for suiRows.Next() {
+		var (
+			rec         StructuredUserInputRecord
+			answersJSON string
+			secretInt   int
+		)
+		if err := suiRows.Scan(&rec.ID, &rec.EndpointID, &rec.ThreadID, &rec.ResponseMessageID, &rec.PromptID, &rec.ToolID, &rec.ReasonCode, &rec.QuestionID, &rec.Header, &rec.QuestionText, &rec.SelectedOptionID, &rec.SelectedOptionLabel, &answersJSON, &rec.PublicSummary, &secretInt, &rec.CreatedAtUnixMs); err != nil {
+			_ = suiRows.Close()
+			return out, err
+		}
+		if strings.TrimSpace(answersJSON) != "" {
+			var answers []string
+			if err := json.Unmarshal([]byte(answersJSON), &answers); err == nil {
+				rec.Answers = answers
+			}
+		}
+		rec.ContainsSecret = secretInt != 0
+		out.StructuredUserInputs = append(out.StructuredUserInputs, rec)
+	}
+	if err := suiRows.Err(); err != nil {
+		_ = suiRows.Close()
+		return out, err
+	}
+	_ = suiRows.Close()
+
+	secretRows, err := tx.QueryContext(ctx, `
+SELECT question_id, answer_text, created_at_unix_ms, response_message_id
+FROM request_user_input_secret_answers
+WHERE endpoint_id = ? AND thread_id = ?
+ORDER BY response_message_id ASC, question_id ASC, answer_index ASC
+`, endpointID, threadID)
+	if err != nil {
+		return out, err
+	}
+	secretIndex := map[string]int{}
+	for secretRows.Next() {
+		var (
+			questionID        string
+			answerText        string
+			createdAtUnixMs   int64
+			responseMessageID string
+		)
+		if err := secretRows.Scan(&questionID, &answerText, &createdAtUnixMs, &responseMessageID); err != nil {
+			_ = secretRows.Close()
+			return out, err
+		}
+		key := strings.TrimSpace(responseMessageID) + "\x1f" + strings.TrimSpace(questionID)
+		if key == "\x1f" {
+			continue
+		}
+		idx, exists := secretIndex[key]
+		if !exists {
+			out.RequestUserInputSecrets = append(out.RequestUserInputSecrets, RequestUserInputSecretAnswerRecord{
+				EndpointID:        endpointID,
+				ThreadID:          threadID,
+				ResponseMessageID: strings.TrimSpace(responseMessageID),
+				QuestionID:        strings.TrimSpace(questionID),
+				CreatedAtUnixMs:   createdAtUnixMs,
+			})
+			idx = len(out.RequestUserInputSecrets) - 1
+			secretIndex[key] = idx
+		}
+		out.RequestUserInputSecrets[idx].Answers = append(out.RequestUserInputSecrets[idx].Answers, strings.TrimSpace(answerText))
+	}
+	if err := secretRows.Err(); err != nil {
+		_ = secretRows.Close()
+		return out, err
+	}
+	_ = secretRows.Close()
+
 	// Run IDs.
 	rrows, err := tx.QueryContext(ctx, `
 SELECT run_id
@@ -778,6 +862,57 @@ INSERT INTO execution_spans(
 ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `, rec.SpanID, endpointID, threadID, strings.TrimSpace(rec.RunID), strings.TrimSpace(rec.Kind), strings.TrimSpace(rec.Name), strings.TrimSpace(rec.Status), strings.TrimSpace(rec.PayloadJSON), rec.StartedAtUnixMs, rec.EndedAtUnixMs, rec.UpdatedAtUnixMs); err != nil {
 			return err
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM structured_user_inputs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+		return err
+	}
+	for _, rec := range snap.StructuredUserInputs {
+		if strings.TrimSpace(rec.QuestionID) == "" {
+			continue
+		}
+		answersJSON := "[]"
+		if len(rec.Answers) > 0 {
+			if raw, err := json.Marshal(rec.Answers); err == nil {
+				answersJSON = string(raw)
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO structured_user_inputs(
+  endpoint_id, thread_id, response_message_id,
+  prompt_id, tool_id, reason_code, question_id,
+  header, question_text,
+  selected_option_id, selected_option_label,
+  answers_json, public_summary, contains_secret, created_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, endpointID, threadID, strings.TrimSpace(rec.ResponseMessageID), strings.TrimSpace(rec.PromptID), strings.TrimSpace(rec.ToolID), strings.TrimSpace(rec.ReasonCode), strings.TrimSpace(rec.QuestionID), strings.TrimSpace(rec.Header), strings.TrimSpace(rec.QuestionText), strings.TrimSpace(rec.SelectedOptionID), strings.TrimSpace(rec.SelectedOptionLabel), strings.TrimSpace(answersJSON), strings.TrimSpace(rec.PublicSummary), boolToInt(rec.ContainsSecret), rec.CreatedAtUnixMs); err != nil {
+			return err
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+		return err
+	}
+	for _, rec := range snap.RequestUserInputSecrets {
+		questionID := strings.TrimSpace(rec.QuestionID)
+		responseMessageID := strings.TrimSpace(rec.ResponseMessageID)
+		if questionID == "" || responseMessageID == "" {
+			continue
+		}
+		for idx, answer := range rec.Answers {
+			answer = strings.TrimSpace(answer)
+			if answer == "" {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `
+INSERT INTO request_user_input_secret_answers(
+  endpoint_id, thread_id, response_message_id,
+  question_id, answer_index, answer_text, created_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?)
+`, endpointID, threadID, responseMessageID, questionID, idx, answer, rec.CreatedAtUnixMs); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -876,10 +1011,7 @@ func (s *Store) restoreThreadRowTx(ctx context.Context, tx *sql.Tx, endpointID s
 	    run_status = ?,
 	    run_updated_at_unix_ms = ?,
 	    run_error = ?,
-	    waiting_prompt_id = ?,
-	    waiting_message_id = ?,
-	    waiting_tool_id = ?,
-	    waiting_choices_json = ?,
+	    waiting_user_input_json = ?,
 	    created_by_user_public_id = ?,
 	    created_by_user_email = ?,
 	    updated_by_user_public_id = ?,
@@ -899,10 +1031,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		normalizeRunStatus(th.RunStatus),
 		th.RunUpdatedAtUnixMs,
 		strings.TrimSpace(th.RunError),
-		strings.TrimSpace(th.WaitingPromptID),
-		strings.TrimSpace(th.WaitingMessageID),
-		strings.TrimSpace(th.WaitingToolID),
-		strings.TrimSpace(th.WaitingChoicesJSON),
+		strings.TrimSpace(th.WaitingUserInputJSON),
 		strings.TrimSpace(th.CreatedByUserPublicID),
 		strings.TrimSpace(th.CreatedByUserEmail),
 		strings.TrimSpace(th.UpdatedByUserPublicID),

@@ -20,9 +20,8 @@ const (
 )
 
 type askUserSignal struct {
+	Questions        []RequestUserInputQuestion
 	Question         string
-	Options          []string
-	Choices          []WaitingPromptChoice
 	ReasonCode       string
 	RequiredFromUser []string
 	EvidenceRefs     []string
@@ -36,29 +35,15 @@ type askUserPolicyDecision struct {
 }
 
 func normalizeAskUserSignal(signal askUserSignal) askUserSignal {
+	questions := normalizeRequestUserInputQuestions(signal.Questions)
 	normalized := askUserSignal{
-		Question:         strings.TrimSpace(signal.Question),
-		Options:          normalizeAskUserOptions(signal.Options),
-		Choices:          normalizeWaitingPromptChoices(signal.Choices),
+		Questions:        questions,
 		ReasonCode:       normalizeAskUserReasonCode(signal.ReasonCode),
 		RequiredFromUser: normalizeAskUserStringList(signal.RequiredFromUser, 8, 200),
 		EvidenceRefs:     normalizeAskUserStringList(signal.EvidenceRefs, 12, 120),
 	}
-	if len(normalized.Choices) == 0 && len(normalized.Options) > 0 {
-		normalized.Choices = waitingPromptChoicesFromOptions(normalized.Options)
-	}
-	if len(normalized.Choices) > 0 {
-		labels := make([]string, 0, len(normalized.Choices))
-		for _, choice := range normalized.Choices {
-			label := strings.TrimSpace(choice.Label)
-			if label == "" {
-				continue
-			}
-			labels = append(labels, label)
-		}
-		if len(labels) > 0 {
-			normalized.Options = labels
-		}
+	if len(normalized.Questions) > 0 {
+		normalized.Question = strings.TrimSpace(normalized.Questions[0].Question)
 	}
 	return normalized
 }
@@ -110,9 +95,7 @@ func normalizeAskUserStringList(items []string, maxItems int, maxLen int) []stri
 func buildAskUserPolicyClassifierMessages(objective string, signal askUserSignal, state runtimeState) []Message {
 	normalizedSignal := normalizeAskUserSignal(signal)
 	payload := map[string]any{
-		"question":           normalizedSignal.Question,
-		"options":            normalizedSignal.Options,
-		"choices":            normalizedSignal.Choices,
+		"questions":          normalizedSignal.Questions,
 		"reason_code":        normalizedSignal.ReasonCode,
 		"required_from_user": normalizedSignal.RequiredFromUser,
 		"evidence_refs":      normalizedSignal.EvidenceRefs,
@@ -244,8 +227,13 @@ func fallbackAskUserPolicyDecision(reason string) askUserPolicyDecision {
 
 func defaultGuardAskUserSignal(question string, options []string, source string) askUserSignal {
 	signal := askUserSignal{
-		Question: question,
-		Options:  options,
+		Questions: normalizeRequestUserInputQuestions([]RequestUserInputQuestion{{
+			ID:       "question_1",
+			Header:   strings.TrimSpace(question),
+			Question: strings.TrimSpace(question),
+			IsOther:  true,
+			Options:  requestUserInputOptionsFromLabels(options),
+		}}),
 	}
 	switch strings.TrimSpace(source) {
 	case "tool_mistake_loop", "guard_doom_loop":

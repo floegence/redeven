@@ -1557,7 +1557,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if err != nil {
 		return r.failRun("Failed to initialize tool scheduler", err)
 	}
-	capabilityContract := resolveRunCapabilityContract(r, scheduler.ActiveTools(mode))
+	capabilityContract := resolveRunCapabilityContract(r, scheduler.ActiveTools(mode), req.ModelCapability.SupportsAskUserQuestionBatches)
 	r.persistRunEvent("capability.contract.resolved", RealtimeStreamKindLifecycle, capabilityContract.eventPayload())
 	r.ensureSkillManager()
 
@@ -1688,8 +1688,8 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		r.emitAskUserToolBlock(signal, source)
 		r.persistRunEvent("ask_user.waiting", RealtimeStreamKindLifecycle, map[string]any{
 			"question":            question,
-			"options_count":       len(signal.Options),
-			"choices_count":       len(signal.Choices),
+			"questions_count":     len(signal.Questions),
+			"options_count":       requestUserInputQuestionOptionCount(signal.Questions),
 			"reason_code":         signal.ReasonCode,
 			"required_inputs":     len(signal.RequiredFromUser),
 			"evidence_refs":       len(signal.EvidenceRefs),
@@ -1788,8 +1788,8 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			"gate_passed":           askPassed,
 			"gate_reason":           askReason,
 			"question_len":          len([]rune(strings.TrimSpace(signal.Question))),
-			"options_count":         len(signal.Options),
-			"choices_count":         len(signal.Choices),
+			"questions_count":       len(signal.Questions),
+			"options_count":         requestUserInputQuestionOptionCount(signal.Questions),
 			"reason_code":           signal.ReasonCode,
 			"required_inputs_count": len(signal.RequiredFromUser),
 			"evidence_refs_count":   len(signal.EvidenceRefs),
@@ -2335,9 +2335,7 @@ mainLoop:
 
 		if askUserCall != nil {
 			signal := askUserSignal{
-				Question:         extractSignalText(*askUserCall, "question"),
-				Options:          extractSignalStringList(*askUserCall, "options"),
-				Choices:          extractSignalWaitingChoices(*askUserCall, "choices"),
+				Questions:        extractSignalRequestUserInputQuestions(*askUserCall, "questions"),
 				ReasonCode:       extractSignalText(*askUserCall, "reason_code"),
 				RequiredFromUser: extractSignalStringList(*askUserCall, "required_from_user"),
 				EvidenceRefs:     extractSignalStringList(*askUserCall, "evidence_refs"),
@@ -3009,6 +3007,23 @@ func buildMessagesFromPromptPack(pack contextmodel.PromptPack, currentUserInput 
 		}
 		if txt := strings.TrimSpace(turn.AssistantText); txt != "" {
 			messages = append(messages, Message{Role: "assistant", Content: []ContentPart{{Type: "text", Text: txt}}})
+		}
+	}
+
+	if len(pack.RecentStructuredUserInputs) > 0 {
+		parts := make([]string, 0, len(pack.RecentStructuredUserInputs))
+		for _, item := range pack.RecentStructuredUserInputs {
+			line := strings.TrimSpace(item.PublicSummary)
+			if line == "" {
+				line = strings.TrimSpace(item.Question)
+			}
+			if line == "" {
+				continue
+			}
+			parts = append(parts, "- "+line)
+		}
+		if len(parts) > 0 {
+			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "Recent structured user inputs:\n" + strings.Join(parts, "\n")}}})
 		}
 	}
 
@@ -3876,11 +3891,66 @@ func extractSignalStringList(call ToolCall, key string) []string {
 	}
 }
 
-func extractSignalWaitingChoices(call ToolCall, key string) []WaitingPromptChoice {
+func extractSignalRequestUserInputOptions(call ToolCall, key string) []RequestUserInputOption {
 	if call.Args == nil {
 		return nil
 	}
-	return parseWaitingPromptChoicesAny(call.Args[key])
+	rawItems := toAnySlice(call.Args[key])
+	if len(rawItems) == 0 {
+		return nil
+	}
+	options := make([]RequestUserInputOption, 0, len(rawItems))
+	for _, item := range rawItems {
+		record, ok := item.(map[string]any)
+		if !ok || record == nil {
+			continue
+		}
+		actionsRaw, _ := record["actions"].([]any)
+		actions := make([]RequestUserInputAction, 0, len(actionsRaw))
+		for _, actionItem := range actionsRaw {
+			actionRecord, ok := actionItem.(map[string]any)
+			if !ok || actionRecord == nil {
+				continue
+			}
+			actions = append(actions, RequestUserInputAction{
+				Type: anyToString(actionRecord["type"]),
+				Mode: anyToString(actionRecord["mode"]),
+			})
+		}
+		options = append(options, RequestUserInputOption{
+			OptionID:    anyToString(record["option_id"]),
+			Label:       anyToString(record["label"]),
+			Description: anyToString(record["description"]),
+			Actions:     actions,
+		})
+	}
+	return normalizeRequestUserInputOptions(options)
+}
+
+func extractSignalRequestUserInputQuestions(call ToolCall, key string) []RequestUserInputQuestion {
+	if call.Args == nil {
+		return nil
+	}
+	rawItems := toAnySlice(call.Args[key])
+	if len(rawItems) == 0 {
+		return nil
+	}
+	questions := make([]RequestUserInputQuestion, 0, len(rawItems))
+	for _, item := range rawItems {
+		record, ok := item.(map[string]any)
+		if !ok || record == nil {
+			continue
+		}
+		questions = append(questions, RequestUserInputQuestion{
+			ID:       anyToString(record["id"]),
+			Header:   anyToString(record["header"]),
+			Question: anyToString(record["question"]),
+			IsOther:  anyToBool(record["is_other"]),
+			IsSecret: anyToBool(record["is_secret"]),
+			Options:  extractSignalRequestUserInputOptions(ToolCall{Args: map[string]any{"options": record["options"]}}, "options"),
+		})
+	}
+	return normalizeRequestUserInputQuestions(questions)
 }
 
 func normalizeAskUserOptions(options []string) []string {
@@ -4389,9 +4459,15 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			"- reason_code must be one of: user_decision_required | permission_blocked | missing_external_input | conflicting_constraints | safety_confirmation.",
 			"- required_from_user must list concrete user inputs needed to proceed.",
 			"- evidence_refs must reference relevant tool IDs when evidence is required.",
-			"- When calling ask_user, include 2-4 concise mutually exclusive options in `options` (best option first).",
-			"- For deterministic UI actions, include structured `choices` with optional `actions` (e.g. {type:\"set_mode\",mode:\"act\"}).",
+			"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_other, is_secret, and optional options[].",
+			"- For each question, include 2-4 concise mutually exclusive options (best option first) when predefined choices are appropriate.",
+			"- For deterministic UI actions, place actions on `questions[].options[].actions` (for example {type:\"set_mode\",mode:\"act\"}).",
 		)
+		if capability.SupportsAskUserQuestionBatches {
+			core = append(core, "- Default to one question at a time. Use multiple questions only when the questions are tightly coupled and must be answered together.")
+		} else {
+			core = append(core, "- This runtime does not support batched ask_user questions. Emit exactly one question.")
+		}
 	} else {
 		core = append(core,
 			"",
@@ -4433,6 +4509,9 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		fmt.Sprintf("- Recent errors: %s", recentErrors),
 		fmt.Sprintf("- Todo tracking: %s", todoStatus),
 	}
+	if allowUserInteraction {
+		runtime = append(runtime, fmt.Sprintf("- Ask-user question batches supported: %t", capability.SupportsAskUserQuestionBatches))
+	}
 	if !allowUserInteraction {
 		runtime = append(runtime, "- Interaction policy: user interaction is disabled in this run. Continue autonomously or finish with task_complete including blockers.")
 	}
@@ -4454,7 +4533,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			planRules = append(planRules,
 				"- If edits are required, call ask_user and request the user to switch this thread to act mode.",
 				"- For this switch request, use reason_code=user_decision_required and keep required_from_user concrete.",
-				"- Include structured ask_user choices: one choice with label like \"Switch to Act mode\" and actions=[{type:\"set_mode\",mode:\"act\"}].",
+				"- Use a single ask_user question whose options include one label like \"Switch to Act mode\" with actions=[{type:\"set_mode\",mode:\"act\"}].",
 			)
 		} else {
 			planRules = append(planRules,
@@ -4672,22 +4751,14 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
 		return
 	}
 	signal = normalizeAskUserSignal(signal)
-	question := strings.TrimSpace(signal.Question)
 	source = strings.TrimSpace(source)
-	choices := normalizeWaitingPromptChoices(signal.Choices)
-	if len(choices) == 0 {
-		choices = waitingPromptChoicesFromOptions(signal.Options)
+	questions := normalizeRequestUserInputQuestions(signal.Questions)
+	if len(questions) == 0 {
+		return
 	}
-	options := make([]string, 0, len(choices))
-	for _, choice := range choices {
-		label := strings.TrimSpace(choice.Label)
-		if label == "" {
-			continue
-		}
-		options = append(options, label)
-	}
-	if len(options) == 0 {
-		options = signal.Options
+	question := strings.TrimSpace(signal.Question)
+	if question == "" {
+		question = strings.TrimSpace(questions[0].Question)
 	}
 	if question == "" {
 		return
@@ -4702,30 +4773,18 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
 	r.needNewTextBlock = true
 	r.mu.Unlock()
 	args := map[string]any{
-		"question":           question,
+		"questions":          questions,
 		"reason_code":        signal.ReasonCode,
 		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
 		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
 	}
-	if len(options) > 0 {
-		args["options"] = append([]string(nil), options...)
-	}
-	if len(choices) > 0 {
-		args["choices"] = choices
-	}
 	result := map[string]any{
-		"question":           question,
+		"questions":          questions,
 		"source":             source,
 		"reason_code":        signal.ReasonCode,
 		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
 		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
 		"waiting_user":       true,
-	}
-	if len(options) > 0 {
-		result["options"] = append([]string(nil), options...)
-	}
-	if len(choices) > 0 {
-		result["choices"] = choices
 	}
 	block := ToolCallBlock{
 		Type:     "tool-call",
@@ -4736,6 +4795,14 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
 		Result:   result,
 	}
 	r.emitPersistedToolBlockSet(idx, block)
+}
+
+func requestUserInputQuestionOptionCount(questions []RequestUserInputQuestion) int {
+	total := 0
+	for _, question := range normalizeRequestUserInputQuestions(questions) {
+		total += len(question.Options)
+	}
+	return total
 }
 
 func (r *run) degradedSummary(state runtimeState, objective string) string {
