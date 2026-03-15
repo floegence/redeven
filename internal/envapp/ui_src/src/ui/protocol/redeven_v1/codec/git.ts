@@ -1,8 +1,11 @@
 import type {
   GitCheckoutBranchRequest,
   GitCheckoutBranchResponse,
+  GitDeleteLinkedWorktreePreview,
   GitDeleteBranchRequest,
   GitDeleteBranchResponse,
+  GitPreviewDeleteBranchRequest,
+  GitPreviewDeleteBranchResponse,
   GitBranchSummary,
   GitCommitWorkspaceRequest,
   GitCommitWorkspaceResponse,
@@ -40,8 +43,11 @@ import type {
 import type {
   wire_git_checkout_branch_req,
   wire_git_checkout_branch_resp,
+  wire_git_delete_linked_worktree_preview,
   wire_git_delete_branch_req,
   wire_git_delete_branch_resp,
+  wire_git_preview_delete_branch_req,
+  wire_git_preview_delete_branch_resp,
   wire_git_branch_summary,
   wire_git_commit_workspace_req,
   wire_git_commit_workspace_resp,
@@ -174,6 +180,19 @@ function fromWireGitLinkedWorktreeSnapshot(resp: wire_git_linked_worktree_snapsh
   if (!resp) return undefined;
   return {
     worktreePath: typeof resp?.worktree_path === 'string' ? resp.worktree_path : undefined,
+    summary: fromWireGitWorkspaceSummary(resp?.summary),
+    staged: Array.isArray(resp?.staged) ? resp.staged.map(fromWireGitWorkspaceChange) : [],
+    unstaged: Array.isArray(resp?.unstaged) ? resp.unstaged.map(fromWireGitWorkspaceChange) : [],
+    untracked: Array.isArray(resp?.untracked) ? resp.untracked.map(fromWireGitWorkspaceChange) : [],
+    conflicted: Array.isArray(resp?.conflicted) ? resp.conflicted.map(fromWireGitWorkspaceChange) : [],
+  };
+}
+
+function fromWireGitDeleteLinkedWorktreePreview(resp: wire_git_delete_linked_worktree_preview | undefined): GitDeleteLinkedWorktreePreview | undefined {
+  if (!resp) return undefined;
+  return {
+    worktreePath: typeof resp?.worktree_path === 'string' ? resp.worktree_path : undefined,
+    accessible: Boolean(resp?.accessible),
     summary: fromWireGitWorkspaceSummary(resp?.summary),
     staged: Array.isArray(resp?.staged) ? resp.staged.map(fromWireGitWorkspaceChange) : [],
     unstaged: Array.isArray(resp?.unstaged) ? resp.unstaged.map(fromWireGitWorkspaceChange) : [],
@@ -409,7 +428,7 @@ export function fromWireGitCheckoutBranchResponse(resp: wire_git_checkout_branch
   };
 }
 
-export function toWireGitDeleteBranchRequest(req: GitDeleteBranchRequest): wire_git_delete_branch_req {
+export function toWireGitPreviewDeleteBranchRequest(req: GitPreviewDeleteBranchRequest): wire_git_preview_delete_branch_req {
   return {
     repo_root_path: req.repoRootPath,
     name: typeof req.name === 'string' ? req.name : undefined,
@@ -418,10 +437,41 @@ export function toWireGitDeleteBranchRequest(req: GitDeleteBranchRequest): wire_
   };
 }
 
+export function fromWireGitPreviewDeleteBranchResponse(resp: wire_git_preview_delete_branch_resp): GitPreviewDeleteBranchResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    name: typeof resp?.name === 'string' ? resp.name : undefined,
+    fullName: typeof resp?.full_name === 'string' ? resp.full_name : undefined,
+    kind: typeof resp?.kind === 'string' ? resp.kind : undefined,
+    linkedWorktree: fromWireGitDeleteLinkedWorktreePreview(resp?.linked_worktree),
+    requiresWorktreeRemoval: Boolean(resp?.requires_worktree_removal),
+    requiresDiscardConfirmation: Boolean(resp?.requires_discard_confirmation),
+    safeDeleteAllowed: Boolean(resp?.safe_delete_allowed),
+    safeDeleteBaseRef: typeof resp?.safe_delete_base_ref === 'string' ? resp.safe_delete_base_ref : undefined,
+    safeDeleteReason: typeof resp?.safe_delete_reason === 'string' ? resp.safe_delete_reason : undefined,
+    blockingReason: typeof resp?.blocking_reason === 'string' ? resp.blocking_reason : undefined,
+    planFingerprint: typeof resp?.plan_fingerprint === 'string' ? resp.plan_fingerprint : undefined,
+  };
+}
+
+export function toWireGitDeleteBranchRequest(req: GitDeleteBranchRequest): wire_git_delete_branch_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    name: typeof req.name === 'string' ? req.name : undefined,
+    full_name: typeof req.fullName === 'string' ? req.fullName : undefined,
+    kind: typeof req.kind === 'string' ? req.kind : undefined,
+    remove_linked_worktree: Boolean(req.removeLinkedWorktree),
+    discard_linked_worktree_changes: Boolean(req.discardLinkedWorktreeChanges),
+    plan_fingerprint: typeof req.planFingerprint === 'string' ? req.planFingerprint : undefined,
+  };
+}
+
 export function fromWireGitDeleteBranchResponse(resp: wire_git_delete_branch_resp): GitDeleteBranchResponse {
   return {
     repoRootPath: String(resp?.repo_root_path ?? ''),
     headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
     headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
+    linkedWorktreeRemoved: Boolean(resp?.linked_worktree_removed),
+    removedWorktreePath: typeof resp?.removed_worktree_path === 'string' ? resp.removed_worktree_path : undefined,
   };
 }

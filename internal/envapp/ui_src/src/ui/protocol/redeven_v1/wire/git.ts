@@ -143,17 +143,54 @@ export type wire_git_checkout_branch_resp = {
   head_commit?: string;
 };
 
-export type wire_git_delete_branch_req = {
+export type wire_git_preview_delete_branch_req = {
   repo_root_path: string;
   name?: string;
   full_name?: string;
   kind?: string;
 };
 
+export type wire_git_delete_linked_worktree_preview = {
+  worktree_path?: string;
+  accessible: boolean;
+  summary: wire_git_workspace_summary;
+  staged: wire_git_workspace_change[];
+  unstaged: wire_git_workspace_change[];
+  untracked: wire_git_workspace_change[];
+  conflicted: wire_git_workspace_change[];
+};
+
+export type wire_git_preview_delete_branch_resp = {
+  repo_root_path: string;
+  name?: string;
+  full_name?: string;
+  kind?: string;
+  linked_worktree?: wire_git_delete_linked_worktree_preview;
+  requires_worktree_removal: boolean;
+  requires_discard_confirmation: boolean;
+  safe_delete_allowed: boolean;
+  safe_delete_base_ref?: string;
+  safe_delete_reason?: string;
+  blocking_reason?: string;
+  plan_fingerprint?: string;
+};
+
+export type wire_git_delete_branch_req = {
+  repo_root_path: string;
+  name?: string;
+  full_name?: string;
+  kind?: string;
+  remove_linked_worktree: boolean;
+  discard_linked_worktree_changes: boolean;
+  plan_fingerprint?: string;
+};
+
 export type wire_git_delete_branch_resp = {
   repo_root_path: string;
   head_ref?: string;
   head_commit?: string;
+  linked_worktree_removed: boolean;
+  removed_worktree_path?: string;
 };
 
 export type wire_git_branch_summary = {

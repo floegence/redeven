@@ -2,6 +2,7 @@
 
 import { LayoutProvider, NotificationProvider } from '@floegence/floe-webapp-core';
 import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -223,50 +224,86 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
-  it('disables delete for a linked worktree branch and shows the reason', () => {
+  it('opens linked worktree review for a linked branch and keeps delete enabled', async () => {
     let deleteCount = 0;
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    const dispose = render(() => (
-      <LayoutProvider>
-        <NotificationProvider>
-          <ProtocolProvider contract={redevenV1Contract}>
-            <div class="h-[640px]">
-              <GitBranchesPanel
-                repoRootPath="/workspace/repo"
-                selectedBranch={{
-                  name: 'feature/linked',
-                  fullName: 'refs/heads/feature/linked',
-                  kind: 'local',
-                  worktreePath: '/workspace/repo-linked',
-                }}
-                branches={{
-                  repoRootPath: '/workspace/repo',
-                  currentRef: 'main',
-                  local: [
-                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
-                    { name: 'feature/linked', fullName: 'refs/heads/feature/linked', kind: 'local', worktreePath: '/workspace/repo-linked' },
-                  ],
-                  remote: [],
-                }}
-                onDeleteBranch={() => {
-                  deleteCount += 1;
-                }}
-              />
-            </div>
-          </ProtocolProvider>
-        </NotificationProvider>
-      </LayoutProvider>
-    ), host);
+    const linkedBranch = {
+      name: 'feature/linked',
+      fullName: 'refs/heads/feature/linked',
+      kind: 'local' as const,
+      worktreePath: '/workspace/repo-linked',
+    };
+    const linkedPreview = {
+      repoRootPath: '/workspace/repo',
+      name: 'feature/linked',
+      fullName: 'refs/heads/feature/linked',
+      kind: 'local' as const,
+      requiresWorktreeRemoval: true,
+      requiresDiscardConfirmation: true,
+      safeDeleteAllowed: true,
+      safeDeleteBaseRef: 'main',
+      planFingerprint: 'plan-1',
+      linkedWorktree: {
+        worktreePath: '/workspace/repo-linked',
+        accessible: true,
+        summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 1, conflictedCount: 0 },
+        staged: [],
+        unstaged: [],
+        untracked: [{ section: 'untracked', changeType: 'added', path: 'scratch.txt', displayPath: 'scratch.txt', patchText: '@@ -0,0 +1 @@\n+scratch' }],
+        conflicted: [],
+      },
+    };
+
+    const dispose = render(() => {
+      const [deleteReviewOpen, setDeleteReviewOpen] = createSignal(false);
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  selectedBranch={linkedBranch}
+                  branches={{
+                    repoRootPath: '/workspace/repo',
+                    currentRef: 'main',
+                    local: [
+                      { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                      linkedBranch,
+                    ],
+                    remote: [],
+                  }}
+                  deleteReviewOpen={deleteReviewOpen()}
+                  deleteReviewBranch={linkedBranch}
+                  deletePreview={deleteReviewOpen() ? linkedPreview : null}
+                  onDeleteBranch={() => {
+                    deleteCount += 1;
+                    setDeleteReviewOpen(true);
+                  }}
+                  onCloseDeleteReview={() => setDeleteReviewOpen(false)}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
 
     try {
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       expect(deleteButton).toBeTruthy();
-      expect(deleteButton?.disabled).toBe(true);
+      expect(deleteButton?.disabled).toBe(false);
+      deleteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+
+      expect(deleteCount).toBe(1);
+      expect(document.body.textContent).toContain('Delete Branch Review');
+      expect(document.body.textContent).toContain('/workspace/repo-linked');
+      expect(document.body.textContent).toContain('scratch.txt');
       expect(host.textContent).toContain('linked worktree');
       expect(host.textContent).toContain('/workspace/repo-linked');
-      expect(deleteCount).toBe(0);
     } finally {
       dispose();
     }
@@ -327,41 +364,67 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
-  it('opens a confirmation dialog before deleting a local branch', async () => {
-    let deletedBranch: string | undefined;
+  it('opens a lightweight confirmation dialog before deleting a local branch', async () => {
+    let requestedBranch: string | undefined;
+    let confirmedBranch: string | undefined;
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    const dispose = render(() => (
-      <LayoutProvider>
-        <NotificationProvider>
-          <ProtocolProvider contract={redevenV1Contract}>
-            <div class="h-[640px]">
-              <GitBranchesPanel
-                repoRootPath="/workspace/repo"
-                selectedBranch={{
-                  name: 'feature/demo',
-                  fullName: 'refs/heads/feature/demo',
-                  kind: 'local',
-                }}
-                branches={{
-                  repoRootPath: '/workspace/repo',
-                  currentRef: 'main',
-                  local: [
-                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
-                    { name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local' },
-                  ],
-                  remote: [],
-                }}
-                onDeleteBranch={(branch) => {
-                  deletedBranch = branch.name;
-                }}
-              />
-            </div>
-          </ProtocolProvider>
-        </NotificationProvider>
-      </LayoutProvider>
-    ), host);
+    const branch = {
+      name: 'feature/demo',
+      fullName: 'refs/heads/feature/demo',
+      kind: 'local' as const,
+    };
+    const preview = {
+      repoRootPath: '/workspace/repo',
+      name: 'feature/demo',
+      fullName: 'refs/heads/feature/demo',
+      kind: 'local' as const,
+      requiresWorktreeRemoval: false,
+      requiresDiscardConfirmation: false,
+      safeDeleteAllowed: true,
+      safeDeleteBaseRef: 'main',
+      planFingerprint: 'plan-1',
+    };
+
+    const dispose = render(() => {
+      const [deleteReviewOpen, setDeleteReviewOpen] = createSignal(false);
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  selectedBranch={branch}
+                  branches={{
+                    repoRootPath: '/workspace/repo',
+                    currentRef: 'main',
+                    local: [
+                      { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                      branch,
+                    ],
+                    remote: [],
+                  }}
+                  deleteReviewOpen={deleteReviewOpen()}
+                  deleteReviewBranch={branch}
+                  deletePreview={deleteReviewOpen() ? preview : null}
+                  onDeleteBranch={(selected) => {
+                    requestedBranch = selected.name;
+                    setDeleteReviewOpen(true);
+                  }}
+                  onCloseDeleteReview={() => setDeleteReviewOpen(false)}
+                  onConfirmDeleteBranch={(selected) => {
+                    confirmedBranch = selected.name;
+                    setDeleteReviewOpen(false);
+                  }}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
 
     try {
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
@@ -369,11 +432,13 @@ describe('GitBranchesPanel interactions', () => {
       deleteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
 
-      expect(document.body.textContent).toContain('Delete local branch');
+      expect(requestedBranch).toBe('feature/demo');
+      expect(document.body.textContent).toContain('Delete Branch');
+      expect(document.body.textContent).toContain('Delete base main');
       const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete Branch') as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
       confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      expect(deletedBranch).toBe('feature/demo');
+      expect(confirmedBranch).toBe('feature/demo');
     } finally {
       dispose();
     }

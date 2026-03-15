@@ -2,10 +2,13 @@ package gitrepo
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/floegence/redeven-agent/internal/gitutil"
 )
 
 func mustEvalPath(t *testing.T, value string) string {
@@ -15,6 +18,22 @@ func mustEvalPath(t *testing.T, value string) string {
 		t.Fatalf("filepath.EvalSymlinks(%q): %v", value, err)
 	}
 	return filepath.Clean(resolved)
+}
+
+func mustPreviewDeleteBranch(
+	t *testing.T,
+	svc *Service,
+	repo repoContext,
+	name string,
+	fullName string,
+	kind string,
+) *previewDeleteBranchResp {
+	t.Helper()
+	resp, err := svc.previewDeleteBranch(context.Background(), repo, name, fullName, kind)
+	if err != nil {
+		t.Fatalf("previewDeleteBranch(%s): %v", name, err)
+	}
+	return resp
 }
 
 func TestResolveRepoForPath(t *testing.T) {
@@ -444,7 +463,21 @@ func TestDeleteBranch_DeletesMergedLocalBranch(t *testing.T) {
 		t.Fatalf("resolveExplicitRepo: %v", err)
 	}
 
-	resp, err := svc.deleteBranch(context.Background(), repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	preview := mustPreviewDeleteBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if !preview.SafeDeleteAllowed {
+		t.Fatalf("expected safe delete preview: %+v", preview)
+	}
+
+	resp, err := svc.deleteBranch(
+		context.Background(),
+		repo,
+		compare.Branch,
+		"refs/heads/"+compare.Branch,
+		"local",
+		false,
+		false,
+		preview.PlanFingerprint,
+	)
 	if err != nil {
 		t.Fatalf("deleteBranch(local): %v", err)
 	}
@@ -465,7 +498,7 @@ func TestDeleteBranch_RejectsCurrentBranch(t *testing.T) {
 		t.Fatalf("resolveExplicitRepo: %v", err)
 	}
 
-	_, err = svc.deleteBranch(context.Background(), repo, repo.headRef, "refs/heads/"+repo.headRef, "local")
+	_, err = svc.deleteBranch(context.Background(), repo, repo.headRef, "refs/heads/"+repo.headRef, "local", false, false, "stale")
 	if err == nil {
 		t.Fatalf("expected deleting current branch to fail")
 	}
@@ -484,7 +517,24 @@ func TestDeleteBranch_RejectsUnmergedBranch(t *testing.T) {
 		t.Fatalf("resolveExplicitRepo: %v", err)
 	}
 
-	_, err = svc.deleteBranch(context.Background(), repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	preview := mustPreviewDeleteBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if preview.SafeDeleteAllowed {
+		t.Fatalf("expected safe delete blocker: %+v", preview)
+	}
+	if !strings.Contains(strings.ToLower(preview.SafeDeleteReason), "not fully merged") {
+		t.Fatalf("unexpected preview safe delete reason: %+v", preview)
+	}
+
+	_, err = svc.deleteBranch(
+		context.Background(),
+		repo,
+		compare.Branch,
+		"refs/heads/"+compare.Branch,
+		"local",
+		false,
+		false,
+		preview.PlanFingerprint,
+	)
 	if err == nil {
 		t.Fatalf("expected deleting unmerged branch to fail")
 	}
@@ -493,13 +543,16 @@ func TestDeleteBranch_RejectsUnmergedBranch(t *testing.T) {
 	}
 }
 
-func TestDeleteBranch_RejectsLinkedWorktreeBranch(t *testing.T) {
+func TestPreviewDeleteBranch_ReportsLinkedDirtyWorktree(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)
 	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
 	serviceRoot := filepath.Dir(fixture.Root)
 	worktree := filepath.Join(serviceRoot, "compare-wt")
 	runGitFixture(t, fixture.Root, "worktree", "add", worktree, compare.Branch)
+	if err := os.WriteFile(filepath.Join(worktree, "scratch.txt"), []byte("pending worktree file\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(scratch.txt): %v", err)
+	}
 
 	svc := NewService(serviceRoot)
 	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
@@ -507,12 +560,21 @@ func TestDeleteBranch_RejectsLinkedWorktreeBranch(t *testing.T) {
 		t.Fatalf("resolveExplicitRepo: %v", err)
 	}
 
-	_, err = svc.deleteBranch(context.Background(), repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
-	if err == nil {
-		t.Fatalf("expected deleting linked worktree branch to fail")
+	preview := mustPreviewDeleteBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if preview.LinkedWorktree == nil {
+		t.Fatalf("expected linked worktree preview: %+v", preview)
 	}
-	if !strings.Contains(err.Error(), "checked out in worktree") || !strings.Contains(err.Error(), worktree) {
-		t.Fatalf("unexpected error: %v", err)
+	if !preview.RequiresWorktreeRemoval || !preview.RequiresDiscardConfirmation {
+		t.Fatalf("unexpected worktree requirements: %+v", preview)
+	}
+	if !preview.LinkedWorktree.Accessible || mustEvalPath(t, preview.LinkedWorktree.WorktreePath) != mustEvalPath(t, worktree) {
+		t.Fatalf("unexpected worktree path: %+v", preview.LinkedWorktree)
+	}
+	if preview.LinkedWorktree.Summary.UntrackedCount != 1 {
+		t.Fatalf("unexpected worktree summary: %+v", preview.LinkedWorktree.Summary)
+	}
+	if len(preview.LinkedWorktree.Untracked) != 1 || preview.LinkedWorktree.Untracked[0].Path != "scratch.txt" {
+		t.Fatalf("unexpected worktree changes: %+v", preview.LinkedWorktree.Untracked)
 	}
 }
 
@@ -534,11 +596,175 @@ func TestDeleteBranch_RejectsRemoteBranch(t *testing.T) {
 	}
 
 	remoteName := "origin/" + remote.RemoteFeatureBranch
-	_, err = svc.deleteBranch(context.Background(), repo, remoteName, "refs/remotes/"+remoteName, "remote")
+	_, err = svc.deleteBranch(context.Background(), repo, remoteName, "refs/remotes/"+remoteName, "remote", false, false, "stale")
 	if err == nil {
 		t.Fatalf("expected deleting remote branch to fail")
 	}
 	if !strings.Contains(err.Error(), "remote branches cannot be deleted here") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDeleteBranch_RemovesLinkedCleanWorktreeAndBranch(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+	runGitFixture(t, fixture.Root, "merge", "--ff-only", compare.Branch)
+	serviceRoot := filepath.Dir(fixture.Root)
+	worktree := filepath.Join(serviceRoot, "compare-wt")
+	runGitFixture(t, fixture.Root, "worktree", "add", worktree, compare.Branch)
+
+	svc := NewService(serviceRoot)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewDeleteBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if !preview.SafeDeleteAllowed || !preview.RequiresWorktreeRemoval || preview.RequiresDiscardConfirmation {
+		t.Fatalf("unexpected preview: %+v", preview)
+	}
+	expectedRemovedWorktreePath := filepath.Clean(preview.LinkedWorktree.WorktreePath)
+
+	resp, err := svc.deleteBranch(
+		context.Background(),
+		repo,
+		compare.Branch,
+		"refs/heads/"+compare.Branch,
+		"local",
+		true,
+		false,
+		preview.PlanFingerprint,
+	)
+	if err != nil {
+		t.Fatalf("deleteBranch(clean linked worktree): %v", err)
+	}
+	if !resp.LinkedWorktreeRemoved || filepath.Clean(resp.RemovedWorktreePath) != expectedRemovedWorktreePath {
+		t.Fatalf("unexpected delete response: %+v", resp)
+	}
+	if _, err := os.Stat(worktree); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected worktree %q to be removed, err=%v", worktree, err)
+	}
+	if gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
+		t.Fatalf("expected branch %q to be deleted", compare.Branch)
+	}
+}
+
+func TestDeleteBranch_RejectsDirtyLinkedWorktreeWithoutDiscardConsent(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+	runGitFixture(t, fixture.Root, "merge", "--ff-only", compare.Branch)
+	serviceRoot := filepath.Dir(fixture.Root)
+	worktree := filepath.Join(serviceRoot, "compare-wt")
+	runGitFixture(t, fixture.Root, "worktree", "add", worktree, compare.Branch)
+	if err := os.WriteFile(filepath.Join(worktree, "scratch.txt"), []byte("pending worktree file\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(scratch.txt): %v", err)
+	}
+
+	svc := NewService(serviceRoot)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewDeleteBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if !preview.RequiresDiscardConfirmation {
+		t.Fatalf("expected discard confirmation requirement: %+v", preview)
+	}
+
+	_, err = svc.deleteBranch(
+		context.Background(),
+		repo,
+		compare.Branch,
+		"refs/heads/"+compare.Branch,
+		"local",
+		true,
+		false,
+		preview.PlanFingerprint,
+	)
+	if err == nil {
+		t.Fatalf("expected dirty linked worktree delete to require discard confirmation")
+	}
+	if !strings.Contains(err.Error(), "discard confirmation is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDeleteBranch_RemovesDirtyLinkedWorktreeAndBranchWithConsent(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+	runGitFixture(t, fixture.Root, "merge", "--ff-only", compare.Branch)
+	serviceRoot := filepath.Dir(fixture.Root)
+	worktree := filepath.Join(serviceRoot, "compare-wt")
+	runGitFixture(t, fixture.Root, "worktree", "add", worktree, compare.Branch)
+	if err := os.WriteFile(filepath.Join(worktree, "scratch.txt"), []byte("pending worktree file\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(scratch.txt): %v", err)
+	}
+
+	svc := NewService(serviceRoot)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewDeleteBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	resp, err := svc.deleteBranch(
+		context.Background(),
+		repo,
+		compare.Branch,
+		"refs/heads/"+compare.Branch,
+		"local",
+		true,
+		true,
+		preview.PlanFingerprint,
+	)
+	if err != nil {
+		t.Fatalf("deleteBranch(dirty linked worktree): %v", err)
+	}
+	if !resp.LinkedWorktreeRemoved {
+		t.Fatalf("expected linked worktree removal: %+v", resp)
+	}
+	if _, err := os.Stat(worktree); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected worktree %q to be removed, err=%v", worktree, err)
+	}
+	if gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
+		t.Fatalf("expected branch %q to be deleted", compare.Branch)
+	}
+}
+
+func TestDeleteBranch_RejectsStaleDeletePlan(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+	runGitFixture(t, fixture.Root, "merge", "--ff-only", compare.Branch)
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewDeleteBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if _, err := gitutil.RunCombinedOutput(context.Background(), fixture.Root, nil, "update-ref", "refs/heads/"+compare.Branch, fixture.BinaryCommit); err != nil {
+		t.Fatalf("update-ref: %v", err)
+	}
+
+	_, err = svc.deleteBranch(
+		context.Background(),
+		repo,
+		compare.Branch,
+		"refs/heads/"+compare.Branch,
+		"local",
+		false,
+		false,
+		preview.PlanFingerprint,
+	)
+	if err == nil {
+		t.Fatalf("expected stale delete plan to fail")
+	}
+	if !strings.Contains(err.Error(), "delete plan is stale") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

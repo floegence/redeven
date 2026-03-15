@@ -3,6 +3,7 @@ import type {
   GitCommitSummary,
   GitListBranchesResponse,
   GitListWorkspaceChangesResponse,
+  GitPreviewDeleteBranchResponse,
   GitRepoSummaryResponse,
   GitResolveRepoResponse,
   GitWorkspaceChange,
@@ -13,6 +14,7 @@ import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitc
 import { GitViewNav } from './GitViewNav';
 import { GitWorkbenchSidebar } from './GitWorkbenchSidebar';
 import { GitWorkbench } from './GitWorkbench';
+import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 
 export interface GitWorkspaceProps {
   mode: GitHistoryMode;
@@ -69,11 +71,20 @@ export interface GitWorkspaceProps {
   pushBusy?: boolean;
   checkoutBusy?: boolean;
   deleteBusy?: boolean;
+  deleteReviewOpen?: boolean;
+  deleteReviewBranch?: GitBranchSummary | null;
+  deletePreview?: GitPreviewDeleteBranchResponse | null;
+  deletePreviewError?: string;
+  deleteActionError?: string;
+  deleteDialogState?: GitDeleteBranchDialogState;
   onFetch?: () => void;
   onPull?: () => void;
   onPush?: () => void;
   onCheckoutBranch?: (branch: GitBranchSummary) => void;
   onDeleteBranch?: (branch: GitBranchSummary) => void;
+  onCloseDeleteReview?: () => void;
+  onRetryDeletePreview?: (branch: GitBranchSummary) => void;
+  onConfirmDeleteBranch?: (branch: GitBranchSummary, options: GitDeleteBranchDialogConfirmOptions) => void;
   showMobileSidebarButton?: boolean;
   onToggleSidebar?: () => void;
   onRefresh?: () => void;
@@ -161,8 +172,17 @@ export function GitWorkspace(props: GitWorkspaceProps) {
           onLoadMore={props.onLoadMore}
           checkoutBusy={props.checkoutBusy}
           deleteBusy={props.deleteBusy}
+          deleteReviewOpen={props.deleteReviewOpen}
+          deleteReviewBranch={props.deleteReviewBranch}
+          deletePreview={props.deletePreview}
+          deletePreviewError={props.deletePreviewError}
+          deleteActionError={props.deleteActionError}
+          deleteDialogState={props.deleteDialogState}
           onCheckoutBranch={props.onCheckoutBranch}
           onDeleteBranch={props.onDeleteBranch}
+          onCloseDeleteReview={props.onCloseDeleteReview}
+          onRetryDeletePreview={props.onRetryDeletePreview}
+          onConfirmDeleteBranch={props.onConfirmDeleteBranch}
           commitMessage={props.commitMessage}
           commitBusy={props.commitBusy}
           onCommitMessageChange={props.onCommitMessageChange}

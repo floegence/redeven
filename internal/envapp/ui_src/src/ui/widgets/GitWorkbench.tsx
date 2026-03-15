@@ -7,6 +7,7 @@ import type {
   GitCommitSummary,
   GitListBranchesResponse,
   GitListWorkspaceChangesResponse,
+  GitPreviewDeleteBranchResponse,
   GitRepoSummaryResponse,
   GitResolveRepoResponse,
   GitWorkspaceChange,
@@ -17,6 +18,7 @@ import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
 import { gitSubviewTone, gitToneActionButtonClass } from './GitChrome';
 import { GitLabelBlock, GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimitives';
+import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 
 export interface GitWorkbenchProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -51,8 +53,17 @@ export interface GitWorkbenchProps {
   onLoadMore?: () => void;
   checkoutBusy?: boolean;
   deleteBusy?: boolean;
+  deleteReviewOpen?: boolean;
+  deleteReviewBranch?: GitBranchSummary | null;
+  deletePreview?: GitPreviewDeleteBranchResponse | null;
+  deletePreviewError?: string;
+  deleteActionError?: string;
+  deleteDialogState?: GitDeleteBranchDialogState;
   onCheckoutBranch?: (branch: GitBranchSummary) => void;
   onDeleteBranch?: (branch: GitBranchSummary) => void;
+  onCloseDeleteReview?: () => void;
+  onRetryDeletePreview?: (branch: GitBranchSummary) => void;
+  onConfirmDeleteBranch?: (branch: GitBranchSummary, options: GitDeleteBranchDialogConfirmOptions) => void;
   commitMessage?: string;
   commitBusy?: boolean;
   onCommitMessageChange?: (value: string) => void;
@@ -232,8 +243,17 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             onLoadMore={props.onLoadMore}
             checkoutBusy={props.checkoutBusy}
             deleteBusy={props.deleteBusy}
+            deleteReviewOpen={props.deleteReviewOpen}
+            deleteReviewBranch={props.deleteReviewBranch}
+            deletePreview={props.deletePreview}
+            deletePreviewError={props.deletePreviewError}
+            deleteActionError={props.deleteActionError}
+            deleteDialogState={props.deleteDialogState}
             onCheckoutBranch={props.onCheckoutBranch}
             onDeleteBranch={props.onDeleteBranch}
+            onCloseDeleteReview={props.onCloseDeleteReview}
+            onRetryDeletePreview={props.onRetryDeletePreview}
+            onConfirmDeleteBranch={props.onConfirmDeleteBranch}
           />
         </Show>
 
