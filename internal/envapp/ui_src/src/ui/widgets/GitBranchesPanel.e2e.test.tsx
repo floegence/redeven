@@ -323,6 +323,10 @@ describe('GitBranchesPanel interactions', () => {
       expect(dialogRoot?.className).toContain('[&>div:last-child]:!overflow-hidden');
       expect(dialogRoot?.className).toContain('[&>div:last-child]:flex');
       expect(dialogRoot?.className).toContain('[&>div:last-child]:!p-0');
+      const closeButton = dialogRoot?.querySelector('button[aria-label="Close"]') as HTMLButtonElement | null | undefined;
+      expect(closeButton).toBeTruthy();
+      expect(closeButton?.className).toContain('hover:bg-red-500');
+      expect(closeButton?.className).not.toContain('hover:bg-muted/80');
 
       const changedFilesScrollRegion = Array.from(dialogRoot?.querySelectorAll('div') ?? []).find((node) => node.className.includes('min-h-0 flex-1 overflow-auto')) as HTMLDivElement | undefined;
       expect(changedFilesScrollRegion).toBeTruthy();

@@ -239,7 +239,12 @@ describe('GitChangesPanel interactions', () => {
       expect(document.body.textContent).toContain('Workspace Diff');
       expect(document.body.textContent).toContain('src/next.ts');
       expect(document.body.textContent).toContain('newLine();');
-      expect(document.querySelector('[role="dialog"]')).toBeTruthy();
+      const dialogRoot = document.querySelector('[role="dialog"]') as HTMLDivElement | null;
+      expect(dialogRoot).toBeTruthy();
+      const closeButton = dialogRoot?.querySelector('button[aria-label="Close"]') as HTMLButtonElement | null;
+      expect(closeButton).toBeTruthy();
+      expect(closeButton?.className).toContain('hover:bg-red-500');
+      expect(closeButton?.className).not.toContain('hover:bg-muted/80');
     } finally {
       dispose();
     }
