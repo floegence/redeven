@@ -25,6 +25,11 @@ import {
   toFileBrowserDisplayPath,
 } from '../utils/fileBrowserDisplayPath';
 
+const FILE_WORKSPACE_TOOLBAR_FIELD_CLASS =
+  'h-7 min-w-0 rounded-md border border-border/50 bg-background px-2.5 shadow-sm';
+const FILE_WORKSPACE_TOOLBAR_SEGMENTED_CLASS =
+  'h-7 shrink-0 [&_button]:h-6 [&_button]:px-2 [&_button]:py-0';
+
 export interface FileBrowserWorkspaceProps {
   mode: GitHistoryMode;
   onModeChange: (mode: GitHistoryMode) => void;
@@ -71,7 +76,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
       <div class="flex flex-wrap items-center gap-2">
         <Show when={props.showMobileSidebarButton && props.onToggleSidebar}>
           <Button
-            size="xs"
+            size="sm"
             variant="outline"
             icon={FilesIcon}
             class="cursor-pointer"
@@ -82,15 +87,15 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
           </Button>
         </Show>
 
-        <Button size="xs" variant="outline" icon={ArrowUp} class="cursor-pointer" onClick={browser.navigateUp} disabled={!canNavigateUp()}>
+        <Button size="sm" variant="outline" icon={ArrowUp} class="cursor-pointer" onClick={browser.navigateUp} disabled={!canNavigateUp()}>
           Up
         </Button>
 
-        <div class="min-w-0 flex-1 rounded-md border border-border/50 bg-background px-2.5 py-1.5 shadow-sm">
+        <div class={`${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex flex-1 items-center`}>
           <Breadcrumb class="min-w-0" />
         </div>
 
-        <label class="flex min-w-[200px] flex-1 items-center gap-1.5 rounded-md border border-border/50 bg-background px-2.5 py-1.5 text-[11px] text-muted-foreground shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring sm:max-w-[15rem] sm:flex-none">
+        <label class={`${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex min-w-[200px] flex-1 items-center gap-1.5 text-[11px] text-muted-foreground focus-within:border-ring focus-within:ring-1 focus-within:ring-ring sm:max-w-[15rem] sm:flex-none`}>
           <Search class="size-3.5 shrink-0" />
           <input
             type="text"
@@ -98,13 +103,14 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
             onInput={(event) => browser.setFilterQuery(event.currentTarget.value)}
             placeholder="Filter files"
             aria-label="Filter files"
-            class="min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground/70"
+            class="h-full min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground/70"
           />
         </label>
 
         <div class="ml-auto flex items-center gap-1.5">
           <SegmentedControl
             size="sm"
+            class={FILE_WORKSPACE_TOOLBAR_SEGMENTED_CLASS}
             value={browser.viewMode()}
             onChange={(value) => browser.setViewMode(value === 'grid' ? 'grid' : 'list')}
             options={[

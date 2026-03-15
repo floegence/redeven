@@ -1280,9 +1280,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     <Dropdown
       trigger={(
         <Button
-          size="xs"
+          size="sm"
           variant="outline"
-          class="cursor-pointer px-2"
+          class="cursor-pointer"
           aria-label="More file browser options"
           title="More options"
         >

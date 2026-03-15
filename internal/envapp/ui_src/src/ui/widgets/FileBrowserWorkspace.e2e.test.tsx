@@ -232,6 +232,44 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
+  it('uses a shared toolbar control height across actions, fields, and view switcher', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={files}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-toolbar-heights"
+            instanceId="test-files-workspace-toolbar-heights"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const upButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Up'));
+      const breadcrumb = host.querySelector('nav[aria-label="Breadcrumb"]');
+      const filterInput = host.querySelector('input[aria-label="Filter files"]');
+      const viewSwitcher = host.querySelector('[role="group"]');
+
+      expect(upButton?.className).toContain('h-7');
+      expect(breadcrumb?.parentElement?.className).toContain('h-7');
+      expect(filterInput?.parentElement?.className).toContain('h-7');
+      expect(viewSwitcher?.className).toContain('h-7');
+    } finally {
+      dispose();
+    }
+  });
+
   it('treats homePath as the navigation root and maps navigate-up back to the absolute home path', async () => {
     let navigatedPath = '';
     const host = document.createElement('div');
