@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -324,7 +325,7 @@ func startGitRepoRPCSession(t *testing.T, svc *Service) (*rpc.Client, func()) {
 	t.Helper()
 	serverConn, clientConn := net.Pipe()
 	router := rpc.NewRouter()
-	svc.Register(router, &session.Meta{CanRead: true})
+	svc.Register(router, &session.Meta{CanRead: true, CanWrite: true})
 	server := rpc.NewServer(serverConn, router)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -343,4 +344,50 @@ func startGitRepoRPCSession(t *testing.T, svc *Service) (*rpc.Client, func()) {
 		}
 	}
 	return rpc.NewClient(clientConn), cleanup
+}
+
+func TestE2E_GitRepoRPC_PreviewDeleteBranchWithLinkedWorktree(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+	runGitFixture(t, fixture.Root, "merge", "--ff-only", compare.Branch)
+	serviceRoot := filepath.Dir(fixture.Root)
+	worktree := filepath.Join(serviceRoot, "compare-wt")
+	runGitFixture(t, fixture.Root, "worktree", "add", worktree, compare.Branch)
+	if err := os.WriteFile(filepath.Join(worktree, "scratch.txt"), []byte("pending worktree file\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(scratch.txt): %v", err)
+	}
+
+	svc := NewService(serviceRoot)
+	client, closeServer := startGitRepoRPCSession(t, svc)
+	defer closeServer()
+
+	previewPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_PREVIEW_DELETE, mustMarshalJSON(t, previewDeleteBranchReq{
+		RepoRootPath: fixture.Root,
+		Name:         compare.Branch,
+		FullName:     "refs/heads/" + compare.Branch,
+		Kind:         "local",
+	}))
+	if err != nil {
+		t.Fatalf("preview delete branch call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("preview delete branch rpc error: %+v", rpcErr)
+	}
+	var previewResp previewDeleteBranchResp
+	if err := json.Unmarshal(previewPayload, &previewResp); err != nil {
+		t.Fatalf("unmarshal preview delete branch: %v", err)
+	}
+	if !previewResp.RequiresWorktreeRemoval || !previewResp.RequiresDiscardConfirmation {
+		t.Fatalf("unexpected preview flags: %+v", previewResp)
+	}
+	if previewResp.LinkedWorktree == nil || !previewResp.LinkedWorktree.Accessible {
+		t.Fatalf("expected accessible linked worktree: %+v", previewResp)
+	}
+	if mustEvalPathE2E(t, previewResp.LinkedWorktree.WorktreePath) != mustEvalPathE2E(t, worktree) {
+		t.Fatalf("preview worktree path=%q, want %q", previewResp.LinkedWorktree.WorktreePath, worktree)
+	}
+	if len(previewResp.LinkedWorktree.Untracked) != 1 || previewResp.LinkedWorktree.Untracked[0].Path != "scratch.txt" {
+		t.Fatalf("unexpected preview worktree changes: %+v", previewResp.LinkedWorktree.Untracked)
+	}
 }

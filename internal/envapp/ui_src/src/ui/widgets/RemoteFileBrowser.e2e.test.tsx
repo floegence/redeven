@@ -63,6 +63,7 @@ const mockRpc = vi.hoisted(() => ({
     pullRepo: vi.fn(),
     pushRepo: vi.fn(),
     checkoutBranch: vi.fn(),
+    previewDeleteBranch: vi.fn(),
     deleteBranch: vi.fn(),
   },
 }));
@@ -187,11 +188,18 @@ vi.mock('./GitWorkspace', () => ({
     pushBusy?: boolean;
     checkoutBusy?: boolean;
     deleteBusy?: boolean;
+    deleteReviewOpen?: boolean;
+    deletePreview?: { planFingerprint?: string } | null;
+    deleteDialogState?: string;
     onFetch?: () => void;
     onPull?: () => void;
     onPush?: () => void;
     onCheckoutBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
     onDeleteBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
+    onConfirmDeleteBranch?: (
+      branch: { name?: string; fullName?: string; kind?: string },
+      options: { removeLinkedWorktree: boolean; discardLinkedWorktreeChanges: boolean; planFingerprint?: string },
+    ) => void;
   }) => {
     onMount(() => {
       workspaceLifecycleStore.gitMounts += 1;
@@ -243,6 +251,22 @@ vi.mock('./GitWorkspace', () => ({
         >
           mock-delete-branch
         </button>
+        {props.deleteReviewOpen && props.deletePreview ? (
+          <button
+            type="button"
+            onClick={() => props.onConfirmDeleteBranch?.({
+              name: 'feature/demo',
+              fullName: 'refs/heads/feature/demo',
+              kind: 'local',
+            }, {
+              removeLinkedWorktree: false,
+              discardLinkedWorktreeChanges: false,
+              planFingerprint: props.deletePreview?.planFingerprint,
+            })}
+          >
+            mock-confirm-delete-branch
+          </button>
+        ) : null}
       </div>
     );
   },
@@ -384,10 +408,22 @@ beforeEach(() => {
     headRef: 'feature/demo',
     headCommit: 'fedcba9',
   });
+  mockRpc.git.previewDeleteBranch.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    name: 'feature/demo',
+    fullName: 'refs/heads/feature/demo',
+    kind: 'local',
+    requiresWorktreeRemoval: false,
+    requiresDiscardConfirmation: false,
+    safeDeleteAllowed: true,
+    safeDeleteBaseRef: 'main',
+    planFingerprint: 'plan-1',
+  });
   mockRpc.git.deleteBranch.mockResolvedValue({
     repoRootPath: '/workspace/repo',
     headRef: 'main',
     headCommit: 'abc1234',
+    linkedWorktreeRemoved: false,
   });
 });
 
@@ -703,11 +739,26 @@ describe('RemoteFileBrowser persistence', () => {
       deleteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
+      expect(mockRpc.git.previewDeleteBranch).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo',
+        name: 'feature/demo',
+        fullName: 'refs/heads/feature/demo',
+        kind: 'local',
+      });
+
+      const confirmButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-confirm-delete-branch') as HTMLButtonElement | undefined;
+      expect(confirmButton).toBeTruthy();
+      confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
       expect(mockRpc.git.deleteBranch).toHaveBeenCalledWith({
         repoRootPath: '/workspace/repo',
         name: 'feature/demo',
         fullName: 'refs/heads/feature/demo',
         kind: 'local',
+        removeLinkedWorktree: false,
+        discardLinkedWorktreeChanges: false,
+        planFingerprint: 'plan-1',
       });
       expect(notificationStore.success).toContainEqual({ title: 'Deleted', message: 'feature/demo was removed.' });
       expect(gitWorkspaceRenderStore.snapshots.some((item) => item.deleteBusy)).toBe(true);

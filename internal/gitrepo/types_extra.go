@@ -95,17 +95,54 @@ type checkoutBranchResp struct {
 	HeadCommit   string `json:"head_commit,omitempty"`
 }
 
-type deleteBranchReq struct {
+type previewDeleteBranchReq struct {
 	RepoRootPath string `json:"repo_root_path"`
 	Name         string `json:"name,omitempty"`
 	FullName     string `json:"full_name,omitempty"`
 	Kind         string `json:"kind,omitempty"`
 }
 
+type gitDeleteLinkedWorktreePreview struct {
+	WorktreePath string               `json:"worktree_path,omitempty"`
+	Accessible   bool                 `json:"accessible"`
+	Summary      gitWorkspaceSummary  `json:"summary"`
+	Staged       []gitWorkspaceChange `json:"staged,omitempty"`
+	Unstaged     []gitWorkspaceChange `json:"unstaged,omitempty"`
+	Untracked    []gitWorkspaceChange `json:"untracked,omitempty"`
+	Conflicted   []gitWorkspaceChange `json:"conflicted,omitempty"`
+}
+
+type previewDeleteBranchResp struct {
+	RepoRootPath                string                          `json:"repo_root_path"`
+	Name                        string                          `json:"name,omitempty"`
+	FullName                    string                          `json:"full_name,omitempty"`
+	Kind                        string                          `json:"kind,omitempty"`
+	LinkedWorktree              *gitDeleteLinkedWorktreePreview `json:"linked_worktree,omitempty"`
+	RequiresWorktreeRemoval     bool                            `json:"requires_worktree_removal"`
+	RequiresDiscardConfirmation bool                            `json:"requires_discard_confirmation"`
+	SafeDeleteAllowed           bool                            `json:"safe_delete_allowed"`
+	SafeDeleteBaseRef           string                          `json:"safe_delete_base_ref,omitempty"`
+	SafeDeleteReason            string                          `json:"safe_delete_reason,omitempty"`
+	BlockingReason              string                          `json:"blocking_reason,omitempty"`
+	PlanFingerprint             string                          `json:"plan_fingerprint,omitempty"`
+}
+
+type deleteBranchReq struct {
+	RepoRootPath                 string `json:"repo_root_path"`
+	Name                         string `json:"name,omitempty"`
+	FullName                     string `json:"full_name,omitempty"`
+	Kind                         string `json:"kind,omitempty"`
+	RemoveLinkedWorktree         bool   `json:"remove_linked_worktree"`
+	DiscardLinkedWorktreeChanges bool   `json:"discard_linked_worktree_changes"`
+	PlanFingerprint              string `json:"plan_fingerprint,omitempty"`
+}
+
 type deleteBranchResp struct {
-	RepoRootPath string `json:"repo_root_path"`
-	HeadRef      string `json:"head_ref,omitempty"`
-	HeadCommit   string `json:"head_commit,omitempty"`
+	RepoRootPath          string `json:"repo_root_path"`
+	HeadRef               string `json:"head_ref,omitempty"`
+	HeadCommit            string `json:"head_commit,omitempty"`
+	LinkedWorktreeRemoved bool   `json:"linked_worktree_removed"`
+	RemovedWorktreePath   string `json:"removed_worktree_path,omitempty"`
 }
 
 type listBranchesReq struct {

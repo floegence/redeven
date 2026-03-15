@@ -145,17 +145,54 @@ export type GitCheckoutBranchResponse = {
   headCommit?: string;
 };
 
-export type GitDeleteBranchRequest = {
+export type GitDeleteLinkedWorktreePreview = {
+  worktreePath?: string;
+  accessible: boolean;
+  summary: GitWorkspaceSummary;
+  staged: GitWorkspaceChange[];
+  unstaged: GitWorkspaceChange[];
+  untracked: GitWorkspaceChange[];
+  conflicted: GitWorkspaceChange[];
+};
+
+export type GitPreviewDeleteBranchRequest = {
   repoRootPath: string;
   name?: string;
   fullName?: string;
   kind?: 'local' | 'remote' | string;
 };
 
+export type GitPreviewDeleteBranchResponse = {
+  repoRootPath: string;
+  name?: string;
+  fullName?: string;
+  kind?: 'local' | 'remote' | string;
+  linkedWorktree?: GitDeleteLinkedWorktreePreview;
+  requiresWorktreeRemoval: boolean;
+  requiresDiscardConfirmation: boolean;
+  safeDeleteAllowed: boolean;
+  safeDeleteBaseRef?: string;
+  safeDeleteReason?: string;
+  blockingReason?: string;
+  planFingerprint?: string;
+};
+
+export type GitDeleteBranchRequest = {
+  repoRootPath: string;
+  name?: string;
+  fullName?: string;
+  kind?: 'local' | 'remote' | string;
+  removeLinkedWorktree: boolean;
+  discardLinkedWorktreeChanges: boolean;
+  planFingerprint?: string;
+};
+
 export type GitDeleteBranchResponse = {
   repoRootPath: string;
   headRef?: string;
   headCommit?: string;
+  linkedWorktreeRemoved: boolean;
+  removedWorktreePath?: string;
 };
 
 export type GitBranchSummary = {

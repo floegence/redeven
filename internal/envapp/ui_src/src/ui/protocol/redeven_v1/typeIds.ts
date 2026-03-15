@@ -23,7 +23,8 @@ export const redevenV1TypeIds = {
     pullRepo: 1112,
     pushRepo: 1113,
     checkoutBranch: 1114,
-    deleteBranch: 1115,
+    previewDeleteBranch: 1115,
+    deleteBranch: 1116,
   },
   terminal: {
     sessionCreate: 2001,

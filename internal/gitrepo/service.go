@@ -30,7 +30,8 @@ const (
 	TypeID_GIT_PULL_REPO         uint32 = 1112
 	TypeID_GIT_PUSH_REPO         uint32 = 1113
 	TypeID_GIT_CHECKOUT_BRANCH   uint32 = 1114
-	TypeID_GIT_DELETE_BRANCH     uint32 = 1115
+	TypeID_GIT_PREVIEW_DELETE    uint32 = 1115
+	TypeID_GIT_DELETE_BRANCH     uint32 = 1116
 
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
@@ -342,6 +343,24 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
+	accessgate.RegisterTyped[previewDeleteBranchReq, previewDeleteBranchResp](r, TypeID_GIT_PREVIEW_DELETE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewDeleteBranchReq) (*previewDeleteBranchResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &previewDeleteBranchReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.previewDeleteBranch(ctx, repo, req.Name, req.FullName, req.Kind)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
+
 	accessgate.RegisterTyped[deleteBranchReq, deleteBranchResp](r, TypeID_GIT_DELETE_BRANCH, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *deleteBranchReq) (*deleteBranchResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
@@ -353,7 +372,16 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
-		resp, err := s.deleteBranch(ctx, repo, req.Name, req.FullName, req.Kind)
+		resp, err := s.deleteBranch(
+			ctx,
+			repo,
+			req.Name,
+			req.FullName,
+			req.Kind,
+			req.RemoveLinkedWorktree,
+			req.DiscardLinkedWorktreeChanges,
+			req.PlanFingerprint,
+		)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
 		}
@@ -679,6 +707,16 @@ func classifyGitMutationRPCError(err error) *rpc.Error {
 		return &rpc.Error{Code: 400, Message: "remote branches cannot be deleted here"}
 	case strings.Contains(lower, "cannot delete the current branch"):
 		return &rpc.Error{Code: 400, Message: "cannot delete the current branch"}
+	case strings.Contains(lower, "delete plan fingerprint is required"):
+		return &rpc.Error{Code: 400, Message: "delete plan fingerprint is required"}
+	case strings.Contains(lower, "delete plan is stale"):
+		return &rpc.Error{Code: 409, Message: message}
+	case strings.Contains(lower, "linked worktree removal must be confirmed"):
+		return &rpc.Error{Code: 400, Message: message}
+	case strings.Contains(lower, "discard confirmation is required"):
+		return &rpc.Error{Code: 400, Message: message}
+	case strings.Contains(lower, "not accessible from this agent"):
+		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "checked out in worktree"):
 		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "checked out at"):

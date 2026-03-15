@@ -3,9 +3,7 @@ package gitrepo
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/floegence/redeven-agent/internal/gitutil"
@@ -201,28 +199,54 @@ func (s *Service) checkoutBranch(ctx context.Context, repo repoContext, name str
 	}, nil
 }
 
-func (s *Service) deleteBranch(ctx context.Context, repo repoContext, name string, fullName string, kind string) (*deleteBranchResp, error) {
+func (s *Service) deleteBranch(
+	ctx context.Context,
+	repo repoContext,
+	name string,
+	fullName string,
+	kind string,
+	removeLinkedWorktree bool,
+	discardLinkedWorktreeChanges bool,
+	planFingerprint string,
+) (*deleteBranchResp, error) {
 	target, err := normalizeDeleteBranchTarget(name, fullName, kind)
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(repo.headRef) == target.LocalName {
-		return nil, errors.New("cannot delete the current branch")
+	plan, err := s.buildDeleteBranchPlan(ctx, repo, target)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(planFingerprint) == "" {
+		return nil, errors.New("delete plan fingerprint is required")
+	}
+	if plan.PlanFingerprint != strings.TrimSpace(planFingerprint) {
+		return nil, errors.New("delete plan is stale; review the branch again")
+	}
+	if strings.TrimSpace(plan.BlockingReason) != "" {
+		return nil, errors.New(plan.BlockingReason)
+	}
+	if !plan.SafeDeleteAllowed {
+		return nil, errors.New(plan.SafeDeleteReason)
 	}
 
-	localRef := "refs/heads/" + target.LocalName
-	if !gitRefExists(ctx, repo.repoRootReal, localRef) {
-		return nil, errors.New("target branch does not exist")
-	}
-
-	if bindings, err := readWorktreeBindings(ctx, repo.repoRootReal); err == nil {
-		bindings = s.filterAccessibleWorktreeBindings(ctx, bindings)
-		if binding, ok := bindings[localRef]; ok {
-			worktreePath := filepath.Clean(strings.TrimSpace(binding.Path))
-			if worktreePath != "" && worktreePath != filepath.Clean(repo.repoRootReal) {
-				return nil, fmt.Errorf("branch is checked out in worktree %s", worktreePath)
-			}
+	removedWorktreePath := ""
+	if plan.LinkedWorktree != nil {
+		if !removeLinkedWorktree {
+			return nil, errors.New("linked worktree removal must be confirmed before deleting this branch")
 		}
+		args := []string{"worktree", "remove"}
+		if plan.RequiresDiscardConfirmation {
+			if !discardLinkedWorktreeChanges {
+				return nil, errors.New("discard confirmation is required for linked worktree changes")
+			}
+			args = append(args, "--force")
+		}
+		args = append(args, plan.LinkedWorktree.WorktreePath)
+		if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
+			return nil, err
+		}
+		removedWorktreePath = plan.LinkedWorktree.WorktreePath
 	}
 
 	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "branch", "-d", target.LocalName); err != nil {
@@ -233,9 +257,11 @@ func (s *Service) deleteBranch(ctx context.Context, repo repoContext, name strin
 		return nil, err
 	}
 	return &deleteBranchResp{
-		RepoRootPath: updatedRepo.repoRootReal,
-		HeadRef:      updatedRepo.headRef,
-		HeadCommit:   updatedRepo.headCommit,
+		RepoRootPath:          updatedRepo.repoRootReal,
+		HeadRef:               updatedRepo.headRef,
+		HeadCommit:            updatedRepo.headCommit,
+		LinkedWorktreeRemoved: removedWorktreePath != "",
+		RemovedWorktreePath:   removedWorktreePath,
 	}, nil
 }
 

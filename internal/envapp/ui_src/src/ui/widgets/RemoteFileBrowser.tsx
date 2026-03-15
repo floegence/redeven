@@ -14,6 +14,7 @@ import {
   type GitCommitSummary,
   type GitListBranchesResponse,
   type GitListWorkspaceChangesResponse,
+  type GitPreviewDeleteBranchResponse,
   type GitRepoSummaryResponse,
   type GitResolveRepoResponse,
   type GitWorkspaceChange,
@@ -292,6 +293,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitCommitMessage, setGitCommitMessage] = createSignal('');
   const [gitMutationScope, setGitMutationScope] = createSignal<GitMutationScope>('');
   const [gitMutationKey, setGitMutationKey] = createSignal('');
+  const [gitDeleteReviewOpen, setGitDeleteReviewOpen] = createSignal(false);
+  const [gitDeleteReviewBranch, setGitDeleteReviewBranch] = createSignal<GitBranchSummary | null>(null);
+  const [gitDeleteReviewPreview, setGitDeleteReviewPreview] = createSignal<GitPreviewDeleteBranchResponse | null>(null);
+  const [gitDeleteReviewLoading, setGitDeleteReviewLoading] = createSignal(false);
+  const [gitDeleteReviewError, setGitDeleteReviewError] = createSignal('');
+  const [gitDeleteActionError, setGitDeleteActionError] = createSignal('');
 
   let activePreviewChannel: JsonFrameChannel | null = null;
   let activeObjectUrl: string | null = null;
@@ -302,6 +309,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let gitRepoSummaryReqSeq = 0;
   let gitWorkspaceReqSeq = 0;
   let gitBranchesReqSeq = 0;
+  let gitDeleteReviewReqSeq = 0;
   let lastGitCommitContextKey = '';
   let lastGitRepoKey = '';
   let docxHost: HTMLDivElement | undefined;
@@ -631,6 +639,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     gitRepoSummaryReqSeq += 1;
     gitWorkspaceReqSeq += 1;
     gitBranchesReqSeq += 1;
+    gitDeleteReviewReqSeq += 1;
     lastGitRepoKey = '';
     setGitRepoSummary(null);
     setGitRepoSummaryLoading(false);
@@ -648,6 +657,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitCommitMessage('');
     setGitMutationScope('');
     setGitMutationKey('');
+    setGitDeleteReviewOpen(false);
+    setGitDeleteReviewBranch(null);
+    setGitDeleteReviewPreview(null);
+    setGitDeleteReviewLoading(false);
+    setGitDeleteReviewError('');
+    setGitDeleteActionError('');
   };
 
   const selectedGitWorkspaceItem = () => findWorkspaceChangeByKey(gitWorkspace(), selectedGitWorkspaceKey());
@@ -1000,6 +1015,60 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     );
   };
 
+  const gitDeleteDialogState = (): 'idle' | 'previewing' | 'deleting' => {
+    if (gitDeleteReviewLoading()) return 'previewing';
+    if (gitMutationScope() === 'deleteBranch' && gitMutationKey() === branchIdentity(gitDeleteReviewBranch())) {
+      return 'deleting';
+    }
+    return 'idle';
+  };
+
+  const closeGitDeleteReview = (options: { force?: boolean } = {}) => {
+    if (!options.force && gitDeleteDialogState() === 'deleting') return;
+    gitDeleteReviewReqSeq += 1;
+    setGitDeleteReviewOpen(false);
+    setGitDeleteReviewBranch(null);
+    setGitDeleteReviewPreview(null);
+    setGitDeleteReviewLoading(false);
+    setGitDeleteReviewError('');
+    setGitDeleteActionError('');
+  };
+
+  const handleDeleteBranch = async (branch: GitBranchSummary) => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    if (!repoRootPath) return;
+    if (!protocol.client()) {
+      notification.error('Git unavailable', 'Connection is not ready.');
+      return;
+    }
+
+    const seq = ++gitDeleteReviewReqSeq;
+    setGitDeleteReviewOpen(true);
+    setGitDeleteReviewBranch(branch);
+    setGitDeleteReviewPreview(null);
+    setGitDeleteReviewError('');
+    setGitDeleteActionError('');
+    setGitDeleteReviewLoading(true);
+
+    try {
+      const resp = await rpc.git.previewDeleteBranch({
+        repoRootPath,
+        name: branch.name,
+        fullName: branch.fullName,
+        kind: branch.kind,
+      });
+      if (seq !== gitDeleteReviewReqSeq) return;
+      setGitDeleteReviewPreview(resp);
+    } catch (err) {
+      if (seq !== gitDeleteReviewReqSeq) return;
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to review branch deletion.');
+      setGitDeleteReviewPreview(null);
+      setGitDeleteReviewError(message);
+    } finally {
+      if (seq === gitDeleteReviewReqSeq) setGitDeleteReviewLoading(false);
+    }
+  };
+
   const refreshGitStateAfterBranchDelete = async (resp: GitMutationRepoResponse) => {
     applyGitMutationRepoState(resp);
 
@@ -1022,23 +1091,50 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     await loadGitCommits(true, nextRef, { silent: true, repoRootPath });
   };
 
-  const handleDeleteBranch = async (branch: GitBranchSummary) => {
+  const handleConfirmDeleteBranch = async (
+    branch: GitBranchSummary,
+    options: {
+      removeLinkedWorktree: boolean;
+      discardLinkedWorktreeChanges: boolean;
+      planFingerprint?: string;
+    },
+  ) => {
     const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
     if (!repoRootPath) return;
-    await runGitMutation(
-      'deleteBranch',
-      branchIdentity(branch),
-      () => rpc.git.deleteBranch({
+    if (!protocol.client()) {
+      notification.error('Git unavailable', 'Connection is not ready.');
+      return;
+    }
+
+    setGitDeleteActionError('');
+    setGitMutationScope('deleteBranch');
+    setGitMutationKey(branchIdentity(branch));
+    try {
+      const resp = await rpc.git.deleteBranch({
         repoRootPath,
         name: branch.name,
         fullName: branch.fullName,
         kind: branch.kind,
-      }),
-      (resp) => {
-        void refreshGitStateAfterBranchDelete(resp);
-        notification.success('Deleted', `${branch.name || 'Branch'} was removed.`);
-      },
-    );
+        removeLinkedWorktree: options.removeLinkedWorktree,
+        discardLinkedWorktreeChanges: options.discardLinkedWorktreeChanges,
+        planFingerprint: options.planFingerprint,
+      });
+      closeGitDeleteReview({ force: true });
+      void refreshGitStateAfterBranchDelete(resp);
+      notification.success('Deleted', `${branch.name || 'Branch'} was removed.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err ?? 'Request failed.');
+      if (message.toLowerCase().includes('stale')) {
+        setGitDeleteReviewPreview(null);
+        setGitDeleteReviewError(message);
+      } else {
+        setGitDeleteActionError(message);
+      }
+      notification.error('Delete failed', message || 'Request failed.');
+    } finally {
+      setGitMutationScope('');
+      setGitMutationKey('');
+    }
   };
 
   const loadGitRepoSummary = async (options: GitLoadOptions = {}) => {
@@ -2560,11 +2656,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       pushBusy={gitMutationScope() === 'push'}
                       checkoutBusy={gitMutationScope() === 'checkout'}
                       deleteBusy={gitMutationScope() === 'deleteBranch'}
+                      deleteReviewOpen={gitDeleteReviewOpen()}
+                      deleteReviewBranch={gitDeleteReviewBranch()}
+                      deletePreview={gitDeleteReviewPreview()}
+                      deletePreviewError={gitDeleteReviewError()}
+                      deleteActionError={gitDeleteActionError()}
+                      deleteDialogState={gitDeleteDialogState()}
                       onFetch={() => { void handleFetchRepo(); }}
                       onPull={() => { void handlePullRepo(); }}
                       onPush={() => { void handlePushRepo(); }}
                       onCheckoutBranch={(branch) => { void handleCheckoutBranch(branch); }}
                       onDeleteBranch={(branch) => { void handleDeleteBranch(branch); }}
+                      onCloseDeleteReview={closeGitDeleteReview}
+                      onRetryDeletePreview={(branch) => { void handleDeleteBranch(branch); }}
+                      onConfirmDeleteBranch={(branch, options) => { void handleConfirmDeleteBranch(branch, options); }}
                       showMobileSidebarButton={layout.isMobile() && Boolean(props.widgetId)}
                       onToggleSidebar={togglePageSidebar}
                       onRefresh={() => { void refreshGitWorkbench(); }}
