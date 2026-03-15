@@ -45,6 +45,7 @@ Management channel and E2EE transport are split by design:
 ### Build
 
 ```bash
+./scripts/lint_ui.sh
 ./scripts/build_assets.sh
 go build -o redeven ./cmd/redeven
 ```
@@ -53,6 +54,7 @@ Notes:
 
 - `internal/**/dist/` assets are generated and embedded via Go `embed`.
 - Generated `dist` assets are not checked into git.
+- `./scripts/lint_ui.sh` validates the Env App and Code App source packages before asset bundling.
 
 ### Enable local guardrails
 

@@ -1,6 +1,6 @@
 // Virtual list hook using Fenwick tree (Binary Indexed Tree) for O(log n) prefix sum queries.
 
-import { createSignal, createEffect, createMemo, onMount, onCleanup, untrack } from 'solid-js';
+import { createSignal, createEffect, createMemo, onCleanup, untrack } from 'solid-js';
 import type { VirtualListConfig } from '../types';
 
 export interface VirtualItem {
@@ -100,7 +100,6 @@ function findIndex(bit: number[], scrollTop: number, count: number): number {
 export function useVirtualList(options: UseVirtualListOptions): UseVirtualListReturn {
   const { count, getItemKey, getItemHeight, config } = options;
 
-  let containerEl: HTMLElement | null = null;
   let scrollEl: HTMLElement | null = null;
 
   const [scrollTop, setScrollTop] = createSignal(0);
@@ -318,7 +317,6 @@ export function useVirtualList(options: UseVirtualListOptions): UseVirtualListRe
   let resizeObserver: ResizeObserver | null = null;
 
   function containerRef(el: HTMLElement): void {
-    containerEl = el;
     setContainerHeight(normalizeHeight(el.clientHeight));
 
     resizeObserver = new ResizeObserver((entries) => {

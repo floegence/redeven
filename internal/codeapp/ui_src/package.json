@@ -7,6 +7,8 @@
   },
   "scripts": {
     "build": "node ./scripts/build.mjs",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"eslint.config.mjs\" --max-warnings=0",
+    "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"eslint.config.mjs\" --fix",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
@@ -14,7 +16,12 @@
     "@floegence/flowersec-core": "^0.16.3"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@typescript-eslint/eslint-plugin": "^8.57.0",
+    "@typescript-eslint/parser": "^8.57.0",
+    "eslint": "^9.39.4",
     "esbuild": "^0.27.2",
+    "globals": "^17.4.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   }

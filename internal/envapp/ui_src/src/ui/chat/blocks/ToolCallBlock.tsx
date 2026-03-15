@@ -2113,17 +2113,6 @@ async function copyToolText(text: string): Promise<boolean> {
   }
 }
 
-function applyPatchFormatLabel(format: ApplyPatchFormat): string {
-  switch (format) {
-    case 'begin_patch':
-      return 'Begin Patch';
-    case 'unified_diff':
-      return 'Unified Diff';
-    default:
-      return 'Patch';
-  }
-}
-
 function applyPatchPreviewLineClass(line: string): string {
   if (!line) return '';
   if (line.startsWith('+') && !line.startsWith('+++')) return 'chat-tool-apply-patch-line-add';
@@ -2786,9 +2775,9 @@ const KnowledgeToolCard: Component<KnowledgeToolCardProps> = (props) => {
   });
 
   createEffect(() => {
-    props.display.toolName;
-    props.display.query;
-    props.display.matches.length;
+    void props.display.toolName;
+    void props.display.query;
+    void props.display.matches.length;
     setExpanded(false);
   });
 

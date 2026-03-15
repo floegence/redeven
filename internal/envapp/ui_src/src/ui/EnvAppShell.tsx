@@ -832,7 +832,7 @@ export function EnvAppShell() {
         localStatus = await getLocalAccessStatus();
         setLocalAccessStatus(localStatus);
         setLocalAccessChecked(true);
-        setLocalAccessChannelReady(!Boolean(localStatus?.password_required));
+        setLocalAccessChannelReady(localStatus?.password_required !== true);
 
         const localEnvID = String((rt as any).env_public_id ?? '').trim() || 'env_local';
         try {

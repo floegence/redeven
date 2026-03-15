@@ -1222,7 +1222,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           notes.push('Skipped large terminal selection attachment because it exceeds the 10 MiB upload limit.');
         } else {
           pendingAttachments.push(new File([attachmentBlob], attachmentName, { type: 'text/plain' }));
-          notes.push(`Large terminal selection was attached as \"${attachmentName}\".`);
+          notes.push(`Large terminal selection was attached as "${attachmentName}".`);
         }
         contextItems = [
           {

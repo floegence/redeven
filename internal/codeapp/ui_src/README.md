@@ -16,6 +16,7 @@ From this directory:
 
 ```bash
 npm ci
+npm run lint
 npm run typecheck
 npm run build
 ```

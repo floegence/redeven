@@ -1,7 +1,6 @@
 import { For, Index, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import {
-  ChevronRight,
   Code,
   Database,
   FileCode,
@@ -22,7 +21,6 @@ import { isReleaseVersion } from '../maintenance/agentVersion';
 import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/shared';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { FlowerIcon } from '../icons/FlowerIcon';
-import { useRedevenRpc } from '../protocol/redeven_v1/hooks';
 import { useEnvContext, type EnvSettingsSection } from './EnvContext';
 
 // ============================================================================
@@ -824,7 +822,6 @@ export function EnvSettingsPage() {
   const agentUpdate = useAgentUpdateContext();
   const protocol = useProtocol();
   const notify = useNotification();
-  const rpc = useRedevenRpc();
 
   const key = createMemo<number | null>(() => (protocol.status() === 'connected' ? env.settingsSeq() : null));
 
@@ -1049,7 +1046,7 @@ export function EnvSettingsPage() {
   const [skillDeleteSaving, setSkillDeleteSaving] = createSignal(false);
   const [skillDeleteTarget, setSkillDeleteTarget] = createSignal<SkillCatalogEntry | null>(null);
   const [skillSources, setSkillSources] = createSignal<Record<string, SkillSourceItem>>({});
-  const [skillSourcesLoading, setSkillSourcesLoading] = createSignal(false);
+  const [, setSkillSourcesLoading] = createSignal(false);
   const [skillReinstalling, setSkillReinstalling] = createSignal<Record<string, boolean>>({});
 
   const [skillInstallOpen, setSkillInstallOpen] = createSignal(false);
@@ -1445,7 +1442,7 @@ export function EnvSettingsPage() {
         body: JSON.stringify({ provider_ids: ids }),
       });
       setAiProviderKeySet(resp?.provider_api_key_set ?? {});
-    } catch (e) {
+    } catch {
       // Best-effort only: the AI config UI should still work even if key status is unavailable.
     }
   };
@@ -1650,7 +1647,7 @@ export function EnvSettingsPage() {
         body: JSON.stringify({ provider_ids: ids }),
       });
       setWebSearchKeySet(resp?.provider_api_key_set ?? {});
-    } catch (e) {
+    } catch {
       // Best-effort only.
     }
   };

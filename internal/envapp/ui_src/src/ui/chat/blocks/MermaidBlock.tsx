@@ -1,6 +1,6 @@
 // MermaidBlock — mermaid diagram rendering using lazy-loaded mermaid library.
 
-import { createSignal, createEffect, Show, onMount } from 'solid-js';
+import { createSignal, createEffect, Show } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 
