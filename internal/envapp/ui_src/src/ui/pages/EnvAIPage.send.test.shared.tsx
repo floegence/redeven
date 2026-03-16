@@ -372,7 +372,7 @@ type SubmitTrigger = 'button' | 'enter';
 function clickButton(host: HTMLElement, title: string) {
   const button = Array.from(host.querySelectorAll('button')).find((item) => item.getAttribute('title') === title);
   expect(button).toBeTruthy();
-  button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  (button as HTMLButtonElement).click();
 }
 
 function submitComposer(host: HTMLElement, trigger: SubmitTrigger, buttonTitle: string) {
@@ -528,7 +528,7 @@ export function registerEnvAIPageSendTests() {
       { trigger: 'button', label: 'send button', buttonTitle: 'Reply now' },
       { trigger: 'enter', label: 'Enter key', buttonTitle: 'Reply now' },
     ] as const).forEach(({ trigger, label, buttonTitle }) => {
-      it(`restores the draft when a waiting-user reply is ambiguous via ${label}`, async () => {
+      it(`keeps ambiguous waiting-user replies blocked via ${label}`, async () => {
         aiState.activeThread = {
           ...(aiState.activeThread as MockThread),
           run_status: 'waiting_user',
@@ -563,12 +563,17 @@ export function registerEnvAIPageSendTests() {
         const { host, dispose } = await renderPage();
         try {
           const textarea = inputComposer(host, 'Check the backend service.');
+          const replyButton = Array.from(host.querySelectorAll('button')).find((item) => item.getAttribute('title') === 'Reply now') as HTMLButtonElement | undefined;
+          expect(replyButton).toBeTruthy();
+          expect(replyButton?.disabled).toBe(true);
+          expect(host.textContent).toContain('Resolve all requested input fields before replying.');
+
           submitComposer(host, trigger, buttonTitle);
           await flushAsync();
 
           expect(submitStructuredPromptResponseMock).not.toHaveBeenCalled();
           expect(sendUserTurnMock).not.toHaveBeenCalled();
-          expect(notificationErrorMock).toHaveBeenCalledWith('Input required', 'Resolve all requested input fields before replying.');
+          expect(notificationErrorMock).not.toHaveBeenCalled();
           expect(textarea.value).toBe('Check the backend service.');
         } finally {
           dispose();

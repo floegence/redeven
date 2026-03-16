@@ -230,6 +230,7 @@ const AIChatInput: Component<{
   onPickWorkingDir?: () => void;
   onEditWorkingDir?: () => void;
   onSendIntent?: (intent: SendIntent) => void;
+  getSendBlockReason?: (content: string, attachments: Attachment[]) => string | null;
   onApiReady?: (api: AIChatInputApi | null) => void;
 }> = (props) => {
   const ctx = useChatContext();
@@ -253,12 +254,18 @@ const AIChatInput: Component<{
   const placeholder = () => props.placeholder || ctx.config().placeholder || 'Type a message...';
   const currentText = () => readLiveTextValue(textareaRef, text());
   const syncTextFromTextarea = () => syncLiveTextValue(textareaRef, setText, text());
+  const hasDraftPayload = () => currentText().trim().length > 0 || attachments.attachments().length > 0;
+  const sendBlockReason = () => {
+    if (!hasDraftPayload()) return '';
+    return String(props.getSendBlockReason?.(currentText(), attachments.attachments()) ?? '').trim();
+  };
 
   const canSend = () =>
-    (currentText().trim() || attachments.attachments().length > 0) &&
+    hasDraftPayload() &&
     !props.disabled &&
     !sending() &&
-    !attachments.hasUploading();
+    !attachments.hasUploading() &&
+    !sendBlockReason();
 
   const adjustHeight = () => {
     const el = textareaRef;
@@ -541,8 +548,12 @@ const AIChatInput: Component<{
         </div>
 
         <div class="chat-input-toolbar-right">
-          <span class="chat-input-hint">
-            <kbd>Enter</kbd> {props.waitingForUser ? 'reply now' : 'send'} &nbsp; <kbd>Shift+Enter</kbd> newline
+          <span class={cn('chat-input-hint', sendBlockReason() && 'text-error opacity-100')}>
+            {sendBlockReason() || (
+              <>
+                <kbd>Enter</kbd> {props.waitingForUser ? 'reply now' : 'send'} &nbsp; <kbd>Shift+Enter</kbd> newline
+              </>
+            )}
           </span>
 
           <Show when={props.waitingForUser}>
@@ -2664,6 +2675,27 @@ export function EnvAIPage() {
     }
     return 'Type a message...';
   });
+  const waitingUserComposerSendBlockReason = (content: string, attachments: Attachment[]): string | null => {
+    if (!activeThreadWaitingUser()) return null;
+
+    const waitingPrompt = ai.activeThreadWaitingPrompt();
+    const hasDraftPayload = String(content ?? '').trim().length > 0 || attachments.length > 0;
+    if (!hasDraftPayload) return null;
+
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    const promptId = String(waitingPrompt?.prompt_id ?? '').trim();
+    if (!tid || !promptId) {
+      return 'The pending input request is no longer available.';
+    }
+
+    const plan = buildStructuredComposerSendPlan({
+      waitingPrompt,
+      composerText: content,
+      drafts: ai.getStructuredPromptDrafts(tid, promptId),
+    });
+
+    return plan.kind === 'error' ? plan.description : null;
+  };
 
   const activeWorkingDir = createMemo(() => {
     const tid = String(ai.activeThreadId() ?? '').trim();
@@ -5108,6 +5140,7 @@ export function EnvAIPage() {
               onSendIntent={(intent) => {
                 nextSendIntent = intent;
               }}
+              getSendBlockReason={waitingUserComposerSendBlockReason}
               onApiReady={setChatInputApi}
             />
           </div>
