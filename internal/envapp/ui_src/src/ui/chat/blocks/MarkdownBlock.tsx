@@ -7,6 +7,7 @@ import { createSignal, createEffect, Show, onCleanup, createMemo } from 'solid-j
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { renderMarkdownHtml } from '../workers/markdownWorkerClient';
+import { StreamingCursor } from '../status/StreamingCursor';
 
 export interface MarkdownBlockProps {
   content: string;
@@ -200,6 +201,7 @@ const StreamingText: Component<StreamingTextProps> = (props) => {
 export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
   const [renderedHtml, setRenderedHtml] = createSignal<string>('');
   const [renderedText, setRenderedText] = createSignal<string>('');
+  const isEmptyStreaming = createMemo(() => props.streaming === true && String(props.content ?? '') === '');
 
   let destroyed = false;
   let inFlight = false;
@@ -377,13 +379,19 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
 
   return (
     <div class={cn('chat-markdown-block', props.class)}>
-      <Show when={canUseHtml()} fallback={<StreamingText text={String(props.content ?? '')} />}>
-        {/* eslint-disable-next-line solid/no-innerhtml */}
-        <div innerHTML={renderedHtml()} />
-        <StreamingText
-          text={String(props.content ?? '')}
-          offset={renderedText().length}
-        />
+      <Show when={!isEmptyStreaming()} fallback={
+        <div class="chat-markdown-empty-streaming" aria-label="Assistant is responding">
+          <StreamingCursor />
+        </div>
+      }>
+        <Show when={canUseHtml()} fallback={<StreamingText text={String(props.content ?? '')} />}>
+          {/* eslint-disable-next-line solid/no-innerhtml */}
+          <div innerHTML={renderedHtml()} />
+          <StreamingText
+            text={String(props.content ?? '')}
+            offset={renderedText().length}
+          />
+        </Show>
       </Show>
     </div>
   );

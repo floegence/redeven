@@ -37,8 +37,8 @@ func (s *Service) GetActiveRunSnapshot(meta *session.Meta, threadID string) (str
 		return runID, msgJSON, nil
 	}
 
-	// Best-effort: for very early runs, the assistant message isn't initialized yet, so there is
-	// no snapshot to return. Callers should wait for stream events or the persisted transcript.
+	// Best-effort: callers can fall back to realtime events or the persisted transcript if the
+	// in-memory snapshot is temporarily unavailable.
 	return "", "", nil
 }
 

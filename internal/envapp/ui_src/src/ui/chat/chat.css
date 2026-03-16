@@ -244,6 +244,12 @@
   min-width: 0;
 }
 
+.chat-markdown-empty-streaming {
+  min-height: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+}
+
 .chat-message-block-slot-imessage {
   transform-origin: left bottom;
   will-change: transform, opacity, filter;
