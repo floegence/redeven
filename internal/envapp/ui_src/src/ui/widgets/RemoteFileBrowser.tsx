@@ -1,12 +1,11 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, untrack } from 'solid-js';
 import { useDeck, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
 import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Sparkles, Trash } from '@floegence/floe-webapp-core/icons';
 import { type ContextMenuCallbacks, type ContextMenuItem, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
-import { Button, ConfirmDialog, DirectoryPicker, Dropdown, FileSavePicker, FloatingWindow, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, DirectoryPicker, Dropdown, FileSavePicker, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import type { Client } from '@floegence/flowersec-core';
-import type { JsonFrameChannel } from '@floegence/flowersec-core/streamio';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import {
   useRedevenRpc,
@@ -20,8 +19,8 @@ import {
   type GitWorkspaceChange,
   type GitWorkspaceSection,
 } from '../protocol/redeven_v1';
-import { getExtDot, isLikelyTextContent, mimeFromExtDot, previewModeByName, type PreviewMode } from '../utils/filePreview';
-import { readFileBytesOnce, openReadFileStreamChannel } from '../utils/fileStreamReader';
+import { getExtDot, mimeFromExtDot } from '../utils/filePreview';
+import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { useEnvContext } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
 import {
@@ -31,6 +30,8 @@ import {
 } from '../utils/askFlowerPath';
 import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from '../utils/fileBrowserClipboard';
 import { createClientId } from '../utils/clientId';
+import { createFilePreviewController } from './createFilePreviewController';
+import { FilePreviewDialog } from './FilePreviewDialog';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
@@ -83,9 +84,6 @@ type PathLoadResult = {
 
 type BrowserPageMode = GitHistoryMode;
 
-const MAX_PREVIEW_BYTES = 20 * 1024 * 1024;
-const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
-const SNIFF_BYTES = 64 * 1024;
 const ASK_FLOWER_MAX_ATTACHMENTS = 5;
 const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 const ASK_FLOWER_MAX_INLINE_SELECTION_CHARS = 10_000;
@@ -188,16 +186,6 @@ function classifyPathLoadError(err: unknown): PathLoadResult {
   return text ? { status: 'transport_error', message: text } : { status: 'transport_error' };
 }
 
-function downloadBlob(params: { name: string; blob: Blob }) {
-  const url = URL.createObjectURL(params.blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = params.name || 'download';
-  a.rel = 'noopener';
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
 export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -212,25 +200,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const [files, setFiles] = createSignal<FileItem[]>([]);
   const [loading, setLoading] = createSignal(false);
+  const filePreview = createFilePreviewController({
+    client: () => protocol.client(),
+  });
 
   let cache: DirCache = new Map();
-
-  const [previewOpen, setPreviewOpen] = createSignal(false);
-  const [previewItem, setPreviewItem] = createSignal<FileItem | null>(null);
-  const [previewMode, setPreviewMode] = createSignal<PreviewMode>('text');
-  const [previewText, setPreviewText] = createSignal('');
-  const [previewMessage, setPreviewMessage] = createSignal('');
-  const [previewObjectUrl, setPreviewObjectUrl] = createSignal('');
-  const [previewBytes, setPreviewBytes] = createSignal<Uint8Array<ArrayBuffer> | null>(null);
-  const [previewTruncated, setPreviewTruncated] = createSignal(false);
-  const [previewLoading, setPreviewLoading] = createSignal(false);
-  const [previewError, setPreviewError] = createSignal<string | null>(null);
-  const [previewAskMenu, setPreviewAskMenu] = createSignal<{ x: number; y: number; selection: string } | null>(null);
-
-  const [xlsxSheetName, setXlsxSheetName] = createSignal('');
-  const [xlsxRows, setXlsxRows] = createSignal<string[][]>([]);
-
-  const [downloadLoading, setDownloadLoading] = createSignal(false);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
   const [deleteDialogItems, setDeleteDialogItems] = createSignal<FileItem[]>([]);
@@ -300,9 +274,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitDeleteReviewError, setGitDeleteReviewError] = createSignal('');
   const [gitDeleteActionError, setGitDeleteActionError] = createSignal('');
 
-  let activePreviewChannel: JsonFrameChannel | null = null;
-  let activeObjectUrl: string | null = null;
-  let previewReqSeq = 0;
   let dirReqSeq = 0;
   let repoReqSeq = 0;
   let gitListReqSeq = 0;
@@ -312,49 +283,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let gitDeleteReviewReqSeq = 0;
   let lastGitCommitContextKey = '';
   let lastGitRepoKey = '';
-  let docxHost: HTMLDivElement | undefined;
-  let previewContentEl: HTMLDivElement | undefined;
-  let previewAskMenuEl: HTMLDivElement | undefined;
-
-  const cleanupPreview = () => {
-    if (activePreviewChannel) {
-      try {
-        activePreviewChannel.stream.reset(new Error('canceled'));
-      } catch {
-      }
-      try {
-        void activePreviewChannel.close();
-      } catch {
-      }
-      activePreviewChannel = null;
-    }
-    if (activeObjectUrl) {
-      try {
-        URL.revokeObjectURL(activeObjectUrl);
-      } catch {
-      }
-      activeObjectUrl = null;
-    }
-    if (docxHost) {
-      docxHost.innerHTML = '';
-    }
-
-    setPreviewObjectUrl('');
-    setPreviewBytes(null);
-    setPreviewText('');
-    setPreviewMessage('');
-    setPreviewTruncated(false);
-    setPreviewError(null);
-    setPreviewAskMenu(null);
-    setXlsxRows([]);
-    setXlsxSheetName('');
-    setPreviewLoading(false);
-  };
-
-  onCleanup(() => {
-    previewReqSeq += 1;
-    cleanupPreview();
-  });
 
   const resetFileBrowser = () => {
     setFileBrowserResetSeq((value) => value + 1);
@@ -1429,10 +1357,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     resetFileBrowser();
 
     repoReqSeq += 1;
-    previewReqSeq += 1;
-    cleanupPreview();
-    setPreviewItem(null);
-    setPreviewOpen(false);
+    filePreview.closePreview();
   });
 
   const loadDirOnce = async (path: string, seq: number): Promise<PathLoadResult> => {
@@ -1548,225 +1473,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     notifyPathLoadFailure(result);
   };
 
-  const openPreview = async (item: FileItem) => {
-    if (item.type !== 'file') return;
-    const client = protocol.client();
-    if (!client) return;
-
-    setPreviewOpen(true);
-    setPreviewItem(item);
-    cleanupPreview();
-
-    const seq = (previewReqSeq += 1);
-    setPreviewLoading(true);
-
-    const baseMode = previewModeByName(item.name);
-    setPreviewMode(baseMode);
-
-    const fileSize = typeof item.size === 'number' ? item.size : undefined;
-    const maxBytes = baseMode === 'text' ? MAX_TEXT_PREVIEW_BYTES : MAX_PREVIEW_BYTES;
-    if (fileSize != null && fileSize > maxBytes && baseMode !== 'text') {
-      setPreviewMode('unsupported');
-      setPreviewMessage('This file is too large to preview.');
-      setPreviewLoading(false);
-      return;
-    }
-
-    try {
-      const wantBytes = baseMode === 'binary' ? SNIFF_BYTES : maxBytes;
-      let out = new Uint8Array(new ArrayBuffer(0));
-      let truncated = false;
-      let mime = 'application/octet-stream';
-
-      const { channel, meta } = await openReadFileStreamChannel({
-        client,
-        path: item.path,
-        offset: 0,
-        maxBytes: wantBytes,
-      });
-      activePreviewChannel = channel;
-      try {
-        if (seq !== previewReqSeq) return;
-
-        const contentLen = Math.max(0, Math.floor(Number(meta.content_len ?? 0)));
-        out = new Uint8Array(new ArrayBuffer(contentLen));
-        let off = 0;
-        while (off < contentLen) {
-          if (seq !== previewReqSeq) return;
-          const take = Math.min(64 * 1024, contentLen - off);
-          const chunk = await channel.reader.readExactly(take);
-          out.set(chunk, off);
-          off += chunk.length;
-        }
-
-        if (seq !== previewReqSeq) return;
-
-        truncated = !!meta.truncated;
-        setPreviewBytes(out);
-        setPreviewTruncated(truncated);
-
-        const extDot = getExtDot(item.name);
-        mime = mimeFromExtDot(extDot) ?? 'application/octet-stream';
-
-        if (baseMode === 'text') {
-          const text = new TextDecoder('utf-8', { fatal: false }).decode(out);
-          setPreviewText(text);
-          if (truncated) {
-            setPreviewMessage('Showing partial content (truncated).');
-          }
-          return;
-        }
-      } finally {
-        try {
-          await channel.close();
-        } catch {
-        }
-        if (activePreviewChannel === channel) activePreviewChannel = null;
-      }
-
-      if (baseMode === 'image') {
-        if (truncated) {
-          setPreviewMode('unsupported');
-          setPreviewMessage('This image is too large to preview.');
-          return;
-        }
-        const url = URL.createObjectURL(new Blob([out], { type: mime }));
-        activeObjectUrl = url;
-        setPreviewObjectUrl(url);
-        return;
-      }
-
-      if (baseMode === 'pdf') {
-        if (truncated) {
-          setPreviewMode('unsupported');
-          setPreviewMessage('This PDF is too large to preview.');
-          return;
-        }
-        const url = URL.createObjectURL(new Blob([out], { type: mime }));
-        activeObjectUrl = url;
-        setPreviewObjectUrl(url);
-        return;
-      }
-
-      if (baseMode === 'docx') {
-        if (truncated) {
-          setPreviewMode('unsupported');
-          setPreviewMessage('This document is too large to preview.');
-          return;
-        }
-        return;
-      }
-
-      if (baseMode === 'xlsx') {
-        if (truncated) {
-          setPreviewMode('unsupported');
-          setPreviewMessage('This spreadsheet is too large to preview.');
-          return;
-        }
-        const mod = await import('exceljs');
-        if (seq !== previewReqSeq) return;
-        const ExcelJS: any = (mod as any).default ?? mod;
-
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(out.buffer);
-        if (seq !== previewReqSeq) return;
-
-        const ws = workbook.worksheets?.[0] ?? workbook.getWorksheet?.(1);
-        if (!ws) {
-          setPreviewMode('unsupported');
-          setPreviewMessage('No worksheet found in this file.');
-          return;
-        }
-
-        const cellToText = (v: unknown): string => {
-          if (v == null) return '';
-          if (typeof v === 'string') return v;
-          if (typeof v === 'number') return String(v);
-          if (typeof v === 'boolean') return v ? 'true' : 'false';
-          if (v instanceof Date) return v.toISOString();
-          if (typeof v === 'object') {
-            const o = v as any;
-            if (typeof o.text === 'string') return o.text;
-            if (Array.isArray(o.richText)) return o.richText.map((p: any) => String(p?.text ?? '')).join('');
-            if (o.result != null) return cellToText(o.result);
-            if (typeof o.formula === 'string' && o.result != null) return `${o.formula} = ${cellToText(o.result)}`;
-            try {
-              return JSON.stringify(o);
-            } catch {
-              return String(o);
-            }
-          }
-          return String(v);
-        };
-
-        const maxRows = 200;
-        const maxCols = 50;
-        const rows: string[][] = [];
-        const rowCount = typeof ws.rowCount === 'number' ? ws.rowCount : 0;
-        const takeRows = Math.min(rowCount || maxRows, maxRows);
-        for (let r = 1; r <= takeRows; r += 1) {
-          const row = ws.getRow?.(r);
-          if (!row) continue;
-          const outRow: string[] = [];
-          for (let c = 1; c <= maxCols; c += 1) {
-            const cell = row.getCell?.(c);
-            outRow.push(cellToText(cell?.value));
-          }
-          rows.push(outRow);
-        }
-
-        setXlsxSheetName(String(ws.name ?? 'Sheet1'));
-        setXlsxRows(rows);
-        return;
-      }
-
-      if (baseMode === 'binary') {
-        if (isLikelyTextContent(out)) {
-          const text = new TextDecoder('utf-8', { fatal: false }).decode(out);
-          setPreviewMode('text');
-          setPreviewText(text);
-          if (truncated) {
-            setPreviewMessage('Showing partial content (truncated).');
-          }
-          return;
-        }
-        setPreviewMessage('Preview is not available for this file type.');
-        return;
-      }
-    } catch (e) {
-      if (seq !== previewReqSeq) return;
-      setPreviewError(e instanceof Error ? e.message : String(e));
-      setPreviewMode('unsupported');
-      setPreviewMessage('Failed to load file.');
-    } finally {
-      if (seq === previewReqSeq) setPreviewLoading(false);
-    }
-  };
-
-  const downloadCurrent = async () => {
-    const client = protocol.client();
-    const it = previewItem();
-    if (!client || !it) return;
-    if (downloadLoading()) return;
-
-    setDownloadLoading(true);
-    try {
-      const cached = previewBytes();
-      const truncated = previewTruncated();
-      if (cached && !truncated) {
-        const mime = mimeFromExtDot(getExtDot(it.name)) ?? 'application/octet-stream';
-        downloadBlob({ name: it.name, blob: new Blob([cached], { type: mime }) });
-        return;
-      }
-
-      const size = typeof it.size === 'number' ? it.size : undefined;
-      const { bytes } = await readFileBytesOnce({ client, path: it.path, maxBytes: size ?? 0 });
-      const mime = mimeFromExtDot(getExtDot(it.name)) ?? 'application/octet-stream';
-      downloadBlob({ name: it.name, blob: new Blob([bytes], { type: mime }) });
-    } catch {
-    } finally {
-      setDownloadLoading(false);
-    }
+  const handlePreviewAskFlower = async (selectionText: string) => {
+    const intent = await buildPreviewIntent(selectionText);
+    if (!intent) return;
+    ctx.openAskFlowerComposer(intent);
   };
 
   const applyLocalMove = (item: FileItem, destDir: string) => {
@@ -2154,65 +1864,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     void loadGitCommits(true, ref);
   });
 
-  createEffect(() => {
-    if (previewMode() !== 'docx') return;
-    const it = previewItem();
-    const bytes = previewBytes();
-    if (!it || !bytes || !docxHost) return;
-
-    const seq = previewReqSeq;
-    void (async () => {
-      try {
-        docxHost!.innerHTML = '';
-        const mod = await import('docx-preview');
-        if (seq !== previewReqSeq) return;
-        const renderAsync = (mod as any).renderAsync as ((buf: ArrayBuffer, container: HTMLElement, styleContainer?: HTMLElement, options?: any) => Promise<void>) | undefined;
-        if (!renderAsync) throw new Error('renderAsync not found');
-        await renderAsync(bytes.buffer, docxHost!, undefined, {
-          className: 'docx-preview-container',
-          inWrapper: true,
-          breakPages: true,
-          ignoreLastRenderedPageBreak: true,
-          useBase64URL: false,
-        });
-      } catch (e) {
-        if (seq !== previewReqSeq) return;
-        setPreviewError(e instanceof Error ? e.message : String(e));
-        setPreviewMode('unsupported');
-        setPreviewMessage('Failed to render DOCX document.');
-      }
-    })();
-  });
-
-  createEffect(() => {
-    const menu = previewAskMenu();
-    if (!menu) return;
-
-    const closeMenu = () => {
-      setPreviewAskMenu(null);
-    };
-
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target) {
-        closeMenu();
-        return;
-      }
-      if (previewAskMenuEl?.contains(target)) return;
-      closeMenu();
-    };
-
-    window.addEventListener('pointerdown', onPointerDown, true);
-    window.addEventListener('resize', closeMenu);
-    window.addEventListener('scroll', closeMenu, true);
-
-    onCleanup(() => {
-      window.removeEventListener('pointerdown', onPointerDown, true);
-      window.removeEventListener('resize', closeMenu);
-      window.removeEventListener('scroll', closeMenu, true);
-    });
-  });
-
   const dispatchAskFlowerIntent = (intent: AskFlowerIntent) => {
     ctx.openAskFlowerComposer(intent);
   };
@@ -2333,30 +1984,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     });
   };
 
-  const readPreviewSelectionText = (): string => {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount <= 0) return '';
-
-    const raw = String(selection.toString() ?? '').trim();
-    if (!raw) return '';
-
-    if (previewContentEl) {
-      const range = selection.getRangeAt(0);
-      const containerNode = range.commonAncestorContainer;
-      const containerElement =
-        containerNode.nodeType === Node.ELEMENT_NODE
-          ? (containerNode as Element)
-          : containerNode.parentElement;
-      if (!containerElement || !previewContentEl.contains(containerElement)) {
-        return '';
-      }
-    }
-
-    return raw;
-  };
-
   const buildPreviewIntent = async (selectionText: string): Promise<AskFlowerIntent | null> => {
-    const item = previewItem();
+    const item = filePreview.item();
     if (!item || item.type !== 'file') return null;
 
     const absolutePath = normalizeAbsolutePath(item.path);
@@ -2392,19 +2021,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       pendingAttachments,
       notes,
     };
-  };
-
-  const openPreviewAskMenu = (event: MouseEvent) => {
-    const item = previewItem();
-    if (!item || item.type !== 'file') return;
-    event.preventDefault();
-    event.stopPropagation();
-
-    setPreviewAskMenu({
-      x: event.clientX,
-      y: event.clientY,
-      selection: readPreviewSelectionText(),
-    });
   };
 
   const handleCopyName = (items: FileItem[]) => {
@@ -2577,7 +2193,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                           closePageSidebar();
                         }
                       }}
-                      onOpen={(item) => void openPreview(item)}
+                      onOpen={(item) => void filePreview.openPreview(item)}
                       onDragMove={(items, targetPath) => void handleDragMove(items, targetPath)}
                       contextMenuCallbacks={ctxMenu}
                       overrideContextMenuItems={overrideContextMenuItems}
@@ -2673,137 +2289,28 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       <LoadingOverlay visible={loading()} message="Loading files..." />
       <LoadingOverlay visible={dragMoveLoading()} message="Moving..." />
 
-      <FloatingWindow
-        open={previewOpen()}
-        onOpenChange={(open) => {
-          setPreviewOpen(open);
-          if (!open) setPreviewAskMenu(null);
-          if (!open) {
-            previewReqSeq += 1;
-            cleanupPreview();
-            setPreviewItem(null);
-          }
+      <FilePreviewDialog
+        open={filePreview.open()}
+        onOpenChange={filePreview.handleOpenChange}
+        item={filePreview.item()}
+        mode={filePreview.mode()}
+        text={filePreview.text()}
+        message={filePreview.message()}
+        objectUrl={filePreview.objectUrl()}
+        bytes={filePreview.bytes()}
+        truncated={filePreview.truncated()}
+        loading={filePreview.loading()}
+        error={filePreview.error()}
+        xlsxSheetName={filePreview.xlsxSheetName()}
+        xlsxRows={filePreview.xlsxRows()}
+        downloadLoading={filePreview.downloadLoading()}
+        onDownload={() => {
+          void filePreview.downloadCurrent();
         }}
-        title={previewItem()?.name ?? 'File preview'}
-        defaultSize={{ width: 920, height: 620 }}
-        minSize={{ width: 520, height: 320 }}
-      >
-        <div class="h-full flex flex-col min-h-0">
-          <div class="px-3 py-2 border-b border-border text-[11px] text-muted-foreground font-mono truncate">
-            {previewItem()?.path}
-          </div>
-
-          <div
-            ref={previewContentEl}
-            class="flex-1 min-h-0 overflow-auto relative bg-background"
-            onContextMenu={(event) => openPreviewAskMenu(event)}
-          >
-            <Show when={previewMode() === 'text' && !previewError()}>
-              <pre class="p-3 text-xs leading-relaxed font-mono whitespace-pre-wrap break-words select-text">
-                {previewText()}
-              </pre>
-            </Show>
-
-            <Show when={previewMode() === 'image' && !previewError()}>
-              <div class="p-3 h-full flex items-center justify-center">
-                <img src={previewObjectUrl()} alt={previewItem()?.name ?? 'Preview'} class="max-w-full max-h-full object-contain" />
-              </div>
-            </Show>
-
-            <Show when={previewMode() === 'pdf' && !previewError()}>
-              <iframe src={previewObjectUrl()} class="w-full h-full border-0" title="PDF preview" />
-            </Show>
-
-            <Show when={previewMode() === 'docx' && !previewError()}>
-              <div ref={docxHost} class="p-3" />
-            </Show>
-
-            <Show when={previewMode() === 'xlsx' && !previewError()}>
-              <div class="p-3">
-                <Show when={xlsxSheetName()}>
-                  <div class="text-[11px] text-muted-foreground mb-2">Sheet: {xlsxSheetName()}</div>
-                </Show>
-                <div class="overflow-auto border border-border rounded-md">
-                  <table class="w-full text-xs">
-                    <tbody>
-                      <For each={xlsxRows()}>
-                        {(row) => (
-                          <tr class="border-b border-border last:border-b-0">
-                            <For each={row}>
-                              {(cell) => (
-                                <td class="px-2 py-1 border-r border-border last:border-r-0 align-top whitespace-pre-wrap break-words">
-                                  {cell}
-                                </td>
-                              )}
-                            </For>
-                          </tr>
-                        )}
-                      </For>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </Show>
-
-            <Show when={(previewMode() === 'binary' || previewMode() === 'unsupported') && !previewError()}>
-              <div class="p-4 text-sm text-muted-foreground">
-                <div class="font-medium text-foreground mb-1">
-                  {previewMode() === 'binary' ? 'Binary file' : 'Preview not available'}
-                </div>
-                <div class="text-xs">{previewMessage() || 'Preview is not available.'}</div>
-              </div>
-            </Show>
-
-            <Show when={previewError()}>
-              <div class="p-4 text-sm text-error">
-                <div class="font-medium mb-1">Failed to load file</div>
-                <div class="text-xs text-muted-foreground">{previewError()}</div>
-              </div>
-            </Show>
-
-            <LoadingOverlay visible={previewLoading()} message="Loading file..." />
-          </div>
-
-          <div class="px-3 py-2 border-t border-border flex items-center justify-between gap-2">
-            <div class="min-w-0">
-              <Show when={previewTruncated()}>
-                <div class="text-[11px] text-muted-foreground truncate">Truncated preview</div>
-              </Show>
-            </div>
-            <div class="flex items-center gap-2">
-              <Button size="sm" variant="outline" loading={downloadLoading()} disabled={!previewItem() || previewLoading() || !!previewError()} onClick={downloadCurrent}>
-                Download
-              </Button>
-            </div>
-          </div>
-        </div>
-      </FloatingWindow>
-
-      <Show when={previewAskMenu()} keyed>
-        {(menu) => (
-          <div
-            ref={previewAskMenuEl}
-            class="fixed z-[120] min-w-[160px] rounded-md border border-border bg-background shadow-lg p-1"
-            style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
-            onContextMenu={(event) => event.preventDefault()}
-          >
-            <button
-              type="button"
-              class="w-full text-left px-3 py-1.5 text-xs rounded hover:bg-muted/60"
-              onClick={() => {
-                void (async () => {
-                  setPreviewAskMenu(null);
-                  const intent = await buildPreviewIntent(menu.selection);
-                  if (!intent) return;
-                  ctx.openAskFlowerComposer(intent, { x: menu.x, y: menu.y });
-                })();
-              }}
-            >
-              Ask Flower
-            </button>
-          </div>
-        )}
-      </Show>
+        onAskFlower={(selectionText) => {
+          void handlePreviewAskFlower(selectionText);
+        }}
+      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

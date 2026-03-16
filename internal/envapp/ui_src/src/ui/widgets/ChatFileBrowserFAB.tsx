@@ -1,6 +1,6 @@
 // Floating file browser FAB for the chat page.
 // The FAB lives inside the message area and can be dragged to any edge.
-import { Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, untrack } from 'solid-js';
 import { Motion } from 'solid-motionone';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { Folder } from '@floegence/floe-webapp-core/icons';
@@ -9,8 +9,6 @@ import { ConfirmDialog, DirectoryPicker, FileSavePicker, FloatingWindow } from '
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc } from '../protocol/redeven_v1';
-import { readFileBytesOnce } from '../utils/fileStreamReader';
-import { previewModeByName, isLikelyTextContent, getExtDot, mimeFromExtDot } from '../utils/filePreview';
 import {
   mapContextMenuCallbacksToAbsolute,
   mapFileItemToAbsolutePath,
@@ -19,6 +17,8 @@ import {
   toFileBrowserDisplayPath,
 } from '../utils/fileBrowserDisplayPath';
 import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from '../utils/fileBrowserClipboard';
+import { createFilePreviewController } from './createFilePreviewController';
+import { FilePreviewDialog } from './FilePreviewDialog';
 import { InputDialog } from './InputDialog';
 import {
   extNoDot,
@@ -50,12 +50,9 @@ function normalizeAbsolutePath(path: string): string {
   return normalizePath(raw);
 }
 
-const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
-const SNIFF_BYTES = 64 * 1024;
 const FAB_SIZE = 44;
 const EDGE_MARGIN = 12;
 const FILE_BROWSER_WINDOW_Z_INDEX = 44;
-const FILE_PREVIEW_WINDOW_Z_INDEX = 45;
 
 // ---- component ----
 
@@ -63,6 +60,9 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const notification = useNotification();
+  const filePreview = createFilePreviewController({
+    client: () => protocol.client(),
+  });
 
   // -- browser state --
   const [browserOpen, setBrowserOpen] = createSignal(false);
@@ -70,15 +70,6 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   const [loading, setLoading] = createSignal(false);
   const [resetSeq, setResetSeq] = createSignal(0);
   const [currentBrowserPath, setCurrentBrowserPath] = createSignal('');
-
-  // -- preview state --
-  const [previewOpen, setPreviewOpen] = createSignal(false);
-  const [previewItem, setPreviewItem] = createSignal<FileItem | null>(null);
-  const [previewText, setPreviewText] = createSignal<string | null>(null);
-  const [previewObjectUrl, setPreviewObjectUrl] = createSignal<string | null>(null);
-  const [previewLoading, setPreviewLoading] = createSignal(false);
-  const [previewError, setPreviewError] = createSignal<string | null>(null);
-  const [previewMode, setPreviewMode] = createSignal<'text' | 'image' | 'binary' | 'unsupported'>('unsupported');
 
   // -- context menu actions --
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
@@ -474,81 +465,6 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   };
   const displayContextMenuCallbacks = createMemo(() => mapContextMenuCallbacksToAbsolute(ctxMenu, browserRootPath()));
 
-  // -- preview --
-  let previewReqSeq = 0;
-
-  function cleanupPreview() {
-    const url = previewObjectUrl();
-    if (url) {
-      URL.revokeObjectURL(url);
-      setPreviewObjectUrl(null);
-    }
-    setPreviewText(null);
-    setPreviewError(null);
-  }
-
-  async function openPreview(item: FileItem) {
-    const seq = ++previewReqSeq;
-    cleanupPreview();
-    setPreviewItem(item);
-    setPreviewLoading(true);
-    setPreviewError(null);
-    setPreviewOpen(true);
-
-    const mode = previewModeByName(item.name);
-    if (mode === 'image') {
-      setPreviewMode('image');
-    } else if (mode === 'text') {
-      setPreviewMode('text');
-    } else {
-      setPreviewMode('unsupported');
-    }
-
-    const client = protocol.client();
-    if (!client) {
-      setPreviewLoading(false);
-      setPreviewError('Connection is not ready');
-      return;
-    }
-
-    try {
-      if (mode === 'image') {
-        const { bytes } = await readFileBytesOnce({ client, path: item.path, maxBytes: MAX_PREVIEW_BYTES });
-        if (seq !== previewReqSeq) return;
-        const ext = getExtDot(item.name);
-        const mime = mimeFromExtDot(ext) || 'application/octet-stream';
-        const blob = new Blob([bytes], { type: mime });
-        setPreviewObjectUrl(URL.createObjectURL(blob));
-      } else if (mode === 'text') {
-        const { bytes } = await readFileBytesOnce({ client, path: item.path, maxBytes: MAX_PREVIEW_BYTES });
-        if (seq !== previewReqSeq) return;
-        setPreviewText(new TextDecoder('utf-8', { fatal: false }).decode(bytes));
-      } else {
-        const { bytes } = await readFileBytesOnce({ client, path: item.path, maxBytes: SNIFF_BYTES });
-        if (seq !== previewReqSeq) return;
-        if (isLikelyTextContent(bytes)) {
-          setPreviewMode('text');
-          if (bytes.length < SNIFF_BYTES) {
-            setPreviewText(new TextDecoder('utf-8', { fatal: false }).decode(bytes));
-          } else {
-            const { bytes: full } = await readFileBytesOnce({ client, path: item.path, maxBytes: MAX_PREVIEW_BYTES });
-            if (seq !== previewReqSeq) return;
-            setPreviewText(new TextDecoder('utf-8', { fatal: false }).decode(full));
-          }
-        } else {
-          setPreviewMode('binary');
-        }
-      }
-    } catch (e) {
-      if (seq !== previewReqSeq) return;
-      setPreviewError(e instanceof Error ? e.message : String(e));
-    } finally {
-      if (seq === previewReqSeq) setPreviewLoading(false);
-    }
-  }
-
-  onCleanup(() => cleanupPreview());
-
   // -- Snap to nearest edge of the container --
   function snapToEdge(left: number, top: number) {
     const ct = props.containerRef;
@@ -747,7 +663,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
                     await loadPathChain(target);
                   })();
                 }}
-                onOpen={(item) => void openPreview(mapFileItemToAbsolutePath(item, browserRootPath()))}
+                onOpen={(item) => void filePreview.openPreview(mapFileItemToAbsolutePath(item, browserRootPath()))}
                 contextMenuCallbacks={displayContextMenuCallbacks()}
                 class="h-full border-0 rounded-none shadow-none"
               />
@@ -757,64 +673,25 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
         </div>
       </FloatingWindow>
 
-      {/* File preview floating window */}
-      <FloatingWindow
-        open={previewOpen()}
-        onOpenChange={(open) => {
-          setPreviewOpen(open);
-          if (!open) {
-            previewReqSeq += 1;
-            cleanupPreview();
-            setPreviewItem(null);
-          }
+      <FilePreviewDialog
+        open={filePreview.open()}
+        onOpenChange={filePreview.handleOpenChange}
+        item={filePreview.item()}
+        mode={filePreview.mode()}
+        text={filePreview.text()}
+        message={filePreview.message()}
+        objectUrl={filePreview.objectUrl()}
+        bytes={filePreview.bytes()}
+        truncated={filePreview.truncated()}
+        loading={filePreview.loading()}
+        error={filePreview.error()}
+        xlsxSheetName={filePreview.xlsxSheetName()}
+        xlsxRows={filePreview.xlsxRows()}
+        downloadLoading={filePreview.downloadLoading()}
+        onDownload={() => {
+          void filePreview.downloadCurrent();
         }}
-        title={previewItem()?.name ?? 'File Preview'}
-        defaultSize={{ width: 720, height: 520 }}
-        minSize={{ width: 400, height: 300 }}
-        zIndex={FILE_PREVIEW_WINDOW_Z_INDEX}
-      >
-        <div class="h-full flex flex-col min-h-0">
-          <div class="px-3 py-2 border-b border-border text-[11px] text-muted-foreground font-mono truncate">
-            {previewItem()?.path}
-          </div>
-
-          <div class="flex-1 min-h-0 overflow-auto relative bg-background">
-            <Show when={previewMode() === 'text' && !previewError()}>
-              <pre class="p-3 text-xs leading-relaxed font-mono whitespace-pre-wrap break-words select-text">
-                {previewText()}
-              </pre>
-            </Show>
-
-            <Show when={previewMode() === 'image' && !previewError()}>
-              <div class="p-3 h-full flex items-center justify-center">
-                <img
-                  src={previewObjectUrl()!}
-                  alt={previewItem()?.name ?? 'Preview'}
-                  class="max-w-full max-h-full object-contain"
-                />
-              </div>
-            </Show>
-
-            <Show when={(previewMode() === 'binary' || previewMode() === 'unsupported') && !previewError() && !previewLoading()}>
-              <div class="p-4 text-sm text-muted-foreground">
-                <div class="font-medium text-foreground mb-1">
-                  {previewMode() === 'binary' ? 'Binary file' : 'Preview not available'}
-                </div>
-                <div class="text-xs">Preview is not available for this file type.</div>
-              </div>
-            </Show>
-
-            <Show when={previewError()}>
-              <div class="p-4 text-sm text-error">
-                <div class="font-medium mb-1">Failed to load file</div>
-                <div class="text-xs text-muted-foreground">{previewError()}</div>
-              </div>
-            </Show>
-
-            <LoadingOverlay visible={previewLoading()} message="Loading file..." />
-          </div>
-        </div>
-      </FloatingWindow>
+      />
 
       <ConfirmDialog
         open={deleteDialogOpen()}
