@@ -972,6 +972,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	updateThreadRunState("running", "", nil)
 	s.broadcastThreadState(endpointID, threadID, runID, "running", "")
 	s.broadcastThreadSummary(endpointID, threadID)
+	r.ensureAssistantMessageStarted()
 
 	var persistedCopy *persistedUserMessage
 	if persisted != nil {
@@ -1040,9 +1041,8 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		if msg == "" {
 			msg = "AI failed."
 		}
-		r.sendStreamEvent(streamEventMessageStart{Type: "message-start", MessageID: messageID})
-		r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: messageID, BlockIndex: 0, BlockType: "markdown"})
-		r.sendStreamEvent(streamEventBlockDelta{Type: "block-delta", MessageID: messageID, BlockIndex: 0, Delta: msg})
+		r.ensureAssistantMessageStarted()
+		_ = r.appendTextDelta(msg)
 		r.sendStreamEvent(streamEventError{Type: "error", MessageID: messageID, Error: msg})
 		r.setEndReason("error")
 		return err

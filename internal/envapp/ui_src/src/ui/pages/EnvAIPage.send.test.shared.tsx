@@ -367,6 +367,22 @@ function composeTextWithoutInput(host: HTMLElement, value: string) {
   return element;
 }
 
+function makeStreamingAssistantSnapshot(messageId = 'assistant-streaming-1') {
+  return {
+    ok: true,
+    runId: 'run-send-1',
+    messageJson: {
+      id: messageId,
+      role: 'assistant',
+      status: 'streaming',
+      timestamp: Date.now(),
+      blocks: [
+        { type: 'markdown', content: '' },
+      ],
+    },
+  };
+}
+
 type SubmitTrigger = 'button' | 'enter';
 
 function clickButton(host: HTMLElement, title: string) {
@@ -450,6 +466,41 @@ export function registerEnvAIPageSendTests() {
           dispose();
         }
       });
+    });
+
+    it('shows the assistant placeholder immediately after send when active snapshot is available', async () => {
+      getActiveRunSnapshotMock
+        .mockResolvedValueOnce({ ok: false })
+        .mockResolvedValueOnce(makeStreamingAssistantSnapshot());
+
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'show me the pending assistant slot');
+        submitComposer(host, 'button', 'Send message');
+        await flushAsync();
+
+        const assistant = host.querySelector('.chat-message-item-assistant');
+        expect(assistant).toBeTruthy();
+        expect(host.querySelector('.chat-markdown-empty-streaming')).toBeTruthy();
+        expect(getActiveRunSnapshotMock).toHaveBeenCalled();
+      } finally {
+        dispose();
+      }
+    });
+
+    it('restores the assistant placeholder on initial thread load from active run snapshot', async () => {
+      getActiveRunSnapshotMock.mockResolvedValueOnce(makeStreamingAssistantSnapshot('assistant-active-thread'));
+
+      const { host, dispose } = await renderPage();
+      try {
+        await flushAsync();
+
+        const assistant = host.querySelector('.chat-message-item-assistant');
+        expect(assistant).toBeTruthy();
+        expect(host.querySelector('.chat-markdown-empty-streaming')).toBeTruthy();
+      } finally {
+        dispose();
+      }
     });
 
     it('sends normal composer messages when crypto.randomUUID is unavailable', async () => {

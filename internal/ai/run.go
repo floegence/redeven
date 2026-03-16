@@ -1070,17 +1070,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		go r.runIdleWatchdog(execCtx)
 	}
 
-	// Initial assistant message + first markdown block.
-	r.muAssistant.Lock()
-	r.assistantCreatedAtUnixMs = time.Now().UnixMilli()
-	r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: ""}}
-	r.muAssistant.Unlock()
-	r.nextBlockIndex = 1
-	r.currentTextBlockIndex = 0
-	r.needNewTextBlock = false
-
-	r.sendStreamEvent(streamEventMessageStart{Type: "message-start", MessageID: r.messageID})
-	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"})
+	r.ensureAssistantMessageStarted()
 	r.emitLifecyclePhase("planning", nil)
 
 	modelID := strings.TrimSpace(req.Model)
@@ -1896,6 +1886,32 @@ func (r *run) persistEnsureIndex(idx int) {
 	for len(r.assistantBlocks) <= idx {
 		r.assistantBlocks = append(r.assistantBlocks, nil)
 	}
+}
+
+func (r *run) ensureAssistantMessageStarted() bool {
+	if r == nil || strings.TrimSpace(r.messageID) == "" {
+		return false
+	}
+
+	started := false
+	r.muAssistant.Lock()
+	if len(r.assistantBlocks) == 0 {
+		r.assistantCreatedAtUnixMs = time.Now().UnixMilli()
+		r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: ""}}
+		started = true
+	}
+	r.muAssistant.Unlock()
+
+	if !started {
+		return false
+	}
+
+	r.nextBlockIndex = 1
+	r.currentTextBlockIndex = 0
+	r.needNewTextBlock = false
+	r.sendStreamEvent(streamEventMessageStart{Type: "message-start", MessageID: r.messageID})
+	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"})
+	return true
 }
 
 func (r *run) persistSetMarkdownBlock(idx int) {
