@@ -30,6 +30,7 @@ import {
   normalizeAbsolutePath,
 } from '../utils/askFlowerPath';
 import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from '../utils/fileBrowserClipboard';
+import { createClientId } from '../utils/clientId';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
@@ -2322,7 +2323,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const suggestedWorkingDirAbs = deriveAbsoluteWorkingDirFromItems(absoluteItems, currentBrowserPath());
 
     dispatchAskFlowerIntent({
-      id: crypto.randomUUID(),
+      id: createClientId('ask-flower'),
       source: 'file_browser',
       mode: 'append',
       suggestedWorkingDirAbs: suggestedWorkingDirAbs || undefined,
@@ -2383,7 +2384,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
 
     return {
-      id: crypto.randomUUID(),
+      id: createClientId('ask-flower'),
       source: 'file_preview',
       mode: 'append',
       suggestedWorkingDirAbs: dirnameAbsolute(absolutePath),

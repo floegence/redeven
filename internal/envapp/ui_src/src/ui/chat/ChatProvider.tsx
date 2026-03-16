@@ -23,6 +23,7 @@ import type {
   StreamEvent,
 } from './types';
 import { DEFAULT_VIRTUAL_LIST_CONFIG } from './types';
+import { createClientId } from '../utils/clientId';
 
 // ---- Defer helper (avoids blocking the UI thread) ----
 
@@ -372,7 +373,7 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
 
     sendMessage: async (content, attachments = []) => {
       const userMsg: Message = {
-        id: crypto.randomUUID(),
+        id: createClientId('message'),
         role: 'user',
         blocks: buildUserBlocks(content, attachments),
         status: 'sending',
