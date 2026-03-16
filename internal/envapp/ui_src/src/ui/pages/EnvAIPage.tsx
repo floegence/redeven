@@ -61,6 +61,7 @@ import {
   resolveSuggestedWorkingDirAbsolute,
   toHomeDisplayPath,
 } from '../utils/askFlowerPath';
+import { readLiveTextValue, syncLiveTextValue } from '../utils/liveTextValue';
 import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';
 import {
   composeFollowupOrder,
@@ -235,6 +236,7 @@ const AIChatInput: Component<{
   const notify = useNotification();
   const [text, setText] = createSignal('');
   const [isFocused, setIsFocused] = createSignal(false);
+  const [isComposing, setIsComposing] = createSignal(false);
   const [sending, setSending] = createSignal(false);
 
   let textareaRef: HTMLTextAreaElement | undefined;
@@ -249,9 +251,11 @@ const AIChatInput: Component<{
   });
 
   const placeholder = () => props.placeholder || ctx.config().placeholder || 'Type a message...';
+  const currentText = () => readLiveTextValue(textareaRef, text());
+  const syncTextFromTextarea = () => syncLiveTextValue(textareaRef, setText, text());
 
   const canSend = () =>
-    (text().trim() || attachments.attachments().length > 0) &&
+    (currentText().trim() || attachments.attachments().length > 0) &&
     !props.disabled &&
     !sending() &&
     !attachments.hasUploading();
@@ -286,17 +290,19 @@ const AIChatInput: Component<{
   };
 
   const snapshotDraft = (): AIChatInputDraftSnapshot => ({
-    text: text(),
+    text: currentText(),
     attachments: attachments.attachments().map((attachment) => ({ ...attachment })),
   });
 
   const clearDraft = () => {
+    setIsComposing(false);
     setText('');
     attachments.clearAttachments();
     if (textareaRef) textareaRef.style.height = 'auto';
   };
 
   const replaceDraft = (nextDraft: AIChatInputDraftSnapshot) => {
+    setIsComposing(false);
     setText(String(nextDraft?.text ?? ''));
     attachments.replaceAttachments(Array.isArray(nextDraft?.attachments) ? nextDraft.attachments : []);
     if (textareaRef) textareaRef.style.height = 'auto';
@@ -323,7 +329,7 @@ const AIChatInput: Component<{
     if (!canSend()) return;
 
     setSending(true);
-    const content = text().trim();
+    const content = syncTextFromTextarea().trim();
     try {
       const upload = await attachments.uploadAll();
       if (!upload.ok) {
@@ -349,7 +355,7 @@ const AIChatInput: Component<{
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.isComposing) return;
+    if (e.isComposing || isComposing()) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
@@ -458,6 +464,16 @@ const AIChatInput: Component<{
           value={text()}
           onInput={(e) => {
             setText(e.currentTarget.value);
+            scheduleAdjustHeight();
+          }}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionUpdate={() => {
+            syncTextFromTextarea();
+            scheduleAdjustHeight();
+          }}
+          onCompositionEnd={() => {
+            setIsComposing(false);
+            syncTextFromTextarea();
             scheduleAdjustHeight();
           }}
           onKeyDown={handleKeyDown}

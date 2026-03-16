@@ -357,6 +357,16 @@ function inputComposer(host: HTMLElement, value: string) {
   return element;
 }
 
+function composeTextWithoutInput(host: HTMLElement, value: string) {
+  const textarea = host.querySelector('textarea');
+  expect(textarea).toBeTruthy();
+  const element = textarea as HTMLTextAreaElement;
+  element.dispatchEvent(new Event('compositionstart', { bubbles: true }));
+  element.value = value;
+  element.dispatchEvent(new Event('compositionupdate', { bubbles: true }));
+  return element;
+}
+
 type SubmitTrigger = 'button' | 'enter';
 
 function clickButton(host: HTMLElement, title: string) {
@@ -440,6 +450,29 @@ export function registerEnvAIPageSendTests() {
           dispose();
         }
       });
+    });
+
+    it('sends composed text through sendUserTurn when the visible textarea value is ahead of input events', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        const textarea = composeTextWithoutInput(host, '你好，Flower');
+        const sendButton = Array.from(host.querySelectorAll('button')).find((item) => item.getAttribute('title') === 'Send message') as HTMLButtonElement | undefined;
+        expect(sendButton).toBeTruthy();
+        expect(sendButton?.disabled).toBe(false);
+
+        clickButton(host, 'Send message');
+        await flushAsync();
+
+        expect(sendUserTurnMock).toHaveBeenCalledTimes(1);
+        expect(sendUserTurnMock).toHaveBeenCalledWith(expect.objectContaining({
+          input: expect.objectContaining({
+            text: '你好，Flower',
+          }),
+        }));
+        expect(textarea.value).toBe('');
+      } finally {
+        dispose();
+      }
     });
 
     ([

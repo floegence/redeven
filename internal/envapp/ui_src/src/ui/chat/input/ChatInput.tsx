@@ -6,6 +6,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { useChatContext } from '../ChatProvider';
 import { useAttachments } from '../hooks/useAttachments';
 import { AttachmentPreview } from './AttachmentPreview';
+import { readLiveTextValue, syncLiveTextValue } from '../../utils/liveTextValue';
 
 export interface ChatInputProps {
   disabled?: boolean;
@@ -35,6 +36,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
   const [text, setText] = createSignal('');
   const [isFocused, setIsFocused] = createSignal(false);
   const [isDragging, setIsDragging] = createSignal(false);
+  const [isComposing, setIsComposing] = createSignal(false);
 
   let textareaRef: HTMLTextAreaElement | undefined;
   let fileInputRef: HTMLInputElement | undefined;
@@ -48,15 +50,18 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
     el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
   };
 
-  const canSend = () => (text().trim().length > 0 || attachments().length > 0) && !hasUploading();
+  const currentText = () => readLiveTextValue(textareaRef, text());
+  const syncTextFromTextarea = () => syncLiveTextValue(textareaRef, setText, text());
+  const canSend = () => (currentText().trim().length > 0 || attachments().length > 0) && !hasUploading();
 
   const handleSend = async () => {
     if (!canSend() || props.disabled) return;
 
-    const content = text().trim();
+    const content = syncTextFromTextarea().trim();
     const upload = await uploadAll();
     if (!upload.ok) return;
     const atts = upload.attachments.filter((attachment) => attachment.status === 'uploaded');
+    setIsComposing(false);
     setText('');
     clearAttachments();
 
@@ -70,7 +75,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
 
   const handleKeyDown = (e: KeyboardEvent) => {
     // Ignore key events during IME composition
-    if (e.isComposing) return;
+    if (e.isComposing || isComposing()) return;
 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -202,6 +207,16 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
           disabled={props.disabled}
           value={text()}
           onInput={handleInput}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionUpdate={() => {
+            syncTextFromTextarea();
+            autoResize();
+          }}
+          onCompositionEnd={() => {
+            setIsComposing(false);
+            syncTextFromTextarea();
+            autoResize();
+          }}
           onKeyDown={handleKeyDown}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}

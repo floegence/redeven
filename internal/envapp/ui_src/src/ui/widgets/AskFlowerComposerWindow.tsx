@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, Folder, FileText, Paperclip, Terminal, Send } f
 import type { AskFlowerComposerAnchor } from '../pages/EnvContext';
 import type { AskFlowerContextItem, AskFlowerIntent } from '../pages/askFlowerIntent';
 import { resolveSuggestedWorkingDirAbsolute } from '../utils/askFlowerPath';
+import { syncLiveTextValue } from '../utils/liveTextValue';
 
 const WINDOW_VIEWPORT_MARGIN_DESKTOP = 12;
 const WINDOW_VIEWPORT_MARGIN_MOBILE = 8;
@@ -129,6 +130,7 @@ function truncatePath(fullPath: string, maxSegments: number = 2): string {
 export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
   const [userPrompt, setUserPrompt] = createSignal('');
   const [validationError, setValidationError] = createSignal('');
+  const [isComposing, setIsComposing] = createSignal(false);
   const [sending, setSending] = createSignal(false);
   const [viewport, setViewport] = createSignal(currentViewportSize());
   const [detailsOpen, setDetailsOpen] = createSignal(false);
@@ -181,6 +183,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
 
   const resetDraft = (intent: AskFlowerIntent | null) => {
     setValidationError('');
+    setIsComposing(false);
     setSending(false);
     setDetailsOpen(false);
     setUserPrompt(String(intent?.userPrompt ?? '').trim());
@@ -213,9 +216,11 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     onCleanup(() => window.removeEventListener('pointerdown', onPointerDown, true));
   });
 
+  const syncPromptFromTextarea = () => syncLiveTextValue(textareaEl, setUserPrompt, userPrompt());
+
   const submit = async () => {
     if (sending()) return;
-    const trimmedPrompt = String(userPrompt()).trim();
+    const trimmedPrompt = syncPromptFromTextarea().trim();
     if (!trimmedPrompt) {
       setValidationError('Please enter a question.');
       requestAnimationFrame(() => textareaEl?.focus());
@@ -276,8 +281,18 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                   setUserPrompt(event.currentTarget.value);
                   if (validationError()) setValidationError('');
                 }}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionUpdate={() => {
+                  syncPromptFromTextarea();
+                  if (validationError()) setValidationError('');
+                }}
+                onCompositionEnd={() => {
+                  setIsComposing(false);
+                  syncPromptFromTextarea();
+                  if (validationError()) setValidationError('');
+                }}
                 onKeyDown={(event) => {
-                  if (event.isComposing) return;
+                  if (event.isComposing || isComposing()) return;
                   if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
                     event.preventDefault();
                     void submit();
