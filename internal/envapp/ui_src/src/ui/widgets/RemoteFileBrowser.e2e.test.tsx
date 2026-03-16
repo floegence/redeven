@@ -47,6 +47,11 @@ const workspaceLifecycleStore = vi.hoisted(() => ({
   gitUnmounts: 0,
 }));
 
+const filePreviewStore = vi.hoisted(() => ({
+  openPreview: vi.fn(),
+  closePreview: vi.fn(),
+}));
+
 const mockRpc = vi.hoisted(() => ({
   fs: {
     list: vi.fn(),
@@ -126,6 +131,14 @@ vi.mock('../protocol/redeven_v1', async () => {
     useRedevenRpc: () => mockRpc,
   };
 });
+
+vi.mock('./FilePreviewContext', () => ({
+  useFilePreviewContext: () => ({
+    openPreview: filePreviewStore.openPreview,
+    closePreview: filePreviewStore.closePreview,
+    controller: {},
+  }),
+}));
 
 vi.mock('./FileBrowserWorkspace', () => ({
   FileBrowserWorkspace: (props: {

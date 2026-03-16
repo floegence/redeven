@@ -10,34 +10,52 @@ function read(relPath: string): string {
 }
 
 describe('file preview wiring', () => {
-  it('keeps file preview on a responsive dialog surface', () => {
-    const dialogSrc = read('./FilePreviewDialog.tsx');
+  it('keeps shared preview content and switches between dialog and floating window by layout', () => {
+    const contentSrc = read('./FilePreviewContent.tsx');
+    const surfaceSrc = read('./FilePreviewSurface.tsx');
 
-    expect(dialogSrc).toContain("import { Button, Dialog } from '@floegence/floe-webapp-core/ui';");
-    expect(dialogSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
-    expect(dialogSrc).toContain('Ask Flower');
-    expect(dialogSrc).toContain('Download');
-    expect(dialogSrc).not.toContain('FloatingWindow');
+    expect(contentSrc).toContain("import('docx-preview')");
+    expect(contentSrc).toContain('Loading file...');
+    expect(contentSrc).toContain('Failed to load file');
+
+    expect(surfaceSrc).toContain("import { Button, Dialog, FloatingWindow } from '@floegence/floe-webapp-core/ui';");
+    expect(surfaceSrc).toContain('layout.isMobile()');
+    expect(surfaceSrc).toContain('<Dialog');
+    expect(surfaceSrc).toContain('<FloatingWindow');
+    expect(surfaceSrc).toContain('Ask Flower');
+    expect(surfaceSrc).toContain('Download');
+    expect(surfaceSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
+    expect(surfaceSrc).toContain('file-preview-floating-window');
   });
 
-  it('routes remote and chat previews through the shared controller and dialog', () => {
+  it('routes remote and chat previews through the shared controller and app-level host', () => {
     const controllerSrc = read('./createFilePreviewController.ts');
+    const contextSrc = read('./FilePreviewContext.ts');
+    const hostSrc = read('./FilePreviewHost.tsx');
     const remoteSrc = read('./RemoteFileBrowser.tsx');
     const chatSrc = read('./ChatFileBrowserFAB.tsx');
+    const shellSrc = read('../EnvAppShell.tsx');
 
     expect(controllerSrc).toContain("export function createFilePreviewController");
     expect(controllerSrc).toContain("openReadFileStreamChannel");
     expect(controllerSrc).toContain("workbook.xlsx.load");
 
-    expect(remoteSrc).toContain("import { createFilePreviewController } from './createFilePreviewController';");
-    expect(remoteSrc).toContain("import { FilePreviewDialog } from './FilePreviewDialog';");
-    expect(remoteSrc).toContain("const filePreview = createFilePreviewController");
-    expect(remoteSrc).toContain("<FilePreviewDialog");
-    expect(remoteSrc).not.toContain('previewAskMenu');
-    expect(remoteSrc).not.toContain('FloatingWindow');
+    expect(contextSrc).toContain("export function useFilePreviewContext()");
+    expect(hostSrc).toContain('<FilePreviewSurface');
+    expect(hostSrc).toContain('buildFilePreviewAskFlowerIntent');
 
-    expect(chatSrc).toContain("import { createFilePreviewController } from './createFilePreviewController';");
-    expect(chatSrc).toContain("import { FilePreviewDialog } from './FilePreviewDialog';");
-    expect(chatSrc).toContain("<FilePreviewDialog");
+    expect(shellSrc).toContain("import { createFilePreviewController } from './widgets/createFilePreviewController';");
+    expect(shellSrc).toContain('const filePreviewController = createFilePreviewController');
+    expect(shellSrc).toContain('<FilePreviewHost />');
+
+    expect(remoteSrc).toContain("import { useFilePreviewContext } from './FilePreviewContext';");
+    expect(remoteSrc).not.toContain("import { createFilePreviewController } from './createFilePreviewController';");
+    expect(remoteSrc).not.toContain("import { FilePreviewDialog } from './FilePreviewDialog';");
+    expect(remoteSrc).not.toContain('<FilePreviewDialog');
+
+    expect(chatSrc).toContain("import { useFilePreviewContext } from './FilePreviewContext';");
+    expect(chatSrc).not.toContain("import { createFilePreviewController } from './createFilePreviewController';");
+    expect(chatSrc).not.toContain("import { FilePreviewDialog } from './FilePreviewDialog';");
+    expect(chatSrc).not.toContain('<FilePreviewDialog');
   });
 });
