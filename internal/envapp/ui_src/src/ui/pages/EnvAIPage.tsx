@@ -332,9 +332,17 @@ const AIChatInput: Component<{
       }
 
       const files = upload.attachments.filter((attachment) => attachment.status === 'uploaded');
+      const restoreDraft: AIChatInputDraftSnapshot = {
+        text: content,
+        attachments: upload.attachments.map((attachment) => ({ ...attachment })),
+      };
       props.onSendIntent?.(intent);
       clearDraft();
-      await ctx.sendMessage(content, files);
+      try {
+        await ctx.sendMessage(content, files);
+      } catch {
+        replaceDraft(restoreDraft);
+      }
     } finally {
       setSending(false);
     }
@@ -3403,10 +3411,14 @@ export function EnvAIPage() {
     if (String(item.followup_id ?? '').trim() === String(loadedDraftFollowupID() ?? '').trim()) {
       return;
     }
-    await sendUserTurn(String(item.text ?? ''), restoreFollowupAttachments(item), {
-      sendIntent: 'queue_after_waiting_user',
-      sourceFollowupId: String(item.followup_id ?? '').trim(),
-    });
+    try {
+      await sendUserTurn(String(item.text ?? ''), restoreFollowupAttachments(item), {
+        sendIntent: 'queue_after_waiting_user',
+        sourceFollowupId: String(item.followup_id ?? '').trim(),
+      });
+    } catch {
+      // sendUserTurn already handled user-facing recovery and notifications
+    }
   };
 
   const stopRun = () => {
@@ -3819,52 +3831,272 @@ export function EnvAIPage() {
     userMessageId?: string;
     sendIntent?: SendIntent;
     sourceFollowupId?: string;
+    sourceDraftSnapshot?: AIChatInputDraftSnapshot;
+  };
+
+  type PendingSendContext = {
+    sendIntent: SendIntent;
+    sourceFollowupId: string;
+    sourceDraftSnapshot?: AIChatInputDraftSnapshot;
+    hasOptimisticMessage: boolean;
+  };
+
+  type StructuredComposerSendPlan =
+    | {
+        kind: 'submit';
+        promptId: string;
+        answers: Record<string, { selectedOptionId?: string; answers: string[] }>;
+        inputText: string;
+      }
+    | {
+        kind: 'error';
+        title: string;
+        description: string;
+      };
+
+  class ComposerSendRejectedError extends Error {}
+
+  const consumePendingSendContext = (userMessageId: string, fallback?: Partial<PendingSendContext>): PendingSendContext => {
+    const id = String(userMessageId ?? '').trim();
+    const context: PendingSendContext = {
+      sendIntent: id ? (sendIntentByMessageId.get(id) ?? fallback?.sendIntent ?? 'default') : (fallback?.sendIntent ?? 'default'),
+      sourceFollowupId: id
+        ? String(sourceFollowupIDByMessageId.get(id) ?? fallback?.sourceFollowupId ?? '').trim()
+        : String(fallback?.sourceFollowupId ?? '').trim(),
+      sourceDraftSnapshot: id ? (draftSnapshotByMessageId.get(id) ?? fallback?.sourceDraftSnapshot) : fallback?.sourceDraftSnapshot,
+      hasOptimisticMessage: id ? true : Boolean(fallback?.hasOptimisticMessage),
+    };
+    if (id) {
+      sendIntentByMessageId.delete(id);
+      sourceFollowupIDByMessageId.delete(id);
+      draftSnapshotByMessageId.delete(id);
+    }
+    return context;
+  };
+
+  const rollbackRejectedComposerSend = (context?: Partial<PendingSendContext>) => {
+    setSendPending(false);
+    setRunPhaseLabel('Working');
+    const optimisticOffset = context?.hasOptimisticMessage ? 1 : 0;
+    const remainingMessages = Math.max(0, (chat?.messages() ?? []).length - optimisticOffset);
+    setHasMessages(remainingMessages > 0);
+
+    const sourceFollowupId = String(context?.sourceFollowupId ?? '').trim();
+    if (!sourceFollowupId || !context?.sourceDraftSnapshot || !chatInputApi()) {
+      return;
+    }
+    chatInputApi()?.replaceDraft(context.sourceDraftSnapshot);
+    setLoadedDraftFollowupID(sourceFollowupId);
+    chatInputApi()?.focusInput();
+  };
+
+  const normalizeStructuredDraftAnswer = (draft: { selectedOptionId?: string; answers?: string[] } | undefined) => ({
+    selectedOptionId: String(draft?.selectedOptionId ?? '').trim() || undefined,
+    answers: Array.isArray(draft?.answers) ? draft.answers.map((item) => String(item ?? '').trim()).filter(Boolean) : [],
+  });
+
+  const hasStructuredDraftAnswer = (draft: { selectedOptionId?: string; answers?: string[] } | undefined): boolean => {
+    const normalized = normalizeStructuredDraftAnswer(draft);
+    return Boolean(normalized.selectedOptionId) || normalized.answers.length > 0;
+  };
+
+  const canComposerAutofillWaitingQuestion = (question: {
+    is_secret?: boolean;
+    is_other?: boolean;
+    options?: ReadonlyArray<unknown>;
+  }): boolean => {
+    if (question.is_secret) return false;
+    const options = Array.isArray(question.options) ? question.options : [];
+    return Boolean(question.is_other) || options.length === 0;
+  };
+
+  const buildStructuredComposerSendPlan = (args: {
+    waitingPrompt: ReturnType<typeof ai.activeThreadWaitingPrompt>;
+    composerText: string;
+    drafts: Record<string, { selectedOptionId?: string; answers: string[] }>;
+  }): StructuredComposerSendPlan => {
+    const promptId = String(args.waitingPrompt?.prompt_id ?? '').trim();
+    if (!promptId) {
+      return {
+        kind: 'error',
+        title: 'Input required',
+        description: 'The pending input request is no longer available.',
+      };
+    }
+
+    const answers: Record<string, { selectedOptionId?: string; answers: string[] }> = {};
+    Object.entries(args.drafts ?? {}).forEach(([questionId, draft]) => {
+      const qid = String(questionId ?? '').trim();
+      if (!qid) return;
+      answers[qid] = normalizeStructuredDraftAnswer(draft);
+    });
+
+    const questions = Array.isArray(args.waitingPrompt?.questions) ? args.waitingPrompt.questions : [];
+    const unanswered = questions.filter((question) => !hasStructuredDraftAnswer(answers[String(question.id ?? '').trim()]));
+    const composerText = String(args.composerText ?? '').trim();
+
+    if (composerText && unanswered.length === 1) {
+      const question = unanswered[0];
+      if (question.is_secret) {
+        return {
+          kind: 'error',
+          title: 'Input required',
+          description: 'Use the inline input card to answer secret requests.',
+        };
+      }
+      if (!canComposerAutofillWaitingQuestion(question)) {
+        return {
+          kind: 'error',
+          title: 'Input required',
+          description: 'Select one of the requested options before replying.',
+        };
+      }
+      answers[String(question.id ?? '').trim()] = {
+        answers: [composerText],
+      };
+    } else if (composerText && unanswered.length > 1) {
+      return {
+        kind: 'error',
+        title: 'Input required',
+        description: 'Resolve all requested input fields before replying.',
+      };
+    }
+
+    const remaining = questions.filter((question) => !hasStructuredDraftAnswer(answers[String(question.id ?? '').trim()]));
+    if (remaining.length > 0) {
+      const secretOnly = remaining.every((question) => Boolean(question.is_secret));
+      return {
+        kind: 'error',
+        title: 'Input required',
+        description: secretOnly
+          ? 'Use the inline input card to answer the pending secret request.'
+          : 'Resolve the pending input request before replying.',
+      };
+    }
+
+    return {
+      kind: 'submit',
+      promptId,
+      answers,
+      inputText: composerText && unanswered.length === 0 ? composerText : '',
+    };
+  };
+
+  const submitStructuredPromptResponseFromComposer = async (
+    threadId: string,
+    content: string,
+    attachments: Attachment[],
+    userMessageId: string,
+    context: PendingSendContext,
+  ) => {
+    const tid = String(threadId ?? '').trim();
+    const waitingPrompt = ai.activeThreadWaitingPrompt();
+    const promptId = String(waitingPrompt?.prompt_id ?? '').trim();
+    if (!tid || !promptId) {
+      rollbackRejectedComposerSend(context);
+      throw new Error('The pending input request is no longer available.');
+    }
+
+    const plan = buildStructuredComposerSendPlan({
+      waitingPrompt,
+      composerText: content,
+      drafts: ai.getStructuredPromptDrafts(tid, promptId),
+    });
+    if (plan.kind === 'error') {
+      rollbackRejectedComposerSend(context);
+      notify.error(plan.title, plan.description);
+      throw new Error(plan.description);
+    }
+
+    const uploaded = attachments.filter((attachment) => attachment.status === 'uploaded' && !!String(attachment.url ?? '').trim());
+    const attIn = uploaded.map((attachment) => ({
+      name: attachment.file.name,
+      mimeType: attachment.file.type,
+      url: String(attachment.url ?? '').trim(),
+    }));
+
+    try {
+      const expectedRunId = String(ai.runIdForThread(tid) ?? '').trim();
+      const resp = await ai.submitStructuredPromptResponse({
+        threadId: tid,
+        promptId: plan.promptId,
+        messageId: userMessageId,
+        answers: plan.answers,
+        text: plan.inputText,
+        attachments: attIn,
+        expectedRunId: expectedRunId || undefined,
+        sourceFollowupId: context.sourceFollowupId || undefined,
+      });
+
+      const appliedExecutionModeRaw = String(resp.appliedExecutionMode ?? '').trim();
+      if (appliedExecutionModeRaw) {
+        const appliedExecutionMode = normalizeExecutionMode(appliedExecutionModeRaw);
+        setDraftExecutionMode(appliedExecutionMode);
+        persistExecutionMode(appliedExecutionMode);
+        setThreadExecutionModeOverrideById((prev) => ({ ...prev, [tid]: appliedExecutionMode }));
+      }
+      if (context.sourceFollowupId) {
+        setLoadedDraftFollowupID((current) => (current === context.sourceFollowupId ? '' : current));
+      }
+
+      const runId = String(resp.runId ?? '').trim();
+      if (runId) {
+        ensureContextRun(runId, { reset: true });
+        void loadContextRunEvents(runId, { reset: true });
+      } else {
+        setRunPhaseLabel('Working');
+      }
+
+      ai.bumpThreadsSeq();
+      void loadFollowups(tid, { silent: true });
+    } catch (error) {
+      rollbackRejectedComposerSend(context);
+      const msg = error instanceof Error ? error.message : String(error);
+      notify.error('AI failed', msg || 'Request failed.');
+      void loadThreadMessages(tid);
+      void loadFollowups(tid, { silent: true });
+      throw error instanceof Error ? error : new Error(msg || 'Request failed.');
+    }
   };
 
   const sendUserTurn = async (content: string, attachments: Attachment[], opts: SendUserTurnOptions = {}) => {
+    const context: PendingSendContext = {
+      sendIntent: opts.sendIntent ?? 'default',
+      sourceFollowupId: String(opts.sourceFollowupId ?? '').trim(),
+      sourceDraftSnapshot: opts.sourceDraftSnapshot,
+      hasOptimisticMessage: Boolean(String(opts.userMessageId ?? '').trim()),
+    };
     if (!chat) {
       notify.error('AI unavailable', 'Chat is not ready.');
-      setSendPending(false);
-      return;
+      rollbackRejectedComposerSend(context);
+      throw new Error('Chat is not ready.');
     }
     if (!ensureRWX()) {
-      setSendPending(false);
-      setRunPhaseLabel('Working');
-      return;
+      rollbackRejectedComposerSend(context);
+      throw new Error('Read/write/execute permission required.');
     }
     if (!ai.aiEnabled()) {
       notify.error('AI not configured', 'Open Settings to enable AI.');
-      setSendPending(false);
-      return;
+      rollbackRejectedComposerSend(context);
+      throw new Error('AI is not configured.');
     }
     if (ai.models.error) {
       const msg = ai.models.error instanceof Error ? ai.models.error.message : String(ai.models.error);
       notify.error('AI unavailable', msg || 'Failed to load models.');
-      setSendPending(false);
-      return;
+      rollbackRejectedComposerSend(context);
+      throw new Error(msg || 'Failed to load models.');
     }
 
     const model = ai.selectedModel().trim();
     if (!model) {
       notify.error('Missing model', 'Please select a model.');
-      setSendPending(false);
-      return;
+      rollbackRejectedComposerSend(context);
+      throw new Error('Please select a model.');
     }
 
     const userMessageId = String(opts.userMessageId ?? '').trim();
-    const sendIntent = userMessageId
-      ? (sendIntentByMessageId.get(userMessageId) ?? opts.sendIntent ?? 'default')
-      : (opts.sendIntent ?? 'default');
-    const sourceFollowupId = userMessageId
-      ? String(sourceFollowupIDByMessageId.get(userMessageId) ?? opts.sourceFollowupId ?? '').trim()
-      : String(opts.sourceFollowupId ?? '').trim();
-    const sourceDraftSnapshot = userMessageId ? draftSnapshotByMessageId.get(userMessageId) : undefined;
-
-    if (userMessageId) {
-      sendIntentByMessageId.delete(userMessageId);
-      sourceFollowupIDByMessageId.delete(userMessageId);
-      draftSnapshotByMessageId.delete(userMessageId);
-    }
+    const sendIntent = context.sendIntent;
+    const sourceFollowupId = context.sourceFollowupId;
 
     setHasMessages(true);
     setSendPending(true);
@@ -3882,8 +4114,8 @@ export function EnvAIPage() {
       }
     }
     if (!tid) {
-      setSendPending(false);
-      return;
+      rollbackRejectedComposerSend(context);
+      throw new Error('Send was not started.');
     }
 
     const userText = String(content ?? '').trim();
@@ -3940,8 +4172,9 @@ export function EnvAIPage() {
         ai.consumeWaitingPrompt(tid, consumedWaitingPromptId);
       } else if (waitingPromptId && sendIntent !== 'queue_after_waiting_user') {
         ai.clearThreadPendingRun(tid);
+        rollbackRejectedComposerSend(context);
         notify.error('Input required', 'Resolve the requested input before sending a new message.');
-        return;
+        throw new ComposerSendRejectedError('Resolve the requested input before sending a new message.');
       }
       const appliedExecutionModeRaw = String(resp.appliedExecutionMode ?? '').trim();
       if (appliedExecutionModeRaw) {
@@ -3973,16 +4206,16 @@ export function EnvAIPage() {
       }
     } catch (e) {
       ai.clearThreadPendingRun(tid);
-      if (sourceFollowupId && sourceDraftSnapshot && chatInputApi()) {
-        chatInputApi()?.replaceDraft(sourceDraftSnapshot);
-        setLoadedDraftFollowupID(sourceFollowupId);
-        chatInputApi()?.focusInput();
+      if (e instanceof ComposerSendRejectedError) {
+        throw e;
       }
+      rollbackRejectedComposerSend(context);
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('AI failed', msg || 'Request failed.');
       setRunPhaseLabel('Working');
       void loadThreadMessages(tid);
       void loadFollowups(tid, { silent: true });
+      throw e instanceof Error ? e : new Error(msg || 'Request failed.');
     } finally {
       setSendPending(false);
     }
@@ -4019,18 +4252,30 @@ export function EnvAIPage() {
       requestScrollToBottom('user');
     },
     onSendMessage: async (content, attachments, userMessageId, _addMessage) => {
+      const context = consumePendingSendContext(userMessageId);
       if (protocol.status() !== 'connected') {
+        rollbackRejectedComposerSend(context);
         notify.error('Not connected', 'Connecting to agent...');
-        setSendPending(false);
-        setRunPhaseLabel('Working');
-        return;
+        throw new Error('Connecting to agent...');
       }
       if (!ensureRWX()) {
-        setSendPending(false);
-        setRunPhaseLabel('Working');
+        rollbackRejectedComposerSend(context);
+        throw new Error('Read/write/execute permission required.');
+      }
+
+      const activeThreadId = String(ai.activeThreadId() ?? '').trim();
+      const activeWaitingPrompt = activeThreadId ? ai.activeThreadWaitingPrompt() : null;
+      if (activeThreadId && activeWaitingPrompt && context.sendIntent !== 'queue_after_waiting_user') {
+        await submitStructuredPromptResponseFromComposer(activeThreadId, content, attachments, userMessageId, context);
         return;
       }
-      await enqueueSendUserTurn(content, attachments, { userMessageId });
+
+      await enqueueSendUserTurn(content, attachments, {
+        userMessageId,
+        sendIntent: context.sendIntent,
+        sourceFollowupId: context.sourceFollowupId || undefined,
+        sourceDraftSnapshot: context.sourceDraftSnapshot,
+      });
     },
     onUploadAttachment: uploadAttachment,
     onToolApproval: sendToolApproval,
@@ -4107,7 +4352,7 @@ export function EnvAIPage() {
   // Handle suggestion click from empty state
   const handleSuggestionClick = (prompt: string) => {
     if (!canInteract()) return;
-    void enqueueSendUserTurn(prompt, []);
+    void enqueueSendUserTurn(prompt, []).catch(() => {});
   };
 
   // Keep the custom working indicator visible from send start until the run fully ends.

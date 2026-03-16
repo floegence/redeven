@@ -398,16 +398,14 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
       const atts = [...attachments];
       const userMessageId = userMsg.id;
 
-      deferNonBlocking(() => {
-        Promise.resolve()
-          .then(() => onSend(text, atts, userMessageId, addMessage))
-          .catch((err) => {
-            console.error('Failed to send message:', err);
-          })
-          .finally(() => {
-            removePrepId(prepId);
-          });
-      });
+      try {
+        await onSend(text, atts, userMessageId, addMessage);
+      } catch (err) {
+        deleteMessage(userMessageId);
+        throw err;
+      } finally {
+        removePrepId(prepId);
+      }
     },
 
     loadMoreHistory: async () => {
