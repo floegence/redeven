@@ -55,6 +55,7 @@ import {
 import { hasRWXPermissions } from './aiPermissions';
 import type { AskFlowerIntent } from './askFlowerIntent';
 import { buildAskFlowerDraftMarkdown, mergeAskFlowerDraft } from '../utils/askFlowerContextTemplate';
+import { createClientId } from '../utils/clientId';
 import {
   expandHomeDisplayPath,
   normalizeAbsolutePath as normalizeAskFlowerAbsolutePath,
@@ -3193,7 +3194,7 @@ export function EnvAIPage() {
       if (!name || !url) continue;
       const file = mimeType ? new File([], name, { type: mimeType }) : new File([], name);
       restored.push({
-        id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${name}-${url}`,
+        id: createClientId('attachment'),
         file,
         type: mimeType.startsWith('image/') ? 'image' : 'file',
         preview: mimeType.startsWith('image/') ? url : undefined,

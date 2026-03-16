@@ -2,6 +2,7 @@
 
 import { createSignal } from 'solid-js';
 import type { Attachment, AttachmentType, AttachmentStatus } from '../types';
+import { createClientId } from '../../utils/clientId';
 
 export type AttachmentUploadMode = 'immediate' | 'deferred';
 
@@ -36,17 +37,8 @@ export interface UseAttachmentsReturn {
   handlePaste: (e: ClipboardEvent) => void;
 }
 
-/** Generate a UUID using crypto.randomUUID or a fallback. */
 function generateId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  // Fallback for environments without crypto.randomUUID
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  return createClientId('attachment');
 }
 
 /** Determine attachment type based on file MIME type. */

@@ -452,6 +452,35 @@ export function registerEnvAIPageSendTests() {
       });
     });
 
+    it('sends normal composer messages when crypto.randomUUID is unavailable', async () => {
+      vi.stubGlobal('crypto', {
+        getRandomValues: (buffer: Uint8Array) => {
+          for (let index = 0; index < buffer.length; index += 1) {
+            buffer[index] = index;
+          }
+          return buffer;
+        },
+      } as Crypto);
+
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'hello from insecure local bind');
+        submitComposer(host, 'button', 'Send message');
+        await flushAsync();
+
+        expect(sendUserTurnMock).toHaveBeenCalledTimes(1);
+        expect(sendUserTurnMock).toHaveBeenCalledWith(expect.objectContaining({
+          threadId: 'thread-1',
+          model: 'model-test',
+          input: expect.objectContaining({
+            text: 'hello from insecure local bind',
+          }),
+        }));
+      } finally {
+        dispose();
+      }
+    });
+
     it('sends composed text through sendUserTurn when the visible textarea value is ahead of input events', async () => {
       const { host, dispose } = await renderPage();
       try {

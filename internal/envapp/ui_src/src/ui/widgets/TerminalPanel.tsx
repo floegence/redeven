@@ -31,6 +31,7 @@ import {
 } from '../services/terminalPreferences';
 import { useEnvContext } from '../pages/EnvContext';
 import { isPermissionDeniedError } from '../utils/permission';
+import { createClientId } from '../utils/clientId';
 import { PermissionEmptyState } from './PermissionEmptyState';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
 import { normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../utils/askFlowerPath';
@@ -1255,7 +1256,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
 
     env.openAskFlowerComposer({
-      id: crypto.randomUUID(),
+      id: createClientId('ask-flower'),
       source: 'terminal',
       mode: 'append',
       suggestedWorkingDirAbs: menu.workingDir,
