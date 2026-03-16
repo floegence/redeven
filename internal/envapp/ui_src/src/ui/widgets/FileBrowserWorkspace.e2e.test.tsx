@@ -8,6 +8,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
 
+const resizeObserverState = {
+  observers: [] as Array<{
+    callback: ResizeObserverCallback;
+    elements: Element[];
+  }>,
+};
+
 async function flush() {
   await Promise.resolve();
   await Promise.resolve();
@@ -100,16 +107,71 @@ function buildDeepFolderTree(): FileItem[] {
   ];
 }
 
+function defineElementWidth(element: Element, width: number) {
+  Object.defineProperty(element, 'offsetWidth', {
+    configurable: true,
+    get: () => width,
+  });
+}
+
+function triggerResizeObservers() {
+  for (const observer of resizeObserverState.observers) {
+    observer.callback(
+      observer.elements.map((element) => ({
+        target: element,
+        contentRect: {
+          width: (element as HTMLElement).offsetWidth ?? 0,
+          height: 0,
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: (element as HTMLElement).offsetWidth ?? 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        },
+      }) as ResizeObserverEntry),
+      {} as ResizeObserver,
+    );
+  }
+}
+
 beforeEach(() => {
   mockMatchMedia(false);
+  resizeObserverState.observers.length = 0;
 
-  Object.defineProperty(globalThis, 'ResizeObserver', {
-    writable: true,
-    value: class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    },
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    return window.setTimeout(() => callback(performance.now()), 0);
+  });
+  vi.stubGlobal('cancelAnimationFrame', (handle: number) => {
+    window.clearTimeout(handle);
+  });
+
+  vi.stubGlobal('ResizeObserver', class {
+    private readonly record: {
+      callback: ResizeObserverCallback;
+      elements: Element[];
+    };
+
+    constructor(callback: ResizeObserverCallback) {
+      this.record = {
+        callback,
+        elements: [],
+      };
+      resizeObserverState.observers.push(this.record);
+    }
+
+    observe(element: Element) {
+      this.record.elements.push(element);
+    }
+
+    unobserve(element: Element) {
+      this.record.elements = this.record.elements.filter((entry) => entry !== element);
+    }
+
+    disconnect() {
+      this.record.elements = [];
+    }
   });
 
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
@@ -121,6 +183,7 @@ beforeEach(() => {
 afterEach(() => {
   document.body.innerHTML = '';
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('FileBrowserWorkspace interactions', () => {
@@ -394,6 +457,104 @@ describe('FileBrowserWorkspace interactions', () => {
       expect(breadcrumb?.parentElement?.className).toContain('h-7');
       expect(filterInput?.parentElement?.className).toContain('h-7');
       expect(viewSwitcher?.className).toContain('h-7');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('switches the workspace header between inline and stacked layouts based on container width', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={files}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-toolbar-layout"
+            instanceId="test-files-workspace-toolbar-layout"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const toolbar = host.querySelector('[data-toolbar-layout]') as HTMLDivElement | null;
+      expect(toolbar).toBeTruthy();
+
+      defineElementWidth(toolbar!, 560);
+      triggerResizeObservers();
+      await flush();
+      expect(toolbar?.getAttribute('data-toolbar-layout')).toBe('stacked');
+
+      defineElementWidth(toolbar!, 760);
+      triggerResizeObservers();
+      await flush();
+      expect(toolbar?.getAttribute('data-toolbar-layout')).toBe('inline');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('shows directories nearest the current path when the breadcrumb has moderate width', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={buildDeepFolderTree()}
+            currentPath="/workspace/customer-facing-platform/services/really-long-nested-feature/config/runtime/assets/icons"
+            initialPath="/workspace/customer-facing-platform/services/really-long-nested-feature/config/runtime/assets/icons"
+            persistenceKey="test-files-workspace-breadcrumb-layout"
+            instanceId="test-files-workspace-breadcrumb-layout"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const breadcrumb = host.querySelector('nav[aria-label="Breadcrumb"]') as HTMLElement | null;
+      expect(breadcrumb).toBeTruthy();
+
+      const hiddenMeasure = breadcrumb?.querySelector('div[aria-hidden="true"]') as HTMLDivElement | null;
+      expect(hiddenMeasure).toBeTruthy();
+
+      defineElementWidth(breadcrumb!, 320);
+      const measureChildren = Array.from(hiddenMeasure!.children);
+      const segmentWidths = [44, 84, 120, 72, 120, 60, 66, 58];
+      for (const [index, width] of segmentWidths.entries()) {
+        defineElementWidth(measureChildren[index]!, width);
+      }
+      defineElementWidth(measureChildren[segmentWidths.length]!, 12);
+      defineElementWidth(measureChildren[segmentWidths.length + 1]!, 28);
+
+      triggerResizeObservers();
+      await flush();
+
+      const visibleButtons = Array.from(breadcrumb!.querySelectorAll('button'))
+        .filter((node) => node.closest('[aria-hidden="true"]') === null)
+        .map((node) => node.textContent?.trim())
+        .filter(Boolean);
+
+      expect(visibleButtons).toContain('Home');
+      expect(visibleButtons).toContain('assets');
+      expect(visibleButtons).toContain('icons');
+      expect(visibleButtons).toContain('…');
+      expect(visibleButtons).not.toContain('workspace');
     } finally {
       dispose();
     }

@@ -1,8 +1,7 @@
-import { Show, createMemo, onCleanup, onMount, type JSX } from 'solid-js';
-import { useFileBrowserDrag } from '@floegence/floe-webapp-core';
+import { Show, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { cn, useFileBrowserDrag } from '@floegence/floe-webapp-core';
 import { Files as FilesIcon, Search, ArrowUp } from '@floegence/floe-webapp-core/icons';
 import {
-  Breadcrumb,
   FileBrowserProvider,
   FileContextMenu,
   FileGridView,
@@ -14,9 +13,11 @@ import {
 } from '@floegence/floe-webapp-core/file-browser';
 import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
+import { FileBrowserPathBreadcrumb } from './FileBrowserPathBreadcrumb';
 import { FileBrowserSidebarTree } from './FileBrowserSidebarTree';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 import { useFileBrowserTypeToFilter } from './fileBrowserTypeToFilter';
+import { resolveFileBrowserToolbarLayout } from './fileBrowserPathLayout';
 import {
   mapContextMenuCallbacksToAbsolute,
   mapContextMenuItemsToAbsolute,
@@ -30,6 +31,9 @@ const FILE_WORKSPACE_TOOLBAR_FIELD_CLASS =
   'h-7 min-w-0 rounded-md border border-border/50 bg-background px-2.5 shadow-sm';
 const FILE_WORKSPACE_TOOLBAR_SEGMENTED_CLASS =
   'h-7 shrink-0 [&_button]:h-6 [&_button]:px-2 [&_button]:py-0';
+const FILE_WORKSPACE_TOOLBAR_PATH_CLASS = `${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex items-center`;
+const FILE_WORKSPACE_TOOLBAR_FILTER_CLASS =
+  `${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex items-center gap-1.5 text-[11px] text-muted-foreground focus-within:border-ring focus-within:ring-1 focus-within:ring-ring`;
 
 export interface FileBrowserWorkspaceProps {
   mode: GitHistoryMode;
@@ -69,63 +73,110 @@ interface FileWorkspaceHeaderProps {
 
 function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
   const browser = useFileBrowser();
+  let toolbarLayoutRef: HTMLDivElement | undefined;
+  const [toolbarWidth, setToolbarWidth] = createSignal(0);
   const canNavigateUp = () => {
     const path = browser.currentPath();
     return path !== '/' && path !== '';
   };
+  const toolbarLayout = createMemo(() => resolveFileBrowserToolbarLayout(toolbarWidth()));
+
+  onMount(() => {
+    const syncToolbarWidth = () => {
+      setToolbarWidth(toolbarLayoutRef?.offsetWidth ?? 0);
+    };
+
+    syncToolbarWidth();
+
+    if (typeof ResizeObserver === 'undefined' || !toolbarLayoutRef) return;
+
+    const observer = new ResizeObserver(() => {
+      syncToolbarWidth();
+    });
+    observer.observe(toolbarLayoutRef);
+
+    onCleanup(() => observer.disconnect());
+  });
 
   return (
     <div class="shrink-0 border-b border-border/60 bg-background/95 px-2.5 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-background/90">
-      <div class="flex flex-wrap items-center gap-2">
-        <Show when={props.showMobileSidebarButton && props.onToggleSidebar}>
-          <Button
-            size="sm"
-            variant="outline"
-            icon={FilesIcon}
-            class="cursor-pointer"
-            aria-label="Toggle browser sidebar"
-            onClick={props.onToggleSidebar}
-          >
-            Sidebar
+      <div
+        ref={toolbarLayoutRef}
+        data-toolbar-layout={toolbarLayout()}
+        class={cn(
+          'grid items-center gap-2',
+          toolbarLayout() === 'inline'
+            ? 'grid-cols-[auto_minmax(0,1fr)_auto]'
+            : 'grid-cols-[auto_minmax(0,1fr)]'
+        )}
+      >
+        <div class="flex shrink-0 items-center gap-2">
+          <Show when={props.showMobileSidebarButton && props.onToggleSidebar}>
+            <Button
+              size="sm"
+              variant="outline"
+              icon={FilesIcon}
+              class="cursor-pointer"
+              aria-label="Toggle browser sidebar"
+              onClick={props.onToggleSidebar}
+            >
+              Sidebar
+            </Button>
+          </Show>
+
+          <Button size="sm" variant="outline" icon={ArrowUp} class="cursor-pointer" onClick={browser.navigateUp} disabled={!canNavigateUp()}>
+            Up
           </Button>
-        </Show>
-
-        <Button size="sm" variant="outline" icon={ArrowUp} class="cursor-pointer" onClick={browser.navigateUp} disabled={!canNavigateUp()}>
-          Up
-        </Button>
-
-        <div class={`${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex flex-1 items-center`}>
-          <Breadcrumb class="min-w-0" />
         </div>
 
-        <label class={`${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex min-w-[200px] flex-1 items-center gap-1.5 text-[11px] text-muted-foreground focus-within:border-ring focus-within:ring-1 focus-within:ring-ring sm:max-w-[15rem] sm:flex-none`}>
-          <Search class="size-3.5 shrink-0" />
-          <input
-            ref={props.filterInputRef}
-            type="text"
-            value={browser.filterQuery()}
-            onInput={(event) => browser.setFilterQuery(event.currentTarget.value)}
-            placeholder="Filter files"
-            aria-label="Filter files"
-            class="h-full min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground/70"
-          />
-        </label>
+        <div class={FILE_WORKSPACE_TOOLBAR_PATH_CLASS}>
+          <FileBrowserPathBreadcrumb class="min-w-0 flex-1" />
+        </div>
 
-        <div class="ml-auto flex items-center gap-1.5">
-          <SegmentedControl
-            size="sm"
-            class={FILE_WORKSPACE_TOOLBAR_SEGMENTED_CLASS}
-            value={browser.viewMode()}
-            onChange={(value) => browser.setViewMode(value === 'grid' ? 'grid' : 'list')}
-            options={[
-              { value: 'list', label: 'List' },
-              { value: 'grid', label: 'Grid' },
-            ]}
-          />
+        <div
+          class={cn(
+            'flex min-w-0 items-center gap-1.5',
+            toolbarLayout() === 'inline'
+              ? 'justify-self-end'
+              : 'col-span-2 flex-wrap'
+          )}
+        >
+          <label
+            class={cn(
+              FILE_WORKSPACE_TOOLBAR_FILTER_CLASS,
+              toolbarLayout() === 'inline'
+                ? 'w-[15rem] min-w-[200px]'
+                : 'min-w-[220px] flex-1 basis-[220px]'
+            )}
+          >
+            <Search class="size-3.5 shrink-0" />
+            <input
+              ref={props.filterInputRef}
+              type="text"
+              value={browser.filterQuery()}
+              onInput={(event) => browser.setFilterQuery(event.currentTarget.value)}
+              placeholder="Filter files"
+              aria-label="Filter files"
+              class="h-full min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground/70"
+            />
+          </label>
 
-          <Show when={props.toolbarEndActions}>
-            <div class="flex items-center gap-1">{props.toolbarEndActions}</div>
-          </Show>
+          <div class="flex shrink-0 items-center gap-1.5">
+            <SegmentedControl
+              size="sm"
+              class={FILE_WORKSPACE_TOOLBAR_SEGMENTED_CLASS}
+              value={browser.viewMode()}
+              onChange={(value) => browser.setViewMode(value === 'grid' ? 'grid' : 'list')}
+              options={[
+                { value: 'list', label: 'List' },
+                { value: 'grid', label: 'Grid' },
+              ]}
+            />
+
+            <Show when={props.toolbarEndActions}>
+              <div class="flex items-center gap-1">{props.toolbarEndActions}</div>
+            </Show>
+          </div>
         </div>
       </div>
 
