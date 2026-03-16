@@ -25,13 +25,11 @@ import { useEnvContext } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
 import {
   deriveAbsoluteWorkingDirFromItems,
-  dirnameAbsolute,
   normalizeAbsolutePath,
 } from '../utils/askFlowerPath';
 import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from '../utils/fileBrowserClipboard';
 import { createClientId } from '../utils/clientId';
-import { createFilePreviewController } from './createFilePreviewController';
-import { FilePreviewDialog } from './FilePreviewDialog';
+import { useFilePreviewContext } from './FilePreviewContext';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
@@ -86,7 +84,6 @@ type BrowserPageMode = GitHistoryMode;
 
 const ASK_FLOWER_MAX_ATTACHMENTS = 5;
 const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
-const ASK_FLOWER_MAX_INLINE_SELECTION_CHARS = 10_000;
 const GIT_COMMIT_PAGE_SIZE = 50;
 const PAGE_SIDEBAR_DEFAULT_WIDTH = 240;
 const PAGE_SIDEBAR_MIN_WIDTH = 180;
@@ -194,15 +191,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const floe = useResolvedFloeConfig();
   const layout = useLayout();
   const notification = useNotification();
+  const filePreview = useFilePreviewContext();
 
   const envId = () => (ctx.env_id() ?? '').trim();
   const useExternalMobileSidebarToggle = () => !props.widgetId;
 
   const [files, setFiles] = createSignal<FileItem[]>([]);
   const [loading, setLoading] = createSignal(false);
-  const filePreview = createFilePreviewController({
-    client: () => protocol.client(),
-  });
 
   let cache: DirCache = new Map();
 
@@ -1473,12 +1468,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     notifyPathLoadFailure(result);
   };
 
-  const handlePreviewAskFlower = async (selectionText: string) => {
-    const intent = await buildPreviewIntent(selectionText);
-    if (!intent) return;
-    ctx.openAskFlowerComposer(intent);
-  };
-
   const applyLocalMove = (item: FileItem, destDir: string) => {
     const from = normalizePath(item.path);
     const to = destDir === '/' ? `/${item.name}` : `${destDir}/${item.name}`;
@@ -1984,45 +1973,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     });
   };
 
-  const buildPreviewIntent = async (selectionText: string): Promise<AskFlowerIntent | null> => {
-    const item = filePreview.item();
-    if (!item || item.type !== 'file') return null;
-
-    const absolutePath = normalizeAbsolutePath(item.path);
-    if (!absolutePath) {
-      notification.error('Ask Flower unavailable', 'Failed to resolve file path.');
-      return null;
-    }
-
-    const selection = String(selectionText ?? '').trim();
-    const notes: string[] = [];
-    const pendingAttachments: File[] = [];
-    let contextItems: AskFlowerIntent['contextItems'];
-
-    if (selection) {
-      if (selection.length > ASK_FLOWER_MAX_INLINE_SELECTION_CHARS) {
-        const attachmentName = `${item.name || 'file'}-selection-${Date.now()}.txt`;
-        pendingAttachments.push(new File([selection], attachmentName, { type: 'text/plain' }));
-        notes.push(`Large selection was attached as "${attachmentName}".`);
-        contextItems = [{ kind: 'file_path', path: absolutePath, isDirectory: false }];
-      } else {
-        contextItems = [{ kind: 'file_selection', path: absolutePath, selection, selectionChars: selection.length }];
-      }
-    } else {
-      contextItems = [{ kind: 'file_path', path: absolutePath, isDirectory: false }];
-    }
-
-    return {
-      id: createClientId('ask-flower'),
-      source: 'file_preview',
-      mode: 'append',
-      suggestedWorkingDirAbs: dirnameAbsolute(absolutePath),
-      contextItems,
-      pendingAttachments,
-      notes,
-    };
-  };
-
   const handleCopyName = (items: FileItem[]) => {
     void (async () => {
       try {
@@ -2288,29 +2238,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
       <LoadingOverlay visible={loading()} message="Loading files..." />
       <LoadingOverlay visible={dragMoveLoading()} message="Moving..." />
-
-      <FilePreviewDialog
-        open={filePreview.open()}
-        onOpenChange={filePreview.handleOpenChange}
-        item={filePreview.item()}
-        mode={filePreview.mode()}
-        text={filePreview.text()}
-        message={filePreview.message()}
-        objectUrl={filePreview.objectUrl()}
-        bytes={filePreview.bytes()}
-        truncated={filePreview.truncated()}
-        loading={filePreview.loading()}
-        error={filePreview.error()}
-        xlsxSheetName={filePreview.xlsxSheetName()}
-        xlsxRows={filePreview.xlsxRows()}
-        downloadLoading={filePreview.downloadLoading()}
-        onDownload={() => {
-          void filePreview.downloadCurrent();
-        }}
-        onAskFlower={(selectionText) => {
-          void handlePreviewAskFlower(selectionText);
-        }}
-      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

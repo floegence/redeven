@@ -17,8 +17,7 @@ import {
   toFileBrowserDisplayPath,
 } from '../utils/fileBrowserDisplayPath';
 import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from '../utils/fileBrowserClipboard';
-import { createFilePreviewController } from './createFilePreviewController';
-import { FilePreviewDialog } from './FilePreviewDialog';
+import { useFilePreviewContext } from './FilePreviewContext';
 import { InputDialog } from './InputDialog';
 import {
   extNoDot,
@@ -60,9 +59,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const notification = useNotification();
-  const filePreview = createFilePreviewController({
-    client: () => protocol.client(),
-  });
+  const filePreview = useFilePreviewContext();
 
   // -- browser state --
   const [browserOpen, setBrowserOpen] = createSignal(false);
@@ -672,26 +669,6 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
           <LoadingOverlay visible={loading()} message="Loading files..." />
         </div>
       </FloatingWindow>
-
-      <FilePreviewDialog
-        open={filePreview.open()}
-        onOpenChange={filePreview.handleOpenChange}
-        item={filePreview.item()}
-        mode={filePreview.mode()}
-        text={filePreview.text()}
-        message={filePreview.message()}
-        objectUrl={filePreview.objectUrl()}
-        bytes={filePreview.bytes()}
-        truncated={filePreview.truncated()}
-        loading={filePreview.loading()}
-        error={filePreview.error()}
-        xlsxSheetName={filePreview.xlsxSheetName()}
-        xlsxRows={filePreview.xlsxRows()}
-        downloadLoading={filePreview.downloadLoading()}
-        onDownload={() => {
-          void filePreview.downloadCurrent();
-        }}
-      />
 
       <ConfirmDialog
         open={deleteDialogOpen()}

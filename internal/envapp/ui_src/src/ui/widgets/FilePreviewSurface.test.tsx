@@ -2,12 +2,16 @@
 
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FilePreviewDialog } from './FilePreviewDialog';
+import { FilePreviewSurface } from './FilePreviewSurface';
+
+const layoutState = vi.hoisted(() => ({
+  mobile: false,
+}));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
   useLayout: () => ({
-    isMobile: () => false,
+    isMobile: () => layoutState.mobile,
   }),
 }));
 
@@ -31,6 +35,15 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       </div>
     ) : null
   ),
+  FloatingWindow: (props: any) => (
+    props.open ? (
+      <div data-testid="floating-window" class={props.class}>
+        <div>{props.title}</div>
+        <div>{props.children}</div>
+        <div>{props.footer}</div>
+      </div>
+    ) : null
+  ),
 }));
 
 vi.mock('@floegence/floe-webapp-core/loading', () => ({
@@ -39,11 +52,12 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
 
 afterEach(() => {
   document.body.innerHTML = '';
+  layoutState.mobile = false;
   vi.restoreAllMocks();
 });
 
-describe('FilePreviewDialog', () => {
-  it('renders explicit footer actions and forwards the current preview selection to Ask Flower', async () => {
+describe('FilePreviewSurface', () => {
+  it('renders a floating window on desktop and forwards the current preview selection to Ask Flower', () => {
     const onAskFlower = vi.fn();
     const onDownload = vi.fn();
 
@@ -51,7 +65,7 @@ describe('FilePreviewDialog', () => {
     document.body.appendChild(host);
 
     render(() => (
-      <FilePreviewDialog
+      <FilePreviewSurface
         open
         onOpenChange={() => undefined}
         item={{ id: '/workspace/demo.txt', name: 'demo.txt', path: '/workspace/demo.txt', type: 'file' }}
@@ -61,6 +75,8 @@ describe('FilePreviewDialog', () => {
         onDownload={onDownload}
       />
     ), host);
+
+    expect(host.querySelector('[data-testid="floating-window"]')).toBeTruthy();
 
     const previewTextNode = host.querySelector('pre')?.firstChild as Node | null;
     expect(previewTextNode).toBeTruthy();
@@ -79,12 +95,14 @@ describe('FilePreviewDialog', () => {
     expect(onDownload).toHaveBeenCalledTimes(1);
   });
 
-  it('shows path and truncated state in the dialog shell', () => {
+  it('renders a dialog shell on mobile and keeps the preview message visible', () => {
+    layoutState.mobile = true;
+
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => (
-      <FilePreviewDialog
+      <FilePreviewSurface
         open
         onOpenChange={() => undefined}
         item={{ id: '/workspace/demo.pdf', name: 'demo.pdf', path: '/workspace/demo.pdf', type: 'file' }}
@@ -94,6 +112,9 @@ describe('FilePreviewDialog', () => {
       />
     ), host);
 
+    const dialog = host.querySelector('[data-testid="dialog"]');
+    expect(dialog).toBeTruthy();
+    expect(dialog?.className).toContain('h-[calc(100dvh-0.5rem)]');
     expect(host.textContent).toContain('/workspace/demo.pdf');
     expect(host.textContent).toContain('Truncated preview');
     expect(host.textContent).toContain('This file is too large to preview.');
