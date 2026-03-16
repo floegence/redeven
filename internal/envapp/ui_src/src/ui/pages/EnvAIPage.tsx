@@ -64,6 +64,7 @@ import {
 } from '../utils/askFlowerPath';
 import { readLiveTextValue, syncLiveTextValue } from '../utils/liveTextValue';
 import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';
+import { FlowerMessageRunIndicator } from '../widgets/FlowerMessageRunIndicator';
 import {
   composeFollowupOrder,
   composerSnapshotHasContent,
@@ -638,148 +639,6 @@ function InlineButtonSnakeLoading() {
     >
       <SnakeLoader size="sm" class="origin-center scale-[0.82]" />
     </span>
-  );
-}
-
-// Custom working indicator — neural animation + minimal waveform bars
-function ChatWorkingIndicator(props: { phaseLabel?: string }) {
-  const uid = `neural-${Math.random().toString(36).slice(2, 8)}`;
-
-  const baseNodes = [
-    { x: 20, y: 8 },
-    { x: 8, y: 20 },
-    { x: 32, y: 20 },
-    { x: 14, y: 32 },
-    { x: 26, y: 32 },
-    { x: 20, y: 20 },
-  ];
-
-  const nodeAnimParams = [
-    { ax: 2.6, ay: 2.2, fx: 1.55, fy: 1.35, px: 0, py: 0.4 },
-    { ax: 2.3, ay: 2.6, fx: 1.4, fy: 1.6, px: 0.7, py: 0.2 },
-    { ax: 2.3, ay: 2.6, fx: 1.4, fy: 1.6, px: 1.9, py: 0.5 },
-    { ax: 2.6, ay: 2.2, fx: 1.55, fy: 1.35, px: 0.4, py: 1.1 },
-    { ax: 2.6, ay: 2.2, fx: 1.55, fy: 1.35, px: 1.3, py: 0.9 },
-    { ax: 0, ay: 0, fx: 0, fy: 0, px: 0, py: 0 },
-  ];
-
-  const toCenterConnections: Array<[number, number]> = [[0, 5], [1, 5], [2, 5], [3, 5], [4, 5]];
-  const toCenterDelays = [0, 0.22, 0.44, 0.66, 0.88];
-
-  const sideConnections: Array<[number, number]> = [[0, 1], [0, 2], [1, 3], [2, 4], [3, 4]];
-  const sideDelays = [120, 210, 300, 150, 240];
-
-  const [nodePositions, setNodePositions] = createSignal(baseNodes.map((n) => ({ x: n.x, y: n.y })));
-
-  createEffect(() => {
-    let animationId = 0;
-    const startTime = performance.now();
-
-    const animate = (currentTime: number) => {
-      const elapsed = (currentTime - startTime) / 1000;
-      setNodePositions(
-        baseNodes.map((base, i) => {
-          const p = nodeAnimParams[i];
-          return {
-            x: base.x + Math.sin(elapsed * p.fx + p.px) * p.ax,
-            y: base.y + Math.sin(elapsed * p.fy + p.py) * p.ay,
-          };
-        }),
-      );
-      animationId = requestAnimationFrame(animate);
-    };
-
-    animationId = requestAnimationFrame(animate);
-    onCleanup(() => cancelAnimationFrame(animationId));
-  });
-
-  return (
-    <div class="px-4 py-1.5 shrink-0">
-      <div class="inline-flex items-center gap-2.5 px-3 py-2 rounded-xl bg-primary/[0.04] border border-primary/10 shadow-sm">
-        {/* Neural SVG animation */}
-        <svg class="w-7 h-7 shrink-0" viewBox="0 0 40 40" fill="none">
-          <defs>
-            <filter id={uid}>
-              <feGaussianBlur stdDeviation="1" result="blur" />
-              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-            </filter>
-          </defs>
-          <style>
-            {`@keyframes ${uid}-draw { from { stroke-dashoffset: 1; stroke-opacity: 0.15; } to { stroke-dashoffset: 0; stroke-opacity: 0.7; } }`}
-          </style>
-
-          <g stroke="var(--primary)" stroke-width="0.8" fill="none">
-            <For each={toCenterConnections}>
-              {([from, to], i) => (
-                <line
-                  x1={nodePositions()[from].x}
-                  y1={nodePositions()[from].y}
-                  x2={nodePositions()[to].x}
-                  y2={nodePositions()[to].y}
-                  pathLength="1"
-                  stroke-dasharray="1"
-                  stroke-dashoffset="1"
-                  style={{ animation: `${uid}-draw 1.15s linear ${toCenterDelays[i()]}s infinite` }}
-                />
-              )}
-            </For>
-            <For each={sideConnections}>
-              {([from, to], i) => (
-                <line
-                  x1={nodePositions()[from].x}
-                  y1={nodePositions()[from].y}
-                  x2={nodePositions()[to].x}
-                  y2={nodePositions()[to].y}
-                  class="processing-neural-line"
-                  style={`animation-delay:${sideDelays[i()]}ms`}
-                />
-              )}
-            </For>
-          </g>
-
-          <g>
-            <For each={toCenterConnections}>
-              {([from, to], i) => (
-                <circle r="1.2" fill="var(--primary)" opacity="0.8">
-                  <animateMotion
-                    dur="1.05s"
-                    repeatCount="indefinite"
-                    begin={`${toCenterDelays[i()]}s`}
-                    path={`M${nodePositions()[from].x},${nodePositions()[from].y} L${nodePositions()[to].x},${nodePositions()[to].y}`}
-                  />
-                </circle>
-              )}
-            </For>
-          </g>
-
-          <g filter={`url(#${uid})`}>
-            <For each={nodePositions()}>
-              {(node, i) => (
-                <circle
-                  cx={node.x}
-                  cy={node.y}
-                  r={i() === 5 ? 2.5 : 2}
-                  fill="var(--primary)"
-                  class="processing-neural-node"
-                  style={`animation-delay:${[0, 200, 400, 600, 800, 100][i()]}ms`}
-                />
-              )}
-            </For>
-          </g>
-        </svg>
-
-        {/* Status text (shimmer) */}
-        <span class="text-xs text-muted-foreground processing-text-shimmer">{String(props.phaseLabel ?? "").trim() || "Working"}</span>
-
-        {/* Waveform bars (minimal style) */}
-        <div class="flex items-end gap-[2px] h-3.5">
-          <div class="w-[3px] bg-primary/70 rounded-full processing-bar" style="animation-delay:0ms" />
-          <div class="w-[3px] bg-primary/70 rounded-full processing-bar" style="animation-delay:100ms" />
-          <div class="w-[3px] bg-primary/70 rounded-full processing-bar" style="animation-delay:200ms" />
-          <div class="w-[3px] bg-primary/70 rounded-full processing-bar" style="animation-delay:300ms" />
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -4411,12 +4270,29 @@ export function EnvAIPage() {
     void enqueueSendUserTurn(prompt, []).catch(() => {});
   };
 
-  // Keep the custom working indicator visible from send start until the run fully ends.
-  const showWorkingIndicator = () => {
-    if (!chatReady()) return false;
-    if (!sendPending() && !activeThreadRunning()) return false;
-    return true;
-  };
+  const hasInlineRunIndicator = createMemo(() => sendPending() || activeThreadRunning());
+  const inlineRunIndicatorMessageId = createMemo(() => {
+    if (!chatReady()) return '';
+
+    const currentMessages = chat?.messages() ?? [];
+    for (let index = currentMessages.length - 1; index >= 0; index -= 1) {
+      const message = currentMessages[index];
+      if (message.role === 'assistant' && message.status === 'streaming') {
+        return message.id;
+      }
+    }
+
+    if (!hasInlineRunIndicator()) return '';
+
+    for (let index = currentMessages.length - 1; index >= 0; index -= 1) {
+      const message = currentMessages[index];
+      if (message.role === 'assistant') {
+        return message.id;
+      }
+    }
+
+    return '';
+  });
 
   return (
     <div class="h-full min-h-0 overflow-hidden relative">
@@ -4424,6 +4300,16 @@ export function EnvAIPage() {
         config={{
           placeholder: 'Describe what you want to do...',
           assistantAvatar: FlowerAssistantAvatar,
+          showListWorkingIndicator: false,
+          renderMessageOrnament: ({ message, isActiveAssistantStreaming }) => {
+            if (message.role !== 'assistant') return null;
+
+            const targetMessageId = inlineRunIndicatorMessageId();
+            if (!targetMessageId) return null;
+            if (!isActiveAssistantStreaming && message.id !== targetMessageId) return null;
+
+            return <FlowerMessageRunIndicator phaseLabel={runPhaseLabel()} />;
+          },
           allowAttachments: canInteract(),
           maxAttachments: 5,
           maxAttachmentSize: 10 * 1024 * 1024,
@@ -4663,11 +4549,6 @@ export function EnvAIPage() {
                 enabled={canInteract() && protocol.status() === 'connected'}
                 containerRef={messageAreaRef}
               />
-            </div>
-
-            {/* Keep indicator mounted and toggle visibility via display to avoid mount/unmount jitter. */}
-            <div style={{ display: showWorkingIndicator() ? '' : 'none' }}>
-              <ChatWorkingIndicator phaseLabel={runPhaseLabel()} />
             </div>
 
             {/* Toolbar: Tasks chip + Execution mode toggle */}

@@ -1,6 +1,6 @@
 // Wraps a single message with avatar, bubble, and footer.
 
-import { Show } from 'solid-js';
+import { Show, createMemo } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { useChatContext } from '../ChatProvider';
@@ -47,6 +47,12 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
     return false;
   };
 
+  const messageOrnament = createMemo(() =>
+    config().renderMessageOrnament?.({
+      message: props.message,
+      isActiveAssistantStreaming: isActiveAssistantStreaming(),
+    }));
+
   return (
     <div
       class={cn(
@@ -66,6 +72,14 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
 
       <div class="chat-message-content-wrapper">
         <MessageBubble message={props.message} />
+
+        <Show when={messageOrnament()}>
+          {(ornament) => (
+            <div class="chat-message-ornament">
+              {ornament()}
+            </div>
+          )}
+        </Show>
 
         <div class="chat-message-footer">
           <MessageMeta

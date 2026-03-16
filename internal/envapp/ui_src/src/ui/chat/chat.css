@@ -143,6 +143,12 @@
   min-width: 0;
 }
 
+.chat-message-ornament {
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+}
+
 .chat-message-footer {
   display: flex;
   align-items: center;

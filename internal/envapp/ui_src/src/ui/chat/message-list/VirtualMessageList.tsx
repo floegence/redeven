@@ -40,6 +40,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   const messages = createMemo(() => ctx.messages());
   const isWorking = ctx.isWorking;
   const isLoadingHistory = ctx.isLoadingHistory;
+  const showListWorkingIndicator = createMemo(() => ctx.config().showListWorkingIndicator !== false);
 
   const [followMode, setFollowMode] = createSignal<FollowMode>('following');
   const [distanceToBottomPx, setDistanceToBottomPx] = createSignal(0);
@@ -366,7 +367,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
           />
         </div>
 
-        <Show when={isWorking()}>
+        <Show when={showListWorkingIndicator() && isWorking()}>
           <div class="chat-working-indicator-wrapper">
             <WorkingIndicator />
           </div>

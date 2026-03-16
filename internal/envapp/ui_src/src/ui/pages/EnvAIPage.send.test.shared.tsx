@@ -122,6 +122,8 @@ const aiState = {
   runIdByThread: {} as Record<string, string>,
 };
 
+const realtimeListeners = new Set<(event: any) => void>();
+
 const aiContextValue = new Proxy({
   settings: { error: null },
   models: { loading: false, error: null },
@@ -171,7 +173,12 @@ const aiContextValue = new Proxy({
   },
   bumpThreadsSeq: () => {},
   isThreadRunning: () => false,
-  onRealtimeEvent: () => () => {},
+  onRealtimeEvent: (handler: (event: any) => void) => {
+    realtimeListeners.add(handler);
+    return () => {
+      realtimeListeners.delete(handler);
+    };
+  },
 }, {
   get(target, prop) {
     if (prop in target) return target[prop as keyof typeof target];
@@ -334,6 +341,13 @@ function resetScenario() {
   aiState.waitingPrompt = null;
   aiState.structuredDrafts = {};
   aiState.runIdByThread = {};
+  realtimeListeners.clear();
+}
+
+function emitRealtimeEvent(event: any) {
+  Array.from(realtimeListeners).forEach((listener) => {
+    listener(event);
+  });
 }
 
 async function flushAsync(): Promise<void> {
@@ -402,6 +416,10 @@ function makeStreamingAssistantSnapshot(messageId = 'assistant-streaming-1') {
       ],
     },
   };
+}
+
+function assistantRunIndicator(host: HTMLElement): HTMLElement | null {
+  return host.querySelector('.chat-message-item-assistant .flower-message-run-indicator');
 }
 
 type SubmitTrigger = 'button' | 'enter';
@@ -519,6 +537,90 @@ export function registerEnvAIPageSendTests() {
         const assistant = host.querySelector('.chat-message-item-assistant');
         expect(assistant).toBeTruthy();
         expect(host.querySelector('.chat-markdown-empty-streaming')).toBeTruthy();
+      } finally {
+        dispose();
+      }
+    });
+
+    it('renders the inline run indicator inside the assistant message after send', async () => {
+      getActiveRunSnapshotMock
+        .mockResolvedValueOnce({ ok: false })
+        .mockResolvedValueOnce(makeStreamingAssistantSnapshot());
+
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'show the inline run indicator');
+        submitComposer(host, 'button', 'Send message');
+        await flushAsync();
+
+        const assistant = host.querySelector('.chat-message-item-assistant');
+        expect(assistant).toBeTruthy();
+        expect(assistantRunIndicator(host)).toBeTruthy();
+        expect(host.querySelectorAll('.flower-message-run-indicator')).toHaveLength(1);
+        expect(host.querySelector('.chat-working-indicator')).toBeNull();
+      } finally {
+        dispose();
+      }
+    });
+
+    it('updates the inline run indicator label when lifecycle phase events arrive', async () => {
+      getActiveRunSnapshotMock.mockResolvedValueOnce(makeStreamingAssistantSnapshot('assistant-active-thread'));
+
+      const { host, dispose } = await renderPage();
+      try {
+        expect(assistantRunIndicator(host)).toBeTruthy();
+
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'lifecycle-phase',
+            phase: 'finalizing',
+          },
+        });
+        await flushAsync();
+
+        expect(assistantRunIndicator(host)?.textContent).toContain('Finalizing...');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('does not render the inline run indicator under user messages', async () => {
+      getActiveRunSnapshotMock
+        .mockResolvedValueOnce({ ok: false })
+        .mockResolvedValueOnce(makeStreamingAssistantSnapshot());
+
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'keep user messages clean');
+        submitComposer(host, 'button', 'Send message');
+        await flushAsync();
+
+        const userMessage = host.querySelector('.chat-message-item-user');
+        expect(userMessage).toBeTruthy();
+        expect(userMessage?.querySelector('.flower-message-run-indicator')).toBeNull();
+      } finally {
+        dispose();
+      }
+    });
+
+    it('keeps the list-level working indicator disabled while chat streaming is active', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'message-start',
+            messageId: 'assistant-realtime-1',
+          },
+        });
+        await flushAsync();
+
+        expect(host.querySelector('.chat-message-item-assistant')).toBeTruthy();
+        expect(assistantRunIndicator(host)).toBeTruthy();
+        expect(host.querySelector('.chat-working-indicator')).toBeNull();
       } finally {
         dispose();
       }
