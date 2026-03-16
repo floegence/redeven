@@ -189,13 +189,11 @@ html.dark {
 .flower-message-run-indicator {
   display: flex;
   align-items: center;
-  --flower-message-run-gap: 0.375rem;
-  --flower-message-run-padding-y: 0.25rem;
-  --flower-message-run-padding-x: 0.5rem;
-  --flower-message-run-min-height: 1.375rem;
-  --flower-message-run-icon-size: 0.9375rem;
-  --flower-message-run-label-size: 0.625rem;
-  --flower-message-run-label-line-height: 0.875rem;
+  --flower-message-run-gap: 0.3125rem;
+  --flower-message-run-min-height: 1rem;
+  --flower-message-run-icon-size: 0.875rem;
+  --flower-message-run-label-size: 0.59375rem;
+  --flower-message-run-label-line-height: 0.75rem;
   --flower-message-run-bars-height: 0.625rem;
   --flower-message-run-bar-width: 0.125rem;
   --flower-message-run-bar-gap: 0.09375rem;
@@ -209,11 +207,10 @@ html.dark {
   gap: var(--flower-message-run-gap);
   min-height: var(--flower-message-run-min-height);
   max-width: 100%;
-  border-radius: 9999px;
-  border: 1px solid color-mix(in srgb, var(--primary) 12%, transparent);
-  background: color-mix(in srgb, var(--primary) 4%, transparent);
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
-  padding: var(--flower-message-run-padding-y) var(--flower-message-run-padding-x);
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
 }
 
 .flower-message-run-indicator-graph {
@@ -244,7 +241,7 @@ html.dark {
   font-size: var(--flower-message-run-label-size);
   line-height: var(--flower-message-run-label-line-height);
   letter-spacing: -0.01em;
-  color: var(--muted-foreground);
+  color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 16%);
   animation: flower-message-run-label 1.6s ease-in-out infinite;
 }
 
