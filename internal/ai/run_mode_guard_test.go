@@ -264,3 +264,69 @@ func TestHandleToolCall_PlanModeAllowsReadonlyFindPipeEgrepWithoutApproval(t *te
 		t.Fatalf("readonly command should not enter approval flow")
 	}
 }
+
+func TestHandleToolCall_PlanModeAllowsReadonlyCurlFetchWithoutApproval(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	target := filepath.Join(workspace, "note.txt")
+	if err := os.WriteFile(target, []byte("hello from curl"), 0o644); err != nil {
+		t.Fatalf("write seed file: %v", err)
+	}
+
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: workspace,
+		Shell:        "bash",
+		SessionMeta: &session.Meta{
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+			CanAdmin:   true,
+		},
+		MessageID: "msg_plan_readonly_curl_guard",
+	})
+	r.runMode = config.AIModePlan
+
+	outcome, err := r.handleToolCall(context.Background(), "tool_plan_readonly_curl", "terminal.exec", map[string]any{
+		"command": "curl -s file://" + target,
+	})
+	if err != nil {
+		t.Fatalf("handleToolCall returned error: %v", err)
+	}
+	if outcome == nil {
+		t.Fatalf("missing tool call outcome")
+	}
+	if !outcome.Success {
+		if outcome.ToolError != nil {
+			t.Fatalf("readonly curl failed: code=%q message=%q", outcome.ToolError.Code, outcome.ToolError.Message)
+		}
+		t.Fatalf("readonly curl failed without tool error details")
+	}
+}
+
+func TestHandleToolCall_PlanModeBlocksCurlOutputFile(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	target := filepath.Join(workspace, "out.json")
+
+	r := newPolicyTestRun(t, workspace, config.AIModePlan, nil, "msg_plan_curl_output")
+	outcome := runToolCall(t, r, "tool_plan_curl_output", map[string]any{
+		"command": "curl -o out.json https://example.com",
+	}, true, false)
+	assertPlanMutatingBlocked(t, outcome, target)
+}
+
+func TestHandleToolCall_PlanModeBlocksCurlRequestBody(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	target := filepath.Join(workspace, "unused.txt")
+
+	r := newPolicyTestRun(t, workspace, config.AIModePlan, nil, "msg_plan_curl_body")
+	outcome := runToolCall(t, r, "tool_plan_curl_body", map[string]any{
+		"command": "curl -d a=1 https://example.com",
+	}, true, false)
+	assertPlanMutatingBlocked(t, outcome, target)
+}

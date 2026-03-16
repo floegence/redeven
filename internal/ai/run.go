@@ -1485,9 +1485,11 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	isPlanMode := strings.TrimSpace(strings.ToLower(r.runMode)) == config.AIModePlan
 	denyDangerous := blockDangerousCommands && dangerous
 	denyPlanMutating := isPlanMode && mutating
-	commandRisk, normalizedCommand := aitools.InvocationRiskInfo(toolName, args)
-	commandRisk = strings.TrimSpace(commandRisk)
-	normalizedCommand = strings.TrimSpace(normalizedCommand)
+	commandProfile := aitools.InvocationCommandProfile(toolName, args)
+	commandRisk := strings.TrimSpace(string(commandProfile.Risk))
+	normalizedCommand := strings.TrimSpace(commandProfile.NormalizedCommand)
+	commandEffects := append([]string(nil), commandProfile.Effects...)
+	classificationReason := strings.TrimSpace(commandProfile.Reason)
 	readonlyRisk := string(aitools.TerminalCommandRiskReadonly)
 	denyReadonlyExec := r.forceReadonlyExec && toolName == "terminal.exec" && commandRisk != "" && commandRisk != readonlyRisk
 	requireApprovalForInvocation := requireUserApproval && needsApproval && !denyReadonlyExec
@@ -1524,6 +1526,8 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			"tool_name":                       toolName,
 			"normalized_command":              normalizedCommand,
 			"command_risk":                    commandRisk,
+			"command_effects":                 commandEffects,
+			"classification_reason":           classificationReason,
 			"policy_decision":                 policyDecision,
 			"policy_reason":                   policyReason,
 			"policy_force_readonly_exec":      r.forceReadonlyExec,
@@ -1563,6 +1567,8 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		"policy_plan_mode_readonly", isPlanMode,
 		"policy_block_dangerous_commands", blockDangerousCommands,
 		"command_risk", commandRisk,
+		"command_effects", commandEffects,
+		"classification_reason", classificationReason,
 		"normalized_command", normalizedCommand,
 		"policy_decision", policyDecision,
 		"policy_reason", policyReason,

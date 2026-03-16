@@ -121,6 +121,8 @@ Current behavior:
 
 - `act` mode executes directly unless a guardrail blocks a tool call.
 - `plan` mode is always readonly.
+- In `plan`, readonly shell inspection remains allowed, including readonly HTTP fetches that only stream to stdout.
+- In `plan`, HTTP commands that write local files/state or send request bodies/uploads remain blocked as mutating actions.
 - Execution mode is stored per thread and enforced server-side.
 - If a task in `plan` requires edits, Flower must ask for a mode switch when interaction is allowed.
 

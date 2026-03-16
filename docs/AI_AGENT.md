@@ -109,6 +109,8 @@ Behavior summary:
 
 - `act` mode executes tools directly by default.
 - `plan` mode is strict readonly: mutating tool calls are blocked.
+- In `plan`, readonly `terminal.exec` commands are still allowed, including readonly HTTP fetches that only stream to stdout (for example `curl -s URL`, `curl -I URL`, `wget -qO- URL`).
+- In `plan`, HTTP commands that write local files/state or send request bodies/uploads are mutating and blocked (for example `curl -o`, `curl -d`, `curl -F`, `curl -T`, `wget -O file`, `wget --post-data`).
 - Execution mode is a thread-level server state (`execution_mode`) and is authoritative for every run.
 - If edits are needed in `plan`, Flower should use `ask_user` to request switching the thread to `act`.
 - The mode-switch `ask_user` must use structured `questions[]`, and deterministic UI actions belong on `questions[].options[].actions` (for example `[{type:"set_mode",mode:"act"}]`).
