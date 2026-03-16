@@ -16,6 +16,7 @@ import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { FileBrowserSidebarTree } from './FileBrowserSidebarTree';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
+import { useFileBrowserTypeToFilter } from './fileBrowserTypeToFilter';
 import {
   mapContextMenuCallbacksToAbsolute,
   mapContextMenuItemsToAbsolute,
@@ -34,6 +35,7 @@ export interface FileBrowserWorkspaceProps {
   mode: GitHistoryMode;
   onModeChange: (mode: GitHistoryMode) => void;
   gitHistoryDisabled?: boolean;
+  captureTypingFromPage?: boolean;
   files: FileItem[];
   currentPath: string;
   initialPath: string;
@@ -62,6 +64,7 @@ interface FileWorkspaceHeaderProps {
   showMobileSidebarButton?: boolean;
   onToggleSidebar?: () => void;
   toolbarEndActions?: JSX.Element;
+  filterInputRef?: (el: HTMLInputElement) => void;
 }
 
 function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
@@ -98,6 +101,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
         <label class={`${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex min-w-[200px] flex-1 items-center gap-1.5 text-[11px] text-muted-foreground focus-within:border-ring focus-within:ring-1 focus-within:ring-ring sm:max-w-[15rem] sm:flex-none`}>
           <Search class="size-3.5 shrink-0" />
           <input
+            ref={props.filterInputRef}
             type="text"
             value={browser.filterQuery()}
             onInput={(event) => browser.setFilterQuery(event.currentTarget.value)}
@@ -177,6 +181,15 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   const dragEnabled = () => Boolean(drag && props.onDragMove);
   let contentScrollEl: HTMLDivElement | null = null;
   let treeScrollEl: HTMLDivElement | null = null;
+  let workspaceRootEl: HTMLDivElement | null = null;
+  let filterInputEl: HTMLInputElement | null = null;
+
+  useFileBrowserTypeToFilter({
+    rootRef: () => workspaceRootEl,
+    filterInputRef: () => filterInputEl,
+    enabled: () => props.mode === 'files',
+    captureWhenBodyFocused: () => props.captureTypingFromPage === true,
+  });
 
   onMount(() => {
     if (!dragEnabled() || !drag) return;
@@ -232,11 +245,20 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
         </div>
       )}
       content={(
-        <div class="flex h-full min-h-0 flex-col bg-background">
+        <div
+          ref={(el) => {
+            workspaceRootEl = el;
+          }}
+          tabindex={-1}
+          class="flex h-full min-h-0 flex-col bg-background focus:outline-none"
+        >
           <FileWorkspaceHeader
             showMobileSidebarButton={props.showMobileSidebarButton}
             onToggleSidebar={props.onToggleSidebar}
             toolbarEndActions={props.toolbarEndActions}
+            filterInputRef={(el) => {
+              filterInputEl = el;
+            }}
           />
           <div
             ref={(el) => {
@@ -286,6 +308,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           mode={props.mode}
           onModeChange={props.onModeChange}
           gitHistoryDisabled={props.gitHistoryDisabled}
+          captureTypingFromPage={props.captureTypingFromPage}
           width={props.width}
           open={props.open}
           resizable={props.resizable}

@@ -149,6 +149,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     mode: string;
     currentPath: string;
     resetKey?: number;
+    captureTypingFromPage?: boolean;
     toolbarEndActions?: JSX.Element;
     onModeChange?: (mode: string) => void;
     contextMenuCallbacks?: ContextMenuCallbacks;
@@ -172,7 +173,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
 
     return (
       <div data-testid="files-workspace">
-        <div>files:{props.mode}:{props.currentPath}:{localCount()}</div>
+        <div>files:{props.mode}:{props.currentPath}:{localCount()}:{props.captureTypingFromPage ? 'page' : 'scoped'}</div>
         <div>{props.toolbarEndActions}</div>
         <button type="button" onClick={() => setLocalCount((count) => count + 1)}>mock-files-bump</button>
         <button type="button" onClick={() => props.onModeChange?.('git')}>mock-to-git</button>
@@ -670,6 +671,32 @@ describe('RemoteFileBrowser persistence', () => {
 
       expect(clipboardStore.writeText).toHaveBeenCalledWith('.env');
       expect(notificationStore.success).toContainEqual({ title: 'Copied', message: '".env" copied to clipboard.' });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('enables page-level type-to-filter routing only for the dedicated browser page', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(host.textContent).toContain(':page');
     } finally {
       dispose();
     }

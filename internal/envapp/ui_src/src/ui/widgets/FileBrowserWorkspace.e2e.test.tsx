@@ -8,6 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
 
+async function flush() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 function mockMatchMedia(matches: boolean) {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -227,6 +233,129 @@ describe('FileBrowserWorkspace interactions', () => {
     try {
       const moreButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'More');
       expect(moreButton).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('routes page-level typing into the filter field when the browser page is the active surface', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            captureTypingFromPage
+            files={files}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-type-to-filter-page"
+            instanceId="test-files-workspace-type-to-filter-page"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const filterInput = host.querySelector('input[aria-label="Filter files"]') as HTMLInputElement | null;
+      expect(filterInput).toBeTruthy();
+      expect(document.activeElement === document.body || document.activeElement === host.ownerDocument?.body).toBe(true);
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }));
+      await flush();
+
+      expect(filterInput!.value).toBe('r');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('requires in-component focus before routing typing when used as a deck widget surface', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={files}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-type-to-filter-widget"
+            instanceId="test-files-workspace-type-to-filter-widget"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const filterInput = host.querySelector('input[aria-label="Filter files"]') as HTMLInputElement | null;
+      const readmeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('README.md')) as HTMLButtonElement | undefined;
+      expect(filterInput).toBeTruthy();
+      expect(readmeButton).toBeTruthy();
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }));
+      await flush();
+      expect(filterInput!.value).toBe('');
+
+      readmeButton!.focus();
+      readmeButton!.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }));
+      await flush();
+
+      expect(filterInput!.value).toBe('r');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('does not steal typing from specific input controls inside the browser chrome', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            captureTypingFromPage
+            files={files}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-type-to-filter-input-exemption"
+            instanceId="test-files-workspace-type-to-filter-input-exemption"
+            resetKey={0}
+            width={260}
+            open
+            toolbarEndActions={<input aria-label="Custom widget input" value="" />}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const filterInput = host.querySelector('input[aria-label="Filter files"]') as HTMLInputElement | null;
+      const customInput = host.querySelector('input[aria-label="Custom widget input"]') as HTMLInputElement | null;
+      expect(filterInput).toBeTruthy();
+      expect(customInput).toBeTruthy();
+
+      customInput!.focus();
+      customInput!.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', bubbles: true }));
+      await flush();
+
+      expect(filterInput!.value).toBe('');
+      expect(document.activeElement).toBe(customInput);
     } finally {
       dispose();
     }

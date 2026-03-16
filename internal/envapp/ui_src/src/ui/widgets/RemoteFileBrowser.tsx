@@ -2114,6 +2114,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       mode={pageMode()}
                       onModeChange={handlePageModeChange}
                       gitHistoryDisabled={!canEnterGitHistory()}
+                      captureTypingFromPage={!props.widgetId}
                       files={files()}
                       currentPath={currentBrowserPath()}
                       initialPath={readPersistedLastPath(id)}
