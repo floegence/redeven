@@ -57,7 +57,7 @@ export default [
     rules: js.configs.recommended.rules,
   },
   {
-    files: ["vite.config.ts"],
+    files: ["*.config.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {

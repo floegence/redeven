@@ -6,11 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
-    "lint": "eslint \"src/**/*.{ts,tsx}\" \"vite.config.ts\" \"eslint.config.mjs\" --max-warnings=0",
-    "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"vite.config.ts\" \"eslint.config.mjs\" --fix",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"vite.config.ts\" \"vitest.browser.config.ts\" \"eslint.config.mjs\" --max-warnings=0",
+    "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"vite.config.ts\" \"vitest.browser.config.ts\" \"eslint.config.mjs\" --fix",
     "preview": "vite preview --host 0.0.0.0 --port 8096",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --environment=node"
+    "test": "vitest run --environment=node --exclude \"src/**/*.browser.test.tsx\"",
+    "test:browser": "vitest run --config vitest.browser.config.ts"
   },
   "dependencies": {
     "@floegence/floe-webapp-core": "^0.35.6",
@@ -52,12 +53,14 @@
     "@tailwindcss/vite": "^4.0.0",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
+    "@vitest/browser": "^3.2.4",
     "@types/diff": "^8.0.0",
     "@types/node": "^20.0.0",
     "eslint": "^9.39.4",
     "eslint-plugin-solid": "^0.14.5",
     "globals": "^17.4.0",
     "jsdom": "^26.1.0",
+    "playwright": "^1.57.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tailwindcss": "^4.0.0",
