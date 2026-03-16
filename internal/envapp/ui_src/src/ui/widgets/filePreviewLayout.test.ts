@@ -19,7 +19,9 @@ describe('file preview wiring', () => {
     expect(contentSrc).toContain('<DocxPreviewPane bytes={props.bytes} />');
     expect(docxPaneSrc).toContain("import('docx-preview')");
     expect(docxPaneSrc).toContain('ResizeObserver');
-    expect(docxPaneSrc).toContain('inWrapper: false');
+    expect(docxPaneSrc).toContain('inWrapper: true');
+    expect(docxPaneSrc).toContain('Fit');
+    expect(docxPaneSrc).toContain('Zoom in docx preview');
     expect(contentSrc).toContain('Loading file...');
     expect(contentSrc).toContain('Failed to load file');
 
