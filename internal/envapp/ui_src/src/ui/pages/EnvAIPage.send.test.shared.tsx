@@ -33,16 +33,30 @@ const notificationSuccessMock = vi.fn();
 const protocolState = {
   status: 'connected' as 'connected' | 'disconnected',
 };
+const ACTIVE_RUN_SNAPSHOT_RECOVERY_SETTLE_MS = 380;
 
 const sendUserTurnMock = vi.fn(async (_req: unknown) => ({
   runId: 'run-send-1',
   kind: 'start',
 }));
-const submitStructuredPromptResponseMock = vi.fn(async (_args: unknown) => ({
-  runId: 'run-structured-1',
-  consumedWaitingPromptId: 'prompt-1',
-  appliedExecutionMode: 'act',
-}));
+const submitStructuredPromptResponseMock = vi.fn(async (args: unknown) => {
+  const tid = String((args as { threadId?: string } | null)?.threadId ?? aiState.activeThreadId ?? '').trim();
+  if (tid) {
+    aiState.runIdByThread[tid] = 'run-structured-1';
+  }
+  aiState.waitingPrompt = null;
+  if (aiState.activeThread && String(aiState.activeThread.thread_id ?? '').trim() === tid) {
+    aiState.activeThread = {
+      ...aiState.activeThread,
+      run_status: 'running',
+    };
+  }
+  return {
+    runId: 'run-structured-1',
+    consumedWaitingPromptId: 'prompt-1',
+    appliedExecutionMode: 'act',
+  };
+});
 const subscribeThreadMock = vi.fn(async (_req: unknown) => ({ runId: 'run-subscribe-1' }));
 const listMessagesMock = vi.fn(async (_req: unknown) => ({ messages: [], nextAfterRowId: 0, hasMore: false }));
 const getActiveRunSnapshotMock = vi.fn(async (_req: unknown) => ({ ok: false }));
@@ -350,10 +364,50 @@ function emitRealtimeEvent(event: any) {
   });
 }
 
+function emitAssistantRealtimeMessageStart(messageId = 'assistant-realtime-1') {
+  emitRealtimeEvent({
+    threadId: 'thread-1',
+    eventType: 'stream_event',
+    streamEvent: {
+      type: 'message-start',
+      messageId,
+    },
+  });
+  emitRealtimeEvent({
+    threadId: 'thread-1',
+    eventType: 'stream_event',
+    streamEvent: {
+      type: 'block-start',
+      messageId,
+      blockIndex: 0,
+      blockType: 'markdown',
+    },
+  });
+  return messageId;
+}
+
+function emitAssistantRealtimeDelta(messageId: string, delta: string) {
+  emitRealtimeEvent({
+    threadId: 'thread-1',
+    eventType: 'stream_event',
+    streamEvent: {
+      type: 'block-delta',
+      messageId,
+      blockIndex: 0,
+      delta,
+    },
+  });
+}
+
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function waitForActiveRunSnapshotRecovery(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ACTIVE_RUN_SNAPSHOT_RECOVERY_SETTLE_MS));
+  await flushAsync();
 }
 
 async function renderPage() {
@@ -507,10 +561,8 @@ export function registerEnvAIPageSendTests() {
       });
     });
 
-    it('shows the assistant placeholder immediately after send when active snapshot is available', async () => {
-      getActiveRunSnapshotMock
-        .mockResolvedValueOnce({ ok: false })
-        .mockResolvedValueOnce(makeStreamingAssistantSnapshot());
+    it('shows the assistant placeholder immediately after send when realtime start arrives', async () => {
+      getActiveRunSnapshotMock.mockResolvedValueOnce({ ok: false });
 
       const { host, dispose } = await renderPage();
       try {
@@ -518,10 +570,41 @@ export function registerEnvAIPageSendTests() {
         submitComposer(host, 'button', 'Send message');
         await flushAsync();
 
+        const messageId = emitAssistantRealtimeMessageStart('assistant-live-send');
+        await flushAsync();
+
         const assistant = host.querySelector('.chat-message-item-assistant');
         expect(assistant).toBeTruthy();
         expect(host.querySelector('.chat-markdown-empty-streaming')).toBeTruthy();
-        expect(getActiveRunSnapshotMock).toHaveBeenCalled();
+        emitAssistantRealtimeDelta(messageId, 'Hello');
+        await flushAsync();
+
+        await waitForActiveRunSnapshotRecovery();
+        expect(getActiveRunSnapshotMock).toHaveBeenCalledTimes(1);
+      } finally {
+        dispose();
+      }
+    });
+
+    it('falls back to the active run snapshot after send when realtime start is missing', async () => {
+      getActiveRunSnapshotMock
+        .mockResolvedValueOnce({ ok: false })
+        .mockResolvedValueOnce(makeStreamingAssistantSnapshot('assistant-recovery-send'));
+
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'recover the pending assistant slot');
+        submitComposer(host, 'button', 'Send message');
+        await flushAsync();
+
+        expect(host.querySelector('.chat-message-item-assistant')).toBeNull();
+
+        await waitForActiveRunSnapshotRecovery();
+
+        const assistant = host.querySelector('.chat-message-item-assistant');
+        expect(assistant).toBeTruthy();
+        expect(host.querySelector('.chat-markdown-empty-streaming')).toBeTruthy();
+        expect(getActiveRunSnapshotMock).toHaveBeenCalledTimes(2);
       } finally {
         dispose();
       }
@@ -543,14 +626,14 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('renders the inline run indicator inside the assistant message after send', async () => {
-      getActiveRunSnapshotMock
-        .mockResolvedValueOnce({ ok: false })
-        .mockResolvedValueOnce(makeStreamingAssistantSnapshot());
+      getActiveRunSnapshotMock.mockResolvedValueOnce({ ok: false });
 
       const { host, dispose } = await renderPage();
       try {
         inputComposer(host, 'show the inline run indicator');
         submitComposer(host, 'button', 'Send message');
+        await flushAsync();
+        emitAssistantRealtimeMessageStart('assistant-indicator-send');
         await flushAsync();
 
         const assistant = host.querySelector('.chat-message-item-assistant');
@@ -587,14 +670,14 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('does not render the inline run indicator under user messages', async () => {
-      getActiveRunSnapshotMock
-        .mockResolvedValueOnce({ ok: false })
-        .mockResolvedValueOnce(makeStreamingAssistantSnapshot());
+      getActiveRunSnapshotMock.mockResolvedValueOnce({ ok: false });
 
       const { host, dispose } = await renderPage();
       try {
         inputComposer(host, 'keep user messages clean');
         submitComposer(host, 'button', 'Send message');
+        await flushAsync();
+        emitAssistantRealtimeMessageStart('assistant-user-clean');
         await flushAsync();
 
         const userMessage = host.querySelector('.chat-message-item-user');
@@ -725,6 +808,49 @@ export function registerEnvAIPageSendTests() {
           dispose();
         }
       });
+    });
+
+    it('falls back to the active run snapshot after waiting-user submit when realtime start is missing', async () => {
+      aiState.activeThread = {
+        ...(aiState.activeThread as MockThread),
+        run_status: 'waiting_user',
+      };
+      aiState.waitingPrompt = {
+        prompt_id: 'prompt-1',
+        message_id: 'assistant-1',
+        tool_id: 'tool-ask-user',
+        questions: [
+          {
+            id: 'question-1',
+            header: 'Clarify',
+            question: 'What logs should Flower inspect?',
+            is_other: true,
+            is_secret: false,
+            options: [],
+          },
+        ],
+      };
+      getActiveRunSnapshotMock
+        .mockResolvedValueOnce({ ok: false })
+        .mockResolvedValueOnce(makeStreamingAssistantSnapshot('assistant-waiting-recovery'));
+
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'Please inspect the build logs.');
+        submitComposer(host, 'button', 'Reply now');
+        await flushAsync();
+
+        expect(submitStructuredPromptResponseMock).toHaveBeenCalledTimes(1);
+        expect(host.querySelector('.chat-message-item-assistant')).toBeNull();
+
+        await waitForActiveRunSnapshotRecovery();
+
+        expect(host.querySelector('.chat-message-item-assistant')).toBeTruthy();
+        expect(host.querySelector('.chat-markdown-empty-streaming')).toBeTruthy();
+        expect(getActiveRunSnapshotMock).toHaveBeenCalledTimes(2);
+      } finally {
+        dispose();
+      }
     });
 
     ([

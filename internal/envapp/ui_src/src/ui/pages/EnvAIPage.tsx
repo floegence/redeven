@@ -170,6 +170,7 @@ function persistExecutionMode(mode: ExecutionMode): void {
 const CONTEXT_TIMELINE_WINDOW_LIMIT = 200;
 const RUN_CONTEXT_EVENTS_PAGE_LIMIT = 200;
 const RUN_CONTEXT_EVENTS_MAX_PAGES = 12;
+const ACTIVE_RUN_SNAPSHOT_RECOVERY_DELAY_MS = 300;
 
 type RunEventResponseItem = {
   event_id?: number;
@@ -1962,8 +1963,10 @@ export function EnvAIPage() {
   let skipNextThreadLoad = false;
   let activeTranscriptCursor = 0; // max transcript_messages.id seen for the active thread
   let activeTranscriptBaselineLoaded = false;
-  let activeRealtimeEventSeq = 0;
+  let activeAssistantMessageSeq = 0;
   let activeSnapshotReqSeq = 0;
+  let activeSnapshotRecoverySeq = 0;
+  let activeSnapshotRecoveryTimer: number | null = null;
   let activeContextRunID = '';
   let activeContextEventCursor = 0;
   let activeContextReplaySeq = 0;
@@ -2779,10 +2782,24 @@ export function EnvAIPage() {
 
   const normalizeMessageID = (m: any): string => String(m?.id ?? '').trim();
 
+  const hasStreamingAssistantMessage = (): boolean => {
+    const messages = chat?.messages() ?? [];
+    return messages.some((message) => message.role === 'assistant' && message.status === 'streaming');
+  };
+
+  const cancelActiveRunSnapshotRecovery = (): void => {
+    activeSnapshotRecoverySeq += 1;
+    if (activeSnapshotRecoveryTimer !== null) {
+      window.clearTimeout(activeSnapshotRecoveryTimer);
+      activeSnapshotRecoveryTimer = null;
+    }
+  };
+
   const resetActiveTranscriptCursor = (_threadId: string) => {
     activeTranscriptCursor = 0;
     activeTranscriptBaselineLoaded = false;
-    activeRealtimeEventSeq = 0;
+    activeAssistantMessageSeq = 0;
+    cancelActiveRunSnapshotRecovery();
     // Invalidate in-flight active snapshot requests when switching threads.
     activeSnapshotReqSeq += 1;
   };
@@ -2915,7 +2932,7 @@ export function EnvAIPage() {
     if (!tid) return;
     if (tid !== String(ai.activeThreadId() ?? '').trim()) return;
     const reqSeq = ++activeSnapshotReqSeq;
-    const realtimeSeqAtStart = activeRealtimeEventSeq;
+    const assistantSeqAtStart = activeAssistantMessageSeq;
 
     try {
       const resp = await rpc.ai.getActiveRunSnapshot({ threadId: tid });
@@ -2924,7 +2941,7 @@ export function EnvAIPage() {
       if (reqSeq !== activeSnapshotReqSeq) return;
       if (tid !== String(ai.activeThreadId() ?? '').trim()) return;
       // Realtime events that arrived during fetch are newer than this snapshot.
-      if (realtimeSeqAtStart !== activeRealtimeEventSeq) return;
+      if (assistantSeqAtStart !== activeAssistantMessageSeq) return;
 
       const decorated = decorateMessageBlocks(resp.messageJson as Message);
       const current = chat.messages() ?? [];
@@ -2936,6 +2953,29 @@ export function EnvAIPage() {
       // Best-effort: ignore snapshot failures (realtime frames / transcript refresh can self-heal).
     }
   };
+
+  const scheduleActiveRunSnapshotRecovery = (threadId: string, runId: string): void => {
+    const tid = String(threadId ?? '').trim();
+    const rid = String(runId ?? '').trim();
+    if (!tid || !rid) return;
+
+    cancelActiveRunSnapshotRecovery();
+    const recoverySeq = activeSnapshotRecoverySeq;
+    const assistantSeqAtStart = activeAssistantMessageSeq;
+    activeSnapshotRecoveryTimer = window.setTimeout(() => {
+      activeSnapshotRecoveryTimer = null;
+      if (recoverySeq !== activeSnapshotRecoverySeq) return;
+      if (tid !== String(ai.activeThreadId() ?? '').trim()) return;
+      if (rid !== String(ai.runIdForThread(tid) ?? '').trim()) return;
+      if (assistantSeqAtStart !== activeAssistantMessageSeq) return;
+      if (hasStreamingAssistantMessage()) return;
+      void loadActiveRunSnapshot(tid);
+    }, ACTIVE_RUN_SNAPSHOT_RECOVERY_DELAY_MS);
+  };
+
+  onCleanup(() => {
+    cancelActiveRunSnapshotRecovery();
+  });
 
   const loadThreadTodos = async (
     threadId: string,
@@ -3440,7 +3480,6 @@ export function EnvAIPage() {
         const isActiveTid = tid === String(ai.activeThreadId() ?? '').trim();
         if (!isActiveTid) return;
 
-        activeRealtimeEventSeq += 1;
         resetActiveTranscriptCursor(tid);
         chat?.clearMessages();
         setHasMessages(false);
@@ -3464,10 +3503,14 @@ export function EnvAIPage() {
         if (!messageID) return;
 
         const decorated = decorateMessageBlocks(messageJson as Message);
+        const messageRole = String((decorated as Message)?.role ?? messageJson?.role ?? '').trim().toLowerCase();
 
         const isActiveTid = tid === String(ai.activeThreadId() ?? '').trim();
         if (isActiveTid) {
-          activeRealtimeEventSeq += 1;
+          if (messageRole === 'assistant') {
+            activeAssistantMessageSeq += 1;
+            cancelActiveRunSnapshotRecovery();
+          }
           if (rowId > 0) {
             const shouldBackfillGap = activeTranscriptBaselineLoaded && rowId > activeTranscriptCursor + 1;
             if (shouldBackfillGap) {
@@ -3492,7 +3535,6 @@ export function EnvAIPage() {
         const streamKind = String(event.streamKind ?? '').trim().toLowerCase();
         const eventRunID = String(event.runId ?? '').trim();
         if (tid === String(ai.activeThreadId() ?? '').trim()) {
-          activeRealtimeEventSeq += 1;
           if (eventRunID) {
             ensureContextRun(eventRunID);
           }
@@ -3537,6 +3579,15 @@ export function EnvAIPage() {
           }
         }
         if (tid === String(ai.activeThreadId() ?? '').trim()) {
+          const isAssistantProgressEvent =
+            streamType === 'message-start' ||
+            streamType === 'block-start' ||
+            streamType === 'block-delta' ||
+            streamType === 'block-set';
+          if (isAssistantProgressEvent) {
+            activeAssistantMessageSeq += 1;
+            cancelActiveRunSnapshotRecovery();
+          }
           chat?.handleStreamEvent(decorateStreamEvent(streamEvent) as any);
           rebuildSubagentsFromMessages(chat?.messages() ?? []);
           setHasMessages(true);
@@ -3955,6 +4006,7 @@ export function EnvAIPage() {
       if (runId) {
         ensureContextRun(runId, { reset: true });
         void loadContextRunEvents(runId, { reset: true });
+        scheduleActiveRunSnapshotRecovery(tid, runId);
       } else {
         setRunPhaseLabel('Working');
       }
@@ -4111,9 +4163,7 @@ export function EnvAIPage() {
         ai.confirmThreadRun(tid, rid);
         ensureContextRun(rid, { reset: true });
         void loadContextRunEvents(rid, { reset: true });
-        if (tid === String(ai.activeThreadId() ?? '').trim()) {
-          void loadActiveRunSnapshot(tid);
-        }
+        scheduleActiveRunSnapshotRecovery(tid, rid);
       }
       ai.bumpThreadsSeq();
       if (responseKind === 'steer' || responseKind === 'queued') {
