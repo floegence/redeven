@@ -55,8 +55,8 @@ func IsMutating(toolName string) bool {
 func RequiresApprovalForInvocation(toolName string, args map[string]any) bool {
 	name := strings.TrimSpace(toolName)
 	if name == "terminal.exec" {
-		risk := ClassifyTerminalCommandRisk(commandFromArgs(args))
-		return risk != TerminalCommandRiskReadonly
+		profile := InvocationCommandProfile(name, args)
+		return profile.Risk != TerminalCommandRiskReadonly
 	}
 	return RequiresApproval(name)
 }
@@ -64,8 +64,8 @@ func RequiresApprovalForInvocation(toolName string, args map[string]any) bool {
 func IsMutatingForInvocation(toolName string, args map[string]any) bool {
 	name := strings.TrimSpace(toolName)
 	if name == "terminal.exec" {
-		risk := ClassifyTerminalCommandRisk(commandFromArgs(args))
-		return risk != TerminalCommandRiskReadonly
+		profile := InvocationCommandProfile(name, args)
+		return profile.Risk != TerminalCommandRiskReadonly
 	}
 	return IsMutating(name)
 }
@@ -75,8 +75,8 @@ func IsDangerousInvocation(toolName string, args map[string]any) bool {
 	if name != "terminal.exec" {
 		return false
 	}
-	risk := ClassifyTerminalCommandRisk(commandFromArgs(args))
-	return risk == TerminalCommandRiskDangerous
+	profile := InvocationCommandProfile(name, args)
+	return profile.Risk == TerminalCommandRiskDangerous
 }
 
 func InvocationRiskLabel(toolName string, args map[string]any) string {
@@ -84,11 +84,19 @@ func InvocationRiskLabel(toolName string, args map[string]any) string {
 	return risk
 }
 
-func InvocationRiskInfo(toolName string, args map[string]any) (string, string) {
+func InvocationCommandProfile(toolName string, args map[string]any) TerminalCommandProfile {
 	name := strings.TrimSpace(toolName)
 	if name != "terminal.exec" {
-		return "", ""
+		return TerminalCommandProfile{}
 	}
 	command := commandFromArgs(args)
-	return string(ClassifyTerminalCommandRisk(command)), NormalizeTerminalCommand(command)
+	return ProfileTerminalCommand(command)
+}
+
+func InvocationRiskInfo(toolName string, args map[string]any) (string, string) {
+	profile := InvocationCommandProfile(toolName, args)
+	if profile.Risk == "" {
+		return "", ""
+	}
+	return string(profile.Risk), profile.NormalizedCommand
 }

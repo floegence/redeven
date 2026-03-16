@@ -1,6 +1,9 @@
 package tools
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestClassifyTerminalCommandRisk_Readonly(t *testing.T) {
 	t.Parallel()
@@ -35,6 +38,104 @@ func TestClassifyTerminalCommandRisk_FindPipeEgrepReadonly(t *testing.T) {
 	risk := ClassifyTerminalCommandRisk(`find . -type f | egrep "README|go.mod" | head -n 20`)
 	if risk != TerminalCommandRiskReadonly {
 		t.Fatalf("risk=%q, want %q", risk, TerminalCommandRiskReadonly)
+	}
+}
+
+func TestClassifyTerminalCommandRisk_CurlReadonlyFetches(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		`curl -s https://example.com`,
+		`curl -fsSL https://example.com/path`,
+		`curl -I https://example.com`,
+		`curl -s https://example.com 2>/dev/null`,
+		`curl -s https://example.com | head -n 20`,
+		`curl -G --data-urlencode city=Toronto https://example.com/weather`,
+		`curl -o /dev/null -I https://example.com`,
+	}
+	for _, command := range cases {
+		command := command
+		t.Run(command, func(t *testing.T) {
+			t.Parallel()
+			risk := ClassifyTerminalCommandRisk(command)
+			if risk != TerminalCommandRiskReadonly {
+				t.Fatalf("command=%q risk=%q, want %q", command, risk, TerminalCommandRiskReadonly)
+			}
+		})
+	}
+}
+
+func TestClassifyTerminalCommandRisk_WgetReadonlyFetches(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		`wget -qO- https://example.com`,
+		`wget --spider https://example.com`,
+		`wget --output-document=- https://example.com`,
+		`wget -qO/dev/null https://example.com`,
+	}
+	for _, command := range cases {
+		command := command
+		t.Run(command, func(t *testing.T) {
+			t.Parallel()
+			risk := ClassifyTerminalCommandRisk(command)
+			if risk != TerminalCommandRiskReadonly {
+				t.Fatalf("command=%q risk=%q, want %q", command, risk, TerminalCommandRiskReadonly)
+			}
+		})
+	}
+}
+
+func TestClassifyTerminalCommandRisk_CurlMutatingOutputsAndBodies(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		`curl -o out.json https://example.com`,
+		`curl -O https://example.com/file.tar.gz`,
+		`curl --output out.json https://example.com`,
+		`curl -c cookies.txt https://example.com`,
+		`curl --hsts cache.txt https://example.com`,
+		`curl --alt-svc cache.txt https://example.com`,
+		`curl -d a=1 https://example.com`,
+		`curl --json '{}' https://example.com`,
+		`curl -F file=@a.txt https://example.com`,
+		`curl -T a.txt https://example.com/upload`,
+		`curl -X POST https://example.com`,
+		`curl -X PUT https://example.com`,
+		`curl -X PATCH https://example.com`,
+		`curl -X DELETE https://example.com`,
+	}
+	for _, command := range cases {
+		command := command
+		t.Run(command, func(t *testing.T) {
+			t.Parallel()
+			risk := ClassifyTerminalCommandRisk(command)
+			if risk != TerminalCommandRiskMutating {
+				t.Fatalf("command=%q risk=%q, want %q", command, risk, TerminalCommandRiskMutating)
+			}
+		})
+	}
+}
+
+func TestClassifyTerminalCommandRisk_WgetMutatingOutputsAndBodies(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		`wget -O out.html https://example.com`,
+		`wget -o wget.log https://example.com`,
+		`wget --save-cookies cookies.txt https://example.com`,
+		`wget --post-data='a=1' https://example.com`,
+		`wget --method=POST https://example.com`,
+	}
+	for _, command := range cases {
+		command := command
+		t.Run(command, func(t *testing.T) {
+			t.Parallel()
+			risk := ClassifyTerminalCommandRisk(command)
+			if risk != TerminalCommandRiskMutating {
+				t.Fatalf("command=%q risk=%q, want %q", command, risk, TerminalCommandRiskMutating)
+			}
+		})
 	}
 }
 
@@ -74,10 +175,40 @@ func TestClassifyTerminalCommandRisk_RmWorkspacePathIsMutating(t *testing.T) {
 	}
 }
 
+func TestProfileTerminalCommand_CurlReadonlyIncludesEffectsAndReason(t *testing.T) {
+	t.Parallel()
+
+	profile := ProfileTerminalCommand(`curl -s https://example.com | head -n 5`)
+	if profile.Risk != TerminalCommandRiskReadonly {
+		t.Fatalf("risk=%q, want %q", profile.Risk, TerminalCommandRiskReadonly)
+	}
+	if profile.Reason != "http_fetch_stdout_readonly" {
+		t.Fatalf("reason=%q, want %q", profile.Reason, "http_fetch_stdout_readonly")
+	}
+	if !reflect.DeepEqual(profile.Effects, []string{terminalCommandEffectNetworkRead, terminalCommandEffectLocalRead}) {
+		t.Fatalf("effects=%v", profile.Effects)
+	}
+}
+
+func TestProfileTerminalCommand_CurlOutputFileIncludesEffectsAndReason(t *testing.T) {
+	t.Parallel()
+
+	profile := ProfileTerminalCommand(`curl -o out.json https://example.com`)
+	if profile.Risk != TerminalCommandRiskMutating {
+		t.Fatalf("risk=%q, want %q", profile.Risk, TerminalCommandRiskMutating)
+	}
+	if profile.Reason != "curl_output_file" {
+		t.Fatalf("reason=%q, want %q", profile.Reason, "curl_output_file")
+	}
+	if !reflect.DeepEqual(profile.Effects, []string{terminalCommandEffectLocalWrite}) {
+		t.Fatalf("effects=%v", profile.Effects)
+	}
+}
+
 func TestInvocationPolicies_TerminalExec(t *testing.T) {
 	t.Parallel()
 
-	readonlyArgs := map[string]any{"command": "pwd"}
+	readonlyArgs := map[string]any{"command": `curl -s https://example.com`}
 	if RequiresApprovalForInvocation("terminal.exec", readonlyArgs) {
 		t.Fatalf("readonly command should not require approval")
 	}
@@ -86,6 +217,17 @@ func TestInvocationPolicies_TerminalExec(t *testing.T) {
 	}
 	if IsDangerousInvocation("terminal.exec", readonlyArgs) {
 		t.Fatalf("readonly command should not be dangerous")
+	}
+
+	mutatingArgs := map[string]any{"command": `curl -d a=1 https://example.com`}
+	if !RequiresApprovalForInvocation("terminal.exec", mutatingArgs) {
+		t.Fatalf("mutating command must require approval")
+	}
+	if !IsMutatingForInvocation("terminal.exec", mutatingArgs) {
+		t.Fatalf("mutating command must be classified as mutating")
+	}
+	if IsDangerousInvocation("terminal.exec", mutatingArgs) {
+		t.Fatalf("mutating but non-dangerous command should not be dangerous")
 	}
 
 	dangerousArgs := map[string]any{"command": "rm -rf /"}
@@ -97,6 +239,20 @@ func TestInvocationPolicies_TerminalExec(t *testing.T) {
 	}
 	if !IsDangerousInvocation("terminal.exec", dangerousArgs) {
 		t.Fatalf("dangerous command must be flagged")
+	}
+}
+
+func TestInvocationCommandProfile(t *testing.T) {
+	t.Parallel()
+
+	profile := InvocationCommandProfile("terminal.exec", map[string]any{
+		"command": `bash -lc 'curl -I https://example.com'`,
+	})
+	if profile.Risk != TerminalCommandRiskReadonly {
+		t.Fatalf("risk=%q, want %q", profile.Risk, TerminalCommandRiskReadonly)
+	}
+	if profile.NormalizedCommand != "curl -I https://example.com" {
+		t.Fatalf("normalized=%q, want %q", profile.NormalizedCommand, "curl -I https://example.com")
 	}
 }
 

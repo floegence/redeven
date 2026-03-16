@@ -172,6 +172,9 @@ func TestBuildLayeredSystemPrompt_PlanModeEnforcesReadonlyAndAskUserSwitch(t *te
 	if !strings.Contains(prompt, "Plan mode is strict readonly: do NOT run any mutating action.") {
 		t.Fatalf("plan prompt missing strict readonly guidance: %q", prompt)
 	}
+	if !strings.Contains(prompt, "Readonly terminal.exec commands include local inspection and readonly HTTP fetches that only stream to stdout") {
+		t.Fatalf("plan prompt missing readonly HTTP guidance: %q", prompt)
+	}
 	if !strings.Contains(prompt, "If edits are required, call ask_user and request the user to switch this thread to act mode.") {
 		t.Fatalf("plan prompt missing act switch guidance: %q", prompt)
 	}

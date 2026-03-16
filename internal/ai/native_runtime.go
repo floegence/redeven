@@ -4528,6 +4528,8 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			"- Prioritize investigation, reasoning, and clear execution plans.",
 			"- Plan mode is strict readonly: do NOT run any mutating action.",
 			"- Do NOT call apply_patch and do NOT run mutating terminal.exec commands.",
+			"- Readonly terminal.exec commands include local inspection and readonly HTTP fetches that only stream to stdout (for example `curl -s URL`, `curl -I URL`, `wget -qO- URL`).",
+			"- HTTP commands that write local files/state or send request bodies/uploads are mutating (for example `curl -o`, `curl -d`, `curl -F`, `curl -T`, `wget -O file`, `wget --post-data`).",
 		}
 		if allowUserInteraction {
 			planRules = append(planRules,
