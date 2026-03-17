@@ -156,7 +156,7 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).toContain('History');
       expect(host.textContent).toContain('Compare');
       expect(host.textContent).toContain('Checkout');
-      expect(host.textContent).toContain('Merge Into Current');
+      expect(host.textContent).toContain('Merge');
       expect(host.textContent).toContain('Delete');
       expect(host.textContent).toContain('src/linked.ts');
       expect(host.textContent).toContain('Upstream origin/feature/demo');
@@ -167,7 +167,7 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).toContain('Switch to another branch before deleting it.');
       expect(host.textContent).not.toContain('pending review');
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
-      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Merge Into Current')) as HTMLButtonElement | undefined;
+      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Merge') as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       expect(checkoutButton).toBeTruthy();
       expect(mergeButton).toBeTruthy();
@@ -226,7 +226,7 @@ describe('GitBranchesPanel interactions', () => {
 
     try {
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
-      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Merge Into Current')) as HTMLButtonElement | undefined;
+      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Merge') as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       expect(checkoutButton).toBeTruthy();
       expect(mergeButton).toBeTruthy();
@@ -569,7 +569,7 @@ describe('GitBranchesPanel interactions', () => {
     }, host);
 
     try {
-      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Merge Into Current')) as HTMLButtonElement | undefined;
+      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Merge') as HTMLButtonElement | undefined;
       expect(mergeButton).toBeTruthy();
       expect(mergeButton?.disabled).toBe(false);
       mergeButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
