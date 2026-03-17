@@ -111,6 +111,9 @@ describe('GitWorkbenchSidebar interactions', () => {
     try {
       expect(host.textContent).toContain('Commit Graph');
       expect(host.textContent).toContain('Merge x2');
+      const scrollRegion = host.querySelector('[data-testid="git-sidebar-scroll-region"]');
+      expect(scrollRegion).toBeTruthy();
+      expect(scrollRegion?.querySelector('[data-commit-graph-rails]')).toBeTruthy();
       expect(host.querySelectorAll('svg')).not.toHaveLength(0);
       expect(host.textContent).not.toContain('Recent history with merge structure.');
     } finally {

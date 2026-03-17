@@ -106,6 +106,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
       resizable={props.resizable}
       onResize={props.onResize}
       onClose={props.onClose}
+      sidebarBodyClass="overflow-hidden"
       modeSwitcher={<GitHistoryModeSwitch mode={props.mode} onChange={props.onModeChange} gitHistoryDisabled={props.gitHistoryDisabled} class="w-full" />}
       navigationLabel="View"
       navigation={<GitViewNav value={props.subview} items={subviewItems()} onChange={props.onSubviewChange} />}
