@@ -231,6 +231,36 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell local access gate', () => {
+  it('shows a neutral checking gate while local access is still resolving', async () => {
+    const accessDeferred = deferred<{ password_required: boolean; unlocked: boolean } | null>();
+    getLocalAccessStatusMock.mockReturnValueOnce(accessDeferred.promise);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      expect(host.textContent).toContain('Preparing secure access');
+      expect(host.textContent).toContain('Checking secure access...');
+      expect(host.textContent).not.toContain('Unlock local agent');
+      expect(host.querySelector('input[type="password"]')).toBeFalsy();
+      expect(connectMock).not.toHaveBeenCalled();
+
+      accessDeferred.resolve({ password_required: true, unlocked: false });
+      await flushAsync();
+      await flushAsync();
+
+      expect(host.textContent).toContain('Unlock local agent');
+      expect(host.querySelector('input[type="password"]')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
   it('waits for password unlock before connecting the local agent', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -312,6 +342,40 @@ describe('EnvAppShell local access gate', () => {
 
 
 describe('EnvAppShell remote access gate', () => {
+  it('shows a neutral checking gate while remote access is still resolving', async () => {
+    getLocalRuntimeMock.mockResolvedValue(null);
+    getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
+
+    const accessDeferred = deferred<{ password_required: boolean; unlocked: boolean }>();
+    getGatewayAccessStatusMock.mockReset();
+    getGatewayAccessStatusMock.mockReturnValueOnce(accessDeferred.promise);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      expect(host.textContent).toContain('Preparing secure access');
+      expect(host.textContent).toContain('Checking secure access...');
+      expect(host.textContent).not.toContain('Unlock agent');
+      expect(host.querySelector('input[type="password"]')).toBeFalsy();
+      expect(connectMock).not.toHaveBeenCalled();
+
+      accessDeferred.resolve({ password_required: true, unlocked: false });
+      await flushAsync();
+      await flushAsync();
+
+      expect(host.textContent).toContain('Unlock agent');
+      expect(host.querySelector('input[type="password"]')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps the app blocked until access resume finishes', async () => {
     getLocalRuntimeMock.mockResolvedValue(null);
     getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');

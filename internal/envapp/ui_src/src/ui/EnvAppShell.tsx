@@ -89,6 +89,8 @@ type CreateThreadResponse = Readonly<{
   }>;
 }>;
 
+type AccessGatePhase = 'checking' | 'unlock_required' | 'resuming' | 'resume_blocked' | 'ready';
+
 class AccessResumeTimeoutError extends Error {
   constructor(message: string) {
     super(message);
@@ -263,6 +265,7 @@ export function EnvAppShell() {
   const accessPasswordRequired = createMemo(() => Boolean(accessStatus()?.password_required));
   const accessServerUnlocked = createMemo(() => Boolean(accessStatus()?.unlocked));
   const accessPending = createMemo(() => !accessChecked());
+  const [accessRecoveryBusy, setAccessRecoveryBusy] = createSignal(false);
   const accessLocked = createMemo(() => {
     if (!accessPasswordRequired()) return false;
     if (isLocalMode()) return !accessServerUnlocked();
@@ -272,10 +275,14 @@ export function EnvAppShell() {
     if (isLocalMode()) return false;
     return accessPasswordRequired() && !accessPending() && !accessLocked() && !accessChannelReady();
   });
-  const accessGateVisible = createMemo(() => accessPending() || accessLocked() || accessResumePending());
+  const accessGatePhase = createMemo<AccessGatePhase>(() => {
+    if (accessPending()) return 'checking';
+    if (accessLocked()) return 'unlock_required';
+    if (accessResumePending()) return accessRecoveryBusy() ? 'resuming' : 'resume_blocked';
+    return 'ready';
+  });
+  const accessGateVisible = createMemo(() => accessGatePhase() !== 'ready');
   const accessRecoverable = createMemo(() => accessPasswordRequired() && !accessPending() && !accessLocked());
-
-  const [accessRecoveryBusy, setAccessRecoveryBusy] = createSignal(false);
 
   const setCurrentAccessPassword = (value: string) => {
     if (isLocalMode()) {
@@ -561,27 +568,45 @@ export function EnvAppShell() {
   };
 
   const status = createMemo(() => {
-    if (accessLocked()) return 'disconnected';
+    if (accessGatePhase() === 'unlock_required') return 'disconnected';
     if (manualError()) return 'error';
     return protocol.status();
   });
   const statusLabel = createMemo(() => {
-    if (accessPending()) return 'Checking access';
-    if (accessLocked()) return 'Locked';
-    return undefined;
+    switch (accessGatePhase()) {
+      case 'checking':
+        return 'Checking access';
+      case 'unlock_required':
+        return 'Locked';
+      default:
+        return undefined;
+    }
   });
   const connecting = () => !accessGateVisible() && protocol.status() === 'connecting';
   const reconnectDisabled = createMemo(() => {
-    if (accessPending()) return true;
-    if (accessLocked()) return true;
-    if (accessResumePending()) return accessRecoveryBusy() || accessUnlocking();
-    return accessRecoveryBusy() || connecting();
+    switch (accessGatePhase()) {
+      case 'checking':
+      case 'unlock_required':
+        return true;
+      case 'resuming':
+      case 'resume_blocked':
+        return accessRecoveryBusy() || accessUnlocking();
+      default:
+        return accessRecoveryBusy() || connecting();
+    }
   });
   const reconnectLabel = createMemo(() => {
-    if (accessPending()) return 'Checking access';
-    if (accessLocked()) return 'Unlock required';
-    if (accessResumePending()) return accessRecoveryBusy() ? 'Preparing secure session' : 'Retry connection';
-    return connecting() ? 'Connecting...' : 'Reconnect';
+    switch (accessGatePhase()) {
+      case 'checking':
+        return 'Checking access';
+      case 'unlock_required':
+        return 'Unlock required';
+      case 'resuming':
+      case 'resume_blocked':
+        return accessRecoveryBusy() ? 'Preparing secure session' : 'Retry connection';
+      default:
+        return connecting() ? 'Connecting...' : 'Reconnect';
+    }
   });
   const connectError = createMemo(() => (accessGateVisible() ? null : manualError() ?? protocol.error()?.message ?? null));
 
@@ -1408,21 +1433,36 @@ export function EnvAppShell() {
   });
 
   const accessGateTitle = createMemo(() => {
-    if (accessResumePending()) {
-      return accessRecoveryBusy() ? 'Preparing secure session' : 'Secure session needs attention';
+    switch (accessGatePhase()) {
+      case 'checking':
+        return 'Preparing secure access';
+      case 'resuming':
+        return 'Preparing secure session';
+      case 'resume_blocked':
+        return 'Secure session needs attention';
+      case 'unlock_required':
+        return isLocalMode() ? 'Unlock local agent' : 'Unlock agent';
+      default:
+        return isLocalMode() ? 'Local agent' : 'Environment';
     }
-    return isLocalMode() ? 'Unlock local agent' : 'Unlock agent';
   });
   const accessGateDescription = createMemo(() => {
-    if (accessResumePending()) {
-      if (accessRecoveryBusy()) return 'Verifying the password for this environment page and connecting to the agent.';
-      return 'The secure session is still blocked for this environment page. Retry the connection or reload the page.';
+    switch (accessGatePhase()) {
+      case 'checking':
+        return 'Checking whether this page can continue with an existing secure agent session.';
+      case 'resuming':
+        return 'Verifying the password for this environment page and connecting to the agent.';
+      case 'resume_blocked':
+        return 'The secure session is still blocked for this environment page. Retry the connection or reload the page.';
+      case 'unlock_required':
+        return isLocalMode()
+          ? 'Enter the full access password before this browser load can connect to the local agent.'
+          : 'Enter the full access password before this environment page can connect to the agent.';
+      default:
+        return 'Secure access is ready.';
     }
-    return isLocalMode()
-      ? 'Enter the full access password before this browser load can connect to the local agent.'
-      : 'Enter the full access password before this environment page can connect to the agent.';
   });
-  const accessGateCheckingLabel = createMemo(() => (isLocalMode() ? 'Checking local access...' : 'Checking agent access...'));
+  const accessGateCheckingLabel = createMemo(() => 'Checking secure access...');
   const accessGateResumeHint = createMemo(() => 'The page stays blocked until the direct agent session confirms the password for this environment page.');
 
   const accessGatePanel = () => (
@@ -1434,7 +1474,7 @@ export function EnvAppShell() {
             <p class="text-sm leading-6 text-muted-foreground">{accessGateDescription()}</p>
           </div>
 
-          <Show when={!accessResumePending()}>
+          <Show when={accessGatePhase() === 'unlock_required'}>
             <form class="flex flex-col gap-3" onSubmit={(event) => void submitAccessUnlock(event)}>
               <input
                 ref={accessPasswordInput}
@@ -1456,11 +1496,11 @@ export function EnvAppShell() {
             </form>
           </Show>
 
-          <Show when={accessPending()}>
+          <Show when={accessGatePhase() === 'checking'}>
             <div class="text-sm text-muted-foreground">{accessGateCheckingLabel()}</div>
           </Show>
 
-          <Show when={accessResumePending()}>
+          <Show when={accessGatePhase() === 'resuming' || accessGatePhase() === 'resume_blocked'}>
             <>
               <div class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">{accessGateResumeHint()}</div>
               <div class="flex flex-col gap-2 sm:flex-row">
