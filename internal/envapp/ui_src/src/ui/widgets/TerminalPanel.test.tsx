@@ -14,6 +14,7 @@ const terminalPrefsState = vi.hoisted(() => ({
   userTheme: 'system',
   fontSize: 12,
   fontFamilyId: 'iosevka',
+  mobileInputMode: 'floe' as 'floe' | 'system',
 }));
 
 const focusSpy = vi.hoisted(() => vi.fn());
@@ -131,6 +132,18 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       onInput={(event) => props.onChange(Number((event.currentTarget as HTMLInputElement).value))}
     />
   ),
+  MobileKeyboard: (props: any) => (
+    props.visible ? (
+      <div data-testid="mobile-keyboard">
+        <button type="button" data-testid="mobile-keyboard-key" onClick={() => props.onKey?.('x')}>
+          Send x
+        </button>
+        <button type="button" data-testid="mobile-keyboard-dismiss" onClick={() => props.onDismiss?.()}>
+          Dismiss
+        </button>
+      </div>
+    ) : null
+  ),
   Tabs: (props: any) => (
     <div>
       {props.items.map((item: any) => (
@@ -219,6 +232,7 @@ vi.mock('../services/terminalPreferences', () => ({
     userTheme: () => terminalPrefsState.userTheme,
     fontSize: () => terminalPrefsState.fontSize,
     fontFamilyId: () => terminalPrefsState.fontFamilyId,
+    mobileInputMode: () => terminalPrefsState.mobileInputMode,
     setUserTheme: (value: string) => {
       terminalPrefsState.userTheme = value;
     },
@@ -227,6 +241,9 @@ vi.mock('../services/terminalPreferences', () => ({
     },
     setFontFamily: (value: string) => {
       terminalPrefsState.fontFamilyId = value;
+    },
+    setMobileInputMode: (value: 'floe' | 'system') => {
+      terminalPrefsState.mobileInputMode = value;
     },
   }),
 }));
@@ -266,6 +283,7 @@ describe('TerminalPanel', () => {
     terminalPrefsState.userTheme = 'system';
     terminalPrefsState.fontSize = 12;
     terminalPrefsState.fontFamilyId = 'iosevka';
+    terminalPrefsState.mobileInputMode = 'floe';
     focusSpy.mockClear();
     Object.values(transportMocks).forEach((mock) => {
       if ('mockClear' in mock) mock.mockClear();
@@ -315,6 +333,7 @@ describe('TerminalPanel', () => {
 
   it('restores focus to the active terminal after closing settings', async () => {
     layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'system';
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -322,6 +341,7 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="deck" />, host);
     await Promise.resolve();
     await Promise.resolve();
+    focusSpy.mockClear();
 
     (host.querySelector('[data-testid="dropdown-item-settings"]') as HTMLButtonElement | null)?.click();
     await Promise.resolve();
@@ -330,6 +350,62 @@ describe('TerminalPanel', () => {
     Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Close'))?.click();
     await Promise.resolve();
 
+    expect(focusSpy).toHaveBeenCalled();
+  });
+
+  it('defaults to the Floe keyboard on mobile and sends payloads to the active session', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeTruthy();
+    (host.querySelector('[data-testid="mobile-keyboard-key"]') as HTMLButtonElement | null)?.click();
+
+    expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', 'x', 'conn-1');
+  });
+
+  it('does not restore terminal focus after closing settings when Floe keyboard mode is active on mobile', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await Promise.resolve();
+    await Promise.resolve();
+    focusSpy.mockClear();
+
+    (host.querySelector('[data-testid="dropdown-item-settings"]') as HTMLButtonElement | null)?.click();
+    await Promise.resolve();
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Close'))?.click();
+    await Promise.resolve();
+
+    expect(focusSpy).not.toHaveBeenCalled();
+  });
+
+  it('switches from Floe keyboard mode to system IME from the mobile More menu', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await Promise.resolve();
+    await Promise.resolve();
+    focusSpy.mockClear();
+
+    (host.querySelector('[data-testid="dropdown-item-use_system_ime"]') as HTMLButtonElement | null)?.click();
+    await Promise.resolve();
+
+    expect(terminalPrefsState.mobileInputMode).toBe('system');
     expect(focusSpy).toHaveBeenCalled();
   });
 });
