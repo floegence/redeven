@@ -324,6 +324,7 @@ describe('browser workspace layout wiring', () => {
 
   it('routes git browser loading states through one centered shared pane', () => {
     const primitivesSrc = read('./GitWorkbenchPrimitives.tsx');
+    const workspaceSrc = read('./GitWorkspace.tsx');
     const changesSrc = read('./GitChangesPanel.tsx');
     const branchesSrc = read('./GitBranchesPanel.tsx');
     const historySrc = read('./GitHistoryBrowser.tsx');
@@ -332,6 +333,9 @@ describe('browser workspace layout wiring', () => {
     expect(primitivesSrc).toContain('export interface GitStatePaneProps');
     expect(primitivesSrc).toContain('flex w-full min-h-0 flex-1 items-center justify-center');
     expect(primitivesSrc).toContain('<SnakeLoader size="sm"');
+    expect(workspaceSrc).toContain('shellLoadingMessage?: string;');
+    expect(workspaceSrc).toContain('Preparing the active Git view...');
+    expect(workspaceSrc).toContain('<GitStatePane loading message={shellLoadingMessage()}');
 
     expect(changesSrc).toContain('GitStatePane');
     expect(changesSrc).toContain('Loading workspace changes...');

@@ -261,6 +261,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitListLoading, setGitListLoading] = createSignal(false);
   const [gitListLoadingMore, setGitListLoadingMore] = createSignal(false);
   const [gitListError, setGitListError] = createSignal('');
+  const [gitListResolved, setGitListResolved] = createSignal(false);
   const [gitHasMore, setGitHasMore] = createSignal(false);
   const [gitNextOffset, setGitNextOffset] = createSignal(0);
   const [gitCommitListRef, setGitCommitListRef] = createSignal('');
@@ -520,6 +521,25 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const repoHistoryAvailable = () => Boolean(repoInfo()?.available && repoInfo()?.repoRootPath);
+  const gitShellLoadingMessage = createMemo(() => {
+    if (pageMode() !== 'git') return '';
+    if (repoInfoLoading()) return 'Checking repository...';
+    if (!repoHistoryAvailable()) return '';
+    if (gitSubview() === 'changes') {
+      return !gitWorkspace() && !gitWorkspaceError() ? 'Loading workspace changes...' : '';
+    }
+    if (gitSubview() === 'branches') {
+      if (!gitBranches() && !gitBranchesError()) return 'Loading branches...';
+      if (selectedGitBranchSubview() === 'history' && gitBranches() && !gitListResolved() && !gitListError()) {
+        return 'Loading commit history...';
+      }
+      return '';
+    }
+    if (gitSubview() === 'history') {
+      return !gitListResolved() && !gitListError() ? 'Loading commits...' : '';
+    }
+    return '';
+  });
 
   const resolveActiveRepoRootPath = (overridePath?: string): string => {
     const candidate = String(overridePath ?? repoInfo()?.repoRootPath ?? '').trim();
@@ -588,6 +608,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitListLoading(false);
     setGitListLoadingMore(false);
     setGitListError('');
+    setGitListResolved(false);
     setGitHasMore(false);
     setGitNextOffset(0);
     setSelectedCommitHash('');
@@ -1313,7 +1334,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const refreshGitWorkbench = async () => {
-    const nextInfo = await resolveRepoInfo(currentBrowserPath());
+    const nextInfo = await resolveRepoInfo(currentBrowserPath(), { silent: Boolean(repoInfo()) });
     if (!nextInfo?.available) {
       resetGitCommitSidebar();
       resetGitWorkbenchData();
@@ -1321,9 +1342,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
     lastGitRepoKey = '';
     lastGitCommitContextKey = '';
-    void loadGitRepoSummary();
-    void loadGitWorkspace();
-    void loadGitBranches();
+    void loadGitRepoSummary({ silent: Boolean(gitRepoSummary()) });
+    if (gitSubview() === 'changes') {
+      void loadGitWorkspace({ silent: Boolean(gitWorkspace()) });
+    }
+    if (gitSubview() === 'branches') {
+      void loadGitBranches({ silent: Boolean(gitBranches()) });
+    }
+    if (gitSubview() === 'history' || (gitSubview() === 'branches' && selectedGitBranchSubview() === 'history')) {
+      void loadGitCommits(true, currentGitCommitRef(), { silent: gitCommits().length > 0 });
+    }
   };
 
   const loadGitCommits = async (reset: boolean, ref = gitCommitListRef(), options: GitLoadOptions = {}) => {
@@ -1336,6 +1364,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (reset) {
         setGitCommitListRef(nextRef);
         setGitListLoading(true);
+        setGitListResolved(false);
       } else {
         setGitListLoadingMore(true);
       }
@@ -1351,6 +1380,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const nextItems = Array.isArray(resp?.commits) ? resp.commits : [];
       if (reset) {
         setGitCommits(nextItems);
+        setGitListResolved(true);
       } else {
         const seen = new Set(gitCommits().map((item) => item.hash));
         setGitCommits([...gitCommits(), ...nextItems.filter((item) => !seen.has(item.hash))]);
@@ -1933,12 +1963,24 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         writePersistedLastPath(id, startPath);
       }
       setCurrentBrowserPath(startPath);
-
-      await loadPathOrFallback(startPath, {
-        fallbackPath: rootPath,
-        persistEnvId: id,
-      });
     })();
+  });
+
+  createEffect(() => {
+    const id = envId();
+    const client = protocol.client();
+    const mode = pageMode();
+    const path = normalizeAbsolutePath(currentBrowserPath());
+    if (!id || !client || mode !== 'files' || !path) return;
+
+    const normalizedPath = normalizePath(path);
+    if (loading() || lastLoadedBrowserPath() === normalizedPath) return;
+
+    void loadPathOrFallback(normalizedPath, {
+      fallbackPath: lastLoadedBrowserPath() || agentHomePathAbs(),
+      persistEnvId: id,
+      resetOnFallback: false,
+    });
   });
 
   createEffect(() => {
@@ -1981,9 +2023,30 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
     lastGitRepoKey = repoKey;
     lastGitCommitContextKey = '';
-    void loadGitRepoSummary();
-    void loadGitWorkspace();
-    void loadGitBranches();
+    void loadGitRepoSummary({ silent: Boolean(gitRepoSummary()) });
+    if (gitSubview() === 'changes') {
+      void loadGitWorkspace({ silent: Boolean(gitWorkspace()) });
+    }
+    if (gitSubview() === 'branches') {
+      void loadGitBranches({ silent: Boolean(gitBranches()) });
+    }
+  });
+
+  createEffect(() => {
+    const mode = pageMode();
+    const subview = gitSubview();
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    if (mode !== 'git' || !repoRootPath) return;
+
+    if (!gitRepoSummary() && !gitRepoSummaryLoading()) {
+      void loadGitRepoSummary();
+    }
+    if (subview === 'changes' && !gitWorkspace() && !gitWorkspaceLoading()) {
+      void loadGitWorkspace();
+    }
+    if (subview === 'branches' && !gitBranches() && !gitBranchesLoading()) {
+      void loadGitBranches();
+    }
   });
 
   createEffect(() => {
@@ -2399,6 +2462,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       showMobileSidebarButton={layout.isMobile() && Boolean(props.widgetId)}
                       onToggleSidebar={togglePageSidebar}
                       onRefresh={() => { void refreshGitWorkbench(); }}
+                      shellLoadingMessage={gitShellLoadingMessage()}
                     />
                   ),
                 },
@@ -2408,7 +2472,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         )}
       </Show>
 
-      <LoadingOverlay visible={loading()} message="Loading files..." />
+      <LoadingOverlay visible={pageMode() === 'files' && loading()} message="Loading files..." />
       <LoadingOverlay visible={dragMoveLoading()} message="Moving..." />
 
       {/* Delete Confirmation Dialog */}

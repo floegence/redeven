@@ -566,8 +566,35 @@ describe('RemoteFileBrowser persistence', () => {
       expect(gitWorkspace?.parentElement?.style.display).toBe('block');
       expect(filesWorkspace).toBeTruthy();
       expect(filesWorkspace?.parentElement?.style.display).toBe('none');
-      expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/workspace/repo/src', showHidden: false });
+      expect(mockRpc.fs.list).not.toHaveBeenCalled();
       expect(mockRpc.git.resolveRepo).toHaveBeenCalledWith({ path: '/workspace/repo/src' });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('hydrates the file tree lazily when returning from restored git mode to files', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.fs.list.mockClear();
+
+      const toFilesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-to-files') as HTMLButtonElement | undefined;
+      expect(toFilesButton).toBeTruthy();
+      toFilesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/workspace/repo/src', showHidden: false });
     } finally {
       dispose();
     }
