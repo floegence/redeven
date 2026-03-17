@@ -340,14 +340,40 @@ export interface MermaidWorkerResponse {
   error?: string;
 }
 
+export interface MarkdownCommittedSegment {
+  key: string;
+  html: string;
+}
+
+export interface MarkdownEmptyTail {
+  kind: 'empty';
+  key: string;
+}
+
+export interface MarkdownHtmlTail {
+  kind: 'html';
+  key: string;
+  html: string;
+}
+
+export type MarkdownTail = MarkdownEmptyTail | MarkdownHtmlTail;
+
+export interface MarkdownRenderSnapshot {
+  sourceLength: number;
+  committedSourceLength: number;
+  committedSegments: MarkdownCommittedSegment[];
+  tail: MarkdownTail;
+}
+
 export interface MarkdownWorkerRequest {
   id: string;
   content: string;
+  streaming?: boolean;
 }
 
 export interface MarkdownWorkerResponse {
   id: string;
-  html: string;
+  snapshot?: MarkdownRenderSnapshot;
   error?: string;
 }
 

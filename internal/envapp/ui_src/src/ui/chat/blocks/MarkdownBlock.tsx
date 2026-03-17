@@ -1,13 +1,20 @@
-// MarkdownBlock — renders markdown content as HTML.
+// MarkdownBlock — renders markdown content as stable committed segments plus a live tail.
 //
-// During streaming, it throttles markdown parsing and keeps it off the main thread
-// (via a shared Web Worker) to avoid UI jank while still showing rendered markdown.
+// During streaming, only the committed prefix is kept as HTML. The unstable suffix falls back
+// to raw streaming text until a fresh worker snapshot arrives, which preserves immediate
+// streaming while avoiding retroactive re-layout of older content.
 
-import { createSignal, createEffect, Show, onCleanup, createMemo } from 'solid-js';
+import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import type { Component } from 'solid-js';
+import type { Marked } from 'marked';
 import { cn } from '@floegence/floe-webapp-core';
-import { renderMarkdownHtml } from '../workers/markdownWorkerClient';
+
+import { StreamingMarkdownTail } from '../markdown/StreamingMarkdownTail';
+import { createMarkdownRenderer } from '../markdown/markedConfig';
+import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel';
 import { StreamingCursor } from '../status/StreamingCursor';
+import type { MarkdownRenderSnapshot } from '../types';
+import { renderMarkdownSnapshot } from '../workers/markdownWorkerClient';
 
 export interface MarkdownBlockProps {
   content: string;
@@ -15,38 +22,19 @@ export interface MarkdownBlockProps {
   class?: string;
 }
 
-const STREAM_RENDER_DEBOUNCE_MS = 160;
-const STREAM_RENDER_MAX_WAIT_MS = 1000;
 const STREAM_APPEND_GUARD_LEN = 64;
 
-// Lazy-loaded marked instance with custom renderer configuration
-let markedInstance: any = null;
+let markedInstance: Marked<string, string> | null = null;
 let markedLoading = false;
 let markedLoadQueue: Array<() => void> = [];
 
 let markdownWorkerUnavailable = false;
 let markdownWorkerErrorLogged = false;
 
-function escapeHtml(raw: string): string {
-  return String(raw ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function normalizeLanguageClass(lang?: string): string {
-  const v = String(lang ?? '').trim();
-  if (!v) return '';
-  const safe = v.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
-  return safe ? ` language-${safe}` : '';
-}
-
-async function getMarked(): Promise<any> {
+async function getMarked(): Promise<Marked<string, string> | null> {
   if (markedInstance) return markedInstance;
 
-  return new Promise<any>((resolve) => {
+  return new Promise<Marked<string, string> | null>((resolve) => {
     markedLoadQueue.push(() => resolve(markedInstance));
 
     if (markedLoading) return;
@@ -54,35 +42,12 @@ async function getMarked(): Promise<any> {
 
     import('marked')
       .then(({ Marked }) => {
-        const instance = new Marked();
-
-        // Configure custom renderer
-        const renderer = {
-          link(token: { href: string; title?: string | null; text: string }) {
-            const titleAttr = token.title ? ` title="${token.title}"` : '';
-            return `<a href="${token.href}" class="chat-md-link" target="_blank" rel="noopener noreferrer"${titleAttr}>${token.text}</a>`;
-          },
-          codespan(token: { text: string }) {
-            return `<code class="chat-md-inline-code">${escapeHtml(token.text)}</code>`;
-          },
-          code(token: { text: string; lang?: string }) {
-            const langClass = normalizeLanguageClass(token.lang).trim() || 'language-text';
-            return `<pre class="chat-md-code-block"><code class="${langClass}">${escapeHtml(token.text)}</code></pre>`;
-          },
-          blockquote(token: { text: string }) {
-            return `<blockquote class="chat-md-blockquote">${token.text}</blockquote>`;
-          },
-          image(token: { href: string; title?: string | null; text: string }) {
-            const titleAttr = token.title ? ` title="${token.title}"` : '';
-            return `<img src="${token.href}" alt="${token.text}" class="chat-md-image"${titleAttr} />`;
-          },
-        };
-
-        instance.use({ renderer });
+        const instance = new Marked<string, string>();
+        instance.use({ renderer: createMarkdownRenderer() });
         markedInstance = instance;
+        markedLoading = false;
 
-        // Flush all waiting callers
-        for (const cb of markedLoadQueue) cb();
+        for (const callback of markedLoadQueue) callback();
         markedLoadQueue = [];
       })
       .catch((err) => {
@@ -93,12 +58,15 @@ async function getMarked(): Promise<any> {
   });
 }
 
-async function renderMarkdownFallback(content: string): Promise<string> {
+async function renderMarkdownFallback(
+  content: string,
+  streaming: boolean,
+): Promise<MarkdownRenderSnapshot> {
   const marked = await getMarked();
   if (!marked) {
     throw new Error('marked failed to load');
   }
-  return marked.parse(content, { async: false }) as string;
+  return buildMarkdownRenderSnapshot(marked, content, streaming);
 }
 
 type StreamingTextProps = {
@@ -107,8 +75,6 @@ type StreamingTextProps = {
   class?: string;
 };
 
-// StreamingText incrementally appends text to the DOM to avoid O(n) textContent
-// updates on every stream delta (which becomes O(n^2) for long outputs).
 const StreamingText: Component<StreamingTextProps> = (props) => {
   const [el, setEl] = createSignal<HTMLDivElement | null>(null);
 
@@ -124,8 +90,7 @@ const StreamingText: Component<StreamingTextProps> = (props) => {
     rafId = requestAnimationFrame(() => {
       rafId = null;
       const node = el();
-      if (!node) return;
-      if (!pending) return;
+      if (!node || !pending) return;
       const text = pending;
       pending = '';
       node.appendChild(document.createTextNode(text));
@@ -195,202 +160,168 @@ const StreamingText: Component<StreamingTextProps> = (props) => {
   );
 };
 
-/**
- * Renders markdown content. While streaming, it throttles re-render frequency.
- */
+function isAppendCompatible(base: string, current: string): boolean {
+  if (current.length < base.length) return false;
+  const guardLen = Math.min(STREAM_APPEND_GUARD_LEN, base.length);
+  if (guardLen === 0) return true;
+  const guard = base.slice(base.length - guardLen);
+  return current.slice(base.length - guardLen, base.length) === guard;
+}
+
 export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
-  const [renderedHtml, setRenderedHtml] = createSignal<string>('');
-  const [renderedText, setRenderedText] = createSignal<string>('');
+  const [renderedSnapshot, setRenderedSnapshot] = createSignal<MarkdownRenderSnapshot | null>(null);
+  const [renderedText, setRenderedText] = createSignal('');
   const isEmptyStreaming = createMemo(() => props.streaming === true && String(props.content ?? '') === '');
 
   let destroyed = false;
   let inFlight = false;
-  let queuedContent: { content: string; force: boolean } | null = null;
+  let queuedContent: { content: string; streaming: boolean } | null = null;
 
-  let hasRenderedOnce = false;
-  let latestContent = '';
-
-  let debounceTimer: number | null = null;
-  let maxWaitTimer: number | null = null;
-  let lastStartAtMs = 0;
-
-  const clearDebounceTimer = () => {
-    if (debounceTimer !== null) {
-      clearTimeout(debounceTimer);
-      debounceTimer = null;
-    }
+  const clearSnapshot = () => {
+    queuedContent = null;
+    setRenderedSnapshot(null);
+    setRenderedText('');
   };
 
-  const clearMaxWaitTimer = () => {
-    if (maxWaitTimer !== null) {
-      clearTimeout(maxWaitTimer);
-      maxWaitTimer = null;
-    }
-  };
-
-  const startRender = (content: string, force: boolean) => {
+  const startRender = (content: string, streaming: boolean) => {
     if (destroyed) return;
     const requested = String(content ?? '');
-    if (!requested) return;
-
-    clearDebounceTimer();
-    clearMaxWaitTimer();
-    lastStartAtMs = Date.now();
-
-    // Overwrite any stale queued content so we never render older text after this request.
-    queuedContent = { content: requested, force: false };
+    if (!requested) {
+      clearSnapshot();
+      return;
+    }
 
     void (async () => {
       inFlight = true;
       try {
-        let html: string | null = null;
+        let snapshot: MarkdownRenderSnapshot | null = null;
         if (!markdownWorkerUnavailable) {
-          html = await renderMarkdownHtml(requested).catch(async (err) => {
+          snapshot = await renderMarkdownSnapshot(requested, { streaming }).catch(async (err) => {
             markdownWorkerUnavailable = true;
             if (!markdownWorkerErrorLogged) {
               markdownWorkerErrorLogged = true;
               console.warn('Markdown worker render failed; streaming parse disabled:', err);
             }
-            if (!force) {
+            if (streaming) {
               throw err;
             }
-            return await renderMarkdownFallback(requested);
+            return await renderMarkdownFallback(requested, streaming);
           });
-        } else if (force) {
-          html = await renderMarkdownFallback(requested);
+        } else if (!streaming) {
+          snapshot = await renderMarkdownFallback(requested, streaming);
         }
 
-        if (destroyed) return;
-        if (html === null) return;
-
-        setRenderedHtml(String(html ?? ''));
-        setRenderedText(requested);
-        hasRenderedOnce = true;
+        if (destroyed || snapshot === null) return;
+        batch(() => {
+          setRenderedSnapshot(snapshot);
+          setRenderedText(requested);
+        });
       } catch (err) {
-        // Keep the previous HTML if available; streaming text remains visible.
-        if (force) {
+        if (!streaming) {
           console.error('Markdown render error:', err);
         }
       } finally {
         inFlight = false;
       }
+
       if (destroyed) return;
 
       const next = queuedContent;
       queuedContent = null;
-      if (next && next.content !== requested) {
-        scheduleRender(next.content, next.force);
+      if (next && (next.content !== requested || next.streaming !== streaming)) {
+        scheduleRender(next.content, next.streaming);
       }
     })();
   };
 
-  const scheduleRender = (content: string, force: boolean) => {
+  const scheduleRender = (content: string, streaming: boolean) => {
     if (destroyed) return;
-    const text = String(content ?? '');
-    latestContent = text;
 
+    const text = String(content ?? '');
     if (!text) {
-      clearDebounceTimer();
-      clearMaxWaitTimer();
-      queuedContent = null;
-      setRenderedHtml('');
-      setRenderedText('');
-      hasRenderedOnce = false;
+      clearSnapshot();
       return;
     }
 
-    if (markdownWorkerUnavailable && !force) {
+    if (markdownWorkerUnavailable && streaming) {
       return;
     }
 
     if (inFlight) {
-      queuedContent = { content: text, force: queuedContent?.force === true ? true : force };
+      queuedContent = { content: text, streaming };
       return;
     }
 
-    if (force || !hasRenderedOnce) {
-      startRender(text, force);
-      return;
-    }
-
-    clearDebounceTimer();
-
-    // Debounce: wait for a short pause. If streaming never pauses, maxWait triggers.
-    debounceTimer = window.setTimeout(() => {
-      debounceTimer = null;
-      if (destroyed) return;
-      if (markdownWorkerUnavailable && !force) return;
-      if (inFlight) {
-        queuedContent = { content: latestContent, force: false };
-        return;
-      }
-      startRender(latestContent, force);
-    }, STREAM_RENDER_DEBOUNCE_MS);
-
-    // Max-wait: keep markdown styling fresh during long continuous streams.
-    if (maxWaitTimer === null) {
-      const now = Date.now();
-      const sinceLastStart = lastStartAtMs > 0 ? now - lastStartAtMs : 0;
-      const dueIn = Math.max(0, STREAM_RENDER_MAX_WAIT_MS - sinceLastStart);
-      maxWaitTimer = window.setTimeout(() => {
-        maxWaitTimer = null;
-        if (destroyed) return;
-        if (markdownWorkerUnavailable && !force) return;
-        if (inFlight) {
-          queuedContent = { content: latestContent, force: false };
-          return;
-        }
-        startRender(latestContent, force);
-      }, dueIn);
-    }
+    startRender(text, streaming);
   };
 
   onCleanup(() => {
     destroyed = true;
-    clearDebounceTimer();
-    clearMaxWaitTimer();
     queuedContent = null;
   });
 
-  const canUseHtml = createMemo(() => {
-    const html = renderedHtml();
-    if (!html) return false;
-    const base = renderedText();
-    if (!base) return false;
-    const current = String(props.content ?? '');
-    if (current.length < base.length) return false;
-
-    // Hot-path: avoid O(n) startsWith checks on every stream delta. For markdown blocks,
-    // the content is expected to be append-only (block-delta). We validate with a small
-    // suffix guard instead of full prefix comparison to keep streaming smooth.
-    const guardLen = Math.min(STREAM_APPEND_GUARD_LEN, base.length);
-    if (guardLen === 0) return true;
-    const guard = base.slice(base.length - guardLen);
-    return current.slice(base.length - guardLen, base.length) === guard;
+  createEffect(() => {
+    scheduleRender(String(props.content ?? ''), props.streaming === true);
   });
 
-  // Render markdown to HTML when content changes (including during streaming).
-  createEffect(() => {
-    const content = String(props.content ?? '');
-    const streaming = props.streaming === true;
-    // When streaming stops, force a final parse to avoid leaving a throttled frame behind.
-    scheduleRender(content, !streaming);
+  const renderState = createMemo(() => {
+    const snapshot = renderedSnapshot();
+    if (!snapshot) return null;
+
+    const base = renderedText();
+    const current = String(props.content ?? '');
+    if (!isAppendCompatible(base, current)) return null;
+
+    return {
+      snapshot,
+      current,
+      fresh: current.length === base.length,
+    };
   });
 
   return (
     <div class={cn('chat-markdown-block', props.class)}>
-      <Show when={!isEmptyStreaming()} fallback={
-        <div class="chat-markdown-empty-streaming" aria-label="Assistant is responding">
-          <StreamingCursor />
-        </div>
-      }>
-        <Show when={canUseHtml()} fallback={<StreamingText text={String(props.content ?? '')} />}>
-          {/* eslint-disable-next-line solid/no-innerhtml */}
-          <div innerHTML={renderedHtml()} />
-          <StreamingText
-            text={String(props.content ?? '')}
-            offset={renderedText().length}
-          />
+      <Show
+        when={!isEmptyStreaming()}
+        fallback={
+          <div class="chat-markdown-empty-streaming" aria-label="Assistant is responding">
+            <StreamingCursor />
+          </div>
+        }
+      >
+        <Show when={renderState()} fallback={<StreamingText text={String(props.content ?? '')} />}>
+          {(stateAccessor) => {
+            const state = () => stateAccessor();
+            const shouldRenderRawSuffix = () =>
+              state().snapshot.committedSourceLength < state().current.length
+              && (!state().fresh || state().snapshot.tail.kind !== 'html');
+
+            return (
+              <>
+                <For each={state().snapshot.committedSegments}>
+                  {(segment) => (
+                    <div
+                      class="chat-markdown-committed-segment"
+                      data-segment-key={segment.key}
+                      // eslint-disable-next-line solid/no-innerhtml
+                      innerHTML={segment.html}
+                    />
+                  )}
+                </For>
+
+                <Show when={state().fresh && state().snapshot.tail.kind === 'html'}>
+                  <StreamingMarkdownTail tail={state().snapshot.tail} />
+                </Show>
+
+                <Show when={shouldRenderRawSuffix()}>
+                  <StreamingText
+                    text={state().current}
+                    offset={state().snapshot.committedSourceLength}
+                  />
+                </Show>
+              </>
+            );
+          }}
         </Show>
       </Show>
     </div>
