@@ -5,13 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/floegence/redeven-agent/internal/accessgate"
+	"github.com/floegence/redeven-agent/internal/agent"
 	gatewaypkg "github.com/floegence/redeven-agent/internal/codeapp/gateway"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
@@ -86,6 +90,7 @@ func newTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 	t.Helper()
 	cfgPath := writeTestConfig(t)
 	return &Server{
+		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		configPath: cfgPath,
 		version:    "dev",
 		accessGate: gate,
@@ -290,6 +295,114 @@ func TestServer_handleFavicon_redirect(t *testing.T) {
 	}
 	if loc := res.Header.Get("Location"); loc != "/_redeven_proxy/env/favicon.svg" {
 		t.Fatalf("location = %q, want %q", loc, "/_redeven_proxy/env/favicon.svg")
+	}
+}
+
+func TestServer_handleRuntime_reportsDesktopManagedMetadata(t *testing.T) {
+	s := newTestServer(t, nil)
+	s.desktopManaged = true
+	s.effectiveRunMode = "hybrid"
+	s.remoteEnabled = true
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/runtime", nil)
+	res := httptest.NewRecorder()
+	s.handleRuntime(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Result().StatusCode, http.StatusOK)
+	}
+
+	var body runtimeResp
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if !body.DesktopManaged || body.EffectiveRunMode != "hybrid" || !body.RemoteEnabled {
+		t.Fatalf("unexpected runtime body: %#v", body)
+	}
+}
+
+func TestServer_handleLatestVersion_desktopManagedMessage(t *testing.T) {
+	s := newTestServer(t, nil)
+	s.version = "v1.2.3"
+	s.desktopManaged = true
+	s.effectiveRunMode = "hybrid"
+	s.remoteEnabled = true
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/agent/version/latest", nil)
+	res := httptest.NewRecorder()
+	s.handleLatestVersion(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Result().StatusCode, http.StatusOK)
+	}
+
+	var body latestVersionResp
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body.LatestVersion != "v1.2.3" {
+		t.Fatalf("LatestVersion = %q", body.LatestVersion)
+	}
+	if !body.DesktopManaged || !strings.Contains(body.Message, "Managed by Redeven Desktop") {
+		t.Fatalf("unexpected latest version body: %#v", body)
+	}
+}
+
+func TestServer_Start_UsesActualDynamicPortForDisplayURLs(t *testing.T) {
+	cfgPath := writeTestConfig(t)
+	bind, err := ParseBind("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("ParseBind() error = %v", err)
+	}
+
+	s := &Server{
+		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		bind:       bind,
+		configPath: cfgPath,
+		gw:         newTestGateway(t, cfgPath),
+		pending:    make(map[string]pendingDirect),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := s.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	if s.Port() == 0 {
+		t.Fatalf("Port() = 0, want non-zero bound port")
+	}
+	if s.ListenLabel() == "127.0.0.1:0" {
+		t.Fatalf("ListenLabel() = %q, want actual port", s.ListenLabel())
+	}
+	urls := s.DisplayURLs()
+	if len(urls) != 1 || strings.Contains(urls[0], ":0/") {
+		t.Fatalf("DisplayURLs() = %#v, want actual bound port", urls)
+	}
+}
+
+func TestNew_PreservesExplicitDynamicLoopbackBind(t *testing.T) {
+	cfgPath := writeTestConfig(t)
+	bind, err := ParseBind("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("ParseBind() error = %v", err)
+	}
+
+	s, err := New(Options{
+		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Bind:       bind,
+		Gateway:    newTestGateway(t, cfgPath),
+		Agent:      &agent.Agent{},
+		ConfigPath: cfgPath,
+		Version:    "dev",
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if s.bind.Host() != "127.0.0.1" || s.bind.Port() != 0 {
+		t.Fatalf("server bind = %#v, want explicit dynamic loopback bind", s.bind)
 	}
 }
 

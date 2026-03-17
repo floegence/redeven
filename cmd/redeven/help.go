@@ -27,7 +27,7 @@ Usage:
 
 Commands:
   bootstrap   Exchange an environment token for local agent config.
-  run         Start the agent in remote, hybrid, or local mode.
+  run         Start the agent in remote, hybrid, local, or desktop mode.
   search      Run web search using configured provider credentials.
   knowledge   Build or verify embedded knowledge bundle assets.
   version     Print build information.
@@ -99,15 +99,16 @@ func runHelpText() string {
 	return strings.TrimLeft(fmt.Sprintf(`
 redeven run
 
-Start the agent in remote, hybrid, or local mode.
+Start the agent in remote, hybrid, local, or desktop mode.
 
 Usage:
   redeven run [flags]
 
 Modes:
-  remote   Connect to the control plane only. No Local UI is started.
-  hybrid   Connect to the control plane and start the Local UI.
-  local    Start the Local UI only. No bootstrap is required.
+  remote    Connect to the control plane only. No Local UI is started.
+  hybrid    Connect to the control plane and start the Local UI.
+  local     Start the Local UI only. No bootstrap is required.
+  desktop   Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.
 
 Bootstrap rules:
   - Recommended flow: run %[5]s once, then use %[6]s.
@@ -115,7 +116,8 @@ Bootstrap rules:
 
 Local UI bind rules:
   - Default bind: localhost:23998
-  - Accepted examples: localhost:23998, 127.0.0.1:24000, 0.0.0.0:24000, 192.168.1.11:24000
+  - Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000
+  - localhost:0 is rejected because dual-stack localhost listeners cannot share one dynamic port.
   - Non-loopback binds require an access password.
 
 Password rules:
@@ -123,7 +125,8 @@ Password rules:
   - --password-env and --password-file trigger startup verification in an interactive terminal.
 
 Flags:
-  --mode <remote|hybrid|local>      Run mode (default: remote).
+  --mode <remote|hybrid|local|desktop>
+                                    Run mode (default: remote).
   --local-ui-bind <host:port>       Local UI bind address (default: localhost:23998).
   --controlplane <url>              Controlplane base URL for one-shot bootstrap.
   --env-id <env_public_id>          Environment public ID for one-shot bootstrap.
@@ -132,6 +135,8 @@ Flags:
   --password <password>             Access password for the Local UI.
   --password-env <env_name>         Read the Local UI password from an environment variable.
   --password-file <path>            Read the Local UI password from a file.
+  --desktop-managed                 Disable CLI self-upgrade for desktop-managed Local UI runs.
+  --startup-report-file <path>      Write machine-readable Local UI readiness JSON.
 
 Examples:
   Remote mode:
@@ -142,6 +147,9 @@ Examples:
 
   Local-only mode:
     redeven run --mode local
+
+  Desktop shell mode:
+    redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0
 
   Hybrid mode with a custom Local UI bind:
     redeven run --mode hybrid --local-ui-bind 127.0.0.1:24000

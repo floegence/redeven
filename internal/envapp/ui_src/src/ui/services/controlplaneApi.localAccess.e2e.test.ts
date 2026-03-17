@@ -22,9 +22,15 @@ describe('controlplaneApi local access flow', () => {
 
   it('detects local runtime from public access status even while locked', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe('/api/local/access/status');
-      expect(init?.credentials).toBe('same-origin');
-      return jsonResponse({ password_required: true, unlocked: false });
+      if (String(input) === '/api/local/access/status') {
+        expect(init?.credentials).toBe('same-origin');
+        return jsonResponse({ password_required: true, unlocked: false });
+      }
+      if (String(input) === '/api/local/runtime') {
+        expect(init?.credentials).toBe('same-origin');
+        return jsonResponse({ message: 'locked' }, 423);
+      }
+      throw new Error(`unexpected request: ${String(input)}`);
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -36,7 +42,41 @@ describe('controlplaneApi local access flow', () => {
       env_public_id: 'env_local',
     });
     expect(String(runtime?.direct_ws_url ?? '')).toContain('/_redeven_direct/ws');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('loads desktop-managed runtime metadata after the local session is unlocked', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/local/access/status') {
+        expect(init?.credentials).toBe('same-origin');
+        return jsonResponse({ password_required: true, unlocked: true });
+      }
+      if (String(input) === '/api/local/runtime') {
+        expect(init?.credentials).toBe('same-origin');
+        return jsonResponse({
+          mode: 'local',
+          env_public_id: 'env_local',
+          direct_ws_url: 'ws://127.0.0.1:43123/_redeven_direct/ws',
+          desktop_managed: true,
+          effective_run_mode: 'hybrid',
+          remote_enabled: true,
+        });
+      }
+      throw new Error(`unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    const runtime = await mod.refreshLocalRuntime();
+
+    expect(runtime).toEqual({
+      mode: 'local',
+      env_public_id: 'env_local',
+      direct_ws_url: 'ws://127.0.0.1:43123/_redeven_direct/ws',
+      desktop_managed: true,
+      effective_run_mode: 'hybrid',
+      remote_enabled: true,
+    });
   });
 
   it('posts unlock with same-origin credentials so the local session cookie can be stored', async () => {

@@ -37,11 +37,17 @@ For each release tag, the workflow publishes:
 - `redeven_linux_arm64.tar.gz`
 - `redeven_darwin_amd64.tar.gz`
 - `redeven_darwin_arm64.tar.gz`
+- `Redeven-Desktop-X.Y.Z-linux-x64.AppImage`
+- `Redeven-Desktop-X.Y.Z-linux-arm64.AppImage`
+- `Redeven-Desktop-X.Y.Z-mac-x64.dmg`
+- `Redeven-Desktop-X.Y.Z-mac-arm64.dmg`
 - `SHA256SUMS`
 - `SHA256SUMS.sig`
 - `SHA256SUMS.pem`
 
 All artifacts are uploaded to the GitHub Release for that tag.
+
+Desktop assets bundle the matching `redeven` binary inside the Electron package and use the same release tag as the CLI tarballs.
 
 ## Signature model
 

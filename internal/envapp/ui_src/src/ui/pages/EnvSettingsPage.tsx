@@ -18,6 +18,7 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import { useAgentUpdateContext } from '../maintenance/AgentUpdateContext';
 import { isReleaseVersion } from '../maintenance/agentVersion';
+import { resolveDesktopManagedAgentState } from '../maintenance/desktopManagedAgent';
 import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/shared';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -888,6 +889,7 @@ export function EnvSettingsPage() {
   const latestVersion = createMemo(() => agentUpdate.version.latestMeta());
   const latestVersionLoading = createMemo(() => agentUpdate.version.latestMetaLoading());
   const latestVersionError = createMemo(() => agentUpdate.version.latestMetaError());
+  const desktopManagedAgent = createMemo(() => resolveDesktopManagedAgentState(latestVersion()));
   const displayedStatus = createMemo(() => agentUpdate.maintenance.displayedStatus());
   const maintenanceStage = createMemo(() => agentUpdate.maintenance.stage());
   const maintenanceError = createMemo(() => agentUpdate.maintenance.error());
@@ -932,6 +934,7 @@ export function EnvSettingsPage() {
 
   const canStartUpgrade = createMemo(() => {
     if (maintaining()) return false;
+    if (desktopManagedAgent().desktopManaged) return false;
     if (protocol.status() !== 'connected') return false;
     if (!targetUpgradeVersionValid()) return false;
     if (!canAdmin()) return false;
@@ -2920,16 +2923,18 @@ export function EnvSettingsPage() {
                 >
                   Restart agent
                 </Button>
-                <Button
-                  size="sm"
-                  variant="default"
-                  class="w-full sm:w-auto"
-                  onClick={() => setUpgradeOpen(true)}
-                  loading={isUpgrading()}
-                  disabled={!canStartUpgrade()}
-                >
-                  Update agent
-                </Button>
+                <Show when={!desktopManagedAgent().desktopManaged}>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    class="w-full sm:w-auto"
+                    onClick={() => setUpgradeOpen(true)}
+                    loading={isUpgrading()}
+                    disabled={!canStartUpgrade()}
+                  >
+                    Update agent
+                  </Button>
+                </Show>
               </>
             }
           >
@@ -2952,19 +2957,26 @@ export function EnvSettingsPage() {
           </div>
 
           <div class="mt-3 space-y-2">
-            <div>
-              <FieldLabel>Target version</FieldLabel>
-              <Input
-                value={targetVersionInput()}
-                onInput={(e) => setTargetVersionInput(e.currentTarget.value)}
-                placeholder="v1.2.3"
-                size="sm"
-                class="w-full"
-                disabled={maintaining()}
-              />
-            </div>
-            <Show when={targetUpgradeVersion() && !targetUpgradeVersionValid()}>
-              <div class="text-xs text-destructive">Use a valid release tag, for example: v1.2.3.</div>
+            <Show when={!desktopManagedAgent().desktopManaged}>
+              <>
+                <div>
+                  <FieldLabel>Target version</FieldLabel>
+                  <Input
+                    value={targetVersionInput()}
+                    onInput={(e) => setTargetVersionInput(e.currentTarget.value)}
+                    placeholder="v1.2.3"
+                    size="sm"
+                    class="w-full"
+                    disabled={maintaining()}
+                  />
+                </div>
+                <Show when={targetUpgradeVersion() && !targetUpgradeVersionValid()}>
+                  <div class="text-xs text-destructive">Use a valid release tag, for example: v1.2.3.</div>
+                </Show>
+              </>
+            </Show>
+            <Show when={desktopManagedAgent().desktopManaged}>
+              <div class="text-xs text-muted-foreground">{desktopManagedAgent().message}</div>
             </Show>
             <Show when={latestVersionError()}>
               <div class="text-xs text-destructive">Latest version metadata is unavailable: {latestVersionError()}</div>
