@@ -7,9 +7,11 @@ import type { PersistApi } from '@floegence/floe-webapp-core';
 export const TERMINAL_THEME_PERSIST_KEY = 'terminal:theme';
 export const TERMINAL_FONT_SIZE_PERSIST_KEY = 'terminal:font_size';
 export const TERMINAL_FONT_FAMILY_PERSIST_KEY = 'terminal:font_family';
+export const TERMINAL_MOBILE_INPUT_MODE_PERSIST_KEY = 'terminal:mobile_input_mode';
 
 export const TERMINAL_MIN_FONT_SIZE = 10;
 export const TERMINAL_MAX_FONT_SIZE = 20;
+export type TerminalMobileInputMode = 'floe' | 'system';
 
 let initialized = false;
 let persistRef: PersistApi | null = null;
@@ -19,9 +21,14 @@ const clampFontSize = (value: number) => {
   return Math.max(TERMINAL_MIN_FONT_SIZE, Math.min(TERMINAL_MAX_FONT_SIZE, Math.round(value)));
 };
 
+const normalizeTerminalMobileInputMode = (value: unknown): TerminalMobileInputMode => {
+  return String(value ?? '').trim() === 'system' ? 'system' : 'floe';
+};
+
 const [terminalUserTheme, setTerminalUserTheme] = createSignal<string>('system');
 const [terminalFontSize, setTerminalFontSize] = createSignal<number>(12);
 const [terminalFontFamilyId, setTerminalFontFamilyId] = createSignal<string>('iosevka');
+const [terminalMobileInputMode, setTerminalMobileInputMode] = createSignal<TerminalMobileInputMode>('floe');
 
 export function ensureTerminalPreferencesInitialized(persist: PersistApi) {
   if (initialized) return;
@@ -36,6 +43,9 @@ export function ensureTerminalPreferencesInitialized(persist: PersistApi) {
 
   const loadedFamily = persist.load<string>(TERMINAL_FONT_FAMILY_PERSIST_KEY, 'iosevka');
   setTerminalFontFamilyId((loadedFamily ?? '').trim() || 'iosevka');
+
+  const loadedMobileInputMode = persist.load<TerminalMobileInputMode>(TERMINAL_MOBILE_INPUT_MODE_PERSIST_KEY, 'floe');
+  setTerminalMobileInputMode(normalizeTerminalMobileInputMode(loadedMobileInputMode));
 }
 
 export function useTerminalPreferences() {
@@ -57,12 +67,20 @@ export function useTerminalPreferences() {
     persistRef?.debouncedSave(TERMINAL_FONT_FAMILY_PERSIST_KEY, next);
   };
 
+  const setMobileInputMode = (value: TerminalMobileInputMode | string) => {
+    const next = normalizeTerminalMobileInputMode(value);
+    setTerminalMobileInputMode(next);
+    persistRef?.debouncedSave(TERMINAL_MOBILE_INPUT_MODE_PERSIST_KEY, next);
+  };
+
   return {
     userTheme: terminalUserTheme,
     fontSize: terminalFontSize,
     fontFamilyId: terminalFontFamilyId,
+    mobileInputMode: terminalMobileInputMode,
     setUserTheme,
     setFontSize,
     setFontFamily,
+    setMobileInputMode,
   };
 }
