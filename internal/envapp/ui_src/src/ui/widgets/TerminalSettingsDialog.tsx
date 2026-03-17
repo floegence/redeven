@@ -1,6 +1,7 @@
-import { For } from 'solid-js';
+import { For, Show } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Button, Dialog, NumberInput } from '@floegence/floe-webapp-core/ui';
+import type { TerminalMobileInputMode } from '../services/terminalPreferences';
 
 type TerminalThemeOptionId = 'system' | 'dark' | 'light' | 'solarizedDark' | 'monokai' | 'tokyoNight';
 
@@ -50,12 +51,14 @@ type TerminalSettingsDialogProps = {
   userTheme: string;
   fontSize: number;
   fontFamilyId: string;
+  mobileInputMode: TerminalMobileInputMode;
   minFontSize: number;
   maxFontSize: number;
   onOpenChange: (open: boolean) => void;
   onThemeChange: (value: string) => void;
   onFontSizeChange: (value: number) => void;
   onFontFamilyChange: (value: string) => void;
+  onMobileInputModeChange: (value: TerminalMobileInputMode) => void;
 };
 
 function SectionTitle(props: { title: string; description: string }) {
@@ -90,6 +93,33 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         </Button>
       }
     >
+      <Show when={isMobile()}>
+        <section class="space-y-3">
+          <SectionTitle
+            title="Mobile input"
+            description="Choose the default keyboard for mobile terminal sessions."
+          />
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Button
+              size="sm"
+              variant={props.mobileInputMode === 'floe' ? 'primary' : 'outline'}
+              class="w-full justify-start"
+              onClick={() => props.onMobileInputModeChange('floe')}
+            >
+              Floe Keyboard
+            </Button>
+            <Button
+              size="sm"
+              variant={props.mobileInputMode === 'system' ? 'primary' : 'outline'}
+              class="w-full justify-start"
+              onClick={() => props.onMobileInputModeChange('system')}
+            >
+              System IME
+            </Button>
+          </div>
+        </section>
+      </Show>
+
       <section class="space-y-3">
         <SectionTitle
           title="Theme"

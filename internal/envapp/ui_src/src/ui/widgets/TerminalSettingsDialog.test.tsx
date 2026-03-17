@@ -57,6 +57,7 @@ describe('TerminalSettingsDialog', () => {
     const onThemeChange = vi.fn();
     const onFontSizeChange = vi.fn();
     const onFontFamilyChange = vi.fn();
+    const onMobileInputModeChange = vi.fn();
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -67,12 +68,14 @@ describe('TerminalSettingsDialog', () => {
         userTheme="system"
         fontSize={12}
         fontFamilyId="iosevka"
+        mobileInputMode="floe"
         minFontSize={10}
         maxFontSize={20}
         onOpenChange={onOpenChange}
         onThemeChange={onThemeChange}
         onFontSizeChange={onFontSizeChange}
         onFontFamilyChange={onFontFamilyChange}
+        onMobileInputModeChange={onMobileInputModeChange}
       />
     ), host);
 
@@ -93,11 +96,14 @@ describe('TerminalSettingsDialog', () => {
     expect(onThemeChange).toHaveBeenCalledWith('dark');
     expect(onFontFamilyChange).toHaveBeenCalledWith('jetbrains');
     expect(onFontSizeChange).toHaveBeenCalledWith(15);
+    expect(onMobileInputModeChange).not.toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('uses the mobile dialog layout when the terminal runs on mobile', () => {
+  it('uses the mobile dialog layout and exposes mobile input mode controls on mobile', () => {
     layoutState.mobile = true;
+
+    const onMobileInputModeChange = vi.fn();
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -108,12 +114,14 @@ describe('TerminalSettingsDialog', () => {
         userTheme="dark"
         fontSize={12}
         fontFamilyId="iosevka"
+        mobileInputMode="floe"
         minFontSize={10}
         maxFontSize={20}
         onOpenChange={() => undefined}
         onThemeChange={() => undefined}
         onFontSizeChange={() => undefined}
         onFontFamilyChange={() => undefined}
+        onMobileInputModeChange={onMobileInputModeChange}
       />
     ), host);
 
@@ -121,5 +129,8 @@ describe('TerminalSettingsDialog', () => {
     expect(dialog).toBeTruthy();
     expect(dialog?.className).toContain('h-[calc(100dvh-0.5rem)]');
     expect(dialog?.className).toContain('w-[calc(100vw-0.5rem)]');
+    expect(host.textContent).toContain('Mobile input');
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('System IME'))?.click();
+    expect(onMobileInputModeChange).toHaveBeenCalledWith('system');
   });
 });

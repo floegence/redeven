@@ -26,6 +26,7 @@ Agent side:
 
 - The agent serves Env App static assets under `/_redeven_proxy/env/*` via the local gateway.
 - The Env App UI talks to the agent using **Flowersec RPC/streams** (fs/terminal/monitor domains).
+- On mobile, Terminal defaults to the built-in Floe keyboard and still lets users switch back to the system IME when needed.
 
 ## Session bootstrap flow used by the Env App UI
 
