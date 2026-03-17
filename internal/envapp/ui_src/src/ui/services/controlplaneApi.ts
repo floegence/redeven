@@ -39,12 +39,18 @@ export type AgentLatestVersion = {
   fetched_at_ms?: number;
   cache_ttl_ms?: number;
   message?: string;
+  desktop_managed?: boolean;
+  effective_run_mode?: 'local' | 'hybrid' | 'remote';
+  remote_enabled?: boolean;
 };
 
 export type LocalRuntimeInfo = {
   mode: 'local';
   env_public_id: string;
   direct_ws_url?: string;
+  desktop_managed?: boolean;
+  effective_run_mode?: 'local' | 'hybrid' | 'remote';
+  remote_enabled?: boolean;
 };
 
 export type LocalAccessStatus = {
@@ -287,6 +293,43 @@ async function fetchLocalJSON<T>(input: RequestInfo | URL, init: RequestInit & {
 
 let cachedLocalRuntime: LocalRuntimeInfo | null | undefined = undefined;
 
+function normalizeLocalRuntimeInfo(raw: unknown): LocalRuntimeInfo {
+  const data = (raw ?? {}) as Record<string, unknown>;
+  const mode = 'local';
+  const envPublicID = asString(data.env_public_id) || 'env_local';
+  const effectiveRunModeRaw = asString(data.effective_run_mode).toLowerCase();
+  const effectiveRunMode = effectiveRunModeRaw === 'hybrid' || effectiveRunModeRaw === 'remote' || effectiveRunModeRaw === 'local'
+    ? effectiveRunModeRaw
+    : undefined;
+  return {
+    mode,
+    env_public_id: envPublicID,
+    direct_ws_url: asString(data.direct_ws_url) || buildLocalDirectWSURLBestEffort(),
+    desktop_managed: Boolean(data.desktop_managed),
+    effective_run_mode: effectiveRunMode,
+    remote_enabled: typeof data.remote_enabled === 'boolean' ? data.remote_enabled : undefined,
+  };
+}
+
+async function loadLocalRuntimeInfo(): Promise<LocalRuntimeInfo | null> {
+  const access = await getLocalAccessStatus();
+  if (!access) return null;
+
+  try {
+    const out = await fetchLocalJSON<LocalRuntimeInfo>('/api/local/runtime', { method: 'GET' });
+    return normalizeLocalRuntimeInfo(out);
+  } catch (error) {
+    if (error instanceof APIError && error.status === 423) {
+      return {
+        mode: 'local',
+        env_public_id: 'env_local',
+        direct_ws_url: buildLocalDirectWSURLBestEffort(),
+      };
+    }
+    throw error;
+  }
+}
+
 export async function getLocalAccessStatus(): Promise<LocalAccessStatus | null> {
   try {
     const out = await fetchLocalJSON<LocalAccessStatus>('/api/local/access/status', { method: 'GET' });
@@ -312,19 +355,13 @@ export async function unlockLocalAccess(password: string): Promise<LocalAccessUn
 
 export async function getLocalRuntime(): Promise<LocalRuntimeInfo | null> {
   if (cachedLocalRuntime !== undefined) return cachedLocalRuntime;
+  cachedLocalRuntime = await loadLocalRuntimeInfo();
+  return cachedLocalRuntime;
+}
 
-  const access = await getLocalAccessStatus();
-  if (access) {
-    cachedLocalRuntime = {
-      mode: 'local',
-      env_public_id: 'env_local',
-      direct_ws_url: buildLocalDirectWSURLBestEffort(),
-    };
-    return cachedLocalRuntime;
-  }
-
-  cachedLocalRuntime = null;
-  return null;
+export async function refreshLocalRuntime(): Promise<LocalRuntimeInfo | null> {
+  cachedLocalRuntime = await loadLocalRuntimeInfo();
+  return cachedLocalRuntime;
 }
 
 export async function mintLocalDirectConnectInfo(): Promise<DirectConnectInfo> {

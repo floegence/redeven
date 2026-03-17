@@ -16,6 +16,9 @@ npm-debug.log*
 # Generated build artifacts (embedded into the agent binary)
 internal/envapp/ui/dist/
 internal/codeapp/ui/dist/
+desktop/dist/
+desktop/release/
+desktop/.bundle/
 
 # Local agent blueprint draft (do not commit)
 .agent.md

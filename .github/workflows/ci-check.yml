@@ -57,6 +57,7 @@ jobs:
           sh -n scripts/install.sh
           sh -n scripts/generate_release_notes.sh
           bash -n scripts/lint_ui.sh
+          bash -n scripts/check_desktop.sh
           bash -n scripts/ui_package_common.sh
           bash -n scripts/open_source_hygiene_check.sh
           bash -n scripts/install_git_hooks.sh
@@ -82,6 +83,9 @@ jobs:
 
       - name: UI lint
         run: ./scripts/lint_ui.sh
+
+      - name: Desktop checks
+        run: ./scripts/check_desktop.sh
 
       - name: Build embedded assets
         run: ./scripts/build_assets.sh

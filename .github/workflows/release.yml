@@ -84,9 +84,88 @@ jobs:
             dist/knowledge_bundle.sha256
           if-no-files-found: error
 
+  desktop:
+    name: Desktop ${{ matrix.goos }}-${{ matrix.goarch }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            runner: ubuntu-24.04
+            builder_platform: linux
+            builder_target: AppImage
+          - goos: linux
+            goarch: arm64
+            runner: ubuntu-24.04-arm
+            builder_platform: linux
+            builder_target: AppImage
+          - goos: darwin
+            goarch: amd64
+            runner: macos-13
+            builder_platform: mac
+            builder_target: dmg
+          - goos: darwin
+            goarch: arm64
+            runner: macos-14
+            builder_platform: mac
+            builder_target: dmg
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+
+      - name: Download matching agent package
+        uses: actions/download-artifact@v5
+        with:
+          name: package-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/agent
+
+      - name: Prepare bundled agent binary
+        run: |
+          set -euo pipefail
+          bundle_dir="desktop/.bundle/${{ matrix.goos }}-${{ matrix.goarch }}"
+          mkdir -p "${bundle_dir}"
+          tar -xzf "dist/agent/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz" -C "${bundle_dir}"
+          chmod +x "${bundle_dir}/redeven"
+
+      - name: Desktop quality checks
+        run: ./scripts/check_desktop.sh
+
+      - name: Build desktop package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          REDEVEN_DESKTOP_AGENT_BINARY: ${{ github.workspace }}/desktop/.bundle/${{ matrix.goos }}-${{ matrix.goarch }}/redeven
+          REDEVEN_DESKTOP_VERSION: ${{ github.ref_name }}
+          REDEVEN_DESKTOP_MAC_IDENTITY: "-"
+        run: |
+          set -euo pipefail
+          cd desktop
+          version="${REDEVEN_DESKTOP_VERSION#v}"
+          REDEVEN_DESKTOP_VERSION="${version}" \
+          npm run package -- --${{ matrix.builder_platform }} ${{ matrix.builder_target }}
+
+      - name: Upload desktop package artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: desktop-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            desktop/release/*.AppImage
+            desktop/release/*.dmg
+          if-no-files-found: error
+
   release:
     name: Create GitHub Release
-    needs: build
+    needs:
+      - build
+      - desktop
     runs-on: ubuntu-latest
 
     steps:
@@ -102,11 +181,18 @@ jobs:
           pattern: package-*
           merge-multiple: true
 
+      - name: Download all desktop artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: dist
+          pattern: desktop-*
+          merge-multiple: true
+
       - name: Generate checksums
         run: |
           set -euo pipefail
           cd dist
-          sha256sum redeven_*.tar.gz knowledge_bundle.manifest.json knowledge_bundle.sha256 > SHA256SUMS
+          sha256sum redeven_*.tar.gz Redeven-Desktop-* knowledge_bundle.manifest.json knowledge_bundle.sha256 > SHA256SUMS
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
@@ -129,6 +215,7 @@ jobs:
           generate_release_notes: true
           files: |
             dist/redeven_*.tar.gz
+            dist/Redeven-Desktop-*
             dist/SHA256SUMS
             dist/SHA256SUMS.sig
             dist/SHA256SUMS.pem

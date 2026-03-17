@@ -37,7 +37,8 @@ func TestRunCLIHelp(t *testing.T) {
 			"redeven run",
 			"Modes:",
 			"Local UI bind rules:",
-			"Accepted examples: localhost:23998, 127.0.0.1:24000, 0.0.0.0:24000, 192.168.1.11:24000",
+			"Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.",
+			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000",
 			"redeven run --mode hybrid --local-ui-bind 127.0.0.1:24000",
 		)
 	})
@@ -135,7 +136,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"invalid value for `--mode`: bad",
-			"Allowed values: remote, hybrid, local.",
+			"Allowed values: remote, hybrid, local, desktop.",
 			"Example: redeven run --mode hybrid",
 		)
 	})
@@ -147,7 +148,40 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"invalid value for `--local-ui-bind`: host must be localhost or an IP literal",
-			"Accepted examples: localhost:23998, 127.0.0.1:24000, 0.0.0.0:24000, 192.168.1.11:24000",
+			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000",
+		)
+	})
+
+	t.Run("localhost zero port explains the supported loopback alternative", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--local-ui-bind", "localhost:0")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr,
+			"invalid value for `--local-ui-bind`: localhost:0 is not supported; use 127.0.0.1:0 or [::1]:0",
+			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000",
+		)
+	})
+
+	t.Run("desktop managed requires a local ui mode", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "remote", "--desktop-managed")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr,
+			"`--desktop-managed` requires a Local UI run mode",
+			"Hint: use `redeven run --mode desktop --desktop-managed` for the packaged desktop shell.",
+		)
+	})
+
+	t.Run("startup report file requires a local ui mode", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "remote", "--startup-report-file", filepath.Join(t.TempDir(), "startup.json"))
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr,
+			"`--startup-report-file` requires a Local UI run mode",
+			"Hint: use `redeven run --mode desktop --startup-report-file <path>` when a desktop shell needs machine-readable readiness output.",
 		)
 	})
 

@@ -44,6 +44,10 @@ type Options struct {
 	Logger *slog.Logger
 	Bind   BindSpec
 
+	DesktopManaged   bool
+	EffectiveRunMode string
+	RemoteEnabled    bool
+
 	// Gateway is the Env App gateway handler mounted under /_redeven_proxy/*.
 	Gateway *gateway.Gateway
 
@@ -64,9 +68,12 @@ type Options struct {
 type Server struct {
 	log *slog.Logger
 
-	bind       BindSpec
-	configPath string
-	version    string
+	bind             BindSpec
+	configPath       string
+	version          string
+	desktopManaged   bool
+	effectiveRunMode string
+	remoteEnabled    bool
 
 	gw *gateway.Gateway
 	a  *agent.Agent
@@ -118,7 +125,7 @@ func New(opts Options) (*Server, error) {
 		return nil, errors.New("missing ConfigPath")
 	}
 	bind := opts.Bind
-	if bind.Port() == 0 {
+	if bind.Host() == "" && bind.Port() == 0 {
 		var err error
 		bind, err = ParseBind(DefaultBind)
 		if err != nil {
@@ -132,14 +139,17 @@ func New(opts Options) (*Server, error) {
 	}
 
 	return &Server{
-		log:        logger,
-		bind:       bind,
-		configPath: strings.TrimSpace(opts.ConfigPath),
-		version:    strings.TrimSpace(opts.Version),
-		gw:         opts.Gateway,
-		a:          opts.Agent,
-		accessGate: opts.AccessGate,
-		pending:    make(map[string]pendingDirect),
+		log:              logger,
+		bind:             bind,
+		configPath:       strings.TrimSpace(opts.ConfigPath),
+		version:          strings.TrimSpace(opts.Version),
+		desktopManaged:   opts.DesktopManaged,
+		effectiveRunMode: strings.TrimSpace(opts.EffectiveRunMode),
+		remoteEnabled:    opts.RemoteEnabled,
+		gw:               opts.Gateway,
+		a:                opts.Agent,
+		accessGate:       opts.AccessGate,
+		pending:          make(map[string]pendingDirect),
 	}, nil
 }
 
@@ -193,7 +203,7 @@ func (s *Server) Start(ctx context.Context) error {
 		}()
 	}
 
-	s.log.Info("local ui listening", "bind", s.bind.ListenLabel())
+	s.log.Info("local ui listening", "bind", s.ListenLabel())
 	return nil
 }
 
@@ -218,7 +228,29 @@ func (s *Server) Port() int {
 	if s == nil {
 		return 0
 	}
+	for _, ln := range s.listeners {
+		if ln == nil {
+			continue
+		}
+		if addr, ok := ln.Addr().(*net.TCPAddr); ok && addr.Port > 0 {
+			return addr.Port
+		}
+	}
 	return s.bind.Port()
+}
+
+func (s *Server) ListenLabel() string {
+	if s == nil {
+		return ""
+	}
+	return s.bind.ListenLabelForPort(s.Port())
+}
+
+func (s *Server) DisplayURLs() []string {
+	if s == nil {
+		return nil
+	}
+	return s.bind.DisplayURLsForPort(s.Port())
 }
 
 type apiResp struct {
@@ -518,9 +550,12 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 type runtimeResp struct {
-	Mode        string `json:"mode"`
-	EnvPublicID string `json:"env_public_id"`
-	DirectWSURL string `json:"direct_ws_url"`
+	Mode             string `json:"mode"`
+	EnvPublicID      string `json:"env_public_id"`
+	DirectWSURL      string `json:"direct_ws_url"`
+	DesktopManaged   bool   `json:"desktop_managed,omitempty"`
+	EffectiveRunMode string `json:"effective_run_mode,omitempty"`
+	RemoteEnabled    bool   `json:"remote_enabled,omitempty"`
 }
 
 func (s *Server) handleRuntime(w http.ResponseWriter, r *http.Request) {
@@ -536,9 +571,12 @@ func (s *Server) handleRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	wsURL, _ := s.directWSURLFromRequest(r)
 	writeJSON(w, http.StatusOK, runtimeResp{
-		Mode:        "local",
-		EnvPublicID: LocalEnvPublicID,
-		DirectWSURL: wsURL,
+		Mode:             "local",
+		EnvPublicID:      LocalEnvPublicID,
+		DirectWSURL:      wsURL,
+		DesktopManaged:   s.desktopManaged,
+		EffectiveRunMode: s.resolvedEffectiveRunMode(),
+		RemoteEnabled:    s.remoteEnabled,
 	})
 }
 
@@ -718,8 +756,11 @@ func (s *Server) handleEnvironment(w http.ResponseWriter, r *http.Request) {
 }
 
 type latestVersionResp struct {
-	LatestVersion string `json:"latest_version"`
-	Message       string `json:"message,omitempty"`
+	LatestVersion    string `json:"latest_version"`
+	Message          string `json:"message,omitempty"`
+	DesktopManaged   bool   `json:"desktop_managed,omitempty"`
+	EffectiveRunMode string `json:"effective_run_mode,omitempty"`
+	RemoteEnabled    bool   `json:"remote_enabled,omitempty"`
 }
 
 func (s *Server) handleLatestVersion(w http.ResponseWriter, r *http.Request) {
@@ -737,10 +778,31 @@ func (s *Server) handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 	if v == "" {
 		v = "unknown"
 	}
+	message := "Offline: latest version check is unavailable in local mode."
+	if s.desktopManaged {
+		message = "Managed by Redeven Desktop. Update from the desktop release instead of self-upgrade."
+	}
 	writeJSON(w, http.StatusOK, latestVersionResp{
-		LatestVersion: v,
-		Message:       "Offline: latest version check is unavailable in local mode.",
+		LatestVersion:    v,
+		Message:          message,
+		DesktopManaged:   s.desktopManaged,
+		EffectiveRunMode: s.resolvedEffectiveRunMode(),
+		RemoteEnabled:    s.remoteEnabled,
 	})
+}
+
+func (s *Server) resolvedEffectiveRunMode() string {
+	if s == nil {
+		return ""
+	}
+	mode := strings.TrimSpace(s.effectiveRunMode)
+	if mode != "" {
+		return mode
+	}
+	if s.remoteEnabled {
+		return "hybrid"
+	}
+	return "local"
 }
 
 func (s *Server) resolveLocalCap() config.PermissionSet {

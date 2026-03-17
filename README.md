@@ -46,6 +46,7 @@ Management channel and E2EE transport are split by design:
 
 ```bash
 ./scripts/lint_ui.sh
+./scripts/check_desktop.sh
 ./scripts/build_assets.sh
 go build -o redeven ./cmd/redeven
 ```
@@ -55,6 +56,7 @@ Notes:
 - `internal/**/dist/` assets are generated and embedded via Go `embed`.
 - Generated `dist` assets are not checked into git.
 - `./scripts/lint_ui.sh` validates the Env App and Code App source packages before asset bundling.
+- `./scripts/check_desktop.sh` validates the Electron desktop shell package (lint, typecheck, tests, build).
 
 ### Enable local guardrails
 
@@ -141,7 +143,7 @@ Multi-environment mode uses isolated state per environment:
 
 ## Release contract
 
-- GitHub Release is the source of truth for versioned binaries and checksums.
+- GitHub Release is the source of truth for versioned CLI tarballs, desktop installers, and checksums.
 - On `v*` tag push, `Release Agent` publishes GitHub Release assets, checksums, signatures, and release notes.
 - `scripts/install.sh` resolves versions from GitHub Releases and downloads release assets directly from GitHub.
 - This public repository does not document downstream private packaging or deployment wrappers.
@@ -159,6 +161,7 @@ Details:
 - Capability-to-permission contract: [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md)
 - Local permission policy: [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md)
 - Release and artifact verification: [`docs/RELEASE.md`](docs/RELEASE.md)
+- Desktop shell packaging and runtime contract: [`docs/DESKTOP.md`](docs/DESKTOP.md)
 
 ## Troubleshooting
 
