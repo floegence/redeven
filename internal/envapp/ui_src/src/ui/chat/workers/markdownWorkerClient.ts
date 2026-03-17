@@ -3,10 +3,10 @@
 // This module owns a single shared Web Worker instance and a simple request/response
 // multiplexer. Callers can throttle/coalesce requests on their side.
 
-import type { MarkdownWorkerRequest, MarkdownWorkerResponse } from '../types';
+import type { MarkdownRenderSnapshot, MarkdownWorkerRequest, MarkdownWorkerResponse } from '../types';
 
 type PendingRequest = {
-  resolve: (html: string) => void;
+  resolve: (snapshot: MarkdownRenderSnapshot) => void;
   reject: (err: Error) => void;
 };
 
@@ -71,7 +71,13 @@ function ensureWorker(): Worker | null {
         return;
       }
 
-      entry.resolve(String((data as any)?.html ?? ''));
+      const snapshot = (data as MarkdownWorkerResponse).snapshot;
+      if (!snapshot) {
+        entry.reject(new Error('Markdown worker returned an empty snapshot.'));
+        return;
+      }
+
+      entry.resolve(snapshot);
     };
 
     w.onerror = (err) => {
@@ -91,13 +97,16 @@ function ensureWorker(): Worker | null {
 }
 
 /**
- * Render markdown to HTML in a shared Web Worker.
+ * Render markdown to a streaming snapshot in a shared Web Worker.
  *
  * Notes:
  * - Callers should throttle/coalesce requests to avoid flooding the worker.
- * - The returned promise resolves even when markdown is empty (html="").
+ * - The returned promise resolves even when markdown is empty.
  */
-export function renderMarkdownHtml(markdown: string): Promise<string> {
+export function renderMarkdownSnapshot(
+  markdown: string,
+  options?: { streaming?: boolean },
+): Promise<MarkdownRenderSnapshot> {
   const w = ensureWorker();
   if (!w) {
     return Promise.reject(
@@ -106,9 +115,13 @@ export function renderMarkdownHtml(markdown: string): Promise<string> {
   }
 
   const id = `md_${++nextReqId}_${Date.now()}`;
-  const req: MarkdownWorkerRequest = { id, content: String(markdown ?? '') };
+  const req: MarkdownWorkerRequest = {
+    id,
+    content: String(markdown ?? ''),
+    streaming: options?.streaming === true,
+  };
 
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<MarkdownRenderSnapshot>((resolve, reject) => {
     pending.set(id, { resolve, reject });
     try {
       w.postMessage(req);
@@ -118,4 +131,3 @@ export function renderMarkdownHtml(markdown: string): Promise<string> {
     }
   });
 }
-

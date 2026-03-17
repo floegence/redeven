@@ -316,6 +316,11 @@
   line-height: 1.7;
 }
 
+.chat-markdown-committed-segment,
+.chat-markdown-tail {
+  min-width: 0;
+}
+
 .chat-markdown-block p { margin-bottom: 0.75rem; }
 .chat-markdown-block p:last-child { margin-bottom: 0; }
 .chat-markdown-block h1 { font-size: 1rem; font-weight: 700; margin-top: 1.25rem; margin-bottom: 0.625rem; color: var(--foreground); }
