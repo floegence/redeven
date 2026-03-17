@@ -1,9 +1,9 @@
 import { Index, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
-import { useCurrentWidgetId, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
+import { useCurrentWidgetId, useLayout, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
-import { Button, Dropdown, type DropdownItem, Input, Tabs, TabPanel, type TabItem } from '@floegence/floe-webapp-core/ui';
+import { Button, Dropdown, type DropdownItem, Input, MobileKeyboard, Tabs, TabPanel, type TabItem } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import {
@@ -27,6 +27,7 @@ import {
   ensureTerminalPreferencesInitialized,
   TERMINAL_MAX_FONT_SIZE,
   TERMINAL_MIN_FONT_SIZE,
+  type TerminalMobileInputMode,
   useTerminalPreferences,
 } from '../services/terminalPreferences';
 import { useEnvContext } from '../pages/EnvContext';
@@ -130,6 +131,7 @@ const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 
 const TERMINAL_SELECTION_BACKGROUND = 'rgba(255, 234, 0, 0.72)';
 const TERMINAL_SELECTION_FOREGROUND = '#000000';
+const MOBILE_TERMINAL_KEYBOARD_PADDING = 'calc(15rem + env(safe-area-inset-bottom))';
 
 const PlusIcon = (props: { class?: string }) => (
   <svg
@@ -564,6 +566,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const env = useEnvContext();
+  const layout = useLayout();
   const theme = useTheme();
   const floe = useResolvedFloeConfig();
   const view = useViewActivation();
@@ -676,10 +679,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const userTheme = terminalPrefs.userTheme;
   const fontSize = terminalPrefs.fontSize;
   const fontFamilyId = terminalPrefs.fontFamilyId;
+  const mobileInputMode = terminalPrefs.mobileInputMode;
 
   const fontFamily = createMemo<string>(() => {
     return resolveTerminalFontFamily(fontFamilyId());
   });
+
+  const isMobileLayout = () => layout.isMobile();
 
   const persistFontSize = (value: number) => {
     terminalPrefs.setFontSize(value);
@@ -687,6 +693,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const persistFontFamily = (id: string) => {
     terminalPrefs.setFontFamily(id);
+  };
+
+  const persistMobileInputMode = (value: TerminalMobileInputMode) => {
+    terminalPrefs.setMobileInputMode(value);
   };
 
   const terminalThemeName = createMemo<TerminalThemeName>(() => {
@@ -713,6 +723,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [mountedSessionIds, setMountedSessionIds] = createSignal<Set<string>>(new Set());
   const [error, setError] = createSignal<string | null>(null);
   const [creating, setCreating] = createSignal(false);
+  const [mobileKeyboardVisible, setMobileKeyboardVisible] = createSignal(
+    isMobileLayout() && mobileInputMode() === 'floe',
+  );
 
   const handleExecuteDenied = (e: unknown): boolean => {
     if (!isPermissionDeniedError(e, 'execute')) return false;
@@ -812,7 +825,51 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   });
 
-  const shouldAutoFocus = () => !isInDeckWidget || panelHasFocus();
+  const shouldUseFloeMobileKeyboard = createMemo(() => {
+    return isMobileLayout() && mobileInputMode() === 'floe';
+  });
+
+  const shouldRestoreTerminalFocus = () => {
+    return !isMobileLayout() || mobileInputMode() === 'system';
+  };
+
+  const shouldAutoFocus = () => {
+    return (!isInDeckWidget || panelHasFocus()) && shouldRestoreTerminalFocus();
+  };
+
+  const blurActiveElement = () => {
+    if (typeof document === 'undefined') return;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) {
+      active.blur();
+    }
+  };
+
+  const restoreActiveTerminalFocus = () => {
+    if (!shouldRestoreTerminalFocus()) return;
+    requestAnimationFrame(() => {
+      getActiveCore()?.focus();
+    });
+  };
+
+  const openFloeMobileKeyboard = () => {
+    if (!shouldUseFloeMobileKeyboard()) return;
+    setMobileKeyboardVisible(true);
+    requestAnimationFrame(() => {
+      blurActiveElement();
+    });
+  };
+
+  let lastMobileKeyboardEligible = false;
+  createEffect(() => {
+    const eligible = shouldUseFloeMobileKeyboard() && connected() && Boolean(activeSessionId());
+    if (eligible && !lastMobileKeyboardEligible) {
+      setMobileKeyboardVisible(true);
+    } else if (!eligible) {
+      setMobileKeyboardVisible(false);
+    }
+    lastMobileKeyboardEligible = eligible;
+  });
 
   createEffect(() => {
     const sid = activeSessionId();
@@ -1020,11 +1077,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }));
   });
 
-  const moreItems = createMemo<DropdownItem[]>(() => [
-    { id: 'search', label: 'Search' },
-    { id: 'settings', label: 'Terminal settings' },
-  ]);
-
   let searchInputEl: HTMLInputElement | null = null;
   let rootEl: HTMLDivElement | null = null;
 
@@ -1034,10 +1086,35 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return coreRegistry.get(sid) ?? null;
   };
 
-  const restoreActiveTerminalFocus = () => {
-    requestAnimationFrame(() => {
-      getActiveCore()?.focus();
+  const handleMobileKeyboardPayload = (payload: string) => {
+    const sid = activeSessionId();
+    if (!sid || !connected()) return;
+
+    void transport.sendInput(sid, payload, connId).catch((e) => {
+      if (handleExecuteDenied(e)) return;
+      setError(e instanceof Error ? e.message : String(e));
     });
+  };
+
+  const handleMobileInputModeChange = (
+    value: TerminalMobileInputMode,
+    options?: { focusTerminal?: boolean },
+  ) => {
+    persistMobileInputMode(value);
+    if (!isMobileLayout()) return;
+
+    if (value === 'floe') {
+      setMobileKeyboardVisible(true);
+      if (options?.focusTerminal !== false) {
+        openFloeMobileKeyboard();
+      }
+      return;
+    }
+
+    setMobileKeyboardVisible(false);
+    if (options?.focusTerminal !== false) {
+      restoreActiveTerminalFocus();
+    }
   };
 
   const handleSettingsOpenChange = (open: boolean) => {
@@ -1046,6 +1123,23 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       restoreActiveTerminalFocus();
     }
   };
+
+  const moreItems = createMemo<DropdownItem[]>(() => {
+    const items: DropdownItem[] = [{ id: 'search', label: 'Search' }];
+    if (isMobileLayout()) {
+      if (mobileInputMode() === 'system') {
+        items.push({ id: 'use_floe_keyboard', label: 'Use Floe Keyboard' });
+      } else {
+        items.push({ id: 'use_system_ime', label: 'Use System IME' });
+        items.push({
+          id: mobileKeyboardVisible() ? 'hide_floe_keyboard' : 'show_floe_keyboard',
+          label: mobileKeyboardVisible() ? 'Hide Floe Keyboard' : 'Show Floe Keyboard',
+        });
+      }
+    }
+    items.push({ id: 'settings', label: 'Terminal settings' });
+    return items;
+  });
 
   const clampAskMenuPosition = (x: number, y: number): { x: number; y: number } => {
     if (typeof window === 'undefined') return { x, y };
@@ -1276,9 +1370,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       core.clearSearch();
     }
     bindSearchCore(null);
-    requestAnimationFrame(() => {
-      getActiveCore()?.focus();
-    });
+    restoreActiveTerminalFocus();
   };
 
   const goNextMatch = () => {
@@ -1322,6 +1414,26 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const handleMoreSelect = (id: string) => {
     if (id === 'search') {
       openSearch();
+      return;
+    }
+
+    if (id === 'use_system_ime') {
+      handleMobileInputModeChange('system');
+      return;
+    }
+
+    if (id === 'use_floe_keyboard') {
+      handleMobileInputModeChange('floe');
+      return;
+    }
+
+    if (id === 'show_floe_keyboard') {
+      openFloeMobileKeyboard();
+      return;
+    }
+
+    if (id === 'hide_floe_keyboard') {
+      setMobileKeyboardVisible(false);
       return;
     }
 
@@ -1420,6 +1532,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         <div
           ref={setTerminalContextMenuHostEl}
           class="flex-1 min-h-0 relative"
+          style={{
+            'padding-bottom':
+              shouldUseFloeMobileKeyboard() && mobileKeyboardVisible()
+                ? MOBILE_TERMINAL_KEYBOARD_PADDING
+                : undefined,
+          }}
         >
           <Show when={searchOpen()}>
             <div class="absolute top-2 right-2 z-20 flex items-center gap-1 rounded-md border border-white/15 bg-[#0b0f14]/95 px-2 py-1 shadow-md backdrop-blur">
@@ -1547,17 +1665,27 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         )}
       </Show>
 
+      <Show when={shouldUseFloeMobileKeyboard()}>
+        <MobileKeyboard
+          visible={mobileKeyboardVisible()}
+          onKey={handleMobileKeyboardPayload}
+          onDismiss={() => setMobileKeyboardVisible(false)}
+        />
+      </Show>
+
       <TerminalSettingsDialog
         open={settingsOpen()}
         userTheme={userTheme()}
         fontSize={fontSize()}
         fontFamilyId={fontFamilyId()}
+        mobileInputMode={mobileInputMode()}
         minFontSize={TERMINAL_MIN_FONT_SIZE}
         maxFontSize={TERMINAL_MAX_FONT_SIZE}
         onOpenChange={handleSettingsOpenChange}
         onThemeChange={handleThemeChange}
         onFontSizeChange={persistFontSize}
         onFontFamilyChange={persistFontFamily}
+        onMobileInputModeChange={(value) => handleMobileInputModeChange(value, { focusTerminal: false })}
       />
 
       <Show when={error()}>
