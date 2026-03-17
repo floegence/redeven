@@ -234,6 +234,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
     <button
       type={props.type ?? 'button'}
+      class={props.class}
       disabled={props.disabled}
       onClick={props.onClick}
       title={props.title}
@@ -244,9 +245,26 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   ),
   ConfirmDialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
   Dialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
+  Dropdown: (props: any) => (
+    <div data-testid="dropdown">
+      {props.trigger}
+      <div data-testid="dropdown-items">
+        {(props.items ?? []).map((item: any) => (
+          <button
+            type="button"
+            data-testid={`dropdown-item-${item.id}`}
+            onClick={() => props.onSelect?.(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  ),
   DirectoryPicker: () => null,
   Input: (props: any) => (
     <input
+      class={props.class}
       value={props.value}
       onInput={props.onInput}
       onChange={props.onChange}
@@ -254,7 +272,11 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       disabled={props.disabled}
     />
   ),
-  Select: () => <div />,
+  Select: (props: any) => (
+    <button type="button" class={props.class} disabled={props.disabled}>
+      {props.value ?? props.placeholder}
+    </button>
+  ),
   Tooltip: (props: any) => <>{props.children}</>,
 }));
 
@@ -452,6 +474,18 @@ function bottomDockSupport(host: HTMLElement): HTMLElement | null {
   return host.querySelector('.flower-chat-bottom-dock-support');
 }
 
+function headerActions(host: HTMLElement): HTMLElement | null {
+  return host.querySelector('.flower-chat-header-actions');
+}
+
+function composerPrimaryRow(host: HTMLElement): HTMLElement | null {
+  return host.querySelector('.flower-chat-input-primary-row');
+}
+
+function composerMetaRail(host: HTMLElement): HTMLElement | null {
+  return host.querySelector('.flower-chat-input-meta-rail');
+}
+
 function inputComposer(host: HTMLElement, value: string) {
   const textarea = host.querySelector('textarea');
   expect(textarea).toBeTruthy();
@@ -561,6 +595,34 @@ export function registerEnvAIPageSendTests() {
         expect(dock).toBeTruthy();
         expect(transcript?.textContent).toContain(`Hello! I'm Flower`);
         expect(dock?.contains(textarea as Node)).toBe(true);
+      } finally {
+        dispose();
+      }
+    });
+
+    it('keeps low-frequency header actions inside the overflow menu and renders the compact composer structure', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        const actions = headerActions(host);
+        const primaryRow = composerPrimaryRow(host);
+        const metaRail = composerMetaRail(host);
+
+        expect(actions).toBeTruthy();
+        expect(actions?.querySelector('[aria-label="Rename"]')).toBeNull();
+        expect(actions?.querySelector('[aria-label="Delete"]')).toBeNull();
+        expect(actions?.querySelector('[aria-label="Settings"]')).toBeNull();
+        expect(actions?.querySelector('[aria-label="More actions"]')).toBeTruthy();
+        expect(host.textContent).toContain('Rename chat');
+        expect(host.textContent).toContain('Delete chat');
+        expect(host.textContent).toContain('AI settings');
+
+        expect(primaryRow).toBeTruthy();
+        expect(primaryRow?.querySelector('textarea')).toBeTruthy();
+        expect(primaryRow?.querySelector('button[title="Send message"]')).toBeTruthy();
+        expect(metaRail).toBeTruthy();
+        expect(metaRail?.querySelector('button[title="Add attachments"]')).toBeTruthy();
+        expect(host.querySelector('.chat-input-toolbar-left')).toBeNull();
+        expect(host.querySelector('.chat-input-toolbar-right')).toBeNull();
       } finally {
         dispose();
       }
@@ -817,13 +879,15 @@ export function registerEnvAIPageSendTests() {
           ],
         };
 
-        const { host, dispose } = await renderPage();
-        try {
-          inputComposer(host, 'Please inspect the build logs.');
-          submitComposer(host, trigger, buttonTitle);
-          await flushAsync();
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'Please inspect the build logs.');
+        const metaRail = composerMetaRail(host);
+        expect(metaRail?.textContent).toContain('Queue for later');
+        submitComposer(host, trigger, buttonTitle);
+        await flushAsync();
 
-          expect(submitStructuredPromptResponseMock).toHaveBeenCalledTimes(1);
+        expect(submitStructuredPromptResponseMock).toHaveBeenCalledTimes(1);
           expect(submitStructuredPromptResponseMock).toHaveBeenCalledWith(expect.objectContaining({
             threadId: 'thread-1',
             promptId: 'prompt-1',

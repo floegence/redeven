@@ -15,7 +15,7 @@ import {
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { LoadingOverlay, SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Button, ConfirmDialog, Dialog, DirectoryPicker, Input, Select, Tooltip } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, Dialog, DirectoryPicker, Dropdown, Input, Select, Tooltip, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import {
   AttachmentPreview,
   ChatProvider,
@@ -467,46 +467,65 @@ const AIChatInput: Component<{
         />
       </Show>
 
-      <div class="chat-input-body">
-        <textarea
-          ref={textareaRef}
-          class="chat-input-textarea"
-          value={text()}
-          onInput={(e) => {
-            setText(e.currentTarget.value);
-            scheduleAdjustHeight();
-          }}
-          onCompositionStart={() => setIsComposing(true)}
-          onCompositionUpdate={() => {
-            syncTextFromTextarea();
-            scheduleAdjustHeight();
-          }}
-          onCompositionEnd={() => {
-            setIsComposing(false);
-            syncTextFromTextarea();
-            scheduleAdjustHeight();
-          }}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          placeholder={placeholder()}
-          disabled={props.disabled}
-          rows={2}
-        />
-      </div>
+      <div class="chat-input-body flower-chat-input-body">
+        <div class="flower-chat-input-primary-row">
+          <textarea
+            ref={textareaRef}
+            class="chat-input-textarea flower-chat-input-textarea"
+            value={text()}
+            onInput={(e) => {
+              setText(e.currentTarget.value);
+              scheduleAdjustHeight();
+            }}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionUpdate={() => {
+              syncTextFromTextarea();
+              scheduleAdjustHeight();
+            }}
+            onCompositionEnd={() => {
+              setIsComposing(false);
+              syncTextFromTextarea();
+              scheduleAdjustHeight();
+            }}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            placeholder={placeholder()}
+            disabled={props.disabled}
+            rows={2}
+          />
 
-      <div class="chat-input-toolbar">
-        <div class="chat-input-toolbar-left">
-          <div class="flex items-center gap-2 min-w-0">
+          <div class="flower-chat-input-send-slot">
+            <button
+              type="button"
+              class={cn(
+                'chat-input-send-btn flower-chat-input-send-btn',
+                canSend() && 'chat-input-send-btn-active',
+                props.waitingForUser && 'flower-chat-input-send-btn-reply',
+              )}
+              onClick={() => void handleSend()}
+              disabled={!canSend()}
+              title={props.waitingForUser ? 'Reply now' : 'Send message'}
+            >
+              <Show when={props.waitingForUser}>
+                <span class="chat-input-send-btn-label">Reply</span>
+              </Show>
+              <SendIcon />
+            </button>
+          </div>
+        </div>
+
+        <div class="flower-chat-input-meta">
+          <div class="flower-chat-input-meta-rail" role="toolbar" aria-label="Chat input secondary actions">
             <Show when={props.onPickWorkingDir}>
               <button
                 type="button"
                 class={cn(
-                  'inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-border bg-muted/40 text-[11px] font-medium text-muted-foreground transition-colors duration-150 max-w-[220px]',
+                  'flower-chat-chip flower-chat-working-dir-chip',
                   canPickWorkingDir()
-                    ? 'hover:text-foreground hover:bg-muted/60 cursor-pointer'
-                    : 'opacity-60 cursor-not-allowed',
+                    ? 'flower-chat-chip-actionable'
+                    : 'flower-chat-chip-disabled',
                 )}
                 onClick={() => {
                   if (!canPickWorkingDir()) return;
@@ -515,7 +534,7 @@ const AIChatInput: Component<{
                 title={String(props.workingDirTitle ?? '').trim() || String(props.workingDirLabel ?? '').trim() || 'Working dir'}
               >
                 <FolderIcon />
-                <span class="truncate font-mono">{String(props.workingDirLabel ?? '').trim() || 'Working dir'}</span>
+                <span class="flower-chat-working-dir-chip-label">{String(props.workingDirLabel ?? '').trim() || 'Working dir'}</span>
                 <Show when={!!props.workingDirLocked}>
                   <LockIcon />
                 </Show>
@@ -525,7 +544,7 @@ const AIChatInput: Component<{
             <Show when={props.onEditWorkingDir}>
               <button
                 type="button"
-                class="chat-input-attachment-btn"
+                class="flower-chat-meta-btn"
                 onClick={() => {
                   if (!canEditWorkingDir()) return;
                   props.onEditWorkingDir?.();
@@ -540,53 +559,30 @@ const AIChatInput: Component<{
             <Show when={ctx.config().allowAttachments}>
               <button
                 type="button"
-                class="chat-input-attachment-btn"
+                class="flower-chat-meta-btn"
                 onClick={attachments.openFilePicker}
                 title="Add attachments"
               >
                 <PaperclipIcon />
               </button>
             </Show>
-          </div>
-        </div>
 
-        <div class="chat-input-toolbar-right">
-          <span class={cn('chat-input-hint', sendBlockReason() && 'text-error opacity-100')}>
-            {sendBlockReason() || (
-              <>
-                <kbd>Enter</kbd> {props.waitingForUser ? 'reply now' : 'send'} &nbsp; <kbd>Shift+Enter</kbd> newline
-              </>
-            )}
-          </span>
-
-          <Show when={props.waitingForUser}>
-            <button
-              type="button"
-              class="chat-input-secondary-action"
-              onClick={() => void handleSend('queue_after_waiting_user')}
-              disabled={!canSend()}
-              title="Queue for later"
-            >
-              Queue for later
-            </button>
-          </Show>
-
-          <button
-            type="button"
-            class={cn(
-              'chat-input-send-btn',
-              canSend() && 'chat-input-send-btn-active',
-              props.waitingForUser && 'chat-input-send-btn-expanded',
-            )}
-            onClick={() => void handleSend()}
-            disabled={!canSend()}
-            title={props.waitingForUser ? 'Reply now' : 'Send message'}
-          >
             <Show when={props.waitingForUser}>
-              <span class="chat-input-send-btn-label">Reply now</span>
+              <button
+                type="button"
+                class="flower-chat-chip flower-chat-secondary-chip"
+                onClick={() => void handleSend('queue_after_waiting_user')}
+                disabled={!canSend()}
+                title="Queue for later"
+              >
+                Queue for later
+              </button>
             </Show>
-            <SendIcon />
-          </button>
+          </div>
+
+          <Show when={sendBlockReason()}>
+            <div class="flower-chat-input-status text-error">{sendBlockReason()}</div>
+          </Show>
         </div>
       </div>
     </div>
@@ -616,6 +612,23 @@ const SendIcon: Component = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <line x1="22" y1="2" x2="11" y2="13" />
     <polygon points="22 2 15 22 11 13 2 9 22 2" />
+  </svg>
+);
+
+const MoreVerticalIcon: Component<{ class?: string }> = (props) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class={props.class}
+  >
+    <circle cx="12" cy="12" r="1" />
+    <circle cx="12" cy="5" r="1" />
+    <circle cx="12" cy="19" r="1" />
   </svg>
 );
 
@@ -4251,6 +4264,11 @@ export function EnvAIPage() {
     setRenameOpen(true);
   };
 
+  const openDelete = () => {
+    setDeleteForce(activeThreadRunning());
+    setDeleteOpen(true);
+  };
+
   const doRename = async () => {
     const tid = ai.activeThreadId();
     if (!tid) return;
@@ -4317,6 +4335,36 @@ export function EnvAIPage() {
   const handleSuggestionClick = (prompt: string) => {
     if (!canInteract()) return;
     void enqueueSendUserTurn(prompt, []).catch(() => {});
+  };
+
+  const headerMoreItems = createMemo<DropdownItem[]>(() => {
+    const items: DropdownItem[] = [];
+    if (ai.activeThreadId() && canRWXReady() && !activeThreadRunning()) {
+      items.push({ id: 'rename', label: 'Rename chat' });
+    }
+    if (ai.activeThreadId() && canRWXReady()) {
+      items.push({ id: 'delete', label: 'Delete chat' });
+    }
+    items.push({ id: 'settings', label: 'AI settings' });
+    return items;
+  });
+
+  const handleHeaderMoreSelect = (itemId: string) => {
+    if (itemId === 'rename') {
+      if (!ai.activeThreadId() || activeThreadRunning() || !canRWXReady()) return;
+      openRename();
+      return;
+    }
+
+    if (itemId === 'delete') {
+      if (!ai.activeThreadId() || !canRWXReady()) return;
+      openDelete();
+      return;
+    }
+
+    if (itemId === 'settings') {
+      env.openSettings('ai');
+    }
   };
 
   const hasInlineRunIndicator = createMemo(() => sendPending() || activeThreadRunning());
@@ -4471,81 +4519,49 @@ export function EnvAIPage() {
                   <div class="chat-header-title flower-chat-header-title">
                     <span class="truncate font-medium">{ai.activeThreadTitle()}</span>
                   </div>
-                  <div class="flower-chat-header-controls">
-                    <div class="flower-chat-header-primary">
-                      {/* Model selector */}
-                      <Show when={ai.aiEnabled() && ai.modelOptions().length > 0}>
-                        <Select
-                          value={ai.selectedModel()}
-                          onChange={(v) => ai.selectModel(String(v ?? '').trim())}
-                          options={ai.modelOptions()}
-                          placeholder="Select model..."
-                          disabled={ai.models.loading || !!ai.models.error || activeThreadRunning() || !canRWXReady()}
-                          class="ai-model-select-trigger flower-chat-model-select min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
-                        />
-                      </Show>
+                  <div class="flower-chat-header-actions">
+                    <Show when={ai.aiEnabled() && ai.modelOptions().length > 0}>
+                      <Select
+                        value={ai.selectedModel()}
+                        onChange={(v) => ai.selectModel(String(v ?? '').trim())}
+                        options={ai.modelOptions()}
+                        placeholder="Select model..."
+                        disabled={ai.models.loading || !!ai.models.error || activeThreadRunning() || !canRWXReady()}
+                        class="ai-model-select-trigger flower-chat-model-select min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
+                      />
+                    </Show>
 
-                      {/* Stop button */}
-                      <Show when={activeThreadRunning()}>
-                        <Tooltip content="Stop generation" placement="bottom" delay={0}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            icon={Stop}
-                            onClick={() => stopRun()}
-                            disabled={!canRWXReady()}
-                            class="flower-chat-stop-button h-7 px-2 text-error border-error/30 hover:bg-error/10 hover:text-error"
-                          >
-                            <span class="flower-chat-stop-button-label">Stop</span>
-                          </Button>
-                        </Tooltip>
-                      </Show>
-                    </div>
+                    <Show when={activeThreadRunning()}>
+                      <Tooltip content="Stop generation" placement="bottom" delay={0}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon={Stop}
+                          onClick={() => stopRun()}
+                          disabled={!canRWXReady()}
+                          class="flower-chat-stop-button h-7 px-2.5 text-error"
+                        >
+                          Stop
+                        </Button>
+                      </Tooltip>
+                    </Show>
 
-                    <div class="flower-chat-header-secondary">
-                      <div class="flower-chat-header-divider" />
-
-                      {/* Rename */}
-                      <Tooltip content="Rename chat" placement="bottom" delay={0}>
+                    <Dropdown
+                      trigger={(
                         <Button
                           size="icon"
                           variant="ghost"
-                          icon={Pencil}
-                          onClick={() => openRename()}
-                          aria-label="Rename"
-                          disabled={!ai.activeThreadId() || activeThreadRunning() || !canRWXReady()}
-                          class="w-7 h-7"
-                        />
-                      </Tooltip>
-
-                      {/* Delete */}
-                      <Tooltip content="Delete chat" placement="bottom" delay={0}>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          icon={Trash}
-                          onClick={() => {
-                            setDeleteForce(activeThreadRunning());
-                            setDeleteOpen(true);
-                          }}
-                          aria-label="Delete"
-                          disabled={!ai.activeThreadId() || !canRWXReady()}
-                          class="w-7 h-7 text-muted-foreground hover:text-error hover:bg-error/10"
-                        />
-                      </Tooltip>
-
-                      {/* Settings button */}
-                      <Tooltip content="AI Settings" placement="bottom" delay={0}>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          icon={Settings}
-                          onClick={() => env.openSettings('ai')}
-                          aria-label="Settings"
-                          class="w-7 h-7"
-                        />
-                      </Tooltip>
-                    </div>
+                          aria-label="More actions"
+                          title="More actions"
+                          class="flower-chat-header-more-trigger"
+                        >
+                          <MoreVerticalIcon class="w-4 h-4" />
+                        </Button>
+                      )}
+                      items={headerMoreItems()}
+                      onSelect={handleHeaderMoreSelect}
+                      align="end"
+                    />
                   </div>
                 </div>
 
