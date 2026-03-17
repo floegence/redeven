@@ -328,8 +328,6 @@ describe('GitBranchesPanel interactions', () => {
       expect(document.body.textContent).not.toContain('Delete Confirmation');
       expect(document.body.textContent).not.toContain('Approve permanent file discard');
       expect(document.body.textContent).not.toContain('scratch.txt');
-      expect(host.textContent).toContain('linked worktree');
-      expect(host.textContent).toContain('/workspace/repo-linked');
       const footer = Array.from(document.body.querySelectorAll('div')).find((node) => node.className.includes('border-t border-border/60 bg-background/88 px-4 pt-3 pb-4')) as HTMLDivElement | undefined;
       const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete Branch and Worktree') as HTMLButtonElement | undefined;
       expect(footer).toBeTruthy();
@@ -381,7 +379,6 @@ describe('GitBranchesPanel interactions', () => {
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       const tablist = host.querySelector('[aria-label="Branch detail tabs"]') as HTMLDivElement | null;
-      const disabledReason = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('sm:text-right') && node.textContent?.includes('This branch is checked out in a linked worktree: /workspace/repo-mobile')) as HTMLDivElement | undefined;
 
       expect(branchHeader).toBeTruthy();
       expect(checkoutButton?.className).toContain('flex-1');
@@ -389,8 +386,6 @@ describe('GitBranchesPanel interactions', () => {
       expect(tablist?.className).toContain('grid');
       expect(tablist?.className).toContain('w-full');
       expect(tablist?.className).toContain('grid-cols-2');
-      expect(disabledReason?.className).toContain('w-full');
-      expect(disabledReason?.className).toContain('sm:text-right');
     } finally {
       dispose();
     }
@@ -592,6 +587,107 @@ describe('GitBranchesPanel interactions', () => {
       expect(confirmButton).toBeTruthy();
       confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       expect(confirmedFingerprint).toBe('merge-plan-1');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps merge clickable for a dirty workspace and shows the blocked preview reason in the dialog', async () => {
+    let requestedBranch: string | undefined;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const branch = {
+      name: 'feature/blocked',
+      fullName: 'refs/heads/feature/blocked',
+      kind: 'local' as const,
+      worktreePath: '/workspace/repo-blocked',
+    };
+    const preview = {
+      repoRootPath: '/workspace/repo',
+      currentRef: 'main',
+      currentCommit: 'abc1234',
+      sourceName: 'feature/blocked',
+      sourceFullName: 'refs/heads/feature/blocked',
+      sourceKind: 'local' as const,
+      sourceCommit: 'fedcba9',
+      mergeBase: 'abc1234',
+      sourceAheadCount: 1,
+      sourceBehindCount: 0,
+      outcome: 'blocked' as const,
+      blockingReason: 'Commit, stash, or discard the current workspace changes before merging (1 unstaged).',
+      planFingerprint: 'merge-plan-blocked',
+      files: [],
+    };
+
+    const dispose = render(() => {
+      const [mergeReviewOpen, setMergeReviewOpen] = createSignal(false);
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  repoSummary={{
+                    repoRootPath: '/workspace/repo',
+                    headRef: 'main',
+                    headCommit: 'abc1234',
+                    workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+                  }}
+                  workspace={{
+                    repoRootPath: '/workspace/repo',
+                    summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+                    staged: [],
+                    unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/dirty.ts', displayPath: 'src/dirty.ts', additions: 2, deletions: 1, patchText: '@@ -1 +1 @@\n-before\n+after' }],
+                    untracked: [],
+                    conflicted: [],
+                  }}
+                  selectedBranch={branch}
+                  branches={{
+                    repoRootPath: '/workspace/repo',
+                    currentRef: 'main',
+                    local: [
+                      { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                      branch,
+                    ],
+                    remote: [],
+                  }}
+                  mergeReviewOpen={mergeReviewOpen()}
+                  mergeReviewBranch={branch}
+                  mergePreview={mergeReviewOpen() ? preview : null}
+                  onMergeBranch={(selected) => {
+                    requestedBranch = selected.name;
+                    setMergeReviewOpen(true);
+                  }}
+                  onCloseMergeReview={() => setMergeReviewOpen(false)}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      expect(host.textContent).not.toContain('Current workspace must be clean before merging.');
+      expect(host.textContent).not.toContain('This branch is checked out in a linked worktree: /workspace/repo-blocked');
+
+      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Merge Into Current')) as HTMLButtonElement | undefined;
+      expect(mergeButton).toBeTruthy();
+      expect(mergeButton?.disabled).toBe(false);
+
+      mergeButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+
+      expect(requestedBranch).toBe('feature/blocked');
+      expect(document.body.textContent).toContain('Merge Branch');
+      expect(document.body.textContent).toContain('Blocked');
+      expect(document.body.textContent).toContain('Commit, stash, or discard the current workspace changes before merging (1 unstaged).');
+
+      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Merge Into main') as HTMLButtonElement | undefined;
+      expect(confirmButton).toBeTruthy();
+      expect(confirmButton?.disabled).toBe(true);
     } finally {
       dispose();
     }
