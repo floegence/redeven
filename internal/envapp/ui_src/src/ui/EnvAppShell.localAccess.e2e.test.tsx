@@ -15,6 +15,7 @@ const mintEnvProxyEntryTicketMock = vi.fn();
 const mintEnvEntryTicketForAppMock = vi.fn();
 const channelInitEntryMock = vi.fn();
 const getEnvPublicIDFromSessionMock = vi.fn(() => '');
+const reloadCurrentPageMock = vi.fn();
 
 const connectMock = vi.fn(async (_config: Record<string, unknown>) => {
   protocolStatus = 'connected';
@@ -56,10 +57,10 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
-  BottomBarItem: (props: any) => <div>{props.children}</div>,
+  BottomBarItem: (props: any) => <button type="button" class={props.class} onClick={props.onClick}>{props.children}</button>,
   Panel: (props: any) => <div>{props.children}</div>,
   PanelContent: (props: any) => <div>{props.children}</div>,
-  Shell: (props: any) => <div>{props.children}</div>,
+  Shell: (props: any) => <div>{props.topBarActions}{props.bottomBarItems}{props.children}</div>,
   StatusIndicator: (props: any) => <div>{props.label ?? props.status}</div>,
 }));
 
@@ -147,6 +148,7 @@ vi.mock('./widgets/AskFlowerComposerWindow', () => ({ AskFlowerComposerWindow: (
 vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div /> }));
 vi.mock('./utils/askFlowerContextTemplate', () => ({ buildAskFlowerDraftMarkdown: () => '' }));
 vi.mock('./utils/askFlowerPath', () => ({ resolveSuggestedWorkingDirAbsolute: () => '' }));
+vi.mock('./utils/windowNavigation', () => ({ reloadCurrentPage: reloadCurrentPageMock }));
 vi.mock('./services/gatewayApi', () => ({
   fetchGatewayJSON: vi.fn(),
   gatewayRequestCredentials: () => 'same-origin',
@@ -163,6 +165,10 @@ vi.mock('./pages/AIChatContext', () => ({
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+  if (vi.isFakeTimers()) {
+    await vi.advanceTimersByTimeAsync(0);
+    return;
+  }
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
@@ -176,8 +182,13 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+function findButtonByText(root: ParentNode, text: string): HTMLButtonElement | undefined {
+  return Array.from(root.querySelectorAll('button')).find((node) => node.textContent?.trim().includes(text)) as HTMLButtonElement | undefined;
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
+  vi.useRealTimers();
 });
 
 beforeEach(() => {
@@ -186,6 +197,13 @@ beforeEach(() => {
   protocolStatus = 'disconnected';
   protocolClient = null;
   resumeCalls = [];
+  reloadCurrentPageMock.mockReset();
+  accessStatusMock.mockReset();
+  accessStatusMock.mockImplementation(async () => ({ passwordRequired: true, unlocked: resumeCalls.length > 0 }));
+  accessResumeMock.mockReset();
+  accessResumeMock.mockImplementation(async ({ token }: { token: string }) => {
+    resumeCalls.push(token);
+  });
   getLocalRuntimeMock.mockResolvedValue({ mode: 'local', env_public_id: 'env_local', direct_ws_url: 'ws://localhost/_redeven_direct/ws' });
   getLocalAccessStatusMock
     .mockResolvedValueOnce({ password_required: true, unlocked: false })
@@ -253,6 +271,150 @@ describe('EnvAppShell local access gate', () => {
 
       expect(host.textContent).toContain('activity main');
       expect(host.textContent).not.toContain('Preparing secure session');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('exposes retry and reload actions after the secure-session resume times out', async () => {
+    vi.useFakeTimers();
+    accessResumeMock.mockImplementationOnce(async ({ token }: { token: string }) => {
+      resumeCalls.push(token);
+      await new Promise<void>(() => {});
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const input = host.querySelector('input[type="password"]') as HTMLInputElement | null;
+      expect(input).toBeTruthy();
+      input!.value = 'secret';
+      input!.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const form = host.querySelector('form');
+      expect(form).toBeTruthy();
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(host.textContent).toContain('Preparing secure session');
+      expect(findButtonByText(host, 'Preparing secure session...')).toBeTruthy();
+      expect(findButtonByText(host, 'Reload page')).toBeTruthy();
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      await flushAsync();
+
+      expect(host.textContent).toContain('Timed out while preparing the secure session');
+      expect(findButtonByText(host, 'Retry connection')?.disabled).toBe(false);
+      expect(findButtonByText(host, 'Reload page')).toBeTruthy();
+      expect(Array.from(host.querySelectorAll('button')).filter((node) => node.textContent?.includes('Retry connection')).length).toBeGreaterThanOrEqual(2);
+
+      findButtonByText(host, 'Reload page')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(reloadCurrentPageMock).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('retries with a fresh connection after a timed-out secure-session resume', async () => {
+    vi.useFakeTimers();
+    let statusCalls = 0;
+    accessStatusMock.mockImplementation(async () => {
+      statusCalls += 1;
+      return { passwordRequired: true, unlocked: false };
+    });
+    accessResumeMock
+      .mockImplementationOnce(async ({ token }: { token: string }) => {
+        resumeCalls.push(token);
+        await new Promise<void>(() => {});
+      })
+      .mockImplementationOnce(async ({ token }: { token: string }) => {
+        resumeCalls.push(token);
+      });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const input = host.querySelector('input[type="password"]') as HTMLInputElement | null;
+      expect(input).toBeTruthy();
+      input!.value = 'secret';
+      input!.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const form = host.querySelector('form');
+      expect(form).toBeTruthy();
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await flushAsync();
+
+      expect(connectMock).toHaveBeenCalledTimes(1);
+      expect(findButtonByText(host, 'Retry connection')?.disabled).toBe(false);
+
+      const retryButtons = Array.from(host.querySelectorAll('button')).filter((node) => node.textContent?.includes('Retry connection')) as HTMLButtonElement[];
+      expect(retryButtons.length).toBeGreaterThanOrEqual(2);
+      retryButtons[retryButtons.length - 1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(disconnectMock).toHaveBeenCalled();
+      expect(connectMock).toHaveBeenCalledTimes(2);
+      expect(accessResumeMock).toHaveBeenCalledTimes(2);
+      expect(resumeCalls).toEqual(['resume123', 'resume123']);
+      expect(statusCalls).toBeGreaterThanOrEqual(2);
+      expect(host.textContent).toContain('activity main');
+      expect(host.textContent).not.toContain('Secure session needs attention');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('returns to the password prompt when the resume token is rejected', async () => {
+    accessResumeMock.mockRejectedValueOnce(Object.assign(new Error('invalid resume token'), { code: 401 }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const input = host.querySelector('input[type="password"]') as HTMLInputElement | null;
+      expect(input).toBeTruthy();
+      input!.value = 'secret';
+      input!.dispatchEvent(new Event('input', { bubbles: true }));
+
+      const form = host.querySelector('form');
+      expect(form).toBeTruthy();
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+      await flushAsync();
+      await flushAsync();
+
+      expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
+      expect(host.textContent).toContain('Unlock local agent');
+      expect(host.textContent).toContain('Access password expired. Enter it again to continue.');
+      expect(host.querySelector('input[type="password"]')).toBeTruthy();
     } finally {
       dispose();
     }

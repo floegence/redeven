@@ -49,6 +49,7 @@ import { FilePreviewContext } from './widgets/FilePreviewContext';
 import { FilePreviewHost } from './widgets/FilePreviewHost';
 import { buildAskFlowerDraftMarkdown } from './utils/askFlowerContextTemplate';
 import { resolveSuggestedWorkingDirAbsolute } from './utils/askFlowerPath';
+import { reloadCurrentPage } from './utils/windowNavigation';
 import {
   fetchGatewayJSON,
   gatewayRequestCredentials,
@@ -79,12 +80,70 @@ import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
 const ACTIVE_TAB_STORAGE_KEY = 'redeven_envapp_active_tab';
 const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
 const EXECUTION_MODE_STORAGE_KEY = 'redeven_ai_execution_mode';
+const ACCESS_RESUME_TIMEOUT_MS = 15_000;
 
 type CreateThreadResponse = Readonly<{
   thread: Readonly<{
     thread_id: string;
   }>;
 }>;
+
+class AccessResumeTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AccessResumeTimeoutError';
+  }
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return String(error.message || '').trim();
+  }
+  return String(error ?? '').trim();
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new AccessResumeTimeoutError(message));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+function isAccessResumeAuthFailure(error: unknown): boolean {
+  const candidate = error as { code?: unknown; status?: unknown } | null;
+  const statusCode = Number(candidate?.status ?? candidate?.code ?? 0);
+  if (Number.isFinite(statusCode) && statusCode === 401) {
+    return true;
+  }
+
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes('invalid resume token') ||
+    message.includes('resume token binding mismatch') ||
+    message.includes('missing channel_id or resume_token') ||
+    message.includes('channel not found') ||
+    message.includes('access password required')
+  );
+}
 
 function readPersistedExecutionMode(): 'act' | 'plan' {
   try {
@@ -202,6 +261,9 @@ export function EnvAppShell() {
   const accessLocked = createMemo(() => accessPasswordRequired() && !String(accessResumeToken() ?? '').trim());
   const accessResumePending = createMemo(() => accessPasswordRequired() && !accessPending() && !accessLocked() && !accessChannelReady());
   const accessGateVisible = createMemo(() => accessPending() || accessLocked() || accessResumePending());
+  const accessRecoverable = createMemo(() => accessPasswordRequired() && !accessPending() && !accessLocked());
+
+  const [accessRecoveryBusy, setAccessRecoveryBusy] = createSignal(false);
 
   const setCurrentAccessPassword = (value: string) => {
     if (isLocalMode()) {
@@ -254,6 +316,27 @@ export function EnvAppShell() {
     setCurrentAccessChannelReady(false);
     setCurrentAccessResumeToken('');
     setCurrentAccessError(message);
+  };
+
+  const setRecoverableAccessError = (message: string) => {
+    setCurrentAccessChannelReady(false);
+    setCurrentAccessError(message);
+    setManualError(null);
+  };
+
+  const handleAccessRecoveryFailure = (error: unknown) => {
+    const message = getErrorMessage(error);
+    if (isAccessResumeAuthFailure(error) || message.toLowerCase().includes('access password')) {
+      markCurrentAccessLocked('Access password expired. Enter it again to continue.');
+      return;
+    }
+    if (accessRecoverable()) {
+      setRecoverableAccessError(message || 'Failed to prepare the secure session. Retry connection or reload the page.');
+      return;
+    }
+    if (message) {
+      setManualError(message);
+    }
   };
 
   const [envId, setEnvId] = createSignal(getEnvPublicIDFromSession());
@@ -496,10 +579,16 @@ export function EnvAppShell() {
     return undefined;
   });
   const connecting = () => !accessGateVisible() && protocol.status() === 'connecting';
-  const reconnectDisabled = createMemo(() => accessGateVisible() || connecting());
+  const reconnectDisabled = createMemo(() => {
+    if (accessPending()) return true;
+    if (accessLocked()) return true;
+    if (accessResumePending()) return accessRecoveryBusy() || accessUnlocking();
+    return accessRecoveryBusy() || connecting();
+  });
   const reconnectLabel = createMemo(() => {
     if (accessPending()) return 'Checking access';
     if (accessLocked()) return 'Unlock required';
+    if (accessResumePending()) return accessRecoveryBusy() ? 'Preparing secure session' : 'Retry connection';
     return connecting() ? 'Connecting...' : 'Reconnect';
   });
   const connectError = createMemo(() => (accessGateVisible() ? null : manualError() ?? protocol.error()?.message ?? null));
@@ -526,16 +615,27 @@ export function EnvAppShell() {
 
   let ensureInFlight: Promise<void> | null = null;
   let accessResumeClient: unknown = null;
-  let accessResumeInFlight: Promise<void> | null = null;
+  let accessRecoverySeq = 0;
+  let accessResumeInFlight: { key: number; promise: Promise<void> } | null = null;
 
-  const ensureAccessResumed = async () => {
+  const ensureAccessResumed = async (attemptKey: number) => {
     const client = protocol.client();
     if (!client || protocol.status() !== 'connected') return;
-    if (accessResumeClient === client) return;
-    if (accessResumeInFlight) return accessResumeInFlight;
+    if (accessResumeClient === client) {
+      setCurrentAccessChannelReady(true);
+      setCurrentAccessError(null);
+      setManualError(null);
+      return;
+    }
+    if (accessResumeInFlight?.key === attemptKey) return accessResumeInFlight.promise;
 
-    accessResumeInFlight = (async () => {
-      const status = await rpc.access.status();
+    const promise = (async () => {
+      const status = await withTimeout(
+        rpc.access.status(),
+        ACCESS_RESUME_TIMEOUT_MS,
+        'Timed out while checking the secure session. Retry connection or reload the page.',
+      );
+      if (accessRecoverySeq !== attemptKey) return;
       if (!status.passwordRequired || status.unlocked) {
         accessResumeClient = client;
         setCurrentAccessChannelReady(true);
@@ -550,22 +650,26 @@ export function EnvAppShell() {
         throw new Error('Access password required. Enter it again to continue.');
       }
 
-      try {
-        await rpc.access.resume({ token });
-      } catch (error) {
-        markCurrentAccessLocked('Access password expired. Enter it again to continue.');
-        throw error;
-      }
+      await withTimeout(
+        rpc.access.resume({ token }),
+        ACCESS_RESUME_TIMEOUT_MS,
+        'Timed out while preparing the secure session. Retry connection or reload the page.',
+      );
+      if (accessRecoverySeq !== attemptKey) return;
       accessResumeClient = client;
       setCurrentAccessChannelReady(true);
       setCurrentAccessError(null);
       setManualError(null);
     })();
 
+    accessResumeInFlight = { key: attemptKey, promise };
+
     try {
-      await accessResumeInFlight;
+      await promise;
     } finally {
-      accessResumeInFlight = null;
+      if (accessResumeInFlight?.key === attemptKey) {
+        accessResumeInFlight = null;
+      }
     }
   };
 
@@ -598,7 +702,7 @@ export function EnvAppShell() {
   };
 
   const runConnect = async (fn: (config: ProtocolConnectConfig) => Promise<void>) => {
-    if (connecting() || accessPending() || accessLocked()) return;
+    if (accessRecoveryBusy() || connecting() || accessPending() || accessLocked()) return;
 
     const id = envId();
     if (!id) {
@@ -607,6 +711,11 @@ export function EnvAppShell() {
       return;
     }
 
+    const attemptKey = ++accessRecoverySeq;
+    accessResumeClient = null;
+    accessResumeInFlight = null;
+    setAccessRecoveryBusy(true);
+    setCurrentAccessError(null);
     setManualError(null);
 
     try {
@@ -629,19 +738,43 @@ export function EnvAppShell() {
           autoReconnect: reconnectPolicy,
         });
       }
-      await ensureAccessResumed();
+      if (accessRecoverySeq !== attemptKey) return;
+      await ensureAccessResumed(attemptKey);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.toLowerCase().includes('access password')) {
-        markCurrentAccessLocked('Enter the access password to continue.');
+      if (accessRecoverySeq === attemptKey) {
+        handleAccessRecoveryFailure(error);
+        protocol.disconnect();
       }
-      if (message) setManualError(message);
-      protocol.disconnect();
+    } finally {
+      if (accessRecoverySeq === attemptKey) {
+        setAccessRecoveryBusy(false);
+      }
     }
   };
 
   const connect = async () => runConnect((config) => protocol.connect(config));
   const reconnect = async () => runConnect((config) => protocol.reconnect(config));
+
+  const retryAccessConnection = async () => {
+    if (accessPending() || accessLocked() || accessUnlocking()) return;
+    setCurrentAccessError(null);
+    setManualError(null);
+    setCurrentAccessChannelReady(false);
+    protocol.disconnect();
+    await connect();
+  };
+
+  const triggerReconnect = async () => {
+    if (accessResumePending()) {
+      await retryAccessConnection();
+      return;
+    }
+    await reconnect();
+  };
+
+  const reloadAccessPage = () => {
+    reloadCurrentPage(window);
+  };
 
   const currentPingSource = createMemo(() => {
     if (accessGateVisible()) return null;
@@ -750,10 +883,20 @@ export function EnvAppShell() {
       return;
     }
     if (accessResumeClient === client) return;
-    void ensureAccessResumed().catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message) setManualError(message);
-      protocol.disconnect();
+    const attemptKey = ++accessRecoverySeq;
+    accessResumeInFlight = null;
+    setAccessRecoveryBusy(true);
+    setCurrentAccessError(null);
+    setManualError(null);
+    void ensureAccessResumed(attemptKey).catch((error) => {
+      if (accessRecoverySeq === attemptKey) {
+        handleAccessRecoveryFailure(error);
+        protocol.disconnect();
+      }
+    }).finally(() => {
+      if (accessRecoverySeq === attemptKey) {
+        setAccessRecoveryBusy(false);
+      }
     });
   });
 
@@ -1209,7 +1352,7 @@ export function EnvAppShell() {
         keybind: 'mod+shift+r',
         icon: Refresh,
         execute: () => {
-          void reconnect();
+          void triggerReconnect();
         },
       },
       {
@@ -1261,12 +1404,22 @@ export function EnvAppShell() {
     onCleanup(() => unregister());
   });
 
-  const accessGateTitle = createMemo(() => (isLocalMode() ? 'Unlock local agent' : 'Unlock agent'));
+  const accessGateTitle = createMemo(() => {
+    if (accessResumePending()) {
+      return accessRecoveryBusy() ? 'Preparing secure session' : 'Secure session needs attention';
+    }
+    return isLocalMode() ? 'Unlock local agent' : 'Unlock agent';
+  });
   const accessGateDescription = createMemo(() => {
     if (accessResumePending()) {
+      if (accessRecoveryBusy()) {
+        return isLocalMode()
+          ? 'Verifying the password for this browser load and connecting to the local agent.'
+          : 'Verifying the password for this environment page and connecting to the agent.';
+      }
       return isLocalMode()
-        ? 'Verifying the password for this browser load and connecting to the local agent.'
-        : 'Verifying the password for this environment page and connecting to the agent.';
+        ? 'The secure session is still blocked for this browser load. Retry the connection or reload the page.'
+        : 'The secure session is still blocked for this environment page. Retry the connection or reload the page.';
     }
     return isLocalMode()
       ? 'Enter the full access password before this browser load can connect to the local agent.'
@@ -1284,7 +1437,7 @@ export function EnvAppShell() {
       <Panel class="w-full max-w-md border-border shadow-sm">
         <PanelContent class="flex flex-col gap-4 p-6">
           <div class="space-y-2">
-            <div class="text-lg font-semibold text-foreground">{accessResumePending() ? 'Preparing secure session' : accessGateTitle()}</div>
+            <div class="text-lg font-semibold text-foreground">{accessGateTitle()}</div>
             <p class="text-sm leading-6 text-muted-foreground">{accessGateDescription()}</p>
           </div>
 
@@ -1315,7 +1468,26 @@ export function EnvAppShell() {
           </Show>
 
           <Show when={accessResumePending()}>
-            <div class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">{accessGateResumeHint()}</div>
+            <>
+              <div class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">{accessGateResumeHint()}</div>
+              <div class="flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  disabled={accessRecoveryBusy() || accessUnlocking()}
+                  onClick={() => void retryAccessConnection()}
+                  class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {accessRecoveryBusy() ? 'Preparing secure session...' : 'Retry connection'}
+                </button>
+                <button
+                  type="button"
+                  onClick={reloadAccessPage}
+                  class="inline-flex h-10 items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted/50"
+                >
+                  Reload page
+                </button>
+              </div>
+            </>
           </Show>
 
           <Show when={accessError()}>
@@ -1428,7 +1600,7 @@ export function EnvAppShell() {
                         </BottomBarItem>
                       </Tooltip>
                       <BottomBarItem
-                        onClick={reconnectDisabled() ? undefined : () => void reconnect()}
+                        onClick={reconnectDisabled() ? undefined : () => void triggerReconnect()}
                         class={reconnectDisabled() ? 'opacity-60 pointer-events-none' : undefined}
                       >
                         {reconnectLabel()}
