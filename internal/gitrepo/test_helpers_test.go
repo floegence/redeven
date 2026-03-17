@@ -97,6 +97,21 @@ type workspaceConflictFixture struct {
 	ConflictPath string
 }
 
+type mergeCommitBranchFixture struct {
+	BaseBranch   string
+	Branch       string
+	BaseCommit   string
+	SourceCommit string
+}
+
+type mergeConflictBranchFixture struct {
+	BaseBranch   string
+	Branch       string
+	ConflictPath string
+	BaseCommit   string
+	SourceCommit string
+}
+
 type remoteSyncFixture struct {
 	RemoteRoot          string
 	BaseBranch          string
@@ -173,6 +188,62 @@ func createWorkspaceConflictFixture(t *testing.T, root string) workspaceConflict
 	}
 
 	return workspaceConflictFixture{ConflictPath: conflictPath}
+}
+
+func createMergeCommitBranchFixture(t *testing.T, root string) mergeCommitBranchFixture {
+	t.Helper()
+	baseBranch := runGitFixture(t, root, "rev-parse", "--abbrev-ref", "HEAD")
+	branchName := "feature/merge-commit"
+
+	runGitFixture(t, root, "checkout", "-b", branchName)
+	writeFixtureFile(t, root, "src/feature-merge.txt", []byte("feature branch\n"))
+	runGitFixture(t, root, "add", "src/feature-merge.txt")
+	runGitFixture(t, root, "commit", "-m", "feature merge change")
+	sourceCommit := runGitFixture(t, root, "rev-parse", "HEAD")
+
+	runGitFixture(t, root, "checkout", baseBranch)
+	writeFixtureFile(t, root, "src/base-merge.txt", []byte("base branch\n"))
+	runGitFixture(t, root, "add", "src/base-merge.txt")
+	runGitFixture(t, root, "commit", "-m", "base merge change")
+	baseCommit := runGitFixture(t, root, "rev-parse", "HEAD")
+
+	return mergeCommitBranchFixture{
+		BaseBranch:   baseBranch,
+		Branch:       branchName,
+		BaseCommit:   baseCommit,
+		SourceCommit: sourceCommit,
+	}
+}
+
+func createMergeConflictBranchFixture(t *testing.T, root string) mergeConflictBranchFixture {
+	t.Helper()
+	baseBranch := runGitFixture(t, root, "rev-parse", "--abbrev-ref", "HEAD")
+	branchName := "feature/merge-conflict"
+	conflictPath := "src/merge-conflict.txt"
+
+	writeFixtureFile(t, root, conflictPath, []byte("base\n"))
+	runGitFixture(t, root, "add", conflictPath)
+	runGitFixture(t, root, "commit", "-m", "add merge conflict base")
+
+	runGitFixture(t, root, "checkout", "-b", branchName)
+	writeFixtureFile(t, root, conflictPath, []byte("feature\n"))
+	runGitFixture(t, root, "add", conflictPath)
+	runGitFixture(t, root, "commit", "-m", "feature merge conflict change")
+	sourceCommit := runGitFixture(t, root, "rev-parse", "HEAD")
+
+	runGitFixture(t, root, "checkout", baseBranch)
+	writeFixtureFile(t, root, conflictPath, []byte("main\n"))
+	runGitFixture(t, root, "add", conflictPath)
+	runGitFixture(t, root, "commit", "-m", "base merge conflict change")
+	baseCommit := runGitFixture(t, root, "rev-parse", "HEAD")
+
+	return mergeConflictBranchFixture{
+		BaseBranch:   baseBranch,
+		Branch:       branchName,
+		ConflictPath: conflictPath,
+		BaseCommit:   baseCommit,
+		SourceCommit: sourceCommit,
+	}
 }
 
 func createRemoteSyncFixture(t *testing.T, root string) remoteSyncFixture {

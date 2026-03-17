@@ -33,8 +33,12 @@ import type {
   GitCommitWorkspaceResponse,
   GitDeleteBranchRequest,
   GitDeleteBranchResponse,
+  GitMergeBranchRequest,
+  GitMergeBranchResponse,
   GitPreviewDeleteBranchRequest,
   GitPreviewDeleteBranchResponse,
+  GitPreviewMergeBranchRequest,
+  GitPreviewMergeBranchResponse,
   GitFetchRepoRequest,
   GitFetchRepoResponse,
   GitGetBranchCompareRequest,
@@ -94,7 +98,9 @@ import {
   fromWireGitCheckoutBranchResponse,
   fromWireGitCommitWorkspaceResponse,
   fromWireGitDeleteBranchResponse,
+  fromWireGitMergeBranchResponse,
   fromWireGitPreviewDeleteBranchResponse,
+  fromWireGitPreviewMergeBranchResponse,
   fromWireGitFetchRepoResponse,
   fromWireGitGetBranchCompareResponse,
   fromWireGitGetCommitDetailResponse,
@@ -110,7 +116,9 @@ import {
   toWireGitCheckoutBranchRequest,
   toWireGitCommitWorkspaceRequest,
   toWireGitDeleteBranchRequest,
+  toWireGitMergeBranchRequest,
   toWireGitPreviewDeleteBranchRequest,
+  toWireGitPreviewMergeBranchRequest,
   toWireGitFetchRepoRequest,
   toWireGitGetBranchCompareRequest,
   toWireGitGetCommitDetailRequest,
@@ -161,8 +169,12 @@ import type {
   wire_git_commit_workspace_resp,
   wire_git_delete_branch_req,
   wire_git_delete_branch_resp,
+  wire_git_merge_branch_req,
+  wire_git_merge_branch_resp,
   wire_git_preview_delete_branch_req,
   wire_git_preview_delete_branch_resp,
+  wire_git_preview_merge_branch_req,
+  wire_git_preview_merge_branch_resp,
   wire_git_fetch_repo_req,
   wire_git_fetch_repo_resp,
   wire_git_get_branch_compare_req,
@@ -216,6 +228,8 @@ export type RedevenV1Rpc = {
     checkoutBranch: (req: GitCheckoutBranchRequest) => Promise<GitCheckoutBranchResponse>;
     previewDeleteBranch: (req: GitPreviewDeleteBranchRequest) => Promise<GitPreviewDeleteBranchResponse>;
     deleteBranch: (req: GitDeleteBranchRequest) => Promise<GitDeleteBranchResponse>;
+    previewMergeBranch: (req: GitPreviewMergeBranchRequest) => Promise<GitPreviewMergeBranchResponse>;
+    mergeBranch: (req: GitMergeBranchRequest) => Promise<GitMergeBranchResponse>;
     listBranches: (req: GitListBranchesRequest) => Promise<GitListBranchesResponse>;
     listCommits: (req: GitListCommitsRequest) => Promise<GitListCommitsResponse>;
     getCommitDetail: (req: GitGetCommitDetailRequest) => Promise<GitGetCommitDetailResponse>;
@@ -378,6 +392,16 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireGitDeleteBranchRequest(req);
         const resp = await call<wire_git_delete_branch_req, wire_git_delete_branch_resp>(redevenV1TypeIds.git.deleteBranch, payload);
         return fromWireGitDeleteBranchResponse(resp);
+      },
+      previewMergeBranch: async (req) => {
+        const payload = toWireGitPreviewMergeBranchRequest(req);
+        const resp = await call<wire_git_preview_merge_branch_req, wire_git_preview_merge_branch_resp>(redevenV1TypeIds.git.previewMergeBranch, payload);
+        return fromWireGitPreviewMergeBranchResponse(resp);
+      },
+      mergeBranch: async (req) => {
+        const payload = toWireGitMergeBranchRequest(req);
+        const resp = await call<wire_git_merge_branch_req, wire_git_merge_branch_resp>(redevenV1TypeIds.git.mergeBranch, payload);
+        return fromWireGitMergeBranchResponse(resp);
       },
       listBranches: async (req) => {
         const payload = toWireGitListBranchesRequest(req);

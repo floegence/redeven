@@ -2,7 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
-import { useRedevenRpc, type GitBranchSummary, type GitCommitFileSummary, type GitCommitSummary, type GitGetBranchCompareResponse, type GitListBranchesResponse, type GitListWorkspaceChangesResponse, type GitPreviewDeleteBranchResponse, type GitRepoSummaryResponse, type GitWorkspaceChange, type GitWorkspaceSection } from '../protocol/redeven_v1';
+import { useRedevenRpc, type GitBranchSummary, type GitCommitFileSummary, type GitCommitSummary, type GitGetBranchCompareResponse, type GitListBranchesResponse, type GitListWorkspaceChangesResponse, type GitPreviewDeleteBranchResponse, type GitPreviewMergeBranchResponse, type GitRepoSummaryResponse, type GitWorkspaceChange, type GitWorkspaceSection } from '../protocol/redeven_v1';
 import {
   allGitBranches,
   branchContextSummary,
@@ -40,6 +40,7 @@ import {
 } from './GitWorkbenchPrimitives';
 import { GitDeleteBranchConfirmDialog } from './GitDeleteBranchConfirmDialog';
 import { GitDeleteBranchDialog, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
+import { GitMergeBranchDialog, type GitMergeBranchDialogConfirmOptions, type GitMergeBranchDialogState } from './GitMergeBranchDialog';
 
 export interface GitBranchesPanelProps {
   repoRootPath?: string;
@@ -62,7 +63,14 @@ export interface GitBranchesPanelProps {
   onSelectCommit?: (hash: string) => void;
   onLoadMore?: () => void;
   checkoutBusy?: boolean;
+  mergeBusy?: boolean;
   deleteBusy?: boolean;
+  mergeReviewOpen?: boolean;
+  mergeReviewBranch?: GitBranchSummary | null;
+  mergePreview?: GitPreviewMergeBranchResponse | null;
+  mergePreviewError?: string;
+  mergeActionError?: string;
+  mergeDialogState?: GitMergeBranchDialogState;
   deleteReviewOpen?: boolean;
   deleteReviewBranch?: GitBranchSummary | null;
   deletePreview?: GitPreviewDeleteBranchResponse | null;
@@ -70,7 +78,11 @@ export interface GitBranchesPanelProps {
   deleteActionError?: string;
   deleteDialogState?: GitDeleteBranchDialogState;
   onCheckoutBranch?: (branch: GitBranchSummary) => void;
+  onMergeBranch?: (branch: GitBranchSummary) => void;
   onDeleteBranch?: (branch: GitBranchSummary) => void;
+  onCloseMergeReview?: () => void;
+  onRetryMergePreview?: (branch: GitBranchSummary) => void;
+  onConfirmMergeBranch?: (branch: GitBranchSummary, options: GitMergeBranchDialogConfirmOptions) => void;
   onCloseDeleteReview?: () => void;
   onRetryDeletePreview?: (branch: GitBranchSummary) => void;
   onConfirmDeleteBranch?: (branch: GitBranchSummary, options: GitDeleteBranchDialogConfirmOptions) => void;
@@ -108,6 +120,14 @@ function defaultCompareTarget(branches: GitListBranchesResponse | null | undefin
   const firstDifferent = names.find((name) => name !== sourceRef);
   if (firstDifferent) return firstDifferent;
   return names[0] ?? 'main';
+}
+
+function workspaceHasChanges(workspace: GitListWorkspaceChangesResponse | null | undefined, repoSummary: GitRepoSummaryResponse | null | undefined): boolean {
+  const summary = workspace?.summary ?? repoSummary?.workspaceSummary;
+  return Number(summary?.stagedCount ?? 0) > 0
+    || Number(summary?.unstagedCount ?? 0) > 0
+    || Number(summary?.untrackedCount ?? 0) > 0
+    || Number(summary?.conflictedCount ?? 0) > 0;
 }
 
 function branchStatusEmptyState(branch: GitBranchSummary | null | undefined): {
@@ -726,9 +746,25 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const visibleStatusItems = () => workspaceSectionItems(visibleStatusWorkspace(), selectedStatusSection());
   const visibleStatusKey = () => gitDiffEntryIdentity(diffDialogItem());
   const statusEmptyState = () => branchStatusEmptyState(props.selectedBranch);
+  const mergeReviewBranch = () => props.mergeReviewBranch ?? props.selectedBranch ?? null;
+  const mergePreview = () => props.mergePreview ?? null;
+  const mergeReviewState = () => props.mergeDialogState ?? 'idle';
   const deleteReviewBranch = () => props.deleteReviewBranch ?? props.selectedBranch ?? null;
   const deletePreview = () => props.deletePreview ?? null;
   const deleteReviewState = () => props.deleteDialogState ?? 'idle';
+  const mergeHelperText = () => {
+    const branch = props.selectedBranch;
+    if (!branch || !props.onMergeBranch) return '';
+    if (branch.current) return 'Select another branch to merge into the current branch.';
+    const headRef = String(props.repoSummary?.headRef ?? '').trim();
+    if (!headRef || headRef === 'HEAD' || props.repoSummary?.detached) {
+      return 'Attach HEAD to a local branch before merging.';
+    }
+    if (workspaceHasChanges(props.workspace, props.repoSummary)) {
+      return 'Current workspace must be clean before merging.';
+    }
+    return '';
+  };
   const deleteHelperText = () => {
     const branch = props.selectedBranch;
     if (!branch || branch.kind !== 'local') return '';
@@ -737,6 +773,20 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     if (worktreePath) return `This branch is checked out in a linked worktree: ${worktreePath}`;
     return '';
   };
+  const actionHelperTexts = createMemo(() => {
+    const items = [mergeHelperText(), deleteHelperText()].filter(Boolean);
+    return Array.from(new Set(items));
+  });
+  const mergeAvailable = () => Boolean(props.onMergeBranch && (props.selectedBranch?.kind === 'local' || props.selectedBranch?.kind === 'remote'));
+  const mergeDisabled = () => Boolean(
+    !mergeAvailable()
+    || props.mergeBusy
+    || props.selectedBranch?.current
+    || props.repoSummary?.detached
+    || String(props.repoSummary?.headRef ?? '').trim() === 'HEAD'
+    || workspaceHasChanges(props.workspace, props.repoSummary)
+  );
+  const mergeLabel = () => (props.mergeBusy ? 'Merging...' : 'Merge Into Current');
   const linkedWorktreeDeleteDialog = () => {
     const branch = deleteReviewBranch();
     if (!props.deleteReviewOpen || !branch) return false;
@@ -965,6 +1015,18 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                             </Button>
                           </Show>
 
+                          <Show when={mergeAvailable()}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              class="flex-1 rounded-md bg-background/80 sm:flex-none"
+                              disabled={mergeDisabled()}
+                              onClick={() => props.selectedBranch && props.onMergeBranch?.(props.selectedBranch)}
+                            >
+                              {mergeLabel()}
+                            </Button>
+                          </Show>
+
                           <Show when={deleteAvailable()}>
                             <Button
                               size="sm"
@@ -1001,9 +1063,13 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                         </div>
                       </div>
 
-                      <Show when={deleteHelperText()}>
+                      <Show when={actionHelperTexts().length > 0}>
                         <div class="w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[24rem] sm:text-right">
-                          {deleteHelperText()}
+                          <For each={actionHelperTexts()}>
+                            {(item, index) => (
+                              <div class={cn(index() > 0 && 'mt-1')}>{item}</div>
+                            )}
+                          </For>
                         </div>
                       </Show>
                     </div>
@@ -1048,6 +1114,18 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         title="Branch Status Diff"
         description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected branch status diff.'}
         emptyMessage="Select a branch status file to inspect its diff."
+      />
+
+      <GitMergeBranchDialog
+        open={Boolean(props.mergeReviewOpen && mergeReviewBranch())}
+        branch={mergeReviewBranch()}
+        preview={mergePreview()}
+        previewError={props.mergePreviewError}
+        actionError={props.mergeActionError}
+        state={mergeReviewState()}
+        onClose={() => props.onCloseMergeReview?.()}
+        onRetryPreview={(branch) => props.onRetryMergePreview?.(branch)}
+        onConfirm={(branch, options) => props.onConfirmMergeBranch?.(branch, options)}
       />
 
       <GitDeleteBranchConfirmDialog

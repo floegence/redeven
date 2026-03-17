@@ -4,8 +4,12 @@ import type {
   GitDeleteLinkedWorktreePreview,
   GitDeleteBranchRequest,
   GitDeleteBranchResponse,
+  GitMergeBranchRequest,
+  GitMergeBranchResponse,
   GitPreviewDeleteBranchRequest,
   GitPreviewDeleteBranchResponse,
+  GitPreviewMergeBranchRequest,
+  GitPreviewMergeBranchResponse,
   GitBranchSummary,
   GitCommitWorkspaceRequest,
   GitCommitWorkspaceResponse,
@@ -46,8 +50,12 @@ import type {
   wire_git_delete_linked_worktree_preview,
   wire_git_delete_branch_req,
   wire_git_delete_branch_resp,
+  wire_git_merge_branch_req,
+  wire_git_merge_branch_resp,
   wire_git_preview_delete_branch_req,
   wire_git_preview_delete_branch_resp,
+  wire_git_preview_merge_branch_req,
+  wire_git_preview_merge_branch_resp,
   wire_git_branch_summary,
   wire_git_commit_workspace_req,
   wire_git_commit_workspace_resp,
@@ -464,5 +472,54 @@ export function fromWireGitDeleteBranchResponse(resp: wire_git_delete_branch_res
     headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
     linkedWorktreeRemoved: Boolean(resp?.linked_worktree_removed),
     removedWorktreePath: typeof resp?.removed_worktree_path === 'string' ? resp.removed_worktree_path : undefined,
+  };
+}
+
+export function toWireGitPreviewMergeBranchRequest(req: GitPreviewMergeBranchRequest): wire_git_preview_merge_branch_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    name: typeof req.name === 'string' ? req.name : undefined,
+    full_name: typeof req.fullName === 'string' ? req.fullName : undefined,
+    kind: typeof req.kind === 'string' ? req.kind : undefined,
+  };
+}
+
+export function fromWireGitPreviewMergeBranchResponse(resp: wire_git_preview_merge_branch_resp): GitPreviewMergeBranchResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    currentRef: typeof resp?.current_ref === 'string' ? resp.current_ref : undefined,
+    currentCommit: typeof resp?.current_commit === 'string' ? resp.current_commit : undefined,
+    sourceName: typeof resp?.source_name === 'string' ? resp.source_name : undefined,
+    sourceFullName: typeof resp?.source_full_name === 'string' ? resp.source_full_name : undefined,
+    sourceKind: typeof resp?.source_kind === 'string' ? resp.source_kind : undefined,
+    sourceCommit: typeof resp?.source_commit === 'string' ? resp.source_commit : undefined,
+    mergeBase: typeof resp?.merge_base === 'string' ? resp.merge_base : undefined,
+    sourceAheadCount: typeof resp?.source_ahead_count === 'number' ? resp.source_ahead_count : undefined,
+    sourceBehindCount: typeof resp?.source_behind_count === 'number' ? resp.source_behind_count : undefined,
+    outcome: typeof resp?.outcome === 'string' ? resp.outcome : undefined,
+    blockingReason: typeof resp?.blocking_reason === 'string' ? resp.blocking_reason : undefined,
+    planFingerprint: typeof resp?.plan_fingerprint === 'string' ? resp.plan_fingerprint : undefined,
+    files: Array.isArray(resp?.files) ? resp.files.map(fromWireGitCommitFileSummary) : [],
+    linkedWorktree: fromWireGitLinkedWorktreeSnapshot(resp?.linked_worktree),
+  };
+}
+
+export function toWireGitMergeBranchRequest(req: GitMergeBranchRequest): wire_git_merge_branch_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    name: typeof req.name === 'string' ? req.name : undefined,
+    full_name: typeof req.fullName === 'string' ? req.fullName : undefined,
+    kind: typeof req.kind === 'string' ? req.kind : undefined,
+    plan_fingerprint: typeof req.planFingerprint === 'string' ? req.planFingerprint : undefined,
+  };
+}
+
+export function fromWireGitMergeBranchResponse(resp: wire_git_merge_branch_resp): GitMergeBranchResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
+    headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
+    result: typeof resp?.result === 'string' ? resp.result : undefined,
+    conflictSummary: fromWireGitWorkspaceSummary(resp?.conflict_summary),
   };
 }
