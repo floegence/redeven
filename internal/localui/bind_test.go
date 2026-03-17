@@ -52,6 +52,29 @@ func TestParseBind_Wildcard(t *testing.T) {
 	}
 }
 
+func TestParseBind_AllowsDynamicLoopbackPortOnExplicitIP(t *testing.T) {
+	t.Parallel()
+
+	bind, err := ParseBind("127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("ParseBind() error = %v", err)
+	}
+	if bind.Port() != 0 {
+		t.Fatalf("Port() = %d, want 0", bind.Port())
+	}
+	if !bind.IsLoopbackOnly() {
+		t.Fatalf("expected loopback bind")
+	}
+}
+
+func TestParseBind_RejectsLocalhostDynamicPort(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ParseBind("localhost:0"); err == nil {
+		t.Fatalf("expected localhost:0 to fail")
+	}
+}
+
 func TestParseBind_RejectsHostname(t *testing.T) {
 	t.Parallel()
 
