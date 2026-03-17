@@ -673,7 +673,7 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).not.toContain('Current workspace must be clean before merging.');
       expect(host.textContent).not.toContain('This branch is checked out in a linked worktree: /workspace/repo-blocked');
 
-      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Merge Into Current')) as HTMLButtonElement | undefined;
+      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Merge') as HTMLButtonElement | undefined;
       expect(mergeButton).toBeTruthy();
       expect(mergeButton?.disabled).toBe(false);
 
