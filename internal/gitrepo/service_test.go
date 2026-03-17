@@ -36,6 +36,22 @@ func mustPreviewDeleteBranch(
 	return resp
 }
 
+func mustPreviewMergeBranch(
+	t *testing.T,
+	svc *Service,
+	repo repoContext,
+	name string,
+	fullName string,
+	kind string,
+) *previewMergeBranchResp {
+	t.Helper()
+	resp, err := svc.previewMergeBranch(context.Background(), repo, name, fullName, kind)
+	if err != nil {
+		t.Fatalf("previewMergeBranch(%s): %v", name, err)
+	}
+	return resp
+}
+
 func TestResolveRepoForPath(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)
@@ -448,6 +464,280 @@ func TestCheckoutBranch_RemoteCreatesTrackingBranch(t *testing.T) {
 	localHead := runGitFixture(t, fixture.Root, "rev-parse", "HEAD")
 	if localHead != remote.RemoteFeatureCommit {
 		t.Fatalf("local HEAD=%q, want %q", localHead, remote.RemoteFeatureCommit)
+	}
+}
+
+func TestPreviewMergeBranch_FastForward(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp := mustPreviewMergeBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if resp.Outcome != mergeBranchOutcomeFastForward {
+		t.Fatalf("Outcome=%q, want %q", resp.Outcome, mergeBranchOutcomeFastForward)
+	}
+	if resp.CurrentRef != compare.BaseBranch {
+		t.Fatalf("CurrentRef=%q, want %q", resp.CurrentRef, compare.BaseBranch)
+	}
+	if resp.SourceName != compare.Branch {
+		t.Fatalf("SourceName=%q, want %q", resp.SourceName, compare.Branch)
+	}
+	if resp.MergeBase != fixture.BinaryCommit {
+		t.Fatalf("MergeBase=%q, want %q", resp.MergeBase, fixture.BinaryCommit)
+	}
+	if resp.SourceAheadCount != 1 || resp.SourceBehindCount != 0 {
+		t.Fatalf("unexpected ahead/behind counts: %+v", resp)
+	}
+	if resp.PlanFingerprint == "" {
+		t.Fatalf("expected preview fingerprint")
+	}
+	if len(resp.Files) != 1 || resp.Files[0].Path != compare.FilePath {
+		t.Fatalf("unexpected preview files: %+v", resp.Files)
+	}
+}
+
+func TestPreviewMergeBranch_BlocksDirtyWorkspace(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+	createWorkspaceChangesFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp := mustPreviewMergeBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if resp.Outcome != mergeBranchOutcomeBlocked {
+		t.Fatalf("Outcome=%q, want %q", resp.Outcome, mergeBranchOutcomeBlocked)
+	}
+	if !strings.Contains(resp.BlockingReason, "Current workspace must be clean before merging") {
+		t.Fatalf("unexpected blocking reason: %q", resp.BlockingReason)
+	}
+}
+
+func TestPreviewMergeBranch_BlocksDetachedHead(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+	runGitFixture(t, fixture.Root, "checkout", "--detach", fixture.BinaryCommit)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp := mustPreviewMergeBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if resp.Outcome != mergeBranchOutcomeBlocked {
+		t.Fatalf("Outcome=%q, want %q", resp.Outcome, mergeBranchOutcomeBlocked)
+	}
+	if !strings.Contains(resp.BlockingReason, "Attach HEAD to a local branch before merging") {
+		t.Fatalf("unexpected blocking reason: %q", resp.BlockingReason)
+	}
+}
+
+func TestPreviewMergeBranch_BlocksSameBranch(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	fullName := "refs/heads/" + repo.headRef
+	resp := mustPreviewMergeBranch(t, svc, repo, repo.headRef, fullName, "local")
+	if resp.Outcome != mergeBranchOutcomeBlocked {
+		t.Fatalf("Outcome=%q, want %q", resp.Outcome, mergeBranchOutcomeBlocked)
+	}
+	if !strings.Contains(resp.BlockingReason, "Select a different branch to merge into the current branch") {
+		t.Fatalf("unexpected blocking reason: %q", resp.BlockingReason)
+	}
+}
+
+func TestPreviewMergeBranch_BlocksInProgressOperation(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+	mergeHeadPath := runGitFixture(t, fixture.Root, "rev-parse", "--git-path", "MERGE_HEAD")
+	mergeHeadPath = strings.TrimSpace(mergeHeadPath)
+	if !filepath.IsAbs(mergeHeadPath) {
+		mergeHeadPath = filepath.Join(fixture.Root, mergeHeadPath)
+	}
+	if err := os.WriteFile(mergeHeadPath, []byte(compare.Commit+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(MERGE_HEAD): %v", err)
+	}
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp := mustPreviewMergeBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if resp.Outcome != mergeBranchOutcomeBlocked {
+		t.Fatalf("Outcome=%q, want %q", resp.Outcome, mergeBranchOutcomeBlocked)
+	}
+	if !strings.Contains(resp.BlockingReason, "Finish the current merge before merging another branch") {
+		t.Fatalf("unexpected blocking reason: %q", resp.BlockingReason)
+	}
+}
+
+func TestMergeBranch_UpToDate(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+	runGitFixture(t, fixture.Root, "merge", "--ff-only", compare.Branch)
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewMergeBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if preview.Outcome != mergeBranchOutcomeUpToDate {
+		t.Fatalf("Outcome=%q, want %q", preview.Outcome, mergeBranchOutcomeUpToDate)
+	}
+
+	resp, err := svc.mergeBranch(context.Background(), repo, compare.Branch, "refs/heads/"+compare.Branch, "local", preview.PlanFingerprint)
+	if err != nil {
+		t.Fatalf("mergeBranch(up_to_date): %v", err)
+	}
+	if resp.Result != mergeBranchOutcomeUpToDate {
+		t.Fatalf("Result=%q, want %q", resp.Result, mergeBranchOutcomeUpToDate)
+	}
+	if resp.HeadCommit != compare.Commit {
+		t.Fatalf("HeadCommit=%q, want %q", resp.HeadCommit, compare.Commit)
+	}
+}
+
+func TestMergeBranch_FastForward(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewMergeBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if preview.Outcome != mergeBranchOutcomeFastForward {
+		t.Fatalf("Outcome=%q, want %q", preview.Outcome, mergeBranchOutcomeFastForward)
+	}
+
+	resp, err := svc.mergeBranch(context.Background(), repo, compare.Branch, "refs/heads/"+compare.Branch, "local", preview.PlanFingerprint)
+	if err != nil {
+		t.Fatalf("mergeBranch(fast_forward): %v", err)
+	}
+	if resp.Result != mergeBranchOutcomeFastForward {
+		t.Fatalf("Result=%q, want %q", resp.Result, mergeBranchOutcomeFastForward)
+	}
+	if resp.HeadRef != compare.BaseBranch {
+		t.Fatalf("HeadRef=%q, want %q", resp.HeadRef, compare.BaseBranch)
+	}
+	if resp.HeadCommit != compare.Commit {
+		t.Fatalf("HeadCommit=%q, want %q", resp.HeadCommit, compare.Commit)
+	}
+}
+
+func TestMergeBranch_MergeCommit(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	mergeFixture := createMergeCommitBranchFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewMergeBranch(t, svc, repo, mergeFixture.Branch, "refs/heads/"+mergeFixture.Branch, "local")
+	if preview.Outcome != mergeBranchOutcomeMergeCommit {
+		t.Fatalf("Outcome=%q, want %q", preview.Outcome, mergeBranchOutcomeMergeCommit)
+	}
+
+	resp, err := svc.mergeBranch(context.Background(), repo, mergeFixture.Branch, "refs/heads/"+mergeFixture.Branch, "local", preview.PlanFingerprint)
+	if err != nil {
+		t.Fatalf("mergeBranch(merge_commit): %v", err)
+	}
+	if resp.Result != mergeBranchOutcomeMergeCommit {
+		t.Fatalf("Result=%q, want %q", resp.Result, mergeBranchOutcomeMergeCommit)
+	}
+	parents := strings.Fields(runGitFixture(t, fixture.Root, "show", "-s", "--format=%P", "HEAD"))
+	if len(parents) != 2 {
+		t.Fatalf("merge commit parents=%v, want 2 parents", parents)
+	}
+}
+
+func TestMergeBranch_Conflicted(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	mergeFixture := createMergeConflictBranchFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewMergeBranch(t, svc, repo, mergeFixture.Branch, "refs/heads/"+mergeFixture.Branch, "local")
+	if preview.Outcome != mergeBranchOutcomeMergeCommit {
+		t.Fatalf("Outcome=%q, want %q", preview.Outcome, mergeBranchOutcomeMergeCommit)
+	}
+
+	resp, err := svc.mergeBranch(context.Background(), repo, mergeFixture.Branch, "refs/heads/"+mergeFixture.Branch, "local", preview.PlanFingerprint)
+	if err != nil {
+		t.Fatalf("mergeBranch(conflicted): %v", err)
+	}
+	if resp.Result != mergeBranchResultConflicted {
+		t.Fatalf("Result=%q, want %q", resp.Result, mergeBranchResultConflicted)
+	}
+	if resp.ConflictSummary.ConflictedCount != 1 {
+		t.Fatalf("unexpected conflict summary: %+v", resp.ConflictSummary)
+	}
+	status, err := svc.readWorkspaceStatus(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("readWorkspaceStatus: %v", err)
+	}
+	if len(status.Conflicted) != 1 || status.Conflicted[0].Path != mergeFixture.ConflictPath {
+		t.Fatalf("unexpected conflicted files: %+v", status.Conflicted)
+	}
+}
+
+func TestMergeBranch_RejectsStalePlan(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewMergeBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+
+	runGitFixture(t, fixture.Root, "checkout", compare.Branch)
+	writeFixtureFile(t, fixture.Root, compare.FilePath, []byte("feature branch\nstale\n"))
+	runGitFixture(t, fixture.Root, "add", compare.FilePath)
+	runGitFixture(t, fixture.Root, "commit", "-m", "stale merge branch change")
+	runGitFixture(t, fixture.Root, "checkout", compare.BaseBranch)
+
+	repo, err = svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo(after branch update): %v", err)
+	}
+
+	_, err = svc.mergeBranch(context.Background(), repo, compare.Branch, "refs/heads/"+compare.Branch, "local", preview.PlanFingerprint)
+	if err == nil {
+		t.Fatalf("expected stale merge plan to fail")
+	}
+	if !strings.Contains(err.Error(), "merge plan is stale") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

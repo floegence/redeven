@@ -145,6 +145,47 @@ type deleteBranchResp struct {
 	RemovedWorktreePath   string `json:"removed_worktree_path,omitempty"`
 }
 
+type previewMergeBranchReq struct {
+	RepoRootPath string `json:"repo_root_path"`
+	Name         string `json:"name,omitempty"`
+	FullName     string `json:"full_name,omitempty"`
+	Kind         string `json:"kind,omitempty"`
+}
+
+type previewMergeBranchResp struct {
+	RepoRootPath      string                     `json:"repo_root_path"`
+	CurrentRef        string                     `json:"current_ref,omitempty"`
+	CurrentCommit     string                     `json:"current_commit,omitempty"`
+	SourceName        string                     `json:"source_name,omitempty"`
+	SourceFullName    string                     `json:"source_full_name,omitempty"`
+	SourceKind        string                     `json:"source_kind,omitempty"`
+	SourceCommit      string                     `json:"source_commit,omitempty"`
+	MergeBase         string                     `json:"merge_base,omitempty"`
+	SourceAheadCount  int                        `json:"source_ahead_count,omitempty"`
+	SourceBehindCount int                        `json:"source_behind_count,omitempty"`
+	Outcome           string                     `json:"outcome,omitempty"`
+	BlockingReason    string                     `json:"blocking_reason,omitempty"`
+	PlanFingerprint   string                     `json:"plan_fingerprint,omitempty"`
+	Files             []gitCommitFileSummary     `json:"files,omitempty"`
+	LinkedWorktree    *gitLinkedWorktreeSnapshot `json:"linked_worktree,omitempty"`
+}
+
+type mergeBranchReq struct {
+	RepoRootPath    string `json:"repo_root_path"`
+	Name            string `json:"name,omitempty"`
+	FullName        string `json:"full_name,omitempty"`
+	Kind            string `json:"kind,omitempty"`
+	PlanFingerprint string `json:"plan_fingerprint,omitempty"`
+}
+
+type mergeBranchResp struct {
+	RepoRootPath    string              `json:"repo_root_path"`
+	HeadRef         string              `json:"head_ref,omitempty"`
+	HeadCommit      string              `json:"head_commit,omitempty"`
+	Result          string              `json:"result,omitempty"`
+	ConflictSummary gitWorkspaceSummary `json:"conflict_summary,omitempty"`
+}
+
 type listBranchesReq struct {
 	RepoRootPath string `json:"repo_root_path"`
 }

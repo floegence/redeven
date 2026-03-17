@@ -37,6 +37,8 @@ const legacyClipboardStore = vi.hoisted(() => ({
 
 const gitWorkspaceRenderStore = vi.hoisted(() => ({
   snapshots: [] as Array<{
+    subview: string;
+    selectedWorkspaceSection?: string;
     repoInfoLoading: boolean;
     repoSummaryLoading: boolean;
     workspaceLoading: boolean;
@@ -46,6 +48,7 @@ const gitWorkspaceRenderStore = vi.hoisted(() => ({
     pullBusy: boolean;
     pushBusy: boolean;
     checkoutBusy: boolean;
+    mergeBusy: boolean;
     deleteBusy: boolean;
   }>,
 }));
@@ -78,6 +81,8 @@ const mockRpc = vi.hoisted(() => ({
     pullRepo: vi.fn(),
     pushRepo: vi.fn(),
     checkoutBranch: vi.fn(),
+    previewMergeBranch: vi.fn(),
+    mergeBranch: vi.fn(),
     previewDeleteBranch: vi.fn(),
     deleteBranch: vi.fn(),
   },
@@ -211,6 +216,7 @@ vi.mock('./GitWorkspace', () => ({
     currentPath: string;
     subview: string;
     width?: number;
+    selectedWorkspaceSection?: string;
     onModeChange?: (mode: string) => void;
     onResize?: (delta: number) => void;
     repoInfoLoading?: boolean;
@@ -222,7 +228,11 @@ vi.mock('./GitWorkspace', () => ({
     pullBusy?: boolean;
     pushBusy?: boolean;
     checkoutBusy?: boolean;
+    mergeBusy?: boolean;
     deleteBusy?: boolean;
+    mergeReviewOpen?: boolean;
+    mergePreview?: { planFingerprint?: string } | null;
+    mergeDialogState?: string;
     deleteReviewOpen?: boolean;
     deletePreview?: { planFingerprint?: string } | null;
     deleteDialogState?: string;
@@ -230,7 +240,12 @@ vi.mock('./GitWorkspace', () => ({
     onPull?: () => void;
     onPush?: () => void;
     onCheckoutBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
+    onMergeBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
     onDeleteBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
+    onConfirmMergeBranch?: (
+      branch: { name?: string; fullName?: string; kind?: string },
+      options: { planFingerprint?: string },
+    ) => void;
     onConfirmDeleteBranch?: (
       branch: { name?: string; fullName?: string; kind?: string },
       options: { removeLinkedWorktree: boolean; discardLinkedWorktreeChanges: boolean; planFingerprint?: string },
@@ -246,6 +261,8 @@ vi.mock('./GitWorkspace', () => ({
 
     createEffect(() => {
       gitWorkspaceRenderStore.snapshots.push({
+        subview: props.subview,
+        selectedWorkspaceSection: props.selectedWorkspaceSection,
         repoInfoLoading: Boolean(props.repoInfoLoading),
         repoSummaryLoading: Boolean(props.repoSummaryLoading),
         workspaceLoading: Boolean(props.workspaceLoading),
@@ -255,6 +272,7 @@ vi.mock('./GitWorkspace', () => ({
         pullBusy: Boolean(props.pullBusy),
         pushBusy: Boolean(props.pushBusy),
         checkoutBusy: Boolean(props.checkoutBusy),
+        mergeBusy: Boolean(props.mergeBusy),
         deleteBusy: Boolean(props.deleteBusy),
       });
     });
@@ -279,6 +297,16 @@ vi.mock('./GitWorkspace', () => ({
         </button>
         <button
           type="button"
+          onClick={() => props.onMergeBranch?.({
+            name: 'feature/demo',
+            fullName: 'refs/heads/feature/demo',
+            kind: 'local',
+          })}
+        >
+          mock-merge-branch
+        </button>
+        <button
+          type="button"
           onClick={() => props.onDeleteBranch?.({
             name: 'feature/demo',
             fullName: 'refs/heads/feature/demo',
@@ -287,6 +315,20 @@ vi.mock('./GitWorkspace', () => ({
         >
           mock-delete-branch
         </button>
+        {props.mergeReviewOpen && props.mergePreview ? (
+          <button
+            type="button"
+            onClick={() => props.onConfirmMergeBranch?.({
+              name: 'feature/demo',
+              fullName: 'refs/heads/feature/demo',
+              kind: 'local',
+            }, {
+              planFingerprint: props.mergePreview?.planFingerprint,
+            })}
+          >
+            mock-confirm-merge-branch
+          </button>
+        ) : null}
         {props.deleteReviewOpen && props.deletePreview ? (
           <button
             type="button"
@@ -455,6 +497,28 @@ beforeEach(() => {
     repoRootPath: '/workspace/repo',
     headRef: 'feature/demo',
     headCommit: 'fedcba9',
+  });
+  mockRpc.git.previewMergeBranch.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    currentRef: 'main',
+    currentCommit: 'abc1234',
+    sourceName: 'feature/demo',
+    sourceFullName: 'refs/heads/feature/demo',
+    sourceKind: 'local',
+    sourceCommit: 'fedcba9',
+    mergeBase: 'abc1234',
+    sourceAheadCount: 1,
+    sourceBehindCount: 0,
+    outcome: 'fast_forward',
+    planFingerprint: 'merge-plan-1',
+    files: [],
+  });
+  mockRpc.git.mergeBranch.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    headRef: 'main',
+    headCommit: 'fedcba9',
+    result: 'fast_forward',
+    conflictSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
   });
   mockRpc.git.previewDeleteBranch.mockResolvedValue({
     repoRootPath: '/workspace/repo',
@@ -930,6 +994,117 @@ describe('RemoteFileBrowser persistence', () => {
       expect(notificationStore.success).toContainEqual({ title: 'Checked out', message: 'feature/demo is now active.' });
       expect(gitWorkspaceRenderStore.snapshots.some((item) => item.checkoutBusy)).toBe(true);
       expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading && !item.repoSummaryLoading && !item.workspaceLoading && !item.branchesLoading && !item.listLoading)).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps merge on local busy state and shows a success toast without global reload flags', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      gitWorkspaceRenderStore.snapshots = [];
+
+      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-merge-branch') as HTMLButtonElement | undefined;
+      expect(mergeButton).toBeTruthy();
+      mergeButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.git.previewMergeBranch).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo',
+        name: 'feature/demo',
+        fullName: 'refs/heads/feature/demo',
+        kind: 'local',
+      });
+
+      const confirmButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-confirm-merge-branch') as HTMLButtonElement | undefined;
+      expect(confirmButton).toBeTruthy();
+      confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.git.mergeBranch).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo',
+        name: 'feature/demo',
+        fullName: 'refs/heads/feature/demo',
+        kind: 'local',
+        planFingerprint: 'merge-plan-1',
+      });
+      expect(notificationStore.success).toContainEqual({ title: 'Fast-forwarded', message: 'main now includes feature/demo.' });
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => item.mergeBusy)).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading && !item.repoSummaryLoading && !item.workspaceLoading && !item.branchesLoading && !item.listLoading)).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('focuses conflicted changes after a merge conflict', async () => {
+    const cleanWorkspace = {
+      repoRootPath: '/workspace/repo',
+      summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+      staged: [],
+      unstaged: [],
+      untracked: [],
+      conflicted: [],
+    };
+    const conflictedWorkspace = {
+      repoRootPath: '/workspace/repo',
+      summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 1 },
+      staged: [],
+      unstaged: [],
+      untracked: [],
+      conflicted: [{ section: 'conflicted', changeType: 'conflicted', path: 'src/conflict.txt', displayPath: 'src/conflict.txt' }],
+    };
+
+    mockRpc.git.listWorkspaceChanges.mockReset();
+    mockRpc.git.listWorkspaceChanges
+      .mockResolvedValueOnce(cleanWorkspace)
+      .mockResolvedValue(conflictedWorkspace);
+    mockRpc.git.mergeBranch.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo',
+      headRef: 'main',
+      headCommit: 'abc1234',
+      result: 'conflicted',
+      conflictSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 1 },
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      gitWorkspaceRenderStore.snapshots = [];
+
+      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-merge-branch') as HTMLButtonElement | undefined;
+      expect(mergeButton).toBeTruthy();
+      mergeButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      const confirmButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-confirm-merge-branch') as HTMLButtonElement | undefined;
+      expect(confirmButton).toBeTruthy();
+      confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(notificationStore.warning).toContainEqual({ title: 'Merge has conflicts', message: 'Resolve the conflicted files in main.' });
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => item.mergeBusy)).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => item.subview === 'changes' && item.selectedWorkspaceSection === 'conflicted')).toBe(true);
     } finally {
       dispose();
     }

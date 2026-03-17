@@ -391,3 +391,102 @@ func TestE2E_GitRepoRPC_PreviewDeleteBranchWithLinkedWorktree(t *testing.T) {
 		t.Fatalf("unexpected preview worktree changes: %+v", previewResp.LinkedWorktree.Untracked)
 	}
 }
+
+func TestE2E_GitRepoRPC_PreviewMergeBranch(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+
+	svc := NewService(fixture.Root)
+	client, closeServer := startGitRepoRPCSession(t, svc)
+	defer closeServer()
+
+	payload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_PREVIEW_MERGE, mustMarshalJSON(t, previewMergeBranchReq{
+		RepoRootPath: fixture.Root,
+		Name:         compare.Branch,
+		FullName:     "refs/heads/" + compare.Branch,
+		Kind:         "local",
+	}))
+	if err != nil {
+		t.Fatalf("preview merge branch call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("preview merge branch rpc error: %+v", rpcErr)
+	}
+
+	var resp previewMergeBranchResp
+	if err := json.Unmarshal(payload, &resp); err != nil {
+		t.Fatalf("unmarshal preview merge branch: %v", err)
+	}
+	if resp.Outcome != mergeBranchOutcomeFastForward {
+		t.Fatalf("Outcome=%q, want %q", resp.Outcome, mergeBranchOutcomeFastForward)
+	}
+	if resp.CurrentRef != compare.BaseBranch {
+		t.Fatalf("CurrentRef=%q, want %q", resp.CurrentRef, compare.BaseBranch)
+	}
+	if len(resp.Files) != 1 || resp.Files[0].Path != compare.FilePath {
+		t.Fatalf("unexpected preview files: %+v", resp.Files)
+	}
+	if resp.PlanFingerprint == "" {
+		t.Fatalf("expected preview fingerprint")
+	}
+}
+
+func TestE2E_GitRepoRPC_MergeBranch(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.BinaryCommit)
+
+	svc := NewService(fixture.Root)
+	client, closeServer := startGitRepoRPCSession(t, svc)
+	defer closeServer()
+
+	previewPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_PREVIEW_MERGE, mustMarshalJSON(t, previewMergeBranchReq{
+		RepoRootPath: fixture.Root,
+		Name:         compare.Branch,
+		FullName:     "refs/heads/" + compare.Branch,
+		Kind:         "local",
+	}))
+	if err != nil {
+		t.Fatalf("preview merge branch call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("preview merge branch rpc error: %+v", rpcErr)
+	}
+
+	var previewResp previewMergeBranchResp
+	if err := json.Unmarshal(previewPayload, &previewResp); err != nil {
+		t.Fatalf("unmarshal preview merge branch: %v", err)
+	}
+	if previewResp.Outcome != mergeBranchOutcomeFastForward {
+		t.Fatalf("Outcome=%q, want %q", previewResp.Outcome, mergeBranchOutcomeFastForward)
+	}
+
+	mergePayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_MERGE_BRANCH, mustMarshalJSON(t, mergeBranchReq{
+		RepoRootPath:    fixture.Root,
+		Name:            compare.Branch,
+		FullName:        "refs/heads/" + compare.Branch,
+		Kind:            "local",
+		PlanFingerprint: previewResp.PlanFingerprint,
+	}))
+	if err != nil {
+		t.Fatalf("merge branch call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("merge branch rpc error: %+v", rpcErr)
+	}
+
+	var mergeResp mergeBranchResp
+	if err := json.Unmarshal(mergePayload, &mergeResp); err != nil {
+		t.Fatalf("unmarshal merge branch: %v", err)
+	}
+	if mergeResp.Result != mergeBranchOutcomeFastForward {
+		t.Fatalf("Result=%q, want %q", mergeResp.Result, mergeBranchOutcomeFastForward)
+	}
+	if mergeResp.HeadRef != compare.BaseBranch {
+		t.Fatalf("HeadRef=%q, want %q", mergeResp.HeadRef, compare.BaseBranch)
+	}
+	if mergeResp.HeadCommit != compare.Commit {
+		t.Fatalf("HeadCommit=%q, want %q", mergeResp.HeadCommit, compare.Commit)
+	}
+}

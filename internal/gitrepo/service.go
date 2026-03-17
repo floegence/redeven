@@ -32,6 +32,8 @@ const (
 	TypeID_GIT_CHECKOUT_BRANCH   uint32 = 1114
 	TypeID_GIT_PREVIEW_DELETE    uint32 = 1115
 	TypeID_GIT_DELETE_BRANCH     uint32 = 1116
+	TypeID_GIT_PREVIEW_MERGE     uint32 = 1117
+	TypeID_GIT_MERGE_BRANCH      uint32 = 1118
 
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
@@ -387,6 +389,42 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		}
 		return resp, nil
 	})
+
+	accessgate.RegisterTyped[previewMergeBranchReq, previewMergeBranchResp](r, TypeID_GIT_PREVIEW_MERGE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewMergeBranchReq) (*previewMergeBranchResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &previewMergeBranchReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.previewMergeBranch(ctx, repo, req.Name, req.FullName, req.Kind)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
+
+	accessgate.RegisterTyped[mergeBranchReq, mergeBranchResp](r, TypeID_GIT_MERGE_BRANCH, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *mergeBranchReq) (*mergeBranchResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &mergeBranchReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.mergeBranch(ctx, repo, req.Name, req.FullName, req.Kind, req.PlanFingerprint)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
 }
 
 type repoContext struct {
@@ -711,11 +749,29 @@ func classifyGitMutationRPCError(err error) *rpc.Error {
 		return &rpc.Error{Code: 400, Message: "delete plan fingerprint is required"}
 	case strings.Contains(lower, "delete plan is stale"):
 		return &rpc.Error{Code: 409, Message: message}
+	case strings.Contains(lower, "merge plan fingerprint is required"):
+		return &rpc.Error{Code: 400, Message: "merge plan fingerprint is required"}
+	case strings.Contains(lower, "merge plan is stale"):
+		return &rpc.Error{Code: 409, Message: message}
 	case strings.Contains(lower, "linked worktree removal must be confirmed"):
 		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "discard confirmation is required"):
 		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "not accessible from this agent"):
+		return &rpc.Error{Code: 400, Message: message}
+	case strings.Contains(lower, "attach head to a local branch before merging"):
+		return &rpc.Error{Code: 400, Message: message}
+	case strings.Contains(lower, "select a different branch to merge"):
+		return &rpc.Error{Code: 400, Message: message}
+	case strings.Contains(lower, "current workspace must be clean before merging"):
+		return &rpc.Error{Code: 400, Message: message}
+	case strings.Contains(lower, "finish the current"):
+		return &rpc.Error{Code: 400, Message: message}
+	case strings.Contains(lower, "unrelated histories support"):
+		return &rpc.Error{Code: 400, Message: message}
+	case strings.Contains(lower, "target branch does not have a readable head commit"):
+		return &rpc.Error{Code: 400, Message: message}
+	case strings.Contains(lower, "merge is blocked"):
 		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "checked out in worktree"):
 		return &rpc.Error{Code: 400, Message: message}

@@ -199,6 +199,60 @@ func (s *Service) checkoutBranch(ctx context.Context, repo repoContext, name str
 	}, nil
 }
 
+func (s *Service) mergeBranch(ctx context.Context, repo repoContext, name string, fullName string, kind string, planFingerprint string) (*mergeBranchResp, error) {
+	target, err := normalizeMergeBranchTarget(name, fullName, kind)
+	if err != nil {
+		return nil, err
+	}
+	plan, err := s.buildMergeBranchPlan(ctx, repo, target)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(planFingerprint) == "" {
+		return nil, errors.New("merge plan fingerprint is required")
+	}
+	if plan.PlanFingerprint != strings.TrimSpace(planFingerprint) {
+		return nil, errors.New("merge plan is stale; review the merge again")
+	}
+	if strings.TrimSpace(plan.BlockingReason) != "" {
+		return nil, errors.New(plan.BlockingReason)
+	}
+
+	result := plan.Outcome
+	switch plan.Outcome {
+	case mergeBranchOutcomeUpToDate:
+	case mergeBranchOutcomeFastForward, mergeBranchOutcomeMergeCommit:
+		conflicted, err := s.runMergeBranchCommand(ctx, repo.repoRootReal, target.MergeRef)
+		if err != nil {
+			return nil, err
+		}
+		if conflicted {
+			result = mergeBranchResultConflicted
+		}
+	default:
+		return nil, errors.New("merge is blocked")
+	}
+
+	updatedRepo, err := s.loadRepoContext(ctx, repo.repoRootReal)
+	if err != nil {
+		return nil, err
+	}
+	resp := &mergeBranchResp{
+		RepoRootPath: updatedRepo.repoRootReal,
+		HeadRef:      updatedRepo.headRef,
+		HeadCommit:   updatedRepo.headCommit,
+		Result:       result,
+	}
+	if result == mergeBranchResultConflicted {
+		status, err := s.readWorkspaceStatus(ctx, repo.repoRootReal)
+		if err != nil {
+			return nil, err
+		}
+		resp.ConflictSummary = status.Summary()
+	}
+	return resp, nil
+}
+
 func (s *Service) deleteBranch(
 	ctx context.Context,
 	repo repoContext,
@@ -263,6 +317,28 @@ func (s *Service) deleteBranch(
 		LinkedWorktreeRemoved: removedWorktreePath != "",
 		RemovedWorktreePath:   removedWorktreePath,
 	}, nil
+}
+
+func (s *Service) runMergeBranchCommand(ctx context.Context, repoRoot string, mergeRef string) (bool, error) {
+	cmd, err := gitutil.CommandContext(ctx, repoRoot, nil, "merge", "--no-edit", mergeRef)
+	if err != nil {
+		return false, err
+	}
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return false, nil
+	}
+
+	status, statusErr := s.readWorkspaceStatus(ctx, repoRoot)
+	if statusErr == nil && len(status.Conflicted) > 0 {
+		return true, nil
+	}
+
+	message := strings.TrimSpace(string(out))
+	if message == "" {
+		message = err.Error()
+	}
+	return false, errors.New(message)
 }
 
 func gitRefExists(ctx context.Context, repoRoot string, ref string) bool {

@@ -8,6 +8,7 @@ import type {
   GitListBranchesResponse,
   GitListWorkspaceChangesResponse,
   GitPreviewDeleteBranchResponse,
+  GitPreviewMergeBranchResponse,
   GitRepoSummaryResponse,
   GitResolveRepoResponse,
   GitWorkspaceChange,
@@ -19,6 +20,7 @@ import { GitHistoryBrowser } from './GitHistoryBrowser';
 import { gitSubviewTone, gitToneActionButtonClass } from './GitChrome';
 import { GitLabelBlock, GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimitives';
 import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
+import type { GitMergeBranchDialogConfirmOptions, GitMergeBranchDialogState } from './GitMergeBranchDialog';
 
 export interface GitWorkbenchProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -52,7 +54,14 @@ export interface GitWorkbenchProps {
   onSelectCommit?: (hash: string) => void;
   onLoadMore?: () => void;
   checkoutBusy?: boolean;
+  mergeBusy?: boolean;
   deleteBusy?: boolean;
+  mergeReviewOpen?: boolean;
+  mergeReviewBranch?: GitBranchSummary | null;
+  mergePreview?: GitPreviewMergeBranchResponse | null;
+  mergePreviewError?: string;
+  mergeActionError?: string;
+  mergeDialogState?: GitMergeBranchDialogState;
   deleteReviewOpen?: boolean;
   deleteReviewBranch?: GitBranchSummary | null;
   deletePreview?: GitPreviewDeleteBranchResponse | null;
@@ -60,7 +69,11 @@ export interface GitWorkbenchProps {
   deleteActionError?: string;
   deleteDialogState?: GitDeleteBranchDialogState;
   onCheckoutBranch?: (branch: GitBranchSummary) => void;
+  onMergeBranch?: (branch: GitBranchSummary) => void;
   onDeleteBranch?: (branch: GitBranchSummary) => void;
+  onCloseMergeReview?: () => void;
+  onRetryMergePreview?: (branch: GitBranchSummary) => void;
+  onConfirmMergeBranch?: (branch: GitBranchSummary, options: GitMergeBranchDialogConfirmOptions) => void;
   onCloseDeleteReview?: () => void;
   onRetryDeletePreview?: (branch: GitBranchSummary) => void;
   onConfirmDeleteBranch?: (branch: GitBranchSummary, options: GitDeleteBranchDialogConfirmOptions) => void;
@@ -242,7 +255,14 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             onSelectCommit={props.onSelectCommit}
             onLoadMore={props.onLoadMore}
             checkoutBusy={props.checkoutBusy}
+            mergeBusy={props.mergeBusy}
             deleteBusy={props.deleteBusy}
+            mergeReviewOpen={props.mergeReviewOpen}
+            mergeReviewBranch={props.mergeReviewBranch}
+            mergePreview={props.mergePreview}
+            mergePreviewError={props.mergePreviewError}
+            mergeActionError={props.mergeActionError}
+            mergeDialogState={props.mergeDialogState}
             deleteReviewOpen={props.deleteReviewOpen}
             deleteReviewBranch={props.deleteReviewBranch}
             deletePreview={props.deletePreview}
@@ -250,7 +270,11 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             deleteActionError={props.deleteActionError}
             deleteDialogState={props.deleteDialogState}
             onCheckoutBranch={props.onCheckoutBranch}
+            onMergeBranch={props.onMergeBranch}
             onDeleteBranch={props.onDeleteBranch}
+            onCloseMergeReview={props.onCloseMergeReview}
+            onRetryMergePreview={props.onRetryMergePreview}
+            onConfirmMergeBranch={props.onConfirmMergeBranch}
             onCloseDeleteReview={props.onCloseDeleteReview}
             onRetryDeletePreview={props.onRetryDeletePreview}
             onConfirmDeleteBranch={props.onConfirmDeleteBranch}

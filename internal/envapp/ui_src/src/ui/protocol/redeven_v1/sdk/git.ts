@@ -195,6 +195,47 @@ export type GitDeleteBranchResponse = {
   removedWorktreePath?: string;
 };
 
+export type GitPreviewMergeBranchRequest = {
+  repoRootPath: string;
+  name?: string;
+  fullName?: string;
+  kind?: 'local' | 'remote' | string;
+};
+
+export type GitPreviewMergeBranchResponse = {
+  repoRootPath: string;
+  currentRef?: string;
+  currentCommit?: string;
+  sourceName?: string;
+  sourceFullName?: string;
+  sourceKind?: 'local' | 'remote' | string;
+  sourceCommit?: string;
+  mergeBase?: string;
+  sourceAheadCount?: number;
+  sourceBehindCount?: number;
+  outcome?: 'blocked' | 'up_to_date' | 'fast_forward' | 'merge_commit' | string;
+  blockingReason?: string;
+  planFingerprint?: string;
+  files: GitCommitFileSummary[];
+  linkedWorktree?: GitLinkedWorktreeSnapshot;
+};
+
+export type GitMergeBranchRequest = {
+  repoRootPath: string;
+  name?: string;
+  fullName?: string;
+  kind?: 'local' | 'remote' | string;
+  planFingerprint?: string;
+};
+
+export type GitMergeBranchResponse = {
+  repoRootPath: string;
+  headRef?: string;
+  headCommit?: string;
+  result?: 'up_to_date' | 'fast_forward' | 'merge_commit' | 'conflicted' | string;
+  conflictSummary: GitWorkspaceSummary;
+};
+
 export type GitBranchSummary = {
   name?: string;
   fullName?: string;

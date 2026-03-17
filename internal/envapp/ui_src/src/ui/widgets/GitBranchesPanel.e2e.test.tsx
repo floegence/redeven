@@ -91,6 +91,7 @@ afterEach(() => {
 describe('GitBranchesPanel interactions', () => {
   it('renders status as the default branch detail view', () => {
     let checkoutCount = 0;
+    let mergeCount = 0;
     let deleteCount = 0;
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -137,6 +138,9 @@ describe('GitBranchesPanel interactions', () => {
                 onCheckoutBranch={() => {
                   checkoutCount += 1;
                 }}
+                onMergeBranch={() => {
+                  mergeCount += 1;
+                }}
                 onDeleteBranch={() => {
                   deleteCount += 1;
                 }}
@@ -152,21 +156,27 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).toContain('History');
       expect(host.textContent).toContain('Compare');
       expect(host.textContent).toContain('Checkout');
+      expect(host.textContent).toContain('Merge Into Current');
       expect(host.textContent).toContain('Delete');
       expect(host.textContent).toContain('src/linked.ts');
       expect(host.textContent).toContain('Upstream origin/feature/demo');
       expect(host.textContent).not.toContain('Current · Upstream origin/feature/demo');
       expect(host.textContent).toContain('Staged');
       expect(host.textContent).toContain('View Diff');
+      expect(host.textContent).toContain('Select another branch to merge into the current branch.');
       expect(host.textContent).toContain('Switch to another branch before deleting it.');
       expect(host.textContent).not.toContain('pending review');
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
+      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Merge Into Current')) as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       expect(checkoutButton).toBeTruthy();
+      expect(mergeButton).toBeTruthy();
       expect(deleteButton).toBeTruthy();
       expect(checkoutButton?.disabled).toBe(true);
+      expect(mergeButton?.disabled).toBe(true);
       expect(deleteButton?.disabled).toBe(true);
       expect(checkoutCount).toBe(0);
+      expect(mergeCount).toBe(0);
       expect(deleteCount).toBe(0);
     } finally {
       dispose();
@@ -175,6 +185,7 @@ describe('GitBranchesPanel interactions', () => {
 
   it('enables checkout for a non-current remote branch', () => {
     let checkoutBranch: string | undefined;
+    let mergeBranch: string | undefined;
     let deleteBranch: string | undefined;
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -200,6 +211,9 @@ describe('GitBranchesPanel interactions', () => {
                 onCheckoutBranch={(branch) => {
                   checkoutBranch = branch.name;
                 }}
+                onMergeBranch={(branch) => {
+                  mergeBranch = branch.name;
+                }}
                 onDeleteBranch={(branch) => {
                   deleteBranch = branch.name;
                 }}
@@ -212,12 +226,17 @@ describe('GitBranchesPanel interactions', () => {
 
     try {
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
+      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Merge Into Current')) as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       expect(checkoutButton).toBeTruthy();
+      expect(mergeButton).toBeTruthy();
       expect(deleteButton).toBeFalsy();
       expect(checkoutButton?.disabled).toBe(false);
+      expect(mergeButton?.disabled).toBe(false);
       checkoutButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      mergeButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       expect(checkoutBranch).toBe('origin/feature/demo');
+      expect(mergeBranch).toBe('origin/feature/demo');
       expect(deleteBranch).toBeUndefined();
     } finally {
       dispose();
@@ -460,6 +479,119 @@ describe('GitBranchesPanel interactions', () => {
       expect(confirmButton?.className).toContain('w-full');
       confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       expect(confirmedBranch).toBe('feature/demo');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('opens merge review dialog and confirms with the preview fingerprint', async () => {
+    let requestedBranch: string | undefined;
+    let confirmedFingerprint: string | undefined;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const branch = {
+      name: 'feature/demo',
+      fullName: 'refs/heads/feature/demo',
+      kind: 'local' as const,
+    };
+    const preview = {
+      repoRootPath: '/workspace/repo',
+      currentRef: 'main',
+      currentCommit: 'abc1234',
+      sourceName: 'feature/demo',
+      sourceFullName: 'refs/heads/feature/demo',
+      sourceKind: 'local' as const,
+      sourceCommit: 'fedcba9',
+      mergeBase: 'abc1234',
+      sourceAheadCount: 1,
+      sourceBehindCount: 0,
+      outcome: 'fast_forward' as const,
+      planFingerprint: 'merge-plan-1',
+      files: [
+        {
+          changeType: 'modified',
+          path: 'src/merge.ts',
+          displayPath: 'src/merge.ts',
+          additions: 5,
+          deletions: 2,
+          patchText: '@@ -1 +1 @@\n-before\n+after',
+        },
+      ],
+    };
+
+    const dispose = render(() => {
+      const [mergeReviewOpen, setMergeReviewOpen] = createSignal(false);
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  repoSummary={{
+                    repoRootPath: '/workspace/repo',
+                    headRef: 'main',
+                    headCommit: 'abc1234',
+                    workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                  }}
+                  workspace={{
+                    repoRootPath: '/workspace/repo',
+                    summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                    staged: [],
+                    unstaged: [],
+                    untracked: [],
+                    conflicted: [],
+                  }}
+                  selectedBranch={branch}
+                  branches={{
+                    repoRootPath: '/workspace/repo',
+                    currentRef: 'main',
+                    local: [
+                      { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                      branch,
+                    ],
+                    remote: [],
+                  }}
+                  mergeReviewOpen={mergeReviewOpen()}
+                  mergeReviewBranch={branch}
+                  mergePreview={mergeReviewOpen() ? preview : null}
+                  onMergeBranch={(selected) => {
+                    requestedBranch = selected.name;
+                    setMergeReviewOpen(true);
+                  }}
+                  onCloseMergeReview={() => setMergeReviewOpen(false)}
+                  onConfirmMergeBranch={(_selected, options) => {
+                    confirmedFingerprint = options.planFingerprint;
+                    setMergeReviewOpen(false);
+                  }}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Merge Into Current')) as HTMLButtonElement | undefined;
+      expect(mergeButton).toBeTruthy();
+      expect(mergeButton?.disabled).toBe(false);
+      mergeButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+
+      expect(requestedBranch).toBe('feature/demo');
+      expect(document.body.textContent).toContain('Merge Branch');
+      expect(document.body.textContent).toContain('Fast-forward');
+      expect(document.body.textContent).toContain('feature/demo');
+      expect(document.body.textContent).toContain('Changed Files');
+      expect(document.body.textContent).toContain('src/merge.ts');
+      expect(document.body.textContent).toContain('Fast-Forward main');
+
+      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Fast-Forward main') as HTMLButtonElement | undefined;
+      expect(confirmButton).toBeTruthy();
+      confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(confirmedFingerprint).toBe('merge-plan-1');
     } finally {
       dispose();
     }

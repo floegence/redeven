@@ -14,6 +14,7 @@ import {
   type GitListBranchesResponse,
   type GitListWorkspaceChangesResponse,
   type GitPreviewDeleteBranchResponse,
+  type GitPreviewMergeBranchResponse,
   type GitRepoSummaryResponse,
   type GitResolveRepoResponse,
   type GitWorkspaceChange,
@@ -95,7 +96,7 @@ const GIT_SUBVIEW_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:git-subview:
 const SHOW_HIDDEN_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:show-hidden:';
 const SHOW_HIDDEN_DROPDOWN_ITEM_ID = 'show-hidden-files';
 
-type GitMutationScope = 'stage' | 'unstage' | 'commit' | 'fetch' | 'pull' | 'push' | 'checkout' | 'deleteBranch' | '';
+type GitMutationScope = 'stage' | 'unstage' | 'commit' | 'fetch' | 'pull' | 'push' | 'checkout' | 'mergeBranch' | 'deleteBranch' | '';
 
 type GitMutationRepoResponse = {
   repoRootPath: string;
@@ -283,6 +284,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitCommitMessage, setGitCommitMessage] = createSignal('');
   const [gitMutationScope, setGitMutationScope] = createSignal<GitMutationScope>('');
   const [gitMutationKey, setGitMutationKey] = createSignal('');
+  const [gitMergeReviewOpen, setGitMergeReviewOpen] = createSignal(false);
+  const [gitMergeReviewBranch, setGitMergeReviewBranch] = createSignal<GitBranchSummary | null>(null);
+  const [gitMergeReviewPreview, setGitMergeReviewPreview] = createSignal<GitPreviewMergeBranchResponse | null>(null);
+  const [gitMergeReviewLoading, setGitMergeReviewLoading] = createSignal(false);
+  const [gitMergeReviewError, setGitMergeReviewError] = createSignal('');
+  const [gitMergeActionError, setGitMergeActionError] = createSignal('');
   const [gitDeleteReviewOpen, setGitDeleteReviewOpen] = createSignal(false);
   const [gitDeleteReviewBranch, setGitDeleteReviewBranch] = createSignal<GitBranchSummary | null>(null);
   const [gitDeleteReviewPreview, setGitDeleteReviewPreview] = createSignal<GitPreviewDeleteBranchResponse | null>(null);
@@ -296,6 +303,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let gitRepoSummaryReqSeq = 0;
   let gitWorkspaceReqSeq = 0;
   let gitBranchesReqSeq = 0;
+  let gitMergeReviewReqSeq = 0;
   let gitDeleteReviewReqSeq = 0;
   let lastGitCommitContextKey = '';
   let lastGitRepoKey = '';
@@ -589,6 +597,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     gitRepoSummaryReqSeq += 1;
     gitWorkspaceReqSeq += 1;
     gitBranchesReqSeq += 1;
+    gitMergeReviewReqSeq += 1;
     gitDeleteReviewReqSeq += 1;
     lastGitRepoKey = '';
     setGitRepoSummary(null);
@@ -607,6 +616,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitCommitMessage('');
     setGitMutationScope('');
     setGitMutationKey('');
+    setGitMergeReviewOpen(false);
+    setGitMergeReviewBranch(null);
+    setGitMergeReviewPreview(null);
+    setGitMergeReviewLoading(false);
+    setGitMergeReviewError('');
+    setGitMergeActionError('');
     setGitDeleteReviewOpen(false);
     setGitDeleteReviewBranch(null);
     setGitDeleteReviewPreview(null);
@@ -641,6 +656,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (layout.isMobile()) {
       closePageSidebar();
     }
+  };
+
+  const focusGitWorkspaceSection = (section: GitWorkspaceViewSection, workspace = gitWorkspace()) => {
+    setGitSubview('changes');
+    setSelectedGitWorkspaceSection(section);
+    const firstItem = workspaceViewSectionItems(workspace, section)[0] ?? null;
+    setSelectedGitWorkspaceKey(workspaceEntryKey(firstItem));
   };
 
   const selectGitWorkspaceSection = (section: GitWorkspaceViewSection) => {
@@ -713,6 +735,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                 ? 'Push failed'
                 : scope === 'checkout'
                   ? 'Checkout failed'
+                  : scope === 'mergeBranch'
+                    ? 'Merge failed'
                   : scope === 'deleteBranch'
                     ? 'Delete failed'
                     : 'Git request failed';
@@ -965,6 +989,60 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     );
   };
 
+  const gitMergeDialogState = (): 'idle' | 'previewing' | 'merging' => {
+    if (gitMergeReviewLoading()) return 'previewing';
+    if (gitMutationScope() === 'mergeBranch' && gitMutationKey() === branchIdentity(gitMergeReviewBranch())) {
+      return 'merging';
+    }
+    return 'idle';
+  };
+
+  const closeGitMergeReview = (options: { force?: boolean } = {}) => {
+    if (!options.force && gitMergeDialogState() === 'merging') return;
+    gitMergeReviewReqSeq += 1;
+    setGitMergeReviewOpen(false);
+    setGitMergeReviewBranch(null);
+    setGitMergeReviewPreview(null);
+    setGitMergeReviewLoading(false);
+    setGitMergeReviewError('');
+    setGitMergeActionError('');
+  };
+
+  const handleMergeBranch = async (branch: GitBranchSummary) => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    if (!repoRootPath) return;
+    if (!protocol.client()) {
+      notification.error('Git unavailable', 'Connection is not ready.');
+      return;
+    }
+
+    const seq = ++gitMergeReviewReqSeq;
+    setGitMergeReviewOpen(true);
+    setGitMergeReviewBranch(branch);
+    setGitMergeReviewPreview(null);
+    setGitMergeReviewError('');
+    setGitMergeActionError('');
+    setGitMergeReviewLoading(true);
+
+    try {
+      const resp = await rpc.git.previewMergeBranch({
+        repoRootPath,
+        name: branch.name,
+        fullName: branch.fullName,
+        kind: branch.kind,
+      });
+      if (seq !== gitMergeReviewReqSeq) return;
+      setGitMergeReviewPreview(resp);
+    } catch (err) {
+      if (seq !== gitMergeReviewReqSeq) return;
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to review branch merge.');
+      setGitMergeReviewPreview(null);
+      setGitMergeReviewError(message);
+    } finally {
+      if (seq === gitMergeReviewReqSeq) setGitMergeReviewLoading(false);
+    }
+  };
+
   const gitDeleteDialogState = (): 'idle' | 'previewing' | 'deleting' => {
     if (gitDeleteReviewLoading()) return 'previewing';
     if (gitMutationScope() === 'deleteBranch' && gitMutationKey() === branchIdentity(gitDeleteReviewBranch())) {
@@ -1039,6 +1117,65 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
     await loadGitCommits(true, nextRef, { silent: true, repoRootPath });
+  };
+
+  const handleConfirmMergeBranch = async (
+    branch: GitBranchSummary,
+    options: {
+      planFingerprint?: string;
+    },
+  ) => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    if (!repoRootPath) return;
+    if (!protocol.client()) {
+      notification.error('Git unavailable', 'Connection is not ready.');
+      return;
+    }
+
+    setGitMergeActionError('');
+    setGitMutationScope('mergeBranch');
+    setGitMutationKey(branchIdentity(branch));
+    try {
+      const resp = await rpc.git.mergeBranch({
+        repoRootPath,
+        name: branch.name,
+        fullName: branch.fullName,
+        kind: branch.kind,
+        planFingerprint: options.planFingerprint,
+      });
+      closeGitMergeReview({ force: true });
+      void refreshGitStateAfterMutation('merge', resp);
+
+      const targetRef = resp.headRef || String(gitRepoSummary()?.headRef ?? '').trim() || 'current branch';
+      if (resp.result === 'up_to_date') {
+        notification.info('Up to date', `${targetRef} already includes ${branch.name || 'the selected branch'}.`);
+        return;
+      }
+      if (resp.result === 'fast_forward') {
+        notification.success('Fast-forwarded', `${targetRef} now includes ${branch.name || 'the selected branch'}.`);
+        return;
+      }
+      if (resp.result === 'merge_commit') {
+        notification.success('Merged', `${branch.name || 'Branch'} was merged into ${targetRef}.`);
+        return;
+      }
+
+      const nextWorkspace = await loadGitWorkspace({ silent: true, repoRootPath }) ?? gitWorkspace();
+      focusGitWorkspaceSection('conflicted', nextWorkspace);
+      notification.warning('Merge has conflicts', `Resolve the conflicted files in ${targetRef}.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err ?? 'Request failed.');
+      if (message.toLowerCase().includes('stale')) {
+        setGitMergeReviewPreview(null);
+        setGitMergeReviewError(message);
+      } else {
+        setGitMergeActionError(message);
+      }
+      notification.error('Merge failed', message || 'Request failed.');
+    } finally {
+      setGitMutationScope('');
+      setGitMutationKey('');
+    }
   };
 
   const handleConfirmDeleteBranch = async (
@@ -2233,7 +2370,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       pullBusy={gitMutationScope() === 'pull'}
                       pushBusy={gitMutationScope() === 'push'}
                       checkoutBusy={gitMutationScope() === 'checkout'}
+                      mergeBusy={gitMutationScope() === 'mergeBranch'}
                       deleteBusy={gitMutationScope() === 'deleteBranch'}
+                      mergeReviewOpen={gitMergeReviewOpen()}
+                      mergeReviewBranch={gitMergeReviewBranch()}
+                      mergePreview={gitMergeReviewPreview()}
+                      mergePreviewError={gitMergeReviewError()}
+                      mergeActionError={gitMergeActionError()}
+                      mergeDialogState={gitMergeDialogState()}
                       deleteReviewOpen={gitDeleteReviewOpen()}
                       deleteReviewBranch={gitDeleteReviewBranch()}
                       deletePreview={gitDeleteReviewPreview()}
@@ -2244,7 +2388,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onPull={() => { void handlePullRepo(); }}
                       onPush={() => { void handlePushRepo(); }}
                       onCheckoutBranch={(branch) => { void handleCheckoutBranch(branch); }}
+                      onMergeBranch={(branch) => { void handleMergeBranch(branch); }}
                       onDeleteBranch={(branch) => { void handleDeleteBranch(branch); }}
+                      onCloseMergeReview={closeGitMergeReview}
+                      onRetryMergePreview={(branch) => { void handleMergeBranch(branch); }}
+                      onConfirmMergeBranch={(branch, options) => { void handleConfirmMergeBranch(branch, options); }}
                       onCloseDeleteReview={closeGitDeleteReview}
                       onRetryDeletePreview={(branch) => { void handleDeleteBranch(branch); }}
                       onConfirmDeleteBranch={(branch, options) => { void handleConfirmDeleteBranch(branch, options); }}

@@ -193,6 +193,47 @@ export type wire_git_delete_branch_resp = {
   removed_worktree_path?: string;
 };
 
+export type wire_git_preview_merge_branch_req = {
+  repo_root_path: string;
+  name?: string;
+  full_name?: string;
+  kind?: string;
+};
+
+export type wire_git_preview_merge_branch_resp = {
+  repo_root_path: string;
+  current_ref?: string;
+  current_commit?: string;
+  source_name?: string;
+  source_full_name?: string;
+  source_kind?: string;
+  source_commit?: string;
+  merge_base?: string;
+  source_ahead_count?: number;
+  source_behind_count?: number;
+  outcome?: string;
+  blocking_reason?: string;
+  plan_fingerprint?: string;
+  files: wire_git_commit_file_summary[];
+  linked_worktree?: wire_git_linked_worktree_snapshot;
+};
+
+export type wire_git_merge_branch_req = {
+  repo_root_path: string;
+  name?: string;
+  full_name?: string;
+  kind?: string;
+  plan_fingerprint?: string;
+};
+
+export type wire_git_merge_branch_resp = {
+  repo_root_path: string;
+  head_ref?: string;
+  head_commit?: string;
+  result?: string;
+  conflict_summary: wire_git_workspace_summary;
+};
+
 export type wire_git_branch_summary = {
   name?: string;
   full_name?: string;
