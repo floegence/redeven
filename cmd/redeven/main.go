@@ -189,11 +189,13 @@ func (c *cli) runCmd(args []string) int {
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
 	envToken := fs.String("env-token", "", "Environment token (required when --controlplane/--env-id is set)")
 	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read|read_only|execute_read_write (optional; applies when bootstrapping)")
-	modeRaw := fs.String("mode", "remote", "Run mode: remote|hybrid|local")
+	modeRaw := fs.String("mode", "remote", "Run mode: remote|hybrid|local|desktop")
 	localUIBindRaw := fs.String("local-ui-bind", localui.DefaultBind, "Local UI bind address (default: localhost:23998)")
 	password := fs.String("password", "", "Access password (not recommended; prefer --password-env or --password-file)")
 	passwordEnv := fs.String("password-env", "", "Environment variable name holding the access password")
 	passwordFile := fs.String("password-file", "", "File path holding the access password")
+	desktopManaged := fs.Bool("desktop-managed", false, "Disable CLI self-upgrade semantics for desktop-managed Local UI runs")
+	startupReportFile := fs.String("startup-report-file", "", "Write Local UI readiness JSON to the given file (advanced)")
 
 	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -211,7 +213,7 @@ func (c *cli) runCmd(args []string) int {
 			c.stderr,
 			fmt.Sprintf("invalid value for `--mode`: %s", strings.TrimSpace(*modeRaw)),
 			[]string{
-				"Allowed values: remote, hybrid, local.",
+				"Allowed values: remote, hybrid, local, desktop.",
 				"Example: redeven run --mode hybrid",
 			},
 			runHelpText(),
@@ -224,7 +226,26 @@ func (c *cli) runCmd(args []string) int {
 		writeErrorWithHelp(
 			c.stderr,
 			fmt.Sprintf("invalid value for `--local-ui-bind`: %v", err),
-			[]string{"Accepted examples: localhost:23998, 127.0.0.1:24000, 0.0.0.0:24000, 192.168.1.11:24000"},
+			[]string{"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000"},
+			runHelpText(),
+		)
+		return 2
+	}
+
+	if *desktopManaged && mode == runModeRemote {
+		writeErrorWithHelp(
+			c.stderr,
+			"`--desktop-managed` requires a Local UI run mode",
+			[]string{"Hint: use `redeven run --mode desktop --desktop-managed` for the packaged desktop shell."},
+			runHelpText(),
+		)
+		return 2
+	}
+	if strings.TrimSpace(*startupReportFile) != "" && mode == runModeRemote {
+		writeErrorWithHelp(
+			c.stderr,
+			"`--startup-report-file` requires a Local UI run mode",
+			[]string{"Hint: use `redeven run --mode desktop --startup-report-file <path>` when a desktop shell needs machine-readable readiness output."},
 			runHelpText(),
 		)
 		return 2
@@ -347,7 +368,7 @@ func (c *cli) runCmd(args []string) int {
 	cfg, err := config.Load(cfgPathClean)
 	if err != nil {
 		// Local mode must be able to start from a clean machine (no bootstrap yet).
-		if mode == runModeLocal && os.IsNotExist(err) {
+		if (mode == runModeLocal || mode == runModeDesktop) && os.IsNotExist(err) {
 			p, _ := config.ParsePermissionPolicyPreset("")
 			cfg = &config.Config{
 				PermissionPolicy: p,
@@ -369,21 +390,31 @@ func (c *cli) runCmd(args []string) int {
 	remoteErr := cfg.ValidateRemoteStrict()
 	remoteEnabled := remoteErr == nil
 
-	controlChannelEnabled := mode != runModeLocal
+	controlChannelEnabled := mode == runModeRemote || mode == runModeHybrid || (mode == runModeDesktop && remoteEnabled)
 	localUIEnabled := mode != runModeRemote
+	effectiveRunMode := mode
+	if mode == runModeDesktop {
+		if controlChannelEnabled {
+			effectiveRunMode = runModeHybrid
+		} else {
+			effectiveRunMode = runModeLocal
+		}
+	}
 
 	if controlChannelEnabled && !remoteEnabled {
 		return c.printNotBootstrappedGuidance(remoteErr)
 	}
 
+	localUIBindLabel := localUIBind.ListenLabel()
+	localUIURLs := localUIBind.DisplayURLs()
 	announce := func() {
 		printWelcomeBanner(c.stderr, welcomeBannerOptions{
 			Version:             Version,
 			ControlplaneBaseURL: cfg.ControlplaneBaseURL,
 			EnvironmentID:       cfg.EnvironmentID,
 			LocalUIEnabled:      localUIEnabled,
-			LocalUIBind:         localUIBind.ListenLabel(),
-			LocalUIURLs:         localUIBind.DisplayURLs(),
+			LocalUIBind:         localUIBindLabel,
+			LocalUIURLs:         localUIURLs,
 		})
 	}
 
@@ -392,6 +423,7 @@ func (c *cli) runCmd(args []string) int {
 		ConfigPath:            cfgPathClean,
 		LocalUIEnabled:        localUIEnabled,
 		ControlChannelEnabled: controlChannelEnabled,
+		DesktopManaged:        *desktopManaged,
 		Version:               Version,
 		Commit:                Commit,
 		BuildTime:             BuildTime,
@@ -429,12 +461,15 @@ func (c *cli) runCmd(args []string) int {
 		}
 
 		srv, err := localui.New(localui.Options{
-			Bind:       localUIBind,
-			Gateway:    gw,
-			Agent:      a,
-			ConfigPath: cfgPathAbs,
-			Version:    Version,
-			AccessGate: accessGate,
+			Bind:             localUIBind,
+			DesktopManaged:   *desktopManaged,
+			EffectiveRunMode: string(effectiveRunMode),
+			RemoteEnabled:    controlChannelEnabled,
+			Gateway:          gw,
+			Agent:            a,
+			ConfigPath:       cfgPathAbs,
+			Version:          Version,
+			AccessGate:       accessGate,
 		})
 		if err != nil {
 			fmt.Fprintf(c.stderr, "failed to init local ui: %v\n", err)
@@ -444,10 +479,25 @@ func (c *cli) runCmd(args []string) int {
 			fmt.Fprintf(c.stderr, "failed to start local ui: %v\n", err)
 			return 1
 		}
+		localUIBindLabel = srv.ListenLabel()
+		localUIURLs = srv.DisplayURLs()
+		if reportPath := strings.TrimSpace(*startupReportFile); reportPath != "" {
+			if err := writeStartupReport(reportPath, startupReport{
+				LocalUIURL:       firstNonEmptyString(localUIURLs),
+				LocalUIURLs:      append([]string(nil), localUIURLs...),
+				EffectiveRunMode: string(effectiveRunMode),
+				RemoteEnabled:    controlChannelEnabled,
+				DesktopManaged:   *desktopManaged,
+			}); err != nil {
+				fmt.Fprintf(c.stderr, "failed to write startup report: %v\n", err)
+				return 1
+			}
+		}
 
-		// In local mode, print after the Local UI is ready.
-		// In hybrid mode, print after the control channel connects (so URL is accurate).
-		if mode == runModeLocal {
+		// In local-only modes, print after the Local UI is ready.
+		// In remote-connected modes, print after the control channel connects so the
+		// final portal URL and Local UI URL are both available together.
+		if !controlChannelEnabled {
 			announce()
 		}
 	}
@@ -477,9 +527,10 @@ func (c *cli) printNotBootstrappedGuidance(reason error) int {
 type runMode string
 
 const (
-	runModeRemote runMode = "remote"
-	runModeHybrid runMode = "hybrid"
-	runModeLocal  runMode = "local"
+	runModeRemote  runMode = "remote"
+	runModeHybrid  runMode = "hybrid"
+	runModeLocal   runMode = "local"
+	runModeDesktop runMode = "desktop"
 )
 
 func parseRunMode(raw string) (runMode, error) {
@@ -491,7 +542,9 @@ func parseRunMode(raw string) (runMode, error) {
 		return runModeHybrid, nil
 	case string(runModeLocal):
 		return runModeLocal, nil
+	case string(runModeDesktop):
+		return runModeDesktop, nil
 	default:
-		return "", fmt.Errorf("want remote|hybrid|local, got %q", raw)
+		return "", fmt.Errorf("want remote|hybrid|local|desktop, got %q", raw)
 	}
 }

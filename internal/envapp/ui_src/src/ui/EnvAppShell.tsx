@@ -66,6 +66,7 @@ import {
   getEnvPublicIDFromSession,
   getLocalAccessStatus,
   getLocalRuntime,
+  refreshLocalRuntime,
   getEnvironment,
   mintEnvProxyEntryTicket,
   mintLocalDirectConnectInfo,
@@ -859,6 +860,10 @@ export function EnvAppShell() {
       if (isLocalMode()) {
         setLocalAccessStatus({ password_required: true, unlocked: true });
         setLocalAccessChecked(true);
+        const refreshedRuntime = await refreshLocalRuntime();
+        if (refreshedRuntime) {
+          setLocalRuntime(refreshedRuntime);
+        }
       } else {
         const nextStatus = await getGatewayAccessStatus();
         setRemoteAccessStatus(nextStatus);

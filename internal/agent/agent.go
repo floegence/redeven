@@ -74,6 +74,9 @@ type Options struct {
 	//
 	// In Local mode, this should be false even when the config is fully bootstrapped.
 	ControlChannelEnabled bool
+	// DesktopManaged disables CLI self-upgrade behaviors that do not apply when the
+	// agent lifecycle is owned by a desktop shell package.
+	DesktopManaged bool
 
 	Version   string
 	Commit    string
@@ -116,6 +119,7 @@ type Agent struct {
 
 	localUIEnabled        bool
 	controlChannelEnabled bool
+	desktopManaged        bool
 	accessGate            *accessgate.Gate
 }
 
@@ -186,6 +190,7 @@ func New(opts Options) (*Agent, error) {
 		onControlConnected:    opts.OnControlConnected,
 		localUIEnabled:        opts.LocalUIEnabled,
 		controlChannelEnabled: opts.ControlChannelEnabled,
+		desktopManaged:        opts.DesktopManaged,
 		accessGate:            opts.AccessGate,
 	}
 
@@ -196,12 +201,16 @@ func New(opts Options) (*Agent, error) {
 	} else {
 		a.audit = auditStore
 	}
+	var upgrader syssvc.Upgrader
+	if !a.desktopManaged {
+		upgrader = &sysUpgrader{a: a}
+	}
 	a.sys = syssvc.NewService(syssvc.Options{
 		AgentInstanceID: opts.Config.AgentInstanceID,
 		Version:         opts.Version,
 		Commit:          opts.Commit,
 		BuildTime:       opts.BuildTime,
-		Upgrader:        &sysUpgrader{a: a},
+		Upgrader:        upgrader,
 		Restarter:       &sysRestarter{a: a},
 	})
 

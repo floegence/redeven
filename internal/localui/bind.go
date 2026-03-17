@@ -42,11 +42,14 @@ func ParseBind(raw string) (BindSpec, error) {
 		return BindSpec{}, fmt.Errorf("missing host")
 	}
 	port, err := strconv.Atoi(strings.TrimSpace(portRaw))
-	if err != nil || port <= 0 || port > 65535 {
+	if err != nil || port < 0 || port > 65535 {
 		return BindSpec{}, fmt.Errorf("invalid port %q", portRaw)
 	}
 
 	if strings.EqualFold(strings.TrimSpace(host), "localhost") {
+		if port == 0 {
+			return BindSpec{}, fmt.Errorf("localhost:0 is not supported; use 127.0.0.1:0 or [::1]:0")
+		}
 		return BindSpec{
 			host:      "localhost",
 			port:      port,
@@ -106,20 +109,47 @@ func (b BindSpec) ListenAddrs() []string {
 			net.JoinHostPort("::1", port),
 		}
 	}
-	if strings.TrimSpace(b.host) == "" || b.port <= 0 {
+	if strings.TrimSpace(b.host) == "" || b.port < 0 {
 		return nil
 	}
 	return []string{net.JoinHostPort(b.host, port)}
 }
 
 func (b BindSpec) DisplayURLs() []string {
+	return b.displayURLsForPort(b.port)
+}
+
+func (b BindSpec) ListenLabelForPort(port int) string {
+	return b.listenLabelForPort(port)
+}
+
+func (b BindSpec) DisplayURLsForPort(port int) []string {
+	return b.displayURLsForPort(port)
+}
+
+func (b BindSpec) listenLabelForPort(port int) string {
+	switch {
+	case port < 0:
+		port = 0
+	}
+	host := b.host
+	if host == "" {
+		host = "localhost"
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
+func (b BindSpec) displayURLsForPort(port int) []string {
+	if port <= 0 {
+		return nil
+	}
 	switch {
 	case b.localhost:
-		return []string{formatHTTPURL("localhost", b.port)}
+		return []string{formatHTTPURL("localhost", port)}
 	case !b.wildcard:
-		return []string{formatHTTPURL(b.host, b.port)}
+		return []string{formatHTTPURL(b.host, port)}
 	default:
-		return discoverWildcardURLs(b.family, b.port)
+		return discoverWildcardURLs(b.family, port)
 	}
 }
 

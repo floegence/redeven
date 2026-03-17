@@ -73,6 +73,10 @@ curl -fsSL ${install_script_url} | REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION=
 - \`redeven_linux_arm64.tar.gz\`
 - \`redeven_darwin_amd64.tar.gz\`
 - \`redeven_darwin_arm64.tar.gz\`
+- \`Redeven-Desktop-${release_tag#v}-linux-x64.AppImage\`
+- \`Redeven-Desktop-${release_tag#v}-linux-arm64.AppImage\`
+- \`Redeven-Desktop-${release_tag#v}-mac-x64.dmg\`
+- \`Redeven-Desktop-${release_tag#v}-mac-arm64.dmg\`
 - \`SHA256SUMS\` + \`SHA256SUMS.sig\` + \`SHA256SUMS.pem\`
 
 ## Verify Integrity (recommended)
