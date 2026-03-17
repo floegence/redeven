@@ -12,6 +12,10 @@ export type GatewayAccessUnlockResult = {
   resume_expires_at_unix_ms?: number;
 };
 
+export type GatewayUploadResponse = {
+  url?: string;
+};
+
 function gatewayErrorMessage(data: any, status: number): string {
   const nested = String(data?.error?.message ?? '').trim();
   if (nested) return nested;
@@ -70,6 +74,22 @@ export async function fetchGatewayJSON<T>(url: string, init: RequestInit): Promi
   if (!resp.ok) throw new Error(gatewayErrorMessage(data, resp.status));
   if (data?.ok === false) throw new Error(gatewayErrorMessage(data, resp.status || 400));
   return (data?.data ?? data) as T;
+}
+
+export async function uploadGatewayFile(file: File): Promise<string> {
+  const form = new FormData();
+  form.append('file', file);
+
+  const out = await fetchGatewayJSON<GatewayUploadResponse>('/_redeven_proxy/api/ai/uploads', {
+    method: 'POST',
+    body: form,
+  });
+
+  const url = String(out?.url ?? '').trim();
+  if (!url) {
+    throw new Error('Upload response missing url');
+  }
+  return url;
 }
 
 export async function getGatewayAccessStatus(): Promise<GatewayAccessStatus> {

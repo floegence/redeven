@@ -82,6 +82,7 @@ const defaultFetchGatewayJSON: (url: string) => Promise<any> = async (url: strin
 };
 
 const fetchGatewayJSONMock = vi.fn(defaultFetchGatewayJSON);
+const uploadGatewayFileMock = vi.fn(async (_file: File) => '/_redeven_proxy/api/ai/uploads/upl_test');
 
 const gatewayRequestCredentialsMock = vi.fn(async () => 'same-origin');
 const prepareGatewayRequestInitMock = vi.fn(async (init: RequestInit = {}) => init);
@@ -344,6 +345,7 @@ vi.mock('../services/gatewayApi', () => ({
   fetchGatewayJSON: fetchGatewayJSONMock,
   gatewayRequestCredentials: gatewayRequestCredentialsMock,
   prepareGatewayRequestInit: prepareGatewayRequestInitMock,
+  uploadGatewayFile: uploadGatewayFileMock,
 }));
 
 vi.mock('./aiPermissions', () => ({
@@ -366,6 +368,7 @@ vi.mock('./aiBlockPresentation', () => ({
 function resetScenario() {
   protocolState.status = 'connected';
   fetchGatewayJSONMock.mockImplementation(defaultFetchGatewayJSON);
+  uploadGatewayFileMock.mockImplementation(async (_file: File) => '/_redeven_proxy/api/ai/uploads/upl_test');
   prepareGatewayRequestInitMock.mockImplementation(async (init: RequestInit = {}) => init);
   aiState.activeThreadId = 'thread-1';
   aiState.activeThread = {

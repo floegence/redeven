@@ -32,7 +32,7 @@ import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
 import { useAIChatContext } from './AIChatContext';
 import { useRedevenRpc, type FsFileInfo } from '../protocol/redeven_v1';
-import { fetchGatewayJSON, prepareGatewayRequestInit } from '../services/gatewayApi';
+import { fetchGatewayJSON, prepareGatewayRequestInit, uploadGatewayFile } from '../services/gatewayApi';
 import { decorateMessageBlocks, decorateStreamEvent } from './aiBlockPresentation';
 import {
   extractSubagentViewsFromWaitResult,
@@ -343,7 +343,10 @@ const AIChatInput: Component<{
     try {
       const upload = await attachments.uploadAll();
       if (!upload.ok) {
-        notify.error('Attachment upload failed', 'Remove failed attachments and try again.');
+        const firstError = upload.failed
+          .map((attachment) => String(attachment.error ?? '').trim())
+          .find((message) => message.length > 0);
+        notify.error('Attachment upload failed', firstError || 'Remove failed attachments and try again.');
         return;
       }
 
@@ -3741,27 +3744,7 @@ export function EnvAIPage() {
     if (!canRWXReady()) {
       throw new Error('Read/write/execute permission required.');
     }
-    const form = new FormData();
-    form.append('file', file);
-
-    const resp = await fetch('/_redeven_proxy/api/ai/uploads', await prepareGatewayRequestInit({
-      method: 'POST',
-      body: form,
-    }));
-
-    const text = await resp.text();
-    let data: any = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      // ignore
-    }
-    if (!resp.ok) throw new Error(data?.error ?? `HTTP ${resp.status}`);
-    if (data?.ok === false) throw new Error(String(data?.error ?? 'Upload failed'));
-
-    const url = String(data?.data?.url ?? '').trim();
-    if (!url) throw new Error('Upload failed');
-    return url;
+    return uploadGatewayFile(file);
   };
 
   const sendToolApproval = async (_messageId: string, toolId: string, approved: boolean) => {

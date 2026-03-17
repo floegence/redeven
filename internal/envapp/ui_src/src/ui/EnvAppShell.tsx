@@ -53,7 +53,7 @@ import { reloadCurrentPage } from './utils/windowNavigation';
 import {
   fetchGatewayJSON,
   getGatewayAccessStatus,
-  prepareGatewayRequestInit,
+  uploadGatewayFile,
   unlockGatewayAccess,
   type GatewayAccessStatus,
 } from './services/gatewayApi';
@@ -431,27 +431,7 @@ export function EnvAppShell() {
   };
 
   const uploadAskFlowerAttachment = async (file: File): Promise<string> => {
-    const form = new FormData();
-    form.append('file', file);
-
-    const resp = await fetch('/_redeven_proxy/api/ai/uploads', await prepareGatewayRequestInit({
-      method: 'POST',
-      body: form,
-    }));
-
-    const text = await resp.text();
-    let data: any = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      // ignore
-    }
-    if (!resp.ok) throw new Error(String(data?.error ?? `HTTP ${resp.status}`));
-    if (data?.ok === false) throw new Error(String(data?.error ?? 'Upload failed'));
-
-    const url = String(data?.data?.url ?? '').trim();
-    if (!url) throw new Error('Upload failed');
-    return url;
+    return uploadGatewayFile(file);
   };
 
   const resolveAskFlowerModel = async (): Promise<string> => {

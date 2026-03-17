@@ -83,6 +83,40 @@ describe('gatewayApi access credentials', () => {
     expect(headers.has('Content-Type')).toBe(false);
   });
 
+  it('uploads files through the shared gateway helper and returns the upload url', async () => {
+    vi.doMock('./controlplaneApi', () => ({
+      getLocalRuntime: vi.fn(async () => ({ mode: 'local', env_public_id: 'env_local' })),
+    }));
+    const auth = await import('./localAccessAuth');
+    auth.writeLocalAccessResumeToken('resume123');
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('/_redeven_proxy/api/ai/uploads');
+      expect(init?.method).toBe('POST');
+      expect(init?.body).toBeInstanceOf(FormData);
+      expect(init?.credentials).toBe('same-origin');
+      expect(new Headers(init?.headers).get(auth.getLocalAccessResumeHeaderName())).toBe('resume123');
+      expect(new Headers(init?.headers).has('Content-Type')).toBe(false);
+      return jsonResponse({ url: '/_redeven_proxy/api/ai/uploads/upl_demo' });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./gatewayApi');
+    const out = await mod.uploadGatewayFile(new File(['demo'], 'demo.txt', { type: 'text/plain' }));
+
+    expect(out).toBe('/_redeven_proxy/api/ai/uploads/upl_demo');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects upload responses that do not contain a url', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./gatewayApi');
+    await expect(mod.uploadGatewayFile(new File(['demo'], 'demo.txt', { type: 'text/plain' })))
+      .rejects
+      .toThrow('Upload response missing url');
+  });
+
   it('fetches remote access status without same-origin cookies on sandbox hosts', async () => {
     vi.doMock('./controlplaneApi', () => ({
       getLocalRuntime: vi.fn(async () => null),

@@ -120,7 +120,8 @@ export function useAttachments(options: UseAttachmentsOptions = {}): UseAttachme
     const task = (async () => {
       const current = attachments().find((item) => item.id === id);
       if (!current) return;
-      if (current.status === 'uploaded') return;
+      const currentURL = String(current.url ?? '').trim();
+      if (current.status === 'uploaded' && currentURL) return;
 
       if (!onUpload) {
         setAttachments((prev) =>
@@ -149,7 +150,7 @@ export function useAttachments(options: UseAttachmentsOptions = {}): UseAttachme
         setAttachments((prev) =>
           prev.map((item) =>
             item.id === id
-              ? { ...item, status: 'uploaded' as AttachmentStatus, uploadProgress: 100, url }
+              ? { ...item, status: 'uploaded' as AttachmentStatus, uploadProgress: 100, url, error: undefined }
               : item,
           ),
         );
@@ -176,7 +177,10 @@ export function useAttachments(options: UseAttachmentsOptions = {}): UseAttachme
   async function uploadAll(): Promise<UploadAllResult> {
     const snapshot = attachments();
     const idsToUpload = snapshot
-      .filter((attachment) => attachment.status === 'pending' || attachment.status === 'error')
+      .filter((attachment) => {
+        const url = String(attachment.url ?? '').trim();
+        return attachment.status === 'pending' || attachment.status === 'error' || (attachment.status === 'uploaded' && !url);
+      })
       .map((attachment) => attachment.id);
 
     for (const id of idsToUpload) {
@@ -195,7 +199,7 @@ export function useAttachments(options: UseAttachmentsOptions = {}): UseAttachme
     }
 
     const final = attachments();
-    const failed = final.filter((attachment) => attachment.status !== 'uploaded');
+    const failed = final.filter((attachment) => attachment.status !== 'uploaded' || !String(attachment.url ?? '').trim());
     return {
       ok: failed.length === 0,
       failed,

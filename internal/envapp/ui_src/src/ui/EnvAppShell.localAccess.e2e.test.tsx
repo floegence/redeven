@@ -153,6 +153,7 @@ vi.mock('./services/gatewayApi', () => ({
   fetchGatewayJSON: vi.fn(),
   gatewayRequestCredentials: () => 'same-origin',
   getGatewayAccessStatus: getGatewayAccessStatusMock,
+  uploadGatewayFile: vi.fn(),
   unlockGatewayAccess: unlockGatewayAccessMock,
 }));
 vi.mock('./services/sandboxWindowRegistry', () => ({ getSandboxWindowInfo: () => null }));
