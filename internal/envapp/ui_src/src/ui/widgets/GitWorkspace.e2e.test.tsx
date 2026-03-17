@@ -217,4 +217,36 @@ describe('GitWorkspace interactions', () => {
       dispose();
     }
   });
+
+  it('routes initial git bootstrap through one shell-owned loading pane', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[620px]">
+          <GitWorkspace
+            mode="git"
+            onModeChange={() => {}}
+            subview="branches"
+            onSubviewChange={() => {}}
+            width={280}
+            open
+            currentPath="/workspace/repo/src"
+            repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
+            shellLoadingMessage="Loading branches..."
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.textContent).toContain('Preparing the active Git view...');
+      expect(host.textContent).toContain('Loading branches...');
+      expect(host.querySelector('[data-testid="git-sidebar-scroll-region"]')).toBeNull();
+      expect(host.textContent).not.toContain('Current path is not inside a Git repository.');
+    } finally {
+      dispose();
+    }
+  });
 });

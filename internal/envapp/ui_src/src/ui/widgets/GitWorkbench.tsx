@@ -117,8 +117,14 @@ export function GitWorkbench(props: GitWorkbenchProps) {
   const repoLabel = () => repoDisplayName(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath);
   const repoPath = () => String(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath || '/').trim() || '/';
   const headRef = () => String(props.repoSummary?.headRef || props.repoInfo?.headRef || '').trim();
-  const loadingBusy = () => Boolean(props.repoInfoLoading || props.repoSummaryLoading || props.workspaceLoading || props.branchesLoading);
   const activeSubview = () => normalizeSubview(props.subview);
+  const loadingBusy = () => {
+    if (props.repoInfoLoading) return true;
+    if (activeSubview() === 'changes') return Boolean(props.workspaceLoading);
+    if (activeSubview() === 'branches') return Boolean(props.branchesLoading);
+    if (activeSubview() === 'history') return Boolean(props.listLoading);
+    return false;
+  };
   const subviewTone = () => gitSubviewTone(activeSubview());
   const detachedHead = () => Boolean(props.repoSummary?.detached) || headRef() === '' || headRef() === 'HEAD';
   const repoActionsDisabled = () => Boolean(

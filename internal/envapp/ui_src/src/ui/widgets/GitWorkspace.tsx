@@ -15,6 +15,7 @@ import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitc
 import { GitViewNav } from './GitViewNav';
 import { GitWorkbenchSidebar } from './GitWorkbenchSidebar';
 import { GitWorkbench } from './GitWorkbench';
+import { GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
 import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import type { GitMergeBranchDialogConfirmOptions, GitMergeBranchDialogState } from './GitMergeBranchDialog';
 
@@ -101,6 +102,7 @@ export interface GitWorkspaceProps {
   showMobileSidebarButton?: boolean;
   onToggleSidebar?: () => void;
   onRefresh?: () => void;
+  shellLoadingMessage?: string;
   class?: string;
 }
 
@@ -110,6 +112,9 @@ export function GitWorkspace(props: GitWorkspaceProps) {
     workspace: props.workspace,
     branchesCount: (props.branches?.local.length ?? 0) + (props.branches?.remote.length ?? 0),
   });
+  const shellLoadingMessage = () => String(props.shellLoadingMessage ?? '').trim();
+  const shellBlocking = () => shellLoadingMessage().length > 0;
+  const shellSidebarNote = () => 'Preparing the active Git view...';
 
   return (
     <BrowserWorkspaceShell
@@ -124,107 +129,115 @@ export function GitWorkspace(props: GitWorkspaceProps) {
       navigationLabel="View"
       navigation={<GitViewNav value={props.subview} items={subviewItems()} onChange={props.onSubviewChange} />}
       sidebarBody={(
-        <GitWorkbenchSidebar
-          subview={props.subview}
-          onClose={props.onClose}
-          repoInfoLoading={props.repoInfoLoading}
-          repoInfoError={props.repoInfoError}
-          repoAvailable={props.repoInfo?.available}
-          repoSummary={props.repoSummary}
-          workspace={props.workspace}
-          workspaceLoading={props.workspaceLoading}
-          workspaceError={props.workspaceError}
-          selectedWorkspaceSection={props.selectedWorkspaceSection}
-          onSelectWorkspaceSection={props.onSelectWorkspaceSection}
-          branches={props.branches}
-          branchesLoading={props.branchesLoading}
-          branchesError={props.branchesError}
-          selectedBranchKey={props.selectedBranchKey}
-          onSelectBranch={props.onSelectBranch}
-          commits={props.commits}
-          listLoading={props.listLoading}
-          listLoadingMore={props.listLoadingMore}
-          listError={props.listError}
-          hasMore={props.hasMore}
-          selectedCommitHash={props.selectedCommitHash}
-          onSelectCommit={props.onSelectCommit}
-          onLoadMore={props.onLoadMore}
-        />
+        shellBlocking()
+          ? <GitSubtleNote class="mx-0.5">{shellSidebarNote()}</GitSubtleNote>
+          : (
+            <GitWorkbenchSidebar
+              subview={props.subview}
+              onClose={props.onClose}
+              repoInfoLoading={props.repoInfoLoading}
+              repoInfoError={props.repoInfoError}
+              repoAvailable={props.repoInfo?.available}
+              repoSummary={props.repoSummary}
+              workspace={props.workspace}
+              workspaceLoading={props.workspaceLoading}
+              workspaceError={props.workspaceError}
+              selectedWorkspaceSection={props.selectedWorkspaceSection}
+              onSelectWorkspaceSection={props.onSelectWorkspaceSection}
+              branches={props.branches}
+              branchesLoading={props.branchesLoading}
+              branchesError={props.branchesError}
+              selectedBranchKey={props.selectedBranchKey}
+              onSelectBranch={props.onSelectBranch}
+              commits={props.commits}
+              listLoading={props.listLoading}
+              listLoadingMore={props.listLoadingMore}
+              listError={props.listError}
+              hasMore={props.hasMore}
+              selectedCommitHash={props.selectedCommitHash}
+              onSelectCommit={props.onSelectCommit}
+              onLoadMore={props.onLoadMore}
+            />
+          )
       )}
       content={(
-        <GitWorkbench
-          class="h-full"
-          currentPath={props.currentPath}
-          repoInfo={props.repoInfo}
-          repoInfoLoading={props.repoInfoLoading}
-          subview={props.subview}
-          repoSummary={props.repoSummary}
-          repoSummaryLoading={props.repoSummaryLoading}
-          repoSummaryError={props.repoSummaryError}
-          workspace={props.workspace}
-          workspaceLoading={props.workspaceLoading}
-          workspaceError={props.workspaceError}
-          selectedWorkspaceSection={props.selectedWorkspaceSection}
-          onSelectWorkspaceSection={props.onSelectWorkspaceSection}
-          selectedWorkspaceItem={props.selectedWorkspaceItem}
-          onSelectWorkspaceItem={props.onSelectWorkspaceItem}
-          busyWorkspaceKey={props.busyWorkspaceKey}
-          busyWorkspaceAction={props.busyWorkspaceAction}
-          branches={props.branches}
-          branchesLoading={props.branchesLoading}
-          branchesError={props.branchesError}
-          selectedBranch={props.selectedBranch}
-          selectedBranchSubview={props.selectedBranchSubview}
-          onSelectBranchSubview={props.onSelectBranchSubview}
-          selectedCommitHash={props.selectedCommitHash}
-          commits={props.commits}
-          listLoading={props.listLoading}
-          listLoadingMore={props.listLoadingMore}
-          listError={props.listError}
-          hasMore={props.hasMore}
-          onSelectCommit={props.onSelectCommit}
-          onLoadMore={props.onLoadMore}
-          checkoutBusy={props.checkoutBusy}
-          mergeBusy={props.mergeBusy}
-          deleteBusy={props.deleteBusy}
-          mergeReviewOpen={props.mergeReviewOpen}
-          mergeReviewBranch={props.mergeReviewBranch}
-          mergePreview={props.mergePreview}
-          mergePreviewError={props.mergePreviewError}
-          mergeActionError={props.mergeActionError}
-          mergeDialogState={props.mergeDialogState}
-          deleteReviewOpen={props.deleteReviewOpen}
-          deleteReviewBranch={props.deleteReviewBranch}
-          deletePreview={props.deletePreview}
-          deletePreviewError={props.deletePreviewError}
-          deleteActionError={props.deleteActionError}
-          deleteDialogState={props.deleteDialogState}
-          onCheckoutBranch={props.onCheckoutBranch}
-          onMergeBranch={props.onMergeBranch}
-          onDeleteBranch={props.onDeleteBranch}
-          onCloseMergeReview={props.onCloseMergeReview}
-          onRetryMergePreview={props.onRetryMergePreview}
-          onConfirmMergeBranch={props.onConfirmMergeBranch}
-          onCloseDeleteReview={props.onCloseDeleteReview}
-          onRetryDeletePreview={props.onRetryDeletePreview}
-          onConfirmDeleteBranch={props.onConfirmDeleteBranch}
-          commitMessage={props.commitMessage}
-          commitBusy={props.commitBusy}
-          onCommitMessageChange={props.onCommitMessageChange}
-          onCommit={props.onCommit}
-          onStageSelected={props.onStageWorkspaceItem}
-          onUnstageSelected={props.onUnstageWorkspaceItem}
-          onBulkAction={props.onBulkWorkspaceAction}
-          fetchBusy={props.fetchBusy}
-          pullBusy={props.pullBusy}
-          pushBusy={props.pushBusy}
-          onFetch={props.onFetch}
-          onPull={props.onPull}
-          onPush={props.onPush}
-          showMobileSidebarButton={props.showMobileSidebarButton}
-          onToggleSidebar={props.onToggleSidebar}
-          onRefresh={props.onRefresh}
-        />
+        shellBlocking()
+          ? <GitStatePane loading message={shellLoadingMessage()} class="h-full px-4 py-6" />
+          : (
+            <GitWorkbench
+              class="h-full"
+              currentPath={props.currentPath}
+              repoInfo={props.repoInfo}
+              repoInfoLoading={props.repoInfoLoading}
+              subview={props.subview}
+              repoSummary={props.repoSummary}
+              repoSummaryLoading={props.repoSummaryLoading}
+              repoSummaryError={props.repoSummaryError}
+              workspace={props.workspace}
+              workspaceLoading={props.workspaceLoading}
+              workspaceError={props.workspaceError}
+              selectedWorkspaceSection={props.selectedWorkspaceSection}
+              onSelectWorkspaceSection={props.onSelectWorkspaceSection}
+              selectedWorkspaceItem={props.selectedWorkspaceItem}
+              onSelectWorkspaceItem={props.onSelectWorkspaceItem}
+              busyWorkspaceKey={props.busyWorkspaceKey}
+              busyWorkspaceAction={props.busyWorkspaceAction}
+              branches={props.branches}
+              branchesLoading={props.branchesLoading}
+              branchesError={props.branchesError}
+              selectedBranch={props.selectedBranch}
+              selectedBranchSubview={props.selectedBranchSubview}
+              onSelectBranchSubview={props.onSelectBranchSubview}
+              selectedCommitHash={props.selectedCommitHash}
+              commits={props.commits}
+              listLoading={props.listLoading}
+              listLoadingMore={props.listLoadingMore}
+              listError={props.listError}
+              hasMore={props.hasMore}
+              onSelectCommit={props.onSelectCommit}
+              onLoadMore={props.onLoadMore}
+              checkoutBusy={props.checkoutBusy}
+              mergeBusy={props.mergeBusy}
+              deleteBusy={props.deleteBusy}
+              mergeReviewOpen={props.mergeReviewOpen}
+              mergeReviewBranch={props.mergeReviewBranch}
+              mergePreview={props.mergePreview}
+              mergePreviewError={props.mergePreviewError}
+              mergeActionError={props.mergeActionError}
+              mergeDialogState={props.mergeDialogState}
+              deleteReviewOpen={props.deleteReviewOpen}
+              deleteReviewBranch={props.deleteReviewBranch}
+              deletePreview={props.deletePreview}
+              deletePreviewError={props.deletePreviewError}
+              deleteActionError={props.deleteActionError}
+              deleteDialogState={props.deleteDialogState}
+              onCheckoutBranch={props.onCheckoutBranch}
+              onMergeBranch={props.onMergeBranch}
+              onDeleteBranch={props.onDeleteBranch}
+              onCloseMergeReview={props.onCloseMergeReview}
+              onRetryMergePreview={props.onRetryMergePreview}
+              onConfirmMergeBranch={props.onConfirmMergeBranch}
+              onCloseDeleteReview={props.onCloseDeleteReview}
+              onRetryDeletePreview={props.onRetryDeletePreview}
+              onConfirmDeleteBranch={props.onConfirmDeleteBranch}
+              commitMessage={props.commitMessage}
+              commitBusy={props.commitBusy}
+              onCommitMessageChange={props.onCommitMessageChange}
+              onCommit={props.onCommit}
+              onStageSelected={props.onStageWorkspaceItem}
+              onUnstageSelected={props.onUnstageWorkspaceItem}
+              onBulkAction={props.onBulkWorkspaceAction}
+              fetchBusy={props.fetchBusy}
+              pullBusy={props.pullBusy}
+              pushBusy={props.pushBusy}
+              onFetch={props.onFetch}
+              onPull={props.onPull}
+              onPush={props.onPush}
+              showMobileSidebarButton={props.showMobileSidebarButton}
+              onToggleSidebar={props.onToggleSidebar}
+              onRefresh={props.onRefresh}
+            />
+          )
       )}
       class={props.class}
     />
