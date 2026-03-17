@@ -839,8 +839,7 @@ export function EnvAppShell() {
       accessResumeClient = null;
 
       if (isLocalMode()) {
-        const nextStatus = await getLocalAccessStatus();
-        setLocalAccessStatus(nextStatus ?? { password_required: true, unlocked: true });
+        setLocalAccessStatus({ password_required: true, unlocked: true });
         setLocalAccessChecked(true);
       } else {
         const nextStatus = await getGatewayAccessStatus();

@@ -205,9 +205,7 @@ beforeEach(() => {
     resumeCalls.push(token);
   });
   getLocalRuntimeMock.mockResolvedValue({ mode: 'local', env_public_id: 'env_local', direct_ws_url: 'ws://localhost/_redeven_direct/ws' });
-  getLocalAccessStatusMock
-    .mockResolvedValueOnce({ password_required: true, unlocked: false })
-    .mockResolvedValueOnce({ password_required: true, unlocked: true });
+  getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });
   unlockLocalAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
   getGatewayAccessStatusMock
     .mockResolvedValueOnce({ password_required: true, unlocked: false })
@@ -447,6 +445,7 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
 
       expect(unlockLocalAccessMock).toHaveBeenCalledWith('secret');
+      expect(getLocalAccessStatusMock).toHaveBeenCalledTimes(1);
       expect(connectMock).toHaveBeenCalledTimes(1);
       const localConnectConfig = connectMock.mock.calls[0]?.[0];
       expect(localConnectConfig).toMatchObject({
@@ -505,6 +504,7 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
 
       expect(unlockGatewayAccessMock).toHaveBeenCalledWith('secret');
+      expect(getGatewayAccessStatusMock).toHaveBeenCalledTimes(2);
       expect(connectMock).toHaveBeenCalledTimes(1);
       const remoteConnectConfig = connectMock.mock.calls[0]?.[0];
       expect(remoteConnectConfig).toMatchObject({
