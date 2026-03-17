@@ -1715,10 +1715,10 @@ interface EmptyChatProps {
 
 const EmptyChat: Component<EmptyChatProps> = (props) => {
   return (
-    <div class="flex-1 flex flex-col items-center justify-center p-8 overflow-auto">
+    <div class="flower-empty-chat-state">
       {/* Welcome section */}
       <Motion.div
-        class="text-center mb-8 max-w-lg"
+        class="flower-empty-chat-hero"
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, easing: 'ease-out' }}
@@ -1743,7 +1743,7 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
       </Motion.div>
 
       {/* Suggestions grid */}
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl">
+      <div class="flower-empty-chat-suggestions">
         <For each={SUGGESTIONS}>
           {(item, i) => (
             <Motion.button
@@ -1778,7 +1778,7 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
 
       {/* Keyboard hint */}
       <Motion.div
-        class="mt-8 text-xs text-muted-foreground/60 flex items-center gap-4"
+        class="flower-empty-chat-hint"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, delay: 0.6 }}
@@ -2462,6 +2462,7 @@ export function EnvAIPage() {
       ? 'Paused until waiting input is resolved.'
       : 'Flower will send these automatically after the current run finishes.',
   );
+  const hasBottomDockPanels = createMemo(() => draftFollowups().length > 0 || shouldShowQueuedTurnsPanel());
   const executionMode = createMemo<ExecutionMode>(() => {
     const tid = String(ai.activeThreadId() ?? '').trim();
     if (!tid) {
@@ -4464,181 +4465,483 @@ export function EnvAIPage() {
               }
             >
               {/* Chat area — sidebar is managed by Shell */}
-          <div class="flex-1 min-w-0 flex flex-col h-full">
-            {/* Header */}
-            <div class="chat-header border-b border-border/80 bg-background/95 backdrop-blur-md max-sm:flex-col max-sm:items-stretch max-sm:gap-2">
-              <div class="chat-header-title flex items-center gap-2 min-w-0 w-full sm:w-auto">
-                <span class="truncate font-medium">{ai.activeThreadTitle()}</span>
-              </div>
-              <div class="w-full sm:w-auto flex items-center justify-between gap-2 sm:justify-start sm:gap-1.5">
-                <div class="min-w-0 flex items-center gap-1.5">
-                  {/* Model selector */}
-                  <Show when={ai.aiEnabled() && ai.modelOptions().length > 0}>
-                    <Select
-                      value={ai.selectedModel()}
-                      onChange={(v) => ai.selectModel(String(v ?? '').trim())}
-                      options={ai.modelOptions()}
-                      placeholder="Select model..."
-                      disabled={ai.models.loading || !!ai.models.error || activeThreadRunning() || !canRWXReady()}
-                      class="ai-model-select-trigger min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
-                    />
-                  </Show>
+              <div class="flower-chat-shell">
+                {/* Header */}
+                <div class="chat-header flower-chat-header border-b border-border/80 bg-background/95 backdrop-blur-md">
+                  <div class="chat-header-title flower-chat-header-title">
+                    <span class="truncate font-medium">{ai.activeThreadTitle()}</span>
+                  </div>
+                  <div class="flower-chat-header-controls">
+                    <div class="flower-chat-header-primary">
+                      {/* Model selector */}
+                      <Show when={ai.aiEnabled() && ai.modelOptions().length > 0}>
+                        <Select
+                          value={ai.selectedModel()}
+                          onChange={(v) => ai.selectModel(String(v ?? '').trim())}
+                          options={ai.modelOptions()}
+                          placeholder="Select model..."
+                          disabled={ai.models.loading || !!ai.models.error || activeThreadRunning() || !canRWXReady()}
+                          class="ai-model-select-trigger flower-chat-model-select min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
+                        />
+                      </Show>
 
-                  {/* Stop button */}
-                  <Show when={activeThreadRunning()}>
-                    <Tooltip content="Stop generation" placement="bottom" delay={0}>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        icon={Stop}
-                        onClick={() => stopRun()}
-                        disabled={!canRWXReady()}
-                        class="h-7 px-2 max-sm:w-7 max-sm:px-0 text-error border-error/30 hover:bg-error/10 hover:text-error"
-                      >
-                        <span class="max-sm:hidden">Stop</span>
-                      </Button>
-                    </Tooltip>
-                  </Show>
+                      {/* Stop button */}
+                      <Show when={activeThreadRunning()}>
+                        <Tooltip content="Stop generation" placement="bottom" delay={0}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            icon={Stop}
+                            onClick={() => stopRun()}
+                            disabled={!canRWXReady()}
+                            class="flower-chat-stop-button h-7 px-2 text-error border-error/30 hover:bg-error/10 hover:text-error"
+                          >
+                            <span class="flower-chat-stop-button-label">Stop</span>
+                          </Button>
+                        </Tooltip>
+                      </Show>
+                    </div>
+
+                    <div class="flower-chat-header-secondary">
+                      <div class="flower-chat-header-divider" />
+
+                      {/* Rename */}
+                      <Tooltip content="Rename chat" placement="bottom" delay={0}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          icon={Pencil}
+                          onClick={() => openRename()}
+                          aria-label="Rename"
+                          disabled={!ai.activeThreadId() || activeThreadRunning() || !canRWXReady()}
+                          class="w-7 h-7"
+                        />
+                      </Tooltip>
+
+                      {/* Delete */}
+                      <Tooltip content="Delete chat" placement="bottom" delay={0}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          icon={Trash}
+                          onClick={() => {
+                            setDeleteForce(activeThreadRunning());
+                            setDeleteOpen(true);
+                          }}
+                          aria-label="Delete"
+                          disabled={!ai.activeThreadId() || !canRWXReady()}
+                          class="w-7 h-7 text-muted-foreground hover:text-error hover:bg-error/10"
+                        />
+                      </Tooltip>
+
+                      {/* Settings button */}
+                      <Tooltip content="AI Settings" placement="bottom" delay={0}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          icon={Settings}
+                          onClick={() => env.openSettings('ai')}
+                          aria-label="Settings"
+                          class="w-7 h-7"
+                        />
+                      </Tooltip>
+                    </div>
+                  </div>
                 </div>
 
-                <div class="shrink-0 flex items-center gap-1.5">
-                  <div class="hidden sm:block w-px h-5 bg-border mx-1" />
+                <div class="flower-chat-main">
+                  <div class="flower-chat-transcript">
+                    <Show when={ai.settings.error || (ai.models.error && ai.aiEnabled())}>
+                      <div class="flower-chat-status-stack">
+                        {/* Error banner: Settings unavailable */}
+                        <Show when={ai.settings.error}>
+                          <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-xl shadow-sm bg-error/5 border border-error/20">
+                            <div class="flex items-center gap-2 font-medium text-error">
+                              <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="12" y1="8" x2="12" y2="12" />
+                                <line x1="12" y1="16" x2="12.01" y2="16" />
+                              </svg>
+                              Settings are not available
+                            </div>
+                            <div class="mt-1 text-muted-foreground pl-6">
+                              {ai.settings.error instanceof Error ? ai.settings.error.message : String(ai.settings.error)}
+                            </div>
+                          </div>
+                        </Show>
 
-                  {/* Rename */}
-                  <Tooltip content="Rename chat" placement="bottom" delay={0}>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      icon={Pencil}
-                      onClick={() => openRename()}
-                      aria-label="Rename"
-                      disabled={!ai.activeThreadId() || activeThreadRunning() || !canRWXReady()}
-                      class="w-7 h-7"
-                    />
-                  </Tooltip>
+                        {/* Error banner: Models unavailable */}
+                        <Show when={ai.models.error && ai.aiEnabled()}>
+                          <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-xl shadow-sm bg-error/5 border border-error/20">
+                            <div class="flex items-center gap-2 font-medium text-error">
+                              <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="12" y1="8" x2="12" y2="12" />
+                                <line x1="12" y1="16" x2="12.01" y2="16" />
+                              </svg>
+                              AI is not available
+                            </div>
+                            <div class="mt-1 text-muted-foreground pl-6">
+                              {ai.models.error instanceof Error ? ai.models.error.message : String(ai.models.error)}
+                            </div>
+                          </div>
+                        </Show>
+                      </div>
+                    </Show>
 
-                  {/* Delete */}
-                  <Tooltip content="Delete chat" placement="bottom" delay={0}>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      icon={Trash}
-                      onClick={() => {
-                        setDeleteForce(activeThreadRunning());
-                        setDeleteOpen(true);
+                    {/* Message list with empty state + file browser FAB */}
+                    <div ref={messageAreaRef} class="flower-chat-transcript-main">
+                      <MessageListWithEmptyState
+                        hasMessages={hasMessages()}
+                        loading={messagesLoading()}
+                        onSuggestionClick={handleSuggestionClick}
+                        disabled={!canInteract()}
+                        class="h-full"
+                      />
+                      <ChatFileBrowserFAB
+                        workingDir={activeWorkingDir()}
+                        homePath={homePath()}
+                        enabled={canInteract() && protocol.status() === 'connected'}
+                        containerRef={messageAreaRef}
+                      />
+                    </div>
+                  </div>
+
+                  <div class="flower-chat-bottom-dock">
+                    {/* Toolbar: Tasks chip + Execution mode toggle */}
+                    <div class="relative px-3 pt-1 pb-1.5 chat-toolbar-separator flower-chat-toolbar">
+                      <div class="flex items-center justify-between gap-2 flex-wrap">
+                        <div class="min-w-0 flex items-center gap-1.5 flex-wrap">
+                          <Show when={ai.activeThreadId() && activeThreadTodos().length > 0}>
+                            <CompactTasksSummary
+                              executionMode={executionMode()}
+                              todos={activeThreadTodos()}
+                              unresolvedCount={unresolvedTodoCount()}
+                              todosLoading={todosLoading()}
+                              todosError={todosError()}
+                              todosView={threadTodos()}
+                              todoUpdatedLabel={todoUpdatedLabel()}
+                            />
+                          </Show>
+                          <Show when={ai.activeThreadId() && activeThreadSubagents().length > 0}>
+                            <CompactSubagentsSummary
+                              subagents={activeThreadSubagents()}
+                              updatedLabel={subagentsUpdatedLabel()}
+                            />
+                          </Show>
+                          <Show when={ai.activeThreadId() && hasContextTelemetry()}>
+                            <CompactContextSummary
+                              usage={contextUsage()}
+                              compactions={contextCompactions()}
+                            />
+                          </Show>
+                          <Show when={!ai.activeThreadId() || (activeThreadTodos().length === 0 && activeThreadSubagents().length === 0 && !hasContextTelemetry())}>
+                            <span class="text-[11px] text-muted-foreground">Execution mode</span>
+                          </Show>
+                        </div>
+                        <ExecutionModeToggle
+                          value={executionMode()}
+                          disabled={activeThreadRunning()}
+                          onChange={(mode) => {
+                            void updateExecutionMode(mode);
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <Show when={hasBottomDockPanels()}>
+                      <div class="flower-chat-bottom-dock-support">
+                        <Show when={draftFollowups().length > 0}>
+                          <div class="flower-queued-turns-panel flower-followups-drafts-panel">
+                            <div class="flower-queued-turns-header">
+                              <div class="flower-queued-turns-header-main">
+                                <span class="flower-queued-turns-title">Draft follow-ups</span>
+                                <span class="flower-queued-turns-count">{draftFollowups().length}</span>
+                              </div>
+                              <div class="flower-queued-turns-hint">These stay under your control until you load them or queue them later.</div>
+                            </div>
+                            <div class="flower-queued-turns-list">
+                              <For each={draftFollowups()}>
+                                {(item, index) => {
+                                  const attachments = () => Array.isArray(item.attachments) ? item.attachments : [];
+                                  const attachmentCount = () => attachments().length;
+                                  const attachmentLabel = () => attachmentCount() === 1 ? '1 attachment' : `${attachmentCount()} attachments`;
+                                  const createdAtLabel = () => formatQueuedTurnTime(item.created_at_unix_ms);
+                                  const executionModeLabel = () => {
+                                    const mode = String(item.execution_mode ?? '').trim().toLowerCase();
+                                    return mode === 'plan' ? 'Plan' : mode === 'act' ? 'Act' : '';
+                                  };
+                                  const followupID = () => String(item.followup_id ?? '').trim();
+                                  const messageText = () => String(item.text ?? '').trim() || 'Attachment-only follow-up';
+                                  const deleting = () => followupDeletingID() === followupID();
+                                  const isLoaded = () => loadedDraftFollowupID() === followupID();
+                                  const reorderDisabled = () => !canInteract() || !!followupReorderingLane() || isLoaded();
+                                  return (
+                                    <div
+                                      class={cn('flower-queued-turn-item', isLoaded() && 'flower-followup-item-loaded')}
+                                      draggable={!reorderDisabled()}
+                                      onDragStart={() => handleFollowupDragStart('draft', followupID())}
+                                      onDragEnd={() => handleFollowupDragEnd()}
+                                      onDragOver={(e) => {
+                                        if (draggingFollowupLane() !== 'draft') return;
+                                        e.preventDefault();
+                                      }}
+                                      onDrop={(e) => {
+                                        e.preventDefault();
+                                        handleFollowupDrop('draft', followupID());
+                                      }}
+                                    >
+                                      <div class="flower-queued-turn-item-main">
+                                        <div class="flower-followup-leading">
+                                          <button
+                                            type="button"
+                                            class="flower-followup-drag-handle"
+                                            disabled={reorderDisabled()}
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            title="Drag to reorder"
+                                          >
+                                            ⋮⋮
+                                          </button>
+                                          <div class="flower-queued-turn-position">{item.position}</div>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                          <div class="flower-queued-turn-item-meta">
+                                            <Show when={createdAtLabel()}>
+                                              <span class="flower-queued-turn-chip">{createdAtLabel()}</span>
+                                            </Show>
+                                            <Show when={executionModeLabel()}>
+                                              <span class="flower-queued-turn-chip">{executionModeLabel()}</span>
+                                            </Show>
+                                            <Show when={String(item.model_id ?? '').trim()}>
+                                              <span class="flower-queued-turn-chip truncate max-w-[14rem]" title={String(item.model_id ?? '').trim()}>
+                                                {String(item.model_id ?? '').trim()}
+                                              </span>
+                                            </Show>
+                                            <Show when={attachmentCount() > 0}>
+                                              <span class="flower-queued-turn-chip">{attachmentLabel()}</span>
+                                            </Show>
+                                            <Show when={isLoaded()}>
+                                              <span class="flower-followup-state-chip">Loaded</span>
+                                            </Show>
+                                          </div>
+                                          <p class="flower-queued-turn-text" title={messageText()}>{messageText()}</p>
+                                        </div>
+                                      </div>
+                                      <div class="flower-queued-turn-actions">
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          title="Move up"
+                                          onClick={() => moveFollowup('draft', index(), -1)}
+                                          disabled={reorderDisabled() || index() === 0}
+                                        >
+                                          <ChevronUp class="w-3.5 h-3.5" />
+                                        </Button>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          title="Move down"
+                                          onClick={() => moveFollowup('draft', index(), 1)}
+                                          disabled={reorderDisabled() || index() === draftFollowups().length - 1}
+                                        >
+                                          <ChevronUp class="w-3.5 h-3.5 rotate-180" />
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant={isLoaded() ? 'outline' : 'ghost'}
+                                          title={isLoaded() ? 'Draft already loaded' : 'Load into editor'}
+                                          onClick={() => requestLoadFollowup(item)}
+                                          disabled={deleting()}
+                                        >
+                                          {isLoaded() ? 'Loaded' : 'Load'}
+                                        </Button>
+                                        <Show when={activeThreadWaitingUser() && !isLoaded()}>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            title="Queue for later"
+                                            onClick={() => void queueDraftForLater(item)}
+                                            disabled={!canInteract() || deleting() || followupReorderingLane() === 'draft'}
+                                          >
+                                            Queue
+                                          </Button>
+                                        </Show>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          title="Edit draft follow-up"
+                                          onClick={() => openFollowupEditor(item)}
+                                          disabled={!canInteract() || deleting() || isLoaded()}
+                                        >
+                                          <Pencil class="w-3.5 h-3.5" />
+                                        </Button>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          title="Remove draft follow-up"
+                                          onClick={() => void deleteFollowup(item)}
+                                          disabled={!canInteract() || deleting() || isLoaded()}
+                                        >
+                                          <Trash class="w-3.5 h-3.5" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  );
+                                }}
+                              </For>
+                            </div>
+                          </div>
+                        </Show>
+
+                        <Show when={shouldShowQueuedTurnsPanel()}>
+                          <div class="flower-queued-turns-panel">
+                            <div class="flower-queued-turns-header">
+                              <div class="flower-queued-turns-header-main">
+                                <span class="flower-queued-turns-title">Queued follow-ups</span>
+                                <span class="flower-queued-turns-count">{activeQueuedTurnCount()}</span>
+                                <Show when={followupsPausedReason() === 'waiting_user'}>
+                                  <span class="flower-followup-state-chip">Paused</span>
+                                </Show>
+                              </div>
+                              <div class="flower-queued-turns-hint">{queuedTurnHint()}</div>
+                            </div>
+                            <div class="flower-queued-turns-list">
+                              <Show when={followupsError() && queuedFollowups().length === 0}>
+                                <div class="flower-queued-turns-empty">{followupsError()}</div>
+                              </Show>
+                              <Show when={followupsLoading() && queuedFollowups().length === 0 && !followupsError()}>
+                                <div class="flower-queued-turns-empty">Loading queued follow-ups...</div>
+                              </Show>
+                              <For each={queuedFollowups()}>
+                                {(item, index) => {
+                                  const attachments = () => Array.isArray(item.attachments) ? item.attachments : [];
+                                  const attachmentCount = () => attachments().length;
+                                  const attachmentLabel = () => attachmentCount() === 1 ? '1 attachment' : `${attachmentCount()} attachments`;
+                                  const createdAtLabel = () => formatQueuedTurnTime(item.created_at_unix_ms);
+                                  const executionModeLabel = () => {
+                                    const mode = String(item.execution_mode ?? '').trim().toLowerCase();
+                                    return mode === 'plan' ? 'Plan' : mode === 'act' ? 'Act' : '';
+                                  };
+                                  const followupID = () => String(item.followup_id ?? '').trim();
+                                  const messageText = () => String(item.text ?? '').trim() || 'Attachment-only follow-up';
+                                  const deleting = () => followupDeletingID() === followupID();
+                                  const reorderDisabled = () => !canInteract() || !!followupReorderingLane();
+                                  return (
+                                    <div
+                                      class="flower-queued-turn-item"
+                                      draggable={!reorderDisabled()}
+                                      onDragStart={() => handleFollowupDragStart('queued', followupID())}
+                                      onDragEnd={() => handleFollowupDragEnd()}
+                                      onDragOver={(e) => {
+                                        if (draggingFollowupLane() !== 'queued') return;
+                                        e.preventDefault();
+                                      }}
+                                      onDrop={(e) => {
+                                        e.preventDefault();
+                                        handleFollowupDrop('queued', followupID());
+                                      }}
+                                    >
+                                      <div class="flower-queued-turn-item-main">
+                                        <div class="flower-followup-leading">
+                                          <button
+                                            type="button"
+                                            class="flower-followup-drag-handle"
+                                            disabled={reorderDisabled()}
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            title="Drag to reorder"
+                                          >
+                                            ⋮⋮
+                                          </button>
+                                          <div class="flower-queued-turn-position">{item.position}</div>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                          <div class="flower-queued-turn-item-meta">
+                                            <Show when={createdAtLabel()}>
+                                              <span class="flower-queued-turn-chip">{createdAtLabel()}</span>
+                                            </Show>
+                                            <Show when={executionModeLabel()}>
+                                              <span class="flower-queued-turn-chip">{executionModeLabel()}</span>
+                                            </Show>
+                                            <Show when={String(item.model_id ?? '').trim()}>
+                                              <span class="flower-queued-turn-chip truncate max-w-[14rem]" title={String(item.model_id ?? '').trim()}>
+                                                {String(item.model_id ?? '').trim()}
+                                              </span>
+                                            </Show>
+                                            <Show when={attachmentCount() > 0}>
+                                              <span class="flower-queued-turn-chip">{attachmentLabel()}</span>
+                                            </Show>
+                                          </div>
+                                          <p class="flower-queued-turn-text" title={messageText()}>{messageText()}</p>
+                                        </div>
+                                      </div>
+                                      <div class="flower-queued-turn-actions">
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          title="Move up"
+                                          onClick={() => moveFollowup('queued', index(), -1)}
+                                          disabled={reorderDisabled() || index() === 0}
+                                        >
+                                          <ChevronUp class="w-3.5 h-3.5" />
+                                        </Button>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          title="Move down"
+                                          onClick={() => moveFollowup('queued', index(), 1)}
+                                          disabled={reorderDisabled() || index() === queuedFollowups().length - 1}
+                                        >
+                                          <ChevronUp class="w-3.5 h-3.5 rotate-180" />
+                                        </Button>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          title="Edit queued follow-up"
+                                          onClick={() => openFollowupEditor(item)}
+                                          disabled={!canInteract() || deleting()}
+                                        >
+                                          <Pencil class="w-3.5 h-3.5" />
+                                        </Button>
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          title="Remove queued follow-up"
+                                          onClick={() => void deleteFollowup(item)}
+                                          disabled={!canInteract() || deleting()}
+                                        >
+                                          <Trash class="w-3.5 h-3.5" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  );
+                                }}
+                              </For>
+                            </div>
+                          </div>
+                        </Show>
+                      </div>
+                    </Show>
+
+                    <AIChatInput
+                      class="flower-chat-input"
+                      disabled={!canInteract()}
+                      waitingForUser={activeThreadWaitingUser()}
+                      placeholder={chatInputPlaceholder()}
+                      workingDirLabel={workingDirLabel() || 'Working dir'}
+                      workingDirTitle={activeWorkingDir() || workingDirLabel() || 'Working dir'}
+                      workingDirLocked={workingDirLocked()}
+                      workingDirDisabled={workingDirDisabled()}
+                      onPickWorkingDir={() => setWorkingDirPickerOpen(true)}
+                      onEditWorkingDir={() => openWorkingDirEditor()}
+                      onSendIntent={(intent) => {
+                        nextSendIntent = intent;
                       }}
-                      aria-label="Delete"
-                      disabled={!ai.activeThreadId() || !canRWXReady()}
-                      class="w-7 h-7 text-muted-foreground hover:text-error hover:bg-error/10"
+                      getSendBlockReason={waitingUserComposerSendBlockReason}
+                      onApiReady={setChatInputApi}
                     />
-                  </Tooltip>
-
-                  {/* Settings button */}
-                  <Tooltip content="AI Settings" placement="bottom" delay={0}>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      icon={Settings}
-                      onClick={() => env.openSettings('ai')}
-                      aria-label="Settings"
-                      class="w-7 h-7"
-                    />
-                  </Tooltip>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            {/* Error banner: Settings unavailable */}
-            <Show when={ai.settings.error}>
-              <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-xl shadow-sm bg-error/5 border border-error/20">
-                <div class="flex items-center gap-2 font-medium text-error">
-                  <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
-                  Settings are not available
-                </div>
-                <div class="mt-1 text-muted-foreground pl-6">
-                  {ai.settings.error instanceof Error ? ai.settings.error.message : String(ai.settings.error)}
-                </div>
-              </div>
-            </Show>
-
-            {/* Error banner: Models unavailable */}
-            <Show when={ai.models.error && ai.aiEnabled()}>
-              <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-xl shadow-sm bg-error/5 border border-error/20">
-                <div class="flex items-center gap-2 font-medium text-error">
-                  <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
-                  AI is not available
-                </div>
-                <div class="mt-1 text-muted-foreground pl-6">
-                  {ai.models.error instanceof Error ? ai.models.error.message : String(ai.models.error)}
-                </div>
-              </div>
-            </Show>
-
-            {/* Message list with empty state + file browser FAB */}
-            <div ref={messageAreaRef} class="flex-1 min-h-0 relative">
-              <MessageListWithEmptyState
-                hasMessages={hasMessages()}
-                loading={messagesLoading()}
-                onSuggestionClick={handleSuggestionClick}
-                disabled={!canInteract()}
-                class="h-full"
-              />
-              <ChatFileBrowserFAB
-                workingDir={activeWorkingDir()}
-                homePath={homePath()}
-                enabled={canInteract() && protocol.status() === 'connected'}
-                containerRef={messageAreaRef}
-              />
-            </div>
-
-            {/* Toolbar: Tasks chip + Execution mode toggle */}
-            <div class="relative px-3 pt-1 pb-1.5 chat-toolbar-separator">
-              <div class="flex items-center justify-between gap-2 flex-wrap">
-                <div class="min-w-0 flex items-center gap-1.5 flex-wrap">
-                  <Show when={ai.activeThreadId() && activeThreadTodos().length > 0}>
-                    <CompactTasksSummary
-                      executionMode={executionMode()}
-                      todos={activeThreadTodos()}
-                      unresolvedCount={unresolvedTodoCount()}
-                      todosLoading={todosLoading()}
-                      todosError={todosError()}
-                      todosView={threadTodos()}
-                      todoUpdatedLabel={todoUpdatedLabel()}
-                    />
-                  </Show>
-                  <Show when={ai.activeThreadId() && activeThreadSubagents().length > 0}>
-                    <CompactSubagentsSummary
-                      subagents={activeThreadSubagents()}
-                      updatedLabel={subagentsUpdatedLabel()}
-                    />
-                  </Show>
-                  <Show when={ai.activeThreadId() && hasContextTelemetry()}>
-                    <CompactContextSummary
-                      usage={contextUsage()}
-                      compactions={contextCompactions()}
-                    />
-                  </Show>
-                  <Show when={!ai.activeThreadId() || (activeThreadTodos().length === 0 && activeThreadSubagents().length === 0 && !hasContextTelemetry())}>
-                    <span class="text-[11px] text-muted-foreground">Execution mode</span>
-                  </Show>
-                </div>
-                <ExecutionModeToggle
-                  value={executionMode()}
-                  disabled={activeThreadRunning()}
-                  onChange={(mode) => {
-                    void updateExecutionMode(mode);
-                  }}
-                />
-              </div>
-            </div>
 
             {/* Input area */}
             <DirectoryPicker
@@ -4795,292 +5098,6 @@ export function EnvAIPage() {
               </div>
             </ConfirmDialog>
 
-            <Show when={draftFollowups().length > 0}>
-              <div class="flower-queued-turns-panel flower-followups-drafts-panel">
-                <div class="flower-queued-turns-header">
-                  <div class="flower-queued-turns-header-main">
-                    <span class="flower-queued-turns-title">Draft follow-ups</span>
-                    <span class="flower-queued-turns-count">{draftFollowups().length}</span>
-                  </div>
-                  <div class="flower-queued-turns-hint">These stay under your control until you load them or queue them later.</div>
-                </div>
-                <div class="flower-queued-turns-list">
-                  <For each={draftFollowups()}>
-                    {(item, index) => {
-                      const attachments = () => Array.isArray(item.attachments) ? item.attachments : [];
-                      const attachmentCount = () => attachments().length;
-                      const attachmentLabel = () => attachmentCount() === 1 ? '1 attachment' : `${attachmentCount()} attachments`;
-                      const createdAtLabel = () => formatQueuedTurnTime(item.created_at_unix_ms);
-                      const executionModeLabel = () => {
-                        const mode = String(item.execution_mode ?? '').trim().toLowerCase();
-                        return mode === 'plan' ? 'Plan' : mode === 'act' ? 'Act' : '';
-                      };
-                      const followupID = () => String(item.followup_id ?? '').trim();
-                      const messageText = () => String(item.text ?? '').trim() || 'Attachment-only follow-up';
-                      const deleting = () => followupDeletingID() === followupID();
-                      const isLoaded = () => loadedDraftFollowupID() === followupID();
-                      const reorderDisabled = () => !canInteract() || !!followupReorderingLane() || isLoaded();
-                      return (
-                        <div
-                          class={cn('flower-queued-turn-item', isLoaded() && 'flower-followup-item-loaded')}
-                          draggable={!reorderDisabled()}
-                          onDragStart={() => handleFollowupDragStart('draft', followupID())}
-                          onDragEnd={() => handleFollowupDragEnd()}
-                          onDragOver={(e) => {
-                            if (draggingFollowupLane() !== 'draft') return;
-                            e.preventDefault();
-                          }}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            handleFollowupDrop('draft', followupID());
-                          }}
-                        >
-                          <div class="flower-queued-turn-item-main">
-                            <div class="flower-followup-leading">
-                              <button
-                                type="button"
-                                class="flower-followup-drag-handle"
-                                disabled={reorderDisabled()}
-                                onMouseDown={(e) => e.preventDefault()}
-                                title="Drag to reorder"
-                              >
-                                ⋮⋮
-                              </button>
-                              <div class="flower-queued-turn-position">{item.position}</div>
-                            </div>
-                            <div class="min-w-0 flex-1">
-                              <div class="flower-queued-turn-item-meta">
-                                <Show when={createdAtLabel()}>
-                                  <span class="flower-queued-turn-chip">{createdAtLabel()}</span>
-                                </Show>
-                                <Show when={executionModeLabel()}>
-                                  <span class="flower-queued-turn-chip">{executionModeLabel()}</span>
-                                </Show>
-                                <Show when={String(item.model_id ?? '').trim()}>
-                                  <span class="flower-queued-turn-chip truncate max-w-[14rem]" title={String(item.model_id ?? '').trim()}>
-                                    {String(item.model_id ?? '').trim()}
-                                  </span>
-                                </Show>
-                                <Show when={attachmentCount() > 0}>
-                                  <span class="flower-queued-turn-chip">{attachmentLabel()}</span>
-                                </Show>
-                                <Show when={isLoaded()}>
-                                  <span class="flower-followup-state-chip">Loaded</span>
-                                </Show>
-                              </div>
-                              <p class="flower-queued-turn-text" title={messageText()}>{messageText()}</p>
-                            </div>
-                          </div>
-                          <div class="flower-queued-turn-actions">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Move up"
-                              onClick={() => moveFollowup('draft', index(), -1)}
-                              disabled={reorderDisabled() || index() === 0}
-                            >
-                              <ChevronUp class="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Move down"
-                              onClick={() => moveFollowup('draft', index(), 1)}
-                              disabled={reorderDisabled() || index() === draftFollowups().length - 1}
-                            >
-                              <ChevronUp class="w-3.5 h-3.5 rotate-180" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant={isLoaded() ? 'outline' : 'ghost'}
-                              title={isLoaded() ? 'Draft already loaded' : 'Load into editor'}
-                              onClick={() => requestLoadFollowup(item)}
-                              disabled={deleting()}
-                            >
-                              {isLoaded() ? 'Loaded' : 'Load'}
-                            </Button>
-                            <Show when={activeThreadWaitingUser() && !isLoaded()}>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                title="Queue for later"
-                                onClick={() => void queueDraftForLater(item)}
-                                disabled={!canInteract() || deleting() || followupReorderingLane() === 'draft'}
-                              >
-                                Queue
-                              </Button>
-                            </Show>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Edit draft follow-up"
-                              onClick={() => openFollowupEditor(item)}
-                              disabled={!canInteract() || deleting() || isLoaded()}
-                            >
-                              <Pencil class="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Remove draft follow-up"
-                              onClick={() => void deleteFollowup(item)}
-                              disabled={!canInteract() || deleting() || isLoaded()}
-                            >
-                              <Trash class="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    }}
-                  </For>
-                </div>
-              </div>
-            </Show>
-
-            <Show when={shouldShowQueuedTurnsPanel()}>
-              <div class="flower-queued-turns-panel">
-                <div class="flower-queued-turns-header">
-                  <div class="flower-queued-turns-header-main">
-                    <span class="flower-queued-turns-title">Queued follow-ups</span>
-                    <span class="flower-queued-turns-count">{activeQueuedTurnCount()}</span>
-                    <Show when={followupsPausedReason() === 'waiting_user'}>
-                      <span class="flower-followup-state-chip">Paused</span>
-                    </Show>
-                  </div>
-                  <div class="flower-queued-turns-hint">{queuedTurnHint()}</div>
-                </div>
-                <div class="flower-queued-turns-list">
-                  <Show when={followupsError() && queuedFollowups().length === 0}>
-                    <div class="flower-queued-turns-empty">{followupsError()}</div>
-                  </Show>
-                  <Show when={followupsLoading() && queuedFollowups().length === 0 && !followupsError()}>
-                    <div class="flower-queued-turns-empty">Loading queued follow-ups...</div>
-                  </Show>
-                  <For each={queuedFollowups()}>
-                    {(item, index) => {
-                      const attachments = () => Array.isArray(item.attachments) ? item.attachments : [];
-                      const attachmentCount = () => attachments().length;
-                      const attachmentLabel = () => attachmentCount() === 1 ? '1 attachment' : `${attachmentCount()} attachments`;
-                      const createdAtLabel = () => formatQueuedTurnTime(item.created_at_unix_ms);
-                      const executionModeLabel = () => {
-                        const mode = String(item.execution_mode ?? '').trim().toLowerCase();
-                        return mode === 'plan' ? 'Plan' : mode === 'act' ? 'Act' : '';
-                      };
-                      const followupID = () => String(item.followup_id ?? '').trim();
-                      const messageText = () => String(item.text ?? '').trim() || 'Attachment-only follow-up';
-                      const deleting = () => followupDeletingID() === followupID();
-                      const reorderDisabled = () => !canInteract() || !!followupReorderingLane();
-                      return (
-                        <div
-                          class="flower-queued-turn-item"
-                          draggable={!reorderDisabled()}
-                          onDragStart={() => handleFollowupDragStart('queued', followupID())}
-                          onDragEnd={() => handleFollowupDragEnd()}
-                          onDragOver={(e) => {
-                            if (draggingFollowupLane() !== 'queued') return;
-                            e.preventDefault();
-                          }}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            handleFollowupDrop('queued', followupID());
-                          }}
-                        >
-                          <div class="flower-queued-turn-item-main">
-                            <div class="flower-followup-leading">
-                              <button
-                                type="button"
-                                class="flower-followup-drag-handle"
-                                disabled={reorderDisabled()}
-                                onMouseDown={(e) => e.preventDefault()}
-                                title="Drag to reorder"
-                              >
-                                ⋮⋮
-                              </button>
-                              <div class="flower-queued-turn-position">{item.position}</div>
-                            </div>
-                            <div class="min-w-0 flex-1">
-                              <div class="flower-queued-turn-item-meta">
-                                <Show when={createdAtLabel()}>
-                                  <span class="flower-queued-turn-chip">{createdAtLabel()}</span>
-                                </Show>
-                                <Show when={executionModeLabel()}>
-                                  <span class="flower-queued-turn-chip">{executionModeLabel()}</span>
-                                </Show>
-                                <Show when={String(item.model_id ?? '').trim()}>
-                                  <span class="flower-queued-turn-chip truncate max-w-[14rem]" title={String(item.model_id ?? '').trim()}>
-                                    {String(item.model_id ?? '').trim()}
-                                  </span>
-                                </Show>
-                                <Show when={attachmentCount() > 0}>
-                                  <span class="flower-queued-turn-chip">{attachmentLabel()}</span>
-                                </Show>
-                              </div>
-                              <p class="flower-queued-turn-text" title={messageText()}>{messageText()}</p>
-                            </div>
-                          </div>
-                          <div class="flower-queued-turn-actions">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Move up"
-                              onClick={() => moveFollowup('queued', index(), -1)}
-                              disabled={reorderDisabled() || index() === 0}
-                            >
-                              <ChevronUp class="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Move down"
-                              onClick={() => moveFollowup('queued', index(), 1)}
-                              disabled={reorderDisabled() || index() === queuedFollowups().length - 1}
-                            >
-                              <ChevronUp class="w-3.5 h-3.5 rotate-180" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Edit queued follow-up"
-                              onClick={() => openFollowupEditor(item)}
-                              disabled={!canInteract() || deleting()}
-                            >
-                              <Pencil class="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              title="Remove queued follow-up"
-                              onClick={() => void deleteFollowup(item)}
-                              disabled={!canInteract() || deleting()}
-                            >
-                              <Trash class="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    }}
-                  </For>
-                </div>
-              </div>
-            </Show>
-
-            <AIChatInput
-              disabled={!canInteract()}
-              waitingForUser={activeThreadWaitingUser()}
-              placeholder={chatInputPlaceholder()}
-              workingDirLabel={workingDirLabel() || 'Working dir'}
-              workingDirTitle={activeWorkingDir() || workingDirLabel() || 'Working dir'}
-              workingDirLocked={workingDirLocked()}
-              workingDirDisabled={workingDirDisabled()}
-              onPickWorkingDir={() => setWorkingDirPickerOpen(true)}
-              onEditWorkingDir={() => openWorkingDirEditor()}
-              onSendIntent={(intent) => {
-                nextSendIntent = intent;
-              }}
-              getSendBlockReason={waitingUserComposerSendBlockReason}
-              onApiReady={setChatInputApi}
-            />
-          </div>
         </Show>
           </Show>
         </Show>

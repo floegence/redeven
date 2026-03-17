@@ -84,6 +84,7 @@ const defaultFetchGatewayJSON: (url: string) => Promise<any> = async (url: strin
 const fetchGatewayJSONMock = vi.fn(defaultFetchGatewayJSON);
 
 const gatewayRequestCredentialsMock = vi.fn(async () => 'same-origin');
+const prepareGatewayRequestInitMock = vi.fn(async (init: RequestInit = {}) => init);
 
 const envResource = (() => {
   const value = {
@@ -320,6 +321,7 @@ vi.mock('../protocol/redeven_v1', () => ({
 vi.mock('../services/gatewayApi', () => ({
   fetchGatewayJSON: fetchGatewayJSONMock,
   gatewayRequestCredentials: gatewayRequestCredentialsMock,
+  prepareGatewayRequestInit: prepareGatewayRequestInitMock,
 }));
 
 vi.mock('./aiPermissions', () => ({
@@ -342,6 +344,7 @@ vi.mock('./aiBlockPresentation', () => ({
 function resetScenario() {
   protocolState.status = 'connected';
   fetchGatewayJSONMock.mockImplementation(defaultFetchGatewayJSON);
+  prepareGatewayRequestInitMock.mockImplementation(async (init: RequestInit = {}) => init);
   aiState.activeThreadId = 'thread-1';
   aiState.activeThread = {
     thread_id: 'thread-1',
@@ -435,6 +438,18 @@ function queuedPanel(host: HTMLElement): HTMLElement | null {
 
 function draftsPanel(host: HTMLElement): HTMLElement | null {
   return host.querySelector('.flower-followups-drafts-panel');
+}
+
+function transcriptRegion(host: HTMLElement): HTMLElement | null {
+  return host.querySelector('.flower-chat-transcript-main');
+}
+
+function bottomDock(host: HTMLElement): HTMLElement | null {
+  return host.querySelector('.flower-chat-bottom-dock');
+}
+
+function bottomDockSupport(host: HTMLElement): HTMLElement | null {
+  return host.querySelector('.flower-chat-bottom-dock-support');
 }
 
 function inputComposer(host: HTMLElement, value: string) {
@@ -535,6 +550,22 @@ export function registerEnvAIPageSendTests() {
   });
 
   describe('EnvAIPage composer send flow', () => {
+    it('uses the shared transcript shell for new chat empty state and keeps the composer in the bottom dock', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        const transcript = transcriptRegion(host);
+        const dock = bottomDock(host);
+        const textarea = host.querySelector('textarea');
+
+        expect(transcript).toBeTruthy();
+        expect(dock).toBeTruthy();
+        expect(transcript?.textContent).toContain(`Hello! I'm Flower`);
+        expect(dock?.contains(textarea as Node)).toBe(true);
+      } finally {
+        dispose();
+      }
+    });
+
     ([
       { trigger: 'button', label: 'send button', buttonTitle: 'Send message' },
       { trigger: 'enter', label: 'Enter key', buttonTitle: 'Send message' },
@@ -986,6 +1017,54 @@ export function registerEnvAIPageSendTests() {
       try {
         expect(queuedPanel(host)).toBeTruthy();
         expect(host.textContent).toContain('Inspect the deployment logs next.');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('renders queued and draft follow-ups inside the shared bottom dock support region', async () => {
+      fetchGatewayJSONMock.mockImplementation(async (url: string) => {
+        if (url.includes('/followups')) {
+          return {
+            queued: [
+              {
+                followup_id: 'followup-1',
+                lane: 'queued',
+                message_id: 'message-1',
+                text: 'Inspect the deployment logs next.',
+                model_id: 'model-test',
+                execution_mode: 'act',
+                position: 1,
+                created_at_unix_ms: 1710000000000,
+                attachments: [],
+              },
+            ],
+            drafts: [
+              {
+                followup_id: 'draft-1',
+                lane: 'draft',
+                message_id: 'message-draft-1',
+                text: 'Draft the next investigation prompt.',
+                model_id: 'model-test',
+                execution_mode: 'plan',
+                position: 1,
+                created_at_unix_ms: 1710000000000,
+                attachments: [],
+              },
+            ],
+            revision: 3,
+            paused_reason: '',
+          };
+        }
+        return defaultFetchGatewayJSON(url);
+      });
+
+      const { host, dispose } = await renderPage();
+      try {
+        const support = bottomDockSupport(host);
+        expect(support).toBeTruthy();
+        expect(support?.contains(queuedPanel(host) as Node)).toBe(true);
+        expect(support?.contains(draftsPanel(host) as Node)).toBe(true);
       } finally {
         dispose();
       }
