@@ -786,7 +786,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     || String(props.repoSummary?.headRef ?? '').trim() === 'HEAD'
     || workspaceHasChanges(props.workspace, props.repoSummary)
   );
-  const mergeLabel = () => (props.mergeBusy ? 'Merging...' : 'Merge Into Current');
+  const mergeLabel = () => (props.mergeBusy ? 'Merging...' : 'Merge');
   const linkedWorktreeDeleteDialog = () => {
     const branch = deleteReviewBranch();
     if (!props.deleteReviewOpen || !branch) return false;
