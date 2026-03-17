@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Marked } from 'marked';
 
 import { createMarkdownRenderer } from '../markdown/markedConfig';
+import { normalizeMarkdownForDisplay } from '../markdown/normalizeMarkdownForDisplay';
 import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel';
 import { MarkdownBlock } from './MarkdownBlock';
 
@@ -179,5 +180,45 @@ describe('MarkdownBlock', () => {
     expect(chatStyles).not.toContain('.chat-markdown-block p:last-child { margin-bottom: 0; }');
     expect(paragraphs[0].matches('.chat-markdown-block > :last-child p:last-child')).toBe(false);
     expect(paragraphs[1].matches('.chat-markdown-block > :last-child p:last-child')).toBe(true);
+  });
+
+  it('normalizes malformed markdown boundaries before rendering', async () => {
+    const content = '# Title##Chapter One';
+    const normalized = normalizeMarkdownForDisplay(content);
+    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <MarkdownBlock content={content} />, host);
+
+    await waitFor(() => {
+      expect(renderMarkdownSnapshotMock).toHaveBeenCalledWith(normalized, { streaming: false });
+    });
+  });
+
+  it('renders repaired chapter headings from malformed transcript fragments', async () => {
+    const content = [
+      '# 🌟星光森林的秘密##第一章：莉莉的发现在遥远的北方，有一片被繁星眷顾的神秘森林。',
+      '',
+      '*（全文完）*我将为您创作一篇完整的童话故事。',
+    ].join('\n');
+    const normalized = normalizeMarkdownForDisplay(content);
+    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <MarkdownBlock content={content} />, host);
+
+    await waitFor(() => {
+      expect(host.querySelector('h1')?.textContent).toBe('🌟星光森林的秘密');
+      expect(host.querySelector('h2')?.textContent).toBe('第一章：莉莉的发现');
+    });
+
+    expect(host.querySelector('p')?.textContent).toContain('在遥远的北方，有一片被繁星眷顾的神秘森林。');
+    expect(host.textContent).toContain('（全文完）');
+    expect(host.textContent).toContain('我将为您创作一篇完整的童话故事。');
+    expect(host.textContent).not.toContain('##第一章');
   });
 });

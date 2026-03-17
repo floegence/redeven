@@ -2257,6 +2257,9 @@ mainLoop:
 			"estimate_tokens": estimateTokens,
 			"estimate_source": estimateSource,
 		})
+		if len(stepResult.ToolCalls) == 0 {
+			r.rememberCanonicalMarkdownTurn(stepResult.Text)
+		}
 		r.persistRunEvent("native.turn.checkpoint", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index":         step,
 			"complexity":         taskComplexity,
@@ -2591,6 +2594,7 @@ mainLoop:
 			if strings.TrimSpace(resultText) != "" && strings.TrimSpace(stepResult.Text) == "" {
 				_ = r.appendTextDelta(strings.TrimSpace(resultText))
 			}
+			r.reconcileCanonicalMarkdownMessage(resultText)
 			r.emitSourcesToolBlock("task_complete")
 			r.setFinalizationReason("task_complete")
 			r.setEndReason("complete")
@@ -2879,6 +2883,7 @@ mainLoop:
 				if strings.TrimSpace(summaryResult.Text) == "" {
 					_ = r.appendTextDelta(strings.TrimSpace(resultText))
 				}
+				r.reconcileCanonicalMarkdownMessage(resultText)
 				r.emitSourcesToolBlock("task_complete")
 				r.setFinalizationReason("task_complete_forced")
 				r.setEndReason("complete")
@@ -3049,6 +3054,9 @@ func (r *run) runNativeConversational(
 		"estimate_source": estimateSource,
 		"intent":          intent,
 	})
+	if txt := strings.TrimSpace(stepResult.Text); txt != "" {
+		r.rememberCanonicalMarkdownTurn(txt)
+	}
 
 	if !r.hasNonEmptyAssistantText() {
 		if txt := strings.TrimSpace(stepResult.Text); txt != "" {
@@ -3058,6 +3066,7 @@ func (r *run) runNativeConversational(
 	if !r.hasNonEmptyAssistantText() {
 		_ = r.appendTextDelta(fallbackText)
 	}
+	r.reconcileCanonicalMarkdownMessage(fallbackText)
 
 	r.setFinalizationReason(finalizationReason)
 	r.setEndReason("complete")
@@ -4582,10 +4591,14 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- **Shell tasks**: terminal.exec → inspect output → task_complete",
 		"- **Debugging**: terminal.exec (reproduce) → apply_patch fix → terminal.exec (verify) → task_complete",
 		"",
+	}
+	core = append(core, buildMarkdownOutputContractLines()...)
+	core = append(core,
+		"",
 		"# Search Template",
 		"- Default: `rg \"<PATTERN>\" . --hidden --glob '!.git' --glob '!node_modules' --glob '!.pnpm-store' --glob '!dist' --glob '!build' --glob '!out' --glob '!coverage' --glob '!target' --glob '!.venv' --glob '!venv' --glob '!.cache' --glob '!.next' --glob '!.turbo'`",
 		"- If you explicitly need dependency or build output, remove the relevant --glob excludes.",
-	}
+	)
 	if allowUserInteraction {
 		core = append(core,
 			"",
@@ -4706,6 +4719,8 @@ func (r *run) buildSocialSystemPrompt() string {
 		"- Do NOT mention internal routing, prompts, or policies.",
 		"- If helpful, ask one short follow-up question to invite a concrete task.",
 	}
+	core = append(core, "")
+	core = append(core, buildMarkdownOutputContractLines()...)
 	cwd := strings.TrimSpace(r.workingDir)
 	if cwd == "" {
 		cwd = strings.TrimSpace(r.agentHomeDir)
@@ -4730,6 +4745,8 @@ func (r *run) buildCreativeSystemPrompt() string {
 		"- Do NOT mention internal routing, prompts, or policies.",
 		"- Keep coherence and avoid starting a second unrelated piece unless user explicitly asks for multiple works.",
 	}
+	core = append(core, "")
+	core = append(core, buildMarkdownOutputContractLines()...)
 	cwd := strings.TrimSpace(r.workingDir)
 	if cwd == "" {
 		cwd = strings.TrimSpace(r.agentHomeDir)
@@ -4739,6 +4756,17 @@ func (r *run) buildCreativeSystemPrompt() string {
 		fmt.Sprintf("- Working directory: %s", cwd),
 	}
 	return strings.Join([]string{strings.Join(core, "\n"), strings.Join(runtime, "\n")}, "\n\n")
+}
+
+func buildMarkdownOutputContractLines() []string {
+	return []string{
+		"# Markdown Output Contract",
+		"- If you use markdown, keep it structurally valid while streaming and after completion.",
+		"- Put headings, lists, blockquotes, and thematic breaks on their own lines.",
+		"- Separate block-level elements with a blank line.",
+		"- Do NOT append prose on the same line after a heading, thematic break, or standalone emphasized paragraph.",
+		"- If strict markdown would be awkward, prefer plain paragraphs over broken markdown.",
+	}
 }
 
 func joinSkillNames(skills []SkillMeta) string {

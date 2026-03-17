@@ -11,6 +11,7 @@ import { cn } from '@floegence/floe-webapp-core';
 
 import { StreamingMarkdownTail } from '../markdown/StreamingMarkdownTail';
 import { createMarkdownRenderer } from '../markdown/markedConfig';
+import { normalizeMarkdownForDisplay } from '../markdown/normalizeMarkdownForDisplay';
 import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel';
 import { StreamingCursor } from '../status/StreamingCursor';
 import type { MarkdownRenderSnapshot } from '../types';
@@ -171,7 +172,8 @@ function isAppendCompatible(base: string, current: string): boolean {
 export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
   const [renderedSnapshot, setRenderedSnapshot] = createSignal<MarkdownRenderSnapshot | null>(null);
   const [renderedText, setRenderedText] = createSignal('');
-  const isEmptyStreaming = createMemo(() => props.streaming === true && String(props.content ?? '') === '');
+  const normalizedContent = createMemo(() => normalizeMarkdownForDisplay(String(props.content ?? '')));
+  const isEmptyStreaming = createMemo(() => props.streaming === true && normalizedContent() === '');
 
   let destroyed = false;
   let inFlight = false;
@@ -237,8 +239,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
   const scheduleRender = (content: string, streaming: boolean) => {
     if (destroyed) return;
 
-    const text = String(content ?? '');
-    if (!text) {
+    if (!content) {
       clearSnapshot();
       return;
     }
@@ -248,11 +249,11 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
     }
 
     if (inFlight) {
-      queuedContent = { content: text, streaming };
+      queuedContent = { content, streaming };
       return;
     }
 
-    startRender(text, streaming);
+    startRender(content, streaming);
   };
 
   onCleanup(() => {
@@ -261,7 +262,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
   });
 
   createEffect(() => {
-    scheduleRender(String(props.content ?? ''), props.streaming === true);
+    scheduleRender(normalizedContent(), props.streaming === true);
   });
 
   const renderState = createMemo(() => {
@@ -269,7 +270,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
     if (!snapshot) return null;
 
     const base = renderedText();
-    const current = String(props.content ?? '');
+    const current = normalizedContent();
     if (!isAppendCompatible(base, current)) return null;
 
     return {
@@ -289,7 +290,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
           </div>
         }
       >
-        <Show when={renderState()} fallback={<StreamingText text={String(props.content ?? '')} />}>
+        <Show when={renderState()} fallback={<StreamingText text={normalizedContent()} />}>
           {(stateAccessor) => {
             const state = () => stateAccessor();
             const shouldRenderRawSuffix = () =>

@@ -131,6 +131,7 @@ type run struct {
 	muAssistant              sync.Mutex
 	assistantCreatedAtUnixMs int64
 	assistantBlocks          []any
+	assistantCanonicalTurns  []string
 
 	finalizationReason string
 	currentModelID     string
@@ -1244,6 +1245,98 @@ func (r *run) assistantMarkdownTextSnapshot() string {
 		parts = append(parts, txt)
 	}
 	return strings.TrimSpace(strings.Join(parts, "\n\n"))
+}
+
+func normalizeCanonicalMarkdownText(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	return strings.TrimSpace(text)
+}
+
+func (r *run) rememberCanonicalMarkdownTurn(text string) {
+	if r == nil {
+		return
+	}
+	text = normalizeCanonicalMarkdownText(text)
+	if text == "" {
+		return
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	if n := len(r.assistantCanonicalTurns); n > 0 && strings.TrimSpace(r.assistantCanonicalTurns[n-1]) == text {
+		return
+	}
+	r.assistantCanonicalTurns = append(r.assistantCanonicalTurns, text)
+}
+
+func (r *run) canonicalMarkdownTextSnapshot(fallback string) string {
+	if r == nil {
+		return ""
+	}
+	r.muAssistant.Lock()
+	parts := append([]string(nil), r.assistantCanonicalTurns...)
+	r.muAssistant.Unlock()
+	if len(parts) == 0 {
+		return normalizeCanonicalMarkdownText(fallback)
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n\n"))
+}
+
+func (r *run) pureMarkdownBlockIndexLocked() int {
+	if r == nil {
+		return -1
+	}
+	idx := -1
+	for i, blk := range r.assistantBlocks {
+		if blk == nil {
+			continue
+		}
+		b, ok := blk.(*persistedMarkdownBlock)
+		if !ok || b == nil {
+			return -1
+		}
+		if idx >= 0 {
+			return -1
+		}
+		idx = i
+	}
+	return idx
+}
+
+func (r *run) reconcileCanonicalMarkdownMessage(fallback string) bool {
+	if r == nil {
+		return false
+	}
+	canonical := r.canonicalMarkdownTextSnapshot(fallback)
+	if canonical == "" {
+		return false
+	}
+
+	r.muAssistant.Lock()
+	idx := r.pureMarkdownBlockIndexLocked()
+	if idx < 0 || idx >= len(r.assistantBlocks) {
+		r.muAssistant.Unlock()
+		return false
+	}
+	block, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
+	if !ok || block == nil {
+		r.muAssistant.Unlock()
+		return false
+	}
+	if strings.TrimSpace(block.Content) == canonical {
+		r.muAssistant.Unlock()
+		return false
+	}
+	block.Content = canonical
+	r.muAssistant.Unlock()
+
+	r.sendStreamEvent(streamEventBlockSet{
+		Type:       "block-set",
+		MessageID:  r.messageID,
+		BlockIndex: idx,
+		Block:      persistedMarkdownBlock{Type: "markdown", Content: canonical},
+	})
+	return true
 }
 
 func (r *run) sessionMetaForTool() (*session.Meta, error) {
