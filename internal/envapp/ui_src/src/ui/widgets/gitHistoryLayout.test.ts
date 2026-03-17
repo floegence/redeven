@@ -235,6 +235,7 @@ describe('browser workspace layout wiring', () => {
 
     expect(src).toContain("import { GitViewNav } from './GitViewNav';");
     expect(src).toContain('navigationLabel="View"');
+    expect(src).toContain('sidebarBodyClass="overflow-hidden"');
     expect(src).toContain('<GitViewNav');
     expect(src).not.toContain('headerActions=');
     expect(src).not.toContain("from './GitChrome'");
@@ -253,6 +254,8 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('space-y-1.5 sm:space-y-2');
     expect(src).toContain('WORKSPACE_VIEW_SECTIONS');
     expect(src).toContain('No files in this section.');
+    expect(src).toContain('data-testid="git-sidebar-scroll-region"');
+    expect(src).toContain('overflow-auto overscroll-contain');
     expect(src).toContain('grid min-h-5 grid-cols-[minmax(0,1fr)_auto] items-center gap-2');
     expect(src).toContain('min-h-4 truncate text-[10px]');
     expect(src).toContain('gitToneSelectableCardClass(tone(), active())');

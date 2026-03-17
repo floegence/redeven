@@ -86,6 +86,9 @@ describe('GitWorkspace interactions', () => {
       expect(host.textContent).toContain('View');
       expect(host.querySelectorAll('[role="radiogroup"][aria-label="Browser mode"]').length).toBe(1);
       expect(host.querySelectorAll('[role="tablist"][aria-label="Git views"]').length).toBe(1);
+      const scrollRegion = host.querySelector('[data-testid="git-sidebar-scroll-region"]');
+      expect(scrollRegion).toBeTruthy();
+      expect(scrollRegion?.querySelector('[role="tablist"][aria-label="Git views"]')).toBeNull();
 
       const historyButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim().startsWith('Graph'));
       expect(historyButton).toBeTruthy();
