@@ -122,14 +122,6 @@ function defaultCompareTarget(branches: GitListBranchesResponse | null | undefin
   return names[0] ?? 'main';
 }
 
-function workspaceHasChanges(workspace: GitListWorkspaceChangesResponse | null | undefined, repoSummary: GitRepoSummaryResponse | null | undefined): boolean {
-  const summary = workspace?.summary ?? repoSummary?.workspaceSummary;
-  return Number(summary?.stagedCount ?? 0) > 0
-    || Number(summary?.unstagedCount ?? 0) > 0
-    || Number(summary?.untrackedCount ?? 0) > 0
-    || Number(summary?.conflictedCount ?? 0) > 0;
-}
-
 function branchStatusEmptyState(branch: GitBranchSummary | null | undefined): {
   title: string;
   detail: string;
@@ -756,21 +748,12 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     const branch = props.selectedBranch;
     if (!branch || !props.onMergeBranch) return '';
     if (branch.current) return 'Select another branch to merge into the current branch.';
-    const headRef = String(props.repoSummary?.headRef ?? '').trim();
-    if (!headRef || headRef === 'HEAD' || props.repoSummary?.detached) {
-      return 'Attach HEAD to a local branch before merging.';
-    }
-    if (workspaceHasChanges(props.workspace, props.repoSummary)) {
-      return 'Current workspace must be clean before merging.';
-    }
     return '';
   };
   const deleteHelperText = () => {
     const branch = props.selectedBranch;
     if (!branch || branch.kind !== 'local') return '';
     if (branch.current) return 'Switch to another branch before deleting it.';
-    const worktreePath = String(branch.worktreePath ?? '').trim();
-    if (worktreePath) return `This branch is checked out in a linked worktree: ${worktreePath}`;
     return '';
   };
   const actionHelperTexts = createMemo(() => {
@@ -782,9 +765,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     !mergeAvailable()
     || props.mergeBusy
     || props.selectedBranch?.current
-    || props.repoSummary?.detached
-    || String(props.repoSummary?.headRef ?? '').trim() === 'HEAD'
-    || workspaceHasChanges(props.workspace, props.repoSummary)
   );
   const mergeLabel = () => (props.mergeBusy ? 'Merging...' : 'Merge Into Current');
   const linkedWorktreeDeleteDialog = () => {
