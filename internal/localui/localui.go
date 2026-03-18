@@ -70,6 +70,7 @@ type Server struct {
 
 	bind             BindSpec
 	configPath       string
+	runtimeStatePath string
 	version          string
 	desktopManaged   bool
 	effectiveRunMode string
@@ -142,6 +143,7 @@ func New(opts Options) (*Server, error) {
 		log:              logger,
 		bind:             bind,
 		configPath:       strings.TrimSpace(opts.ConfigPath),
+		runtimeStatePath: localRuntimeStatePath(opts.ConfigPath),
 		version:          strings.TrimSpace(opts.Version),
 		desktopManaged:   opts.DesktopManaged,
 		effectiveRunMode: strings.TrimSpace(opts.EffectiveRunMode),
@@ -203,6 +205,18 @@ func (s *Server) Start(ctx context.Context) error {
 		}()
 	}
 
+	if err := writeRuntimeState(s.runtimeStatePath, runtimeState{
+		LocalUIURL:       firstNonEmptyString(s.DisplayURLs()),
+		LocalUIURLs:      s.DisplayURLs(),
+		EffectiveRunMode: s.effectiveRunMode,
+		RemoteEnabled:    s.remoteEnabled,
+		DesktopManaged:   s.desktopManaged,
+		PID:              os.Getpid(),
+	}); err != nil {
+		_ = s.Close()
+		return fmt.Errorf("write local runtime state: %w", err)
+	}
+
 	s.log.Info("local ui listening", "bind", s.ListenLabel())
 	return nil
 }
@@ -218,6 +232,9 @@ func (s *Server) Close() error {
 	}
 	for _, ln := range s.listeners {
 		_ = ln.Close()
+	}
+	if err := removeRuntimeState(s.runtimeStatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		s.log.Warn("failed to remove local runtime state", "path", s.runtimeStatePath, "error", err)
 	}
 	s.srv = nil
 	s.listeners = nil

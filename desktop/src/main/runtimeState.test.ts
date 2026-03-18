@@ -1,0 +1,82 @@
+import fs from 'node:fs/promises';
+import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+
+import { describe, expect, it } from 'vitest';
+
+import { defaultRuntimeStatePath, loadAttachableRuntimeState } from './runtimeState';
+
+describe('runtimeState', () => {
+  it('uses the standard runtime state path under the redeven home directory', () => {
+    expect(defaultRuntimeStatePath({ HOME: '/Users/tester' }, () => '/ignored')).toBe('/Users/tester/.redeven/runtime/local-ui.json');
+  });
+
+  it('falls back to the current working directory when no home directory is available', () => {
+    expect(defaultRuntimeStatePath({}, () => '')).toBe(path.resolve('runtime', 'local-ui.json'));
+  });
+
+  it('loads an attachable loopback runtime from disk', async () => {
+    const server = http.createServer((request, response) => {
+      if (request.url === '/_redeven_proxy/env/') {
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end('<html>ok</html>');
+        return;
+      }
+      response.writeHead(404);
+      response.end('not found');
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+      server.once('error', reject);
+    });
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('expected a TCP server address');
+      }
+
+      const runtimeStateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-state-'));
+      const runtimeStateFile = path.join(runtimeStateDir, 'local-ui.json');
+      await fs.writeFile(runtimeStateFile, JSON.stringify({
+        local_ui_url: `http://127.0.0.1:${address.port}/`,
+        local_ui_urls: [`http://127.0.0.1:${address.port}/`],
+        effective_run_mode: 'hybrid',
+        remote_enabled: true,
+        desktop_managed: true,
+      }), 'utf8');
+
+      const startup = await loadAttachableRuntimeState(runtimeStateFile);
+      expect(startup).toEqual({
+        local_ui_url: `http://127.0.0.1:${address.port}/`,
+        local_ui_urls: [`http://127.0.0.1:${address.port}/`],
+        effective_run_mode: 'hybrid',
+        remote_enabled: true,
+        desktop_managed: true,
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    }
+  });
+
+  it('rejects runtime state entries that point to non-loopback hosts', async () => {
+    const runtimeStateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-state-'));
+    const runtimeStateFile = path.join(runtimeStateDir, 'local-ui.json');
+    await fs.writeFile(runtimeStateFile, JSON.stringify({
+      local_ui_url: 'https://example.com/',
+      local_ui_urls: ['https://example.com/'],
+    }), 'utf8');
+
+    await expect(loadAttachableRuntimeState(runtimeStateFile)).resolves.toBeNull();
+  });
+});

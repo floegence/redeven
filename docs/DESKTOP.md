@@ -13,6 +13,7 @@ This document describes the public Electron desktop shell that is published toge
 - Electron is a thin shell.
 - `redeven run --mode desktop --desktop-managed` remains the only runtime entrypoint.
 - The desktop shell waits for a machine-readable startup report file from `redeven`.
+- If a compatible Local UI instance is already running from the same default state directory, the desktop shell reuses that loopback URL instead of failing on the agent lock.
 - Electron only allows loopback navigation for the reported Local UI origin and opens all other URLs in the system browser.
 
 ## Runtime contract
@@ -49,8 +50,10 @@ Each public `vX.Y.Z` release includes:
 - `redeven_linux_arm64.tar.gz`
 - `redeven_darwin_amd64.tar.gz`
 - `redeven_darwin_arm64.tar.gz`
-- `Redeven-Desktop-X.Y.Z-linux-x64.AppImage`
-- `Redeven-Desktop-X.Y.Z-linux-arm64.AppImage`
+- `Redeven-Desktop-X.Y.Z-linux-x64.deb`
+- `Redeven-Desktop-X.Y.Z-linux-x64.rpm`
+- `Redeven-Desktop-X.Y.Z-linux-arm64.deb`
+- `Redeven-Desktop-X.Y.Z-linux-arm64.rpm`
 - `Redeven-Desktop-X.Y.Z-mac-x64.dmg`
 - `Redeven-Desktop-X.Y.Z-mac-arm64.dmg`
 
@@ -72,6 +75,18 @@ Unpackaged Electron runs can point to a local agent binary with:
 cd desktop
 REDEVEN_DESKTOP_AGENT_BINARY=../redeven npm run start
 ```
+
+## macOS distribution
+
+- Local ad-hoc builds (`REDEVEN_DESKTOP_MAC_IDENTITY=-`) are for development only.
+- Public macOS release artifacts must be signed with a `Developer ID Application` certificate and notarized with Apple before they are uploaded to GitHub Release.
+- The release workflow now requires the following repository secrets for macOS jobs:
+  - `REDEVEN_DESKTOP_MAC_CERT_BASE64`
+  - `REDEVEN_DESKTOP_MAC_CERT_PASSWORD`
+  - `REDEVEN_DESKTOP_MAC_IDENTITY`
+  - `REDEVEN_DESKTOP_MAC_NOTARY_API_KEY`
+  - `REDEVEN_DESKTOP_MAC_NOTARY_API_KEY_ID`
+  - `REDEVEN_DESKTOP_MAC_NOTARY_API_ISSUER`
 
 ## code-server scope
 
