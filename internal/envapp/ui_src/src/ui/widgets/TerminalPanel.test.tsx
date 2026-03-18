@@ -583,6 +583,8 @@ describe('TerminalPanel', () => {
 
     expect(host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]')).toBeNull();
+    expect(host.textContent).not.toContain('Session: session-1');
+    expect(host.textContent).not.toContain('History:');
 
     (host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]') as HTMLButtonElement | null)?.click();
     await Promise.resolve();
@@ -590,6 +592,8 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeNull();
     expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('0px');
     expect(host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]')).toBeTruthy();
+    expect(host.textContent).toContain('Session: session-1');
+    expect(host.textContent).toContain('History:');
     expect(forceResizeSpy).toHaveBeenCalled();
 
     forceResizeSpy.mockClear();
@@ -642,6 +646,8 @@ describe('TerminalPanel', () => {
     expect(terminalContent?.style.paddingBottom).toBe('');
     expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('132px');
     expect(terminalSurface?.style.bottom).toBe('var(--terminal-bottom-inset)');
+    expect(host.textContent).not.toContain('Session: session-1');
+    expect(host.textContent).not.toContain('History:');
   });
 
   it('maps mobile touch drags on the terminal surface to terminal scrollback', async () => {
