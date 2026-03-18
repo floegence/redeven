@@ -70,6 +70,42 @@ function SectionTitle(props: { title: string; description: string }) {
   );
 }
 
+type MobileInputOptionCardProps = {
+  selected: boolean;
+  label: string;
+  description: string;
+  onClick: () => void;
+};
+
+function MobileInputOptionCard(props: MobileInputOptionCardProps) {
+  return (
+    <Button
+      size="sm"
+      variant={props.selected ? 'primary' : 'outline'}
+      class={cn(
+        'h-auto w-full flex-col items-start gap-2 px-3 py-3 text-left',
+        props.selected ? 'shadow-sm' : 'bg-transparent',
+      )}
+      onClick={props.onClick}
+    >
+      <span class="flex w-full items-center justify-between gap-2 text-sm font-medium">
+        <span>{props.label}</span>
+        <span class="text-[10px] font-semibold uppercase tracking-[0.12em] opacity-80">
+          {props.selected ? 'Selected' : 'Tap to use'}
+        </span>
+      </span>
+      <span
+        class={cn(
+          'whitespace-normal text-xs leading-5',
+          props.selected ? 'text-primary-foreground/90' : 'text-muted-foreground',
+        )}
+      >
+        {props.description}
+      </span>
+    </Button>
+  );
+}
+
 export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
   const layout = useLayout();
   const isMobile = () => layout.isMobile();
@@ -79,7 +115,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title="Terminal settings"
-      description="Customize theme, font, and font size for all terminal sessions."
+      description="Customize the default theme, font, and mobile input behavior for terminal sessions."
       class={cn(
         'flex flex-col overflow-hidden rounded-md p-0',
         '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:flex-col [&>div:nth-child(2)]:gap-5',
@@ -97,25 +133,27 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         <section class="space-y-3">
           <SectionTitle
             title="Mobile input"
-            description="Choose the default keyboard for mobile terminal sessions."
+            description="Choose one default input mode for every mobile terminal session."
           />
+          <div class="rounded-md border border-border/70 bg-muted/[0.14] p-3">
+            <p class="text-xs leading-5 text-muted-foreground">
+              Only one mode can be active at a time. Use Floe Keyboard to keep the system keyboard hidden until you
+              explicitly switch back to System IME.
+            </p>
+          </div>
           <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Button
-              size="sm"
-              variant={props.mobileInputMode === 'floe' ? 'primary' : 'outline'}
-              class="w-full justify-start"
+            <MobileInputOptionCard
+              selected={props.mobileInputMode === 'floe'}
+              label="Floe Keyboard"
+              description="Keeps terminal taps focused on the terminal surface and shows Floe suggestions, quick inserts, scripts, and path completions."
               onClick={() => props.onMobileInputModeChange('floe')}
-            >
-              Floe Keyboard
-            </Button>
-            <Button
-              size="sm"
-              variant={props.mobileInputMode === 'system' ? 'primary' : 'outline'}
-              class="w-full justify-start"
+            />
+            <MobileInputOptionCard
+              selected={props.mobileInputMode === 'system'}
+              label="System IME"
+              description="Focuses the native terminal input so you can use the device keyboard, IME candidate bar, and platform text features."
               onClick={() => props.onMobileInputModeChange('system')}
-            >
-              System IME
-            </Button>
+            />
           </div>
         </section>
       </Show>

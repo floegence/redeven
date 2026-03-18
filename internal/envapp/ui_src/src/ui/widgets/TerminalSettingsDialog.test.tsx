@@ -100,7 +100,7 @@ describe('TerminalSettingsDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('uses the mobile dialog layout and exposes mobile input mode controls on mobile', () => {
+  it('uses the mobile dialog layout and exposes mutually exclusive mobile input mode controls', () => {
     layoutState.mobile = true;
 
     const onMobileInputModeChange = vi.fn();
@@ -130,7 +130,14 @@ describe('TerminalSettingsDialog', () => {
     expect(dialog?.className).toContain('h-[calc(100dvh-0.5rem)]');
     expect(dialog?.className).toContain('w-[calc(100vw-0.5rem)]');
     expect(host.textContent).toContain('Mobile input');
+    expect(host.textContent).toContain('Only one mode can be active at a time.');
+    expect(host.textContent).toContain('Floe suggestions');
+    expect(host.textContent).toContain('platform text features');
+
     Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('System IME'))?.click();
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Floe Keyboard'))?.click();
+
     expect(onMobileInputModeChange).toHaveBeenCalledWith('system');
+    expect(onMobileInputModeChange).toHaveBeenCalledWith('floe');
   });
 });
