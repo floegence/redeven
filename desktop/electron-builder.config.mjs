@@ -2,7 +2,10 @@ import path from 'node:path';
 
 const desktopVersion = String(process.env.REDEVEN_DESKTOP_VERSION ?? '').trim() || '0.1.0';
 const bundledAgentBinary = String(process.env.REDEVEN_DESKTOP_AGENT_BINARY ?? '').trim();
-const macIdentity = String(process.env.REDEVEN_DESKTOP_MAC_IDENTITY ?? '').trim();
+const macIdentity = String(process.env.REDEVEN_DESKTOP_MAC_IDENTITY ?? '')
+  .trim()
+  .replace(/^Developer ID Application:\s*/u, '')
+  .trim();
 const buildResourcesDir = path.resolve('build');
 
 if (!bundledAgentBinary) {
