@@ -1436,16 +1436,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const moreItems = createMemo<DropdownItem[]>(() => {
     const items: DropdownItem[] = [{ id: 'search', label: 'Search' }];
-    if (isMobileLayout()) {
-      if (mobileInputMode() === 'system') {
-        items.push({ id: 'use_floe_keyboard', label: 'Use Floe Keyboard' });
-      } else {
-        items.push({ id: 'use_system_ime', label: 'Use System IME' });
-        items.push({
-          id: mobileKeyboardVisible() ? 'hide_floe_keyboard' : 'show_floe_keyboard',
-          label: mobileKeyboardVisible() ? 'Hide Floe Keyboard' : 'Show Floe Keyboard',
-        });
-      }
+    if (isMobileLayout() && mobileInputMode() === 'floe') {
+      items.push({
+        id: mobileKeyboardVisible() ? 'hide_floe_keyboard' : 'show_floe_keyboard',
+        label: mobileKeyboardVisible() ? 'Hide Floe Keyboard' : 'Show Floe Keyboard',
+      });
     }
     items.push({ id: 'settings', label: 'Terminal settings' });
     return items;
@@ -1724,16 +1719,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const handleMoreSelect = (id: string) => {
     if (id === 'search') {
       openSearch();
-      return;
-    }
-
-    if (id === 'use_system_ime') {
-      handleMobileInputModeChange('system');
-      return;
-    }
-
-    if (id === 'use_floe_keyboard') {
-      handleMobileInputModeChange('floe');
       return;
     }
 

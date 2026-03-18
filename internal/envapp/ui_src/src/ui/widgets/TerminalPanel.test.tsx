@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Show } from 'solid-js';
+import { For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -137,15 +137,17 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     <div data-testid="dropdown">
       <div>{props.trigger}</div>
       <div>
-        {props.items.map((item: any) => (
-          item.separator ? (
-            <div data-testid={`separator-${item.id}`} />
-          ) : (
-            <button type="button" data-testid={`dropdown-item-${item.id}`} onClick={() => props.onSelect(item.id)}>
-              {item.label}
-            </button>
-          )
-        ))}
+        <For each={props.items}>
+          {(item: any) => (
+            item.separator ? (
+              <div data-testid={`separator-${item.id}`} />
+            ) : (
+              <button type="button" data-testid={`dropdown-item-${item.id}`} onClick={() => props.onSelect(item.id)}>
+                {item.label}
+              </button>
+            )
+          )}
+        </For>
       </div>
     </div>
   ),
@@ -165,7 +167,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     />
   ),
   MobileKeyboard: (props: any) => (
-    props.visible ? (
+    <Show when={props.visible}>
       <div
         data-testid="mobile-keyboard"
         ref={(el) => {
@@ -205,7 +207,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
           </button>
         ))}
       </div>
-    ) : null
+    </Show>
   ),
   Tabs: (props: any) => (
     <div>
@@ -418,6 +420,10 @@ describe('TerminalPanel', () => {
 
     expect(searchAction).toBeTruthy();
     expect(settingsAction).toBeTruthy();
+    expect(host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]')).toBeNull();
+    expect(host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]')).toBeNull();
+    expect(host.querySelector('[data-testid="dropdown-item-use_floe_keyboard"]')).toBeNull();
+    expect(host.querySelector('[data-testid="dropdown-item-use_system_ime"]')).toBeNull();
     expect(host.textContent).not.toContain('Theme:');
     expect(host.textContent).not.toContain('Font:');
     expect(host.textContent).not.toContain('System Theme');
@@ -491,7 +497,7 @@ describe('TerminalPanel', () => {
     expect(focusSpy).not.toHaveBeenCalled();
   });
 
-  it('switches from Floe keyboard mode to system IME from the mobile More menu', async () => {
+  it('switches from Floe keyboard mode to system IME only from terminal settings', async () => {
     layoutState.mobile = true;
     terminalPrefsState.mobileInputMode = 'floe';
 
@@ -503,11 +509,66 @@ describe('TerminalPanel', () => {
     await Promise.resolve();
     focusSpy.mockClear();
 
-    (host.querySelector('[data-testid="dropdown-item-use_system_ime"]') as HTMLButtonElement | null)?.click();
+    expect(host.querySelector('[data-testid="dropdown-item-use_system_ime"]')).toBeNull();
+    expect(host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]')).toBeTruthy();
+
+    (host.querySelector('[data-testid="dropdown-item-settings"]') as HTMLButtonElement | null)?.click();
+    await Promise.resolve();
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('System IME'))?.click();
     await Promise.resolve();
 
     expect(terminalPrefsState.mobileInputMode).toBe('system');
+    expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeNull();
+
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Close'))?.click();
+    await Promise.resolve();
+
     expect(focusSpy).toHaveBeenCalled();
+  });
+
+  it('keeps temporary Floe keyboard visibility actions in the mobile More menu only for Floe mode', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]')).toBeNull();
+
+    (host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]') as HTMLButtonElement | null)?.click();
+    await Promise.resolve();
+
+    expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeNull();
+    expect(host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]')).toBeTruthy();
+
+    (host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]') as HTMLButtonElement | null)?.click();
+    await Promise.resolve();
+
+    expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]')).toBeTruthy();
+  });
+
+  it('does not show Floe keyboard actions in the mobile More menu while System IME mode is active', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'system';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]')).toBeNull();
+    expect(host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]')).toBeNull();
+    expect(host.querySelector('[data-testid="dropdown-item-use_floe_keyboard"]')).toBeNull();
+    expect(host.querySelector('[data-testid="dropdown-item-use_system_ime"]')).toBeNull();
+    expect(host.querySelector('[data-testid="dropdown-item-settings"]')).toBeTruthy();
   });
 
   it('suppresses the system IME and matches the terminal inset to the Floe keyboard height', async () => {
