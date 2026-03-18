@@ -123,7 +123,7 @@ jobs:
           node-version: "24"
 
       - name: Download matching agent package
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: package-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/agent
@@ -175,14 +175,14 @@ jobs:
           fetch-depth: 0
 
       - name: Download all package artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           path: dist
           pattern: package-*
           merge-multiple: true
 
       - name: Download all desktop artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           path: dist
           pattern: desktop-*
@@ -209,7 +209,7 @@ jobs:
         run: ./scripts/generate_release_notes.sh "${GITHUB_REF_NAME}" dist/RELEASE_NOTES.md
 
       - name: Publish release assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.4.2
         with:
           body_path: dist/RELEASE_NOTES.md
           generate_release_notes: true
