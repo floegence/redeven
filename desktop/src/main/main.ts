@@ -1,6 +1,12 @@
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, shell } from 'electron';
 
 import { startManagedAgent, type ManagedAgent } from './agentProcess';
+import {
+  blockedActionFromURL,
+  blockedPageDataURL,
+  isBlockedActionURL,
+} from './blockedPage';
+import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import { isAllowedAppNavigation } from './navigation';
 import { resolveBundledAgentPath } from './paths';
 
@@ -9,6 +15,7 @@ let managedAgent: ManagedAgent | null = null;
 let allowedBaseURL = '';
 let quitting = false;
 const childWindows = new Set<BrowserWindow>();
+let blockedLaunch: LaunchBlockedReport | null = null;
 
 function focusMainWindow(): void {
   if (!mainWindow) return;
@@ -21,6 +28,33 @@ function focusMainWindow(): void {
 function openExternal(url: string): void {
   if (!url || url === 'about:blank') return;
   void shell.openExternal(url);
+}
+
+function handleBlockedAction(url: string): boolean {
+  const action = blockedActionFromURL(url);
+  if (!action) {
+    return false;
+  }
+  if (action === 'retry') {
+    blockedLaunch = null;
+    void showMainWindow().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      dialog.showErrorBox('Redeven Desktop failed to retry', message || 'Unknown retry error.');
+      app.quit();
+    });
+    return true;
+  }
+  if (action === 'copy-diagnostics') {
+    if (blockedLaunch) {
+      clipboard.writeText(formatBlockedLaunchDiagnostics(blockedLaunch));
+    }
+    return true;
+  }
+  if (action === 'quit') {
+    app.quit();
+    return true;
+  }
+  return false;
 }
 
 function createBrowserWindow(targetURL: string, parent?: BrowserWindow): BrowserWindow {
@@ -42,6 +76,9 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow): Browser
 
   const { webContents } = win;
   webContents.setWindowOpenHandler(({ url }) => {
+    if (handleBlockedAction(url)) {
+      return { action: 'deny' };
+    }
     if (isAllowedAppNavigation(url, allowedBaseURL)) {
       createBrowserWindow(url, win);
     } else {
@@ -50,6 +87,11 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow): Browser
     return { action: 'deny' };
   });
   webContents.on('will-navigate', (event, url) => {
+    if (isBlockedActionURL(url)) {
+      event.preventDefault();
+      handleBlockedAction(url);
+      return;
+    }
     if (isAllowedAppNavigation(url, allowedBaseURL)) {
       return;
     }
@@ -72,6 +114,7 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow): Browser
 
 async function ensureAgentStarted(): Promise<string> {
   if (managedAgent) {
+    blockedLaunch = null;
     return managedAgent.startup.local_ui_url;
   }
 
@@ -80,7 +123,7 @@ async function ensureAgentStarted(): Promise<string> {
     resourcesPath: process.resourcesPath,
     appPath: app.getAppPath(),
   });
-  managedAgent = await startManagedAgent({
+  const launch = await startManagedAgent({
     executablePath,
     tempRoot: app.getPath('temp'),
     onLog: (stream, chunk) => {
@@ -89,6 +132,15 @@ async function ensureAgentStarted(): Promise<string> {
       console.log(`[redeven:${stream}] ${text}`);
     },
   });
+  if (launch.kind === 'blocked') {
+    managedAgent = null;
+    blockedLaunch = launch.blocked;
+    allowedBaseURL = '';
+    return blockedPageDataURL(launch.blocked);
+  }
+
+  blockedLaunch = null;
+  managedAgent = launch.managedAgent;
   allowedBaseURL = managedAgent.startup.local_ui_url;
   return allowedBaseURL;
 }
