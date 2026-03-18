@@ -12,6 +12,9 @@
     "test": "vitest run",
     "package": "npm run build && electron-builder --config electron-builder.config.mjs --publish never"
   },
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@types/node": "^20.19.24",
