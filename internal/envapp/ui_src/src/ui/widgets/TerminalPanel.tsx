@@ -961,6 +961,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return mobileKeyboardInsetPx();
   });
 
+  const showTerminalStatusBar = createMemo(() => {
+    return Boolean(activeSessionId()) && !(shouldUseFloeMobileKeyboard() && mobileKeyboardVisible());
+  });
+
   const shouldRestoreTerminalFocus = () => {
     return !isMobileLayout() || mobileInputMode() === 'system';
   };
@@ -2161,7 +2165,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       <Show when={error()}>
         <div class="p-2 text-[11px] text-error border-t border-border bg-background/80 break-words">{error()}</div>
       </Show>
-      <Show when={activeSessionId()}>
+      <Show when={showTerminalStatusBar()}>
         <div class="flex items-center justify-between px-3 py-1 border-t border-border text-[10px] text-muted-foreground">
           <span>Session: {activeSessionId()}</span>
           <span>History: {historyBytes() === null ? '-' : formatBytes(historyBytes() ?? 0)}</span>
