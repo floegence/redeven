@@ -84,6 +84,11 @@ jobs:
       - name: UI lint
         run: ./scripts/lint_ui.sh
 
+      - name: Setup Desktop Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+
       - name: Desktop checks
         run: ./scripts/check_desktop.sh
 

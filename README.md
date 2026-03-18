@@ -1,7 +1,7 @@
 # Redeven Agent
 
 ![Go Version](https://img.shields.io/badge/Go-1.25.8-00ADD8?logo=go)
-![Node Version](https://img.shields.io/badge/Node.js-20-339933?logo=node.js)
+![Node Version](https://img.shields.io/badge/Node.js-24-339933?logo=node.js)
 ![Architecture](https://img.shields.io/badge/Architecture-E2EE%20Endpoint-5B2CFF)
 
 Redeven Agent is the endpoint runtime in the Redeven + Flowersec architecture.
@@ -38,7 +38,7 @@ Management channel and E2EE transport are split by design:
 ### Prerequisites
 
 - Go `1.25.8`
-- Node.js `20`
+- Node.js `24`
 - npm
 - pnpm (or Node.js `corepack`)
 
@@ -57,6 +57,7 @@ Notes:
 - Generated `dist` assets are not checked into git.
 - `./scripts/lint_ui.sh` validates the Env App and Code App source packages before asset bundling.
 - `./scripts/check_desktop.sh` validates the Electron desktop shell package (lint, typecheck, tests, build).
+- Desktop development and packaging require Node.js `24+`.
 
 ### Enable local guardrails
 
