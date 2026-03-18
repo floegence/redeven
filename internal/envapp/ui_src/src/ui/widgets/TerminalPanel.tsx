@@ -51,6 +51,7 @@ import type { AskFlowerIntent } from '../pages/askFlowerIntent';
 import { normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../utils/askFlowerPath';
 import { resolveTerminalSurfaceTouchAction } from '../mobileViewportPolicy';
 import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSettingsDialog';
+import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
 
@@ -820,6 +821,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const [coreRegistrySeq, setCoreRegistrySeq] = createSignal(0);
   const [surfaceRegistrySeq, setSurfaceRegistrySeq] = createSignal(0);
+  let mobileKeyboardInsetSyncRaf: number | null = null;
 
   const registerCore = (id: string, core: TerminalCore | null) => {
     if (!id) return;
@@ -857,6 +859,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return;
     }
     actionsRegistry.delete(id);
+  };
+
+  const getActiveTerminalViewportElement = (): HTMLDivElement | null => {
+    const sid = activeSessionId();
+    if (!sid) return null;
+    const surface = surfaceRegistry.get(sid);
+    const viewport = surface?.parentElement;
+    return viewport instanceof HTMLDivElement ? viewport : null;
   };
 
   const handleNameUpdate = (sessionId: string, newName: string, workingDir: string) => {
@@ -1359,7 +1369,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   let searchInputEl: HTMLInputElement | null = null;
   let rootEl: HTMLDivElement | null = null;
-  let mobileKeyboardEl: HTMLDivElement | null = null;
+  const [mobileKeyboardElement, setMobileKeyboardElement] = createSignal<HTMLDivElement | null>(null);
 
   const getActiveCore = () => {
     const sid = activeSessionId();
@@ -1422,38 +1432,74 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const syncMobileKeyboardInset = () => {
-    if (!shouldUseFloeMobileKeyboard() || !mobileKeyboardVisible() || !mobileKeyboardEl) {
+    const keyboardEl = mobileKeyboardElement();
+    if (!shouldUseFloeMobileKeyboard() || !mobileKeyboardVisible() || !keyboardEl) {
       setMobileKeyboardInsetPx(0);
       return;
     }
 
-    const height = Math.max(0, Math.ceil(mobileKeyboardEl.getBoundingClientRect().height));
-    setMobileKeyboardInsetPx(height);
+    setMobileKeyboardInsetPx(resolveTerminalMobileKeyboardInsetPx({
+      viewportEl: getActiveTerminalViewportElement(),
+      keyboardEl,
+    }));
+  };
+
+  const cancelScheduledMobileKeyboardInsetSync = () => {
+    if (mobileKeyboardInsetSyncRaf === null) return;
+    cancelAnimationFrame(mobileKeyboardInsetSyncRaf);
+    mobileKeyboardInsetSyncRaf = null;
+  };
+
+  const scheduleMobileKeyboardInsetSync = () => {
+    if (mobileKeyboardInsetSyncRaf !== null) return;
+    mobileKeyboardInsetSyncRaf = requestAnimationFrame(() => {
+      mobileKeyboardInsetSyncRaf = null;
+      syncMobileKeyboardInset();
+    });
   };
 
   createEffect(() => {
     void shouldUseFloeMobileKeyboard();
     void mobileKeyboardVisible();
+    void activeSessionId();
+    void surfaceRegistrySeq();
+    const el = mobileKeyboardElement();
 
-    const el = mobileKeyboardEl;
-    if (!el) {
+    const viewportEl = getActiveTerminalViewportElement();
+    if (!el || !viewportEl) {
       setMobileKeyboardInsetPx(0);
       return;
     }
 
-    syncMobileKeyboardInset();
+    scheduleMobileKeyboardInsetSync();
 
-    if (!shouldUseFloeMobileKeyboard() || !mobileKeyboardVisible() || typeof ResizeObserver === 'undefined') {
+    if (!shouldUseFloeMobileKeyboard() || !mobileKeyboardVisible()) {
       return;
     }
 
-    const observer = new ResizeObserver(() => {
-      syncMobileKeyboardInset();
-    });
-    observer.observe(el);
+    const scheduleSync = () => {
+      scheduleMobileKeyboardInsetSync();
+    };
+    const visualViewport = typeof window !== 'undefined' ? window.visualViewport : null;
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => {
+        scheduleSync();
+      });
+    observer?.observe(el);
+    observer?.observe(viewportEl);
+    window.addEventListener('resize', scheduleSync);
+    window.addEventListener('orientationchange', scheduleSync);
+    visualViewport?.addEventListener('resize', scheduleSync);
+    visualViewport?.addEventListener('scroll', scheduleSync);
 
     onCleanup(() => {
-      observer.disconnect();
+      cancelScheduledMobileKeyboardInsetSync();
+      observer?.disconnect();
+      window.removeEventListener('resize', scheduleSync);
+      window.removeEventListener('orientationchange', scheduleSync);
+      visualViewport?.removeEventListener('resize', scheduleSync);
+      visualViewport?.removeEventListener('scroll', scheduleSync);
     });
   });
 
@@ -2136,7 +2182,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       <Show when={shouldUseFloeMobileKeyboard()}>
         <MobileKeyboard
           ref={(el) => {
-            mobileKeyboardEl = el;
+            setMobileKeyboardElement(el);
             syncMobileKeyboardInset();
           }}
           visible={mobileKeyboardVisible()}

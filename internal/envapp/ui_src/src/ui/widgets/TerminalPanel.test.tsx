@@ -26,6 +26,20 @@ const terminalScrollState = vi.hoisted(() => ({
   scrollbackLength: 200,
 }));
 
+const mobileKeyboardRectState = vi.hoisted(() => ({
+  left: 0,
+  top: 240,
+  width: 320,
+  height: 132,
+}));
+
+const terminalViewportRectState = vi.hoisted(() => ({
+  left: 0,
+  top: 24,
+  width: 320,
+  bottom: 320,
+}));
+
 const rpcFsMocks = vi.hoisted(() => ({
   getPathContext: vi.fn().mockResolvedValue({ agentHomePathAbs: '/workspace' }),
   list: vi.fn().mockResolvedValue({
@@ -181,14 +195,14 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
           Object.defineProperty(el, 'getBoundingClientRect', {
             configurable: true,
             value: () => ({
-              width: 320,
-              height: 132,
-              top: 0,
-              left: 0,
-              right: 320,
-              bottom: 132,
-              x: 0,
-              y: 0,
+              width: mobileKeyboardRectState.width,
+              height: mobileKeyboardRectState.height,
+              top: mobileKeyboardRectState.top,
+              left: mobileKeyboardRectState.left,
+              right: mobileKeyboardRectState.left + mobileKeyboardRectState.width,
+              bottom: mobileKeyboardRectState.top + mobileKeyboardRectState.height,
+              x: mobileKeyboardRectState.left,
+              y: mobileKeyboardRectState.top,
               toJSON: () => undefined,
             }),
           });
@@ -362,6 +376,14 @@ vi.mock('../utils/askFlowerPath', () => ({
   normalizeAbsolutePath: (value: string) => value,
 }));
 
+const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+
+async function settleTerminalPanel() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe('TerminalPanel', () => {
   beforeEach(() => {
     terminalPrefsState.userTheme = 'system';
@@ -374,6 +396,14 @@ describe('TerminalPanel', () => {
     terminalInputSpy.mockClear();
     terminalScrollState.alternateScreen = false;
     terminalScrollState.scrollbackLength = 200;
+    mobileKeyboardRectState.left = 0;
+    mobileKeyboardRectState.top = 240;
+    mobileKeyboardRectState.width = 320;
+    mobileKeyboardRectState.height = 132;
+    terminalViewportRectState.left = 0;
+    terminalViewportRectState.top = 24;
+    terminalViewportRectState.width = 320;
+    terminalViewportRectState.bottom = 320;
     Object.values(transportMocks).forEach((mock) => {
       if ('mockClear' in mock) mock.mockClear();
     });
@@ -433,11 +463,32 @@ describe('TerminalPanel', () => {
 
       vi.stubGlobal('PointerEvent', TestPointerEvent as unknown as typeof PointerEvent);
     }
+
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.style.getPropertyValue('--terminal-bottom-inset')) {
+        return {
+          top: terminalViewportRectState.top,
+          bottom: terminalViewportRectState.bottom,
+          left: terminalViewportRectState.left,
+          right: terminalViewportRectState.left + terminalViewportRectState.width,
+          width: terminalViewportRectState.width,
+          height: terminalViewportRectState.bottom - terminalViewportRectState.top,
+          x: terminalViewportRectState.left,
+          y: terminalViewportRectState.top,
+          toJSON: () => undefined,
+        } as DOMRect;
+      }
+      return originalGetBoundingClientRect.call(this);
+    });
   });
 
   afterEach(() => {
     document.body.innerHTML = '';
     layoutState.mobile = false;
+    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: originalGetBoundingClientRect,
+    });
     vi.unstubAllGlobals();
   });
 
@@ -539,8 +590,7 @@ describe('TerminalPanel', () => {
     document.body.appendChild(host);
 
     render(() => <TerminalPanel variant="deck" />, host);
-    await Promise.resolve();
-    await Promise.resolve();
+    await settleTerminalPanel();
     focusSpy.mockClear();
     forceResizeSpy.mockClear();
 
@@ -574,8 +624,7 @@ describe('TerminalPanel', () => {
     document.body.appendChild(host);
 
     render(() => <TerminalPanel variant="deck" />, host);
-    await Promise.resolve();
-    await Promise.resolve();
+    await settleTerminalPanel();
 
     const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
     const sessionViewport = terminalSurface?.parentElement as HTMLDivElement | null;
@@ -602,7 +651,7 @@ describe('TerminalPanel', () => {
 
     expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]')).toBeTruthy();
-    expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('132px');
+    expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('80px');
     expect(forceResizeSpy).toHaveBeenCalled();
   });
 
@@ -624,7 +673,7 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-testid="dropdown-item-settings"]')).toBeTruthy();
   });
 
-  it('suppresses the system IME and matches the terminal inset to the Floe keyboard height', async () => {
+  it('suppresses the system IME and matches the terminal inset to the real keyboard overlap', async () => {
     layoutState.mobile = true;
     terminalPrefsState.mobileInputMode = 'floe';
 
@@ -632,8 +681,7 @@ describe('TerminalPanel', () => {
     document.body.appendChild(host);
 
     render(() => <TerminalPanel variant="deck" />, host);
-    await Promise.resolve();
-    await Promise.resolve();
+    await settleTerminalPanel();
 
     const terminalInput = host.querySelector('textarea[aria-label="Terminal input"]') as HTMLTextAreaElement | null;
     expect(terminalInput?.getAttribute('inputmode')).toBe('none');
@@ -644,7 +692,7 @@ describe('TerminalPanel', () => {
     const sessionViewport = terminalSurface?.parentElement as HTMLDivElement | null;
 
     expect(terminalContent?.style.paddingBottom).toBe('');
-    expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('132px');
+    expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('80px');
     expect(terminalSurface?.style.bottom).toBe('var(--terminal-bottom-inset)');
     expect(host.textContent).not.toContain('Session: session-1');
     expect(host.textContent).not.toContain('History:');
