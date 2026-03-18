@@ -37,7 +37,7 @@ export default [
     },
   },
   {
-    files: ['eslint.config.mjs', 'electron-builder.config.mjs', 'scripts/**/*.mjs'],
+    files: ['eslint.config.mjs', 'electron-builder.config.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

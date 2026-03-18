@@ -25,7 +25,7 @@ Each GitHub Release must include both:
 Implementation in this repository:
 
 - Notes preface generator: `scripts/generate_release_notes.sh`
-- Workflow integration: `.github/workflows/release.yml` (`body_path` + `generate_release_notes: true`)
+- Workflow integration: `.github/workflows/release.yml` (preface file + GitHub Release Notes API)
 
 This keeps every release self-service for operators while preserving a complete change history for open source transparency.
 
@@ -37,8 +37,10 @@ For each release tag, the workflow publishes:
 - `redeven_linux_arm64.tar.gz`
 - `redeven_darwin_amd64.tar.gz`
 - `redeven_darwin_arm64.tar.gz`
-- `Redeven-Desktop-X.Y.Z-linux-x64.AppImage`
-- `Redeven-Desktop-X.Y.Z-linux-arm64.AppImage`
+- `Redeven-Desktop-X.Y.Z-linux-x64.deb`
+- `Redeven-Desktop-X.Y.Z-linux-x64.rpm`
+- `Redeven-Desktop-X.Y.Z-linux-arm64.deb`
+- `Redeven-Desktop-X.Y.Z-linux-arm64.rpm`
 - `Redeven-Desktop-X.Y.Z-mac-x64.dmg`
 - `Redeven-Desktop-X.Y.Z-mac-arm64.dmg`
 - `SHA256SUMS`
@@ -48,6 +50,29 @@ For each release tag, the workflow publishes:
 All artifacts are uploaded to the GitHub Release for that tag.
 
 Desktop assets bundle the matching `redeven` binary inside the Electron package and use the same release tag as the CLI tarballs.
+
+## macOS desktop signing baseline
+
+Public macOS desktop artifacts must satisfy all of the following before a tag is considered releasable:
+
+- Sign the bundled Electron app with a `Developer ID Application` certificate.
+- Notarize the signed app with Apple and staple the notarization ticket during packaging.
+- Fail the release workflow if the required signing or notarization secrets are missing.
+
+Repository secrets expected by `.github/workflows/release.yml`:
+
+- `REDEVEN_DESKTOP_MAC_CERT_BASE64`
+- `REDEVEN_DESKTOP_MAC_CERT_PASSWORD`
+- `REDEVEN_DESKTOP_MAC_IDENTITY`
+- `REDEVEN_DESKTOP_MAC_NOTARY_API_KEY`
+- `REDEVEN_DESKTOP_MAC_NOTARY_API_KEY_ID`
+- `REDEVEN_DESKTOP_MAC_NOTARY_API_ISSUER`
+
+Notes:
+
+- `REDEVEN_DESKTOP_MAC_CERT_BASE64` must contain the base64-encoded `.p12` Developer ID certificate bundle.
+- `REDEVEN_DESKTOP_MAC_NOTARY_API_KEY` must contain the raw contents of the Apple App Store Connect API key (`.p8`).
+- Ad-hoc signing (`REDEVEN_DESKTOP_MAC_IDENTITY=-`) remains acceptable for local packaging only and must not be used for public releases.
 
 ## Signature model
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildManagedAgentArgs, parseStartupReport } from './agentProcess';
+import { buildManagedAgentArgs } from './agentProcess';
+import { parseStartupReport } from './startup';
 
 describe('agentProcess', () => {
   it('builds the desktop-managed agent startup arguments', () => {
