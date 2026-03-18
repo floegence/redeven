@@ -17,7 +17,7 @@ import {
   Terminal,
 } from '@floegence/floe-webapp-core/icons';
 import { FlowerIcon } from './icons/FlowerIcon';
-import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
+import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
 import { Tooltip } from '@floegence/floe-webapp-core/ui';
 import type { ClientObserverLike } from '@floegence/flowersec-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
@@ -228,6 +228,7 @@ export function EnvAppShell() {
     initialDelayMs: 500,
     maxDelayMs: 30_000,
   } as const;
+  const topBarTooltip = (label: string): string | false => (layout.isMobile() ? false : label);
 
   widgetRegistry.registerAll(redevenDeckWidgets);
 
@@ -1579,42 +1580,33 @@ export function EnvAppShell() {
                 sidebarMode="auto"
                 sidebarContent={(activeTab) => activeTab === 'ai' && canUseFlower() ? <AIChatSidebar /> : <></>}
                 logo={
-                  <Tooltip content="Back to dashboard" placement="bottom" delay={0}>
-                    <button
-                      type="button"
-                      class="flex items-center justify-center w-8 h-8 rounded cursor-pointer hover:bg-muted/60 transition-colors"
-                      onClick={() => window.location.assign(`${consoleOrigin()}/dashboard`)}
-                      aria-label="Back to dashboard"
-                    >
-                      <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Redeven" class="w-6 h-6 object-contain" />
-                    </button>
-                  </Tooltip>
+                  <TopBarIconButton
+                    label="Back to dashboard"
+                    tooltip={topBarTooltip('Back to dashboard')}
+                    onClick={() => window.location.assign(`${consoleOrigin()}/dashboard`)}
+                  >
+                    <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Redeven" class="w-6 h-6 object-contain" />
+                  </TopBarIconButton>
                 }
                 activityItems={activityItems()}
                 activityBottomItems={activityBottomItems()}
                 activityBottomItemsMobileMode="topBar"
                 topBarActions={
                   <div class="flex items-center gap-1">
-                    <Tooltip content="Command palette" placement="bottom" delay={0}>
-                      <button
-                        type="button"
-                        class="flex items-center justify-center w-8 h-8 rounded cursor-pointer hover:bg-muted/60 transition-colors"
-                        onClick={() => cmd.open()}
-                        aria-label="Command palette"
-                      >
-                        <Search class="w-4 h-4" />
-                      </button>
-                    </Tooltip>
-                    <Tooltip content="Toggle theme" placement="bottom" delay={0}>
-                      <button
-                        type="button"
-                        class="flex items-center justify-center w-8 h-8 rounded cursor-pointer hover:bg-muted/60 transition-colors"
-                        onClick={() => theme.toggleTheme()}
-                        aria-label="Toggle theme"
-                      >
-                        {theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />}
-                      </button>
-                    </Tooltip>
+                    <TopBarIconButton
+                      label="Command palette"
+                      tooltip={topBarTooltip('Command palette')}
+                      onClick={() => cmd.open()}
+                    >
+                      <Search class="w-4 h-4" />
+                    </TopBarIconButton>
+                    <TopBarIconButton
+                      label="Toggle theme"
+                      tooltip={topBarTooltip('Toggle theme')}
+                      onClick={() => theme.toggleTheme()}
+                    >
+                      {theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />}
+                    </TopBarIconButton>
                   </div>
                 }
                 bottomBarItems={
