@@ -33,6 +33,12 @@ const mobileKeyboardRectState = vi.hoisted(() => ({
   height: 132,
 }));
 
+const mobileKeyboardTransitionState = vi.hoisted(() => ({
+  lastVisible: true,
+  visible: true,
+  reopenReadPending: false,
+}));
+
 const terminalViewportRectState = vi.hoisted(() => ({
   left: 0,
   top: 24,
@@ -187,49 +193,80 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       onInput={(event) => props.onChange(Number((event.currentTarget as HTMLInputElement).value))}
     />
   ),
-  MobileKeyboard: (props: any) => (
-    <Show when={props.visible}>
+  MobileKeyboard: (props: any) => {
+    if (props.visible && !mobileKeyboardTransitionState.lastVisible) {
+      mobileKeyboardTransitionState.reopenReadPending = true;
+    }
+    mobileKeyboardTransitionState.visible = props.visible;
+    mobileKeyboardTransitionState.lastVisible = props.visible;
+
+    const viewportLeftPx = `${mobileKeyboardRectState.left}px`;
+    const viewportBottomPx = '0px';
+    const viewportWidthPx = `${mobileKeyboardRectState.width}px`;
+
+    return (
       <div
-        data-testid="mobile-keyboard"
+        data-testid={props.visible ? 'mobile-keyboard' : undefined}
+        aria-hidden={!props.visible}
         ref={(el) => {
+          el.style.setProperty('--mobile-keyboard-viewport-left', viewportLeftPx);
+          el.style.setProperty('--mobile-keyboard-viewport-bottom', viewportBottomPx);
+          el.style.setProperty('--mobile-keyboard-viewport-width', viewportWidthPx);
+          el.style.left = viewportLeftPx;
+          el.style.bottom = viewportBottomPx;
+          el.style.width = viewportWidthPx;
           Object.defineProperty(el, 'getBoundingClientRect', {
             configurable: true,
-            value: () => ({
-              width: mobileKeyboardRectState.width,
-              height: mobileKeyboardRectState.height,
-              top: mobileKeyboardRectState.top,
-              left: mobileKeyboardRectState.left,
-              right: mobileKeyboardRectState.left + mobileKeyboardRectState.width,
-              bottom: mobileKeyboardRectState.top + mobileKeyboardRectState.height,
-              x: mobileKeyboardRectState.left,
-              y: mobileKeyboardRectState.top,
-              toJSON: () => undefined,
-            }),
+            value: () => {
+              const hiddenTop = window.innerHeight;
+              const hiddenBottom = hiddenTop + mobileKeyboardRectState.height;
+              const useHiddenRect = !mobileKeyboardTransitionState.visible || mobileKeyboardTransitionState.reopenReadPending;
+              if (mobileKeyboardTransitionState.visible && mobileKeyboardTransitionState.reopenReadPending) {
+                mobileKeyboardTransitionState.reopenReadPending = false;
+              }
+              const top = useHiddenRect ? hiddenTop : mobileKeyboardRectState.top;
+              const bottom = useHiddenRect ? hiddenBottom : mobileKeyboardRectState.top + mobileKeyboardRectState.height;
+              return {
+                width: mobileKeyboardRectState.width,
+                height: mobileKeyboardRectState.height,
+                top,
+                left: mobileKeyboardRectState.left,
+                right: mobileKeyboardRectState.left + mobileKeyboardRectState.width,
+                bottom,
+                x: mobileKeyboardRectState.left,
+                y: top,
+                toJSON: () => undefined,
+              };
+            },
           });
           props.ref?.(el);
         }}
       >
-        <button type="button" data-testid="mobile-keyboard-key" onClick={() => props.onKey?.('x')}>
-          Send x
-        </button>
-        <button type="button" data-testid="mobile-keyboard-key-g" onClick={() => props.onKey?.('g')}>
-          Send g
-        </button>
-        <button type="button" data-testid="mobile-keyboard-dismiss" onClick={() => props.onDismiss?.()}>
-          Dismiss
-        </button>
-        {(props.suggestions ?? []).map((item: any) => (
-          <button
-            type="button"
-            data-testid={`mobile-keyboard-suggestion-${item.label}`}
-            onClick={() => props.onSuggestionSelect?.(item)}
-          >
-            {item.label}
-          </button>
-        ))}
+        <Show when={props.visible}>
+          <>
+            <button type="button" data-testid="mobile-keyboard-key" onClick={() => props.onKey?.('x')}>
+              Send x
+            </button>
+            <button type="button" data-testid="mobile-keyboard-key-g" onClick={() => props.onKey?.('g')}>
+              Send g
+            </button>
+            <button type="button" data-testid="mobile-keyboard-dismiss" onClick={() => props.onDismiss?.()}>
+              Dismiss
+            </button>
+            {(props.suggestions ?? []).map((item: any) => (
+              <button
+                type="button"
+                data-testid={`mobile-keyboard-suggestion-${item.label}`}
+                onClick={() => props.onSuggestionSelect?.(item)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </>
+        </Show>
       </div>
-    </Show>
-  ),
+    );
+  },
   Tabs: (props: any) => (
     <div>
       {props.items.map((item: any) => (
@@ -400,10 +437,21 @@ describe('TerminalPanel', () => {
     mobileKeyboardRectState.top = 240;
     mobileKeyboardRectState.width = 320;
     mobileKeyboardRectState.height = 132;
+    mobileKeyboardTransitionState.lastVisible = true;
+    mobileKeyboardTransitionState.visible = true;
+    mobileKeyboardTransitionState.reopenReadPending = false;
     terminalViewportRectState.left = 0;
     terminalViewportRectState.top = 24;
     terminalViewportRectState.width = 320;
     terminalViewportRectState.bottom = 320;
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 372,
+    });
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 320,
+    });
     Object.values(transportMocks).forEach((mock) => {
       if ('mockClear' in mock) mock.mockClear();
     });
@@ -442,11 +490,22 @@ describe('TerminalPanel', () => {
     sessionsCoordinatorMocks.refresh.mockClear();
     sessionsCoordinatorMocks.updateSessionMeta.mockClear();
 
+    let nextAnimationFrameId = 0;
+    const pendingAnimationFrames = new Map<number, FrameRequestCallback>();
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
+      const id = ++nextAnimationFrameId;
+      pendingAnimationFrames.set(id, callback);
+      queueMicrotask(() => {
+        const pending = pendingAnimationFrames.get(id);
+        if (!pending) return;
+        pendingAnimationFrames.delete(id);
+        pending(0);
+      });
+      return id;
     });
-    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      pendingAnimationFrames.delete(id);
+    });
     if (typeof PointerEvent === 'undefined') {
       class TestPointerEvent extends MouseEvent {
         pointerId: number;
@@ -647,12 +706,44 @@ describe('TerminalPanel', () => {
 
     forceResizeSpy.mockClear();
     (host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]') as HTMLButtonElement | null)?.click();
-    await Promise.resolve();
+    await settleTerminalPanel();
 
     expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]')).toBeTruthy();
     expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('80px');
     expect(forceResizeSpy).toHaveBeenCalled();
+  });
+
+  it('recomputes the terminal inset correctly when the keyboard is reopened from the terminal surface', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    const sessionViewport = terminalSurface?.parentElement as HTMLDivElement | null;
+    expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('80px');
+
+    (host.querySelector('[data-testid="mobile-keyboard-dismiss"]') as HTMLButtonElement | null)?.click();
+    await Promise.resolve();
+    expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('0px');
+
+    terminalSurface?.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      pointerId: 9,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 40,
+      clientY: 40,
+    }));
+    await settleTerminalPanel();
+
+    expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeTruthy();
+    expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('80px');
   });
 
   it('does not show Floe keyboard actions in the mobile More menu while System IME mode is active', async () => {

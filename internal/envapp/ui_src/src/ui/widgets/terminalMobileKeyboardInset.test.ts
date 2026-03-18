@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
 
@@ -25,6 +25,15 @@ function mockRect(
 }
 
 describe('resolveTerminalMobileKeyboardInsetPx', () => {
+  const originalInnerHeight = window.innerHeight;
+
+  afterEach(() => {
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: originalInnerHeight,
+    });
+  });
+
   it('returns the overlap height between the viewport and keyboard', () => {
     const viewportEl = document.createElement('div');
     const keyboardEl = document.createElement('div');
@@ -45,5 +54,22 @@ describe('resolveTerminalMobileKeyboardInsetPx', () => {
 
   it('returns zero when elements are missing', () => {
     expect(resolveTerminalMobileKeyboardInsetPx({ viewportEl: null, keyboardEl: null })).toBe(0);
+  });
+
+  it('uses the keyboard target occupied rect instead of the animated current rect during reopen', () => {
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 372,
+    });
+
+    const viewportEl = document.createElement('div');
+    const keyboardEl = document.createElement('div');
+    keyboardEl.style.setProperty('--mobile-keyboard-viewport-left', '0px');
+    keyboardEl.style.setProperty('--mobile-keyboard-viewport-bottom', '0px');
+    keyboardEl.style.setProperty('--mobile-keyboard-viewport-width', '320px');
+    mockRect(viewportEl, { top: 24, bottom: 320, left: 0, width: 320 });
+    mockRect(keyboardEl, { top: 372, bottom: 504, left: 0, width: 320, height: 132 });
+
+    expect(resolveTerminalMobileKeyboardInsetPx({ viewportEl, keyboardEl })).toBe(80);
   });
 });

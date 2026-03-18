@@ -243,7 +243,7 @@ describe('GitChangesPanel interactions', () => {
       expect(dialogRoot).toBeTruthy();
       const closeButton = dialogRoot?.querySelector('button[aria-label="Close"]') as HTMLButtonElement | null;
       expect(closeButton).toBeTruthy();
-      expect(closeButton?.className).toContain('hover:bg-red-500');
+      expect(closeButton?.className).toContain('hover:bg-error');
       expect(closeButton?.className).not.toContain('hover:bg-muted/80');
     } finally {
       dispose();
