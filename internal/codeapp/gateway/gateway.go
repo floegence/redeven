@@ -26,6 +26,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/ai"
 	"github.com/floegence/redeven-agent/internal/auditlog"
 	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven-agent/internal/diagnostics"
 	"github.com/floegence/redeven-agent/internal/pathutil"
 	"github.com/floegence/redeven-agent/internal/portforward"
 	pfregistry "github.com/floegence/redeven-agent/internal/portforward/registry"
@@ -41,6 +42,7 @@ type Options struct {
 	PortForward             PortForwardBackend
 	AI                      *ai.Service
 	Audit                   *auditlog.Store
+	Diagnostics             *diagnostics.Store
 	ResolveSessionMeta      func(channelID string) (*session.Meta, bool)
 	ResolveSessionTunnelURL func(channelID string) (string, bool)
 	// ConfigPath is the absolute path to the agent config file.
@@ -102,11 +104,13 @@ type Gateway struct {
 	pf      PortForwardBackend
 	ai      *ai.Service
 	audit   *auditlog.Store
+	diag    *diagnostics.Store
 
 	resolveSessionMeta      func(channelID string) (*session.Meta, bool)
 	resolveSessionTunnelURL func(channelID string) (string, bool)
 
 	configPath string
+	stateDir   string
 	configMu   sync.Mutex
 	secrets    *settings.SecretsStore
 
@@ -197,15 +201,18 @@ func New(opts Options) (*Gateway, error) {
 		secrets = settings.NewSecretsStore(filepath.Join(dir, "secrets.json"))
 	}
 
+	stateDir := filepath.Dir(strings.TrimSpace(opts.ConfigPath))
 	return &Gateway{
 		log:                     logger,
 		backend:                 opts.Backend,
 		pf:                      opts.PortForward,
 		ai:                      opts.AI,
 		audit:                   opts.Audit,
+		diag:                    opts.Diagnostics,
 		resolveSessionMeta:      opts.ResolveSessionMeta,
 		resolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
 		configPath:              strings.TrimSpace(opts.ConfigPath),
+		stateDir:                stateDir,
 		secrets:                 secrets,
 		distFS:                  opts.DistFS,
 		dist:                    dist,
@@ -314,7 +321,7 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		g.handleAPI(w, r)
+		g.handleAPIWithDiagnostics(w, r, localUI)
 		return
 	}
 	if strings.HasPrefix(p, "/_redeven_proxy/") {
@@ -441,6 +448,46 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+func (g *Gateway) handleAPIWithDiagnostics(w http.ResponseWriter, r *http.Request, localUI bool) {
+	if g == nil || g.diag == nil || shouldSkipDiagnosticsPath(r) {
+		g.handleAPI(w, r)
+		return
+	}
+	traceID := diagnostics.TraceIDFromContext(r.Context())
+	if traceID == "" {
+		traceID = strings.TrimSpace(r.Header.Get(diagnostics.TraceHeader))
+	}
+	if traceID == "" {
+		traceID = diagnostics.NewTraceID()
+	}
+	if traceID != "" {
+		r = r.WithContext(diagnostics.WithTraceID(r.Context(), traceID))
+		w.Header().Set(diagnostics.TraceHeader, traceID)
+	}
+	startedAt := time.Now()
+	rw := diagnostics.NewStatusWriter(w)
+	g.handleAPI(rw, r)
+	g.diag.Append(diagnostics.Event{
+		Scope:      diagnostics.ScopeGatewayAPI,
+		Kind:       "request",
+		TraceID:    traceID,
+		Method:     r.Method,
+		Path:       strings.TrimSpace(r.URL.Path),
+		StatusCode: rw.StatusCode(),
+		DurationMs: time.Since(startedAt).Milliseconds(),
+		Detail: map[string]any{
+			"local_ui": localUI,
+		},
+	})
+}
+
+func shouldSkipDiagnosticsPath(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimSpace(r.URL.Path), "/_redeven_proxy/api/debug/diagnostics")
+}
+
 func writeAISkillError(w http.ResponseWriter, fallbackStatus int, err error) {
 	status := fallbackStatus
 	code := ""
@@ -449,6 +496,98 @@ func writeAISkillError(w http.ResponseWriter, fallbackStatus int, err error) {
 		code = se.Code()
 	}
 	writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: code})
+}
+
+type diagnosticsView struct {
+	Enabled      bool                      `json:"enabled"`
+	StateDir     string                    `json:"state_dir,omitempty"`
+	RecentEvents []diagnostics.Event       `json:"recent_events"`
+	SlowSummary  []diagnostics.SummaryItem `json:"slow_summary"`
+	Stats        diagnostics.Stats         `json:"stats"`
+}
+
+type diagnosticsExportView struct {
+	Enabled       bool                 `json:"enabled"`
+	StateDir      string               `json:"state_dir,omitempty"`
+	ExportedAt    string               `json:"exported_at"`
+	Snapshot      diagnostics.Snapshot `json:"snapshot"`
+	AgentEvents   []diagnostics.Event  `json:"agent_events"`
+	DesktopEvents []diagnostics.Event  `json:"desktop_events"`
+}
+
+func parseDiagnosticsLimit(r *http.Request, key string, defaultValue int, maxValue int) int {
+	if defaultValue <= 0 {
+		defaultValue = 100
+	}
+	if maxValue <= 0 {
+		maxValue = defaultValue
+	}
+	if r == nil {
+		return defaultValue
+	}
+	raw := strings.TrimSpace(r.URL.Query().Get(key))
+	if raw == "" {
+		return defaultValue
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return defaultValue
+	}
+	if value > maxValue {
+		return maxValue
+	}
+	return value
+}
+
+func (g *Gateway) loadDiagnosticsSource(source string, limit int) ([]diagnostics.Event, error) {
+	if g == nil || strings.TrimSpace(g.stateDir) == "" {
+		return nil, nil
+	}
+	return diagnostics.ListSource(g.stateDir, source, limit)
+}
+
+func (g *Gateway) buildDiagnosticsView(recentLimit int, sourceLimit int, summaryLimit int) (diagnosticsView, error) {
+	view := diagnosticsView{Enabled: g != nil && g.diag != nil, StateDir: strings.TrimSpace(g.stateDir)}
+	if !view.Enabled {
+		return view, nil
+	}
+	agentEvents, err := g.loadDiagnosticsSource(diagnostics.SourceAgent, sourceLimit)
+	if err != nil {
+		return diagnosticsView{}, err
+	}
+	desktopEvents, err := g.loadDiagnosticsSource(diagnostics.SourceDesktop, sourceLimit)
+	if err != nil {
+		return diagnosticsView{}, err
+	}
+	snapshot := diagnostics.BuildSnapshot(recentLimit, summaryLimit, agentEvents, desktopEvents)
+	view.RecentEvents = snapshot.RecentEvents
+	view.SlowSummary = snapshot.SlowSummary
+	view.Stats = snapshot.Stats
+	return view, nil
+}
+
+func (g *Gateway) buildDiagnosticsExportView(sourceLimit int, summaryLimit int) (diagnosticsExportView, error) {
+	view := diagnosticsExportView{
+		Enabled:    g != nil && g.diag != nil,
+		StateDir:   strings.TrimSpace(g.stateDir),
+		ExportedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	if !view.Enabled {
+		view.Snapshot = diagnostics.BuildSnapshot(sourceLimit, summaryLimit)
+		return view, nil
+	}
+	agentEvents, err := g.loadDiagnosticsSource(diagnostics.SourceAgent, sourceLimit)
+	if err != nil {
+		return diagnosticsExportView{}, err
+	}
+	desktopEvents, err := g.loadDiagnosticsSource(diagnostics.SourceDesktop, sourceLimit)
+	if err != nil {
+		return diagnosticsExportView{}, err
+	}
+	view.AgentEvents = agentEvents
+	view.DesktopEvents = desktopEvents
+	view.Snapshot = diagnostics.BuildSnapshot(sourceLimit, summaryLimit, agentEvents, desktopEvents)
+	return view, nil
 }
 
 func toSettingsView(cfg *config.Config, configPath string, secrets *settings.SecretsStore) settingsView {
@@ -784,6 +923,37 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"entries": entries}})
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/debug/diagnostics":
+		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			return
+		}
+		view, err := g.buildDiagnosticsView(
+			parseDiagnosticsLimit(r, "limit", 60, 200),
+			parseDiagnosticsLimit(r, "source_limit", 300, 1000),
+			parseDiagnosticsLimit(r, "summary_limit", 12, 40),
+		)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "failed to load diagnostics"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/debug/diagnostics/export":
+		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			return
+		}
+		view, err := g.buildDiagnosticsExportView(
+			parseDiagnosticsLimit(r, "limit", 500, 2000),
+			parseDiagnosticsLimit(r, "summary_limit", 20, 50),
+		)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "failed to export diagnostics"})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/settings":

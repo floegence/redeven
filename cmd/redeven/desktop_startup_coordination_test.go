@@ -45,6 +45,9 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 	if report.LocalUIURL != server.URL+"/" {
 		t.Fatalf("LocalUIURL = %q", report.LocalUIURL)
 	}
+	if report.StateDir != filepath.Dir(cfgPath) || !report.DiagnosticsEnabled {
+		t.Fatalf("unexpected diagnostics report: %#v", report)
+	}
 }
 
 func TestHandleDesktopLockConflictWritesBlockedReportWhenRuntimeIsUnavailable(t *testing.T) {
@@ -88,11 +91,13 @@ func TestHandleDesktopLockConflictWritesBlockedReportWhenRuntimeIsUnavailable(t 
 
 func writeRuntimeStateForTest(path string, localUIURL string) error {
 	body, err := json.MarshalIndent(map[string]any{
-		"local_ui_url":       localUIURL,
-		"local_ui_urls":      []string{localUIURL},
-		"effective_run_mode": "hybrid",
-		"remote_enabled":     true,
-		"desktop_managed":    true,
+		"local_ui_url":         localUIURL,
+		"local_ui_urls":        []string{localUIURL},
+		"effective_run_mode":   "hybrid",
+		"remote_enabled":       true,
+		"desktop_managed":      true,
+		"state_dir":            filepath.Dir(filepath.Dir(path)),
+		"diagnostics_enabled":  true,
 	}, "", "  ")
 	if err != nil {
 		return err

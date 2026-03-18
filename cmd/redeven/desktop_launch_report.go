@@ -41,11 +41,13 @@ type desktopLaunchReport struct {
 	Code    string              `json:"code,omitempty"`
 	Message string              `json:"message,omitempty"`
 
-	LocalUIURL       string   `json:"local_ui_url,omitempty"`
-	LocalUIURLs      []string `json:"local_ui_urls,omitempty"`
-	EffectiveRunMode string   `json:"effective_run_mode,omitempty"`
-	RemoteEnabled    bool     `json:"remote_enabled"`
-	DesktopManaged   bool     `json:"desktop_managed"`
+	LocalUIURL         string   `json:"local_ui_url,omitempty"`
+	LocalUIURLs        []string `json:"local_ui_urls,omitempty"`
+	EffectiveRunMode   string   `json:"effective_run_mode,omitempty"`
+	RemoteEnabled      bool     `json:"remote_enabled"`
+	DesktopManaged     bool     `json:"desktop_managed"`
+	StateDir           string   `json:"state_dir,omitempty"`
+	DiagnosticsEnabled bool     `json:"diagnostics_enabled"`
 
 	LockOwner   *desktopLaunchLockOwner   `json:"lock_owner,omitempty"`
 	Diagnostics *desktopLaunchDiagnostics `json:"diagnostics,omitempty"`

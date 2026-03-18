@@ -13,21 +13,25 @@ import (
 )
 
 type runtimeState struct {
-	LocalUIURL       string   `json:"local_ui_url,omitempty"`
-	LocalUIURLs      []string `json:"local_ui_urls,omitempty"`
-	EffectiveRunMode string   `json:"effective_run_mode,omitempty"`
-	RemoteEnabled    bool     `json:"remote_enabled"`
-	DesktopManaged   bool     `json:"desktop_managed"`
-	PID              int      `json:"pid,omitempty"`
+	LocalUIURL         string   `json:"local_ui_url,omitempty"`
+	LocalUIURLs        []string `json:"local_ui_urls,omitempty"`
+	EffectiveRunMode   string   `json:"effective_run_mode,omitempty"`
+	RemoteEnabled      bool     `json:"remote_enabled"`
+	DesktopManaged     bool     `json:"desktop_managed"`
+	StateDir           string   `json:"state_dir,omitempty"`
+	DiagnosticsEnabled bool     `json:"diagnostics_enabled"`
+	PID                int      `json:"pid,omitempty"`
 }
 
 type RuntimeStateSnapshot struct {
-	LocalUIURL       string
-	LocalUIURLs      []string
-	EffectiveRunMode string
-	RemoteEnabled    bool
-	DesktopManaged   bool
-	PID              int
+	LocalUIURL         string
+	LocalUIURLs        []string
+	EffectiveRunMode   string
+	RemoteEnabled      bool
+	DesktopManaged     bool
+	StateDir           string
+	DiagnosticsEnabled bool
+	PID                int
 }
 
 func RuntimeStatePath(configPath string) string {
@@ -141,12 +145,14 @@ func parseRuntimeState(raw []byte) (*RuntimeStateSnapshot, error) {
 		state.LocalUIURLs = []string{state.LocalUIURL}
 	}
 	return &RuntimeStateSnapshot{
-		LocalUIURL:       state.LocalUIURL,
-		LocalUIURLs:      append([]string(nil), state.LocalUIURLs...),
-		EffectiveRunMode: strings.TrimSpace(state.EffectiveRunMode),
-		RemoteEnabled:    state.RemoteEnabled,
-		DesktopManaged:   state.DesktopManaged,
-		PID:              state.PID,
+		LocalUIURL:         state.LocalUIURL,
+		LocalUIURLs:        append([]string(nil), state.LocalUIURLs...),
+		EffectiveRunMode:   strings.TrimSpace(state.EffectiveRunMode),
+		RemoteEnabled:      state.RemoteEnabled,
+		DesktopManaged:     state.DesktopManaged,
+		StateDir:           strings.TrimSpace(state.StateDir),
+		DiagnosticsEnabled: state.DiagnosticsEnabled,
+		PID:                state.PID,
 	}, nil
 }
 

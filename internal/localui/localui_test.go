@@ -18,6 +18,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/agent"
 	gatewaypkg "github.com/floegence/redeven-agent/internal/codeapp/gateway"
 	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven-agent/internal/diagnostics"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -97,6 +98,19 @@ func newTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 		gw:         newTestGateway(t, cfgPath),
 		pending:    make(map[string]pendingDirect),
 	}
+}
+
+func newDiagnosticsStoreForConfig(t *testing.T, cfgPath string) *diagnostics.Store {
+	t.Helper()
+	store, err := diagnostics.New(diagnostics.Options{
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		StateDir: filepath.Dir(cfgPath),
+		Source:   diagnostics.SourceAgent,
+	})
+	if err != nil {
+		t.Fatalf("diagnostics.New() error = %v", err)
+	}
+	return store
 }
 
 func TestServer_handleRoot_redirectWhenUnlocked(t *testing.T) {
@@ -318,6 +332,128 @@ func TestServer_handleRuntime_reportsDesktopManagedMetadata(t *testing.T) {
 	}
 	if !body.DesktopManaged || body.EffectiveRunMode != "hybrid" || !body.RemoteEnabled {
 		t.Fatalf("unexpected runtime body: %#v", body)
+	}
+}
+
+func TestServer_DiagnosticsAddsTraceHeaderForRuntime(t *testing.T) {
+	cfgPath := writeTestConfig(t)
+	diagStore := newDiagnosticsStoreForConfig(t, cfgPath)
+	s := &Server{
+		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		configPath: cfgPath,
+		version:    "dev",
+		gw:         newTestGateway(t, cfgPath),
+		diag:       diagStore,
+		pending:    make(map[string]pendingDirect),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/runtime", nil)
+	res := httptest.NewRecorder()
+	s.handler().ServeHTTP(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Result().StatusCode, http.StatusOK)
+	}
+	traceID := res.Header().Get(diagnostics.TraceHeader)
+	if traceID == "" {
+		t.Fatalf("missing %s header", diagnostics.TraceHeader)
+	}
+
+	events, err := diagStore.List(10)
+	if err != nil {
+		t.Fatalf("diagStore.List() error = %v", err)
+	}
+	var matched *diagnostics.Event
+	for i := range events {
+		event := events[i]
+		if event.Scope == diagnostics.ScopeLocalUIHTTP && event.Path == "/api/local/runtime" {
+			matched = &event
+			break
+		}
+	}
+	if matched == nil {
+		t.Fatalf("expected runtime diagnostics event, got %#v", events)
+	}
+	if matched.TraceID != traceID {
+		t.Fatalf("matched.TraceID = %q, want %q", matched.TraceID, traceID)
+	}
+}
+
+func TestServer_DiagnosticsConnectInfoReusesTraceID(t *testing.T) {
+	cfgPath := writeTestConfig(t)
+	diagStore := newDiagnosticsStoreForConfig(t, cfgPath)
+	s := &Server{
+		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		configPath: cfgPath,
+		version:    "dev",
+		gw:         newTestGateway(t, cfgPath),
+		diag:       diagStore,
+		pending:    make(map[string]pendingDirect),
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_info", bytes.NewBufferString(`{}`))
+	res := httptest.NewRecorder()
+	s.handler().ServeHTTP(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Result().StatusCode, http.StatusOK)
+	}
+	traceID := res.Header().Get(diagnostics.TraceHeader)
+	if traceID == "" {
+		t.Fatalf("missing %s header", diagnostics.TraceHeader)
+	}
+
+	events, err := diagStore.List(20)
+	if err != nil {
+		t.Fatalf("diagStore.List() error = %v", err)
+	}
+	var connectInfoEvent *diagnostics.Event
+	var httpEvent *diagnostics.Event
+	for i := range events {
+		event := events[i]
+		if event.Scope == diagnostics.ScopeDirectSession && event.Kind == "connect_info_issued" {
+			connectInfoEvent = &event
+		}
+		if event.Scope == diagnostics.ScopeLocalUIHTTP && event.Path == "/api/local/direct/connect_info" {
+			httpEvent = &event
+		}
+	}
+	if connectInfoEvent == nil {
+		t.Fatalf("expected connect_info_issued diagnostics event, got %#v", events)
+	}
+	if httpEvent == nil {
+		t.Fatalf("expected localui_http diagnostics event, got %#v", events)
+	}
+	if connectInfoEvent.TraceID != traceID || httpEvent.TraceID != traceID {
+		t.Fatalf("unexpected trace IDs connect=%q http=%q want=%q", connectInfoEvent.TraceID, httpEvent.TraceID, traceID)
+	}
+}
+
+func TestServer_DiagnosticsSkipsDiagnosticsAPIRequests(t *testing.T) {
+	cfgPath := writeTestConfig(t)
+	diagStore := newDiagnosticsStoreForConfig(t, cfgPath)
+	s := &Server{
+		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		configPath: cfgPath,
+		version:    "dev",
+		gw:         newTestGateway(t, cfgPath),
+		diag:       diagStore,
+		pending:    make(map[string]pendingDirect),
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/api/debug/diagnostics", nil)
+	res := httptest.NewRecorder()
+	s.handler().ServeHTTP(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Result().StatusCode, http.StatusOK)
+	}
+	events, err := diagStore.List(10)
+	if err != nil {
+		t.Fatalf("diagStore.List() error = %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("expected diagnostics API request to be skipped, got %#v", events)
 	}
 }
 

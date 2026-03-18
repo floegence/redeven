@@ -32,6 +32,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/auditlog"
 	"github.com/floegence/redeven-agent/internal/codeapp"
 	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven-agent/internal/diagnostics"
 	"github.com/floegence/redeven-agent/internal/fs"
 	"github.com/floegence/redeven-agent/internal/gitrepo"
 	"github.com/floegence/redeven-agent/internal/monitor"
@@ -97,6 +98,7 @@ type Agent struct {
 	log *slog.Logger
 
 	audit *auditlog.Store
+	diag  *diagnostics.Store
 
 	version   string
 	commit    string
@@ -201,6 +203,14 @@ func New(opts Options) (*Agent, error) {
 	} else {
 		a.audit = auditStore
 	}
+	if diagnostics.EnabledForLogLevel(opts.Config.LogLevel) {
+		diagnosticsStore, err := diagnostics.New(diagnostics.Options{Logger: logger, StateDir: stateDir, Source: diagnostics.SourceAgent})
+		if err != nil {
+			logger.Warn("diagnostics init failed", "error", err)
+		} else {
+			a.diag = diagnosticsStore
+		}
+	}
 	var upgrader syssvc.Upgrader
 	if !a.desktopManaged {
 		upgrader = &sysUpgrader{a: a}
@@ -225,6 +235,7 @@ func New(opts Options) (*Agent, error) {
 		Shell:               shell,
 		AIConfig:            opts.Config.AI,
 		Audit:               auditStore,
+		Diagnostics:         a.diag,
 		LocalUIEnabled:      a.localUIEnabled,
 		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
 			if a == nil {

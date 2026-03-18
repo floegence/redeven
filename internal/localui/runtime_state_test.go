@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/floegence/redeven-agent/internal/diagnostics"
 )
 
 func discardLogger() *slog.Logger {
@@ -20,11 +22,13 @@ func discardLogger() *slog.Logger {
 func TestWriteRuntimeState(t *testing.T) {
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
 	err := writeRuntimeState(runtimePath, runtimeState{
-		LocalUIURLs:      []string{"http://127.0.0.1:43123/", "", "http://127.0.0.1:43123/"},
-		EffectiveRunMode: "hybrid",
-		RemoteEnabled:    true,
-		DesktopManaged:   true,
-		PID:              42,
+		LocalUIURLs:        []string{"http://127.0.0.1:43123/", "", "http://127.0.0.1:43123/"},
+		EffectiveRunMode:   "hybrid",
+		RemoteEnabled:      true,
+		DesktopManaged:     true,
+		StateDir:           "/Users/tester/.redeven",
+		DiagnosticsEnabled: true,
+		PID:                42,
 	})
 	if err != nil {
 		t.Fatalf("writeRuntimeState() error = %v", err)
@@ -48,6 +52,9 @@ func TestWriteRuntimeState(t *testing.T) {
 	if !state.RemoteEnabled || !state.DesktopManaged || state.EffectiveRunMode != "hybrid" || state.PID != 42 {
 		t.Fatalf("unexpected state: %#v", state)
 	}
+	if state.StateDir != "/Users/tester/.redeven" || !state.DiagnosticsEnabled {
+		t.Fatalf("unexpected diagnostics state: %#v", state)
+	}
 }
 
 func TestWriteRuntimeState_RejectsMissingLocalURL(t *testing.T) {
@@ -68,10 +75,22 @@ func TestServerStartWritesAndCloseRemovesRuntimeState(t *testing.T) {
 		log:              discardLogger(),
 		bind:             bind,
 		configPath:       cfgPath,
+		stateDir:         filepath.Dir(cfgPath),
 		runtimeStatePath: localRuntimeStatePath(cfgPath),
 		version:          "dev",
 		gw:               newTestGateway(t, cfgPath),
-		pending:          make(map[string]pendingDirect),
+		diag: func() *diagnostics.Store {
+			store, err := diagnostics.New(diagnostics.Options{
+				Logger:   discardLogger(),
+				StateDir: filepath.Dir(cfgPath),
+				Source:   diagnostics.SourceAgent,
+			})
+			if err != nil {
+				t.Fatalf("diagnostics.New() error = %v", err)
+			}
+			return store
+		}(),
+		pending: make(map[string]pendingDirect),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -92,6 +111,9 @@ func TestServerStartWritesAndCloseRemovesRuntimeState(t *testing.T) {
 	}
 	if state.LocalUIURL == "" || len(state.LocalUIURLs) == 0 {
 		t.Fatalf("unexpected runtime state: %#v", state)
+	}
+	if state.StateDir != filepath.Dir(cfgPath) || !state.DiagnosticsEnabled {
+		t.Fatalf("unexpected diagnostics metadata: %#v", state)
 	}
 
 	if err := s.Close(); err != nil {
@@ -114,11 +136,13 @@ func TestLoadAttachableRuntimeState(t *testing.T) {
 
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
 	if err := writeRuntimeState(runtimePath, runtimeState{
-		LocalUIURLs:      []string{server.URL + "/", "https://example.com/"},
-		EffectiveRunMode: "hybrid",
-		RemoteEnabled:    true,
-		DesktopManaged:   true,
-		PID:              42,
+		LocalUIURLs:        []string{server.URL + "/", "https://example.com/"},
+		EffectiveRunMode:   "hybrid",
+		RemoteEnabled:      true,
+		DesktopManaged:     true,
+		StateDir:           "/tmp/redeven",
+		DiagnosticsEnabled: true,
+		PID:                42,
 	}); err != nil {
 		t.Fatalf("writeRuntimeState() error = %v", err)
 	}
@@ -135,6 +159,9 @@ func TestLoadAttachableRuntimeState(t *testing.T) {
 	}
 	if !state.RemoteEnabled || !state.DesktopManaged || state.EffectiveRunMode != "hybrid" || state.PID != 42 {
 		t.Fatalf("unexpected state: %#v", state)
+	}
+	if state.StateDir != "/tmp/redeven" || !state.DiagnosticsEnabled {
+		t.Fatalf("unexpected diagnostics metadata: %#v", state)
 	}
 }
 

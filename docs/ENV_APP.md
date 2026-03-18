@@ -60,6 +60,26 @@ There are **two** audit log sources:
      - `state_dir` is the directory of the agent config file (default: `~/.redeven/`)
    - The log is metadata-only and must not contain secrets (PSK/attach token/AI secrets/file contents).
 
+## Diagnostics mode
+
+Diagnostics mode is enabled implicitly when the agent config uses:
+
+- `logging.log_level = "debug"`
+
+Behavior:
+
+- Agent-side request/direct-session diagnostics are stored separately from audit logs:
+  - `<state_dir>/diagnostics/agent-events.jsonl`
+- Desktop builds that attach to the same runtime may also write:
+  - `<state_dir>/diagnostics/desktop-events.jsonl`
+- Local UI and gateway share a single trace header:
+  - `X-Redeven-Debug-Trace-ID`
+- Env Settings exposes a Diagnostics panel under Logging and reads data through:
+  - `GET /_redeven_proxy/api/debug/diagnostics`
+  - `GET /_redeven_proxy/api/debug/diagnostics/export`
+
+The diagnostics stream is timing-focused and must remain separate from the audit log because it is intended for troubleshooting performance and startup issues rather than user-operation auditing.
+
 ## Codespaces (code-server) management
 
 The Env App UI manages local codespaces via the agent local gateway API:

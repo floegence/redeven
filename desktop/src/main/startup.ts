@@ -4,6 +4,8 @@ export type StartupReport = Readonly<{
   effective_run_mode?: string;
   remote_enabled?: boolean;
   desktop_managed?: boolean;
+  state_dir?: string;
+  diagnostics_enabled?: boolean;
 }>;
 
 export function parseStartupReport(raw: string): StartupReport {
@@ -23,5 +25,7 @@ export function parseStartupReport(raw: string): StartupReport {
     effective_run_mode: String(parsed.effective_run_mode ?? '').trim() || undefined,
     remote_enabled: typeof parsed.remote_enabled === 'boolean' ? parsed.remote_enabled : undefined,
     desktop_managed: typeof parsed.desktop_managed === 'boolean' ? parsed.desktop_managed : undefined,
+    state_dir: String(parsed.state_dir ?? '').trim() || undefined,
+    diagnostics_enabled: typeof parsed.diagnostics_enabled === 'boolean' ? parsed.diagnostics_enabled : undefined,
   };
 }
