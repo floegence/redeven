@@ -18,6 +18,7 @@ const terminalPrefsState = vi.hoisted(() => ({
 }));
 
 const focusSpy = vi.hoisted(() => vi.fn());
+const forceResizeSpy = vi.hoisted(() => vi.fn());
 
 const rpcFsMocks = vi.hoisted(() => ({
   getPathContext: vi.fn().mockResolvedValue({ agentHomePathAbs: '/workspace' }),
@@ -260,7 +261,7 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     initialize = vi.fn().mockResolvedValue(undefined);
     dispose = vi.fn();
     setTheme = vi.fn();
-    forceResize = vi.fn();
+    forceResize = forceResizeSpy;
     getDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
     startHistoryReplay = vi.fn();
     endHistoryReplay = vi.fn();
@@ -356,6 +357,7 @@ describe('TerminalPanel', () => {
     terminalPrefsState.fontFamilyId = 'iosevka';
     terminalPrefsState.mobileInputMode = 'floe';
     focusSpy.mockClear();
+    forceResizeSpy.mockClear();
     Object.values(transportMocks).forEach((mock) => {
       if ('mockClear' in mock) mock.mockClear();
     });
@@ -508,6 +510,10 @@ describe('TerminalPanel', () => {
     await Promise.resolve();
     await Promise.resolve();
     focusSpy.mockClear();
+    forceResizeSpy.mockClear();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    const sessionViewport = terminalSurface?.parentElement as HTMLDivElement | null;
 
     expect(host.querySelector('[data-testid="dropdown-item-use_system_ime"]')).toBeNull();
     expect(host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]')).toBeTruthy();
@@ -519,6 +525,8 @@ describe('TerminalPanel', () => {
 
     expect(terminalPrefsState.mobileInputMode).toBe('system');
     expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeNull();
+    expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('0px');
+    expect(forceResizeSpy).toHaveBeenCalled();
 
     Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Close'))?.click();
     await Promise.resolve();
@@ -537,6 +545,10 @@ describe('TerminalPanel', () => {
     await Promise.resolve();
     await Promise.resolve();
 
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    const sessionViewport = terminalSurface?.parentElement as HTMLDivElement | null;
+    forceResizeSpy.mockClear();
+
     expect(host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]')).toBeNull();
 
@@ -544,13 +556,18 @@ describe('TerminalPanel', () => {
     await Promise.resolve();
 
     expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeNull();
+    expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('0px');
     expect(host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]')).toBeTruthy();
+    expect(forceResizeSpy).toHaveBeenCalled();
 
+    forceResizeSpy.mockClear();
     (host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]') as HTMLButtonElement | null)?.click();
     await Promise.resolve();
 
     expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]')).toBeTruthy();
+    expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('132px');
+    expect(forceResizeSpy).toHaveBeenCalled();
   });
 
   it('does not show Floe keyboard actions in the mobile More menu while System IME mode is active', async () => {
@@ -587,7 +604,12 @@ describe('TerminalPanel', () => {
     expect(terminalInput?.getAttribute('virtualkeyboardpolicy')).toBe('manual');
 
     const terminalContent = host.querySelector('[data-testid="terminal-content"]') as HTMLDivElement | null;
-    expect(terminalContent?.style.paddingBottom).toBe('132px');
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    const sessionViewport = terminalSurface?.parentElement as HTMLDivElement | null;
+
+    expect(terminalContent?.style.paddingBottom).toBe('');
+    expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('132px');
+    expect(terminalSurface?.style.bottom).toBe('var(--terminal-bottom-inset)');
   });
 
   it('shows keyboard suggestions and sends the completion payload when a suggestion is selected', async () => {
