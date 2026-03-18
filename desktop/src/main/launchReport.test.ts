@@ -11,6 +11,8 @@ describe('launchReport', () => {
       effective_run_mode: 'hybrid',
       remote_enabled: true,
       desktop_managed: true,
+      state_dir: '/Users/tester/.redeven',
+      diagnostics_enabled: true,
     }))).toEqual({
       status: 'ready',
       startup: {
@@ -19,6 +21,8 @@ describe('launchReport', () => {
         effective_run_mode: 'hybrid',
         remote_enabled: true,
         desktop_managed: true,
+        state_dir: '/Users/tester/.redeven',
+        diagnostics_enabled: true,
       },
     });
   });
@@ -31,6 +35,8 @@ describe('launchReport', () => {
       effective_run_mode: 'local',
       remote_enabled: false,
       desktop_managed: false,
+      state_dir: '/Users/tester/.redeven',
+      diagnostics_enabled: false,
     }))).toEqual({
       status: 'attached',
       startup: {
@@ -39,6 +45,8 @@ describe('launchReport', () => {
         effective_run_mode: 'local',
         remote_enabled: false,
         desktop_managed: false,
+        state_dir: '/Users/tester/.redeven',
+        diagnostics_enabled: false,
       },
     });
   });

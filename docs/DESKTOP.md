@@ -50,6 +50,11 @@ Behavior:
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
 - Desktop-managed startup settings do not create a separate agent state directory; `~/.redeven` remains the runtime source of truth.
 
+The ready/attached startup payload also carries:
+
+- `state_dir`: the runtime state directory used by the current agent instance
+- `diagnostics_enabled`: whether runtime diagnostics mode is active for this launch
+
 ### Launch outcomes
 
 The launch report distinguishes these outcomes:
@@ -91,6 +96,8 @@ Desktop settings live under the Electron user data directory, not inside the git
 - Env App hides `Update agent` in desktop-managed runs.
 - Env App keeps `Restart agent`.
 - The maintenance card explains that updates must come from a new desktop release.
+- When agent logging is set to `log_level=debug`, Desktop records Chromium-side request diagnostics into `<state_dir>/diagnostics/desktop-events.jsonl`.
+- Desktop skips self-observation for the diagnostics API itself so the diagnostics panel reflects application traffic rather than its own refresh/export requests.
 
 ## Release assets
 
