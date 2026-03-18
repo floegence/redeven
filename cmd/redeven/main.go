@@ -305,6 +305,16 @@ func (c *cli) runCmd(args []string) int {
 	lk, err := lockfile.Acquire(lockPath)
 	if err != nil {
 		if errors.Is(err, lockfile.ErrAlreadyLocked) {
+			if desktopLaunchReportEnabled(mode, *desktopManaged, *startupReportFile) {
+				handled, exitCode, reportErr := handleDesktopLockConflict(*startupReportFile, lockPath, cfgPathClean)
+				if reportErr != nil {
+					fmt.Fprintf(c.stderr, "failed to resolve desktop startup conflict: %v\n", reportErr)
+					return 1
+				}
+				if handled {
+					return exitCode
+				}
+			}
 			fmt.Fprintf(c.stderr, "another redeven agent is already using this state directory: %s\n", lockPath)
 			fmt.Fprintf(c.stderr, "Hint: stop the existing agent process, or use a different environment/state directory before retrying.\n")
 			return 1
@@ -313,6 +323,11 @@ func (c *cli) runCmd(args []string) int {
 		return 1
 	}
 	defer func() { _ = lk.Release() }()
+
+	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), *desktopManaged, mode != runModeRemote, cfgPathClean, localui.RuntimeStatePath(cfgPathClean))); err != nil {
+		fmt.Fprintf(c.stderr, "failed to write agent lock metadata: %v\n", err)
+		return 1
+	}
 
 	runPassword, err := resolveRunPassword(runPasswordOptions{
 		password:     *password,
@@ -482,14 +497,14 @@ func (c *cli) runCmd(args []string) int {
 		localUIBindLabel = srv.ListenLabel()
 		localUIURLs = srv.DisplayURLs()
 		if reportPath := strings.TrimSpace(*startupReportFile); reportPath != "" {
-			if err := writeStartupReport(reportPath, startupReport{
+			if err := writeDesktopReadyLaunchReport(reportPath, runtimeStartupReport{
 				LocalUIURL:       firstNonEmptyString(localUIURLs),
 				LocalUIURLs:      append([]string(nil), localUIURLs...),
 				EffectiveRunMode: string(effectiveRunMode),
 				RemoteEnabled:    controlChannelEnabled,
 				DesktopManaged:   *desktopManaged,
-			}); err != nil {
-				fmt.Fprintf(c.stderr, "failed to write startup report: %v\n", err)
+			}, desktopLaunchStatusReady); err != nil {
+				fmt.Fprintf(c.stderr, "failed to write desktop launch report: %v\n", err)
 				return 1
 			}
 		}

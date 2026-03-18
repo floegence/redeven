@@ -5,8 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
 
+import { parseLaunchReport, type LaunchBlockedReport, type LaunchReport } from './launchReport';
 import { defaultRuntimeStatePath, loadAttachableRuntimeState } from './runtimeState';
-import { type StartupReport, parseStartupReport } from './startup';
+import { type StartupReport } from './startup';
 
 const STARTUP_REPORT_POLL_MS = 100;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
@@ -35,6 +36,17 @@ export type StartManagedAgentArgs = Readonly<{
   runtimeAttachTimeoutMs?: number;
   onLog?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }>;
+
+export type ManagedAgentLaunch = Readonly<
+  | {
+      kind: 'ready';
+      managedAgent: ManagedAgent;
+    }
+  | {
+      kind: 'blocked';
+      blocked: LaunchBlockedReport;
+    }
+>;
 
 type RecentLogs = {
   stdout: string;
@@ -87,7 +99,20 @@ function readinessFailure(message: string, logs: RecentLogs): Error {
   return new Error(`${message}\n\n${details}`);
 }
 
-async function waitForStartupReport(
+async function readLaunchReport(reportFile: string): Promise<LaunchReport | null> {
+  try {
+    const raw = await fs.readFile(reportFile, 'utf8');
+    return parseLaunchReport(raw);
+  } catch (error: unknown) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError?.code === 'ENOENT' || error instanceof SyntaxError) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function waitForLaunchReport(
   reportFile: string,
   child: SpawnedAgentProcess,
   timeoutMs: number,
@@ -95,42 +120,58 @@ async function waitForStartupReport(
   runtimeAttachTimeoutMs: number,
   logs: RecentLogs,
   getSpawnError: () => Error | null,
-): Promise<StartupReport> {
+): Promise<LaunchReport> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const spawnError = getSpawnError();
     if (spawnError) {
       throw readinessFailure(`Failed to start redeven: ${spawnError.message}`, logs);
     }
+    const launchReport = await readLaunchReport(reportFile);
+    if (launchReport) {
+      return launchReport;
+    }
     if (child.exitCode !== null) {
       const attachedStartup = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
       if (attachedStartup) {
-        return attachedStartup;
+        return {
+          status: 'attached',
+          startup: attachedStartup,
+        };
+      }
+      const finalReport = await readLaunchReport(reportFile);
+      if (finalReport) {
+        return finalReport;
       }
       throw readinessFailure(`redeven exited before reporting readiness (exit code: ${child.exitCode})`, logs);
     }
     if (child.signalCode) {
       const attachedStartup = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
       if (attachedStartup) {
-        return attachedStartup;
+        return {
+          status: 'attached',
+          startup: attachedStartup,
+        };
+      }
+      const finalReport = await readLaunchReport(reportFile);
+      if (finalReport) {
+        return finalReport;
       }
       throw readinessFailure(`redeven exited before reporting readiness (signal: ${child.signalCode})`, logs);
-    }
-    try {
-      const raw = await fs.readFile(reportFile, 'utf8');
-      return parseStartupReport(raw);
-    } catch (error: unknown) {
-      const nodeError = error as NodeJS.ErrnoException;
-      if (nodeError?.code !== 'ENOENT' && !(error instanceof SyntaxError)) {
-        throw error;
-      }
     }
     if (Date.now() >= deadline) {
       const attachedStartup = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
       if (attachedStartup) {
-        return attachedStartup;
+        return {
+          status: 'attached',
+          startup: attachedStartup,
+        };
       }
-      throw readinessFailure('Timed out waiting for redeven desktop startup report.', logs);
+      const finalReport = await readLaunchReport(reportFile);
+      if (finalReport) {
+        return finalReport;
+      }
+      throw readinessFailure('Timed out waiting for redeven desktop launch report.', logs);
     }
     await delay(STARTUP_REPORT_POLL_MS);
   }
@@ -151,7 +192,7 @@ async function stopChildProcess(child: SpawnedAgentProcess, timeoutMs: number): 
   }
 }
 
-export async function startManagedAgent(args: StartManagedAgentArgs): Promise<ManagedAgent> {
+export async function startManagedAgent(args: StartManagedAgentArgs): Promise<ManagedAgentLaunch> {
   const mergedEnv = {
     ...process.env,
     ...args.env,
@@ -161,12 +202,15 @@ export async function startManagedAgent(args: StartManagedAgentArgs): Promise<Ma
   const existingRuntime = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
   if (existingRuntime) {
     return {
-      child: null,
-      startup: existingRuntime,
-      reportDir: null,
-      reportFile: null,
-      attached: true,
-      stop: async () => undefined,
+      kind: 'ready',
+      managedAgent: {
+        child: null,
+        startup: existingRuntime,
+        reportDir: null,
+        reportFile: null,
+        attached: true,
+        stop: async () => undefined,
+      },
     };
   }
 
@@ -195,7 +239,7 @@ export async function startManagedAgent(args: StartManagedAgentArgs): Promise<Ma
   });
 
   try {
-    const startup = await waitForStartupReport(
+    const launchReport = await waitForLaunchReport(
       reportFile,
       child,
       args.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS,
@@ -204,26 +248,64 @@ export async function startManagedAgent(args: StartManagedAgentArgs): Promise<Ma
       recentLogs,
       () => spawnError,
     );
-    if (spawnError || child.exitCode !== null || child.signalCode) {
+
+    if (launchReport.status === 'blocked') {
+      await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS).catch(() => undefined);
       await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
       return {
-        child: null,
-        startup,
-        reportDir: null,
-        reportFile: null,
-        attached: true,
-        stop: async () => undefined,
+        kind: 'blocked',
+        blocked: launchReport,
       };
     }
+
+    const startup = launchReport.startup;
+    if (launchReport.status === 'attached') {
+      await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS).catch(() => undefined);
+      await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
+      return {
+        kind: 'ready',
+        managedAgent: {
+          child: null,
+          startup,
+          reportDir: null,
+          reportFile: null,
+          attached: true,
+          stop: async () => undefined,
+        },
+      };
+    }
+
+    if (spawnError || child.exitCode !== null || child.signalCode) {
+      const attachedStartup = await loadAttachableRuntimeState(runtimeStateFile, runtimeAttachTimeoutMs);
+      if (!attachedStartup) {
+        throw readinessFailure('redeven reported readiness but exited before Desktop could attach.', recentLogs);
+      }
+      await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
+      return {
+        kind: 'ready',
+        managedAgent: {
+          child: null,
+          startup: attachedStartup,
+          reportDir: null,
+          reportFile: null,
+          attached: true,
+          stop: async () => undefined,
+        },
+      };
+    }
+
     return {
-      child,
-      startup,
-      reportDir,
-      reportFile,
-      attached: false,
-      stop: async () => {
-        await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS);
-        await fs.rm(reportDir, { recursive: true, force: true });
+      kind: 'ready',
+      managedAgent: {
+        child,
+        startup,
+        reportDir,
+        reportFile,
+        attached: false,
+        stop: async () => {
+          await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS);
+          await fs.rm(reportDir, { recursive: true, force: true });
+        },
       },
     };
   } catch (error) {

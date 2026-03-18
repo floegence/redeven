@@ -38,11 +38,36 @@ func Acquire(path string) (*Lock, error) {
 	return &Lock{path: path, f: f}, nil
 }
 
+func ReadContent(path string) ([]byte, error) {
+	if path == "" {
+		return nil, fmt.Errorf("lock path is empty")
+	}
+	return os.ReadFile(path)
+}
+
 func (l *Lock) Path() string {
 	if l == nil {
 		return ""
 	}
 	return l.path
+}
+
+func (l *Lock) SetContent(body []byte) error {
+	if l == nil || l.f == nil {
+		return fmt.Errorf("lock is not held")
+	}
+	if err := l.f.Truncate(0); err != nil {
+		return err
+	}
+	if _, err := l.f.Seek(0, 0); err != nil {
+		return err
+	}
+	if len(body) > 0 {
+		if _, err := l.f.Write(body); err != nil {
+			return err
+		}
+	}
+	return l.f.Sync()
 }
 
 func (l *Lock) Release() error {
