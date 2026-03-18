@@ -506,6 +506,7 @@ func (c *cli) runCmd(args []string) int {
 			Agent:            a,
 			ConfigPath:       cfgPathAbs,
 			Version:          Version,
+			Diagnostics:      a.DiagnosticsStore(),
 			AccessGate:       accessGate,
 		})
 		if err != nil {
@@ -520,11 +521,13 @@ func (c *cli) runCmd(args []string) int {
 		localUIURLs = srv.DisplayURLs()
 		if reportPath := strings.TrimSpace(*startupReportFile); reportPath != "" {
 			if err := writeDesktopReadyLaunchReport(reportPath, runtimeStartupReport{
-				LocalUIURL:       firstNonEmptyString(localUIURLs),
-				LocalUIURLs:      append([]string(nil), localUIURLs...),
-				EffectiveRunMode: string(effectiveRunMode),
-				RemoteEnabled:    controlChannelEnabled,
-				DesktopManaged:   *desktopManaged,
+				LocalUIURL:         firstNonEmptyString(localUIURLs),
+				LocalUIURLs:        append([]string(nil), localUIURLs...),
+				EffectiveRunMode:   string(effectiveRunMode),
+				RemoteEnabled:      controlChannelEnabled,
+				DesktopManaged:     *desktopManaged,
+				StateDir:           filepath.Dir(cfgPathAbs),
+				DiagnosticsEnabled: a.DiagnosticsStore() != nil,
 			}, desktopLaunchStatusReady); err != nil {
 				fmt.Fprintf(c.stderr, "failed to write desktop launch report: %v\n", err)
 				return 1

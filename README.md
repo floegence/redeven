@@ -136,6 +136,8 @@ Common local files:
 - `~/.redeven/agent.lock`
 - `~/.redeven/secrets.json`
 - `~/.redeven/audit/events.jsonl`
+- `~/.redeven/diagnostics/agent-events.jsonl` (only when `log_level=debug`)
+- `~/.redeven/diagnostics/desktop-events.jsonl` (desktop-managed runs with diagnostics mode)
 - `~/.redeven/apps/code/...`
 
 Multi-environment mode uses isolated state per environment:
@@ -202,3 +204,9 @@ Details:
 - If you expose Local UI on a non-loopback address, also set a Local UI password.
 - To register Desktop to a Redeven environment on the next start, fill in `Control plane URL`, `Environment ID`, and `Environment token`, then save.
 - `CommandOrControl+Q` now asks for confirmation before quitting the desktop app.
+
+### Requests feel slow even though Desktop is talking to a local agent
+
+- Set `log_level=debug`, restart the agent/Desktop runtime, then open the Env Settings `Logging` section.
+- Use the Diagnostics panel to compare recent Desktop and agent timing, inspect slow-request summaries, and export a diagnostics bundle.
+- The exported data comes from `/_redeven_proxy/api/debug/diagnostics/export` and correlates events through `X-Redeven-Debug-Trace-ID`.

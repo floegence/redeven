@@ -11,12 +11,16 @@ describe('agentProcess', () => {
       effective_run_mode: 'hybrid',
       remote_enabled: true,
       desktop_managed: true,
+      state_dir: '/Users/tester/.redeven',
+      diagnostics_enabled: true,
     }))).toEqual({
       local_ui_url: 'http://127.0.0.1:43123/',
       local_ui_urls: ['http://127.0.0.1:43123/'],
       effective_run_mode: 'hybrid',
       remote_enabled: true,
       desktop_managed: true,
+      state_dir: '/Users/tester/.redeven',
+      diagnostics_enabled: true,
     });
   });
 

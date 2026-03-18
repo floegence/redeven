@@ -9,6 +9,7 @@ import (
 	"github.com/floegence/flowersec/flowersec-go/endpoint"
 	"github.com/floegence/redeven-agent/internal/accessgate"
 	"github.com/floegence/redeven-agent/internal/auditlog"
+	"github.com/floegence/redeven-agent/internal/diagnostics"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -29,7 +30,9 @@ func sanitizeAuditError(err error) string {
 //
 // The session metadata MUST be treated as authoritative and is used to enforce permission caps.
 type LocalDirectSessionOptions struct {
-	AccessUnlocked bool
+	AccessUnlocked        bool
+	TraceID               string
+	ConnectInfoIssuedAtMs int64
 }
 
 func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSessionOptions) func() {
@@ -117,6 +120,28 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess endpoint.Sessi
 			"duration_ms", time.Since(startedAt).Milliseconds(),
 		)
 
+		if a.diag != nil {
+			statusCode := 0
+			if err != nil && !errors.Is(err, context.Canceled) {
+				statusCode = 1
+			}
+			a.diag.Append(diagnostics.Event{
+				Scope:      diagnostics.ScopeDirectSession,
+				Kind:       "closed",
+				TraceID:    strings.TrimSpace(opts.TraceID),
+				DurationMs: time.Since(startedAt).Milliseconds(),
+				StatusCode: statusCode,
+				Message:    reason,
+				Detail: map[string]any{
+					"channel_id":          channelID,
+					"floe_app":            strings.TrimSpace(meta.FloeApp),
+					"code_space_id":       strings.TrimSpace(meta.CodeSpaceID),
+					"reason":              reason,
+					"session_duration_ms": time.Since(startedAt).Milliseconds(),
+				},
+			})
+		}
+
 		if a.audit != nil {
 			status := "success"
 			if err != nil && !errors.Is(err, context.Canceled) {
@@ -146,6 +171,25 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess endpoint.Sessi
 			})
 		}
 	}()
+
+	if a.diag != nil {
+		detail := map[string]any{
+			"channel_id":    channelID,
+			"floe_app":      strings.TrimSpace(meta.FloeApp),
+			"code_space_id": strings.TrimSpace(meta.CodeSpaceID),
+		}
+		if opts.ConnectInfoIssuedAtMs > 0 {
+			detail["connect_info_age_ms"] = time.Now().UnixMilli() - opts.ConnectInfoIssuedAtMs
+		}
+		a.diag.Append(diagnostics.Event{
+			Scope:      diagnostics.ScopeDirectSession,
+			Kind:       "opened",
+			TraceID:    strings.TrimSpace(opts.TraceID),
+			DurationMs: time.Since(startedAt).Milliseconds(),
+			Message:    "local direct session opened",
+			Detail:     detail,
+		})
+	}
 
 	a.log.Info("local direct session opened",
 		"channel_id", channelID,
