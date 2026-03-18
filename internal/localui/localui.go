@@ -183,10 +183,11 @@ func (s *Server) Start(ctx context.Context) error {
 		s.log.Warn("local ui listener unavailable", "bind", s.bind.ListenLabel(), "error", errText)
 	}
 
-	s.srv = &http.Server{
+	srv := &http.Server{
 		Handler:           s.handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	s.srv = srv
 	s.listeners = listeners
 
 	go func() {
@@ -199,7 +200,7 @@ func (s *Server) Start(ctx context.Context) error {
 	for _, ln := range listeners {
 		ln := ln
 		go func() {
-			if err := s.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				s.log.Error("local ui server stopped", "addr", ln.Addr().String(), "error", err)
 			}
 		}()
