@@ -19,6 +19,12 @@ const terminalPrefsState = vi.hoisted(() => ({
 
 const focusSpy = vi.hoisted(() => vi.fn());
 const forceResizeSpy = vi.hoisted(() => vi.fn());
+const scrollLinesSpy = vi.hoisted(() => vi.fn());
+const terminalInputSpy = vi.hoisted(() => vi.fn());
+const terminalScrollState = vi.hoisted(() => ({
+  alternateScreen: false,
+  scrollbackLength: 200,
+}));
 
 const rpcFsMocks = vi.hoisted(() => ({
   getPathContext: vi.fn().mockResolvedValue({ agentHomePathAbs: '/workspace' }),
@@ -249,7 +255,13 @@ vi.mock('../protocol/redeven_v1', () => ({
 vi.mock('@floegence/floeterm-terminal-web', () => {
   class MockTerminalCore {
     container: HTMLDivElement;
-    terminal = { options: {} };
+    terminal = {
+      options: {},
+      scrollLines: scrollLinesSpy,
+      getScrollbackLength: () => terminalScrollState.scrollbackLength,
+      isAlternateScreen: () => terminalScrollState.alternateScreen,
+      input: terminalInputSpy,
+    };
 
     constructor(container: HTMLDivElement) {
       this.container = container;
@@ -358,6 +370,10 @@ describe('TerminalPanel', () => {
     terminalPrefsState.mobileInputMode = 'floe';
     focusSpy.mockClear();
     forceResizeSpy.mockClear();
+    scrollLinesSpy.mockClear();
+    terminalInputSpy.mockClear();
+    terminalScrollState.alternateScreen = false;
+    terminalScrollState.scrollbackLength = 200;
     Object.values(transportMocks).forEach((mock) => {
       if ('mockClear' in mock) mock.mockClear();
     });
@@ -401,6 +417,22 @@ describe('TerminalPanel', () => {
       return 1;
     });
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    if (typeof PointerEvent === 'undefined') {
+      class TestPointerEvent extends MouseEvent {
+        pointerId: number;
+        pointerType: string;
+        isPrimary: boolean;
+
+        constructor(type: string, init: PointerEventInit = {}) {
+          super(type, init);
+          this.pointerId = init.pointerId ?? 1;
+          this.pointerType = init.pointerType ?? '';
+          this.isPrimary = init.isPrimary ?? true;
+        }
+      }
+
+      vi.stubGlobal('PointerEvent', TestPointerEvent as unknown as typeof PointerEvent);
+    }
   });
 
   afterEach(() => {
@@ -610,6 +642,101 @@ describe('TerminalPanel', () => {
     expect(terminalContent?.style.paddingBottom).toBe('');
     expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('132px');
     expect(terminalSurface?.style.bottom).toBe('var(--terminal-bottom-inset)');
+  });
+
+  it('maps mobile touch drags on the terminal surface to terminal scrollback', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await Promise.resolve();
+    await Promise.resolve();
+    scrollLinesSpy.mockClear();
+    terminalInputSpy.mockClear();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+    expect(terminalSurface?.style.touchAction).toBe('pan-x pinch-zoom');
+    expect(terminalSurface?.style.overscrollBehavior).toBe('contain');
+
+    terminalSurface?.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 40,
+      clientY: 40,
+    }));
+    terminalSurface?.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 40,
+      clientY: 65,
+    }));
+    terminalSurface?.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true,
+      pointerId: 1,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 40,
+      clientY: 65,
+    }));
+
+    expect(scrollLinesSpy).toHaveBeenCalledWith(-1);
+    expect(terminalInputSpy).not.toHaveBeenCalled();
+  });
+
+  it('routes mobile touch drags through terminal input when the terminal is in alternate screen mode', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+    terminalScrollState.alternateScreen = true;
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await Promise.resolve();
+    await Promise.resolve();
+    scrollLinesSpy.mockClear();
+    terminalInputSpy.mockClear();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    terminalSurface?.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      pointerId: 2,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 40,
+      clientY: 60,
+    }));
+    terminalSurface?.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 2,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 40,
+      clientY: 35,
+    }));
+    terminalSurface?.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true,
+      pointerId: 2,
+      pointerType: 'touch',
+      isPrimary: true,
+      clientX: 40,
+      clientY: 35,
+    }));
+
+    expect(scrollLinesSpy).not.toHaveBeenCalled();
+    expect(terminalInputSpy).toHaveBeenCalledWith('\x1B[B', true);
   });
 
   it('shows keyboard suggestions and sends the completion payload when a suggestion is selected', async () => {
