@@ -21,30 +21,36 @@ func desktopLaunchReportEnabled(mode runMode, desktopManaged bool, reportPath st
 
 func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupReport, status desktopLaunchStatus) error {
 	return writeDesktopLaunchReport(reportPath, desktopLaunchReport{
-		Status:           status,
-		LocalUIURL:       startup.LocalUIURL,
-		LocalUIURLs:      append([]string(nil), startup.LocalUIURLs...),
-		EffectiveRunMode: startup.EffectiveRunMode,
-		RemoteEnabled:    startup.RemoteEnabled,
-		DesktopManaged:   startup.DesktopManaged,
+		Status:             status,
+		LocalUIURL:         startup.LocalUIURL,
+		LocalUIURLs:        append([]string(nil), startup.LocalUIURLs...),
+		EffectiveRunMode:   startup.EffectiveRunMode,
+		RemoteEnabled:      startup.RemoteEnabled,
+		DesktopManaged:     startup.DesktopManaged,
+		StateDir:           startup.StateDir,
+		DiagnosticsEnabled: startup.DiagnosticsEnabled,
 	})
 }
 
 type runtimeStartupReport struct {
-	LocalUIURL       string
-	LocalUIURLs      []string
-	EffectiveRunMode string
-	RemoteEnabled    bool
-	DesktopManaged   bool
+	LocalUIURL         string
+	LocalUIURLs        []string
+	EffectiveRunMode   string
+	RemoteEnabled      bool
+	DesktopManaged     bool
+	StateDir           string
+	DiagnosticsEnabled bool
 }
 
 func buildRuntimeStartupReport(state *localui.RuntimeStateSnapshot) runtimeStartupReport {
 	return runtimeStartupReport{
-		LocalUIURL:       state.LocalUIURL,
-		LocalUIURLs:      append([]string(nil), state.LocalUIURLs...),
-		EffectiveRunMode: state.EffectiveRunMode,
-		RemoteEnabled:    state.RemoteEnabled,
-		DesktopManaged:   state.DesktopManaged,
+		LocalUIURL:         state.LocalUIURL,
+		LocalUIURLs:        append([]string(nil), state.LocalUIURLs...),
+		EffectiveRunMode:   state.EffectiveRunMode,
+		RemoteEnabled:      state.RemoteEnabled,
+		DesktopManaged:     state.DesktopManaged,
+		StateDir:           state.StateDir,
+		DiagnosticsEnabled: state.DiagnosticsEnabled,
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -25,6 +26,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/agent"
 	"github.com/floegence/redeven-agent/internal/codeapp/gateway"
 	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven-agent/internal/diagnostics"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -61,6 +63,9 @@ type Options struct {
 	// Version is the agent build version (used by /api/local/agent/version/latest).
 	Version string
 
+	// Diagnostics stores structured debug-only request timing events.
+	Diagnostics *diagnostics.Store
+
 	// AccessGate protects the local browser entry when password mode is enabled.
 	AccessGate *accessgate.Gate
 }
@@ -70,14 +75,16 @@ type Server struct {
 
 	bind             BindSpec
 	configPath       string
+	stateDir         string
 	runtimeStatePath string
 	version          string
 	desktopManaged   bool
 	effectiveRunMode string
 	remoteEnabled    bool
 
-	gw *gateway.Gateway
-	a  *agent.Agent
+	gw   *gateway.Gateway
+	a    *agent.Agent
+	diag *diagnostics.Store
 
 	accessGate *accessgate.Gate
 
@@ -89,9 +96,11 @@ type Server struct {
 }
 
 type pendingDirect struct {
-	psk               [32]byte
-	initExpireAtUnixS int64
-	meta              session.Meta
+	psk                   [32]byte
+	initExpireAtUnixS     int64
+	meta                  session.Meta
+	traceID               string
+	connectInfoIssuedAtMs int64
 }
 
 func (s *Server) handler() http.Handler {
@@ -112,7 +121,10 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("/_redeven_direct/ws", s.handleDirectWS)
 	// Reuse the existing gateway for Env App UI + management APIs.
 	mux.HandleFunc("/_redeven_proxy/", s.handleGateway)
-	return mux
+	if s.diag == nil {
+		return mux
+	}
+	return s.withDiagnostics(mux)
 }
 
 func New(opts Options) (*Server, error) {
@@ -139,17 +151,20 @@ func New(opts Options) (*Server, error) {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
 
+	configPath := strings.TrimSpace(opts.ConfigPath)
 	return &Server{
 		log:              logger,
 		bind:             bind,
-		configPath:       strings.TrimSpace(opts.ConfigPath),
-		runtimeStatePath: localRuntimeStatePath(opts.ConfigPath),
+		configPath:       configPath,
+		stateDir:         filepath.Dir(configPath),
+		runtimeStatePath: localRuntimeStatePath(configPath),
 		version:          strings.TrimSpace(opts.Version),
 		desktopManaged:   opts.DesktopManaged,
 		effectiveRunMode: strings.TrimSpace(opts.EffectiveRunMode),
 		remoteEnabled:    opts.RemoteEnabled,
 		gw:               opts.Gateway,
 		a:                opts.Agent,
+		diag:             opts.Diagnostics,
 		accessGate:       opts.AccessGate,
 		pending:          make(map[string]pendingDirect),
 	}, nil
@@ -189,6 +204,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.srv = srv
 	s.listeners = listeners
+	srv := s.srv
 
 	go func() {
 		<-ctx.Done()
@@ -207,12 +223,14 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	if err := writeRuntimeState(s.runtimeStatePath, runtimeState{
-		LocalUIURL:       firstNonEmptyString(s.DisplayURLs()),
-		LocalUIURLs:      s.DisplayURLs(),
-		EffectiveRunMode: s.effectiveRunMode,
-		RemoteEnabled:    s.remoteEnabled,
-		DesktopManaged:   s.desktopManaged,
-		PID:              os.Getpid(),
+		LocalUIURL:         firstNonEmptyString(s.DisplayURLs()),
+		LocalUIURLs:        s.DisplayURLs(),
+		EffectiveRunMode:   s.effectiveRunMode,
+		RemoteEnabled:      s.remoteEnabled,
+		DesktopManaged:     s.desktopManaged,
+		StateDir:           s.stateDir,
+		DiagnosticsEnabled: s.diag != nil,
+		PID:                os.Getpid(),
 	}); err != nil {
 		_ = s.Close()
 		return fmt.Errorf("write local runtime state: %w", err)
@@ -567,6 +585,89 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+func (s *Server) withDiagnostics(next http.Handler) http.Handler {
+	if s == nil || s.diag == nil || next == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		path := strings.TrimSpace(r.URL.Path)
+		if !shouldTraceLocalUIPath(path) || shouldSkipLocalUIDiagnosticsPath(path) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		traceID := localUITraceID(r)
+		if traceID == "" {
+			traceID = diagnostics.NewTraceID()
+		}
+		if traceID != "" {
+			r = r.WithContext(diagnostics.WithTraceID(r.Context(), traceID))
+			w.Header().Set(diagnostics.TraceHeader, traceID)
+		}
+		startedAt := time.Now()
+		rw := diagnostics.NewStatusWriter(w)
+		next.ServeHTTP(rw, r)
+		s.diag.Append(diagnostics.Event{
+			Scope:      diagnostics.ScopeLocalUIHTTP,
+			Kind:       "request",
+			TraceID:    traceID,
+			Method:     r.Method,
+			Path:       path,
+			StatusCode: rw.StatusCode(),
+			DurationMs: time.Since(startedAt).Milliseconds(),
+			Detail: map[string]any{
+				"route_kind": localUIDiagnosticsRouteKind(path),
+			},
+		})
+	})
+}
+
+func localUITraceID(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if traceID := diagnostics.TraceIDFromContext(r.Context()); traceID != "" {
+		return traceID
+	}
+	return strings.TrimSpace(r.Header.Get(diagnostics.TraceHeader))
+}
+
+func shouldTraceLocalUIPath(path string) bool {
+	path = strings.TrimSpace(path)
+	switch {
+	case strings.HasPrefix(path, "/api/local/"):
+		return true
+	case path == "/_redeven_direct/ws":
+		return true
+	case strings.HasPrefix(path, "/_redeven_proxy/"):
+		return true
+	default:
+		return false
+	}
+}
+
+func shouldSkipLocalUIDiagnosticsPath(path string) bool {
+	path = strings.TrimSpace(path)
+	return strings.HasPrefix(path, "/_redeven_proxy/api/debug/diagnostics")
+}
+
+func localUIDiagnosticsRouteKind(path string) string {
+	path = strings.TrimSpace(path)
+	switch {
+	case strings.HasPrefix(path, "/api/local/"):
+		return "local_api"
+	case path == "/_redeven_direct/ws":
+		return "direct_ws"
+	case strings.HasPrefix(path, "/_redeven_proxy/"):
+		return "gateway_entry"
+	default:
+		return "other"
+	}
+}
+
 type runtimeResp struct {
 	Mode             string `json:"mode"`
 	EnvPublicID      string `json:"env_public_id"`
@@ -624,7 +725,7 @@ func randomB64u(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func (s *Server) mintPending(meta session.Meta, wsURL string) (*directv1.DirectConnectInfo, error) {
+func (s *Server) mintPending(meta session.Meta, wsURL string, traceID string) (*directv1.DirectConnectInfo, error) {
 	if s == nil {
 		return nil, errors.New("server not ready")
 	}
@@ -638,15 +739,18 @@ func (s *Server) mintPending(meta session.Meta, wsURL string) (*directv1.DirectC
 	}
 
 	// Keep the init window reasonably short; the UI can always mint a fresh connect_info.
-	initExp := time.Now().Add(10 * time.Minute).Unix()
+	now := time.Now()
+	initExp := now.Add(10 * time.Minute).Unix()
 
 	meta.ChannelID = channelID
 
 	s.pendingMu.Lock()
 	s.pending[channelID] = pendingDirect{
-		psk:               psk,
-		initExpireAtUnixS: initExp,
-		meta:              meta,
+		psk:                   psk,
+		initExpireAtUnixS:     initExp,
+		meta:                  meta,
+		traceID:               strings.TrimSpace(traceID),
+		connectInfoIssuedAtMs: now.UnixMilli(),
 	}
 	s.pendingMu.Unlock()
 
@@ -693,10 +797,25 @@ func (s *Server) handleConnectInfo(w http.ResponseWriter, r *http.Request) {
 	meta.CanAdmin = true
 	meta.CreatedAtUnixMs = time.Now().UnixMilli()
 
-	info, err := s.mintPending(meta, wsURL)
+	traceID := localUITraceID(r)
+	info, err := s.mintPending(meta, wsURL, traceID)
 	if err != nil {
 		http.Error(w, "failed to mint connect info", http.StatusInternalServerError)
 		return
+	}
+
+	if s.diag != nil {
+		s.diag.Append(diagnostics.Event{
+			Scope:   diagnostics.ScopeDirectSession,
+			Kind:    "connect_info_issued",
+			TraceID: traceID,
+			Message: "issued direct connect info",
+			Detail: map[string]any{
+				"channel_id":    info.ChannelId,
+				"floe_app":      meta.FloeApp,
+				"code_space_id": meta.CodeSpaceID,
+			},
+		})
 	}
 
 	writeJSON(w, http.StatusOK, info)
@@ -866,6 +985,7 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
 		return
 	}
+	traceID := localUITraceID(r)
 	if !s.requireLocalAccessHTTP(w, r) {
 		return
 	}
@@ -874,9 +994,13 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	startedAt := time.Now()
 	c, err := ws.Upgrade(w, r, ws.UpgraderOptions{CheckOrigin: sameOriginWSRequest})
 	if err != nil {
 		s.log.Warn("local direct ws upgrade failed", "error", err)
+		if s.diag != nil {
+			s.diag.Append(diagnostics.Event{Scope: diagnostics.ScopeDirectSession, Kind: "upgrade_failed", TraceID: traceID, DurationMs: time.Since(startedAt).Milliseconds(), Message: err.Error()})
+		}
 		return
 	}
 	defer c.Close()
@@ -902,6 +1026,22 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		s.log.Warn("local direct ws handshake failed", "channel_id", ch, "error", err)
+		if s.diag != nil {
+			failureTraceID := strings.TrimSpace(traceID)
+			if resolved.traceID != "" {
+				failureTraceID = strings.TrimSpace(resolved.traceID)
+			}
+			s.diag.Append(diagnostics.Event{
+				Scope:      diagnostics.ScopeDirectSession,
+				Kind:       "handshake_failed",
+				TraceID:    failureTraceID,
+				DurationMs: time.Since(startedAt).Milliseconds(),
+				Message:    err.Error(),
+				Detail: map[string]any{
+					"channel_id": strings.TrimSpace(ch),
+				},
+			})
+		}
 		return
 	}
 	defer sess.Close()
@@ -919,7 +1059,9 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	if err := s.a.ServeLocalDirectSession(r.Context(), sess, &metaCopy, agent.LocalDirectSessionOptions{
 		// The Local UI already enforced access-gate authorization for this HTTP request,
 		// so the direct channel can start in the unlocked state.
-		AccessUnlocked: s.accessEnabled(),
+		AccessUnlocked:        s.accessEnabled(),
+		TraceID:               firstNonEmptyString([]string{resolved.traceID, traceID}),
+		ConnectInfoIssuedAtMs: resolved.connectInfoIssuedAtMs,
 	}); err != nil && r.Context().Err() == nil {
 		s.log.Warn("local direct session exited", "channel_id", metaCopy.ChannelID, "error", err)
 	}

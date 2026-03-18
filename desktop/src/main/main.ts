@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, safeStorage, shell, type MessageBoxOptions } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, safeStorage, session, shell, type MessageBoxOptions } from 'electron';
 
 import { launchStartedFreshManagedRuntime, startManagedAgent, type ManagedAgent } from './agentProcess';
 import { buildAppMenuTemplate } from './appMenu';
@@ -14,6 +14,7 @@ import {
   type DesktopPreferences,
 } from './desktopPreferences';
 import { buildDesktopAgentArgs, buildDesktopAgentEnvironment } from './desktopLaunch';
+import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { desktopTheme } from './desktopTheme';
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import { isAllowedAppNavigation } from './navigation';
@@ -34,6 +35,7 @@ let quitPhase: 'idle' | 'requested' | 'shutting_down' = 'idle';
 const childWindows = new Set<BrowserWindow>();
 let blockedLaunch: LaunchBlockedReport | null = null;
 let desktopPreferencesCache: DesktopPreferences | null = null;
+const desktopDiagnostics = new DesktopDiagnosticsRecorder();
 
 function preferencesPaths() {
   return defaultDesktopPreferencesPaths(app.getPath('userData'));
@@ -93,6 +95,7 @@ async function requestQuit(): Promise<void> {
   }
 
   quitPhase = 'requested';
+  await desktopDiagnostics.recordLifecycle('quit_requested', 'user requested to quit Redeven Desktop');
   app.quit();
 }
 
@@ -205,6 +208,7 @@ function handleBlockedAction(url: string): boolean {
 }
 
 function createBrowserWindow(targetURL: string, parent?: BrowserWindow): BrowserWindow {
+  const windowRole = parent ? 'child' : 'main';
   const win = new BrowserWindow({
     width: 1440,
     height: 960,
@@ -246,14 +250,34 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow): Browser
     openExternal(url);
   });
 
+  void desktopDiagnostics.recordLifecycle('window_created', 'browser window created', { role: windowRole });
+  webContents.on('did-start-loading', () => {
+    void desktopDiagnostics.recordLifecycle('loading_started', 'browser window started loading', { role: windowRole });
+  });
+  webContents.on('did-finish-load', () => {
+    void desktopDiagnostics.recordLifecycle('loading_finished', 'browser window finished loading', { role: windowRole, url: webContents.getURL() });
+  });
+  webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    void desktopDiagnostics.recordLifecycle('loading_failed', errorDescription || 'browser window failed to load', {
+      role: windowRole,
+      url: validatedURL,
+      error_code: errorCode,
+      main_frame: isMainFrame,
+    });
+  });
+
   win.once('ready-to-show', () => {
     win.show();
+    void desktopDiagnostics.recordLifecycle('ready_to_show', 'browser window is ready to show', { role: windowRole });
+  });
+  win.on('closed', () => {
+    void desktopDiagnostics.recordLifecycle('window_closed', 'browser window closed', { role: windowRole });
+    if (parent) {
+      childWindows.delete(win);
+    }
   });
   if (parent) {
     childWindows.add(win);
-    win.on('closed', () => {
-      childWindows.delete(win);
-    });
   }
   void win.loadURL(targetURL);
   return win;
@@ -286,6 +310,7 @@ async function ensureAgentStarted(): Promise<string> {
     managedAgent = null;
     blockedLaunch = launch.blocked;
     allowedBaseURL = '';
+    desktopDiagnostics.clearRuntime();
     return blockedPageDataURL(launch.blocked);
   }
 
@@ -296,6 +321,16 @@ async function ensureAgentStarted(): Promise<string> {
   blockedLaunch = null;
   managedAgent = launch.managedAgent;
   allowedBaseURL = managedAgent.startup.local_ui_url;
+  await desktopDiagnostics.configureRuntime(managedAgent.startup, allowedBaseURL);
+  await desktopDiagnostics.recordLifecycle(
+    managedAgent.attached ? 'agent_attached' : 'agent_started',
+    managedAgent.attached ? 'desktop attached to an existing agent runtime' : 'desktop started a managed agent runtime',
+    {
+      attached: managedAgent.attached,
+      spawned: launch.spawned,
+      effective_run_mode: managedAgent.startup.effective_run_mode ?? '',
+    },
+  );
   return allowedBaseURL;
 }
 
@@ -314,6 +349,7 @@ async function showMainWindow(): Promise<void> {
 }
 
 async function shutdownAgent(): Promise<void> {
+  await desktopDiagnostics.recordLifecycle('agent_stopping', 'desktop is stopping the current agent runtime');
   for (const win of childWindows) {
     if (!win.isDestroyed()) {
       win.close();
@@ -326,6 +362,36 @@ async function shutdownAgent(): Promise<void> {
   if (runningAgent) {
     await runningAgent.stop();
   }
+  desktopDiagnostics.clearRuntime();
+}
+
+function installDesktopDiagnosticsHooks(): void {
+  const webSession = session.defaultSession;
+  webSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    const requestHeaders = desktopDiagnostics.startRequest({
+      requestID: details.id,
+      method: details.method,
+      url: details.url,
+      requestHeaders: details.requestHeaders as Record<string, string | string[]>,
+    });
+    callback(requestHeaders ? { requestHeaders } : {});
+  });
+  webSession.webRequest.onCompleted((details) => {
+    void desktopDiagnostics.completeRequest({
+      requestID: details.id,
+      url: details.url,
+      statusCode: details.statusCode,
+      responseHeaders: details.responseHeaders as Record<string, string | string[]> | undefined,
+      fromCache: details.fromCache,
+    });
+  });
+  webSession.webRequest.onErrorOccurred((details) => {
+    void desktopDiagnostics.failRequest({
+      requestID: details.id,
+      url: details.url,
+      error: details.error,
+    });
+  });
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -358,6 +424,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
+    installDesktopDiagnosticsHooks();
     Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate({
       openSettings: () => {
         void openSettingsWindow().catch((error) => {

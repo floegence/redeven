@@ -21,8 +21,10 @@ import { isReleaseVersion } from '../maintenance/agentVersion';
 import { resolveDesktopManagedAgentState } from '../maintenance/desktopManagedAgent';
 import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/shared';
 import { fetchGatewayJSON } from '../services/gatewayApi';
+import { diagnosticsExportFilename, exportDiagnostics, getDiagnostics, type DiagnosticsView } from '../services/diagnosticsApi';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { useEnvContext, type EnvSettingsSection } from './EnvContext';
+import { EnvDiagnosticsPanel } from './EnvDiagnosticsPanel';
 
 // ============================================================================
 // Types
@@ -830,6 +832,10 @@ export function EnvSettingsPage() {
     () => key(),
     async (k) => (k == null ? null : await fetchGatewayJSON<SettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' })),
   );
+  const [diagnosticsData, { refetch: refetchDiagnostics }] = createResource<DiagnosticsView | null, number | null>(
+    () => key(),
+    async (k) => (k == null ? null : await getDiagnostics()),
+  );
 
   const canInteract = createMemo(() => protocol.status() === 'connected' && !settings.loading && !settings.error);
 
@@ -978,6 +984,41 @@ export function EnvSettingsPage() {
   const [runtimeDirty, setRuntimeDirty] = createSignal(false);
   const [loggingDirty, setLoggingDirty] = createSignal(false);
   const [codespacesDirty, setCodespacesDirty] = createSignal(false);
+  const [diagnosticsRefreshing, setDiagnosticsRefreshing] = createSignal(false);
+  const [diagnosticsExporting, setDiagnosticsExporting] = createSignal(false);
+
+  const diagnosticsRuntimeEnabled = createMemo(() => !!diagnosticsData()?.enabled);
+  const refreshDiagnostics = async () => {
+    setDiagnosticsRefreshing(true);
+    try {
+      await refetchDiagnostics();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Diagnostics refresh failed', msg || 'Request failed.');
+    } finally {
+      setDiagnosticsRefreshing(false);
+    }
+  };
+
+  const exportDiagnosticsBundle = async () => {
+    setDiagnosticsExporting(true);
+    try {
+      const data = await exportDiagnostics();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = href;
+      a.download = diagnosticsExportFilename(data.exported_at);
+      a.click();
+      URL.revokeObjectURL(href);
+      notify.success('Diagnostics exported', a.download);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Diagnostics export failed', msg || 'Request failed.');
+    } finally {
+      setDiagnosticsExporting(false);
+    }
+  };
   const [policyDirty, setPolicyDirty] = createSignal(false);
   const [aiDirty, setAiDirty] = createSignal(false);
 
@@ -988,6 +1029,7 @@ export function EnvSettingsPage() {
   // Logging fields
   const [logFormat, setLogFormat] = createSignal('');
   const [logLevel, setLogLevel] = createSignal('');
+  const diagnosticsConfiguredDebug = createMemo(() => String(logLevel() ?? settings()?.logging?.log_level ?? '').trim() === 'debug');
 
   // Codespaces fields
   const [useDefaultCodePorts, setUseDefaultCodePorts] = createSignal(true);
@@ -3108,42 +3150,64 @@ export function EnvSettingsPage() {
               />
             }
           >
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <FieldLabel>log_format</FieldLabel>
-                <Select
-                  value={logFormat()}
-                  onChange={(v) => {
-                    setLogFormat(v);
-                    setLoggingDirty(true);
-                  }}
-                  disabled={!canInteract()}
-                  options={[
-                    { value: '', label: 'Default (json)' },
-                    { value: 'json', label: 'json' },
-                    { value: 'text', label: 'text' },
-                  ]}
-                  class="w-full"
-                />
+            <div class="space-y-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <FieldLabel>log_format</FieldLabel>
+                  <Select
+                    value={logFormat()}
+                    onChange={(v) => {
+                      setLogFormat(v);
+                      setLoggingDirty(true);
+                    }}
+                    disabled={!canInteract()}
+                    options={[
+                      { value: '', label: 'Default (json)' },
+                      { value: 'json', label: 'json' },
+                      { value: 'text', label: 'text' },
+                    ]}
+                    class="w-full"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>log_level</FieldLabel>
+                  <Select
+                    value={logLevel()}
+                    onChange={(v) => {
+                      setLogLevel(v);
+                      setLoggingDirty(true);
+                    }}
+                    disabled={!canInteract()}
+                    options={[
+                      { value: '', label: 'Default (info)' },
+                      { value: 'debug', label: 'debug' },
+                      { value: 'info', label: 'info' },
+                      { value: 'warn', label: 'warn' },
+                      { value: 'error', label: 'error' },
+                    ]}
+                    class="w-full"
+                  />
+                </div>
               </div>
-              <div>
-                <FieldLabel>log_level</FieldLabel>
-                <Select
-                  value={logLevel()}
-                  onChange={(v) => {
-                    setLogLevel(v);
-                    setLoggingDirty(true);
-                  }}
-                  disabled={!canInteract()}
-                  options={[
-                    { value: '', label: 'Default (info)' },
-                    { value: 'debug', label: 'debug' },
-                    { value: 'info', label: 'info' },
-                    { value: 'warn', label: 'warn' },
-                    { value: 'error', label: 'error' },
-                  ]}
-                  class="w-full"
+
+              <div class="border-t border-border/70 pt-4">
+                <SubSectionHeader
+                  title="Diagnostics"
+                  description="Correlate desktop and agent timing when debug logging is enabled."
                 />
+                <div class="mt-3">
+                  <EnvDiagnosticsPanel
+                    configuredDebug={diagnosticsConfiguredDebug()}
+                    runtimeEnabled={diagnosticsRuntimeEnabled()}
+                    loading={diagnosticsData.loading}
+                    refreshing={diagnosticsRefreshing()}
+                    exporting={diagnosticsExporting()}
+                    error={diagnosticsData.error ? formatUnknownError(diagnosticsData.error) : ''}
+                    diagnostics={diagnosticsData()}
+                    onRefresh={() => void refreshDiagnostics()}
+                    onExport={() => void exportDiagnosticsBundle()}
+                  />
+                </div>
               </div>
             </div>
           </Show>

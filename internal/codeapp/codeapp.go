@@ -17,6 +17,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/codeapp/registry"
 	"github.com/floegence/redeven-agent/internal/codeapp/ui"
 	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven-agent/internal/diagnostics"
 	envui "github.com/floegence/redeven-agent/internal/envapp/ui"
 	"github.com/floegence/redeven-agent/internal/pathutil"
 	"github.com/floegence/redeven-agent/internal/portforward"
@@ -46,8 +47,9 @@ type Options struct {
 	AgentHomeDir string
 	Shell        string
 
-	AIConfig *config.AIConfig
-	Audit    *auditlog.Store
+	AIConfig    *config.AIConfig
+	Audit       *auditlog.Store
+	Diagnostics *diagnostics.Store
 	// LocalUIEnabled enables Local UI-specific runtime behavior such as shorter
 	// code-server reconnection grace and local gateway routing.
 	LocalUIEnabled          bool
@@ -190,6 +192,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		PortForward:             pfSvc,
 		AI:                      aiSvc,
 		Audit:                   opts.Audit,
+		Diagnostics:             opts.Diagnostics,
 		ResolveSessionMeta:      opts.ResolveSessionMeta,
 		ResolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
 		ConfigPath:              strings.TrimSpace(opts.ConfigPath),
