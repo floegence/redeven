@@ -64,6 +64,8 @@ Desktop package checks:
 ./scripts/check_desktop.sh
 ```
 
+Node.js `24+` is required for desktop package checks and packaging.
+
 Unpackaged Electron runs can point to a local agent binary with:
 
 ```bash

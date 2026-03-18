@@ -104,12 +104,12 @@ jobs:
             builder_target: AppImage
           - goos: darwin
             goarch: amd64
-            runner: macos-13
+            runner: macos-15-intel
             builder_platform: mac
             builder_target: dmg
           - goos: darwin
             goarch: arm64
-            runner: macos-14
+            runner: macos-15
             builder_platform: mac
             builder_target: dmg
 
@@ -120,7 +120,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Download matching agent package
         uses: actions/download-artifact@v5
