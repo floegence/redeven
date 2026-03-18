@@ -147,6 +147,21 @@ const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 const TERMINAL_SELECTION_BACKGROUND = 'rgba(255, 234, 0, 0.72)';
 const TERMINAL_SELECTION_FOREGROUND = '#000000';
 const TERMINAL_INPUT_SELECTOR = 'textarea[aria-label="Terminal input"], textarea';
+const MOBILE_TERMINAL_TOUCH_SCROLL_LINE_HEIGHT_FALLBACK_PX = 20;
+const MOBILE_TERMINAL_TOUCH_SCROLL_MIN_LINE_HEIGHT_PX = 12;
+
+type terminal_touch_scroll_target = {
+  scrollLines?: (amount: number) => void;
+  getScrollbackLength?: () => number;
+  isAlternateScreen?: () => boolean;
+  input?: (data: string, wasUserInput?: boolean) => void;
+};
+
+function resolveTerminalTouchScrollTarget(core: TerminalCore | null): terminal_touch_scroll_target | null {
+  if (!core) return null;
+  const inner = (core as unknown as { terminal?: terminal_touch_scroll_target | null }).terminal;
+  return inner ?? null;
+}
 
 const PlusIcon = (props: { class?: string }) => (
   <svg
@@ -1034,6 +1049,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
+    void surfaceRegistrySeq();
+    const mobile = isMobileLayout();
+
+    for (const surface of surfaceRegistry.values()) {
+      surface.style.touchAction = mobile ? 'pan-x pinch-zoom' : '';
+      surface.style.overscrollBehavior = mobile ? 'contain' : '';
+    }
+  });
+
+  createEffect(() => {
     void activeSessionId();
     setMobileKeyboardDraftState(createEmptyTerminalMobileKeyboardDraftState());
   });
@@ -1347,6 +1372,41 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return resolveTerminalInputElement(getActiveSurfaceElement());
   };
 
+  const getTerminalTouchScrollLineHeightPx = (surface: HTMLDivElement, core: TerminalCore) => {
+    const rows = Math.max(1, core.getDimensions().rows);
+    const height = surface.getBoundingClientRect().height;
+    if (!Number.isFinite(height) || height <= 0) {
+      return MOBILE_TERMINAL_TOUCH_SCROLL_LINE_HEIGHT_FALLBACK_PX;
+    }
+
+    return Math.max(MOBILE_TERMINAL_TOUCH_SCROLL_MIN_LINE_HEIGHT_PX, height / rows);
+  };
+
+  const applyTerminalTouchScrollLines = (sessionId: string, core: TerminalCore, lineDelta: number): boolean => {
+    if (lineDelta === 0) return false;
+
+    const target = resolveTerminalTouchScrollTarget(core);
+    if (!target) return false;
+
+    if (target.isAlternateScreen?.()) {
+      const sequence = (lineDelta > 0 ? '\x1B[B' : '\x1B[A').repeat(Math.abs(lineDelta));
+      if (!sequence) return false;
+
+      if (typeof target.input === 'function') {
+        target.input(sequence, true);
+      } else {
+        void transport.sendInput(sessionId, sequence, connId);
+      }
+      return true;
+    }
+
+    if ((target.getScrollbackLength?.() ?? 0) <= 0) return false;
+    if (typeof target.scrollLines !== 'function') return false;
+
+    target.scrollLines(lineDelta);
+    return true;
+  };
+
   const recordMobileKeyboardHistory = (sessionId: string, command: string) => {
     setMobileKeyboardHistoryBySession((prev) => {
       const current = prev[sessionId] ?? [];
@@ -1406,6 +1466,89 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       if (!connected()) return;
       if (terminalViewportInsetPx() !== inset) return;
       core.forceResize();
+    });
+  });
+
+  createEffect(() => {
+    void surfaceRegistrySeq();
+    void coreRegistrySeq();
+    const sid = activeSessionId();
+    const surface = getActiveSurfaceElement();
+    const core = getActiveCore();
+    const mobile = isMobileLayout();
+
+    if (!mobile || !sid || !surface || !core) return;
+
+    let pointerId: number | null = null;
+    let lastY = 0;
+    let accumulatedPx = 0;
+
+    const resetGesture = () => {
+      if (pointerId === null) return;
+
+      if (typeof surface.hasPointerCapture === 'function' && surface.hasPointerCapture(pointerId)) {
+        try {
+          surface.releasePointerCapture(pointerId);
+        } catch {
+        }
+      }
+
+      pointerId = null;
+      lastY = 0;
+      accumulatedPx = 0;
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' || !event.isPrimary) return;
+
+      pointerId = event.pointerId;
+      lastY = event.clientY;
+      accumulatedPx = 0;
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (pointerId === null || event.pointerId !== pointerId) return;
+
+      const deltaY = event.clientY - lastY;
+      lastY = event.clientY;
+      accumulatedPx += deltaY;
+
+      const lineHeightPx = getTerminalTouchScrollLineHeightPx(surface, core);
+      const rawLineDelta = -accumulatedPx / lineHeightPx;
+      const wholeLineDelta = rawLineDelta > 0 ? Math.floor(rawLineDelta) : Math.ceil(rawLineDelta);
+      if (wholeLineDelta === 0) return;
+
+      if (!applyTerminalTouchScrollLines(sid, core, wholeLineDelta)) {
+        accumulatedPx = 0;
+        return;
+      }
+
+      accumulatedPx += wholeLineDelta * lineHeightPx;
+      if (typeof surface.setPointerCapture === 'function') {
+        try {
+          surface.setPointerCapture(event.pointerId);
+        } catch {
+        }
+      }
+      event.preventDefault();
+    };
+
+    const onPointerEnd = (event: PointerEvent) => {
+      if (pointerId === null || event.pointerId !== pointerId) return;
+      resetGesture();
+    };
+
+    surface.addEventListener('pointerdown', onPointerDown);
+    surface.addEventListener('pointermove', onPointerMove);
+    surface.addEventListener('pointerup', onPointerEnd);
+    surface.addEventListener('pointercancel', onPointerEnd);
+
+    onCleanup(() => {
+      surface.removeEventListener('pointerdown', onPointerDown);
+      surface.removeEventListener('pointermove', onPointerMove);
+      surface.removeEventListener('pointerup', onPointerEnd);
+      surface.removeEventListener('pointercancel', onPointerEnd);
+      resetGesture();
     });
   });
 
