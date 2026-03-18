@@ -44,9 +44,16 @@ export default {
     category: 'Development',
     maintainer: 'Floegence',
     vendor: 'Floegence',
+    executableName: 'redeven-desktop',
     synopsis: 'Redeven Desktop shell',
     description: 'Public Electron desktop shell that bundles the matching redeven runtime.',
     icon: path.join(buildResourcesDir, 'icon.png'),
     target: ['deb', 'rpm'],
+  },
+  deb: {
+    packageName: 'redeven-desktop',
+  },
+  rpm: {
+    packageName: 'redeven-desktop',
   },
 };
