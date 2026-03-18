@@ -15,6 +15,7 @@ const mintEnvProxyEntryTicketMock = vi.fn();
 const mintEnvEntryTicketForAppMock = vi.fn();
 const channelInitEntryMock = vi.fn();
 const getEnvPublicIDFromSessionMock = vi.fn(() => '');
+const refreshLocalRuntimeMock = vi.fn();
 const reloadCurrentPageMock = vi.fn();
 
 const connectMock = vi.fn(async (_config: Record<string, unknown>) => {
@@ -37,11 +38,12 @@ const accessResumeMock = vi.fn(async ({ token }: { token: string }) => {
 let protocolStatus: 'connected' | 'disconnected' | 'connecting' | 'error' = 'disconnected';
 let protocolClient: unknown = null;
 let resumeCalls: string[] = [];
+let layoutIsMobile = false;
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   useCommand: () => ({ open: vi.fn(), registerAll: () => () => {} }),
   useLayout: () => ({
-    isMobile: () => false,
+    isMobile: () => layoutIsMobile,
     sidebarActiveTab: () => 'deck',
     setSidebarActiveTab: vi.fn(),
     setSidebarCollapsed: vi.fn(),
@@ -62,6 +64,17 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   PanelContent: (props: any) => <div>{props.children}</div>,
   Shell: (props: any) => <div>{props.topBarActions}{props.bottomBarItems}{props.children}</div>,
   StatusIndicator: (props: any) => <div>{props.label ?? props.status}</div>,
+  TopBarIconButton: (props: any) => (
+    <button
+      type="button"
+      class={props.class}
+      onClick={props.onClick}
+      aria-label={props.label}
+      data-tooltip={props.tooltip === false ? undefined : String(props.tooltip ?? props.label)}
+    >
+      {props.children}
+    </button>
+  ),
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
@@ -123,6 +136,7 @@ vi.mock('./services/controlplaneApi', () => ({
   mintEnvProxyEntryTicket: mintEnvProxyEntryTicketMock,
   mintLocalDirectConnectInfo: mintLocalDirectConnectInfoMock,
   mintEnvEntryTicketForApp: mintEnvEntryTicketForAppMock,
+  refreshLocalRuntime: refreshLocalRuntimeMock,
   unlockLocalAccess: unlockLocalAccessMock,
 }));
 
@@ -198,6 +212,7 @@ beforeEach(() => {
   protocolStatus = 'disconnected';
   protocolClient = null;
   resumeCalls = [];
+  layoutIsMobile = false;
   reloadCurrentPageMock.mockReset();
   accessStatusMock.mockReset();
   accessStatusMock.mockImplementation(async () => ({ passwordRequired: true, unlocked: resumeCalls.length > 0 }));
@@ -206,6 +221,7 @@ beforeEach(() => {
     resumeCalls.push(token);
   });
   getLocalRuntimeMock.mockResolvedValue({ mode: 'local', env_public_id: 'env_local', direct_ws_url: 'ws://localhost/_redeven_direct/ws' });
+  refreshLocalRuntimeMock.mockResolvedValue({ mode: 'local', env_public_id: 'env_local', direct_ws_url: 'ws://localhost/_redeven_direct/ws' });
   getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });
   unlockLocalAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
   getGatewayAccessStatusMock
@@ -228,6 +244,30 @@ beforeEach(() => {
     default_suite: 1,
   });
   channelInitEntryMock.mockReturnValue({ endpointId: 'env_local' });
+});
+
+describe('EnvAppShell top bar affordances', () => {
+  it('disables top bar tooltips on mobile layouts to avoid sticky touch overlays', async () => {
+    layoutIsMobile = true;
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const toggleThemeButton = host.querySelector('button[aria-label="Toggle theme"]');
+      expect(toggleThemeButton).toBeTruthy();
+      expect(toggleThemeButton?.getAttribute('data-tooltip')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
 });
 
 describe('EnvAppShell local access gate', () => {
