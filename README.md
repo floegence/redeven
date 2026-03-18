@@ -142,6 +142,12 @@ Multi-environment mode uses isolated state per environment:
 
 - `~/.redeven/envs/<env_public_id>/config.json`
 
+Desktop-managed launch preferences are stored separately in the desktop app user data directory. They cover startup-only settings such as:
+
+- Local UI bind address
+- Local UI password for non-loopback exposure
+- One-shot “register to Redeven on next start” bootstrap values
+
 ## Release contract
 
 - GitHub Release is the source of truth for versioned CLI tarballs, desktop installers, and checksums.
@@ -186,4 +192,13 @@ Details:
 - Desktop reuses an existing Local UI automatically when the current state directory already exposes one.
 - If the existing agent is running without Local UI (for example `redeven run --mode remote`), Desktop stays open and shows a blocked page instead of crashing.
 - In that case, stop the existing agent or restart it in a Local UI mode (`local`, `hybrid`, or desktop-managed), then use `Retry`.
+- Use `Settings` from the blocked page or `CommandOrControl+,` from the app menu to update Desktop startup settings.
 - Use `Copy diagnostics` from the blocked page to capture the lock owner mode, PID, and state paths for troubleshooting.
+
+### Redeven Desktop needs a different bind address or first-time registration
+
+- Open the native Desktop Settings window with `CommandOrControl+,`.
+- Set `Local UI bind address` to values such as `127.0.0.1:0` or `0.0.0.0:24000`.
+- If you expose Local UI on a non-loopback address, also set a Local UI password.
+- To register Desktop to a Redeven environment on the next start, fill in `Control plane URL`, `Environment ID`, and `Environment token`, then save.
+- `CommandOrControl+Q` now asks for confirmation before quitting the desktop app.

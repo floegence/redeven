@@ -1,4 +1,5 @@
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
+import { desktopTheme } from './desktopTheme';
 
 const BLOCKED_ACTION_ORIGIN = 'https://redeven-desktop.invalid';
 
@@ -30,7 +31,7 @@ function blockedHeadline(report: LaunchBlockedReport): { title: string; body: st
   };
 }
 
-function actionURL(action: 'retry' | 'copy-diagnostics' | 'quit'): string {
+function actionURL(action: 'retry' | 'copy-diagnostics' | 'settings' | 'quit'): string {
   return `${BLOCKED_ACTION_ORIGIN}/${action}`;
 }
 
@@ -38,7 +39,7 @@ export function isBlockedActionURL(rawURL: string): boolean {
   return String(rawURL ?? '').startsWith(`${BLOCKED_ACTION_ORIGIN}/`);
 }
 
-export function blockedActionFromURL(rawURL: string): 'retry' | 'copy-diagnostics' | 'quit' | null {
+export function blockedActionFromURL(rawURL: string): 'retry' | 'copy-diagnostics' | 'settings' | 'quit' | null {
   if (!isBlockedActionURL(rawURL)) {
     return null;
   }
@@ -48,6 +49,8 @@ export function blockedActionFromURL(rawURL: string): 'retry' | 'copy-diagnostic
       return 'retry';
     case '/copy-diagnostics':
       return 'copy-diagnostics';
+    case '/settings':
+      return 'settings';
     case '/quit':
       return 'quit';
     default:
@@ -71,22 +74,21 @@ export function buildBlockedPageHTML(report: LaunchBlockedReport): string {
     <style>
       :root {
         color-scheme: light;
-        --bg: #f5f1e8;
-        --panel: rgba(255, 255, 255, 0.82);
-        --text: #241c12;
-        --muted: #66594b;
-        --border: rgba(36, 28, 18, 0.12);
-        --accent: #aa5b2d;
-        --accent-text: #fff9f3;
+        --bg: ${desktopTheme.pageBackground};
+        --panel: ${desktopTheme.surface};
+        --panel-muted: ${desktopTheme.surfaceMuted};
+        --text: ${desktopTheme.text};
+        --muted: ${desktopTheme.muted};
+        --border: ${desktopTheme.border};
+        --accent: ${desktopTheme.accent};
+        --accent-text: ${desktopTheme.accentText};
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-        background:
-          radial-gradient(circle at top, rgba(170, 91, 45, 0.12), transparent 34rem),
-          linear-gradient(180deg, #fbf8f1 0%, var(--bg) 100%);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--bg);
         color: var(--text);
         display: grid;
         place-items: center;
@@ -97,33 +99,30 @@ export function buildBlockedPageHTML(report: LaunchBlockedReport): string {
         border: 1px solid var(--border);
         border-radius: 24px;
         background: var(--panel);
-        box-shadow: 0 24px 80px rgba(36, 28, 18, 0.12);
+        box-shadow: 0 18px 48px rgba(24, 19, 17, 0.08);
         padding: 32px;
-        backdrop-filter: blur(18px);
       }
       .eyebrow {
         margin: 0 0 12px;
-        font-size: 12px;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
+        font-size: 13px;
         color: var(--muted);
       }
       h1 {
         margin: 0;
-        font-size: clamp(32px, 5vw, 48px);
-        line-height: 1.04;
+        font-size: clamp(28px, 4vw, 40px);
+        line-height: 1.1;
       }
       p {
         margin: 16px 0 0;
-        font-size: 17px;
-        line-height: 1.7;
+        font-size: 16px;
+        line-height: 1.65;
         color: var(--muted);
       }
       .meta {
         margin-top: 18px;
         padding: 16px 18px;
         border-radius: 16px;
-        background: rgba(255, 255, 255, 0.68);
+        background: var(--panel-muted);
         border: 1px solid var(--border);
         color: var(--text);
         font-size: 14px;
@@ -146,7 +145,7 @@ export function buildBlockedPageHTML(report: LaunchBlockedReport): string {
         border: 1px solid var(--border);
         text-decoration: none;
         color: var(--text);
-        background: rgba(255, 255, 255, 0.88);
+        background: var(--panel);
         font-weight: 600;
       }
       .button.primary {
@@ -167,8 +166,8 @@ export function buildBlockedPageHTML(report: LaunchBlockedReport): string {
         margin: 14px 0 0;
         padding: 16px;
         border-radius: 14px;
-        background: #1f1a15;
-        color: #f4ede3;
+        background: #201917;
+        color: #f9efe8;
         overflow: auto;
         font-size: 12px;
         line-height: 1.6;
@@ -189,6 +188,7 @@ export function buildBlockedPageHTML(report: LaunchBlockedReport): string {
       <div class="meta">${details}</div>
       <div class="actions">
         <a class="button primary" href="${actionURL('retry')}">Retry</a>
+        <a class="button" href="${actionURL('settings')}">Settings</a>
         <a class="button" href="${actionURL('copy-diagnostics')}">Copy diagnostics</a>
         <a class="button" href="${actionURL('quit')}">Quit</a>
       </div>

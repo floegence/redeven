@@ -28,6 +28,7 @@ export type ManagedAgent = Readonly<{
 
 export type StartManagedAgentArgs = Readonly<{
   executablePath: string;
+  agentArgs: string[];
   tempRoot?: string;
   env?: NodeJS.ProcessEnv;
   startupTimeoutMs?: number;
@@ -41,30 +42,23 @@ export type ManagedAgentLaunch = Readonly<
   | {
       kind: 'ready';
       managedAgent: ManagedAgent;
+      spawned: boolean;
     }
   | {
       kind: 'blocked';
       blocked: LaunchBlockedReport;
+      spawned: boolean;
     }
 >;
+
+export function launchStartedFreshManagedRuntime(launch: ManagedAgentLaunch): boolean {
+  return launch.kind === 'ready' && launch.spawned && !launch.managedAgent.attached;
+}
 
 type RecentLogs = {
   stdout: string;
   stderr: string;
 };
-
-export function buildManagedAgentArgs(startupReportFile: string): string[] {
-  return [
-    'run',
-    '--mode',
-    'desktop',
-    '--desktop-managed',
-    '--local-ui-bind',
-    '127.0.0.1:0',
-    '--startup-report-file',
-    startupReportFile,
-  ];
-}
 
 async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -211,12 +205,13 @@ export async function startManagedAgent(args: StartManagedAgentArgs): Promise<Ma
         attached: true,
         stop: async () => undefined,
       },
+      spawned: false,
     };
   }
 
   const reportDir = await fs.mkdtemp(path.join(args.tempRoot ?? os.tmpdir(), 'redeven-desktop-'));
   const reportFile = path.join(reportDir, 'startup-report.json');
-  const child = spawn(args.executablePath, buildManagedAgentArgs(reportFile), {
+  const child = spawn(args.executablePath, [...args.agentArgs, '--startup-report-file', reportFile], {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: mergedEnv,
   });
@@ -255,6 +250,7 @@ export async function startManagedAgent(args: StartManagedAgentArgs): Promise<Ma
       return {
         kind: 'blocked',
         blocked: launchReport,
+        spawned: true,
       };
     }
 
@@ -272,6 +268,7 @@ export async function startManagedAgent(args: StartManagedAgentArgs): Promise<Ma
           attached: true,
           stop: async () => undefined,
         },
+        spawned: true,
       };
     }
 
@@ -291,6 +288,7 @@ export async function startManagedAgent(args: StartManagedAgentArgs): Promise<Ma
           attached: true,
           stop: async () => undefined,
         },
+        spawned: true,
       };
     }
 
@@ -307,6 +305,7 @@ export async function startManagedAgent(args: StartManagedAgentArgs): Promise<Ma
           await fs.rm(reportDir, { recursive: true, force: true });
         },
       },
+      spawned: true,
     };
   } catch (error) {
     await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS).catch(() => undefined);
