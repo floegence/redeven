@@ -3,14 +3,15 @@
   "private": true,
   "version": "0.1.0",
   "description": "Redeven Desktop shell",
+  "author": "Floegence",
   "main": "dist/main/main.js",
   "scripts": {
     "start": "npm run build && electron .",
     "build": "tsc -p tsconfig.json",
-    "lint": "eslint \"src/**/*.ts\" \"scripts/**/*.mjs\" \"electron-builder.config.mjs\" \"eslint.config.mjs\" --max-warnings=0",
+    "lint": "eslint \"src/**/*.ts\" \"electron-builder.config.mjs\" \"eslint.config.mjs\" --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "package": "npm run build && node scripts/package.mjs"
+    "package": "npm run build && electron-builder --config electron-builder.config.mjs --publish never"
   },
   "engines": {
     "node": ">=24.0.0"
