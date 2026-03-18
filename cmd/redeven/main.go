@@ -118,6 +118,7 @@ func (c *cli) bootstrapCmd(args []string) int {
 	controlplane := fs.String("controlplane", "", "Controlplane base URL (e.g. https://region.example.invalid)")
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
 	envToken := fs.String("env-token", "", "Environment token (raw token; 'Bearer <token>' is also accepted)")
+	envTokenEnv := fs.String("env-token-env", "", "Environment variable name holding the environment token")
 
 	agentHomeDir := fs.String("agent-home-dir", "", "Agent home dir used for filesystem-facing features (default: user home dir)")
 	shell := fs.String("shell", "", "Shell command (default: $SHELL or /bin/bash)")
@@ -139,10 +140,20 @@ func (c *cli) bootstrapCmd(args []string) int {
 		return 2
 	}
 
+	resolvedEnvToken, err := resolveEnvToken(envTokenOptions{
+		token:    *envToken,
+		tokenEnv: *envTokenEnv,
+	})
+	if err != nil {
+		message, details := translateEnvTokenOptionError(err, "redeven bootstrap")
+		writeErrorWithHelp(c.stderr, message, details, bootstrapHelpText())
+		return 2
+	}
+
 	missing := findMissingFlags(
 		requiredFlag{name: "--controlplane", value: *controlplane},
 		requiredFlag{name: "--env-id", value: *envID},
-		requiredFlag{name: "--env-token", value: *envToken},
+		requiredFlag{name: "one of --env-token or --env-token-env", value: resolvedEnvToken},
 	)
 	if len(missing) > 0 {
 		writeErrorWithHelp(
@@ -164,10 +175,10 @@ func (c *cli) bootstrapCmd(args []string) int {
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 
-	_, err := config.BootstrapConfig(ctx, config.BootstrapArgs{
+	_, err = config.BootstrapConfig(ctx, config.BootstrapArgs{
 		ControlplaneBaseURL:    *controlplane,
 		EnvironmentID:          *envID,
-		EnvironmentToken:       *envToken,
+		EnvironmentToken:       resolvedEnvToken,
 		AgentHomeDir:           *agentHomeDir,
 		Shell:                  *shell,
 		LogFormat:              *logFormat,
@@ -188,6 +199,7 @@ func (c *cli) runCmd(args []string) int {
 	controlplane := fs.String("controlplane", "", "Controlplane base URL (optional; when set, bootstraps into an isolated per-environment state dir)")
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
 	envToken := fs.String("env-token", "", "Environment token (required when --controlplane/--env-id is set)")
+	envTokenEnv := fs.String("env-token-env", "", "Environment variable name holding the environment token")
 	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read|read_only|execute_read_write (optional; applies when bootstrapping)")
 	modeRaw := fs.String("mode", "remote", "Run mode: remote|hybrid|local|desktop")
 	localUIBindRaw := fs.String("local-ui-bind", localui.DefaultBind, "Local UI bind address (default: localhost:23998)")
@@ -232,6 +244,16 @@ func (c *cli) runCmd(args []string) int {
 		return 2
 	}
 
+	resolvedEnvToken, err := resolveEnvToken(envTokenOptions{
+		token:    *envToken,
+		tokenEnv: *envTokenEnv,
+	})
+	if err != nil {
+		message, details := translateEnvTokenOptionError(err, "redeven run")
+		writeErrorWithHelp(c.stderr, message, details, runHelpText())
+		return 2
+	}
+
 	if *desktopManaged && mode == runModeRemote {
 		writeErrorWithHelp(
 			c.stderr,
@@ -260,12 +282,12 @@ func (c *cli) runCmd(args []string) int {
 	// This avoids overwriting the global ~/.redeven/config.json.
 	bootstrapViaFlags := strings.TrimSpace(*controlplane) != "" ||
 		strings.TrimSpace(*envID) != "" ||
-		strings.TrimSpace(*envToken) != ""
+		resolvedEnvToken != ""
 	if bootstrapViaFlags {
 		missing := findMissingFlags(
 			requiredFlag{name: "--controlplane", value: *controlplane},
 			requiredFlag{name: "--env-id", value: *envID},
-			requiredFlag{name: "--env-token", value: *envToken},
+			requiredFlag{name: "one of --env-token or --env-token-env", value: resolvedEnvToken},
 		)
 		if len(missing) > 0 {
 			label := "flags"
@@ -276,7 +298,7 @@ func (c *cli) runCmd(args []string) int {
 				c.stderr,
 				fmt.Sprintf("incomplete bootstrap flags for `redeven run`: missing %s %s", label, formatFlagList(missing)),
 				[]string{
-					"Hint: provide --controlplane, --env-id, and --env-token together, or run `redeven bootstrap` first.",
+					"Hint: provide --controlplane, --env-id, and either --env-token or --env-token-env together, or run `redeven bootstrap` first.",
 					fmt.Sprintf(
 						"Example: redeven run --mode hybrid --controlplane %s --env-id %s --env-token %s",
 						exampleControlplaneURL,
@@ -367,10 +389,10 @@ func (c *cli) runCmd(args []string) int {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
-		_, err := config.BootstrapConfig(ctx, config.BootstrapArgs{
+		_, err = config.BootstrapConfig(ctx, config.BootstrapArgs{
 			ControlplaneBaseURL:    *controlplane,
 			EnvironmentID:          *envID,
-			EnvironmentToken:       *envToken,
+			EnvironmentToken:       resolvedEnvToken,
 			ConfigPath:             cfgPathClean,
 			PermissionPolicyPreset: *permissionPolicy,
 		})
@@ -529,7 +551,7 @@ func (c *cli) printNotBootstrappedGuidance(reason error) int {
 		c.stderr,
 		fmt.Sprintf("agent is not bootstrapped for remote or hybrid mode: %v", reason),
 		[]string{
-			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and --env-token directly to `redeven run`.",
+			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and either --env-token or --env-token-env directly to `redeven run`.",
 			"Examples:",
 			fmt.Sprintf("  redeven bootstrap --controlplane %s --env-id %s --env-token %s", exampleControlplaneURL, exampleEnvID, exampleEnvToken),
 			fmt.Sprintf("  redeven run --mode hybrid --controlplane %s --env-id %s --env-token %s", exampleControlplaneURL, exampleEnvID, exampleEnvToken),

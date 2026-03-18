@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { bundledAgentExecutableName, resolveBundledAgentPath } from './paths';
+import { bundledAgentExecutableName, resolveBundledAgentPath, resolveSettingsPreloadPath } from './paths';
 
 describe('paths', () => {
   it('uses the packaged resources directory when the desktop app is bundled', () => {
@@ -36,5 +36,11 @@ describe('paths', () => {
   it('uses a platform-specific executable name', () => {
     expect(bundledAgentExecutableName('linux')).toBe('redeven');
     expect(bundledAgentExecutableName('win32')).toBe('redeven.exe');
+  });
+
+  it('resolves the bundled settings preload script path', () => {
+    expect(resolveSettingsPreloadPath({
+      appPath: '/Applications/Redeven Desktop.app/Contents/Resources/app.asar',
+    })).toBe('/Applications/Redeven Desktop.app/Contents/Resources/app.asar/dist/preload/settings.js');
   });
 });

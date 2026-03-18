@@ -56,6 +56,7 @@ func TestRunCLIHelp(t *testing.T) {
 			"--controlplane <url>",
 			"--env-id <env_public_id>",
 			"--env-token <token>",
+			"--env-token-env <env_name>",
 			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
 		)
 	})
@@ -113,7 +114,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"missing required flags for `redeven bootstrap`: --controlplane, --env-id, --env-token",
+			"missing required flags for `redeven bootstrap`: --controlplane, --env-id, one of --env-token or --env-token-env",
 			"Example: redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
 		)
 	})
@@ -124,9 +125,20 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"incomplete bootstrap flags for `redeven run`: missing flag --env-token",
-			"Hint: provide --controlplane, --env-id, and --env-token together, or run `redeven bootstrap` first.",
+			"incomplete bootstrap flags for `redeven run`: missing flag one of --env-token or --env-token-env",
+			"Hint: provide --controlplane, --env-id, and either --env-token or --env-token-env together, or run `redeven bootstrap` first.",
 		)
+	})
+
+	t.Run("env token env can satisfy inline bootstrap requirements", func(t *testing.T) {
+		t.Setenv("REDEVEN_ENV_TOKEN", "token-123")
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--controlplane", "https://region.example.invalid", "--env-id", "env_123", "--env-token-env", "REDEVEN_ENV_TOKEN")
+		if code != 1 {
+			t.Fatalf("exit code = %d, want 1", code)
+		}
+		if strings.Contains(stderr, "invalid environment token flags") {
+			t.Fatalf("stderr = %q, want no env token flag error", stderr)
+		}
 	})
 
 	t.Run("invalid mode includes allowed values", func(t *testing.T) {
@@ -220,6 +232,28 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		)
 	})
 
+	t.Run("multiple env token sources explain the conflict", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--env-token", "token-1", "--env-token-env", "REDEVEN_ENV_TOKEN")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr,
+			"invalid environment token flags: use only one of --env-token or --env-token-env",
+			"Hint: choose a single environment token source for `redeven run`.",
+		)
+	})
+
+	t.Run("missing env token env gives export guidance", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--env-token-env", "REDEVEN_ENV_TOKEN")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr,
+			"invalid environment token flags: environment token env var \"REDEVEN_ENV_TOKEN\" is not set",
+			"Hint: export REDEVEN_ENV_TOKEN with a non-empty token before running `redeven run`.",
+		)
+	})
+
 	t.Run("empty password file explains how to fix it", func(t *testing.T) {
 		passwordFile := filepath.Join(t.TempDir(), "password.txt")
 		if err := os.WriteFile(passwordFile, []byte("\n"), 0o600); err != nil {
@@ -244,7 +278,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"agent is not bootstrapped for remote or hybrid mode:",
-			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and --env-token directly to `redeven run`.",
+			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and either --env-token or --env-token-env directly to `redeven run`.",
 			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
 			"redeven run --mode hybrid --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
 		)
