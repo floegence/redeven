@@ -30,6 +30,19 @@ import {
   type TerminalMobileInputMode,
   useTerminalPreferences,
 } from '../services/terminalPreferences';
+import {
+  applyTerminalMobileKeyboardPayload,
+  buildTerminalMobileKeyboardSuggestions,
+  createEmptyTerminalMobileKeyboardDraftState,
+  deriveTerminalMobileKeyboardContext,
+  parseTerminalMobileKeyboardScripts,
+  rememberTerminalMobileKeyboardHistory,
+  resolveTerminalMobileKeyboardPackageJsonPath,
+  type TerminalMobileKeyboardPathEntry,
+  type TerminalMobileKeyboardScript,
+  type TerminalMobileKeyboardSuggestion,
+  TERMINAL_MOBILE_KEYBOARD_QUICK_INSERTS,
+} from '../services/terminalMobileKeyboard';
 import { useEnvContext } from '../pages/EnvContext';
 import { isPermissionDeniedError } from '../utils/permission';
 import { createClientId } from '../utils/clientId';
@@ -121,6 +134,7 @@ type terminal_session_view_props = {
   transport: TerminalTransport;
   eventSource: TerminalEventSource;
   registerCore: (sessionId: string, core: TerminalCore | null) => void;
+  registerSurfaceElement: (sessionId: string, surface: HTMLDivElement | null) => void;
   registerActions: (sessionId: string, actions: { reload: () => Promise<void> } | null) => void;
   onNameUpdate?: (sessionId: string, newName: string, workingDir: string) => void;
 };
@@ -131,7 +145,7 @@ const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 
 const TERMINAL_SELECTION_BACKGROUND = 'rgba(255, 234, 0, 0.72)';
 const TERMINAL_SELECTION_FOREGROUND = '#000000';
-const MOBILE_TERMINAL_KEYBOARD_PADDING = 'calc(15rem + env(safe-area-inset-bottom))';
+const TERMINAL_INPUT_SELECTOR = 'textarea[aria-label="Terminal input"], textarea';
 
 const PlusIcon = (props: { class?: string }) => (
   <svg
@@ -514,6 +528,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
     reloadSeq += 1;
     disposeTerminal();
     props.registerCore(sessionId(), null);
+    props.registerSurfaceElement(sessionId(), null);
   });
 
   const terminalBackground = () => colors().background ?? '#1e1e1e';
@@ -531,7 +546,10 @@ function TerminalSessionView(props: terminal_session_view_props) {
       }}
     >
       <div
-        ref={(n) => (container = n)}
+        ref={(n) => {
+          container = n;
+          props.registerSurfaceElement(sessionId(), n);
+        }}
         class="absolute top-2 left-2 right-0 bottom-0 redeven-terminal-surface"
         style={{
           transition: 'opacity 0.15s ease-out',
@@ -676,6 +694,36 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   });
 
+  createEffect(() => {
+    const host = terminalContextMenuHostEl();
+    if (!host) return;
+
+    const onPointerDownCapture = (event: PointerEvent) => {
+      if (!shouldUseFloeMobileKeyboard()) return;
+      if (!isTerminalSurfaceContextMenuEvent(event as unknown as MouseEvent)) return;
+      openFloeMobileKeyboard();
+    };
+
+    const onFocusInCapture = (event: FocusEvent) => {
+      if (!shouldUseFloeMobileKeyboard()) return;
+      const target = event.target;
+      if (!(target instanceof HTMLTextAreaElement)) return;
+      if (!host.contains(target)) return;
+
+      requestAnimationFrame(() => {
+        target.blur();
+      });
+    };
+
+    host.addEventListener('pointerdown', onPointerDownCapture, true);
+    host.addEventListener('focusin', onFocusInCapture, true);
+
+    onCleanup(() => {
+      host.removeEventListener('pointerdown', onPointerDownCapture, true);
+      host.removeEventListener('focusin', onFocusInCapture, true);
+    });
+  });
+
   const userTheme = terminalPrefs.userTheme;
   const fontSize = terminalPrefs.fontSize;
   const fontFamilyId = terminalPrefs.fontFamilyId;
@@ -726,6 +774,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [mobileKeyboardVisible, setMobileKeyboardVisible] = createSignal(
     isMobileLayout() && mobileInputMode() === 'floe',
   );
+  const [mobileKeyboardInsetPx, setMobileKeyboardInsetPx] = createSignal(0);
+  const [mobileKeyboardDraftState, setMobileKeyboardDraftState] = createSignal(
+    createEmptyTerminalMobileKeyboardDraftState(),
+  );
+  const [mobileKeyboardHistoryBySession, setMobileKeyboardHistoryBySession] = createSignal<Record<string, string[]>>({});
+  const [mobileKeyboardPathEntries, setMobileKeyboardPathEntries] = createSignal<TerminalMobileKeyboardPathEntry[]>([]);
+  const [mobileKeyboardPackageScripts, setMobileKeyboardPackageScripts] = createSignal<TerminalMobileKeyboardScript[]>([]);
 
   const handleExecuteDenied = (e: unknown): boolean => {
     if (!isPermissionDeniedError(e, 'execute')) return false;
@@ -736,9 +791,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [historyBytes, setHistoryBytes] = createSignal<number | null>(null);
 
   const coreRegistry = new Map<string, TerminalCore>();
+  const surfaceRegistry = new Map<string, HTMLDivElement>();
   const actionsRegistry = new Map<string, { reload: () => Promise<void> }>();
+  const mobileKeyboardPathCache = new Map<string, TerminalMobileKeyboardPathEntry[]>();
+  const mobileKeyboardPackageScriptsCache = new Map<string, TerminalMobileKeyboardScript[]>();
 
   const [coreRegistrySeq, setCoreRegistrySeq] = createSignal(0);
+  const [surfaceRegistrySeq, setSurfaceRegistrySeq] = createSignal(0);
 
   const registerCore = (id: string, core: TerminalCore | null) => {
     if (!id) return;
@@ -756,6 +815,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
     coreRegistry.delete(id);
     setCoreRegistrySeq((v) => v + 1);
+  };
+
+  const registerSurfaceElement = (id: string, surface: HTMLDivElement | null) => {
+    if (!id) return;
+    if (surface) {
+      surfaceRegistry.set(id, surface);
+      setSurfaceRegistrySeq((v) => v + 1);
+      return;
+    }
+    surfaceRegistry.delete(id);
+    setSurfaceRegistrySeq((v) => v + 1);
   };
 
   const registerActions = (id: string, actions: { reload: () => Promise<void> } | null) => {
@@ -825,8 +895,44 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   });
 
+  const activeSession = createMemo<TerminalSessionInfo | null>(() => {
+    const sid = activeSessionId();
+    if (!sid) return null;
+    return sessions().find((session) => session.id === sid) ?? null;
+  });
+
+  const activeSessionWorkingDir = createMemo(() => {
+    return normalizeAskFlowerAbsolutePath(activeSession()?.workingDir ?? '')
+      || normalizeAskFlowerAbsolutePath(agentHomePathAbs())
+      || '/';
+  });
+
+  const activeMobileKeyboardHistory = createMemo(() => {
+    const sid = activeSessionId();
+    if (!sid) return [] as string[];
+    return mobileKeyboardHistoryBySession()[sid] ?? [];
+  });
+
+  const mobileKeyboardContext = createMemo(() => {
+    return deriveTerminalMobileKeyboardContext({
+      state: mobileKeyboardDraftState(),
+      workingDirAbs: activeSessionWorkingDir(),
+      agentHomePathAbs: agentHomePathAbs(),
+    });
+  });
+
   const shouldUseFloeMobileKeyboard = createMemo(() => {
     return isMobileLayout() && mobileInputMode() === 'floe';
+  });
+
+  const mobileKeyboardSuggestions = createMemo<TerminalMobileKeyboardSuggestion[]>(() => {
+    if (!shouldUseFloeMobileKeyboard()) return [];
+    return buildTerminalMobileKeyboardSuggestions({
+      context: mobileKeyboardContext(),
+      history: activeMobileKeyboardHistory(),
+      pathEntries: mobileKeyboardPathEntries(),
+      packageScripts: mobileKeyboardPackageScripts(),
+    });
   });
 
   const shouldRestoreTerminalFocus = () => {
@@ -845,6 +951,39 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   };
 
+  const resolveTerminalInputElement = (surface: HTMLDivElement | null): HTMLTextAreaElement | null => {
+    if (!surface) return null;
+    const input = surface.querySelector(TERMINAL_INPUT_SELECTOR);
+    return input instanceof HTMLTextAreaElement ? input : null;
+  };
+
+  const syncTerminalInputElementMode = (surface: HTMLDivElement | null) => {
+    const input = resolveTerminalInputElement(surface);
+    if (!input) return;
+
+    input.autocapitalize = 'off';
+    input.autocomplete = 'off';
+    (input as unknown as { autocorrect?: string }).autocorrect = 'off';
+    input.spellcheck = false;
+
+    if (shouldUseFloeMobileKeyboard()) {
+      input.setAttribute('inputmode', 'none');
+      input.setAttribute('enterkeyhint', 'done');
+      input.setAttribute('virtualkeyboardpolicy', 'manual');
+      return;
+    }
+
+    input.setAttribute('inputmode', 'text');
+    input.setAttribute('enterkeyhint', 'enter');
+    input.removeAttribute('virtualkeyboardpolicy');
+  };
+
+  const syncAllTerminalInputElementModes = () => {
+    for (const surface of surfaceRegistry.values()) {
+      syncTerminalInputElementMode(surface);
+    }
+  };
+
   const restoreActiveTerminalFocus = () => {
     if (!shouldRestoreTerminalFocus()) return;
     requestAnimationFrame(() => {
@@ -856,6 +995,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!shouldUseFloeMobileKeyboard()) return;
     setMobileKeyboardVisible(true);
     requestAnimationFrame(() => {
+      syncAllTerminalInputElementModes();
+      getActiveTerminalInputElement()?.blur();
       blurActiveElement();
     });
   };
@@ -869,6 +1010,104 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       setMobileKeyboardVisible(false);
     }
     lastMobileKeyboardEligible = eligible;
+  });
+
+  createEffect(() => {
+    void surfaceRegistrySeq();
+    void coreRegistrySeq();
+    void shouldUseFloeMobileKeyboard();
+
+    requestAnimationFrame(() => {
+      syncAllTerminalInputElementModes();
+    });
+  });
+
+  createEffect(() => {
+    void activeSessionId();
+    setMobileKeyboardDraftState(createEmptyTerminalMobileKeyboardDraftState());
+  });
+
+  createEffect(() => {
+    const query = mobileKeyboardContext().pathQuery;
+    if (!shouldUseFloeMobileKeyboard() || !query) {
+      setMobileKeyboardPathEntries([]);
+      return;
+    }
+
+    const cacheKey = `${query.baseDirAbs}:${query.showHidden ? 'hidden' : 'visible'}`;
+    const cached = mobileKeyboardPathCache.get(cacheKey);
+    if (cached) {
+      setMobileKeyboardPathEntries(cached);
+    } else {
+      setMobileKeyboardPathEntries([]);
+    }
+
+    let cancelled = false;
+    void (async () => {
+      if (cached) return;
+      try {
+        const resp = await rpc.fs.list({ path: query.baseDirAbs, showHidden: query.showHidden });
+        if (cancelled) return;
+        const entries: TerminalMobileKeyboardPathEntry[] = Array.isArray(resp?.entries)
+          ? resp.entries.map((entry) => ({
+            name: String(entry.name ?? '').trim(),
+            path: String(entry.path ?? '').trim(),
+            isDirectory: Boolean(entry.isDirectory),
+          })).filter((entry) => entry.name && entry.path)
+          : [];
+        mobileKeyboardPathCache.set(cacheKey, entries);
+        setMobileKeyboardPathEntries(entries);
+      } catch {
+        if (!cancelled) {
+          setMobileKeyboardPathEntries([]);
+        }
+      }
+    })();
+
+    onCleanup(() => {
+      cancelled = true;
+    });
+  });
+
+  createEffect(() => {
+    const workingDir = activeSessionWorkingDir();
+    if (!shouldUseFloeMobileKeyboard() || !workingDir) {
+      setMobileKeyboardPackageScripts([]);
+      return;
+    }
+
+    const packageJsonPath = resolveTerminalMobileKeyboardPackageJsonPath(workingDir);
+    if (!packageJsonPath) {
+      setMobileKeyboardPackageScripts([]);
+      return;
+    }
+
+    const cached = mobileKeyboardPackageScriptsCache.get(packageJsonPath);
+    if (cached) {
+      setMobileKeyboardPackageScripts(cached);
+    } else {
+      setMobileKeyboardPackageScripts([]);
+    }
+
+    let cancelled = false;
+    void (async () => {
+      if (cached) return;
+      try {
+        const resp = await rpc.fs.readFile({ path: packageJsonPath, encoding: 'utf8' });
+        if (cancelled) return;
+        const scripts = parseTerminalMobileKeyboardScripts(String(resp?.content ?? ''));
+        mobileKeyboardPackageScriptsCache.set(packageJsonPath, scripts);
+        setMobileKeyboardPackageScripts(scripts);
+      } catch {
+        if (!cancelled) {
+          setMobileKeyboardPackageScripts([]);
+        }
+      }
+    })();
+
+    onCleanup(() => {
+      cancelled = true;
+    });
   });
 
   createEffect(() => {
@@ -1079,6 +1318,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   let searchInputEl: HTMLInputElement | null = null;
   let rootEl: HTMLDivElement | null = null;
+  let mobileKeyboardEl: HTMLDivElement | null = null;
 
   const getActiveCore = () => {
     const sid = activeSessionId();
@@ -1086,14 +1326,84 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return coreRegistry.get(sid) ?? null;
   };
 
+  const getActiveSurfaceElement = () => {
+    const sid = activeSessionId();
+    if (!sid) return null;
+    return surfaceRegistry.get(sid) ?? null;
+  };
+
+  const getActiveTerminalInputElement = () => {
+    return resolveTerminalInputElement(getActiveSurfaceElement());
+  };
+
+  const recordMobileKeyboardHistory = (sessionId: string, command: string) => {
+    setMobileKeyboardHistoryBySession((prev) => {
+      const current = prev[sessionId] ?? [];
+      const next = rememberTerminalMobileKeyboardHistory(current, command);
+      if (next === current) return prev;
+      return { ...prev, [sessionId]: next };
+    });
+  };
+
+  const syncMobileKeyboardInset = () => {
+    if (!shouldUseFloeMobileKeyboard() || !mobileKeyboardVisible() || !mobileKeyboardEl) {
+      setMobileKeyboardInsetPx(0);
+      return;
+    }
+
+    const height = Math.max(0, Math.ceil(mobileKeyboardEl.getBoundingClientRect().height));
+    setMobileKeyboardInsetPx(height);
+  };
+
+  createEffect(() => {
+    void shouldUseFloeMobileKeyboard();
+    void mobileKeyboardVisible();
+
+    const el = mobileKeyboardEl;
+    if (!el) {
+      setMobileKeyboardInsetPx(0);
+      return;
+    }
+
+    syncMobileKeyboardInset();
+
+    if (!shouldUseFloeMobileKeyboard() || !mobileKeyboardVisible() || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      syncMobileKeyboardInset();
+    });
+    observer.observe(el);
+
+    onCleanup(() => {
+      observer.disconnect();
+    });
+  });
+
   const handleMobileKeyboardPayload = (payload: string) => {
     const sid = activeSessionId();
     if (!sid || !connected()) return;
+
+    const update = applyTerminalMobileKeyboardPayload({
+      state: mobileKeyboardDraftState(),
+      payload,
+      history: activeMobileKeyboardHistory(),
+    });
+    setMobileKeyboardDraftState(update.nextState);
+    if (update.committedCommand) {
+      recordMobileKeyboardHistory(sid, update.committedCommand);
+    }
 
     void transport.sendInput(sid, payload, connId).catch((e) => {
       if (handleExecuteDenied(e)) return;
       setError(e instanceof Error ? e.message : String(e));
     });
+  };
+
+  const handleMobileKeyboardSuggestionSelect = (suggestion: TerminalMobileKeyboardSuggestion) => {
+    if (!suggestion.insertText) return;
+    handleMobileKeyboardPayload(suggestion.insertText);
   };
 
   const handleMobileInputModeChange = (
@@ -1531,11 +1841,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       <Show when={connected()} fallback={<div class="p-4 text-xs text-muted-foreground">Not connected.</div>}>
         <div
           ref={setTerminalContextMenuHostEl}
+          data-testid="terminal-content"
           class="flex-1 min-h-0 relative"
           style={{
             'padding-bottom':
               shouldUseFloeMobileKeyboard() && mobileKeyboardVisible()
-                ? MOBILE_TERMINAL_KEYBOARD_PADDING
+                ? `${mobileKeyboardInsetPx()}px`
                 : undefined,
           }}
         >
@@ -1604,6 +1915,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                         transport={transport}
                         eventSource={eventSource}
                         registerCore={registerCore}
+                        registerSurfaceElement={registerSurfaceElement}
                         registerActions={registerActions}
                         onNameUpdate={handleNameUpdate}
                       />
@@ -1667,8 +1979,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
       <Show when={shouldUseFloeMobileKeyboard()}>
         <MobileKeyboard
+          ref={(el) => {
+            mobileKeyboardEl = el;
+            syncMobileKeyboardInset();
+          }}
           visible={mobileKeyboardVisible()}
+          quickInserts={TERMINAL_MOBILE_KEYBOARD_QUICK_INSERTS}
+          suggestions={mobileKeyboardSuggestions()}
           onKey={handleMobileKeyboardPayload}
+          onSuggestionSelect={handleMobileKeyboardSuggestionSelect}
           onDismiss={() => setMobileKeyboardVisible(false)}
         />
       </Show>

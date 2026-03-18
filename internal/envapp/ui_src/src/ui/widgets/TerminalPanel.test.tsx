@@ -19,6 +19,38 @@ const terminalPrefsState = vi.hoisted(() => ({
 
 const focusSpy = vi.hoisted(() => vi.fn());
 
+const rpcFsMocks = vi.hoisted(() => ({
+  getPathContext: vi.fn().mockResolvedValue({ agentHomePathAbs: '/workspace' }),
+  list: vi.fn().mockResolvedValue({
+    entries: [
+      {
+        name: 'src',
+        path: '/workspace/src',
+        isDirectory: true,
+        size: 0,
+        modifiedAt: 0,
+        createdAt: 0,
+      },
+      {
+        name: 'README.md',
+        path: '/workspace/README.md',
+        isDirectory: false,
+        size: 0,
+        modifiedAt: 0,
+        createdAt: 0,
+      },
+    ],
+  }),
+  readFile: vi.fn().mockResolvedValue({
+    content: JSON.stringify({
+      scripts: {
+        dev: 'vite',
+        test: 'vitest run',
+      },
+    }),
+  }),
+}));
+
 const transportMocks = vi.hoisted(() => ({
   sendInput: vi.fn().mockResolvedValue(undefined),
   resize: vi.fn().mockResolvedValue(undefined),
@@ -134,13 +166,44 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   ),
   MobileKeyboard: (props: any) => (
     props.visible ? (
-      <div data-testid="mobile-keyboard">
+      <div
+        data-testid="mobile-keyboard"
+        ref={(el) => {
+          Object.defineProperty(el, 'getBoundingClientRect', {
+            configurable: true,
+            value: () => ({
+              width: 320,
+              height: 132,
+              top: 0,
+              left: 0,
+              right: 320,
+              bottom: 132,
+              x: 0,
+              y: 0,
+              toJSON: () => undefined,
+            }),
+          });
+          props.ref?.(el);
+        }}
+      >
         <button type="button" data-testid="mobile-keyboard-key" onClick={() => props.onKey?.('x')}>
           Send x
+        </button>
+        <button type="button" data-testid="mobile-keyboard-key-g" onClick={() => props.onKey?.('g')}>
+          Send g
         </button>
         <button type="button" data-testid="mobile-keyboard-dismiss" onClick={() => props.onDismiss?.()}>
           Dismiss
         </button>
+        {(props.suggestions ?? []).map((item: any) => (
+          <button
+            type="button"
+            data-testid={`mobile-keyboard-suggestion-${item.label}`}
+            onClick={() => props.onSuggestionSelect?.(item)}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
     ) : null
   ),
@@ -176,15 +239,21 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 
 vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
-    fs: {
-      getPathContext: vi.fn().mockResolvedValue({ agentHomePathAbs: '/workspace' }),
-    },
+    fs: rpcFsMocks,
   }),
 }));
 
 vi.mock('@floegence/floeterm-terminal-web', () => {
   class MockTerminalCore {
+    container: HTMLDivElement;
     terminal = { options: {} };
+
+    constructor(container: HTMLDivElement) {
+      this.container = container;
+      const input = document.createElement('textarea');
+      input.setAttribute('aria-label', 'Terminal input');
+      this.container.appendChild(input);
+    }
 
     initialize = vi.fn().mockResolvedValue(undefined);
     dispose = vi.fn();
@@ -287,6 +356,38 @@ describe('TerminalPanel', () => {
     focusSpy.mockClear();
     Object.values(transportMocks).forEach((mock) => {
       if ('mockClear' in mock) mock.mockClear();
+    });
+    Object.values(rpcFsMocks).forEach((mock) => {
+      if ('mockClear' in mock) mock.mockClear();
+    });
+    rpcFsMocks.getPathContext.mockResolvedValue({ agentHomePathAbs: '/workspace' });
+    rpcFsMocks.list.mockResolvedValue({
+      entries: [
+        {
+          name: 'src',
+          path: '/workspace/src',
+          isDirectory: true,
+          size: 0,
+          modifiedAt: 0,
+          createdAt: 0,
+        },
+        {
+          name: 'README.md',
+          path: '/workspace/README.md',
+          isDirectory: false,
+          size: 0,
+          modifiedAt: 0,
+          createdAt: 0,
+        },
+      ],
+    });
+    rpcFsMocks.readFile.mockResolvedValue({
+      content: JSON.stringify({
+        scripts: {
+          dev: 'vite',
+          test: 'vitest run',
+        },
+      }),
     });
     sessionsCoordinatorMocks.refresh.mockClear();
     sessionsCoordinatorMocks.updateSessionMeta.mockClear();
@@ -407,5 +508,50 @@ describe('TerminalPanel', () => {
 
     expect(terminalPrefsState.mobileInputMode).toBe('system');
     expect(focusSpy).toHaveBeenCalled();
+  });
+
+  it('suppresses the system IME and matches the terminal inset to the Floe keyboard height', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const terminalInput = host.querySelector('textarea[aria-label="Terminal input"]') as HTMLTextAreaElement | null;
+    expect(terminalInput?.getAttribute('inputmode')).toBe('none');
+    expect(terminalInput?.getAttribute('virtualkeyboardpolicy')).toBe('manual');
+
+    const terminalContent = host.querySelector('[data-testid="terminal-content"]') as HTMLDivElement | null;
+    expect(terminalContent?.style.paddingBottom).toBe('132px');
+  });
+
+  it('shows keyboard suggestions and sends the completion payload when a suggestion is selected', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await Promise.resolve();
+    await Promise.resolve();
+    transportMocks.sendInput.mockClear();
+
+    (host.querySelector('[data-testid="mobile-keyboard-key-g"]') as HTMLButtonElement | null)?.click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const gitSuggestion = host.querySelector('[data-testid="mobile-keyboard-suggestion-git"]') as HTMLButtonElement | null;
+    expect(gitSuggestion).toBeTruthy();
+
+    gitSuggestion?.click();
+    await Promise.resolve();
+
+    expect(transportMocks.sendInput).toHaveBeenNthCalledWith(1, 'session-1', 'g', 'conn-1');
+    expect(transportMocks.sendInput).toHaveBeenNthCalledWith(2, 'session-1', 'it ', 'conn-1');
   });
 });
