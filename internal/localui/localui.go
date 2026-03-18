@@ -204,7 +204,6 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.srv = srv
 	s.listeners = listeners
-	srv := s.srv
 
 	go func() {
 		<-ctx.Done()
