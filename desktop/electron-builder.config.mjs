@@ -36,6 +36,7 @@ export default {
   mac: {
     category: 'public.app-category.developer-tools',
     target: ['dmg'],
+    forceCodeSigning: true,
     identity: macIdentity || undefined,
     icon: path.join(buildResourcesDir, 'icon.icns'),
   },
