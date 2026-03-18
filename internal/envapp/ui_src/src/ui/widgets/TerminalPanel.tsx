@@ -49,6 +49,7 @@ import { createClientId } from '../utils/clientId';
 import { PermissionEmptyState } from './PermissionEmptyState';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
 import { normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../utils/askFlowerPath';
+import { resolveTerminalSurfaceTouchAction } from '../mobileViewportPolicy';
 import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSettingsDialog';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
@@ -1057,7 +1058,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const mobile = isMobileLayout();
 
     for (const surface of surfaceRegistry.values()) {
-      surface.style.touchAction = mobile ? 'pan-x pinch-zoom' : '';
+      surface.style.touchAction = resolveTerminalSurfaceTouchAction(mobile);
       surface.style.overscrollBehavior = mobile ? 'contain' : '';
     }
   });

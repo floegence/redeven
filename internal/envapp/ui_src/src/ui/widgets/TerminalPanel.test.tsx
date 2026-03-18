@@ -665,7 +665,7 @@ describe('TerminalPanel', () => {
 
     const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
     expect(terminalSurface).toBeTruthy();
-    expect(terminalSurface?.style.touchAction).toBe('pan-x pinch-zoom');
+    expect(terminalSurface?.style.touchAction).toBe('pan-x');
     expect(terminalSurface?.style.overscrollBehavior).toBe('contain');
 
     terminalSurface?.dispatchEvent(new PointerEvent('pointerdown', {
