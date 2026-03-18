@@ -62,12 +62,13 @@ redeven bootstrap
 Exchange an environment token for local agent config.
 
 Usage:
-  redeven bootstrap --controlplane <url> --env-id <env_public_id> --env-token <token> [flags]
+  redeven bootstrap --controlplane <url> --env-id <env_public_id> (--env-token <token> | --env-token-env <env_name>) [flags]
 
 Required flags:
   --controlplane <url>              Controlplane base URL.
   --env-id <env_public_id>          Environment public ID.
   --env-token <token>               Environment token. "Bearer <token>" is also accepted.
+  --env-token-env <env_name>        Read the environment token from an environment variable.
 
 Optional flags:
   --agent-home-dir <path>           Agent home dir for filesystem-facing features.
@@ -112,7 +113,7 @@ Modes:
 
 Bootstrap rules:
   - Recommended flow: run %[5]s once, then use %[6]s.
-  - One-shot flow: pass --controlplane, --env-id, and --env-token together to %[6]s.
+  - One-shot flow: pass --controlplane, --env-id, and either --env-token or --env-token-env to %[6]s.
 
 Local UI bind rules:
   - Default bind: localhost:23998
@@ -131,6 +132,7 @@ Flags:
   --controlplane <url>              Controlplane base URL for one-shot bootstrap.
   --env-id <env_public_id>          Environment public ID for one-shot bootstrap.
   --env-token <token>               Environment token for one-shot bootstrap.
+  --env-token-env <env_name>        Read the environment token from an environment variable.
   --permission-policy <preset>      Local permission policy when bootstrapping inline.
   --password <password>             Access password for the Local UI.
   --password-env <env_name>         Read the Local UI password from an environment variable.
@@ -419,6 +421,24 @@ func translatePasswordOptionError(err error) (string, []string) {
 		}
 	}
 	return fmt.Sprintf("invalid password flags: %v", err), nil
+}
+
+func translateEnvTokenOptionError(err error, command string) (string, []string) {
+	var optErr *envTokenOptionError
+	if errors.As(err, &optErr) {
+		switch optErr.kind {
+		case envTokenOptionErrorMultipleSources:
+			return "invalid environment token flags: use only one of --env-token or --env-token-env",
+				[]string{fmt.Sprintf("Hint: choose a single environment token source for `%s`.", command)}
+		case envTokenOptionErrorEnvNotSet:
+			return fmt.Sprintf("invalid environment token flags: environment token env var %q is not set", optErr.envName),
+				[]string{fmt.Sprintf("Hint: export %s with a non-empty token before running `%s`.", optErr.envName, command)}
+		case envTokenOptionErrorEnvEmpty:
+			return fmt.Sprintf("invalid environment token flags: environment token env var %q is empty", optErr.envName),
+				[]string{fmt.Sprintf("Hint: set %s to a non-empty token and retry.", optErr.envName)}
+		}
+	}
+	return fmt.Sprintf("invalid environment token flags: %v", err), nil
 }
 
 func translatePasswordVerificationError(err error) (string, []string) {

@@ -10,6 +10,10 @@ export type ResolveBundledAgentPathArgs = Readonly<{
   existsSync?: (filePath: string) => boolean;
 }>;
 
+export type ResolvePreloadPathArgs = Readonly<{
+  appPath: string;
+}>;
+
 export function bundledAgentExecutableName(platform: NodeJS.Platform = process.platform): string {
   return platform === 'win32' ? 'redeven.exe' : 'redeven';
 }
@@ -42,4 +46,8 @@ export function resolveBundledAgentPath(args: ResolveBundledAgentPathArgs): stri
   }
 
   throw new Error('Unable to locate the bundled redeven binary. Set REDEVEN_DESKTOP_AGENT_BINARY for local development.');
+}
+
+export function resolveSettingsPreloadPath(args: ResolvePreloadPathArgs): string {
+  return path.join(args.appPath, 'dist', 'preload', 'settings.js');
 }
