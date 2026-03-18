@@ -180,3 +180,10 @@ Details:
 
 - Open codespace from Env App instead of visiting the sandbox URL directly.
 - If opener context is gone after refresh, reopen from Env App so a new entry ticket can be minted.
+
+### Redeven Desktop says another agent is already using `~/.redeven`
+
+- Desktop reuses an existing Local UI automatically when the current state directory already exposes one.
+- If the existing agent is running without Local UI (for example `redeven run --mode remote`), Desktop stays open and shows a blocked page instead of crashing.
+- In that case, stop the existing agent or restart it in a Local UI mode (`local`, `hybrid`, or desktop-managed), then use `Retry`.
+- Use `Copy diagnostics` from the blocked page to capture the lock owner mode, PID, and state paths for troubleshooting.

@@ -12,8 +12,9 @@ This document describes the public Electron desktop shell that is published toge
 
 - Electron is a thin shell.
 - `redeven run --mode desktop --desktop-managed` remains the only runtime entrypoint.
-- The desktop shell waits for a machine-readable startup report file from `redeven`.
+- The desktop shell waits for a machine-readable desktop launch report file from `redeven`.
 - If a compatible Local UI instance is already running from the same default state directory, the desktop shell reuses that loopback URL instead of failing on the agent lock.
+- If the default state directory is locked by another agent without an attachable Local UI, the desktop shell stays open and renders a blocked page instead of crashing with raw stderr.
 - Electron only allows loopback navigation for the reported Local UI origin and opens all other URLs in the system browser.
 
 ## Runtime contract
@@ -33,7 +34,22 @@ Behavior:
 - Local UI always starts.
 - Remote control channel is enabled only when the local config is already bootstrapped and remote-valid.
 - `--desktop-managed` disables CLI self-upgrade semantics; restart remains available.
-- `--startup-report-file` lets Electron wait for a structured readiness signal instead of scraping terminal output.
+- `--startup-report-file` lets Electron wait for a structured desktop launch report instead of scraping terminal output.
+- On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
+
+### Launch outcomes
+
+The launch report distinguishes these outcomes:
+
+- `ready`: the spawned desktop-managed process started Local UI successfully
+- `attached`: the desktop shell found an attachable Local UI from the same state directory and reuses it
+- `blocked`: another agent owns the same state directory, but Desktop cannot attach to a Local UI from it
+
+The first stable blocked code is:
+
+- `state_dir_locked`
+
+That blocked payload includes lock owner metadata and the relevant state paths so Desktop can show actionable diagnostics without guessing from stderr text.
 
 ## Env App behavior
 
@@ -75,6 +91,11 @@ Unpackaged Electron runs can point to a local agent binary with:
 cd desktop
 REDEVEN_DESKTOP_AGENT_BINARY=../redeven npm run start
 ```
+
+If another `redeven` process already holds `~/.redeven/agent.lock`, Desktop now behaves as follows:
+
+- If that process exposes a compatible Local UI, Desktop attaches automatically.
+- If that process does not expose Local UI (for example a `remote`-only run), Desktop shows a blocked page with `Retry`, `Copy diagnostics`, and `Quit`.
 
 ## macOS distribution
 
