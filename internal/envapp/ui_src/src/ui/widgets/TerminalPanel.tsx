@@ -130,6 +130,7 @@ type terminal_session_view_props = {
   themeColors: () => Record<string, string>;
   fontSize: () => number;
   fontFamily: () => string;
+  bottomInsetPx: () => number;
   connId: string;
   transport: TerminalTransport;
   eventSource: TerminalEventSource;
@@ -539,6 +540,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       class="h-full min-h-0 relative overflow-hidden"
       style={{
         'background-color': terminalBackground(),
+        '--terminal-bottom-inset': `${props.bottomInsetPx()}px`,
         '--background': terminalBackground(),
         '--primary': terminalForeground(),
         '--muted': `color-mix(in srgb, ${terminalForeground()} 12%, ${terminalBackground()})`,
@@ -553,6 +555,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
         class="absolute top-2 left-2 right-0 bottom-0 redeven-terminal-surface"
         style={{
           transition: 'opacity 0.15s ease-out',
+          bottom: 'var(--terminal-bottom-inset)',
           opacity: readyOnce() ? (showLoading() ? '0' : '1') : (loading() === 'idle' ? '1' : '0'),
         }}
       />
@@ -570,7 +573,10 @@ function TerminalSessionView(props: terminal_session_view_props) {
       <Show when={error()}>
         <div
           class="absolute left-3 right-3 bottom-3 text-[11px] px-2 py-1 rounded border border-border text-error break-words"
-          style={{ 'background-color': `color-mix(in srgb, ${terminalBackground()} 80%, transparent)` }}
+          style={{
+            'background-color': `color-mix(in srgb, ${terminalBackground()} 80%, transparent)`,
+            bottom: 'calc(var(--terminal-bottom-inset) + 0.75rem)',
+          }}
         >
           {error()}
         </div>
@@ -933,6 +939,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       pathEntries: mobileKeyboardPathEntries(),
       packageScripts: mobileKeyboardPackageScripts(),
     });
+  });
+
+  const terminalViewportInsetPx = createMemo(() => {
+    if (!shouldUseFloeMobileKeyboard() || !mobileKeyboardVisible()) return 0;
+    return mobileKeyboardInsetPx();
   });
 
   const shouldRestoreTerminalFocus = () => {
@@ -1378,6 +1389,23 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     onCleanup(() => {
       observer.disconnect();
+    });
+  });
+
+  createEffect(() => {
+    const sid = activeSessionId();
+    const inset = terminalViewportInsetPx();
+    if (!sid) return;
+    if (!connected()) return;
+
+    const core = coreRegistry.get(sid);
+    if (!core) return;
+
+    requestAnimationFrame(() => {
+      if (activeSessionId() !== sid) return;
+      if (!connected()) return;
+      if (terminalViewportInsetPx() !== inset) return;
+      core.forceResize();
     });
   });
 
@@ -1828,12 +1856,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           ref={setTerminalContextMenuHostEl}
           data-testid="terminal-content"
           class="flex-1 min-h-0 relative"
-          style={{
-            'padding-bottom':
-              shouldUseFloeMobileKeyboard() && mobileKeyboardVisible()
-                ? `${mobileKeyboardInsetPx()}px`
-                : undefined,
-          }}
         >
           <Show when={searchOpen()}>
             <div class="absolute top-2 right-2 z-20 flex items-center gap-1 rounded-md border border-white/15 bg-[#0b0f14]/95 px-2 py-1 shadow-md backdrop-blur">
@@ -1896,6 +1918,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 	                        themeColors={terminalThemeColors}
                         fontSize={fontSize}
                         fontFamily={fontFamily}
+                        bottomInsetPx={terminalViewportInsetPx}
                         connId={connId}
                         transport={transport}
                         eventSource={eventSource}
