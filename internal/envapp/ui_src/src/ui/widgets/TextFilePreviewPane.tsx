@@ -22,21 +22,6 @@ export interface TextFilePreviewPaneProps {
   onDiscard?: () => void;
 }
 
-function describePreviewMode(props: TextFilePreviewPaneProps, monacoSupported: boolean): string {
-  if (props.editing) {
-    return monacoSupported
-      ? 'Editing'
-      : 'Editing in plain text mode (syntax highlighting unavailable for this language).';
-  }
-  if (props.descriptor.textPresentation === 'plain') {
-    return 'Read-only text preview';
-  }
-  if (monacoSupported) {
-    return 'Read-only code preview';
-  }
-  return 'Read-only highlight fallback';
-}
-
 export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   const resolvedLanguage = createMemo(() => {
     if (props.descriptor.textPresentation !== 'code') return 'plaintext';
@@ -61,12 +46,6 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
     renderLineHighlight: props.editing ? ('line' as const) : ('none' as const),
     renderWhitespace: 'selection' as const,
   }));
-  const statusText = createMemo(() => describePreviewMode(props, monacoSupported()));
-  const languageLabel = createMemo(() => (
-    props.descriptor.textPresentation === 'code'
-      ? props.descriptor.language || 'plaintext'
-      : 'text'
-  ));
 
   createEffect(() => {
     if (!shouldUseMonaco()) {
@@ -76,13 +55,6 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
 
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
-      <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-muted-foreground">
-        <span class="rounded-full border border-border/80 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/80">
-          {languageLabel()}
-        </span>
-        <span class="min-w-0 truncate text-xs">{statusText()}</span>
-      </div>
-
       <Show when={(props.saveError ?? '').trim()}>
         <div class="shrink-0 border-b border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
           {props.saveError}

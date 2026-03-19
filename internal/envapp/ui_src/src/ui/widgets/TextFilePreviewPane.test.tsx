@@ -64,6 +64,7 @@ describe('TextFilePreviewPane', () => {
     const editor = host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null;
     expect(editor).toBeTruthy();
     expect(host.textContent).toContain('typescript:const value = 2;:rw');
+    expect(host.textContent).not.toContain('Editing');
 
     editor?.click();
 
@@ -87,6 +88,6 @@ describe('TextFilePreviewPane', () => {
 
     expect(supportCheckMock).toHaveBeenCalledWith('toml');
     expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
-    expect(host.textContent).toContain('Read-only highlight fallback');
+    expect(host.textContent).not.toContain('Read-only highlight fallback');
   });
 });

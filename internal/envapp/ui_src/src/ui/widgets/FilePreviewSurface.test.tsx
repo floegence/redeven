@@ -85,6 +85,7 @@ describe('FilePreviewSurface', () => {
         item={{ id: '/workspace/demo.txt', name: 'demo.txt', path: '/workspace/demo.txt', type: 'file' }}
         descriptor={{ mode: 'text', textPresentation: 'plain', wrapText: true }}
         text="selected line"
+        editing
         selectedText="selected from editor"
         onAskFlower={onAskFlower}
         onDownload={onDownload}
@@ -92,6 +93,11 @@ describe('FilePreviewSurface', () => {
     ), host);
 
     expect(host.querySelector('[data-testid="floating-window"]')).toBeTruthy();
+    const footer = host.querySelector('[data-testid="file-preview-footer"]') as HTMLElement | null;
+    expect(footer).toBeTruthy();
+    expect(footer?.className).toContain('bg-primary/8');
+    expect(footer?.textContent).toContain('Editing');
+    expect(footer?.textContent).toContain('No local changes');
 
     vi.spyOn(window, 'getSelection').mockReturnValue({
       rangeCount: 1,
@@ -130,7 +136,10 @@ describe('FilePreviewSurface', () => {
     expect(dialog).toBeTruthy();
     expect(dialog?.className).toContain('h-[calc(100dvh-0.5rem)]');
     expect(host.textContent).toContain('/workspace/demo.pdf');
-    expect(host.textContent).toContain('Truncated preview');
+    const footer = host.querySelector('[data-testid="file-preview-footer"]') as HTMLElement | null;
+    expect(footer).toBeTruthy();
+    expect(footer?.className).toContain('bg-warning/10');
+    expect(footer?.textContent).toContain('Truncated preview');
     expect(host.textContent).toContain('This file is too large to preview.');
     expect(host.querySelector('[data-testid="confirm-dialog"]')).toBeTruthy();
   });
