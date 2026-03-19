@@ -6,12 +6,13 @@ import {
   REPORT_DESKTOP_WINDOW_THEME_CHANNEL,
   type DesktopWindowThemeSnapshot,
 } from '../shared/windowThemeIPC';
+import { desktopWindowTitleBarInsetCSSValue, usesDesktopWindowThemeOverlay } from '../shared/windowChromePlatform';
 
 const WINDOW_CHROME_STYLE_ID = 'redeven-desktop-window-chrome';
 const WINDOW_CHROME_STYLE_TEXT = `
 body > #root {
   box-sizing: border-box;
-  padding-top: env(titlebar-area-height, 0px);
+  padding-top: ${desktopWindowTitleBarInsetCSSValue(process.platform)};
 }
 `;
 
@@ -91,6 +92,10 @@ function ensureWindowChromeStyle(): void {
 }
 
 export function bootstrapDesktopWindowThemeReporter(): void {
+  if (!usesDesktopWindowThemeOverlay(process.platform)) {
+    return;
+  }
+
   let lastSnapshot = '';
 
   const reportTheme = () => {
