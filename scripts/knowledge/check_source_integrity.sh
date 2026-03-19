@@ -37,4 +37,7 @@ if search_pattern "^[[:space:]]*-[[:space:]]*redeven:" "$SOURCE_ROOT/cards"; the
   exit 1
 fi
 
-go run ./cmd/knowledge-bundle --source-root "$SOURCE_ROOT" --validate-source-only >/dev/null
+(
+  cd "$ROOT_DIR"
+  go run ./cmd/knowledge-bundle --source-root "$SOURCE_ROOT" --validate-source-only >/dev/null
+)

@@ -1,16 +1,47 @@
+import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const desktopVersion = String(process.env.REDEVEN_DESKTOP_VERSION ?? '').trim() || '0.1.0';
-const bundledAgentBinary = String(process.env.REDEVEN_DESKTOP_AGENT_BINARY ?? '').trim();
 const macIdentity = String(process.env.REDEVEN_DESKTOP_MAC_IDENTITY ?? '')
   .trim()
   .replace(/^Developer ID Application:\s*/u, '')
   .trim();
-const buildResourcesDir = path.resolve('build');
+const desktopDir = path.dirname(fileURLToPath(import.meta.url));
+const buildResourcesDir = path.join(desktopDir, 'build');
 
-if (!bundledAgentBinary) {
-  throw new Error('REDEVEN_DESKTOP_AGENT_BINARY is required for desktop packaging.');
+function resolveTargetGoos(platform = process.platform) {
+  if (platform === 'darwin' || platform === 'linux') {
+    return platform;
+  }
+  throw new Error(`Unsupported desktop packaging platform: ${platform}`);
 }
+
+function resolveTargetGoarch(arch = process.arch) {
+  switch (arch) {
+    case 'x64':
+      return 'amd64';
+    case 'arm64':
+      return 'arm64';
+    default:
+      throw new Error(`Unsupported desktop packaging architecture: ${arch}`);
+  }
+}
+
+function resolveBundledAgentBinary() {
+  const goos = resolveTargetGoos();
+  const goarch = resolveTargetGoarch();
+  const executableName = goos === 'windows' ? 'redeven.exe' : 'redeven';
+  const candidate = path.join(desktopDir, '.bundle', `${goos}-${goarch}`, executableName);
+  if (!fs.existsSync(candidate)) {
+    throw new Error(
+      `Bundled agent binary not found at ${candidate}. Run npm run prepare:bundled-agent or npm run package from the desktop workspace before invoking electron-builder directly.`,
+    );
+  }
+  return candidate;
+}
+
+const bundledAgentBinary = resolveBundledAgentBinary();
 
 export default {
   appId: 'com.floegence.redeven.desktop',
@@ -28,7 +59,7 @@ export default {
   ],
   extraResources: [
     {
-      from: path.resolve(bundledAgentBinary),
+      from: bundledAgentBinary,
       to: 'bin/redeven',
     },
   ],

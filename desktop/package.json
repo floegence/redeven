@@ -7,12 +7,13 @@
   "homepage": "https://github.com/floegence/redeven-agent",
   "main": "dist/main/main.js",
   "scripts": {
-    "start": "npm run build && electron .",
+    "prepare:bundled-agent": "../scripts/build_desktop_bundled_agent.sh",
+    "start": "npm run build && npm run prepare:bundled-agent && electron .",
     "build": "tsc -p tsconfig.json",
     "lint": "eslint \"src/**/*.ts\" \"electron-builder.config.mjs\" \"eslint.config.mjs\" --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "package": "npm run build && electron-builder --config electron-builder.config.mjs --publish never"
+    "package": "npm run build && npm run prepare:bundled-agent && electron-builder --config electron-builder.config.mjs --publish never"
   },
   "engines": {
     "node": ">=24.0.0"

@@ -50,6 +50,7 @@ For each release tag, the workflow publishes:
 All artifacts are uploaded to the GitHub Release for that tag.
 
 Desktop assets bundle the matching `redeven` binary inside the Electron package and use the same release tag as the CLI tarballs.
+The desktop workflow materializes that binary through `scripts/build_desktop_bundled_agent.sh`, which hydrates `desktop/.bundle/<goos>-<goarch>/redeven` from the matching CLI tarball before `electron-builder` packages the app.
 
 ## macOS desktop signing baseline
 

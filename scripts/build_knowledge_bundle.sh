@@ -20,12 +20,18 @@ SOURCE_ROOT="$ROOT_DIR/internal/knowledge/source"
 DIST_ROOT="$ROOT_DIR/internal/knowledge/dist"
 
 if [ "$VERIFY_ONLY" -eq 1 ]; then
-  go run ./cmd/knowledge-bundle \
-    --source-root "$SOURCE_ROOT" \
-    --dist-root "$DIST_ROOT" \
-    --verify-only
+  (
+    cd "$ROOT_DIR"
+    go run ./cmd/knowledge-bundle \
+      --source-root "$SOURCE_ROOT" \
+      --dist-root "$DIST_ROOT" \
+      --verify-only
+  )
 else
-  go run ./cmd/knowledge-bundle \
-    --source-root "$SOURCE_ROOT" \
-    --dist-root "$DIST_ROOT"
+  (
+    cd "$ROOT_DIR"
+    go run ./cmd/knowledge-bundle \
+      --source-root "$SOURCE_ROOT" \
+      --dist-root "$DIST_ROOT"
+  )
 fi

@@ -57,6 +57,7 @@ Notes:
 - Generated `dist` assets are not checked into git.
 - `./scripts/lint_ui.sh` validates the Env App and Code App source packages before asset bundling.
 - `./scripts/check_desktop.sh` validates the Electron desktop shell package (lint, typecheck, tests, build).
+- `cd desktop && npm run start` and `cd desktop && npm run package` now prepare `desktop/.bundle/<goos>-<goarch>/redeven` from the current repository before Electron starts or packages the desktop shell.
 - Desktop development and packaging require Node.js `24+`.
 
 ### Enable local guardrails

@@ -127,12 +127,21 @@ Desktop package checks:
 
 Node.js `24+` is required for desktop package checks and packaging.
 
-Unpackaged Electron runs can point to a local agent binary with:
+Desktop development and packaging always prepare a deterministic local bundle at:
+
+```bash
+desktop/.bundle/<goos>-<goarch>/redeven
+```
+
+The standard desktop entrypoints build or refresh that bundle from the current repository automatically:
 
 ```bash
 cd desktop
-REDEVEN_DESKTOP_AGENT_BINARY=../redeven npm run start
+npm run start
+npm run package -- --mac dmg
 ```
+
+For release automation, the same preparation script can hydrate the bundle from a prebuilt CLI tarball by setting `REDEVEN_DESKTOP_AGENT_TARBALL`.
 
 If another `redeven` process already holds `~/.redeven/agent.lock`, Desktop now behaves as follows:
 

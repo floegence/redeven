@@ -12,25 +12,26 @@ describe('paths', () => {
     })).toBe('/Applications/Redeven Desktop.app/Contents/Resources/bin/redeven');
   });
 
-  it('prefers the explicit development override', () => {
+  it('uses the prepared desktop bundle during local development', () => {
     expect(resolveBundledAgentPath({
       isPackaged: false,
       resourcesPath: '/tmp/resources',
       appPath: '/repo/desktop',
-      env: { REDEVEN_DESKTOP_AGENT_BINARY: '/tmp/redeven-dev' },
-      existsSync: () => false,
+      existsSync: (candidate) => candidate === '/repo/desktop/.bundle/linux-amd64/redeven',
       platform: 'linux',
-    })).toBe('/tmp/redeven-dev');
+      arch: 'x64',
+    })).toBe('/repo/desktop/.bundle/linux-amd64/redeven');
   });
 
-  it('falls back to the sibling repo binary during local development', () => {
+  it('falls back to the parent desktop workspace bundle when appPath points to a nested build directory', () => {
     expect(resolveBundledAgentPath({
       isPackaged: false,
       resourcesPath: '/tmp/resources',
-      appPath: '/repo/desktop',
-      existsSync: (candidate) => candidate === '/repo/redeven',
+      appPath: '/repo/desktop/dist',
+      existsSync: (candidate) => candidate === '/repo/desktop/.bundle/linux-amd64/redeven',
       platform: 'linux',
-    })).toBe('/repo/redeven');
+      arch: 'x64',
+    })).toBe('/repo/desktop/.bundle/linux-amd64/redeven');
   });
 
   it('uses a platform-specific executable name', () => {
