@@ -44,7 +44,13 @@ vi.mock('@floegence/floe-webapp-core', () => ({
     setSidebarCollapsed: vi.fn(),
   }),
   useNotification: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),
-  useTheme: () => ({ resolvedTheme: () => 'dark', toggleTheme: vi.fn() }),
+  useTheme: () => ({
+    resolvedTheme: () => 'dark',
+    toggleTheme: vi.fn(),
+    themePresets: () => [],
+    themePreset: () => undefined,
+    setThemePreset: vi.fn(),
+  }),
   useWidgetRegistry: () => ({ registerAll: vi.fn() }),
 }));
 
@@ -62,6 +68,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  Dropdown: (props: any) => <>{props.trigger}</>,
   Tooltip: (props: any) => <>{props.children}</>,
 }));
 
