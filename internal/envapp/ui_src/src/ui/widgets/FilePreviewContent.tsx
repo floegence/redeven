@@ -1,6 +1,7 @@
 import { For, Show } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
+import { Button } from '@floegence/floe-webapp-core/ui';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { DocxPreviewPane } from './DocxPreviewPane';
 import { TextFilePreviewPane } from './TextFilePreviewPane';
@@ -23,6 +24,7 @@ export interface FilePreviewContentProps {
   error?: string | null;
   xlsxSheetName?: string;
   xlsxRows?: string[][];
+  onCopyPath?: () => void;
   contentRef?: (element: HTMLDivElement) => void;
   onStartEdit?: () => void;
   onDraftChange?: (value: string) => void;
@@ -33,11 +35,57 @@ export interface FilePreviewContentProps {
 
 export function FilePreviewContent(props: FilePreviewContentProps) {
   const resolvedError = () => props.error;
+  const resolvedPath = () => String(props.item?.path ?? '').trim();
+  const showEditorActions = () => props.descriptor.mode === 'text' && Boolean(props.canEdit);
 
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
-      <div class="shrink-0 truncate border-b border-border px-3 py-2 text-[11px] font-mono text-muted-foreground">
-        {props.item?.path}
+      <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <span class="shrink-0 text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Path</span>
+          <span class="min-w-[12rem] flex-1 truncate font-mono text-xs text-muted-foreground">
+            {resolvedPath() || '(unknown path)'}
+          </span>
+          <Show when={props.onCopyPath}>
+            <Button
+              size="sm"
+              variant="ghost"
+              class="shrink-0"
+              disabled={!resolvedPath()}
+              onClick={() => props.onCopyPath?.()}
+            >
+              Copy path
+            </Button>
+          </Show>
+        </div>
+
+        <Show when={showEditorActions() && !props.editing}>
+          <Button size="sm" variant="outline" class="shrink-0" onClick={() => props.onStartEdit?.()}>
+            Edit
+          </Button>
+        </Show>
+
+        <Show when={showEditorActions() && props.editing}>
+          <div class="flex shrink-0 items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={props.saving || (!props.dirty && !(props.saveError ?? '').trim())}
+              onClick={() => props.onDiscard?.()}
+            >
+              Discard
+            </Button>
+            <Button
+              size="sm"
+              variant="default"
+              loading={props.saving}
+              disabled={!props.dirty}
+              onClick={() => props.onSave?.()}
+            >
+              Save
+            </Button>
+          </div>
+        </Show>
       </div>
 
       <div

@@ -1,5 +1,6 @@
 import { useNotification } from '@floegence/floe-webapp-core';
 import { useEnvContext } from '../pages/EnvContext';
+import { writeTextToClipboard } from '../utils/clipboard';
 import { buildFilePreviewAskFlowerIntent } from '../utils/filePreviewAskFlower';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { FilePreviewSurface } from './FilePreviewSurface';
@@ -8,6 +9,21 @@ export function FilePreviewHost() {
   const notification = useNotification();
   const env = useEnvContext();
   const filePreview = useFilePreviewContext();
+
+  const handleCopyPath = async () => {
+    const path = String(filePreview.controller.item()?.path ?? '').trim();
+    if (!path) {
+      notification.error('Copy failed', 'Missing file path');
+      return;
+    }
+
+    try {
+      await writeTextToClipboard(path);
+      notification.success('Copied', 'File path copied to clipboard');
+    } catch (error) {
+      notification.error('Copy failed', error instanceof Error ? error.message : 'Failed to copy text to clipboard.');
+    }
+  };
 
   const handleAskFlower = (selectionText: string) => {
     const result = buildFilePreviewAskFlowerIntent({
@@ -57,6 +73,9 @@ export function FilePreviewHost() {
       xlsxSheetName={filePreview.controller.xlsxSheetName()}
       xlsxRows={filePreview.controller.xlsxRows()}
       downloadLoading={filePreview.controller.downloadLoading()}
+      onCopyPath={() => {
+        void handleCopyPath();
+      }}
       onDownload={() => {
         void filePreview.controller.downloadCurrent();
       }}

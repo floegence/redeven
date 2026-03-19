@@ -6,14 +6,6 @@ import { TextFilePreviewPane } from './TextFilePreviewPane';
 
 const supportCheckMock = vi.hoisted(() => vi.fn((language?: string) => language !== 'toml'));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
-  Button: (props: any) => (
-    <button type="button" disabled={props.disabled} onClick={props.onClick}>
-      {props.children}
-    </button>
-  ),
-}));
-
 vi.mock('@floegence/floe-webapp-core/editor', () => ({
   isCodeEditorLanguageSupported: (language?: string) => supportCheckMock(language),
   CodeEditor: (props: any) => (
@@ -50,8 +42,6 @@ describe('TextFilePreviewPane', () => {
   it('renders the Monaco editor path for supported languages and forwards edits and selections', async () => {
     const onDraftChange = vi.fn();
     const onSelectionChange = vi.fn();
-    const onSave = vi.fn();
-    const onDiscard = vi.fn();
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -67,8 +57,6 @@ describe('TextFilePreviewPane', () => {
         canEdit
         onDraftChange={onDraftChange}
         onSelectionChange={onSelectionChange}
-        onSave={onSave}
-        onDiscard={onDiscard}
       />
     ), host);
     await flushAsync();
@@ -81,13 +69,6 @@ describe('TextFilePreviewPane', () => {
 
     expect(onDraftChange).toHaveBeenCalledWith('changed from editor');
     expect(onSelectionChange).toHaveBeenCalledWith('selected from editor');
-
-    const buttons = Array.from(host.querySelectorAll('button'));
-    buttons.find((button) => button.textContent?.includes('Save'))?.click();
-    buttons.find((button) => button.textContent?.includes('Discard'))?.click();
-
-    expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onDiscard).toHaveBeenCalledTimes(1);
   });
 
   it('uses the read-only fallback preview for unsupported code languages', async () => {
@@ -107,6 +88,5 @@ describe('TextFilePreviewPane', () => {
     expect(supportCheckMock).toHaveBeenCalledWith('toml');
     expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
     expect(host.textContent).toContain('Read-only highlight fallback');
-    expect(host.textContent).toContain('Edit');
   });
 });
