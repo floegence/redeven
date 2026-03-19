@@ -77,6 +77,7 @@ export interface FilePreviewSurfaceProps {
   error?: string | null;
   xlsxSheetName?: string;
   xlsxRows?: string[][];
+  onCopyPath?: () => void;
   downloadLoading?: boolean;
   onDownload?: () => void;
   onAskFlower?: (selectionText: string) => void | Promise<void>;
@@ -126,6 +127,7 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
       error={props.error}
       xlsxSheetName={props.xlsxSheetName}
       xlsxRows={props.xlsxRows}
+      onCopyPath={props.onCopyPath}
       onStartEdit={props.onStartEdit}
       onDraftChange={props.onDraftChange}
       onSelectionChange={props.onSelectionChange}
