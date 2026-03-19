@@ -141,14 +141,14 @@ describe('AskFlowerComposerWindow', () => {
 
     const scrollRegion = host.querySelector('[data-testid="ask-flower-scroll-region"]');
     const composerDock = host.querySelector('[data-testid="ask-flower-composer-dock"]');
-    const flowerIcon = host.querySelector('[data-testid="flower-icon"]');
+    const assistantAvatar = host.querySelector('[data-testid="ask-flower-avatar"]');
     const textarea = host.querySelector('textarea');
 
     expect(scrollRegion).toBeTruthy();
     expect(composerDock).toBeTruthy();
     expect(textarea && composerDock?.contains(textarea)).toBe(true);
     expect(textarea && scrollRegion?.contains(textarea)).toBe(false);
-    expect(flowerIcon?.parentElement?.className).toContain('rounded-full');
+    expect(assistantAvatar).toBeTruthy();
   });
 
   it('submits the visible composed prompt through the send button', async () => {
