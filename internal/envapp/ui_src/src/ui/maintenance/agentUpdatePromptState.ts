@@ -1,4 +1,5 @@
 import { compareReleaseVersionCore, isReleaseVersion } from './agentVersion';
+import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 
 const AGENT_UPDATE_PROMPT_STORAGE_PREFIX = 'redeven_envapp_update_prompt_v1:';
 
@@ -68,26 +69,14 @@ export function agentUpdatePromptStorageKey(envId: string): string {
 export function readAgentUpdatePromptMemory(envId: string): AgentUpdatePromptMemory {
   const key = agentUpdatePromptStorageKey(envId);
   if (!key) return {};
-  if (typeof localStorage === 'undefined') return {};
-
-  try {
-    return sanitizePromptMemory(JSON.parse(String(localStorage.getItem(key) ?? 'null')));
-  } catch {
-    return {};
-  }
+  return sanitizePromptMemory(readUIStorageJSON(key, null));
 }
 
 export function writeAgentUpdatePromptMemory(envId: string, next: AgentUpdatePromptMemory): AgentUpdatePromptMemory {
   const key = agentUpdatePromptStorageKey(envId);
   const sanitized = sanitizePromptMemory(next);
   if (!key) return sanitized;
-  if (typeof localStorage === 'undefined') return sanitized;
-
-  try {
-    localStorage.setItem(key, JSON.stringify(sanitized));
-  } catch {
-    // ignore
-  }
+  writeUIStorageJSON(key, sanitized);
 
   return sanitized;
 }

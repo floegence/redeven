@@ -80,6 +80,7 @@ import {
 } from './services/controlplaneApi';
 import { buildDetachedFilePreviewSurface, isDesktopManagedRuntime, openDetachedSurfaceWindow, parseDetachedSurfaceFromURL } from './services/detachedSurface';
 import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
+import { readUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 
 
 const ACTIVE_TAB_STORAGE_KEY = 'redeven_envapp_active_tab';
@@ -154,52 +155,36 @@ function isAccessResumeAuthFailure(error: unknown): boolean {
 }
 
 function readPersistedExecutionMode(): 'act' | 'plan' {
-  try {
-    const value = String(localStorage.getItem(EXECUTION_MODE_STORAGE_KEY) ?? '').trim().toLowerCase();
-    return value === 'plan' ? 'plan' : 'act';
-  } catch {
-    return 'act';
-  }
+  const value = String(readUIStorageItem(EXECUTION_MODE_STORAGE_KEY) ?? '').trim().toLowerCase();
+  return value === 'plan' ? 'plan' : 'act';
 }
 
 function persistActiveThreadId(threadId: string): void {
-  try {
-    const value = String(threadId ?? '').trim();
-    if (!value) return;
-    localStorage.setItem(ACTIVE_THREAD_STORAGE_KEY, value);
-  } catch {
-    // ignore
-  }
+  const value = String(threadId ?? '').trim();
+  if (!value) return;
+  writeUIStorageItem(ACTIVE_THREAD_STORAGE_KEY, value);
 }
 
 function readPersistedActiveTab(): EnvNavTab | null {
-  try {
-    const v = String(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) ?? '').trim();
-    // Backward compat: the "market" tab was removed; redirect old preferences.
-    if (v === 'market') return 'codespaces';
-    if (
-      v === 'deck' ||
-      v === 'terminal' ||
-      v === 'monitor' ||
-      v === 'files' ||
-      v === 'codespaces' ||
-      v === 'ports' ||
-      v === 'ai'
-    ) {
-      return v;
-    }
-    return null;
-  } catch {
-    return null;
+  const v = String(readUIStorageItem(ACTIVE_TAB_STORAGE_KEY) ?? '').trim();
+  // Backward compat: the "market" tab was removed; redirect old preferences.
+  if (v === 'market') return 'codespaces';
+  if (
+    v === 'deck' ||
+    v === 'terminal' ||
+    v === 'monitor' ||
+    v === 'files' ||
+    v === 'codespaces' ||
+    v === 'ports' ||
+    v === 'ai'
+  ) {
+    return v;
   }
+  return null;
 }
 
 function persistActiveTab(tab: EnvNavTab): void {
-  try {
-    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tab);
-  } catch {
-    // ignore
-  }
+  writeUIStorageItem(ACTIVE_TAB_STORAGE_KEY, tab);
 }
 
 // Bridge: provides AIChatContext to Shell and its children (requires EnvContext above).

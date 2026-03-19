@@ -63,6 +63,7 @@ import {
   toHomeDisplayPath,
 } from '../utils/askFlowerPath';
 import { readLiveTextValue, syncLiveTextValue } from '../utils/liveTextValue';
+import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';
 import { FlowerMessageRunIndicator } from '../widgets/FlowerMessageRunIndicator';
 import {
@@ -152,19 +153,11 @@ function normalizeExecutionMode(raw: unknown): ExecutionMode {
 }
 
 function readPersistedExecutionMode(): ExecutionMode {
-  try {
-    return normalizeExecutionMode(localStorage.getItem(EXECUTION_MODE_STORAGE_KEY));
-  } catch {
-    return 'act';
-  }
+  return normalizeExecutionMode(readUIStorageItem(EXECUTION_MODE_STORAGE_KEY));
 }
 
 function persistExecutionMode(mode: ExecutionMode): void {
-  try {
-    localStorage.setItem(EXECUTION_MODE_STORAGE_KEY, normalizeExecutionMode(mode));
-  } catch {
-    // ignore
-  }
+  writeUIStorageItem(EXECUTION_MODE_STORAGE_KEY, normalizeExecutionMode(mode));
 }
 
 const CONTEXT_TIMELINE_WINDOW_LIMIT = 200;

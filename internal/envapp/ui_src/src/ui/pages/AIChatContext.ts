@@ -14,6 +14,7 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type AIRealtimeEvent } from '../protocol/redeven_v1';
 import { useEnvContext } from './EnvContext';
 import { fetchGatewayJSON } from '../services/gatewayApi';
+import { readUIStorageItem, removeUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { hasRWXPermissions } from './aiPermissions';
 
 // ---- API response types (shared between sidebar and main page) ----
@@ -107,50 +108,30 @@ const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
 const DRAFT_WORKING_DIR_STORAGE_KEY = 'redeven_ai_draft_working_dir';
 
 function readPersistedActiveThreadId(): string | null {
-  try {
-    const v = String(localStorage.getItem(ACTIVE_THREAD_STORAGE_KEY) ?? '').trim();
-    return v || null;
-  } catch {
-    return null;
-  }
+  const v = String(readUIStorageItem(ACTIVE_THREAD_STORAGE_KEY) ?? '').trim();
+  return v || null;
 }
 
 function persistActiveThreadId(threadId: string): void {
-  try {
-    localStorage.setItem(ACTIVE_THREAD_STORAGE_KEY, threadId);
-  } catch {
-    // ignore
-  }
+  writeUIStorageItem(ACTIVE_THREAD_STORAGE_KEY, threadId);
 }
 
 function clearPersistedActiveThreadId(): void {
-  try {
-    localStorage.removeItem(ACTIVE_THREAD_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
+  removeUIStorageItem(ACTIVE_THREAD_STORAGE_KEY);
 }
 
 function readPersistedDraftWorkingDir(): string | null {
-  try {
-    const v = String(localStorage.getItem(DRAFT_WORKING_DIR_STORAGE_KEY) ?? '').trim();
-    return v || null;
-  } catch {
-    return null;
-  }
+  const v = String(readUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY) ?? '').trim();
+  return v || null;
 }
 
 function persistDraftWorkingDir(path: string): void {
-  try {
-    const v = String(path ?? '').trim();
-    if (!v) {
-      localStorage.removeItem(DRAFT_WORKING_DIR_STORAGE_KEY);
-      return;
-    }
-    localStorage.setItem(DRAFT_WORKING_DIR_STORAGE_KEY, v);
-  } catch {
-    // ignore
+  const v = String(path ?? '').trim();
+  if (!v) {
+    removeUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY);
+    return;
   }
+  writeUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY, v);
 }
 
 function normalizeThreadRunStatus(raw: string | null | undefined): ThreadRunStatus {
