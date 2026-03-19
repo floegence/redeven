@@ -29,6 +29,25 @@ export function FilePreviewHost() {
       item={filePreview.controller.item()}
       descriptor={filePreview.controller.descriptor()}
       text={filePreview.controller.text()}
+      draftText={filePreview.controller.draftText()}
+      editing={filePreview.controller.editing()}
+      dirty={filePreview.controller.dirty()}
+      saving={filePreview.controller.saving()}
+      saveError={filePreview.controller.saveError()}
+      canEdit={filePreview.controller.canEdit()}
+      selectedText={filePreview.controller.selectedText()}
+      closeConfirmOpen={filePreview.controller.closeConfirmOpen()}
+      closeConfirmMessage={filePreview.controller.closeConfirmMessage()}
+      onCloseConfirmChange={(open) => {
+        if (open) return;
+        filePreview.controller.cancelPendingAction();
+      }}
+      onConfirmDiscardClose={() => void filePreview.controller.confirmDiscardAndContinue()}
+      onStartEdit={filePreview.controller.beginEditing}
+      onDraftChange={filePreview.controller.updateDraft}
+      onSelectionChange={filePreview.controller.updateSelection}
+      onSave={() => void filePreview.controller.saveCurrent()}
+      onDiscard={filePreview.controller.revertCurrent}
       message={filePreview.controller.message()}
       objectUrl={filePreview.controller.objectUrl()}
       bytes={filePreview.controller.bytes()}

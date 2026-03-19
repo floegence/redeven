@@ -3,12 +3,18 @@ import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { DocxPreviewPane } from './DocxPreviewPane';
-import { CodePreviewPane } from './CodePreviewPane';
+import { TextFilePreviewPane } from './TextFilePreviewPane';
 
 export interface FilePreviewContentProps {
   item?: FileItem | null;
   descriptor: FilePreviewDescriptor;
   text?: string;
+  draftText?: string;
+  editing?: boolean;
+  dirty?: boolean;
+  saving?: boolean;
+  saveError?: string | null;
+  canEdit?: boolean;
   message?: string;
   objectUrl?: string;
   bytes?: Uint8Array<ArrayBuffer> | null;
@@ -18,17 +24,15 @@ export interface FilePreviewContentProps {
   xlsxSheetName?: string;
   xlsxRows?: string[][];
   contentRef?: (element: HTMLDivElement) => void;
+  onStartEdit?: () => void;
+  onDraftChange?: (value: string) => void;
+  onSelectionChange?: (selectionText: string) => void;
+  onSave?: () => void;
+  onDiscard?: () => void;
 }
 
 export function FilePreviewContent(props: FilePreviewContentProps) {
   const resolvedError = () => props.error;
-  const isCodeText = () => props.descriptor.mode === 'text' && props.descriptor.textPresentation === 'code';
-  const isPlainText = () => props.descriptor.mode === 'text' && props.descriptor.textPresentation !== 'code';
-  const plainTextClass = () => (
-    props.descriptor.wrapText === false
-      ? 'p-3 font-mono text-xs leading-relaxed whitespace-pre select-text'
-      : 'p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words select-text'
-  );
 
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
@@ -42,14 +46,23 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
         }}
         class="relative flex-1 min-h-0 overflow-auto bg-background"
       >
-        <Show when={isCodeText() && !resolvedError()}>
-          <CodePreviewPane code={props.text ?? ''} language={props.descriptor.language} />
-        </Show>
-
-        <Show when={isPlainText() && !resolvedError()}>
-          <pre class={plainTextClass()}>
-            {props.text}
-          </pre>
+        <Show when={props.descriptor.mode === 'text' && !resolvedError()}>
+          <TextFilePreviewPane
+            path={props.item?.path ?? 'preview.txt'}
+            descriptor={props.descriptor}
+            text={props.text ?? ''}
+            draftText={props.draftText ?? props.text ?? ''}
+            editing={props.editing}
+            dirty={props.dirty}
+            saving={props.saving}
+            saveError={props.saveError}
+            canEdit={props.canEdit}
+            onStartEdit={props.onStartEdit}
+            onDraftChange={props.onDraftChange}
+            onSelectionChange={props.onSelectionChange}
+            onSave={props.onSave}
+            onDiscard={props.onDiscard}
+          />
         </Show>
 
         <Show when={props.descriptor.mode === 'image' && !resolvedError()}>
