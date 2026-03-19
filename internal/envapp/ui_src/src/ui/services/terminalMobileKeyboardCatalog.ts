@@ -1,9 +1,14 @@
+export type TerminalCommandCatalogPathPreference = 'files' | 'directories';
+
 export type TerminalCommandCatalogArgumentEntry = {
   name: string;
   detail: string;
   kind?: 'subcommand' | 'option';
   featured?: boolean;
   pathContext?: boolean;
+  pathPreference?: TerminalCommandCatalogPathPreference;
+  takesValue?: boolean;
+  valueHint?: string;
   subcommands?: readonly TerminalCommandCatalogArgumentEntry[];
 };
 
@@ -12,16 +17,24 @@ export type TerminalCommandCatalogEntry = {
   detail: string;
   featured?: boolean;
   pathContext?: boolean;
+  pathPreference?: TerminalCommandCatalogPathPreference;
   subcommands?: readonly TerminalCommandCatalogArgumentEntry[];
 };
 
 const FILE_SYSTEM_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
-  { command: 'cd', detail: 'Change directory', featured: true, pathContext: true },
+  {
+    command: 'cd',
+    detail: 'Change directory',
+    featured: true,
+    pathContext: true,
+    pathPreference: 'directories',
+  },
   {
     command: 'ls',
     detail: 'List directory contents',
     featured: true,
     pathContext: true,
+    pathPreference: 'directories',
     subcommands: [
       { name: '-la', detail: 'Show all files with details', kind: 'option', featured: true },
       { name: '-lh', detail: 'Show human-readable file sizes', kind: 'option', featured: true },
@@ -29,16 +42,22 @@ const FILE_SYSTEM_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
     ],
   },
   { command: 'pwd', detail: 'Print working directory', featured: true },
-  { command: 'cat', detail: 'Print file contents', pathContext: true },
+  { command: 'cat', detail: 'Print file contents', pathContext: true, pathPreference: 'files' },
   {
     command: 'mkdir',
     detail: 'Create directories',
     pathContext: true,
+    pathPreference: 'directories',
     subcommands: [
       { name: '-p', detail: 'Create parent directories as needed', kind: 'option', featured: true },
     ],
   },
-  { command: 'touch', detail: 'Create files or update timestamps', pathContext: true },
+  {
+    command: 'touch',
+    detail: 'Create files or update timestamps',
+    pathContext: true,
+    pathPreference: 'files',
+  },
   {
     command: 'cp',
     detail: 'Copy files or directories',
@@ -66,13 +85,43 @@ const FILE_SYSTEM_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
       { name: '-rf', detail: 'Force recursive removal', kind: 'option' },
     ],
   },
-  { command: 'rmdir', detail: 'Remove empty directories', pathContext: true },
-  { command: 'less', detail: 'Open a pager for file contents', pathContext: true },
-  { command: 'more', detail: 'Page through file contents', pathContext: true },
-  { command: 'open', detail: 'Open a file or directory with the default app', pathContext: true },
+  {
+    command: 'rmdir',
+    detail: 'Remove empty directories',
+    pathContext: true,
+    pathPreference: 'directories',
+  },
+  {
+    command: 'less',
+    detail: 'Open a pager for file contents',
+    pathContext: true,
+    pathPreference: 'files',
+  },
+  {
+    command: 'more',
+    detail: 'Page through file contents',
+    pathContext: true,
+    pathPreference: 'files',
+  },
+  {
+    command: 'open',
+    detail: 'Open a file or directory with the default app',
+    pathContext: true,
+    pathPreference: 'files',
+  },
   { command: 'head', detail: 'Show the first lines of a file' },
-  { command: 'tail', detail: 'Show the last lines of a file', pathContext: true },
-  { command: 'tree', detail: 'Show a directory tree', pathContext: true },
+  {
+    command: 'tail',
+    detail: 'Show the last lines of a file',
+    pathContext: true,
+    pathPreference: 'files',
+  },
+  {
+    command: 'tree',
+    detail: 'Show a directory tree',
+    pathContext: true,
+    pathPreference: 'directories',
+  },
   { command: 'stat', detail: 'Inspect file metadata' },
   { command: 'file', detail: 'Detect file type' },
   {
@@ -107,10 +156,31 @@ const SEARCH_AND_TEXT_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
     detail: 'Find files and directories',
     featured: true,
     pathContext: true,
+    pathPreference: 'directories',
     subcommands: [
-      { name: '-name', detail: 'Match by file name', kind: 'option', featured: true },
-      { name: '-type', detail: 'Filter by entry type', kind: 'option', featured: true },
-      { name: '-maxdepth', detail: 'Limit search depth', kind: 'option' },
+      {
+        name: '-name',
+        detail: 'Match by file name',
+        kind: 'option',
+        featured: true,
+        takesValue: true,
+        valueHint: '<pattern>',
+      },
+      {
+        name: '-type',
+        detail: 'Filter by entry type',
+        kind: 'option',
+        featured: true,
+        takesValue: true,
+        valueHint: '<type>',
+      },
+      {
+        name: '-maxdepth',
+        detail: 'Limit search depth',
+        kind: 'option',
+        takesValue: true,
+        valueHint: '<depth>',
+      },
     ],
   },
   {
@@ -182,16 +252,64 @@ const SYSTEM_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
     subcommands: [
       { name: '-u', detail: 'Filter logs by unit name', kind: 'option', featured: true },
       { name: '-f', detail: 'Follow new log entries', kind: 'option', featured: true },
-      { name: '-n', detail: 'Show the most recent entries', kind: 'option' },
+      {
+        name: '-n',
+        detail: 'Show the most recent entries',
+        kind: 'option',
+        takesValue: true,
+        valueHint: '<count>',
+      },
     ],
   },
 ];
 
 const EDITOR_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
-  { command: 'nano', detail: 'Open a terminal text editor', pathContext: true },
-  { command: 'vi', detail: 'Open the Vi text editor', pathContext: true },
-  { command: 'vim', detail: 'Open the Vim text editor', pathContext: true },
-  { command: 'vimdiff', detail: 'Open Vim in diff mode', pathContext: true },
+  {
+    command: 'nano',
+    detail: 'Open a terminal text editor',
+    pathContext: true,
+    pathPreference: 'files',
+  },
+  {
+    command: 'vi',
+    detail: 'Open the Vi text editor',
+    pathContext: true,
+    pathPreference: 'files',
+  },
+  {
+    command: 'vim',
+    detail: 'Open the Vim text editor',
+    pathContext: true,
+    pathPreference: 'files',
+    subcommands: [
+      { name: '-R', detail: 'Open files in read-only mode', kind: 'option', featured: true },
+      {
+        name: '-O',
+        detail: 'Open files in vertical splits',
+        kind: 'option',
+        featured: true,
+        pathContext: true,
+        pathPreference: 'files',
+        takesValue: true,
+        valueHint: '<file>',
+      },
+      {
+        name: '-o',
+        detail: 'Open files in horizontal splits',
+        kind: 'option',
+        pathContext: true,
+        pathPreference: 'files',
+        takesValue: true,
+        valueHint: '<file>',
+      },
+    ],
+  },
+  {
+    command: 'vimdiff',
+    detail: 'Open Vim in diff mode',
+    pathContext: true,
+    pathPreference: 'files',
+  },
 ];
 
 const ARCHIVE_AND_NETWORK_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
@@ -213,7 +331,13 @@ const ARCHIVE_AND_NETWORK_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
       { name: '-L', detail: 'Follow HTTP redirects', kind: 'option', featured: true },
       { name: '-I', detail: 'Fetch response headers only', kind: 'option' },
       { name: '-O', detail: 'Write output to a file named by the remote source', kind: 'option' },
-      { name: '-H', detail: 'Send a custom request header', kind: 'option' },
+      {
+        name: '-H',
+        detail: 'Send a custom request header',
+        kind: 'option',
+        takesValue: true,
+        valueHint: '<header>',
+      },
     ],
   },
   { command: 'wget', detail: 'Download files from the web' },
@@ -222,8 +346,23 @@ const ARCHIVE_AND_NETWORK_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
     command: 'ssh',
     detail: 'Open a secure shell session',
     subcommands: [
-      { name: '-i', detail: 'Use a specific private key file', kind: 'option', featured: true },
-      { name: '-p', detail: 'Connect to a non-default port', kind: 'option' },
+      {
+        name: '-i',
+        detail: 'Use a specific private key file',
+        kind: 'option',
+        featured: true,
+        pathContext: true,
+        pathPreference: 'files',
+        takesValue: true,
+        valueHint: '<identity_file>',
+      },
+      {
+        name: '-p',
+        detail: 'Connect to a non-default port',
+        kind: 'option',
+        takesValue: true,
+        valueHint: '<port>',
+      },
     ],
   },
   { command: 'scp', detail: 'Copy files over SSH' },
@@ -243,7 +382,14 @@ const ARCHIVE_AND_NETWORK_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
     detail: 'Manage GNU Screen sessions',
     subcommands: [
       { name: '-ls', detail: 'List existing screen sessions', kind: 'option', featured: true },
-      { name: '-r', detail: 'Resume a detached screen session', kind: 'option', featured: true },
+      {
+        name: '-r',
+        detail: 'Resume a detached screen session',
+        kind: 'option',
+        featured: true,
+        takesValue: true,
+        valueHint: '<session>',
+      },
     ],
   },
 ];
@@ -255,22 +401,170 @@ const RUNTIME_AND_BUILD_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
     featured: true,
     subcommands: [
       { name: 'status', detail: 'Show tracked changes', featured: true },
-      { name: 'diff', detail: 'Inspect current diff', featured: true, pathContext: true },
-      { name: 'add', detail: 'Stage file changes', featured: true, pathContext: true },
-      { name: 'restore', detail: 'Restore file contents', pathContext: true },
-      { name: 'checkout', detail: 'Switch branches or paths', pathContext: true },
-      { name: 'switch', detail: 'Switch branches' },
+      {
+        name: 'diff',
+        detail: 'Inspect current diff',
+        featured: true,
+        pathContext: true,
+        pathPreference: 'files',
+        subcommands: [
+          { name: '--stat', detail: 'Show a summary of changed files', kind: 'option', featured: true },
+          { name: '--staged', detail: 'Compare staged changes', kind: 'option', featured: true },
+          { name: '--cached', detail: 'Compare staged changes', kind: 'option' },
+          { name: '--name-only', detail: 'Show only changed file names', kind: 'option' },
+        ],
+      },
+      {
+        name: 'add',
+        detail: 'Stage file changes',
+        featured: true,
+        pathContext: true,
+        pathPreference: 'files',
+        subcommands: [
+          { name: '-A', detail: 'Stage all changes', kind: 'option', featured: true },
+          { name: '-p', detail: 'Select hunks interactively', kind: 'option', featured: true },
+          { name: '--all', detail: 'Stage all changes', kind: 'option' },
+        ],
+      },
+      {
+        name: 'restore',
+        detail: 'Restore file contents',
+        pathContext: true,
+        pathPreference: 'files',
+        subcommands: [
+          { name: '--staged', detail: 'Restore the staged version', kind: 'option', featured: true },
+          {
+            name: '--source',
+            detail: 'Restore from a specific tree-ish',
+            kind: 'option',
+            takesValue: true,
+            valueHint: '<tree-ish>',
+          },
+        ],
+      },
+      {
+        name: 'checkout',
+        detail: 'Switch branches or paths',
+        pathContext: true,
+        pathPreference: 'files',
+        subcommands: [
+          {
+            name: '-b',
+            detail: 'Create and switch to a new branch',
+            kind: 'option',
+            featured: true,
+            takesValue: true,
+            valueHint: '<branch>',
+          },
+          { name: '--', detail: 'Treat following arguments as paths', kind: 'option' },
+        ],
+      },
+      {
+        name: 'switch',
+        detail: 'Switch branches',
+        subcommands: [
+          {
+            name: '-c',
+            detail: 'Create and switch to a new branch',
+            kind: 'option',
+            featured: true,
+            takesValue: true,
+            valueHint: '<branch>',
+          },
+        ],
+      },
       { name: 'pull', detail: 'Fetch and merge remote changes' },
       { name: 'push', detail: 'Push local commits' },
       { name: 'fetch', detail: 'Download remote refs and objects' },
-      { name: 'commit', detail: 'Create a commit' },
-      { name: 'branch', detail: 'Manage branches' },
-      { name: 'merge', detail: 'Join histories together' },
-      { name: 'rebase', detail: 'Reapply commits on top of another base' },
-      { name: 'log', detail: 'Show commit history' },
+      {
+        name: 'commit',
+        detail: 'Create a commit',
+        subcommands: [
+          {
+            name: '-m',
+            detail: 'Use the given commit message',
+            kind: 'option',
+            featured: true,
+            takesValue: true,
+            valueHint: '<message>',
+          },
+          { name: '--amend', detail: 'Amend the previous commit', kind: 'option', featured: true },
+        ],
+      },
+      {
+        name: 'branch',
+        detail: 'Manage branches',
+        subcommands: [
+          {
+            name: '-d',
+            detail: 'Delete a branch',
+            kind: 'option',
+            takesValue: true,
+            valueHint: '<branch>',
+          },
+          {
+            name: '-D',
+            detail: 'Force-delete a branch',
+            kind: 'option',
+            takesValue: true,
+            valueHint: '<branch>',
+          },
+        ],
+      },
+      {
+        name: 'merge',
+        detail: 'Join histories together',
+        subcommands: [
+          { name: '--no-ff', detail: 'Create a merge commit even when fast-forward is possible', kind: 'option', featured: true },
+        ],
+      },
+      {
+        name: 'rebase',
+        detail: 'Reapply commits on top of another base',
+        subcommands: [
+          { name: '--continue', detail: 'Continue the current rebase', kind: 'option', featured: true },
+          { name: '--abort', detail: 'Abort the current rebase', kind: 'option', featured: true },
+        ],
+      },
+      {
+        name: 'log',
+        detail: 'Show commit history',
+        subcommands: [
+          { name: '--oneline', detail: 'Condense each commit to one line', kind: 'option', featured: true },
+          { name: '--stat', detail: 'Show file change statistics', kind: 'option', featured: true },
+          { name: '-p', detail: 'Show patch text for each commit', kind: 'option' },
+        ],
+      },
       { name: 'stash', detail: 'Save work temporarily' },
-      { name: 'reset', detail: 'Reset current HEAD to a state' },
-      { name: 'clone', detail: 'Clone a repository into a new directory' },
+      {
+        name: 'reset',
+        detail: 'Reset current HEAD to a state',
+        subcommands: [
+          { name: '--soft', detail: 'Keep changes staged', kind: 'option' },
+          { name: '--mixed', detail: 'Keep changes in the working tree', kind: 'option' },
+          { name: '--hard', detail: 'Discard changes from index and working tree', kind: 'option', featured: true },
+        ],
+      },
+      {
+        name: 'clone',
+        detail: 'Clone a repository into a new directory',
+        subcommands: [
+          {
+            name: '--depth',
+            detail: 'Limit clone history depth',
+            kind: 'option',
+            takesValue: true,
+            valueHint: '<depth>',
+          },
+          {
+            name: '--branch',
+            detail: 'Checkout a specific branch after clone',
+            kind: 'option',
+            takesValue: true,
+            valueHint: '<branch>',
+          },
+        ],
+      },
       { name: 'grep', detail: 'Search tracked content' },
     ],
   },
@@ -338,9 +632,22 @@ const RUNTIME_AND_BUILD_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
     detail: 'Run Python programs',
     featured: true,
     subcommands: [
-      { name: '-m', detail: 'Run a library module as a script', kind: 'option', featured: true },
+      {
+        name: '-m',
+        detail: 'Run a library module as a script',
+        kind: 'option',
+        featured: true,
+        takesValue: true,
+        valueHint: '<module>',
+      },
       { name: '-V', detail: 'Show the Python version', kind: 'option' },
-      { name: '-c', detail: 'Run Python code passed as a string', kind: 'option' },
+      {
+        name: '-c',
+        detail: 'Run Python code passed as a string',
+        kind: 'option',
+        takesValue: true,
+        valueHint: '<code>',
+      },
     ],
   },
   {
@@ -438,6 +745,30 @@ const CLOUD_AND_PACKAGE_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
         detail: 'Use Docker Compose',
         featured: true,
         subcommands: [
+          {
+            name: '-f',
+            detail: 'Use a specific Compose file',
+            kind: 'option',
+            featured: true,
+            pathContext: true,
+            pathPreference: 'files',
+            takesValue: true,
+            valueHint: '<compose-file>',
+          },
+          {
+            name: '--profile',
+            detail: 'Enable a specific Compose profile',
+            kind: 'option',
+            takesValue: true,
+            valueHint: '<profile>',
+          },
+          {
+            name: '--project-name',
+            detail: 'Override the Compose project name',
+            kind: 'option',
+            takesValue: true,
+            valueHint: '<name>',
+          },
           { name: 'up', detail: 'Create and start services', featured: true },
           { name: 'down', detail: 'Stop and remove services', featured: true },
           { name: 'ps', detail: 'List compose services' },
@@ -455,19 +786,54 @@ const CLOUD_AND_PACKAGE_COMMANDS: readonly TerminalCommandCatalogEntry[] = [
     detail: 'Manage Kubernetes clusters',
     subcommands: [
       {
+        name: '-n',
+        detail: 'Use a specific namespace',
+        kind: 'option',
+        featured: true,
+        takesValue: true,
+        valueHint: '<namespace>',
+      },
+      {
+        name: '--context',
+        detail: 'Use a specific kubeconfig context',
+        kind: 'option',
+        takesValue: true,
+        valueHint: '<context>',
+      },
+      {
         name: 'get',
         detail: 'Display one or many resources',
         featured: true,
         subcommands: [
           { name: 'pods', detail: 'List pods', featured: true },
+          { name: 'po', detail: 'List pods (short name)', featured: true },
           { name: 'deployments', detail: 'List deployments', featured: true },
+          { name: 'deploy', detail: 'List deployments (short name)', featured: true },
           { name: 'services', detail: 'List services', featured: true },
+          { name: 'svc', detail: 'List services (short name)', featured: true },
           { name: 'nodes', detail: 'List nodes' },
           { name: 'namespaces', detail: 'List namespaces' },
+          { name: 'ns', detail: 'List namespaces (short name)' },
         ],
       },
       { name: 'describe', detail: 'Show detailed resource information', featured: true },
-      { name: 'apply', detail: 'Apply a configuration to a resource', featured: true },
+      {
+        name: 'apply',
+        detail: 'Apply a configuration to a resource',
+        featured: true,
+        subcommands: [
+          {
+            name: '-f',
+            detail: 'Read the resource definition from a file',
+            kind: 'option',
+            featured: true,
+            pathContext: true,
+            pathPreference: 'files',
+            takesValue: true,
+            valueHint: '<file>',
+          },
+        ],
+      },
       { name: 'delete', detail: 'Delete resources', featured: true },
       { name: 'logs', detail: 'Print logs for a container', featured: true },
       { name: 'exec', detail: 'Run a command in a container', featured: true },
@@ -527,34 +893,3 @@ export const TERMINAL_COMMAND_CATALOG: readonly TerminalCommandCatalogEntry[] = 
   ...RUNTIME_AND_BUILD_COMMANDS,
   ...CLOUD_AND_PACKAGE_COMMANDS,
 ];
-
-function collectPathCommandContexts(
-  catalog: readonly TerminalCommandCatalogEntry[],
-): ReadonlySet<string> {
-  const contexts = new Set<string>();
-
-  const visit = (
-    prefix: string,
-    entries: readonly TerminalCommandCatalogArgumentEntry[] | undefined,
-  ) => {
-    if (!entries) return;
-    for (const entry of entries) {
-      const nextPrefix = `${prefix} ${entry.name}`;
-      if (entry.pathContext) {
-        contexts.add(nextPrefix);
-      }
-      visit(nextPrefix, entry.subcommands);
-    }
-  };
-
-  for (const entry of catalog) {
-    if (entry.pathContext) {
-      contexts.add(entry.command);
-    }
-    visit(entry.command, entry.subcommands);
-  }
-
-  return contexts;
-}
-
-export const TERMINAL_PATH_COMMAND_CONTEXTS = collectPathCommandContexts(TERMINAL_COMMAND_CATALOG);
