@@ -1,8 +1,9 @@
-// CodeBlock — code display with syntax highlighting (lazy-loaded shiki) and copy button.
+// CodeBlock renders chat code with shared Shiki highlighting and copy support.
 
-import { createSignal, createEffect, Show } from 'solid-js';
+import { createEffect, createSignal, Show } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { highlightCodeToHtml, resolveCodeHighlightTheme } from '../../utils/shikiHighlight';
 
 export interface CodeBlockProps {
   language: string;
@@ -11,30 +12,8 @@ export interface CodeBlockProps {
   class?: string;
 }
 
-// Lazy-loaded shiki highlighter singleton
-let highlighterPromise: Promise<any> | null = null;
+const CHAT_CODE_THEME = resolveCodeHighlightTheme('dark');
 
-function getHighlighter(): Promise<any> {
-  if (highlighterPromise) return highlighterPromise;
-
-  highlighterPromise = import('shiki')
-    .then(async (shiki) => {
-      const highlighter = await shiki.createHighlighter({
-        themes: ['github-dark', 'github-light'],
-        langs: [],
-      });
-      return highlighter;
-    })
-    .catch((err) => {
-      console.error('Failed to load shiki:', err);
-      highlighterPromise = null;
-      return null;
-    });
-
-  return highlighterPromise;
-}
-
-// SVG icons for the copy button
 const CopyIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -68,50 +47,26 @@ const CheckIcon = () => (
   </svg>
 );
 
-/**
- * Renders a code block with optional syntax highlighting via shiki.
- * Falls back to plain text if shiki is unavailable or the language is not loaded.
- * Includes a copy-to-clipboard button.
- */
 export const CodeBlock: Component<CodeBlockProps> = (props) => {
-  const [highlightedHtml, setHighlightedHtml] = createSignal<string>('');
+  const [highlightedHtml, setHighlightedHtml] = createSignal('');
   const [copied, setCopied] = createSignal(false);
+  let highlightRequestSeq = 0;
 
-  // Highlight code when content or language changes
   createEffect(() => {
     const code = props.content;
-    const lang = props.language;
+    const language = props.language;
+    const seq = (highlightRequestSeq += 1);
 
-    if (!code) {
-      setHighlightedHtml('');
-      return;
-    }
+    setHighlightedHtml('');
+    if (!code) return;
 
-    getHighlighter().then(async (highlighter) => {
-      if (!highlighter) return;
-
-      try {
-        // Dynamically load the language if needed
-        const loadedLangs = highlighter.getLoadedLanguages();
-        if (lang && !loadedLangs.includes(lang)) {
-          try {
-            await highlighter.loadLanguage(lang);
-          } catch {
-            // Language not available — fall back to plain text
-            setHighlightedHtml('');
-            return;
-          }
-        }
-
-        const html = highlighter.codeToHtml(code, {
-          lang: lang || 'text',
-          theme: 'github-dark',
-        });
-        setHighlightedHtml(html);
-      } catch (err) {
-        console.error('Shiki highlight error:', err);
-        setHighlightedHtml('');
-      }
+    void highlightCodeToHtml({
+      code,
+      language,
+      theme: CHAT_CODE_THEME,
+    }).then((html) => {
+      if (seq !== highlightRequestSeq) return;
+      setHighlightedHtml(html ?? '');
     });
   });
 
@@ -152,11 +107,11 @@ export const CodeBlock: Component<CodeBlockProps> = (props) => {
       <div class="chat-code-content">
         <Show
           when={highlightedHtml()}
-          fallback={
+          fallback={(
             <pre class="chat-code-pre">
               <code>{props.content}</code>
             </pre>
-          }
+          )}
         >
           {/* eslint-disable-next-line solid/no-innerhtml */}
           <div innerHTML={highlightedHtml()} />
