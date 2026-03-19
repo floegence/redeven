@@ -173,6 +173,8 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
   let pollTimer: number | undefined;
   let reqSeq = 0;
   let lastSampleTs: number | null = null;
+  let fetchInFlight: Promise<void> | null = null;
+  let queuedFetchOpts: { silent?: boolean } | null = null;
 
   const stopPolling = () => {
     if (pollTimer) {
@@ -183,64 +185,86 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
   };
 
   const fetchOnce = async (opts: { silent?: boolean } = {}) => {
-    if (noExecute()) return;
+    if (!isConnected() || noExecute()) return;
+    if (fetchInFlight) {
+      queuedFetchOpts = {
+        silent: Boolean(queuedFetchOpts?.silent ?? true) && Boolean(opts.silent),
+      };
+      return;
+    }
 
     const seq = ++reqSeq;
-    if (!opts.silent) setLoading(true);
+    const run = (async () => {
+      if (!opts.silent) setLoading(true);
 
-    try {
-      if (seq !== reqSeq) return;
+      try {
+        if (seq !== reqSeq) return;
 
-      const [monitorRes, sessionsRes] = await Promise.allSettled([
-        rpc.monitor.getSysMonitor({ sortBy: sortBy() }),
-        rpc.sessions.listActiveSessions(),
-      ]);
+        const [monitorRes, sessionsRes] = await Promise.allSettled([
+          rpc.monitor.getSysMonitor({ sortBy: sortBy() }),
+          rpc.sessions.listActiveSessions(),
+        ]);
 
-      if (seq !== reqSeq) return;
+        if (seq !== reqSeq) return;
 
-      if (monitorRes.status === 'fulfilled') {
-        setError(null);
-        const resp = monitorRes.value;
-        const ts = Number(resp.timestampMs ?? 0);
-        const prevTs = lastSampleTs;
-        lastSampleTs = ts;
-
-        if (prevTs !== null) {
-          const gap = ts - prevTs;
-          if (gap > CHART_RESET_THRESHOLD_MS || gap < 0) {
-            setChartToken((v) => v + 1);
-          }
-        }
-
-        setData(resp);
-        setSample({
-          ts,
-          cpu: Math.max(0, Math.min(100, Number(resp.cpuUsage ?? 0))),
-          cpuCores: Number(resp.cpuCores ?? 0),
-          netIn: Math.max(0, Number(resp.networkSpeedReceived ?? 0)),
-          netOut: Math.max(0, Number(resp.networkSpeedSent ?? 0)),
-        });
-        setSampleSeq((v) => v + 1);
-      } else {
-        const e = monitorRes.reason;
-        if (isPermissionDeniedError(e, 'execute')) {
-          setExecuteDenied(true);
+        if (monitorRes.status === 'fulfilled') {
           setError(null);
-          setSessionsError(null);
-          return;
-        }
-        setError(e instanceof Error ? e.message : String(e));
-      }
+          const resp = monitorRes.value;
+          const ts = Number(resp.timestampMs ?? 0);
+          const prevTs = lastSampleTs;
+          lastSampleTs = ts;
 
-      if (sessionsRes.status === 'fulfilled') {
-        setSessionsError(null);
-        setSessions(Array.isArray(sessionsRes.value?.sessions) ? sessionsRes.value.sessions : []);
-      } else {
-        const e = sessionsRes.reason;
-        setSessionsError(e instanceof Error ? e.message : String(e));
+          if (prevTs !== null) {
+            const gap = ts - prevTs;
+            if (gap > CHART_RESET_THRESHOLD_MS || gap < 0) {
+              setChartToken((v) => v + 1);
+            }
+          }
+
+          setData(resp);
+          setSample({
+            ts,
+            cpu: Math.max(0, Math.min(100, Number(resp.cpuUsage ?? 0))),
+            cpuCores: Number(resp.cpuCores ?? 0),
+            netIn: Math.max(0, Number(resp.networkSpeedReceived ?? 0)),
+            netOut: Math.max(0, Number(resp.networkSpeedSent ?? 0)),
+          });
+          setSampleSeq((v) => v + 1);
+        } else {
+          const e = monitorRes.reason;
+          if (isPermissionDeniedError(e, 'execute')) {
+            setExecuteDenied(true);
+            setError(null);
+            setSessionsError(null);
+            return;
+          }
+          setError(e instanceof Error ? e.message : String(e));
+        }
+
+        if (sessionsRes.status === 'fulfilled') {
+          setSessionsError(null);
+          setSessions(Array.isArray(sessionsRes.value?.sessions) ? sessionsRes.value.sessions : []);
+        } else {
+          const e = sessionsRes.reason;
+          setSessionsError(e instanceof Error ? e.message : String(e));
+        }
+      } finally {
+        if (seq === reqSeq) setLoading(false);
       }
+    })();
+
+    fetchInFlight = run;
+    try {
+      await run;
     } finally {
-      if (seq === reqSeq) setLoading(false);
+      if (fetchInFlight === run) {
+        fetchInFlight = null;
+      }
+      if (queuedFetchOpts) {
+        const nextOpts = queuedFetchOpts;
+        queuedFetchOpts = null;
+        queueMicrotask(() => void fetchOnce(nextOpts));
+      }
     }
   };
 

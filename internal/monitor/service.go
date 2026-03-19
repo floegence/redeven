@@ -28,20 +28,32 @@ const (
 )
 
 const (
-	monitorCacheTTL     = 2 * time.Second
-	networkSpeedWindow  = 6 * time.Second
-	networkHistoryMax   = 10
-	monitorProcessLimit = 20
+	networkSpeedWindow            = 6 * time.Second
+	networkHistoryMax             = 10
+	monitorProcessLimit           = 20
+	defaultSystemRefreshInterval  = 2 * time.Second
+	defaultProcessRefreshInterval = 10 * time.Second
+	defaultSystemRefreshTimeout   = 1500 * time.Millisecond
+	defaultProcessRefreshTimeout  = 6 * time.Second
 )
 
 type Service struct {
-	log *slog.Logger
-
-	mu      sync.Mutex
-	hasSnap bool
-	snap    monitorSnapshot
-
+	log        *slog.Logger
+	collectors monitorCollectors
 	netHistory *networkHistory
+
+	systemRefreshInterval  time.Duration
+	processRefreshInterval time.Duration
+	systemRefreshTimeout   time.Duration
+	processRefreshTimeout  time.Duration
+
+	startOnce sync.Once
+
+	mu           sync.RWMutex
+	hasSystem    bool
+	systemSnap   monitorSnapshot
+	hasProcesses bool
+	processSnap  processSnapshot
 }
 
 func NewService(log *slog.Logger) *Service {
@@ -49,9 +61,28 @@ func NewService(log *slog.Logger) *Service {
 		log = slog.Default()
 	}
 	return &Service{
-		log:        log,
-		netHistory: newNetworkHistory(networkHistoryMax, networkSpeedWindow),
+		log:                    log,
+		collectors:             defaultMonitorCollectors(),
+		netHistory:             newNetworkHistory(networkHistoryMax, networkSpeedWindow),
+		systemRefreshInterval:  defaultSystemRefreshInterval,
+		processRefreshInterval: defaultProcessRefreshInterval,
+		systemRefreshTimeout:   defaultSystemRefreshTimeout,
+		processRefreshTimeout:  defaultProcessRefreshTimeout,
 	}
+}
+
+func (s *Service) Start(ctx context.Context) {
+	if s == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	s.startOnce.Do(func() {
+		go s.runLoop(ctx, s.systemRefreshInterval, s.refreshSystemSnapshot)
+		go s.runLoop(ctx, s.processRefreshInterval, s.refreshProcessSnapshot)
+	})
 }
 
 func (s *Service) Register(r *rpc.Router, meta *session.Meta) {
@@ -73,8 +104,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			sortBy = normalizeSortBy(req.SortBy)
 		}
 
-		snap := s.getSnapshot(ctx)
-		resp := buildResponse(snap, sortBy)
+		resp := s.snapshotResponse(sortBy)
 		return &resp, nil
 	})
 }
@@ -113,6 +143,10 @@ type monitorSnapshot struct {
 	procMetrics []processWithMetrics
 }
 
+type processSnapshot struct {
+	metrics []processWithMetrics
+}
+
 type processWithMetrics struct {
 	pid         int32
 	name        string
@@ -121,86 +155,196 @@ type processWithMetrics struct {
 	username    string
 }
 
-func (s *Service) getSnapshot(ctx context.Context) monitorSnapshot {
-	now := time.Now()
-
-	s.mu.Lock()
-	if s.hasSnap && now.Sub(s.snap.collectedAt) < monitorCacheTTL {
-		out := s.snap
-		s.mu.Unlock()
-		return out
-	}
-	s.mu.Unlock()
-
-	snap := s.collectSnapshot(ctx)
-
-	s.mu.Lock()
-	s.snap = snap
-	s.hasSnap = true
-	s.mu.Unlock()
-
-	return snap
+type monitorCollectors struct {
+	readCPUUsage          func(ctx context.Context) (float64, error)
+	countCPUCores         func(ctx context.Context) (int, error)
+	readLoadAverage       func(ctx context.Context) ([]float64, error)
+	readNetworkCounters   func(ctx context.Context) (networkCounters, error)
+	collectProcessMetrics func(ctx context.Context) ([]processWithMetrics, error)
 }
 
-func (s *Service) collectSnapshot(ctx context.Context) monitorSnapshot {
-	collectedAt := time.Now()
+type networkCounters struct {
+	bytesReceived uint64
+	bytesSent     uint64
+}
 
+func defaultMonitorCollectors() monitorCollectors {
+	return monitorCollectors{
+		readCPUUsage:  readCPUUsage,
+		countCPUCores: func(ctx context.Context) (int, error) { return cpu.CountsWithContext(ctx, true) },
+		readLoadAverage: func(ctx context.Context) ([]float64, error) {
+			avg, err := load.AvgWithContext(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if avg == nil {
+				return nil, nil
+			}
+			return []float64{avg.Load1, avg.Load5, avg.Load15}, nil
+		},
+		readNetworkCounters: func(ctx context.Context) (networkCounters, error) {
+			ioStats, err := gopsutilNet.IOCountersWithContext(ctx, false)
+			if err != nil {
+				return networkCounters{}, err
+			}
+			if len(ioStats) == 0 {
+				return networkCounters{}, nil
+			}
+			return networkCounters{
+				bytesReceived: ioStats[0].BytesRecv,
+				bytesSent:     ioStats[0].BytesSent,
+			}, nil
+		},
+		collectProcessMetrics: collectProcessMetrics,
+	}
+}
+
+func (s *Service) runLoop(ctx context.Context, interval time.Duration, refresh func(context.Context)) {
+	if s == nil || refresh == nil {
+		return
+	}
+	refresh(ctx)
+	if interval <= 0 {
+		<-ctx.Done()
+		return
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			refresh(ctx)
+		}
+	}
+}
+
+func (s *Service) refreshSystemSnapshot(parent context.Context) {
+	if s == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(parent, s.systemRefreshTimeout)
+	defer cancel()
+
+	snap := s.collectSystemSnapshot(ctx)
+
+	s.mu.Lock()
+	s.systemSnap = snap
+	s.hasSystem = true
+	s.mu.Unlock()
+}
+
+func (s *Service) refreshProcessSnapshot(parent context.Context) {
+	if s == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(parent, s.processRefreshTimeout)
+	defer cancel()
+
+	procMetrics, err := s.collectors.collectProcessMetrics(ctx)
+	if err != nil {
+		s.log.Warn("sys_monitor: get process list failed", "error", err)
+		return
+	}
+
+	s.mu.Lock()
+	s.processSnap = processSnapshot{
+		metrics: append([]processWithMetrics(nil), procMetrics...),
+	}
+	s.hasProcesses = true
+	s.mu.Unlock()
+}
+
+func (s *Service) collectSystemSnapshot(ctx context.Context) monitorSnapshot {
 	resp := sysMonitorResp{
-		Platform: runtime.GOOS,
+		Platform:  runtime.GOOS,
+		Processes: []processInfo{},
 	}
 
 	// CPU usage: prefer non-blocking sampling (diff from last call) and per-CPU sampling on
 	// macOS to avoid 0% results caused by coarse aggregated tick updates.
-	if usage, err := readCPUUsage(ctx); err == nil {
+	if usage, err := s.collectors.readCPUUsage(ctx); err == nil {
 		resp.CPUUsage = usage
 	} else {
 		s.log.Warn("sys_monitor: get cpu percent failed", "error", err)
 	}
 
-	cores, err := cpu.CountsWithContext(ctx, true)
+	cores, err := s.collectors.countCPUCores(ctx)
 	if err == nil {
 		resp.CPUCores = cores
-	} else if err != nil {
+	} else {
 		s.log.Warn("sys_monitor: get cpu cores failed", "error", err)
 	}
 
-	if avg, err := load.AvgWithContext(ctx); err == nil && avg != nil {
-		resp.LoadAverage = []float64{avg.Load1, avg.Load5, avg.Load15}
-	} else if err != nil {
+	loadAverage, err := s.collectors.readLoadAverage(ctx)
+	if err == nil {
+		resp.LoadAverage = loadAverage
+	} else {
 		s.log.Warn("sys_monitor: get load average failed", "error", err)
 	}
 
-	// Network + speed
-	if ioStats, err := gopsutilNet.IOCountersWithContext(ctx, false); err == nil && len(ioStats) > 0 {
-		resp.NetworkBytesReceived = ioStats[0].BytesRecv
-		resp.NetworkBytesSent = ioStats[0].BytesSent
-
+	collectedAt := time.Now()
+	counters, err := s.collectors.readNetworkCounters(ctx)
+	if err == nil {
+		resp.NetworkBytesReceived = counters.bytesReceived
+		resp.NetworkBytesSent = counters.bytesSent
 		s.netHistory.Add(networkStats{
-			bytesReceived: ioStats[0].BytesRecv,
-			bytesSent:     ioStats[0].BytesSent,
+			bytesReceived: counters.bytesReceived,
+			bytesSent:     counters.bytesSent,
 			at:            collectedAt,
 		})
-
 		recvSpd, sentSpd := s.netHistory.CalculateSpeed(collectedAt)
 		resp.NetworkSpeedReceived = recvSpd
 		resp.NetworkSpeedSent = sentSpd
-	} else if err != nil {
+	} else {
 		s.log.Warn("sys_monitor: get network io failed", "error", err)
 	}
 
-	procMetrics, err := collectProcessMetrics(ctx)
-	if err != nil {
-		s.log.Warn("sys_monitor: get process list failed", "error", err)
-		procMetrics = nil
-	}
-
-	resp.TimestampMs = collectedAt.UnixMilli()
+	publishedAt := time.Now()
+	resp.TimestampMs = publishedAt.UnixMilli()
 
 	return monitorSnapshot{
-		collectedAt: collectedAt,
+		collectedAt: publishedAt,
 		data:        resp,
-		procMetrics: procMetrics,
+		procMetrics: nil,
 	}
+}
+
+func (s *Service) currentSnapshot() (monitorSnapshot, bool) {
+	if s == nil {
+		return monitorSnapshot{}, false
+	}
+
+	s.mu.RLock()
+	if !s.hasSystem {
+		s.mu.RUnlock()
+		return monitorSnapshot{}, false
+	}
+	snap := s.systemSnap
+	if s.hasProcesses {
+		snap.procMetrics = append([]processWithMetrics(nil), s.processSnap.metrics...)
+	}
+	s.mu.RUnlock()
+
+	return monitorSnapshot{
+		collectedAt: snap.collectedAt,
+		data:        snap.data,
+		procMetrics: snap.procMetrics,
+	}, true
+}
+
+func (s *Service) snapshotResponse(sortBy string) sysMonitorResp {
+	snap, ok := s.currentSnapshot()
+	if !ok {
+		return sysMonitorResp{
+			Platform:  runtime.GOOS,
+			Processes: []processInfo{},
+		}
+	}
+	return buildResponse(snap, sortBy)
 }
 
 func readCPUUsage(ctx context.Context) (float64, error) {
@@ -256,6 +400,9 @@ func collectProcessMetrics(ctx context.Context) ([]processWithMetrics, error) {
 
 	out := make([]processWithMetrics, 0, len(procs))
 	for _, p := range procs {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if p == nil {
 			continue
 		}

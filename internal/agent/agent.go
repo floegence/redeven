@@ -287,6 +287,8 @@ func New(opts Options) (*Agent, error) {
 }
 
 func (a *Agent) Run(ctx context.Context) error {
+	a.StartBackgroundServices(ctx)
+
 	defer func() {
 		if a != nil && a.code != nil {
 			_ = a.code.Close()
@@ -341,6 +343,15 @@ func (a *Agent) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-timer.C:
 		}
+	}
+}
+
+func (a *Agent) StartBackgroundServices(ctx context.Context) {
+	if a == nil {
+		return
+	}
+	if a.mon != nil {
+		a.mon.Start(ctx)
 	}
 }
 
