@@ -94,6 +94,29 @@ export default [
     },
   },
   {
+    files: ["src/ui/**/*.{ts,tsx}"],
+    ignores: [
+      "src/**/*.test.{ts,tsx}",
+      "src/**/*.e2e.test.{ts,tsx}",
+      "src/**/*.browser.test.tsx",
+      "src/ui/services/uiStorage.ts",
+    ],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "localStorage",
+          message: "Use uiStorage.ts so desktop persistence remains origin-independent.",
+        },
+        {
+          object: "window",
+          property: "localStorage",
+          message: "Use uiStorage.ts so desktop persistence remains origin-independent.",
+        },
+      ],
+    },
+  },
+  {
     files: ["src/**/*.test.{ts,tsx}", "src/**/*.e2e.test.{ts,tsx}"],
     languageOptions: {
       globals: {
