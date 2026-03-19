@@ -29,6 +29,7 @@ describe('settingsPage', () => {
 
     expect(html).not.toContain('gradient');
     expect(html).toContain('background: var(--bg);');
+    expect(html).toContain('env(titlebar-area-height, 0px)');
   });
 
   it('renders an inline error when validation fails', () => {

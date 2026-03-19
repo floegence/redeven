@@ -26,6 +26,7 @@ describe('blockedPage', () => {
     expect(html).toContain('Default state directory: /Users/tester/.redeven');
     expect(html).toContain('Settings');
     expect(html).not.toContain('gradient');
+    expect(html).toContain('env(titlebar-area-height, 0px)');
   });
 
   it('renders the local-ui-enabled blocked explanation', () => {
