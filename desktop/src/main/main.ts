@@ -45,7 +45,6 @@ import {
   REPORT_DESKTOP_WINDOW_THEME_CHANNEL,
   normalizeDesktopWindowThemeSnapshot,
 } from '../shared/windowThemeIPC';
-import { usesDesktopWindowThemeOverlay } from '../shared/windowChromePlatform';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -284,9 +283,9 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameNam
   const spec = resolveDesktopWindowSpec(targetURL, Boolean(parent));
   const attachToParent = Boolean(parent) && spec.attachToParent !== false;
   const actualParent = attachToParent ? parent : undefined;
-  const browserPreloadPath = usesDesktopWindowThemeOverlay(process.platform)
-    ? resolveBrowserPreloadPath({ appPath: app.getAppPath() })
-    : '';
+  // Every desktop browser window needs the shared preload because it hosts
+  // renderer persistence bridges in addition to any platform-specific chrome integration.
+  const browserPreloadPath = resolveBrowserPreloadPath({ appPath: app.getAppPath() });
   const trimmedFrameName = String(frameName ?? '').trim();
   const windowStateKey = String(explicitWindowStateKey ?? '').trim()
     || (trimmedFrameName ? `window:${trimmedFrameName}` : parent ? 'window:child' : 'window:main');
@@ -319,7 +318,7 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameNam
     ...buildDesktopWindowChromeOptions(process.platform, defaultDesktopWindowThemeSnapshot()),
     parent: actualParent,
     webPreferences: {
-      ...(browserPreloadPath ? { preload: browserPreloadPath } : {}),
+      preload: browserPreloadPath,
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
