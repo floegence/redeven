@@ -14,6 +14,7 @@ declare global {
 }
 
 const fallbackMemoryStorage = new Map<string, string>();
+let desktopBridgeWarningLogged = false;
 
 function isStorageLike(value: unknown): value is Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> {
   if (!value || typeof value !== 'object') {
@@ -82,6 +83,23 @@ function desktopBridge(): DesktopStateStorageBridge | null {
   return candidate;
 }
 
+function looksLikeElectronRenderer(): boolean {
+  if (typeof navigator === 'undefined') {
+    return false;
+  }
+  return String(navigator.userAgent ?? '').includes('Electron');
+}
+
+function warnMissingDesktopBridge(): void {
+  if (desktopBridgeWarningLogged || !looksLikeElectronRenderer()) {
+    return;
+  }
+  desktopBridgeWarningLogged = true;
+  console.warn(
+    'Redeven Desktop state storage bridge is unavailable; falling back to browser storage. UI preferences may not persist across full restarts.'
+  );
+}
+
 function fallbackMemoryStorageBridge(): DesktopStateStorageBridge {
   return {
     getItem: (key) => fallbackMemoryStorage.get(String(key ?? '')) ?? null,
@@ -100,7 +118,13 @@ export function isDesktopStateStorageAvailable(): boolean {
 }
 
 export function resolveUIStorage(): DesktopStateStorageBridge {
-  return desktopBridge() ?? localStorageBridge() ?? fallbackMemoryStorageBridge();
+  const bridge = desktopBridge();
+  if (bridge) {
+    return bridge;
+  }
+
+  warnMissingDesktopBridge();
+  return localStorageBridge() ?? fallbackMemoryStorageBridge();
 }
 
 export function createUIStorageAdapter(): FloeStorageAdapter {

@@ -29,6 +29,9 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('ipcMain.on(DESKTOP_STATE_SET_CHANNEL');
     expect(mainSrc).toContain('ipcMain.on(DESKTOP_STATE_REMOVE_CHANNEL');
     expect(mainSrc).toContain('ipcMain.on(DESKTOP_STATE_KEYS_CHANNEL');
+    expect(mainSrc).toContain("const browserPreloadPath = resolveBrowserPreloadPath({ appPath: app.getAppPath() });");
+    expect(mainSrc).toContain('preload: browserPreloadPath,');
+    expect(mainSrc).not.toContain('usesDesktopWindowThemeOverlay(process.platform)');
     expect(mainSrc).toContain("mainWindow = createBrowserWindow(targetURL, undefined, '', 'window:main');");
     expect(mainSrc).toContain('registerWindowStatePersistence(win, windowStateKey);');
   });

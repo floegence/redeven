@@ -38,6 +38,11 @@ function adapterKeys(): string[] {
   return createUIStorageAdapter().keys?.() ?? [];
 }
 
+async function loadUIStorageModule() {
+  vi.resetModules();
+  return import('./uiStorage');
+}
+
 afterEach(() => {
   for (const key of adapterKeys()) {
     removeUIStorageItem(key);
@@ -79,5 +84,19 @@ describe('uiStorage', () => {
     expect(adapterKeys()).toEqual(['beta']);
     expect(localStorageMock.getItem('beta')).toBe('local');
     expect(isDesktopStateStorageAvailable()).toBe(true);
+  });
+
+  it('warns when an Electron renderer is missing the desktop bridge', async () => {
+    vi.stubGlobal('localStorage', createStorageMock());
+    vi.stubGlobal('navigator', { userAgent: 'RedevenDesktop Electron/41.0.0' });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const { readUIStorageItem: readItem, writeUIStorageItem: writeItem } = await loadUIStorageModule();
+    writeItem('gamma', 'three');
+
+    expect(readItem('gamma')).toBe('three');
+    expect(warn).toHaveBeenCalledWith(
+      'Redeven Desktop state storage bridge is unavailable; falling back to browser storage. UI preferences may not persist across full restarts.'
+    );
   });
 });
