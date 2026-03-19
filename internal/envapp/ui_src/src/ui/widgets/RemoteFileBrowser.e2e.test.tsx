@@ -357,9 +357,13 @@ async function flush() {
 }
 
 function createEnvContext(): EnvContextValue {
+  return createEnvContextWithIdAccessor(() => 'env-1');
+}
+
+function createEnvContextWithIdAccessor(envId: () => string): EnvContextValue {
   const [envResource] = createResource(async () => null);
   return {
-    env_id: () => 'env-1',
+    env_id: envId,
     env: envResource,
     localRuntime: () => null,
     connect: async () => {},
@@ -917,6 +921,69 @@ describe('RemoteFileBrowser persistence', () => {
     try {
       await flush();
       expect(host.textContent).toContain(':page');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('does not close the preview while the initial env id is still hydrating', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const [envId, setEnvId] = createSignal('');
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContextWithIdAccessor(envId)}>
+          <RemoteFileBrowser />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      filePreviewStore.openPreview.mockClear();
+      filePreviewStore.closePreview.mockClear();
+
+      filePreviewStore.openPreview({
+        id: '/workspace/repo/src/index.ts',
+        name: 'index.ts',
+        type: 'file',
+        path: '/workspace/repo/src/index.ts',
+      });
+      expect(filePreviewStore.openPreview).toHaveBeenCalledTimes(1);
+
+      setEnvId('env-1');
+      await flush();
+
+      expect(filePreviewStore.closePreview).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('closes the preview when switching between concrete environments', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const [envId, setEnvId] = createSignal('env-1');
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContextWithIdAccessor(envId)}>
+          <RemoteFileBrowser />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      filePreviewStore.closePreview.mockClear();
+
+      setEnvId('env-2');
+      await flush();
+
+      expect(filePreviewStore.closePreview).toHaveBeenCalledTimes(1);
     } finally {
       dispose();
     }
