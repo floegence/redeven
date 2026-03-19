@@ -1,7 +1,8 @@
-import { createSignal, onCleanup, type Accessor } from 'solid-js';
+import { type Accessor, createSignal, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { Client } from '@floegence/flowersec-core';
 import type { JsonFrameChannel } from '@floegence/flowersec-core/streamio';
+import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import {
   describeFilePreview,
   FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR,
@@ -10,14 +11,28 @@ import {
   mimeFromExtDot,
   type FilePreviewDescriptor,
 } from '../utils/filePreview';
-import { readFileBytesOnce, openReadFileStreamChannel } from '../utils/fileStreamReader';
+import { openReadFileStreamChannel, readFileBytesOnce } from '../utils/fileStreamReader';
 
 const MAX_PREVIEW_BYTES = 20 * 1024 * 1024;
 const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
 const SNIFF_BYTES = 64 * 1024;
 
+type PendingPreviewAction =
+  | { type: 'close' }
+  | { type: 'open'; item: FileItem }
+  | null;
+
 function emptyBytes(): Uint8Array<ArrayBuffer> {
   return new Uint8Array(new ArrayBuffer(0));
+}
+
+function encodeUtf8Bytes(text: string): Uint8Array<ArrayBuffer> {
+  return new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return String(error.message || '').trim();
+  return String(error ?? '').trim();
 }
 
 function downloadBlob(params: { name: string; blob: Blob }) {
@@ -35,6 +50,15 @@ export interface FilePreviewController {
   item: Accessor<FileItem | null>;
   descriptor: Accessor<FilePreviewDescriptor>;
   text: Accessor<string>;
+  draftText: Accessor<string>;
+  editing: Accessor<boolean>;
+  dirty: Accessor<boolean>;
+  saving: Accessor<boolean>;
+  saveError: Accessor<string | null>;
+  selectedText: Accessor<string>;
+  canEdit: Accessor<boolean>;
+  closeConfirmOpen: Accessor<boolean>;
+  closeConfirmMessage: Accessor<string>;
   message: Accessor<string>;
   objectUrl: Accessor<string>;
   bytes: Accessor<Uint8Array<ArrayBuffer> | null>;
@@ -47,16 +71,34 @@ export interface FilePreviewController {
   openPreview: (item: FileItem) => Promise<void>;
   closePreview: () => void;
   handleOpenChange: (open: boolean) => void;
+  cancelPendingAction: () => void;
+  confirmDiscardAndContinue: () => Promise<void>;
+  beginEditing: () => void;
+  updateDraft: (value: string) => void;
+  updateSelection: (selectionText: string) => void;
+  saveCurrent: () => Promise<boolean>;
+  revertCurrent: () => void;
   downloadCurrent: () => Promise<void>;
 }
 
 export function createFilePreviewController(params: {
   client: Accessor<Client | null | undefined>;
+  rpc: Accessor<RedevenV1Rpc | null | undefined>;
+  canWrite: Accessor<boolean>;
+  onSaved?: (path: string) => void;
+  onSaveError?: (path: string, message: string) => void;
 }): FilePreviewController {
   const [previewOpen, setPreviewOpen] = createSignal(false);
   const [previewItem, setPreviewItem] = createSignal<FileItem | null>(null);
   const [previewDescriptor, setPreviewDescriptor] = createSignal<FilePreviewDescriptor>(FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR);
   const [previewText, setPreviewText] = createSignal('');
+  const [previewDraftText, setPreviewDraftText] = createSignal('');
+  const [previewEditing, setPreviewEditing] = createSignal(false);
+  const [previewDirty, setPreviewDirty] = createSignal(false);
+  const [previewSaving, setPreviewSaving] = createSignal(false);
+  const [previewSaveError, setPreviewSaveError] = createSignal<string | null>(null);
+  const [previewSelectedText, setPreviewSelectedText] = createSignal('');
+  const [closeConfirmOpen, setCloseConfirmOpen] = createSignal(false);
   const [previewMessage, setPreviewMessage] = createSignal('');
   const [previewObjectUrl, setPreviewObjectUrl] = createSignal('');
   const [previewBytes, setPreviewBytes] = createSignal<Uint8Array<ArrayBuffer> | null>(null);
@@ -70,6 +112,17 @@ export function createFilePreviewController(params: {
   let activePreviewChannel: JsonFrameChannel | null = null;
   let activeObjectUrl: string | null = null;
   let previewReqSeq = 0;
+  let saveReqSeq = 0;
+  let pendingAction: PendingPreviewAction = null;
+
+  const resetEditorState = (value = '') => {
+    setPreviewDraftText(value);
+    setPreviewEditing(false);
+    setPreviewDirty(false);
+    setPreviewSaving(false);
+    setPreviewSaveError(null);
+    setPreviewSelectedText('');
+  };
 
   const cleanupPreviewContent = () => {
     if (activePreviewChannel) {
@@ -101,24 +154,56 @@ export function createFilePreviewController(params: {
     setXlsxRows([]);
     setXlsxSheetName('');
     setPreviewLoading(false);
+    resetEditorState();
   };
 
-  const closePreview = () => {
+  const clearPendingAction = () => {
+    pendingAction = null;
+    setCloseConfirmOpen(false);
+  };
+
+  const forceClosePreview = () => {
     previewReqSeq += 1;
+    saveReqSeq += 1;
+    clearPendingAction();
     cleanupPreviewContent();
     setPreviewItem(null);
     setPreviewOpen(false);
     setDownloadLoading(false);
   };
 
-  onCleanup(() => {
-    closePreview();
-  });
+  const hasUnsavedChanges = () => previewOpen() && previewDescriptor().mode === 'text' && previewDirty();
 
-  const openPreview = async (item: FileItem) => {
+  const canEdit = () => (
+    Boolean(
+      params.canWrite()
+      && previewItem()?.type === 'file'
+      && previewDescriptor().mode === 'text'
+      && !previewLoading()
+      && !previewError()
+      && !previewTruncated(),
+    )
+  );
+
+  const closeConfirmMessage = () => {
+    const currentName = previewItem()?.name ?? 'this file';
+    if (pendingAction?.type === 'open') {
+      return `Discard unsaved changes in ${currentName} and open ${pendingAction.item.name}?`;
+    }
+    return `Discard unsaved changes in ${currentName} and close the preview?`;
+  };
+
+  const queuePendingAction = (action: Exclude<PendingPreviewAction, null>) => {
+    pendingAction = action;
+    setCloseConfirmOpen(true);
+  };
+
+  const loadPreview = async (item: FileItem) => {
     if (item.type !== 'file') return;
 
     const seq = (previewReqSeq += 1);
+    saveReqSeq += 1;
+    clearPendingAction();
     cleanupPreviewContent();
     setPreviewItem(item);
     setPreviewOpen(true);
@@ -173,7 +258,7 @@ export function createFilePreviewController(params: {
 
         if (seq !== previewReqSeq) return;
 
-        truncated = !!meta.truncated;
+        truncated = Boolean(meta.truncated);
         setPreviewBytes(bytes);
         setPreviewTruncated(truncated);
 
@@ -181,7 +266,9 @@ export function createFilePreviewController(params: {
         mime = mimeFromExtDot(extDot) ?? 'application/octet-stream';
 
         if (baseDescriptor.mode === 'text') {
-          setPreviewText(new TextDecoder('utf-8', { fatal: false }).decode(bytes));
+          const decodedText = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+          setPreviewText(decodedText);
+          resetEditorState(decodedText);
           if (truncated) {
             setPreviewMessage('Showing partial content (truncated).');
           }
@@ -289,8 +376,10 @@ export function createFilePreviewController(params: {
 
       if (baseDescriptor.mode === 'binary') {
         if (isLikelyTextContent(bytes)) {
+          const decodedText = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
           setPreviewDescriptor(FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR);
-          setPreviewText(new TextDecoder('utf-8', { fatal: false }).decode(bytes));
+          setPreviewText(decodedText);
+          resetEditorState(decodedText);
           if (truncated) {
             setPreviewMessage('Showing partial content (truncated).');
           }
@@ -301,7 +390,7 @@ export function createFilePreviewController(params: {
       }
     } catch (error) {
       if (seq !== previewReqSeq) return;
-      setPreviewError(error instanceof Error ? error.message : String(error));
+      setPreviewError(getErrorMessage(error) || 'Failed to load file.');
       setPreviewDescriptor({ mode: 'unsupported' });
       setPreviewMessage('Failed to load file.');
     } finally {
@@ -309,6 +398,24 @@ export function createFilePreviewController(params: {
         setPreviewLoading(false);
       }
     }
+  };
+
+  const openPreview = async (item: FileItem) => {
+    if (item.type !== 'file') return;
+    if (hasUnsavedChanges()) {
+      queuePendingAction({ type: 'open', item });
+      return;
+    }
+    await loadPreview(item);
+  };
+
+  const closePreview = () => {
+    if (!previewOpen()) return;
+    if (hasUnsavedChanges()) {
+      queuePendingAction({ type: 'close' });
+      return;
+    }
+    forceClosePreview();
   };
 
   const handleOpenChange = (open: boolean) => {
@@ -319,6 +426,90 @@ export function createFilePreviewController(params: {
     closePreview();
   };
 
+  const cancelPendingAction = () => {
+    clearPendingAction();
+  };
+
+  const confirmDiscardAndContinue = async () => {
+    const action = pendingAction;
+    clearPendingAction();
+    if (!action) return;
+
+    if (action.type === 'close') {
+      forceClosePreview();
+      return;
+    }
+
+    await loadPreview(action.item);
+  };
+
+  const beginEditing = () => {
+    if (!canEdit()) return;
+    setPreviewEditing(true);
+    setPreviewSaveError(null);
+  };
+
+  const updateDraft = (value: string) => {
+    if (previewDescriptor().mode !== 'text') return;
+    setPreviewDraftText(value);
+    setPreviewDirty(value !== previewText());
+    if (previewSaveError()) {
+      setPreviewSaveError(null);
+    }
+  };
+
+  const updateSelection = (selectionText: string) => {
+    setPreviewSelectedText(String(selectionText ?? '').trim());
+  };
+
+  const saveCurrent = async (): Promise<boolean> => {
+    if (!canEdit() || !previewDirty() || previewSaving()) return false;
+
+    const rpc = params.rpc();
+    const item = previewItem();
+    if (!rpc || !item || previewDescriptor().mode !== 'text') return false;
+
+    const content = previewDraftText();
+    const requestSeq = ++saveReqSeq;
+    setPreviewSaving(true);
+    setPreviewSaveError(null);
+
+    try {
+      await rpc.fs.writeFile({
+        path: item.path,
+        content,
+        encoding: 'utf8',
+        createDirs: false,
+      });
+
+      if (requestSeq !== saveReqSeq || previewItem()?.path !== item.path) return false;
+
+      setPreviewText(content);
+      setPreviewDraftText(content);
+      setPreviewBytes(encodeUtf8Bytes(content));
+      setPreviewTruncated(false);
+      setPreviewDirty(false);
+      setPreviewSaveError(null);
+      params.onSaved?.(item.path);
+      return true;
+    } catch (error) {
+      if (requestSeq !== saveReqSeq) return false;
+      const message = getErrorMessage(error) || 'Failed to save file.';
+      setPreviewSaveError(message);
+      params.onSaveError?.(item.path, message);
+      return false;
+    } finally {
+      if (requestSeq === saveReqSeq) {
+        setPreviewSaving(false);
+      }
+    }
+  };
+
+  const revertCurrent = () => {
+    if (previewDescriptor().mode !== 'text') return;
+    resetEditorState(previewText());
+  };
+
   const downloadCurrent = async () => {
     const client = params.client();
     const item = previewItem();
@@ -326,6 +517,12 @@ export function createFilePreviewController(params: {
 
     setDownloadLoading(true);
     try {
+      if (previewDescriptor().mode === 'text' && previewDirty()) {
+        const mime = mimeFromExtDot(getExtDot(item.name)) ?? 'text/plain;charset=utf-8';
+        downloadBlob({ name: item.name, blob: new Blob([previewDraftText()], { type: mime }) });
+        return;
+      }
+
       const cached = previewBytes();
       const truncated = previewTruncated();
       if (cached && !truncated) {
@@ -343,11 +540,24 @@ export function createFilePreviewController(params: {
     }
   };
 
+  onCleanup(() => {
+    forceClosePreview();
+  });
+
   return {
     open: previewOpen,
     item: previewItem,
     descriptor: previewDescriptor,
     text: previewText,
+    draftText: previewDraftText,
+    editing: previewEditing,
+    dirty: previewDirty,
+    saving: previewSaving,
+    saveError: previewSaveError,
+    selectedText: previewSelectedText,
+    canEdit,
+    closeConfirmOpen,
+    closeConfirmMessage,
     message: previewMessage,
     objectUrl: previewObjectUrl,
     bytes: previewBytes,
@@ -360,6 +570,13 @@ export function createFilePreviewController(params: {
     openPreview,
     closePreview,
     handleOpenChange,
+    cancelPendingAction,
+    confirmDiscardAndContinue,
+    beginEditing,
+    updateDraft,
+    updateSelection,
+    saveCurrent,
+    revertCurrent,
     downloadCurrent,
   };
 }

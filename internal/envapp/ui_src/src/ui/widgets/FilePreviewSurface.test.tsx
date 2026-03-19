@@ -44,10 +44,24 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       </div>
     ) : null
   ),
+  ConfirmDialog: (props: any) => (
+    props.open ? (
+      <div data-testid="confirm-dialog">
+        <div>{props.title}</div>
+        <div>{props.description}</div>
+      </div>
+    ) : null
+  ),
 }));
 
-vi.mock('@floegence/floe-webapp-core/loading', () => ({
-  LoadingOverlay: (props: any) => (props.visible ? <div>{props.message}</div> : null),
+vi.mock('./FilePreviewContent', () => ({
+  FilePreviewContent: (props: any) => (
+    <div ref={(element) => props.contentRef?.(element)}>
+      <div>{props.item?.path}</div>
+      <pre>{props.text}</pre>
+      <div>{props.message}</div>
+    </div>
+  ),
 }));
 
 afterEach(() => {
@@ -57,7 +71,7 @@ afterEach(() => {
 });
 
 describe('FilePreviewSurface', () => {
-  it('renders a floating window on desktop and forwards the current preview selection to Ask Flower', () => {
+  it('renders a floating window on desktop and prioritizes the editor selection for Ask Flower', () => {
     const onAskFlower = vi.fn();
     const onDownload = vi.fn();
 
@@ -71,6 +85,7 @@ describe('FilePreviewSurface', () => {
         item={{ id: '/workspace/demo.txt', name: 'demo.txt', path: '/workspace/demo.txt', type: 'file' }}
         descriptor={{ mode: 'text', textPresentation: 'plain', wrapText: true }}
         text="selected line"
+        selectedText="selected from editor"
         onAskFlower={onAskFlower}
         onDownload={onDownload}
       />
@@ -78,24 +93,21 @@ describe('FilePreviewSurface', () => {
 
     expect(host.querySelector('[data-testid="floating-window"]')).toBeTruthy();
 
-    const previewTextNode = host.querySelector('pre')?.firstChild as Node | null;
-    expect(previewTextNode).toBeTruthy();
-
     vi.spyOn(window, 'getSelection').mockReturnValue({
       rangeCount: 1,
-      toString: () => 'selected line',
-      getRangeAt: () => ({ commonAncestorContainer: previewTextNode }) as Range,
+      toString: () => 'selected from dom',
+      getRangeAt: () => ({ commonAncestorContainer: host.querySelector('pre')?.firstChild as Node }) as Range,
     } as unknown as Selection);
 
     const buttons = Array.from(host.querySelectorAll('button'));
     buttons.find((button) => button.textContent?.includes('Ask Flower'))?.click();
     buttons.find((button) => button.textContent?.includes('Download'))?.click();
 
-    expect(onAskFlower).toHaveBeenCalledWith('selected line');
+    expect(onAskFlower).toHaveBeenCalledWith('selected from editor');
     expect(onDownload).toHaveBeenCalledTimes(1);
   });
 
-  it('renders a dialog shell on mobile and keeps the preview message visible', () => {
+  it('renders a dialog shell on mobile, keeps the preview message visible, and shows close confirmation state', () => {
     layoutState.mobile = true;
 
     const host = document.createElement('div');
@@ -109,6 +121,8 @@ describe('FilePreviewSurface', () => {
         descriptor={{ mode: 'unsupported' }}
         message="This file is too large to preview."
         truncated
+        closeConfirmOpen
+        closeConfirmMessage="Discard unsaved changes in demo.pdf and close the preview?"
       />
     ), host);
 
@@ -118,5 +132,6 @@ describe('FilePreviewSurface', () => {
     expect(host.textContent).toContain('/workspace/demo.pdf');
     expect(host.textContent).toContain('Truncated preview');
     expect(host.textContent).toContain('This file is too large to preview.');
+    expect(host.querySelector('[data-testid="confirm-dialog"]')).toBeTruthy();
   });
 });
