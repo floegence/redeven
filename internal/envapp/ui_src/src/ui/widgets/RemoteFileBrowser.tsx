@@ -324,6 +324,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitDeleteReviewPreview, setGitDeleteReviewPreview] = createSignal<GitPreviewDeleteBranchResponse | null>(null);
   const [gitDeleteReviewLoading, setGitDeleteReviewLoading] = createSignal(false);
   const [gitDeleteReviewError, setGitDeleteReviewError] = createSignal('');
+  let previousEnvId: string | null = null;
   const [gitDeleteActionError, setGitDeleteActionError] = createSignal('');
 
   let dirReqSeq = 0;
@@ -1578,7 +1579,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     resetFileBrowser();
 
     repoReqSeq += 1;
-    filePreview.closePreview();
+    if (previousEnvId && previousEnvId !== id) {
+      filePreview.closePreview();
+    }
+    previousEnvId = id;
   });
 
   const loadDirOnce = async (path: string, seq: number): Promise<PathLoadResult> => {
