@@ -1,6 +1,6 @@
 import { Index, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
-import { useCurrentWidgetId, useLayout, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
+import { Copy, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button, Dropdown, type DropdownItem, Input, MobileKeyboard, Tabs, TabPanel, type TabItem } from '@floegence/floe-webapp-core/ui';
@@ -23,6 +23,7 @@ import {
   getOrCreateTerminalConnId,
 } from '../services/terminalTransport';
 import { disposeRedevenTerminalSessionsCoordinator, getRedevenTerminalSessionsCoordinator } from '../services/terminalSessions';
+import { patchTerminalSelectionMouseUpBehavior, readTerminalSelectionText } from '../services/terminalSelectionBehavior';
 import {
   ensureTerminalPreferencesInitialized,
   TERMINAL_MAX_FONT_SIZE,
@@ -52,6 +53,7 @@ import { normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../util
 import { resolveTerminalSurfaceTouchAction } from '../mobileViewportPolicy';
 import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSettingsDialog';
 import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
+import { writeTextToClipboard } from '../utils/clipboard';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
 
@@ -393,8 +395,6 @@ function TerminalSessionView(props: terminal_session_view_props) {
         // When multiple views/panels show the same terminal session, only the focused terminal should emit remote resize.
         // This prevents hidden terminals from locking the remote PTY cols/rows to an inactive size.
         responsive: {
-          fitOnFocus: true,
-          emitResizeOnFocus: true,
           notifyResizeOnlyWhenFocused: true,
         } satisfies TerminalResponsiveConfig,
       }),
@@ -420,6 +420,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
     try {
       await core.initialize();
       if (seq !== initSeq) return;
+      patchTerminalSelectionMouseUpBehavior(core);
 
       // After core.initialize(), the underlying terminal instance is ready: re-register to keep the outer registry consistent.
       props.registerCore(id, core);
@@ -608,6 +609,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const rpc = useRedevenRpc();
   const env = useEnvContext();
   const layout = useLayout();
+  const notify = useNotification();
   const theme = useTheme();
   const floe = useResolvedFloeConfig();
   const view = useViewActivation();
@@ -1700,6 +1702,24 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return false;
   };
 
+  const isTerminalCopyShortcutEvent = (event: KeyboardEvent): boolean => {
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    const host = terminalContextMenuHostEl();
+    for (const node of path) {
+      if (!(node instanceof Element)) continue;
+      if (node.matches('input, select, [contenteditable="true"]')) return false;
+      if (node.matches(TERMINAL_INPUT_SELECTOR)) return true;
+      if (node.classList.contains('redeven-terminal-surface')) return true;
+      if (node === host) break;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Element)) return false;
+    if (target.matches('input, select, [contenteditable="true"]')) return false;
+    if (target.matches(TERMINAL_INPUT_SELECTOR)) return true;
+    return !!target.closest('.redeven-terminal-surface');
+  };
+
   const openTerminalAskMenu = (event: MouseEvent) => {
     if (!connected()) return;
 
@@ -1714,13 +1734,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       || normalizeAskFlowerAbsolutePath(agentHomePathAbs())
       || '';
     const core = coreRegistry.get(resolvedSession.id) ?? getActiveCore();
-
-    let selection = '';
-    try {
-      selection = String((core as any)?.getSelectionText?.() ?? '').trim();
-    } catch {
-      selection = '';
-    }
+    const selection = readTerminalSelectionText(core);
 
     const pos = clampAskMenuPosition(event.clientX, event.clientY);
     event.preventDefault();
@@ -1743,6 +1757,22 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!isTerminalSurfaceContextMenuEvent(event)) return;
     openTerminalAskMenu(event);
   }
+
+  const copyTerminalSelection = async (selectionText?: string): Promise<boolean> => {
+    const selection = String(selectionText ?? readTerminalSelectionText(getActiveCore()) ?? '').trim();
+    if (!selection) return false;
+    await writeTextToClipboard(selection);
+    return true;
+  };
+
+  const handleCopyTerminalSelection = () => {
+    const menu = terminalAskMenu();
+    setTerminalAskMenu(null);
+    void copyTerminalSelection(menu?.selection).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      notify.error('Copy failed', message || 'Failed to copy text to clipboard.');
+    });
+  };
 
   const askFlowerFromTerminal = () => {
     const menu = terminalAskMenu();
@@ -1805,6 +1835,35 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       notes,
     }, { x: menu.x, y: menu.y });
   };
+
+  createEffect(() => {
+    const host = terminalContextMenuHostEl();
+    if (!host) return;
+
+    const onKeyDownCapture = (event: KeyboardEvent) => {
+      const key = String(event.key ?? '').toLowerCase();
+      if (key !== 'c') return;
+      if (!event.metaKey && !event.ctrlKey) return;
+      if (!isTerminalCopyShortcutEvent(event)) return;
+
+      const selection = readTerminalSelectionText(getActiveCore());
+      if (!selection) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      void copyTerminalSelection(selection).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        notify.error('Copy failed', message || 'Failed to copy text to clipboard.');
+      });
+    };
+
+    host.addEventListener('keydown', onKeyDownCapture, true);
+    onCleanup(() => {
+      host.removeEventListener('keydown', onKeyDownCapture, true);
+    });
+  });
 
   const bindSearchCore = (core: TerminalCore | null) => {
     if (searchBoundCore && searchBoundCore !== core) {
@@ -2167,6 +2226,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
             onContextMenu={(event) => event.preventDefault()}
           >
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={handleCopyTerminalSelection}
+              disabled={!String(menu.selection ?? '').trim()}
+            >
+              <Copy class="w-3.5 h-3.5 opacity-60" />
+              <span class="flex-1 text-left">Copy selection</span>
+            </button>
             <button
               type="button"
               class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
