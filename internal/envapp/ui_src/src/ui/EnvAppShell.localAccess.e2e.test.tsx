@@ -62,7 +62,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   BottomBarItem: (props: any) => <button type="button" class={props.class} onClick={props.onClick}>{props.children}</button>,
   Panel: (props: any) => <div>{props.children}</div>,
   PanelContent: (props: any) => <div>{props.children}</div>,
-  Shell: (props: any) => <div>{props.topBarActions}{props.bottomBarItems}{props.children}</div>,
+  Shell: (props: any) => <div>{props.logo}{props.topBarActions}{props.bottomBarItems}{props.children}</div>,
   StatusIndicator: (props: any) => <div>{props.label ?? props.status}</div>,
   TopBarIconButton: (props: any) => (
     <button
@@ -247,6 +247,25 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell top bar affordances', () => {
+  it('uses the dark-mode svg variant for the original redeven logo mark', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const logoImage = host.querySelector('img[alt="Redeven"]');
+      expect(logoImage).toBeTruthy();
+      expect(logoImage?.getAttribute('data-redeven-logo-theme')).toBe('dark');
+      expect(logoImage?.getAttribute('src')).toContain('logo-dark.svg');
+    } finally {
+      dispose();
+    }
+  });
+
   it('disables top bar tooltips on mobile layouts to avoid sticky touch overlays', async () => {
     layoutIsMobile = true;
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
