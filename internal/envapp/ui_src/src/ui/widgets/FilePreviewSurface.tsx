@@ -77,7 +77,7 @@ export interface FilePreviewSurfaceProps {
   error?: string | null;
   xlsxSheetName?: string;
   xlsxRows?: string[][];
-  onCopyPath?: () => void;
+  onCopyPath?: () => boolean | Promise<boolean>;
   downloadLoading?: boolean;
   onDownload?: () => void;
   onAskFlower?: (selectionText: string) => void | Promise<void>;
@@ -102,11 +102,59 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
   const desktopSizing = createMemo(() => resolveDesktopWindowSizing(viewport()));
   const title = () => props.item?.name ?? 'File preview';
   const footerStatus = createMemo(() => {
-    if ((props.saveError ?? '').trim()) return props.saveError ?? '';
-    if (props.dirty) return 'Unsaved changes';
-    if (props.editing) return 'Editing';
-    if (props.truncated) return 'Truncated preview';
-    return '';
+    const saveError = String(props.saveError ?? '').trim();
+    if (saveError) {
+      return { label: 'Save failed', detail: saveError, tone: 'error' as const };
+    }
+    if (props.dirty) {
+      return { label: 'Unsaved changes', detail: 'Editing with local changes', tone: 'warning' as const };
+    }
+    if (props.editing) {
+      return { label: 'Editing', detail: 'No local changes', tone: 'brand' as const };
+    }
+    if (props.truncated) {
+      return { label: 'Truncated preview', detail: 'Download the full file for the complete content.', tone: 'warning' as const };
+    }
+    if (props.loading) {
+      return { label: 'Loading', detail: 'Fetching preview content', tone: 'neutral' as const };
+    }
+    return { label: 'Ready', detail: '', tone: 'neutral' as const };
+  });
+  const footerToneClass = createMemo(() => {
+    switch (footerStatus().tone) {
+      case 'error':
+        return 'border-error/25 bg-error/6';
+      case 'warning':
+        return 'border-warning/20 bg-warning/10';
+      case 'brand':
+        return 'border-primary/20 bg-primary/8';
+      default:
+        return 'border-border/60 bg-background/95';
+    }
+  });
+  const footerBadgeClass = createMemo(() => {
+    switch (footerStatus().tone) {
+      case 'error':
+        return 'border-error/20 bg-error/10 text-error';
+      case 'warning':
+        return 'border-warning/20 bg-warning/12 text-warning';
+      case 'brand':
+        return 'border-primary/20 bg-primary/[0.08] text-primary';
+      default:
+        return 'border-border/70 bg-background/80 text-muted-foreground';
+    }
+  });
+  const footerDetailClass = createMemo(() => {
+    switch (footerStatus().tone) {
+      case 'error':
+        return 'text-error';
+      case 'warning':
+        return 'text-warning';
+      case 'brand':
+        return 'text-primary';
+      default:
+        return 'text-muted-foreground';
+    }
   });
   const previewBody = () => (
     <FilePreviewContent
@@ -139,37 +187,46 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
     />
   );
   const footer = (
-    <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div class={cn('min-h-4 min-w-0 truncate text-[11px]', (props.saveError ?? '').trim() ? 'text-error' : 'text-muted-foreground')}>
-        {footerStatus()}
-      </div>
+    <div data-testid="file-preview-footer" class={cn('border-t px-3 py-2', footerToneClass())}>
+      <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex min-w-0 items-center gap-2">
+          <span class={cn('shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]', footerBadgeClass())}>
+            {footerStatus().label}
+          </span>
+          <Show when={footerStatus().detail}>
+            <span class={cn('min-w-0 truncate text-xs', footerDetailClass())}>
+              {footerStatus().detail}
+            </span>
+          </Show>
+        </div>
 
-      <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
-        <Show when={props.onAskFlower}>
+        <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+          <Show when={props.onAskFlower}>
+            <Button
+              size="sm"
+              variant="outline"
+              class="w-full sm:w-auto"
+              disabled={!props.item || props.loading}
+              onClick={() => {
+                const selectionText = String(props.selectedText ?? '').trim() || readSelectionTextFromPreview(previewContentEl);
+                void props.onAskFlower?.(selectionText);
+              }}
+            >
+              Ask Flower
+            </Button>
+          </Show>
+
           <Button
             size="sm"
             variant="outline"
             class="w-full sm:w-auto"
+            loading={props.downloadLoading}
             disabled={!props.item || props.loading}
-            onClick={() => {
-              const selectionText = String(props.selectedText ?? '').trim() || readSelectionTextFromPreview(previewContentEl);
-              void props.onAskFlower?.(selectionText);
-            }}
+            onClick={() => props.onDownload?.()}
           >
-            Ask Flower
+            Download
           </Button>
-        </Show>
-
-        <Button
-          size="sm"
-          variant="outline"
-          class="w-full sm:w-auto"
-          loading={props.downloadLoading}
-          disabled={!props.item || props.loading}
-          onClick={() => props.onDownload?.()}
-        >
-          Download
-        </Button>
+        </div>
       </div>
     </div>
   );

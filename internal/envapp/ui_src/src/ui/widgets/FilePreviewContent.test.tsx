@@ -33,14 +33,22 @@ vi.mock('./DocxPreviewPane', () => ({
   DocxPreviewPane: () => <div data-testid="docx-preview-pane" />,
 }));
 
+async function flushAsync(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 describe('FilePreviewContent', () => {
-  it('renders the path copy action and edit control inside the shared header', () => {
-    const onCopyPath = vi.fn();
+  it('renders the path copy icon inline and briefly shows the copied state', async () => {
+    vi.useFakeTimers();
+
+    const onCopyPath = vi.fn(async () => true);
     const onStartEdit = vi.fn();
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -60,11 +68,18 @@ describe('FilePreviewContent', () => {
     const header = root?.firstElementChild as HTMLElement | null;
     expect(header?.textContent).toContain('Path');
     expect(header?.textContent).toContain('/workspace/demo.sh');
-    expect(header?.textContent).toContain('Copy path');
     expect(header?.textContent).toContain('Edit');
+    expect(host.querySelector('button[aria-label="Copy path"]')).toBeTruthy();
+
+    const copyButton = host.querySelector('button[aria-label="Copy path"]') as HTMLButtonElement | null;
+    copyButton?.click();
+    await flushAsync();
+    expect(host.querySelector('button[aria-label="Path copied"]')).toBeTruthy();
+    vi.advanceTimersByTime(1600);
+    await flushAsync();
+    expect(host.querySelector('button[aria-label="Copy path"]')).toBeTruthy();
 
     const buttons = Array.from(host.querySelectorAll('button'));
-    buttons.find((button) => button.textContent?.includes('Copy path'))?.click();
     buttons.find((button) => button.textContent?.includes('Edit'))?.click();
 
     expect(onCopyPath).toHaveBeenCalledTimes(1);
@@ -96,18 +111,46 @@ describe('FilePreviewContent', () => {
     const root = host.firstElementChild as HTMLElement | null;
     const header = root?.firstElementChild as HTMLElement | null;
     expect(header?.textContent).toContain('/workspace/demo.ts');
-    expect(header?.textContent).toContain('Copy path');
     expect(header?.textContent).toContain('Discard');
     expect(header?.textContent).toContain('Save');
     expect(header?.textContent).not.toContain('Edit');
+    expect(host.querySelector('button[aria-label="Copy path"]')).toBeTruthy();
 
     const buttons = Array.from(host.querySelectorAll('button'));
-    buttons.find((button) => button.textContent?.includes('Copy path'))?.click();
+    (host.querySelector('button[aria-label="Copy path"]') as HTMLButtonElement | null)?.click();
     buttons.find((button) => button.textContent?.includes('Discard'))?.click();
     buttons.find((button) => button.textContent?.includes('Save'))?.click();
 
     expect(onCopyPath).toHaveBeenCalledTimes(1);
     expect(onDiscard).toHaveBeenCalledTimes(1);
     expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps discard available when editing starts without any local changes', () => {
+    const onDiscard = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <FilePreviewContent
+        item={{ id: '/workspace/demo.ts', name: 'demo.ts', path: '/workspace/demo.ts', type: 'file' }}
+        descriptor={{ mode: 'text', textPresentation: 'code', language: 'typescript', wrapText: false }}
+        text="const value = 1;"
+        draftText="const value = 1;"
+        editing
+        dirty={false}
+        canEdit
+        onDiscard={onDiscard}
+      />
+    ), host);
+
+    const discardButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Discard')) as HTMLButtonElement | undefined;
+    const saveButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Save')) as HTMLButtonElement | undefined;
+
+    expect(discardButton?.disabled).toBe(false);
+    expect(saveButton?.disabled).toBe(true);
+
+    discardButton?.click();
+    expect(onDiscard).toHaveBeenCalledTimes(1);
   });
 });

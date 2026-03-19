@@ -28,9 +28,10 @@ describe('file preview wiring', () => {
     expect(docxPaneSrc).toContain('Zoom in docx preview');
     expect(textPaneSrc).toContain("import { isCodeEditorLanguageSupported, type CodeEditorApi } from '@floegence/floe-webapp-core/editor';");
     expect(textPaneSrc).toContain('Loading editor...');
-    expect(textPaneSrc).toContain('Edit');
-    expect(textPaneSrc).toContain('Save');
-    expect(textPaneSrc).toContain('Discard');
+    expect(contentSrc).toContain('Copy path');
+    expect(contentSrc).toContain('Edit');
+    expect(contentSrc).toContain('Save');
+    expect(contentSrc).toContain('Discard');
     expect(codePreviewSrc).toContain('Syntax highlighting disabled for large files.');
     expect(codePreviewSrc).toContain('resolveCodeHighlightTheme');
     expect(contentSrc).toContain('Loading file...');
@@ -44,6 +45,8 @@ describe('file preview wiring', () => {
     expect(surfaceSrc).toContain('<ConfirmDialog');
     expect(surfaceSrc).toContain('Ask Flower');
     expect(surfaceSrc).toContain('Download');
+    expect(surfaceSrc).toContain('Unsaved changes');
+    expect(surfaceSrc).toContain('Truncated preview');
     expect(surfaceSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
     expect(surfaceSrc).toContain('file-preview-floating-window');
   });
@@ -72,6 +75,7 @@ describe('file preview wiring', () => {
     expect(hostSrc).toContain('draftText={filePreview.controller.draftText()}');
     expect(hostSrc).toContain('closeConfirmOpen={filePreview.controller.closeConfirmOpen()}');
     expect(hostSrc).toContain('buildFilePreviewAskFlowerIntent');
+    expect(hostSrc).toContain('writeTextToClipboard');
 
     expect(shellSrc).toContain("import { createFilePreviewController } from './widgets/createFilePreviewController';");
     expect(shellSrc).toContain('const filePreviewController = createFilePreviewController');
