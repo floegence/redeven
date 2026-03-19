@@ -147,4 +147,38 @@ describe('createFilePreviewController', () => {
       dispose();
     }
   });
+
+  it('exits edit mode when discard is pressed before any changes are made', async () => {
+    const file = { id: '/workspace/demo.ts', name: 'demo.ts', path: '/workspace/demo.ts', type: 'file' } satisfies FileItem;
+
+    openReadFileStreamChannelMock.mockResolvedValue(createTextChannel('const value = 1;\n'));
+
+    const [client] = createSignal({} as any);
+    const [rpc] = createSignal({ fs: { writeFile: vi.fn(async () => ({ success: true })) } } as any);
+    const [canWrite] = createSignal(true);
+
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createFilePreviewController({ client, rpc, canWrite });
+      return disposeRoot;
+    });
+
+    try {
+      await controller.openPreview(file);
+      await flushAsync();
+
+      controller.beginEditing();
+
+      expect(controller.editing()).toBe(true);
+      expect(controller.dirty()).toBe(false);
+
+      controller.revertCurrent();
+
+      expect(controller.editing()).toBe(false);
+      expect(controller.dirty()).toBe(false);
+      expect(controller.draftText()).toBe('const value = 1;\n');
+    } finally {
+      dispose();
+    }
+  });
 });

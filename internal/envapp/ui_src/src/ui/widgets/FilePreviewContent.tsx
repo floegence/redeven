@@ -1,5 +1,6 @@
-import { For, Show } from 'solid-js';
+import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
+import { Check, Copy } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
@@ -24,7 +25,7 @@ export interface FilePreviewContentProps {
   error?: string | null;
   xlsxSheetName?: string;
   xlsxRows?: string[][];
-  onCopyPath?: () => void;
+  onCopyPath?: () => boolean | Promise<boolean>;
   contentRef?: (element: HTMLDivElement) => void;
   onStartEdit?: () => void;
   onDraftChange?: (value: string) => void;
@@ -37,6 +38,44 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
   const resolvedError = () => props.error;
   const resolvedPath = () => String(props.item?.path ?? '').trim();
   const showEditorActions = () => props.descriptor.mode === 'text' && Boolean(props.canEdit);
+  const [pathCopied, setPathCopied] = createSignal(false);
+  let copyResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+  const clearCopiedState = () => {
+    if (copyResetTimer !== undefined) {
+      globalThis.clearTimeout(copyResetTimer);
+      copyResetTimer = undefined;
+    }
+    setPathCopied(false);
+  };
+
+  createEffect(() => {
+    resolvedPath();
+    clearCopiedState();
+  });
+
+  onCleanup(() => {
+    clearCopiedState();
+  });
+
+  const handleCopyPath = async () => {
+    if (!props.onCopyPath || !resolvedPath()) return;
+    let copied: boolean | void = false;
+    try {
+      copied = await props.onCopyPath();
+    } catch {
+      return;
+    }
+    if (copied === false) return;
+    setPathCopied(true);
+    if (copyResetTimer !== undefined) {
+      globalThis.clearTimeout(copyResetTimer);
+    }
+    copyResetTimer = globalThis.setTimeout(() => {
+      copyResetTimer = undefined;
+      setPathCopied(false);
+    }, 1600);
+  };
 
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
@@ -47,15 +86,22 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
             {resolvedPath() || '(unknown path)'}
           </span>
           <Show when={props.onCopyPath}>
-            <Button
-              size="sm"
-              variant="ghost"
-              class="shrink-0"
+            <button
+              type="button"
+              class={`inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-transparent transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 ${
+                pathCopied() ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+              }`}
               disabled={!resolvedPath()}
-              onClick={() => props.onCopyPath?.()}
+              aria-label={pathCopied() ? 'Path copied' : 'Copy path'}
+              title={pathCopied() ? 'Path copied' : 'Copy path'}
+              onClick={() => {
+                void handleCopyPath();
+              }}
             >
-              Copy path
-            </Button>
+              <Show when={pathCopied()} fallback={<Copy class="size-3.5" />}>
+                <Check class="size-3.5" />
+              </Show>
+            </button>
           </Show>
         </div>
 
@@ -70,7 +116,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
             <Button
               size="sm"
               variant="ghost"
-              disabled={props.saving || (!props.dirty && !(props.saveError ?? '').trim())}
+              disabled={props.saving}
               onClick={() => props.onDiscard?.()}
             >
               Discard

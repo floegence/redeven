@@ -10,18 +10,19 @@ export function FilePreviewHost() {
   const env = useEnvContext();
   const filePreview = useFilePreviewContext();
 
-  const handleCopyPath = async () => {
+  const handleCopyPath = async (): Promise<boolean> => {
     const path = String(filePreview.controller.item()?.path ?? '').trim();
     if (!path) {
       notification.error('Copy failed', 'Missing file path');
-      return;
+      return false;
     }
 
     try {
       await writeTextToClipboard(path);
-      notification.success('Copied', 'File path copied to clipboard');
+      return true;
     } catch (error) {
       notification.error('Copy failed', error instanceof Error ? error.message : 'Failed to copy text to clipboard.');
+      return false;
     }
   };
 
@@ -73,9 +74,7 @@ export function FilePreviewHost() {
       xlsxSheetName={filePreview.controller.xlsxSheetName()}
       xlsxRows={filePreview.controller.xlsxRows()}
       downloadLoading={filePreview.controller.downloadLoading()}
-      onCopyPath={() => {
-        void handleCopyPath();
-      }}
+      onCopyPath={handleCopyPath}
       onDownload={() => {
         void filePreview.controller.downloadCurrent();
       }}
