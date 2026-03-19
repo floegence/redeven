@@ -121,8 +121,24 @@ describe('terminalMobileKeyboard', () => {
 
     expect(gitSuggestions.some((item) => item.kind === 'subcommand' && item.label === 'checkout')).toBe(true);
 
+    const gitCommitOptionContext = deriveTerminalMobileKeyboardContext({
+      state: { line: 'git commit -', desynced: false, historyIndex: null },
+      workingDirAbs: '/workspace',
+    });
+    const gitCommitOptionSuggestions = buildTerminalMobileKeyboardSuggestions({
+      context: gitCommitOptionContext,
+      history: [],
+      pathEntries: [],
+      packageScripts: [],
+    });
+    expect(gitCommitOptionSuggestions.some((item) => (
+      item.kind === 'option'
+      && item.label === '-m'
+      && item.detail === 'Use the given commit message (<message>)'
+    ))).toBe(true);
+
     const dockerComposeContext = deriveTerminalMobileKeyboardContext({
-      state: { line: 'docker compose d', desynced: false, historyIndex: null },
+      state: { line: 'docker compose -f docker-compose.yml d', desynced: false, historyIndex: null },
       workingDirAbs: '/workspace',
     });
     const dockerComposeSuggestions = buildTerminalMobileKeyboardSuggestions({
@@ -132,6 +148,37 @@ describe('terminalMobileKeyboard', () => {
       packageScripts: [],
     });
     expect(dockerComposeSuggestions.some((item) => item.kind === 'subcommand' && item.label === 'down' && item.insertText === 'own ')).toBe(true);
+
+    const dockerComposePathContext = deriveTerminalMobileKeyboardContext({
+      state: { line: 'docker compose -f do', desynced: false, historyIndex: null },
+      workingDirAbs: '/workspace',
+    });
+    const dockerComposePathSuggestions = buildTerminalMobileKeyboardSuggestions({
+      context: dockerComposePathContext,
+      history: [],
+      pathEntries: [
+        { name: 'docker-compose.yml', path: '/workspace/docker-compose.yml', isDirectory: false },
+        { name: 'docs', path: '/workspace/docs', isDirectory: true },
+      ],
+      packageScripts: [],
+    });
+    expect(dockerComposePathSuggestions.some((item) => (
+      item.kind === 'path'
+      && item.label === 'docker-compose.yml'
+      && item.insertText === 'cker-compose.yml '
+    ))).toBe(true);
+
+    const kubectlNamespaceContext = deriveTerminalMobileKeyboardContext({
+      state: { line: 'kubectl -n kube-system g', desynced: false, historyIndex: null },
+      workingDirAbs: '/workspace',
+    });
+    const kubectlNamespaceSuggestions = buildTerminalMobileKeyboardSuggestions({
+      context: kubectlNamespaceContext,
+      history: [],
+      pathEntries: [],
+      packageScripts: [],
+    });
+    expect(kubectlNamespaceSuggestions.some((item) => item.kind === 'subcommand' && item.label === 'get')).toBe(true);
 
     const unameOptionContext = deriveTerminalMobileKeyboardContext({
       state: { line: 'uname -', desynced: false, historyIndex: null },
@@ -162,6 +209,21 @@ describe('terminalMobileKeyboard', () => {
 
     expect(pathSuggestions.some((item) => item.kind === 'path' && item.label === 'src/' && item.insertText === 'c/')).toBe(true);
 
+    const gitAddPathContext = deriveTerminalMobileKeyboardContext({
+      state: { line: 'git add -p RE', desynced: false, historyIndex: null },
+      workingDirAbs: '/workspace',
+    });
+    const gitAddPathSuggestions = buildTerminalMobileKeyboardSuggestions({
+      context: gitAddPathContext,
+      history: [],
+      pathEntries: [
+        { name: 'README.md', path: '/workspace/README.md', isDirectory: false },
+        { name: 'src', path: '/workspace/src', isDirectory: true },
+      ],
+      packageScripts: [],
+    });
+    expect(gitAddPathSuggestions.some((item) => item.kind === 'path' && item.label === 'README.md')).toBe(true);
+
     const vimPathContext = deriveTerminalMobileKeyboardContext({
       state: { line: 'vim RE', desynced: false, historyIndex: null },
       workingDirAbs: '/workspace',
@@ -177,6 +239,36 @@ describe('terminalMobileKeyboard', () => {
     });
 
     expect(vimPathSuggestions.some((item) => item.kind === 'path' && item.label === 'README.md' && item.insertText === 'ADME.md ')).toBe(true);
+
+    const vimEmptyPathContext = deriveTerminalMobileKeyboardContext({
+      state: { line: 'vim ', desynced: false, historyIndex: null },
+      workingDirAbs: '/workspace',
+    });
+    const vimEmptyPathSuggestions = buildTerminalMobileKeyboardSuggestions({
+      context: vimEmptyPathContext,
+      history: [],
+      pathEntries: [
+        { name: 'src', path: '/workspace/src', isDirectory: true },
+        { name: 'README.md', path: '/workspace/README.md', isDirectory: false },
+      ],
+      packageScripts: [],
+    });
+    expect(vimEmptyPathSuggestions[0]?.label).toBe('README.md');
+
+    const cdEmptyPathContext = deriveTerminalMobileKeyboardContext({
+      state: { line: 'cd ', desynced: false, historyIndex: null },
+      workingDirAbs: '/workspace',
+    });
+    const cdEmptyPathSuggestions = buildTerminalMobileKeyboardSuggestions({
+      context: cdEmptyPathContext,
+      history: [],
+      pathEntries: [
+        { name: 'README.md', path: '/workspace/README.md', isDirectory: false },
+        { name: 'src', path: '/workspace/src', isDirectory: true },
+      ],
+      packageScripts: [],
+    });
+    expect(cdEmptyPathSuggestions[0]?.label).toBe('src/');
   });
 
   it('suggests package scripts for common script runners', () => {
