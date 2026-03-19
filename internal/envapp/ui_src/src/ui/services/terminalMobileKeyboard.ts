@@ -2,9 +2,9 @@ import type { MobileKeyboardSuggestionItem } from '@floegence/floe-webapp-core/u
 import { expandHomeDisplayPath, normalizeAbsolutePath } from '../utils/askFlowerPath';
 import {
   TERMINAL_COMMAND_CATALOG,
-  TERMINAL_PATH_COMMAND_CONTEXTS,
   type TerminalCommandCatalogArgumentEntry,
   type TerminalCommandCatalogEntry,
+  type TerminalCommandCatalogPathPreference,
 } from './terminalMobileKeyboardCatalog';
 
 export type TerminalMobileKeyboardDraftState = {
@@ -54,12 +54,20 @@ export type TerminalMobileKeyboardPathQuery = {
   displayDirPrefix: string;
   prefix: string;
   showHidden: boolean;
+  preference: TerminalCommandCatalogPathPreference | null;
 };
 
 type TerminalSnippetEntry = {
   id: string;
   label: string;
   detail: string;
+};
+
+type TerminalCatalogTraversalState = {
+  scope: string[];
+  entries: readonly TerminalCommandCatalogArgumentEntry[];
+  activeEntry: TerminalCommandCatalogEntry | TerminalCommandCatalogArgumentEntry;
+  pendingValueOption: TerminalCommandCatalogArgumentEntry | null;
 };
 
 const MAX_HISTORY_ITEMS = 24;
@@ -237,7 +245,7 @@ export function deriveTerminalMobileKeyboardContext(params: {
       workingDirAbs: params.workingDirAbs,
       agentHomePathAbs: params.agentHomePathAbs,
       command,
-      firstArgument,
+      tokens,
       currentToken,
       trailingSpace,
     }),
@@ -330,60 +338,122 @@ function buildCatalogSuggestions(
   }
 
   const matchedCommand = TERMINAL_COMMAND_CATALOG.find((entry) => entry.command === context.command);
-  if (!matchedCommand?.subcommands) {
+  if (!matchedCommand) {
     return [];
   }
 
-  const candidates = resolveCatalogArgumentCandidates(matchedCommand, context);
-  if (!candidates) {
+  const traversal = resolveCatalogTraversalState(matchedCommand, {
+    tokens: context.tokens,
+    trailingSpace: context.trailingSpace,
+  });
+  if (!traversal || traversal.pendingValueOption) {
     return [];
   }
 
   const prefix = context.currentToken.toLowerCase();
   const scopedCandidates = prefix
-    ? candidates.entries
-    : candidates.entries.filter((entry) => entry.featured ?? true);
+    ? traversal.entries
+    : traversal.entries.filter((entry) => entry.featured ?? true);
 
-  return scopedCandidates
+  return sortCatalogArgumentEntries(scopedCandidates, prefix)
     .filter((entry) => !prefix || entry.name.toLowerCase().startsWith(prefix))
     .map((entry) => {
       const kind = entry.kind ?? 'subcommand';
       return {
-        id: `${kind}:${matchedCommand.command}:${candidates.scope.join(':')}:${entry.name}`,
+        id: `${kind}:${matchedCommand.command}:${traversal.scope.join(':')}:${entry.name}`,
         label: entry.name,
-        detail: entry.detail,
+        detail: formatCatalogSuggestionDetail(entry),
         kind,
         insertText: entry.name.slice(context.currentToken.length) + ' ',
       };
     });
 }
 
-function resolveCatalogArgumentCandidates(
+function resolveCatalogTraversalState(
   commandEntry: TerminalCommandCatalogEntry,
-  context: TerminalMobileKeyboardContext,
-): {
-  scope: string[];
-  entries: readonly TerminalCommandCatalogArgumentEntry[];
-} | null {
-  const argumentTokens = context.tokens.slice(1);
-  const consumedTokens = context.trailingSpace ? argumentTokens : argumentTokens.slice(0, -1);
+  params: {
+    tokens: string[];
+    trailingSpace: boolean;
+  },
+): TerminalCatalogTraversalState | null {
+  const argumentTokens = params.tokens.slice(1);
+  const consumedTokens = params.trailingSpace ? argumentTokens : argumentTokens.slice(0, -1);
 
   let entries = commandEntry.subcommands ?? [];
   const scope: string[] = [];
+  let activeEntry: TerminalCommandCatalogEntry | TerminalCommandCatalogArgumentEntry = commandEntry;
+  let pendingValueOption: TerminalCommandCatalogArgumentEntry | null = null;
 
   for (const token of consumedTokens) {
-    const matched = entries.find((entry) => entry.name === token);
-    if (!matched?.subcommands) {
+    if (pendingValueOption) {
+      pendingValueOption = null;
+      continue;
+    }
+
+    const optionMatch = entries.find((entry) => isCatalogOptionEntry(entry) && entry.name === token);
+    if (optionMatch) {
+      if (optionMatch.takesValue) {
+        pendingValueOption = optionMatch;
+      }
+      continue;
+    }
+
+    const subcommandMatch = entries.find((entry) => !isCatalogOptionEntry(entry) && entry.name === token);
+    if (!subcommandMatch) {
       return null;
     }
-    scope.push(matched.name);
-    entries = matched.subcommands;
+
+    scope.push(subcommandMatch.name);
+    activeEntry = subcommandMatch;
+    entries = subcommandMatch.subcommands ?? [];
   }
 
   return {
     scope,
     entries,
+    activeEntry,
+    pendingValueOption,
   };
+}
+
+function isCatalogOptionEntry(entry: TerminalCommandCatalogArgumentEntry): boolean {
+  return entry.kind === 'option';
+}
+
+function sortCatalogArgumentEntries(
+  entries: readonly TerminalCommandCatalogArgumentEntry[],
+  prefix: string,
+): TerminalCommandCatalogArgumentEntry[] {
+  const optionPrefix = prefix.startsWith('-');
+  const hasPrefix = prefix.length > 0;
+
+  return [...entries].sort((left, right) => {
+    const leftIsOption = isCatalogOptionEntry(left);
+    const rightIsOption = isCatalogOptionEntry(right);
+
+    if (leftIsOption !== rightIsOption) {
+      if (optionPrefix) return leftIsOption ? -1 : 1;
+      if (hasPrefix) return leftIsOption ? 1 : -1;
+      return leftIsOption ? 1 : -1;
+    }
+
+    const leftFeatured = left.featured ? 1 : 0;
+    const rightFeatured = right.featured ? 1 : 0;
+    if (leftFeatured !== rightFeatured) {
+      return rightFeatured - leftFeatured;
+    }
+
+    if (left.name.length !== right.name.length) {
+      return left.name.length - right.name.length;
+    }
+
+    return left.name.localeCompare(right.name);
+  });
+}
+
+function formatCatalogSuggestionDetail(entry: TerminalCommandCatalogArgumentEntry): string {
+  if (!entry.valueHint) return entry.detail;
+  return `${entry.detail} (${entry.valueHint})`;
 }
 
 function buildScriptSuggestions(
@@ -434,6 +504,9 @@ function buildPathSuggestions(
   const sorted = [...entries]
     .sort((left, right) => {
       if (left.isDirectory !== right.isDirectory) {
+        if (pathQuery.preference === 'files') {
+          return left.isDirectory ? 1 : -1;
+        }
         return left.isDirectory ? -1 : 1;
       }
       return left.name.localeCompare(right.name);
@@ -497,7 +570,7 @@ function resolveTerminalMobileKeyboardPathQuery(params: {
   workingDirAbs: string;
   agentHomePathAbs?: string | null;
   command: string;
-  firstArgument: string;
+  tokens: string[];
   currentToken: string;
   trailingSpace: boolean;
 }): TerminalMobileKeyboardPathQuery | null {
@@ -505,17 +578,18 @@ function resolveTerminalMobileKeyboardPathQuery(params: {
   if (!workingDirAbs) return null;
 
   let rawToken = params.currentToken;
-  const commandContext = params.command === 'git' && params.firstArgument
-    ? `git ${params.firstArgument}`
-    : params.command;
+  const matchedCommand = TERMINAL_COMMAND_CATALOG.find((entry) => entry.command === params.command);
+  const traversal = matchedCommand
+    ? resolveCatalogTraversalState(matchedCommand, {
+      tokens: params.tokens,
+      trailingSpace: params.trailingSpace,
+    })
+    : null;
   const completingCommandToken = !params.trailingSpace
-    && !params.firstArgument
+    && params.tokens.length <= 1
     && params.currentToken === params.command;
-  const contextExpectsPath = !completingCommandToken && TERMINAL_PATH_COMMAND_CONTEXTS.has(commandContext);
-
-  const expectsPath = contextExpectsPath
-    || looksLikePathToken(rawToken)
-    || (params.trailingSpace && TERMINAL_PATH_COMMAND_CONTEXTS.has(commandContext));
+  const traversalExpectsPath = resolveCatalogPathExpectation(traversal, completingCommandToken);
+  const expectsPath = traversalExpectsPath || looksLikePathToken(rawToken);
 
   if (!expectsPath) return null;
 
@@ -537,6 +611,7 @@ function resolveTerminalMobileKeyboardPathQuery(params: {
       displayDirPrefix: '',
       prefix: '',
       showHidden,
+      preference: resolveCatalogPathPreference(traversal),
     };
   }
 
@@ -550,6 +625,7 @@ function resolveTerminalMobileKeyboardPathQuery(params: {
       displayDirPrefix: displayDirPrefix || '/',
       prefix,
       showHidden,
+      preference: resolveCatalogPathPreference(traversal),
     };
   }
 
@@ -566,6 +642,7 @@ function resolveTerminalMobileKeyboardPathQuery(params: {
       displayDirPrefix,
       prefix,
       showHidden,
+      preference: resolveCatalogPathPreference(traversal),
     };
   }
 
@@ -579,6 +656,7 @@ function resolveTerminalMobileKeyboardPathQuery(params: {
       displayDirPrefix,
       prefix,
       showHidden,
+      preference: resolveCatalogPathPreference(traversal),
     };
   }
 
@@ -588,7 +666,32 @@ function resolveTerminalMobileKeyboardPathQuery(params: {
     displayDirPrefix: '',
     prefix: rawToken,
     showHidden,
+    preference: resolveCatalogPathPreference(traversal),
   };
+}
+
+function resolveCatalogPathExpectation(
+  traversal: TerminalCatalogTraversalState | null,
+  completingCommandToken: boolean,
+): boolean {
+  if (!traversal) return false;
+  if (traversal.pendingValueOption) {
+    return Boolean(traversal.pendingValueOption.pathContext);
+  }
+  if (completingCommandToken) {
+    return false;
+  }
+  return Boolean(traversal.activeEntry.pathContext);
+}
+
+function resolveCatalogPathPreference(
+  traversal: TerminalCatalogTraversalState | null,
+): TerminalCommandCatalogPathPreference | null {
+  if (!traversal) return null;
+  if (traversal.pendingValueOption?.pathPreference) {
+    return traversal.pendingValueOption.pathPreference;
+  }
+  return traversal.activeEntry.pathPreference ?? null;
 }
 
 export function resolveTerminalMobileKeyboardPathBase(params: {
