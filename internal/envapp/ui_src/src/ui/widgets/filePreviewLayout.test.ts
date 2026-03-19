@@ -13,15 +13,20 @@ describe('file preview wiring', () => {
   it('keeps shared preview content and switches between dialog and floating window by layout', () => {
     const contentSrc = read('./FilePreviewContent.tsx');
     const docxPaneSrc = read('./DocxPreviewPane.tsx');
+    const codePreviewSrc = read('./CodePreviewPane.tsx');
     const surfaceSrc = read('./FilePreviewSurface.tsx');
 
     expect(contentSrc).toContain("import { DocxPreviewPane } from './DocxPreviewPane';");
+    expect(contentSrc).toContain("import { CodePreviewPane } from './CodePreviewPane';");
     expect(contentSrc).toContain('<DocxPreviewPane bytes={props.bytes} />');
+    expect(contentSrc).toContain("<CodePreviewPane code={props.text ?? ''} language={props.descriptor.language} />");
     expect(docxPaneSrc).toContain("import('docx-preview')");
     expect(docxPaneSrc).toContain('ResizeObserver');
     expect(docxPaneSrc).toContain('inWrapper: true');
     expect(docxPaneSrc).toContain('Fit');
     expect(docxPaneSrc).toContain('Zoom in docx preview');
+    expect(codePreviewSrc).toContain('Syntax highlighting disabled for large files.');
+    expect(codePreviewSrc).toContain('resolveCodeHighlightTheme');
     expect(contentSrc).toContain('Loading file...');
     expect(contentSrc).toContain('Failed to load file');
 
@@ -45,10 +50,13 @@ describe('file preview wiring', () => {
 
     expect(controllerSrc).toContain("export function createFilePreviewController");
     expect(controllerSrc).toContain("openReadFileStreamChannel");
+    expect(controllerSrc).toContain("describeFilePreview");
+    expect(controllerSrc).toContain("descriptor: previewDescriptor");
     expect(controllerSrc).toContain("workbook.xlsx.load");
 
     expect(contextSrc).toContain("export function useFilePreviewContext()");
     expect(hostSrc).toContain('<FilePreviewSurface');
+    expect(hostSrc).toContain('descriptor={filePreview.controller.descriptor()}');
     expect(hostSrc).toContain('buildFilePreviewAskFlowerIntent');
 
     expect(shellSrc).toContain("import { createFilePreviewController } from './widgets/createFilePreviewController';");

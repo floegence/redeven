@@ -40,6 +40,48 @@ html.dark {
     0 1px 2px rgba(2, 6, 23, 0.24);
 }
 
+
+.code-preview-pane__html > .shiki,
+.code-preview-pane__plain {
+  margin: 0;
+  min-height: 100%;
+  font-family: 'Iosevka', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.code-preview-pane__plain {
+  background: color-mix(in srgb, var(--muted) 28%, var(--background));
+}
+
+.code-preview-pane__html > .shiki {
+  min-width: fit-content;
+  padding: 0.75rem 0;
+  overflow: visible !important;
+}
+
+.code-preview-pane__html > .shiki code {
+  display: block;
+  counter-reset: code-preview-line;
+}
+
+.code-preview-pane__with-line-numbers .line {
+  position: relative;
+  display: block;
+  min-height: 1.45rem;
+  padding: 0 1rem 0 4.5rem;
+}
+
+.code-preview-pane__with-line-numbers .line::before {
+  position: absolute;
+  left: 0;
+  width: 3.25rem;
+  padding-right: 0.75rem;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, transparent);
+  content: counter(code-preview-line);
+  counter-increment: code-preview-line;
+  text-align: right;
+  user-select: none;
+}
+
 .git-browser-selection-surface {
   border-color: var(--git-browser-selection-border);
   background: var(--git-browser-selection-bg);

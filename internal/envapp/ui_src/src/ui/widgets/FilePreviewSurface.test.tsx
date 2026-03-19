@@ -69,7 +69,7 @@ describe('FilePreviewSurface', () => {
         open
         onOpenChange={() => undefined}
         item={{ id: '/workspace/demo.txt', name: 'demo.txt', path: '/workspace/demo.txt', type: 'file' }}
-        mode="text"
+        descriptor={{ mode: 'text', textPresentation: 'plain', wrapText: true }}
         text="selected line"
         onAskFlower={onAskFlower}
         onDownload={onDownload}
@@ -106,7 +106,7 @@ describe('FilePreviewSurface', () => {
         open
         onOpenChange={() => undefined}
         item={{ id: '/workspace/demo.pdf', name: 'demo.pdf', path: '/workspace/demo.pdf', type: 'file' }}
-        mode="unsupported"
+        descriptor={{ mode: 'unsupported' }}
         message="This file is too large to preview."
         truncated
       />
