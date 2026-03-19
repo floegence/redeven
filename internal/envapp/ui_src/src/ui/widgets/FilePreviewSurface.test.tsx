@@ -93,8 +93,10 @@ describe('FilePreviewSurface', () => {
     ), host);
 
     expect(host.querySelector('[data-testid="floating-window"]')).toBeTruthy();
+    expect((host.querySelector('[data-testid="floating-window"]') as HTMLElement | null)?.className).toContain('[&>div>div:last-child]:!p-2');
     const footer = host.querySelector('[data-testid="file-preview-footer"]') as HTMLElement | null;
     expect(footer).toBeTruthy();
+    expect(footer?.className).toContain('w-full');
     expect(footer?.className).toContain('bg-primary/8');
     expect(footer?.textContent).toContain('Editing');
     expect(footer?.textContent).toContain('No local changes');
@@ -127,6 +129,8 @@ describe('FilePreviewSurface', () => {
         descriptor={{ mode: 'unsupported' }}
         message="This file is too large to preview."
         truncated
+        onAskFlower={() => undefined}
+        onDownload={() => undefined}
         closeConfirmOpen
         closeConfirmMessage="Discard unsaved changes in demo.pdf and close the preview?"
       />
@@ -135,11 +139,17 @@ describe('FilePreviewSurface', () => {
     const dialog = host.querySelector('[data-testid="dialog"]');
     expect(dialog).toBeTruthy();
     expect(dialog?.className).toContain('h-[calc(100dvh-0.5rem)]');
+    expect(dialog?.className).toContain('[&>div:last-child]:!p-2');
     expect(host.textContent).toContain('/workspace/demo.pdf');
     const footer = host.querySelector('[data-testid="file-preview-footer"]') as HTMLElement | null;
     expect(footer).toBeTruthy();
+    expect(footer?.className).toContain('w-full');
+    expect(footer?.className).toContain('rounded-xl');
     expect(footer?.className).toContain('bg-warning/10');
     expect(footer?.textContent).toContain('Truncated preview');
+    const buttons = Array.from(host.querySelectorAll('button'));
+    expect(buttons.find((button) => button.textContent?.includes('Ask Flower'))?.className).toContain('h-8');
+    expect(buttons.find((button) => button.textContent?.includes('Download'))?.className).toContain('h-8');
     expect(host.textContent).toContain('This file is too large to preview.');
     expect(host.querySelector('[data-testid="confirm-dialog"]')).toBeTruthy();
   });

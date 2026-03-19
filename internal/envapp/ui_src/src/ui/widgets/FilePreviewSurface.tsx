@@ -85,6 +85,7 @@ export interface FilePreviewSurfaceProps {
 
 export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
   const layout = useLayout();
+  const isMobile = createMemo(() => layout.isMobile());
   const [viewport, setViewport] = createSignal(currentViewportSize());
   let previewContentEl: HTMLDivElement | undefined;
 
@@ -186,26 +187,43 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
       }}
     />
   );
+  const hasAskFlowerAction = () => Boolean(props.onAskFlower);
   const footer = (
-    <div data-testid="file-preview-footer" class={cn('border-t px-3 py-2', footerToneClass())}>
-      <div class="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex min-w-0 items-center gap-2">
+    <div
+      data-testid="file-preview-footer"
+      class={cn(
+        'w-full',
+        isMobile() ? 'rounded-xl border px-3 py-2.5 shadow-sm' : 'px-3 py-2',
+        footerToneClass(),
+      )}
+    >
+      <div class={cn('flex w-full', isMobile() ? 'flex-col gap-3' : 'flex-col gap-2 sm:flex-row sm:items-center sm:justify-between')}>
+        <div class={cn('min-w-0', isMobile() ? 'flex flex-col gap-1.5' : 'flex items-center gap-2')}>
           <span class={cn('shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]', footerBadgeClass())}>
             {footerStatus().label}
           </span>
           <Show when={footerStatus().detail}>
-            <span class={cn('min-w-0 truncate text-xs', footerDetailClass())}>
+            <span class={cn(isMobile() ? 'text-[11px] leading-4' : 'min-w-0 truncate text-xs', footerDetailClass())}>
               {footerStatus().detail}
             </span>
           </Show>
         </div>
 
-        <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+        <div
+          class={cn(
+            'gap-2',
+            isMobile()
+              ? hasAskFlowerAction()
+                ? 'grid grid-cols-2'
+                : 'grid grid-cols-1'
+              : 'flex w-full flex-col sm:w-auto sm:flex-row sm:justify-end',
+          )}
+        >
           <Show when={props.onAskFlower}>
             <Button
               size="sm"
               variant="outline"
-              class="w-full sm:w-auto"
+              class={cn(isMobile() ? 'h-8 w-full px-3 text-[11px] font-semibold' : 'w-full sm:w-auto')}
               disabled={!props.item || props.loading}
               onClick={() => {
                 const selectionText = String(props.selectedText ?? '').trim() || readSelectionTextFromPreview(previewContentEl);
@@ -219,7 +237,7 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
           <Button
             size="sm"
             variant="outline"
-            class="w-full sm:w-auto"
+            class={cn(isMobile() ? 'h-8 w-full px-3 text-[11px] font-semibold' : 'w-full sm:w-auto')}
             loading={props.downloadLoading}
             disabled={!props.item || props.loading}
             onClick={() => props.onDownload?.()}
@@ -234,7 +252,7 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
   return (
     <>
       <Show
-        when={layout.isMobile()}
+        when={isMobile()}
         fallback={(
           <PersistentFloatingWindow
             open={props.open}
@@ -248,6 +266,7 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
             class={cn(
               'file-preview-floating-window overflow-hidden rounded-md',
               '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:flex-col [&>div:nth-child(2)]:!overflow-hidden [&>div:nth-child(2)]:!p-0',
+              '[&>div>div:last-child]:!w-full [&>div>div:last-child]:!items-stretch [&>div>div:last-child]:!justify-stretch [&>div>div:last-child]:!gap-0 [&>div>div:last-child]:!p-2 sm:[&>div>div:last-child]:!p-3',
             )}
             footer={footer}
           >
@@ -264,6 +283,7 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
             'flex max-w-none flex-col overflow-hidden rounded-md p-0',
             '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
             '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:flex-col [&>div:nth-child(2)]:!overflow-hidden [&>div:nth-child(2)]:!p-0',
+            '[&>div:last-child]:!w-full [&>div:last-child]:!items-stretch [&>div:last-child]:!justify-stretch [&>div:last-child]:!gap-0 [&>div:last-child]:!p-2 sm:[&>div:last-child]:!p-3',
             'h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none',
           )}
         >

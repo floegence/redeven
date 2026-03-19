@@ -47,6 +47,9 @@ describe('file preview wiring', () => {
     expect(surfaceSrc).toContain('Download');
     expect(surfaceSrc).toContain('Unsaved changes');
     expect(surfaceSrc).toContain('Truncated preview');
+    expect(surfaceSrc).toContain('rounded-xl border px-3 py-2.5 shadow-sm');
+    expect(surfaceSrc).toContain("[&>div:last-child]:!w-full [&>div:last-child]:!items-stretch [&>div:last-child]:!justify-stretch [&>div:last-child]:!gap-0 [&>div:last-child]:!p-2 sm:[&>div:last-child]:!p-3");
+    expect(surfaceSrc).toContain("[&>div>div:last-child]:!w-full [&>div>div:last-child]:!items-stretch [&>div>div:last-child]:!justify-stretch [&>div>div:last-child]:!gap-0 [&>div>div:last-child]:!p-2 sm:[&>div>div:last-child]:!p-3");
     expect(surfaceSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
     expect(surfaceSrc).toContain('file-preview-floating-window');
   });
