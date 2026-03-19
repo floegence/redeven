@@ -6,18 +6,54 @@ ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 
 source "$SCRIPT_DIR/ui_package_common.sh"
 
+infer_target_from_tarball() {
+  local tarball_path="$1"
+  local field="$2"
+  local tarball_name
+
+  tarball_name="$(basename -- "$tarball_path")"
+  if [[ "$tarball_name" =~ ^redeven_([^_]+)_([^_]+)\.tar\.gz$ ]]; then
+    case "$field" in
+      goos)
+        printf '%s\n' "${BASH_REMATCH[1]}"
+        return 0
+        ;;
+      goarch)
+        printf '%s\n' "${BASH_REMATCH[2]}"
+        return 0
+        ;;
+    esac
+  fi
+
+  return 1
+}
+
 resolve_target_goos() {
+  local tarball_path="${1:-}"
   if [ -n "${REDEVEN_DESKTOP_BUNDLE_GOOS:-}" ]; then
     printf '%s\n' "${REDEVEN_DESKTOP_BUNDLE_GOOS}"
     return 0
+  fi
+  if [ -n "$tarball_path" ] && infer_target_from_tarball "$tarball_path" goos; then
+    return 0
+  fi
+  if ! command -v go >/dev/null 2>&1; then
+    ui_pkg_die "go not found (required to resolve desktop bundle GOOS)"
   fi
   go env GOOS
 }
 
 resolve_target_goarch() {
+  local tarball_path="${1:-}"
   if [ -n "${REDEVEN_DESKTOP_BUNDLE_GOARCH:-}" ]; then
     printf '%s\n' "${REDEVEN_DESKTOP_BUNDLE_GOARCH}"
     return 0
+  fi
+  if [ -n "$tarball_path" ] && infer_target_from_tarball "$tarball_path" goarch; then
+    return 0
+  fi
+  if ! command -v go >/dev/null 2>&1; then
+    ui_pkg_die "go not found (required to resolve desktop bundle GOARCH)"
   fi
   go env GOARCH
 }
@@ -89,12 +125,12 @@ bundle_from_source() {
 
 main() {
   local goos goarch binary_name bundle_dir bundle_path tarball_path
-  goos="$(resolve_target_goos)"
-  goarch="$(resolve_target_goarch)"
+  tarball_path="${REDEVEN_DESKTOP_AGENT_TARBALL:-}"
+  goos="$(resolve_target_goos "$tarball_path")"
+  goarch="$(resolve_target_goarch "$tarball_path")"
   binary_name="$(resolve_binary_name "$goos")"
   bundle_dir="$ROOT_DIR/desktop/.bundle/${goos}-${goarch}"
   bundle_path="$bundle_dir/$binary_name"
-  tarball_path="${REDEVEN_DESKTOP_AGENT_TARBALL:-}"
 
   ui_pkg_log "Preparing desktop bundled agent..."
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
