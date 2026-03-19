@@ -129,14 +129,6 @@ jobs:
             --dir dist/agent \
             --name "package-${{ matrix.goos }}-${{ matrix.goarch }}"
 
-      - name: Prepare bundled agent binary
-        run: |
-          set -euo pipefail
-          bundle_dir="desktop/.bundle/${{ matrix.goos }}-${{ matrix.goarch }}"
-          mkdir -p "${bundle_dir}"
-          tar -xzf "dist/agent/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz" -C "${bundle_dir}"
-          chmod +x "${bundle_dir}/redeven"
-
       - name: Desktop quality checks
         run: ./scripts/check_desktop.sh
 
@@ -190,7 +182,7 @@ jobs:
           REDEVEN_DESKTOP_MAC_IDENTITY: ${{ secrets.REDEVEN_DESKTOP_MAC_IDENTITY }}
           APPLE_API_KEY_ID: ${{ secrets.REDEVEN_DESKTOP_MAC_NOTARY_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.REDEVEN_DESKTOP_MAC_NOTARY_API_ISSUER }}
-          REDEVEN_DESKTOP_AGENT_BINARY: ${{ github.workspace }}/desktop/.bundle/${{ matrix.goos }}-${{ matrix.goarch }}/redeven
+          REDEVEN_DESKTOP_AGENT_TARBALL: ${{ github.workspace }}/dist/agent/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
           REDEVEN_DESKTOP_VERSION: ${{ github.ref_name }}
         run: |
           set -euo pipefail
