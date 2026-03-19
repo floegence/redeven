@@ -19,7 +19,7 @@ import {
 import { FlowerIcon } from './icons/FlowerIcon';
 import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Tooltip } from '@floegence/floe-webapp-core/ui';
+import { Dropdown, Tooltip, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import type { ClientObserverLike } from '@floegence/flowersec-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
@@ -86,6 +86,7 @@ const ACTIVE_TAB_STORAGE_KEY = 'redeven_envapp_active_tab';
 const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
 const EXECUTION_MODE_STORAGE_KEY = 'redeven_ai_execution_mode';
 const ACCESS_RESUME_TIMEOUT_MS = 15_000;
+const CHART_THEME_PREVIEW_VARS = ['--chart-1', '--chart-2', '--chart-3'] as const;
 
 type CreateThreadResponse = Readonly<{
   thread: Readonly<{
@@ -238,6 +239,21 @@ export function EnvAppShell() {
   const headerLogoSrc = createMemo(() =>
     `${import.meta.env.BASE_URL}${theme.resolvedTheme() === 'dark' ? 'logo-dark.svg' : 'logo.svg'}`,
   );
+  const activeChartThemeLabel = createMemo(() => theme.themePreset()?.displayName ?? 'Default');
+  const chartThemeItems = createMemo<DropdownItem[]>(() =>
+    theme.themePresets().map((preset) => ({
+      id: preset.name,
+      label: preset.displayName,
+    }))
+  );
+
+  const setChartThemePreset = (presetName: string) => {
+    const preset = theme.themePresets().find((item) => item.name === presetName);
+    if (!preset) return;
+    if (theme.themePreset()?.name === preset.name) return;
+    theme.setThemePreset(preset.name);
+    notify.info('Chart palette changed', `Switched to ${preset.displayName}`);
+  };
 
   widgetRegistry.registerAll(redevenDeckWidgets);
 
@@ -1436,6 +1452,15 @@ export function EnvAppShell() {
           notify.info('Theme changed', `Switched to ${nextTheme} theme`);
         },
       },
+      ...theme.themePresets().map((preset) => ({
+        id: `redeven.env.chartTheme.${preset.name}`,
+        title: `Use ${preset.displayName} Chart Palette`,
+        description: preset.description ?? `Apply the ${preset.displayName} chart palette.`,
+        category: 'View',
+        execute: () => {
+          setChartThemePreset(preset.name);
+        },
+      })),
       {
         id: 'redeven.env.savePreviewFile',
         title: 'Save Preview File',
@@ -1629,6 +1654,29 @@ export function EnvAppShell() {
           >
             <Search class="w-4 h-4" />
           </TopBarIconButton>
+          <Show when={theme.themePresets().length > 0}>
+            <Dropdown
+              trigger={(
+                <TopBarIconButton
+                  label="Chart palette"
+                  tooltip={topBarTooltip(`Chart palette: ${activeChartThemeLabel()}`)}
+                >
+                  <span class="flex items-center gap-1">
+                    {CHART_THEME_PREVIEW_VARS.map((variable) => (
+                      <span
+                        class="h-2 w-2 rounded-full border border-background/80"
+                        style={{ background: `var(${variable})` }}
+                      />
+                    ))}
+                  </span>
+                </TopBarIconButton>
+              )}
+              items={chartThemeItems()}
+              value={theme.themePreset()?.name}
+              onSelect={setChartThemePreset}
+              align="end"
+            />
+          </Show>
           <TopBarIconButton
             label="Toggle theme"
             tooltip={topBarTooltip('Toggle theme')}
