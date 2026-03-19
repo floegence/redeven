@@ -361,6 +361,7 @@ function createEnvContext(): EnvContextValue {
   return {
     env_id: () => 'env-1',
     env: envResource,
+    localRuntime: () => null,
     connect: async () => {},
     connecting: () => false,
     connectError: () => null,

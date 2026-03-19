@@ -96,6 +96,7 @@ Desktop settings live under the Electron user data directory, not inside the git
 - Env App hides `Update agent` in desktop-managed runs.
 - Env App keeps `Restart agent`.
 - The maintenance card explains that updates must come from a new desktop release.
+- Desktop-managed Env App windows can reopen selected serialized surfaces as dedicated BrowserWindow instances instead of in-page overlays. The first detached surfaces are `File Preview` and the AI page `File Browser`, both reconstructed from query-driven scene state while keeping the same Local UI + Flowersec session contract.
 - When agent logging is set to `log_level=debug`, Desktop records Chromium-side request diagnostics into `<state_dir>/diagnostics/desktop-events.jsonl`.
 - Desktop skips self-observation for the diagnostics API itself so the diagnostics panel reflects application traffic rather than its own refresh/export requests.
 

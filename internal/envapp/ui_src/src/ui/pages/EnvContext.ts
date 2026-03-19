@@ -1,5 +1,5 @@
 import { createContext, useContext, type Resource } from 'solid-js';
-import type { EnvironmentDetail } from '../services/controlplaneApi';
+import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
 import type { AskFlowerIntent } from './askFlowerIntent';
 
 export type EnvNavTab = 'deck' | 'terminal' | 'monitor' | 'files' | 'codespaces' | 'ports' | 'ai';
@@ -23,6 +23,7 @@ export type AskFlowerComposerAnchor = {
 export type EnvContextValue = {
   env_id: () => string;
   env: Resource<EnvironmentDetail | null>;
+  localRuntime: () => LocalRuntimeInfo | null;
   connect: () => Promise<void>;
   connecting: () => boolean;
   connectError: () => string | null;
