@@ -2,7 +2,7 @@ import { Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Button, Dialog, FloatingWindow } from '@floegence/floe-webapp-core/ui';
-import type { PreviewMode } from '../utils/filePreview';
+import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { FilePreviewContent } from './FilePreviewContent';
 
 const WINDOW_MARGIN_DESKTOP = 16;
@@ -70,7 +70,7 @@ export interface FilePreviewSurfaceProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   item?: FileItem | null;
-  mode: PreviewMode;
+  descriptor: FilePreviewDescriptor;
   text?: string;
   message?: string;
   objectUrl?: string;
@@ -106,7 +106,7 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
   const previewBody = () => (
     <FilePreviewContent
       item={props.item}
-      mode={props.mode}
+      descriptor={props.descriptor}
       text={props.text}
       message={props.message}
       objectUrl={props.objectUrl}

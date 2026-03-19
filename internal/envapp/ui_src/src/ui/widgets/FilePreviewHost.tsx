@@ -27,7 +27,7 @@ export function FilePreviewHost() {
       open={filePreview.controller.open()}
       onOpenChange={filePreview.controller.handleOpenChange}
       item={filePreview.controller.item()}
-      mode={filePreview.controller.mode()}
+      descriptor={filePreview.controller.descriptor()}
       text={filePreview.controller.text()}
       message={filePreview.controller.message()}
       objectUrl={filePreview.controller.objectUrl()}

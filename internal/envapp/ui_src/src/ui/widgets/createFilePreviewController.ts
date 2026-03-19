@@ -2,7 +2,14 @@ import { createSignal, onCleanup, type Accessor } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { Client } from '@floegence/flowersec-core';
 import type { JsonFrameChannel } from '@floegence/flowersec-core/streamio';
-import { getExtDot, isLikelyTextContent, mimeFromExtDot, previewModeByName, type PreviewMode } from '../utils/filePreview';
+import {
+  describeFilePreview,
+  FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR,
+  getExtDot,
+  isLikelyTextContent,
+  mimeFromExtDot,
+  type FilePreviewDescriptor,
+} from '../utils/filePreview';
 import { readFileBytesOnce, openReadFileStreamChannel } from '../utils/fileStreamReader';
 
 const MAX_PREVIEW_BYTES = 20 * 1024 * 1024;
@@ -26,7 +33,7 @@ function downloadBlob(params: { name: string; blob: Blob }) {
 export interface FilePreviewController {
   open: Accessor<boolean>;
   item: Accessor<FileItem | null>;
-  mode: Accessor<PreviewMode>;
+  descriptor: Accessor<FilePreviewDescriptor>;
   text: Accessor<string>;
   message: Accessor<string>;
   objectUrl: Accessor<string>;
@@ -48,7 +55,7 @@ export function createFilePreviewController(params: {
 }): FilePreviewController {
   const [previewOpen, setPreviewOpen] = createSignal(false);
   const [previewItem, setPreviewItem] = createSignal<FileItem | null>(null);
-  const [previewMode, setPreviewMode] = createSignal<PreviewMode>('text');
+  const [previewDescriptor, setPreviewDescriptor] = createSignal<FilePreviewDescriptor>(FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR);
   const [previewText, setPreviewText] = createSignal('');
   const [previewMessage, setPreviewMessage] = createSignal('');
   const [previewObjectUrl, setPreviewObjectUrl] = createSignal('');
@@ -117,8 +124,8 @@ export function createFilePreviewController(params: {
     setPreviewOpen(true);
     setPreviewLoading(true);
 
-    const baseMode = previewModeByName(item.name);
-    setPreviewMode(baseMode);
+    const baseDescriptor = describeFilePreview(item.name);
+    setPreviewDescriptor(baseDescriptor);
 
     const client = params.client();
     if (!client) {
@@ -128,16 +135,16 @@ export function createFilePreviewController(params: {
     }
 
     const fileSize = typeof item.size === 'number' ? item.size : undefined;
-    const maxBytes = baseMode === 'text' ? MAX_TEXT_PREVIEW_BYTES : MAX_PREVIEW_BYTES;
-    if (fileSize != null && fileSize > maxBytes && baseMode !== 'text') {
-      setPreviewMode('unsupported');
+    const maxBytes = baseDescriptor.mode === 'text' ? MAX_TEXT_PREVIEW_BYTES : MAX_PREVIEW_BYTES;
+    if (fileSize != null && fileSize > maxBytes && baseDescriptor.mode !== 'text') {
+      setPreviewDescriptor({ mode: 'unsupported' });
       setPreviewMessage('This file is too large to preview.');
       setPreviewLoading(false);
       return;
     }
 
     try {
-      const wantBytes = baseMode === 'binary' ? SNIFF_BYTES : maxBytes;
+      const wantBytes = baseDescriptor.mode === 'binary' ? SNIFF_BYTES : maxBytes;
       let bytes = emptyBytes();
       let truncated = false;
       let mime = 'application/octet-stream';
@@ -173,7 +180,7 @@ export function createFilePreviewController(params: {
         const extDot = getExtDot(item.name);
         mime = mimeFromExtDot(extDot) ?? 'application/octet-stream';
 
-        if (baseMode === 'text') {
+        if (baseDescriptor.mode === 'text') {
           setPreviewText(new TextDecoder('utf-8', { fatal: false }).decode(bytes));
           if (truncated) {
             setPreviewMessage('Showing partial content (truncated).');
@@ -190,10 +197,10 @@ export function createFilePreviewController(params: {
         }
       }
 
-      if (baseMode === 'image' || baseMode === 'pdf') {
+      if (baseDescriptor.mode === 'image' || baseDescriptor.mode === 'pdf') {
         if (truncated) {
-          setPreviewMode('unsupported');
-          setPreviewMessage(baseMode === 'image' ? 'This image is too large to preview.' : 'This PDF is too large to preview.');
+          setPreviewDescriptor({ mode: 'unsupported' });
+          setPreviewMessage(baseDescriptor.mode === 'image' ? 'This image is too large to preview.' : 'This PDF is too large to preview.');
           return;
         }
 
@@ -203,17 +210,17 @@ export function createFilePreviewController(params: {
         return;
       }
 
-      if (baseMode === 'docx') {
+      if (baseDescriptor.mode === 'docx') {
         if (truncated) {
-          setPreviewMode('unsupported');
+          setPreviewDescriptor({ mode: 'unsupported' });
           setPreviewMessage('This document is too large to preview.');
         }
         return;
       }
 
-      if (baseMode === 'xlsx') {
+      if (baseDescriptor.mode === 'xlsx') {
         if (truncated) {
-          setPreviewMode('unsupported');
+          setPreviewDescriptor({ mode: 'unsupported' });
           setPreviewMessage('This spreadsheet is too large to preview.');
           return;
         }
@@ -228,7 +235,7 @@ export function createFilePreviewController(params: {
 
         const worksheet = workbook.worksheets?.[0] ?? workbook.getWorksheet?.(1);
         if (!worksheet) {
-          setPreviewMode('unsupported');
+          setPreviewDescriptor({ mode: 'unsupported' });
           setPreviewMessage('No worksheet found in this file.');
           return;
         }
@@ -280,9 +287,9 @@ export function createFilePreviewController(params: {
         return;
       }
 
-      if (baseMode === 'binary') {
+      if (baseDescriptor.mode === 'binary') {
         if (isLikelyTextContent(bytes)) {
-          setPreviewMode('text');
+          setPreviewDescriptor(FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR);
           setPreviewText(new TextDecoder('utf-8', { fatal: false }).decode(bytes));
           if (truncated) {
             setPreviewMessage('Showing partial content (truncated).');
@@ -295,7 +302,7 @@ export function createFilePreviewController(params: {
     } catch (error) {
       if (seq !== previewReqSeq) return;
       setPreviewError(error instanceof Error ? error.message : String(error));
-      setPreviewMode('unsupported');
+      setPreviewDescriptor({ mode: 'unsupported' });
       setPreviewMessage('Failed to load file.');
     } finally {
       if (seq === previewReqSeq) {
@@ -339,7 +346,7 @@ export function createFilePreviewController(params: {
   return {
     open: previewOpen,
     item: previewItem,
-    mode: previewMode,
+    descriptor: previewDescriptor,
     text: previewText,
     message: previewMessage,
     objectUrl: previewObjectUrl,

@@ -1,12 +1,13 @@
 import { For, Show } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
-import type { PreviewMode } from '../utils/filePreview';
+import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { DocxPreviewPane } from './DocxPreviewPane';
+import { CodePreviewPane } from './CodePreviewPane';
 
 export interface FilePreviewContentProps {
   item?: FileItem | null;
-  mode: PreviewMode;
+  descriptor: FilePreviewDescriptor;
   text?: string;
   message?: string;
   objectUrl?: string;
@@ -21,6 +22,13 @@ export interface FilePreviewContentProps {
 
 export function FilePreviewContent(props: FilePreviewContentProps) {
   const resolvedError = () => props.error;
+  const isCodeText = () => props.descriptor.mode === 'text' && props.descriptor.textPresentation === 'code';
+  const isPlainText = () => props.descriptor.mode === 'text' && props.descriptor.textPresentation !== 'code';
+  const plainTextClass = () => (
+    props.descriptor.wrapText === false
+      ? 'p-3 font-mono text-xs leading-relaxed whitespace-pre select-text'
+      : 'p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words select-text'
+  );
 
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
@@ -34,13 +42,17 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
         }}
         class="relative flex-1 min-h-0 overflow-auto bg-background"
       >
-        <Show when={props.mode === 'text' && !resolvedError()}>
-          <pre class="p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words select-text">
+        <Show when={isCodeText() && !resolvedError()}>
+          <CodePreviewPane code={props.text ?? ''} language={props.descriptor.language} />
+        </Show>
+
+        <Show when={isPlainText() && !resolvedError()}>
+          <pre class={plainTextClass()}>
             {props.text}
           </pre>
         </Show>
 
-        <Show when={props.mode === 'image' && !resolvedError()}>
+        <Show when={props.descriptor.mode === 'image' && !resolvedError()}>
           <div class="flex h-full items-center justify-center p-3">
             <img
               src={props.objectUrl}
@@ -50,15 +62,15 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
           </div>
         </Show>
 
-        <Show when={props.mode === 'pdf' && !resolvedError()}>
+        <Show when={props.descriptor.mode === 'pdf' && !resolvedError()}>
           <iframe src={props.objectUrl} class="h-full w-full border-0" title="PDF preview" />
         </Show>
 
-        <Show when={props.mode === 'docx' && !resolvedError()}>
+        <Show when={props.descriptor.mode === 'docx' && !resolvedError()}>
           <DocxPreviewPane bytes={props.bytes} />
         </Show>
 
-        <Show when={props.mode === 'xlsx' && !resolvedError()}>
+        <Show when={props.descriptor.mode === 'xlsx' && !resolvedError()}>
           <div class="p-3">
             <Show when={props.xlsxSheetName}>
               <div class="mb-2 text-[11px] text-muted-foreground">Sheet: {props.xlsxSheetName}</div>
@@ -86,10 +98,10 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
           </div>
         </Show>
 
-        <Show when={(props.mode === 'binary' || props.mode === 'unsupported') && !resolvedError()}>
+        <Show when={(props.descriptor.mode === 'binary' || props.descriptor.mode === 'unsupported') && !resolvedError()}>
           <div class="p-4 text-sm text-muted-foreground">
             <div class="mb-1 font-medium text-foreground">
-              {props.mode === 'binary' ? 'Binary file' : 'Preview not available'}
+              {props.descriptor.mode === 'binary' ? 'Binary file' : 'Preview not available'}
             </div>
             <div class="text-xs">{props.message || 'Preview is not available.'}</div>
           </div>
