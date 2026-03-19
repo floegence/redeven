@@ -17,6 +17,7 @@ import {
   Terminal,
 } from '@floegence/floe-webapp-core/icons';
 import { FlowerIcon } from './icons/FlowerIcon';
+import { RedevenMark } from './icons/RedevenMark';
 import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
 import { Tooltip } from '@floegence/floe-webapp-core/ui';
 import type { ClientObserverLike } from '@floegence/flowersec-core';
@@ -1585,7 +1586,7 @@ export function EnvAppShell() {
                     tooltip={topBarTooltip('Back to dashboard')}
                     onClick={() => window.location.assign(`${consoleOrigin()}/dashboard`)}
                   >
-                    <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Redeven" class="w-6 h-6 object-contain" />
+                    <RedevenMark theme={theme.resolvedTheme()} class="w-6 h-6" aria-hidden="true" />
                   </TopBarIconButton>
                 }
                 activityItems={activityItems()}
