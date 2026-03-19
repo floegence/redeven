@@ -1,5 +1,11 @@
 import type { MobileKeyboardSuggestionItem } from '@floegence/floe-webapp-core/ui';
 import { expandHomeDisplayPath, normalizeAbsolutePath } from '../utils/askFlowerPath';
+import {
+  TERMINAL_COMMAND_CATALOG,
+  TERMINAL_PATH_COMMAND_CONTEXTS,
+  type TerminalCommandCatalogArgumentEntry,
+  type TerminalCommandCatalogEntry,
+} from './terminalMobileKeyboardCatalog';
 
 export type TerminalMobileKeyboardDraftState = {
   line: string;
@@ -22,6 +28,7 @@ export type TerminalMobileKeyboardSuggestionKind =
   | 'history'
   | 'command'
   | 'subcommand'
+  | 'option'
   | 'script'
   | 'path'
   | 'snippet';
@@ -49,12 +56,6 @@ export type TerminalMobileKeyboardPathQuery = {
   showHidden: boolean;
 };
 
-type TerminalCommandCatalogEntry = {
-  command: string;
-  detail: string;
-  subcommands?: Array<{ name: string; detail: string }>;
-};
-
 type TerminalSnippetEntry = {
   id: string;
   label: string;
@@ -63,132 +64,7 @@ type TerminalSnippetEntry = {
 
 const MAX_HISTORY_ITEMS = 24;
 const MAX_SUGGESTIONS = 12;
-
-const PATH_COMMAND_CONTEXTS = new Set([
-  'cat',
-  'cd',
-  'cp',
-  'git add',
-  'git checkout',
-  'git diff',
-  'git restore',
-  'less',
-  'ls',
-  'mkdir',
-  'more',
-  'mv',
-  'nano',
-  'open',
-  'pwd',
-  'rm',
-  'rmdir',
-  'tail',
-  'touch',
-  'tree',
-  'vi',
-  'vim',
-]);
-
-const COMMAND_CATALOG: TerminalCommandCatalogEntry[] = [
-  { command: 'cd', detail: 'Change directory' },
-  { command: 'ls', detail: 'List directory contents' },
-  { command: 'pwd', detail: 'Print working directory' },
-  { command: 'cat', detail: 'Print file contents' },
-  { command: 'mkdir', detail: 'Create directories' },
-  { command: 'touch', detail: 'Create files or update timestamps' },
-  { command: 'cp', detail: 'Copy files or directories' },
-  { command: 'mv', detail: 'Move or rename files or directories' },
-  { command: 'rm', detail: 'Remove files or directories' },
-  { command: 'grep', detail: 'Search text by pattern' },
-  { command: 'find', detail: 'Find files and directories' },
-  { command: 'rg', detail: 'Search recursively with ripgrep' },
-  {
-    command: 'git',
-    detail: 'Distributed version control',
-    subcommands: [
-      { name: 'status', detail: 'Show tracked changes' },
-      { name: 'diff', detail: 'Inspect current diff' },
-      { name: 'add', detail: 'Stage file changes' },
-      { name: 'restore', detail: 'Restore file contents' },
-      { name: 'checkout', detail: 'Switch branches or paths' },
-      { name: 'switch', detail: 'Switch branches' },
-      { name: 'pull', detail: 'Fetch and merge remote changes' },
-      { name: 'push', detail: 'Push local commits' },
-      { name: 'commit', detail: 'Create a commit' },
-      { name: 'branch', detail: 'Manage branches' },
-      { name: 'log', detail: 'Show commit history' },
-    ],
-  },
-  {
-    command: 'pnpm',
-    detail: 'Run project packages and scripts',
-    subcommands: [
-      { name: 'install', detail: 'Install dependencies' },
-      { name: 'dev', detail: 'Run the default dev script' },
-      { name: 'build', detail: 'Run the default build script' },
-      { name: 'test', detail: 'Run the default test script' },
-      { name: 'lint', detail: 'Run the default lint script' },
-    ],
-  },
-  {
-    command: 'npm',
-    detail: 'Run project packages and scripts',
-    subcommands: [
-      { name: 'install', detail: 'Install dependencies' },
-      { name: 'run', detail: 'Run a package script' },
-      { name: 'test', detail: 'Run the test script' },
-      { name: 'build', detail: 'Run the build script' },
-    ],
-  },
-  {
-    command: 'yarn',
-    detail: 'Run project packages and scripts',
-    subcommands: [
-      { name: 'install', detail: 'Install dependencies' },
-      { name: 'dev', detail: 'Run the default dev script' },
-      { name: 'build', detail: 'Run the default build script' },
-      { name: 'test', detail: 'Run the default test script' },
-    ],
-  },
-  {
-    command: 'bun',
-    detail: 'Run packages and scripts with Bun',
-    subcommands: [
-      { name: 'install', detail: 'Install dependencies' },
-      { name: 'run', detail: 'Run a script' },
-      { name: 'test', detail: 'Run tests' },
-    ],
-  },
-  {
-    command: 'python3',
-    detail: 'Run Python programs',
-    subcommands: [
-      { name: '-m', detail: 'Run a library module as a script' },
-      { name: '-V', detail: 'Show Python version' },
-    ],
-  },
-  {
-    command: 'go',
-    detail: 'Go toolchain',
-    subcommands: [
-      { name: 'test', detail: 'Run Go tests' },
-      { name: 'build', detail: 'Build packages and binaries' },
-      { name: 'run', detail: 'Run a main package' },
-      { name: 'fmt', detail: 'Format packages' },
-    ],
-  },
-  {
-    command: 'docker',
-    detail: 'Manage containers and images',
-    subcommands: [
-      { name: 'ps', detail: 'List containers' },
-      { name: 'images', detail: 'List images' },
-      { name: 'logs', detail: 'Show container logs' },
-      { name: 'exec', detail: 'Run a command in a container' },
-      { name: 'compose', detail: 'Use Docker Compose' },
-    ],
-  },
-];
+const FEATURED_COMMAND_SUGGESTION_LIMIT = 8;
 
 const SNIPPETS: TerminalSnippetEntry[] = [
   { id: 'snippet-git-status', label: 'git status', detail: 'Inspect current workspace changes' },
@@ -399,34 +275,9 @@ export function buildTerminalMobileKeyboardSuggestions(params: {
     if (suggestions.length >= MAX_SUGGESTIONS) return suggestions;
   }
 
-  if (params.context.tokens.length <= 1 && !params.context.trailingSpace) {
-    for (const entry of COMMAND_CATALOG) {
-      if (commandPrefix && !entry.command.startsWith(commandPrefix)) continue;
-      push({
-        id: `command:${entry.command}`,
-        label: entry.command,
-        detail: entry.detail,
-        kind: 'command',
-        insertText: entry.command.slice(params.context.currentToken.length) + ' ',
-      });
-      if (suggestions.length >= MAX_SUGGESTIONS) return suggestions;
-    }
-  } else {
-    const matchedCommand = COMMAND_CATALOG.find((entry) => entry.command === params.context.command);
-    const argumentPrefix = params.context.currentToken.toLowerCase();
-    if (matchedCommand?.subcommands) {
-      for (const subcommand of matchedCommand.subcommands) {
-        if (argumentPrefix && !subcommand.name.startsWith(argumentPrefix)) continue;
-        push({
-          id: `subcommand:${matchedCommand.command}:${subcommand.name}`,
-          label: subcommand.name,
-          detail: subcommand.detail,
-          kind: 'subcommand',
-          insertText: subcommand.name.slice(params.context.currentToken.length) + ' ',
-        });
-        if (suggestions.length >= MAX_SUGGESTIONS) return suggestions;
-      }
-    }
+  for (const entry of buildCatalogSuggestions(params.context, commandPrefix)) {
+    push(entry);
+    if (suggestions.length >= MAX_SUGGESTIONS) return suggestions;
   }
 
   for (const item of params.history) {
@@ -456,6 +307,83 @@ export function buildTerminalMobileKeyboardSuggestions(params: {
   }
 
   return suggestions;
+}
+
+function buildCatalogSuggestions(
+  context: TerminalMobileKeyboardContext,
+  commandPrefix: string,
+): TerminalMobileKeyboardSuggestion[] {
+  if (context.tokens.length <= 1 && !context.trailingSpace) {
+    const catalog = commandPrefix
+      ? TERMINAL_COMMAND_CATALOG
+      : TERMINAL_COMMAND_CATALOG.filter((entry) => entry.featured).slice(0, FEATURED_COMMAND_SUGGESTION_LIMIT);
+
+    return catalog
+      .filter((entry) => !commandPrefix || entry.command.toLowerCase().startsWith(commandPrefix))
+      .map((entry) => ({
+        id: `command:${entry.command}`,
+        label: entry.command,
+        detail: entry.detail,
+        kind: 'command' as const,
+        insertText: entry.command.slice(context.currentToken.length) + ' ',
+      }));
+  }
+
+  const matchedCommand = TERMINAL_COMMAND_CATALOG.find((entry) => entry.command === context.command);
+  if (!matchedCommand?.subcommands) {
+    return [];
+  }
+
+  const candidates = resolveCatalogArgumentCandidates(matchedCommand, context);
+  if (!candidates) {
+    return [];
+  }
+
+  const prefix = context.currentToken.toLowerCase();
+  const scopedCandidates = prefix
+    ? candidates.entries
+    : candidates.entries.filter((entry) => entry.featured ?? true);
+
+  return scopedCandidates
+    .filter((entry) => !prefix || entry.name.toLowerCase().startsWith(prefix))
+    .map((entry) => {
+      const kind = entry.kind ?? 'subcommand';
+      return {
+        id: `${kind}:${matchedCommand.command}:${candidates.scope.join(':')}:${entry.name}`,
+        label: entry.name,
+        detail: entry.detail,
+        kind,
+        insertText: entry.name.slice(context.currentToken.length) + ' ',
+      };
+    });
+}
+
+function resolveCatalogArgumentCandidates(
+  commandEntry: TerminalCommandCatalogEntry,
+  context: TerminalMobileKeyboardContext,
+): {
+  scope: string[];
+  entries: readonly TerminalCommandCatalogArgumentEntry[];
+} | null {
+  const argumentTokens = context.tokens.slice(1);
+  const consumedTokens = context.trailingSpace ? argumentTokens : argumentTokens.slice(0, -1);
+
+  let entries = commandEntry.subcommands ?? [];
+  const scope: string[] = [];
+
+  for (const token of consumedTokens) {
+    const matched = entries.find((entry) => entry.name === token);
+    if (!matched?.subcommands) {
+      return null;
+    }
+    scope.push(matched.name);
+    entries = matched.subcommands;
+  }
+
+  return {
+    scope,
+    entries,
+  };
 }
 
 function buildScriptSuggestions(
@@ -580,10 +508,14 @@ function resolveTerminalMobileKeyboardPathQuery(params: {
   const commandContext = params.command === 'git' && params.firstArgument
     ? `git ${params.firstArgument}`
     : params.command;
+  const completingCommandToken = !params.trailingSpace
+    && !params.firstArgument
+    && params.currentToken === params.command;
+  const contextExpectsPath = !completingCommandToken && TERMINAL_PATH_COMMAND_CONTEXTS.has(commandContext);
 
-  const expectsPath = PATH_COMMAND_CONTEXTS.has(commandContext)
+  const expectsPath = contextExpectsPath
     || looksLikePathToken(rawToken)
-    || (params.trailingSpace && PATH_COMMAND_CONTEXTS.has(commandContext));
+    || (params.trailingSpace && TERMINAL_PATH_COMMAND_CONTEXTS.has(commandContext));
 
   if (!expectsPath) return null;
 
