@@ -217,6 +217,14 @@ export function EnvAppShell() {
   const notify = useNotification();
   const filePreviewController = createFilePreviewController({
     client: () => protocol.client(),
+    rpc: () => rpc,
+    canWrite: () => Boolean(env()?.permissions?.can_write),
+    onSaved: (path) => {
+      notify.success('File saved', `${path} saved successfully.`);
+    },
+    onSaveError: (path, message) => {
+      notify.error('Save failed', `${path}: ${message}`);
+    },
   });
 
   type ProtocolConnectConfig = Parameters<typeof protocol.connect>[0];
@@ -1426,6 +1434,17 @@ export function EnvAppShell() {
           theme.toggleTheme();
           const nextTheme = theme.resolvedTheme() === 'light' ? 'dark' : 'light';
           notify.info('Theme changed', `Switched to ${nextTheme} theme`);
+        },
+      },
+      {
+        id: 'redeven.env.savePreviewFile',
+        title: 'Save Preview File',
+        description: 'Save the active preview editor',
+        category: 'File Preview',
+        keybind: 'mod+s',
+        icon: Files,
+        execute: () => {
+          void filePreviewController.saveCurrent();
         },
       },
       {
