@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,13 +21,21 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       </div>
     ) : null
   ),
+  Dialog: (props: any) => (
+    <Show when={props.open}>
+      <div data-testid="dialog" class={props.class}>
+        <div>{props.title}</div>
+        <div>{props.description}</div>
+        <div>{props.children}</div>
+        <div>{props.footer}</div>
+      </div>
+    </Show>
+  ),
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
-    ChevronDown: Icon,
-    ChevronUp: Icon,
     Folder: Icon,
     FileText: Icon,
     Paperclip: Icon,
@@ -34,6 +43,48 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Send: Icon,
   };
 });
+
+vi.mock('@floegence/floe-webapp-protocol', () => ({
+  useProtocol: () => ({
+    client: () => null,
+  }),
+}));
+
+vi.mock('./FilePreviewContext', () => ({
+  useFilePreviewContext: () => ({
+    openPreview: vi.fn(),
+  }),
+}));
+
+vi.mock('../services/detachedSurface', () => ({
+  buildDetachedFileBrowserSurface: (params: any) => params,
+  openDetachedSurfaceWindow: vi.fn(),
+}));
+
+vi.mock('../icons/FlowerIcon', () => ({
+  FlowerIcon: () => <span data-testid="flower-icon" />,
+}));
+
+vi.mock('../utils/filePreview', () => ({
+  describeFilePreview: () => ({ mode: 'text' }),
+  isLikelyTextContent: () => true,
+}));
+
+vi.mock('../utils/fileStreamReader', () => ({
+  readFileBytesOnce: vi.fn(),
+}));
+
+vi.mock('./PersistentFloatingWindow', () => ({
+  PersistentFloatingWindow: (props: any) => (
+    props.open ? (
+      <div data-testid="floating-window" class={props.class}>
+        <div>{props.title}</div>
+        <div>{props.children}</div>
+        <div>{props.footer}</div>
+      </div>
+    ) : null
+  ),
+}));
 
 vi.mock('../utils/askFlowerPath', () => ({
   resolveSuggestedWorkingDirAbsolute: ({ suggestedWorkingDirAbs }: { suggestedWorkingDirAbs?: string }) =>
@@ -125,5 +176,40 @@ describe('AskFlowerComposerWindow', () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledWith('deploy this change');
+  });
+
+  it('shows a selection preview when the highlighted context is clicked', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={{
+          ...baseIntent,
+          source: 'file_preview',
+          contextItems: [
+            {
+              kind: 'file_selection',
+              path: '/Users/demo/notes.md',
+              selection: 'const answer = 42;',
+              selectionChars: 18,
+            },
+          ],
+        }}
+        onClose={() => undefined}
+        onSend={async () => undefined}
+      />
+    ), host);
+
+    const selectionButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('selected content'),
+    );
+    expect(selectionButton).toBeTruthy();
+    selectionButton?.click();
+    await flushAsync();
+
+    expect(host.querySelector('[data-testid="dialog"]')).toBeTruthy();
+    expect(host.textContent).toContain('const answer = 42;');
   });
 });
