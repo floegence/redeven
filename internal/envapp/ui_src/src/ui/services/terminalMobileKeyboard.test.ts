@@ -63,23 +63,50 @@ describe('terminalMobileKeyboard', () => {
     expect(down.nextState.line).toBe('');
   });
 
-  it('suggests command completions for the first token', () => {
-    const context = deriveTerminalMobileKeyboardContext({
+  it('suggests richer command completions for the first token without leaking path suggestions', () => {
+    const gitContext = deriveTerminalMobileKeyboardContext({
       state: { line: 'gi', desynced: false, historyIndex: null },
       workingDirAbs: '/workspace',
     });
 
-    const suggestions = buildTerminalMobileKeyboardSuggestions({
-      context,
+    const gitSuggestions = buildTerminalMobileKeyboardSuggestions({
+      context: gitContext,
       history: [],
       pathEntries: [],
       packageScripts: [],
     });
 
-    expect(suggestions.some((item) => item.kind === 'command' && item.label === 'git' && item.insertText === 't ')).toBe(true);
+    expect(gitSuggestions.some((item) => item.kind === 'command' && item.label === 'git' && item.insertText === 't ')).toBe(true);
+
+    const unameContext = deriveTerminalMobileKeyboardContext({
+      state: { line: 'una', desynced: false, historyIndex: null },
+      workingDirAbs: '/workspace',
+    });
+    const unameSuggestions = buildTerminalMobileKeyboardSuggestions({
+      context: unameContext,
+      history: [],
+      pathEntries: [],
+      packageScripts: [],
+    });
+    expect(unameSuggestions.some((item) => item.kind === 'command' && item.label === 'uname' && item.insertText === 'me ')).toBe(true);
+
+    const vimContext = deriveTerminalMobileKeyboardContext({
+      state: { line: 'vi', desynced: false, historyIndex: null },
+      workingDirAbs: '/workspace',
+    });
+    const vimSuggestions = buildTerminalMobileKeyboardSuggestions({
+      context: vimContext,
+      history: [],
+      pathEntries: [
+        { name: 'src', path: '/workspace/src', isDirectory: true },
+      ],
+      packageScripts: [],
+    });
+    expect(vimSuggestions.some((item) => item.kind === 'command' && item.label === 'vim' && item.insertText === 'm ')).toBe(true);
+    expect(vimSuggestions.some((item) => item.kind === 'path')).toBe(false);
   });
 
-  it('suggests subcommands and path completions in context', () => {
+  it('suggests subcommands, options, nested command contexts, and path completions in context', () => {
     const gitContext = deriveTerminalMobileKeyboardContext({
       state: { line: 'git ch', desynced: false, historyIndex: null },
       workingDirAbs: '/workspace',
@@ -93,6 +120,30 @@ describe('terminalMobileKeyboard', () => {
     });
 
     expect(gitSuggestions.some((item) => item.kind === 'subcommand' && item.label === 'checkout')).toBe(true);
+
+    const dockerComposeContext = deriveTerminalMobileKeyboardContext({
+      state: { line: 'docker compose d', desynced: false, historyIndex: null },
+      workingDirAbs: '/workspace',
+    });
+    const dockerComposeSuggestions = buildTerminalMobileKeyboardSuggestions({
+      context: dockerComposeContext,
+      history: [],
+      pathEntries: [],
+      packageScripts: [],
+    });
+    expect(dockerComposeSuggestions.some((item) => item.kind === 'subcommand' && item.label === 'down' && item.insertText === 'own ')).toBe(true);
+
+    const unameOptionContext = deriveTerminalMobileKeyboardContext({
+      state: { line: 'uname -', desynced: false, historyIndex: null },
+      workingDirAbs: '/workspace',
+    });
+    const unameOptionSuggestions = buildTerminalMobileKeyboardSuggestions({
+      context: unameOptionContext,
+      history: [],
+      pathEntries: [],
+      packageScripts: [],
+    });
+    expect(unameOptionSuggestions.some((item) => item.kind === 'option' && item.label === '-a' && item.insertText === 'a ')).toBe(true);
 
     const cdContext = deriveTerminalMobileKeyboardContext({
       state: { line: 'cd sr', desynced: false, historyIndex: null },
@@ -110,6 +161,22 @@ describe('terminalMobileKeyboard', () => {
     });
 
     expect(pathSuggestions.some((item) => item.kind === 'path' && item.label === 'src/' && item.insertText === 'c/')).toBe(true);
+
+    const vimPathContext = deriveTerminalMobileKeyboardContext({
+      state: { line: 'vim RE', desynced: false, historyIndex: null },
+      workingDirAbs: '/workspace',
+    });
+    const vimPathSuggestions = buildTerminalMobileKeyboardSuggestions({
+      context: vimPathContext,
+      history: [],
+      pathEntries: [
+        { name: 'README.md', path: '/workspace/README.md', isDirectory: false },
+        { name: 'src', path: '/workspace/src', isDirectory: true },
+      ],
+      packageScripts: [],
+    });
+
+    expect(vimPathSuggestions.some((item) => item.kind === 'path' && item.label === 'README.md' && item.insertText === 'ADME.md ')).toBe(true);
   });
 
   it('suggests package scripts for common script runners', () => {
