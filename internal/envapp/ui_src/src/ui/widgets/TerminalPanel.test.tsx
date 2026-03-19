@@ -363,6 +363,8 @@ vi.mock('../services/terminalPreferences', () => ({
   ensureTerminalPreferencesInitialized: vi.fn(),
   TERMINAL_MIN_FONT_SIZE: 10,
   TERMINAL_MAX_FONT_SIZE: 20,
+  DEFAULT_TERMINAL_THEME: 'dark',
+  DEFAULT_TERMINAL_FONT_FAMILY_ID: 'monaco',
   useTerminalPreferences: () => ({
     userTheme: () => terminalPrefsState.userTheme,
     fontSize: () => terminalPrefsState.fontSize,

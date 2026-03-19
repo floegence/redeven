@@ -27,6 +27,7 @@ Agent side:
 
 - The agent serves Env App static assets under `/_redeven_proxy/env/*` via the local gateway.
 - The Env App UI talks to the agent using **Flowersec RPC/streams** (fs/terminal/monitor domains).
+- Terminal initializes new users with the `Dark` color theme and `Monaco` font while still preserving any saved per-user overrides.
 - On mobile, Terminal defaults to the built-in Floe keyboard, keeps taps from auto-triggering the system IME in Floe mode, and offers suggestion rails for recent commands, common commands, scripts, and paths. The default mobile input mode is chosen in Terminal settings as a strict `Floe Keyboard` / `System IME` toggle, while the More menu only exposes temporary show/hide actions when Floe Keyboard mode is active. Floe Keyboard stays as a bottom overlay, the terminal viewport aligns itself to the measured keyboard inset instead of reserving a separate blank spacer above it, and vertical touch drags on the terminal surface are translated into native terminal scrolling on mobile.
 
 ## Session bootstrap flow used by the Env App UI
