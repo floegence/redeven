@@ -5,7 +5,7 @@ import { Motion } from 'solid-motionone';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { Folder } from '@floegence/floe-webapp-core/icons';
 import { FileBrowser, type ContextMenuCallbacks, type FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { ConfirmDialog, DirectoryPicker, FileSavePicker, FloatingWindow } from '@floegence/floe-webapp-core/ui';
+import { ConfirmDialog, DirectoryPicker, FileSavePicker } from '@floegence/floe-webapp-core/ui';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from '../pages/EnvContext';
@@ -22,6 +22,7 @@ import {
 import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from '../utils/fileBrowserClipboard';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { InputDialog } from './InputDialog';
+import { PersistentFloatingWindow } from './PersistentFloatingWindow';
 import {
   extNoDot,
   fileNameFromPath,
@@ -655,12 +656,13 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
       </Show>
 
       {/* File browser floating window */}
-      <FloatingWindow
+      <PersistentFloatingWindow
         open={browserOpen()}
         onOpenChange={(open) => {
           setBrowserOpen(open);
         }}
         title="File Browser"
+        persistenceKey="chat-file-browser"
         defaultSize={{ width: 560, height: 520 }}
         minSize={{ width: 380, height: 340 }}
         zIndex={FILE_BROWSER_WINDOW_Z_INDEX}
@@ -692,7 +694,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
           </Show>
           <LoadingOverlay visible={loading()} message="Loading files..." />
         </div>
-      </FloatingWindow>
+      </PersistentFloatingWindow>
 
       <ConfirmDialog
         open={deleteDialogOpen()}

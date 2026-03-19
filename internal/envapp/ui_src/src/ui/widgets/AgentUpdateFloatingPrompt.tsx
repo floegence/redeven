@@ -1,8 +1,9 @@
 import { Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import { Button, FloatingWindow } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
 import { Refresh, X } from '@floegence/floe-webapp-core/icons';
 
 import type { AgentUpdatePromptMode } from '../maintenance/createAgentUpdatePromptCoordinator';
+import { PersistentFloatingWindow } from './PersistentFloatingWindow';
 
 const WINDOW_MARGIN_DESKTOP = 16;
 const WINDOW_MARGIN_MOBILE = 10;
@@ -131,12 +132,13 @@ export function AgentUpdateFloatingPrompt(props: AgentUpdateFloatingPromptProps)
 
   return (
     <Show when={props.open}>
-      <FloatingWindow
+      <PersistentFloatingWindow
         open
         onOpenChange={(next) => {
           if (!next) props.onClose();
         }}
         title={title()}
+        persistenceKey="agent-update-prompt"
         defaultPosition={position()}
         defaultSize={{ width: width(), height: WINDOW_HEIGHT }}
         minSize={{ width: width(), height: WINDOW_HEIGHT }}
@@ -190,7 +192,7 @@ export function AgentUpdateFloatingPrompt(props: AgentUpdateFloatingPromptProps)
             </div>
           </Show>
         </div>
-      </FloatingWindow>
+      </PersistentFloatingWindow>
     </Show>
   );
 }

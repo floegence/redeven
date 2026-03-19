@@ -1,10 +1,11 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import { Button, FloatingWindow } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
 import { ChevronDown, ChevronUp, Folder, FileText, Paperclip, Terminal, Send } from '@floegence/floe-webapp-core/icons';
 import type { AskFlowerComposerAnchor } from '../pages/EnvContext';
 import type { AskFlowerContextItem, AskFlowerIntent } from '../pages/askFlowerIntent';
 import { resolveSuggestedWorkingDirAbsolute } from '../utils/askFlowerPath';
 import { syncLiveTextValue } from '../utils/liveTextValue';
+import { PersistentFloatingWindow } from './PersistentFloatingWindow';
 
 const WINDOW_VIEWPORT_MARGIN_DESKTOP = 12;
 const WINDOW_VIEWPORT_MARGIN_MOBILE = 8;
@@ -237,13 +238,14 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
   return (
     <Show when={props.open && props.intent} keyed>
       {(intent) => (
-        <FloatingWindow
+        <PersistentFloatingWindow
           open
           onOpenChange={(next) => {
             if (sending()) return;
             if (!next) props.onClose();
           }}
           title="Ask Flower"
+          persistenceKey="ask-flower-composer"
           defaultPosition={position()}
           defaultSize={windowSizing().defaultSize}
           minSize={windowSizing().minSize}
@@ -405,7 +407,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
               </Show>
             </div>
           </div>
-        </FloatingWindow>
+        </PersistentFloatingWindow>
       )}
     </Show>
   );
