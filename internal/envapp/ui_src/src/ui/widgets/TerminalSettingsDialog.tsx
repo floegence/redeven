@@ -1,7 +1,10 @@
 import { For, Show } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Button, Dialog, NumberInput } from '@floegence/floe-webapp-core/ui';
-import type { TerminalMobileInputMode } from '../services/terminalPreferences';
+import {
+  DEFAULT_TERMINAL_FONT_FAMILY_ID,
+  type TerminalMobileInputMode,
+} from '../services/terminalPreferences';
 
 type TerminalThemeOptionId = 'system' | 'dark' | 'light' | 'solarizedDark' | 'monokai' | 'tokyoNight';
 
@@ -43,7 +46,8 @@ export const TERMINAL_FONT_OPTIONS: Array<{ id: string; label: string; family: s
 ];
 
 export function resolveTerminalFontFamily(id: string): string {
-  return TERMINAL_FONT_OPTIONS.find((option) => option.id === id)?.family ?? TERMINAL_FONT_OPTIONS[0]!.family;
+  const fallback = TERMINAL_FONT_OPTIONS.find((option) => option.id === DEFAULT_TERMINAL_FONT_FAMILY_ID) ?? TERMINAL_FONT_OPTIONS[0]!;
+  return TERMINAL_FONT_OPTIONS.find((option) => option.id === id)?.family ?? fallback.family;
 }
 
 type TerminalSettingsDialogProps = {

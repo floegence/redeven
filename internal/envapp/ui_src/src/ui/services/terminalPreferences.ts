@@ -12,12 +12,16 @@ export const TERMINAL_MOBILE_INPUT_MODE_PERSIST_KEY = 'terminal:mobile_input_mod
 export const TERMINAL_MIN_FONT_SIZE = 10;
 export const TERMINAL_MAX_FONT_SIZE = 20;
 export type TerminalMobileInputMode = 'floe' | 'system';
+export const DEFAULT_TERMINAL_THEME = 'dark';
+export const DEFAULT_TERMINAL_FONT_SIZE = 12;
+export const DEFAULT_TERMINAL_FONT_FAMILY_ID = 'monaco';
+export const DEFAULT_TERMINAL_MOBILE_INPUT_MODE: TerminalMobileInputMode = 'floe';
 
 let initialized = false;
 let persistRef: PersistApi | null = null;
 
 const clampFontSize = (value: number) => {
-  if (!Number.isFinite(value)) return 12;
+  if (!Number.isFinite(value)) return DEFAULT_TERMINAL_FONT_SIZE;
   return Math.max(TERMINAL_MIN_FONT_SIZE, Math.min(TERMINAL_MAX_FONT_SIZE, Math.round(value)));
 };
 
@@ -25,32 +29,32 @@ const normalizeTerminalMobileInputMode = (value: unknown): TerminalMobileInputMo
   return String(value ?? '').trim() === 'system' ? 'system' : 'floe';
 };
 
-const [terminalUserTheme, setTerminalUserTheme] = createSignal<string>('system');
-const [terminalFontSize, setTerminalFontSize] = createSignal<number>(12);
-const [terminalFontFamilyId, setTerminalFontFamilyId] = createSignal<string>('iosevka');
-const [terminalMobileInputMode, setTerminalMobileInputMode] = createSignal<TerminalMobileInputMode>('floe');
+const [terminalUserTheme, setTerminalUserTheme] = createSignal<string>(DEFAULT_TERMINAL_THEME);
+const [terminalFontSize, setTerminalFontSize] = createSignal<number>(DEFAULT_TERMINAL_FONT_SIZE);
+const [terminalFontFamilyId, setTerminalFontFamilyId] = createSignal<string>(DEFAULT_TERMINAL_FONT_FAMILY_ID);
+const [terminalMobileInputMode, setTerminalMobileInputMode] = createSignal<TerminalMobileInputMode>(DEFAULT_TERMINAL_MOBILE_INPUT_MODE);
 
 export function ensureTerminalPreferencesInitialized(persist: PersistApi) {
   if (initialized) return;
   initialized = true;
   persistRef = persist;
 
-  const loadedTheme = persist.load<string>(TERMINAL_THEME_PERSIST_KEY, 'system');
-  setTerminalUserTheme((loadedTheme ?? '').trim() || 'system');
+  const loadedTheme = persist.load<string>(TERMINAL_THEME_PERSIST_KEY, DEFAULT_TERMINAL_THEME);
+  setTerminalUserTheme((loadedTheme ?? '').trim() || DEFAULT_TERMINAL_THEME);
 
-  const loadedSize = persist.load<number>(TERMINAL_FONT_SIZE_PERSIST_KEY, 12);
+  const loadedSize = persist.load<number>(TERMINAL_FONT_SIZE_PERSIST_KEY, DEFAULT_TERMINAL_FONT_SIZE);
   setTerminalFontSize(clampFontSize(loadedSize));
 
-  const loadedFamily = persist.load<string>(TERMINAL_FONT_FAMILY_PERSIST_KEY, 'iosevka');
-  setTerminalFontFamilyId((loadedFamily ?? '').trim() || 'iosevka');
+  const loadedFamily = persist.load<string>(TERMINAL_FONT_FAMILY_PERSIST_KEY, DEFAULT_TERMINAL_FONT_FAMILY_ID);
+  setTerminalFontFamilyId((loadedFamily ?? '').trim() || DEFAULT_TERMINAL_FONT_FAMILY_ID);
 
-  const loadedMobileInputMode = persist.load<TerminalMobileInputMode>(TERMINAL_MOBILE_INPUT_MODE_PERSIST_KEY, 'floe');
+  const loadedMobileInputMode = persist.load<TerminalMobileInputMode>(TERMINAL_MOBILE_INPUT_MODE_PERSIST_KEY, DEFAULT_TERMINAL_MOBILE_INPUT_MODE);
   setTerminalMobileInputMode(normalizeTerminalMobileInputMode(loadedMobileInputMode));
 }
 
 export function useTerminalPreferences() {
   const setUserTheme = (value: string) => {
-    const next = (value ?? '').trim() || 'system';
+    const next = (value ?? '').trim() || DEFAULT_TERMINAL_THEME;
     setTerminalUserTheme(next);
     persistRef?.debouncedSave(TERMINAL_THEME_PERSIST_KEY, next);
   };
@@ -62,7 +66,7 @@ export function useTerminalPreferences() {
   };
 
   const setFontFamily = (id: string) => {
-    const next = (id ?? '').trim() || 'iosevka';
+    const next = (id ?? '').trim() || DEFAULT_TERMINAL_FONT_FAMILY_ID;
     setTerminalFontFamilyId(next);
     persistRef?.debouncedSave(TERMINAL_FONT_FAMILY_PERSIST_KEY, next);
   };
