@@ -1,5 +1,4 @@
 import { Suspense, Show, createEffect, createMemo, lazy } from 'solid-js';
-import { Button } from '@floegence/floe-webapp-core/ui';
 import { isCodeEditorLanguageSupported, type CodeEditorApi } from '@floegence/floe-webapp-core/editor';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { CodePreviewPane } from './CodePreviewPane';
@@ -68,7 +67,6 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
       ? props.descriptor.language || 'plaintext'
       : 'text'
   ));
-  const showEditActions = createMemo(() => Boolean(props.canEdit));
 
   createEffect(() => {
     if (!shouldUseMonaco()) {
@@ -78,39 +76,11 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
 
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
-      <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <div class="min-w-0">
-          <div class="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">{languageLabel()}</div>
-          <div class="text-xs text-muted-foreground">{statusText()}</div>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <Show when={showEditActions() && !props.editing}>
-            <Button size="sm" variant="outline" onClick={() => props.onStartEdit?.()}>
-              Edit
-            </Button>
-          </Show>
-
-          <Show when={showEditActions() && props.editing}>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={props.saving || (!props.dirty && !(props.saveError ?? '').trim())}
-              onClick={() => props.onDiscard?.()}
-            >
-              Discard
-            </Button>
-            <Button
-              size="sm"
-              variant="default"
-              loading={props.saving}
-              disabled={!props.dirty}
-              onClick={() => props.onSave?.()}
-            >
-              Save
-            </Button>
-          </Show>
-        </div>
+      <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-muted-foreground">
+        <span class="rounded-full border border-border/80 px-2 py-0.5 text-[10px] font-mono uppercase tracking-[0.08em] text-foreground/80">
+          {languageLabel()}
+        </span>
+        <span class="min-w-0 truncate text-xs">{statusText()}</span>
       </div>
 
       <Show when={(props.saveError ?? '').trim()}>
