@@ -14,11 +14,17 @@ import {
   type DesktopPreferences,
 } from './desktopPreferences';
 import { buildDesktopAgentArgs, buildDesktopAgentEnvironment } from './desktopLaunch';
+import { defaultDesktopStateStorePath, DesktopStateStore } from './desktopStateStore';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import { isAllowedAppNavigation } from './navigation';
 import { resolveBrowserPreloadPath, resolveBundledAgentPath, resolveSettingsPreloadPath } from './paths';
 import { settingsPageDataURL } from './settingsPage';
+import {
+  applyRestoredWindowState,
+  attachDesktopWindowStatePersistence,
+  restoreBrowserWindowBounds,
+} from './windowState';
 import { resolveDesktopWindowSpec } from './windowSpec';
 import { applyDesktopWindowTheme, buildDesktopWindowChromeOptions, defaultDesktopWindowThemeSnapshot } from './windowChrome';
 import {
@@ -27,6 +33,14 @@ import {
   type DesktopSettingsDraft,
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
+import {
+  DESKTOP_STATE_GET_CHANNEL,
+  DESKTOP_STATE_KEYS_CHANNEL,
+  DESKTOP_STATE_REMOVE_CHANNEL,
+  DESKTOP_STATE_SET_CHANNEL,
+  normalizeDesktopStateKey,
+  normalizeDesktopStateSetPayload,
+} from '../shared/stateIPC';
 import {
   REPORT_DESKTOP_WINDOW_THEME_CHANNEL,
   normalizeDesktopWindowThemeSnapshot,
@@ -41,7 +55,18 @@ const childWindows = new Set<BrowserWindow>();
 const namedChildWindows = new Map<string, BrowserWindow>();
 let blockedLaunch: LaunchBlockedReport | null = null;
 let desktopPreferencesCache: DesktopPreferences | null = null;
+let desktopStateStoreCache: DesktopStateStore | null = null;
 const desktopDiagnostics = new DesktopDiagnosticsRecorder();
+const windowStateCleanup = new Map<BrowserWindow, () => void>();
+
+const SETTINGS_WINDOW_STATE_KEY = 'settings';
+
+const SETTINGS_WINDOW_SPEC = {
+  width: 760,
+  height: 820,
+  minWidth: 720,
+  minHeight: 720,
+} as const;
 
 function preferencesPaths() {
   return defaultDesktopPreferencesPaths(app.getPath('userData'));
@@ -49,6 +74,27 @@ function preferencesPaths() {
 
 function preferencesCodec() {
   return createSafeStorageSecretCodec(safeStorage);
+}
+
+function desktopStateStore(): DesktopStateStore {
+  if (!desktopStateStoreCache) {
+    desktopStateStoreCache = new DesktopStateStore(defaultDesktopStateStorePath(app.getPath('userData')));
+  }
+  return desktopStateStoreCache;
+}
+
+function registerWindowStatePersistence(win: BrowserWindow, key: string): void {
+  const dispose = attachDesktopWindowStatePersistence(win, desktopStateStore(), key);
+  windowStateCleanup.set(win, dispose);
+}
+
+function cleanupWindowStatePersistence(win: BrowserWindow): void {
+  const dispose = windowStateCleanup.get(win);
+  if (!dispose) {
+    return;
+  }
+  windowStateCleanup.delete(win);
+  dispose();
 }
 
 async function loadDesktopPreferencesCached(): Promise<DesktopPreferences> {
@@ -109,11 +155,18 @@ async function openSettingsWindow(draft?: DesktopSettingsDraft, errorMessage = '
   const currentDraft = draft ?? desktopPreferencesToDraft(await loadDesktopPreferencesCached());
 
   if (!settingsWindow) {
+    const restoredState = desktopStateStore().getWindowState(SETTINGS_WINDOW_STATE_KEY);
+    const restoredBounds = restoreBrowserWindowBounds(SETTINGS_WINDOW_SPEC, desktopStateStore(), SETTINGS_WINDOW_STATE_KEY);
+    const restoredPosition = restoredBounds.x === undefined || restoredBounds.y === undefined
+      ? {}
+      : { x: restoredBounds.x, y: restoredBounds.y };
+
     settingsWindow = new BrowserWindow({
-      width: 760,
-      height: 820,
-      minWidth: 720,
-      minHeight: 720,
+      ...restoredPosition,
+      width: restoredBounds.width,
+      height: restoredBounds.height,
+      minWidth: SETTINGS_WINDOW_SPEC.minWidth,
+      minHeight: SETTINGS_WINDOW_SPEC.minHeight,
       show: false,
       title: 'Redeven Desktop Settings',
       parent: mainWindow ?? undefined,
@@ -127,7 +180,10 @@ async function openSettingsWindow(draft?: DesktopSettingsDraft, errorMessage = '
         spellcheck: false,
       },
     });
+    applyRestoredWindowState(settingsWindow, restoredState);
+    registerWindowStatePersistence(settingsWindow, SETTINGS_WINDOW_STATE_KEY);
     settingsWindow.on('closed', () => {
+      cleanupWindowStatePersistence(settingsWindow!);
       settingsWindow = null;
     });
     settingsWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -223,11 +279,13 @@ function focusAuxiliaryWindow(win: BrowserWindow): void {
   win.focus();
 }
 
-function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameName = ''): BrowserWindow {
+function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameName = '', explicitWindowStateKey = ''): BrowserWindow {
   const spec = resolveDesktopWindowSpec(targetURL, Boolean(parent));
   const attachToParent = Boolean(parent) && spec.attachToParent !== false;
   const actualParent = attachToParent ? parent : undefined;
   const trimmedFrameName = String(frameName ?? '').trim();
+  const windowStateKey = String(explicitWindowStateKey ?? '').trim()
+    || (trimmedFrameName ? `window:${trimmedFrameName}` : parent ? 'window:child' : 'window:main');
   if (trimmedFrameName) {
     const existing = namedChildWindows.get(trimmedFrameName);
     if (existing && !existing.isDestroyed()) {
@@ -241,9 +299,15 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameNam
   }
 
   const windowRole = parent ? (attachToParent ? 'child' : 'detached') : 'main';
+  const restoredState = desktopStateStore().getWindowState(windowStateKey);
+  const restoredBounds = restoreBrowserWindowBounds(spec, desktopStateStore(), windowStateKey);
+  const restoredPosition = restoredBounds.x === undefined || restoredBounds.y === undefined
+    ? {}
+    : { x: restoredBounds.x, y: restoredBounds.y };
   const win = new BrowserWindow({
-    width: spec.width,
-    height: spec.height,
+    ...restoredPosition,
+    width: restoredBounds.width,
+    height: restoredBounds.height,
     minWidth: spec.minWidth,
     minHeight: spec.minHeight,
     show: false,
@@ -258,6 +322,8 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameNam
       spellcheck: false,
     },
   });
+  applyRestoredWindowState(win, restoredState);
+  registerWindowStatePersistence(win, windowStateKey);
 
   const { webContents } = win;
   webContents.setWindowOpenHandler(({ url, frameName: nextFrameName }) => {
@@ -306,6 +372,7 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameNam
   });
   win.on('closed', () => {
     void desktopDiagnostics.recordLifecycle('window_closed', 'browser window closed', { role: windowRole });
+    cleanupWindowStatePersistence(win);
     childWindows.delete(win);
     if (trimmedFrameName && namedChildWindows.get(trimmedFrameName) === win) {
       namedChildWindows.delete(trimmedFrameName);
@@ -380,7 +447,7 @@ async function showMainWindow(): Promise<void> {
     return;
   }
 
-  mainWindow = createBrowserWindow(targetURL);
+  mainWindow = createBrowserWindow(targetURL, undefined, '', 'window:main');
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -437,6 +504,28 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', () => {
     focusMainWindow();
+  });
+
+  ipcMain.on(DESKTOP_STATE_GET_CHANNEL, (event, key) => {
+    const cleanKey = normalizeDesktopStateKey(key);
+    event.returnValue = cleanKey ? desktopStateStore().getRendererItem(cleanKey) : null;
+  });
+  ipcMain.on(DESKTOP_STATE_SET_CHANNEL, (event, payload) => {
+    const normalized = normalizeDesktopStateSetPayload(payload);
+    if (normalized) {
+      desktopStateStore().setRendererItem(normalized.key, normalized.value);
+    }
+    event.returnValue = null;
+  });
+  ipcMain.on(DESKTOP_STATE_REMOVE_CHANNEL, (event, key) => {
+    const cleanKey = normalizeDesktopStateKey(key);
+    if (cleanKey) {
+      desktopStateStore().removeRendererItem(cleanKey);
+    }
+    event.returnValue = null;
+  });
+  ipcMain.on(DESKTOP_STATE_KEYS_CHANNEL, (event) => {
+    event.returnValue = desktopStateStore().rendererKeys();
   });
 
   ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (_event, draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> => {

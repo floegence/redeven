@@ -3,6 +3,7 @@ import { CommandPalette } from '@floegence/floe-webapp-core/ui';
 import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { EnvAppShell } from './EnvAppShell';
 import { redevenV1Contract } from './protocol/redeven_v1';
+import { createUIStorageAdapter, isDesktopStateStorageAvailable } from './services/uiStorage';
 import { TerminalSessionsLifecycleSync } from './services/terminalSessionsLifecycleSync';
 import { REDEVEN_DECK_LAYOUT_IDS, redevenDeckPresets } from './deck/redevenDeckPresets';
 import { envChartThemePresets } from './chartThemePresets';
@@ -17,11 +18,19 @@ function readSessionStorage(key: string): string {
 }
 
 const envID = readSessionStorage('redeven_env_public_id');
-const storageNamespace = envID ? `redeven-envapp:${envID}` : 'redeven-envapp';
-const deckStorageKey = envID ? `deck:${envID}` : 'deck';
+const desktopStateStorage = isDesktopStateStorageAvailable();
+const storageNamespace = desktopStateStorage
+  ? 'redeven-envapp:desktop'
+  : envID ? `redeven-envapp:${envID}` : 'redeven-envapp';
+const deckStorageKey = desktopStateStorage
+  ? 'deck:desktop'
+  : envID ? `deck:${envID}` : 'deck';
 
 const floeConfig = {
-  storage: { namespace: storageNamespace },
+  storage: {
+    namespace: storageNamespace,
+    adapter: createUIStorageAdapter(),
+  },
   // Users frequently type in Terminal/Editor; command palette should always be available (Cmd/Ctrl+K).
   commands: { ignoreWhenTyping: false },
   theme: {

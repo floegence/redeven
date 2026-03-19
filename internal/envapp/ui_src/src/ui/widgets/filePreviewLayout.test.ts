@@ -36,10 +36,11 @@ describe('file preview wiring', () => {
     expect(contentSrc).toContain('Loading file...');
     expect(contentSrc).toContain('Failed to load file');
 
-    expect(surfaceSrc).toContain("import { Button, ConfirmDialog, Dialog, FloatingWindow } from '@floegence/floe-webapp-core/ui';");
+    expect(surfaceSrc).toContain("import { Button, ConfirmDialog, Dialog } from '@floegence/floe-webapp-core/ui';");
+    expect(surfaceSrc).toContain("import { PersistentFloatingWindow } from './PersistentFloatingWindow';");
     expect(surfaceSrc).toContain('layout.isMobile()');
     expect(surfaceSrc).toContain('<Dialog');
-    expect(surfaceSrc).toContain('<FloatingWindow');
+    expect(surfaceSrc).toContain('<PersistentFloatingWindow');
     expect(surfaceSrc).toContain('<ConfirmDialog');
     expect(surfaceSrc).toContain('Ask Flower');
     expect(surfaceSrc).toContain('Download');

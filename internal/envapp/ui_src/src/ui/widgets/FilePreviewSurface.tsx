@@ -1,10 +1,11 @@
 import { Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Button, ConfirmDialog, Dialog, FloatingWindow } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { FilePreviewContent } from './FilePreviewContent';
+import { PersistentFloatingWindow } from './PersistentFloatingWindow';
 
 const WINDOW_MARGIN_DESKTOP = 16;
 const WINDOW_DEFAULT_WIDTH = 1040;
@@ -176,10 +177,11 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
       <Show
         when={layout.isMobile()}
         fallback={(
-          <FloatingWindow
+          <PersistentFloatingWindow
             open={props.open}
             onOpenChange={props.onOpenChange}
             title={title()}
+            persistenceKey="file-preview"
             defaultSize={desktopSizing().defaultSize}
             minSize={desktopSizing().minSize}
             maxSize={desktopSizing().maxSize}
@@ -191,7 +193,7 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
             footer={footer}
           >
             {previewBody()}
-          </FloatingWindow>
+          </PersistentFloatingWindow>
         )}
       >
         <Dialog
