@@ -126,6 +126,31 @@ afterEach(() => {
 });
 
 describe('AskFlowerComposerWindow', () => {
+  it('keeps the Flower message in the scroll region and docks the user composer at the bottom', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={baseIntent}
+        onClose={() => undefined}
+        onSend={async () => undefined}
+      />
+    ), host);
+
+    const scrollRegion = host.querySelector('[data-testid="ask-flower-scroll-region"]');
+    const composerDock = host.querySelector('[data-testid="ask-flower-composer-dock"]');
+    const flowerIcon = host.querySelector('[data-testid="flower-icon"]');
+    const textarea = host.querySelector('textarea');
+
+    expect(scrollRegion).toBeTruthy();
+    expect(composerDock).toBeTruthy();
+    expect(textarea && composerDock?.contains(textarea)).toBe(true);
+    expect(textarea && scrollRegion?.contains(textarea)).toBe(false);
+    expect(flowerIcon?.parentElement?.className).toContain('rounded-full');
+  });
+
   it('submits the visible composed prompt through the send button', async () => {
     const onSend = vi.fn(async () => undefined);
     const host = document.createElement('div');
