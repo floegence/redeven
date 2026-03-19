@@ -6,6 +6,7 @@ import {
   type DesktopSettingsDraft,
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
+import { bootstrapDesktopWindowThemeReporter } from './windowTheme';
 
 contextBridge.exposeInMainWorld('redevenDesktopSettings', {
   save: (draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> =>
@@ -14,3 +15,5 @@ contextBridge.exposeInMainWorld('redevenDesktopSettings', {
     ipcRenderer.send(CANCEL_DESKTOP_SETTINGS_CHANNEL);
   },
 });
+
+bootstrapDesktopWindowThemeReporter();

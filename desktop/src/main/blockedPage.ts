@@ -92,7 +92,7 @@ export function buildBlockedPageHTML(report: LaunchBlockedReport): string {
         color: var(--text);
         display: grid;
         place-items: center;
-        padding: 24px;
+        padding: calc(24px + env(titlebar-area-height, 0px)) 24px 24px;
       }
       main {
         width: min(760px, 100%);
@@ -173,7 +173,7 @@ export function buildBlockedPageHTML(report: LaunchBlockedReport): string {
         line-height: 1.6;
       }
       @media (max-width: 640px) {
-        body { padding: 12px; }
+        body { padding: calc(12px + env(titlebar-area-height, 0px)) 12px 12px; }
         main { padding: 22px; border-radius: 18px; }
         .actions { flex-direction: column; }
         .button { width: 100%; }
