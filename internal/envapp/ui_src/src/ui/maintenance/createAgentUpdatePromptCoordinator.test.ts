@@ -72,6 +72,7 @@ function createCoordinatorHarness() {
       version: {
         currentPing: () => null,
         currentPingLoading: () => false,
+        currentProcessStartedAtMs: () => null,
         currentVersion,
         currentVersionValid: () => true,
         latestMeta,

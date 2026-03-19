@@ -16,6 +16,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/agent"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/localui"
+	localuiruntime "github.com/floegence/redeven-agent/internal/localui/runtime"
 	"github.com/floegence/redeven-agent/internal/lockfile"
 )
 
@@ -346,7 +347,7 @@ func (c *cli) runCmd(args []string) int {
 	}
 	defer func() { _ = lk.Release() }()
 
-	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), *desktopManaged, mode != runModeRemote, cfgPathClean, localui.RuntimeStatePath(cfgPathClean))); err != nil {
+	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), *desktopManaged, mode != runModeRemote, cfgPathClean, localuiruntime.RuntimeStatePath(cfgPathClean))); err != nil {
 		fmt.Fprintf(c.stderr, "failed to write agent lock metadata: %v\n", err)
 		return 1
 	}

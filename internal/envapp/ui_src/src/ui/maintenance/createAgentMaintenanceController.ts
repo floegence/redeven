@@ -36,6 +36,7 @@ type CreateAgentMaintenanceControllerArgs = Readonly<{
   canAdmin: Accessor<boolean>;
   controlplaneStatus: Accessor<string>;
   protocolStatus: Accessor<string>;
+  currentProcessStartedAtMs: Accessor<number | null>;
   currentVersion: Accessor<string>;
   connect: () => Promise<void>;
   notify: NotificationApi;
@@ -44,6 +45,11 @@ type CreateAgentMaintenanceControllerArgs = Readonly<{
   refetchEnvironment?: () => Promise<EnvironmentDetail | null>;
   getEnvironment?: (envId: string) => Promise<EnvironmentDetail | null>;
 }>;
+
+function normalizeProcessStartedAtMs(value: unknown): number | null {
+  const numeric = Number(value ?? Number.NaN);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
 
 export function createAgentMaintenanceController(args: CreateAgentMaintenanceControllerArgs): AgentMaintenanceController {
   const loadEnvironment = args.getEnvironment ?? getEnvironment;
@@ -125,7 +131,19 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
     setKind(nextKind);
     setTargetVersion(nextKind === 'upgrade' ? cleanTargetVersion : '');
 
-    const previousVersion = nextKind === 'upgrade' ? String(args.currentVersion() ?? '').trim() : '';
+    let baselinePing: SysPingResponse | null = null;
+    try {
+      baselinePing = await args.refetchCurrentVersion();
+    } catch {
+      // Ignore transient ping failures here and rely on the latest settled version/process markers.
+    }
+
+    const previousVersion = nextKind === 'upgrade'
+      ? String(baselinePing?.version ?? args.currentVersion() ?? '').trim()
+      : '';
+    const previousProcessStartedAtMs =
+      normalizeProcessStartedAtMs(baselinePing?.processStartedAtMs) ??
+      normalizeProcessStartedAtMs(args.currentProcessStartedAtMs());
 
     let started = false;
     try {
@@ -200,7 +218,7 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
         // Ignore transient control plane failures while maintenance is running.
       }
 
-      if (sawDisconnect && String(polledStatus() ?? '').trim().toLowerCase() === 'online') {
+      if (sawDisconnect && displayedStatus().trim().toLowerCase() === 'online') {
         try {
           await args.connect();
         } catch {
@@ -208,10 +226,18 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
         }
       }
 
-      if (sawDisconnect && String(args.protocolStatus() ?? '').trim() === 'connected') {
+      if (String(args.protocolStatus() ?? '').trim() === 'connected') {
         try {
           const ping = await args.refetchCurrentVersion();
           const nextVersion = String(ping?.version ?? '').trim();
+          const nextProcessStartedAtMs = normalizeProcessStartedAtMs(ping?.processStartedAtMs);
+          const restarted = previousProcessStartedAtMs !== null
+            ? nextProcessStartedAtMs !== null && nextProcessStartedAtMs !== previousProcessStartedAtMs
+            : sawDisconnect && nextProcessStartedAtMs !== null;
+          if (!restarted) {
+            await sleep(1500);
+            continue;
+          }
 
           setKind(null);
           setPolledStatus(null);

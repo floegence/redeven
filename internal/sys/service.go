@@ -53,19 +53,21 @@ type RestartResponse struct {
 }
 
 type Options struct {
-	AgentInstanceID string
-	Version         string
-	Commit          string
-	BuildTime       string
-	Upgrader        Upgrader
-	Restarter       Restarter
+	AgentInstanceID    string
+	ProcessStartedAtMs int64
+	Version            string
+	Commit             string
+	BuildTime          string
+	Upgrader           Upgrader
+	Restarter          Restarter
 }
 
 type Service struct {
-	agentInstanceID string
-	version         string
-	commit          string
-	buildTime       string
+	agentInstanceID    string
+	processStartedAtMs int64
+	version            string
+	commit             string
+	buildTime          string
 
 	upgrader  Upgrader
 	restarter Restarter
@@ -73,12 +75,13 @@ type Service struct {
 
 func NewService(opts Options) *Service {
 	return &Service{
-		agentInstanceID: strings.TrimSpace(opts.AgentInstanceID),
-		version:         strings.TrimSpace(opts.Version),
-		commit:          strings.TrimSpace(opts.Commit),
-		buildTime:       strings.TrimSpace(opts.BuildTime),
-		upgrader:        opts.Upgrader,
-		restarter:       opts.Restarter,
+		agentInstanceID:    strings.TrimSpace(opts.AgentInstanceID),
+		processStartedAtMs: opts.ProcessStartedAtMs,
+		version:            strings.TrimSpace(opts.Version),
+		commit:             strings.TrimSpace(opts.Commit),
+		buildTime:          strings.TrimSpace(opts.BuildTime),
+		upgrader:           opts.Upgrader,
+		restarter:          opts.Restarter,
 	}
 }
 
@@ -93,11 +96,12 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 
 	accessgate.RegisterTyped[pingReq, pingResp](r, TypeID_SYS_PING, gate, meta, accessgate.RPCAccessPublic, func(_ctx context.Context, _ *pingReq) (*pingResp, error) {
 		return &pingResp{
-			ServerTimeMs:    time.Now().UnixMilli(),
-			AgentInstanceID: s.agentInstanceID,
-			Version:         s.version,
-			Commit:          s.commit,
-			BuildTime:       s.buildTime,
+			ServerTimeMs:       time.Now().UnixMilli(),
+			AgentInstanceID:    s.agentInstanceID,
+			ProcessStartedAtMs: s.processStartedAtMs,
+			Version:            s.version,
+			Commit:             s.commit,
+			BuildTime:          s.buildTime,
 		}, nil
 	})
 
@@ -131,9 +135,10 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 type pingReq struct{}
 
 type pingResp struct {
-	ServerTimeMs    int64  `json:"server_time_ms,omitempty"`
-	AgentInstanceID string `json:"agent_instance_id,omitempty"`
-	Version         string `json:"version,omitempty"`
-	Commit          string `json:"commit,omitempty"`
-	BuildTime       string `json:"build_time,omitempty"`
+	ServerTimeMs       int64  `json:"server_time_ms,omitempty"`
+	AgentInstanceID    string `json:"agent_instance_id,omitempty"`
+	ProcessStartedAtMs int64  `json:"process_started_at_ms,omitempty"`
+	Version            string `json:"version,omitempty"`
+	Commit             string `json:"commit,omitempty"`
+	BuildTime          string `json:"build_time,omitempty"`
 }

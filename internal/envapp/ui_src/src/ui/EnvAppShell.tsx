@@ -818,6 +818,7 @@ export function EnvAppShell() {
     canAdmin,
     controlplaneStatus,
     protocolStatus: () => protocol.status(),
+    currentProcessStartedAtMs: agentVersionModel.currentProcessStartedAtMs,
     currentVersion: agentVersionModel.currentVersion,
     connect,
     notify,

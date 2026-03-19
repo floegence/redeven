@@ -1,27 +1,18 @@
-package localui
+package localuiruntime
 
 import (
-	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/floegence/redeven-agent/internal/diagnostics"
 )
 
-func discardLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
-
-func TestWriteRuntimeState(t *testing.T) {
+func TestWriteState(t *testing.T) {
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
-	err := writeRuntimeState(runtimePath, runtimeState{
+	err := WriteState(runtimePath, State{
 		LocalUIURLs:        []string{"http://127.0.0.1:43123/", "", "http://127.0.0.1:43123/"},
 		EffectiveRunMode:   "hybrid",
 		RemoteEnabled:      true,
@@ -31,7 +22,7 @@ func TestWriteRuntimeState(t *testing.T) {
 		PID:                42,
 	})
 	if err != nil {
-		t.Fatalf("writeRuntimeState() error = %v", err)
+		t.Fatalf("WriteState() error = %v", err)
 	}
 
 	body, err := os.ReadFile(runtimePath)
@@ -39,7 +30,7 @@ func TestWriteRuntimeState(t *testing.T) {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 
-	var state runtimeState
+	var state State
 	if err := json.Unmarshal(body, &state); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
@@ -57,74 +48,14 @@ func TestWriteRuntimeState(t *testing.T) {
 	}
 }
 
-func TestWriteRuntimeState_RejectsMissingLocalURL(t *testing.T) {
-	err := writeRuntimeState(filepath.Join(t.TempDir(), "runtime", "local-ui.json"), runtimeState{})
+func TestWriteStateRejectsMissingLocalURL(t *testing.T) {
+	err := WriteState(filepath.Join(t.TempDir(), "runtime", "local-ui.json"), State{})
 	if err == nil {
 		t.Fatalf("expected missing local_ui_url error")
 	}
 }
 
-func TestServerStartWritesAndCloseRemovesRuntimeState(t *testing.T) {
-	cfgPath := writeTestConfig(t)
-	bind, err := ParseBind("127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("ParseBind() error = %v", err)
-	}
-
-	s := &Server{
-		log:              discardLogger(),
-		bind:             bind,
-		configPath:       cfgPath,
-		stateDir:         filepath.Dir(cfgPath),
-		runtimeStatePath: localRuntimeStatePath(cfgPath),
-		version:          "dev",
-		gw:               newTestGateway(t, cfgPath),
-		diag: func() *diagnostics.Store {
-			store, err := diagnostics.New(diagnostics.Options{
-				Logger:   discardLogger(),
-				StateDir: filepath.Dir(cfgPath),
-				Source:   diagnostics.SourceAgent,
-			})
-			if err != nil {
-				t.Fatalf("diagnostics.New() error = %v", err)
-			}
-			return store
-		}(),
-		pending: make(map[string]pendingDirect),
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	if err := s.Start(ctx); err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
-
-	body, err := os.ReadFile(localRuntimeStatePath(cfgPath))
-	if err != nil {
-		t.Fatalf("ReadFile() error = %v", err)
-	}
-
-	var state runtimeState
-	if err := json.Unmarshal(body, &state); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v", err)
-	}
-	if state.LocalUIURL == "" || len(state.LocalUIURLs) == 0 {
-		t.Fatalf("unexpected runtime state: %#v", state)
-	}
-	if state.StateDir != filepath.Dir(cfgPath) || !state.DiagnosticsEnabled {
-		t.Fatalf("unexpected diagnostics metadata: %#v", state)
-	}
-
-	if err := s.Close(); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
-	if _, err := os.Stat(localRuntimeStatePath(cfgPath)); !os.IsNotExist(err) {
-		t.Fatalf("runtime state still exists, stat err = %v", err)
-	}
-}
-
-func TestLoadAttachableRuntimeState(t *testing.T) {
+func TestLoadAttachable(t *testing.T) {
 	server := httpTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/_redeven_proxy/env/" {
 			http.NotFound(w, r)
@@ -135,7 +66,7 @@ func TestLoadAttachableRuntimeState(t *testing.T) {
 	}))
 
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
-	if err := writeRuntimeState(runtimePath, runtimeState{
+	if err := WriteState(runtimePath, State{
 		LocalUIURLs:        []string{server.URL + "/", "https://example.com/"},
 		EffectiveRunMode:   "hybrid",
 		RemoteEnabled:      true,
@@ -144,12 +75,12 @@ func TestLoadAttachableRuntimeState(t *testing.T) {
 		DiagnosticsEnabled: true,
 		PID:                42,
 	}); err != nil {
-		t.Fatalf("writeRuntimeState() error = %v", err)
+		t.Fatalf("WriteState() error = %v", err)
 	}
 
-	state, err := LoadAttachableRuntimeState(runtimePath, time.Second)
+	state, err := LoadAttachable(runtimePath, time.Second)
 	if err != nil {
-		t.Fatalf("LoadAttachableRuntimeState() error = %v", err)
+		t.Fatalf("LoadAttachable() error = %v", err)
 	}
 	if state == nil {
 		t.Fatalf("expected attachable runtime state")
@@ -165,7 +96,7 @@ func TestLoadAttachableRuntimeState(t *testing.T) {
 	}
 }
 
-func TestWaitForAttachableRuntimeState(t *testing.T) {
+func TestWaitForAttachable(t *testing.T) {
 	server := httpTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/_redeven_proxy/env/" {
 			http.NotFound(w, r)
@@ -178,15 +109,15 @@ func TestWaitForAttachableRuntimeState(t *testing.T) {
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
 	go func() {
 		time.Sleep(150 * time.Millisecond)
-		_ = writeRuntimeState(runtimePath, runtimeState{
+		_ = WriteState(runtimePath, State{
 			LocalUIURLs:      []string{server.URL + "/"},
 			EffectiveRunMode: "local",
 		})
 	}()
 
-	state, err := WaitForAttachableRuntimeState(runtimePath, time.Second, 50*time.Millisecond, 200*time.Millisecond)
+	state, err := WaitForAttachable(runtimePath, time.Second, 50*time.Millisecond, 200*time.Millisecond)
 	if err != nil {
-		t.Fatalf("WaitForAttachableRuntimeState() error = %v", err)
+		t.Fatalf("WaitForAttachable() error = %v", err)
 	}
 	if state == nil {
 		t.Fatalf("expected runtime state to become attachable")
@@ -196,20 +127,31 @@ func TestWaitForAttachableRuntimeState(t *testing.T) {
 	}
 }
 
-func TestLoadAttachableRuntimeStateRejectsNonLoopbackURL(t *testing.T) {
+func TestLoadAttachableRejectsNonLoopbackURL(t *testing.T) {
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
-	if err := writeRuntimeState(runtimePath, runtimeState{
+	if err := WriteState(runtimePath, State{
 		LocalUIURL: "https://example.com/",
 	}); err != nil {
-		t.Fatalf("writeRuntimeState() error = %v", err)
+		t.Fatalf("WriteState() error = %v", err)
 	}
 
-	state, err := LoadAttachableRuntimeState(runtimePath, 100*time.Millisecond)
+	state, err := LoadAttachable(runtimePath, 100*time.Millisecond)
 	if err != nil {
-		t.Fatalf("LoadAttachableRuntimeState() error = %v", err)
+		t.Fatalf("LoadAttachable() error = %v", err)
 	}
 	if state != nil {
 		t.Fatalf("expected non-loopback runtime state to be rejected: %#v", state)
+	}
+}
+
+func TestSnapshotBindAddress(t *testing.T) {
+	snapshot := &Snapshot{LocalUIURL: "http://127.0.0.1:43123/"}
+	got, err := snapshot.BindAddress()
+	if err != nil {
+		t.Fatalf("BindAddress() error = %v", err)
+	}
+	if got != "127.0.0.1:43123" {
+		t.Fatalf("BindAddress() = %q", got)
 	}
 }
 

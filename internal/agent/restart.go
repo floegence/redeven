@@ -29,7 +29,7 @@ func (r *sysRestarter) StartRestart(_ctx context.Context, meta *session.Meta, _ 
 		return &syssvc.RestartResponse{OK: false, Message: "Windows is not supported for self-restart. Please restart manually."}, nil
 	}
 
-	exePath, _, err := resolveSelfExecPaths()
+	plan, err := resolveSelfExecPlan(a.runtimeStatePath)
 	if err != nil {
 		a.log.Warn("sys_restart: resolve self paths failed", "error", err)
 		return nil, &rpc.Error{Code: 500, Message: "failed to resolve agent executable path"}
@@ -56,10 +56,11 @@ func (r *sysRestarter) StartRestart(_ctx context.Context, meta *session.Meta, _ 
 	a.log.Info("sys_restart: started",
 		"user_public_id", userPublicID,
 		"channel_id", channelID,
-		"exe_path", exePath,
+		"exe_path", plan.exePath,
+		"local_ui_bind", plan.localUIBind,
 	)
 
-	go a.runSelfRestart(exePath, userPublicID, channelID)
+	go a.runSelfRestart(plan, userPublicID, channelID)
 
 	return &syssvc.RestartResponse{
 		OK:      true,
@@ -67,7 +68,7 @@ func (r *sysRestarter) StartRestart(_ctx context.Context, meta *session.Meta, _ 
 	}, nil
 }
 
-func (a *Agent) runSelfRestart(exePath string, userPublicID string, channelID string) {
+func (a *Agent) runSelfRestart(plan selfExecPlan, userPublicID string, channelID string) {
 	// Allow the RPC response to flush before we break active streams.
 	time.Sleep(restartDelay)
 
@@ -83,10 +84,11 @@ func (a *Agent) runSelfRestart(exePath string, userPublicID string, channelID st
 	a.log.Info("sys_restart: restarting",
 		"user_public_id", userPublicID,
 		"channel_id", channelID,
-		"exe_path", exePath,
+		"exe_path", plan.exePath,
+		"local_ui_bind", plan.localUIBind,
 	)
 
-	if err := syscall.Exec(exePath, os.Args, os.Environ()); err != nil {
+	if err := syscall.Exec(plan.exePath, plan.argv, os.Environ()); err != nil {
 		a.log.Error("sys_restart: exec failed",
 			"user_public_id", userPublicID,
 			"channel_id", channelID,

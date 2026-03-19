@@ -1,4 +1,4 @@
-package localui
+package localuiruntime
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-type runtimeState struct {
+type State struct {
 	LocalUIURL         string   `json:"local_ui_url,omitempty"`
 	LocalUIURLs        []string `json:"local_ui_urls,omitempty"`
 	EffectiveRunMode   string   `json:"effective_run_mode,omitempty"`
@@ -23,7 +23,7 @@ type runtimeState struct {
 	PID                int      `json:"pid,omitempty"`
 }
 
-type RuntimeStateSnapshot struct {
+type Snapshot struct {
 	LocalUIURL         string
 	LocalUIURLs        []string
 	EffectiveRunMode   string
@@ -42,18 +42,14 @@ func RuntimeStatePath(configPath string) string {
 	return filepath.Join(filepath.Dir(configPath), "runtime", "local-ui.json")
 }
 
-func localRuntimeStatePath(configPath string) string {
-	return RuntimeStatePath(configPath)
-}
-
-func writeRuntimeState(path string, state runtimeState) error {
+func WriteState(path string, state State) error {
 	cleanPath := strings.TrimSpace(path)
 	if cleanPath == "" {
 		return nil
 	}
 
 	state.LocalUIURL = strings.TrimSpace(state.LocalUIURL)
-	state.LocalUIURLs = compactRuntimeStrings(state.LocalUIURLs)
+	state.LocalUIURLs = compactStrings(state.LocalUIURLs)
 	if state.LocalUIURL == "" {
 		state.LocalUIURL = firstNonEmptyString(state.LocalUIURLs)
 	}
@@ -83,7 +79,7 @@ func writeRuntimeState(path string, state runtimeState) error {
 	return os.Rename(tmpPath, cleanPath)
 }
 
-func removeRuntimeState(path string) error {
+func RemoveState(path string) error {
 	cleanPath := strings.TrimSpace(path)
 	if cleanPath == "" {
 		return nil
@@ -98,7 +94,7 @@ func removeRuntimeState(path string) error {
 	return nil
 }
 
-func compactRuntimeStrings(values []string) []string {
+func compactStrings(values []string) []string {
 	if len(values) == 0 {
 		return nil
 	}
@@ -128,13 +124,13 @@ func firstNonEmptyString(values []string) string {
 	return ""
 }
 
-func parseRuntimeState(raw []byte) (*RuntimeStateSnapshot, error) {
-	var state runtimeState
+func parseState(raw []byte) (*Snapshot, error) {
+	var state State
 	if err := json.Unmarshal(raw, &state); err != nil {
 		return nil, err
 	}
 	state.LocalUIURL = strings.TrimSpace(state.LocalUIURL)
-	state.LocalUIURLs = compactRuntimeStrings(state.LocalUIURLs)
+	state.LocalUIURLs = compactStrings(state.LocalUIURLs)
 	if state.LocalUIURL == "" {
 		state.LocalUIURL = firstNonEmptyString(state.LocalUIURLs)
 	}
@@ -144,7 +140,7 @@ func parseRuntimeState(raw []byte) (*RuntimeStateSnapshot, error) {
 	if len(state.LocalUIURLs) == 0 {
 		state.LocalUIURLs = []string{state.LocalUIURL}
 	}
-	return &RuntimeStateSnapshot{
+	return &Snapshot{
 		LocalUIURL:         state.LocalUIURL,
 		LocalUIURLs:        append([]string(nil), state.LocalUIURLs...),
 		EffectiveRunMode:   strings.TrimSpace(state.EffectiveRunMode),
@@ -156,7 +152,7 @@ func parseRuntimeState(raw []byte) (*RuntimeStateSnapshot, error) {
 	}, nil
 }
 
-func loadRuntimeState(path string) (*RuntimeStateSnapshot, error) {
+func Load(path string) (*Snapshot, error) {
 	cleanPath := strings.TrimSpace(path)
 	if cleanPath == "" {
 		return nil, nil
@@ -168,14 +164,14 @@ func loadRuntimeState(path string) (*RuntimeStateSnapshot, error) {
 		}
 		return nil, err
 	}
-	snapshot, err := parseRuntimeState(body)
+	snapshot, err := parseState(body)
 	if err != nil {
 		return nil, nil
 	}
 	return snapshot, nil
 }
 
-func probeRuntimeURL(rawURL string, timeout time.Duration) bool {
+func probeURL(rawURL string, timeout time.Duration) bool {
 	baseURL := strings.TrimSpace(rawURL)
 	if baseURL == "" {
 		return false
@@ -214,8 +210,8 @@ func probeRuntimeURL(rawURL string, timeout time.Duration) bool {
 	return resp.StatusCode >= 200 && resp.StatusCode < 400
 }
 
-func LoadAttachableRuntimeState(path string, timeout time.Duration) (*RuntimeStateSnapshot, error) {
-	snapshot, err := loadRuntimeState(path)
+func LoadAttachable(path string, timeout time.Duration) (*Snapshot, error) {
+	snapshot, err := Load(path)
 	if err != nil || snapshot == nil {
 		return snapshot, err
 	}
@@ -224,25 +220,25 @@ func LoadAttachableRuntimeState(path string, timeout time.Duration) (*RuntimeSta
 		if candidateURL == "" {
 			continue
 		}
-		if probeRuntimeURL(candidateURL, timeout) {
+		if probeURL(candidateURL, timeout) {
 			snapshot.LocalUIURL = candidateURL
-			snapshot.LocalUIURLs = compactRuntimeStrings(append([]string{candidateURL}, snapshot.LocalUIURLs...))
+			snapshot.LocalUIURLs = compactStrings(append([]string{candidateURL}, snapshot.LocalUIURLs...))
 			return snapshot, nil
 		}
 	}
 	return nil, nil
 }
 
-func WaitForAttachableRuntimeState(path string, timeout time.Duration, pollInterval time.Duration, probeTimeout time.Duration) (*RuntimeStateSnapshot, error) {
+func WaitForAttachable(path string, timeout time.Duration, pollInterval time.Duration, probeTimeout time.Duration) (*Snapshot, error) {
 	if timeout <= 0 {
-		return LoadAttachableRuntimeState(path, probeTimeout)
+		return LoadAttachable(path, probeTimeout)
 	}
 	if pollInterval <= 0 {
 		pollInterval = 100 * time.Millisecond
 	}
 	deadline := time.Now().Add(timeout)
 	for {
-		snapshot, err := LoadAttachableRuntimeState(path, probeTimeout)
+		snapshot, err := LoadAttachable(path, probeTimeout)
 		if err != nil || snapshot != nil {
 			return snapshot, err
 		}
@@ -251,4 +247,20 @@ func WaitForAttachableRuntimeState(path string, timeout time.Duration, pollInter
 		}
 		time.Sleep(pollInterval)
 	}
+}
+
+func (s *Snapshot) BindAddress() (string, error) {
+	if s == nil {
+		return "", errors.New("nil runtime snapshot")
+	}
+	parsedURL, err := url.Parse(strings.TrimSpace(s.LocalUIURL))
+	if err != nil {
+		return "", err
+	}
+	host := strings.TrimSpace(parsedURL.Hostname())
+	port := strings.TrimSpace(parsedURL.Port())
+	if host == "" || port == "" {
+		return "", errors.New("missing local ui host or port")
+	}
+	return net.JoinHostPort(host, port), nil
 }

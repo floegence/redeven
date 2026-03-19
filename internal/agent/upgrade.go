@@ -5,7 +5,6 @@ import (
 	"context"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -71,7 +70,7 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 		return nil, err
 	}
 
-	exePath, installDir, err := resolveSelfExecPaths()
+	plan, err := resolveSelfExecPlan(a.runtimeStatePath)
 	if err != nil {
 		a.log.Warn("sys_upgrade: resolve self paths failed", "error", err)
 		return nil, &rpc.Error{Code: 500, Message: "failed to resolve agent executable path"}
@@ -98,12 +97,13 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 	a.log.Info("sys_upgrade: started",
 		"user_public_id", userPublicID,
 		"channel_id", channelID,
-		"exe_path", exePath,
-		"install_dir", installDir,
+		"exe_path", plan.exePath,
+		"install_dir", plan.installDir,
+		"local_ui_bind", plan.localUIBind,
 		"target_version", targetVersion,
 	)
 
-	go a.runSelfUpgrade(exePath, installDir, userPublicID, channelID, targetVersion)
+	go a.runSelfUpgrade(plan, userPublicID, channelID, targetVersion)
 
 	msg := "Upgrade started. The agent will restart shortly."
 	if targetVersion != "" {
@@ -112,27 +112,7 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 	return &syssvc.UpgradeResponse{OK: true, Message: msg}, nil
 }
 
-func resolveSelfExecPaths() (exePath string, installDir string, err error) {
-	exePath, err = os.Executable()
-	if err != nil {
-		return "", "", err
-	}
-	exePath = strings.TrimSpace(exePath)
-	if exePath == "" {
-		return "", "", os.ErrInvalid
-	}
-	if abs, absErr := filepath.Abs(exePath); absErr == nil && strings.TrimSpace(abs) != "" {
-		exePath = abs
-	}
-	exePath = filepath.Clean(exePath)
-	installDir = filepath.Clean(filepath.Dir(exePath))
-	if strings.TrimSpace(installDir) == "" {
-		return "", "", os.ErrInvalid
-	}
-	return exePath, installDir, nil
-}
-
-func (a *Agent) runSelfUpgrade(exePath string, installDir string, userPublicID string, channelID string, targetVersion string) {
+func (a *Agent) runSelfUpgrade(plan selfExecPlan, userPublicID string, channelID string, targetVersion string) {
 	// Allow the RPC response to flush before we potentially break active streams.
 	time.Sleep(200 * time.Millisecond)
 
@@ -144,7 +124,7 @@ func (a *Agent) runSelfUpgrade(exePath string, installDir string, userPublicID s
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", "curl -fsSL "+upgradeInstallScriptURL+" | sh")
 	env := append(os.Environ(),
 		"REDEVEN_INSTALL_MODE=upgrade",
-		"REDEVEN_INSTALL_DIR="+installDir,
+		"REDEVEN_INSTALL_DIR="+plan.installDir,
 	)
 	if targetVersion != "" {
 		env = append(env, "REDEVEN_VERSION="+targetVersion)
@@ -187,10 +167,11 @@ func (a *Agent) runSelfUpgrade(exePath string, installDir string, userPublicID s
 	a.log.Info("sys_upgrade: restarting",
 		"user_public_id", userPublicID,
 		"channel_id", channelID,
-		"exe_path", exePath,
+		"exe_path", plan.exePath,
+		"local_ui_bind", plan.localUIBind,
 	)
 
-	if err := syscall.Exec(exePath, os.Args, os.Environ()); err != nil {
+	if err := syscall.Exec(plan.exePath, plan.argv, os.Environ()); err != nil {
 		a.log.Error("sys_upgrade: exec failed",
 			"user_public_id", userPublicID,
 			"channel_id", channelID,
