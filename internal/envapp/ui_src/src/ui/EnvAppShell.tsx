@@ -17,7 +17,6 @@ import {
   Terminal,
 } from '@floegence/floe-webapp-core/icons';
 import { FlowerIcon } from './icons/FlowerIcon';
-import { RedevenMark } from './icons/RedevenMark';
 import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
 import { Tooltip } from '@floegence/floe-webapp-core/ui';
 import type { ClientObserverLike } from '@floegence/flowersec-core';
@@ -230,6 +229,11 @@ export function EnvAppShell() {
     maxDelayMs: 30_000,
   } as const;
   const topBarTooltip = (label: string): string | false => (layout.isMobile() ? false : label);
+  const headerLogoSurfaceTone = () => (theme.resolvedTheme() === 'dark' ? 'light' : 'transparent');
+  const headerLogoSurfaceClass = () =>
+    headerLogoSurfaceTone() === 'light'
+      ? 'flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fffaf7] ring-1 ring-black/5'
+      : 'flex h-8 w-8 items-center justify-center';
 
   widgetRegistry.registerAll(redevenDeckWidgets);
 
@@ -1587,7 +1591,9 @@ export function EnvAppShell() {
                     tooltip={topBarTooltip('Back to dashboard')}
                     onClick={() => window.location.assign(`${consoleOrigin()}/dashboard`)}
                   >
-                    <RedevenMark theme={theme.resolvedTheme()} class="w-6 h-6" aria-hidden="true" />
+                    <span class={headerLogoSurfaceClass()} data-redeven-logo-surface={headerLogoSurfaceTone()}>
+                      <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Redeven" class="h-6 w-6 object-contain" />
+                    </span>
                   </TopBarIconButton>
                 }
                 activityItems={activityItems()}
