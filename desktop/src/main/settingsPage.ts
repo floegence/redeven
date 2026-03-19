@@ -46,7 +46,7 @@ export function buildSettingsPageHTML(draft: DesktopSettingsDraft, errorMessage 
         background: var(--bg);
         color: var(--text);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        padding: 24px;
+        padding: calc(24px + env(titlebar-area-height, 0px)) 24px 24px;
       }
       main {
         width: min(880px, 100%);
@@ -156,7 +156,7 @@ export function buildSettingsPageHTML(draft: DesktopSettingsDraft, errorMessage 
         cursor: wait;
       }
       @media (max-width: 720px) {
-        body { padding: 12px; }
+        body { padding: calc(12px + env(titlebar-area-height, 0px)) 12px 12px; }
         main { padding: 20px; border-radius: 18px; }
         .grid.two { grid-template-columns: 1fr; }
         .actions { flex-direction: column-reverse; }

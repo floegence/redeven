@@ -68,3 +68,7 @@ export function resolveBundledAgentPath(args: ResolveBundledAgentPathArgs): stri
 export function resolveSettingsPreloadPath(args: ResolvePreloadPathArgs): string {
   return path.join(args.appPath, 'dist', 'preload', 'settings.js');
 }
+
+export function resolveBrowserPreloadPath(args: ResolvePreloadPathArgs): string {
+  return path.join(args.appPath, 'dist', 'preload', 'browser.js');
+}
