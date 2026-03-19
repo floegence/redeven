@@ -65,10 +65,10 @@ function resolveWindowSizing(viewport: { width: number; height: number }): Windo
   const margin = compact ? WINDOW_VIEWPORT_MARGIN_MOBILE : WINDOW_VIEWPORT_MARGIN_DESKTOP;
   const maxWidth = Math.max(280, viewport.width - margin * 2);
   const maxHeight = Math.max(280, viewport.height - margin * 2);
-  const defaultWidth = compact ? Math.min(460, maxWidth) : Math.min(620, maxWidth);
-  const defaultHeight = compact ? Math.min(560, maxHeight) : Math.min(660, maxHeight);
+  const defaultWidth = compact ? Math.min(460, maxWidth) : Math.min(640, maxWidth);
+  const defaultHeight = compact ? Math.min(620, maxHeight) : Math.min(720, maxHeight);
   const minWidth = Math.min(compact ? 300 : 420, maxWidth);
-  const minHeight = Math.min(compact ? 420 : 480, maxHeight);
+  const minHeight = Math.min(compact ? 440 : 520, maxHeight);
 
   return {
     compact,
@@ -474,16 +474,21 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
             )}
           >
             <div class="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.14),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,255,255,0.9))] dark:bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.18),transparent_42%),linear-gradient(180deg,rgba(19,24,38,0.98),rgba(12,16,28,0.98))]">
-              <div class="flex-1 min-h-0 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4">
-                <div class="flex min-h-full flex-col gap-4">
-                  <div class="flex items-start gap-3">
-                    <div class="flex size-11 shrink-0 items-center justify-center rounded-2xl rounded-bl-md border border-amber-500/20 bg-gradient-to-br from-amber-100 via-background to-background text-amber-600 shadow-sm dark:from-amber-500/20 dark:via-background dark:to-background dark:text-amber-200">
+              <div data-testid="ask-flower-scroll-region" class="flex-1 min-h-0 overflow-y-auto px-3 py-3 sm:px-4 sm:py-4">
+                <div class="mx-auto flex w-full max-w-3xl flex-col gap-3 sm:gap-4">
+                  <div class="flex items-start gap-3 sm:gap-4">
+                    <div class="flex size-10 shrink-0 items-center justify-center rounded-full border border-amber-500/30 bg-[radial-gradient(circle_at_35%_35%,rgba(255,251,235,0.96),rgba(253,230,138,0.82))] text-amber-600 shadow-[0_14px_28px_-20px_rgba(245,158,11,0.9)] ring-4 ring-background/80 dark:border-amber-400/30 dark:bg-[radial-gradient(circle_at_35%_35%,rgba(120,53,15,0.92),rgba(245,158,11,0.28))] dark:text-amber-200 dark:ring-slate-950/50 sm:size-11">
                       <FlowerIcon class="size-6" />
                     </div>
 
-                    <div class="min-w-0 flex-1 rounded-[1.35rem] rounded-tl-md border border-border/70 bg-background/92 px-4 py-3 shadow-[0_18px_44px_-28px_rgba(15,23,42,0.45)] backdrop-blur">
-                      <div class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground/70">Flower</div>
-                      <div class="mt-2 text-[15px] leading-7 text-foreground/95">
+                    <div class="min-w-0 flex-1 rounded-[1.35rem] rounded-tl-md border border-border/70 bg-background/94 px-4 py-3 shadow-[0_18px_44px_-30px_rgba(15,23,42,0.42)] backdrop-blur sm:px-5 sm:py-4">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <div class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground/70">Flower</div>
+                        <span class="inline-flex items-center rounded-full border border-primary/15 bg-primary/8 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary/80">
+                          {composerCopy()?.sourceLabel}
+                        </span>
+                      </div>
+                      <div class="mt-2 text-[14px] leading-6 text-foreground/95 sm:text-[15px] sm:leading-7">
                         <For each={composerCopy()?.headline ?? []}>
                           {(part) =>
                             part.kind === 'text'
@@ -491,7 +496,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                               : (
                                 <button
                                   type="button"
-                                  class={`mx-0.5 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 align-baseline text-[13px] font-medium transition-colors ${entryButtonClass(contextEntryMap().get(part.entryId)!)} `}
+                                  class={`mx-0.5 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 align-baseline text-[12px] font-medium transition-colors sm:text-[13px] ${entryButtonClass(contextEntryMap().get(part.entryId)!)}`}
                                   title={contextEntryMap().get(part.entryId)?.title}
                                   onClick={() => {
                                     const entry = contextEntryMap().get(part.entryId);
@@ -511,20 +516,22 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                       <Show when={(composerCopy()?.contextEntries.length ?? 0) > 0}>
                         <div class="mt-4 rounded-2xl border border-border/60 bg-muted/25 px-3 py-3">
                           <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/65">Included context</div>
-                          <div class="mt-2 flex flex-wrap gap-2">
+                          <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <For each={composerCopy()?.contextEntries ?? []}>
                               {(entry) => (
                                 <button
                                   type="button"
-                                  class={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${entryButtonClass(entry)}`}
+                                  class={`flex min-h-14 w-full min-w-0 items-start gap-2 rounded-2xl border px-3 py-2 text-left text-xs font-medium transition-colors ${entryButtonClass(entry)}`}
                                   title={entry.title}
                                   onClick={() => {
                                     void openContextEntry(entry);
                                   }}
                                 >
-                                  {entryIcon(entry)}
-                                  <span class="truncate">{entry.label}</span>
-                                  <span class="truncate text-[11px] opacity-75">{entry.detail}</span>
+                                  <span class="mt-0.5">{entryIcon(entry)}</span>
+                                  <span class="min-w-0 flex-1">
+                                    <span class="block truncate">{entry.label}</span>
+                                    <span class="mt-0.5 block line-clamp-2 text-[11px] leading-5 opacity-75">{entry.detail}</span>
+                                  </span>
                                 </button>
                               )}
                             </For>
@@ -545,52 +552,58 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                       </Show>
                     </div>
                   </div>
+                </div>
+              </div>
 
-                  <div class="flex justify-end">
-                    <div class="w-full max-w-[min(100%,34rem)] rounded-[1.55rem] rounded-br-md border border-primary/18 bg-background/96 p-4 shadow-[0_24px_60px_-32px_rgba(37,99,235,0.45)] backdrop-blur">
-                      <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-primary/70">You</div>
-                      <textarea
-                        ref={textareaEl}
-                        id={`ask-flower-prompt-${intent.id}`}
-                        class="min-h-[180px] w-full resize-none border-none bg-transparent text-[15px] leading-7 text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
-                        value={userPrompt()}
-                        placeholder={composerCopy()?.placeholder}
-                        disabled={sending()}
-                        onInput={(event) => {
-                          setUserPrompt(event.currentTarget.value);
-                          if (validationError()) setValidationError('');
-                        }}
-                        onCompositionStart={() => setIsComposing(true)}
-                        onCompositionUpdate={() => {
-                          syncPromptFromTextarea();
-                          if (validationError()) setValidationError('');
-                        }}
-                        onCompositionEnd={() => {
-                          setIsComposing(false);
-                          syncPromptFromTextarea();
-                          if (validationError()) setValidationError('');
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.isComposing || isComposing()) return;
-                          if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                            event.preventDefault();
-                            void submit();
-                          }
-                        }}
-                      />
+              <div data-testid="ask-flower-composer-dock" class="shrink-0 border-t border-border/70 bg-background/96 px-3 py-3 shadow-[0_-24px_48px_-38px_rgba(15,23,42,0.55)] backdrop-blur sm:px-4 sm:py-4">
+                <div class="mx-auto w-full max-w-3xl">
+                  <div class="rounded-[1.55rem] border border-primary/18 bg-background/98 p-4 shadow-[0_24px_60px_-36px_rgba(37,99,235,0.34)]">
+                    <div class="mb-2 flex items-center justify-between gap-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary/70">You</div>
+                      <span class="text-[11px] text-muted-foreground">{sending() ? 'Sending...' : 'Reply to Flower'}</span>
+                    </div>
 
-                      <div class="mt-3 flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div class="min-h-5 text-xs leading-5 text-muted-foreground">
-                          <Show when={validationError()} fallback={<span>Write your message naturally. Flower will receive the linked context automatically.</span>}>
-                            <span class="text-error">{validationError()}</span>
-                          </Show>
-                        </div>
+                    <textarea
+                      ref={textareaEl}
+                      id={`ask-flower-prompt-${intent.id}`}
+                      class="min-h-[132px] max-h-[30vh] w-full resize-none border-none bg-transparent text-[15px] leading-7 text-foreground placeholder:text-muted-foreground/60 focus:outline-none sm:min-h-[156px]"
+                      value={userPrompt()}
+                      placeholder={composerCopy()?.placeholder}
+                      disabled={sending()}
+                      onInput={(event) => {
+                        setUserPrompt(event.currentTarget.value);
+                        if (validationError()) setValidationError('');
+                      }}
+                      onCompositionStart={() => setIsComposing(true)}
+                      onCompositionUpdate={() => {
+                        syncPromptFromTextarea();
+                        if (validationError()) setValidationError('');
+                      }}
+                      onCompositionEnd={() => {
+                        setIsComposing(false);
+                        syncPromptFromTextarea();
+                        if (validationError()) setValidationError('');
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.isComposing || isComposing()) return;
+                        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                          event.preventDefault();
+                          void submit();
+                        }
+                      }}
+                    />
 
-                        <Button variant="primary" size="sm" onClick={() => void submit()} disabled={sending()}>
-                          <Send class="size-3.5" />
-                          <span class="ml-1.5">Send</span>
-                        </Button>
+                    <div class="mt-3 flex flex-col gap-3 border-t border-border/60 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div class="min-h-5 text-xs leading-5 text-muted-foreground">
+                        <Show when={validationError()} fallback={<span>Write your message naturally. Flower will receive the linked context automatically.</span>}>
+                          <span class="text-error">{validationError()}</span>
+                        </Show>
                       </div>
+
+                      <Button variant="primary" size="sm" onClick={() => void submit()} disabled={sending()}>
+                        <Send class="size-3.5" />
+                        <span class="ml-1.5">Send</span>
+                      </Button>
                     </div>
                   </div>
                 </div>
