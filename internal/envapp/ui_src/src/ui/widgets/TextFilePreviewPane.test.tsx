@@ -4,10 +4,22 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TextFilePreviewPane } from './TextFilePreviewPane';
 
-const supportCheckMock = vi.hoisted(() => vi.fn((language?: string) => language !== 'toml'));
+const resolveLanguageSpecMock = vi.hoisted(() => vi.fn((language?: string) => {
+  switch (language) {
+    case 'typescript':
+      return { id: 'typescript' };
+    case 'vue':
+    case 'toml':
+      return { id: 'plaintext' };
+    case 'mdx':
+      return { id: 'mdx' };
+    default:
+      return { id: String(language ?? 'plaintext') || 'plaintext' };
+  }
+}));
 
 vi.mock('@floegence/floe-webapp-core/editor', () => ({
-  isCodeEditorLanguageSupported: (language?: string) => supportCheckMock(language),
+  resolveCodeEditorLanguageSpec: (language?: string) => resolveLanguageSpecMock(language),
   CodeEditor: (props: any) => (
     <button
       type="button"
@@ -35,7 +47,7 @@ async function flushAsync(): Promise<void> {
 
 afterEach(() => {
   document.body.innerHTML = '';
-  supportCheckMock.mockClear();
+  resolveLanguageSpecMock.mockClear();
 });
 
 describe('TextFilePreviewPane', () => {
@@ -72,22 +84,41 @@ describe('TextFilePreviewPane', () => {
     expect(onSelectionChange).toHaveBeenCalledWith('selected from editor');
   });
 
-  it('uses the read-only fallback preview for unsupported code languages', async () => {
+  it('uses the read-only fallback preview for code languages that Monaco only treats as plaintext', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => (
       <TextFilePreviewPane
-        path="/workspace/demo.toml"
-        descriptor={{ mode: 'text', textPresentation: 'code', language: 'toml', wrapText: false }}
-        text={'title = "redeven"'}
+        path="/workspace/demo.vue"
+        descriptor={{ mode: 'text', textPresentation: 'code', language: 'vue', wrapText: false }}
+        text={'<script setup lang="ts">const value = 1;</script>'}
         canEdit
       />
     ), host);
     await flushAsync();
 
-    expect(supportCheckMock).toHaveBeenCalledWith('toml');
+    expect(resolveLanguageSpecMock).toHaveBeenCalledWith('vue');
     expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
-    expect(host.textContent).not.toContain('Read-only highlight fallback');
+    expect(host.textContent).toContain('vue:');
+  });
+
+  it('uses the read-only fallback preview for code languages without a rich Monaco contribution', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TextFilePreviewPane
+        path="/workspace/demo.mdx"
+        descriptor={{ mode: 'text', textPresentation: 'code', language: 'mdx', wrapText: false }}
+        text={'# Hello\n\nexport const value = 1;'}
+        canEdit
+      />
+    ), host);
+    await flushAsync();
+
+    expect(resolveLanguageSpecMock).toHaveBeenCalledWith('mdx');
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
+    expect(host.textContent).toContain('mdx:');
   });
 });

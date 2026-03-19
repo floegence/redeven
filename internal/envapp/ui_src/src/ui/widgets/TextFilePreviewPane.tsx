@@ -1,9 +1,53 @@
 import { Suspense, Show, createEffect, createMemo, lazy } from 'solid-js';
-import { isCodeEditorLanguageSupported, type CodeEditorApi } from '@floegence/floe-webapp-core/editor';
+import { resolveCodeEditorLanguageSpec, type CodeEditorApi } from '@floegence/floe-webapp-core/editor';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { CodePreviewPane } from './CodePreviewPane';
 
 const CodeEditor = lazy(() => import('@floegence/floe-webapp-core/editor').then((module) => ({ default: module.CodeEditor })));
+
+const MONACO_CODE_PREVIEW_LANGUAGE_IDS = new Set([
+  'javascript',
+  'typescript',
+  'json',
+  'html',
+  'css',
+  'scss',
+  'less',
+  'markdown',
+  'yaml',
+  'ini',
+  'xml',
+  'python',
+  'java',
+  'kotlin',
+  'scala',
+  'go',
+  'rust',
+  'cpp',
+  'csharp',
+  'fsharp',
+  'php',
+  'ruby',
+  'perl',
+  'shell',
+  'swift',
+  'objective-c',
+  'r',
+  'sql',
+  'lua',
+  'dart',
+  'dockerfile',
+  'bat',
+  'powershell',
+]);
+
+const PLAIN_TEXT_EDITOR_LANGUAGES = new Set(['', 'text', 'plaintext', 'txt']);
+
+function supportsRichMonacoCodePreview(language?: string): boolean {
+  const normalized = String(language ?? '').trim().toLowerCase();
+  if (PLAIN_TEXT_EDITOR_LANGUAGES.has(normalized)) return true;
+  return MONACO_CODE_PREVIEW_LANGUAGE_IDS.has(resolveCodeEditorLanguageSpec(normalized).id);
+}
 
 export interface TextFilePreviewPaneProps {
   path: string;
@@ -29,7 +73,7 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   });
   const monacoSupported = createMemo(() => (
     props.descriptor.textPresentation !== 'code'
-    || isCodeEditorLanguageSupported(resolvedLanguage())
+    || supportsRichMonacoCodePreview(resolvedLanguage())
   ));
   const shouldUseMonaco = createMemo(() => (
     props.editing

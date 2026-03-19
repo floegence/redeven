@@ -7,7 +7,11 @@ type CodeHighlighter = Awaited<ReturnType<(typeof import('shiki'))['createHighli
 const SHIKI_THEMES: CodeHighlightTheme[] = ['github-dark', 'github-light'];
 const LANGUAGE_ALIASES: Record<string, string> = {
   js: 'javascript',
+  mjs: 'javascript',
+  cjs: 'javascript',
   ts: 'typescript',
+  mts: 'typescript',
+  cts: 'typescript',
   py: 'python',
   rb: 'ruby',
   rs: 'rust',
@@ -17,11 +21,17 @@ const LANGUAGE_ALIASES: Record<string, string> = {
   shell: 'shellscript',
   yml: 'yaml',
   md: 'markdown',
+  jsonc: 'json',
+  webmanifest: 'json',
   tex: 'latex',
   cs: 'csharp',
   fs: 'fsharp',
   docker: 'dockerfile',
   make: 'makefile',
+  gql: 'graphql',
+  ps1: 'powershell',
+  styl: 'stylus',
+  pcss: 'postcss',
 };
 
 let highlighterPromise: Promise<CodeHighlighter | null> | null = null;
