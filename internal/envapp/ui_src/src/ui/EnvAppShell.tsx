@@ -229,11 +229,9 @@ export function EnvAppShell() {
     maxDelayMs: 30_000,
   } as const;
   const topBarTooltip = (label: string): string | false => (layout.isMobile() ? false : label);
-  const headerLogoSurfaceTone = () => (theme.resolvedTheme() === 'dark' ? 'light' : 'transparent');
-  const headerLogoSurfaceClass = () =>
-    headerLogoSurfaceTone() === 'light'
-      ? 'flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#fffaf7] ring-1 ring-black/5'
-      : 'flex h-8 w-8 items-center justify-center';
+  const headerLogoSrc = createMemo(() =>
+    `${import.meta.env.BASE_URL}${theme.resolvedTheme() === 'dark' ? 'logo-dark.svg' : 'logo.svg'}`,
+  );
 
   widgetRegistry.registerAll(redevenDeckWidgets);
 
@@ -1591,9 +1589,12 @@ export function EnvAppShell() {
                     tooltip={topBarTooltip('Back to dashboard')}
                     onClick={() => window.location.assign(`${consoleOrigin()}/dashboard`)}
                   >
-                    <span class={headerLogoSurfaceClass()} data-redeven-logo-surface={headerLogoSurfaceTone()}>
-                      <img src={`${import.meta.env.BASE_URL}logo.png`} alt="Redeven" class="h-6 w-6 object-contain" />
-                    </span>
+                    <img
+                      src={headerLogoSrc()}
+                      alt="Redeven"
+                      class="h-6 w-6 object-contain"
+                      data-redeven-logo-theme={theme.resolvedTheme()}
+                    />
                   </TopBarIconButton>
                 }
                 activityItems={activityItems()}

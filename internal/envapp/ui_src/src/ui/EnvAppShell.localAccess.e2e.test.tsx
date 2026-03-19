@@ -247,7 +247,7 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell top bar affordances', () => {
-  it('keeps the original redeven logo asset on a light surface in dark theme', async () => {
+  it('uses the dark-mode svg variant for the original redeven logo mark', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -257,11 +257,10 @@ describe('EnvAppShell top bar affordances', () => {
     try {
       await flushAsync();
 
-      const logoSurface = host.querySelector('[data-redeven-logo-surface="light"]');
-      expect(logoSurface).toBeTruthy();
-      const logoImage = logoSurface?.querySelector('img[alt="Redeven"]');
+      const logoImage = host.querySelector('img[alt="Redeven"]');
       expect(logoImage).toBeTruthy();
-      expect(logoImage?.getAttribute('src')).toContain('logo.png');
+      expect(logoImage?.getAttribute('data-redeven-logo-theme')).toBe('dark');
+      expect(logoImage?.getAttribute('src')).toContain('logo-dark.svg');
     } finally {
       dispose();
     }
