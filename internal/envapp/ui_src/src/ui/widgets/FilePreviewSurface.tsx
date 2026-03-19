@@ -3,6 +3,7 @@ import { cn, useLayout } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Button, Dialog, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
+import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { FilePreviewContent } from './FilePreviewContent';
 
 const WINDOW_MARGIN_DESKTOP = 16;
@@ -23,27 +24,6 @@ function currentViewportSize(): ViewportSize {
     width: Math.max(320, window.innerWidth),
     height: Math.max(320, window.innerHeight),
   };
-}
-
-function readSelectionTextFromPreview(contentElement?: HTMLDivElement): string {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount <= 0) return '';
-
-  const text = String(selection.toString() ?? '').trim();
-  if (!text) return '';
-  if (!contentElement) return text;
-
-  const range = selection.getRangeAt(0);
-  const containerNode = range.commonAncestorContainer;
-  const containerElement =
-    containerNode.nodeType === Node.ELEMENT_NODE
-      ? (containerNode as Element)
-      : containerNode.parentElement;
-  if (!containerElement || !contentElement.contains(containerElement)) {
-    return '';
-  }
-
-  return text;
 }
 
 function resolveDesktopWindowSizing(viewport: ViewportSize) {

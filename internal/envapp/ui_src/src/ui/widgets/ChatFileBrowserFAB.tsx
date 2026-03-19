@@ -8,7 +8,10 @@ import { FileBrowser, type ContextMenuCallbacks, type FileItem } from '@floegenc
 import { ConfirmDialog, DirectoryPicker, FileSavePicker, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
+import { useEnvContext } from '../pages/EnvContext';
 import { useRedevenRpc } from '../protocol/redeven_v1';
+import { getLocalRuntime } from '../services/controlplaneApi';
+import { buildDetachedFileBrowserSurface, isDesktopManagedRuntime, openDetachedSurfaceWindow } from '../services/detachedSurface';
 import {
   mapContextMenuCallbacksToAbsolute,
   mapFileItemToAbsolutePath,
@@ -59,6 +62,7 @@ const CHAT_FAB_SIDEBAR_WIDTH_STORAGE_KEY = 'chat-fab-files:sidebar-width';
 export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
+  const env = useEnvContext();
   const notification = useNotification();
   const filePreview = useFilePreviewContext();
 
@@ -577,13 +581,31 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
       // snap to nearest edge
       snapToEdge(fabLeft()!, fabTop()!);
     } else {
-      // it was a click — open file browser
-      const wd = untrack(initialPath);
-      if (!wd) return;
-      if (!cache.has(wd) || lastLoadedPath !== wd) {
-        void loadPathChain(wd);
-      }
-      setBrowserOpen(true);
+      void (async () => {
+        const wd = untrack(initialPath);
+        if (!wd) return;
+
+        try {
+          const runtime = env.localRuntime() ?? await getLocalRuntime();
+          if (isDesktopManagedRuntime(runtime)) {
+            const surface = buildDetachedFileBrowserSurface({
+              path: wd,
+              homePath: untrack(browserRootPath),
+            });
+            if (surface) {
+              openDetachedSurfaceWindow(surface);
+              return;
+            }
+          }
+        } catch {
+          // Fall back to the in-app floating window when local runtime inspection fails.
+        }
+
+        if (!cache.has(wd) || lastLoadedPath !== wd) {
+          await loadPathChain(wd);
+        }
+        setBrowserOpen(true);
+      })();
     }
   }
 

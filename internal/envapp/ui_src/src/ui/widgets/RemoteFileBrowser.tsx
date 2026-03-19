@@ -162,6 +162,15 @@ const ClipboardIcon = (props: { class?: string }) => (
 
 export interface RemoteFileBrowserProps {
   widgetId?: string;
+  stateScope?: string;
+  initialPathOverride?: string;
+  homePathOverride?: string;
+}
+
+function normalizeBrowserStateScope(value: unknown): string {
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (!raw) return 'page';
+  return raw.replace(/[^a-z0-9:_-]+/g, '-');
 }
 
 function classifyPathLoadError(err: unknown): PathLoadResult {
@@ -197,6 +206,25 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const envId = () => (ctx.env_id() ?? '').trim();
   const useExternalMobileSidebarToggle = () => !props.widgetId;
+  const browserStateScope = () => normalizeBrowserStateScope(props.stateScope);
+  const initialPathOverride = () => normalizeAbsolutePath(props.initialPathOverride ?? '');
+  const homePathOverride = () => normalizeAbsolutePath(props.homePathOverride ?? '');
+  const scopedStorageKey = (key: string): string => (
+    browserStateScope() === 'page' ? key : `${key}:${browserStateScope()}`
+  );
+  const scopedStorageKeyByEnv = (prefix: string, id: string): string => (
+    browserStateScope() === 'page' ? `${prefix}:${id}` : `${prefix}:${browserStateScope()}:${id}`
+  );
+  const workspacePersistenceKey = (id: string): string => (
+    browserStateScope() === 'page' ? `files:${id}` : `files:${browserStateScope()}:${id}`
+  );
+  const workspaceInstanceId = (id: string): string => (
+    props.widgetId
+      ? `redeven-files:${id}:${props.widgetId}`
+      : browserStateScope() === 'page'
+        ? `redeven-files:${id}`
+        : `redeven-files:${browserStateScope()}:${id}`
+  );
 
   function readPersistedSidebarWidth(): number {
     if (props.widgetId) {
@@ -205,7 +233,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
 
     return normalizePageSidebarWidth(
-      floe.persist.load<number>(PAGE_SIDEBAR_WIDTH_STORAGE_KEY, PAGE_SIDEBAR_DEFAULT_WIDTH)
+      floe.persist.load<number>(scopedStorageKey(PAGE_SIDEBAR_WIDTH_STORAGE_KEY), PAGE_SIDEBAR_DEFAULT_WIDTH)
     );
   }
 
@@ -217,7 +245,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
-    floe.persist.debouncedSave(PAGE_SIDEBAR_WIDTH_STORAGE_KEY, next);
+    floe.persist.debouncedSave(scopedStorageKey(PAGE_SIDEBAR_WIDTH_STORAGE_KEY), next);
   }
 
   const [files, setFiles] = createSignal<FileItem[]>([]);
@@ -324,6 +352,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const readPersistedLastPath = (id: string): string => {
     const eid = id.trim();
     if (!eid) return '';
+    const override = initialPathOverride();
+    if (override) return override;
 
     if (props.widgetId) {
       const state = deck.getWidgetState(props.widgetId);
@@ -335,7 +365,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return '';
     }
 
-    const saved = floe.persist.load<string>(`files:lastPath:${eid}`, '');
+    const saved = floe.persist.load<string>(scopedStorageKeyByEnv('files:lastPath', eid), '');
     return saved ? normalizePath(saved) : '';
   };
 
@@ -355,7 +385,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
-    floe.persist.debouncedSave(`files:lastPath:${eid}`, next);
+    floe.persist.debouncedSave(scopedStorageKeyByEnv('files:lastPath', eid), next);
   };
 
   const readPersistedTargetPath = (id: string): string | null => {
@@ -372,7 +402,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return null;
     }
 
-    const saved = floe.persist.load<string>(`files:lastTargetPath:${eid}`, '');
+    const saved = floe.persist.load<string>(scopedStorageKeyByEnv('files:lastTargetPath', eid), '');
     return saved ? normalizePath(saved) : null;
   };
 
@@ -392,7 +422,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
-    floe.persist.debouncedSave(`files:lastTargetPath:${eid}`, next);
+    floe.persist.debouncedSave(scopedStorageKeyByEnv('files:lastTargetPath', eid), next);
   };
 
   const readPersistedShowHidden = (id: string): boolean => {
@@ -408,7 +438,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return false;
     }
 
-    return normalizeShowHidden(floe.persist.load<boolean>(`${SHOW_HIDDEN_STORAGE_KEY_PREFIX}${eid}`, false));
+    return normalizeShowHidden(floe.persist.load<boolean>(scopedStorageKey(`${SHOW_HIDDEN_STORAGE_KEY_PREFIX}${eid}`), false));
   };
 
   const writePersistedShowHidden = (id: string, value: boolean) => {
@@ -427,7 +457,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
-    floe.persist.debouncedSave(`${SHOW_HIDDEN_STORAGE_KEY_PREFIX}${eid}`, next);
+    floe.persist.debouncedSave(scopedStorageKey(`${SHOW_HIDDEN_STORAGE_KEY_PREFIX}${eid}`), next);
   };
 
 
@@ -444,7 +474,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return 'files';
     }
 
-    return normalizeBrowserPageMode(floe.persist.load<string>(`${PAGE_MODE_STORAGE_KEY_PREFIX}${eid}`, 'files'));
+    return normalizeBrowserPageMode(floe.persist.load<string>(scopedStorageKey(`${PAGE_MODE_STORAGE_KEY_PREFIX}${eid}`), 'files'));
   };
 
   const writePersistedPageMode = (id: string, mode: BrowserPageMode) => {
@@ -463,7 +493,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
-    floe.persist.debouncedSave(`${PAGE_MODE_STORAGE_KEY_PREFIX}${eid}`, next);
+    floe.persist.debouncedSave(scopedStorageKey(`${PAGE_MODE_STORAGE_KEY_PREFIX}${eid}`), next);
   };
 
   const readPersistedGitSubview = (id: string): GitWorkbenchSubview => {
@@ -479,7 +509,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return 'changes';
     }
 
-    return normalizeGitSubview(floe.persist.load<string>(`${GIT_SUBVIEW_STORAGE_KEY_PREFIX}${eid}`, 'changes'));
+    return normalizeGitSubview(floe.persist.load<string>(scopedStorageKey(`${GIT_SUBVIEW_STORAGE_KEY_PREFIX}${eid}`), 'changes'));
   };
 
   const writePersistedGitSubview = (id: string, view: GitWorkbenchSubview) => {
@@ -498,7 +528,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
-    floe.persist.debouncedSave(`${GIT_SUBVIEW_STORAGE_KEY_PREFIX}${eid}`, next);
+    floe.persist.debouncedSave(scopedStorageKey(`${GIT_SUBVIEW_STORAGE_KEY_PREFIX}${eid}`), next);
   };
 
   const commitBrowserSidebarWidth = (value: number) => {
@@ -508,6 +538,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const resolveFsRootAbs = async (): Promise<string> => {
+    const override = homePathOverride();
+    if (override) {
+      setAgentHomePathAbs(override);
+      return override;
+    }
+
     const cached = normalizeAbsolutePath(agentHomePathAbs());
     if (cached) return cached;
 
@@ -2342,8 +2378,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       currentPath={currentBrowserPath()}
                       initialPath={readPersistedLastPath(id)}
                       homePath={agentHomePathAbs() || undefined}
-                      persistenceKey={`files:${id}`}
-                      instanceId={props.widgetId ? `redeven-files:${id}:${props.widgetId}` : `redeven-files:${id}`}
+                      persistenceKey={workspacePersistenceKey(id)}
+                      instanceId={workspaceInstanceId(id)}
                       resetKey={fileBrowserResetSeq()}
                       width={browserSidebarWidth()}
                       open={pageSidebarOpen()}

@@ -18,6 +18,7 @@ import {
 } from '@floegence/floe-webapp-core/icons';
 import { FlowerIcon } from './icons/FlowerIcon';
 import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
+import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Tooltip } from '@floegence/floe-webapp-core/ui';
 import type { ClientObserverLike } from '@floegence/flowersec-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
@@ -45,6 +46,7 @@ import { AuditLogDialog } from './widgets/AuditLogDialog';
 import { AgentUpdateFloatingPrompt } from './widgets/AgentUpdateFloatingPrompt';
 import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
 import { createFilePreviewController } from './widgets/createFilePreviewController';
+import { DetachedSurfaceScene } from './widgets/DetachedSurfaceScene';
 import { FilePreviewContext } from './widgets/FilePreviewContext';
 import { FilePreviewHost } from './widgets/FilePreviewHost';
 import { buildAskFlowerDraftMarkdown } from './utils/askFlowerContextTemplate';
@@ -76,6 +78,7 @@ import {
   type LocalAccessStatus,
   type LocalRuntimeInfo,
 } from './services/controlplaneApi';
+import { buildDetachedFilePreviewSurface, isDesktopManagedRuntime, openDetachedSurfaceWindow, parseDetachedSurfaceFromURL } from './services/detachedSurface';
 import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
 
 
@@ -215,11 +218,6 @@ export function EnvAppShell() {
   const filePreviewController = createFilePreviewController({
     client: () => protocol.client(),
   });
-  const filePreviewContextValue = {
-    controller: filePreviewController,
-    openPreview: filePreviewController.openPreview,
-    closePreview: filePreviewController.closePreview,
-  } as const;
 
   type ProtocolConnectConfig = Parameters<typeof protocol.connect>[0];
   const reconnectPolicy = {
@@ -237,6 +235,9 @@ export function EnvAppShell() {
 
   const [localRuntime, setLocalRuntime] = createSignal<LocalRuntimeInfo | null>(null);
   const isLocalMode = createMemo(() => localRuntime() !== null);
+  const detachedSurface = createMemo(() => (
+    typeof window === 'undefined' ? null : parseDetachedSurfaceFromURL(window.location)
+  ));
   const initialAccessResumeToken = typeof window !== 'undefined' ? consumeAccessResumeTokenFromWindow(window) : '';
   if (initialAccessResumeToken) {
     writeLocalAccessResumeToken(initialAccessResumeToken);
@@ -1545,11 +1546,150 @@ export function EnvAppShell() {
     </div>
   );
 
+  const filePreviewContextValue = {
+    controller: filePreviewController,
+    openPreview: async (item: FileItem) => {
+      try {
+        const runtime = localRuntime() ?? await getLocalRuntime();
+        if (isDesktopManagedRuntime(runtime)) {
+          const surface = buildDetachedFilePreviewSurface(item);
+          if (surface) {
+            openDetachedSurfaceWindow(surface);
+            return;
+          }
+        }
+      } catch {
+        // Fall back to the in-app preview surface when local runtime inspection fails.
+      }
+
+      await filePreviewController.openPreview(item);
+    },
+    closePreview: filePreviewController.closePreview,
+  } as const;
+
+  const renderDetachedSurface = () => {
+    const surface = detachedSurface();
+    if (!surface) return null;
+    return (
+      <DetachedSurfaceScene
+        surface={surface}
+        accessGateVisible={accessGateVisible()}
+        accessGatePanel={accessGatePanel()}
+        connectError={connectError()}
+      />
+    );
+  };
+
+  const renderMainShell = () => (
+    <Shell
+      sidebarMode="auto"
+      sidebarContent={(activeTab) => activeTab === 'ai' && canUseFlower() ? <AIChatSidebar /> : <></>}
+      logo={
+        <TopBarIconButton
+          label="Back to dashboard"
+          tooltip={topBarTooltip('Back to dashboard')}
+          onClick={() => window.location.assign(`${consoleOrigin()}/dashboard`)}
+        >
+          <img
+            src={headerLogoSrc()}
+            alt="Redeven"
+            class="h-6 w-6 object-contain"
+            data-redeven-logo-theme={theme.resolvedTheme()}
+          />
+        </TopBarIconButton>
+      }
+      activityItems={activityItems()}
+      activityBottomItems={activityBottomItems()}
+      activityBottomItemsMobileMode="topBar"
+      topBarActions={
+        <div class="flex items-center gap-1">
+          <TopBarIconButton
+            label="Command palette"
+            tooltip={topBarTooltip('Command palette')}
+            onClick={() => cmd.open()}
+          >
+            <Search class="w-4 h-4" />
+          </TopBarIconButton>
+          <TopBarIconButton
+            label="Toggle theme"
+            tooltip={topBarTooltip('Toggle theme')}
+            onClick={() => theme.toggleTheme()}
+          >
+            {theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />}
+          </TopBarIconButton>
+        </div>
+      }
+      bottomBarItems={
+        <>
+          <div class="flex items-center gap-2 min-w-0">
+            <BottomBarItem class="min-w-0">
+              <span class="truncate">{envName()}</span>
+            </BottomBarItem>
+            <BottomBarItem class="min-w-0">
+              <span class="truncate">{envId() || '(missing env id)'}</span>
+            </BottomBarItem>
+          </div>
+          <div class="flex items-center gap-2">
+            <StatusIndicator status={status()} label={statusLabel()} />
+            <Tooltip content={canViewAudit() ? 'Audit log' : 'Admin required'} placement="top" delay={0}>
+              <BottomBarItem
+                onClick={canViewAudit() ? () => setAuditOpen(true) : undefined}
+                class={canViewAudit() ? undefined : 'opacity-60 pointer-events-none'}
+              >
+                Audit log
+              </BottomBarItem>
+            </Tooltip>
+            <BottomBarItem
+              onClick={reconnectDisabled() ? undefined : () => void triggerReconnect()}
+              class={reconnectDisabled() ? 'opacity-60 pointer-events-none' : undefined}
+            >
+              {reconnectLabel()}
+            </BottomBarItem>
+          </div>
+        </>
+      }
+    >
+      <div class="h-full min-h-0 overflow-hidden flex flex-col">
+        <Show when={connectError()}>
+          <Panel class="h-auto rounded-none border-0 border-b border-error/40">
+            <PanelContent class="p-3 text-xs">
+              <div class="text-error font-medium">Connection failed</div>
+              <div class="text-muted-foreground break-words">{connectError()}</div>
+            </PanelContent>
+          </Panel>
+        </Show>
+
+        <div class="flex-1 min-h-0 overflow-hidden relative">
+          <Show when={accessGateVisible()} fallback={<ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />}>
+            {accessGatePanel()}
+          </Show>
+        </div>
+      </div>
+
+      <AuditLogDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
+      <FilePreviewHost />
+      <AgentUpdateFloatingPrompt
+        open={agentUpdatePrompt.visible()}
+        mode={agentUpdatePrompt.mode()}
+        currentVersion={agentUpdatePrompt.currentVersion()}
+        targetVersion={agentUpdatePrompt.targetVersion()}
+        latestMessage={agentUpdatePrompt.latestMessage()}
+        stage={agentUpdatePrompt.stage()}
+        error={agentUpdatePrompt.error()}
+        onClose={agentUpdatePrompt.dismiss}
+        onUpdateNow={agentUpdatePrompt.startRecommendedUpgrade}
+        onRetry={agentUpdatePrompt.retry}
+        onSkip={agentUpdatePrompt.skipCurrentVersion}
+      />
+    </Shell>
+  );
+
   return (
     <EnvContext.Provider
       value={{
         env_id: envId,
         env,
+        localRuntime,
         connect,
         connecting,
         connectError,
@@ -1580,114 +1720,16 @@ export function EnvAppShell() {
         >
           <FloeRegistryRuntime components={components()}>
             <AIChatProviderBridge>
-              <Shell
-                sidebarMode="auto"
-                sidebarContent={(activeTab) => activeTab === 'ai' && canUseFlower() ? <AIChatSidebar /> : <></>}
-                logo={
-                  <TopBarIconButton
-                    label="Back to dashboard"
-                    tooltip={topBarTooltip('Back to dashboard')}
-                    onClick={() => window.location.assign(`${consoleOrigin()}/dashboard`)}
-                  >
-                    <img
-                      src={headerLogoSrc()}
-                      alt="Redeven"
-                      class="h-6 w-6 object-contain"
-                      data-redeven-logo-theme={theme.resolvedTheme()}
-                    />
-                  </TopBarIconButton>
-                }
-                activityItems={activityItems()}
-                activityBottomItems={activityBottomItems()}
-                activityBottomItemsMobileMode="topBar"
-                topBarActions={
-                  <div class="flex items-center gap-1">
-                    <TopBarIconButton
-                      label="Command palette"
-                      tooltip={topBarTooltip('Command palette')}
-                      onClick={() => cmd.open()}
-                    >
-                      <Search class="w-4 h-4" />
-                    </TopBarIconButton>
-                    <TopBarIconButton
-                      label="Toggle theme"
-                      tooltip={topBarTooltip('Toggle theme')}
-                      onClick={() => theme.toggleTheme()}
-                    >
-                      {theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />}
-                    </TopBarIconButton>
-                  </div>
-                }
-                bottomBarItems={
-                  <>
-                    <div class="flex items-center gap-2 min-w-0">
-                      <BottomBarItem class="min-w-0">
-                        <span class="truncate">{envName()}</span>
-                      </BottomBarItem>
-                      <BottomBarItem class="min-w-0">
-                        <span class="truncate">{envId() || '(missing env id)'}</span>
-                      </BottomBarItem>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <StatusIndicator status={status()} label={statusLabel()} />
-                      <Tooltip content={canViewAudit() ? 'Audit log' : 'Admin required'} placement="top" delay={0}>
-                        <BottomBarItem
-                          onClick={canViewAudit() ? () => setAuditOpen(true) : undefined}
-                          class={canViewAudit() ? undefined : 'opacity-60 pointer-events-none'}
-                        >
-                          Audit log
-                        </BottomBarItem>
-                      </Tooltip>
-                      <BottomBarItem
-                        onClick={reconnectDisabled() ? undefined : () => void triggerReconnect()}
-                        class={reconnectDisabled() ? 'opacity-60 pointer-events-none' : undefined}
-                      >
-                        {reconnectLabel()}
-                      </BottomBarItem>
-                    </div>
-                  </>
-                }
-              >
-                <div class="h-full min-h-0 overflow-hidden flex flex-col">
-                  <Show when={connectError()}>
-                    <Panel class="h-auto rounded-none border-0 border-b border-error/40">
-                      <PanelContent class="p-3 text-xs">
-                        <div class="text-error font-medium">Connection failed</div>
-                        <div class="text-muted-foreground break-words">{connectError()}</div>
-                      </PanelContent>
-                    </Panel>
-                  </Show>
-
-                  <div class="flex-1 min-h-0 overflow-hidden relative">
-                    <Show when={accessGateVisible()} fallback={<ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />}>
-                      {accessGatePanel()}
-                    </Show>
-                  </div>
-                </div>
-
-                <AuditLogDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
-                <FilePreviewHost />
-                <AgentUpdateFloatingPrompt
-                  open={agentUpdatePrompt.visible()}
-                  mode={agentUpdatePrompt.mode()}
-                  currentVersion={agentUpdatePrompt.currentVersion()}
-                  targetVersion={agentUpdatePrompt.targetVersion()}
-                  latestMessage={agentUpdatePrompt.latestMessage()}
-                  stage={agentUpdatePrompt.stage()}
-                  error={agentUpdatePrompt.error()}
-                  onClose={agentUpdatePrompt.dismiss}
-                  onUpdateNow={agentUpdatePrompt.startRecommendedUpgrade}
-                  onRetry={agentUpdatePrompt.retry}
-                  onSkip={agentUpdatePrompt.skipCurrentVersion}
-                />
-                <AskFlowerComposerWindow
-                  open={askFlowerComposerOpen()}
-                  intent={askFlowerComposerIntent()}
-                  anchor={askFlowerComposerAnchor()}
-                  onClose={closeAskFlowerComposer}
-                  onSend={submitAskFlowerComposer}
-                />
-              </Shell>
+              <Show when={detachedSurface()} fallback={renderMainShell()}>
+                {renderDetachedSurface()}
+              </Show>
+              <AskFlowerComposerWindow
+                open={askFlowerComposerOpen()}
+                intent={askFlowerComposerIntent()}
+                anchor={askFlowerComposerAnchor()}
+                onClose={closeAskFlowerComposer}
+                onSend={submitAskFlowerComposer}
+              />
             </AIChatProviderBridge>
           </FloeRegistryRuntime>
         </AgentUpdateContext.Provider>

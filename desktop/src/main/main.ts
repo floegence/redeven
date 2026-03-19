@@ -20,6 +20,7 @@ import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './laun
 import { isAllowedAppNavigation } from './navigation';
 import { resolveBundledAgentPath, resolveSettingsPreloadPath } from './paths';
 import { settingsPageDataURL } from './settingsPage';
+import { resolveDesktopWindowSpec } from './windowSpec';
 import {
   CANCEL_DESKTOP_SETTINGS_CHANNEL,
   SAVE_DESKTOP_SETTINGS_CHANNEL,
@@ -33,6 +34,7 @@ let managedAgent: ManagedAgent | null = null;
 let allowedBaseURL = '';
 let quitPhase: 'idle' | 'requested' | 'shutting_down' = 'idle';
 const childWindows = new Set<BrowserWindow>();
+const namedChildWindows = new Map<string, BrowserWindow>();
 let blockedLaunch: LaunchBlockedReport | null = null;
 let desktopPreferencesCache: DesktopPreferences | null = null;
 const desktopDiagnostics = new DesktopDiagnosticsRecorder();
@@ -207,16 +209,43 @@ function handleBlockedAction(url: string): boolean {
   return false;
 }
 
-function createBrowserWindow(targetURL: string, parent?: BrowserWindow): BrowserWindow {
-  const windowRole = parent ? 'child' : 'main';
+function focusAuxiliaryWindow(win: BrowserWindow): void {
+  if (win.isMinimized()) {
+    win.restore();
+  }
+  if (!win.isVisible()) {
+    win.show();
+  }
+  win.focus();
+}
+
+function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameName = ''): BrowserWindow {
+  const spec = resolveDesktopWindowSpec(targetURL, Boolean(parent));
+  const attachToParent = Boolean(parent) && spec.attachToParent !== false;
+  const actualParent = attachToParent ? parent : undefined;
+  const trimmedFrameName = String(frameName ?? '').trim();
+  if (trimmedFrameName) {
+    const existing = namedChildWindows.get(trimmedFrameName);
+    if (existing && !existing.isDestroyed()) {
+      if (spec.title) {
+        existing.setTitle(spec.title);
+      }
+      void existing.loadURL(targetURL);
+      focusAuxiliaryWindow(existing);
+      return existing;
+    }
+  }
+
+  const windowRole = parent ? (attachToParent ? 'child' : 'detached') : 'main';
   const win = new BrowserWindow({
-    width: 1440,
-    height: 960,
-    minWidth: 1024,
-    minHeight: 720,
+    width: spec.width,
+    height: spec.height,
+    minWidth: spec.minWidth,
+    minHeight: spec.minHeight,
     show: false,
+    title: spec.title,
     backgroundColor: desktopTheme.windowBackground,
-    parent,
+    parent: actualParent,
     webPreferences: {
       sandbox: true,
       contextIsolation: true,
@@ -226,12 +255,12 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow): Browser
   });
 
   const { webContents } = win;
-  webContents.setWindowOpenHandler(({ url }) => {
+  webContents.setWindowOpenHandler(({ url, frameName: nextFrameName }) => {
     if (handleBlockedAction(url)) {
       return { action: 'deny' };
     }
     if (isAllowedAppNavigation(url, allowedBaseURL)) {
-      createBrowserWindow(url, win);
+      createBrowserWindow(url, win, nextFrameName);
     } else {
       openExternal(url);
     }
@@ -272,12 +301,16 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow): Browser
   });
   win.on('closed', () => {
     void desktopDiagnostics.recordLifecycle('window_closed', 'browser window closed', { role: windowRole });
-    if (parent) {
-      childWindows.delete(win);
+    childWindows.delete(win);
+    if (trimmedFrameName && namedChildWindows.get(trimmedFrameName) === win) {
+      namedChildWindows.delete(trimmedFrameName);
     }
   });
-  if (parent) {
+  if (parent || trimmedFrameName) {
     childWindows.add(win);
+  }
+  if (trimmedFrameName) {
+    namedChildWindows.set(trimmedFrameName, win);
   }
   void win.loadURL(targetURL);
   return win;
