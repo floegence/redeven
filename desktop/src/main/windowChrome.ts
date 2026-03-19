@@ -2,8 +2,7 @@ import type { BrowserWindow, BrowserWindowConstructorOptions } from 'electron';
 
 import { desktopTheme } from './desktopTheme';
 import { type DesktopWindowThemeSnapshot } from '../shared/windowThemeIPC';
-
-export const LINUX_TITLE_BAR_OVERLAY_HEIGHT = 40;
+import { LINUX_TITLE_BAR_OVERLAY_HEIGHT, usesDesktopWindowThemeOverlay } from '../shared/windowChromePlatform';
 
 export function defaultDesktopWindowThemeSnapshot(): DesktopWindowThemeSnapshot {
   return {
@@ -16,14 +15,7 @@ export function buildDesktopWindowChromeOptions(
   platform: NodeJS.Platform = process.platform,
   snapshot: DesktopWindowThemeSnapshot = defaultDesktopWindowThemeSnapshot(),
 ): Pick<BrowserWindowConstructorOptions, 'backgroundColor' | 'titleBarStyle' | 'titleBarOverlay'> {
-  if (platform === 'darwin') {
-    return {
-      backgroundColor: snapshot.backgroundColor,
-      titleBarStyle: 'hiddenInset',
-    };
-  }
-
-  if (platform === 'linux') {
+  if (usesDesktopWindowThemeOverlay(platform)) {
     return {
       backgroundColor: snapshot.backgroundColor,
       titleBarStyle: 'hidden',
@@ -47,7 +39,7 @@ export function applyDesktopWindowTheme(
 ): void {
   win.setBackgroundColor(snapshot.backgroundColor);
 
-  if (platform === 'linux') {
+  if (usesDesktopWindowThemeOverlay(platform)) {
     win.setTitleBarOverlay({
       color: snapshot.backgroundColor,
       symbolColor: snapshot.symbolColor,

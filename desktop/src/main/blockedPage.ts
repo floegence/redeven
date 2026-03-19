@@ -1,5 +1,6 @@
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import { desktopTheme } from './desktopTheme';
+import { desktopWindowTitleBarInsetCSSValue } from '../shared/windowChromePlatform';
 
 const BLOCKED_ACTION_ORIGIN = 'https://redeven-desktop.invalid';
 
@@ -58,12 +59,16 @@ export function blockedActionFromURL(rawURL: string): 'retry' | 'copy-diagnostic
   }
 }
 
-export function buildBlockedPageHTML(report: LaunchBlockedReport): string {
+export function buildBlockedPageHTML(
+  report: LaunchBlockedReport,
+  platform: NodeJS.Platform = process.platform,
+): string {
   const headline = blockedHeadline(report);
   const diagnostics = escapeHTML(formatBlockedLaunchDiagnostics(report));
   const details = report.diagnostics?.state_dir
     ? `Default state directory: ${escapeHTML(report.diagnostics.state_dir)}`
     : 'Desktop could not attach to an existing Local UI instance.';
+  const titleBarInset = desktopWindowTitleBarInsetCSSValue(platform);
 
   return `<!doctype html>
 <html lang="en">
@@ -92,7 +97,7 @@ export function buildBlockedPageHTML(report: LaunchBlockedReport): string {
         color: var(--text);
         display: grid;
         place-items: center;
-        padding: calc(24px + env(titlebar-area-height, 0px)) 24px 24px;
+        padding: calc(24px + ${titleBarInset}) 24px 24px;
       }
       main {
         width: min(760px, 100%);
@@ -173,7 +178,7 @@ export function buildBlockedPageHTML(report: LaunchBlockedReport): string {
         line-height: 1.6;
       }
       @media (max-width: 640px) {
-        body { padding: calc(12px + env(titlebar-area-height, 0px)) 12px 12px; }
+        body { padding: calc(12px + ${titleBarInset}) 12px 12px; }
         main { padding: 22px; border-radius: 18px; }
         .actions { flex-direction: column; }
         .button { width: 100%; }
@@ -201,6 +206,9 @@ export function buildBlockedPageHTML(report: LaunchBlockedReport): string {
 </html>`;
 }
 
-export function blockedPageDataURL(report: LaunchBlockedReport): string {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(buildBlockedPageHTML(report))}`;
+export function blockedPageDataURL(
+  report: LaunchBlockedReport,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return `data:text/html;charset=utf-8,${encodeURIComponent(buildBlockedPageHTML(report, platform))}`;
 }

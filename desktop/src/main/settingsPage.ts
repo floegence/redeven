@@ -1,5 +1,6 @@
 import { desktopTheme } from './desktopTheme';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
+import { desktopWindowTitleBarInsetCSSValue } from '../shared/windowChromePlatform';
 
 function escapeHTML(value: string): string {
   return String(value ?? '')
@@ -17,8 +18,13 @@ function serializeDraft(draft: DesktopSettingsDraft): string {
     .replaceAll('&', '\\u0026');
 }
 
-export function buildSettingsPageHTML(draft: DesktopSettingsDraft, errorMessage = ''): string {
+export function buildSettingsPageHTML(
+  draft: DesktopSettingsDraft,
+  errorMessage = '',
+  platform: NodeJS.Platform = process.platform,
+): string {
   const error = String(errorMessage ?? '').trim();
+  const titleBarInset = desktopWindowTitleBarInsetCSSValue(platform);
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -46,7 +52,7 @@ export function buildSettingsPageHTML(draft: DesktopSettingsDraft, errorMessage 
         background: var(--bg);
         color: var(--text);
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        padding: calc(24px + env(titlebar-area-height, 0px)) 24px 24px;
+        padding: calc(24px + ${titleBarInset}) 24px 24px;
       }
       main {
         width: min(880px, 100%);
@@ -156,7 +162,7 @@ export function buildSettingsPageHTML(draft: DesktopSettingsDraft, errorMessage 
         cursor: wait;
       }
       @media (max-width: 720px) {
-        body { padding: calc(12px + env(titlebar-area-height, 0px)) 12px 12px; }
+        body { padding: calc(12px + ${titleBarInset}) 12px 12px; }
         main { padding: 20px; border-radius: 18px; }
         .grid.two { grid-template-columns: 1fr; }
         .actions { flex-direction: column-reverse; }
@@ -277,6 +283,10 @@ export function buildSettingsPageHTML(draft: DesktopSettingsDraft, errorMessage 
 </html>`;
 }
 
-export function settingsPageDataURL(draft: DesktopSettingsDraft, errorMessage = ''): string {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(buildSettingsPageHTML(draft, errorMessage))}`;
+export function settingsPageDataURL(
+  draft: DesktopSettingsDraft,
+  errorMessage = '',
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return `data:text/html;charset=utf-8,${encodeURIComponent(buildSettingsPageHTML(draft, errorMessage, platform))}`;
 }
