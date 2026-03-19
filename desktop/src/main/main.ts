@@ -45,6 +45,7 @@ import {
   REPORT_DESKTOP_WINDOW_THEME_CHANNEL,
   normalizeDesktopWindowThemeSnapshot,
 } from '../shared/windowThemeIPC';
+import { usesDesktopWindowThemeOverlay } from '../shared/windowChromePlatform';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -199,7 +200,7 @@ async function openSettingsWindow(draft?: DesktopSettingsDraft, errorMessage = '
     });
   }
 
-  await settingsWindow.loadURL(settingsPageDataURL(currentDraft, errorMessage));
+  await settingsWindow.loadURL(settingsPageDataURL(currentDraft, errorMessage, process.platform));
   if (!settingsWindow.isVisible()) {
     settingsWindow.show();
   }
@@ -283,6 +284,9 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameNam
   const spec = resolveDesktopWindowSpec(targetURL, Boolean(parent));
   const attachToParent = Boolean(parent) && spec.attachToParent !== false;
   const actualParent = attachToParent ? parent : undefined;
+  const browserPreloadPath = usesDesktopWindowThemeOverlay(process.platform)
+    ? resolveBrowserPreloadPath({ appPath: app.getAppPath() })
+    : '';
   const trimmedFrameName = String(frameName ?? '').trim();
   const windowStateKey = String(explicitWindowStateKey ?? '').trim()
     || (trimmedFrameName ? `window:${trimmedFrameName}` : parent ? 'window:child' : 'window:main');
@@ -315,7 +319,7 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameNam
     ...buildDesktopWindowChromeOptions(process.platform, defaultDesktopWindowThemeSnapshot()),
     parent: actualParent,
     webPreferences: {
-      preload: resolveBrowserPreloadPath({ appPath: app.getAppPath() }),
+      ...(browserPreloadPath ? { preload: browserPreloadPath } : {}),
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -416,7 +420,7 @@ async function ensureAgentStarted(): Promise<string> {
     blockedLaunch = launch.blocked;
     allowedBaseURL = '';
     desktopDiagnostics.clearRuntime();
-    return blockedPageDataURL(launch.blocked);
+    return blockedPageDataURL(launch.blocked, process.platform);
   }
 
   if (launchStartedFreshManagedRuntime(launch) && preferences.pending_bootstrap) {

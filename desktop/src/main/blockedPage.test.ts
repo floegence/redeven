@@ -19,7 +19,7 @@ describe('blockedPage', () => {
       diagnostics: {
         state_dir: '/Users/tester/.redeven',
       },
-    });
+    }, 'linux');
 
     expect(html).toContain('Redeven is already running');
     expect(html).toContain('without an attachable Local UI');
@@ -38,10 +38,12 @@ describe('blockedPage', () => {
         mode: 'hybrid',
         local_ui_enabled: true,
       },
-    });
+    }, 'darwin');
 
     expect(html).toContain('Redeven is already starting elsewhere');
     expect(html).toContain('appears to provide Local UI');
+    expect(html).toContain('calc(24px + 0px)');
+    expect(html).not.toContain('env(titlebar-area-height, 0px)');
   });
 
   it('recognizes blocked page action urls', () => {

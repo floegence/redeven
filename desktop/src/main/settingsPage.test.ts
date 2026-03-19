@@ -25,11 +25,24 @@ describe('settingsPage', () => {
       controlplane_url: '',
       env_id: '',
       env_token: '',
-    });
+    }, '', 'linux');
 
     expect(html).not.toContain('gradient');
     expect(html).toContain('background: var(--bg);');
     expect(html).toContain('env(titlebar-area-height, 0px)');
+  });
+
+  it('uses native spacing on macOS without titlebar safe-area CSS', () => {
+    const html = buildSettingsPageHTML({
+      local_ui_bind: '127.0.0.1:0',
+      local_ui_password: '',
+      controlplane_url: '',
+      env_id: '',
+      env_token: '',
+    }, '', 'darwin');
+
+    expect(html).toContain('calc(24px + 0px)');
+    expect(html).not.toContain('env(titlebar-area-height, 0px)');
   });
 
   it('renders an inline error when validation fails', () => {
