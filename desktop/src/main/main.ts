@@ -15,18 +15,22 @@ import {
 } from './desktopPreferences';
 import { buildDesktopAgentArgs, buildDesktopAgentEnvironment } from './desktopLaunch';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
-import { desktopTheme } from './desktopTheme';
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import { isAllowedAppNavigation } from './navigation';
-import { resolveBundledAgentPath, resolveSettingsPreloadPath } from './paths';
+import { resolveBrowserPreloadPath, resolveBundledAgentPath, resolveSettingsPreloadPath } from './paths';
 import { settingsPageDataURL } from './settingsPage';
 import { resolveDesktopWindowSpec } from './windowSpec';
+import { applyDesktopWindowTheme, buildDesktopWindowChromeOptions, defaultDesktopWindowThemeSnapshot } from './windowChrome';
 import {
   CANCEL_DESKTOP_SETTINGS_CHANNEL,
   SAVE_DESKTOP_SETTINGS_CHANNEL,
   type DesktopSettingsDraft,
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
+import {
+  REPORT_DESKTOP_WINDOW_THEME_CHANNEL,
+  normalizeDesktopWindowThemeSnapshot,
+} from '../shared/windowThemeIPC';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -114,7 +118,7 @@ async function openSettingsWindow(draft?: DesktopSettingsDraft, errorMessage = '
       title: 'Redeven Desktop Settings',
       parent: mainWindow ?? undefined,
       modal: false,
-      backgroundColor: desktopTheme.windowBackground,
+      ...buildDesktopWindowChromeOptions(process.platform, defaultDesktopWindowThemeSnapshot()),
       webPreferences: {
         preload: resolveSettingsPreloadPath({ appPath: app.getAppPath() }),
         contextIsolation: true,
@@ -244,9 +248,10 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameNam
     minHeight: spec.minHeight,
     show: false,
     title: spec.title,
-    backgroundColor: desktopTheme.windowBackground,
+    ...buildDesktopWindowChromeOptions(process.platform, defaultDesktopWindowThemeSnapshot()),
     parent: actualParent,
     webPreferences: {
+      preload: resolveBrowserPreloadPath({ appPath: app.getAppPath() }),
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -454,6 +459,17 @@ if (!app.requestSingleInstanceLock()) {
     if (settingsWindow && !settingsWindow.isDestroyed()) {
       settingsWindow.close();
     }
+  });
+  ipcMain.on(REPORT_DESKTOP_WINDOW_THEME_CHANNEL, (event, snapshot) => {
+    const normalized = normalizeDesktopWindowThemeSnapshot(snapshot);
+    if (!normalized) {
+      return;
+    }
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) {
+      return;
+    }
+    applyDesktopWindowTheme(win, normalized, process.platform);
   });
 
   app.whenReady().then(async () => {

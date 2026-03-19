@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { bundledAgentExecutableName, resolveBundledAgentPath, resolveSettingsPreloadPath } from './paths';
+import {
+  bundledAgentExecutableName,
+  resolveBrowserPreloadPath,
+  resolveBundledAgentPath,
+  resolveSettingsPreloadPath,
+} from './paths';
 
 describe('paths', () => {
   it('uses the packaged resources directory when the desktop app is bundled', () => {
@@ -43,5 +48,11 @@ describe('paths', () => {
     expect(resolveSettingsPreloadPath({
       appPath: '/Applications/Redeven Desktop.app/Contents/Resources/app.asar',
     })).toBe('/Applications/Redeven Desktop.app/Contents/Resources/app.asar/dist/preload/settings.js');
+  });
+
+  it('resolves the bundled browser preload script path', () => {
+    expect(resolveBrowserPreloadPath({
+      appPath: '/Applications/Redeven Desktop.app/Contents/Resources/app.asar',
+    })).toBe('/Applications/Redeven Desktop.app/Contents/Resources/app.asar/dist/preload/browser.js');
   });
 });
