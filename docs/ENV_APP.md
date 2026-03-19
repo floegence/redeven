@@ -8,6 +8,7 @@ Key points:
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower).
 - File Browser text previews now use Shiki-based syntax highlighting for recognized code/config formats, with large files degrading to plain text for responsiveness.
+- Desktop-managed runs can promote serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` and `file_browser` today).
 
 ## What runs where
 
@@ -27,6 +28,7 @@ Agent side:
 
 - The agent serves Env App static assets under `/_redeven_proxy/env/*` via the local gateway.
 - The Env App UI talks to the agent using **Flowersec RPC/streams** (fs/terminal/monitor domains).
+- Detached desktop child windows keep using the same Env App runtime, access gate, and Flowersec protocol path; only the scene rendered inside the window changes.
 - Terminal initializes new users with the `Dark` color theme and `Monaco` font while still preserving any saved per-user overrides.
 - On mobile, Terminal defaults to the built-in Floe keyboard, keeps taps from auto-triggering the system IME in Floe mode, and offers suggestion rails for recent commands, common commands, scripts, and paths. The default mobile input mode is chosen in Terminal settings as a strict `Floe Keyboard` / `System IME` toggle, while the More menu only exposes temporary show/hide actions when Floe Keyboard mode is active. Floe Keyboard stays as a bottom overlay, the terminal viewport aligns itself to the measured keyboard inset instead of reserving a separate blank spacer above it, and vertical touch drags on the terminal surface are translated into native terminal scrolling on mobile.
 
