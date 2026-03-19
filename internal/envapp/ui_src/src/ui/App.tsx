@@ -5,6 +5,7 @@ import { EnvAppShell } from './EnvAppShell';
 import { redevenV1Contract } from './protocol/redeven_v1';
 import { TerminalSessionsLifecycleSync } from './services/terminalSessionsLifecycleSync';
 import { REDEVEN_DECK_LAYOUT_IDS, redevenDeckPresets } from './deck/redevenDeckPresets';
+import { envChartThemePresets } from './chartThemePresets';
 
 function readSessionStorage(key: string): string {
   try {
@@ -23,6 +24,10 @@ const floeConfig = {
   storage: { namespace: storageNamespace },
   // Users frequently type in Terminal/Editor; command palette should always be available (Cmd/Ctrl+K).
   commands: { ignoreWhenTyping: false },
+  theme: {
+    defaultPreset: 'default',
+    presets: envChartThemePresets,
+  },
   deck: {
     storageKey: deckStorageKey,
     defaultActiveLayoutId: REDEVEN_DECK_LAYOUT_IDS.default,
