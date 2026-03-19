@@ -46,6 +46,16 @@ const terminalViewportRectState = vi.hoisted(() => ({
   bottom: 320,
 }));
 
+const terminalSelectionState = vi.hoisted(() => ({
+  text: '',
+}));
+
+const terminalConfigState = vi.hoisted(() => ({
+  values: [] as any[],
+}));
+
+const writeTextToClipboardSpy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+
 const rpcFsMocks = vi.hoisted(() => ({
   getPathContext: vi.fn().mockResolvedValue({ agentHomePathAbs: '/workspace' }),
   list: vi.fn().mockResolvedValue({
@@ -116,6 +126,10 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   useLayout: () => ({
     isMobile: () => layoutState.mobile,
   }),
+  useNotification: () => ({
+    error: vi.fn(),
+    success: vi.fn(),
+  }),
   useResolvedFloeConfig: () => ({
     persist: {
       load: (_key: string, fallback: any) => fallback,
@@ -133,6 +147,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
+    Copy: Icon,
     Sparkles: Icon,
     Terminal: Icon,
     Trash: Icon,
@@ -308,14 +323,23 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     container: HTMLDivElement;
     terminal = {
       options: {},
+      selectionManager: {
+        isSelecting: false,
+        boundMouseUpHandler: vi.fn(),
+        stopAutoScroll: vi.fn(),
+        selectionChangedEmitter: {
+          fire: vi.fn(),
+        },
+      },
       scrollLines: scrollLinesSpy,
       getScrollbackLength: () => terminalScrollState.scrollbackLength,
       isAlternateScreen: () => terminalScrollState.alternateScreen,
       input: terminalInputSpy,
     };
 
-    constructor(container: HTMLDivElement) {
+    constructor(container: HTMLDivElement, config?: any) {
       this.container = container;
+      terminalConfigState.values.push(config ?? null);
       const input = document.createElement('textarea');
       input.setAttribute('aria-label', 'Terminal input');
       this.container.appendChild(input);
@@ -336,11 +360,12 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     findNext = vi.fn();
     findPrevious = vi.fn();
     clear = vi.fn();
+    getSelectionText = vi.fn(() => terminalSelectionState.text);
   }
 
   return {
     TerminalCore: MockTerminalCore,
-    getDefaultTerminalConfig: vi.fn(() => ({})),
+    getDefaultTerminalConfig: vi.fn((_theme: string, overrides?: any) => overrides ?? {}),
     getThemeColors: vi.fn(() => ({ background: '#111111', foreground: '#eeeeee' })),
   };
 });
@@ -415,6 +440,10 @@ vi.mock('../utils/askFlowerPath', () => ({
   normalizeAbsolutePath: (value: string) => value,
 }));
 
+vi.mock('../utils/clipboard', () => ({
+  writeTextToClipboard: writeTextToClipboardSpy,
+}));
+
 const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
 
 async function settleTerminalPanel() {
@@ -446,6 +475,9 @@ describe('TerminalPanel', () => {
     terminalViewportRectState.top = 24;
     terminalViewportRectState.width = 320;
     terminalViewportRectState.bottom = 320;
+    terminalSelectionState.text = '';
+    terminalConfigState.values = [];
+    writeTextToClipboardSpy.mockClear();
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
       value: 372,
@@ -582,6 +614,19 @@ describe('TerminalPanel', () => {
     await Promise.resolve();
     expect(host.querySelector('[data-testid="dialog"]')).toBeTruthy();
     expect(host.textContent).toContain('Terminal settings');
+  });
+
+  it('configures TerminalCore without focus-triggered fit or resize-on-focus behavior', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    expect(terminalConfigState.values.length).toBeGreaterThan(0);
+    expect(terminalConfigState.values[0]?.responsive).toEqual({
+      notifyResizeOnlyWhenFocused: true,
+    });
   });
 
   it('restores focus to the active terminal after closing settings', async () => {
@@ -910,5 +955,83 @@ describe('TerminalPanel', () => {
 
     expect(transportMocks.sendInput).toHaveBeenNthCalledWith(1, 'session-1', 'g', 'conn-1');
     expect(transportMocks.sendInput).toHaveBeenNthCalledWith(2, 'session-1', 'it ', 'conn-1');
+  });
+
+  it('copies the active terminal selection from the custom context menu', async () => {
+    terminalSelectionState.text = 'echo redeven';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    terminalSurface?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await settleTerminalPanel();
+
+    const copyButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Copy selection'));
+    expect(copyButton).toBeTruthy();
+
+    copyButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await settleTerminalPanel();
+
+    expect(writeTextToClipboardSpy).toHaveBeenCalledWith('echo redeven');
+  });
+
+  it('copies the active terminal selection on Cmd/Ctrl+C when selection exists', async () => {
+    terminalSelectionState.text = 'pnpm test';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    terminalSurface?.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: 'c',
+    }));
+    await settleTerminalPanel();
+
+    expect(writeTextToClipboardSpy).toHaveBeenCalledWith('pnpm test');
+  });
+
+  it('does not hijack Cmd/Ctrl+C from non-terminal inputs inside the panel host', async () => {
+    terminalSelectionState.text = 'pnpm test';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const terminalContent = host.querySelector('[data-testid="terminal-content"]') as HTMLDivElement | null;
+    expect(terminalContent).toBeTruthy();
+
+    const extraInput = document.createElement('input');
+    terminalContent?.appendChild(extraInput);
+
+    extraInput.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: true,
+      key: 'c',
+    }));
+    await settleTerminalPanel();
+
+    expect(writeTextToClipboardSpy).not.toHaveBeenCalled();
   });
 });
