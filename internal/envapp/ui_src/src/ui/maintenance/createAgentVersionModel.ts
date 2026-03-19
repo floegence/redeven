@@ -13,6 +13,7 @@ type VersionRpc = Readonly<{
 export type AgentVersionModel = Readonly<{
   currentPing: Accessor<SysPingResponse | null>;
   currentPingLoading: Accessor<boolean>;
+  currentProcessStartedAtMs: Accessor<number | null>;
   currentVersion: Accessor<string>;
   currentVersionValid: Accessor<boolean>;
   latestMeta: Accessor<AgentLatestVersion | null>;
@@ -116,6 +117,10 @@ export function createAgentVersionModel(args: CreateAgentVersionModelArgs): Agen
   };
 
   const currentPing = createMemo(() => currentPingResource() ?? null);
+  const currentProcessStartedAtMs = createMemo(() => {
+    const value = Number(currentPing()?.processStartedAtMs ?? Number.NaN);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  });
   const currentVersion = createMemo(() => String(currentPing()?.version ?? '').trim());
   const preferredTargetVersion = createMemo(() => resolvePreferredTargetVersion(latestMeta()));
   const preferredTargetCompareToCurrent = createMemo(() => compareReleaseVersionCore(currentVersion(), preferredTargetVersion()));
@@ -129,6 +134,7 @@ export function createAgentVersionModel(args: CreateAgentVersionModelArgs): Agen
   return {
     currentPing,
     currentPingLoading: () => currentPingResource.loading,
+    currentProcessStartedAtMs,
     currentVersion,
     currentVersionValid: () => isReleaseVersion(currentVersion()),
     latestMeta,

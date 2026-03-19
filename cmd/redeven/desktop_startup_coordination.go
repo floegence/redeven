@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/localui"
+	localuiruntime "github.com/floegence/redeven-agent/internal/localui/runtime"
 )
 
 const (
@@ -42,7 +42,7 @@ type runtimeStartupReport struct {
 	DiagnosticsEnabled bool
 }
 
-func buildRuntimeStartupReport(state *localui.RuntimeStateSnapshot) runtimeStartupReport {
+func buildRuntimeStartupReport(state *localuiruntime.Snapshot) runtimeStartupReport {
 	return runtimeStartupReport{
 		LocalUIURL:         state.LocalUIURL,
 		LocalUIURLs:        append([]string(nil), state.LocalUIURLs...),
@@ -55,8 +55,8 @@ func buildRuntimeStartupReport(state *localui.RuntimeStateSnapshot) runtimeStart
 }
 
 func handleDesktopLockConflict(reportPath string, lockPath string, configPath string) (handled bool, exitCode int, err error) {
-	runtimeStatePath := localui.RuntimeStatePath(configPath)
-	state, loadErr := localui.WaitForAttachableRuntimeState(
+	runtimeStatePath := localuiruntime.RuntimeStatePath(configPath)
+	state, loadErr := localuiruntime.WaitForAttachable(
 		runtimeStatePath,
 		desktopLockConflictAttachTimeout,
 		desktopLockConflictPollInterval,

@@ -35,6 +35,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/diagnostics"
 	"github.com/floegence/redeven-agent/internal/fs"
 	"github.com/floegence/redeven-agent/internal/gitrepo"
+	localuiruntime "github.com/floegence/redeven-agent/internal/localui/runtime"
 	"github.com/floegence/redeven-agent/internal/monitor"
 	"github.com/floegence/redeven-agent/internal/pathutil"
 	"github.com/floegence/redeven-agent/internal/portforward"
@@ -104,7 +105,9 @@ type Agent struct {
 	commit    string
 	buildTime string
 
-	agentHomeAbs string
+	agentHomeAbs       string
+	runtimeStatePath   string
+	processStartedAtMs int64
 
 	term *terminal.Manager
 	mon  *monitor.Service
@@ -186,6 +189,8 @@ func New(opts Options) (*Agent, error) {
 		commit:                strings.TrimSpace(opts.Commit),
 		buildTime:             strings.TrimSpace(opts.BuildTime),
 		agentHomeAbs:          agentHomeAbs,
+		runtimeStatePath:      localuiruntime.RuntimeStatePath(cfgPathAbs),
+		processStartedAtMs:    time.Now().UnixMilli(),
 		term:                  terminal.NewManager(shell, agentHomeAbs, logger),
 		mon:                   monitor.NewService(logger),
 		sessions:              make(map[string]*activeSession),
@@ -216,12 +221,13 @@ func New(opts Options) (*Agent, error) {
 		upgrader = &sysUpgrader{a: a}
 	}
 	a.sys = syssvc.NewService(syssvc.Options{
-		AgentInstanceID: opts.Config.AgentInstanceID,
-		Version:         opts.Version,
-		Commit:          opts.Commit,
-		BuildTime:       opts.BuildTime,
-		Upgrader:        upgrader,
-		Restarter:       &sysRestarter{a: a},
+		AgentInstanceID:    opts.Config.AgentInstanceID,
+		ProcessStartedAtMs: a.processStartedAtMs,
+		Version:            opts.Version,
+		Commit:             opts.Commit,
+		BuildTime:          opts.BuildTime,
+		Upgrader:           upgrader,
+		Restarter:          &sysRestarter{a: a},
 	})
 
 	codeSvc, err := codeapp.New(context.Background(), codeapp.Options{

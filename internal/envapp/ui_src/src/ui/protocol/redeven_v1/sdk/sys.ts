@@ -1,6 +1,7 @@
 export type SysPingResponse = {
   serverTimeMs: number;
   agentInstanceId?: string;
+  processStartedAtMs?: number;
   version?: string;
   commit?: string;
   buildTime?: string;

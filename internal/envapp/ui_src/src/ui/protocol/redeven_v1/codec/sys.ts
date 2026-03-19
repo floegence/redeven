@@ -5,6 +5,7 @@ export function fromWireSysPingResponse(resp: wire_sys_ping_resp): SysPingRespon
   return {
     serverTimeMs: Number(resp?.server_time_ms ?? 0),
     agentInstanceId: resp?.agent_instance_id ? String(resp.agent_instance_id) : undefined,
+    processStartedAtMs: typeof resp?.process_started_at_ms === 'number' ? Number(resp.process_started_at_ms) : undefined,
     version: resp?.version ? String(resp.version) : undefined,
     commit: resp?.commit ? String(resp.commit) : undefined,
     buildTime: resp?.build_time ? String(resp.build_time) : undefined,

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/localui"
+	localuiruntime "github.com/floegence/redeven-agent/internal/localui/runtime"
 	"github.com/floegence/redeven-agent/internal/lockfile"
 )
 
@@ -25,7 +25,7 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	reportPath := filepath.Join(t.TempDir(), "startup-report.json")
-	runtimePath := localui.RuntimeStatePath(cfgPath)
+	runtimePath := localuiruntime.RuntimeStatePath(cfgPath)
 	if err := writeRuntimeStateForTest(runtimePath, server.URL+"/"); err != nil {
 		t.Fatalf("writeRuntimeStateForTest() error = %v", err)
 	}
@@ -67,7 +67,7 @@ func TestHandleDesktopLockConflictWritesBlockedReportWhenRuntimeIsUnavailable(t 
 		false,
 		false,
 		cfgPath,
-		localui.RuntimeStatePath(cfgPath),
+		localuiruntime.RuntimeStatePath(cfgPath),
 	)); err != nil {
 		t.Fatalf("writeAgentLockMetadata() error = %v", err)
 	}
@@ -91,13 +91,13 @@ func TestHandleDesktopLockConflictWritesBlockedReportWhenRuntimeIsUnavailable(t 
 
 func writeRuntimeStateForTest(path string, localUIURL string) error {
 	body, err := json.MarshalIndent(map[string]any{
-		"local_ui_url":         localUIURL,
-		"local_ui_urls":        []string{localUIURL},
-		"effective_run_mode":   "hybrid",
-		"remote_enabled":       true,
-		"desktop_managed":      true,
-		"state_dir":            filepath.Dir(filepath.Dir(path)),
-		"diagnostics_enabled":  true,
+		"local_ui_url":        localUIURL,
+		"local_ui_urls":       []string{localUIURL},
+		"effective_run_mode":  "hybrid",
+		"remote_enabled":      true,
+		"desktop_managed":     true,
+		"state_dir":           filepath.Dir(filepath.Dir(path)),
+		"diagnostics_enabled": true,
 	}, "", "  ")
 	if err != nil {
 		return err

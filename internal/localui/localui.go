@@ -27,6 +27,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/codeapp/gateway"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/diagnostics"
+	localuiruntime "github.com/floegence/redeven-agent/internal/localui/runtime"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
@@ -157,7 +158,7 @@ func New(opts Options) (*Server, error) {
 		bind:             bind,
 		configPath:       configPath,
 		stateDir:         filepath.Dir(configPath),
-		runtimeStatePath: localRuntimeStatePath(configPath),
+		runtimeStatePath: localuiruntime.RuntimeStatePath(configPath),
 		version:          strings.TrimSpace(opts.Version),
 		desktopManaged:   opts.DesktopManaged,
 		effectiveRunMode: strings.TrimSpace(opts.EffectiveRunMode),
@@ -221,7 +222,7 @@ func (s *Server) Start(ctx context.Context) error {
 		}()
 	}
 
-	if err := writeRuntimeState(s.runtimeStatePath, runtimeState{
+	if err := localuiruntime.WriteState(s.runtimeStatePath, localuiruntime.State{
 		LocalUIURL:         firstNonEmptyString(s.DisplayURLs()),
 		LocalUIURLs:        s.DisplayURLs(),
 		EffectiveRunMode:   s.effectiveRunMode,
@@ -251,7 +252,7 @@ func (s *Server) Close() error {
 	for _, ln := range s.listeners {
 		_ = ln.Close()
 	}
-	if err := removeRuntimeState(s.runtimeStatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := localuiruntime.RemoveState(s.runtimeStatePath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		s.log.Warn("failed to remove local runtime state", "path", s.runtimeStatePath, "error", err)
 	}
 	s.srv = nil
@@ -1091,6 +1092,16 @@ func sameOriginWSRequest(r *http.Request) bool {
 	}
 	return strings.EqualFold(strings.TrimSpace(originURL.Scheme), expectedScheme) &&
 		strings.EqualFold(strings.TrimSpace(originURL.Host), expectedHost)
+}
+
+func firstNonEmptyString(values []string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (s *Server) sweepLoop(ctx context.Context) {
