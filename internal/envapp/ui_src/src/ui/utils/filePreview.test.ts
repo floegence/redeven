@@ -9,6 +9,36 @@ describe('describeFilePreview', () => {
       language: 'typescript',
       wrapText: false,
     });
+    expect(describeFilePreview('frontend/postcss.config.mjs')).toEqual({
+      mode: 'text',
+      textPresentation: 'code',
+      language: 'javascript',
+      wrapText: false,
+    });
+    expect(describeFilePreview('frontend/env.d.mts')).toEqual({
+      mode: 'text',
+      textPresentation: 'code',
+      language: 'typescript',
+      wrapText: false,
+    });
+    expect(describeFilePreview('frontend/app.webmanifest')).toEqual({
+      mode: 'text',
+      textPresentation: 'code',
+      language: 'json',
+      wrapText: false,
+    });
+    expect(describeFilePreview('frontend/routes.graphql')).toEqual({
+      mode: 'text',
+      textPresentation: 'code',
+      language: 'graphql',
+      wrapText: false,
+    });
+    expect(describeFilePreview('frontend/layout.astro')).toEqual({
+      mode: 'text',
+      textPresentation: 'code',
+      language: 'astro',
+      wrapText: false,
+    });
     expect(describeFilePreview('Dockerfile')).toEqual({
       mode: 'text',
       textPresentation: 'code',
