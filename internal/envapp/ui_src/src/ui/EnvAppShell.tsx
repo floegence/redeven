@@ -51,7 +51,9 @@ import { FilePreviewContext } from './widgets/FilePreviewContext';
 import { FilePreviewHost } from './widgets/FilePreviewHost';
 import { buildAskFlowerDraftMarkdown } from './utils/askFlowerContextTemplate';
 import { resolveSuggestedWorkingDirAbsolute } from './utils/askFlowerPath';
+import { buildFilePreviewAskFlowerIntent } from './utils/filePreviewAskFlower';
 import { reloadCurrentPage } from './utils/windowNavigation';
+import { subscribeDesktopAskFlowerMainWindowHandoff, type DesktopAskFlowerMainWindowHandoff } from './services/desktopAskFlowerBridge';
 import {
   fetchGatewayJSON,
   getGatewayAccessStatus,
@@ -78,7 +80,7 @@ import {
   type LocalAccessStatus,
   type LocalRuntimeInfo,
 } from './services/controlplaneApi';
-import { buildDetachedFilePreviewSurface, isDesktopManagedRuntime, openDetachedSurfaceWindow, parseDetachedSurfaceFromURL } from './services/detachedSurface';
+import { basenameFromAbsolutePath, buildDetachedFilePreviewSurface, isDesktopManagedRuntime, openDetachedSurfaceWindow, parseDetachedSurfaceFromURL } from './services/detachedSurface';
 import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 
@@ -404,6 +406,7 @@ export function EnvAppShell() {
   const [askFlowerComposerOpen, setAskFlowerComposerOpen] = createSignal(false);
   const [askFlowerComposerIntent, setAskFlowerComposerIntent] = createSignal<AskFlowerIntent | null>(null);
   const [askFlowerComposerAnchor, setAskFlowerComposerAnchor] = createSignal<AskFlowerComposerAnchor | null>(null);
+  let pendingMainWindowAskFlowerIntents: AskFlowerIntent[] = [];
 
   const [settingsSeq, setSettingsSeq] = createSignal(0);
   const bumpSettingsSeq = () => setSettingsSeq((n) => n + 1);
@@ -450,6 +453,50 @@ export function EnvAppShell() {
     setAskFlowerComposerOpen(false);
     setAskFlowerComposerIntent(null);
     setAskFlowerComposerAnchor(null);
+  };
+
+  const flushPendingMainWindowAskFlowerIntents = () => {
+    if (!canUseFlower() || pendingMainWindowAskFlowerIntents.length <= 0) {
+      return;
+    }
+    const queue = [...pendingMainWindowAskFlowerIntents];
+    pendingMainWindowAskFlowerIntents = [];
+    goTab('ai');
+    for (const intent of queue) {
+      injectAskFlowerIntent(intent);
+    }
+  };
+
+  const handleDesktopAskFlowerMainWindowHandoff = (payload: DesktopAskFlowerMainWindowHandoff) => {
+    const item: FileItem = {
+      id: payload.path,
+      name: basenameFromAbsolutePath(payload.path),
+      path: payload.path,
+      type: 'file',
+    };
+    const result = buildFilePreviewAskFlowerIntent({
+      item,
+      selectionText: payload.selectionText,
+    });
+    if (result.error) {
+      notify.error('Ask Flower unavailable', result.error);
+      return;
+    }
+    if (!result.intent) {
+      return;
+    }
+
+    if (!canUseFlower()) {
+      if (env.state === 'ready') {
+        notify.error('Permission denied', 'Read/write/execute permission required.');
+        return;
+      }
+      pendingMainWindowAskFlowerIntents.push(result.intent);
+      return;
+    }
+
+    goTab('ai');
+    injectAskFlowerIntent(result.intent);
   };
 
   const uploadAskFlowerAttachment = async (file: File): Promise<string> => {
@@ -1144,7 +1191,16 @@ export function EnvAppShell() {
     };
 
     window.addEventListener('message', onMessage);
-    onCleanup(() => window.removeEventListener('message', onMessage));
+    const unsubscribeAskFlowerHandoff = subscribeDesktopAskFlowerMainWindowHandoff((payload) => {
+      if (detachedSurface()) {
+        return;
+      }
+      handleDesktopAskFlowerMainWindowHandoff(payload);
+    });
+    onCleanup(() => {
+      window.removeEventListener('message', onMessage);
+      unsubscribeAskFlowerHandoff();
+    });
   });
 
   // Ensure the tunnel is healthy after common browser lifecycle transitions.
@@ -1214,6 +1270,13 @@ export function EnvAppShell() {
     if (initialTab && layout.sidebarActiveTab() !== initialTab) return;
     setPendingAutoOpenAI(false);
     goTab('ai');
+  });
+
+  createEffect(() => {
+    if (env.state !== 'ready' || !canUseFlower()) {
+      return;
+    }
+    flushPendingMainWindowAskFlowerIntents();
   });
 
   // Never keep the user on Flower when RWX is not granted.

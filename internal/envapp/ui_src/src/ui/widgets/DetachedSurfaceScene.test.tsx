@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DetachedSurfaceScene } from './DetachedSurfaceScene';
 
 const openAskFlowerComposer = vi.fn();
+const requestDesktopAskFlowerMainWindowHandoff = vi.hoisted(() => vi.fn(() => false));
 const openPreview = vi.fn(async () => undefined);
 const closePreview = vi.fn();
 const downloadCurrent = vi.fn(async () => undefined);
@@ -45,6 +46,10 @@ vi.mock('../pages/EnvContext', () => ({
   useEnvContext: () => ({
     openAskFlowerComposer,
   }),
+}));
+
+vi.mock('../services/desktopAskFlowerBridge', () => ({
+  requestDesktopAskFlowerMainWindowHandoff,
 }));
 
 vi.mock('./FilePreviewContext', () => ({
@@ -92,6 +97,8 @@ afterEach(() => {
   document.body.innerHTML = '';
   document.title = '';
   openAskFlowerComposer.mockReset();
+  requestDesktopAskFlowerMainWindowHandoff.mockReset();
+  requestDesktopAskFlowerMainWindowHandoff.mockReturnValue(false);
   openPreview.mockClear();
   closePreview.mockClear();
   downloadCurrent.mockClear();
@@ -128,6 +135,37 @@ describe('DetachedSurfaceScene', () => {
 
     expect(openAskFlowerComposer).toHaveBeenCalledTimes(1);
     expect(downloadCurrent).toHaveBeenCalledTimes(1);
+  });
+
+  it('prefers the desktop main-window handoff before falling back to the local composer', () => {
+    requestDesktopAskFlowerMainWindowHandoff.mockReturnValue(true);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <DetachedSurfaceScene
+        surface={{ kind: 'file_preview', path: '/workspace/demo.txt' }}
+        accessGateVisible={false}
+        accessGatePanel={<div>gate</div>}
+      />
+    ), host);
+
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      rangeCount: 1,
+      toString: () => 'selected line',
+      getRangeAt: () => ({ commonAncestorContainer: host.querySelector('[data-testid="preview-content"]') }) as unknown as Range,
+    } as unknown as Selection);
+
+    const askFlowerButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Ask Flower'));
+    askFlowerButton?.click();
+
+    expect(requestDesktopAskFlowerMainWindowHandoff).toHaveBeenCalledWith({
+      source: 'file_preview',
+      path: '/workspace/demo.txt',
+      selectionText: 'selected line',
+    });
+    expect(openAskFlowerComposer).not.toHaveBeenCalled();
   });
 
   it('renders the detached file browser scene with isolated state scope', () => {

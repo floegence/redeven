@@ -8,6 +8,7 @@ import type { DetachedSurface } from '../services/detachedSurface';
 import { basenameFromAbsolutePath } from '../services/detachedSurface';
 import { buildFilePreviewAskFlowerIntent } from '../utils/filePreviewAskFlower';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
+import { requestDesktopAskFlowerMainWindowHandoff } from '../services/desktopAskFlowerBridge';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { FilePreviewContent } from './FilePreviewContent';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
@@ -69,9 +70,21 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
   });
 
   const handleAskFlower = () => {
+    const selectionText = readSelectionTextFromPreview(previewContentEl);
+    const path = String(filePreview.controller.item()?.path ?? '').trim();
+    if (
+      requestDesktopAskFlowerMainWindowHandoff({
+        source: 'file_preview',
+        path,
+        selectionText,
+      })
+    ) {
+      return;
+    }
+
     const result = buildFilePreviewAskFlowerIntent({
       item: filePreview.controller.item(),
-      selectionText: readSelectionTextFromPreview(previewContentEl),
+      selectionText,
     });
     if (result.error) {
       notification.error('Ask Flower unavailable', result.error);
