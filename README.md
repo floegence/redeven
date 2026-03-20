@@ -147,6 +147,8 @@ Multi-environment mode uses isolated state per environment:
 
 Desktop-managed launch preferences are stored separately in the desktop app user data directory. They cover startup-only settings such as:
 
+- Desktop target mode (`This device` vs `External Redeven`)
+- Remembered external Redeven URL
 - Local UI bind address
 - Local UI password for non-loopback exposure
 - One-shot “register to Redeven on next start” bootstrap values
@@ -205,6 +207,14 @@ Details:
 - If you expose Local UI on a non-loopback address, also set a Local UI password.
 - To register Desktop to a Redeven environment on the next start, fill in `Control plane URL`, `Environment ID`, and `Environment token`, then save.
 - `CommandOrControl+Q` now asks for confirmation before quitting the desktop app.
+
+### Redeven Desktop needs to connect to another machine
+
+- Open `Connect to Redeven...` from the native app menu.
+- Select `External Redeven`.
+- Enter the exposed Redeven Local UI base URL, for example `http://192.168.1.11:24000/`.
+- If the remote machine requires a Local UI password, the page will ask for it after Desktop opens the target.
+- To make this machine reachable from another Desktop instance, set `Local UI bind address` to an explicit reachable address such as `0.0.0.0:24000` and configure a Local UI password.
 
 ### Requests feel slow even though Desktop is talking to a local agent
 

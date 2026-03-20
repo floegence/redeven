@@ -52,4 +52,18 @@ describe('blockedPage', () => {
     expect(blockedActionFromURL('https://redeven-desktop.invalid/settings')).toBe('settings');
     expect(blockedActionFromURL('https://example.com/quit')).toBeNull();
   });
+
+  it('renders an external target connectivity failure', () => {
+    const html = buildBlockedPageHTML({
+      status: 'blocked',
+      code: 'external_target_unreachable',
+      message: 'Desktop could not reach the configured Redeven URL.',
+      diagnostics: {
+        target_url: 'http://192.168.1.11:24000/',
+      },
+    }, 'linux');
+
+    expect(html).toContain('Redeven target is unavailable');
+    expect(html).toContain('Target URL: http://192.168.1.11:24000/');
+  });
 });
