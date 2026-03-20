@@ -86,9 +86,9 @@
   <rect x="430" y="430" width="180" height="92" rx="22" fill="#E0F2FE" stroke="#38BDF8" stroke-width="2"/>
   <text x="462" y="466" fill="#0C4A6E" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Flowersec</text>
   <text x="470" y="496" fill="#0C4A6E" font-family="Arial, Helvetica, sans-serif" font-size="18">Tunnel</text>
-  <rect x="388" y="378" width="170" height="56" rx="18" fill="#F0FDF4" fill-opacity="0.96" stroke="#86EFAC"/>
-  <text x="406" y="404" fill="#047857" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">E2EE data plane</text>
-  <text x="406" y="426" fill="#065F46" font-family="Arial, Helvetica, sans-serif" font-size="13.5">encrypted bytes only</text>
+  <rect x="430" y="356" width="180" height="56" rx="18" fill="#F0FDF4" fill-opacity="0.96" stroke="#86EFAC"/>
+  <text x="448" y="382" fill="#047857" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">E2EE data plane</text>
+  <text x="448" y="404" fill="#065F46" font-family="Arial, Helvetica, sans-serif" font-size="13.5">encrypted bytes only</text>
 
   <rect x="70" y="548" width="1050" height="60" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>
   <text x="96" y="571" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="14">
