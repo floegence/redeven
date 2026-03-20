@@ -39,6 +39,7 @@ export interface FileBrowserWorkspaceProps {
   mode: GitHistoryMode;
   onModeChange: (mode: GitHistoryMode) => void;
   gitHistoryDisabled?: boolean;
+  gitHistoryDisabledReason?: string;
   captureTypingFromPage?: boolean;
   files: FileItem[];
   currentPath: string;
@@ -270,7 +271,15 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
       onResize={props.onResize}
       onClose={props.onClose}
       sidebarBodyClass="overflow-hidden"
-      modeSwitcher={<GitHistoryModeSwitch mode={props.mode} onChange={props.onModeChange} gitHistoryDisabled={props.gitHistoryDisabled} class="w-full" />}
+      modeSwitcher={(
+        <GitHistoryModeSwitch
+          mode={props.mode}
+          onChange={props.onModeChange}
+          gitHistoryDisabled={props.gitHistoryDisabled}
+          gitHistoryDisabledReason={props.gitHistoryDisabledReason}
+          class="w-full"
+        />
+      )}
       sidebarBody={(
         <div class="flex h-full min-h-0 flex-col gap-1.5">
           <div class="flex items-center justify-between px-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
@@ -359,6 +368,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           mode={props.mode}
           onModeChange={props.onModeChange}
           gitHistoryDisabled={props.gitHistoryDisabled}
+          gitHistoryDisabledReason={props.gitHistoryDisabledReason}
           captureTypingFromPage={props.captureTypingFromPage}
           width={props.width}
           open={props.open}

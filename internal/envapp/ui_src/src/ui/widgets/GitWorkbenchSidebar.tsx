@@ -37,6 +37,7 @@ export interface GitWorkbenchSidebarProps {
   repoInfoLoading?: boolean;
   repoInfoError?: string;
   repoAvailable?: boolean;
+  repoUnavailableReason?: string;
   repoSummary?: GitRepoSummaryResponse | null;
   workspace?: GitListWorkspaceChangesResponse | null;
   workspaceLoading?: boolean;
@@ -102,11 +103,14 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
       >
         <div class="space-y-1.5 sm:space-y-2">
           <Show
-            when={!props.repoInfoLoading}
-            fallback={<GitStatePane loading message="Checking repository..." class="min-h-[4.5rem] py-3" />}
+              when={!props.repoInfoLoading}
+              fallback={<GitStatePane loading message="Checking repository..." class="min-h-[4.5rem] py-3" />}
           >
             <Show when={!props.repoInfoError} fallback={<div class="py-3 text-xs break-words text-error">{props.repoInfoError}</div>}>
-              <Show when={props.repoAvailable} fallback={<div class="py-3 text-xs text-muted-foreground">Current path is not inside a Git repository.</div>}>
+              <Show
+                when={props.repoAvailable}
+                fallback={<div class="py-3 text-xs text-muted-foreground">{props.repoUnavailableReason || 'Current path is not inside a Git repository.'}</div>}
+              >
                 <div class="space-y-1.5 sm:space-y-2">
                   <div class="px-1 pb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/65">
                     {selectorLabel(activeSubview())}
