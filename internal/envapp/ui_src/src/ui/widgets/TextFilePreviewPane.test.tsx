@@ -24,6 +24,17 @@ vi.mock('@floegence/floe-webapp-core/editor', () => ({
     <button
       type="button"
       data-testid="mock-editor"
+      data-read-only={String(props.options.readOnly)}
+      data-hover-enabled={String(props.options.hover?.enabled)}
+      data-code-lens={String(props.options.codeLens)}
+      data-inlay-hints={String(props.options.inlayHints?.enabled)}
+      data-quick-suggestions={String(props.options.quickSuggestions)}
+      data-suggest-on-trigger={String(props.options.suggestOnTriggerCharacters)}
+      data-parameter-hints={String(props.options.parameterHints?.enabled)}
+      data-inline-suggest={String(props.options.inlineSuggest?.enabled)}
+      data-drop-into-editor={String(props.options.dropIntoEditor?.enabled)}
+      data-paste-as={String(props.options.pasteAs?.enabled)}
+      data-drag-and-drop={String(props.options.dragAndDrop)}
       onClick={() => {
         props.onChange?.('changed from editor');
         props.onSelectionChange?.('selected from editor', {});
@@ -77,6 +88,17 @@ describe('TextFilePreviewPane', () => {
     expect(editor).toBeTruthy();
     expect(host.textContent).toContain('typescript:const value = 2;:rw');
     expect(host.textContent).not.toContain('Editing');
+    expect(editor?.dataset.readOnly).toBe('false');
+    expect(editor?.dataset.hoverEnabled).toBe('false');
+    expect(editor?.dataset.codeLens).toBe('false');
+    expect(editor?.dataset.inlayHints).toBe('off');
+    expect(editor?.dataset.quickSuggestions).toBe('false');
+    expect(editor?.dataset.suggestOnTrigger).toBe('false');
+    expect(editor?.dataset.parameterHints).toBe('false');
+    expect(editor?.dataset.inlineSuggest).toBe('false');
+    expect(editor?.dataset.dropIntoEditor).toBe('false');
+    expect(editor?.dataset.pasteAs).toBe('false');
+    expect(editor?.dataset.dragAndDrop).toBe('false');
 
     editor?.click();
 
