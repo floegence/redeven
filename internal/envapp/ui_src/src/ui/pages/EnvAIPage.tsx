@@ -57,7 +57,6 @@ import type { AskFlowerIntent } from './askFlowerIntent';
 import { buildAskFlowerDraftMarkdown, mergeAskFlowerDraft } from '../utils/askFlowerContextTemplate';
 import { createClientId } from '../utils/clientId';
 import {
-  expandHomeDisplayPath,
   normalizeAbsolutePath as normalizeAskFlowerAbsolutePath,
   resolveSuggestedWorkingDirAbsolute,
   toHomeDisplayPath,
@@ -130,15 +129,6 @@ function withChildren(tree: FileItem[], folderPath: string, children: FileItem[]
 
   const [next] = visit(tree);
   return next;
-}
-
-function normalizeWorkingDirInputText(input: string, rootAbs?: string): string {
-  const raw = String(input ?? '').trim();
-  if (!raw) return '';
-  if (raw.startsWith('~')) {
-    return expandHomeDisplayPath(raw, rootAbs);
-  }
-  return normalizeAskFlowerAbsolutePath(raw);
 }
 
 type ExecutionMode = 'act' | 'plan';
@@ -224,7 +214,6 @@ const AIChatInput: Component<{
   workingDirLocked?: boolean;
   workingDirDisabled?: boolean;
   onPickWorkingDir?: () => void;
-  onEditWorkingDir?: () => void;
   onSendIntent?: (intent: SendIntent) => void;
   getSendBlockReason?: (content: string, attachments: Attachment[]) => string | null;
   onApiReady?: (api: AIChatInputApi | null) => void;
@@ -374,7 +363,6 @@ const AIChatInput: Component<{
   };
 
   const canPickWorkingDir = () => !!props.onPickWorkingDir && !props.disabled && !props.workingDirDisabled && !props.workingDirLocked;
-  const canEditWorkingDir = () => !!props.onEditWorkingDir && !props.disabled && !props.workingDirDisabled && !props.workingDirLocked;
 
   const applyDraftText = (nextText: string, mode: 'append' | 'replace') => {
     const normalized = String(nextText ?? '').trim();
@@ -534,21 +522,6 @@ const AIChatInput: Component<{
                 <Show when={!!props.workingDirLocked}>
                   <LockIcon />
                 </Show>
-              </button>
-            </Show>
-
-            <Show when={props.onEditWorkingDir}>
-              <button
-                type="button"
-                class="flower-chat-meta-btn"
-                onClick={() => {
-                  if (!canEditWorkingDir()) return;
-                  props.onEditWorkingDir?.();
-                }}
-                title="Edit working directory"
-                disabled={!canEditWorkingDir()}
-              >
-                <Pencil class="w-4 h-4" />
               </button>
             </Show>
 
@@ -1895,10 +1868,6 @@ export function EnvAIPage() {
   const [homePath, setHomePath] = createSignal<string | undefined>(undefined);
   const [workingDirPickerOpen, setWorkingDirPickerOpen] = createSignal(false);
   const [workingDirFiles, setWorkingDirFiles] = createSignal<FileItem[]>([]);
-  const [workingDirEditOpen, setWorkingDirEditOpen] = createSignal(false);
-  const [workingDirEditValue, setWorkingDirEditValue] = createSignal('');
-  const [workingDirEditError, setWorkingDirEditError] = createSignal<string | null>(null);
-  const [workingDirEditSaving, setWorkingDirEditSaving] = createSignal(false);
   let workingDirCache: DirCache = new Map();
   let draftWorkingDirInitializedForHome = false;
 
@@ -2644,47 +2613,6 @@ export function EnvAIPage() {
       applyAskFlowerIntent(intent);
     }
   });
-
-  const openWorkingDirEditor = () => {
-    if (workingDirLocked()) return;
-    setWorkingDirEditError(null);
-    setWorkingDirEditValue(workingDirLabel() || activeWorkingDir() || '');
-    setWorkingDirEditOpen(true);
-  };
-
-  const saveWorkingDirEditor = async () => {
-    if (!ensureRWX()) return;
-    if (workingDirLocked()) return;
-
-    const root = String(homePath() ?? '').trim();
-    const normalized = normalizeWorkingDirInputText(workingDirEditValue(), root);
-
-    // Empty input: reset to default root dir.
-    if (!normalized) {
-      ai.setDraftWorkingDir('');
-      setWorkingDirEditOpen(false);
-      setWorkingDirEditError(null);
-      return;
-    }
-
-    setWorkingDirEditSaving(true);
-    setWorkingDirEditError(null);
-    try {
-      const resp = await fetchGatewayJSON<Readonly<{ working_dir: string }>>('/_redeven_proxy/api/ai/validate_working_dir', {
-        method: 'POST',
-        body: JSON.stringify({ working_dir: normalized }),
-      });
-      const cleaned = String(resp?.working_dir ?? '').trim();
-      if (!cleaned) throw new Error('Invalid working directory');
-      ai.setDraftWorkingDir(cleaned);
-      setWorkingDirEditOpen(false);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setWorkingDirEditError(msg || 'Request failed.');
-    } finally {
-      setWorkingDirEditSaving(false);
-    }
-  };
 
   const loadWorkingDirRoot = async () => {
     if (!protocol.client()) return;
@@ -4924,7 +4852,6 @@ export function EnvAIPage() {
                       workingDirLocked={workingDirLocked()}
                       workingDirDisabled={workingDirDisabled()}
                       onPickWorkingDir={() => setWorkingDirPickerOpen(true)}
-                      onEditWorkingDir={() => openWorkingDirEditor()}
                       onSendIntent={(intent) => {
                         nextSendIntent = intent;
                       }}
@@ -4956,59 +4883,6 @@ export function EnvAIPage() {
                 }
               }}
             />
-
-            <Dialog
-              open={workingDirEditOpen()}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setWorkingDirEditOpen(false);
-                  setWorkingDirEditError(null);
-                  setWorkingDirEditValue('');
-                  return;
-                }
-                setWorkingDirEditOpen(true);
-              }}
-              title="Edit Working Directory"
-              footer={
-                <div class="flex justify-end gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setWorkingDirEditOpen(false)} disabled={workingDirEditSaving()}>
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="default"
-                    onClick={() => void saveWorkingDirEditor()}
-                    disabled={workingDirEditSaving() || workingDirLocked()}
-                  >
-                    <Show when={workingDirEditSaving()}>
-                      <span class="mr-1">
-                        <InlineButtonSnakeLoading />
-                      </span>
-                    </Show>
-                    Save
-                  </Button>
-                </div>
-              }
-            >
-              <div class="space-y-3">
-                <div>
-                  <label class="block text-xs font-medium mb-1.5">Path</label>
-                  <Input
-                    value={workingDirEditValue()}
-                    onInput={(e) => setWorkingDirEditValue(e.currentTarget.value)}
-                    placeholder="/path/to/dir"
-                    size="sm"
-                    class="w-full"
-                  />
-                  <p class="text-[11px] text-muted-foreground mt-1.5">
-                    Use an absolute path. <span class="font-mono">~</span> maps to Home (<span class="font-mono">agent_home_dir</span>).
-                  </p>
-                  <Show when={workingDirEditError()}>
-                    <p class="text-[11px] text-error mt-1.5">{workingDirEditError()}</p>
-                  </Show>
-                </div>
-              </div>
-            </Dialog>
 
             <Dialog
               open={followupEditOpen()}
