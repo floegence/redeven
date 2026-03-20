@@ -16,7 +16,6 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       <div
         data-testid="floating-root"
         data-floe-geometry-surface="floating-window"
-        class={props.class}
         data-default-x={String(props.defaultPosition?.x ?? '')}
         data-default-y={String(props.defaultPosition?.y ?? '')}
         data-default-width={String(props.defaultSize?.width ?? '')}
@@ -27,7 +26,11 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
           height: `${props.defaultSize?.height ?? 300}px`,
         }}
       >
-        {props.children}
+        <div class={props.class}>
+          <div data-testid="floating-titlebar">{props.title}</div>
+          <div data-testid="floating-content">{props.children}</div>
+          {props.footer ? <div data-testid="floating-footer">{props.footer}</div> : null}
+        </div>
       </div>
     ) : null
   ),
@@ -101,5 +104,34 @@ describe('PersistentFloatingWindow', () => {
       width: 860,
       height: 540,
     });
+  });
+
+  it('applies custom content and footer classes to the floating window slots', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <PersistentFloatingWindow
+        open
+        onOpenChange={() => undefined}
+        title="Demo"
+        persistenceKey="demo"
+        contentClass="!p-0"
+        footerClass="!px-2.5"
+        footer={<div>footer</div>}
+      >
+        <div>content</div>
+      </PersistentFloatingWindow>
+    ), host);
+
+    await Promise.resolve();
+    vi.advanceTimersByTime(1);
+    await Promise.resolve();
+
+    const content = host.querySelector('[data-testid="floating-content"]');
+    const footer = host.querySelector('[data-testid="floating-footer"]');
+
+    expect(content?.className).toContain('!p-0');
+    expect(footer?.className).toContain('!px-2.5');
   });
 });

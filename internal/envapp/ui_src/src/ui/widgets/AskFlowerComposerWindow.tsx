@@ -188,7 +188,6 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
   const [userPrompt, setUserPrompt] = createSignal('');
   const [validationError, setValidationError] = createSignal('');
   const [isComposing, setIsComposing] = createSignal(false);
-  const [isFocused, setIsFocused] = createSignal(false);
   const [sending, setSending] = createSignal(false);
   const [viewport, setViewport] = createSignal(currentViewportSize());
   const [contextPreview, setContextPreview] = createSignal<ContextPreviewState | null>(null);
@@ -240,7 +239,6 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
   const resetDraft = (intent: AskFlowerIntent | null) => {
     setValidationError('');
     setIsComposing(false);
-    setIsFocused(false);
     setSending(false);
     closeContextPreview();
     setUserPrompt(String(intent?.userPrompt ?? '').trim());
@@ -459,35 +457,37 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
             defaultSize={windowSizing().defaultSize}
             minSize={windowSizing().minSize}
             maxSize={windowSizing().maxSize}
-            class="ask-flower-composer-window"
+            class="ask-flower-composer-window border-border/65 shadow-[0_28px_72px_-42px_rgba(15,23,42,0.38)]"
+            contentClass="!p-0"
+            footerClass="!gap-1.5 !px-2 !py-1.5 sm:!px-2.5 sm:!py-1.5"
             zIndex={130}
             footer={(
-              <div class="flex w-full min-w-0 items-center gap-2">
-                <div class="flex min-w-0 flex-1 items-center text-[11px] text-muted-foreground">
-                  <span class="inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-full border border-border/65 bg-muted/35 px-2.5 py-1">
+              <div class="flex w-full min-w-0 items-center gap-1.5 overflow-hidden">
+                <div class="flex min-w-0 flex-1 items-center text-[10px] text-muted-foreground sm:text-[11px]">
+                  <span class="inline-flex min-w-0 flex-1 items-center gap-1 rounded-full border border-border/60 bg-muted/28 px-2 py-0.5">
                     <Folder class="size-3 shrink-0" />
                     <span class="shrink-0 font-medium text-foreground/80">Working dir</span>
-                    <span class="min-w-0 truncate font-mono" title={suggestedWorkingDir() || 'Working directory unavailable'}>
+                    <span class="min-w-0 truncate font-mono text-[10px] sm:text-[11px]" title={suggestedWorkingDir() || 'Working directory unavailable'}>
                       {suggestedWorkingDir() ? truncatePath(suggestedWorkingDir()) : 'Unavailable'}
                     </span>
                   </span>
                 </div>
                 <span class="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">{sending() ? 'Sending...' : 'Ready'}</span>
-                <Button variant="ghost" size="sm" onClick={props.onClose} disabled={sending()}>
+                <Button variant="ghost" size="sm" class="h-7 shrink-0 rounded-md px-2.5 text-[11px] font-medium sm:h-8" onClick={props.onClose} disabled={sending()}>
                   Close
                 </Button>
               </div>
             )}
           >
             <div class="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.14),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,255,255,0.9))] dark:bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.18),transparent_42%),linear-gradient(180deg,rgba(19,24,38,0.98),rgba(12,16,28,0.98))]">
-              <div data-testid="ask-flower-scroll-region" class="flex-1 min-h-0 overflow-y-auto px-2.5 py-2.5 sm:px-3 sm:py-3">
-                <div class="mx-auto flex w-full max-w-[42rem] flex-col gap-2.5">
-                  <div class="chat-message-item items-start gap-2 sm:gap-2.5">
+              <div data-testid="ask-flower-scroll-region" class="flex-1 min-h-0 overflow-y-auto px-2 py-2 sm:px-2.5 sm:py-2.5">
+                <div class="mx-auto flex w-full max-w-[40rem] flex-col gap-2">
+                  <div class="chat-message-item items-start gap-2">
                     <FlowerComposerAvatar />
 
-                    <div class="chat-message-content-wrapper max-w-[min(100%,39rem)] gap-1.5">
-                      <div class="min-w-0 rounded-2xl rounded-tl-lg border border-border/70 bg-card/95 px-3 py-2.5 shadow-[0_16px_34px_-32px_rgba(15,23,42,0.4)] backdrop-blur sm:px-3.5 sm:py-3">
-                        <div class="flex flex-wrap items-center gap-1.5">
+                    <div class="chat-message-content-wrapper max-w-[min(100%,37rem)] gap-1">
+                      <div class="min-w-0 rounded-[1.05rem] rounded-tl-md border border-border/65 bg-card/96 px-2.5 py-2 shadow-[0_14px_28px_-28px_rgba(15,23,42,0.34)] backdrop-blur sm:px-3 sm:py-2.5">
+                        <div class="flex flex-wrap items-center gap-1">
                           <div class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground/70">Flower</div>
                           <span class="inline-flex items-center rounded-full border border-primary/15 bg-primary/8 px-2 py-0.5 text-[11px] font-semibold text-primary/80">
                             {composerCopy()?.sourceLabel}
@@ -499,7 +499,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                           </Show>
                         </div>
 
-                        <div class="mt-1.5 text-sm leading-5 text-foreground/95">
+                        <div class="mt-1 text-sm leading-5 text-foreground/95">
                           <For each={composerCopy()?.headline ?? []}>
                             {(part) =>
                               part.kind === 'text'
@@ -523,7 +523,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                           </For>
                         </div>
 
-                        <div class="mt-2 rounded-xl border border-border/60 bg-muted/[0.22] px-2.5 py-2 text-[11px] leading-5 text-muted-foreground">
+                        <div class="mt-1.5 rounded-[0.95rem] border border-border/55 bg-muted/[0.2] px-2.5 py-1.5 text-[11px] leading-5 text-muted-foreground">
                           <span class="font-medium text-foreground/90">{composerCopy()?.question}</span>
                           <Show when={(composerCopy()?.contextEntries.length ?? 0) > 0}>
                             <span class="ml-1">Open any linked context below to preview exactly what Flower will use.</span>
@@ -531,14 +531,14 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                         </div>
 
                         <Show when={(composerCopy()?.contextEntries.length ?? 0) > 0}>
-                          <div class="mt-2.5 border-t border-border/55 pt-2.5">
-                            <div class="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/65">Linked context</div>
-                            <div class="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                          <div class="mt-2 border-t border-border/50 pt-2">
+                            <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/65">Linked context</div>
+                            <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
                               <For each={composerCopy()?.contextEntries ?? []}>
                                 {(entry) => (
                                   <button
                                     type="button"
-                                    class={`flex min-w-0 items-start gap-2 rounded-xl border px-2.5 py-2 text-left text-[11px] font-medium transition-colors ${entryButtonClass(entry)}`}
+                                    class={`flex min-w-0 items-start gap-2 rounded-[0.95rem] border px-2 py-1.5 text-left text-[11px] font-medium transition-colors ${entryButtonClass(entry)}`}
                                     title={entry.title}
                                     onClick={() => {
                                       void openContextEntry(entry);
@@ -557,10 +557,10 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                         </Show>
 
                         <Show when={cleanedNotes().length > 0}>
-                          <div class="mt-2 space-y-1.5">
+                          <div class="mt-1.5 space-y-1">
                             <For each={cleanedNotes()}>
                               {(note) => (
-                                <div class="rounded-xl border border-sky-500/15 bg-sky-500/8 px-2.5 py-1.5 text-[11px] leading-5 text-muted-foreground">
+                                <div class="rounded-[0.95rem] border border-sky-500/15 bg-sky-500/8 px-2.5 py-1.5 text-[11px] leading-5 text-muted-foreground">
                                   {note}
                                 </div>
                               )}
@@ -573,13 +573,13 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                 </div>
               </div>
 
-              <div data-testid="ask-flower-composer-dock" class="shrink-0 border-t border-border/70 bg-background/96 px-2 py-2 shadow-[0_-16px_32px_-30px_rgba(15,23,42,0.36)] backdrop-blur sm:px-2.5 sm:py-2.5">
-                <div class="mx-auto w-full max-w-[42rem]">
-                  <div class={`chat-input-container flower-chat-input !m-0 overflow-hidden rounded-[1.1rem] border border-border/55 bg-background/92 shadow-[0_12px_26px_-24px_rgba(15,23,42,0.22)] transition-[border-color,box-shadow,background-color] duration-150 ${isFocused() ? 'border-primary/30 bg-background shadow-[0_0_0_1px_rgba(59,130,246,0.10),0_14px_30px_-24px_rgba(37,99,235,0.18)]' : ''}`}>
+              <div data-testid="ask-flower-composer-dock" class="shrink-0 border-t border-border/65 bg-background/96 px-1.5 py-1.5 shadow-[0_-14px_30px_-30px_rgba(15,23,42,0.32)] backdrop-blur sm:px-2 sm:py-2">
+                <div class="mx-auto w-full max-w-[40rem]">
+                  <div class="chat-input-container flower-chat-input !m-0 overflow-hidden rounded-[1rem] border border-border/50 bg-background/94 shadow-[0_10px_24px_-24px_rgba(15,23,42,0.18)] transition-[border-color,box-shadow,background-color] duration-150 hover:border-border/65 hover:shadow-[0_14px_28px_-24px_rgba(15,23,42,0.2)] focus-within:border-sky-500/25 focus-within:bg-background focus-within:shadow-[0_0_0_1px_rgba(56,139,253,0.1),0_14px_30px_-24px_rgba(56,139,253,0.22)]">
                     <div class="chat-input-body flower-chat-input-body">
-                      <div class="flower-chat-input-primary-row !gap-2 !px-2.5 !pt-2.5 !pb-0 sm:!gap-2.5 sm:!px-3 sm:!pt-3">
+                      <div class="flower-chat-input-primary-row !gap-1.5 !px-2 !pt-2 !pb-0 sm:!gap-2 sm:!px-2.5 sm:!pt-2.5">
                         <div class="min-w-0 flex-1">
-                          <div class="mb-1 flex items-center justify-between gap-2">
+                          <div class="mb-0.5 flex items-center justify-between gap-2">
                             <div class="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary/70">You</div>
                             <span class="text-[11px] text-muted-foreground">{sending() ? 'Sending...' : 'Reply to Flower'}</span>
                           </div>
@@ -587,7 +587,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                           <textarea
                             ref={textareaEl}
                             id={`ask-flower-prompt-${intent.id}`}
-                            class="chat-input-textarea flower-chat-input-textarea !min-h-[72px] !max-h-[24vh] !px-0 !py-0 !text-sm !leading-5 focus-visible:!shadow-none sm:!min-h-[84px]"
+                            class="chat-input-textarea flower-chat-input-textarea !min-h-[68px] !max-h-[22vh] !px-0 !py-0 !text-sm !leading-5 focus:!outline-none focus-visible:!outline-none focus-visible:!shadow-none sm:!min-h-[78px]"
                             value={userPrompt()}
                             placeholder={composerCopy()?.placeholder}
                             disabled={sending()}
@@ -612,12 +612,10 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                                 void submit();
                               }
                             }}
-                            onFocus={() => setIsFocused(true)}
-                            onBlur={() => setIsFocused(false)}
                           />
                         </div>
 
-                        <div class="flower-chat-input-send-slot pb-0.5">
+                        <div class="flower-chat-input-send-slot pb-0">
                           <button
                             type="button"
                             class={`chat-input-send-btn flower-chat-input-send-btn chat-input-send-btn-expanded ${canSubmit() ? 'chat-input-send-btn-active' : ''}`}
@@ -631,9 +629,9 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                         </div>
                       </div>
 
-                      <div class="chat-input-toolbar flex-wrap gap-1.5 !px-2.5 !py-1.5 sm:!px-3 sm:!py-2">
+                      <div class="chat-input-toolbar flex-wrap gap-1 !px-2 !py-1 sm:!px-2.5 sm:!py-1.5">
                         <div class="chat-input-toolbar-left min-w-0">
-                          <div class="min-h-4 text-[11px] leading-4 text-muted-foreground">
+                          <div class="min-h-4 text-[10px] leading-4 text-muted-foreground sm:text-[11px]">
                             <Show when={validationError()} fallback={<span>Flower receives the linked context automatically.</span>}>
                               <span class="text-error">{validationError()}</span>
                             </Show>
@@ -641,7 +639,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                         </div>
                         <div class="chat-input-toolbar-right ml-auto shrink-0 flex-wrap justify-end gap-1.5">
                           <Show when={(composerCopy()?.contextEntries.length ?? 0) > 0}>
-                            <span class="inline-flex items-center rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            <span class="inline-flex items-center rounded-full border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:px-2 sm:text-[11px]">
                               {composerCopy()?.contextEntries.length} linked
                             </span>
                           </Show>
