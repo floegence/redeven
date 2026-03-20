@@ -13,6 +13,7 @@ export type AgentUpdatePromptMemory = Readonly<{
 export type AgentUpdatePromptDecisionInput = Readonly<{
   accessGateVisible: boolean;
   isLocalMode: boolean;
+  upgradePolicy?: string;
   protocolStatus: string;
   canAdmin: boolean;
   envStatus: string;
@@ -133,6 +134,7 @@ export function clearAgentUpdateSkippedVersionIfMatched(envId: string, targetVer
 export function shouldShowAgentUpdatePrompt(input: AgentUpdatePromptDecisionInput): boolean {
   if (input.accessGateVisible) return false;
   if (input.isLocalMode) return false;
+  if (normalizeStatus(input.upgradePolicy) !== 'self_upgrade') return false;
   if (normalizeStatus(input.protocolStatus) !== 'connected') return false;
   if (!input.canAdmin) return false;
   if (normalizeStatus(input.envStatus) !== 'online') return false;

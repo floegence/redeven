@@ -246,6 +246,7 @@ describe('EnvAppShell update prompt orchestration', () => {
       latestDeferred.resolve({
         latest_version: 'v1.1.0',
         recommended_version: 'v1.1.0',
+        upgrade_policy: 'self_upgrade',
         cache_ttl_ms: 300_000,
       });
       await flushAsync();

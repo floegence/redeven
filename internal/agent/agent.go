@@ -79,6 +79,10 @@ type Options struct {
 	// DesktopManaged disables CLI self-upgrade behaviors that do not apply when the
 	// agent lifecycle is owned by a desktop shell package.
 	DesktopManaged bool
+	// EffectiveRunMode reports the current runtime mode exposed to the UI/control plane.
+	EffectiveRunMode string
+	// RemoteEnabled reports whether the current process has the remote control channel enabled.
+	RemoteEnabled bool
 
 	Version   string
 	Commit    string
@@ -125,6 +129,8 @@ type Agent struct {
 	localUIEnabled        bool
 	controlChannelEnabled bool
 	desktopManaged        bool
+	effectiveRunMode      string
+	remoteEnabled         bool
 	accessGate            *accessgate.Gate
 }
 
@@ -198,6 +204,8 @@ func New(opts Options) (*Agent, error) {
 		localUIEnabled:        opts.LocalUIEnabled,
 		controlChannelEnabled: opts.ControlChannelEnabled,
 		desktopManaged:        opts.DesktopManaged,
+		effectiveRunMode:      strings.TrimSpace(opts.EffectiveRunMode),
+		remoteEnabled:         opts.RemoteEnabled,
 		accessGate:            opts.AccessGate,
 	}
 
@@ -388,12 +396,15 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 
 	// Register (best-effort; required for server-side online state).
 	_, err = rpctyped.Call[registerReq, registerResp](ctx, rpcC, controlRPCTypeRegister, &registerReq{
-		EnvPublicID:     a.cfg.EnvironmentID,
-		AgentInstanceID: a.cfg.AgentInstanceID,
-		Version:         a.version,
-		OS:              runtime.GOOS,
-		Arch:            runtime.GOARCH,
-		Hostname:        hostnameBestEffort(),
+		EnvPublicID:      a.cfg.EnvironmentID,
+		AgentInstanceID:  a.cfg.AgentInstanceID,
+		Version:          a.version,
+		OS:               runtime.GOOS,
+		Arch:             runtime.GOARCH,
+		Hostname:         hostnameBestEffort(),
+		DesktopManaged:   a.desktopManaged,
+		EffectiveRunMode: normalizeEffectiveRunMode(a.effectiveRunMode),
+		RemoteEnabled:    a.remoteEnabled,
 	})
 	if err != nil {
 		return err
@@ -1049,12 +1060,15 @@ func originWithChannelLabel(baseOrigin string, channelID string) (string, error)
 // --- control channel types (wire JSON) ---
 
 type registerReq struct {
-	EnvPublicID     string `json:"env_public_id,omitempty"`
-	AgentInstanceID string `json:"agent_instance_id,omitempty"`
-	Version         string `json:"version,omitempty"`
-	OS              string `json:"os,omitempty"`
-	Arch            string `json:"arch,omitempty"`
-	Hostname        string `json:"hostname,omitempty"`
+	EnvPublicID      string `json:"env_public_id,omitempty"`
+	AgentInstanceID  string `json:"agent_instance_id,omitempty"`
+	Version          string `json:"version,omitempty"`
+	OS               string `json:"os,omitempty"`
+	Arch             string `json:"arch,omitempty"`
+	Hostname         string `json:"hostname,omitempty"`
+	DesktopManaged   bool   `json:"desktop_managed,omitempty"`
+	EffectiveRunMode string `json:"effective_run_mode,omitempty"`
+	RemoteEnabled    bool   `json:"remote_enabled,omitempty"`
 }
 
 type registerResp struct {
@@ -1076,6 +1090,19 @@ type backoff struct {
 }
 
 func newBackoff() *backoff { return &backoff{} }
+
+func normalizeEffectiveRunMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "local":
+		return "local"
+	case "hybrid":
+		return "hybrid"
+	case "remote":
+		return "remote"
+	default:
+		return ""
+	}
+}
 
 func (b *backoff) Next() time.Duration {
 	// 250ms, 450ms, 810ms, ... capped at 10s

@@ -476,11 +476,44 @@ func TestServer_handleLatestVersion_desktopManagedMessage(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if body.LatestVersion != "v1.2.3" {
-		t.Fatalf("LatestVersion = %q", body.LatestVersion)
+	if body.CurrentVersion != "v1.2.3" {
+		t.Fatalf("CurrentVersion = %q", body.CurrentVersion)
+	}
+	if body.LatestVersion != "" || body.RecommendedVersion != "" {
+		t.Fatalf("unexpected latest metadata in local mode: %#v", body)
+	}
+	if body.UpgradePolicy != "desktop_release" {
+		t.Fatalf("UpgradePolicy = %q", body.UpgradePolicy)
 	}
 	if !body.DesktopManaged || !strings.Contains(body.Message, "Managed by Redeven Desktop") {
 		t.Fatalf("unexpected latest version body: %#v", body)
+	}
+}
+
+func TestServer_handleLatestVersion_manualPolicyForLocalMode(t *testing.T) {
+	s := newTestServer(t, nil)
+	s.version = "v1.2.3"
+	s.desktopManaged = false
+	s.effectiveRunMode = "local"
+	s.remoteEnabled = false
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/agent/version/latest", nil)
+	res := httptest.NewRecorder()
+	s.handleLatestVersion(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Result().StatusCode, http.StatusOK)
+	}
+
+	var body latestVersionResp
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body.CurrentVersion != "v1.2.3" || body.UpgradePolicy != "manual" {
+		t.Fatalf("unexpected latest version body: %#v", body)
+	}
+	if !strings.Contains(body.Message, "Offline: latest version check is unavailable in local mode.") {
+		t.Fatalf("unexpected message: %#v", body)
 	}
 }
 

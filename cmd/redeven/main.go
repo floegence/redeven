@@ -462,6 +462,8 @@ func (c *cli) runCmd(args []string) int {
 		LocalUIEnabled:        localUIEnabled,
 		ControlChannelEnabled: controlChannelEnabled,
 		DesktopManaged:        *desktopManaged,
+		EffectiveRunMode:      string(effectiveRunMode),
+		RemoteEnabled:         controlChannelEnabled,
 		Version:               Version,
 		Commit:                Commit,
 		BuildTime:             BuildTime,
