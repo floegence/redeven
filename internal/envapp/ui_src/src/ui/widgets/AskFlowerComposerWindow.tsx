@@ -929,11 +929,9 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                           </For>
                         </div>
 
-                        <div class="mt-1.5 rounded-[0.95rem] border border-border/55 bg-muted/[0.2] px-2.5 py-1.5 text-[11px] leading-5 text-muted-foreground">
-                          <span class="font-medium text-foreground/90">{composerCopy()?.question}</span>
-                          <Show when={(composerCopy()?.contextEntries.length ?? 0) > 0}>
-                            <span class="ml-1">Open any linked context below to preview exactly what Flower will use.</span>
-                          </Show>
+                        <div class="mt-1.5 rounded-[0.95rem] border border-primary/14 bg-primary/[0.055] px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
+                          <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/55">Question</div>
+                          <div class="mt-1 text-[12px] font-semibold leading-5 text-foreground sm:text-[13px]">{composerCopy()?.question}</div>
                         </div>
 
                         <Show when={(composerCopy()?.contextEntries.length ?? 0) > 0}>
