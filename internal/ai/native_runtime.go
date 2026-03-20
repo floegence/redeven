@@ -922,6 +922,7 @@ func buildOpenAIInput(messages []Message) (oresponses.ResponseInputParam, string
 				items = append(items, oresponses.ResponseInputItemParamOfFunctionCallOutput(callID, output))
 			}
 		case "assistant":
+			handledAssistantPart := false
 			appendFunctionCall := func(part ContentPart) {
 				callID := strings.TrimSpace(part.ToolCallID)
 				if callID == "" {
@@ -949,6 +950,7 @@ func buildOpenAIInput(messages []Message) (oresponses.ResponseInputParam, string
 					argsRaw = "{}"
 				}
 				items = append(items, oresponses.ResponseInputItemParamOfFunctionCall(argsRaw, callID, name))
+				handledAssistantPart = true
 			}
 			var textBuf strings.Builder
 			appendAssistantText := func(text string) {
@@ -960,6 +962,7 @@ func buildOpenAIInput(messages []Message) (oresponses.ResponseInputParam, string
 					textBuf.WriteString("\n")
 				}
 				textBuf.WriteString(text)
+				handledAssistantPart = true
 			}
 			flushAssistantText := func() {
 				txt := strings.TrimSpace(textBuf.String())
@@ -978,7 +981,7 @@ func buildOpenAIInput(messages []Message) (oresponses.ResponseInputParam, string
 					appendFunctionCall(part)
 				}
 			}
-			if textBuf.Len() == 0 {
+			if !handledAssistantPart {
 				appendAssistantText(joinMessageText(msg))
 			}
 			flushAssistantText()
@@ -1946,6 +1949,24 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		}
 		return true, endAskUser(step, signal, source)
 	}
+	appendAssistantHistory := func(step int, source string, text string, reasoning string, calls []ToolCall) bool {
+		msg, ok := buildAssistantHistoryMessage(text, reasoning, calls)
+		source = strings.TrimSpace(source)
+		payload := map[string]any{
+			"step_index":      step,
+			"source":          source,
+			"committed":       ok,
+			"text_len":        len([]rune(strings.TrimSpace(text))),
+			"reasoning_len":   len([]rune(strings.TrimSpace(reasoning))),
+			"tool_call_count": len(calls),
+		}
+		if ok {
+			messages = append(messages, msg)
+			payload["content_parts"] = len(msg.Content)
+		}
+		r.persistRunEvent("assistant.turn.history", RealtimeStreamKindLifecycle, payload)
+		return ok
+	}
 
 mainLoop:
 	for step := 0; ; step++ {
@@ -2381,7 +2402,7 @@ mainLoop:
 				todoSetupNudges = 0
 			}
 
-			messages = append(messages, buildToolCallMessages(normalCalls, stepResult.Reasoning)...)
+			appendAssistantHistory(step, "tool_call_turn", stepResult.Text, stepResult.Reasoning, normalCalls)
 			messages = append(messages, buildToolResultMessages(toolResults, normalCalls)...)
 			state.PendingToolCalls = nil
 			hasError := false
@@ -2519,6 +2540,7 @@ mainLoop:
 					continue
 				}
 				if !approved {
+					appendAssistantHistory(step, "completion_rejected_continuation", resultText, stepResult.Reasoning, nil)
 					messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "The user rejected completion. Continue the same objective with improved evidence."}}})
 					state.PendingUserInputQueue = appendLimited(state.PendingUserInputQueue, "completion_rejected", 4)
 					exceptionOverlay = "[RECOVERY] Completion rejected. Continue same objective and provide stronger evidence."
@@ -2570,6 +2592,7 @@ mainLoop:
 					emptyTaskCompleteRejects = 0
 					continue
 				}
+				appendAssistantHistory(step, "task_complete_rejected_continuation", resultText, stepResult.Reasoning, nil)
 				rejectionMsg := "task_complete was rejected. Provide concrete completion evidence and retry task_complete."
 				recoveryOverlay := "[RECOVERY] task_complete rejected by completion gate. Provide explicit completion evidence and call task_complete again."
 				if capabilityContract.AllowUserInteraction {
@@ -2594,6 +2617,7 @@ mainLoop:
 			if strings.TrimSpace(resultText) != "" && strings.TrimSpace(stepResult.Text) == "" {
 				_ = r.appendTextDelta(strings.TrimSpace(resultText))
 			}
+			r.rememberCanonicalMarkdownTurn(resultText)
 			r.reconcileCanonicalMarkdownMessage(resultText)
 			r.emitSourcesToolBlock("task_complete")
 			r.setFinalizationReason("task_complete")
@@ -2646,6 +2670,7 @@ mainLoop:
 		finishReason := strings.ToLower(strings.TrimSpace(stepResult.FinishReason))
 		if finishReason == "length" {
 			// Genuine truncation — recovery path.
+			appendAssistantHistory(step, "truncated_turn_continuation", stepResult.Text, stepResult.Reasoning, nil)
 			recoveryCount++
 			fail := errors.New("provider output truncated (length)")
 			exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, fail, "", capabilityContract.AllowUserInteraction)
@@ -2655,6 +2680,7 @@ mainLoop:
 		}
 		if finishReason == "tool_calls" || finishReason == "unknown" {
 			// Model wanted tools but parsing failed, or unknown state — treat as backpressure nudge.
+			appendAssistantHistory(step, "unparsed_tool_continuation", stepResult.Text, stepResult.Reasoning, nil)
 			noToolRounds++
 			exceptionOverlay = fmt.Sprintf("[BACKPRESSURE] Provider returned finish_reason=%q but no valid tool calls were parsed. You MUST do one of: (1) Call task_complete if done, (2) Use tools to investigate.", finishReason)
 			if capabilityContract.AllowUserInteraction {
@@ -2702,6 +2728,7 @@ mainLoop:
 		}
 
 		noToolRounds++
+		appendAssistantHistory(step, "text_only_continuation", stepResult.Text, stepResult.Reasoning, nil)
 		r.emitLifecyclePhase("finalizing", map[string]any{
 			"reason":             "waiting_explicit_completion",
 			"step_index":         step,
@@ -2793,6 +2820,8 @@ mainLoop:
 					if strings.TrimSpace(forcedResult.Text) == "" {
 						_ = r.appendTextDelta(strings.TrimSpace(resultText))
 					}
+					r.rememberCanonicalMarkdownTurn(resultText)
+					r.reconcileCanonicalMarkdownMessage(resultText)
 					r.emitSourcesToolBlock("task_complete")
 					r.setFinalizationReason("task_complete_forced")
 					r.setEndReason("complete")
@@ -2883,6 +2912,7 @@ mainLoop:
 				if strings.TrimSpace(summaryResult.Text) == "" {
 					_ = r.appendTextDelta(strings.TrimSpace(resultText))
 				}
+				r.rememberCanonicalMarkdownTurn(resultText)
 				r.reconcileCanonicalMarkdownMessage(resultText)
 				r.emitSourcesToolBlock("task_complete")
 				r.setFinalizationReason("task_complete_forced")
@@ -3920,6 +3950,46 @@ func appendLimited(in []string, value string, limit int) []string {
 	return in
 }
 
+func buildAssistantHistoryMessage(text string, reasoning string, calls []ToolCall) (Message, bool) {
+	parts := make([]ContentPart, 0, len(calls)+2)
+	if txt := strings.TrimSpace(text); txt != "" {
+		parts = append(parts, ContentPart{Type: "text", Text: txt})
+	}
+	if len(calls) > 0 {
+		if txt := strings.TrimSpace(reasoning); txt != "" {
+			parts = append(parts, ContentPart{Type: "reasoning", Text: txt})
+		}
+		for _, call := range calls {
+			callID := strings.TrimSpace(call.ID)
+			name := strings.TrimSpace(call.Name)
+			if callID == "" || name == "" {
+				continue
+			}
+			args := cloneAnyMap(call.Args)
+			if args == nil {
+				args = map[string]any{}
+			}
+			b, _ := json.Marshal(args)
+			rawArgs := strings.TrimSpace(string(b))
+			if rawArgs == "" || rawArgs == "null" || !json.Valid(b) {
+				rawArgs = "{}"
+				b = []byte(rawArgs)
+			}
+			parts = append(parts, ContentPart{
+				Type:       "tool_call",
+				ToolCallID: callID,
+				ToolName:   name,
+				ArgsJSON:   rawArgs,
+				JSON:       b,
+			})
+		}
+	}
+	if len(parts) == 0 {
+		return Message{}, false
+	}
+	return Message{Role: "assistant", Content: parts}, true
+}
+
 func buildToolResultMessages(results []ToolResult, calls []ToolCall) []Message {
 	if len(results) == 0 {
 		return nil
@@ -3957,42 +4027,11 @@ func buildToolResultMessages(results []ToolResult, calls []ToolCall) []Message {
 }
 
 func buildToolCallMessages(calls []ToolCall, reasoning string) []Message {
-	if len(calls) == 0 {
+	msg, ok := buildAssistantHistoryMessage("", reasoning, calls)
+	if !ok {
 		return nil
 	}
-	parts := make([]ContentPart, 0, len(calls)+1)
-	parts = append(parts, ContentPart{
-		Type: "reasoning",
-		Text: strings.TrimSpace(reasoning),
-	})
-	for _, call := range calls {
-		callID := strings.TrimSpace(call.ID)
-		name := strings.TrimSpace(call.Name)
-		if callID == "" || name == "" {
-			continue
-		}
-		args := cloneAnyMap(call.Args)
-		if args == nil {
-			args = map[string]any{}
-		}
-		b, _ := json.Marshal(args)
-		rawArgs := strings.TrimSpace(string(b))
-		if rawArgs == "" || rawArgs == "null" || !json.Valid(b) {
-			rawArgs = "{}"
-			b = []byte(rawArgs)
-		}
-		parts = append(parts, ContentPart{
-			Type:       "tool_call",
-			ToolCallID: callID,
-			ToolName:   name,
-			ArgsJSON:   rawArgs,
-			JSON:       b,
-		})
-	}
-	if len(parts) == 1 {
-		return nil
-	}
-	return []Message{{Role: "assistant", Content: parts}}
+	return []Message{msg}
 }
 
 func extractSignalText(call ToolCall, key string) string {
