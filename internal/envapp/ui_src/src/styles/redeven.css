@@ -314,6 +314,18 @@ html.dark {
   box-shadow: 0 6px 14px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
+.ask-flower-composer-window button:not(:disabled),
+.ask-flower-composer-window [role='button']:not([aria-disabled='true']),
+.ask-flower-context-preview-dialog button:not(:disabled),
+.ask-flower-context-preview-dialog [role='button']:not([aria-disabled='true']) {
+  cursor: pointer !important;
+}
+
+.ask-flower-composer-window .ask-flower-flat-input .chat-input-toolbar {
+  border-top-color: transparent;
+  background: transparent;
+}
+
 .flower-chat-input-send-btn-reply {
   display: inline-flex;
   align-items: center;
