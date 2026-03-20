@@ -16,6 +16,7 @@ describe('file preview wiring', () => {
     const textPaneSrc = read('./TextFilePreviewPane.tsx');
     const codePreviewSrc = read('./CodePreviewPane.tsx');
     const surfaceSrc = read('./FilePreviewSurface.tsx');
+    const previewWindowSrc = read('./PreviewWindow.tsx');
 
     expect(contentSrc).toContain("import { DocxPreviewPane } from './DocxPreviewPane';");
     expect(contentSrc).toContain("import { TextFilePreviewPane } from './TextFilePreviewPane';");
@@ -26,7 +27,8 @@ describe('file preview wiring', () => {
     expect(docxPaneSrc).toContain('inWrapper: true');
     expect(docxPaneSrc).toContain('Fit');
     expect(docxPaneSrc).toContain('Zoom in docx preview');
-    expect(textPaneSrc).toContain("import { isCodeEditorLanguageSupported, type CodeEditorApi } from '@floegence/floe-webapp-core/editor';");
+    expect(textPaneSrc).toContain("import { resolveCodeEditorLanguageSpec, type CodeEditorApi } from '@floegence/floe-webapp-core/editor';");
+    expect(textPaneSrc).toContain('supportsRichMonacoCodePreview');
     expect(textPaneSrc).toContain('Loading editor...');
     expect(contentSrc).toContain('Copy path');
     expect(contentSrc).toContain('Edit');
@@ -37,11 +39,10 @@ describe('file preview wiring', () => {
     expect(contentSrc).toContain('Loading file...');
     expect(contentSrc).toContain('Failed to load file');
 
-    expect(surfaceSrc).toContain("import { Button, ConfirmDialog, Dialog } from '@floegence/floe-webapp-core/ui';");
-    expect(surfaceSrc).toContain("import { PersistentFloatingWindow } from './PersistentFloatingWindow';");
+    expect(surfaceSrc).toContain("import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';");
+    expect(surfaceSrc).toContain("import { PREVIEW_WINDOW_Z_INDEX, PreviewWindow } from './PreviewWindow';");
     expect(surfaceSrc).toContain('layout.isMobile()');
-    expect(surfaceSrc).toContain('<Dialog');
-    expect(surfaceSrc).toContain('<PersistentFloatingWindow');
+    expect(surfaceSrc).toContain('<PreviewWindow');
     expect(surfaceSrc).toContain('<ConfirmDialog');
     expect(surfaceSrc).toContain('Ask Flower');
     expect(surfaceSrc).toContain('Download');
@@ -51,8 +52,15 @@ describe('file preview wiring', () => {
     expect(surfaceSrc).not.toContain('rounded-xl border px-3 py-2.5 shadow-sm');
     expect(surfaceSrc).not.toContain('[&>div:last-child]:!w-full');
     expect(surfaceSrc).not.toContain('[&>div>div:last-child]:!w-full');
-    expect(surfaceSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
-    expect(surfaceSrc).toContain('file-preview-floating-window');
+
+    expect(previewWindowSrc).toContain("import { Dialog } from '@floegence/floe-webapp-core/ui';");
+    expect(previewWindowSrc).toContain("import { PersistentFloatingWindow } from './PersistentFloatingWindow';");
+    expect(previewWindowSrc).toContain('layout.isMobile()');
+    expect(previewWindowSrc).toContain('<Dialog');
+    expect(previewWindowSrc).toContain('<PersistentFloatingWindow');
+    expect(previewWindowSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
+    expect(previewWindowSrc).toContain('file-preview-floating-window');
+    expect(previewWindowSrc).toContain('PREVIEW_WINDOW_Z_INDEX = 150');
   });
 
   it('routes remote and chat previews through the shared controller and app-level host', () => {
