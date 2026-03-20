@@ -377,7 +377,7 @@ html.dark {
   width: 100%;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 0.5rem;
 }
 
