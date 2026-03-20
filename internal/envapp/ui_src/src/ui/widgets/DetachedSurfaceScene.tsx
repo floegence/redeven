@@ -8,7 +8,10 @@ import type { DetachedSurface } from '../services/detachedSurface';
 import { basenameFromAbsolutePath } from '../services/detachedSurface';
 import { buildFilePreviewAskFlowerIntent } from '../utils/filePreviewAskFlower';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
-import { requestDesktopAskFlowerMainWindowHandoff } from '../services/desktopAskFlowerBridge';
+import {
+  requestDesktopAskFlowerMainWindowHandoff,
+  shouldRequireDesktopAskFlowerMainWindowHandoff,
+} from '../services/desktopAskFlowerBridge';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { FilePreviewContent } from './FilePreviewContent';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
@@ -79,6 +82,10 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
         selectionText,
       })
     ) {
+      return;
+    }
+    if (shouldRequireDesktopAskFlowerMainWindowHandoff()) {
+      notification.error('Ask Flower unavailable', 'Redeven Desktop could not route Ask Flower to the main window. Reopen the main window and try again.');
       return;
     }
 

@@ -4,11 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   requestDesktopAskFlowerMainWindowHandoff,
+  shouldRequireDesktopAskFlowerMainWindowHandoff,
   subscribeDesktopAskFlowerMainWindowHandoff,
 } from './desktopAskFlowerBridge';
 
 afterEach(() => {
   delete window.redevenDesktopAskFlowerHandoff;
+  vi.unstubAllGlobals();
 });
 
 describe('desktopAskFlowerBridge', () => {
@@ -20,6 +22,18 @@ describe('desktopAskFlowerBridge', () => {
         selectionText: 'selected line',
       }),
     ).toBe(false);
+  });
+
+  it('requires the main-window handoff inside Electron renderers', () => {
+    vi.stubGlobal('navigator', { userAgent: 'RedevenDesktop Electron/41.0.0' });
+
+    expect(shouldRequireDesktopAskFlowerMainWindowHandoff()).toBe(true);
+  });
+
+  it('does not require the main-window handoff in standard browsers', () => {
+    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 Test Browser' });
+
+    expect(shouldRequireDesktopAskFlowerMainWindowHandoff()).toBe(false);
   });
 
   it('forwards normalized handoff requests to the desktop bridge', () => {
