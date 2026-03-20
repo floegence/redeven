@@ -1,39 +1,122 @@
+<p align="center">
+  <img src="internal/envapp/ui_src/public/logo.png" alt="Redeven" width="120">
+</p>
+
 # Redeven Agent
+
+<p align="center">
+  <strong>Turn any machine into a secure E2EE workspace endpoint for files, terminals, monitoring, codespaces, desktop access, and AI-assisted workflows.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/floegence/redeven-agent/releases">Get Desktop</a> |
+  <a href="#quick-start">Install CLI</a> |
+  <a href="#capabilities">Explore Capabilities</a> |
+  <a href="#docs-by-task">Open Docs</a>
+</p>
 
 ![Go Version](https://img.shields.io/badge/Go-1.25.8-00ADD8?logo=go)
 ![Node Version](https://img.shields.io/badge/Node.js-24-339933?logo=node.js)
 ![Architecture](https://img.shields.io/badge/Architecture-E2EE%20Endpoint-5B2CFF)
+![Desktop](https://img.shields.io/badge/Desktop-Electron-47848F?logo=electron)
+![Distribution](https://img.shields.io/badge/Distribution-GitHub%20Releases-181717?logo=github)
 
-Redeven Agent is the endpoint runtime in the Redeven + Flowersec architecture.
-It runs on the user machine, receives session grants from the Redeven service, and serves encrypted RPC and streams over Flowersec.
+Redeven Agent runs on the user machine. Redeven Service issues grants, Flowersec carries encrypted bytes, and the endpoint hosts the real application surfaces and local capabilities.
 
-> This repository is intended to stay open-source and auditable. Public docs in this repo describe only the agent runtime, its local behavior, and the public release contract.
+This repository stays open-source and auditable. It documents the public agent runtime, its Local UI behavior, and the public GitHub Release contract.
 
-## Why the agent exists
+![Redeven Agent architecture overview](docs/images/readme-architecture.svg)
 
-- End-to-end encrypted browser sessions terminate on the endpoint, not on the control plane.
-- Session metadata and encrypted application bytes are intentionally separated.
-- Local capabilities such as files, terminals, monitoring, and code-server run on the user machine.
-- Public release artifacts and verification steps are reproducible from this repository.
+## Why teams use it
 
-## Architecture at a glance
+- Keep application data on the endpoint while the control plane only issues grants and metadata.
+- Give users one entry point for files, terminals, monitoring, codespaces, and optional AI workflows.
+- Ship the same runtime as a CLI and as a desktop app, with versioned GitHub Release artifacts and verification steps.
 
-```text
-                        (management channel, direct)
-Redeven Service  ------------------------------------------>  Redeven Agent
-  bootstrap + session_meta                                      (endpoint runtime)
+## Capabilities
 
-Browser (Sandbox)  <========== Flowersec Tunnel ==========>  Redeven Agent
-      E2EE client attach token + PSK            E2EE server role + app handlers
-                           (data-plane bytes only)
+| Surface | What users get | Why it matters | Docs |
+| --- | --- | --- | --- |
+| `Env App` | Deck, terminal, monitoring, file browser, codespaces, port forwarding, settings | One secure workspace view for day-to-day endpoint operations | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
+| `Code App` | code-server over Flowersec E2EE proxying for HTTP and WebSocket traffic | Browser IDE access without exposing the editor directly to the control plane | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
+| `Desktop Shell` | Native Electron app that opens this device or another Redeven Local UI | Local UX, settings, blocked-state handling, and diagnostics in a desktop wrapper | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
+| `Flower` (optional) | AI workflows that can start from terminal, file, and monitoring context | AI assistance stays attached to the same endpoint runtime and permission model | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
+
+## Example workflows
+
+| Use case | Flow | Outcome |
+| --- | --- | --- |
+| Secure remote environment access | Open Env App, inspect files, attach a terminal, and check monitoring panels | Operate on the user machine without routing plaintext application traffic through the control plane |
+| Browser-based development | Launch a codespace from Env App, then move into Code App | Reach code-server through the agent gateway and Flowersec E2EE proxy |
+| Desktop operations | Start Redeven Desktop on this device or connect it to another Redeven Local UI | Use native settings, diagnostics, and connection management around the same runtime contract |
+
+## Quick start
+
+### 1. Install the CLI
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/floegence/redeven-agent/main/scripts/install.sh | sh
 ```
 
-Management channel and E2EE transport are split by design:
+If you want the native desktop app instead, download the installers from [GitHub Releases](https://github.com/floegence/redeven-agent/releases).
 
-- Management channel: authenticate, authorize, issue grants, deliver `session_meta`
-- E2EE transport: forward encrypted bytes; tunnel cannot decrypt application data
+### 2. Bootstrap once
 
-## Build and run
+```bash
+redeven bootstrap \
+  --controlplane https://<redeven-environment-host> \
+  --env-id <env_public_id> \
+  --env-token <env_token>
+```
+
+Bootstrap writes the default local config to `~/.redeven/config.json` and applies the local permission cap preset `execute_read_write`.
+
+### 3. Run the endpoint
+
+```bash
+redeven run --mode hybrid
+```
+
+Expected result:
+
+- `redeven run` starts without config validation errors.
+- The Redeven service shows the endpoint online.
+- Env App can open basic file and terminal actions over E2EE sessions.
+
+### 4. Pick the runtime shape you need
+
+| Goal | Command |
+| --- | --- |
+| Local UI only on this machine | `redeven run --mode local` |
+| Local UI plus remote control channel | `redeven run --mode hybrid` |
+| Desktop-managed runtime | `redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0` |
+| Expose Local UI to another trusted machine | `REDEVEN_LOCAL_UI_PASSWORD=<long-password> redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env REDEVEN_LOCAL_UI_PASSWORD` |
+
+## Security at a glance
+
+| Topic | Public contract |
+| --- | --- |
+| Trust boundary | The agent does not trust browser-claimed permissions. Effective permissions come from server-issued session grants, clamped by local policy. |
+| Control plane vs data plane | Management traffic issues grants and metadata. Flowersec forwards encrypted bytes and cannot decrypt application data. |
+| Local secrets | Local config contains sensitive material, including E2EE PSKs, so the state directory must stay private to the local account. |
+
+Read the full contract in [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md) and [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md).
+
+## Docs by task
+
+| I want to... | Read |
+| --- | --- |
+| Understand the Env App runtime and session flow | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
+| Run code-server over E2EE | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
+| Package or operate the desktop shell | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
+| Configure Flower and its settings | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
+| Review the permission contract | [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md), [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md) |
+| Verify releases and artifacts | [`docs/RELEASE.md`](docs/RELEASE.md) |
+
+## For developers
+
+<details>
+<summary>Build from source</summary>
 
 ### Prerequisites
 
@@ -51,173 +134,57 @@ Management channel and E2EE transport are split by design:
 go build -o redeven ./cmd/redeven
 ```
 
-Notes:
-
-- `internal/**/dist/` assets are generated and embedded via Go `embed`.
-- Generated `dist` assets are not checked into git.
-- `./scripts/lint_ui.sh` validates the Env App and Code App source packages before asset bundling.
-- `./scripts/check_desktop.sh` validates the Electron desktop shell package (lint, typecheck, tests, build).
-- `cd desktop && npm run start` and `cd desktop && npm run package` now prepare `desktop/.bundle/<goos>-<goarch>/redeven` from the current repository before Electron starts or packages the desktop shell.
-- Desktop development and packaging require Node.js `24+`.
-
-### Enable local guardrails
+### Local guardrails
 
 ```bash
 ./scripts/install_git_hooks.sh
 ```
 
-The pre-commit hook runs `scripts/open_source_hygiene_check.sh --staged`.
+Notes:
 
-### Bootstrap and run
+- `internal/**/dist/` assets are generated and embedded via Go `embed`.
+- Generated `dist` assets are not checked into git.
+- `./scripts/lint_ui.sh` validates the Env App and Code App source packages before asset bundling.
+- `./scripts/check_desktop.sh` validates the Electron desktop shell package.
+- `cd desktop && npm run start` and `cd desktop && npm run package` prepare `desktop/.bundle/<goos>-<goarch>/redeven` from the current repository before Electron starts or packages the desktop shell.
 
-```bash
-./redeven bootstrap \
-  --controlplane https://<redeven-environment-host> \
-  --env-id <env_public_id> \
-  --env-token <env_token>
+</details>
 
-./redeven run
-```
+<details>
+<summary>Local state, releases, and troubleshooting shortcuts</summary>
 
-By default bootstrap writes:
-
-- `~/.redeven/config.json`
-- local permission cap preset `execute_read_write`
-
-Expected result:
-
-- `redeven run` starts without config validation errors
-- the Redeven service shows the endpoint online
-- Env App can open basic file and terminal actions over E2EE sessions
-
-## Current capability surfaces
-
-### `floe_app = com.floegence.redeven.agent`
-
-- File system RPC (`list/read/write/delete/get_path_context`) and `fs/read_file` stream
-- Terminal RPC (`create/list/attach`) with bidirectional data notifications
-- Monitor RPC (CPU, network, process snapshots)
-- Agent-bundled Env App UI assets
-- Optional Flower runtime
-
-See:
-
-- [`docs/ENV_APP.md`](docs/ENV_APP.md)
-- [`docs/AI_AGENT.md`](docs/AI_AGENT.md)
-
-### `floe_app = com.floegence.redeven.code`
-
-- code-server over Flowersec E2EE proxy (`flowersec-proxy/http1`, `flowersec-proxy/ws`)
-- Agent-bundled inject script for CSP-safe proxying
-- Local codespace lifecycle management through the agent gateway
-
-See:
-
-- [`docs/CODE_APP.md`](docs/CODE_APP.md)
-
-## Security model
-
-- The agent does not trust browser-claimed permissions.
-- Effective permissions come from server-issued `session_meta`, clamped by local `permission_policy`.
-- Capability-to-permission behavior is documented in:
-  - [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md)
-  - [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md)
-- Local config contains sensitive material, including E2EE PSKs; keep local files private.
-
-## Local state
-
-Default state directory is derived from the config path:
-
-- Config: `~/.redeven/config.json`
-- State dir: `~/.redeven/`
-
-Common local files:
+### Common local files
 
 - `~/.redeven/config.json`
 - `~/.redeven/agent.lock`
 - `~/.redeven/secrets.json`
 - `~/.redeven/audit/events.jsonl`
-- `~/.redeven/diagnostics/agent-events.jsonl` (only when `log_level=debug`)
-- `~/.redeven/diagnostics/desktop-events.jsonl` (desktop-managed runs with diagnostics mode)
+- `~/.redeven/diagnostics/agent-events.jsonl` when `log_level=debug`
+- `~/.redeven/diagnostics/desktop-events.jsonl` for desktop-managed runs with diagnostics mode
 - `~/.redeven/apps/code/...`
 
 Multi-environment mode uses isolated state per environment:
 
 - `~/.redeven/envs/<env_public_id>/config.json`
 
-Desktop-managed launch preferences are stored separately in the desktop app user data directory. They cover startup-only settings such as:
-
-- Desktop target mode (`This device` vs `External Redeven`)
-- Remembered external Redeven URL
-- Local UI bind address
-- Local UI password for non-loopback exposure
-- One-shot “register to Redeven on next start” bootstrap values
-
-## Release contract
+### Public release contract
 
 - GitHub Release is the source of truth for versioned CLI tarballs, desktop installers, and checksums.
 - On `v*` tag push, `Release Agent` publishes GitHub Release assets, checksums, signatures, and release notes.
 - `scripts/install.sh` resolves versions from GitHub Releases and downloads release assets directly from GitHub.
-- This public repository does not document downstream private packaging or deployment wrappers.
 
-Details:
+Full details: [`docs/RELEASE.md`](docs/RELEASE.md)
 
-- [`docs/RELEASE.md`](docs/RELEASE.md)
+### Common troubleshooting entry points
 
-## Documentation map
+- `bootstrap failed` or `missing direct connect info`: verify `--controlplane`, `--env-id`, and `--env-token`.
+- `code-server binary not found`: install `code-server`, or set `REDEVEN_CODE_SERVER_BIN` to an absolute path.
+- `Missing init payload` in Codespaces: reopen the codespace from Env App so a new entry ticket can be minted.
+- Desktop lock conflict: if another agent already owns `~/.redeven`, stop it or restart it with a Local UI mode, then retry.
+- Requests feel slow: set `log_level=debug`, then use the diagnostics panel to compare desktop and agent timing.
 
-- Env App runtime: [`docs/ENV_APP.md`](docs/ENV_APP.md)
-- Code App runtime: [`docs/CODE_APP.md`](docs/CODE_APP.md)
-- Flower runtime and behavior: [`docs/AI_AGENT.md`](docs/AI_AGENT.md)
-- Flower settings and secrets: [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md)
-- Capability-to-permission contract: [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md)
-- Local permission policy: [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md)
-- Release and artifact verification: [`docs/RELEASE.md`](docs/RELEASE.md)
-- Desktop shell packaging and runtime contract: [`docs/DESKTOP.md`](docs/DESKTOP.md)
+</details>
 
-## Troubleshooting
+## Open-source scope
 
-### `bootstrap failed` or `missing direct connect info`
-
-- Verify `--controlplane`, `--env-id`, and `--env-token`.
-- Confirm the Redeven environment is reachable and can issue bootstrap credentials.
-
-### Code App says `code-server binary not found`
-
-- Install `code-server`, or set `REDEVEN_CODE_SERVER_BIN` to an absolute path.
-- See [`docs/CODE_APP.md`](docs/CODE_APP.md) for details.
-
-### Codespace page shows `Missing init payload`
-
-- Open codespace from Env App instead of visiting the sandbox URL directly.
-- If opener context is gone after refresh, reopen from Env App so a new entry ticket can be minted.
-
-### Redeven Desktop says another agent is already using `~/.redeven`
-
-- Desktop reuses an existing Local UI automatically when the current state directory already exposes one.
-- If the existing agent is running without Local UI (for example `redeven run --mode remote`), Desktop stays open and shows a blocked page instead of crashing.
-- In that case, stop the existing agent or restart it in a Local UI mode (`local`, `hybrid`, or desktop-managed), then use `Retry`.
-- Use `Settings` from the blocked page or `CommandOrControl+,` from the app menu to update Desktop startup settings.
-- Use `Copy diagnostics` from the blocked page to capture the lock owner mode, PID, and state paths for troubleshooting.
-
-### Redeven Desktop needs a different bind address or first-time registration
-
-- Open the native Desktop Settings window with `CommandOrControl+,`.
-- Set `Local UI bind address` to values such as `127.0.0.1:0` or `0.0.0.0:24000`.
-- If you expose Local UI on a non-loopback address, also set a Local UI password.
-- To register Desktop to a Redeven environment on the next start, fill in `Control plane URL`, `Environment ID`, and `Environment token`, then save.
-- `CommandOrControl+Q` now asks for confirmation before quitting the desktop app.
-
-### Redeven Desktop needs to connect to another machine
-
-- Open `Connect to Redeven...` from the native app menu.
-- Select `External Redeven`.
-- Enter the exposed Redeven Local UI base URL, for example `http://192.168.1.11:24000/`.
-- If the remote machine requires a Local UI password, the page will ask for it after Desktop opens the target.
-- To make this machine reachable from another Desktop instance, set `Local UI bind address` to an explicit reachable address such as `0.0.0.0:24000` and configure a Local UI password.
-
-### Requests feel slow even though Desktop is talking to a local agent
-
-- Set `log_level=debug`, restart the agent/Desktop runtime, then open the Env Settings `Logging` section.
-- Use the Diagnostics panel to compare recent Desktop and agent timing, inspect slow-request summaries, and export a diagnostics bundle.
-- The exported data comes from `/_redeven_proxy/api/debug/diagnostics/export` and correlates events through `X-Redeven-Debug-Trace-ID`.
+This public repository describes the agent runtime, Local UI behavior, and the public GitHub Release contract. It does not document private downstream deployment wrappers.
