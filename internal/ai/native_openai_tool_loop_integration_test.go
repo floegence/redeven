@@ -227,6 +227,31 @@ func hasFunctionCallItem(input any) bool {
 	return false
 }
 
+func hasAssistantMessageContaining(input any, needle string) bool {
+	needle = strings.TrimSpace(needle)
+	if needle == "" {
+		return false
+	}
+	list, ok := input.([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range list {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(fmt.Sprint(m["role"])) != "assistant" {
+			continue
+		}
+		b, _ := json.Marshal(m)
+		if strings.Contains(string(b), needle) {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *openAIToolLoopMock) snapshot() (bool, bool, bool, bool, int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -357,6 +382,296 @@ func TestIntegration_NativeSDK_OpenAI_ToolLoop_Succeeds(t *testing.T) {
 	}
 	if stepCount < 2 {
 		t.Fatalf("expected at least 2 provider turns, got %d", stepCount)
+	}
+}
+
+type openAITextOnlyContinuationMock struct {
+	mu sync.Mutex
+
+	step                int
+	textToken           string
+	finalToken          string
+	sawAssistantHistory bool
+	secondInputJSON     string
+}
+
+func (m *openAITextOnlyContinuationMock) handle(w http.ResponseWriter, r *http.Request) {
+	if r == nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if strings.TrimSpace(r.Header.Get("Authorization")) != "Bearer sk-test" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/responses") {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	body, _ := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	var req map[string]any
+	_ = json.Unmarshal(body, &req)
+	if isIntentClassifierRequest(req) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		f, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+		model := strings.TrimSpace(fmt.Sprint(req["model"]))
+		if model == "" {
+			model = "gpt-5-mini"
+		}
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.created",
+			"response": map[string]any{
+				"id":         "resp_intent_text_only_commit",
+				"created_at": time.Now().Unix(),
+				"model":      model,
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":  "response.output_text.delta",
+			"delta": classifyIntentResponseToken(req),
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_intent_text_only_commit",
+				"model":  model,
+				"status": "completed",
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+				},
+			},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
+		return
+	}
+
+	m.mu.Lock()
+	m.step++
+	step := m.step
+	textToken := m.textToken
+	finalToken := m.finalToken
+	if step >= 2 {
+		if b, err := json.Marshal(req["input"]); err == nil {
+			m.secondInputJSON = string(b)
+		}
+		if hasAssistantMessageContaining(req["input"], textToken) {
+			m.sawAssistantHistory = true
+		}
+	}
+	m.mu.Unlock()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	f, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	model := strings.TrimSpace(fmt.Sprint(req["model"]))
+	if model == "" {
+		model = "gpt-5-mini"
+	}
+
+	writeOpenAISSEJSON(w, f, map[string]any{
+		"type": "response.created",
+		"response": map[string]any{
+			"id":         fmt.Sprintf("resp_text_only_commit_%d", step),
+			"created_at": time.Now().Unix(),
+			"model":      model,
+		},
+	})
+	if step == 1 {
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":  "response.output_text.delta",
+			"delta": textToken,
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_text_only_commit_1",
+				"model":  model,
+				"status": "completed",
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+					"output_tokens_details": map[string]any{
+						"reasoning_tokens": 0,
+					},
+				},
+			},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
+		return
+	}
+	writeOpenAISSEJSON(w, f, map[string]any{
+		"type": "response.completed",
+		"response": map[string]any{
+			"id":     "resp_text_only_commit_2",
+			"model":  model,
+			"status": "completed",
+			"output": []any{
+				map[string]any{
+					"type":      "function_call",
+					"id":        "fc_text_only_commit_done",
+					"call_id":   "call_text_only_commit_done",
+					"name":      "task_complete",
+					"arguments": fmt.Sprintf(`{"result":%q}`, finalToken),
+				},
+			},
+			"usage": map[string]any{
+				"input_tokens":  1,
+				"output_tokens": 1,
+				"output_tokens_details": map[string]any{
+					"reasoning_tokens": 0,
+				},
+			},
+		},
+	})
+	_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	f.Flush()
+}
+
+func (m *openAITextOnlyContinuationMock) snapshot() (step int, sawAssistantHistory bool, secondInputJSON string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.step, m.sawAssistantHistory, m.secondInputJSON
+}
+
+func TestIntegration_NativeSDK_OpenAI_TextOnlyContinuationCommitsAssistantHistory(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	stateDir := t.TempDir()
+	agentHomeDir := t.TempDir()
+
+	textToken := "TEXT_ONLY_CONTEXT_COMMIT"
+	finalToken := "TEXT_ONLY_CONTEXT_COMMIT_DONE"
+	mock := &openAITextOnlyContinuationMock{textToken: textToken, finalToken: finalToken}
+	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
+	t.Cleanup(srv.Close)
+
+	baseURL := strings.TrimSuffix(srv.URL, "/") + "/v1"
+	cfg := &config.AIConfig{
+		Providers: []config.AIProvider{
+			{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: baseURL,
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+			},
+		},
+	}
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_test_text_only_history",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc, err := NewService(Options{
+		Logger:              logger,
+		StateDir:            stateDir,
+		AgentHomeDir:        agentHomeDir,
+		Shell:               "bash",
+		Config:              cfg,
+		RunMaxWallTime:      30 * time.Second,
+		RunIdleTimeout:      10 * time.Second,
+		ToolApprovalTimeout: 5 * time.Second,
+		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
+			if strings.TrimSpace(providerID) != "openai" {
+				return "", false, nil
+			}
+			return "sk-test", true, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	th, err := svc.CreateThread(ctx, &meta, "hello", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_test_native_openai_text_only_history_1"
+	rr := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "inspect current status"},
+		Options:  RunOptions{MaxSteps: 4, MaxNoToolRounds: 1},
+	}, rr); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	body := rr.Body.String()
+	if !strings.Contains(body, textToken) {
+		t.Fatalf("stream output missing text token %q, body=%q", textToken, body)
+	}
+	if !strings.Contains(body, finalToken) {
+		t.Fatalf("stream output missing final token %q, body=%q", finalToken, body)
+	}
+
+	stepCount, sawAssistantHistory, secondInputJSON := mock.snapshot()
+	if stepCount != 2 {
+		t.Fatalf("provider step count=%d, want 2", stepCount)
+	}
+	if !sawAssistantHistory {
+		t.Fatalf("expected second provider turn to include prior assistant text in input history, input=%s", secondInputJSON)
+	}
+
+	events, err := svc.ListRunEvents(ctx, &meta, runID, 200)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	foundCommitEvent := false
+	for _, ev := range events.Events {
+		if strings.TrimSpace(ev.EventType) != "assistant.turn.history" {
+			continue
+		}
+		payload, ok := ev.Payload.(map[string]any)
+		if !ok {
+			t.Fatalf("assistant.turn.history payload type=%T, want map[string]any", ev.Payload)
+		}
+		if strings.TrimSpace(fmt.Sprint(payload["source"])) != "text_only_continuation" {
+			continue
+		}
+		if committed := strings.TrimSpace(fmt.Sprint(payload["committed"])); committed != "true" {
+			t.Fatalf("assistant.turn.history committed=%q, want true", committed)
+		}
+		foundCommitEvent = true
+		break
+	}
+	if !foundCommitEvent {
+		t.Fatalf("missing assistant.turn.history event for text_only_continuation")
 	}
 }
 
