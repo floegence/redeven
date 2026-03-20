@@ -345,9 +345,15 @@ html.dark {
 .ask-flower-composer-textarea {
   min-height: 4.25rem !important;
   max-height: 22vh !important;
-  padding: 0 !important;
+  padding: 0.125rem 0.25rem !important;
   font-size: 0.875rem !important;
   line-height: 1.5 !important;
+}
+
+.ask-flower-composer-textarea::placeholder {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, transparent);
 }
 
 .ask-flower-composer-send {

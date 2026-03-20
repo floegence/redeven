@@ -89,11 +89,7 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
     props.descriptor.textPresentation !== 'code'
     || supportsRichMonacoCodePreview(resolvedLanguage())
   ));
-  const shouldUseMonaco = createMemo(() => (
-    props.editing
-    || props.descriptor.textPresentation !== 'code'
-    || monacoSupported()
-  ));
+  const shouldUseMonaco = createMemo(() => !!props.editing);
   const editorValue = createMemo(() => (props.editing ? props.draftText ?? props.text : props.text));
   const editorOptions = createMemo<CodeEditorOptions>(() => ({
     ...PREVIEW_MONACO_INTERACTION_OPTIONS,
@@ -123,7 +119,12 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
       <div class="min-h-0 flex-1 overflow-hidden">
         <Show
           when={shouldUseMonaco()}
-          fallback={<CodePreviewPane code={props.text} language={props.descriptor.language} />}
+          fallback={(
+            <CodePreviewPane
+              code={props.text}
+              language={props.descriptor.textPresentation === 'code' ? props.descriptor.language : undefined}
+            />
+          )}
         >
           <Suspense fallback={<div class="flex h-full items-center justify-center text-sm text-muted-foreground">Loading editor...</div>}>
             <CodeEditor
