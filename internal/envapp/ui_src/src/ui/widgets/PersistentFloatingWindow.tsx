@@ -79,8 +79,21 @@ function scheduleAfterFrame(callback: () => void): () => void {
   return () => window.clearTimeout(handle);
 }
 
+function applyClassTokens(element: HTMLElement | null, value: string): void {
+  if (!element || !value) {
+    return;
+  }
+  for (const token of value.split(/\s+/)) {
+    if (token) {
+      element.classList.add(token);
+    }
+  }
+}
+
 export interface PersistentFloatingWindowProps extends FloatingWindowProps {
   persistenceKey?: string;
+  contentClass?: string;
+  footerClass?: string;
 }
 
 export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): JSX.Element {
@@ -175,6 +188,51 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
       observer?.disconnect();
       window.removeEventListener('pagehide', handlePageHide);
       persistNow();
+    });
+  });
+
+  createEffect(() => {
+    if (!props.open || typeof document === 'undefined') {
+      return;
+    }
+
+    const contentClass = String(props.contentClass ?? '').trim();
+    const footerClass = String(props.footerClass ?? '').trim();
+    if (!contentClass && !footerClass) {
+      return;
+    }
+
+    let disposed = false;
+    let cancelBind: (() => void) | null = null;
+
+    const bindSlotClasses = () => {
+      if (disposed) {
+        return;
+      }
+
+      const marker = document.querySelector(`.${markerClass}`) as HTMLElement | null;
+      if (!marker) {
+        cancelBind = scheduleAfterFrame(bindSlotClasses);
+        return;
+      }
+
+      const children = Array.from(marker.children).filter((node): node is HTMLElement => node instanceof HTMLElement);
+      const contentEl = children[1] ?? null;
+      const footerEl = children[2] ?? null;
+      if (!contentEl || (footerClass && props.footer && !footerEl)) {
+        cancelBind = scheduleAfterFrame(bindSlotClasses);
+        return;
+      }
+
+      applyClassTokens(contentEl, contentClass);
+      applyClassTokens(footerEl, footerClass);
+    };
+
+    cancelBind = scheduleAfterFrame(bindSlotClasses);
+
+    onCleanup(() => {
+      disposed = true;
+      cancelBind?.();
     });
   });
 
