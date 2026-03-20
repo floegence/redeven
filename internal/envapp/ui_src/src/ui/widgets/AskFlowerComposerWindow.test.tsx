@@ -74,6 +74,20 @@ vi.mock('../utils/fileStreamReader', () => ({
   readFileBytesOnce: vi.fn(),
 }));
 
+vi.mock('./PreviewWindow', () => ({
+  PreviewWindow: (props: any) => (
+    <Show when={props.open}>
+      <div data-testid="preview-window" class={props.floatingClass ?? props.mobileClass}>
+        <div>{props.title}</div>
+        <div>{props.description}</div>
+        <div>{props.children}</div>
+        <div>{props.footer}</div>
+      </div>
+    </Show>
+  ),
+  PREVIEW_WINDOW_Z_INDEX: 150,
+}));
+
 vi.mock('./PersistentFloatingWindow', () => ({
   PersistentFloatingWindow: (props: any) => (
     props.open ? (
@@ -253,7 +267,7 @@ describe('AskFlowerComposerWindow', () => {
     selectionButton?.click();
     await flushAsync();
 
-    expect(host.querySelector('[data-testid="dialog"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="preview-window"]')).toBeTruthy();
     expect(host.textContent).toContain('const answer = 42;');
   });
 });

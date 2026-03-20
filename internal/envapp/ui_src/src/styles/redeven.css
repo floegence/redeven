@@ -316,8 +316,8 @@ html.dark {
 
 .ask-flower-composer-window button:not(:disabled),
 .ask-flower-composer-window [role='button']:not([aria-disabled='true']),
-.ask-flower-context-preview-dialog button:not(:disabled),
-.ask-flower-context-preview-dialog [role='button']:not([aria-disabled='true']) {
+.ask-flower-context-preview-surface button:not(:disabled),
+.ask-flower-context-preview-surface [role='button']:not([aria-disabled='true']) {
   cursor: pointer !important;
 }
 
