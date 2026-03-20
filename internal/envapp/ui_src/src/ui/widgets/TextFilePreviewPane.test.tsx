@@ -4,45 +4,39 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TextFilePreviewPane } from './TextFilePreviewPane';
 
-const resolveLanguageSpecMock = vi.hoisted(() => vi.fn((language?: string) => {
-  switch (language) {
-    case 'typescript':
-      return { id: 'typescript' };
-    case 'vue':
-    case 'toml':
-      return { id: 'plaintext' };
-    case 'mdx':
-      return { id: 'mdx' };
-    default:
-      return { id: String(language ?? 'plaintext') || 'plaintext' };
-  }
+const editorRenderState = vi.hoisted(() => ({
+  errorMessage: '',
 }));
 
 vi.mock('@floegence/floe-webapp-core/editor', () => ({
-  resolveCodeEditorLanguageSpec: (language?: string) => resolveLanguageSpecMock(language),
-  CodeEditor: (props: any) => (
-    <button
-      type="button"
-      data-testid="mock-editor"
-      data-read-only={String(props.options.readOnly)}
-      data-hover-enabled={String(props.options.hover?.enabled)}
-      data-code-lens={String(props.options.codeLens)}
-      data-inlay-hints={String(props.options.inlayHints?.enabled)}
-      data-quick-suggestions={String(props.options.quickSuggestions)}
-      data-suggest-on-trigger={String(props.options.suggestOnTriggerCharacters)}
-      data-parameter-hints={String(props.options.parameterHints?.enabled)}
-      data-inline-suggest={String(props.options.inlineSuggest?.enabled)}
-      data-drop-into-editor={String(props.options.dropIntoEditor?.enabled)}
-      data-paste-as={String(props.options.pasteAs?.enabled)}
-      data-drag-and-drop={String(props.options.dragAndDrop)}
-      onClick={() => {
-        props.onChange?.('changed from editor');
-        props.onSelectionChange?.('selected from editor', {});
-      }}
-    >
-      {`${props.language}:${props.value}:${props.options.readOnly ? 'ro' : 'rw'}`}
-    </button>
-  ),
+  CodeEditor: (props: any) => {
+    if (editorRenderState.errorMessage) {
+      throw new Error(editorRenderState.errorMessage);
+    }
+    return (
+      <button
+        type="button"
+        data-testid="mock-editor"
+        data-read-only={String(props.options.readOnly)}
+        data-hover-enabled={String(props.options.hover?.enabled)}
+        data-code-lens={String(props.options.codeLens)}
+        data-inlay-hints={String(props.options.inlayHints?.enabled)}
+        data-quick-suggestions={String(props.options.quickSuggestions)}
+        data-suggest-on-trigger={String(props.options.suggestOnTriggerCharacters)}
+        data-parameter-hints={String(props.options.parameterHints?.enabled)}
+        data-inline-suggest={String(props.options.inlineSuggest?.enabled)}
+        data-drop-into-editor={String(props.options.dropIntoEditor?.enabled)}
+        data-paste-as={String(props.options.pasteAs?.enabled)}
+        data-drag-and-drop={String(props.options.dragAndDrop)}
+        onClick={() => {
+          props.onChange?.('changed from editor');
+          props.onSelectionChange?.('selected from editor', {});
+        }}
+      >
+        {`${props.language}:${props.value}:${props.options.readOnly ? 'ro' : 'rw'}`}
+      </button>
+    );
+  },
 }));
 
 vi.mock('./CodePreviewPane', () => ({
@@ -58,11 +52,11 @@ async function flushAsync(): Promise<void> {
 
 afterEach(() => {
   document.body.innerHTML = '';
-  resolveLanguageSpecMock.mockClear();
+  editorRenderState.errorMessage = '';
 });
 
 describe('TextFilePreviewPane', () => {
-  it('uses the read-only fallback preview even for Monaco-supported languages', async () => {
+  it('renders Monaco in read-only mode for Monaco-supported preview languages', async () => {
     const onSelectionChange = vi.fn();
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -77,11 +71,12 @@ describe('TextFilePreviewPane', () => {
     ), host);
     await flushAsync();
 
-    expect(resolveLanguageSpecMock).toHaveBeenCalledWith('typescript');
-    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
-    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
-    expect(host.textContent).toContain('typescript:const value = 1;');
-    expect(onSelectionChange).toHaveBeenCalledWith('');
+    const editor = host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null;
+    expect(editor).toBeTruthy();
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeNull();
+    expect(host.textContent).toContain('typescript:const value = 1;:ro');
+    expect(editor?.dataset.readOnly).toBe('true');
+    expect(onSelectionChange).not.toHaveBeenCalled();
   });
 
   it('renders the Monaco editor path for supported languages and forwards edits and selections', async () => {
@@ -128,7 +123,7 @@ describe('TextFilePreviewPane', () => {
     expect(onSelectionChange).toHaveBeenCalledWith('selected from editor');
   });
 
-  it('uses the read-only fallback preview for code languages that Monaco only treats as plaintext', async () => {
+  it('keeps unsupported code languages on the same read-only Monaco surface as Edit mode', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -142,12 +137,12 @@ describe('TextFilePreviewPane', () => {
     ), host);
     await flushAsync();
 
-    expect(resolveLanguageSpecMock).toHaveBeenCalledWith('vue');
-    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
-    expect(host.textContent).toContain('vue:');
+    expect(host.querySelector('[data-testid="mock-editor"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeNull();
+    expect(host.textContent).toContain('vue:<script setup lang="ts">const value = 1;</script>:ro');
   });
 
-  it('uses the read-only fallback preview for code languages without a rich Monaco contribution', async () => {
+  it('keeps richer preview-only languages on the Monaco surface to match Edit mode', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -161,8 +156,52 @@ describe('TextFilePreviewPane', () => {
     ), host);
     await flushAsync();
 
-    expect(resolveLanguageSpecMock).toHaveBeenCalledWith('mdx');
+    expect(host.querySelector('[data-testid="mock-editor"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeNull();
+    expect(host.textContent).toContain('mdx:# Hello');
+  });
+
+  it('uses the lightweight fallback for truncated previews even when Monaco supports the language', async () => {
+    const onSelectionChange = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TextFilePreviewPane
+        path="/workspace/demo.sh"
+        descriptor={{ mode: 'text', textPresentation: 'code', language: 'shellscript', wrapText: false }}
+        text={'echo "redeven"'}
+        truncated
+        onSelectionChange={onSelectionChange}
+      />
+    ), host);
+    await flushAsync();
+
+    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
     expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
-    expect(host.textContent).toContain('mdx:');
+    expect(onSelectionChange).toHaveBeenCalledWith('');
+  });
+
+  it('falls back to the lightweight preview when Monaco rendering fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    editorRenderState.errorMessage = 'monaco unavailable';
+    const onSelectionChange = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TextFilePreviewPane
+        path="/workspace/demo.ts"
+        descriptor={{ mode: 'text', textPresentation: 'code', language: 'typescript', wrapText: false }}
+        text="const value = 1;"
+        onSelectionChange={onSelectionChange}
+      />
+    ), host);
+    await flushAsync();
+
+    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
+    expect(host.textContent).toContain('typescript:const value = 1;');
+    expect(onSelectionChange).toHaveBeenCalledWith('');
   });
 });
