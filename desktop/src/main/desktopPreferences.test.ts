@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   activeDesktopTargetKey,
   clearPendingBootstrap,
+  defaultDesktopPreferences,
   createPlaintextSecretCodec,
   defaultDesktopPreferencesPaths,
   desktopPreferencesToDraft,
@@ -104,6 +105,116 @@ describe('desktopPreferences', () => {
       await saveDesktopPreferences(paths, preferences, codec);
       const loaded = await loadDesktopPreferences(paths, codec);
       expect(loaded).toEqual(preferences);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('falls back to defaults when the preferences json is malformed', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preferences-test-'));
+    try {
+      const paths = defaultDesktopPreferencesPaths(root);
+      await fs.writeFile(paths.preferencesFile, '{not valid json', 'utf8');
+
+      const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
+      expect(loaded).toEqual(defaultDesktopPreferences());
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('drops malformed secrets while keeping valid non-secret preferences', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preferences-test-'));
+    try {
+      const paths = defaultDesktopPreferencesPaths(root);
+      await fs.writeFile(paths.preferencesFile, JSON.stringify({
+        version: 1,
+        target: {
+          kind: 'external_local_ui',
+          external_local_ui_url: 'http://192.168.1.11:24000/',
+        },
+        local_ui_bind: '127.0.0.1:0',
+      }), 'utf8');
+      await fs.writeFile(paths.secretsFile, '{"broken"', 'utf8');
+
+      const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
+      expect(loaded).toEqual({
+        target: {
+          kind: 'external_local_ui',
+          external_local_ui_url: 'http://192.168.1.11:24000/',
+        },
+        local_ui_bind: '127.0.0.1:0',
+        local_ui_password: '',
+        pending_bootstrap: null,
+      });
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('drops secrets that cannot be decoded', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preferences-test-'));
+    try {
+      const paths = defaultDesktopPreferencesPaths(root);
+      await fs.writeFile(paths.preferencesFile, JSON.stringify({
+        version: 1,
+        target: {
+          kind: 'managed_local',
+        },
+        local_ui_bind: '127.0.0.1:0',
+        pending_bootstrap: {
+          controlplane_url: 'https://region.example.invalid',
+          env_id: 'env_123',
+        },
+      }), 'utf8');
+      await fs.writeFile(paths.secretsFile, JSON.stringify({
+        version: 1,
+        local_ui_password: {
+          encoding: 'safe_storage',
+          data: 'abc',
+        },
+        pending_bootstrap: {
+          env_token: {
+            encoding: 'safe_storage',
+            data: 'abc',
+          },
+        },
+      }), 'utf8');
+
+      const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
+      expect(loaded).toEqual({
+        target: {
+          kind: 'managed_local',
+          external_local_ui_url: '',
+        },
+        local_ui_bind: '127.0.0.1:0',
+        local_ui_password: '',
+        pending_bootstrap: null,
+      });
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('recovers invalid stored values by falling back to valid defaults', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preferences-test-'));
+    try {
+      const paths = defaultDesktopPreferencesPaths(root);
+      await fs.writeFile(paths.preferencesFile, JSON.stringify({
+        version: 1,
+        target: {
+          kind: 'external_local_ui',
+          external_local_ui_url: 'http://example.com:24000/',
+        },
+        local_ui_bind: 'bad-bind',
+        pending_bootstrap: {
+          controlplane_url: 'not-a-url',
+          env_id: 'env_123',
+        },
+      }), 'utf8');
+
+      const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
+      expect(loaded).toEqual(defaultDesktopPreferences());
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

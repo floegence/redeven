@@ -14,12 +14,13 @@ import (
 
 func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/_redeven_proxy/env/" {
+		if r.URL.Path != "/api/local/access/status" {
 			http.NotFound(w, r)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+		_, _ = w.Write([]byte(`{"ok":true,"data":{"password_required":true,"unlocked":false}}`))
 	}))
 	defer server.Close()
 
