@@ -673,7 +673,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
               <FileBrowser
                 files={displayFiles()}
                 initialPath={displayInitialPath()}
-                initialViewMode="list"
+                initialViewMode="grid"
                 homeLabel={browserHomeLabel()}
                 sidebarWidth={200}
                 sidebarWidthStorageKey={CHAT_FAB_SIDEBAR_WIDTH_STORAGE_KEY}

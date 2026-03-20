@@ -119,6 +119,7 @@ describe('file preview wiring', () => {
     const chatSrc = read('./ChatFileBrowserFAB.tsx');
 
     expect(chatSrc).toContain("const CHAT_FAB_SIDEBAR_WIDTH_STORAGE_KEY = 'chat-fab-files:sidebar-width';");
+    expect(chatSrc).toContain('initialViewMode="grid"');
     expect(chatSrc).toContain('sidebarWidthStorageKey={CHAT_FAB_SIDEBAR_WIDTH_STORAGE_KEY}');
     expect(chatSrc).toContain('persistenceKey="chat-fab-files"');
   });
