@@ -28,13 +28,6 @@ describe('buildAskFlowerComposerCopy', () => {
     expect(copy.sourceLabel).toBe('Preview');
     expect(copy.placeholder).toBe('Ask about this selection, request a change, or describe what you need');
     expect(copy.question).toBe('What would you like to understand, change, or verify?');
-    expect(copy.headline).toEqual([
-      { kind: 'text', value: 'I can see ' },
-      { kind: 'entry', entryId: 'context-0-selection' },
-      { kind: 'text', value: ' in ' },
-      { kind: 'entry', entryId: 'context-0-file' },
-      { kind: 'text', value: '.' },
-    ]);
     expect(copy.contextEntries.map((entry) => ({ kind: entry.kind, label: entry.label, detail: entry.detail }))).toEqual([
       { kind: 'selection', label: 'selected content', detail: 'notes.md' },
       { kind: 'file', label: 'notes.md', detail: '/Users/demo/notes.md' },
@@ -62,9 +55,6 @@ describe('buildAskFlowerComposerCopy', () => {
     expect(copy.sourceLabel).toBe('Files');
     expect(copy.placeholder).toBe('Ask about these files and folders, compare them, or describe what you need');
     expect(copy.question).toBe('What would you like to explore, compare, or change?');
-    expect(copy.headline).toEqual([
-      { kind: 'text', value: 'I can work from the selected files and folders below.' },
-    ]);
     expect(copy.contextEntries.map((entry) => ({ kind: entry.kind, label: entry.label }))).toEqual([
       { kind: 'directory', label: 'app' },
       { kind: 'file', label: 'main.go' },
