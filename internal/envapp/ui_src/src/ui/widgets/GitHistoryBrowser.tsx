@@ -69,6 +69,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   let detailReqSeq = 0;
 
   const repoAvailable = createMemo(() => Boolean(props.repoInfo?.available && props.repoInfo?.repoRootPath));
+  const repoUnavailableReason = createMemo(() => String(props.repoInfo?.unavailableReason ?? '').trim());
   const commitHash = createMemo(() => String(props.selectedCommitHash ?? '').trim());
   const commitBodyText = createMemo(() => normalizeCommitBody(commitDetail()));
   const hasExpandableCommitBody = createMemo(() => {
@@ -146,7 +147,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
               <div class="text-xs text-muted-foreground">
                 {props.repoInfoLoading
                   ? 'Checking repository context for the current path...'
-                  : `Current path ${props.currentPath || '/'} is outside a Git repository.`}
+                  : repoUnavailableReason() || `Current path ${props.currentPath || '/'} is outside a Git repository.`}
               </div>
             </div>
           </div>

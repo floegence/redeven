@@ -37,7 +37,11 @@ const (
 
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
+
+	gitUnavailableReason = "Git is not installed or not available in PATH on this agent."
 )
+
+var errGitUnavailable = errors.New("git unavailable")
 
 type Service struct {
 	agentHomeAbs string
@@ -67,22 +71,27 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if req == nil {
 			req = &resolveRepoReq{}
 		}
-		repo, available, err := s.resolveRepoForPath(ctx, req.Path)
+		result, err := s.resolveRepoForPath(ctx, req.Path)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				return nil, &rpc.Error{Code: 404, Message: "not found"}
 			}
 			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
 		}
-		if !available {
-			return &resolveRepoResp{Available: false}, nil
+		if !result.Available {
+			return &resolveRepoResp{
+				Available:         false,
+				GitAvailable:      result.GitAvailable,
+				UnavailableReason: result.UnavailableReason,
+			}, nil
 		}
 		return &resolveRepoResp{
 			Available:    true,
-			RepoRootPath: repo.repoRootReal,
-			HeadRef:      repo.headRef,
-			HeadCommit:   repo.headCommit,
-			Dirty:        repo.dirty,
+			GitAvailable: true,
+			RepoRootPath: result.Repo.repoRootReal,
+			HeadRef:      result.Repo.headRef,
+			HeadCommit:   result.Repo.headCommit,
+			Dirty:        result.Repo.dirty,
 		}, nil
 	})
 
@@ -434,41 +443,64 @@ type repoContext struct {
 	dirty        bool
 }
 
-func (s *Service) resolveRepoForPath(ctx context.Context, path string) (repoContext, bool, error) {
+type repoResolveResult struct {
+	Repo              repoContext
+	Available         bool
+	GitAvailable      bool
+	UnavailableReason string
+}
+
+func (s *Service) resolveRepoForPath(ctx context.Context, path string) (repoResolveResult, error) {
 	if strings.TrimSpace(path) == "" {
 		path = s.agentHomeAbs
 	}
 	resolved, err := pathutil.ResolveExistingScopedPath(path, s.agentHomeAbs)
 	if err != nil {
-		return repoContext{}, false, err
+		return repoResolveResult{}, err
 	}
 	stat, err := os.Stat(resolved)
 	if err != nil {
-		return repoContext{}, false, err
+		return repoResolveResult{}, err
 	}
 	targetDir := resolved
 	if !stat.IsDir() {
 		targetDir = filepath.Dir(resolved)
 	}
-	repoRootReal, ok := gitutil.ShowTopLevel(ctx, targetDir)
-	if !ok {
-		return repoContext{}, false, nil
+	repoRootReal, err := resolveGitTopLevel(ctx, targetDir)
+	if err != nil {
+		if errors.Is(err, errGitUnavailable) {
+			return repoResolveResult{
+				GitAvailable:      false,
+				UnavailableReason: gitUnavailableReason,
+			}, nil
+		}
+		return repoResolveResult{
+			GitAvailable:      true,
+			UnavailableReason: "Current path is not inside a Git repository.",
+		}, nil
 	}
 	if eval, err := filepath.EvalSymlinks(repoRootReal); err == nil {
 		repoRootReal = filepath.Clean(eval)
 	}
 	withinRoot, err := pathutil.IsWithinScope(repoRootReal, s.agentHomeAbs)
 	if err != nil {
-		return repoContext{}, false, err
+		return repoResolveResult{}, err
 	}
 	if !withinRoot {
-		return repoContext{}, false, nil
+		return repoResolveResult{
+			GitAvailable:      true,
+			UnavailableReason: "Current path is not inside a Git repository.",
+		}, nil
 	}
 	repo, err := s.loadRepoContext(ctx, repoRootReal)
 	if err != nil {
-		return repoContext{}, false, err
+		return repoResolveResult{}, err
 	}
-	return repo, true, nil
+	return repoResolveResult{
+		Repo:         repo,
+		Available:    true,
+		GitAvailable: true,
+	}, nil
 }
 
 func (s *Service) resolveExplicitRepo(ctx context.Context, repoRootPath string) (repoContext, error) {
@@ -501,14 +533,28 @@ func (s *Service) validateRepoRootPath(ctx context.Context, repoRootPath string)
 	if !withinRoot {
 		return "", errors.New("path escapes root")
 	}
-	topLevel, ok := gitutil.ShowTopLevel(ctx, repoRootReal)
-	if !ok {
+	topLevel, err := resolveGitTopLevel(ctx, repoRootReal)
+	if err != nil {
+		if errors.Is(err, errGitUnavailable) {
+			return "", err
+		}
 		return "", errors.New("not a git repository")
 	}
 	if filepath.Clean(topLevel) != filepath.Clean(repoRootReal) {
 		return "", errors.New("repo_root_path must match worktree root")
 	}
 	return repoRootReal, nil
+}
+
+func resolveGitTopLevel(ctx context.Context, dir string) (string, error) {
+	topLevel, err := gitutil.ResolveTopLevel(ctx, dir)
+	if err != nil {
+		if gitutil.IsGitUnavailable(err) {
+			return "", errGitUnavailable
+		}
+		return "", err
+	}
+	return topLevel, nil
 }
 
 func (s *Service) loadRepoContext(ctx context.Context, repoRootReal string) (repoContext, error) {
@@ -682,6 +728,9 @@ func classifyRepoRPCError(err error) *rpc.Error {
 	if err == nil {
 		return &rpc.Error{Code: 500, Message: "internal error"}
 	}
+	if errors.Is(err, errGitUnavailable) {
+		return &rpc.Error{Code: 503, Message: gitUnavailableReason}
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return &rpc.Error{Code: 404, Message: "not found"}
 	}
@@ -699,6 +748,9 @@ func classifyRepoRPCError(err error) *rpc.Error {
 func classifyGitRPCError(err error) *rpc.Error {
 	if err == nil {
 		return &rpc.Error{Code: 500, Message: "internal error"}
+	}
+	if errors.Is(err, errGitUnavailable) || gitutil.IsGitUnavailable(err) {
+		return &rpc.Error{Code: 503, Message: gitUnavailableReason}
 	}
 	message := strings.TrimSpace(err.Error())
 	lower := strings.ToLower(message)
@@ -789,11 +841,13 @@ type resolveRepoReq struct {
 }
 
 type resolveRepoResp struct {
-	Available    bool   `json:"available"`
-	RepoRootPath string `json:"repo_root_path,omitempty"`
-	HeadRef      string `json:"head_ref,omitempty"`
-	HeadCommit   string `json:"head_commit,omitempty"`
-	Dirty        bool   `json:"dirty,omitempty"`
+	Available         bool   `json:"available"`
+	GitAvailable      bool   `json:"git_available"`
+	UnavailableReason string `json:"unavailable_reason,omitempty"`
+	RepoRootPath      string `json:"repo_root_path,omitempty"`
+	HeadRef           string `json:"head_ref,omitempty"`
+	HeadCommit        string `json:"head_commit,omitempty"`
+	Dirty             bool   `json:"dirty,omitempty"`
 }
 
 type listCommitsReq struct {

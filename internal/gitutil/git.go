@@ -48,6 +48,9 @@ func runCombinedOutput(ctx context.Context, repoRoot string, env []string, allow
 		if msg == "" {
 			msg = err.Error()
 		}
+		if msg == err.Error() {
+			return nil, fmt.Errorf("git %s failed: %w", strings.Join(args, " "), err)
+		}
 		return nil, fmt.Errorf("git %s failed: %s", strings.Join(args, " "), msg)
 	}
 	return out, nil
@@ -62,22 +65,43 @@ func containsExitCode(allowedExitCodes []int, code int) bool {
 	return false
 }
 
-// ShowTopLevel resolves the git worktree root for dir.
-func ShowTopLevel(ctx context.Context, dir string) (string, bool) {
+// IsGitUnavailable reports whether the git executable is unavailable on the host.
+func IsGitUnavailable(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, exec.ErrNotFound) {
+		return true
+	}
+	var execErr *exec.Error
+	return errors.As(err, &execErr) && errors.Is(execErr.Err, exec.ErrNotFound)
+}
+
+// ResolveTopLevel resolves the git worktree root for dir and preserves lookup errors.
+func ResolveTopLevel(ctx context.Context, dir string) (string, error) {
 	dir = filepath.Clean(strings.TrimSpace(dir))
 	if dir == "" {
-		return "", false
+		return "", errors.New("missing git directory")
 	}
 	out, err := RunCombinedOutput(ctx, dir, nil, "rev-parse", "--show-toplevel")
 	if err != nil {
-		return "", false
+		return "", err
 	}
 	root := filepath.Clean(strings.TrimSpace(string(out)))
 	if root == "" {
-		return "", false
+		return "", errors.New("missing git top-level")
 	}
 	if mapped := preferOriginalPathRoot(dir, root); mapped != "" {
-		return mapped, true
+		return mapped, nil
+	}
+	return root, nil
+}
+
+// ShowTopLevel resolves the git worktree root for dir.
+func ShowTopLevel(ctx context.Context, dir string) (string, bool) {
+	root, err := ResolveTopLevel(ctx, dir)
+	if err != nil {
+		return "", false
 	}
 	return root, true
 }

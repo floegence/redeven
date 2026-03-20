@@ -57,30 +57,60 @@ func TestResolveRepoForPath(t *testing.T) {
 	fixture := createTestRepoFixture(t)
 	svc := NewService(fixture.Root)
 
-	repo, available, err := svc.resolveRepoForPath(context.Background(), filepath.Join(fixture.Root, "src"))
+	result, err := svc.resolveRepoForPath(context.Background(), filepath.Join(fixture.Root, "src"))
 	if err != nil {
 		t.Fatalf("resolveRepoForPath: %v", err)
 	}
-	if !available {
+	if !result.Available {
 		t.Fatalf("expected repository to be available")
 	}
+	repo := result.Repo
 	if mustEvalPath(t, repo.repoRootReal) != mustEvalPath(t, fixture.Root) {
 		t.Fatalf("repoRootReal=%q, want %q", repo.repoRootReal, fixture.Root)
 	}
 	if repo.headCommit != fixture.BinaryCommit {
 		t.Fatalf("headCommit=%q, want %q", repo.headCommit, fixture.BinaryCommit)
 	}
+	if !result.GitAvailable || result.UnavailableReason != "" {
+		t.Fatalf("expected git to be available without an unavailable reason: %+v", result)
+	}
 }
 
 func TestResolveRepoForPath_NonRepository(t *testing.T) {
 	t.Parallel()
 	svc := NewService(t.TempDir())
-	_, available, err := svc.resolveRepoForPath(context.Background(), "")
+	result, err := svc.resolveRepoForPath(context.Background(), "")
 	if err != nil {
 		t.Fatalf("resolveRepoForPath(non-repo): %v", err)
 	}
-	if available {
+	if result.Available {
 		t.Fatalf("expected non-repository path to be unavailable")
+	}
+	if !result.GitAvailable {
+		t.Fatalf("expected git capability to remain available for non-repository paths: %+v", result)
+	}
+	if got := result.UnavailableReason; got != "Current path is not inside a Git repository." {
+		t.Fatalf("unexpected unavailable reason: %q", got)
+	}
+}
+
+func TestResolveRepoForPath_GitUnavailable(t *testing.T) {
+	fixture := createTestRepoFixture(t)
+	svc := NewService(fixture.Root)
+	t.Setenv("PATH", t.TempDir())
+
+	result, err := svc.resolveRepoForPath(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveRepoForPath(git unavailable): %v", err)
+	}
+	if result.Available {
+		t.Fatalf("expected repository to be unavailable without git: %+v", result)
+	}
+	if result.GitAvailable {
+		t.Fatalf("expected git capability to be unavailable: %+v", result)
+	}
+	if got := result.UnavailableReason; got != gitUnavailableReason {
+		t.Fatalf("unexpected unavailable reason: %q", got)
 	}
 }
 
@@ -93,13 +123,14 @@ func TestResolveRepoForPath_Worktree(t *testing.T) {
 	runGitFixture(t, fixture.Root, "worktree", "add", worktree, branch)
 
 	svc := NewService(worktree)
-	repo, available, err := svc.resolveRepoForPath(context.Background(), worktree)
+	result, err := svc.resolveRepoForPath(context.Background(), worktree)
 	if err != nil {
 		t.Fatalf("resolveRepoForPath(worktree): %v", err)
 	}
-	if !available {
+	if !result.Available {
 		t.Fatalf("expected worktree repository to be available")
 	}
+	repo := result.Repo
 	if mustEvalPath(t, repo.repoRootReal) != mustEvalPath(t, worktree) {
 		t.Fatalf("repoRootReal=%q, want %q", repo.repoRootReal, worktree)
 	}

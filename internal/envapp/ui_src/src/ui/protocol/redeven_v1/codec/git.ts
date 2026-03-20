@@ -209,6 +209,8 @@ export function toWireGitResolveRepoRequest(req: GitResolveRepoRequest): wire_gi
 export function fromWireGitResolveRepoResponse(resp: wire_git_resolve_repo_resp): GitResolveRepoResponse {
   return {
     available: Boolean(resp?.available),
+    gitAvailable: typeof resp?.git_available === 'boolean' ? resp.git_available : undefined,
+    unavailableReason: typeof resp?.unavailable_reason === 'string' ? resp.unavailable_reason : undefined,
     repoRootPath: typeof resp?.repo_root_path === 'string' ? resp.repo_root_path : undefined,
     headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
     headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,

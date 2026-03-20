@@ -4,6 +4,8 @@ export type GitResolveRepoRequest = {
 
 export type GitResolveRepoResponse = {
   available: boolean;
+  gitAvailable?: boolean;
+  unavailableReason?: string;
   repoRootPath?: string;
   headRef?: string;
   headCommit?: string;
