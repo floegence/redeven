@@ -18,9 +18,15 @@ describe('runtimeState', () => {
 
   it('loads an attachable loopback runtime from disk', async () => {
     const server = http.createServer((request, response) => {
-      if (request.url === '/_redeven_proxy/env/') {
-        response.writeHead(200, { 'Content-Type': 'text/html' });
-        response.end('<html>ok</html>');
+      if (request.url === '/api/local/access/status') {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({
+          ok: true,
+          data: {
+            password_required: true,
+            unlocked: false,
+          },
+        }));
         return;
       }
       response.writeHead(404);
@@ -82,9 +88,15 @@ describe('runtimeState', () => {
 
   it('loads an external Local UI startup payload from an explicit local IP url', async () => {
     const server = http.createServer((request, response) => {
-      if (request.url === '/_redeven_proxy/env/') {
-        response.writeHead(200, { 'Content-Type': 'text/html' });
-        response.end('<html>ok</html>');
+      if (request.url === '/api/local/access/status') {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({
+          ok: true,
+          data: {
+            password_required: false,
+            unlocked: true,
+          },
+        }));
         return;
       }
       response.writeHead(404);
@@ -121,5 +133,41 @@ describe('runtimeState', () => {
 
   it('rejects external Local UI startup for unsupported hosts', async () => {
     await expect(loadExternalLocalUIStartup('https://example.com/')).rejects.toThrow('Redeven URL must use localhost or an IP literal.');
+  });
+
+  it('rejects a local target that responds with non-Redeven access status payloads', async () => {
+    const server = http.createServer((request, response) => {
+      if (request.url === '/api/local/access/status') {
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end('<html>not redeven</html>');
+        return;
+      }
+      response.writeHead(404);
+      response.end('not found');
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+      server.once('error', reject);
+    });
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('expected a TCP server address');
+      }
+
+      await expect(loadExternalLocalUIStartup(`http://127.0.0.1:${address.port}/`)).resolves.toBeNull();
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    }
   });
 });

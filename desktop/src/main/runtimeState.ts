@@ -10,6 +10,11 @@ import { normalizeLocalUIBaseURL } from './localUIURL';
 
 const DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
 
+type RuntimeProbeResponse = Readonly<{
+  statusCode: number | null;
+  body: string;
+}>;
+
 function candidateStartupURLs(startup: StartupReport): string[] {
   const seen = new Set<string>();
   const ordered = [startup.local_ui_url, ...startup.local_ui_urls];
@@ -25,34 +30,57 @@ function candidateStartupURLs(startup: StartupReport): string[] {
   return out;
 }
 
-function requestStatus(url: URL, timeoutMs: number): Promise<number | null> {
+function request(url: URL, timeoutMs: number): Promise<RuntimeProbeResponse> {
   return new Promise((resolve) => {
     const requestImpl = url.protocol === 'https:' ? https.get : http.get;
     const request = requestImpl(url, {
       timeout: timeoutMs,
       headers: {
-        Accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
+        Accept: 'application/json;q=1.0,text/html;q=0.8,*/*;q=0.5',
       },
     }, (response) => {
-      const status = typeof response.statusCode === 'number' ? response.statusCode : null;
-      response.resume();
-      resolve(status);
+      const statusCode = typeof response.statusCode === 'number' ? response.statusCode : null;
+      response.setEncoding('utf8');
+      let body = '';
+      response.on('data', (chunk: string) => {
+        body += chunk;
+      });
+      response.on('end', () => {
+        resolve({ statusCode, body });
+      });
     });
 
     request.on('timeout', () => {
       request.destroy(new Error('request timed out'));
     });
-    request.on('error', () => resolve(null));
+    request.on('error', () => resolve({ statusCode: null, body: '' }));
   });
 }
 
-async function probeStartupURL(baseURL: string, timeoutMs: number): Promise<boolean> {
+function parseLocalAccessStatusResponse(raw: string): boolean {
+  if (!raw) {
+    return false;
+  }
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const inner = parsed?.data;
+    if (!inner || typeof inner !== 'object') {
+      return false;
+    }
+    const data = inner as Record<string, unknown>;
+    return typeof data.password_required === 'boolean' && typeof data.unlocked === 'boolean';
+  } catch {
+    return false;
+  }
+}
+
+async function probeRedevenLocalUI(baseURL: string, timeoutMs: number): Promise<boolean> {
   if (!isAllowedAppNavigation(baseURL, baseURL)) {
     return false;
   }
-  const probeURL = new URL('/_redeven_proxy/env/', baseURL);
-  const status = await requestStatus(probeURL, timeoutMs);
-  return status !== null && status >= 200 && status < 400;
+  const probeURL = new URL('/api/local/access/status', baseURL);
+  const response = await request(probeURL, timeoutMs);
+  return response.statusCode === 200 && parseLocalAccessStatusResponse(response.body);
 }
 
 export async function loadExternalLocalUIStartup(
@@ -60,7 +88,7 @@ export async function loadExternalLocalUIStartup(
   timeoutMs: number = DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
 ): Promise<StartupReport | null> {
   const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL);
-  if (!await probeStartupURL(normalizedBaseURL, timeoutMs)) {
+  if (!await probeRedevenLocalUI(normalizedBaseURL, timeoutMs)) {
     return null;
   }
   return {
@@ -108,7 +136,7 @@ export async function loadAttachableRuntimeState(
   }
 
   for (const candidateURL of candidateStartupURLs(startup)) {
-    if (await probeStartupURL(candidateURL, timeoutMs)) {
+    if (await probeRedevenLocalUI(candidateURL, timeoutMs)) {
       return {
         ...startup,
         local_ui_url: candidateURL,

@@ -41,44 +41,61 @@
   <text x="470" y="376" fill="#0C4A6E" font-family="Arial, Helvetica, sans-serif" font-size="18">Tunnel</text>
 
   <rect x="670" y="150" width="450" height="392" rx="28" fill="url(#agent)"/>
-  <text x="706" y="204" fill="#F8FAFC" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700">Redeven Agent on the user machine</text>
-  <text x="706" y="236" fill="#CCFBF1" font-family="Arial, Helvetica, sans-serif" font-size="18">The endpoint hosts the real capabilities and keeps the data plane local.</text>
+  <text x="706" y="202" fill="#F8FAFC" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">
+    <tspan x="706" dy="0">Redeven Agent</tspan>
+    <tspan x="706" dy="32">on the user machine</tspan>
+  </text>
+  <text x="706" y="268" fill="#CCFBF1" font-family="Arial, Helvetica, sans-serif" font-size="17">
+    <tspan x="706" dy="0">The endpoint hosts the real capabilities</tspan>
+    <tspan x="706" dy="24">while encrypted traffic stays local.</tspan>
+  </text>
 
-  <rect x="706" y="274" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
-  <text x="736" y="303" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Files</text>
+  <rect x="706" y="302" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
+  <text x="736" y="331" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Files</text>
 
-  <rect x="850" y="274" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
-  <text x="868" y="303" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Terminal</text>
+  <rect x="850" y="302" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
+  <text x="868" y="331" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Terminal</text>
 
-  <rect x="994" y="274" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
-  <text x="1006" y="303" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Monitoring</text>
+  <rect x="994" y="302" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
+  <text x="1006" y="331" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Monitoring</text>
 
-  <rect x="706" y="338" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
-  <text x="726" y="367" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Env App</text>
+  <rect x="706" y="366" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
+  <text x="726" y="395" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Env App</text>
 
-  <rect x="850" y="338" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
-  <text x="870" y="367" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Code App</text>
+  <rect x="850" y="366" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
+  <text x="870" y="395" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Code App</text>
 
-  <rect x="994" y="338" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
-  <text x="1018" y="367" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Desktop</text>
+  <rect x="994" y="366" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
+  <text x="1018" y="395" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Desktop</text>
 
-  <rect x="706" y="402" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
-  <text x="728" y="431" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Flower</text>
+  <rect x="706" y="430" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
+  <text x="728" y="459" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Flower</text>
 
-  <rect x="850" y="402" width="270" height="94" rx="18" fill="#0B3B38" stroke="#2DD4BF"/>
-  <text x="878" y="436" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700">Local state and policy</text>
-  <text x="878" y="466" fill="#CCFBF1" font-family="Arial, Helvetica, sans-serif" font-size="17">Config, secrets, audit logs, diagnostics,</text>
-  <text x="878" y="490" fill="#CCFBF1" font-family="Arial, Helvetica, sans-serif" font-size="17">permission caps, and code-server data</text>
+  <rect x="850" y="424" width="270" height="88" rx="18" fill="#0B3B38" stroke="#2DD4BF"/>
+  <text x="878" y="454" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Local state and policy</text>
+  <text x="878" y="476" fill="#CCFBF1" font-family="Arial, Helvetica, sans-serif" font-size="14">
+    <tspan x="878" dy="0">Config, secrets, audit logs,</tspan>
+    <tspan x="878" dy="18">diagnostics, permission caps,</tspan>
+    <tspan x="878" dy="18">and code-server data</tspan>
+  </text>
 
-  <path d="M350 226H650" stroke="#334155" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-dark)"/>
-  <text x="392" y="206" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Management channel</text>
-  <text x="376" y="232" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="16">bootstrap + grants + session metadata</text>
+  <path d="M350 236H650" stroke="#334155" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-dark)"/>
+  <rect x="376" y="160" width="228" height="56" rx="16" fill="#FFFFFF" fill-opacity="0.96" stroke="#CBD5E1"/>
+  <text x="394" y="187" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700">Management channel</text>
+  <text x="394" y="206" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="13">
+    <tspan x="394" dy="0">bootstrap, grants, and</tspan>
+    <tspan x="394" dy="16">session metadata</tspan>
+  </text>
 
   <path d="M350 458H430" stroke="#059669" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-green)"/>
   <path d="M610 458H650" stroke="#059669" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-green)"/>
-  <text x="382" y="432" fill="#047857" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">E2EE data plane</text>
-  <text x="362" y="458" fill="#065F46" font-family="Arial, Helvetica, sans-serif" font-size="16">encrypted bytes only</text>
+  <rect x="374" y="398" width="188" height="54" rx="16" fill="#F0FDF4" fill-opacity="0.96" stroke="#86EFAC"/>
+  <text x="390" y="426" fill="#047857" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">E2EE data plane</text>
+  <text x="390" y="446" fill="#065F46" font-family="Arial, Helvetica, sans-serif" font-size="14">encrypted bytes only</text>
 
-  <rect x="70" y="560" width="1050" height="32" rx="16" fill="#FFFFFF" stroke="#CBD5E1"/>
-  <text x="96" y="582" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="16">Control plane issues grants. Flowersec forwards encrypted traffic. Redeven Agent terminates the session on the endpoint and serves the real local capabilities.</text>
+  <rect x="70" y="552" width="1050" height="52" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="96" y="575" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="14">
+    <tspan x="96" dy="0">Control plane issues grants. Flowersec forwards encrypted traffic.</tspan>
+    <tspan x="96" dy="18">Redeven Agent terminates sessions on the endpoint and serves the real local capabilities.</tspan>
+  </text>
 </svg>
