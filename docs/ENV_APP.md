@@ -9,7 +9,8 @@ Key points:
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower).
 - File Browser text/code previews now use a Monaco-based viewer/editor path for the primary experience, matching the shared Floe Webapp editor surface.
 - When the environment grants `can_write`, text previews can switch into an editable mode and save changes back through the agent file RPC.
-- Unsupported languages, oversized files, truncated reads, and Monaco load failures fall back to the lightweight Shiki/plain-text preview path so preview remains responsive.
+- Languages that Monaco can only treat as plain text still stay on the same Monaco surface so preview and Edit mode remain visually aligned.
+- Truncated reads and Monaco load failures fall back to the lightweight Shiki/plain-text preview path so preview remains responsive.
 - Desktop-managed runs can promote serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` and `file_browser` today).
 
 ## What runs where

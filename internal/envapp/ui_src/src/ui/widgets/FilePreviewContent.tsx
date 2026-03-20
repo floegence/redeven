@@ -146,6 +146,7 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
             descriptor={props.descriptor}
             text={props.text ?? ''}
             draftText={props.draftText ?? props.text ?? ''}
+            truncated={props.truncated}
             editing={props.editing}
             dirty={props.dirty}
             saving={props.saving}

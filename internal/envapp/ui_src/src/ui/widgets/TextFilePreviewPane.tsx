@@ -1,47 +1,10 @@
-import { Suspense, Show, createEffect, createMemo, lazy } from 'solid-js';
-import { resolveCodeEditorLanguageSpec, type CodeEditorApi, type CodeEditorProps } from '@floegence/floe-webapp-core/editor';
+import { ErrorBoundary, Suspense, Show, createEffect, createMemo, createSignal, lazy, on } from 'solid-js';
+import type { CodeEditorApi, CodeEditorProps } from '@floegence/floe-webapp-core/editor';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { CodePreviewPane } from './CodePreviewPane';
 
 const CodeEditor = lazy(() => import('@floegence/floe-webapp-core/editor').then((module) => ({ default: module.CodeEditor })));
 
-const MONACO_CODE_PREVIEW_LANGUAGE_IDS = new Set([
-  'javascript',
-  'typescript',
-  'json',
-  'html',
-  'css',
-  'scss',
-  'less',
-  'markdown',
-  'yaml',
-  'ini',
-  'xml',
-  'python',
-  'java',
-  'kotlin',
-  'scala',
-  'go',
-  'rust',
-  'cpp',
-  'csharp',
-  'fsharp',
-  'php',
-  'ruby',
-  'perl',
-  'shell',
-  'swift',
-  'objective-c',
-  'r',
-  'sql',
-  'lua',
-  'dart',
-  'dockerfile',
-  'bat',
-  'powershell',
-]);
-
-const PLAIN_TEXT_EDITOR_LANGUAGES = new Set(['', 'text', 'plaintext', 'txt']);
 type CodeEditorOptions = NonNullable<CodeEditorProps['options']>;
 
 const PREVIEW_MONACO_INTERACTION_OPTIONS: CodeEditorOptions = {
@@ -57,17 +20,12 @@ const PREVIEW_MONACO_INTERACTION_OPTIONS: CodeEditorOptions = {
   dragAndDrop: false,
 };
 
-function supportsRichMonacoCodePreview(language?: string): boolean {
-  const normalized = String(language ?? '').trim().toLowerCase();
-  if (PLAIN_TEXT_EDITOR_LANGUAGES.has(normalized)) return true;
-  return MONACO_CODE_PREVIEW_LANGUAGE_IDS.has(resolveCodeEditorLanguageSpec(normalized).id);
-}
-
 export interface TextFilePreviewPaneProps {
   path: string;
   descriptor: FilePreviewDescriptor;
   text: string;
   draftText?: string;
+  truncated?: boolean;
   editing?: boolean;
   dirty?: boolean;
   saving?: boolean;
@@ -81,15 +39,12 @@ export interface TextFilePreviewPaneProps {
 }
 
 export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
+  const [monacoFailed, setMonacoFailed] = createSignal(false);
   const resolvedLanguage = createMemo(() => {
     if (props.descriptor.textPresentation !== 'code') return 'plaintext';
     return props.descriptor.language || 'plaintext';
   });
-  const monacoSupported = createMemo(() => (
-    props.descriptor.textPresentation !== 'code'
-    || supportsRichMonacoCodePreview(resolvedLanguage())
-  ));
-  const shouldUseMonaco = createMemo(() => !!props.editing);
+  const shouldUseMonaco = createMemo(() => !props.truncated && !monacoFailed());
   const editorValue = createMemo(() => (props.editing ? props.draftText ?? props.text : props.text));
   const editorOptions = createMemo<CodeEditorOptions>(() => ({
     ...PREVIEW_MONACO_INTERACTION_OPTIONS,
@@ -100,6 +55,16 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
     folding: props.descriptor.textPresentation === 'code',
     renderLineHighlight: props.editing ? ('line' as const) : ('none' as const),
     renderWhitespace: 'selection' as const,
+  }));
+  const fallbackPreview = () => (
+    <CodePreviewPane
+      code={props.text}
+      language={props.descriptor.textPresentation === 'code' ? props.descriptor.language : undefined}
+    />
+  );
+
+  createEffect(on(() => [props.path, props.truncated, resolvedLanguage()], () => {
+    setMonacoFailed(false);
   }));
 
   createEffect(() => {
@@ -119,29 +84,33 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
       <div class="min-h-0 flex-1 overflow-hidden">
         <Show
           when={shouldUseMonaco()}
-          fallback={(
-            <CodePreviewPane
-              code={props.text}
-              language={props.descriptor.textPresentation === 'code' ? props.descriptor.language : undefined}
-            />
-          )}
+          fallback={fallbackPreview()}
         >
-          <Suspense fallback={<div class="flex h-full items-center justify-center text-sm text-muted-foreground">Loading editor...</div>}>
-            <CodeEditor
-              path={props.path}
-              language={monacoSupported() ? resolvedLanguage() : 'plaintext'}
-              value={editorValue()}
-              options={editorOptions()}
-              onChange={(value: string) => {
-                if (!props.editing) return;
-                props.onDraftChange?.(value);
-              }}
-              onSelectionChange={(selectionText: string, _api: CodeEditorApi) => {
-                props.onSelectionChange?.(selectionText);
-              }}
-              class="h-full"
-            />
-          </Suspense>
+          <ErrorBoundary
+            fallback={() => {
+              queueMicrotask(() => {
+                setMonacoFailed(true);
+              });
+              return fallbackPreview();
+            }}
+          >
+            <Suspense fallback={<div class="flex h-full items-center justify-center text-sm text-muted-foreground">Loading editor...</div>}>
+              <CodeEditor
+                path={props.path}
+                language={resolvedLanguage()}
+                value={editorValue()}
+                options={editorOptions()}
+                onChange={(value: string) => {
+                  if (!props.editing) return;
+                  props.onDraftChange?.(value);
+                }}
+                onSelectionChange={(selectionText: string, _api: CodeEditorApi) => {
+                  props.onSelectionChange?.(selectionText);
+                }}
+                class="h-full"
+              />
+            </Suspense>
+          </ErrorBoundary>
         </Show>
       </div>
     </div>
