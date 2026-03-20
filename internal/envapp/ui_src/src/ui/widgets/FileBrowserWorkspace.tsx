@@ -348,7 +348,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
         files={displayFiles()}
         path={displayCurrentPath()}
         initialPath={displayInitialPath()}
-        initialViewMode="list"
+        initialViewMode="grid"
         persistenceKey={props.persistenceKey}
         homeLabel="Home"
         onNavigate={(path) => props.onNavigate?.(toAbsolutePath(path))}
