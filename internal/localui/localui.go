@@ -893,11 +893,15 @@ func (s *Server) handleEnvironment(w http.ResponseWriter, r *http.Request) {
 }
 
 type latestVersionResp struct {
-	LatestVersion    string `json:"latest_version"`
-	Message          string `json:"message,omitempty"`
-	DesktopManaged   bool   `json:"desktop_managed,omitempty"`
-	EffectiveRunMode string `json:"effective_run_mode,omitempty"`
-	RemoteEnabled    bool   `json:"remote_enabled,omitempty"`
+	CurrentVersion     string `json:"current_version"`
+	LatestVersion      string `json:"latest_version,omitempty"`
+	RecommendedVersion string `json:"recommended_version,omitempty"`
+	UpgradePolicy      string `json:"upgrade_policy"`
+	ReleasePageURL     string `json:"release_page_url,omitempty"`
+	Message            string `json:"message,omitempty"`
+	DesktopManaged     bool   `json:"desktop_managed,omitempty"`
+	EffectiveRunMode   string `json:"effective_run_mode,omitempty"`
+	RemoteEnabled      bool   `json:"remote_enabled,omitempty"`
 }
 
 func (s *Server) handleLatestVersion(w http.ResponseWriter, r *http.Request) {
@@ -916,11 +920,14 @@ func (s *Server) handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 		v = "unknown"
 	}
 	message := "Offline: latest version check is unavailable in local mode."
+	upgradePolicy := "manual"
 	if s.desktopManaged {
 		message = "Managed by Redeven Desktop. Update from the desktop release instead of self-upgrade."
+		upgradePolicy = "desktop_release"
 	}
 	writeJSON(w, http.StatusOK, latestVersionResp{
-		LatestVersion:    v,
+		CurrentVersion:   v,
+		UpgradePolicy:    upgradePolicy,
 		Message:          message,
 		DesktopManaged:   s.desktopManaged,
 		EffectiveRunMode: s.resolvedEffectiveRunMode(),

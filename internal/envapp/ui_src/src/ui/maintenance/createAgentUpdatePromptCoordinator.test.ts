@@ -35,6 +35,13 @@ async function flushAsync(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+async function flushUntil(predicate: () => boolean, maxTurns: number = 8): Promise<void> {
+  for (let index = 0; index < maxTurns; index += 1) {
+    await flushAsync();
+    if (predicate()) return;
+  }
+}
+
 function createCoordinatorHarness() {
   const [envId] = createSignal('env_prompt');
   const [isLocalMode] = createSignal(false);
@@ -43,9 +50,15 @@ function createCoordinatorHarness() {
   const [canAdmin] = createSignal(true);
   const [envStatus, setEnvStatus] = createSignal('online');
   const [currentVersion, setCurrentVersion] = createSignal('v1.0.0');
-  const [latestMeta, setLatestMeta] = createSignal({
+  const [latestMeta, setLatestMeta] = createSignal<{
+    latest_version: string;
+    recommended_version: string;
+    upgrade_policy: 'self_upgrade' | 'manual' | 'desktop_release';
+    cache_ttl_ms: number;
+  }>({
     latest_version: 'v1.1.0',
     recommended_version: 'v1.1.0',
+    upgrade_policy: 'self_upgrade' as const,
     cache_ttl_ms: 300_000,
   });
   const [maintenanceKind, setMaintenanceKind] = createSignal<'upgrade' | 'restart' | null>(null);
@@ -131,7 +144,7 @@ describe('createAgentUpdatePromptCoordinator', () => {
   it('opens when a recommended update is available and closes after upgrade success', async () => {
     const harness = createCoordinatorHarness();
     try {
-      await flushAsync();
+      await flushUntil(() => harness.coordinator.visible());
 
       expect(harness.refetchLatestVersion).toHaveBeenCalled();
       expect(harness.coordinator.visible()).toBe(true);
@@ -169,6 +182,25 @@ describe('createAgentUpdatePromptCoordinator', () => {
       expect(harness.coordinator.visible()).toBe(true);
       expect(harness.coordinator.mode()).toBe('failed');
       expect(harness.coordinator.error()).toBe('Upgrade rejected.');
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it('suppresses the prompt when the latest metadata does not allow self-upgrade', async () => {
+    const harness = createCoordinatorHarness();
+    try {
+      harness.setLatestMeta({
+        latest_version: 'v1.1.0',
+        recommended_version: 'v1.1.0',
+        upgrade_policy: 'manual',
+        cache_ttl_ms: 300_000,
+      });
+
+      await flushAsync();
+
+      expect(harness.coordinator.visible()).toBe(false);
+      expect(harness.coordinator.open()).toBe(false);
     } finally {
       harness.dispose();
     }

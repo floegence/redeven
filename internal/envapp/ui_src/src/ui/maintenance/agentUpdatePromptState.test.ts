@@ -63,6 +63,7 @@ describe('agentUpdatePromptState', () => {
     const base = {
       accessGateVisible: false,
       isLocalMode: false,
+      upgradePolicy: 'self_upgrade',
       protocolStatus: 'connected',
       canAdmin: true,
       envStatus: 'online',
@@ -75,6 +76,7 @@ describe('agentUpdatePromptState', () => {
     } as const;
 
     expect(shouldShowAgentUpdatePrompt({ ...base, accessGateVisible: true })).toBe(false);
+    expect(shouldShowAgentUpdatePrompt({ ...base, upgradePolicy: 'manual' })).toBe(false);
     expect(shouldShowAgentUpdatePrompt({ ...base, canAdmin: false })).toBe(false);
     expect(shouldShowAgentUpdatePrompt({ ...base, protocolStatus: 'disconnected' })).toBe(false);
     expect(shouldShowAgentUpdatePrompt({ ...base, envStatus: 'offline' })).toBe(false);
@@ -90,6 +92,7 @@ describe('agentUpdatePromptState', () => {
       shouldShowAgentUpdatePrompt({
         accessGateVisible: false,
         isLocalMode: false,
+        upgradePolicy: 'self_upgrade',
         protocolStatus: 'connected',
         canAdmin: true,
         envStatus: 'online',
@@ -106,6 +109,7 @@ describe('agentUpdatePromptState', () => {
       shouldShowAgentUpdatePrompt({
         accessGateVisible: false,
         isLocalMode: false,
+        upgradePolicy: 'self_upgrade',
         protocolStatus: 'connected',
         canAdmin: true,
         envStatus: 'online',
@@ -123,6 +127,7 @@ describe('agentUpdatePromptState', () => {
       shouldShowAgentUpdatePrompt({
         accessGateVisible: false,
         isLocalMode: false,
+        upgradePolicy: 'self_upgrade',
         protocolStatus: 'connected',
         canAdmin: true,
         envStatus: 'online',

@@ -17,8 +17,8 @@ import { Button, Card, Checkbox, ConfirmDialog, Dialog, Input, Select } from '@f
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import { useAgentUpdateContext } from '../maintenance/AgentUpdateContext';
+import { resolveAgentUpgradeState } from '../maintenance/agentUpgradeState';
 import { isReleaseVersion } from '../maintenance/agentVersion';
-import { resolveDesktopManagedAgentState } from '../maintenance/desktopManagedAgent';
 import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/shared';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { diagnosticsExportFilename, exportDiagnostics, getDiagnostics, type DiagnosticsView } from '../services/diagnosticsApi';
@@ -895,7 +895,7 @@ export function EnvSettingsPage() {
   const latestVersion = createMemo(() => agentUpdate.version.latestMeta());
   const latestVersionLoading = createMemo(() => agentUpdate.version.latestMetaLoading());
   const latestVersionError = createMemo(() => agentUpdate.version.latestMetaError());
-  const desktopManagedAgent = createMemo(() => resolveDesktopManagedAgentState(latestVersion()));
+  const upgradeState = createMemo(() => resolveAgentUpgradeState(latestVersion()));
   const displayedStatus = createMemo(() => agentUpdate.maintenance.displayedStatus());
   const maintenanceStage = createMemo(() => agentUpdate.maintenance.stage());
   const maintenanceError = createMemo(() => agentUpdate.maintenance.error());
@@ -940,7 +940,7 @@ export function EnvSettingsPage() {
 
   const canStartUpgrade = createMemo(() => {
     if (maintaining()) return false;
-    if (desktopManagedAgent().desktopManaged) return false;
+    if (!upgradeState().allowsUpgradeAction) return false;
     if (protocol.status() !== 'connected') return false;
     if (!targetUpgradeVersionValid()) return false;
     if (!canAdmin()) return false;
@@ -2965,7 +2965,7 @@ export function EnvSettingsPage() {
                 >
                   Restart agent
                 </Button>
-                <Show when={!desktopManagedAgent().desktopManaged}>
+                <Show when={upgradeState().allowsUpgradeAction}>
                   <Button
                     size="sm"
                     variant="default"
@@ -2999,7 +2999,7 @@ export function EnvSettingsPage() {
           </div>
 
           <div class="mt-3 space-y-2">
-            <Show when={!desktopManagedAgent().desktopManaged}>
+            <Show when={upgradeState().allowsUpgradeAction}>
               <>
                 <div>
                   <FieldLabel>Target version</FieldLabel>
@@ -3017,8 +3017,18 @@ export function EnvSettingsPage() {
                 </Show>
               </>
             </Show>
-            <Show when={desktopManagedAgent().desktopManaged}>
-              <div class="text-xs text-muted-foreground">{desktopManagedAgent().message}</div>
+            <Show when={upgradeState().message}>
+              <div class="text-xs text-muted-foreground">{upgradeState().message}</div>
+            </Show>
+            <Show when={upgradeState().policy === 'desktop_release' && upgradeState().releasePageURL}>
+              <a
+                href={upgradeState().releasePageURL}
+                target="_blank"
+                rel="noreferrer"
+                class="text-xs text-primary underline-offset-4 hover:underline"
+              >
+                Open desktop release page
+              </a>
             </Show>
             <Show when={latestVersionError()}>
               <div class="text-xs text-destructive">Latest version metadata is unavailable: {latestVersionError()}</div>

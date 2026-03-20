@@ -94,6 +94,16 @@ export function createAgentUpdatePromptCoordinator(args: CreateAgentUpdatePrompt
     return 'available';
   });
 
+  const canKeepAvailablePromptOpen = createMemo(() => {
+    if (!refreshEligible()) return false;
+    if (args.version.latestMeta()?.upgrade_policy !== 'self_upgrade') return false;
+    if (args.version.latestMeta()?.stale === true) return false;
+    if (!args.version.currentVersionValid()) return false;
+    if (!args.version.preferredTargetVersionValid()) return false;
+    const compare = args.version.preferredTargetCompareToCurrent();
+    return compare != null && compare < 0;
+  });
+
   const targetVersion = createMemo(() => {
     const requested = String(promptRequestedTargetVersion() ?? '').trim();
     if (requested) return requested;
@@ -106,7 +116,7 @@ export function createAgentUpdatePromptCoordinator(args: CreateAgentUpdatePrompt
 
   const visible = createMemo(() => {
     if (!open()) return false;
-    if (mode() === 'available') return refreshEligible();
+    if (mode() === 'available') return canKeepAvailablePromptOpen();
     return true;
   });
 
@@ -165,9 +175,18 @@ export function createAgentUpdatePromptCoordinator(args: CreateAgentUpdatePrompt
   });
 
   createEffect(() => {
+    if (!open()) return;
+    if (promptUpgradeRequested()) return;
+    if (mode() !== 'available') return;
+    if (canKeepAvailablePromptOpen()) return;
+    setOpen(false);
+  });
+
+  createEffect(() => {
     const shouldOpen = shouldShowAgentUpdatePrompt({
       accessGateVisible: args.accessGateVisible(),
       isLocalMode: args.isLocalMode(),
+      upgradePolicy: args.version.latestMeta()?.upgrade_policy,
       protocolStatus: args.protocolStatus(),
       canAdmin: args.canAdmin(),
       envStatus: args.envStatus(),

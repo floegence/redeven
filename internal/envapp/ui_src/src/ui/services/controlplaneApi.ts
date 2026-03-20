@@ -31,8 +31,11 @@ export type EnvironmentDetail = Environment & {
 };
 
 export type AgentLatestVersion = {
-  latest_version: string;
+  current_version?: string;
+  latest_version?: string;
   recommended_version?: string;
+  upgrade_policy?: 'self_upgrade' | 'desktop_release' | 'manual';
+  release_page_url?: string;
   manifest_etag?: string;
   source?: string;
   stale?: boolean;
