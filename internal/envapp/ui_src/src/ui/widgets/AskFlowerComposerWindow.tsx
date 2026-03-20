@@ -18,6 +18,7 @@ import {
 } from '../utils/filePreview';
 import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { syncLiveTextValue } from '../utils/liveTextValue';
+import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { FilePreviewContent } from './FilePreviewContent';
 import { PersistentFloatingWindow } from './PersistentFloatingWindow';
@@ -985,8 +986,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                                 if (validationError()) setValidationError('');
                               }}
                               onKeyDown={(event) => {
-                                if (event.isComposing || isComposing()) return;
-                                if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                                if (shouldSubmitOnEnterKeydown({ event, isComposing: isComposing() })) {
                                   event.preventDefault();
                                   void submit();
                                 }
