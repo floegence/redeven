@@ -24,21 +24,21 @@
   <text x="70" y="72" fill="#0F172A" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700">Redeven Agent architecture overview</text>
   <text x="70" y="104" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="18">Control traffic and encrypted application traffic are split by design.</text>
 
-  <rect x="70" y="150" width="280" height="150" rx="24" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/>
-  <text x="102" y="202" fill="#0F172A" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">Redeven Service</text>
-  <text x="102" y="240" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="18">Bootstrap endpoint</text>
-  <text x="102" y="268" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="18">Session grants</text>
-  <text x="102" y="296" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="18">Session metadata</text>
+  <rect x="70" y="148" width="280" height="162" rx="24" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/>
+  <text x="102" y="198" fill="#0F172A" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">Redeven Service</text>
+  <text x="102" y="238" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="18">Bootstrap endpoint</text>
+  <text x="102" y="266" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="18">Session grants</text>
+  <text x="102" y="294" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="18">Session metadata</text>
 
-  <rect x="70" y="372" width="280" height="170" rx="24" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/>
-  <text x="102" y="426" fill="#0F172A" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">Browser / Desktop</text>
-  <text x="102" y="464" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="18">Env App</text>
-  <text x="102" y="492" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="18">Code App</text>
-  <text x="102" y="520" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="18">Desktop shell</text>
+  <rect x="70" y="372" width="280" height="176" rx="24" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/>
+  <text x="102" y="424" fill="#0F172A" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">Browser / Desktop</text>
+  <text x="102" y="468" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="18">Env App</text>
+  <text x="102" y="496" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="18">Code App</text>
+  <text x="102" y="524" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="18">Desktop shell</text>
 
-  <rect x="430" y="314" width="180" height="80" rx="20" fill="#E0F2FE" stroke="#38BDF8" stroke-width="2"/>
+  <rect x="430" y="314" width="180" height="92" rx="22" fill="#E0F2FE" stroke="#38BDF8" stroke-width="2"/>
   <text x="462" y="350" fill="#0C4A6E" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">Flowersec</text>
-  <text x="470" y="376" fill="#0C4A6E" font-family="Arial, Helvetica, sans-serif" font-size="18">Tunnel</text>
+  <text x="470" y="380" fill="#0C4A6E" font-family="Arial, Helvetica, sans-serif" font-size="18">Tunnel</text>
 
   <rect x="670" y="150" width="450" height="392" rx="28" fill="url(#agent)"/>
   <text x="706" y="202" fill="#F8FAFC" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">
@@ -71,28 +71,28 @@
   <rect x="706" y="430" width="126" height="46" rx="14" fill="#0B3B38" stroke="#2DD4BF"/>
   <text x="728" y="459" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Flower</text>
 
-  <rect x="850" y="424" width="270" height="88" rx="18" fill="#0B3B38" stroke="#2DD4BF"/>
-  <text x="878" y="454" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Local state and policy</text>
-  <text x="878" y="476" fill="#CCFBF1" font-family="Arial, Helvetica, sans-serif" font-size="14">
+  <rect x="850" y="418" width="270" height="102" rx="18" fill="#0B3B38" stroke="#2DD4BF"/>
+  <text x="878" y="450" fill="#F0FDFA" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700">Local state and policy</text>
+  <text x="878" y="472" fill="#CCFBF1" font-family="Arial, Helvetica, sans-serif" font-size="14">
     <tspan x="878" dy="0">Config, secrets, audit logs,</tspan>
     <tspan x="878" dy="18">diagnostics, permission caps,</tspan>
     <tspan x="878" dy="18">and code-server data</tspan>
   </text>
 
-  <path d="M350 244H650" stroke="#334155" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-dark)"/>
-  <rect x="370" y="150" width="248" height="62" rx="18" fill="#FFFFFF" fill-opacity="0.97" stroke="#CBD5E1"/>
-  <text x="390" y="176" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" textLength="162" lengthAdjust="spacingAndGlyphs">Management channel</text>
-  <text x="390" y="196" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="12.5" textLength="118" lengthAdjust="spacingAndGlyphs">bootstrap + grants</text>
-  <text x="390" y="212" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="12.5" textLength="120" lengthAdjust="spacingAndGlyphs">session metadata</text>
+  <path d="M350 246H650" stroke="#334155" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-dark)"/>
+  <rect x="368" y="144" width="256" height="84" rx="18" fill="#FFFFFF" fill-opacity="0.97" stroke="#CBD5E1"/>
+  <text x="390" y="174" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" textLength="162" lengthAdjust="spacingAndGlyphs">Management channel</text>
+  <text x="390" y="197" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="12.5" textLength="118" lengthAdjust="spacingAndGlyphs">bootstrap + grants</text>
+  <text x="390" y="215" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="12.5" textLength="120" lengthAdjust="spacingAndGlyphs">session metadata</text>
 
-  <path d="M350 458H430" stroke="#059669" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-green)"/>
-  <path d="M610 458H650" stroke="#059669" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-green)"/>
-  <rect x="374" y="398" width="188" height="54" rx="16" fill="#F0FDF4" fill-opacity="0.96" stroke="#86EFAC"/>
-  <text x="390" y="426" fill="#047857" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">E2EE data plane</text>
-  <text x="390" y="446" fill="#065F46" font-family="Arial, Helvetica, sans-serif" font-size="14">encrypted bytes only</text>
+  <path d="M350 476H430" stroke="#059669" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-green)"/>
+  <path d="M610 476H650" stroke="#059669" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-green)"/>
+  <rect x="372" y="396" width="196" height="66" rx="18" fill="#F0FDF4" fill-opacity="0.96" stroke="#86EFAC"/>
+  <text x="390" y="424" fill="#047857" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">E2EE data plane</text>
+  <text x="390" y="446" fill="#065F46" font-family="Arial, Helvetica, sans-serif" font-size="13.5">encrypted bytes only</text>
 
-  <rect x="70" y="552" width="1050" height="52" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>
-  <text x="96" y="575" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="14">
+  <rect x="70" y="548" width="1050" height="60" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>
+  <text x="96" y="571" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="14">
     <tspan x="96" dy="0">Control plane issues grants. Flowersec forwards encrypted traffic.</tspan>
     <tspan x="96" dy="18">Redeven Agent terminates sessions on the endpoint and serves the real local capabilities.</tspan>
   </text>
