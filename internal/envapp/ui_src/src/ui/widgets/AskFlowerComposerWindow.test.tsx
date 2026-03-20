@@ -202,6 +202,28 @@ describe('AskFlowerComposerWindow', () => {
 
     expect(composerDock?.querySelector('.ask-flower-flat-input')).toBeTruthy();
     expect(composerDock?.querySelector('.chat-input-container')).toBeNull();
+    expect(composerDock?.querySelector('.ask-flower-composer-toolbar')).toBeNull();
+  });
+
+  it('keeps the inline send button anchored inside the composer field', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={baseIntent}
+        onClose={() => undefined}
+        onSend={async () => undefined}
+      />
+    ), host);
+
+    const editorShell = host.querySelector('[data-testid="ask-flower-composer-editor-shell"]');
+    const inlineSend = host.querySelector('[data-testid="ask-flower-inline-send"]');
+
+    expect(editorShell).toBeTruthy();
+    expect(inlineSend).toBeTruthy();
+    expect(inlineSend && editorShell?.contains(inlineSend)).toBe(true);
   });
 
   it('submits the visible composed prompt through the send button', async () => {
@@ -219,7 +241,7 @@ describe('AskFlowerComposerWindow', () => {
     ), host);
 
     composePrompt(host, '你好，Flower');
-    const sendButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Send'));
+    const sendButton = host.querySelector('[data-testid="ask-flower-inline-send"]') as HTMLButtonElement | null;
     expect(sendButton).toBeTruthy();
     sendButton?.click();
     await flushAsync();
@@ -383,8 +405,9 @@ describe('AskFlowerComposerWindow', () => {
       />
     ), host);
 
-    expect(host.textContent).toContain('1 linked');
+    expect(host.textContent).not.toContain('1 linked');
     expect(host.textContent).not.toContain('Queued attachment');
+    expect(host.textContent).not.toContain('Ctrl/⌘');
 
     const fileButton = Array.from(host.querySelectorAll('button')).find((button) =>
       button.textContent?.includes('eslint.config.mjs') && button.getAttribute('title')?.includes('/Users/demo/eslint.config.mjs'),
