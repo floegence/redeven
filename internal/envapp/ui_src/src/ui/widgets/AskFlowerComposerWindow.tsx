@@ -9,10 +9,18 @@ import type { AskFlowerIntent } from '../pages/askFlowerIntent';
 import { buildDetachedFileBrowserSurface, openDetachedSurfaceWindow } from '../services/detachedSurface';
 import { buildAskFlowerComposerCopy, type AskFlowerComposerEntry } from '../utils/askFlowerComposerCopy';
 import { resolveSuggestedWorkingDirAbsolute } from '../utils/askFlowerPath';
-import { describeFilePreview, isLikelyTextContent } from '../utils/filePreview';
+import {
+  describeFilePreview,
+  FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR,
+  getExtDot,
+  isLikelyTextContent,
+  mimeFromExtDot,
+  type FilePreviewDescriptor,
+} from '../utils/filePreview';
 import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { syncLiveTextValue } from '../utils/liveTextValue';
 import { useFilePreviewContext } from './FilePreviewContext';
+import { FilePreviewContent } from './FilePreviewContent';
 import { PersistentFloatingWindow } from './PersistentFloatingWindow';
 import { PREVIEW_WINDOW_Z_INDEX, PreviewWindow } from './PreviewWindow';
 
@@ -41,10 +49,19 @@ type WindowSizing = {
 };
 
 type ContextPreviewState = Readonly<{
-  tone: 'loading' | 'text' | 'notice' | 'error';
   title: string;
   subtitle: string;
-  body?: string;
+  item: FileItem;
+  descriptor: FilePreviewDescriptor;
+  text?: string;
+  message?: string;
+  objectUrl?: string;
+  bytes?: Uint8Array<ArrayBuffer> | null;
+  truncated?: boolean;
+  loading?: boolean;
+  error?: string | null;
+  xlsxSheetName?: string;
+  xlsxRows?: string[][];
   helper?: string;
   actionLabel?: string;
   onAction?: () => void;
@@ -136,6 +153,16 @@ function fileItemFromPath(path: string): FileItem {
   };
 }
 
+function fileItemForContextPreview(path: string, name?: string): FileItem {
+  const normalizedPath = String(path ?? '').trim() || name || 'Context preview';
+  return {
+    id: normalizedPath,
+    name: String(name ?? '').trim() || basenameFromPath(normalizedPath),
+    path: normalizedPath,
+    type: 'file',
+  };
+}
+
 function previewNoticeForMode(mode: ReturnType<typeof describeFilePreview>['mode']): string {
   if (mode === 'image') return 'This file uses an image preview. Open the full preview to inspect it.';
   if (mode === 'pdf') return 'This file uses a PDF preview. Open the full preview to inspect it.';
@@ -153,6 +180,318 @@ function trimPreviewBody(content: string): { body: string; truncated: boolean } 
     body: content.slice(0, INLINE_TEXT_PREVIEW_MAX_CHARS),
     truncated: true,
   };
+}
+
+function contextPreviewStateForText(params: {
+  title: string;
+  subtitle: string;
+  item: FileItem;
+  text: string;
+  helper?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}): ContextPreviewState {
+  return {
+    title: params.title,
+    subtitle: params.subtitle,
+    item: params.item,
+    descriptor: FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR,
+    text: params.text,
+    helper: params.helper,
+    actionLabel: params.actionLabel,
+    onAction: params.onAction,
+  };
+}
+
+function contextPreviewStateForMessage(params: {
+  title: string;
+  subtitle: string;
+  item: FileItem;
+  descriptor?: FilePreviewDescriptor;
+  message: string;
+  helper?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  error?: string | null;
+}): ContextPreviewState {
+  return {
+    title: params.title,
+    subtitle: params.subtitle,
+    item: params.item,
+    descriptor: params.descriptor ?? { mode: 'unsupported' },
+    message: params.message,
+    helper: params.helper,
+    actionLabel: params.actionLabel,
+    onAction: params.onAction,
+    error: params.error ?? null,
+  };
+}
+
+function contextPreviewStateLoading(params: {
+  title: string;
+  subtitle: string;
+  item: FileItem;
+  helper?: string;
+}): ContextPreviewState {
+  return {
+    title: params.title,
+    subtitle: params.subtitle,
+    item: params.item,
+    descriptor: FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR,
+    loading: true,
+    helper: params.helper,
+  };
+}
+
+function revokeContextPreviewResources(preview: ContextPreviewState | null) {
+  const objectUrl = String(preview?.objectUrl ?? '').trim();
+  if (!objectUrl) return;
+  try {
+    URL.revokeObjectURL(objectUrl);
+  } catch {
+    // ignore
+  }
+}
+
+async function resolveSpreadsheetPreview(bytes: Uint8Array<ArrayBuffer>): Promise<{ sheetName: string; rows: string[][] } | null> {
+  const module = await import('exceljs');
+  const ExcelJS: any = module.default ?? module;
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(bytes.buffer);
+
+  const worksheet = workbook.worksheets?.[0] ?? workbook.getWorksheet?.(1);
+  if (!worksheet) {
+    return null;
+  }
+
+  const cellToText = (value: unknown): string => {
+    if (value == null) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number') return String(value);
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'object') {
+      const maybeCell = value as any;
+      if (typeof maybeCell.text === 'string') return maybeCell.text;
+      if (Array.isArray(maybeCell.richText)) {
+        return maybeCell.richText.map((part: any) => String(part?.text ?? '')).join('');
+      }
+      if (maybeCell.result != null) return cellToText(maybeCell.result);
+      if (typeof maybeCell.formula === 'string' && maybeCell.result != null) {
+        return `${maybeCell.formula} = ${cellToText(maybeCell.result)}`;
+      }
+      try {
+        return JSON.stringify(maybeCell);
+      } catch {
+        return String(maybeCell);
+      }
+    }
+    return String(value);
+  };
+
+  const rows: string[][] = [];
+  const maxRows = 200;
+  const maxCols = 50;
+  const rowCount = typeof worksheet.rowCount === 'number' ? worksheet.rowCount : 0;
+  const takeRows = Math.min(rowCount || maxRows, maxRows);
+
+  for (let rowIndex = 1; rowIndex <= takeRows; rowIndex += 1) {
+    const row = worksheet.getRow?.(rowIndex);
+    if (!row) continue;
+    const nextRow: string[] = [];
+    for (let colIndex = 1; colIndex <= maxCols; colIndex += 1) {
+      const cell = row.getCell?.(colIndex);
+      nextRow.push(cellToText(cell?.value));
+    }
+    rows.push(nextRow);
+  }
+
+  return {
+    sheetName: String(worksheet.name ?? 'Sheet1'),
+    rows,
+  };
+}
+
+async function readBlobBytes(blob: Blob): Promise<Uint8Array<ArrayBuffer>> {
+  if (typeof blob.arrayBuffer === 'function') {
+    return new Uint8Array(await blob.arrayBuffer()) as Uint8Array<ArrayBuffer>;
+  }
+
+  if (typeof FileReader !== 'undefined') {
+    return await new Promise<Uint8Array<ArrayBuffer>>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error ?? new Error('Failed to read file.'));
+      reader.onload = () => {
+        if (reader.result instanceof ArrayBuffer) {
+          resolve(new Uint8Array(reader.result) as Uint8Array<ArrayBuffer>);
+          return;
+        }
+        reject(new Error('Failed to read file.'));
+      };
+      reader.readAsArrayBuffer(blob);
+    });
+  }
+
+  return new Uint8Array(await new Response(blob).arrayBuffer()) as Uint8Array<ArrayBuffer>;
+}
+
+async function buildFileLikeContextPreview(params: {
+  title: string;
+  subtitle: string;
+  item: FileItem;
+  name: string;
+  bytes: Uint8Array<ArrayBuffer>;
+  truncated?: boolean;
+  helper?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  blob?: Blob;
+}): Promise<ContextPreviewState> {
+  const descriptor = describeFilePreview(params.name);
+  const helperParts = params.helper ? [params.helper] : [];
+  const truncated = !!params.truncated;
+
+  if (descriptor.mode === 'text') {
+    const preview = trimPreviewBody(new TextDecoder('utf-8', { fatal: false }).decode(params.bytes));
+    if (truncated) {
+      helperParts.push('Showing partial content (truncated).');
+    }
+    if (preview.truncated) {
+      helperParts.push('Showing the first part of the content.');
+    }
+    return contextPreviewStateForText({
+      title: params.title,
+      subtitle: params.subtitle,
+      item: params.item,
+      text: preview.body,
+      helper: helperParts.join(' ') || undefined,
+      actionLabel: params.actionLabel,
+      onAction: params.onAction,
+    });
+  }
+
+  if (descriptor.mode === 'image' || descriptor.mode === 'pdf') {
+    if (truncated) {
+      return contextPreviewStateForMessage({
+        title: params.title,
+        subtitle: params.subtitle,
+        item: params.item,
+        message: descriptor.mode === 'image' ? 'This image is too large to preview.' : 'This PDF is too large to preview.',
+        helper: helperParts.join(' ') || undefined,
+        actionLabel: params.actionLabel,
+        onAction: params.onAction,
+      });
+    }
+
+    const mime = mimeFromExtDot(getExtDot(params.name)) ?? 'application/octet-stream';
+    const objectUrl = URL.createObjectURL(params.blob ?? new Blob([params.bytes], { type: mime }));
+    return {
+      title: params.title,
+      subtitle: params.subtitle,
+      item: params.item,
+      descriptor,
+      objectUrl,
+      bytes: params.bytes,
+      truncated,
+      helper: helperParts.join(' ') || undefined,
+      actionLabel: params.actionLabel,
+      onAction: params.onAction,
+    };
+  }
+
+  if (descriptor.mode === 'docx') {
+    if (truncated) {
+      return contextPreviewStateForMessage({
+        title: params.title,
+        subtitle: params.subtitle,
+        item: params.item,
+        message: 'This document is too large to preview.',
+        helper: helperParts.join(' ') || undefined,
+        actionLabel: params.actionLabel,
+        onAction: params.onAction,
+      });
+    }
+
+    return {
+      title: params.title,
+      subtitle: params.subtitle,
+      item: params.item,
+      descriptor,
+      bytes: params.bytes,
+      helper: helperParts.join(' ') || undefined,
+      actionLabel: params.actionLabel,
+      onAction: params.onAction,
+    };
+  }
+
+  if (descriptor.mode === 'xlsx') {
+    if (truncated) {
+      return contextPreviewStateForMessage({
+        title: params.title,
+        subtitle: params.subtitle,
+        item: params.item,
+        message: 'This spreadsheet is too large to preview.',
+        helper: helperParts.join(' ') || undefined,
+        actionLabel: params.actionLabel,
+        onAction: params.onAction,
+      });
+    }
+
+    const spreadsheetPreview = await resolveSpreadsheetPreview(params.bytes);
+    if (!spreadsheetPreview) {
+      return contextPreviewStateForMessage({
+        title: params.title,
+        subtitle: params.subtitle,
+        item: params.item,
+        message: 'No worksheet found in this file.',
+        helper: helperParts.join(' ') || undefined,
+        actionLabel: params.actionLabel,
+        onAction: params.onAction,
+      });
+    }
+
+    return {
+      title: params.title,
+      subtitle: params.subtitle,
+      item: params.item,
+      descriptor,
+      bytes: params.bytes,
+      xlsxSheetName: spreadsheetPreview.sheetName,
+      xlsxRows: spreadsheetPreview.rows,
+      helper: helperParts.join(' ') || undefined,
+      actionLabel: params.actionLabel,
+      onAction: params.onAction,
+    };
+  }
+
+  if (isLikelyTextContent(params.bytes)) {
+    const preview = trimPreviewBody(new TextDecoder('utf-8', { fatal: false }).decode(params.bytes));
+    if (truncated) {
+      helperParts.push('Showing partial content (truncated).');
+    }
+    if (preview.truncated) {
+      helperParts.push('Showing the first part of the content.');
+    }
+    return contextPreviewStateForText({
+      title: params.title,
+      subtitle: params.subtitle,
+      item: params.item,
+      text: preview.body,
+      helper: helperParts.join(' ') || undefined,
+      actionLabel: params.actionLabel,
+      onAction: params.onAction,
+    });
+  }
+
+  return contextPreviewStateForMessage({
+    title: params.title,
+    subtitle: params.subtitle,
+    item: params.item,
+    message: 'Preview is not available for this file type.',
+    helper: helperParts.join(' ') || undefined,
+    actionLabel: params.actionLabel,
+    onAction: params.onAction,
+  });
 }
 
 function entryIcon(entry: AskFlowerComposerEntry) {
@@ -208,6 +547,10 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     });
   });
 
+  onCleanup(() => {
+    closeContextPreview();
+  });
+
   const windowSizing = createMemo(() => resolveWindowSizing(viewport()));
   const position = createMemo(() => toWindowPosition(props.anchor ?? null, windowSizing()));
   const composerCopy = createMemo(() => (props.intent ? buildAskFlowerComposerCopy(props.intent) : null));
@@ -234,9 +577,18 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
       .filter((note) => !!note);
   });
 
+  const updateContextPreview = (next: ContextPreviewState | null) => {
+    setContextPreview((current) => {
+      if (current?.objectUrl && current.objectUrl !== next?.objectUrl) {
+        revokeContextPreviewResources(current);
+      }
+      return next;
+    });
+  };
+
   const closeContextPreview = () => {
     previewRequestSeq += 1;
-    setContextPreview(null);
+    updateContextPreview(null);
   };
 
   const resetDraft = (intent: AskFlowerIntent | null) => {
@@ -302,59 +654,89 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     await filePreview.openPreview(fileItemFromPath(path));
   };
 
+  const openAttachmentPreview = async (params: {
+    title: string;
+    subtitle: string;
+    item: FileItem;
+    file: File;
+    helper?: string;
+    actionLabel?: string;
+    onAction?: () => void;
+  }) => {
+    const seq = ++previewRequestSeq;
+    updateContextPreview(contextPreviewStateLoading({
+      title: params.title,
+      subtitle: params.subtitle,
+      item: params.item,
+      helper: 'Loading preview...',
+    }));
+
+    try {
+      const bytes = await readBlobBytes(params.file);
+      if (seq !== previewRequestSeq) return;
+      const nextPreview = await buildFileLikeContextPreview({
+        title: params.title,
+        subtitle: params.subtitle,
+        item: params.item,
+        name: params.file.name || params.item.name,
+        bytes,
+        helper: params.helper,
+        actionLabel: params.actionLabel,
+        onAction: params.onAction,
+        blob: params.file,
+      });
+      if (seq !== previewRequestSeq) {
+        revokeContextPreviewResources(nextPreview);
+        return;
+      }
+      updateContextPreview(nextPreview);
+    } catch (error) {
+      if (seq !== previewRequestSeq) return;
+      const message = error instanceof Error ? error.message : String(error);
+      updateContextPreview(contextPreviewStateForMessage({
+        title: params.title,
+        subtitle: params.subtitle,
+        item: params.item,
+        message: 'Failed to read the attachment preview.',
+        helper: message || undefined,
+        error: message || 'Failed to read the attachment preview.',
+      }));
+    }
+  };
+
   const openContextEntry = async (entry: AskFlowerComposerEntry): Promise<void> => {
     if (entry.kind === 'selection') {
       const preview = trimPreviewBody(entry.content);
-      setContextPreview({
-        tone: 'text',
+      updateContextPreview(contextPreviewStateForText({
         title: 'Selected content',
         subtitle: entry.detail,
-        body: preview.body,
+        item: fileItemForContextPreview(entry.sourcePath || entry.detail, 'Selected content'),
+        text: preview.body,
         helper: preview.truncated ? 'Showing the first part of the selected content.' : undefined,
-      });
+      }));
       return;
     }
 
     if (entry.kind === 'terminal_selection') {
       const preview = trimPreviewBody(entry.content);
-      setContextPreview({
-        tone: 'text',
+      updateContextPreview(contextPreviewStateForText({
         title: 'Selected terminal output',
         subtitle: entry.detail,
-        body: preview.body,
+        item: fileItemForContextPreview(entry.workingDir || entry.detail, 'Selected terminal output'),
+        text: preview.body,
         helper: preview.truncated ? 'Showing the first part of the selected terminal output.' : undefined,
-      });
+      }));
       return;
     }
 
     if (entry.kind === 'attachment') {
-      const seq = ++previewRequestSeq;
-      setContextPreview({
-        tone: 'loading',
+      await openAttachmentPreview({
         title: entry.label,
         subtitle: entry.detail,
-        helper: 'Loading attachment preview...',
+        item: fileItemForContextPreview(entry.detail === 'Queued attachment' ? entry.file.name : entry.detail, entry.file.name),
+        file: entry.file,
+        helper: 'Queued with your Ask Flower message.',
       });
-      try {
-        const preview = trimPreviewBody(await entry.file.text());
-        if (seq !== previewRequestSeq) return;
-        setContextPreview({
-          tone: 'text',
-          title: entry.label,
-          subtitle: entry.detail,
-          body: preview.body,
-          helper: preview.truncated ? 'Showing the first part of the attachment.' : 'Queued with your Ask Flower message.',
-        });
-      } catch (error) {
-        if (seq !== previewRequestSeq) return;
-        const message = error instanceof Error ? error.message : String(error);
-        setContextPreview({
-          tone: 'error',
-          title: entry.label,
-          subtitle: entry.detail,
-          helper: message || 'Failed to read the attachment preview.',
-        });
-      }
       return;
     }
 
@@ -365,22 +747,39 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
       return;
     }
 
+    if (entry.attachmentFile) {
+      await openAttachmentPreview({
+        title: entry.label,
+        subtitle: entry.path,
+        item: fileItemForContextPreview(entry.path, entry.label),
+        file: entry.attachmentFile,
+        helper: 'Showing the attached snapshot that Flower will receive.',
+        actionLabel: 'Open live file preview',
+        onAction: () => {
+          void openFullFilePreview(entry.path);
+        },
+      });
+      return;
+    }
+
     const seq = ++previewRequestSeq;
-    setContextPreview({
-      tone: 'loading',
+    updateContextPreview(contextPreviewStateLoading({
       title: entry.label,
       subtitle: entry.path,
-      helper: 'Loading file preview...',
-    });
+      item: fileItemForContextPreview(entry.path, entry.label),
+      helper: 'Loading preview...',
+    }));
 
     const client = protocol.client();
     if (!client) {
-      setContextPreview({
-        tone: 'error',
+      updateContextPreview(contextPreviewStateForMessage({
         title: entry.label,
         subtitle: entry.path,
+        item: fileItemForContextPreview(entry.path, entry.label),
+        message: 'Failed to load file preview.',
         helper: 'Connection is not ready.',
-      });
+        error: 'Connection is not ready.',
+      }));
       return;
     }
 
@@ -395,52 +794,56 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
       const descriptor = describeFilePreview(entry.path);
       const canRenderText = descriptor.mode === 'text' || (descriptor.mode === 'binary' && isLikelyTextContent(bytes));
       if (!canRenderText) {
-        setContextPreview({
-          tone: 'notice',
+        updateContextPreview(contextPreviewStateForMessage({
           title: entry.label,
           subtitle: entry.path,
-          helper: previewNoticeForMode(descriptor.mode),
+          item: fileItemForContextPreview(entry.path, entry.label),
+          message: previewNoticeForMode(descriptor.mode),
           actionLabel: 'Open full preview',
           onAction: () => {
             void openFullFilePreview(entry.path);
           },
-        });
+        }));
         return;
       }
 
-      const preview = trimPreviewBody(new TextDecoder().decode(bytes));
       const helperParts: string[] = [];
       if (meta.truncated) {
         helperParts.push(`Showing the first ${Math.round(INLINE_FILE_PREVIEW_MAX_BYTES / 1024)} KB.`);
       }
-      if (preview.truncated) {
-        helperParts.push('Showing the first part of the file.');
-      }
-
-      setContextPreview({
-        tone: 'text',
+      const nextPreview = await buildFileLikeContextPreview({
         title: entry.label,
         subtitle: entry.path,
-        body: preview.body,
+        item: fileItemForContextPreview(entry.path, entry.label),
+        name: entry.path,
+        bytes,
+        truncated: meta.truncated,
         helper: helperParts.join(' ') || undefined,
         actionLabel: 'Open full preview',
         onAction: () => {
           void openFullFilePreview(entry.path);
         },
       });
+      if (seq !== previewRequestSeq) {
+        revokeContextPreviewResources(nextPreview);
+        return;
+      }
+      updateContextPreview(nextPreview);
     } catch (error) {
       if (seq !== previewRequestSeq) return;
       const message = error instanceof Error ? error.message : String(error);
-      setContextPreview({
-        tone: 'error',
+      updateContextPreview(contextPreviewStateForMessage({
         title: entry.label,
         subtitle: entry.path,
-        helper: message || 'Failed to load file preview.',
+        item: fileItemForContextPreview(entry.path, entry.label),
+        message: 'Failed to load file preview.',
+        helper: message || undefined,
+        error: message || 'Failed to load file preview.',
         actionLabel: 'Retry',
         onAction: () => {
           void openContextEntry(entry);
         },
-      });
+      }));
     }
   };
 
@@ -576,13 +979,13 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                 </div>
               </div>
 
-              <div data-testid="ask-flower-composer-dock" class="shrink-0 border-t border-border/65 bg-background/96 px-1.5 py-1.5 shadow-[0_-14px_30px_-30px_rgba(15,23,42,0.32)] backdrop-blur sm:px-2 sm:py-2">
+              <div data-testid="ask-flower-composer-dock" class="ask-flower-composer-dock shrink-0 border-t border-border/65 bg-background/96 shadow-[0_-14px_30px_-30px_rgba(15,23,42,0.32)] backdrop-blur">
                 <div class="mx-auto w-full max-w-[40rem]">
-                  <div class="ask-flower-flat-input flower-chat-input">
-                    <div class="chat-input-body flower-chat-input-body !gap-0.5 sm:!gap-0.75">
-                      <div class="flower-chat-input-primary-row !gap-1.5 !px-2 !pt-2 !pb-0 sm:!gap-2 sm:!px-2.5 sm:!pt-2.5">
-                        <div class="min-w-0 flex-1">
-                          <div class="mb-0.5 flex items-center justify-between gap-2">
+                  <div class="ask-flower-flat-input flower-chat-input ask-flower-composer-input">
+                    <div class="chat-input-body flower-chat-input-body ask-flower-composer-input-body">
+                      <div class="flower-chat-input-primary-row ask-flower-composer-editor-row">
+                        <div class="ask-flower-composer-editor min-w-0 flex-1">
+                          <div class="ask-flower-composer-heading mb-0.5 flex items-center justify-between gap-2">
                             <div class="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary/70">You</div>
                             <span class="text-[11px] text-muted-foreground">{sending() ? 'Sending...' : 'Reply to Flower'}</span>
                           </div>
@@ -590,7 +993,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                           <textarea
                             ref={textareaEl}
                             id={`ask-flower-prompt-${intent.id}`}
-                            class="chat-input-textarea flower-chat-input-textarea !min-h-[68px] !max-h-[22vh] !px-0 !py-0 !text-sm !leading-5 focus:!outline-none focus-visible:!outline-none focus-visible:!shadow-none sm:!min-h-[78px]"
+                            class="chat-input-textarea flower-chat-input-textarea ask-flower-composer-textarea focus:!outline-none focus-visible:!outline-none focus-visible:!shadow-none"
                             value={userPrompt()}
                             placeholder={composerCopy()?.placeholder}
                             disabled={sending()}
@@ -618,10 +1021,10 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                           />
                         </div>
 
-                        <div class="flower-chat-input-send-slot pb-0">
+                        <div class="flower-chat-input-send-slot ask-flower-composer-send">
                           <button
                             type="button"
-                            class={`chat-input-send-btn flower-chat-input-send-btn chat-input-send-btn-expanded cursor-pointer ${canSubmit() ? 'chat-input-send-btn-active' : ''}`}
+                            class={`chat-input-send-btn flower-chat-input-send-btn chat-input-send-btn-expanded ask-flower-composer-send-btn cursor-pointer ${canSubmit() ? 'chat-input-send-btn-active' : ''}`}
                             onClick={() => void submit()}
                             disabled={!canSubmit()}
                             title="Send message"
@@ -632,15 +1035,15 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                         </div>
                       </div>
 
-                      <div class="chat-input-toolbar flex-wrap items-end gap-1 !border-t-0 !bg-transparent !px-2 !pt-0 !pb-0.5 sm:!px-2.5 sm:!pb-0.5">
-                        <div class="chat-input-toolbar-left min-w-0">
+                      <div class="chat-input-toolbar ask-flower-composer-toolbar">
+                        <div class="chat-input-toolbar-left ask-flower-composer-toolbar-left min-w-0">
                           <div class="min-h-4 text-[10px] leading-4 text-muted-foreground sm:text-[11px]">
                             <Show when={validationError()} fallback={<span>Flower receives the linked context automatically.</span>}>
                               <span class="text-error">{validationError()}</span>
                             </Show>
                           </div>
                         </div>
-                        <div class="chat-input-toolbar-right ml-auto shrink-0 flex-wrap justify-end gap-1.5">
+                        <div class="chat-input-toolbar-right ask-flower-composer-toolbar-right shrink-0">
                           <Show when={(composerCopy()?.contextEntries.length ?? 0) > 0}>
                             <span class="inline-flex items-center rounded-full border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:px-2 sm:text-[11px]">
                               {composerCopy()?.contextEntries.length} linked
@@ -693,19 +1096,31 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
               </div>
             )}
           >
-            <div class="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-2 pb-4">
-              <Show when={contextPreview()?.body} fallback={(
-                <div class="rounded-2xl border border-dashed border-border/70 bg-muted/15 px-4 py-6 text-sm leading-6 text-muted-foreground">
-                  {contextPreview()?.tone === 'loading' ? 'Loading preview...' : contextPreview()?.helper || 'Nothing to preview.'}
-                </div>
-              )}>
+            <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
                 <Show when={contextPreview()?.helper}>
-                  <div class={`mb-3 rounded-xl border px-3 py-2 text-sm ${contextPreview()?.tone === 'error' ? 'border-error/25 bg-error/6 text-error' : 'border-border/60 bg-muted/25 text-muted-foreground'}`}>
+                  <div class={`shrink-0 border-b px-3 py-2 text-xs ${contextPreview()?.error ? 'border-error/20 bg-error/5 text-error' : 'border-border/70 bg-muted/25 text-muted-foreground'}`}>
                     {contextPreview()?.helper}
                   </div>
                 </Show>
-                <pre class="min-h-[14rem] max-h-[min(60vh,38rem)] overflow-auto rounded-2xl border border-border/70 bg-slate-950 px-4 py-4 text-[12px] leading-6 text-slate-50 shadow-inner whitespace-pre-wrap break-words">{contextPreview()?.body}</pre>
-              </Show>
+              <div class="min-h-0 flex-1 overflow-hidden">
+                <Show when={contextPreview()}>
+                  {(preview) => (
+                    <FilePreviewContent
+                      item={preview().item}
+                      descriptor={preview().descriptor}
+                      text={preview().text}
+                      message={preview().message}
+                      objectUrl={preview().objectUrl}
+                      bytes={preview().bytes}
+                      truncated={preview().truncated}
+                      loading={preview().loading}
+                      error={preview().error}
+                      xlsxSheetName={preview().xlsxSheetName}
+                      xlsxRows={preview().xlsxRows}
+                    />
+                  )}
+                </Show>
+              </div>
             </div>
           </PreviewWindow>
         </>

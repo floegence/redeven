@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildAskFlowerComposerCopy } from './askFlowerComposerCopy';
+import { setAskFlowerAttachmentSourcePath } from './askFlowerAttachmentMetadata';
 
 const baseIntent = {
   id: 'intent-1',
@@ -68,5 +69,33 @@ describe('buildAskFlowerComposerCopy', () => {
       { kind: 'directory', label: 'app' },
       { kind: 'file', label: 'main.go' },
     ]);
+  });
+
+  it('merges a file-browser attachment into the matching file context entry', () => {
+    const attachment = setAskFlowerAttachmentSourcePath(
+      new File(['export default {};'], 'eslint.config.mjs', { type: 'text/plain' }),
+      '/workspace/desktop/eslint.config.mjs',
+    );
+
+    const copy = buildAskFlowerComposerCopy({
+      ...baseIntent,
+      source: 'file_browser',
+      contextItems: [
+        {
+          kind: 'file_path',
+          path: '/workspace/desktop/eslint.config.mjs',
+          isDirectory: false,
+        },
+      ],
+      pendingAttachments: [attachment],
+    });
+
+    expect(copy.contextEntries).toHaveLength(1);
+    expect(copy.contextEntries[0]).toMatchObject({
+      kind: 'file',
+      label: 'eslint.config.mjs',
+      detail: '/workspace/desktop/eslint.config.mjs',
+    });
+    expect(copy.contextEntries[0].kind === 'file' && copy.contextEntries[0].attachmentFile).toBe(attachment);
   });
 });

@@ -5,6 +5,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AskFlowerComposerWindow } from './AskFlowerComposerWindow';
+import { setAskFlowerAttachmentSourcePath } from '../utils/askFlowerAttachmentMetadata';
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
@@ -67,11 +68,24 @@ vi.mock('../icons/FlowerIcon', () => ({
 
 vi.mock('../utils/filePreview', () => ({
   describeFilePreview: () => ({ mode: 'text' }),
+  FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR: { mode: 'text', textPresentation: 'plain', wrapText: true },
+  getExtDot: (value: string) => value.slice(value.lastIndexOf('.')).toLowerCase(),
   isLikelyTextContent: () => true,
+  mimeFromExtDot: () => 'text/plain',
 }));
 
 vi.mock('../utils/fileStreamReader', () => ({
   readFileBytesOnce: vi.fn(),
+}));
+
+vi.mock('./FilePreviewContent', () => ({
+  FilePreviewContent: (props: any) => (
+    <div data-testid="file-preview-content">
+      <div>{props.item?.path}</div>
+      <div>{props.text}</div>
+      <div>{props.message}</div>
+    </div>
+  ),
 }));
 
 vi.mock('./PreviewWindow', () => ({
@@ -116,6 +130,8 @@ const baseIntent = {
 
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   await Promise.resolve();
 }
 
@@ -269,5 +285,49 @@ describe('AskFlowerComposerWindow', () => {
 
     expect(host.querySelector('[data-testid="preview-window"]')).toBeTruthy();
     expect(host.textContent).toContain('const answer = 42;');
+  });
+
+  it('collapses a matching file-browser attachment into a single linked context entry and previews the attached snapshot', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const attachment = setAskFlowerAttachmentSourcePath(
+      new File(['export default [];'], 'eslint.config.mjs', { type: 'text/plain' }),
+      '/Users/demo/eslint.config.mjs',
+    );
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={{
+          ...baseIntent,
+          source: 'file_browser',
+          contextItems: [
+            {
+              kind: 'file_path',
+              path: '/Users/demo/eslint.config.mjs',
+              isDirectory: false,
+            },
+          ],
+          pendingAttachments: [attachment],
+        }}
+        onClose={() => undefined}
+        onSend={async () => undefined}
+      />
+    ), host);
+
+    expect(host.textContent).toContain('1 linked');
+    expect(host.textContent).not.toContain('Queued attachment');
+
+    const fileButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('eslint.config.mjs') && button.getAttribute('title')?.includes('/Users/demo/eslint.config.mjs'),
+    );
+    expect(fileButton).toBeTruthy();
+    fileButton?.click();
+    await flushAsync();
+
+    expect(host.querySelector('[data-testid="preview-window"]')).toBeTruthy();
+    expect(host.textContent).toContain('Showing the attached snapshot that Flower will receive.');
+    expect(host.textContent).toContain('export default [];');
   });
 });
