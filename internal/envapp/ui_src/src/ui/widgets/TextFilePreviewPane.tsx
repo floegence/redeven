@@ -1,5 +1,5 @@
 import { Suspense, Show, createEffect, createMemo, lazy } from 'solid-js';
-import { resolveCodeEditorLanguageSpec, type CodeEditorApi } from '@floegence/floe-webapp-core/editor';
+import { resolveCodeEditorLanguageSpec, type CodeEditorApi, type CodeEditorProps } from '@floegence/floe-webapp-core/editor';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { CodePreviewPane } from './CodePreviewPane';
 
@@ -42,6 +42,20 @@ const MONACO_CODE_PREVIEW_LANGUAGE_IDS = new Set([
 ]);
 
 const PLAIN_TEXT_EDITOR_LANGUAGES = new Set(['', 'text', 'plaintext', 'txt']);
+type CodeEditorOptions = NonNullable<CodeEditorProps['options']>;
+
+const PREVIEW_MONACO_INTERACTION_OPTIONS: CodeEditorOptions = {
+  hover: { enabled: false, sticky: false },
+  codeLens: false,
+  inlayHints: { enabled: 'off' },
+  quickSuggestions: false,
+  suggestOnTriggerCharacters: false,
+  parameterHints: { enabled: false },
+  inlineSuggest: { enabled: false },
+  dropIntoEditor: { enabled: false, showDropSelector: 'never' },
+  pasteAs: { enabled: false, showPasteSelector: 'never' },
+  dragAndDrop: false,
+};
 
 function supportsRichMonacoCodePreview(language?: string): boolean {
   const normalized = String(language ?? '').trim().toLowerCase();
@@ -81,7 +95,8 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
     || monacoSupported()
   ));
   const editorValue = createMemo(() => (props.editing ? props.draftText ?? props.text : props.text));
-  const editorOptions = createMemo(() => ({
+  const editorOptions = createMemo<CodeEditorOptions>(() => ({
+    ...PREVIEW_MONACO_INTERACTION_OPTIONS,
     readOnly: !props.editing,
     wordWrap: props.descriptor.wrapText === false ? ('off' as const) : ('on' as const),
     lineNumbers: props.descriptor.textPresentation === 'code' ? ('on' as const) : ('off' as const),
