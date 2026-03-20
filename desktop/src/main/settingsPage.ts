@@ -178,9 +178,36 @@ export function buildSettingsPageHTML(
       </p>
       <form id="settings-form">
         <section>
-          <h2>Local UI startup</h2>
+          <h2>Desktop Target</h2>
           <p class="section-note">
-            Use <code>127.0.0.1:0</code> for the default loopback-only dynamic port, or an explicit address such as <code>0.0.0.0:24000</code> to make Local UI reachable on your LAN.
+            Choose whether Desktop opens this machine or another Redeven Local UI endpoint.
+          </p>
+          <div class="grid">
+            <label>
+              <span>Target</span>
+              <div class="grid">
+                <label class="help">
+                  <input id="target-kind-managed-local" type="radio" name="target_kind" value="managed_local">
+                  <span>This device</span>
+                </label>
+                <label class="help">
+                  <input id="target-kind-external-local-ui" type="radio" name="target_kind" value="external_local_ui">
+                  <span>External Redeven</span>
+                </label>
+              </div>
+            </label>
+            <label id="external-local-ui-url-row">
+              <span>Redeven URL</span>
+              <input id="external-local-ui-url" name="external_local_ui_url" autocomplete="off" spellcheck="false" placeholder="http://192.168.1.11:24000/">
+              <span class="help">Paste the base URL exposed by another Redeven Local UI. Hostnames are intentionally not supported; use localhost or an IP literal.</span>
+            </label>
+          </div>
+        </section>
+
+        <section>
+          <h2>Host This Device</h2>
+          <p class="section-note">
+            Use <code>127.0.0.1:0</code> for the default loopback-only dynamic port, or an explicit address such as <code>0.0.0.0:24000</code> to make this Desktop reachable on your LAN.
           </p>
           <div class="grid">
             <label>
@@ -199,7 +226,7 @@ export function buildSettingsPageHTML(
         <section>
           <h2>Register to Redeven on next start</h2>
           <p class="section-note">
-            These values are treated as a one-shot bootstrap request for the next successful Desktop-managed start, then cleared automatically.
+            These values are treated as a one-shot bootstrap request for the next successful desktop-managed start on this device, then cleared automatically.
           </p>
           <div class="grid two">
             <label>
@@ -237,16 +264,36 @@ export function buildSettingsPageHTML(
       const cancelButton = document.getElementById('cancel');
       const saveButton = document.getElementById('save');
       const fields = {
+        external_local_ui_url: document.getElementById('external-local-ui-url'),
         local_ui_bind: document.getElementById('local-ui-bind'),
         local_ui_password: document.getElementById('local-ui-password'),
         controlplane_url: document.getElementById('controlplane-url'),
         env_id: document.getElementById('env-id'),
         env_token: document.getElementById('env-token'),
       };
+      const targetKindInputs = Array.from(document.querySelectorAll('input[name="target_kind"]'));
+      const externalLocalUIURLRow = document.getElementById('external-local-ui-url-row');
+
+      function selectedTargetKind() {
+        const selected = targetKindInputs.find((input) => input.checked);
+        return selected ? selected.value : 'managed_local';
+      }
+
+      function syncTargetMode() {
+        const externalMode = selectedTargetKind() === 'external_local_ui';
+        externalLocalUIURLRow.style.display = externalMode ? 'grid' : 'none';
+        fields.external_local_ui_url.disabled = !externalMode;
+        fields.external_local_ui_url.placeholder = 'http://192.168.1.11:24000/';
+      }
 
       for (const [key, element] of Object.entries(fields)) {
         element.value = state[key] || '';
       }
+      for (const input of targetKindInputs) {
+        input.checked = input.value === (state.target_kind || 'managed_local');
+        input.addEventListener('change', syncTargetMode);
+      }
+      syncTargetMode();
 
       function setBusy(busy) {
         saveButton.disabled = busy;
@@ -268,6 +315,7 @@ export function buildSettingsPageHTML(
         setBusy(true);
         setError('');
         const payload = {};
+        payload.target_kind = selectedTargetKind();
         for (const [key, element] of Object.entries(fields)) {
           payload[key] = element.value || '';
         }

@@ -1,10 +1,12 @@
 import fs from 'node:fs/promises';
 import http from 'node:http';
+import https from 'node:https';
 import os from 'node:os';
 import path from 'node:path';
 
 import { isAllowedAppNavigation } from './navigation';
 import { parseStartupReport, type StartupReport } from './startup';
+import { normalizeLocalUIBaseURL } from './localUIURL';
 
 const DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
 
@@ -25,7 +27,8 @@ function candidateStartupURLs(startup: StartupReport): string[] {
 
 function requestStatus(url: URL, timeoutMs: number): Promise<number | null> {
   return new Promise((resolve) => {
-    const request = http.get(url, {
+    const requestImpl = url.protocol === 'https:' ? https.get : http.get;
+    const request = requestImpl(url, {
       timeout: timeoutMs,
       headers: {
         Accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
@@ -50,6 +53,20 @@ async function probeStartupURL(baseURL: string, timeoutMs: number): Promise<bool
   const probeURL = new URL('/_redeven_proxy/env/', baseURL);
   const status = await requestStatus(probeURL, timeoutMs);
   return status !== null && status >= 200 && status < 400;
+}
+
+export async function loadExternalLocalUIStartup(
+  baseURL: string,
+  timeoutMs: number = DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
+): Promise<StartupReport | null> {
+  const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL);
+  if (!await probeStartupURL(normalizedBaseURL, timeoutMs)) {
+    return null;
+  }
+  return {
+    local_ui_url: normalizedBaseURL,
+    local_ui_urls: [normalizedBaseURL],
+  };
 }
 
 export function defaultRuntimeStatePath(
