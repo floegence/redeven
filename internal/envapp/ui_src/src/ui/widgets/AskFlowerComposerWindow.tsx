@@ -473,13 +473,13 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                   </span>
                 </div>
                 <span class="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">{sending() ? 'Sending...' : 'Ready'}</span>
-                <Button variant="ghost" size="sm" class="h-7 shrink-0 rounded-md px-2.5 text-[11px] font-medium sm:h-8" onClick={props.onClose} disabled={sending()}>
+                <Button variant="ghost" size="sm" class="h-7 shrink-0 rounded-md px-2.5 text-[11px] font-medium cursor-pointer sm:h-8" onClick={props.onClose} disabled={sending()}>
                   Close
                 </Button>
               </div>
             )}
           >
-            <div class="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.14),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(255,255,255,0.9))] dark:bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.18),transparent_42%),linear-gradient(180deg,rgba(19,24,38,0.98),rgba(12,16,28,0.98))]">
+            <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
               <div data-testid="ask-flower-scroll-region" class="flex-1 min-h-0 overflow-y-auto px-2 py-2 sm:px-2.5 sm:py-2.5">
                 <div class="mx-auto flex w-full max-w-[40rem] flex-col gap-2">
                   <div class="chat-message-item items-start gap-2">
@@ -507,7 +507,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                                 : (
                                   <button
                                     type="button"
-                                    class={`mx-0.5 inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 align-baseline text-[11px] font-medium transition-colors ${entryButtonClass(contextEntryMap().get(part.entryId)!)}`}
+                                    class={`mx-0.5 inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 align-baseline text-[11px] font-medium transition-colors cursor-pointer ${entryButtonClass(contextEntryMap().get(part.entryId)!)}`}
                                     title={contextEntryMap().get(part.entryId)?.title}
                                     onClick={() => {
                                       const entry = contextEntryMap().get(part.entryId);
@@ -538,7 +538,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                                 {(entry) => (
                                   <button
                                     type="button"
-                                    class={`flex min-w-0 items-start gap-2 rounded-[0.95rem] border px-2 py-1.5 text-left text-[11px] font-medium transition-colors ${entryButtonClass(entry)}`}
+                                    class={`flex min-w-0 items-start gap-2 rounded-[0.95rem] border px-2 py-1.5 text-left text-[11px] font-medium transition-colors cursor-pointer ${entryButtonClass(entry)}`}
                                     title={entry.title}
                                     onClick={() => {
                                       void openContextEntry(entry);
@@ -575,8 +575,8 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
 
               <div data-testid="ask-flower-composer-dock" class="shrink-0 border-t border-border/65 bg-background/96 px-1.5 py-1.5 shadow-[0_-14px_30px_-30px_rgba(15,23,42,0.32)] backdrop-blur sm:px-2 sm:py-2">
                 <div class="mx-auto w-full max-w-[40rem]">
-                  <div class="chat-input-container flower-chat-input !m-0 overflow-hidden rounded-[1rem] border border-border/50 bg-background/94 shadow-[0_10px_24px_-24px_rgba(15,23,42,0.18)] transition-[border-color,box-shadow,background-color] duration-150 hover:border-border/65 hover:shadow-[0_14px_28px_-24px_rgba(15,23,42,0.2)] focus-within:border-sky-500/25 focus-within:bg-background focus-within:shadow-[0_0_0_1px_rgba(56,139,253,0.1),0_14px_30px_-24px_rgba(56,139,253,0.22)]">
-                    <div class="chat-input-body flower-chat-input-body">
+                  <div class="ask-flower-flat-input flower-chat-input">
+                    <div class="chat-input-body flower-chat-input-body !gap-0.5 sm:!gap-0.75">
                       <div class="flower-chat-input-primary-row !gap-1.5 !px-2 !pt-2 !pb-0 sm:!gap-2 sm:!px-2.5 sm:!pt-2.5">
                         <div class="min-w-0 flex-1">
                           <div class="mb-0.5 flex items-center justify-between gap-2">
@@ -618,7 +618,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                         <div class="flower-chat-input-send-slot pb-0">
                           <button
                             type="button"
-                            class={`chat-input-send-btn flower-chat-input-send-btn chat-input-send-btn-expanded ${canSubmit() ? 'chat-input-send-btn-active' : ''}`}
+                            class={`chat-input-send-btn flower-chat-input-send-btn chat-input-send-btn-expanded cursor-pointer ${canSubmit() ? 'chat-input-send-btn-active' : ''}`}
                             onClick={() => void submit()}
                             disabled={!canSubmit()}
                             title="Send message"
@@ -629,7 +629,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                         </div>
                       </div>
 
-                      <div class="chat-input-toolbar flex-wrap gap-1 !px-2 !py-1 sm:!px-2.5 sm:!py-1.5">
+                      <div class="chat-input-toolbar flex-wrap items-end gap-1 !border-t-0 !bg-transparent !px-2 !pt-0 !pb-0.5 sm:!px-2.5 sm:!pb-0.5">
                         <div class="chat-input-toolbar-left min-w-0">
                           <div class="min-h-4 text-[10px] leading-4 text-muted-foreground sm:text-[11px]">
                             <Show when={validationError()} fallback={<span>Flower receives the linked context automatically.</span>}>
@@ -667,13 +667,14 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
             class="ask-flower-context-preview-dialog flex max-w-none flex-col overflow-hidden rounded-md p-0 sm:w-[min(52rem,92vw)]"
             footer={(
               <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
-                <Button size="sm" variant="outline" onClick={closeContextPreview}>
+                <Button size="sm" variant="outline" class="cursor-pointer" onClick={closeContextPreview}>
                   Close
                 </Button>
                 <Show when={contextPreview()?.actionLabel && contextPreview()?.onAction}>
                   <Button
                     size="sm"
                     variant="default"
+                    class="cursor-pointer"
                     onClick={() => {
                       contextPreview()?.onAction?.();
                     }}

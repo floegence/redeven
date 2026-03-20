@@ -151,6 +151,25 @@ describe('AskFlowerComposerWindow', () => {
     expect(assistantAvatar).toBeTruthy();
   });
 
+  it('renders the user composer as a flat bottom dock instead of a bordered chat card', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={baseIntent}
+        onClose={() => undefined}
+        onSend={async () => undefined}
+      />
+    ), host);
+
+    const composerDock = host.querySelector('[data-testid="ask-flower-composer-dock"]');
+
+    expect(composerDock?.querySelector('.ask-flower-flat-input')).toBeTruthy();
+    expect(composerDock?.querySelector('.chat-input-container')).toBeNull();
+  });
+
   it('submits the visible composed prompt through the send button', async () => {
     const onSend = vi.fn(async () => undefined);
     const host = document.createElement('div');
