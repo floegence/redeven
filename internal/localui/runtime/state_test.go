@@ -57,12 +57,13 @@ func TestWriteStateRejectsMissingLocalURL(t *testing.T) {
 
 func TestLoadAttachable(t *testing.T) {
 	server := httpTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/_redeven_proxy/env/" {
+		if r.URL.Path != "/api/local/access/status" {
 			http.NotFound(w, r)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+		_, _ = w.Write([]byte(`{"ok":true,"data":{"password_required":true,"unlocked":false}}`))
 	}))
 
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
@@ -98,12 +99,13 @@ func TestLoadAttachable(t *testing.T) {
 
 func TestWaitForAttachable(t *testing.T) {
 	server := httpTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/_redeven_proxy/env/" {
+		if r.URL.Path != "/api/local/access/status" {
 			http.NotFound(w, r)
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+		_, _ = w.Write([]byte(`{"ok":true,"data":{"password_required":false,"unlocked":true}}`))
 	}))
 
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
@@ -141,6 +143,33 @@ func TestLoadAttachableRejectsNonLoopbackURL(t *testing.T) {
 	}
 	if state != nil {
 		t.Fatalf("expected non-loopback runtime state to be rejected: %#v", state)
+	}
+}
+
+func TestLoadAttachableRejectsNonRedevenProbeResponse(t *testing.T) {
+	server := httpTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/local/access/status" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true,"data":{}}`))
+	}))
+
+	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
+	if err := WriteState(runtimePath, State{
+		LocalUIURL: server.URL + "/",
+	}); err != nil {
+		t.Fatalf("WriteState() error = %v", err)
+	}
+
+	state, err := LoadAttachable(runtimePath, time.Second)
+	if err != nil {
+		t.Fatalf("LoadAttachable() error = %v", err)
+	}
+	if state != nil {
+		t.Fatalf("expected non-Redeven probe response to be rejected: %#v", state)
 	}
 }
 

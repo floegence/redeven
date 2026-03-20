@@ -251,34 +251,118 @@ async function readJSONFile<T>(filePath: string): Promise<T | null> {
     return JSON.parse(raw) as T;
   } catch (error: unknown) {
     const nodeError = error as NodeJS.ErrnoException;
-    if (nodeError?.code === 'ENOENT') {
+    if (nodeError?.code === 'ENOENT' || error instanceof SyntaxError) {
       return null;
     }
     throw error;
   }
 }
 
-export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, codec: DesktopSecretCodec): Promise<DesktopPreferences> {
-  const preferencesFile = await readJSONFile<DesktopPreferencesFile>(paths.preferencesFile);
-  const secretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
+function decodeOptionalSecret(codec: DesktopSecretCodec, secret: StoredSecret | null | undefined): string {
+  if (!secret) {
+    return '';
+  }
+  try {
+    return String(codec.decodeSecret(secret) ?? '');
+  } catch {
+    return '';
+  }
+}
 
-  const targetKind = normalizeTargetKind(preferencesFile?.target?.kind);
-  const externalLocalUIURL = compact(preferencesFile?.target?.external_local_ui_url);
-  const localUIBind = compact(preferencesFile?.local_ui_bind) || DEFAULT_DESKTOP_LOCAL_UI_BIND;
-  const localUIPassword = secretsFile?.local_ui_password ? codec.decodeSecret(secretsFile.local_ui_password) : '';
-  const controlplaneURL = compact(preferencesFile?.pending_bootstrap?.controlplane_url);
-  const envID = compact(preferencesFile?.pending_bootstrap?.env_id);
-  const envToken = secretsFile?.pending_bootstrap?.env_token ? codec.decodeSecret(secretsFile.pending_bootstrap.env_token) : '';
+function recoverLocalUIBind(raw: unknown): string {
+  const value = compact(raw);
+  if (value === '') {
+    return DEFAULT_DESKTOP_LOCAL_UI_BIND;
+  }
+  try {
+    parseLocalUIBind(value);
+    return value;
+  } catch {
+    return DEFAULT_DESKTOP_LOCAL_UI_BIND;
+  }
+}
 
-  return validateDesktopSettingsDraft({
+function recoverExternalLocalUIURL(raw: unknown): string {
+  const value = compact(raw);
+  if (value === '') {
+    return '';
+  }
+  try {
+    return normalizeLocalUIBaseURL(value);
+  } catch {
+    return '';
+  }
+}
+
+function recoverPendingBootstrap(
+  controlplaneURLRaw: unknown,
+  envIDRaw: unknown,
+  envTokenRaw: unknown,
+): PendingBootstrap | null {
+  const controlplaneURL = compact(controlplaneURLRaw);
+  const envID = compact(envIDRaw);
+  const envToken = compact(envTokenRaw);
+  if (controlplaneURL === '' && envID === '' && envToken === '') {
+    return null;
+  }
+  if (controlplaneURL === '' || envID === '' || envToken === '') {
+    return null;
+  }
+  try {
+    return {
+      controlplane_url: normalizeControlplaneURL(controlplaneURL),
+      env_id: envID,
+      env_token: envToken,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function recoverDesktopPreferencesDraft(draft: Partial<DesktopSettingsDraft>): DesktopSettingsDraft {
+  let targetKind = normalizeTargetKind(draft.target_kind);
+  const externalLocalUIURL = recoverExternalLocalUIURL(draft.external_local_ui_url);
+  if (targetKind === 'external_local_ui' && externalLocalUIURL === '') {
+    targetKind = 'managed_local';
+  }
+
+  let localUIBind = recoverLocalUIBind(draft.local_ui_bind);
+  const localUIPassword = String(draft.local_ui_password ?? '');
+  try {
+    const bind = parseLocalUIBind(localUIBind);
+    if (!isLoopbackOnlyBind(bind) && compact(localUIPassword) === '') {
+      localUIBind = DEFAULT_DESKTOP_LOCAL_UI_BIND;
+    }
+  } catch {
+    localUIBind = DEFAULT_DESKTOP_LOCAL_UI_BIND;
+  }
+
+  const pendingBootstrap = recoverPendingBootstrap(draft.controlplane_url, draft.env_id, draft.env_token);
+
+  return {
     target_kind: targetKind,
     external_local_ui_url: externalLocalUIURL,
     local_ui_bind: localUIBind,
     local_ui_password: localUIPassword,
-    controlplane_url: controlplaneURL,
-    env_id: envID,
-    env_token: envToken,
-  });
+    controlplane_url: pendingBootstrap?.controlplane_url ?? '',
+    env_id: pendingBootstrap?.env_id ?? '',
+    env_token: pendingBootstrap?.env_token ?? '',
+  };
+}
+
+export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, codec: DesktopSecretCodec): Promise<DesktopPreferences> {
+  const preferencesFile = await readJSONFile<DesktopPreferencesFile>(paths.preferencesFile);
+  const secretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
+
+  return validateDesktopSettingsDraft(recoverDesktopPreferencesDraft({
+    target_kind: preferencesFile?.target?.kind as DesktopSettingsDraft['target_kind'] | undefined,
+    external_local_ui_url: preferencesFile?.target?.external_local_ui_url ?? '',
+    local_ui_bind: preferencesFile?.local_ui_bind ?? DEFAULT_DESKTOP_LOCAL_UI_BIND,
+    local_ui_password: decodeOptionalSecret(codec, secretsFile?.local_ui_password),
+    controlplane_url: preferencesFile?.pending_bootstrap?.controlplane_url ?? '',
+    env_id: preferencesFile?.pending_bootstrap?.env_id ?? '',
+    env_token: decodeOptionalSecret(codec, secretsFile?.pending_bootstrap?.env_token),
+  }));
 }
 
 export async function saveDesktopPreferences(

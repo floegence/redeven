@@ -25,6 +25,14 @@ export function buildSettingsPageHTML(
 ): string {
   const error = String(errorMessage ?? '').trim();
   const titleBarInset = desktopWindowTitleBarInsetCSSValue(platform);
+  const externalMode = draft.target_kind === 'external_local_ui';
+  const hostThisDeviceStateNote = externalMode
+    ? 'While Desktop Target is External Redeven, these settings stay saved for the next This device start.'
+    : 'These settings apply to desktop-managed starts on this machine.';
+  const bootstrapStateNote = externalMode
+    ? 'While Desktop Target is External Redeven, this request stays saved for the next This device start and is never sent to the external target.'
+    : 'If saved, the next successful desktop-managed start on this device will consume and clear them automatically.';
+  const saveButtonLabel = externalMode ? 'Save settings' : 'Save and apply';
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -141,6 +149,10 @@ export function buildSettingsPageHTML(
         justify-content: flex-end;
         gap: 12px;
       }
+      .state-note {
+        display: block;
+        margin-top: 8px;
+      }
       button {
         min-height: 44px;
         border-radius: 999px;
@@ -208,6 +220,7 @@ export function buildSettingsPageHTML(
           <h2>Host This Device</h2>
           <p class="section-note">
             Use <code>127.0.0.1:0</code> for the default loopback-only dynamic port, or an explicit address such as <code>0.0.0.0:24000</code> to make this Desktop reachable on your LAN.
+            <span id="host-this-device-state-note" class="state-note">${escapeHTML(hostThisDeviceStateNote)}</span>
           </p>
           <div class="grid">
             <label>
@@ -227,6 +240,7 @@ export function buildSettingsPageHTML(
           <h2>Register to Redeven on next start</h2>
           <p class="section-note">
             These values are treated as a one-shot bootstrap request for the next successful desktop-managed start on this device, then cleared automatically.
+            <span id="bootstrap-state-note" class="state-note">${escapeHTML(bootstrapStateNote)}</span>
           </p>
           <div class="grid two">
             <label>
@@ -251,7 +265,7 @@ export function buildSettingsPageHTML(
 
         <div class="actions">
           <button id="cancel" type="button">Cancel</button>
-          <button id="save" class="primary" type="submit">Save and apply</button>
+          <button id="save" class="primary" type="submit">${escapeHTML(saveButtonLabel)}</button>
         </div>
       </form>
     </main>
@@ -273,6 +287,8 @@ export function buildSettingsPageHTML(
       };
       const targetKindInputs = Array.from(document.querySelectorAll('input[name="target_kind"]'));
       const externalLocalUIURLRow = document.getElementById('external-local-ui-url-row');
+      const hostThisDeviceStateNote = document.getElementById('host-this-device-state-note');
+      const bootstrapStateNote = document.getElementById('bootstrap-state-note');
 
       function selectedTargetKind() {
         const selected = targetKindInputs.find((input) => input.checked);
@@ -284,6 +300,17 @@ export function buildSettingsPageHTML(
         externalLocalUIURLRow.style.display = externalMode ? 'grid' : 'none';
         fields.external_local_ui_url.disabled = !externalMode;
         fields.external_local_ui_url.placeholder = 'http://192.168.1.11:24000/';
+        if (hostThisDeviceStateNote) {
+          hostThisDeviceStateNote.textContent = externalMode
+            ? 'While Desktop Target is External Redeven, these settings stay saved for the next This device start.'
+            : 'These settings apply to desktop-managed starts on this machine.';
+        }
+        if (bootstrapStateNote) {
+          bootstrapStateNote.textContent = externalMode
+            ? 'While Desktop Target is External Redeven, this request stays saved for the next This device start and is never sent to the external target.'
+            : 'If saved, the next successful desktop-managed start on this device will consume and clear them automatically.';
+        }
+        saveButton.textContent = externalMode ? 'Save settings' : 'Save and apply';
       }
 
       for (const [key, element] of Object.entries(fields)) {

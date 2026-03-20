@@ -20,6 +20,9 @@ describe('settingsPage', () => {
     expect(html).toContain('Host This Device');
     expect(html).toContain('Register to Redeven on next start');
     expect(html).toContain('--env-token-env');
+    expect(html).toContain('These settings apply to desktop-managed starts on this machine.');
+    expect(html).toContain('While Desktop Target is External Redeven, this request stays saved for the next This device start and is never sent to the external target.');
+    expect(html).toContain("saveButton.textContent = externalMode ? 'Save settings' : 'Save and apply';");
   });
 
   it('keeps the page on a flat theme without glossy gradients', () => {
