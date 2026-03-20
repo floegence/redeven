@@ -31,6 +31,9 @@ const INLINE_FILE_PREVIEW_MAX_BYTES = 160 * 1024;
 const INLINE_TEXT_PREVIEW_MAX_CHARS = 120_000;
 const CONTEXT_PREVIEW_DEFAULT_SIZE = { width: 880, height: 640 };
 const CONTEXT_PREVIEW_MIN_SIZE = { width: 380, height: 280 };
+const ASK_FLOWER_COMPOSER_Z_INDEX = PREVIEW_WINDOW_Z_INDEX + 10;
+const ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX = ASK_FLOWER_COMPOSER_Z_INDEX + 1;
+const ASK_FLOWER_CONTEXT_PREVIEW_Z_INDEX = ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX + 1;
 
 type AskFlowerComposerWindowProps = {
   open: boolean;
@@ -876,7 +879,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
             class="ask-flower-composer-window border-border/65 shadow-[0_28px_72px_-42px_rgba(15,23,42,0.38)]"
             contentClass="!p-0"
             footerClass="!gap-1.5 !px-2 !py-1.5 sm:!px-2.5 sm:!py-1.5"
-            zIndex={130}
+            zIndex={ASK_FLOWER_COMPOSER_Z_INDEX}
             footer={(
               <div class="flex w-full min-w-0 items-center gap-1.5 overflow-hidden">
                 <div class="flex min-w-0 flex-1 items-center text-[10px] text-muted-foreground sm:text-[11px]">
@@ -1027,7 +1030,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
             persistenceKey="ask-flower-context-browser"
             defaultSize={{ width: 760, height: 580 }}
             minSize={{ width: 420, height: 320 }}
-            zIndex={PREVIEW_WINDOW_Z_INDEX - 1}
+            zIndex={ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX}
             floatingClass="ask-flower-context-preview-surface"
             mobileClass="ask-flower-context-preview-surface"
           >
@@ -1053,7 +1056,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
             persistenceKey="ask-flower-context-preview"
             defaultSize={CONTEXT_PREVIEW_DEFAULT_SIZE}
             minSize={CONTEXT_PREVIEW_MIN_SIZE}
-            zIndex={PREVIEW_WINDOW_Z_INDEX}
+            zIndex={ASK_FLOWER_CONTEXT_PREVIEW_Z_INDEX}
             floatingClass="ask-flower-context-preview-surface"
             mobileClass="ask-flower-context-preview-surface"
             footer={(
