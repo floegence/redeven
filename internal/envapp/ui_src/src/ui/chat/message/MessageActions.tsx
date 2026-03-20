@@ -1,9 +1,10 @@
 // Action buttons (copy, retry) that appear on hover over a message.
 
-import { createSignal, Show } from 'solid-js';
+import { createSignal, onCleanup, Show } from 'solid-js';
 import type { Component } from 'solid-js';
 import { useChatContext } from '../ChatProvider';
 import type { Message } from '../types';
+import { writeTextToClipboard } from '../../utils/clipboard';
 
 export interface MessageActionsProps {
   message: Message;
@@ -40,15 +41,34 @@ function extractTextContent(message: Message): string {
 export const MessageActions: Component<MessageActionsProps> = (props) => {
   const ctx = useChatContext();
   const [copied, setCopied] = createSignal(false);
+  let copiedResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+  const clearCopiedState = (): void => {
+    if (copiedResetTimer !== undefined) {
+      globalThis.clearTimeout(copiedResetTimer);
+      copiedResetTimer = undefined;
+    }
+    setCopied(false);
+  };
+
+  onCleanup(() => {
+    clearCopiedState();
+  });
 
   async function handleCopy(): Promise<void> {
     const text = extractTextContent(props.message);
     if (!text) return;
 
     try {
-      await navigator.clipboard.writeText(text);
+      await writeTextToClipboard(text);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copiedResetTimer !== undefined) {
+        globalThis.clearTimeout(copiedResetTimer);
+      }
+      copiedResetTimer = globalThis.setTimeout(() => {
+        copiedResetTimer = undefined;
+        setCopied(false);
+      }, 1600);
     } catch (err) {
       console.error('Failed to copy message text:', err);
     }
@@ -61,7 +81,9 @@ export const MessageActions: Component<MessageActionsProps> = (props) => {
   return (
     <div class="chat-message-actions">
       <button
+        type="button"
         class="chat-message-action-btn chat-message-action-copy"
+        classList={{ 'chat-message-action-btn-copied': copied() }}
         onClick={handleCopy}
         title={copied() ? 'Copied!' : 'Copy'}
         aria-label={copied() ? 'Copied' : 'Copy message'}
@@ -73,6 +95,7 @@ export const MessageActions: Component<MessageActionsProps> = (props) => {
 
       <Show when={props.message.status === 'error'}>
         <button
+          type="button"
           class="chat-message-action-btn chat-message-action-retry"
           onClick={handleRetry}
           title="Retry"
