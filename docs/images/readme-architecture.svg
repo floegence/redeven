@@ -79,13 +79,11 @@
     <tspan x="878" dy="18">and code-server data</tspan>
   </text>
 
-  <path d="M350 236H650" stroke="#334155" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-dark)"/>
-  <rect x="376" y="160" width="228" height="56" rx="16" fill="#FFFFFF" fill-opacity="0.96" stroke="#CBD5E1"/>
-  <text x="394" y="187" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700">Management channel</text>
-  <text x="394" y="206" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="13">
-    <tspan x="394" dy="0">bootstrap, grants, and</tspan>
-    <tspan x="394" dy="16">session metadata</tspan>
-  </text>
+  <path d="M350 244H650" stroke="#334155" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-dark)"/>
+  <rect x="370" y="150" width="248" height="62" rx="18" fill="#FFFFFF" fill-opacity="0.97" stroke="#CBD5E1"/>
+  <text x="390" y="176" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" textLength="162" lengthAdjust="spacingAndGlyphs">Management channel</text>
+  <text x="390" y="196" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="12.5" textLength="118" lengthAdjust="spacingAndGlyphs">bootstrap + grants</text>
+  <text x="390" y="212" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="12.5" textLength="120" lengthAdjust="spacingAndGlyphs">session metadata</text>
 
   <path d="M350 458H430" stroke="#059669" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-green)"/>
   <path d="M610 458H650" stroke="#059669" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-green)"/>
