@@ -4,6 +4,8 @@ export type wire_git_resolve_repo_req = {
 
 export type wire_git_resolve_repo_resp = {
   available: boolean;
+  git_available: boolean;
+  unavailable_reason?: string;
   repo_root_path?: string;
   head_ref?: string;
   head_commit?: string;
