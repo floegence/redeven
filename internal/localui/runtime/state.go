@@ -171,6 +171,15 @@ func Load(path string) (*Snapshot, error) {
 	return snapshot, nil
 }
 
+type localAccessStatusEnvelope struct {
+	Data *localAccessStatusPayload `json:"data"`
+}
+
+type localAccessStatusPayload struct {
+	PasswordRequired *bool `json:"password_required"`
+	Unlocked         *bool `json:"unlocked"`
+}
+
 func probeURL(rawURL string, timeout time.Duration) bool {
 	baseURL := strings.TrimSpace(rawURL)
 	if baseURL == "" {
@@ -197,7 +206,7 @@ func probeURL(rawURL string, timeout time.Duration) bool {
 	if err != nil {
 		return false
 	}
-	probeURL.Path = "/_redeven_proxy/env/"
+	probeURL.Path = "/api/local/access/status"
 	probeURL.RawQuery = ""
 	probeURL.Fragment = ""
 
@@ -207,7 +216,15 @@ func probeURL(rawURL string, timeout time.Duration) bool {
 		return false
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode >= 200 && resp.StatusCode < 400
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+
+	var envelope localAccessStatusEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+		return false
+	}
+	return envelope.Data != nil && envelope.Data.PasswordRequired != nil && envelope.Data.Unlocked != nil
 }
 
 func LoadAttachable(path string, timeout time.Duration) (*Snapshot, error) {
