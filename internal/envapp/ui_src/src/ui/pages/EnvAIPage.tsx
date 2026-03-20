@@ -62,6 +62,7 @@ import {
   toHomeDisplayPath,
 } from '../utils/askFlowerPath';
 import { readLiveTextValue, syncLiveTextValue } from '../utils/liveTextValue';
+import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown';
 import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';
 import { FlowerMessageRunIndicator } from '../widgets/FlowerMessageRunIndicator';
@@ -350,8 +351,7 @@ const AIChatInput: Component<{
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.isComposing || isComposing()) return;
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (shouldSubmitOnEnterKeydown({ event: e, isComposing: isComposing() })) {
       e.preventDefault();
       void handleSend();
     }
