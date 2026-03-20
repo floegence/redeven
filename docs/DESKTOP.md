@@ -7,17 +7,24 @@ This document describes the public Electron desktop shell that is published toge
 - Keep `redeven` as the single runtime authority for agent behavior.
 - Ship a desktop installer that bundles the matching `redeven` binary.
 - Reuse the existing Local UI over the configured local HTTP bind instead of adding a second UI runtime.
+- Treat `Redeven Local UI endpoint` as the single host/connect contract for both `redeven agent` and `Redeven Desktop`.
 
 ## Architecture
 
 - Electron is a thin shell.
 - `redeven run --mode desktop --desktop-managed` remains the only runtime entrypoint.
 - Desktop-owned startup settings are stored separately from agent runtime state, so the shell can control launch arguments without introducing a second runtime.
+- Desktop can either:
+  - target `This device` and use the bundled runtime flow
+  - target `External Redeven` and open another machine's Local UI directly
 - The desktop shell waits for a machine-readable desktop launch report file from `redeven`.
 - If a compatible Local UI instance is already running from the same default state directory, the desktop shell reuses that reported Local UI URL instead of failing on the agent lock.
 - If the default state directory is locked by another agent without an attachable Local UI, the desktop shell stays open and renders a blocked page instead of crashing with raw stderr.
 - Electron only allows navigation to the exact reported Local UI origin (`localhost` / loopback / explicit local IP) and opens all other URLs in the system browser.
-- Desktop exposes a native Settings window and explicit quit accelerators (`CommandOrControl+,`, `CommandOrControl+Q`).
+- Desktop exposes:
+  - a native `Connect to Redeven...` menu entry for target selection
+  - a native Settings window
+  - explicit quit accelerators (`CommandOrControl+,`, `CommandOrControl+Q`)
 
 ## Runtime contract
 
@@ -50,6 +57,9 @@ Behavior:
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
 - Desktop-managed startup settings do not create a separate agent state directory; `~/.redeven` remains the runtime source of truth.
 
+When the desktop target is `External Redeven`, Desktop does not start the bundled binary.
+Instead it validates and probes the configured Local UI base URL, then opens that exact origin in the shell.
+
 The ready/attached startup payload also carries:
 
 - `state_dir`: the runtime state directory used by the current agent instance
@@ -73,6 +83,9 @@ That blocked payload includes lock owner metadata and the relevant state paths s
 
 Desktop owns a small native settings model for launch-time configuration:
 
+- Persistent target settings:
+  - `desktop_target_kind`
+  - `external_local_ui_url`
 - Persistent settings:
   - `local_ui_bind`
   - `local_ui_password`
@@ -83,12 +96,27 @@ Desktop owns a small native settings model for launch-time configuration:
 
 Semantics:
 
+- `desktop_target_kind` chooses whether Desktop opens this machine or another Redeven Local UI endpoint.
+- `external_local_ui_url` stores the last explicit external target URL and is only active when `desktop_target_kind=external_local_ui`.
 - The Local UI bind and password apply to every future desktop-managed start.
 - The bootstrap triple is treated as a one-shot “register to Redeven on next successful start” request.
 - After a spawned desktop-managed start succeeds, Desktop clears the pending bootstrap request automatically so an expired environment token is not retried on every future launch.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
 
+Target validation rules:
+
+- External targets must use an absolute `http://` or `https://` URL.
+- The host must be `localhost` or an IP literal.
+- The shell normalizes the configured target to the Local UI origin root.
+- Desktop does not implement a separate desktop-to-desktop protocol; it reuses the same Local UI contract that Env App already uses.
+
 Desktop settings live under the Electron user data directory, not inside the git checkout.
+
+## User entry points
+
+- `Connect to Redeven...` from the native app menu opens the target selection flow.
+- `Settings...` opens the full desktop startup/settings window.
+- The blocked page `Settings` action reuses the same settings window so the user can switch back to `This device` or fix an external target URL.
 
 ## Env App behavior
 
@@ -148,8 +176,17 @@ If another `redeven` process already holds `~/.redeven/agent.lock`, Desktop now 
 - If that process exposes a compatible Local UI, Desktop attaches automatically.
 - If that process does not expose Local UI (for example a `remote`-only run), Desktop shows a blocked page with `Retry`, `Settings`, `Copy diagnostics`, and `Quit`.
 
+Desktop can also open another machine directly:
+
+- Open `Connect to Redeven...` from the app menu.
+- Select `External Redeven`.
+- Enter the target Local UI base URL, for example `http://192.168.1.11:24000/`.
+- If that target uses a Local UI password, Env App will ask for it after the page loads.
+- To expose this machine for another Desktop instance, switch the local host bind to an explicit reachable address such as `0.0.0.0:24000` and set a Local UI password.
+
 Desktop shortcuts:
 
+- `Connect to Redeven...` is available from the native app menu.
 - `CommandOrControl+,` opens the native Settings window.
 - `CommandOrControl+Q` asks for confirmation before quitting the desktop app.
 

@@ -4,6 +4,7 @@ export type LaunchReportDiagnostics = Readonly<{
   lock_path?: string;
   state_dir?: string;
   runtime_state_path?: string;
+  target_url?: string;
 }>;
 
 export type LaunchReportLockOwner = Readonly<{
@@ -90,6 +91,7 @@ export function parseLaunchReport(raw: string): LaunchReport {
           lock_path: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).lock_path),
           state_dir: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).state_dir),
           runtime_state_path: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).runtime_state_path),
+          target_url: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).target_url),
         }
       : undefined,
   };
@@ -119,6 +121,9 @@ export function formatBlockedLaunchDiagnostics(report: LaunchBlockedReport): str
   }
   if (report.diagnostics?.runtime_state_path) {
     lines.push(`runtime state path: ${report.diagnostics.runtime_state_path}`);
+  }
+  if (report.diagnostics?.target_url) {
+    lines.push(`target url: ${report.diagnostics.target_url}`);
   }
 
   return lines.join('\n');

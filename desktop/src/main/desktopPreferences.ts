@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { DEFAULT_DESKTOP_LOCAL_UI_BIND, isLoopbackOnlyBind, parseLocalUIBind } from './localUIBind';
+import { normalizeLocalUIBaseURL } from './localUIURL';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 
 export type PendingBootstrap = Readonly<{
@@ -10,7 +11,15 @@ export type PendingBootstrap = Readonly<{
   env_token: string;
 }>;
 
+export type DesktopTargetKind = 'managed_local' | 'external_local_ui';
+
+export type DesktopTargetPreferences = Readonly<{
+  kind: DesktopTargetKind;
+  external_local_ui_url: string;
+}>;
+
 export type DesktopPreferences = Readonly<{
+  target: DesktopTargetPreferences;
   local_ui_bind: string;
   local_ui_password: string;
   pending_bootstrap: PendingBootstrap | null;
@@ -28,6 +37,10 @@ type StoredSecret = Readonly<{
 
 type DesktopPreferencesFile = Readonly<{
   version?: number;
+  target?: Readonly<{
+    kind?: string;
+    external_local_ui_url?: string;
+  }>;
   local_ui_bind?: string;
   pending_bootstrap?: Readonly<{
     controlplane_url?: string;
@@ -90,6 +103,10 @@ export function createSafeStorageSecretCodec(safeStorage: SafeStorageLike | null
 
 export function defaultDesktopPreferences(): DesktopPreferences {
   return {
+    target: {
+      kind: 'managed_local',
+      external_local_ui_url: '',
+    },
     local_ui_bind: DEFAULT_DESKTOP_LOCAL_UI_BIND,
     local_ui_password: '',
     pending_bootstrap: null,
@@ -105,6 +122,8 @@ export function defaultDesktopPreferencesPaths(userDataDir: string): DesktopPref
 
 export function desktopPreferencesToDraft(preferences: DesktopPreferences): DesktopSettingsDraft {
   return {
+    target_kind: preferences.target.kind,
+    external_local_ui_url: preferences.target.external_local_ui_url,
     local_ui_bind: preferences.local_ui_bind,
     local_ui_password: preferences.local_ui_password,
     controlplane_url: preferences.pending_bootstrap?.controlplane_url ?? '',
@@ -115,6 +134,28 @@ export function desktopPreferencesToDraft(preferences: DesktopPreferences): Desk
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function normalizeTargetKind(raw: unknown): DesktopTargetKind {
+  return compact(raw) === 'external_local_ui' ? 'external_local_ui' : 'managed_local';
+}
+
+export function activeDesktopTargetKey(preferences: DesktopPreferences): string {
+  if (preferences.target.kind === 'external_local_ui') {
+    return `external_local_ui:${preferences.target.external_local_ui_url}`;
+  }
+  return 'managed_local';
+}
+
+export function managedDesktopLaunchKey(preferences: DesktopPreferences): string {
+  const pendingBootstrap = preferences.pending_bootstrap;
+  return JSON.stringify({
+    local_ui_bind: preferences.local_ui_bind,
+    local_ui_password: preferences.local_ui_password,
+    controlplane_url: pendingBootstrap?.controlplane_url ?? '',
+    env_id: pendingBootstrap?.env_id ?? '',
+    env_token: pendingBootstrap?.env_token ?? '',
+  });
 }
 
 function normalizeControlplaneURL(raw: string): string {
@@ -135,6 +176,23 @@ function normalizeControlplaneURL(raw: string): string {
 }
 
 export function validateDesktopSettingsDraft(draft: DesktopSettingsDraft): DesktopPreferences {
+  const targetKind = normalizeTargetKind(draft.target_kind);
+  const externalTargetInput = compact(draft.external_local_ui_url);
+  let externalLocalUIURL = '';
+  if (externalTargetInput !== '') {
+    try {
+      externalLocalUIURL = normalizeLocalUIBaseURL(externalTargetInput);
+    } catch (error) {
+      if (targetKind === 'external_local_ui') {
+        throw error;
+      }
+      externalLocalUIURL = '';
+    }
+  }
+  if (targetKind === 'external_local_ui' && externalLocalUIURL === '') {
+    throw new Error('Redeven URL is required when Desktop Target is External Redeven.');
+  }
+
   const localUIBind = compact(draft.local_ui_bind);
   if (!localUIBind) {
     throw new Error('Local UI bind address is required.');
@@ -170,6 +228,10 @@ export function validateDesktopSettingsDraft(draft: DesktopSettingsDraft): Deskt
   }
 
   return {
+    target: {
+      kind: targetKind,
+      external_local_ui_url: externalLocalUIURL,
+    },
     local_ui_bind: localUIBind,
     local_ui_password: localUIPassword,
     pending_bootstrap: pendingBootstrap,
@@ -200,6 +262,8 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
   const preferencesFile = await readJSONFile<DesktopPreferencesFile>(paths.preferencesFile);
   const secretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
 
+  const targetKind = normalizeTargetKind(preferencesFile?.target?.kind);
+  const externalLocalUIURL = compact(preferencesFile?.target?.external_local_ui_url);
   const localUIBind = compact(preferencesFile?.local_ui_bind) || DEFAULT_DESKTOP_LOCAL_UI_BIND;
   const localUIPassword = secretsFile?.local_ui_password ? codec.decodeSecret(secretsFile.local_ui_password) : '';
   const controlplaneURL = compact(preferencesFile?.pending_bootstrap?.controlplane_url);
@@ -207,6 +271,8 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
   const envToken = secretsFile?.pending_bootstrap?.env_token ? codec.decodeSecret(secretsFile.pending_bootstrap.env_token) : '';
 
   return validateDesktopSettingsDraft({
+    target_kind: targetKind,
+    external_local_ui_url: externalLocalUIURL,
     local_ui_bind: localUIBind,
     local_ui_password: localUIPassword,
     controlplane_url: controlplaneURL,
@@ -223,6 +289,10 @@ export async function saveDesktopPreferences(
   const nextPreferences = validateDesktopSettingsDraft(desktopPreferencesToDraft(preferences));
   const preferencesFile: DesktopPreferencesFile = {
     version: 1,
+    target: {
+      kind: nextPreferences.target.kind,
+      external_local_ui_url: nextPreferences.target.external_local_ui_url || undefined,
+    },
     local_ui_bind: nextPreferences.local_ui_bind,
     pending_bootstrap: nextPreferences.pending_bootstrap
       ? {

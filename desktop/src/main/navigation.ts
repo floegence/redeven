@@ -1,18 +1,8 @@
-import net from 'node:net';
+import { isLoopbackHost, isSupportedLocalHostname } from './localUIURL';
 
 function normalizeHTTPPort(url: URL): string {
   if (url.port) return url.port;
   return url.protocol === 'https:' ? '443' : '80';
-}
-
-export function isLoopbackHost(hostname: string): boolean {
-  const host = String(hostname ?? '').trim().toLowerCase();
-  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
-}
-
-function isSupportedLocalHost(hostname: string): boolean {
-  const host = String(hostname ?? '').trim().toLowerCase();
-  return isLoopbackHost(host) || net.isIP(host) !== 0;
 }
 
 export function isAllowedAppNavigation(input: string, allowedBaseURL: string): boolean {
@@ -25,7 +15,7 @@ export function isAllowedAppNavigation(input: string, allowedBaseURL: string): b
     if (normalizeHTTPPort(candidate) !== normalizeHTTPPort(allowed)) {
       return false;
     }
-    if (!isSupportedLocalHost(allowed.hostname) || !isSupportedLocalHost(candidate.hostname)) {
+    if (!isSupportedLocalHostname(allowed.hostname) || !isSupportedLocalHostname(candidate.hostname)) {
       return false;
     }
     if (isLoopbackHost(allowed.hostname) && isLoopbackHost(candidate.hostname)) {

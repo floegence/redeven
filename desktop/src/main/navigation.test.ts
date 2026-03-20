@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { isAllowedAppNavigation, isLoopbackHost } from './navigation';
+import { isAllowedAppNavigation } from './navigation';
+import { isLoopbackHost } from './localUIURL';
 
 describe('navigation', () => {
   it('recognizes supported loopback hosts', () => {

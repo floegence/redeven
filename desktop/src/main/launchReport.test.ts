@@ -82,6 +82,7 @@ describe('launchReport', () => {
         lock_path: '/Users/tester/.redeven/agent.lock',
         state_dir: '/Users/tester/.redeven',
         runtime_state_path: undefined,
+        target_url: undefined,
       },
     });
   });
@@ -99,10 +100,12 @@ describe('launchReport', () => {
       diagnostics: {
         state_dir: '/Users/tester/.redeven',
         lock_path: '/Users/tester/.redeven/agent.lock',
+        target_url: 'http://192.168.1.11:24000/',
       },
     });
     expect(diagnostics).toContain('code: state_dir_locked');
     expect(diagnostics).toContain('lock owner mode: remote');
     expect(diagnostics).toContain('state dir: /Users/tester/.redeven');
+    expect(diagnostics).toContain('target url: http://192.168.1.11:24000/');
   });
 });
