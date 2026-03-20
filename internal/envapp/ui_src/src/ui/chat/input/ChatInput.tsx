@@ -7,6 +7,7 @@ import { useChatContext } from '../ChatProvider';
 import { useAttachments } from '../hooks/useAttachments';
 import { AttachmentPreview } from './AttachmentPreview';
 import { readLiveTextValue, syncLiveTextValue } from '../../utils/liveTextValue';
+import { shouldSubmitOnEnterKeydown } from '../../utils/shouldSubmitOnEnterKeydown';
 
 export interface ChatInputProps {
   disabled?: boolean;
@@ -74,10 +75,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    // Ignore key events during IME composition
-    if (e.isComposing || isComposing()) return;
-
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (shouldSubmitOnEnterKeydown({ event: e, isComposing: isComposing() })) {
       e.preventDefault();
       handleSend();
     }

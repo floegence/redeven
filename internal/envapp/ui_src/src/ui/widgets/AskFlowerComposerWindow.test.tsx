@@ -268,7 +268,7 @@ describe('AskFlowerComposerWindow', () => {
     expect(onSend).toHaveBeenCalledWith('你好，Flower');
   });
 
-  it('submits the composed prompt with Ctrl+Enter after composition ends', async () => {
+  it('submits the composed prompt with Enter after composition ends', async () => {
     const onSend = vi.fn(async () => undefined);
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -286,7 +286,6 @@ describe('AskFlowerComposerWindow', () => {
     textarea.dispatchEvent(new Event('compositionend', { bubbles: true }));
     textarea.dispatchEvent(new KeyboardEvent('keydown', {
       key: 'Enter',
-      ctrlKey: true,
       bubbles: true,
       cancelable: true,
     }));
@@ -294,6 +293,33 @@ describe('AskFlowerComposerWindow', () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledWith('deploy this change');
+  });
+
+  it('keeps Shift+Enter available for a newline instead of sending', async () => {
+    const onSend = vi.fn(async () => undefined);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={baseIntent}
+        onClose={() => undefined}
+        onSend={onSend}
+      />
+    ), host);
+
+    const textarea = composePrompt(host, 'keep editing');
+    textarea.dispatchEvent(new Event('compositionend', { bubbles: true }));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    }));
+    await flushAsync();
+
+    expect(onSend).not.toHaveBeenCalled();
   });
 
   it('shows a selection preview when the highlighted context is clicked', async () => {
