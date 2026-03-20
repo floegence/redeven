@@ -52,6 +52,8 @@ describe('MessageActions', () => {
 
     render(() => <MessageActions message={message} />, host);
 
+    expect(host.querySelector('button[aria-label="Copy message"] rect')).toBeNull();
+
     const copyButton = host.querySelector('button[aria-label="Copy message"]') as HTMLButtonElement | null;
     copyButton?.click();
     await flushAsync();
