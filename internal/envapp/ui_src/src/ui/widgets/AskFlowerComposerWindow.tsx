@@ -555,13 +555,6 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
   const position = createMemo(() => toWindowPosition(props.anchor ?? null, windowSizing()));
   const composerCopy = createMemo(() => (props.intent ? buildAskFlowerComposerCopy(props.intent) : null));
   const canSubmit = createMemo(() => !sending() && userPrompt().trim().length > 0);
-  const contextEntryMap = createMemo(() => {
-    const map = new Map<string, AskFlowerComposerEntry>();
-    for (const item of composerCopy()?.contextEntries ?? []) {
-      map.set(item.id, item);
-    }
-    return map;
-  });
 
   const suggestedWorkingDir = createMemo(() => {
     const intent = props.intent;
@@ -905,30 +898,6 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                           </Show>
                         </div>
 
-                        <div class="mt-1 text-sm leading-5 text-foreground/95">
-                          <For each={composerCopy()?.headline ?? []}>
-                            {(part) =>
-                              part.kind === 'text'
-                                ? part.value
-                                : (
-                                  <button
-                                    type="button"
-                                    class={`mx-0.5 inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 align-baseline text-[11px] font-medium transition-colors cursor-pointer ${entryButtonClass(contextEntryMap().get(part.entryId)!)}`}
-                                    title={contextEntryMap().get(part.entryId)?.title}
-                                    onClick={() => {
-                                      const entry = contextEntryMap().get(part.entryId);
-                                      if (!entry) return;
-                                      void openContextEntry(entry);
-                                    }}
-                                  >
-                                    {entryIcon(contextEntryMap().get(part.entryId)!)}
-                                    <span class="truncate">{contextEntryMap().get(part.entryId)?.label}</span>
-                                  </button>
-                                )
-                            }
-                          </For>
-                        </div>
-
                         <div class="mt-1.5 rounded-[0.95rem] border border-primary/14 bg-primary/[0.055] px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
                           <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/55">Question</div>
                           <div class="mt-1 text-[12px] font-semibold leading-5 text-foreground sm:text-[13px]">{composerCopy()?.question}</div>
@@ -1034,14 +1003,14 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                       </div>
 
                       <div class="chat-input-toolbar ask-flower-composer-toolbar">
-                        <div class="chat-input-toolbar-left ask-flower-composer-toolbar-left min-w-0">
-                          <div class="min-h-4 text-[10px] leading-4 text-muted-foreground sm:text-[11px]">
-                            <Show when={validationError()} fallback={<span>Flower receives the linked context automatically.</span>}>
+                        <Show when={validationError()}>
+                          <div class="chat-input-toolbar-left ask-flower-composer-toolbar-left min-w-0">
+                            <div class="min-h-4 text-[10px] leading-4 text-muted-foreground sm:text-[11px]">
                               <span class="text-error">{validationError()}</span>
-                            </Show>
+                            </div>
                           </div>
-                        </div>
-                        <div class="chat-input-toolbar-right ask-flower-composer-toolbar-right shrink-0">
+                        </Show>
+                        <div class="chat-input-toolbar-right ask-flower-composer-toolbar-right ml-auto shrink-0">
                           <Show when={(composerCopy()?.contextEntries.length ?? 0) > 0}>
                             <span class="inline-flex items-center rounded-full border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:px-2 sm:text-[11px]">
                               {composerCopy()?.contextEntries.length} linked
