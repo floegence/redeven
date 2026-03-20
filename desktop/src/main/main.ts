@@ -45,6 +45,12 @@ import {
   REPORT_DESKTOP_WINDOW_THEME_CHANNEL,
   normalizeDesktopWindowThemeSnapshot,
 } from '../shared/windowThemeIPC';
+import {
+  DESKTOP_ASK_FLOWER_HANDOFF_DELIVER_CHANNEL,
+  DESKTOP_ASK_FLOWER_HANDOFF_REQUEST_CHANNEL,
+  normalizeDesktopAskFlowerHandoffPayload,
+  type DesktopAskFlowerHandoffPayload,
+} from '../shared/askFlowerHandoffIPC';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -60,6 +66,7 @@ const desktopDiagnostics = new DesktopDiagnosticsRecorder();
 const windowStateCleanup = new Map<BrowserWindow, () => void>();
 
 const SETTINGS_WINDOW_STATE_KEY = 'settings';
+const pendingMainWindowAskFlowerHandoffs: DesktopAskFlowerHandoffPayload[] = [];
 
 const SETTINGS_WINDOW_SPEC = {
   width: 760,
@@ -110,12 +117,29 @@ async function persistDesktopPreferences(next: DesktopPreferences): Promise<void
   await saveDesktopPreferences(preferencesPaths(), next, preferencesCodec());
 }
 
-function focusMainWindow(): void {
-  if (!mainWindow) return;
-  if (mainWindow.isMinimized()) {
-    mainWindow.restore();
+function presentAppWindow(win: BrowserWindow, options?: Readonly<{ stealAppFocus?: boolean }>): void {
+  if (win.isMinimized()) {
+    win.restore();
   }
-  mainWindow.focus();
+  if (!win.isVisible()) {
+    win.show();
+  }
+  if (process.platform === 'darwin' && options?.stealAppFocus) {
+    app.focus({ steal: true });
+  } else {
+    app.focus();
+  }
+  try {
+    win.moveTop();
+  } catch {
+    // Best-effort only: some platforms/window managers may ignore stacking hints.
+  }
+  win.focus();
+}
+
+function focusMainWindow(options?: Readonly<{ stealAppFocus?: boolean }>): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  presentAppWindow(mainWindow, options);
 }
 
 function openExternal(url: string): void {
@@ -270,13 +294,26 @@ function handleBlockedAction(url: string): boolean {
 }
 
 function focusAuxiliaryWindow(win: BrowserWindow): void {
-  if (win.isMinimized()) {
-    win.restore();
+  presentAppWindow(win);
+}
+
+function flushPendingMainWindowAskFlowerHandoffs(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
   }
-  if (!win.isVisible()) {
-    win.show();
+  if (mainWindow.webContents.isLoadingMainFrame() || pendingMainWindowAskFlowerHandoffs.length <= 0) {
+    return;
   }
-  win.focus();
+
+  const queue = pendingMainWindowAskFlowerHandoffs.splice(0, pendingMainWindowAskFlowerHandoffs.length);
+  for (const payload of queue) {
+    mainWindow.webContents.send(DESKTOP_ASK_FLOWER_HANDOFF_DELIVER_CHANNEL, payload);
+  }
+}
+
+function queueMainWindowAskFlowerHandoff(payload: DesktopAskFlowerHandoffPayload): void {
+  pendingMainWindowAskFlowerHandoffs.push(payload);
+  flushPendingMainWindowAskFlowerHandoffs();
 }
 
 function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameName = '', explicitWindowStateKey = ''): BrowserWindow {
@@ -391,6 +428,28 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameNam
   return win;
 }
 
+function createMainBrowserWindow(targetURL: string): BrowserWindow {
+  const win = createBrowserWindow(targetURL, undefined, '', 'window:main');
+  win.on('closed', () => {
+    if (mainWindow === win) {
+      mainWindow = null;
+    }
+  });
+  win.webContents.on('did-finish-load', () => {
+    if (mainWindow !== win) {
+      return;
+    }
+    flushPendingMainWindowAskFlowerHandoffs();
+  });
+  win.once('ready-to-show', () => {
+    if (mainWindow !== win || pendingMainWindowAskFlowerHandoffs.length <= 0) {
+      return;
+    }
+    focusMainWindow({ stealAppFocus: true });
+  });
+  return win;
+}
+
 async function ensureAgentStarted(): Promise<string> {
   if (managedAgent) {
     blockedLaunch = null;
@@ -442,18 +501,29 @@ async function ensureAgentStarted(): Promise<string> {
   return allowedBaseURL;
 }
 
+async function ensureMainWindowCreated(): Promise<BrowserWindow> {
+  const targetURL = await ensureAgentStarted();
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    mainWindow = createMainBrowserWindow(targetURL);
+  }
+  return mainWindow;
+}
+
 async function showMainWindow(): Promise<void> {
   const targetURL = await ensureAgentStarted();
-  if (mainWindow) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
     await mainWindow.loadURL(targetURL);
     focusMainWindow();
     return;
   }
 
-  mainWindow = createBrowserWindow(targetURL, undefined, '', 'window:main');
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+  mainWindow = createMainBrowserWindow(targetURL);
+}
+
+async function handoffAskFlowerToMainWindow(payload: DesktopAskFlowerHandoffPayload): Promise<void> {
+  await ensureMainWindowCreated();
+  queueMainWindowAskFlowerHandoff(payload);
+  focusMainWindow({ stealAppFocus: true });
 }
 
 async function shutdownAgent(): Promise<void> {
@@ -562,6 +632,13 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
     applyDesktopWindowTheme(win, normalized, process.platform);
+  });
+  ipcMain.on(DESKTOP_ASK_FLOWER_HANDOFF_REQUEST_CHANNEL, (_event, payload) => {
+    const normalized = normalizeDesktopAskFlowerHandoffPayload(payload);
+    if (!normalized) {
+      return;
+    }
+    void handoffAskFlowerToMainWindow(normalized);
   });
 
   app.whenReady().then(async () => {
