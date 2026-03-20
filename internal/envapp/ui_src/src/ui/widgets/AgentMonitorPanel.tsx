@@ -1,11 +1,17 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
+import { Sparkles, Trash } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { MonitoringChart } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type ActiveSession, type SysMonitorProcessInfo, type SysMonitorSnapshot, type SysMonitorSortBy } from '../protocol/redeven_v1';
 import { useEnvContext } from '../pages/EnvContext';
+import {
+  buildMonitorProcessAskFlowerIntent,
+  formatMonitorProcessBytes,
+  monitorProcessDisplayLabel,
+} from '../utils/monitorProcessAskFlower';
 import { isPermissionDeniedError } from '../utils/permission';
 import { PermissionEmptyState } from './PermissionEmptyState';
 
@@ -22,21 +28,6 @@ type chart_sample = {
   netIn: number;
   netOut: number;
 };
-
-function formatBytes(bytes: number): string {
-  const b = Number(bytes ?? 0);
-  if (!Number.isFinite(b) || b <= 0) return '0 B';
-
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = b;
-  let idx = 0;
-  while (value >= 1024 && idx < units.length - 1) {
-    value /= 1024;
-    idx += 1;
-  }
-  const rounded = idx === 0 ? Math.round(value) : Math.round(value * 10) / 10;
-  return `${rounded} ${units[idx]}`;
-}
 
 function formatSpeed(bytesPerSecond: number): string {
   const bps = Number(bytesPerSecond ?? 0);
@@ -113,6 +104,13 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
   const [sessionsError, setSessionsError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
   const [executeDenied, setExecuteDenied] = createSignal(false);
+  const [killingPid, setKillingPid] = createSignal<number | null>(null);
+  const [processContextMenu, setProcessContextMenu] = createSignal<{
+    x: number;
+    y: number;
+    process: SysMonitorProcessInfo;
+    snapshot: Pick<SysMonitorSnapshot, 'platform' | 'timestampMs'> | null;
+  } | null>(null);
 
   const [sample, setSample] = createSignal<chart_sample | null>(null);
   const [sampleSeq, setSampleSeq] = createSignal(0);
@@ -175,6 +173,7 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
   let lastSampleTs: number | null = null;
   let fetchInFlight: Promise<void> | null = null;
   let queuedFetchOpts: { silent?: boolean } | null = null;
+  let processContextMenuEl: HTMLDivElement | null = null;
 
   const stopPolling = () => {
     if (pollTimer) {
@@ -310,6 +309,111 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
   });
 
   onCleanup(() => stopPolling());
+
+  const clampProcessMenuPosition = (x: number, y: number): { x: number; y: number } => {
+    if (typeof window === 'undefined') return { x, y };
+
+    const margin = 8;
+    const menuWidth = 180;
+    const menuHeight = 84;
+    const maxX = Math.max(margin, window.innerWidth - menuWidth - margin);
+    const maxY = Math.max(margin, window.innerHeight - menuHeight - margin);
+
+    return {
+      x: Math.min(Math.max(x, margin), maxX),
+      y: Math.min(Math.max(y, margin), maxY),
+    };
+  };
+
+  createEffect(() => {
+    const menu = processContextMenu();
+    if (!menu) return;
+
+    const closeMenu = () => setProcessContextMenu(null);
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && processContextMenuEl?.contains(target)) return;
+      closeMenu();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeMenu();
+      }
+    };
+
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+    window.addEventListener('keydown', onKeyDown);
+    onCleanup(() => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+      window.removeEventListener('keydown', onKeyDown);
+    });
+  });
+
+  const openProcessContextMenu = (event: MouseEvent, process: SysMonitorProcessInfo) => {
+    const pos = clampProcessMenuPosition(event.clientX, event.clientY);
+    event.preventDefault();
+    event.stopPropagation();
+    const snapshot = data();
+    setProcessContextMenu({
+      x: pos.x,
+      y: pos.y,
+      process,
+      snapshot: snapshot ? { platform: snapshot.platform, timestampMs: snapshot.timestampMs } : null,
+    });
+  };
+
+  const handleKillProcess = async () => {
+    const menu = processContextMenu();
+    if (!menu) return;
+
+    const pid = Math.trunc(Number(menu.process.pid ?? 0));
+    if (pid <= 0) {
+      setProcessContextMenu(null);
+      notify.error('Kill failed', 'Invalid process PID.');
+      return;
+    }
+    if (killingPid() === pid) {
+      setProcessContextMenu(null);
+      return;
+    }
+
+    const label = monitorProcessDisplayLabel({ pid, name: menu.process.name });
+    setProcessContextMenu(null);
+    setKillingPid(pid);
+
+    try {
+      const resp = await rpc.monitor.killProcess({ pid });
+      if (!resp.ok) {
+        throw new Error(`Kill request for PID ${pid} was not acknowledged.`);
+      }
+      notify.success('Process killed', `${label} was killed.`);
+      await fetchOnce({ silent: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      notify.error('Kill failed', message || `Failed to kill PID ${pid}.`);
+    } finally {
+      setKillingPid((current) => (current === pid ? null : current));
+    }
+  };
+
+  const handleAskFlowerFromProcess = () => {
+    const menu = processContextMenu();
+    if (!menu) return;
+
+    const anchor = { x: menu.x, y: menu.y };
+    setProcessContextMenu(null);
+    ctx.openAskFlowerComposer(
+      buildMonitorProcessAskFlowerIntent({
+        process: menu.process,
+        snapshot: menu.snapshot,
+      }),
+      anchor,
+    );
+  };
 
   let lastCpuSeq = 0;
   const cpuOnUpdate = () => {
@@ -489,11 +593,15 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
                     }>
                       <For each={processes()}>
                         {(proc) => (
-                          <tr class="border-b border-border/40 hover:bg-muted/30 transition-colors">
+                          <tr
+                            class={`border-b border-border/40 transition-colors hover:bg-muted/30 ${processContextMenu()?.process.pid === proc.pid ? 'bg-muted/40' : ''}`}
+                            onContextMenu={(event) => openProcessContextMenu(event, proc)}
+                            title="Right-click for actions"
+                          >
                             <td class="py-2 px-2 font-mono text-[11px] text-muted-foreground">{proc.pid}</td>
                             <td class="py-2 px-2 truncate max-w-[220px]" title={proc.name}>{proc.name}</td>
                             <td class="py-2 px-2 text-right font-mono tabular-nums">{Number(proc.cpuPercent ?? 0).toFixed(1)}</td>
-                            <td class="py-2 px-2 text-right font-mono tabular-nums">{formatBytes(Number(proc.memoryBytes ?? 0))}</td>
+                            <td class="py-2 px-2 text-right font-mono tabular-nums">{formatMonitorProcessBytes(Number(proc.memoryBytes ?? 0))}</td>
                             <td class="py-2 px-2 truncate max-w-[160px] text-muted-foreground" title={proc.username}>{proc.username}</td>
                           </tr>
                         )}
@@ -598,6 +706,39 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
         </div>
           <LoadingOverlay visible={loading() && !data()} message="Loading monitoring data..." />
         </div>
+
+        <Show when={processContextMenu()} keyed>
+          {(menu) => (
+            <div
+              ref={(el) => {
+                processContextMenuEl = el;
+              }}
+              class="fixed z-50 min-w-[180px] py-1 bg-popover border border-border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100"
+              style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
+              onContextMenu={(event) => event.preventDefault()}
+            >
+              <button
+                type="button"
+                class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => {
+                  void handleKillProcess();
+                }}
+                disabled={killingPid() === menu.process.pid}
+              >
+                <Trash class="w-3.5 h-3.5 opacity-60" />
+                <span class="flex-1 text-left">Kill</span>
+              </button>
+              <button
+                type="button"
+                class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
+                onClick={handleAskFlowerFromProcess}
+              >
+                <Sparkles class="w-3.5 h-3.5 opacity-60" />
+                <span class="flex-1 text-left">Ask Flower</span>
+              </button>
+            </div>
+          )}
+        </Show>
       </Show>
     </div>
   );

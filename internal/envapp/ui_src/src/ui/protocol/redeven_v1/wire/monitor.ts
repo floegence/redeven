@@ -4,6 +4,15 @@ export type wire_sys_monitor_req = {
   sort_by?: wire_sys_monitor_sort_by;
 };
 
+export type wire_sys_monitor_kill_process_req = {
+  pid: number;
+};
+
+export type wire_sys_monitor_kill_process_resp = {
+  ok: boolean;
+  pid: number;
+};
+
 export type wire_sys_monitor_process_info = {
   pid: number;
   name: string;
@@ -27,4 +36,3 @@ export type wire_sys_monitor_resp = {
   processes: wire_sys_monitor_process_info[];
   timestamp_ms: number;
 };
-

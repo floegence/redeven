@@ -86,4 +86,32 @@ describe('buildAskFlowerComposerCopy', () => {
     });
     expect(copy.contextEntries[0].kind === 'file' && copy.contextEntries[0].attachmentFile).toBe(attachment);
   });
+
+  it('builds monitoring-focused copy for process snapshots', () => {
+    const copy = buildAskFlowerComposerCopy({
+      ...baseIntent,
+      source: 'monitoring',
+      contextItems: [
+        {
+          kind: 'process_snapshot',
+          pid: 4242,
+          name: 'node',
+          username: 'alice',
+          cpuPercent: 87.3,
+          memoryBytes: 268_435_456,
+          platform: 'darwin',
+          capturedAtMs: 1_710_000_000_000,
+        },
+      ],
+    });
+
+    expect(copy.placeholder).toBe('Ask why this process is busy, whether it is expected, or what to do next');
+    expect(copy.question).toBe('What would you like me to inspect or explain?');
+    expect(copy.contextEntries).toHaveLength(1);
+    expect(copy.contextEntries[0]).toMatchObject({
+      kind: 'process_snapshot',
+      label: 'node (PID 4242)',
+      detail: 'alice · 87.3% CPU · 256 MB',
+    });
+  });
 });

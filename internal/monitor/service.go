@@ -25,6 +25,11 @@ const (
 	//
 	// NOTE: The type_id must match Env App: internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts.
 	TypeID_SYS_MONITOR uint32 = 3001
+
+	// TypeID_SYS_MONITOR_KILL_PROCESS terminates a process by PID.
+	//
+	// NOTE: The type_id must match Env App: internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts.
+	TypeID_SYS_MONITOR_KILL_PROCESS uint32 = 3002
 )
 
 const (
@@ -107,6 +112,35 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		resp := s.snapshotResponse(sortBy)
 		return &resp, nil
 	})
+
+	accessgate.RegisterTyped[killProcessReq, killProcessResp](r, TypeID_SYS_MONITOR_KILL_PROCESS, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *killProcessReq) (*killProcessResp, error) {
+		if meta == nil || !meta.CanExecute {
+			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
+		}
+		if req == nil {
+			return nil, &rpc.Error{Code: 400, Message: "missing request"}
+		}
+		if s.collectors.killProcess == nil {
+			return nil, &rpc.Error{Code: 501, Message: "process kill not supported"}
+		}
+
+		if err := s.collectors.killProcess(ctx, req.PID); err != nil {
+			switch {
+			case errors.Is(err, errInvalidProcessPID):
+				return nil, &rpc.Error{Code: 400, Message: err.Error()}
+			case errors.Is(err, errProcessNotFound):
+				return nil, &rpc.Error{Code: 404, Message: err.Error()}
+			default:
+				s.log.Warn("sys_monitor: kill process failed", "pid", req.PID, "error", err)
+				return nil, &rpc.Error{Code: 500, Message: fmt.Sprintf("failed to kill process %d", req.PID)}
+			}
+		}
+
+		return &killProcessResp{
+			OK:  true,
+			PID: req.PID,
+		}, nil
+	})
 }
 
 type sysMonitorReq struct {
@@ -127,6 +161,15 @@ type sysMonitorResp struct {
 
 	Processes   []processInfo `json:"processes"`
 	TimestampMs int64         `json:"timestamp_ms"`
+}
+
+type killProcessReq struct {
+	PID int32 `json:"pid"`
+}
+
+type killProcessResp struct {
+	OK  bool  `json:"ok"`
+	PID int32 `json:"pid"`
 }
 
 type processInfo struct {
@@ -161,12 +204,18 @@ type monitorCollectors struct {
 	readLoadAverage       func(ctx context.Context) ([]float64, error)
 	readNetworkCounters   func(ctx context.Context) (networkCounters, error)
 	collectProcessMetrics func(ctx context.Context) ([]processWithMetrics, error)
+	killProcess           func(ctx context.Context, pid int32) error
 }
 
 type networkCounters struct {
 	bytesReceived uint64
 	bytesSent     uint64
 }
+
+var (
+	errInvalidProcessPID = errors.New("invalid process pid")
+	errProcessNotFound   = errors.New("process not found")
+)
 
 func defaultMonitorCollectors() monitorCollectors {
 	return monitorCollectors{
@@ -196,6 +245,7 @@ func defaultMonitorCollectors() monitorCollectors {
 			}, nil
 		},
 		collectProcessMetrics: collectProcessMetrics,
+		killProcess:           killProcessByPID,
 	}
 }
 
@@ -438,6 +488,35 @@ func collectProcessMetrics(ctx context.Context) ([]processWithMetrics, error) {
 	}
 
 	return out, nil
+}
+
+func killProcessByPID(ctx context.Context, pid int32) error {
+	if pid <= 0 {
+		return fmt.Errorf("%w: %d", errInvalidProcessPID, pid)
+	}
+
+	exists, err := process.PidExistsWithContext(ctx, pid)
+	if err != nil {
+		return fmt.Errorf("check pid %d: %w", pid, err)
+	}
+	if !exists {
+		return fmt.Errorf("%w: %d", errProcessNotFound, pid)
+	}
+
+	proc, err := process.NewProcessWithContext(ctx, pid)
+	if err != nil {
+		return fmt.Errorf("open pid %d: %w", pid, err)
+	}
+
+	if err := proc.KillWithContext(ctx); err != nil {
+		existsAfter, existsErr := process.PidExistsWithContext(ctx, pid)
+		if existsErr == nil && !existsAfter {
+			return nil
+		}
+		return fmt.Errorf("kill pid %d: %w", pid, err)
+	}
+
+	return nil
 }
 
 func normalizeSortBy(sortBy string) string {

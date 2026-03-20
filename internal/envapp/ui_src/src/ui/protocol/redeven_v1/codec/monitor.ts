@@ -1,5 +1,15 @@
-import type { wire_sys_monitor_req, wire_sys_monitor_resp } from '../wire/monitor';
-import type { SysMonitorRequest, SysMonitorSnapshot } from '../sdk/monitor';
+import type {
+  wire_sys_monitor_kill_process_req,
+  wire_sys_monitor_kill_process_resp,
+  wire_sys_monitor_req,
+  wire_sys_monitor_resp,
+} from '../wire/monitor';
+import type {
+  SysMonitorKillProcessRequest,
+  SysMonitorKillProcessResponse,
+  SysMonitorRequest,
+  SysMonitorSnapshot,
+} from '../sdk/monitor';
 
 export function toWireSysMonitorRequest(req: SysMonitorRequest): wire_sys_monitor_req {
   return { sort_by: req.sortBy };
@@ -27,3 +37,15 @@ export function fromWireSysMonitorResponse(resp: wire_sys_monitor_resp): SysMoni
   };
 }
 
+export function toWireSysMonitorKillProcessRequest(req: SysMonitorKillProcessRequest): wire_sys_monitor_kill_process_req {
+  return {
+    pid: Number(req?.pid ?? 0),
+  };
+}
+
+export function fromWireSysMonitorKillProcessResponse(resp: wire_sys_monitor_kill_process_resp): SysMonitorKillProcessResponse {
+  return {
+    ok: Boolean(resp?.ok),
+    pid: Number(resp?.pid ?? 0),
+  };
+}

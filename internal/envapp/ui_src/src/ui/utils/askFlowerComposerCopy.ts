@@ -1,5 +1,10 @@
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
 import { getAskFlowerAttachmentSourcePath } from './askFlowerAttachmentMetadata';
+import {
+  buildMonitorProcessSnapshotText,
+  formatMonitorProcessBytes,
+  monitorProcessDisplayLabel,
+} from './monitorProcessAskFlower';
 
 export type AskFlowerComposerEntry =
   | Readonly<{
@@ -40,6 +45,16 @@ export type AskFlowerComposerEntry =
       detail: string;
       content: string;
       workingDir: string;
+    }>
+  | Readonly<{
+      id: string;
+      kind: 'process_snapshot';
+      itemIndex: number;
+      label: string;
+      title: string;
+      detail: string;
+      content: string;
+      pid: number;
     }>
   | Readonly<{
       id: string;
@@ -101,6 +116,20 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerComposerEntry[] 
         title: `Preview ${item.path}`,
         detail: item.path,
         path: item.path,
+      });
+      return;
+    }
+
+    if (item.kind === 'process_snapshot') {
+      entries.push({
+        id: `context-${index}-process-snapshot`,
+        kind: 'process_snapshot',
+        itemIndex: index,
+        label: monitorProcessDisplayLabel({ pid: item.pid, name: item.name }),
+        title: `Preview monitoring snapshot for PID ${item.pid}`,
+        detail: `${String(item.username ?? '').trim() || 'system'} · ${Number(item.cpuPercent ?? 0).toFixed(1)}% CPU · ${formatMonitorProcessBytes(item.memoryBytes)}`,
+        content: buildMonitorProcessSnapshotText(item),
+        pid: item.pid,
       });
       return;
     }
@@ -190,6 +219,17 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
       question: 'What would you like me to inspect or do next?',
       contextEntries,
     };
+  }
+
+  if (firstContext?.kind === 'process_snapshot') {
+    const processEntry = findEntryByItem(contextEntries, 0, 'process_snapshot');
+    if (processEntry) {
+      return {
+        placeholder: 'Ask why this process is busy, whether it is expected, or what to do next',
+        question: 'What would you like me to inspect or explain?',
+        contextEntries,
+      };
+    }
   }
 
   if (intent.source === 'file_preview') {

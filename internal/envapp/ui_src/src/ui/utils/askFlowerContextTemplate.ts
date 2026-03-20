@@ -1,9 +1,11 @@
 import type { AskFlowerContextItem, AskFlowerIntent, AskFlowerIntentMode } from '../pages/askFlowerIntent';
 import { resolveSuggestedWorkingDirAbsolute } from './askFlowerPath';
+import { buildMonitorProcessSnapshotText } from './monitorProcessAskFlower';
 
 function sourceLabel(source: AskFlowerIntent['source']): string {
   if (source === 'file_browser') return 'file browser';
   if (source === 'file_preview') return 'file preview';
+  if (source === 'monitoring') return 'monitoring';
   return 'terminal';
 }
 
@@ -21,6 +23,11 @@ function buildContextSection(item: AskFlowerContextItem): string {
   if (item.kind === 'file_selection') {
     const body = sanitizeFenceContent(item.selection);
     return `- Selected text from \`${item.path}\`:\n\n\`\`\`text\n${body}\n\`\`\``;
+  }
+
+  if (item.kind === 'process_snapshot') {
+    const body = sanitizeFenceContent(buildMonitorProcessSnapshotText(item));
+    return `- Process snapshot:\n\n\`\`\`text\n${body}\n\`\`\``;
   }
 
   const wd = String(item.workingDir ?? '').trim() || 'Working directory unavailable';

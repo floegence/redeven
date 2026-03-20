@@ -28,3 +28,11 @@ export type SysMonitorRequest = {
   sortBy?: SysMonitorSortBy;
 };
 
+export type SysMonitorKillProcessRequest = {
+  pid: number;
+};
+
+export type SysMonitorKillProcessResponse = {
+  ok: boolean;
+  pid: number;
+};

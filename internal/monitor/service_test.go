@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
+	"os/exec"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -198,4 +200,53 @@ func TestService_refreshProcessSnapshotKeepsLastSuccessfulData(t *testing.T) {
 	if got := second.Processes[0].PID; got != 21 {
 		t.Fatalf("second process pid = %d, want 21", got)
 	}
+}
+
+func Test_killProcessByPID_invalidPID(t *testing.T) {
+	t.Parallel()
+
+	err := killProcessByPID(context.Background(), 0)
+	if !errors.Is(err, errInvalidProcessPID) {
+		t.Fatalf("killProcessByPID error = %v, want invalid pid", err)
+	}
+}
+
+func Test_killProcessByPID_terminatesStartedProcess(t *testing.T) {
+	t.Parallel()
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcessSleep", "--")
+	cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS_SLEEP=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start helper process: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	time.Sleep(150 * time.Millisecond)
+
+	if err := killProcessByPID(context.Background(), int32(cmd.Process.Pid)); err != nil {
+		t.Fatalf("killProcessByPID: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatalf("helper process exited cleanly, want killed process error")
+		}
+	case <-time.After(5 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatalf("timed out waiting for helper process to exit")
+	}
+}
+
+func TestHelperProcessSleep(t *testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS_SLEEP") != "1" {
+		return
+	}
+
+	time.Sleep(30 * time.Second)
+	os.Exit(0)
 }

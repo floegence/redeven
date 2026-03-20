@@ -46,6 +46,7 @@ export const redevenV1TypeIds = {
   },
   monitor: {
     sysMonitor: 3001,
+    killProcess: 3002,
   },
   ai: {
     sendUserTurn: 6001,
