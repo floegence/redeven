@@ -49,6 +49,13 @@ function normalizeDesktopAskFlowerMainWindowHandoff(value: unknown): DesktopAskF
   };
 }
 
+function looksLikeElectronRenderer(): boolean {
+  if (typeof navigator === 'undefined') {
+    return false;
+  }
+  return String(navigator.userAgent ?? '').includes('Electron');
+}
+
 function desktopAskFlowerBridge(): DesktopAskFlowerBridge | null {
   if (typeof window === 'undefined') {
     return null;
@@ -64,6 +71,10 @@ function desktopAskFlowerBridge(): DesktopAskFlowerBridge | null {
     return null;
   }
   return candidate;
+}
+
+export function shouldRequireDesktopAskFlowerMainWindowHandoff(): boolean {
+  return looksLikeElectronRenderer();
 }
 
 export function requestDesktopAskFlowerMainWindowHandoff(payload: DesktopAskFlowerMainWindowHandoff): boolean {
