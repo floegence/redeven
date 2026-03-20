@@ -24,17 +24,24 @@ function createDeferred<T>(): deferred<T> {
 const rpcMocks = vi.hoisted(() => ({
   monitor: {
     getSysMonitor: vi.fn(),
+    killProcess: vi.fn(),
   },
   sessions: {
     listActiveSessions: vi.fn(),
   },
 }));
 
+const notificationMocks = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+}));
+
+const envContextMocks = vi.hoisted(() => ({
+  openAskFlowerComposer: vi.fn(),
+}));
+
 vi.mock('@floegence/floe-webapp-core', () => ({
-  useNotification: () => ({
-    success: vi.fn(),
-    error: vi.fn(),
-  }),
+  useNotification: () => notificationMocks,
 }));
 
 vi.mock('@floegence/floe-webapp-core/loading', () => ({
@@ -70,6 +77,7 @@ vi.mock('../pages/EnvContext', () => {
   return {
     useEnvContext: () => ({
       env: envAccessor,
+      openAskFlowerComposer: envContextMocks.openAskFlowerComposer,
     }),
   };
 });
@@ -87,7 +95,7 @@ async function flushPanel() {
   await Promise.resolve();
 }
 
-function makeSnapshot(timestampMs: number) {
+function makeSnapshot(timestampMs: number, processes: Array<Record<string, unknown>> = []) {
   return {
     cpuUsage: 12.5,
     cpuCores: 8,
@@ -97,7 +105,7 @@ function makeSnapshot(timestampMs: number) {
     networkSpeedReceived: 10,
     networkSpeedSent: 20,
     platform: 'darwin',
-    processes: [],
+    processes,
     timestampMs,
   };
 }
@@ -108,8 +116,13 @@ describe('AgentMonitorPanel', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     rpcMocks.monitor.getSysMonitor.mockReset();
+    rpcMocks.monitor.killProcess.mockReset();
     rpcMocks.sessions.listActiveSessions.mockReset();
     rpcMocks.sessions.listActiveSessions.mockResolvedValue({ sessions: [] });
+    rpcMocks.monitor.killProcess.mockResolvedValue({ ok: true, pid: 4242 });
+    notificationMocks.success.mockReset();
+    notificationMocks.error.mockReset();
+    envContextMocks.openAskFlowerComposer.mockReset();
 
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -144,5 +157,86 @@ describe('AgentMonitorPanel', () => {
     await flushPanel();
 
     expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(2);
+  });
+
+  it('kills a process from the row context menu and refreshes monitoring', async () => {
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue(
+      makeSnapshot(1, [
+        { pid: 4242, name: 'node', cpuPercent: 87.3, memoryBytes: 268_435_456, username: 'alice' },
+      ]),
+    );
+
+    render(() => <AgentMonitorPanel variant="deck" />, host);
+    await flushPanel();
+
+    const processRow = host.querySelector('tbody tr') as HTMLTableRowElement | null;
+    expect(processRow).toBeTruthy();
+
+    processRow?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 40,
+      clientY: 56,
+    }));
+    await flushPanel();
+
+    const killButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Kill'));
+    expect(killButton).toBeTruthy();
+
+    killButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPanel();
+    await flushPanel();
+
+    expect(rpcMocks.monitor.killProcess).toHaveBeenCalledWith({ pid: 4242 });
+    expect(notificationMocks.success).toHaveBeenCalledWith('Process killed', 'node (PID 4242) was killed.');
+    expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens Ask Flower from the row context menu with process snapshot context', async () => {
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue(
+      makeSnapshot(1_710_000_000_000, [
+        { pid: 313, name: 'python', cpuPercent: 42.5, memoryBytes: 134_217_728, username: 'bob' },
+      ]),
+    );
+
+    render(() => <AgentMonitorPanel variant="deck" />, host);
+    await flushPanel();
+
+    const processRow = host.querySelector('tbody tr') as HTMLTableRowElement | null;
+    expect(processRow).toBeTruthy();
+
+    processRow?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await flushPanel();
+
+    const askFlowerButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Ask Flower'));
+    expect(askFlowerButton).toBeTruthy();
+
+    askFlowerButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPanel();
+
+    expect(envContextMocks.openAskFlowerComposer).toHaveBeenCalledTimes(1);
+    expect(envContextMocks.openAskFlowerComposer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'monitoring',
+        contextItems: [
+          expect.objectContaining({
+            kind: 'process_snapshot',
+            pid: 313,
+            name: 'python',
+            username: 'bob',
+            cpuPercent: 42.5,
+            memoryBytes: 134_217_728,
+            platform: 'darwin',
+            capturedAtMs: 1_710_000_000_000,
+          }),
+        ],
+      }),
+      { x: 24, y: 32 },
+    );
   });
 });

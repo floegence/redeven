@@ -1,4 +1,4 @@
-export type AskFlowerIntentSource = 'file_browser' | 'terminal' | 'file_preview';
+export type AskFlowerIntentSource = 'file_browser' | 'terminal' | 'file_preview' | 'monitoring';
 
 export type AskFlowerIntentMode = 'append' | 'replace';
 
@@ -19,6 +19,16 @@ export type AskFlowerContextItem =
       workingDir: string;
       selection: string;
       selectionChars: number;
+    }
+  | {
+      kind: 'process_snapshot';
+      pid: number;
+      name: string;
+      username: string;
+      cpuPercent: number;
+      memoryBytes: number;
+      platform?: string;
+      capturedAtMs?: number;
     };
 
 export type AskFlowerIntent = {

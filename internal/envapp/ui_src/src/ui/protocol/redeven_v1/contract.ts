@@ -64,7 +64,12 @@ import type {
   GitUnstageWorkspaceRequest,
   GitUnstageWorkspaceResponse,
 } from './sdk/git';
-import type { SysMonitorRequest, SysMonitorSnapshot } from './sdk/monitor';
+import type {
+  SysMonitorKillProcessRequest,
+  SysMonitorKillProcessResponse,
+  SysMonitorRequest,
+  SysMonitorSnapshot,
+} from './sdk/monitor';
 import type { SessionsListActiveResponse } from './sdk/sessions';
 import type { SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgradeResponse } from './sdk/sys';
 import type { TerminalClearRequest, TerminalClearResponse, TerminalHistoryRequest, TerminalHistoryResponse, TerminalNameUpdateEvent, TerminalOutputEvent, TerminalSessionAttachRequest, TerminalSessionAttachResponse, TerminalSessionCreateRequest, TerminalSessionCreateResponse, TerminalSessionDeleteRequest, TerminalSessionDeleteResponse, TerminalSessionInfo, TerminalSessionStatsRequest, TerminalSessionStatsResponse, TerminalSessionsChangedEvent } from './sdk/terminal';
@@ -132,7 +137,12 @@ import {
   toWireGitStageWorkspaceRequest,
   toWireGitUnstageWorkspaceRequest,
 } from './codec/git';
-import { fromWireSysMonitorResponse, toWireSysMonitorRequest } from './codec/monitor';
+import {
+  fromWireSysMonitorKillProcessResponse,
+  fromWireSysMonitorResponse,
+  toWireSysMonitorKillProcessRequest,
+  toWireSysMonitorRequest,
+} from './codec/monitor';
 import { fromWireSessionsListActiveResponse } from './codec/sessions';
 import { fromWireSysPingResponse, fromWireSysRestartResponse, fromWireSysUpgradeResponse, toWireSysRestartRequest, toWireSysUpgradeRequest } from './codec/sys';
 import { fromWireTerminalNameUpdateNotify, fromWireTerminalOutputNotify, fromWireTerminalSessionAttachResponse, fromWireTerminalSessionCreateResponse, fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionListResponse, fromWireTerminalSessionStatsResponse, fromWireTerminalHistoryResponse, toWireTerminalInputNotify, toWireTerminalResizeNotify, toWireTerminalSessionAttachRequest, toWireTerminalSessionCreateRequest, toWireTerminalSessionDeleteRequest, toWireTerminalSessionStatsRequest, toWireTerminalHistoryRequest, toWireTerminalClearRequest, fromWireTerminalClearResponse, fromWireTerminalSessionsChangedNotify } from './codec/terminal';
@@ -200,7 +210,12 @@ import type {
   wire_git_unstage_workspace_req,
   wire_git_unstage_workspace_resp,
 } from './wire/git';
-import type { wire_sys_monitor_req, wire_sys_monitor_resp } from './wire/monitor';
+import type {
+  wire_sys_monitor_kill_process_req,
+  wire_sys_monitor_kill_process_resp,
+  wire_sys_monitor_req,
+  wire_sys_monitor_resp,
+} from './wire/monitor';
 import type { wire_sessions_list_active_resp } from './wire/sessions';
 import type { wire_sys_ping_resp, wire_sys_restart_req, wire_sys_restart_resp, wire_sys_upgrade_req, wire_sys_upgrade_resp } from './wire/sys';
 import type { wire_terminal_clear_req, wire_terminal_clear_resp, wire_terminal_history_req, wire_terminal_history_resp, wire_terminal_name_update_notify, wire_terminal_output_notify, wire_terminal_session_attach_req, wire_terminal_session_attach_resp, wire_terminal_session_create_req, wire_terminal_session_create_resp, wire_terminal_session_delete_req, wire_terminal_session_delete_resp, wire_terminal_session_list_resp, wire_terminal_session_stats_req, wire_terminal_session_stats_resp, wire_terminal_sessions_changed_notify } from './wire/terminal';
@@ -266,6 +281,7 @@ export type RedevenV1Rpc = {
   };
   monitor: {
     getSysMonitor: (req?: SysMonitorRequest) => Promise<SysMonitorSnapshot>;
+    killProcess: (req: SysMonitorKillProcessRequest) => Promise<SysMonitorKillProcessResponse>;
   };
   sessions: {
     listActiveSessions: () => Promise<SessionsListActiveResponse>;
@@ -553,6 +569,11 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireSysMonitorRequest(req);
         const resp = await call<wire_sys_monitor_req, wire_sys_monitor_resp>(redevenV1TypeIds.monitor.sysMonitor, payload);
         return fromWireSysMonitorResponse(resp);
+      },
+      killProcess: async (req) => {
+        const payload = toWireSysMonitorKillProcessRequest(req);
+        const resp = await call<wire_sys_monitor_kill_process_req, wire_sys_monitor_kill_process_resp>(redevenV1TypeIds.monitor.killProcess, payload);
+        return fromWireSysMonitorKillProcessResponse(resp);
       },
     },
     sessions: {

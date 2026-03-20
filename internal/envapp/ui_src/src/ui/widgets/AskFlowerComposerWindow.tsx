@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type Component } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { FileText, Folder, Paperclip, Send, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Activity, FileText, Folder, Paperclip, Send, Terminal } from '@floegence/floe-webapp-core/icons';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -507,12 +507,16 @@ async function buildFileLikeContextPreview(params: {
 function entryIcon(entry: AskFlowerComposerEntry) {
   if (entry.kind === 'directory') return <Folder class="size-3.5 shrink-0" />;
   if (entry.kind === 'attachment') return <Paperclip class="size-3.5 shrink-0" />;
+  if (entry.kind === 'process_snapshot') return <Activity class="size-3.5 shrink-0" />;
   if (entry.kind === 'terminal_selection') return <Terminal class="size-3.5 shrink-0" />;
   if (entry.kind === 'selection') return <FileText class="size-3.5 shrink-0" />;
   return <FileText class="size-3.5 shrink-0" />;
 }
 
 function entryButtonClass(entry: AskFlowerComposerEntry): string {
+  if (entry.kind === 'process_snapshot') {
+    return 'border-cyan-500/20 bg-cyan-500/10 text-cyan-700 hover:border-cyan-500/35 hover:bg-cyan-500/16 dark:text-cyan-200';
+  }
   if (entry.kind === 'selection' || entry.kind === 'terminal_selection') {
     return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 hover:border-emerald-500/35 hover:bg-emerald-500/16 dark:text-emerald-200';
   }
@@ -725,6 +729,18 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
         item: fileItemForContextPreview(entry.sourcePath || entry.detail, 'Selected content'),
         text: preview.body,
         helper: preview.truncated ? 'Showing the first part of the selected content.' : undefined,
+      }));
+      return;
+    }
+
+    if (entry.kind === 'process_snapshot') {
+      const preview = trimPreviewBody(entry.content);
+      updateContextPreview(contextPreviewStateForText({
+        title: 'Process snapshot',
+        subtitle: entry.detail,
+        item: fileItemForContextPreview(`process://${entry.pid}`, entry.label),
+        text: preview.body,
+        helper: preview.truncated ? 'Showing the first part of the process snapshot.' : undefined,
       }));
       return;
     }
