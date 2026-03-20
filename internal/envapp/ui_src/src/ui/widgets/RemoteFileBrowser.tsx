@@ -28,6 +28,7 @@ import {
   deriveAbsoluteWorkingDirFromItems,
   normalizeAbsolutePath,
 } from '../utils/askFlowerPath';
+import { setAskFlowerAttachmentSourcePath } from '../utils/askFlowerAttachmentMetadata';
 import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from '../utils/fileBrowserClipboard';
 import { createClientId } from '../utils/clientId';
 import { useFilePreviewContext } from './FilePreviewContext';
@@ -2168,10 +2169,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
 
       const mime = mimeFromExtDot(getExtDot(item.name)) ?? 'application/octet-stream';
-      const file = new File([bytes], item.name || 'attachment', {
+      const file = setAskFlowerAttachmentSourcePath(new File([bytes], item.name || 'attachment', {
         type: mime,
         lastModified: item.modifiedAt?.getTime() ?? Date.now(),
-      });
+      }), normalizedPath);
       return { file };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

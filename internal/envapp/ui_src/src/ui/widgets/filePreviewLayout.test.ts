@@ -27,7 +27,7 @@ describe('file preview wiring', () => {
     expect(docxPaneSrc).toContain('inWrapper: true');
     expect(docxPaneSrc).toContain('Fit');
     expect(docxPaneSrc).toContain('Zoom in docx preview');
-    expect(textPaneSrc).toContain("import { resolveCodeEditorLanguageSpec, type CodeEditorApi } from '@floegence/floe-webapp-core/editor';");
+    expect(textPaneSrc).toContain("import { resolveCodeEditorLanguageSpec, type CodeEditorApi, type CodeEditorProps } from '@floegence/floe-webapp-core/editor';");
     expect(textPaneSrc).toContain('supportsRichMonacoCodePreview');
     expect(textPaneSrc).toContain('Loading editor...');
     expect(contentSrc).toContain('Copy path');
