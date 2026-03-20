@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,6 +10,7 @@ const macIdentity = String(process.env.REDEVEN_DESKTOP_MAC_IDENTITY ?? '')
   .trim();
 const desktopDir = path.dirname(fileURLToPath(import.meta.url));
 const buildResourcesDir = path.join(desktopDir, 'build');
+const require = createRequire(import.meta.url);
 
 function resolveTargetGoos(platform = process.platform) {
   if (platform === 'darwin' || platform === 'linux') {
@@ -41,12 +43,30 @@ function resolveBundledAgentBinary() {
   return candidate;
 }
 
+function loadReleaseArtifactHelpers() {
+  const helperPath = path.join(desktopDir, 'dist', 'shared', 'releaseArtifactNames.js');
+  try {
+    return require(helperPath);
+  } catch (error) {
+    throw new Error(
+      `Desktop release artifact helpers not found at ${helperPath}. Run npm run build before packaging.`,
+      { cause: error },
+    );
+  }
+}
+
 const bundledAgentBinary = resolveBundledAgentBinary();
+const { normalizeLinuxDesktopArtifactPaths } = loadReleaseArtifactHelpers();
 
 export default {
   appId: 'com.floegence.redeven.desktop',
   productName: 'Redeven Desktop',
   artifactName: 'Redeven-Desktop-${version}-${os}-${arch}.${ext}',
+  afterAllArtifactBuild: async (buildResult) => {
+    const artifactPaths = await normalizeLinuxDesktopArtifactPaths(buildResult.artifactPaths);
+    buildResult.artifactPaths.splice(0, buildResult.artifactPaths.length, ...artifactPaths);
+    return [];
+  },
   asar: true,
   npmRebuild: false,
   directories: {
