@@ -82,7 +82,7 @@ export const MessageActions: Component<MessageActionsProps> = (props) => {
     <div class="chat-message-actions">
       <button
         type="button"
-        class="chat-message-action-btn chat-message-action-copy"
+        class="chat-message-action-btn chat-message-action-btn-icon-only chat-message-action-copy"
         classList={{ 'chat-message-action-btn-copied': copied() }}
         onClick={handleCopy}
         title={copied() ? 'Copied!' : 'Copy'}
@@ -96,7 +96,7 @@ export const MessageActions: Component<MessageActionsProps> = (props) => {
       <Show when={props.message.status === 'error'}>
         <button
           type="button"
-          class="chat-message-action-btn chat-message-action-retry"
+          class="chat-message-action-btn chat-message-action-btn-icon-only chat-message-action-retry"
           onClick={handleRetry}
           title="Retry"
           aria-label="Retry message"
@@ -118,14 +118,12 @@ const CopyIcon: Component = () => (
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
-    stroke-width="1.8"
+    stroke-width="2"
     stroke-linecap="round"
     stroke-linejoin="round"
   >
-    <path d="M14 3H9a3 3 0 0 0-3 3v1" />
-    <path d="M14 3v4h4" />
-    <path d="M6 8h6l4 4v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z" />
-    <path d="M12 8v4h4" />
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
   </svg>
 );
 

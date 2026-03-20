@@ -52,10 +52,10 @@ describe('MessageActions', () => {
 
     render(() => <MessageActions message={message} />, host);
 
-    expect(host.querySelector('button[aria-label="Copy message"] rect')).toBeNull();
+    const initialCopyButton = host.querySelector('button[aria-label="Copy message"]') as HTMLButtonElement | null;
+    expect(initialCopyButton?.className).toContain('chat-message-action-btn-icon-only');
 
-    const copyButton = host.querySelector('button[aria-label="Copy message"]') as HTMLButtonElement | null;
-    copyButton?.click();
+    initialCopyButton?.click();
     await flushAsync();
 
     expect(writeTextToClipboardMock).toHaveBeenCalledWith('Alpha block\n\nconst value = 1;\n\npwd\n\n/workspace');
