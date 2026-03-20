@@ -6,8 +6,38 @@ export type AppMenuActions = Readonly<{
   requestQuit: () => void;
 }>;
 
-export function buildAppMenuTemplate(actions: AppMenuActions): MenuItemConstructorOptions[] {
-  const appMenu: MenuItemConstructorOptions = process.platform === 'darwin'
+function buildEditSubmenu(platform: NodeJS.Platform): MenuItemConstructorOptions[] {
+  const commonItems: MenuItemConstructorOptions[] = [
+    { role: 'undo' },
+    { role: 'redo' },
+    { type: 'separator' },
+    { role: 'cut' },
+    { role: 'copy' },
+    { role: 'paste' },
+  ];
+
+  if (platform === 'darwin') {
+    return [
+      ...commonItems,
+      { role: 'pasteAndMatchStyle' },
+      { role: 'delete' },
+      { role: 'selectAll' },
+    ];
+  }
+
+  return [
+    ...commonItems,
+    { role: 'delete' },
+    { type: 'separator' },
+    { role: 'selectAll' },
+  ];
+}
+
+export function buildAppMenuTemplate(
+  actions: AppMenuActions,
+  platform: NodeJS.Platform = process.platform,
+): MenuItemConstructorOptions[] {
+  const appMenu: MenuItemConstructorOptions = platform === 'darwin'
     ? {
         label: 'Redeven Desktop',
         submenu: [
@@ -35,6 +65,10 @@ export function buildAppMenuTemplate(actions: AppMenuActions): MenuItemConstruct
 
   return [
     appMenu,
+    {
+      label: 'Edit',
+      submenu: buildEditSubmenu(platform),
+    },
     {
       label: 'Window',
       submenu: [
