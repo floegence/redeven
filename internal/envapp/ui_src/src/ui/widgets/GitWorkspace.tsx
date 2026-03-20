@@ -23,6 +23,7 @@ export interface GitWorkspaceProps {
   mode: GitHistoryMode;
   onModeChange: (mode: GitHistoryMode) => void;
   gitHistoryDisabled?: boolean;
+  gitHistoryDisabledReason?: string;
   subview: GitWorkbenchSubview;
   onSubviewChange: (view: GitWorkbenchSubview) => void;
   width?: number;
@@ -34,6 +35,7 @@ export interface GitWorkspaceProps {
   repoInfo?: GitResolveRepoResponse | null;
   repoInfoLoading?: boolean;
   repoInfoError?: string;
+  repoUnavailableReason?: string;
   repoSummary?: GitRepoSummaryResponse | null;
   repoSummaryLoading?: boolean;
   repoSummaryError?: string;
@@ -125,7 +127,15 @@ export function GitWorkspace(props: GitWorkspaceProps) {
       onResize={props.onResize}
       onClose={props.onClose}
       sidebarBodyClass="overflow-hidden"
-      modeSwitcher={<GitHistoryModeSwitch mode={props.mode} onChange={props.onModeChange} gitHistoryDisabled={props.gitHistoryDisabled} class="w-full" />}
+      modeSwitcher={(
+        <GitHistoryModeSwitch
+          mode={props.mode}
+          onChange={props.onModeChange}
+          gitHistoryDisabled={props.gitHistoryDisabled}
+          gitHistoryDisabledReason={props.gitHistoryDisabledReason}
+          class="w-full"
+        />
+      )}
       navigationLabel="View"
       navigation={<GitViewNav value={props.subview} items={subviewItems()} onChange={props.onSubviewChange} />}
       sidebarBody={(
@@ -138,6 +148,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               repoInfoLoading={props.repoInfoLoading}
               repoInfoError={props.repoInfoError}
               repoAvailable={props.repoInfo?.available}
+              repoUnavailableReason={props.repoUnavailableReason}
               repoSummary={props.repoSummary}
               workspace={props.workspace}
               workspaceLoading={props.workspaceLoading}

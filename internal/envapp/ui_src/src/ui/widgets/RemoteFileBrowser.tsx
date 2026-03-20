@@ -87,6 +87,7 @@ type BrowserPageMode = GitHistoryMode;
 const ASK_FLOWER_MAX_ATTACHMENTS = 5;
 const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 const GIT_COMMIT_PAGE_SIZE = 50;
+const DEFAULT_GIT_UNAVAILABLE_REASON = 'Git is not installed or not available in PATH on this agent.';
 const PAGE_SIDEBAR_DEFAULT_WIDTH = 240;
 const PAGE_SIDEBAR_MIN_WIDTH = 180;
 const PAGE_SIDEBAR_MAX_WIDTH = 520;
@@ -559,6 +560,21 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const repoHistoryAvailable = () => Boolean(repoInfo()?.available && repoInfo()?.repoRootPath);
+  const repoUnavailableReason = createMemo(() => {
+    const info = repoInfo();
+    const reason = String(info?.unavailableReason ?? '').trim();
+    if (reason) return reason;
+    if (info?.gitAvailable === false) return DEFAULT_GIT_UNAVAILABLE_REASON;
+    if (repoInfoResolved() && !info?.available) return 'Current path is not inside a Git repository.';
+    return '';
+  });
+  const gitModeDisabledReason = createMemo(() => {
+    if (repoInfoLoading()) return 'Checking repository context for the current path...';
+    if (!repoInfoResolved()) return 'Checking repository context for the current path...';
+    const infoError = String(repoInfoError() ?? '').trim();
+    if (infoError) return infoError;
+    return repoUnavailableReason();
+  });
   const gitShellLoadingMessage = createMemo(() => {
     if (pageMode() !== 'git') return '';
     if (repoInfoLoading()) return 'Checking repository...';
@@ -607,12 +623,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const nextInfo: GitResolveRepoResponse = resp?.available
         ? {
             available: true,
+            gitAvailable: resp.gitAvailable,
             repoRootPath: resp.repoRootPath,
             headRef: resp.headRef,
             headCommit: resp.headCommit,
             dirty: resp.dirty,
           }
-        : { available: false };
+        : {
+            available: false,
+            gitAvailable: resp?.gitAvailable,
+            unavailableReason: resp?.unavailableReason,
+          };
       setRepoInfo(nextInfo);
       return nextInfo;
     } catch (err) {
@@ -620,7 +641,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const result = classifyPathLoadError(err);
       if (!options.silent) {
         if (result.status === 'invalid_path') {
-          setRepoInfo({ available: false });
+          setRepoInfo({
+            available: false,
+            gitAvailable: true,
+            unavailableReason: result.message || 'Current path is not inside a Git repository.',
+          });
           setRepoInfoError('');
         } else {
           setRepoInfo(null);
@@ -1450,7 +1475,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
-  const canEnterGitHistory = () => repoHistoryAvailable() && !repoInfoLoading();
+  const canEnterGitHistory = () => gitModeDisabledReason() === '';
   const mobileSidebarOpen = () => (useExternalMobileSidebarToggle() ? ctx.filesSidebarOpen() : browserSidebarOpen());
   const setMobileSidebarOpen = (open: boolean) => {
     if (useExternalMobileSidebarToggle()) {
@@ -2032,6 +2057,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       repoReqSeq += 1;
       setRepoInfo(null);
       setRepoInfoLoading(false);
+      setRepoInfoResolved(false);
       setRepoInfoError('');
       return;
     }
@@ -2378,6 +2404,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       mode={pageMode()}
                       onModeChange={handlePageModeChange}
                       gitHistoryDisabled={!canEnterGitHistory()}
+                      gitHistoryDisabledReason={gitModeDisabledReason() || undefined}
                       captureTypingFromPage={!props.widgetId}
                       files={files()}
                       currentPath={currentBrowserPath()}
@@ -2424,6 +2451,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       mode={pageMode()}
                       onModeChange={handlePageModeChange}
                       gitHistoryDisabled={!canEnterGitHistory()}
+                      gitHistoryDisabledReason={gitModeDisabledReason() || undefined}
                       subview={gitSubview()}
                       onSubviewChange={handleGitSubviewChange}
                       width={browserSidebarWidth()}
@@ -2435,6 +2463,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       repoInfo={repoInfo()}
                       repoInfoLoading={repoInfoLoading()}
                       repoInfoError={repoInfoError()}
+                      repoUnavailableReason={repoUnavailableReason() || undefined}
                       repoSummary={gitRepoSummary()}
                       repoSummaryLoading={gitRepoSummaryLoading()}
                       repoSummaryError={gitRepoSummaryError()}
