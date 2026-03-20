@@ -25,7 +25,6 @@ describe('buildAskFlowerComposerCopy', () => {
       ],
     });
 
-    expect(copy.sourceLabel).toBe('Preview');
     expect(copy.placeholder).toBe('Ask about this selection, request a change, or describe what you need');
     expect(copy.question).toBe('What would you like to understand, change, or verify?');
     expect(copy.contextEntries.map((entry) => ({ kind: entry.kind, label: entry.label, detail: entry.detail }))).toEqual([
@@ -52,7 +51,6 @@ describe('buildAskFlowerComposerCopy', () => {
       ],
     });
 
-    expect(copy.sourceLabel).toBe('Files');
     expect(copy.placeholder).toBe('Ask about these files and folders, compare them, or describe what you need');
     expect(copy.question).toBe('What would you like to explore, compare, or change?');
     expect(copy.contextEntries.map((entry) => ({ kind: entry.kind, label: entry.label }))).toEqual([

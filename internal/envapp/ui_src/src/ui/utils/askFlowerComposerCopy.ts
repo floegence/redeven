@@ -52,7 +52,6 @@ export type AskFlowerComposerEntry =
     }>;
 
 export type AskFlowerComposerCopy = Readonly<{
-  sourceLabel: string;
   placeholder: string;
   question: string;
   contextEntries: AskFlowerComposerEntry[];
@@ -62,12 +61,6 @@ function basenameFromPath(path: string): string {
   const normalized = String(path ?? '').replace(/\\/g, '/');
   const parts = normalized.split('/').filter(Boolean);
   return parts[parts.length - 1] || normalized || 'Context';
-}
-
-function sourceLabel(source: AskFlowerIntent['source']): string {
-  if (source === 'file_browser') return 'Files';
-  if (source === 'file_preview') return 'Preview';
-  return 'Terminal';
 }
 
 function buildContextEntries(intent: AskFlowerIntent): AskFlowerComposerEntry[] {
@@ -175,7 +168,6 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
     const fileEntry = findEntryByItem(contextEntries, 0, 'file');
     if (selectionEntry && fileEntry) {
       return {
-        sourceLabel: sourceLabel(intent.source),
         placeholder: 'Ask about this selection, request a change, or describe what you need',
         question: 'What would you like to understand, change, or verify?',
         contextEntries,
@@ -187,7 +179,6 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
     const selectionEntry = findEntryByItem(contextEntries, 0, 'terminal_selection');
     if (selectionEntry) {
       return {
-        sourceLabel: sourceLabel(intent.source),
         placeholder: 'Ask about the output, request a command, or describe the next step',
         question: 'What would you like me to inspect or do next?',
         contextEntries,
@@ -195,7 +186,6 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
     }
 
     return {
-      sourceLabel: sourceLabel(intent.source),
       placeholder: 'Ask about the terminal context, request a command, or describe the next step',
       question: 'What would you like me to inspect or do next?',
       contextEntries,
@@ -206,7 +196,6 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
     const fileEntry = findEntryByKind(contextEntries, 'file');
     if (fileEntry) {
       return {
-        sourceLabel: sourceLabel(intent.source),
         placeholder: 'Ask about this file, request a change, or describe what you need',
         question: 'What should we focus on?',
         contextEntries,
@@ -218,7 +207,6 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
     if (fileEntries.length === 1) {
       const isDirectory = fileEntries[0].kind === 'directory';
       return {
-        sourceLabel: sourceLabel(intent.source),
         placeholder: isDirectory
           ? 'Ask about this folder, the files inside it, or describe what you need'
           : 'Ask about this file, request a change, or describe what you need',
@@ -229,7 +217,6 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
 
     if (fileEntries.length > 1) {
       return {
-        sourceLabel: sourceLabel(intent.source),
         placeholder: hasDirectories
           ? 'Ask about these files and folders, compare them, or describe what you need'
           : 'Ask about these files, compare them, or describe what you need',
@@ -242,7 +229,6 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
   const firstFileEntry = fileEntries[0];
   if (firstFileEntry) {
     return {
-      sourceLabel: sourceLabel(intent.source),
       placeholder: 'Ask about this context, request a change, or describe what you need',
       question: 'What would you like help with?',
       contextEntries,
@@ -252,7 +238,6 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
   const attachmentEntry = findEntryByKind(contextEntries, 'attachment');
   if (attachmentEntry) {
     return {
-      sourceLabel: sourceLabel(intent.source),
       placeholder: 'Ask about the attached context or describe what you need',
       question: 'What would you like me to focus on?',
       contextEntries,
@@ -260,7 +245,6 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
   }
 
   return {
-    sourceLabel: sourceLabel(intent.source),
     placeholder: 'Describe what you want to understand, change, or verify',
     question: 'What would you like to work on?',
     contextEntries,

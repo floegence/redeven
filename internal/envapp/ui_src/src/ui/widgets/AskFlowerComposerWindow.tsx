@@ -6,7 +6,6 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { AskFlowerComposerAnchor } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
-import { buildDetachedFileBrowserSurface, openDetachedSurfaceWindow } from '../services/detachedSurface';
 import { buildAskFlowerComposerCopy, type AskFlowerComposerEntry } from '../utils/askFlowerComposerCopy';
 import { resolveSuggestedWorkingDirAbsolute } from '../utils/askFlowerPath';
 import {
@@ -23,6 +22,7 @@ import { useFilePreviewContext } from './FilePreviewContext';
 import { FilePreviewContent } from './FilePreviewContent';
 import { PersistentFloatingWindow } from './PersistentFloatingWindow';
 import { PREVIEW_WINDOW_Z_INDEX, PreviewWindow } from './PreviewWindow';
+import { RemoteFileBrowser } from './RemoteFileBrowser';
 
 const WINDOW_VIEWPORT_MARGIN_DESKTOP = 12;
 const WINDOW_VIEWPORT_MARGIN_MOBILE = 8;
@@ -65,6 +65,12 @@ type ContextPreviewState = Readonly<{
   helper?: string;
   actionLabel?: string;
   onAction?: () => void;
+}>;
+
+type ContextBrowserState = Readonly<{
+  path: string;
+  title: string;
+  subtitle: string;
 }>;
 
 function clamp(value: number, min: number, max: number): number {
@@ -533,6 +539,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
   const [sending, setSending] = createSignal(false);
   const [viewport, setViewport] = createSignal(currentViewportSize());
   const [contextPreview, setContextPreview] = createSignal<ContextPreviewState | null>(null);
+  const [contextBrowser, setContextBrowser] = createSignal<ContextBrowserState | null>(null);
   let textareaEl: HTMLTextAreaElement | undefined;
   let previewRequestSeq = 0;
 
@@ -549,6 +556,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
 
   onCleanup(() => {
     closeContextPreview();
+    closeContextBrowser();
   });
 
   const windowSizing = createMemo(() => resolveWindowSizing(viewport()));
@@ -584,11 +592,16 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     updateContextPreview(null);
   };
 
+  const closeContextBrowser = () => {
+    setContextBrowser(null);
+  };
+
   const resetDraft = (intent: AskFlowerIntent | null) => {
     setValidationError('');
     setIsComposing(false);
     setSending(false);
     closeContextPreview();
+    closeContextBrowser();
     setUserPrompt(String(intent?.userPrompt ?? '').trim());
     requestAnimationFrame(() => {
       textareaEl?.focus();
@@ -606,6 +619,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
   createEffect(() => {
     if (!props.open) {
       closeContextPreview();
+      closeContextBrowser();
       return;
     }
     resetDraft(props.intent);
@@ -616,6 +630,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     const onPointerDown = (event: PointerEvent) => {
       if (sending()) return;
       if (contextPreview()) return;
+      if (contextBrowser()) return;
       if (isPointerInsideComposer(event)) return;
       props.onClose();
     };
@@ -734,9 +749,11 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     }
 
     if (entry.kind === 'directory') {
-      const surface = buildDetachedFileBrowserSurface({ path: entry.path });
-      if (!surface) return;
-      openDetachedSurfaceWindow(surface);
+      setContextBrowser({
+        path: entry.path,
+        title: entry.label,
+        subtitle: entry.path,
+      });
       return;
     }
 
@@ -886,22 +903,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
 
                     <div class="chat-message-content-wrapper max-w-[min(100%,37rem)] gap-1">
                       <div class="min-w-0 rounded-[1.05rem] rounded-tl-md border border-border/65 bg-card/96 px-2.5 py-2 shadow-[0_14px_28px_-28px_rgba(15,23,42,0.34)] backdrop-blur sm:px-3 sm:py-2.5">
-                        <div class="flex flex-wrap items-center gap-1">
-                          <div class="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground/70">Flower</div>
-                          <span class="inline-flex items-center rounded-full border border-primary/15 bg-primary/8 px-2 py-0.5 text-[11px] font-semibold text-primary/80">
-                            {composerCopy()?.sourceLabel}
-                          </span>
-                          <Show when={(composerCopy()?.contextEntries.length ?? 0) > 0}>
-                            <span class="inline-flex items-center rounded-full border border-border/65 bg-muted/35 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                              {composerCopy()?.contextEntries.length} linked
-                            </span>
-                          </Show>
-                        </div>
-
-                        <div class="mt-1.5 rounded-[0.95rem] border border-primary/14 bg-primary/[0.055] px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
-                          <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary/55">Question</div>
-                          <div class="mt-1 text-[12px] font-semibold leading-5 text-foreground sm:text-[13px]">{composerCopy()?.question}</div>
-                        </div>
+                        <div class="text-sm leading-5 text-foreground/95">{composerCopy()?.question}</div>
 
                         <Show when={(composerCopy()?.contextEntries.length ?? 0) > 0}>
                           <div class="mt-2 border-t border-border/50 pt-2">
@@ -1029,6 +1031,32 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
               </div>
             </div>
           </PersistentFloatingWindow>
+
+          <PreviewWindow
+            open={!!contextBrowser()}
+            onOpenChange={(open) => {
+              if (!open) closeContextBrowser();
+            }}
+            title={contextBrowser()?.title || 'Linked context'}
+            description={contextBrowser()?.subtitle || undefined}
+            persistenceKey="ask-flower-context-browser"
+            defaultSize={{ width: 760, height: 580 }}
+            minSize={{ width: 420, height: 320 }}
+            zIndex={PREVIEW_WINDOW_Z_INDEX - 1}
+            floatingClass="ask-flower-context-preview-surface"
+            mobileClass="ask-flower-context-preview-surface"
+          >
+            <div class="h-full min-h-0 overflow-hidden bg-background">
+              <Show when={contextBrowser()} keyed>
+                {(browser) => (
+                  <RemoteFileBrowser
+                    stateScope="ask-flower-context-browser"
+                    initialPathOverride={browser.path}
+                  />
+                )}
+              </Show>
+            </div>
+          </PreviewWindow>
 
           <PreviewWindow
             open={!!contextPreview()}

@@ -57,11 +57,6 @@ vi.mock('./FilePreviewContext', () => ({
   }),
 }));
 
-vi.mock('../services/detachedSurface', () => ({
-  buildDetachedFileBrowserSurface: (params: any) => params,
-  openDetachedSurfaceWindow: vi.fn(),
-}));
-
 vi.mock('../icons/FlowerIcon', () => ({
   FlowerIcon: () => <span data-testid="flower-icon" />,
 }));
@@ -84,6 +79,15 @@ vi.mock('./FilePreviewContent', () => ({
       <div>{props.item?.path}</div>
       <div>{props.text}</div>
       <div>{props.message}</div>
+    </div>
+  ),
+}));
+
+vi.mock('./RemoteFileBrowser', () => ({
+  RemoteFileBrowser: (props: any) => (
+    <div data-testid="remote-file-browser">
+      <div>{props.initialPathOverride}</div>
+      <div>{props.stateScope}</div>
     </div>
   ),
 }));
@@ -285,6 +289,69 @@ describe('AskFlowerComposerWindow', () => {
 
     expect(host.querySelector('[data-testid="preview-window"]')).toBeTruthy();
     expect(host.textContent).toContain('const answer = 42;');
+  });
+
+  it('renders the Flower bubble as a plain question with linked context below it', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={{
+          ...baseIntent,
+          source: 'file_browser',
+          contextItems: [
+            {
+              kind: 'file_path',
+              path: '/Users/demo/project',
+              isDirectory: true,
+            },
+          ],
+        }}
+        onClose={() => undefined}
+        onSend={async () => undefined}
+      />
+    ), host);
+
+    expect(host.textContent).toContain('What would you like to explore inside it?');
+    expect(host.textContent).toContain('Linked context');
+    expect(host.textContent).not.toContain('Question');
+    expect(host.textContent).not.toContain('Files');
+  });
+
+  it('opens directory linked context in a floating file browser window', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={{
+          ...baseIntent,
+          source: 'file_browser',
+          contextItems: [
+            {
+              kind: 'file_path',
+              path: '/Users/demo/project',
+              isDirectory: true,
+            },
+          ],
+        }}
+        onClose={() => undefined}
+        onSend={async () => undefined}
+      />
+    ), host);
+
+    const directoryButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('project') && button.getAttribute('title')?.includes('/Users/demo/project'),
+    );
+    expect(directoryButton).toBeTruthy();
+    directoryButton?.click();
+    await flushAsync();
+
+    expect(host.querySelector('[data-testid="remote-file-browser"]')).toBeTruthy();
+    expect(host.textContent).toContain('/Users/demo/project');
   });
 
   it('collapses a matching file-browser attachment into a single linked context entry and previews the attached snapshot', async () => {
