@@ -623,7 +623,9 @@ export function registerEnvAIPageSendTests() {
         expect(primaryRow?.querySelector('textarea')).toBeTruthy();
         expect(primaryRow?.querySelector('button[title="Send message"]')).toBeTruthy();
         expect(metaRail).toBeTruthy();
+        expect(metaRail?.querySelector('.flower-chat-working-dir-chip')).toBeTruthy();
         expect(metaRail?.querySelector('button[title="Add attachments"]')).toBeTruthy();
+        expect(metaRail?.querySelector('button[title="Edit working directory"]')).toBeNull();
         expect(host.querySelector('.chat-input-toolbar-left')).toBeNull();
         expect(host.querySelector('.chat-input-toolbar-right')).toBeNull();
       } finally {
