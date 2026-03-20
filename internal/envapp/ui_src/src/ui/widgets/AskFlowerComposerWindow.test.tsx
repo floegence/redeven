@@ -95,7 +95,7 @@ vi.mock('./RemoteFileBrowser', () => ({
 vi.mock('./PreviewWindow', () => ({
   PreviewWindow: (props: any) => (
     <Show when={props.open}>
-      <div data-testid="preview-window" class={props.floatingClass ?? props.mobileClass}>
+      <div data-testid="preview-window" data-z-index={String(props.zIndex ?? '')} class={props.floatingClass ?? props.mobileClass}>
         <div>{props.title}</div>
         <div>{props.description}</div>
         <div>{props.children}</div>
@@ -109,7 +109,7 @@ vi.mock('./PreviewWindow', () => ({
 vi.mock('./PersistentFloatingWindow', () => ({
   PersistentFloatingWindow: (props: any) => (
     props.open ? (
-      <div data-testid="floating-window" class={props.class}>
+      <div data-testid="floating-window" data-z-index={String(props.zIndex ?? '')} class={props.class}>
         <div>{props.title}</div>
         <div>{props.children}</div>
         <div>{props.footer}</div>
@@ -160,6 +160,24 @@ afterEach(() => {
 });
 
 describe('AskFlowerComposerWindow', () => {
+  it('stays above the standard file preview surface', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <AskFlowerComposerWindow
+        open
+        intent={baseIntent}
+        onClose={() => undefined}
+        onSend={async () => undefined}
+      />
+    ), host);
+
+    const floatingWindow = host.querySelector('[data-testid="floating-window"]');
+
+    expect(floatingWindow?.getAttribute('data-z-index')).toBe('160');
+  });
+
   it('keeps the Flower message in the scroll region and docks the user composer at the bottom', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

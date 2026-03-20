@@ -17,6 +17,7 @@ describe('file preview wiring', () => {
     const codePreviewSrc = read('./CodePreviewPane.tsx');
     const surfaceSrc = read('./FilePreviewSurface.tsx');
     const previewWindowSrc = read('./PreviewWindow.tsx');
+    const askFlowerComposerSrc = read('./AskFlowerComposerWindow.tsx');
 
     expect(contentSrc).toContain("import { DocxPreviewPane } from './DocxPreviewPane';");
     expect(contentSrc).toContain("import { TextFilePreviewPane } from './TextFilePreviewPane';");
@@ -65,6 +66,12 @@ describe('file preview wiring', () => {
     expect(previewWindowSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
     expect(previewWindowSrc).toContain('file-preview-floating-window');
     expect(previewWindowSrc).toContain('PREVIEW_WINDOW_Z_INDEX = 150');
+    expect(askFlowerComposerSrc).toContain('const ASK_FLOWER_COMPOSER_Z_INDEX = PREVIEW_WINDOW_Z_INDEX + 10;');
+    expect(askFlowerComposerSrc).toContain('const ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX = ASK_FLOWER_COMPOSER_Z_INDEX + 1;');
+    expect(askFlowerComposerSrc).toContain('const ASK_FLOWER_CONTEXT_PREVIEW_Z_INDEX = ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX + 1;');
+    expect(askFlowerComposerSrc).toContain('zIndex={ASK_FLOWER_COMPOSER_Z_INDEX}');
+    expect(askFlowerComposerSrc).toContain('zIndex={ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX}');
+    expect(askFlowerComposerSrc).toContain('zIndex={ASK_FLOWER_CONTEXT_PREVIEW_Z_INDEX}');
   });
 
   it('routes remote and chat previews through the shared controller and app-level host', () => {
