@@ -1,4 +1,5 @@
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
+import { getAskFlowerAttachmentSourcePath } from './askFlowerAttachmentMetadata';
 
 export type AskFlowerComposerEntry =
   | Readonly<{
@@ -9,6 +10,7 @@ export type AskFlowerComposerEntry =
       title: string;
       detail: string;
       path: string;
+      attachmentFile?: File;
     }>
   | Readonly<{
       id: string;
@@ -27,6 +29,7 @@ export type AskFlowerComposerEntry =
       title: string;
       detail: string;
       content: string;
+      sourcePath: string;
     }>
   | Readonly<{
       id: string;
@@ -36,6 +39,7 @@ export type AskFlowerComposerEntry =
       title: string;
       detail: string;
       content: string;
+      workingDir: string;
     }>
   | Readonly<{
       id: string;
@@ -113,6 +117,7 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerComposerEntry[] 
         title: `Preview selected content from ${item.path}`,
         detail: label,
         content: item.selection,
+        sourcePath: item.path,
       });
       entries.push({
         id: `context-${index}-file`,
@@ -135,11 +140,26 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerComposerEntry[] 
         title: 'Preview selected terminal output',
         detail: item.workingDir || 'Terminal',
         content: item.selection,
+        workingDir: item.workingDir,
       });
     }
   });
 
   intent.pendingAttachments.forEach((file, index) => {
+    const sourcePath = getAskFlowerAttachmentSourcePath(file);
+    if (sourcePath) {
+      const existingFileIndex = entries.findIndex((entry) => entry.kind === 'file' && entry.path === sourcePath);
+      if (existingFileIndex >= 0) {
+        const existingEntry = entries[existingFileIndex];
+        if (existingEntry.kind !== 'file') return;
+        entries[existingFileIndex] = {
+          ...existingEntry,
+          attachmentFile: file,
+        };
+        return;
+      }
+    }
+
     const label = String(file.name ?? '').trim() || `attachment-${index + 1}`;
     entries.push({
       id: `attachment-${index}`,
