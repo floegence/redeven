@@ -1,51 +1,11 @@
-import { Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { Show, createMemo } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Button, ConfirmDialog, Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { FilePreviewContent } from './FilePreviewContent';
-import { PersistentFloatingWindow } from './PersistentFloatingWindow';
-
-const WINDOW_MARGIN_DESKTOP = 16;
-const WINDOW_DEFAULT_WIDTH = 1040;
-const WINDOW_DEFAULT_HEIGHT = 760;
-const WINDOW_MIN_WIDTH = 420;
-const WINDOW_MIN_HEIGHT = 320;
-const WINDOW_Z_INDEX = 120;
-
-type ViewportSize = {
-  width: number;
-  height: number;
-};
-
-function currentViewportSize(): ViewportSize {
-  if (typeof window === 'undefined') return { width: 1440, height: 900 };
-  return {
-    width: Math.max(320, window.innerWidth),
-    height: Math.max(320, window.innerHeight),
-  };
-}
-
-function resolveDesktopWindowSizing(viewport: ViewportSize) {
-  const maxWidth = Math.max(320, viewport.width - WINDOW_MARGIN_DESKTOP * 2);
-  const maxHeight = Math.max(320, viewport.height - WINDOW_MARGIN_DESKTOP * 2);
-
-  return {
-    defaultSize: {
-      width: Math.min(WINDOW_DEFAULT_WIDTH, maxWidth),
-      height: Math.min(WINDOW_DEFAULT_HEIGHT, maxHeight),
-    },
-    minSize: {
-      width: Math.min(WINDOW_MIN_WIDTH, maxWidth),
-      height: Math.min(WINDOW_MIN_HEIGHT, maxHeight),
-    },
-    maxSize: {
-      width: maxWidth,
-      height: maxHeight,
-    },
-  };
-}
+import { PREVIEW_WINDOW_Z_INDEX, PreviewWindow } from './PreviewWindow';
 
 export interface FilePreviewSurfaceProps {
   open: boolean;
@@ -86,21 +46,7 @@ export interface FilePreviewSurfaceProps {
 export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
   const layout = useLayout();
   const isMobile = createMemo(() => layout.isMobile());
-  const [viewport, setViewport] = createSignal(currentViewportSize());
   let previewContentEl: HTMLDivElement | undefined;
-
-  onMount(() => {
-    const syncViewport = () => setViewport(currentViewportSize());
-    syncViewport();
-    window.addEventListener('resize', syncViewport);
-    window.addEventListener('orientationchange', syncViewport);
-    onCleanup(() => {
-      window.removeEventListener('resize', syncViewport);
-      window.removeEventListener('orientationchange', syncViewport);
-    });
-  });
-
-  const desktopSizing = createMemo(() => resolveDesktopWindowSizing(viewport()));
   const title = () => props.item?.name ?? 'File preview';
   const footerStatus = createMemo(() => {
     const saveError = String(props.saveError ?? '').trim();
@@ -232,43 +178,16 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
 
   return (
     <>
-      <Show
-        when={isMobile()}
-        fallback={(
-          <PersistentFloatingWindow
-            open={props.open}
-            onOpenChange={props.onOpenChange}
-            title={title()}
-            persistenceKey="file-preview"
-            defaultSize={desktopSizing().defaultSize}
-            minSize={desktopSizing().minSize}
-            maxSize={desktopSizing().maxSize}
-            zIndex={WINDOW_Z_INDEX}
-            class={cn(
-              'file-preview-floating-window overflow-hidden rounded-md',
-              '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:flex-col [&>div:nth-child(2)]:!overflow-hidden [&>div:nth-child(2)]:!p-0',
-            )}
-            footer={footer}
-          >
-            {previewBody()}
-          </PersistentFloatingWindow>
-        )}
+      <PreviewWindow
+        open={props.open}
+        onOpenChange={props.onOpenChange}
+        title={title()}
+        footer={footer}
+        persistenceKey="file-preview"
+        zIndex={PREVIEW_WINDOW_Z_INDEX}
       >
-        <Dialog
-          open={props.open}
-          onOpenChange={props.onOpenChange}
-          title={title()}
-          footer={footer}
-          class={cn(
-            'flex max-w-none flex-col overflow-hidden rounded-md p-0',
-            '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
-            '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:flex-col [&>div:nth-child(2)]:!overflow-hidden [&>div:nth-child(2)]:!p-0',
-            'h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none',
-          )}
-        >
-          {previewBody()}
-        </Dialog>
-      </Show>
+        {previewBody()}
+      </PreviewWindow>
 
       <ConfirmDialog
         open={!!props.closeConfirmOpen}

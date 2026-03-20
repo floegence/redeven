@@ -2,7 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, 
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { FileText, Folder, Paperclip, Send, Terminal } from '@floegence/floe-webapp-core/icons';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { AskFlowerComposerAnchor } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
@@ -14,12 +14,15 @@ import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { syncLiveTextValue } from '../utils/liveTextValue';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { PersistentFloatingWindow } from './PersistentFloatingWindow';
+import { PREVIEW_WINDOW_Z_INDEX, PreviewWindow } from './PreviewWindow';
 
 const WINDOW_VIEWPORT_MARGIN_DESKTOP = 12;
 const WINDOW_VIEWPORT_MARGIN_MOBILE = 8;
 const WINDOW_ANCHOR_OFFSET = 8;
 const INLINE_FILE_PREVIEW_MAX_BYTES = 160 * 1024;
 const INLINE_TEXT_PREVIEW_MAX_CHARS = 120_000;
+const CONTEXT_PREVIEW_DEFAULT_SIZE = { width: 880, height: 640 };
+const CONTEXT_PREVIEW_MIN_SIZE = { width: 380, height: 280 };
 
 type AskFlowerComposerWindowProps = {
   open: boolean;
@@ -104,12 +107,12 @@ function isPointerInsideComposer(event: PointerEvent): boolean {
   for (const node of path) {
     if (!(node instanceof Element)) continue;
     if (node.classList.contains('ask-flower-composer-window')) return true;
-    if (node.classList.contains('ask-flower-context-preview-dialog')) return true;
+    if (node.classList.contains('ask-flower-context-preview-surface')) return true;
   }
 
   const target = event.target;
   if (!(target instanceof Element)) return false;
-  return !!target.closest('.ask-flower-composer-window, .ask-flower-context-preview-dialog');
+  return !!target.closest('.ask-flower-composer-window, .ask-flower-context-preview-surface');
 }
 
 function truncatePath(fullPath: string, maxSegments = 3): string {
@@ -657,14 +660,19 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
             </div>
           </PersistentFloatingWindow>
 
-          <Dialog
+          <PreviewWindow
             open={!!contextPreview()}
             onOpenChange={(open) => {
               if (!open) closeContextPreview();
             }}
             title={contextPreview()?.title || 'Context preview'}
             description={contextPreview()?.subtitle || undefined}
-            class="ask-flower-context-preview-dialog flex max-w-none flex-col overflow-hidden rounded-md p-0 sm:w-[min(52rem,92vw)]"
+            persistenceKey="ask-flower-context-preview"
+            defaultSize={CONTEXT_PREVIEW_DEFAULT_SIZE}
+            minSize={CONTEXT_PREVIEW_MIN_SIZE}
+            zIndex={PREVIEW_WINDOW_Z_INDEX}
+            floatingClass="ask-flower-context-preview-surface"
+            mobileClass="ask-flower-context-preview-surface"
             footer={(
               <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
                 <Button size="sm" variant="outline" class="cursor-pointer" onClick={closeContextPreview}>
@@ -699,7 +707,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                 <pre class="min-h-[14rem] max-h-[min(60vh,38rem)] overflow-auto rounded-2xl border border-border/70 bg-slate-950 px-4 py-4 text-[12px] leading-6 text-slate-50 shadow-inner whitespace-pre-wrap break-words">{contextPreview()?.body}</pre>
               </Show>
             </div>
-          </Dialog>
+          </PreviewWindow>
         </>
       )}
     </Show>
