@@ -293,16 +293,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.125rem;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
   line-height: 0;
   color: var(--muted-foreground);
   cursor: pointer;
   transition: color 150ms ease, opacity 150ms ease, transform 150ms ease;
   border: none;
-  background: none;
+  background: transparent;
   appearance: none;
   -webkit-appearance: none;
   box-shadow: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .chat-message-action-btn:hover {
@@ -316,6 +318,29 @@
 
 .chat-message-action-btn-copied {
   color: color-mix(in srgb, var(--primary) 86%, var(--foreground));
+}
+
+.chat-message-action-btn-icon-only {
+  padding: 0;
+  border-radius: 0;
+  background-color: transparent;
+}
+
+.chat-message-action-btn-icon-only:hover,
+.chat-message-action-btn-icon-only:focus-visible,
+.chat-message-action-btn-icon-only:active {
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.chat-message-action-btn-icon-only::-moz-focus-inner {
+  border: 0;
+  padding: 0;
+}
+
+.chat-action-icon {
+  display: block;
+  flex: none;
 }
 
 .chat-text-block {
