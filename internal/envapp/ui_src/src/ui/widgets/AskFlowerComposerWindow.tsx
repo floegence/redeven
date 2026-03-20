@@ -959,70 +959,55 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                             <span class="text-[11px] text-muted-foreground">{sending() ? 'Sending...' : 'Reply to Flower'}</span>
                           </div>
 
-                          <textarea
-                            ref={textareaEl}
-                            id={`ask-flower-prompt-${intent.id}`}
-                            class="chat-input-textarea flower-chat-input-textarea ask-flower-composer-textarea focus:!outline-none focus-visible:!outline-none focus-visible:!shadow-none"
-                            value={userPrompt()}
-                            placeholder={composerCopy()?.placeholder}
-                            disabled={sending()}
-                            onInput={(event) => {
-                              setUserPrompt(event.currentTarget.value);
-                              if (validationError()) setValidationError('');
-                            }}
-                            onCompositionStart={() => setIsComposing(true)}
-                            onCompositionUpdate={() => {
-                              syncPromptFromTextarea();
-                              if (validationError()) setValidationError('');
-                            }}
-                            onCompositionEnd={() => {
-                              setIsComposing(false);
-                              syncPromptFromTextarea();
-                              if (validationError()) setValidationError('');
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.isComposing || isComposing()) return;
-                              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                                event.preventDefault();
-                                void submit();
-                              }
-                            }}
-                          />
-                        </div>
+                          <div data-testid="ask-flower-composer-editor-shell" class="ask-flower-composer-editor-shell">
+                            <textarea
+                              ref={textareaEl}
+                              id={`ask-flower-prompt-${intent.id}`}
+                              class="chat-input-textarea flower-chat-input-textarea ask-flower-composer-textarea focus:!outline-none focus-visible:!outline-none focus-visible:!shadow-none"
+                              value={userPrompt()}
+                              placeholder={composerCopy()?.placeholder}
+                              disabled={sending()}
+                              onInput={(event) => {
+                                setUserPrompt(event.currentTarget.value);
+                                if (validationError()) setValidationError('');
+                              }}
+                              onCompositionStart={() => setIsComposing(true)}
+                              onCompositionUpdate={() => {
+                                syncPromptFromTextarea();
+                                if (validationError()) setValidationError('');
+                              }}
+                              onCompositionEnd={() => {
+                                setIsComposing(false);
+                                syncPromptFromTextarea();
+                                if (validationError()) setValidationError('');
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.isComposing || isComposing()) return;
+                                if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                                  event.preventDefault();
+                                  void submit();
+                                }
+                              }}
+                            />
 
-                        <div class="flower-chat-input-send-slot ask-flower-composer-send">
-                          <button
-                            type="button"
-                            class={`chat-input-send-btn flower-chat-input-send-btn chat-input-send-btn-expanded ask-flower-composer-send-btn cursor-pointer ${canSubmit() ? 'chat-input-send-btn-active' : ''}`}
-                            onClick={() => void submit()}
-                            disabled={!canSubmit()}
-                            title="Send message"
-                          >
-                            <span class="chat-input-send-btn-label">Send</span>
-                            <Send class="size-3.5" />
-                          </button>
-                        </div>
-                      </div>
+                            <Show when={validationError()}>
+                              <div class="ask-flower-composer-validation text-error">
+                                {validationError()}
+                              </div>
+                            </Show>
 
-                      <div class="chat-input-toolbar ask-flower-composer-toolbar">
-                        <Show when={validationError()}>
-                          <div class="chat-input-toolbar-left ask-flower-composer-toolbar-left min-w-0">
-                            <div class="min-h-4 text-[10px] leading-4 text-muted-foreground sm:text-[11px]">
-                              <span class="text-error">{validationError()}</span>
-                            </div>
+                            <button
+                              data-testid="ask-flower-inline-send"
+                              type="button"
+                              class={`chat-input-send-btn flower-chat-input-send-btn ask-flower-composer-send-btn cursor-pointer ${canSubmit() ? 'chat-input-send-btn-active' : ''}`}
+                              onClick={() => void submit()}
+                              disabled={!canSubmit()}
+                              title="Send message"
+                              aria-label="Send message"
+                            >
+                              <Send class="size-3.5" />
+                            </button>
                           </div>
-                        </Show>
-                        <div class="chat-input-toolbar-right ask-flower-composer-toolbar-right ml-auto shrink-0">
-                          <Show when={(composerCopy()?.contextEntries.length ?? 0) > 0}>
-                            <span class="inline-flex items-center rounded-full border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:px-2 sm:text-[11px]">
-                              {composerCopy()?.contextEntries.length} linked
-                            </span>
-                          </Show>
-                          <span class="chat-input-hint hidden sm:inline-flex">
-                            <kbd>Ctrl/⌘</kbd>
-                            <span>+</span>
-                            <kbd>Enter</kbd>
-                          </span>
                         </div>
                       </div>
                     </div>
