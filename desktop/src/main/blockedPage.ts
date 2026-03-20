@@ -26,6 +26,12 @@ function blockedHeadline(report: LaunchBlockedReport): { title: string; body: st
       body: 'Another Redeven agent is using the default state directory without an attachable Local UI. Stop that agent or restart it in a Local UI mode, then retry.',
     };
   }
+  if (report.code === 'external_target_unreachable') {
+    return {
+      title: 'Redeven target is unavailable',
+      body: report.message,
+    };
+  }
   return {
     title: 'Redeven Desktop is blocked',
     body: report.message,
@@ -65,7 +71,9 @@ export function buildBlockedPageHTML(
 ): string {
   const headline = blockedHeadline(report);
   const diagnostics = escapeHTML(formatBlockedLaunchDiagnostics(report));
-  const details = report.diagnostics?.state_dir
+  const details = report.diagnostics?.target_url
+    ? `Target URL: ${escapeHTML(report.diagnostics.target_url)}`
+    : report.diagnostics?.state_dir
     ? `Default state directory: ${escapeHTML(report.diagnostics.state_dir)}`
     : 'Desktop could not attach to an existing Local UI instance.';
   const titleBarInset = desktopWindowTitleBarInsetCSSValue(platform);

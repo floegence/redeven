@@ -5,7 +5,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { defaultRuntimeStatePath, loadAttachableRuntimeState } from './runtimeState';
+import { defaultRuntimeStatePath, loadAttachableRuntimeState, loadExternalLocalUIStartup } from './runtimeState';
 
 describe('runtimeState', () => {
   it('uses the standard runtime state path under the redeven home directory', () => {
@@ -78,5 +78,48 @@ describe('runtimeState', () => {
     }), 'utf8');
 
     await expect(loadAttachableRuntimeState(runtimeStateFile)).resolves.toBeNull();
+  });
+
+  it('loads an external Local UI startup payload from an explicit local IP url', async () => {
+    const server = http.createServer((request, response) => {
+      if (request.url === '/_redeven_proxy/env/') {
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end('<html>ok</html>');
+        return;
+      }
+      response.writeHead(404);
+      response.end('not found');
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+      server.once('error', reject);
+    });
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('expected a TCP server address');
+      }
+
+      await expect(loadExternalLocalUIStartup(`http://127.0.0.1:${address.port}/_redeven_proxy/env/`)).resolves.toEqual({
+        local_ui_url: `http://127.0.0.1:${address.port}/`,
+        local_ui_urls: [`http://127.0.0.1:${address.port}/`],
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    }
+  });
+
+  it('rejects external Local UI startup for unsupported hosts', async () => {
+    await expect(loadExternalLocalUIStartup('https://example.com/')).rejects.toThrow('Redeven URL must use localhost or an IP literal.');
   });
 });

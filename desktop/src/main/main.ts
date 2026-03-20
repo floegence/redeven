@@ -4,11 +4,13 @@ import { launchStartedFreshManagedRuntime, startManagedAgent, type ManagedAgent 
 import { buildAppMenuTemplate } from './appMenu';
 import { blockedActionFromURL, blockedPageDataURL, isBlockedActionURL } from './blockedPage';
 import {
+  activeDesktopTargetKey,
   clearPendingBootstrap,
   createSafeStorageSecretCodec,
   defaultDesktopPreferencesPaths,
   desktopPreferencesToDraft,
   loadDesktopPreferences,
+  managedDesktopLaunchKey,
   saveDesktopPreferences,
   validateDesktopSettingsDraft,
   type DesktopPreferences,
@@ -19,7 +21,9 @@ import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import { isAllowedAppNavigation } from './navigation';
 import { resolveBrowserPreloadPath, resolveBundledAgentPath, resolveSettingsPreloadPath } from './paths';
+import { loadExternalLocalUIStartup } from './runtimeState';
 import { settingsPageDataURL } from './settingsPage';
+import type { StartupReport } from './startup';
 import {
   applyRestoredWindowState,
   attachDesktopWindowStatePersistence,
@@ -55,6 +59,7 @@ import {
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
 let managedAgent: ManagedAgent | null = null;
+let externalTargetStartup: StartupReport | null = null;
 let allowedBaseURL = '';
 let quitPhase: 'idle' | 'requested' | 'shutting_down' = 'idle';
 const childWindows = new Set<BrowserWindow>();
@@ -115,6 +120,21 @@ async function loadDesktopPreferencesCached(): Promise<DesktopPreferences> {
 async function persistDesktopPreferences(next: DesktopPreferences): Promise<void> {
   desktopPreferencesCache = next;
   await saveDesktopPreferences(preferencesPaths(), next, preferencesCodec());
+}
+
+function buildExternalTargetBlockedReport(
+  code: 'external_target_unreachable' | 'external_target_invalid',
+  targetURL: string,
+  message: string,
+): LaunchBlockedReport {
+  return {
+    status: 'blocked',
+    code,
+    message,
+    diagnostics: {
+      target_url: targetURL,
+    },
+  };
 }
 
 function presentAppWindow(win: BrowserWindow, options?: Readonly<{ stealAppFocus?: boolean }>): void {
@@ -230,8 +250,32 @@ async function openSettingsWindow(draft?: DesktopSettingsDraft, errorMessage = '
   settingsWindow.focus();
 }
 
-async function applySavedPreferences(): Promise<void> {
+function buildConnectToRedevenDraft(preferences: DesktopPreferences): DesktopSettingsDraft {
+  return {
+    ...desktopPreferencesToDraft(preferences),
+    target_kind: 'external_local_ui',
+  };
+}
+
+async function openConnectToRedevenWindow(): Promise<void> {
+  await openSettingsWindow(buildConnectToRedevenDraft(await loadDesktopPreferencesCached()));
+}
+
+async function applySavedPreferences(previous: DesktopPreferences, next: DesktopPreferences): Promise<void> {
   blockedLaunch = null;
+  const targetChanged = activeDesktopTargetKey(previous) !== activeDesktopTargetKey(next);
+  if (targetChanged) {
+    await disconnectCurrentTarget();
+    await showMainWindow();
+    return;
+  }
+  if (next.target.kind === 'external_local_ui') {
+    return;
+  }
+  const managedLaunchChanged = managedDesktopLaunchKey(previous) !== managedDesktopLaunchKey(next);
+  if (!managedLaunchChanged) {
+    return;
+  }
   if (!managedAgent) {
     await showMainWindow();
     return;
@@ -255,7 +299,7 @@ async function applySavedPreferences(): Promise<void> {
     return;
   }
 
-  await shutdownAgent();
+  await disconnectCurrentTarget();
   await showMainWindow();
 }
 
@@ -280,7 +324,10 @@ function handleBlockedAction(url: string): boolean {
     return true;
   }
   if (action === 'settings') {
-    void openSettingsWindow().catch((error) => {
+    const openSettings = blockedLaunch?.code === 'external_target_unreachable' || blockedLaunch?.code === 'external_target_invalid'
+      ? openConnectToRedevenWindow
+      : openSettingsWindow;
+    void openSettings().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       dialog.showErrorBox('Redeven Desktop failed to open settings', message || 'Unknown settings error.');
     });
@@ -450,7 +497,59 @@ function createMainBrowserWindow(targetURL: string): BrowserWindow {
   return win;
 }
 
-async function ensureAgentStarted(): Promise<string> {
+async function ensureDesktopTargetReady(): Promise<string> {
+  const preferences = await loadDesktopPreferencesCached();
+  if (preferences.target.kind === 'external_local_ui') {
+    if (externalTargetStartup?.local_ui_url === preferences.target.external_local_ui_url) {
+      blockedLaunch = null;
+      allowedBaseURL = externalTargetStartup.local_ui_url;
+      return externalTargetStartup.local_ui_url;
+    }
+
+    try {
+      const startup = await loadExternalLocalUIStartup(preferences.target.external_local_ui_url);
+      if (!startup) {
+        blockedLaunch = buildExternalTargetBlockedReport(
+          'external_target_unreachable',
+          preferences.target.external_local_ui_url,
+          'Desktop could not reach the configured Redeven URL. Make sure the target machine is exposing Redeven Local UI and that its port is reachable from this machine.',
+        );
+        managedAgent = null;
+        externalTargetStartup = null;
+        allowedBaseURL = '';
+        desktopDiagnostics.clearRuntime();
+        return blockedPageDataURL(blockedLaunch, process.platform);
+      }
+
+      blockedLaunch = null;
+      managedAgent = null;
+      externalTargetStartup = startup;
+      allowedBaseURL = startup.local_ui_url;
+      await desktopDiagnostics.configureRuntime(startup, allowedBaseURL);
+      await desktopDiagnostics.recordLifecycle(
+        'external_target_connected',
+        'desktop connected to an external Redeven Local UI target',
+        {
+          target_url: startup.local_ui_url,
+        },
+      );
+      return allowedBaseURL;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      blockedLaunch = buildExternalTargetBlockedReport(
+        'external_target_invalid',
+        preferences.target.external_local_ui_url,
+        message || 'Desktop target is invalid.',
+      );
+      managedAgent = null;
+      externalTargetStartup = null;
+      allowedBaseURL = '';
+      desktopDiagnostics.clearRuntime();
+      return blockedPageDataURL(blockedLaunch, process.platform);
+    }
+  }
+
+  externalTargetStartup = null;
   if (managedAgent) {
     blockedLaunch = null;
     return managedAgent.startup.local_ui_url;
@@ -461,7 +560,6 @@ async function ensureAgentStarted(): Promise<string> {
     resourcesPath: process.resourcesPath,
     appPath: app.getAppPath(),
   });
-  const preferences = await loadDesktopPreferencesCached();
   const launch = await startManagedAgent({
     executablePath,
     agentArgs: buildDesktopAgentArgs(preferences),
@@ -502,7 +600,7 @@ async function ensureAgentStarted(): Promise<string> {
 }
 
 async function ensureMainWindowCreated(): Promise<BrowserWindow> {
-  const targetURL = await ensureAgentStarted();
+  const targetURL = await ensureDesktopTargetReady();
   if (!mainWindow || mainWindow.isDestroyed()) {
     mainWindow = createMainBrowserWindow(targetURL);
   }
@@ -510,7 +608,7 @@ async function ensureMainWindowCreated(): Promise<BrowserWindow> {
 }
 
 async function showMainWindow(): Promise<void> {
-  const targetURL = await ensureAgentStarted();
+  const targetURL = await ensureDesktopTargetReady();
   if (mainWindow && !mainWindow.isDestroyed()) {
     await mainWindow.loadURL(targetURL);
     focusMainWindow();
@@ -526,8 +624,8 @@ async function handoffAskFlowerToMainWindow(payload: DesktopAskFlowerHandoffPayl
   focusMainWindow({ stealAppFocus: true });
 }
 
-async function shutdownAgent(): Promise<void> {
-  await desktopDiagnostics.recordLifecycle('agent_stopping', 'desktop is stopping the current agent runtime');
+async function disconnectCurrentTarget(): Promise<void> {
+  await desktopDiagnostics.recordLifecycle('target_disconnecting', 'desktop is disconnecting from the current Redeven target');
   for (const win of childWindows) {
     if (!win.isDestroyed()) {
       win.close();
@@ -536,6 +634,7 @@ async function shutdownAgent(): Promise<void> {
   childWindows.clear();
   const runningAgent = managedAgent;
   managedAgent = null;
+  externalTargetStartup = null;
   allowedBaseURL = '';
   if (runningAgent) {
     await runningAgent.stop();
@@ -604,8 +703,9 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (_event, draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> => {
     try {
       const next = validateDesktopSettingsDraft(draft);
+      const previous = await loadDesktopPreferencesCached();
       await persistDesktopPreferences(next);
-      await applySavedPreferences();
+      await applySavedPreferences(previous, next);
       if (settingsWindow && !settingsWindow.isDestroyed()) {
         settingsWindow.close();
       }
@@ -644,6 +744,12 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     installDesktopDiagnosticsHooks();
     Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate({
+      connectToRedeven: () => {
+        void openConnectToRedevenWindow().catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          dialog.showErrorBox('Redeven Desktop failed to open target settings', message || 'Unknown target settings error.');
+        });
+      },
       openSettings: () => {
         void openSettingsWindow().catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
@@ -682,7 +788,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     quitPhase = 'shutting_down';
     event.preventDefault();
-    void shutdownAgent().finally(() => app.quit());
+    void disconnectCurrentTarget().finally(() => app.quit());
   });
 
   app.on('window-all-closed', () => {

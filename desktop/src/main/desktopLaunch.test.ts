@@ -12,6 +12,8 @@ import {
 describe('desktopLaunch', () => {
   it('builds desktop-managed args from persistent local settings', () => {
     const preferences = validateDesktopSettingsDraft({
+      target_kind: 'managed_local',
+      external_local_ui_url: '',
       local_ui_bind: '0.0.0.0:24000',
       local_ui_password: 'secret',
       controlplane_url: '',
@@ -33,6 +35,8 @@ describe('desktopLaunch', () => {
 
   it('adds one-shot bootstrap args and secret env vars to the spawn plan', () => {
     const preferences = validateDesktopSettingsDraft({
+      target_kind: 'managed_local',
+      external_local_ui_url: '',
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: 'secret',
       controlplane_url: 'https://region.example.invalid',
@@ -66,6 +70,8 @@ describe('desktopLaunch', () => {
 
   it('removes stale secret env vars when the current settings do not use them', () => {
     const preferences = validateDesktopSettingsDraft({
+      target_kind: 'managed_local',
+      external_local_ui_url: '',
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       controlplane_url: '',

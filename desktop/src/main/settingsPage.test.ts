@@ -5,6 +5,8 @@ import { buildSettingsPageHTML } from './settingsPage';
 describe('settingsPage', () => {
   it('renders the settings form with desktop startup fields', () => {
     const html = buildSettingsPageHTML({
+      target_kind: 'managed_local',
+      external_local_ui_url: '',
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       controlplane_url: 'https://region.example.invalid',
@@ -13,13 +15,17 @@ describe('settingsPage', () => {
     });
 
     expect(html).toContain('Redeven Desktop Settings');
-    expect(html).toContain('Local UI bind address');
+    expect(html).toContain('Desktop Target');
+    expect(html).toContain('Redeven URL');
+    expect(html).toContain('Host This Device');
     expect(html).toContain('Register to Redeven on next start');
     expect(html).toContain('--env-token-env');
   });
 
   it('keeps the page on a flat theme without glossy gradients', () => {
     const html = buildSettingsPageHTML({
+      target_kind: 'managed_local',
+      external_local_ui_url: '',
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       controlplane_url: '',
@@ -34,6 +40,8 @@ describe('settingsPage', () => {
 
   it('uses native spacing on macOS without titlebar safe-area CSS', () => {
     const html = buildSettingsPageHTML({
+      target_kind: 'managed_local',
+      external_local_ui_url: '',
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       controlplane_url: '',
@@ -47,6 +55,8 @@ describe('settingsPage', () => {
 
   it('renders an inline error when validation fails', () => {
     const html = buildSettingsPageHTML({
+      target_kind: 'managed_local',
+      external_local_ui_url: '',
       local_ui_bind: '0.0.0.0:24000',
       local_ui_password: '',
       controlplane_url: '',
