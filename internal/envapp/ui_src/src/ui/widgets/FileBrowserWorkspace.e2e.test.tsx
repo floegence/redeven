@@ -301,6 +301,44 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
+  it('starts in grid view for first-run workspaces and still allows switching back to list', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={files}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-default-grid"
+            instanceId="test-files-workspace-default-grid"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.querySelector('.redeven-file-list-compact')).toBeNull();
+
+      const listButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'List');
+      expect(listButton).toBeTruthy();
+
+      listButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(host.querySelector('.redeven-file-list-compact')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
   it('routes page-level typing into the filter field when the browser page is the active surface', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
