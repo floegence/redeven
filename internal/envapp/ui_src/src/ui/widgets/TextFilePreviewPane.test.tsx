@@ -62,6 +62,28 @@ afterEach(() => {
 });
 
 describe('TextFilePreviewPane', () => {
+  it('uses the read-only fallback preview even for Monaco-supported languages', async () => {
+    const onSelectionChange = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TextFilePreviewPane
+        path="/workspace/demo.ts"
+        descriptor={{ mode: 'text', textPresentation: 'code', language: 'typescript', wrapText: false }}
+        text="const value = 1;"
+        onSelectionChange={onSelectionChange}
+      />
+    ), host);
+    await flushAsync();
+
+    expect(resolveLanguageSpecMock).toHaveBeenCalledWith('typescript');
+    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
+    expect(host.textContent).toContain('typescript:const value = 1;');
+    expect(onSelectionChange).toHaveBeenCalledWith('');
+  });
+
   it('renders the Monaco editor path for supported languages and forwards edits and selections', async () => {
     const onDraftChange = vi.fn();
     const onSelectionChange = vi.fn();
