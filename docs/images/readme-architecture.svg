@@ -79,10 +79,13 @@
     <tspan x="878" dy="18">and code-server data</tspan>
   </text>
 
-  <path d="M350 226H650" stroke="#334155" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-dark)"/>
-  <rect x="376" y="174" width="238" height="54" rx="16" fill="#FFFFFF" fill-opacity="0.92" stroke="#CBD5E1"/>
-  <text x="394" y="202" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700">Management channel</text>
-  <text x="394" y="222" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="14">bootstrap + grants + session metadata</text>
+  <path d="M350 236H650" stroke="#334155" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-dark)"/>
+  <rect x="376" y="160" width="228" height="56" rx="16" fill="#FFFFFF" fill-opacity="0.96" stroke="#CBD5E1"/>
+  <text x="394" y="187" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700">Management channel</text>
+  <text x="394" y="206" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="13">
+    <tspan x="394" dy="0">bootstrap, grants, and</tspan>
+    <tspan x="394" dy="16">session metadata</tspan>
+  </text>
 
   <path d="M350 458H430" stroke="#059669" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-green)"/>
   <path d="M610 458H650" stroke="#059669" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-green)"/>
