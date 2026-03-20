@@ -303,10 +303,14 @@ html.dark {
 }
 
 .flower-chat-input-send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 2.75rem;
   min-height: 2.75rem;
   padding: 0.625rem;
   border-radius: 0.875rem;
+  line-height: 1;
 }
 
 .flower-chat-input-send-btn.chat-input-send-btn-active:hover {
