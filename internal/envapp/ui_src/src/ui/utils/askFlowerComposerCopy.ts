@@ -151,6 +151,7 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerComposerEntry[] 
       const existingFileIndex = entries.findIndex((entry) => entry.kind === 'file' && entry.path === sourcePath);
       if (existingFileIndex >= 0) {
         const existingEntry = entries[existingFileIndex];
+        if (existingEntry.kind !== 'file') return;
         entries[existingFileIndex] = {
           ...existingEntry,
           attachmentFile: file,
