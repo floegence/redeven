@@ -81,7 +81,7 @@ Behavior:
   - `<state_dir>/diagnostics/desktop-events.jsonl`
 - Local UI and gateway share a single trace header:
   - `X-Redeven-Debug-Trace-ID`
-- Env Settings exposes a Diagnostics panel under Logging and reads data through:
+- Agent Settings exposes a Diagnostics panel under Logging and reads data through:
   - `GET /_redeven_proxy/api/debug/diagnostics`
   - `GET /_redeven_proxy/api/debug/diagnostics/export`
 

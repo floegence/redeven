@@ -87,7 +87,7 @@ For each run the Go runtime:
 
 ## 5. UI behavior
 
-Current Settings UI behavior is:
+Current Agent Settings UI behavior is:
 
 - Add Provider generates a provider id automatically.
 - Provider id is shown as read-only.
@@ -126,4 +126,4 @@ Current behavior:
 - Execution mode is stored per thread and enforced server-side.
 - If a task in `plan` requires edits, Flower must ask for a mode switch when interaction is allowed.
 
-The execution-policy UI is exposed under Settings → Flower → Execution policy.
+The execution-policy UI is exposed under Agent Settings → Flower → Execution policy.

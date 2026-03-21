@@ -5,19 +5,19 @@ import { buildAppMenuTemplate } from './appMenu';
 function buildMenu(platform: NodeJS.Platform) {
   return buildAppMenuTemplate({
     connectToRedeven: () => undefined,
-    openSettings: () => undefined,
+    openDesktopSettings: () => undefined,
     requestQuit: () => undefined,
   }, platform);
 }
 
 describe('appMenu', () => {
-  it('includes settings and quit accelerators on macOS', () => {
+  it('includes Desktop Settings and quit accelerators on macOS', () => {
     const template = buildMenu('darwin');
 
     const items = template.flatMap((item) => Array.isArray(item.submenu) ? item.submenu : []);
     expect(items).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Connect to Redeven...' }),
-      expect.objectContaining({ label: 'Settings...', accelerator: 'CommandOrControl+,' }),
+      expect.objectContaining({ label: 'Desktop Settings...', accelerator: 'CommandOrControl+,' }),
       expect.objectContaining({ label: 'Quit Redeven Desktop', accelerator: 'CommandOrControl+Q' }),
     ]));
   });

@@ -1120,7 +1120,7 @@ export function createAIChatContextValue(): AIChatContextValue {
       return null;
     }
     if (!aiEnabled()) {
-      notify.error('AI not configured', 'Open Settings to enable AI.');
+      notify.error('AI not configured', 'Open Agent Settings to enable AI.');
       return null;
     }
 

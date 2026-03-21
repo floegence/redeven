@@ -22,7 +22,7 @@ import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './laun
 import { isAllowedAppNavigation } from './navigation';
 import { resolveBrowserPreloadPath, resolveBundledAgentPath, resolveSettingsPreloadPath } from './paths';
 import { loadExternalLocalUIStartup } from './runtimeState';
-import { settingsPageDataURL } from './settingsPage';
+import { pageWindowTitle, settingsPageDataURL, type DesktopPageMode } from './settingsPage';
 import type { StartupReport } from './startup';
 import {
   applyRestoredWindowState,
@@ -195,8 +195,13 @@ async function requestQuit(): Promise<void> {
   app.quit();
 }
 
-async function openSettingsWindow(draft?: DesktopSettingsDraft, errorMessage = ''): Promise<void> {
+async function openDesktopPageWindow(
+  mode: DesktopPageMode,
+  draft?: DesktopSettingsDraft,
+  errorMessage = '',
+): Promise<void> {
   const currentDraft = draft ?? desktopPreferencesToDraft(await loadDesktopPreferencesCached());
+  const windowTitle = pageWindowTitle(mode);
 
   if (!settingsWindow) {
     const restoredState = desktopStateStore().getWindowState(SETTINGS_WINDOW_STATE_KEY);
@@ -212,7 +217,7 @@ async function openSettingsWindow(draft?: DesktopSettingsDraft, errorMessage = '
       minWidth: SETTINGS_WINDOW_SPEC.minWidth,
       minHeight: SETTINGS_WINDOW_SPEC.minHeight,
       show: false,
-      title: 'Redeven Desktop Settings',
+      title: windowTitle,
       parent: mainWindow ?? undefined,
       modal: false,
       ...buildDesktopWindowChromeOptions(process.platform, defaultDesktopWindowThemeSnapshot()),
@@ -243,11 +248,16 @@ async function openSettingsWindow(draft?: DesktopSettingsDraft, errorMessage = '
     });
   }
 
-  await settingsWindow.loadURL(settingsPageDataURL(currentDraft, errorMessage, process.platform));
+  settingsWindow.setTitle(windowTitle);
+  await settingsWindow.loadURL(settingsPageDataURL(currentDraft, errorMessage, process.platform, mode));
   if (!settingsWindow.isVisible()) {
     settingsWindow.show();
   }
   settingsWindow.focus();
+}
+
+async function openDesktopSettingsWindow(): Promise<void> {
+  await openDesktopPageWindow('desktop_settings');
 }
 
 function buildConnectToRedevenDraft(preferences: DesktopPreferences): DesktopSettingsDraft {
@@ -258,7 +268,7 @@ function buildConnectToRedevenDraft(preferences: DesktopPreferences): DesktopSet
 }
 
 async function openConnectToRedevenWindow(): Promise<void> {
-  await openSettingsWindow(buildConnectToRedevenDraft(await loadDesktopPreferencesCached()));
+  await openDesktopPageWindow('connect', buildConnectToRedevenDraft(await loadDesktopPreferencesCached()));
 }
 
 async function applySavedPreferences(previous: DesktopPreferences, next: DesktopPreferences): Promise<void> {
@@ -269,10 +279,26 @@ async function applySavedPreferences(previous: DesktopPreferences, next: Desktop
     await showMainWindow();
     return;
   }
+  const managedLaunchChanged = managedDesktopLaunchKey(previous) !== managedDesktopLaunchKey(next);
   if (next.target.kind === 'external_local_ui') {
+    if (managedLaunchChanged) {
+      const options: MessageBoxOptions = {
+        type: 'info',
+        buttons: ['OK'],
+        defaultId: 0,
+        title: 'Desktop settings saved',
+        message: 'Desktop settings saved for the next This device start.',
+        detail: 'Desktop is currently targeting External Redeven, so the updated startup settings will apply after you switch back to This device.',
+        normalizeAccessKeys: true,
+      };
+      if (mainWindow) {
+        await dialog.showMessageBox(mainWindow, options);
+      } else {
+        await dialog.showMessageBox(options);
+      }
+    }
     return;
   }
-  const managedLaunchChanged = managedDesktopLaunchKey(previous) !== managedDesktopLaunchKey(next);
   if (!managedLaunchChanged) {
     return;
   }
@@ -286,8 +312,8 @@ async function applySavedPreferences(previous: DesktopPreferences, next: Desktop
       type: 'info',
       buttons: ['OK'],
       defaultId: 0,
-      title: 'Settings saved',
-      message: 'Settings saved for the next desktop-managed start.',
+      title: 'Desktop settings saved',
+      message: 'Desktop settings saved for the next desktop-managed start.',
       detail: 'Redeven Desktop is currently attached to an already-running agent, so the new startup settings will apply after that agent stops and Desktop starts a fresh desktop-managed runtime.',
       normalizeAccessKeys: true,
     };
@@ -323,13 +349,17 @@ function handleBlockedAction(url: string): boolean {
     }
     return true;
   }
-  if (action === 'settings') {
-    const openSettings = blockedLaunch?.code === 'external_target_unreachable' || blockedLaunch?.code === 'external_target_invalid'
-      ? openConnectToRedevenWindow
-      : openSettingsWindow;
-    void openSettings().catch((error) => {
+  if (action === 'desktop-settings') {
+    void openDesktopSettingsWindow().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
-      dialog.showErrorBox('Redeven Desktop failed to open settings', message || 'Unknown settings error.');
+      dialog.showErrorBox('Redeven Desktop failed to open Desktop Settings', message || 'Unknown desktop settings error.');
+    });
+    return true;
+  }
+  if (action === 'connect') {
+    void openConnectToRedevenWindow().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      dialog.showErrorBox('Redeven Desktop failed to open Connect to Redeven', message || 'Unknown connection settings error.');
     });
     return true;
   }
@@ -747,13 +777,13 @@ if (!app.requestSingleInstanceLock()) {
       connectToRedeven: () => {
         void openConnectToRedevenWindow().catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
-          dialog.showErrorBox('Redeven Desktop failed to open target settings', message || 'Unknown target settings error.');
+          dialog.showErrorBox('Redeven Desktop failed to open Connect to Redeven', message || 'Unknown connection settings error.');
         });
       },
-      openSettings: () => {
-        void openSettingsWindow().catch((error) => {
+      openDesktopSettings: () => {
+        void openDesktopSettingsWindow().catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
-          dialog.showErrorBox('Redeven Desktop failed to open settings', message || 'Unknown settings error.');
+          dialog.showErrorBox('Redeven Desktop failed to open Desktop Settings', message || 'Unknown desktop settings error.');
         });
       },
       requestQuit: () => {

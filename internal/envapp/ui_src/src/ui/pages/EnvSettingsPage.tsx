@@ -2870,9 +2870,9 @@ export function EnvSettingsPage() {
         {/* Page Header */}
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 class="text-xl font-semibold text-foreground tracking-tight">Settings</h1>
+            <h1 class="text-xl font-semibold text-foreground tracking-tight">Agent Settings</h1>
             <p class="text-sm text-muted-foreground mt-1 leading-relaxed">
-              Configure your agent. Settings are auto-saved when valid, and most runtime changes require a restart.
+              Configure your agent runtime. Changes are auto-saved when valid, and most runtime updates require a restart.
             </p>
           </div>
           <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={settings.loading} class="gap-1.5 self-start">

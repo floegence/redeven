@@ -3956,7 +3956,7 @@ export function EnvAIPage() {
       throw new Error('Read/write/execute permission required.');
     }
     if (!ai.aiEnabled()) {
-      notify.error('AI not configured', 'Open Settings to enable AI.');
+      notify.error('AI not configured', 'Open Agent Settings to enable AI.');
       rollbackRejectedComposerSend(context);
       throw new Error('AI is not configured.');
     }
@@ -4379,11 +4379,11 @@ export function EnvAIPage() {
                       </div>
                       <div class="text-lg font-semibold text-foreground mb-2">Flower is not configured</div>
                       <div class="text-sm text-muted-foreground mb-6 max-w-[320px]">
-                        Configure an AI provider in settings to start using Flower.
+                        Configure an AI provider in Agent Settings to start using Flower.
                       </div>
                       <Button size="md" variant="default" onClick={() => env.openSettings('ai')}>
                         <Settings class="w-4 h-4 mr-2" />
-                        Open Settings
+                        Open Agent Settings
                       </Button>
                     </Motion.div>
                   }
@@ -4410,7 +4410,7 @@ export function EnvAIPage() {
                     </div>
                     <Button size="md" variant="default" onClick={() => env.openSettings('ai')}>
                       <Settings class="w-4 h-4 mr-2" />
-                      Open Settings
+                      Open Agent Settings
                     </Button>
                   </Motion.div>
                 </Show>
@@ -4482,7 +4482,7 @@ export function EnvAIPage() {
                                 <line x1="12" y1="8" x2="12" y2="12" />
                                 <line x1="12" y1="16" x2="12.01" y2="16" />
                               </svg>
-                              Settings are not available
+                              Agent Settings are not available
                             </div>
                             <div class="mt-1 text-muted-foreground pl-6">
                               {ai.settings.error instanceof Error ? ai.settings.error.message : String(ai.settings.error)}
