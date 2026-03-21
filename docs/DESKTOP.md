@@ -23,7 +23,7 @@ This document describes the public Electron desktop shell that is published toge
 - Electron only allows navigation to the exact reported Local UI origin (`localhost` / loopback / explicit local IP) and opens all other URLs in the system browser.
 - Desktop exposes:
   - a native `Connect to Redeven...` menu entry for target selection
-  - a native Settings window
+  - a native `Desktop Settings...` window for shell-owned startup configuration
   - explicit quit accelerators (`CommandOrControl+,`, `CommandOrControl+Q`)
 
 ## Runtime contract
@@ -115,8 +115,9 @@ Desktop settings live under the Electron user data directory, not inside the git
 ## User entry points
 
 - `Connect to Redeven...` from the native app menu opens the target selection flow.
-- `Settings...` opens the full desktop startup/settings window.
-- The blocked page `Settings` action reuses the same settings window so the user can switch back to `This device` or fix an external target URL.
+- `Desktop Settings...` opens the desktop startup/settings window.
+- Desktop intentionally keeps connection targeting separate from `Desktop Settings...` so shell-owned startup state does not collide with Env App `Agent Settings`.
+- The blocked page routes to either `Connect to Redeven` or `Desktop Settings` depending on whether the failure is about the selected target or the local desktop-managed startup state.
 
 ## Env App behavior
 
@@ -174,7 +175,7 @@ For release automation, the same preparation script can hydrate the bundle from 
 If another `redeven` process already holds `~/.redeven/agent.lock`, Desktop now behaves as follows:
 
 - If that process exposes a compatible Local UI, Desktop attaches automatically.
-- If that process does not expose Local UI (for example a `remote`-only run), Desktop shows a blocked page with `Retry`, `Settings`, `Copy diagnostics`, and `Quit`.
+- If that process does not expose Local UI (for example a `remote`-only run), Desktop shows a blocked page with `Retry`, `Desktop Settings`, `Copy diagnostics`, and `Quit`.
 
 Desktop can also open another machine directly:
 
@@ -187,7 +188,7 @@ Desktop can also open another machine directly:
 Desktop shortcuts:
 
 - `Connect to Redeven...` is available from the native app menu.
-- `CommandOrControl+,` opens the native Settings window.
+- `CommandOrControl+,` opens `Desktop Settings...`.
 - `CommandOrControl+Q` asks for confirmation before quitting the desktop app.
 
 ## macOS distribution

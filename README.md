@@ -37,9 +37,9 @@ This repository stays open-source and auditable. It documents the public agent r
 
 | Surface | What users get | Why it matters | Docs |
 | --- | --- | --- | --- |
-| `Env App` | Deck, terminal, monitoring, file browser, codespaces, port forwarding, settings | One secure workspace view for day-to-day endpoint operations | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
+| `Env App` | Deck, terminal, monitoring, file browser, codespaces, port forwarding, Agent Settings | One secure workspace view for day-to-day endpoint operations | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
 | `Code App` | code-server over Flowersec E2EE proxying for HTTP and WebSocket traffic | Browser IDE access without exposing the editor directly to the control plane | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
-| `Desktop Shell` | Native Electron app that opens this device or another Redeven Local UI | Local UX, settings, blocked-state handling, and diagnostics in a desktop wrapper | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
+| `Desktop Shell` | Native Electron app that opens this device or another Redeven Local UI | Local UX, Desktop Settings, connection management, blocked-state handling, and diagnostics in a desktop wrapper | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
 | `Flower` (optional) | AI workflows that can start from terminal, file, and monitoring context | AI assistance stays attached to the same endpoint runtime and permission model | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
 
 ## Example workflows
@@ -48,7 +48,7 @@ This repository stays open-source and auditable. It documents the public agent r
 | --- | --- | --- |
 | Secure remote environment access | Open Env App, inspect files, attach a terminal, and check monitoring panels | Operate on the user machine without routing plaintext application traffic through the control plane |
 | Browser-based development | Launch a codespace from Env App, then move into Code App | Reach code-server through the agent gateway and Flowersec E2EE proxy |
-| Desktop operations | Start Redeven Desktop on this device or connect it to another Redeven Local UI | Use native settings, diagnostics, and connection management around the same runtime contract |
+| Desktop operations | Start Redeven Desktop on this device or connect it to another Redeven Local UI | Use native Desktop Settings, diagnostics, and connection management around the same runtime contract |
 
 ## Quick start
 

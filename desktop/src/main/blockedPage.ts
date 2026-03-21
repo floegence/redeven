@@ -38,15 +38,30 @@ function blockedHeadline(report: LaunchBlockedReport): { title: string; body: st
   };
 }
 
-function actionURL(action: 'retry' | 'copy-diagnostics' | 'settings' | 'quit'): string {
+type BlockedPageAction = 'retry' | 'copy-diagnostics' | 'desktop-settings' | 'connect' | 'quit';
+
+function actionURL(action: BlockedPageAction): string {
   return `${BLOCKED_ACTION_ORIGIN}/${action}`;
+}
+
+function secondaryAction(report: LaunchBlockedReport): Readonly<{ action: BlockedPageAction; label: string }> {
+  if (report.code === 'external_target_unreachable' || report.code === 'external_target_invalid') {
+    return {
+      action: 'connect',
+      label: 'Connect to Redeven',
+    };
+  }
+  return {
+    action: 'desktop-settings',
+    label: 'Desktop Settings',
+  };
 }
 
 export function isBlockedActionURL(rawURL: string): boolean {
   return String(rawURL ?? '').startsWith(`${BLOCKED_ACTION_ORIGIN}/`);
 }
 
-export function blockedActionFromURL(rawURL: string): 'retry' | 'copy-diagnostics' | 'settings' | 'quit' | null {
+export function blockedActionFromURL(rawURL: string): BlockedPageAction | null {
   if (!isBlockedActionURL(rawURL)) {
     return null;
   }
@@ -56,8 +71,10 @@ export function blockedActionFromURL(rawURL: string): 'retry' | 'copy-diagnostic
       return 'retry';
     case '/copy-diagnostics':
       return 'copy-diagnostics';
-    case '/settings':
-      return 'settings';
+    case '/desktop-settings':
+      return 'desktop-settings';
+    case '/connect':
+      return 'connect';
     case '/quit':
       return 'quit';
     default:
@@ -70,6 +87,7 @@ export function buildBlockedPageHTML(
   platform: NodeJS.Platform = process.platform,
 ): string {
   const headline = blockedHeadline(report);
+  const secondary = secondaryAction(report);
   const diagnostics = escapeHTML(formatBlockedLaunchDiagnostics(report));
   const details = report.diagnostics?.target_url
     ? `Target URL: ${escapeHTML(report.diagnostics.target_url)}`
@@ -201,7 +219,7 @@ export function buildBlockedPageHTML(
       <div class="meta">${details}</div>
       <div class="actions">
         <a class="button primary" href="${actionURL('retry')}">Retry</a>
-        <a class="button" href="${actionURL('settings')}">Settings</a>
+        <a class="button" href="${actionURL(secondary.action)}">${escapeHTML(secondary.label)}</a>
         <a class="button" href="${actionURL('copy-diagnostics')}">Copy diagnostics</a>
         <a class="button" href="${actionURL('quit')}">Quit</a>
       </div>

@@ -500,7 +500,7 @@ export function EnvAppShell() {
     const first = String(options[0]?.id ?? '').trim();
     if (first && allowed.has(first)) return first;
 
-    throw new Error('No available model. Configure AI in Settings first.');
+    throw new Error('No available model. Configure AI in Agent Settings first.');
   };
 
   const validateAskFlowerWorkingDir = async (workingDir: string): Promise<string> => {
@@ -1220,7 +1220,7 @@ export function EnvAppShell() {
     // permissions load asynchronously, but FloeRegistryRuntime registers components only once on mount.
     // Access to Flower is still gated via navigation + permission checks.
     list.push({ id: 'ai', name: 'Flower', icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
-    list.push({ id: 'settings', name: 'Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
+    list.push({ id: 'settings', name: 'Agent Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
     return list;
   });
 
@@ -1336,7 +1336,7 @@ export function EnvAppShell() {
   };
 
   const activityBottomItems = (): ActivityBarItem[] => {
-    return [{ id: 'settings', icon: Settings, label: 'Settings', onClick: () => openSettings() }];
+    return [{ id: 'settings', icon: Settings, label: 'Agent Settings', onClick: () => openSettings() }];
   };
 
   const envName = () => {
