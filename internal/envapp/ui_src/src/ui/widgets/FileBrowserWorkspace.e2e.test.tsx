@@ -21,6 +21,18 @@ async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function expectCodeBadgeForFile(host: HTMLElement, fileName: string, label: string, tone: string) {
+  const fileButton = Array.from(host.querySelectorAll('button'))
+    .find((node) => node.textContent?.includes(fileName));
+
+  expect(fileButton, `expected rendered file entry for ${fileName}`).toBeTruthy();
+
+  const badge = fileButton?.querySelector('[data-code-badge-label]') as HTMLElement | null;
+  expect(badge, `expected code badge for ${fileName}`).toBeTruthy();
+  expect(badge?.getAttribute('data-code-badge-label')).toBe(label);
+  expect(badge?.getAttribute('data-code-badge-tone')).toBe(tone);
+}
+
 function mockMatchMedia(matches: boolean) {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -763,6 +775,70 @@ describe('FileBrowserWorkspace interactions', () => {
       expect(nextFilterInput).toBeTruthy();
       expect(nextFilterInput).not.toBe(filterInput);
       expect(nextFilterInput!.value).toBe('');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('renders published code badges for representative code files in the agent workspace', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const codeFiles: FileItem[] = [
+      { id: 'file-eslint-config', name: 'eslint.config.mjs', type: 'file', path: '/eslint.config.mjs' },
+      { id: 'file-server-ts', name: 'server.ts', type: 'file', path: '/server.ts' },
+      { id: 'file-dockerfile', name: 'Dockerfile', type: 'file', path: '/Dockerfile' },
+      { id: 'file-dockerfile-prefix', name: 'Dockerfile.dev', type: 'file', path: '/Dockerfile.dev' },
+      { id: 'file-dockerfile-suffix', name: 'deploy.dockerfile', type: 'file', path: '/deploy.dockerfile' },
+      { id: 'file-makefile', name: 'Makefile', type: 'file', path: '/Makefile' },
+      { id: 'file-cmake', name: 'CMakeLists.txt', type: 'file', path: '/CMakeLists.txt' },
+      { id: 'file-zshrc', name: '.zshrc', type: 'file', path: '/.zshrc' },
+      { id: 'file-powershell', name: 'deploy.ps1', type: 'file', path: '/deploy.ps1' },
+      { id: 'file-gradle', name: 'build.gradle', type: 'file', path: '/build.gradle' },
+    ];
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div style={{ height: '1200px', width: '960px' }}>
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={codeFiles}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-code-icons"
+            instanceId="test-files-workspace-code-icons"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const listButton = Array.from(host.querySelectorAll('button'))
+        .find((node) => node.textContent === 'List');
+      expect(listButton).toBeTruthy();
+      listButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      const expectations = [
+        ['eslint.config.mjs', 'JS', 'warning'],
+        ['server.ts', 'TS', 'primary'],
+        ['Dockerfile', 'DKR', 'info'],
+        ['Dockerfile.dev', 'DKR', 'info'],
+        ['deploy.dockerfile', 'DKR', 'info'],
+        ['Makefile', 'MAKE', 'warning'],
+        ['CMakeLists.txt', 'CMK', 'primary'],
+        ['.zshrc', 'SH', 'success'],
+        ['deploy.ps1', 'PS', 'primary'],
+        ['build.gradle', 'GRV', 'success'],
+      ] as const;
+
+      for (const [fileName, label, tone] of expectations) {
+        expectCodeBadgeForFile(host, fileName, label, tone);
+      }
     } finally {
       dispose();
     }
