@@ -120,6 +120,25 @@ Desktop settings live under the Electron user data directory, not inside the git
 - Desktop intentionally keeps connection targeting separate from `Desktop Settings...` so shell-owned startup state does not collide with Env App `Agent Settings`.
 - The blocked page routes to either `Connect to Redeven` or `Desktop Settings` depending on whether the failure is about the selected target or the local desktop-managed startup state.
 
+## Accessibility behavior
+
+Desktop-owned HTML pages target the same WCAG 2.2 AA baseline as Env App, but they do so with repository-owned markup instead of shared browser components.
+
+The required contract for `settingsPage.ts` and `blockedPage.ts` is:
+
+- Include a skip link and a stable `main` target so keyboard users can bypass the window chrome and page preamble.
+- Keep validation and blocked-state summaries focusable and announced with appropriate alert/live-region semantics.
+- Use explicit labels, `fieldset` / `legend`, and `aria-describedby` relationships for settings forms instead of placeholder-only guidance.
+- Preserve visible `:focus-visible` treatments on links, buttons, radio cards, and inputs.
+- Respect `prefers-reduced-motion` in page-level CSS.
+- Maintain contrast-safe theme tokens when updating desktop palette values.
+
+Desktop-specific outcomes from this implementation:
+
+- The Desktop Settings / Connect page focuses the surfaced error region on validation failure or initial error rendering.
+- The blocked page focuses its summary alert on load so the reason and next action are announced immediately.
+- The blocked action row is exposed as a labeled navigation landmark.
+
 ## Env App behavior
 
 - Desktop-managed Local UI exposes `desktop_managed`, `effective_run_mode`, and `remote_enabled` through the local runtime/version endpoints.

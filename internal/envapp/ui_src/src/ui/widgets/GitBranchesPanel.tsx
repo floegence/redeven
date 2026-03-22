@@ -17,6 +17,7 @@ import {
   workspaceSectionLabel,
   type GitBranchSubview,
 } from '../utils/gitWorkbench';
+import { resolveRovingTabTargetId } from '../utils/tabNavigation';
 import { gitBranchTone, gitChangePathClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import {
@@ -120,6 +121,16 @@ function defaultCompareTarget(branches: GitListBranchesResponse | null | undefin
   const firstDifferent = names.find((name) => name !== sourceRef);
   if (firstDifferent) return firstDifferent;
   return names[0] ?? 'main';
+}
+
+const GIT_BRANCH_SUBVIEW_IDS = ['status', 'history'] as const satisfies readonly GitBranchSubview[];
+
+function gitBranchSubviewTabId(view: GitBranchSubview): string {
+  return `git-branch-subview-tab-${view}`;
+}
+
+function gitBranchSubviewPanelId(view: GitBranchSubview): string {
+  return `git-branch-subview-panel-${view}`;
 }
 
 function branchStatusEmptyState(branch: GitBranchSummary | null | undefined): {
@@ -718,6 +729,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
 
 export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const rpc = useRedevenRpc();
+  const branchSubviewTabRefs = new Map<GitBranchSubview, HTMLButtonElement>();
 
   const [statusWorkspace, setStatusWorkspace] = createSignal<GitListWorkspaceChangesResponse | null>(null);
   const [statusLoading, setStatusLoading] = createSignal(false);
@@ -788,6 +800,13 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     || props.selectedBranch?.current
   );
   const deleteLabel = () => (props.deleteBusy ? 'Deleting...' : 'Delete');
+  const handleBranchSubviewKeyDown = (event: KeyboardEvent, currentView: GitBranchSubview) => {
+    const nextView = resolveRovingTabTargetId(GIT_BRANCH_SUBVIEW_IDS, currentView, event.key, 'horizontal');
+    if (!nextView || nextView === currentView) return;
+    event.preventDefault();
+    props.onSelectBranchSubview?.(nextView);
+    queueMicrotask(() => branchSubviewTabRefs.get(nextView)?.focus());
+  };
 
   createEffect(() => {
     const branch = props.selectedBranch;
@@ -845,11 +864,27 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const renderStatus = () => {
     const branch = props.selectedBranch;
     if (!branch) {
-      return <div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Choose a branch from the sidebar to inspect its status or history.</div>;
+      return (
+        <div
+          class="flex-1 px-3 py-4 text-xs text-muted-foreground"
+          role="tabpanel"
+          id={gitBranchSubviewPanelId('status')}
+          aria-labelledby={gitBranchSubviewTabId('status')}
+          tabIndex={0}
+        >
+          Choose a branch from the sidebar to inspect its status or history.
+        </div>
+      );
     }
 
     return (
-      <div class="flex h-full min-h-0 flex-col overflow-hidden">
+      <div
+        class="flex h-full min-h-0 flex-col overflow-hidden"
+        role="tabpanel"
+        id={gitBranchSubviewPanelId('status')}
+        aria-labelledby={gitBranchSubviewTabId('status')}
+        tabIndex={0}
+      >
         <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
           <div class="flex min-h-0 flex-1 flex-col gap-3">
             <section class="rounded-md border border-border/65 bg-card px-3 py-2.5">
@@ -1020,20 +1055,32 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           </Show>
                         </div>
 
-                        <div class="grid w-full grid-cols-2 rounded-md border border-border/65 bg-muted/[0.14] p-0.5 sm:inline-flex sm:w-auto" role="tablist" aria-label="Branch detail tabs">
-                          <For each={(['status', 'history'] as GitBranchSubview[])}>
+                        <div
+                          class="grid w-full grid-cols-2 rounded-md border border-border/65 bg-muted/[0.14] p-0.5 sm:inline-flex sm:w-auto"
+                          role="tablist"
+                          aria-label="Branch detail tabs"
+                          aria-orientation="horizontal"
+                        >
+                          <For each={GIT_BRANCH_SUBVIEW_IDS}>
                             {(view) => {
                               const active = () => branchSubview() === view;
                               return (
                                 <button
+                                  ref={(el) => {
+                                    branchSubviewTabRefs.set(view, el);
+                                  }}
                                   type="button"
                                   role="tab"
+                                  id={gitBranchSubviewTabId(view)}
                                   aria-selected={active()}
+                                  aria-controls={gitBranchSubviewPanelId(view)}
+                                  tabIndex={active() ? 0 : -1}
                                   class={cn(
                                     'rounded px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150',
                                     active() ? 'git-browser-selection-chip' : 'text-muted-foreground hover:bg-background/80 hover:text-foreground'
                                   )}
                                   onClick={() => props.onSelectBranchSubview?.(view)}
+                                  onKeyDown={(event) => handleBranchSubviewKeyDown(event, view)}
                                 >
                                   {branchSubviewLabel(view)}
                                 </button>
@@ -1058,18 +1105,26 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               </div>
 
               <Show when={branchSubview() === 'history'} fallback={renderStatus()}>
-                <HistoryList
-                  repoRootPath={compareRepoRootPath()}
-                  selectedBranch={props.selectedBranch}
-                  commits={props.commits}
-                  listLoading={props.listLoading}
-                  listLoadingMore={props.listLoadingMore}
-                  listError={props.listError}
-                  hasMore={props.hasMore}
-                  selectedCommitHash={props.selectedCommitHash}
-                  onSelectCommit={props.onSelectCommit}
-                  onLoadMore={props.onLoadMore}
-                />
+                <div
+                  role="tabpanel"
+                  id={gitBranchSubviewPanelId('history')}
+                  aria-labelledby={gitBranchSubviewTabId('history')}
+                  tabIndex={0}
+                  class="flex min-h-0 flex-1 flex-col overflow-hidden"
+                >
+                  <HistoryList
+                    repoRootPath={compareRepoRootPath()}
+                    selectedBranch={props.selectedBranch}
+                    commits={props.commits}
+                    listLoading={props.listLoading}
+                    listLoadingMore={props.listLoadingMore}
+                    listError={props.listError}
+                    hasMore={props.hasMore}
+                    selectedCommitHash={props.selectedCommitHash}
+                    onSelectCommit={props.onSelectCommit}
+                    onLoadMore={props.onLoadMore}
+                  />
+                </div>
               </Show>
             </div>
           </Show>

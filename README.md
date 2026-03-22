@@ -102,6 +102,13 @@ Expected result:
 
 Read the full contract in [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md) and [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md).
 
+## Frontend accessibility baseline
+
+- Env App and Desktop target a WCAG 2.2 AA baseline for keyboard access, visible focus, semantic landmarks, motion reduction, and contrast-sensitive text.
+- Shared interaction semantics should come from released `@floegence/floe-webapp-*` packages first. Product-owned Redeven widgets should only add app-specific accessibility behavior on top of those primitives.
+- Custom widgets must use real interactive elements, preserve visible focus indicators, and keep keyboard behavior aligned with their semantic role instead of relying on clickable containers or one-off ARIA patches.
+- Contributor guidance for the two frontend surfaces lives in [`docs/ENV_APP.md`](docs/ENV_APP.md) and [`docs/DESKTOP.md`](docs/DESKTOP.md).
+
 ## Docs by task
 
 | I want to... | Read |
