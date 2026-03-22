@@ -97,6 +97,16 @@ type CreateThreadResponse = Readonly<{
 
 type AccessGatePhase = 'checking' | 'unlock_required' | 'resuming' | 'resume_blocked' | 'ready';
 
+const ACCESS_GATE_IDS = {
+  title: 'redeven-access-gate-title',
+  description: 'redeven-access-gate-description',
+  passwordInput: 'redeven-access-password',
+  passwordHelp: 'redeven-access-password-help',
+  resumeHint: 'redeven-access-resume-hint',
+  error: 'redeven-access-error',
+  notice: 'redeven-access-notice',
+} as const;
+
 class AccessResumeTimeoutError extends Error {
   constructor(message: string) {
     super(message);
@@ -1536,72 +1546,127 @@ export function EnvAppShell() {
   });
   const accessGateCheckingLabel = createMemo(() => 'Checking secure access...');
   const accessGateResumeHint = createMemo(() => 'The page stays blocked until the direct agent session confirms the password for this environment page.');
+  const accessGatePasswordLabel = createMemo(() => 'Access password');
+  const accessGatePasswordHelp = createMemo(() => (
+    isLocalMode()
+      ? 'Use the full Local UI password configured for this local agent.'
+      : 'Use the full Local UI password configured for this environment page.'
+  ));
+  const accessGateRegionDescribedBy = createMemo(() => {
+    const ids: string[] = [ACCESS_GATE_IDS.description, ACCESS_GATE_IDS.notice];
+    if (accessGatePhase() === 'resuming' || accessGatePhase() === 'resume_blocked') {
+      ids.push(ACCESS_GATE_IDS.resumeHint);
+    }
+    if (accessError()) {
+      ids.push(ACCESS_GATE_IDS.error);
+    }
+    return ids.join(' ');
+  });
+  const accessGatePasswordDescribedBy = createMemo(() => {
+    const ids: string[] = [ACCESS_GATE_IDS.passwordHelp];
+    if (accessError()) {
+      ids.push(ACCESS_GATE_IDS.error);
+    }
+    return ids.join(' ');
+  });
 
   const accessGatePanel = () => (
     <div class="flex h-full min-h-0 items-center justify-center bg-background px-4 py-6">
       <Panel class="w-full max-w-md border-border shadow-sm">
-        <PanelContent class="flex flex-col gap-4 p-6">
-          <div class="space-y-2">
-            <div class="text-lg font-semibold text-foreground">{accessGateTitle()}</div>
-            <p class="text-sm leading-6 text-muted-foreground">{accessGateDescription()}</p>
-          </div>
+        <PanelContent class="p-6">
+          <section
+            class="flex flex-col gap-4"
+            aria-labelledby={ACCESS_GATE_IDS.title}
+            aria-describedby={accessGateRegionDescribedBy()}
+            aria-busy={accessPending() || accessUnlocking() || accessRecoveryBusy()}
+          >
+            <div class="space-y-2">
+              <h1 id={ACCESS_GATE_IDS.title} class="text-lg font-semibold text-foreground">{accessGateTitle()}</h1>
+              <p id={ACCESS_GATE_IDS.description} class="text-sm leading-6 text-muted-foreground">{accessGateDescription()}</p>
+            </div>
 
-          <Show when={accessGatePhase() === 'unlock_required'}>
-            <form class="flex flex-col gap-3" onSubmit={(event) => void submitAccessUnlock(event)}>
-              <input
-                ref={accessPasswordInput}
-                type="password"
-                autocomplete="current-password"
-                placeholder="Access password"
-                value={accessPassword()}
-                onInput={(event) => setCurrentAccessPassword(event.currentTarget.value)}
-                disabled={accessPending() || accessUnlocking()}
-                class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-[border,box-shadow] placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
-              />
-              <button
-                type="submit"
-                disabled={accessPending() || accessUnlocking() || !accessPassword()}
-                class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {accessUnlocking() ? 'Unlocking...' : 'Unlock'}
-              </button>
-            </form>
-          </Show>
-
-          <Show when={accessGatePhase() === 'checking'}>
-            <div class="text-sm text-muted-foreground">{accessGateCheckingLabel()}</div>
-          </Show>
-
-          <Show when={accessGatePhase() === 'resuming' || accessGatePhase() === 'resume_blocked'}>
-            <>
-              <div class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">{accessGateResumeHint()}</div>
-              <div class="flex flex-col gap-2 sm:flex-row">
+            <Show when={accessGatePhase() === 'unlock_required'}>
+              <form class="flex flex-col gap-3" onSubmit={(event) => void submitAccessUnlock(event)}>
+                <div class="space-y-2">
+                  <label for={ACCESS_GATE_IDS.passwordInput} class="text-sm font-medium text-foreground">
+                    {accessGatePasswordLabel()}
+                  </label>
+                  <input
+                    ref={accessPasswordInput}
+                    id={ACCESS_GATE_IDS.passwordInput}
+                    type="password"
+                    autocomplete="current-password"
+                    placeholder="Enter access password"
+                    value={accessPassword()}
+                    onInput={(event) => setCurrentAccessPassword(event.currentTarget.value)}
+                    disabled={accessPending() || accessUnlocking()}
+                    aria-describedby={accessGatePasswordDescribedBy()}
+                    aria-invalid={!!accessError()}
+                    class="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-[border,box-shadow] placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                  <p id={ACCESS_GATE_IDS.passwordHelp} class="text-xs leading-5 text-muted-foreground">
+                    {accessGatePasswordHelp()}
+                  </p>
+                </div>
                 <button
-                  type="button"
-                  disabled={accessRecoveryBusy() || accessUnlocking()}
-                  onClick={() => void retryAccessConnection()}
+                  type="submit"
+                  disabled={accessPending() || accessUnlocking() || !accessPassword()}
                   class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {accessRecoveryBusy() ? 'Preparing secure session...' : 'Retry connection'}
+                  {accessUnlocking() ? 'Unlocking...' : 'Unlock'}
                 </button>
-                <button
-                  type="button"
-                  onClick={reloadAccessPage}
-                  class="inline-flex h-10 items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted/50"
+              </form>
+            </Show>
+
+            <Show when={accessGatePhase() === 'checking'}>
+              <div class="text-sm text-muted-foreground">{accessGateCheckingLabel()}</div>
+            </Show>
+
+            <Show when={accessGatePhase() === 'resuming' || accessGatePhase() === 'resume_blocked'}>
+              <>
+                <div
+                  id={ACCESS_GATE_IDS.resumeHint}
+                  class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-sm text-muted-foreground"
                 >
-                  Reload page
-                </button>
+                  {accessGateResumeHint()}
+                </div>
+                <div class="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    disabled={accessRecoveryBusy() || accessUnlocking()}
+                    onClick={() => void retryAccessConnection()}
+                    class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {accessRecoveryBusy() ? 'Preparing secure session...' : 'Retry connection'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={reloadAccessPage}
+                    class="inline-flex h-10 items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted/50"
+                  >
+                    Reload page
+                  </button>
+                </div>
+              </>
+            </Show>
+
+            <Show when={accessError()}>
+              <div
+                id={ACCESS_GATE_IDS.error}
+                role="alert"
+                class="rounded-md border border-error/30 bg-error/5 px-3 py-2 text-sm text-error"
+              >
+                {accessError()}
               </div>
-            </>
-          </Show>
+            </Show>
 
-          <Show when={accessError()}>
-            <div class="rounded-md border border-error/30 bg-error/5 px-3 py-2 text-sm text-error">{accessError()}</div>
-          </Show>
-
-          <div class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
-            Password verification stays inside the agent-managed session before interactive features continue.
-          </div>
+            <div
+              id={ACCESS_GATE_IDS.notice}
+              class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground"
+            >
+              Password verification stays inside the agent-managed session before interactive features continue.
+            </div>
+          </section>
         </PanelContent>
       </Panel>
     </div>
@@ -1714,8 +1779,10 @@ export function EnvAppShell() {
         <Show when={connectError()}>
           <Panel class="h-auto rounded-none border-0 border-b border-error/40">
             <PanelContent class="p-3 text-xs">
-              <div class="text-error font-medium">Connection failed</div>
-              <div class="text-muted-foreground break-words">{connectError()}</div>
+              <div role="alert">
+                <div class="text-error font-medium">Connection failed</div>
+                <div class="text-muted-foreground break-words">{connectError()}</div>
+              </div>
             </PanelContent>
           </Panel>
         </Show>

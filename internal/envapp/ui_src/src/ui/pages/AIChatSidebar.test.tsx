@@ -220,4 +220,27 @@ describe('AIChatSidebar', () => {
     const indicator = host.querySelector('[data-thread-id="thread-read"] [data-thread-indicator]');
     expect(indicator?.getAttribute('data-thread-indicator')).toBe('none');
   });
+
+  it('renders a dedicated delete button outside the thread selection button', () => {
+    aiContextStub.threads = makeThreadsResource([
+      makeThread({
+        thread_id: 'thread-delete',
+      }),
+    ]);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <AIChatSidebar />, host);
+
+    const threadCard = host.querySelector('[data-thread-id="thread-delete"]') as HTMLDivElement | null;
+    const deleteButton = host.querySelector('button[aria-label="Delete chat Conversation"]') as HTMLButtonElement | null;
+
+    expect(threadCard).toBeTruthy();
+    expect(deleteButton).toBeTruthy();
+    expect(threadCard?.querySelector('button button')).toBeNull();
+
+    deleteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(host.textContent).toContain('Delete ');
+    expect(host.textContent).toContain('"Conversation"?');
+  });
 });

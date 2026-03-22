@@ -115,15 +115,33 @@ export function buildBlockedPageHTML(
         --accent-text: ${desktopTheme.accentText};
       }
       * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: "Aptos", "Avenir Next", "Segoe UI Variable", sans-serif;
         background: var(--bg);
         color: var(--text);
         display: grid;
         place-items: center;
         padding: calc(24px + ${titleBarInset}) 24px 24px;
+      }
+      .skip-link {
+        position: absolute;
+        left: 24px;
+        top: calc(8px + ${titleBarInset});
+        z-index: 10;
+        padding: 0.6rem 0.9rem;
+        border-radius: 999px;
+        background: var(--accent);
+        color: var(--accent-text);
+        text-decoration: none;
+        transform: translateY(-220%);
+      }
+      .skip-link:focus-visible {
+        transform: translateY(0);
+        outline: 2px solid color-mix(in srgb, var(--accent) 35%, white);
+        outline-offset: 3px;
       }
       main {
         width: min(760px, 100%);
@@ -179,6 +197,11 @@ export function buildBlockedPageHTML(
         background: var(--panel);
         font-weight: 600;
       }
+      .button:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--accent) 40%, white);
+        outline-offset: 2px;
+      }
       .button.primary {
         background: var(--accent);
         color: var(--accent-text);
@@ -203,31 +226,50 @@ export function buildBlockedPageHTML(
         font-size: 12px;
         line-height: 1.6;
       }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
       @media (max-width: 640px) {
         body { padding: calc(12px + ${titleBarInset}) 12px 12px; }
         main { padding: 22px; border-radius: 18px; }
         .actions { flex-direction: column; }
         .button { width: 100%; }
+        .skip-link { left: 12px; }
       }
     </style>
   </head>
   <body>
-    <main>
-      <p class="eyebrow">Redeven Desktop</p>
-      <h1>${escapeHTML(headline.title)}</h1>
-      <p>${escapeHTML(headline.body)}</p>
-      <div class="meta">${details}</div>
-      <div class="actions">
+    <a class="skip-link" href="#blocked-main">Skip to main content</a>
+    <main id="blocked-main" tabindex="-1">
+      <div id="blocked-summary" role="alert" aria-live="assertive" aria-describedby="blocked-meta" tabindex="-1">
+        <p class="eyebrow">Redeven Desktop</p>
+        <h1>${escapeHTML(headline.title)}</h1>
+        <p>${escapeHTML(headline.body)}</p>
+      </div>
+      <div id="blocked-meta" class="meta">${details}</div>
+      <nav class="actions" aria-label="Blocked page actions">
         <a class="button primary" href="${actionURL('retry')}">Retry</a>
         <a class="button" href="${actionURL(secondary.action)}">${escapeHTML(secondary.label)}</a>
         <a class="button" href="${actionURL('copy-diagnostics')}">Copy diagnostics</a>
         <a class="button" href="${actionURL('quit')}">Quit</a>
-      </div>
+      </nav>
       <details>
         <summary>Technical details</summary>
         <pre>${diagnostics}</pre>
       </details>
     </main>
+    <script>
+      const blockedSummary = document.getElementById('blocked-summary');
+      if (blockedSummary) {
+        queueMicrotask(() => blockedSummary.focus());
+      }
+    </script>
   </body>
 </html>`;
 }
