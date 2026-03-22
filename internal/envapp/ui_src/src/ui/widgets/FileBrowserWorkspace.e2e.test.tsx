@@ -33,6 +33,12 @@ function expectCodeBadgeForFile(host: HTMLElement, fileName: string, label: stri
   expect(badge?.getAttribute('data-code-badge-tone')).toBe(tone);
 }
 
+function findGridLabel(tile: HTMLButtonElement | null, name: string) {
+  if (!tile) return null;
+  return Array.from(tile.querySelectorAll('span'))
+    .find((node) => node.textContent === name) as HTMLSpanElement | null;
+}
+
 function mockMatchMedia(matches: boolean) {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -391,8 +397,8 @@ describe('FileBrowserWorkspace interactions', () => {
       expect(folderTile?.getAttribute('title')).toBe(longFolderName);
       expect(fileTile?.getAttribute('title')).toBe(longFileName);
 
-      const folderLabel = folderTile?.querySelector('[data-file-grid-name="true"]') as HTMLSpanElement | null;
-      const fileLabel = fileTile?.querySelector('[data-file-grid-name="true"]') as HTMLSpanElement | null;
+      const folderLabel = findGridLabel(folderTile, longFolderName);
+      const fileLabel = findGridLabel(fileTile, longFileName);
 
       expect(folderLabel).toBeTruthy();
       expect(fileLabel).toBeTruthy();
