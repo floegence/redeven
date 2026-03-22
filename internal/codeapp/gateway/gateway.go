@@ -109,10 +109,11 @@ type Gateway struct {
 	resolveSessionMeta      func(channelID string) (*session.Meta, bool)
 	resolveSessionTunnelURL func(channelID string) (string, bool)
 
-	configPath string
-	stateDir   string
-	configMu   sync.Mutex
-	secrets    *settings.SecretsStore
+	configPath         string
+	stateDir           string
+	localPermissionCap *config.PermissionSet
+	configMu           sync.Mutex
+	secrets            *settings.SecretsStore
 
 	distFS fs.FS
 	dist   http.Handler
@@ -202,6 +203,12 @@ func New(opts Options) (*Gateway, error) {
 	}
 
 	stateDir := filepath.Dir(strings.TrimSpace(opts.ConfigPath))
+	localPermissionCap := config.ResolvePermissionCapFromConfigPath(
+		strings.TrimSpace(opts.ConfigPath),
+		localUserPublicID,
+		localFloeAppAgent,
+		config.PermissionSet{Read: true, Write: false, Execute: true},
+	)
 	return &Gateway{
 		log:                     logger,
 		backend:                 opts.Backend,
@@ -213,6 +220,7 @@ func New(opts Options) (*Gateway, error) {
 		resolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
 		configPath:              strings.TrimSpace(opts.ConfigPath),
 		stateDir:                stateDir,
+		localPermissionCap:      &localPermissionCap,
 		secrets:                 secrets,
 		distFS:                  opts.DistFS,
 		dist:                    dist,
@@ -800,12 +808,11 @@ const (
 )
 
 func (g *Gateway) localSessionMeta() *session.Meta {
-	// Best-effort: keep the Local UI usable even if the config is not readable.
+	// Local UI permissions follow the current process snapshot and only change after
+	// an explicit agent restart, matching the rest of the runtime.
 	cap := config.PermissionSet{Read: true, Write: false, Execute: true}
-	if g != nil {
-		if cfg, err := g.loadConfigLocked(); err == nil && cfg != nil && cfg.PermissionPolicy != nil {
-			cap = cfg.PermissionPolicy.ResolveCap(localUserPublicID, localFloeAppAgent)
-		}
+	if g != nil && g.localPermissionCap != nil {
+		cap = *g.localPermissionCap
 	}
 
 	return &session.Meta{

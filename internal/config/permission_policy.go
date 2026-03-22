@@ -114,3 +114,22 @@ func ParsePermissionPolicyPreset(preset string) (*PermissionPolicy, error) {
 		return nil, fmt.Errorf("unknown permission policy preset: %q", preset)
 	}
 }
+
+// ResolvePermissionCapFromConfigPath loads configPath and resolves the effective local cap
+// for the given user/app pair. When the config cannot be loaded, it falls back to fallback.
+func ResolvePermissionCapFromConfigPath(
+	configPath string,
+	userPublicID string,
+	floeApp string,
+	fallback PermissionSet,
+) PermissionSet {
+	path := strings.TrimSpace(configPath)
+	if path == "" {
+		return fallback
+	}
+	cfg, err := Load(path)
+	if err != nil || cfg == nil || cfg.PermissionPolicy == nil {
+		return fallback
+	}
+	return cfg.PermissionPolicy.ResolveCap(userPublicID, floeApp)
+}
