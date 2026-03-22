@@ -306,12 +306,7 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
           while (blocks.length <= target) {
             blocks.push(createEmptyBlock('text'));
           }
-          const block = blocks[target];
-          if (block && 'content' in block && typeof block.content === 'string') {
-            blocks[target] = { ...(block as any), content: block.content + event.delta };
-          } else {
-            blocks[target] = { type: 'text', content: event.delta };
-          }
+          blocks[target] = appendDeltaToBlock(blocks[target], event.delta);
           msgs[idx] = { ...msg, blocks };
         }));
         setStreamingMessageId(id);
@@ -576,6 +571,43 @@ function createEmptyBlock(blockType: MessageBlock['type']): MessageBlock {
       return { type: 'sources', sources: [] };
     default:
       return { type: 'text', content: '' };
+  }
+}
+
+function appendDeltaToBlock(block: MessageBlock | undefined, delta: string): MessageBlock {
+  const nextContent = `${readBlockContent(block)}${delta}`;
+  switch (block?.type) {
+    case 'text':
+      return { ...block, content: nextContent };
+    case 'markdown':
+      return { ...block, content: nextContent };
+    case 'code':
+      return { ...block, content: nextContent };
+    case 'svg':
+      return { ...block, content: nextContent };
+    case 'mermaid':
+      return { ...block, content: nextContent };
+    case 'thinking':
+      return { ...block, content: nextContent };
+    default:
+      return { type: 'text', content: delta };
+  }
+}
+
+function readBlockContent(block: MessageBlock | undefined): string {
+  if (!block) {
+    return '';
+  }
+  switch (block.type) {
+    case 'text':
+    case 'markdown':
+    case 'code':
+    case 'svg':
+    case 'mermaid':
+    case 'thinking':
+      return typeof block.content === 'string' ? block.content : '';
+    default:
+      return '';
   }
 }
 
