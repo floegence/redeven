@@ -192,6 +192,34 @@ describe('AgentMonitorPanel', () => {
     expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(2);
   });
 
+  it('renders Ask Flower before the destructive Kill action in the row context menu', async () => {
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue(
+      makeSnapshot(1, [
+        { pid: 4242, name: 'node', cpuPercent: 87.3, memoryBytes: 268_435_456, username: 'alice' },
+      ]),
+    );
+
+    render(() => <AgentMonitorPanel variant="deck" />, host);
+    await flushPanel();
+
+    const processRow = host.querySelector('tbody tr') as HTMLTableRowElement | null;
+    expect(processRow).toBeTruthy();
+
+    processRow?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 40,
+      clientY: 56,
+    }));
+    await flushPanel();
+
+    const menuButtons = Array.from(host.querySelectorAll('div.fixed.z-50 button')) as HTMLButtonElement[];
+    expect(menuButtons).toHaveLength(2);
+    expect(menuButtons[0]?.textContent).toContain('Ask Flower');
+    expect(menuButtons[1]?.textContent).toContain('Kill');
+    expect(menuButtons[1]?.className).toContain('text-destructive');
+  });
+
   it('opens Ask Flower from the row context menu with process snapshot context', async () => {
     rpcMocks.monitor.getSysMonitor.mockResolvedValue(
       makeSnapshot(1_710_000_000_000, [
