@@ -1,4 +1,4 @@
-import { For } from 'solid-js';
+import { For, Index } from 'solid-js';
 import { Button, Checkbox, Input } from '@floegence/floe-webapp-core/ui';
 import type { PermissionRow } from './types';
 import {
@@ -38,13 +38,13 @@ export function PermissionRuleTable(props: {
         </SettingsTableHeaderRow>
       </SettingsTableHead>
       <SettingsTableBody>
-        <For each={props.rows}>
+        <Index each={props.rows}>
           {(row, index) => (
             <SettingsTableRow>
               <SettingsTableCell>
                 <Input
-                  value={row.key}
-                  onInput={(event) => props.onChangeKey(index(), event.currentTarget.value)}
+                  value={row().key}
+                  onInput={(event) => props.onChangeKey(index, event.currentTarget.value)}
                   placeholder={props.keyPlaceholder}
                   size="sm"
                   class="w-full font-mono text-xs"
@@ -53,8 +53,8 @@ export function PermissionRuleTable(props: {
               </SettingsTableCell>
               <SettingsTableCell align="center">
                 <Checkbox
-                  checked={row.read}
-                  onChange={(value) => props.onChangePerm(index(), 'read', value)}
+                  checked={row().read}
+                  onChange={(value) => props.onChangePerm(index, 'read', value)}
                   disabled={!props.canInteract || !props.readEnabled}
                   label=""
                   size="sm"
@@ -62,8 +62,8 @@ export function PermissionRuleTable(props: {
               </SettingsTableCell>
               <SettingsTableCell align="center">
                 <Checkbox
-                  checked={row.write}
-                  onChange={(value) => props.onChangePerm(index(), 'write', value)}
+                  checked={row().write}
+                  onChange={(value) => props.onChangePerm(index, 'write', value)}
                   disabled={!props.canInteract || !props.writeEnabled}
                   label=""
                   size="sm"
@@ -71,8 +71,8 @@ export function PermissionRuleTable(props: {
               </SettingsTableCell>
               <SettingsTableCell align="center">
                 <Checkbox
-                  checked={row.execute}
-                  onChange={(value) => props.onChangePerm(index(), 'execute', value)}
+                  checked={row().execute}
+                  onChange={(value) => props.onChangePerm(index, 'execute', value)}
                   disabled={!props.canInteract || !props.executeEnabled}
                   label=""
                   size="sm"
@@ -83,7 +83,7 @@ export function PermissionRuleTable(props: {
                   size="sm"
                   variant="ghost"
                   class="text-muted-foreground hover:text-destructive"
-                  onClick={() => props.onRemove(index())}
+                  onClick={() => props.onRemove(index)}
                   disabled={!props.canInteract}
                 >
                   Remove
@@ -91,7 +91,7 @@ export function PermissionRuleTable(props: {
               </SettingsTableCell>
             </SettingsTableRow>
           )}
-        </For>
+        </Index>
         {props.rows.length === 0 ? <SettingsTableEmptyRow colSpan={5}>{props.emptyMessage}</SettingsTableEmptyRow> : null}
       </SettingsTableBody>
     </SettingsTable>

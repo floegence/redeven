@@ -156,4 +156,54 @@ describe('PermissionPolicyTables', () => {
     expect(onRemove).toHaveBeenCalledWith(0);
     expect(host.textContent).toContain('No rows');
   });
+
+  it('keeps focus on a new rule input while the parent updates that row', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => {
+      const [rows, setRows] = createSignal([
+        {
+          key: '',
+          read: true,
+          write: false,
+          execute: false,
+        },
+      ]);
+
+      return (
+        <PermissionRuleTable
+          rows={rows()}
+          emptyMessage="No rows"
+          keyHeader="User"
+          keyPlaceholder="user_public_id"
+          canInteract
+          readEnabled
+          writeEnabled
+          executeEnabled
+          onChangeKey={(index, value) => {
+            setRows((prev) => prev.map((item, rowIndex) => (rowIndex === index ? { ...item, key: value } : item)));
+          }}
+          onChangePerm={(index, key, value) => {
+            setRows((prev) => prev.map((item, rowIndex) => (rowIndex === index ? { ...item, [key]: value } : item)));
+          }}
+          onRemove={(index) => {
+            setRows((prev) => prev.filter((_, rowIndex) => rowIndex !== index));
+          }}
+        />
+      );
+    }, host);
+
+    const input = host.querySelector('input[placeholder="user_public_id"]') as HTMLInputElement;
+    input.focus();
+    expect(document.activeElement).toBe(input);
+
+    input.value = 'u';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const nextInput = host.querySelector('input[placeholder="user_public_id"]') as HTMLInputElement;
+    expect(nextInput).toBe(input);
+    expect(nextInput.value).toBe('u');
+    expect(document.activeElement).toBe(input);
+  });
 });
