@@ -20,9 +20,10 @@ function cleanDist() {
 }
 
 async function buildInject() {
+  const outfile = path.join(distDir, "inject.js");
   await esbuild.build({
     entryPoints: [path.join(srcDir, "inject.ts")],
-    outfile: path.join(distDir, "inject.js"),
+    outfile,
     bundle: true,
     platform: "browser",
     format: "iife",
@@ -31,9 +32,11 @@ async function buildInject() {
     minify: false,
     legalComments: "none"
   });
+  console.log(`Code App inject bundle ready: ${path.relative(uiSrcDir, outfile)}`);
 }
 
 async function main() {
+  console.log("Bundling Code App inject UI...");
   cleanDist();
   await buildInject();
 }

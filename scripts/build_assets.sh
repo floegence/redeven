@@ -43,9 +43,9 @@ build_codeapp_ui() {
   (
     cd "$dir"
     if ui_pkg_need_install "$dir"; then
-      npm ci
+      npm ci --no-audit --no-fund
     fi
-    npm run build
+    npm run --silent build
   )
   ui_pkg_log "Code App UI: done."
 }
