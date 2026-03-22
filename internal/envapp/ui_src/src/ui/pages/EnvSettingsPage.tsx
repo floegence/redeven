@@ -167,6 +167,10 @@ function autoSaveMessage(label: string, unixMs: number): string {
   return t ? `${label} saved at ${t}.` : `${label} saved.`;
 }
 
+function autoSaveRestartRequiredMessage(label: string, unixMs: number): string {
+  return `${autoSaveMessage(label, unixMs)} Restart manually to apply.`;
+}
+
 function isSettingsResponseLike(raw: unknown): raw is SettingsResponse {
   if (!raw || typeof raw !== 'object') return false;
   const v = raw as any;
@@ -1954,9 +1958,17 @@ export function EnvSettingsPage() {
     return { body, signature: JSON.stringify(body) };
   };
 
-  const notifyAutoSaveSuccess = (label: string, unixMs: number, aiUpdate?: SettingsAIUpdateMeta | null) => {
-    const applyScope = String(aiUpdate?.apply_scope ?? '').trim().toLowerCase();
-    const activeRunCount = Number(aiUpdate?.active_run_count ?? 0);
+  const notifyAutoSaveSuccess = (
+    label: string,
+    unixMs: number,
+    options?: { aiUpdate?: SettingsAIUpdateMeta | null; restartRequired?: boolean },
+  ) => {
+    if (options?.restartRequired) {
+      notify.success('Auto-saved', autoSaveRestartRequiredMessage(label, unixMs));
+      return;
+    }
+    const applyScope = String(options?.aiUpdate?.apply_scope ?? '').trim().toLowerCase();
+    const activeRunCount = Number(options?.aiUpdate?.active_run_count ?? 0);
     if (applyScope === 'future_runs' && Number.isFinite(activeRunCount) && activeRunCount > 0) {
       const base = autoSaveMessage(label, unixMs);
       notify.success('Auto-saved', `${base} Changes apply to future runs.`);
@@ -1985,7 +1997,7 @@ export function EnvSettingsPage() {
       const now = Date.now();
       setRuntimeSavedAt(now);
       setRuntimeError(null);
-      notifyAutoSaveSuccess('Runtime settings', now);
+      notifyAutoSaveSuccess('Runtime settings', now, { restartRequired: true });
       let unchanged = false;
       try {
         unchanged = buildRuntimeDraft().signature === draft.signature;
@@ -2017,7 +2029,7 @@ export function EnvSettingsPage() {
       const now = Date.now();
       setLoggingSavedAt(now);
       setLoggingError(null);
-      notifyAutoSaveSuccess('Logging settings', now);
+      notifyAutoSaveSuccess('Logging settings', now, { restartRequired: true });
       let unchanged = false;
       try {
         unchanged = buildLoggingDraft().signature === draft.signature;
@@ -2049,7 +2061,7 @@ export function EnvSettingsPage() {
       const now = Date.now();
       setCodespacesSavedAt(now);
       setCodespacesError(null);
-      notifyAutoSaveSuccess('Codespaces settings', now);
+      notifyAutoSaveSuccess('Codespaces settings', now, { restartRequired: true });
       let unchanged = false;
       try {
         unchanged = buildCodespacesDraft().signature === draft.signature;
@@ -2081,7 +2093,7 @@ export function EnvSettingsPage() {
       const now = Date.now();
       setPolicySavedAt(now);
       setPolicyError(null);
-      notifyAutoSaveSuccess('Permission policy', now);
+      notifyAutoSaveSuccess('Permission policy', now, { restartRequired: true });
       let unchanged = false;
       try {
         unchanged = buildPolicyDraft().signature === draft.signature;
@@ -2113,7 +2125,7 @@ export function EnvSettingsPage() {
       const now = Date.now();
       setAiSavedAt(now);
       setAiError(null);
-      notifyAutoSaveSuccess('Flower settings', now, saved.aiUpdate);
+      notifyAutoSaveSuccess('Flower settings', now, { aiUpdate: saved.aiUpdate });
       let unchanged = false;
       try {
         unchanged = buildAIDraft().signature === draft.signature;
@@ -2145,7 +2157,7 @@ export function EnvSettingsPage() {
       setAiSavedAt(now);
       setAiError(null);
       setAiDirty(false);
-      notifyAutoSaveSuccess('Flower settings', now, null);
+      notifyAutoSaveSuccess('Flower settings', now);
     } catch (e) {
       const msg = formatUnknownError(e) || 'Save failed.';
       setAiCurrentModelID(prevModelID);
@@ -2378,7 +2390,7 @@ export function EnvSettingsPage() {
           <div>
             <h1 class="text-xl font-semibold text-foreground tracking-tight">Agent Settings</h1>
             <p class="text-sm text-muted-foreground mt-1 leading-relaxed">
-              Configure your agent runtime. Changes are auto-saved when valid, and most runtime updates require a restart.
+              Configure your agent runtime. Changes are auto-saved when valid. Restart-required settings only apply after a manual restart that you trigger.
             </p>
           </div>
           <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={settings.loading} class="gap-1.5 self-start">
@@ -2626,7 +2638,7 @@ export function EnvSettingsPage() {
               icon={Terminal}
               title="Runtime"
               description="Shell and working directory configuration."
-              badge="Restart required"
+              badge="Manual restart required"
               badgeVariant="warning"
               error={runtimeError()}
               actions={
@@ -2710,7 +2722,7 @@ export function EnvSettingsPage() {
               icon={Database}
               title="Logging"
               description="Log format and verbosity level."
-              badge="Restart required"
+              badge="Manual restart required"
               badgeVariant="warning"
               error={loggingError()}
               actions={
@@ -2824,7 +2836,7 @@ export function EnvSettingsPage() {
               icon={Code}
               title="Codespaces"
               description="Port range for code-server instances."
-              badge="Restart required"
+              badge="Manual restart required"
               badgeVariant="warning"
               error={codespacesError()}
               actions={
@@ -2942,8 +2954,8 @@ export function EnvSettingsPage() {
             <SettingsCard
               icon={Shield}
               title="Permission Policy"
-              description="Control read, write, and execute permissions."
-              badge="Restart required"
+              description="Control read, write, and execute permissions. Saved changes apply after a manual restart."
+              badge="Manual restart required"
               badgeVariant="warning"
               error={policyError()}
               actions={
