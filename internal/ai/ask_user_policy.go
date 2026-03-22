@@ -225,7 +225,7 @@ func fallbackAskUserPolicyDecision(reason string) askUserPolicyDecision {
 	}
 }
 
-func defaultGuardAskUserSignal(question string, options []string, source string) askUserSignal {
+func defaultGuardAskUserSignal(question string, options []string, source string, evidenceRefs ...string) askUserSignal {
 	signal := askUserSignal{
 		Questions: normalizeRequestUserInputQuestions([]RequestUserInputQuestion{{
 			ID:       "question_1",
@@ -238,7 +238,7 @@ func defaultGuardAskUserSignal(question string, options []string, source string)
 	switch strings.TrimSpace(source) {
 	case "tool_mistake_loop", "guard_doom_loop":
 		signal.ReasonCode = AskUserReasonConflictingWork
-		signal.RequiredFromUser = []string{"Clarify the exact objective and constraints."}
+		signal.RequiredFromUser = []string{"Provide missing context or choose the next direction so execution can avoid repeating failed tool paths."}
 	case "completion_empty_result_repeated", "missing_explicit_completion":
 		signal.ReasonCode = AskUserReasonUserDecisionRequired
 		signal.RequiredFromUser = []string{"Confirm whether the current result should be treated as final."}
@@ -249,6 +249,7 @@ func defaultGuardAskUserSignal(question string, options []string, source string)
 		signal.ReasonCode = AskUserReasonMissingExternalInput
 		signal.RequiredFromUser = []string{"Provide clarification so execution can continue safely."}
 	}
+	signal.EvidenceRefs = normalizeUniqueNonEmptyList(evidenceRefs)
 	return normalizeAskUserSignal(signal)
 }
 

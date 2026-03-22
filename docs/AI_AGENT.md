@@ -90,6 +90,11 @@ Built-in tools:
 - `write_todos`
 - `web.search` (optional; controlled by `ai.web_search_provider`)
 
+Terminal execution notes:
+
+- `terminal.exec` command classification is effect-oriented: common local inspection commands (for example file metadata probes and archive-to-stdout inspection flows) stay readonly, while explicit writes / uploads / extraction-to-disk remain mutating.
+- Mutating workspace actions create a pre-run workspace checkpoint. Tar-based checkpoints now skip unreadable paths and record the skipped entries in checkpoint metadata instead of failing the whole run on unrelated permission-denied filesystem branches.
+
 Online research notes:
 
 - Prefer direct requests to authoritative sources via `terminal.exec` + `curl` when you already know the right URL.
@@ -122,6 +127,7 @@ Behavior summary:
 - Structured prompt answers are submitted through a dedicated prompt-response action rather than the plain chat `sendMessage` path.
 - no-tool backpressure defaults to 3 rounds and inserts a completion-required nudge before falling back to `ask_user`.
 - `terminal.exec` output is rendered with structured shell blocks in the Env App (no markdown fallback conversion).
+- Subagents are for parallelizable or independently reviewable work. Simple local inspection tasks should stay in the main Flower run instead of spawning subagents.
 
 Installer note:
 

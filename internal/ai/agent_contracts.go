@@ -231,6 +231,7 @@ type LoopDetector interface {
 type runtimeState struct {
 	PendingToolCalls      []ToolCall        `json:"pending_tool_calls,omitempty"`
 	ToolCallLedger        map[string]string `json:"tool_call_ledger,omitempty"`
+	BlockedEvidenceRefs   []string          `json:"blocked_evidence_refs,omitempty"`
 	RecentErrors          []string          `json:"recent_errors,omitempty"`
 	NoProgressSignatures  []string          `json:"no_progress_signatures,omitempty"`
 	PendingUserInputQueue []string          `json:"pending_user_input_queue,omitempty"`
@@ -252,6 +253,7 @@ func newRuntimeState(objective string) runtimeState {
 	return runtimeState{
 		PendingToolCalls:      make([]ToolCall, 0, 4),
 		ToolCallLedger:        make(map[string]string),
+		BlockedEvidenceRefs:   make([]string, 0, 8),
 		RecentErrors:          make([]string, 0, 4),
 		NoProgressSignatures:  make([]string, 0, 8),
 		PendingUserInputQueue: make([]string, 0, 2),

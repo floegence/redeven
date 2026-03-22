@@ -100,6 +100,19 @@ func TestEvaluateAskUserGate(t *testing.T) {
 func TestEvaluateGuardAskUserGate(t *testing.T) {
 	t.Parallel()
 
+	if pass, reason := evaluateGuardAskUserGate("tool_mistake_loop", runtimeState{
+		ToolCallLedger: map[string]string{"tool_1": "failed"},
+	}, TaskComplexityStandard); pass || reason != "missing_evidence_refs" {
+		t.Fatalf("tool_mistake_loop without evidence => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateGuardAskUserGate("tool_mistake_loop", runtimeState{
+		ToolCallLedger:      map[string]string{"tool_1": "failed"},
+		BlockedEvidenceRefs: []string{"tool:tool_1"},
+	}, TaskComplexityStandard); !pass || reason != "ok" {
+		t.Fatalf("tool_mistake_loop with evidence => pass=%v reason=%q", pass, reason)
+	}
+
 	if pass, reason := evaluateGuardAskUserGate("missing_explicit_completion", runtimeState{
 		TodoTrackingEnabled: true,
 		TodoOpenCount:       2,

@@ -66,6 +66,14 @@ func TestDefaultGuardAskUserSignal(t *testing.T) {
 	if len(signal.RequiredFromUser) == 0 {
 		t.Fatalf("required_from_user should not be empty")
 	}
+
+	signal = defaultGuardAskUserSignal("Need direction.", nil, "tool_mistake_loop", "tool:tool_1", "tool:tool_1")
+	if signal.ReasonCode != AskUserReasonConflictingWork {
+		t.Fatalf("reason_code=%q, want %q", signal.ReasonCode, AskUserReasonConflictingWork)
+	}
+	if len(signal.EvidenceRefs) != 1 || signal.EvidenceRefs[0] != "tool:tool_1" {
+		t.Fatalf("evidence_refs=%v, want [tool:tool_1]", signal.EvidenceRefs)
+	}
 }
 
 func TestAskUserReasonRequiresEvidence(t *testing.T) {

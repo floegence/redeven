@@ -21,6 +21,7 @@ import (
 const (
 	workspaceCheckpointBackendGitTree = "git_tree"
 	workspaceCheckpointBackendTar     = "tar"
+	workspaceCheckpointSkippedPathCap = 128
 )
 
 type workspaceCheckpointMeta struct {
@@ -38,17 +39,24 @@ type workspaceCheckpointGit struct {
 	Untracked []string `json:"untracked"`
 }
 
+type workspaceCheckpointSkippedPath struct {
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
+}
+
 type workspaceCheckpointTar struct {
-	ArchivePath  string   `json:"archive_path"`
-	ManifestPath string   `json:"manifest_path"`
-	Excludes     []string `json:"excludes"`
+	ArchivePath  string                           `json:"archive_path"`
+	ManifestPath string                           `json:"manifest_path"`
+	Excludes     []string                         `json:"excludes"`
+	Skipped      []workspaceCheckpointSkippedPath `json:"skipped,omitempty"`
 }
 
 type tarCheckpointManifest struct {
-	Version  int      `json:"version"`
-	Root     string   `json:"root"`
-	Excludes []string `json:"excludes"`
-	Files    []string `json:"files"`
+	Version  int                              `json:"version"`
+	Root     string                           `json:"root"`
+	Excludes []string                         `json:"excludes"`
+	Files    []string                         `json:"files"`
+	Skipped  []workspaceCheckpointSkippedPath `json:"skipped,omitempty"`
 }
 
 func checkpointArtifactsDir(stateDir string, checkpointID string) string {
@@ -100,6 +108,41 @@ func ensureAbsPathWithinRoot(rootAbs string, targetAbs string) (string, error) {
 		return "", errors.New("path escapes root")
 	}
 	return targetAbs, nil
+}
+
+func isPermissionDeniedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, fs.ErrPermission) || errors.Is(err, os.ErrPermission)
+}
+
+func appendSkippedCheckpointPath(skipped []workspaceCheckpointSkippedPath, rootAbs string, targetPath string, reason string) []workspaceCheckpointSkippedPath {
+	if len(skipped) >= workspaceCheckpointSkippedPathCap {
+		return skipped
+	}
+	rootAbs = filepath.Clean(strings.TrimSpace(rootAbs))
+	targetPath = filepath.Clean(strings.TrimSpace(targetPath))
+	reason = strings.TrimSpace(reason)
+	if rootAbs == "" || targetPath == "" || reason == "" {
+		return skipped
+	}
+	rel, err := filepath.Rel(rootAbs, targetPath)
+	if err != nil {
+		return skipped
+	}
+	rel = filepath.ToSlash(strings.TrimSpace(rel))
+	rel = strings.TrimPrefix(rel, "./")
+	rel = strings.TrimPrefix(rel, "/")
+	if rel == "" || rel == "." || strings.HasPrefix(rel, "../") {
+		return skipped
+	}
+	for _, item := range skipped {
+		if item.Path == rel && item.Reason == reason {
+			return skipped
+		}
+	}
+	return append(skipped, workspaceCheckpointSkippedPath{Path: rel, Reason: reason})
 }
 
 func runGitCombinedOutput(ctx context.Context, repoRoot string, env []string, args ...string) ([]byte, error) {
@@ -225,8 +268,16 @@ func createTarCheckpoint(ctx context.Context, stateDir string, checkpointID stri
 	defer func() { _ = tw.Close() }()
 
 	files := make([]string, 0, 256)
+	skipped := make([]workspaceCheckpointSkippedPath, 0, 8)
 	walkErr := filepath.WalkDir(rootAbs, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
+			if isPermissionDeniedError(walkErr) {
+				skipped = appendSkippedCheckpointPath(skipped, rootAbs, path, "walk_permission_denied")
+				if d != nil && d.IsDir() {
+					return fs.SkipDir
+				}
+				return nil
+			}
 			return walkErr
 		}
 		if ctx.Err() != nil {
@@ -255,6 +306,13 @@ func createTarCheckpoint(ctx context.Context, stateDir string, checkpointID stri
 
 		info, err := os.Lstat(path)
 		if err != nil {
+			if isPermissionDeniedError(err) {
+				skipped = appendSkippedCheckpointPath(skipped, rootAbs, path, "lstat_permission_denied")
+				if d != nil && d.IsDir() {
+					return fs.SkipDir
+				}
+				return nil
+			}
 			return err
 		}
 		mode := info.Mode()
@@ -263,6 +321,10 @@ func createTarCheckpoint(ctx context.Context, stateDir string, checkpointID stri
 		case mode&os.ModeSymlink != 0:
 			target, err := os.Readlink(path)
 			if err != nil {
+				if isPermissionDeniedError(err) {
+					skipped = appendSkippedCheckpointPath(skipped, rootAbs, path, "readlink_permission_denied")
+					return nil
+				}
 				return err
 			}
 			hdr := &tar.Header{
@@ -278,6 +340,14 @@ func createTarCheckpoint(ctx context.Context, stateDir string, checkpointID stri
 			files = append(files, rel)
 			return nil
 		case mode.IsRegular():
+			r, err := os.Open(path)
+			if err != nil {
+				if isPermissionDeniedError(err) {
+					skipped = appendSkippedCheckpointPath(skipped, rootAbs, path, "open_permission_denied")
+					return nil
+				}
+				return err
+			}
 			hdr := &tar.Header{
 				Name:    rel,
 				Mode:    int64(mode.Perm()),
@@ -285,10 +355,7 @@ func createTarCheckpoint(ctx context.Context, stateDir string, checkpointID stri
 				ModTime: info.ModTime(),
 			}
 			if err := tw.WriteHeader(hdr); err != nil {
-				return err
-			}
-			r, err := os.Open(path)
-			if err != nil {
+				_ = r.Close()
 				return err
 			}
 			_, copyErr := io.Copy(tw, r)
@@ -309,10 +376,11 @@ func createTarCheckpoint(ctx context.Context, stateDir string, checkpointID stri
 
 	sort.Strings(files)
 	manifest := tarCheckpointManifest{
-		Version:  1,
+		Version:  2,
 		Root:     rootAbs,
 		Excludes: excludes,
 		Files:    files,
+		Skipped:  append([]workspaceCheckpointSkippedPath(nil), skipped...),
 	}
 	mb, err := json.Marshal(manifest)
 	if err != nil {
@@ -330,6 +398,7 @@ func createTarCheckpoint(ctx context.Context, stateDir string, checkpointID stri
 			ArchivePath:  archivePath,
 			ManifestPath: manifestPath,
 			Excludes:     excludes,
+			Skipped:      append([]workspaceCheckpointSkippedPath(nil), skipped...),
 		},
 	}, nil
 }
