@@ -518,12 +518,13 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		modeFallback = cfg.EffectiveMode()
 	}
 	resolvedExecutionMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback)
+	runStatus, _ := normalizeThreadRunState(th.RunStatus, th.RunError)
 	consumeSourceFollowup := func() {
 		if err := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, req.SourceFollowupID); err != nil && a.mgr.svc.log != nil {
 			a.mgr.svc.log.Warn("failed to consume source followup", "thread_id", threadID, "followup_id", strings.TrimSpace(req.SourceFollowupID), "error", err)
 		}
 	}
-	openPrompt := requestUserInputPromptFromThreadRecord(th, th.RunStatus)
+	openPrompt := a.mgr.svc.threadWaitingPrompt(ctx, th, runStatus)
 	if openPrompt != nil && req.QueueAfterWaitingUser {
 		req.Options.Mode = resolvedExecutionMode
 		appliedExecutionMode = resolvedExecutionMode
@@ -666,12 +667,13 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 		modeFallback = cfg.EffectiveMode()
 	}
 	resolvedExecutionMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback)
+	runStatus, _ := normalizeThreadRunState(th.RunStatus, th.RunError)
 	consumeSourceFollowup := func() {
 		if err := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, req.SourceFollowupID); err != nil && a.mgr.svc.log != nil {
 			a.mgr.svc.log.Warn("failed to consume source followup", "thread_id", threadID, "followup_id", strings.TrimSpace(req.SourceFollowupID), "error", err)
 		}
 	}
-	openPrompt := requestUserInputPromptFromThreadRecord(th, th.RunStatus)
+	openPrompt := a.mgr.svc.threadWaitingPrompt(ctx, th, runStatus)
 	if openPrompt == nil {
 		return SubmitStructuredPromptResponseResponse{}, ErrWaitingPromptChanged
 	}

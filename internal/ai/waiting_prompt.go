@@ -262,6 +262,63 @@ func requestUserInputPromptFromThreadRecord(t *threadstore.Thread, effectiveRunS
 	return parseRequestUserInputPromptJSON(t.WaitingUserInputJSON)
 }
 
+func requestUserInputPromptFromMessageJSON(raw string) *RequestUserInputPrompt {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var payload struct {
+		ID     string            `json:"id"`
+		Role   string            `json:"role"`
+		Blocks []json.RawMessage `json:"blocks"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return nil
+	}
+	messageID := strings.TrimSpace(payload.ID)
+	if messageID == "" {
+		return nil
+	}
+	role := strings.TrimSpace(strings.ToLower(payload.Role))
+	if role != "" && role != "assistant" {
+		return nil
+	}
+	var fallbackPrompt *RequestUserInputPrompt
+	for i := len(payload.Blocks) - 1; i >= 0; i-- {
+		var block map[string]any
+		if err := json.Unmarshal(payload.Blocks[i], &block); err != nil {
+			continue
+		}
+		prompt, waitingUser := extractAskUserPromptSnapshot(block, messageID)
+		if prompt == nil {
+			continue
+		}
+		if waitingUser {
+			return prompt
+		}
+		if fallbackPrompt == nil {
+			fallbackPrompt = prompt
+		}
+	}
+	return fallbackPrompt
+}
+
+func requestUserInputPromptFromMessages(messages []threadstore.Message, effectiveRunStatus string) *RequestUserInputPrompt {
+	if NormalizeRunState(effectiveRunStatus) != RunStateWaitingUser {
+		return nil
+	}
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if !strings.EqualFold(strings.TrimSpace(msg.Role), "assistant") {
+			continue
+		}
+		if prompt := requestUserInputPromptFromMessageJSON(msg.MessageJSON); prompt != nil {
+			return prompt
+		}
+	}
+	return nil
+}
+
 func normalizeRequestUserInputAnswer(answer RequestUserInputAnswer) RequestUserInputAnswer {
 	out := RequestUserInputAnswer{
 		SelectedOptionID: truncateRunes(strings.TrimSpace(answer.SelectedOptionID), 64),
