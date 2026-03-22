@@ -110,19 +110,19 @@ export function PermissionMatrixTable(props: {
       key: 'read' as const,
       label: 'Read',
       description: 'Allow viewing files and reading state.',
-      checked: props.read,
+      checked: () => props.read,
     },
     {
       key: 'write' as const,
       label: 'Write',
       description: 'Allow modifying files and local state.',
-      checked: props.write,
+      checked: () => props.write,
     },
     {
       key: 'execute' as const,
       label: 'Execute',
       description: 'Allow terminal/process execution.',
-      checked: props.execute,
+      checked: () => props.execute,
     },
   ];
 
@@ -144,13 +144,13 @@ export function PermissionMatrixTable(props: {
               <SettingsTableCell>
                 <div class="flex items-center gap-3">
                   <Checkbox
-                    checked={row.checked}
+                    checked={row.checked()}
                     onChange={(value) => props.onChange(row.key, value)}
                     disabled={!props.canInteract}
                     label=""
                     size="sm"
                   />
-                  <SettingsPill tone={row.checked ? 'success' : 'default'}>{row.checked ? 'Enabled' : 'Disabled'}</SettingsPill>
+                  <SettingsPill tone={row.checked() ? 'success' : 'default'}>{row.checked() ? 'Enabled' : 'Disabled'}</SettingsPill>
                 </div>
               </SettingsTableCell>
             </SettingsTableRow>
