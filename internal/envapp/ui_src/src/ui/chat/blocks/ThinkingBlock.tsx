@@ -1,4 +1,4 @@
-// ThinkingBlock — AI thinking process display with optional duration.
+// ThinkingBlock renders user-visible model reasoning with optional duration metadata.
 
 import { Show } from 'solid-js';
 import type { Component } from 'solid-js';
@@ -26,10 +26,7 @@ export const ThinkingBlock: Component<ThinkingBlockProps> = (props) => {
   return (
     <div class={cn('chat-thinking-block', props.class)}>
       <div class="chat-thinking-header">
-        <span class="chat-thinking-icon" aria-hidden="true">
-          {'\uD83D\uDCAD'}
-        </span>
-        <span class="chat-thinking-label">Thinking...</span>
+        <span class="chat-thinking-label">Reasoning</span>
         <Show when={props.duration !== undefined}>
           <span class="chat-thinking-duration">
             {formatDuration(props.duration!)}

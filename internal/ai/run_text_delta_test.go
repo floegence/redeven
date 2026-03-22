@@ -52,6 +52,50 @@ func TestAssistantMarkdownTextSnapshot_JoinsMarkdownBlocksOnly(t *testing.T) {
 	}
 }
 
+func TestAppendThinkingDelta_ReusesInitialMarkdownBlock(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 2)
+	r := &run{
+		messageID:                 "msg_reasoning",
+		onStreamEvent:             func(ev any) { events = append(events, ev) },
+		nextBlockIndex:            1,
+		currentTextBlockIndex:     0,
+		currentThinkingBlockIndex: -1,
+		assistantBlocks: []any{
+			&persistedMarkdownBlock{Type: "markdown", Content: ""},
+		},
+	}
+
+	if err := r.appendThinkingDelta("Inspecting repository layout."); err != nil {
+		t.Fatalf("appendThinkingDelta: %v", err)
+	}
+
+	block, ok := r.assistantBlocks[0].(*persistedThinkingBlock)
+	if !ok || block == nil {
+		t.Fatalf("assistantBlocks[0]=%T, want *persistedThinkingBlock", r.assistantBlocks[0])
+	}
+	if block.Content != "Inspecting repository layout." {
+		t.Fatalf("thinking content=%q", block.Content)
+	}
+	if !r.needNewTextBlock {
+		t.Fatalf("needNewTextBlock=%v, want true", r.needNewTextBlock)
+	}
+	if len(events) != 2 {
+		t.Fatalf("stream events=%d, want 2", len(events))
+	}
+	if _, ok := events[0].(streamEventBlockSet); !ok {
+		t.Fatalf("event[0]=%T, want streamEventBlockSet", events[0])
+	}
+	ev, ok := events[1].(streamEventBlockDelta)
+	if !ok {
+		t.Fatalf("event[1]=%T, want streamEventBlockDelta", events[1])
+	}
+	if ev.BlockIndex != 0 || ev.Delta != "Inspecting repository layout." {
+		t.Fatalf("block-delta=%+v", ev)
+	}
+}
+
 func TestCanonicalMarkdownTextSnapshot_JoinsRememberedTurns(t *testing.T) {
 	t.Parallel()
 

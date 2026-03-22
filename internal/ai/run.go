@@ -124,9 +124,11 @@ type run struct {
 	lastLifecycleAt     time.Time
 	lifecycleMinEmitGap time.Duration
 
-	nextBlockIndex        int
-	currentTextBlockIndex int
-	needNewTextBlock      bool
+	nextBlockIndex            int
+	currentTextBlockIndex     int
+	needNewTextBlock          bool
+	currentThinkingBlockIndex int
+	needNewThinkingBlock      bool
 
 	muAssistant              sync.Mutex
 	assistantCreatedAtUnixMs int64
@@ -177,39 +179,40 @@ func newRun(opts runOptions) *run {
 	}
 
 	r := &run{
-		log:                     opts.Log,
-		stateDir:                strings.TrimSpace(opts.StateDir),
-		agentHomeDir:            agentHomeDir,
-		workingDir:              workingDir,
-		shell:                   strings.TrimSpace(opts.Shell),
-		cfg:                     opts.AIConfig,
-		sessionMeta:             runMeta,
-		resolveProviderKey:      opts.ResolveProviderKey,
-		resolveWebSearchKey:     opts.ResolveWebSearchKey,
-		id:                      runID,
-		channelID:               strings.TrimSpace(opts.ChannelID),
-		endpointID:              strings.TrimSpace(opts.EndpointID),
-		threadID:                strings.TrimSpace(opts.ThreadID),
-		userPublicID:            strings.TrimSpace(opts.UserPublicID),
-		messageID:               strings.TrimSpace(opts.MessageID),
-		uploadsDir:              strings.TrimSpace(opts.UploadsDir),
-		threadsDB:               opts.ThreadsDB,
-		persistOpTimeout:        opts.PersistOpTimeout,
-		onStreamEvent:           opts.OnStreamEvent,
-		w:                       opts.Writer,
-		toolApprovals:           make(map[string]chan bool),
-		toolBlockIndex:          make(map[string]int),
-		maxWallTime:             opts.MaxWallTime,
-		idleTimeout:             opts.IdleTimeout,
-		toolApprovalTO:          opts.ToolApprovalTimeout,
-		doneCh:                  make(chan struct{}),
-		lifecycleMinEmitGap:     600 * time.Millisecond,
-		collectedWebSources:     make(map[string]SourceRef),
-		collectedWebSourceOrder: make([]string, 0, 8),
-		subagentDepth:           opts.SubagentDepth,
-		forceReadonlyExec:       opts.ForceReadonlyExec,
-		skillManager:            opts.SkillManager,
-		noUserInteraction:       opts.NoUserInteraction,
+		log:                       opts.Log,
+		stateDir:                  strings.TrimSpace(opts.StateDir),
+		agentHomeDir:              agentHomeDir,
+		workingDir:                workingDir,
+		shell:                     strings.TrimSpace(opts.Shell),
+		cfg:                       opts.AIConfig,
+		sessionMeta:               runMeta,
+		resolveProviderKey:        opts.ResolveProviderKey,
+		resolveWebSearchKey:       opts.ResolveWebSearchKey,
+		id:                        runID,
+		channelID:                 strings.TrimSpace(opts.ChannelID),
+		endpointID:                strings.TrimSpace(opts.EndpointID),
+		threadID:                  strings.TrimSpace(opts.ThreadID),
+		userPublicID:              strings.TrimSpace(opts.UserPublicID),
+		messageID:                 strings.TrimSpace(opts.MessageID),
+		uploadsDir:                strings.TrimSpace(opts.UploadsDir),
+		threadsDB:                 opts.ThreadsDB,
+		persistOpTimeout:          opts.PersistOpTimeout,
+		onStreamEvent:             opts.OnStreamEvent,
+		w:                         opts.Writer,
+		toolApprovals:             make(map[string]chan bool),
+		toolBlockIndex:            make(map[string]int),
+		maxWallTime:               opts.MaxWallTime,
+		idleTimeout:               opts.IdleTimeout,
+		toolApprovalTO:            opts.ToolApprovalTimeout,
+		doneCh:                    make(chan struct{}),
+		lifecycleMinEmitGap:       600 * time.Millisecond,
+		collectedWebSources:       make(map[string]SourceRef),
+		collectedWebSourceOrder:   make([]string, 0, 8),
+		currentThinkingBlockIndex: -1,
+		subagentDepth:             opts.SubagentDepth,
+		forceReadonlyExec:         opts.ForceReadonlyExec,
+		skillManager:              opts.SkillManager,
+		noUserInteraction:         opts.NoUserInteraction,
 		allowSubagentDelegate: func() bool {
 			if opts.AllowSubagentDelegate {
 				return true
@@ -1151,12 +1154,49 @@ func (r *run) appendTextDelta(delta string) error {
 		r.persistSetMarkdownBlock(idx)
 		r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "markdown"})
 	}
+	r.needNewThinkingBlock = true
 	delta = r.normalizeMarkdownDelta(r.currentTextBlockIndex, delta)
 	if delta == "" {
 		return nil
 	}
 	r.persistAppendMarkdownDelta(r.currentTextBlockIndex, delta)
 	r.sendStreamEvent(streamEventBlockDelta{Type: "block-delta", MessageID: r.messageID, BlockIndex: r.currentTextBlockIndex, Delta: delta})
+	return nil
+}
+
+func (r *run) appendThinkingDelta(delta string) error {
+	if r == nil || delta == "" {
+		return nil
+	}
+	if r.needNewThinkingBlock || r.currentThinkingBlockIndex < 0 {
+		if idx, reused := r.reuseInitialMarkdownBlockForThinking(); reused {
+			r.currentThinkingBlockIndex = idx
+			r.needNewThinkingBlock = false
+			r.needNewTextBlock = true
+			r.currentTextBlockIndex = -1
+			r.sendStreamEvent(streamEventBlockSet{
+				Type:       "block-set",
+				MessageID:  r.messageID,
+				BlockIndex: idx,
+				Block:      persistedThinkingBlock{Type: "thinking"},
+			})
+		} else {
+			idx := r.nextBlockIndex
+			r.nextBlockIndex++
+			r.currentThinkingBlockIndex = idx
+			r.needNewThinkingBlock = false
+			r.needNewTextBlock = true
+			r.currentTextBlockIndex = -1
+			r.persistSetThinkingBlock(idx)
+			r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "thinking"})
+		}
+	}
+	delta = r.normalizeThinkingDelta(r.currentThinkingBlockIndex, delta)
+	if delta == "" {
+		return nil
+	}
+	r.persistAppendThinkingDelta(r.currentThinkingBlockIndex, delta)
+	r.sendStreamEvent(streamEventBlockDelta{Type: "block-delta", MessageID: r.messageID, BlockIndex: r.currentThinkingBlockIndex, Delta: delta})
 	return nil
 }
 
@@ -1170,6 +1210,22 @@ func (r *run) normalizeMarkdownDelta(idx int, delta string) string {
 		return delta
 	}
 	b, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
+	if !ok || b == nil || b.Content == "" {
+		return delta
+	}
+	return trimMarkdownDeltaOverlap(b.Content, delta)
+}
+
+func (r *run) normalizeThinkingDelta(idx int, delta string) string {
+	if r == nil || idx < 0 || delta == "" {
+		return delta
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	if idx >= len(r.assistantBlocks) {
+		return delta
+	}
+	b, ok := r.assistantBlocks[idx].(*persistedThinkingBlock)
 	if !ok || b == nil || b.Content == "" {
 		return delta
 	}
@@ -1215,11 +1271,7 @@ func (r *run) hasNonEmptyAssistantText() bool {
 	r.muAssistant.Lock()
 	defer r.muAssistant.Unlock()
 	for _, blk := range r.assistantBlocks {
-		b, ok := blk.(*persistedMarkdownBlock)
-		if !ok || b == nil {
-			continue
-		}
-		if strings.TrimSpace(b.Content) != "" {
+		if assistantVisibleTextFromBlock(blk) != "" {
 			return true
 		}
 	}
@@ -1662,6 +1714,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	idx := r.nextBlockIndex
 	r.nextBlockIndex++
 	r.needNewTextBlock = true
+	r.needNewThinkingBlock = true
 	r.toolBlockIndex[toolID] = idx
 	r.mu.Unlock()
 
@@ -2002,6 +2055,8 @@ func (r *run) ensureAssistantMessageStarted() bool {
 	r.nextBlockIndex = 1
 	r.currentTextBlockIndex = 0
 	r.needNewTextBlock = false
+	r.currentThinkingBlockIndex = -1
+	r.needNewThinkingBlock = false
 	r.sendStreamEvent(streamEventMessageStart{Type: "message-start", MessageID: r.messageID})
 	r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"})
 	return true
@@ -2017,6 +2072,16 @@ func (r *run) persistSetMarkdownBlock(idx int) {
 	r.assistantBlocks[idx] = &persistedMarkdownBlock{Type: "markdown", Content: ""}
 }
 
+func (r *run) persistSetThinkingBlock(idx int) {
+	if r == nil || idx < 0 {
+		return
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	r.persistEnsureIndex(idx)
+	r.assistantBlocks[idx] = &persistedThinkingBlock{Type: "thinking"}
+}
+
 func (r *run) persistAppendMarkdownDelta(idx int, delta string) {
 	if r == nil || idx < 0 || delta == "" {
 		return
@@ -2029,6 +2094,37 @@ func (r *run) persistAppendMarkdownDelta(idx int, delta string) {
 	if b, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock); ok && b != nil {
 		b.Content += delta
 	}
+}
+
+func (r *run) persistAppendThinkingDelta(idx int, delta string) {
+	if r == nil || idx < 0 || delta == "" {
+		return
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	if idx >= len(r.assistantBlocks) {
+		return
+	}
+	if b, ok := r.assistantBlocks[idx].(*persistedThinkingBlock); ok && b != nil {
+		b.Content += delta
+	}
+}
+
+func (r *run) reuseInitialMarkdownBlockForThinking() (int, bool) {
+	if r == nil {
+		return -1, false
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	if len(r.assistantBlocks) != 1 {
+		return -1, false
+	}
+	block, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	if !ok || block == nil || strings.TrimSpace(block.Content) != "" {
+		return -1, false
+	}
+	r.assistantBlocks[0] = &persistedThinkingBlock{Type: "thinking"}
+	return 0, true
 }
 
 func (r *run) persistSetToolBlock(idx int, block ToolCallBlock) {
@@ -2105,6 +2201,13 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 			}
 			cp := *v
 			blocks = append(blocks, &cp)
+		case *persistedThinkingBlock:
+			if v == nil {
+				blocks = append(blocks, (*persistedThinkingBlock)(nil))
+				continue
+			}
+			cp := *v
+			blocks = append(blocks, &cp)
 		default:
 			blocks = append(blocks, v)
 		}
@@ -2124,7 +2227,7 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 		return "", "", 0, err
 	}
 
-	// Text for history: concatenate markdown blocks.
+	// Text for history: concatenate user-visible assistant text blocks.
 	var (
 		sb             strings.Builder
 		askUserSummary string
@@ -2133,17 +2236,14 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 		if askUserSummary == "" {
 			askUserSummary = extractAskUserSummaryFromBlock(blk)
 		}
-		bm, ok := blk.(*persistedMarkdownBlock)
-		if !ok || bm == nil {
-			continue
-		}
-		if strings.TrimSpace(bm.Content) == "" {
+		text := assistantVisibleTextFromBlock(blk)
+		if text == "" {
 			continue
 		}
 		if sb.Len() > 0 {
-			sb.WriteString("\n")
+			sb.WriteString("\n\n")
 		}
-		sb.WriteString(bm.Content)
+		sb.WriteString(text)
 	}
 
 	assistantText := strings.TrimSpace(sb.String())
@@ -2188,6 +2288,23 @@ func extractAskUserSummaryFromBlock(block any) string {
 			return summary
 		}
 		return extractAskUserSummaryFromAny(v["result"])
+	default:
+		return ""
+	}
+}
+
+func assistantVisibleTextFromBlock(block any) string {
+	switch v := block.(type) {
+	case *persistedMarkdownBlock:
+		if v == nil {
+			return ""
+		}
+		return strings.TrimSpace(v.Content)
+	case *persistedThinkingBlock:
+		if v == nil {
+			return ""
+		}
+		return strings.TrimSpace(v.Content)
 	default:
 		return ""
 	}
@@ -2719,6 +2836,7 @@ func (r *run) emitSourcesToolBlock(source string) {
 	idx = r.nextBlockIndex
 	r.nextBlockIndex++
 	r.needNewTextBlock = true
+	r.needNewThinkingBlock = true
 	r.mu.Unlock()
 
 	toolID, err := newToolID()

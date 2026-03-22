@@ -243,6 +243,36 @@ func TestSnapshotAssistantMessageJSON_UsesAskUserQuestionWhenMarkdownEmpty(t *te
 	}
 }
 
+func TestSnapshotAssistantMessageJSON_IncludesThinkingBlocksInAssistantText(t *testing.T) {
+	t.Parallel()
+
+	r := &run{
+		messageID:                "msg_reasoning_snapshot",
+		assistantCreatedAtUnixMs: 1700000000123,
+		assistantBlocks: []any{
+			&persistedThinkingBlock{Type: "thinking", Content: "Checked the theme registry and token export surface."},
+			&persistedMarkdownBlock{Type: "markdown", Content: "Design tokens live in packages/core/src/styles/tokens.ts."},
+		},
+	}
+
+	rawJSON, assistantText, assistantAt, err := r.snapshotAssistantMessageJSON()
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
+	}
+	if !strings.Contains(assistantText, "Checked the theme registry") {
+		t.Fatalf("assistantText=%q, want reasoning text", assistantText)
+	}
+	if !strings.Contains(assistantText, "Design tokens live in") {
+		t.Fatalf("assistantText=%q, want markdown text", assistantText)
+	}
+	if assistantAt != 1700000000123 {
+		t.Fatalf("assistantAt=%d, want %d", assistantAt, 1700000000123)
+	}
+	if !strings.Contains(rawJSON, `"type":"thinking"`) {
+		t.Fatalf("assistant JSON missing thinking block: %s", rawJSON)
+	}
+}
+
 func TestSnapshotWaitingPrompt_ExtractsStructuredQuestions(t *testing.T) {
 	t.Parallel()
 
