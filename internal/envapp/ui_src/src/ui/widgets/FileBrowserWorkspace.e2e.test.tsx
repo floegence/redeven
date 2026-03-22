@@ -351,6 +351,60 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
+  it('uses tile-level hover titles and single-line ellipsis labels for long names in grid mode', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const longFolderName = 'customer-facing-platform-runtime-assets-and-shared-icons';
+    const longFileName = '2026-quarterly-forecast-and-platform-capacity-report.final.reviewed.xlsx';
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div style={{ height: '720px', width: '960px' }}>
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={[
+              { id: 'folder-long', name: longFolderName, type: 'folder', path: `/${longFolderName}`, children: [] },
+              { id: 'file-long', name: longFileName, type: 'file', path: `/${longFileName}` },
+            ]}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-grid-long-names"
+            instanceId="test-files-workspace-grid-long-names"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const folderTile = host.querySelector(`button[title="${longFolderName}"]`) as HTMLButtonElement | null;
+      const fileTile = host.querySelector(`button[title="${longFileName}"]`) as HTMLButtonElement | null;
+
+      expect(folderTile).toBeTruthy();
+      expect(fileTile).toBeTruthy();
+      expect(folderTile?.getAttribute('title')).toBe(longFolderName);
+      expect(fileTile?.getAttribute('title')).toBe(longFileName);
+
+      const folderLabel = folderTile?.querySelector('[data-file-grid-name="true"]') as HTMLSpanElement | null;
+      const fileLabel = fileTile?.querySelector('[data-file-grid-name="true"]') as HTMLSpanElement | null;
+
+      expect(folderLabel).toBeTruthy();
+      expect(fileLabel).toBeTruthy();
+      expect(folderLabel?.className).toContain('truncate');
+      expect(fileLabel?.className).toContain('truncate');
+      expect(folderLabel?.className).not.toContain('line-clamp-2');
+      expect(fileLabel?.className).not.toContain('line-clamp-2');
+    } finally {
+      dispose();
+    }
+  });
+
   it('routes page-level typing into the filter field when the browser page is the active surface', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
