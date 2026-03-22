@@ -780,6 +780,67 @@ func TestGateway_SettingsUpdate_ReturnsAIUpdateMeta(t *testing.T) {
 	}
 }
 
+func TestGateway_LocalUISettingsPermissionCapDoesNotHotReload(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+
+	cfgPath := writeTestConfig(t)
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         cfgPath,
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	saveReq := WithLocalUIEnvRoute(httptest.NewRequest(
+		http.MethodPut,
+		"/_redeven_proxy/api/settings",
+		bytes.NewBufferString(`{"permission_policy":{"schema_version":1,"local_max":{"read":false,"write":false,"execute":false}}}`),
+	))
+	saveRes := httptest.NewRecorder()
+	gw.serveHTTP(saveRes, saveReq)
+	if saveRes.Code != http.StatusOK {
+		t.Fatalf("save status = %d, want %d body=%s", saveRes.Code, http.StatusOK, saveRes.Body.String())
+	}
+
+	getReq := WithLocalUIEnvRoute(httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil))
+	getRes := httptest.NewRecorder()
+	gw.serveHTTP(getRes, getReq)
+	if getRes.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want %d body=%s", getRes.Code, http.StatusOK, getRes.Body.String())
+	}
+
+	var resp struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			PermissionPolicy struct {
+				LocalMax struct {
+					Read    bool `json:"read"`
+					Write   bool `json:"write"`
+					Execute bool `json:"execute"`
+				} `json:"local_max"`
+			} `json:"permission_policy"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(getRes.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !resp.OK {
+		t.Fatalf("unexpected response: %s", getRes.Body.String())
+	}
+	if resp.Data.PermissionPolicy.LocalMax.Read || resp.Data.PermissionPolicy.LocalMax.Write || resp.Data.PermissionPolicy.LocalMax.Execute {
+		t.Fatalf("permission_policy local_max = %+v, want all false", resp.Data.PermissionPolicy.LocalMax)
+	}
+}
+
 func TestGateway_AIProviderKeys_StatusAndUpdate(t *testing.T) {
 	t.Parallel()
 

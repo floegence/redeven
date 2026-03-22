@@ -74,14 +74,15 @@ type Options struct {
 type Server struct {
 	log *slog.Logger
 
-	bind             BindSpec
-	configPath       string
-	stateDir         string
-	runtimeStatePath string
-	version          string
-	desktopManaged   bool
-	effectiveRunMode string
-	remoteEnabled    bool
+	bind               BindSpec
+	configPath         string
+	stateDir           string
+	runtimeStatePath   string
+	version            string
+	desktopManaged     bool
+	effectiveRunMode   string
+	remoteEnabled      bool
+	localPermissionCap *config.PermissionSet
 
 	gw   *gateway.Gateway
 	a    *agent.Agent
@@ -153,21 +154,28 @@ func New(opts Options) (*Server, error) {
 	}
 
 	configPath := strings.TrimSpace(opts.ConfigPath)
+	localPermissionCap := config.ResolvePermissionCapFromConfigPath(
+		configPath,
+		localUserPublicID,
+		agent.FloeAppRedevenAgent,
+		config.PermissionSet{Read: true, Write: false, Execute: true},
+	)
 	return &Server{
-		log:              logger,
-		bind:             bind,
-		configPath:       configPath,
-		stateDir:         filepath.Dir(configPath),
-		runtimeStatePath: localuiruntime.RuntimeStatePath(configPath),
-		version:          strings.TrimSpace(opts.Version),
-		desktopManaged:   opts.DesktopManaged,
-		effectiveRunMode: strings.TrimSpace(opts.EffectiveRunMode),
-		remoteEnabled:    opts.RemoteEnabled,
-		gw:               opts.Gateway,
-		a:                opts.Agent,
-		diag:             opts.Diagnostics,
-		accessGate:       opts.AccessGate,
-		pending:          make(map[string]pendingDirect),
+		log:                logger,
+		bind:               bind,
+		configPath:         configPath,
+		stateDir:           filepath.Dir(configPath),
+		runtimeStatePath:   localuiruntime.RuntimeStatePath(configPath),
+		version:            strings.TrimSpace(opts.Version),
+		desktopManaged:     opts.DesktopManaged,
+		effectiveRunMode:   strings.TrimSpace(opts.EffectiveRunMode),
+		remoteEnabled:      opts.RemoteEnabled,
+		localPermissionCap: &localPermissionCap,
+		gw:                 opts.Gateway,
+		a:                  opts.Agent,
+		diag:               opts.Diagnostics,
+		accessGate:         opts.AccessGate,
+		pending:            make(map[string]pendingDirect),
 	}, nil
 }
 
@@ -950,18 +958,10 @@ func (s *Server) resolvedEffectiveRunMode() string {
 }
 
 func (s *Server) resolveLocalCap() config.PermissionSet {
-	if s == nil {
+	if s == nil || s.localPermissionCap == nil {
 		return config.PermissionSet{Read: true, Write: false, Execute: true}
 	}
-	cfg, err := config.Load(s.configPath)
-	if err != nil || cfg == nil {
-		// Best-effort: keep the UI usable even if config is missing/corrupt.
-		return config.PermissionSet{Read: true, Write: false, Execute: true}
-	}
-	if cfg.PermissionPolicy == nil {
-		return config.PermissionSet{Read: true, Write: false, Execute: true}
-	}
-	return cfg.PermissionPolicy.ResolveCap(localUserPublicID, agent.FloeAppRedevenAgent)
+	return *s.localPermissionCap
 }
 
 func (s *Server) consumePending(channelID string) (pendingDirect, bool) {

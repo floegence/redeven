@@ -90,13 +90,20 @@ func newTestGateway(t *testing.T, cfgPath string) *gatewaypkg.Gateway {
 func newTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 	t.Helper()
 	cfgPath := writeTestConfig(t)
+	localPermissionCap := config.ResolvePermissionCapFromConfigPath(
+		cfgPath,
+		localUserPublicID,
+		agent.FloeAppRedevenAgent,
+		config.PermissionSet{Read: true, Write: false, Execute: true},
+	)
 	return &Server{
-		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
-		configPath: cfgPath,
-		version:    "dev",
-		accessGate: gate,
-		gw:         newTestGateway(t, cfgPath),
-		pending:    make(map[string]pendingDirect),
+		log:                slog.New(slog.NewTextHandler(io.Discard, nil)),
+		configPath:         cfgPath,
+		version:            "dev",
+		localPermissionCap: &localPermissionCap,
+		accessGate:         gate,
+		gw:                 newTestGateway(t, cfgPath),
+		pending:            make(map[string]pendingDirect),
 	}
 }
 
@@ -265,6 +272,54 @@ func TestServer_LocalAccessRejectsInvalidResumeToken(t *testing.T) {
 	s.handleRuntime(res, req)
 	if res.Result().StatusCode != http.StatusLocked {
 		t.Fatalf("status = %d, want %d", res.Result().StatusCode, http.StatusLocked)
+	}
+}
+
+func TestServer_LocalPermissionCapDoesNotHotReload(t *testing.T) {
+	cfgPath := writeTestConfig(t)
+	localPermissionCap := config.ResolvePermissionCapFromConfigPath(
+		cfgPath,
+		localUserPublicID,
+		agent.FloeAppRedevenAgent,
+		config.PermissionSet{Read: true, Write: false, Execute: true},
+	)
+	s := &Server{
+		log:                slog.New(slog.NewTextHandler(io.Discard, nil)),
+		configPath:         cfgPath,
+		version:            "dev",
+		localPermissionCap: &localPermissionCap,
+		gw:                 newTestGateway(t, cfgPath),
+		pending:            make(map[string]pendingDirect),
+	}
+
+	locked := config.PermissionSet{Read: false, Write: false, Execute: false}
+	if err := config.Save(cfgPath, &config.Config{
+		PermissionPolicy: &config.PermissionPolicy{
+			SchemaVersion: 1,
+			LocalMax:      &locked,
+		},
+		LogFormat: "json",
+		LogLevel:  "info",
+	}); err != nil {
+		t.Fatalf("config.Save() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/environment", nil)
+	res := httptest.NewRecorder()
+	s.handleEnvironment(res, req)
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("environment status = %d, want %d body=%s", res.Result().StatusCode, http.StatusOK, res.Body.String())
+	}
+
+	var body environmentResp
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body.Permissions == nil {
+		t.Fatalf("missing permissions in response")
+	}
+	if !body.Permissions.CanRead || !body.Permissions.CanWrite || !body.Permissions.CanExecute {
+		t.Fatalf("permissions = %+v, want startup permissions to remain active", body.Permissions)
 	}
 }
 
