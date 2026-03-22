@@ -11,6 +11,12 @@ const notificationError = vi.hoisted(() => vi.fn());
 const openPreview = vi.fn(async () => undefined);
 const closePreview = vi.fn();
 const downloadCurrent = vi.fn(async () => undefined);
+const beginEditing = vi.fn();
+const updateDraft = vi.fn();
+const updateSelection = vi.fn();
+const saveCurrent = vi.fn(async () => true);
+const revertCurrent = vi.fn();
+const writeTextToClipboard = vi.hoisted(() => vi.fn(async () => undefined));
 const protocolState: {
   status: () => string;
   client: () => Record<string, never> | null;
@@ -55,15 +61,33 @@ vi.mock('../services/desktopAskFlowerBridge', () => ({
   shouldRequireDesktopAskFlowerMainWindowHandoff,
 }));
 
+vi.mock('../utils/clipboard', () => ({
+  writeTextToClipboard,
+}));
+
 vi.mock('./FilePreviewContext', () => ({
   useFilePreviewContext: () => ({
     controller: {
       openPreview,
       closePreview,
       downloadCurrent,
+      beginEditing,
+      updateDraft,
+      updateSelection,
+      saveCurrent,
+      revertCurrent,
       item: () => previewItem,
       descriptor: () => ({ mode: 'text', textPresentation: 'plain', wrapText: true }),
       text: () => 'selected line',
+      draftText: () => 'selected line',
+      editing: () => false,
+      dirty: () => false,
+      saving: () => false,
+      saveError: () => null,
+      selectedText: () => 'selected from controller',
+      canEdit: () => true,
+      closeConfirmOpen: () => false,
+      closeConfirmMessage: () => '',
       message: () => '',
       objectUrl: () => '',
       bytes: () => null,
@@ -79,8 +103,17 @@ vi.mock('./FilePreviewContext', () => ({
 
 vi.mock('./FilePreviewContent', () => ({
   FilePreviewContent: (props: any) => (
-    <div data-testid="preview-content" ref={props.contentRef}>
+    <div
+      data-testid="preview-content"
+      data-can-edit={String(Boolean(props.canEdit))}
+      data-editing={String(Boolean(props.editing))}
+      data-has-copy-path={String(typeof props.onCopyPath === 'function')}
+      ref={props.contentRef}
+    >
       {props.item?.path}
+      <button type="button" onClick={() => void props.onCopyPath?.()}>
+        Copy path
+      </button>
     </div>
   ),
 }));
@@ -108,6 +141,13 @@ afterEach(() => {
   openPreview.mockClear();
   closePreview.mockClear();
   downloadCurrent.mockClear();
+  beginEditing.mockClear();
+  updateDraft.mockClear();
+  updateSelection.mockClear();
+  saveCurrent.mockClear();
+  revertCurrent.mockClear();
+  writeTextToClipboard.mockReset();
+  writeTextToClipboard.mockResolvedValue(undefined);
   protocolState.status = () => 'connected';
   protocolState.client = () => ({});
   vi.restoreAllMocks();
@@ -128,6 +168,8 @@ describe('DetachedSurfaceScene', () => {
 
     expect(openPreview).toHaveBeenCalledWith(previewItem);
     expect(document.title).toBe('demo.txt - File Preview');
+    expect(host.querySelector('[data-testid="preview-content"]')?.getAttribute('data-can-edit')).toBe('true');
+    expect(host.querySelector('[data-testid="preview-content"]')?.getAttribute('data-has-copy-path')).toBe('true');
 
     vi.spyOn(window, 'getSelection').mockReturnValue({
       rangeCount: 1,
@@ -140,7 +182,35 @@ describe('DetachedSurfaceScene', () => {
     buttons.find((button) => button.textContent?.includes('Download'))?.click();
 
     expect(openAskFlowerComposer).toHaveBeenCalledTimes(1);
+    expect(openAskFlowerComposer).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'file_preview',
+      contextItems: expect.arrayContaining([
+        expect.objectContaining({
+          path: '/workspace/demo.txt',
+          selection: 'selected from controller',
+        }),
+      ]),
+    }));
     expect(downloadCurrent).toHaveBeenCalledTimes(1);
+  });
+
+  it('copies the detached preview path through the shared clipboard helper', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <DetachedSurfaceScene
+        surface={{ kind: 'file_preview', path: '/workspace/demo.txt' }}
+        accessGateVisible={false}
+        accessGatePanel={<div>gate</div>}
+      />
+    ), host);
+
+    const copyButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Copy path'));
+    copyButton?.click();
+    await Promise.resolve();
+
+    expect(writeTextToClipboard).toHaveBeenCalledWith('/workspace/demo.txt');
   });
 
   it('prefers the desktop main-window handoff before falling back to the local composer', () => {
@@ -169,7 +239,7 @@ describe('DetachedSurfaceScene', () => {
     expect(requestDesktopAskFlowerMainWindowHandoff).toHaveBeenCalledWith({
       source: 'file_preview',
       path: '/workspace/demo.txt',
-      selectionText: 'selected line',
+      selectionText: 'selected from controller',
     });
     expect(openAskFlowerComposer).not.toHaveBeenCalled();
   });
@@ -200,7 +270,7 @@ describe('DetachedSurfaceScene', () => {
     expect(requestDesktopAskFlowerMainWindowHandoff).toHaveBeenCalledWith({
       source: 'file_preview',
       path: '/workspace/demo.txt',
-      selectionText: 'selected line',
+      selectionText: 'selected from controller',
     });
     expect(notificationError).toHaveBeenCalledWith(
       'Ask Flower unavailable',

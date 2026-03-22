@@ -23,6 +23,9 @@ describe('detached surface desktop wiring', () => {
     expect(sceneSrc).toContain('stateScope="detached-surface"');
     expect(sceneSrc).toContain('<RemoteFileBrowser');
     expect(sceneSrc).toContain('document.title = detachedSceneTitle(props.surface);');
+    expect(sceneSrc).toContain('<FilePreviewControllerContent');
+    expect(sceneSrc).toContain("writeTextToClipboard(path)");
+    expect(sceneSrc).toContain("filePreview.controller.selectedText() ?? '').trim() || readSelectionTextFromPreview(previewContentEl)");
 
     expect(browserSrc).toContain('stateScope?: string;');
     expect(browserSrc).toContain('initialPathOverride?: string;');
