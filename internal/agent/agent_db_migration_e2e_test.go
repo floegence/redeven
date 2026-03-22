@@ -10,6 +10,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/testutil/legacydb"
 )
@@ -72,8 +73,8 @@ func TestAgentRun_MigratesLegacyThreadstoreE2E(t *testing.T) {
 	if err := raw.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 17 {
-		t.Fatalf("user_version=%d, want 17", version)
+	if want := threadstore.CurrentSchemaVersion(); version != want {
+		t.Fatalf("user_version=%d, want %d", version, want)
 	}
 
 	var laneColumns int
