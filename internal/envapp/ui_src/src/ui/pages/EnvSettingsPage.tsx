@@ -335,7 +335,7 @@ export function EnvSettingsPage() {
 
   const key = createMemo<number | null>(() => (protocol.status() === 'connected' ? env.settingsSeq() : null));
 
-  const [settings, { refetch }] = createResource<SettingsResponse | null, number | null>(
+  const [settings, { mutate: mutateSettings, refetch }] = createResource<SettingsResponse | null, number | null>(
     () => key(),
     async (k) => (k == null ? null : await fetchGatewayJSON<SettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' })),
   );
@@ -1749,8 +1749,14 @@ export function EnvSettingsPage() {
       method: 'PUT',
       body: JSON.stringify(body),
     });
+    const normalized = normalizeSettingsUpdateResponse(data);
+    if (normalized.settings) {
+      // Keep the local resource in sync before dirty flags are cleared, otherwise
+      // section reset effects can briefly rehydrate stale pre-save values.
+      mutateSettings(normalized.settings);
+    }
     env.bumpSettingsSeq();
-    return normalizeSettingsUpdateResponse(data);
+    return normalized;
   };
 
   // View switchers
