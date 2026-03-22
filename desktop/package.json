@@ -9,7 +9,7 @@
   "scripts": {
     "prepare:bundled-agent": "../scripts/build_desktop_bundled_agent.sh",
     "start": "npm run build && npm run prepare:bundled-agent && electron .",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node dist/build/buildPreloads.js",
     "lint": "eslint \"src/**/*.ts\" \"electron-builder.config.mjs\" \"eslint.config.mjs\" --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
@@ -23,6 +23,7 @@
     "@types/node": "^20.19.24",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
+    "esbuild": "^0.27.4",
     "electron": "41.0.2",
     "electron-builder": "26.8.1",
     "electron-builder-squirrel-windows": "26.8.1",
