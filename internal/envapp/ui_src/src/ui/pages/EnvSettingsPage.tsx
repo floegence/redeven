@@ -41,6 +41,7 @@ import {
   providerTypeRequiresBaseURL,
   recommendedModelsForProviderType,
 } from './settings/aiCatalog';
+import { buildPermissionPolicyValue } from './settings/permissionPolicy';
 import { PermissionMatrixTable, PermissionRuleTable } from './settings/PermissionPolicyTables';
 import {
   AutoSaveIndicator,
@@ -689,36 +690,7 @@ export function EnvSettingsPage() {
       write: !!policyLocalWrite(),
       execute: !!policyLocalExecute(),
     };
-
-    const mkRow = (r: PermissionRow): PermissionSet => ({
-      read: localMax.read ? !!r.read : false,
-      write: localMax.write ? !!r.write : false,
-      execute: localMax.execute ? !!r.execute : false,
-    });
-
-    const byUserRows = policyByUser();
-    const byAppRows = policyByApp();
-
-    const by_user: Record<string, PermissionSet> = {};
-    for (const r of byUserRows) {
-      const k = String(r.key ?? '').trim();
-      if (!k) continue;
-      if (by_user[k]) throw new Error(`Duplicate by_user key: ${k}`);
-      by_user[k] = mkRow(r);
-    }
-
-    const by_app: Record<string, PermissionSet> = {};
-    for (const r of byAppRows) {
-      const k = String(r.key ?? '').trim();
-      if (!k) continue;
-      if (by_app[k]) throw new Error(`Duplicate by_app key: ${k}`);
-      by_app[k] = mkRow(r);
-    }
-
-    const out: any = { schema_version: 1, local_max: localMax };
-    if (Object.keys(by_user).length > 0) out.by_user = by_user;
-    if (Object.keys(by_app).length > 0) out.by_app = by_app;
-    return out as PermissionPolicy;
+    return buildPermissionPolicyValue(localMax, policyByUser(), policyByApp());
   };
 
   const buildAIValue = (): AIConfig => {
