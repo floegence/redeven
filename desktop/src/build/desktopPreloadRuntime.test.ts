@@ -13,6 +13,8 @@ const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
 const electronRuntimeIntegrationTimeoutMs = 30_000;
 const electronRuntimePreloadEnvName = 'REDEVEN_DESKTOP_TEST_PRELOAD_PATH';
+const electronRuntimePayloadStartMarker = '__REDEVEN_DESKTOP_RUNTIME_PAYLOAD_START__';
+const electronRuntimePayloadEndMarker = '__REDEVEN_DESKTOP_RUNTIME_PAYLOAD_END__';
 const linuxElectronLaunchArgs = ['--no-sandbox', '--disable-setuid-sandbox'] as const;
 
 function getElectronRuntimeLaunch(
@@ -47,6 +49,21 @@ function getElectronRuntimeLaunch(
   };
 }
 
+function extractElectronRuntimePayload(stdout: string): string {
+  const startIndex = stdout.lastIndexOf(electronRuntimePayloadStartMarker);
+  if (startIndex === -1) {
+    throw new Error(`Missing runtime payload start marker in stdout:\n${stdout}`);
+  }
+
+  const payloadStartIndex = startIndex + electronRuntimePayloadStartMarker.length;
+  const endIndex = stdout.indexOf(electronRuntimePayloadEndMarker, payloadStartIndex);
+  if (endIndex === -1) {
+    throw new Error(`Missing runtime payload end marker in stdout:\n${stdout}`);
+  }
+
+  return stdout.slice(payloadStartIndex, endIndex);
+}
+
 afterEach(async () => {
   while (tempDirs.length > 0) {
     const tempDir = tempDirs.pop();
@@ -75,6 +92,15 @@ describe('desktop preload runtime', () => {
       command: 'electron',
       args: ['runtime.js'],
     });
+  });
+
+  it('extracts the marked runtime payload from noisy stdout', () => {
+    const payload = '{"main":{"hasAskFlowerBridge":true},"child":{"hasAskFlowerBridge":true}}';
+    expect(
+      extractElectronRuntimePayload(
+        `noise before\n${electronRuntimePayloadStartMarker}${payload}${electronRuntimePayloadEndMarker}\nnoise after`,
+      ),
+    ).toBe(payload);
   });
 
   it('exposes desktop bridges in sandboxed main and detached child windows', async () => {
@@ -130,7 +156,7 @@ app.whenReady().then(async () => {
     void childWindow.webContents.once('did-finish-load', async () => {
       const child = JSON.parse(await childWindow.webContents.executeJavaScript('(' + snapshotBridgeState.toString() + ')()'));
       const main = JSON.parse(await mainWindow.webContents.executeJavaScript('(' + snapshotBridgeState.toString() + ')()'));
-      process.stdout.write(JSON.stringify({ main, child }));
+      process.stdout.write('${electronRuntimePayloadStartMarker}' + JSON.stringify({ main, child }) + '${electronRuntimePayloadEndMarker}');
       await app.quit();
     });
     return { action: 'deny' };
@@ -159,7 +185,7 @@ app.whenReady().then(async () => {
       maxBuffer: 1024 * 1024,
     });
 
-    const payload = JSON.parse(stdout.trim()) as {
+    const payload = JSON.parse(extractElectronRuntimePayload(stdout)) as {
       main: { hasAskFlowerBridge: boolean; hasStateStorageBridge: boolean };
       child: { hasAskFlowerBridge: boolean; hasStateStorageBridge: boolean };
     };
