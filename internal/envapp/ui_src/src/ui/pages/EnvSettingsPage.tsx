@@ -1,4 +1,4 @@
-import { For, Index, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import {
   Code,
@@ -13,7 +13,7 @@ import {
 } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Sidebar, SidebarContent, SidebarItem, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
-import { Button, Card, Checkbox, ConfirmDialog, Dialog, Input, Select } from '@floegence/floe-webapp-core/ui';
+import { Button, Checkbox, ConfirmDialog, Dialog, Input, Select } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import { useAgentUpdateContext } from '../maintenance/AgentUpdateContext';
@@ -25,165 +25,70 @@ import { diagnosticsExportFilename, exportDiagnostics, getDiagnostics, type Diag
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { useEnvContext, type EnvSettingsSection } from './EnvContext';
 import { EnvDiagnosticsPanel } from './EnvDiagnosticsPanel';
-
-// ============================================================================
-// Types
-// ============================================================================
-
-type ViewMode = 'ui' | 'json';
-
-type PermissionSet = Readonly<{ read: boolean; write: boolean; execute: boolean }>;
-type PermissionPolicy = Readonly<{
-  schema_version: number;
-  local_max: PermissionSet;
-  by_user?: Record<string, PermissionSet>;
-  by_app?: Record<string, PermissionSet>;
-}>;
-
-type AIProviderType = 'openai' | 'anthropic' | 'moonshot' | 'chatglm' | 'deepseek' | 'qwen' | 'openai_compatible';
-type AIProviderModel = Readonly<{
-  model_name: string;
-  context_window?: number;
-  max_output_tokens?: number;
-  effective_context_window_percent?: number;
-}>;
-type AIProvider = Readonly<{ id: string; name?: string; type: AIProviderType; base_url?: string; models: AIProviderModel[] }>;
-type AIExecutionPolicy = Readonly<{
-  require_user_approval?: boolean;
-  block_dangerous_commands?: boolean;
-}>;
-type AIConfig = Readonly<{
-  current_model_id: string;
-  providers: AIProvider[];
-  mode?: 'act' | 'plan';
-  web_search_provider?: 'prefer_openai' | 'brave' | 'disabled';
-  tool_recovery_enabled?: boolean;
-  tool_recovery_max_steps?: number;
-  tool_recovery_allow_path_rewrite?: boolean;
-  tool_recovery_allow_probe_tools?: boolean;
-  tool_recovery_fail_on_repeated_signature?: boolean;
-  execution_policy?: AIExecutionPolicy;
-}>;
-type AISecretsView = Readonly<{ provider_api_key_set: Record<string, boolean> }>;
-
-type SkillCatalogNotice = Readonly<{
-  name?: string;
-  path?: string;
-  message?: string;
-  winner_path?: string;
-}>;
-
-type SkillCatalogEntry = Readonly<{
-  id: string;
-  name: string;
-  description: string;
-  path: string;
-  scope: string;
-  priority?: number;
-  mode_hints?: string[];
-  allow_implicit_invocation?: boolean;
-  dependencies?: ReadonlyArray<Readonly<{ name?: string; transport?: string; command?: string; url?: string }>>;
-  dependency_state?: string;
-  enabled: boolean;
-  effective: boolean;
-  shadowed_by?: string;
-}>;
-
-type SkillsCatalogResponse = Readonly<{
-  catalog_version: number;
-  skills: SkillCatalogEntry[];
-  conflicts?: SkillCatalogNotice[];
-  errors?: SkillCatalogNotice[];
-}>;
-
-type SkillSourceItem = Readonly<{
-  skill_path: string;
-  source_type: 'local_manual' | 'github_import' | 'system_bundle' | string;
-  source_id: string;
-  repo?: string;
-  ref?: string;
-  repo_path?: string;
-  install_mode?: string;
-  installed_commit?: string;
-  installed_at_unix_ms?: number;
-  last_checked_at_unix_ms?: number;
-}>;
-
-type SkillSourcesResponse = Readonly<{
-  items: SkillSourceItem[];
-}>;
-
-type SkillGitHubCatalogItem = Readonly<{
-  remote_id: string;
-  name: string;
-  description: string;
-  repo_path: string;
-  exists_local: boolean;
-  installed_paths?: string[];
-}>;
-
-type SkillGitHubCatalogResponse = Readonly<{
-  source: Readonly<{ repo: string; ref: string; base_path: string }>;
-  skills: SkillGitHubCatalogItem[];
-}>;
-
-type SkillGitHubValidateItem = Readonly<{
-  name: string;
-  description: string;
-  repo: string;
-  ref: string;
-  repo_path: string;
-  target_dir: string;
-  target_skill_path: string;
-  already_exists: boolean;
-}>;
-
-type SkillGitHubValidateResponse = Readonly<{
-  resolved: SkillGitHubValidateItem[];
-}>;
-
-type SkillGitHubImportItem = Readonly<{
-  name: string;
-  scope: string;
-  skill_path: string;
-  source_type: string;
-  source_id: string;
-  install_mode: string;
-  installed_commit?: string;
-}>;
-
-type SkillGitHubImportResponse = Readonly<{
-  catalog: SkillsCatalogResponse;
-  imports: SkillGitHubImportItem[];
-}>;
-
-type SkillReinstallResponse = Readonly<{
-  catalog: SkillsCatalogResponse;
-  reinstalled: ReadonlyArray<Readonly<{ skill_path: string; source_id: string; install_mode: string }>>;
-}>;
-
-type SkillBrowseTreeEntry = Readonly<{
-  name: string;
-  path: string;
-  is_dir: boolean;
-  size: number;
-  modified_at_unix_ms: number;
-}>;
-
-type SkillBrowseTreeResponse = Readonly<{
-  root: string;
-  dir: string;
-  entries: SkillBrowseTreeEntry[];
-}>;
-
-type SkillBrowseFileResponse = Readonly<{
-  root: string;
-  file: string;
-  encoding: 'utf8' | 'base64' | string;
-  truncated: boolean;
-  size: number;
-  content: string;
-}>;
+import { AIProviderDialog } from './settings/AIProviderDialog';
+import {
+  DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
+  cloneAIProviderRow,
+  defaultBaseURLForProviderType,
+  defaultContextWindowForProviderType,
+  formatTokenCount,
+  modelID,
+  normalizeAIProviderRowDraft,
+  normalizeContextWindowByProvider,
+  normalizeEffectiveContextPercent,
+  normalizePositiveInteger,
+  providerPresetForType,
+  providerTypeRequiresBaseURL,
+  recommendedModelsForProviderType,
+} from './settings/aiCatalog';
+import { PermissionMatrixTable, PermissionRuleTable } from './settings/PermissionPolicyTables';
+import {
+  AutoSaveIndicator,
+  CodeBadge,
+  FieldLabel,
+  JSONEditor,
+  SectionGroup,
+  SettingsCard,
+  SettingsKeyValueTable,
+  SettingsPill,
+  SettingsTable,
+  SettingsTableBody,
+  SettingsTableCell,
+  SettingsTableHead,
+  SettingsTableHeaderCell,
+  SettingsTableHeaderRow,
+  SettingsTableRow,
+  SubSectionHeader,
+  ViewToggle,
+  type ViewMode,
+} from './settings/SettingsPrimitives';
+import { SkillsCatalogTable } from './settings/SkillsCatalogTable';
+import type {
+  AIConfig,
+  AIProvider,
+  AIProviderDialogMode,
+  AIProviderModel,
+  AIProviderModelPreset,
+  AIProviderModelRow,
+  AIProviderRow,
+  AIProviderType,
+  AISecretsView,
+  AIPreservedUIFields,
+  PermissionPolicy,
+  PermissionRow,
+  PermissionSet,
+  SkillBrowseFileResponse,
+  SkillBrowseTreeResponse,
+  SkillCatalogEntry,
+  SkillGitHubCatalogResponse,
+  SkillGitHubImportResponse,
+  SkillGitHubValidateItem,
+  SkillGitHubValidateResponse,
+  SkillReinstallResponse,
+  SkillsCatalogResponse,
+  SkillSourceItem,
+  SkillSourcesResponse,
+} from './settings/types';
 
 type SettingsResponse = Readonly<{
   config_path: string;
@@ -217,128 +122,13 @@ type SettingsUpdateResponse = Readonly<{
   ai_update?: SettingsAIUpdateMeta | null;
 }>;
 
-type PermissionRow = { key: string; read: boolean; write: boolean; execute: boolean };
-type AIProviderModelRow = {
-  model_name: string;
-  context_window?: number;
-  max_output_tokens?: number;
-  effective_context_window_percent?: number;
-};
-type AIProviderRow = { id: string; name: string; type: AIProviderType; base_url: string; models: AIProviderModelRow[] };
-type AIProviderModelPreset = Readonly<{
-  model_name: string;
-  context_window: number;
-  max_output_tokens?: number;
-  effective_context_window_percent?: number;
-  note?: string;
-}>;
-type AIProviderPreset = Readonly<{
-  type: AIProviderType;
-  name: string;
-  default_base_url: string;
-  models: readonly AIProviderModelPreset[];
-}>;
-type AIProviderDialogMode = 'create' | 'edit';
-type AIPreservedUIFields = {
-  mode?: 'act' | 'plan';
-  tool_recovery_enabled?: boolean;
-  tool_recovery_max_steps?: number;
-  tool_recovery_allow_path_rewrite?: boolean;
-  tool_recovery_allow_probe_tools?: boolean;
-  tool_recovery_fail_on_repeated_signature?: boolean;
-};
-
 // ============================================================================
 // Constants & Helpers
 // ============================================================================
 
 const DEFAULT_CODE_SERVER_PORT_MIN = 20000;
 const DEFAULT_CODE_SERVER_PORT_MAX = 21000;
-const DEFAULT_OPENAI_COMPAT_CONTEXT_WINDOW = 128000;
-const DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT = 95;
 const AUTO_SAVE_DELAY_MS = 700;
-const AI_PROVIDER_TYPE_OPTIONS: ReadonlyArray<{ value: AIProviderType; label: string }> = [
-  { value: 'openai', label: 'openai' },
-  { value: 'anthropic', label: 'anthropic' },
-  { value: 'moonshot', label: 'moonshot' },
-  { value: 'chatglm', label: 'chatglm' },
-  { value: 'deepseek', label: 'deepseek' },
-  { value: 'qwen', label: 'qwen' },
-  { value: 'openai_compatible', label: 'openai_compatible' },
-];
-
-const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset> = {
-  openai: {
-    type: 'openai',
-    name: 'OpenAI',
-    default_base_url: 'https://api.openai.com/v1',
-    models: [
-      { model_name: 'gpt-5.2', context_window: 400000, max_output_tokens: 128000, note: 'Latest flagship model' },
-      { model_name: 'gpt-5.4', context_window: 400000, max_output_tokens: 128000, note: 'Additional GPT-5.4 preset' },
-      { model_name: 'gpt-5.2-mini', context_window: 400000, max_output_tokens: 128000, note: 'Cost-effective flagship variant' },
-      { model_name: 'gpt-5', context_window: 400000, max_output_tokens: 128000, note: 'Stable flagship' },
-      { model_name: 'gpt-5-mini', context_window: 400000, max_output_tokens: 128000, note: 'Stable lightweight option' },
-    ],
-  },
-  anthropic: {
-    type: 'anthropic',
-    name: 'Anthropic',
-    default_base_url: 'https://api.anthropic.com/v1',
-    models: [
-      { model_name: 'claude-opus-4-1-20250805', context_window: 200000, note: 'Highest quality flagship' },
-      { model_name: 'claude-sonnet-4-5-20250929', context_window: 200000, note: 'General-purpose flagship (1M context beta available)' },
-      { model_name: 'claude-haiku-4-5-20251001', context_window: 200000, note: 'Fast and lower-cost option (1M context beta available)' },
-    ],
-  },
-  moonshot: {
-    type: 'moonshot',
-    name: 'Moonshot',
-    default_base_url: 'https://api.moonshot.cn/v1',
-    models: [
-      { model_name: 'kimi-k2.5', context_window: 256000, note: 'Current all-round Kimi flagship' },
-      { model_name: 'kimi-k2-0905-preview', context_window: 256000, note: 'Agent and coding enhanced preview' },
-      { model_name: 'kimi-k2-thinking', context_window: 256000, note: 'Long-thinking model' },
-      { model_name: 'kimi-k2-thinking-turbo', context_window: 256000, note: 'Long-thinking model, faster output' },
-    ],
-  },
-  chatglm: {
-    type: 'chatglm',
-    name: 'ChatGLM',
-    default_base_url: 'https://open.bigmodel.cn/api/paas/v4/',
-    models: [
-      { model_name: 'glm-5', context_window: 200000, max_output_tokens: 128000, note: 'Latest flagship model' },
-      { model_name: 'glm-4.7', context_window: 200000, max_output_tokens: 16000, note: 'Stable flagship-level model' },
-      { model_name: 'glm-4.5-air', context_window: 128000, max_output_tokens: 16000, note: 'Balanced quality and speed' },
-      { model_name: 'glm-4.5-flash', context_window: 128000, max_output_tokens: 16000, note: 'Fast and low-latency option' },
-    ],
-  },
-  deepseek: {
-    type: 'deepseek',
-    name: 'DeepSeek',
-    default_base_url: 'https://api.deepseek.com',
-    models: [
-      { model_name: 'deepseek-chat', context_window: 128000, max_output_tokens: 64000, note: 'Maps to DeepSeek-V3.2-Exp' },
-      { model_name: 'deepseek-reasoner', context_window: 128000, max_output_tokens: 64000, note: 'Maps to DeepSeek-R1-0528' },
-    ],
-  },
-  qwen: {
-    type: 'qwen',
-    name: 'Qwen',
-    default_base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-    models: [
-      { model_name: 'qwen3-max', context_window: 262144, max_output_tokens: 65536, note: 'Flagship model for complex tasks' },
-      { model_name: 'qwen-plus', context_window: 1000000, max_output_tokens: 32768, note: 'Balanced quality/speed/cost' },
-      { model_name: 'qwen-flash', context_window: 1000000, max_output_tokens: 65536, note: 'Fast and low-cost option' },
-      { model_name: 'qwen3-coder-plus', context_window: 1000000, max_output_tokens: 65536, note: 'Flagship coding model' },
-    ],
-  },
-  openai_compatible: {
-    type: 'openai_compatible',
-    name: 'OpenAI compatible',
-    default_base_url: 'https://api.example.com/v1',
-    models: [],
-  },
-};
 
 type SettingsNavItem = Readonly<{
   id: EnvSettingsSection;
@@ -407,92 +197,6 @@ function newProviderID(): string {
   // Fallback: timestamp + random.
   const rnd = Math.random().toString(16).slice(2);
   return `prov_${Date.now().toString(16)}_${rnd}`;
-}
-
-function modelID(providerID: string, modelName: string): string {
-  const pid = String(providerID ?? '').trim();
-  const mn = String(modelName ?? '').trim();
-  if (!pid || !mn) return '';
-  return `${pid}/${mn}`;
-}
-
-function providerTypeRequiresBaseURL(providerType: AIProviderType): boolean {
-  return providerType === 'moonshot' || providerType === 'chatglm' || providerType === 'deepseek' || providerType === 'qwen' || providerType === 'openai_compatible';
-}
-
-function providerPresetForType(providerType: AIProviderType): AIProviderPreset {
-  return AI_PROVIDER_PRESET_CATALOG[providerType] ?? AI_PROVIDER_PRESET_CATALOG.openai;
-}
-
-function recommendedModelsForProviderType(providerType: AIProviderType): readonly AIProviderModelPreset[] {
-  return providerPresetForType(providerType).models;
-}
-
-function formatTokenCount(tokenCount: number): string {
-  if (!Number.isFinite(tokenCount) || tokenCount <= 0) return 'N/A';
-  return new Intl.NumberFormat('en-US').format(Math.trunc(tokenCount));
-}
-
-function normalizePositiveInteger(raw: unknown): number | undefined {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return undefined;
-  const value = Math.floor(n);
-  if (value <= 0) return undefined;
-  return value;
-}
-
-function normalizeContextWindowByProvider(providerType: AIProviderType, raw: unknown): number | undefined {
-  const parsed = normalizePositiveInteger(raw);
-  if (parsed != null) return parsed;
-  if (providerType === 'openai_compatible') return DEFAULT_OPENAI_COMPAT_CONTEXT_WINDOW;
-  return undefined;
-}
-
-function defaultContextWindowForProviderType(providerType: AIProviderType): number | undefined {
-  if (providerType === 'openai_compatible') return DEFAULT_OPENAI_COMPAT_CONTEXT_WINDOW;
-  return undefined;
-}
-
-function normalizeEffectiveContextPercent(raw: unknown): number | undefined {
-  const parsed = normalizePositiveInteger(raw);
-  if (parsed == null) return undefined;
-  if (parsed < 1 || parsed > 100) return undefined;
-  return parsed;
-}
-
-function defaultBaseURLForProviderType(providerType: AIProviderType): string {
-  return providerPresetForType(providerType).default_base_url;
-}
-
-function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
-  return {
-    id: String(row?.id ?? ''),
-    name: String(row?.name ?? ''),
-    type: (row?.type as AIProviderType) || 'openai',
-    base_url: String(row?.base_url ?? ''),
-    models: (Array.isArray(row?.models) ? row.models : []).map((m) => ({
-      model_name: String(m?.model_name ?? ''),
-      context_window: normalizePositiveInteger(m?.context_window),
-      max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
-      effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
-    })),
-  };
-}
-
-function normalizeAIProviderRowDraft(row: AIProviderRow): AIProviderRow {
-  const out = cloneAIProviderRow(row);
-  const models = Array.isArray(out.models) ? out.models : [];
-  if (models.length === 0) {
-    out.models = [{ model_name: '', context_window: defaultContextWindowForProviderType(out.type) }];
-  } else {
-    out.models = models.map((m) => ({
-      model_name: String(m?.model_name ?? ''),
-      context_window: normalizeContextWindowByProvider(out.type, m?.context_window),
-      max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
-      effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
-    }));
-  }
-  return out;
 }
 
 function newAIProviderDraft(): AIProviderRow {
@@ -611,209 +315,12 @@ function mapToPermissionRows(m: Record<string, PermissionSet> | undefined): Perm
   }));
 }
 
-function skillScopeLabel(scope: string): string {
-  const v = String(scope ?? '').trim().toLowerCase();
-  if (v === 'user') return 'User (.redeven)';
-  if (v === 'user_agents') return 'User (.agents)';
-  return v || 'unknown';
-}
-
-function skillSourceLabel(sourceType: string): string {
-  const v = String(sourceType ?? '').trim().toLowerCase();
-  if (v === 'github_import') return 'GitHub import';
-  if (v === 'local_manual') return 'Local manual';
-  if (v === 'system_bundle') return 'System bundle';
-  return v || 'unknown';
-}
-
 function normalizeRepoInput(raw: string): string {
   return String(raw ?? '')
     .trim()
     .replace(/^https?:\/\/github\.com\//i, '')
     .replace(/\.git$/i, '')
     .replace(/^\/+|\/+$/g, '');
-}
-
-// ============================================================================
-// Reusable UI Components
-// ============================================================================
-
-function ViewToggle(props: { value: () => ViewMode; disabled?: boolean; onChange: (v: ViewMode) => void }) {
-  const btnClass = (active: boolean) => {
-    const base = 'px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150';
-    if (active) return `${base} bg-background text-foreground shadow-sm border border-border`;
-    return `${base} text-muted-foreground hover:text-foreground hover:bg-muted/50`;
-  };
-  const disabledClass = () => (props.disabled ? 'opacity-50 pointer-events-none' : '');
-
-  return (
-    <div class={`inline-flex items-center gap-0.5 rounded-lg border border-border p-0.5 bg-muted/40 ${disabledClass()}`}>
-      <button type="button" class={btnClass(props.value() === 'ui')} onClick={() => props.onChange('ui')}>
-        UI
-      </button>
-      <button type="button" class={btnClass(props.value() === 'json')} onClick={() => props.onChange('json')}>
-        JSON
-      </button>
-    </div>
-  );
-}
-
-function AutoSaveIndicator(props: { dirty: boolean; saving: boolean; error?: string | null; savedAt: number | null; enabled?: boolean }) {
-  const badgeClass = createMemo(() => {
-    if (props.saving) return 'border-primary/30 bg-primary/10 text-primary';
-    if (!props.enabled) return 'border-border bg-muted/40 text-muted-foreground';
-    if (props.error) return 'border-destructive/30 bg-destructive/10 text-destructive';
-    if (props.dirty) return 'border-warning/30 bg-warning/10 text-warning';
-    if (props.savedAt) return 'border-success/30 bg-success/10 text-success';
-    return 'border-border bg-muted/40 text-muted-foreground';
-  });
-
-  const label = createMemo(() => {
-    if (props.saving) return 'Saving...';
-    if (!props.enabled) return 'Auto-save paused';
-    if (props.error) return 'Needs attention';
-    if (props.dirty) return 'Unsaved changes';
-    if (props.savedAt) {
-      const t = formatSavedTime(props.savedAt);
-      return t ? `Saved ${t}` : 'Saved';
-    }
-    return 'Auto-save on';
-  });
-
-  return <span class={`inline-flex items-center rounded-md border px-2 py-1 text-[11px] font-medium ${badgeClass()}`}>{label()}</span>;
-}
-
-interface SettingsCardProps {
-  icon: (props: { class?: string }) => JSX.Element;
-  title: string;
-  description: string;
-  badge?: string;
-  badgeVariant?: 'default' | 'warning' | 'success';
-  actions?: JSX.Element;
-  error?: string | null;
-  children: JSX.Element;
-}
-
-function SettingsCard(props: SettingsCardProps) {
-  const badgeColors = {
-    default: 'bg-muted text-muted-foreground',
-    warning: 'bg-warning/10 text-warning border border-warning/50',
-    success: 'bg-success/10 text-success border border-success/50',
-  };
-
-  return (
-    <Card class="overflow-hidden shadow-sm">
-      <div class="border-b border-border bg-muted/20 px-4 py-3.5 sm:px-5">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div class="flex min-w-0 items-start gap-3">
-            <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center ring-1 ring-primary/15">
-              <props.icon class="w-4 h-4 text-primary" />
-            </div>
-            <div class="min-w-0">
-              <div class="flex flex-wrap items-center gap-2">
-                <h3 class="text-sm font-semibold text-foreground tracking-tight">{props.title}</h3>
-                <Show when={props.badge}>
-                  <span class={`text-[10px] font-medium px-2 py-0.5 rounded-full ${badgeColors[props.badgeVariant ?? 'default']}`}>
-                    {props.badge}
-                  </span>
-                </Show>
-              </div>
-              <p class="mt-0.5 text-xs text-muted-foreground break-words leading-relaxed">{props.description}</p>
-            </div>
-          </div>
-          <Show when={props.actions}>
-            <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">{props.actions}</div>
-          </Show>
-        </div>
-      </div>
-
-      <div class="p-4 space-y-4 sm:p-5">
-        <Show when={props.error}>
-          <div class="flex items-start gap-2.5 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-            <div class="w-1 h-full min-h-4 rounded-full bg-destructive/60 flex-shrink-0" />
-            <div class="text-xs text-destructive break-words">{props.error}</div>
-          </div>
-        </Show>
-        {props.children}
-      </div>
-    </Card>
-  );
-}
-
-interface FieldLabelProps {
-  children: string;
-  hint?: string;
-}
-
-function FieldLabel(props: FieldLabelProps) {
-  return (
-    <div class="mb-1.5">
-      <label class="text-xs font-medium text-foreground">{props.children}</label>
-      <Show when={props.hint}>
-        <span class="ml-1.5 text-xs text-muted-foreground">({props.hint})</span>
-      </Show>
-    </div>
-  );
-}
-
-interface InfoRowProps {
-  label: string;
-  value: string;
-  mono?: boolean;
-}
-
-function InfoRow(props: InfoRowProps) {
-  return (
-    <div class="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3 py-2.5 border-b border-border/60 last:border-b-0">
-      <div class="text-xs font-medium text-muted-foreground sm:w-40 sm:flex-shrink-0 sm:text-right">{props.label}</div>
-      <div class={`text-sm break-all min-w-0 ${props.mono ? 'font-mono text-xs leading-relaxed' : ''}`}>{props.value || '—'}</div>
-    </div>
-  );
-}
-
-function CodeBadge(props: { children: string }) {
-  return <code class="px-1.5 py-0.5 text-xs font-mono bg-muted rounded">{props.children}</code>;
-}
-
-function SectionGroup(props: { title: string; children: JSX.Element }) {
-  return (
-    <div class="space-y-4">
-      <div class="flex items-center gap-3 pt-2">
-        <h2 class="text-[11px] font-semibold tracking-widest uppercase text-muted-foreground whitespace-nowrap">{props.title}</h2>
-        <div class="flex-1 h-px bg-border/50" />
-      </div>
-      {props.children}
-    </div>
-  );
-}
-
-function SubSectionHeader(props: { title: string; description?: string; actions?: JSX.Element }) {
-  return (
-    <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <div class="text-sm font-semibold text-foreground">{props.title}</div>
-        <Show when={props.description}>
-          <p class="text-xs text-muted-foreground mt-0.5">{props.description}</p>
-        </Show>
-      </div>
-      <Show when={props.actions}>
-        <div class="flex-shrink-0">{props.actions}</div>
-      </Show>
-    </div>
-  );
-}
-
-function JSONEditor(props: { value: string; onChange: (v: string) => void; disabled?: boolean; rows?: number }) {
-  return (
-    <textarea
-      class="w-full font-mono text-xs border border-border rounded-lg px-3 py-2.5 bg-muted/30 resize-y focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-50 disabled:bg-muted/50"
-      style={{ 'min-height': `${(props.rows ?? 6) * 1.5}rem` }}
-      value={props.value}
-      onInput={(e) => props.onChange(e.currentTarget.value)}
-      spellcheck={false}
-      disabled={props.disabled}
-    />
-  );
 }
 
 // ============================================================================
@@ -1565,14 +1072,38 @@ export function EnvSettingsPage() {
     return out;
   };
 
+  const updateAIProviderDialogDraft = (updater: (current: AIProviderRow) => AIProviderRow) => {
+    setAiProviderDialogDraft((prev) => {
+      if (!prev) return prev;
+      return normalizeAIProviderRowDraft(updater(cloneAIProviderRow(prev)));
+    });
+  };
+
+  const updateAIProviderDialogModelField = (
+    index: number,
+    key: 'context_window' | 'max_output_tokens' | 'effective_context_window_percent',
+    rawValue: string,
+  ) => {
+    updateAIProviderDialogDraft((current) => ({
+      ...current,
+      models: (Array.isArray(current.models) ? current.models : []).map((model, modelIndex) => {
+        if (modelIndex !== index) return model;
+        const normalizedValue =
+          key === 'effective_context_window_percent'
+            ? normalizeEffectiveContextPercent(rawValue)
+            : normalizePositiveInteger(rawValue);
+        return { ...model, [key]: normalizedValue };
+      }),
+    }));
+  };
+
   const addRecommendedModelToDraft = (modelName: string) => {
     const targetName = String(modelName ?? '').trim();
     if (!targetName) return;
-    setAiProviderDialogDraft((prev) => {
-      if (!prev) return prev;
-      const targetPreset = recommendedModelsForProviderType(prev.type).find((item) => item.model_name === targetName);
-      const merged = normalizeProviderModelRows(prev.type, [
-        ...(Array.isArray(prev.models) ? prev.models : []),
+    updateAIProviderDialogDraft((current) => {
+      const targetPreset = recommendedModelsForProviderType(current.type).find((item) => item.model_name === targetName);
+      const merged = normalizeProviderModelRows(current.type, [
+        ...(Array.isArray(current.models) ? current.models : []),
         {
           model_name: targetName,
           context_window: normalizePositiveInteger(targetPreset?.context_window),
@@ -1580,10 +1111,10 @@ export function EnvSettingsPage() {
           effective_context_window_percent: normalizeEffectiveContextPercent(targetPreset?.effective_context_window_percent),
         },
       ]);
-      return normalizeAIProviderRowDraft({
-        ...cloneAIProviderRow(prev),
-        models: merged.length > 0 ? merged : [{ model_name: '', context_window: defaultContextWindowForProviderType(prev.type) }],
-      });
+      return {
+        ...current,
+        models: merged.length > 0 ? merged : [{ model_name: '', context_window: defaultContextWindowForProviderType(current.type) }],
+      };
     });
   };
 
@@ -1603,13 +1134,10 @@ export function EnvSettingsPage() {
       notify.info('No presets', `No recommended models are available for provider type "${provider.type}".`);
       return;
     }
-    setAiProviderDialogDraft((prev) => {
-      if (!prev) return prev;
-      return normalizeAIProviderRowDraft({
-        ...cloneAIProviderRow(prev),
-        models: recommendedRows,
-      });
-    });
+    updateAIProviderDialogDraft((current) => ({
+      ...current,
+      models: recommendedRows,
+    }));
     notify.success('Models applied', `${recommendedRows.length} recommended model(s) applied.`);
   };
 
@@ -2903,1147 +2431,1078 @@ export function EnvSettingsPage() {
 
         {/* ── Information (read-only) ── */}
         <SectionGroup title="Information">
-        <div id={settingsSectionElementID('config')} class="scroll-mt-6">
-          <SettingsCard
-            icon={FileCode}
-            title="Config File"
-            description="Location of the agent configuration file."
-            badge="Read-only"
-            actions={<ViewToggle value={configView} onChange={(v) => setConfigView(v)} />}
-          >
-            <Show when={configView() === 'ui'} fallback={<JSONEditor value={configJSONText()} onChange={() => {}} disabled rows={4} />}>
-              <InfoRow label="Path" value={configPath() || '(unknown)'} mono />
-            </Show>
-          </SettingsCard>
-        </div>
+          <div id={settingsSectionElementID('config')} class="scroll-mt-6">
+            <SettingsCard
+              icon={FileCode}
+              title="Config File"
+              description="Location of the agent configuration file."
+              badge="Read-only"
+              actions={<ViewToggle value={configView} onChange={(value) => setConfigView(value)} />}
+            >
+              <Show when={configView() === 'ui'} fallback={<JSONEditor value={configJSONText()} onChange={() => undefined} disabled rows={4} />}>
+                <SettingsKeyValueTable
+                  rows={[
+                    {
+                      label: 'Path',
+                      value: configPath() || '(unknown)',
+                      note: 'Agent config file on local disk.',
+                      mono: true,
+                    },
+                  ]}
+                />
+              </Show>
+            </SettingsCard>
+          </div>
 
-        {/* Connection Card */}
-        <div id={settingsSectionElementID('connection')} class="scroll-mt-6">
-          <SettingsCard
-            icon={Globe}
-            title="Connection"
-            description="Connection details managed by the control plane."
-            badge="Read-only"
-            actions={<ViewToggle value={connectionView} onChange={(v) => setConnectionView(v)} />}
-          >
-            <Show when={connectionView() === 'ui'} fallback={<JSONEditor value={connectionJSONText()} onChange={() => {}} disabled rows={10} />}>
-              <div class="space-y-0">
-                <InfoRow label="Control Plane" value={String(settings()?.connection?.controlplane_base_url ?? '')} mono />
-                <InfoRow label="Environment ID" value={String(settings()?.connection?.environment_id ?? '')} mono />
-                <InfoRow label="Agent Instance ID" value={String(settings()?.connection?.agent_instance_id ?? '')} mono />
-                <InfoRow label="Direct Channel" value={String(settings()?.connection?.direct?.channel_id ?? '')} mono />
-                <InfoRow label="Direct Suite" value={String(settings()?.connection?.direct?.default_suite ?? '')} mono />
-                <InfoRow label="E2EE PSK" value={settings()?.connection?.direct?.e2ee_psk_set ? 'Configured' : 'Not set'} />
-                <InfoRow label="Direct WebSocket URL" value={String(settings()?.connection?.direct?.ws_url ?? '')} mono />
-              </div>
-            </Show>
-          </SettingsCard>
-        </div>
+          <div id={settingsSectionElementID('connection')} class="scroll-mt-6">
+            <SettingsCard
+              icon={Globe}
+              title="Connection"
+              description="Connection details managed by the control plane."
+              badge="Read-only"
+              actions={<ViewToggle value={connectionView} onChange={(value) => setConnectionView(value)} />}
+            >
+              <Show when={connectionView() === 'ui'} fallback={<JSONEditor value={connectionJSONText()} onChange={() => undefined} disabled rows={10} />}>
+                <SettingsKeyValueTable
+                  minWidthClass="min-w-[52rem]"
+                  rows={[
+                    {
+                      label: 'Control Plane',
+                      value: String(settings()?.connection?.controlplane_base_url ?? ''),
+                      note: 'Base URL used for the control plane contract.',
+                      mono: true,
+                    },
+                    {
+                      label: 'Environment ID',
+                      value: String(settings()?.connection?.environment_id ?? ''),
+                      note: 'Public environment identifier.',
+                      mono: true,
+                    },
+                    {
+                      label: 'Agent Instance ID',
+                      value: String(settings()?.connection?.agent_instance_id ?? ''),
+                      note: 'Current runtime instance identifier.',
+                      mono: true,
+                    },
+                    {
+                      label: 'Direct Channel',
+                      value: String(settings()?.connection?.direct?.channel_id ?? ''),
+                      note: 'Direct control channel id.',
+                      mono: true,
+                    },
+                    {
+                      label: 'Direct Suite',
+                      value: String(settings()?.connection?.direct?.default_suite ?? ''),
+                      note: 'Default cryptographic suite negotiated for direct sessions.',
+                      mono: true,
+                    },
+                    {
+                      label: 'E2EE PSK',
+                      value: settings()?.connection?.direct?.e2ee_psk_set ? 'Configured' : 'Not set',
+                      note: 'Derived status only. Plaintext secret is never shown.',
+                    },
+                    {
+                      label: 'Direct WebSocket URL',
+                      value: String(settings()?.connection?.direct?.ws_url ?? ''),
+                      note: 'WebSocket endpoint for the direct control connection.',
+                      mono: true,
+                    },
+                  ]}
+                />
+              </Show>
+            </SettingsCard>
+          </div>
         </SectionGroup>
 
         {/* ── Agent Management ── */}
         <SectionGroup title="Agent Management">
-
-        {/* Agent Card */}
-        <div id={settingsSectionElementID('agent')} class="scroll-mt-6">
-          <SettingsCard
-            icon={Zap}
-            title="Agent"
-            description="Version and maintenance actions."
-            badge={agentCardBadge()}
-            badgeVariant={agentCardBadgeVariant()}
-            error={maintenanceError()}
-            actions={
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  class="w-full sm:w-auto"
-                  onClick={() => setRestartOpen(true)}
-                  loading={isRestarting()}
-                  disabled={!canStartRestart()}
-                >
-                  Restart agent
-                </Button>
-                <Show when={upgradeState().allowsUpgradeAction}>
+          <div id={settingsSectionElementID('agent')} class="scroll-mt-6">
+            <SettingsCard
+              icon={Zap}
+              title="Agent"
+              description="Version and maintenance actions."
+              badge={agentCardBadge()}
+              badgeVariant={agentCardBadgeVariant()}
+              error={maintenanceError()}
+              actions={
+                <>
                   <Button
                     size="sm"
-                    variant="default"
+                    variant="outline"
                     class="w-full sm:w-auto"
-                    onClick={() => setUpgradeOpen(true)}
-                    loading={isUpgrading()}
-                    disabled={!canStartUpgrade()}
+                    onClick={() => setRestartOpen(true)}
+                    loading={isRestarting()}
+                    disabled={!canStartRestart()}
                   >
-                    Update agent
+                    Restart agent
                   </Button>
-                </Show>
-              </>
-            }
-          >
-          <div class="grid grid-cols-3 gap-3">
-            <div class="p-3 rounded-lg bg-muted/30 border border-border">
-              <div class="text-[11px] font-medium text-muted-foreground mb-1">Current</div>
-              <div class="text-sm font-mono font-medium">{agentUpdate.version.currentVersion() || '—'}</div>
-            </div>
-            <div class="p-3 rounded-lg bg-muted/30 border border-border">
-              <div class="text-[11px] font-medium text-muted-foreground mb-1">Latest</div>
-              <div class="text-sm font-mono font-medium">{latestVersion()?.latest_version ? String(latestVersion()!.latest_version) : latestVersionLoading() ? 'Loading...' : '—'}</div>
-            </div>
-            <div class="p-3 rounded-lg bg-muted/30 border border-border">
-              <div class="text-[11px] font-medium text-muted-foreground mb-1">Status</div>
-              <div class="flex items-center gap-1.5">
-                <div class={`w-1.5 h-1.5 rounded-full ${displayedStatus() === 'online' ? 'bg-success' : displayedStatus() === 'offline' ? 'bg-warning' : 'bg-muted-foreground'}`} />
-                <span class="text-sm font-medium">{statusLabel()}</span>
-              </div>
-            </div>
-          </div>
+                  <Show when={upgradeState().allowsUpgradeAction}>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      class="w-full sm:w-auto"
+                      onClick={() => setUpgradeOpen(true)}
+                      loading={isUpgrading()}
+                      disabled={!canStartUpgrade()}
+                    >
+                      Update agent
+                    </Button>
+                  </Show>
+                </>
+              }
+            >
+              <SettingsTable minWidthClass="min-w-[44rem]">
+                <SettingsTableHead>
+                  <SettingsTableHeaderRow>
+                    <SettingsTableHeaderCell class="w-48">Metric</SettingsTableHeaderCell>
+                    <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
+                    <SettingsTableHeaderCell class="w-72">Notes</SettingsTableHeaderCell>
+                  </SettingsTableHeaderRow>
+                </SettingsTableHead>
+                <SettingsTableBody>
+                  <SettingsTableRow>
+                    <SettingsTableCell class="font-medium text-muted-foreground">Current version</SettingsTableCell>
+                    <SettingsTableCell class="font-mono text-[11px]">{agentUpdate.version.currentVersion() || '—'}</SettingsTableCell>
+                    <SettingsTableCell class="text-[11px] text-muted-foreground">Version currently running on this endpoint.</SettingsTableCell>
+                  </SettingsTableRow>
+                  <SettingsTableRow>
+                    <SettingsTableCell class="font-medium text-muted-foreground">Latest version</SettingsTableCell>
+                    <SettingsTableCell class="font-mono text-[11px]">
+                      {latestVersion()?.latest_version ? String(latestVersion()!.latest_version) : latestVersionLoading() ? 'Loading...' : '—'}
+                    </SettingsTableCell>
+                    <SettingsTableCell class="text-[11px] text-muted-foreground">Latest release metadata resolved by the updater.</SettingsTableCell>
+                  </SettingsTableRow>
+                  <SettingsTableRow>
+                    <SettingsTableCell class="font-medium text-muted-foreground">Status</SettingsTableCell>
+                    <SettingsTableCell>
+                      <SettingsPill tone={displayedStatus() === 'online' ? 'success' : displayedStatus() === 'offline' ? 'warning' : 'default'}>
+                        {statusLabel()}
+                      </SettingsPill>
+                    </SettingsTableCell>
+                    <SettingsTableCell class="text-[11px] text-muted-foreground">Current status as observed by the maintenance controller.</SettingsTableCell>
+                  </SettingsTableRow>
+                  <Show when={upgradeState().allowsUpgradeAction}>
+                    <SettingsTableRow>
+                      <SettingsTableCell class="font-medium text-muted-foreground">Target version</SettingsTableCell>
+                      <SettingsTableCell>
+                        <Input
+                          value={targetVersionInput()}
+                          onInput={(event) => setTargetVersionInput(event.currentTarget.value)}
+                          placeholder="v1.2.3"
+                          size="sm"
+                          class="w-full"
+                          disabled={maintaining()}
+                        />
+                      </SettingsTableCell>
+                      <SettingsTableCell class="text-[11px] text-muted-foreground">
+                        Release tag used when the update action is triggered.
+                      </SettingsTableCell>
+                    </SettingsTableRow>
+                  </Show>
+                  <SettingsTableRow>
+                    <SettingsTableCell class="font-medium text-muted-foreground">Manifest ETag</SettingsTableCell>
+                    <SettingsTableCell class="font-mono text-[11px]">{latestVersion()?.manifest_etag ? String(latestVersion()!.manifest_etag) : '—'}</SettingsTableCell>
+                    <SettingsTableCell class="text-[11px] text-muted-foreground">Cache validator for the latest version manifest.</SettingsTableCell>
+                  </SettingsTableRow>
+                </SettingsTableBody>
+              </SettingsTable>
 
-          <div class="mt-3 space-y-2">
-            <Show when={upgradeState().allowsUpgradeAction}>
-              <>
-                <div>
-                  <FieldLabel>Target version</FieldLabel>
-                  <Input
-                    value={targetVersionInput()}
-                    onInput={(e) => setTargetVersionInput(e.currentTarget.value)}
-                    placeholder="v1.2.3"
-                    size="sm"
-                    class="w-full"
-                    disabled={maintaining()}
-                  />
-                </div>
+              <div class="space-y-2">
                 <Show when={targetUpgradeVersion() && !targetUpgradeVersionValid()}>
                   <div class="text-xs text-destructive">Use a valid release tag, for example: v1.2.3.</div>
                 </Show>
-              </>
-            </Show>
-            <Show when={upgradeState().message}>
-              <div class="text-xs text-muted-foreground">{upgradeState().message}</div>
-            </Show>
-            <Show when={upgradeState().policy === 'desktop_release' && upgradeState().releasePageURL}>
-              <a
-                href={upgradeState().releasePageURL}
-                target="_blank"
-                rel="noreferrer"
-                class="text-xs text-primary underline-offset-4 hover:underline"
-              >
-                Open desktop release page
-              </a>
-            </Show>
-            <Show when={latestVersionError()}>
-              <div class="text-xs text-destructive">Latest version metadata is unavailable: {latestVersionError()}</div>
-            </Show>
-            <Show when={latestVersion()?.stale}>
-              <div class="text-xs text-muted-foreground">Using stale version metadata from cache. Please retry refresh if possible.</div>
-            </Show>
-            <Show when={latestVersion()?.manifest_etag}>
-              <div class="text-[11px] text-muted-foreground">Manifest ETag: <span class="font-mono">{String(latestVersion()!.manifest_etag)}</span></div>
-            </Show>
+                <Show when={upgradeState().message}>
+                  <div class="text-xs text-muted-foreground">{upgradeState().message}</div>
+                </Show>
+                <Show when={upgradeState().policy === 'desktop_release' && upgradeState().releasePageURL}>
+                  <a
+                    href={upgradeState().releasePageURL}
+                    target="_blank"
+                    rel="noreferrer"
+                    class="text-xs text-primary underline-offset-4 hover:underline"
+                  >
+                    Open desktop release page
+                  </a>
+                </Show>
+                <Show when={latestVersionError()}>
+                  <div class="text-xs text-destructive">Latest version metadata is unavailable: {latestVersionError()}</div>
+                </Show>
+                <Show when={latestVersion()?.stale}>
+                  <div class="text-xs text-muted-foreground">Using stale version metadata from cache. Please retry refresh if possible.</div>
+                </Show>
+                <Show when={!canAdmin()}>
+                  <div class="text-xs text-muted-foreground">Admin permission required.</div>
+                </Show>
+                <Show when={maintenanceStage()}>
+                  <div class="text-xs text-muted-foreground">{maintenanceStage()}</div>
+                </Show>
+              </div>
+            </SettingsCard>
           </div>
-
-          <Show when={!canAdmin()}>
-            <div class="text-xs text-muted-foreground">Admin permission required.</div>
-          </Show>
-
-          <Show when={maintenanceStage()}>
-            <div class="text-xs text-muted-foreground">{maintenanceStage()}</div>
-          </Show>
-          </SettingsCard>
-        </div>
         </SectionGroup>
 
         {/* ── Configuration ── */}
         <SectionGroup title="Configuration">
-        {/* Runtime Card */}
-        <div id={settingsSectionElementID('runtime')} class="scroll-mt-6">
-          <SettingsCard
-            icon={Terminal}
-            title="Runtime"
-            description="Shell and working directory configuration."
-            badge="Restart required"
-            badgeVariant="warning"
-            error={runtimeError()}
-            actions={
-              <>
-                <ViewToggle value={runtimeView} disabled={!canInteract()} onChange={(v) => switchRuntimeView(v)} />
-                <AutoSaveIndicator
-                  dirty={runtimeDirty()}
-                  saving={runtimeSaving()}
-                  error={runtimeError()}
-                  savedAt={runtimeSavedAt()}
-                  enabled={canInteract()}
-                />
-              </>
-            }
-          >
-          <Show
-            when={runtimeView() === 'ui'}
-            fallback={
-              <JSONEditor
-                value={runtimeJSON()}
-                onChange={(v) => {
-                  setRuntimeJSON(v);
-                  setRuntimeDirty(true);
-                }}
-                disabled={!canInteract()}
-                rows={5}
-              />
-            }
-          >
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <FieldLabel hint="default: user home">agent_home_dir</FieldLabel>
-                <Input
-                  value={agentHomeDir()}
-                  onInput={(e) => {
-                    setAgentHomeDir(e.currentTarget.value);
-                    setRuntimeDirty(true);
-                  }}
-                  placeholder="/home/user"
-                  size="sm"
-                  class="w-full"
-                  disabled={!canInteract()}
-                />
-              </div>
-              <div>
-                <FieldLabel hint="default: $SHELL">shell</FieldLabel>
-                <Input
-                  value={shell()}
-                  onInput={(e) => {
-                    setShell(e.currentTarget.value);
-                    setRuntimeDirty(true);
-                  }}
-                  placeholder="/bin/bash"
-                  size="sm"
-                  class="w-full"
-                  disabled={!canInteract()}
-                />
-              </div>
-            </div>
-          </Show>
-          </SettingsCard>
-        </div>
+          <div id={settingsSectionElementID('runtime')} class="scroll-mt-6">
+            <SettingsCard
+              icon={Terminal}
+              title="Runtime"
+              description="Shell and working directory configuration."
+              badge="Restart required"
+              badgeVariant="warning"
+              error={runtimeError()}
+              actions={
+                <>
+                  <ViewToggle value={runtimeView} disabled={!canInteract()} onChange={(value) => switchRuntimeView(value)} />
+                  <AutoSaveIndicator
+                    dirty={runtimeDirty()}
+                    saving={runtimeSaving()}
+                    error={runtimeError()}
+                    savedAt={runtimeSavedAt()}
+                    enabled={canInteract()}
+                  />
+                </>
+              }
+            >
+              <Show
+                when={runtimeView() === 'ui'}
+                fallback={
+                  <JSONEditor
+                    value={runtimeJSON()}
+                    onChange={(value) => {
+                      setRuntimeJSON(value);
+                      setRuntimeDirty(true);
+                    }}
+                    disabled={!canInteract()}
+                    rows={5}
+                  />
+                }
+              >
+                <SettingsTable minWidthClass="min-w-[42rem]">
+                  <SettingsTableHead>
+                    <SettingsTableHeaderRow>
+                      <SettingsTableHeaderCell class="w-48">Setting</SettingsTableHeaderCell>
+                      <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
+                      <SettingsTableHeaderCell class="w-72">Notes</SettingsTableHeaderCell>
+                    </SettingsTableHeaderRow>
+                  </SettingsTableHead>
+                  <SettingsTableBody>
+                    <SettingsTableRow>
+                      <SettingsTableCell class="font-medium text-muted-foreground">agent_home_dir</SettingsTableCell>
+                      <SettingsTableCell>
+                        <Input
+                          value={agentHomeDir()}
+                          onInput={(event) => {
+                            setAgentHomeDir(event.currentTarget.value);
+                            setRuntimeDirty(true);
+                          }}
+                          placeholder="/home/user"
+                          size="sm"
+                          class="w-full"
+                          disabled={!canInteract()}
+                        />
+                      </SettingsTableCell>
+                      <SettingsTableCell class="text-[11px] text-muted-foreground">Defaults to the user home directory if left empty.</SettingsTableCell>
+                    </SettingsTableRow>
+                    <SettingsTableRow>
+                      <SettingsTableCell class="font-medium text-muted-foreground">shell</SettingsTableCell>
+                      <SettingsTableCell>
+                        <Input
+                          value={shell()}
+                          onInput={(event) => {
+                            setShell(event.currentTarget.value);
+                            setRuntimeDirty(true);
+                          }}
+                          placeholder="/bin/bash"
+                          size="sm"
+                          class="w-full"
+                          disabled={!canInteract()}
+                        />
+                      </SettingsTableCell>
+                      <SettingsTableCell class="text-[11px] text-muted-foreground">Defaults to `$SHELL` if left empty.</SettingsTableCell>
+                    </SettingsTableRow>
+                  </SettingsTableBody>
+                </SettingsTable>
+              </Show>
+            </SettingsCard>
+          </div>
 
-        {/* Logging Card */}
-        <div id={settingsSectionElementID('logging')} class="scroll-mt-6">
-          <SettingsCard
-            icon={Database}
-            title="Logging"
-            description="Log format and verbosity level."
-            badge="Restart required"
-            badgeVariant="warning"
-            error={loggingError()}
-            actions={
-              <>
-                <ViewToggle value={loggingView} disabled={!canInteract()} onChange={(v) => switchLoggingView(v)} />
-                <AutoSaveIndicator
-                  dirty={loggingDirty()}
-                  saving={loggingSaving()}
-                  error={loggingError()}
-                  savedAt={loggingSavedAt()}
-                  enabled={canInteract()}
-                />
-              </>
-            }
-          >
-          <Show
-            when={loggingView() === 'ui'}
-            fallback={
-              <JSONEditor
-                value={loggingJSON()}
-                onChange={(v) => {
-                  setLoggingJSON(v);
-                  setLoggingDirty(true);
-                }}
-                disabled={!canInteract()}
-                rows={5}
-              />
-            }
-          >
-            <div class="space-y-4">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <FieldLabel>log_format</FieldLabel>
-                  <Select
-                    value={logFormat()}
-                    onChange={(v) => {
-                      setLogFormat(v);
+          <div id={settingsSectionElementID('logging')} class="scroll-mt-6">
+            <SettingsCard
+              icon={Database}
+              title="Logging"
+              description="Log format and verbosity level."
+              badge="Restart required"
+              badgeVariant="warning"
+              error={loggingError()}
+              actions={
+                <>
+                  <ViewToggle value={loggingView} disabled={!canInteract()} onChange={(value) => switchLoggingView(value)} />
+                  <AutoSaveIndicator
+                    dirty={loggingDirty()}
+                    saving={loggingSaving()}
+                    error={loggingError()}
+                    savedAt={loggingSavedAt()}
+                    enabled={canInteract()}
+                  />
+                </>
+              }
+            >
+              <Show
+                when={loggingView() === 'ui'}
+                fallback={
+                  <JSONEditor
+                    value={loggingJSON()}
+                    onChange={(value) => {
+                      setLoggingJSON(value);
                       setLoggingDirty(true);
                     }}
                     disabled={!canInteract()}
-                    options={[
-                      { value: '', label: 'Default (json)' },
-                      { value: 'json', label: 'json' },
-                      { value: 'text', label: 'text' },
-                    ]}
-                    class="w-full"
+                    rows={5}
                   />
-                </div>
-                <div>
-                  <FieldLabel>log_level</FieldLabel>
-                  <Select
-                    value={logLevel()}
-                    onChange={(v) => {
-                      setLogLevel(v);
-                      setLoggingDirty(true);
-                    }}
-                    disabled={!canInteract()}
-                    options={[
-                      { value: '', label: 'Default (info)' },
-                      { value: 'debug', label: 'debug' },
-                      { value: 'info', label: 'info' },
-                      { value: 'warn', label: 'warn' },
-                      { value: 'error', label: 'error' },
-                    ]}
-                    class="w-full"
-                  />
-                </div>
-              </div>
+                }
+              >
+                <div class="space-y-4">
+                  <SettingsTable minWidthClass="min-w-[44rem]">
+                    <SettingsTableHead>
+                      <SettingsTableHeaderRow>
+                        <SettingsTableHeaderCell class="w-48">Setting</SettingsTableHeaderCell>
+                        <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
+                        <SettingsTableHeaderCell class="w-72">Notes</SettingsTableHeaderCell>
+                      </SettingsTableHeaderRow>
+                    </SettingsTableHead>
+                    <SettingsTableBody>
+                      <SettingsTableRow>
+                        <SettingsTableCell class="font-medium text-muted-foreground">log_format</SettingsTableCell>
+                        <SettingsTableCell>
+                          <Select
+                            value={logFormat()}
+                            onChange={(value) => {
+                              setLogFormat(value);
+                              setLoggingDirty(true);
+                            }}
+                            disabled={!canInteract()}
+                            options={[
+                              { value: '', label: 'Default (json)' },
+                              { value: 'json', label: 'json' },
+                              { value: 'text', label: 'text' },
+                            ]}
+                            class="w-full"
+                          />
+                        </SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">Choose the log serialization format.</SettingsTableCell>
+                      </SettingsTableRow>
+                      <SettingsTableRow>
+                        <SettingsTableCell class="font-medium text-muted-foreground">log_level</SettingsTableCell>
+                        <SettingsTableCell>
+                          <Select
+                            value={logLevel()}
+                            onChange={(value) => {
+                              setLogLevel(value);
+                              setLoggingDirty(true);
+                            }}
+                            disabled={!canInteract()}
+                            options={[
+                              { value: '', label: 'Default (info)' },
+                              { value: 'debug', label: 'debug' },
+                              { value: 'info', label: 'info' },
+                              { value: 'warn', label: 'warn' },
+                              { value: 'error', label: 'error' },
+                            ]}
+                            class="w-full"
+                          />
+                        </SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">Use `debug` to enable detailed diagnostics collection.</SettingsTableCell>
+                      </SettingsTableRow>
+                    </SettingsTableBody>
+                  </SettingsTable>
 
-              <div class="border-t border-border/70 pt-4">
-                <SubSectionHeader
-                  title="Diagnostics"
-                  description="Correlate desktop and agent timing when debug logging is enabled."
-                />
-                <div class="mt-3">
-                  <EnvDiagnosticsPanel
-                    configuredDebug={diagnosticsConfiguredDebug()}
-                    runtimeEnabled={diagnosticsRuntimeEnabled()}
-                    loading={diagnosticsData.loading}
-                    refreshing={diagnosticsRefreshing()}
-                    exporting={diagnosticsExporting()}
-                    error={diagnosticsData.error ? formatUnknownError(diagnosticsData.error) : ''}
-                    diagnostics={diagnosticsData()}
-                    onRefresh={() => void refreshDiagnostics()}
-                    onExport={() => void exportDiagnosticsBundle()}
-                  />
-                </div>
-              </div>
-            </div>
-          </Show>
-          </SettingsCard>
-        </div>
-
-        {/* Codespaces Card */}
-        <div id={settingsSectionElementID('codespaces')} class="scroll-mt-6">
-          <SettingsCard
-            icon={Code}
-            title="Codespaces"
-            description="Port range for code-server instances."
-            badge="Restart required"
-            badgeVariant="warning"
-            error={codespacesError()}
-            actions={
-              <>
-                <ViewToggle value={codespacesView} disabled={!canInteract()} onChange={(v) => switchCodespacesView(v)} />
-                <AutoSaveIndicator
-                  dirty={codespacesDirty()}
-                  saving={codespacesSaving()}
-                  error={codespacesError()}
-                  savedAt={codespacesSavedAt()}
-                  enabled={canInteract()}
-                />
-              </>
-            }
-          >
-          <Show
-            when={codespacesView() === 'ui'}
-            fallback={
-              <JSONEditor
-                value={codespacesJSON()}
-                onChange={(v) => {
-                  setCodespacesJSON(v);
-                  setCodespacesDirty(true);
-                }}
-                disabled={!canInteract()}
-                rows={5}
-              />
-            }
-          >
-            <div class="space-y-4">
-              <div class="flex flex-col items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:flex-row sm:items-center sm:gap-4">
-                <div class="flex-1">
-                  <div class="text-xs text-muted-foreground">Effective port range</div>
-                  <div class="text-sm font-mono mt-0.5">
-                    {codespacesEffective().effective_min} – {codespacesEffective().effective_max}
-                  </div>
-                </div>
-                <div class="text-xs text-muted-foreground">
-                  Default: <CodeBadge>{String(DEFAULT_CODE_SERVER_PORT_MIN)}</CodeBadge> –{' '}
-                  <CodeBadge>{String(DEFAULT_CODE_SERVER_PORT_MAX)}</CodeBadge>
-                </div>
-              </div>
-
-              <Checkbox
-                checked={useDefaultCodePorts()}
-                onChange={(v) => {
-                  setUseDefaultCodePorts(v);
-                  setCodespacesDirty(true);
-                }}
-                disabled={!canInteract()}
-                label="Use default port range"
-                size="sm"
-              />
-
-              <Show when={!useDefaultCodePorts()}>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <FieldLabel>code_server_port_min</FieldLabel>
-                    <Input
-                      value={codePortMin() === '' ? '' : String(codePortMin())}
-                      onInput={(e) => {
-                        const v = e.currentTarget.value.trim();
-                        setCodePortMin(v ? Number(v) : '');
-                        setCodespacesDirty(true);
-                      }}
-                      placeholder="20000"
-                      size="sm"
-                      class="w-full"
-                      disabled={!canInteract()}
+                  <div class="border-t border-border/70 pt-4">
+                    <SubSectionHeader
+                      title="Diagnostics"
+                      description="Correlate desktop and agent timing when debug logging is enabled."
                     />
-                  </div>
-                  <div>
-                    <FieldLabel>code_server_port_max</FieldLabel>
-                    <Input
-                      value={codePortMax() === '' ? '' : String(codePortMax())}
-                      onInput={(e) => {
-                        const v = e.currentTarget.value.trim();
-                        setCodePortMax(v ? Number(v) : '');
-                        setCodespacesDirty(true);
-                      }}
-                      placeholder="21000"
-                      size="sm"
-                      class="w-full"
-                      disabled={!canInteract()}
-                    />
+                    <div class="mt-3">
+                      <EnvDiagnosticsPanel
+                        configuredDebug={diagnosticsConfiguredDebug()}
+                        runtimeEnabled={diagnosticsRuntimeEnabled()}
+                        loading={diagnosticsData.loading}
+                        refreshing={diagnosticsRefreshing()}
+                        exporting={diagnosticsExporting()}
+                        error={diagnosticsData.error ? formatUnknownError(diagnosticsData.error) : ''}
+                        diagnostics={diagnosticsData()}
+                        onRefresh={() => void refreshDiagnostics()}
+                        onExport={() => void exportDiagnosticsBundle()}
+                      />
+                    </div>
                   </div>
                 </div>
               </Show>
-            </div>
-          </Show>
-          </SettingsCard>
-        </div>
+            </SettingsCard>
+          </div>
+
+          <div id={settingsSectionElementID('codespaces')} class="scroll-mt-6">
+            <SettingsCard
+              icon={Code}
+              title="Codespaces"
+              description="Port range for code-server instances."
+              badge="Restart required"
+              badgeVariant="warning"
+              error={codespacesError()}
+              actions={
+                <>
+                  <ViewToggle value={codespacesView} disabled={!canInteract()} onChange={(value) => switchCodespacesView(value)} />
+                  <AutoSaveIndicator
+                    dirty={codespacesDirty()}
+                    saving={codespacesSaving()}
+                    error={codespacesError()}
+                    savedAt={codespacesSavedAt()}
+                    enabled={canInteract()}
+                  />
+                </>
+              }
+            >
+              <Show
+                when={codespacesView() === 'ui'}
+                fallback={
+                  <JSONEditor
+                    value={codespacesJSON()}
+                    onChange={(value) => {
+                      setCodespacesJSON(value);
+                      setCodespacesDirty(true);
+                    }}
+                    disabled={!canInteract()}
+                    rows={5}
+                  />
+                }
+              >
+                <SettingsTable minWidthClass="min-w-[48rem]">
+                  <SettingsTableHead>
+                    <SettingsTableHeaderRow>
+                      <SettingsTableHeaderCell class="w-48">Setting</SettingsTableHeaderCell>
+                      <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
+                      <SettingsTableHeaderCell class="w-72">Notes</SettingsTableHeaderCell>
+                    </SettingsTableHeaderRow>
+                  </SettingsTableHead>
+                  <SettingsTableBody>
+                    <SettingsTableRow>
+                      <SettingsTableCell class="font-medium text-muted-foreground">Port policy</SettingsTableCell>
+                      <SettingsTableCell>
+                        <div class="flex items-center gap-3">
+                          <Checkbox
+                            checked={useDefaultCodePorts()}
+                            onChange={(value) => {
+                              setUseDefaultCodePorts(value);
+                              setCodespacesDirty(true);
+                            }}
+                            disabled={!canInteract()}
+                            label="Use default port range"
+                            size="sm"
+                          />
+                          <SettingsPill tone={useDefaultCodePorts() ? 'success' : 'default'}>
+                            {useDefaultCodePorts() ? 'Default' : 'Custom'}
+                          </SettingsPill>
+                        </div>
+                      </SettingsTableCell>
+                      <SettingsTableCell class="text-[11px] text-muted-foreground">
+                        Default range: <span class="font-mono">{DEFAULT_CODE_SERVER_PORT_MIN}</span> - <span class="font-mono">{DEFAULT_CODE_SERVER_PORT_MAX}</span>
+                      </SettingsTableCell>
+                    </SettingsTableRow>
+                    <SettingsTableRow>
+                      <SettingsTableCell class="font-medium text-muted-foreground">Effective range</SettingsTableCell>
+                      <SettingsTableCell class="font-mono text-[11px]">
+                        {codespacesEffective().effective_min} - {codespacesEffective().effective_max}
+                      </SettingsTableCell>
+                      <SettingsTableCell class="text-[11px] text-muted-foreground">Computed range after validation and fallback logic.</SettingsTableCell>
+                    </SettingsTableRow>
+                    <SettingsTableRow>
+                      <SettingsTableCell class="font-medium text-muted-foreground">code_server_port_min</SettingsTableCell>
+                      <SettingsTableCell>
+                        <Input
+                          value={codePortMin() === '' ? '' : String(codePortMin())}
+                          onInput={(event) => {
+                            const value = event.currentTarget.value.trim();
+                            setCodePortMin(value ? Number(value) : '');
+                            setCodespacesDirty(true);
+                          }}
+                          placeholder="20000"
+                          size="sm"
+                          class="w-full"
+                          disabled={!canInteract() || useDefaultCodePorts()}
+                        />
+                      </SettingsTableCell>
+                      <SettingsTableCell class="text-[11px] text-muted-foreground">Start of the custom code-server port range.</SettingsTableCell>
+                    </SettingsTableRow>
+                    <SettingsTableRow>
+                      <SettingsTableCell class="font-medium text-muted-foreground">code_server_port_max</SettingsTableCell>
+                      <SettingsTableCell>
+                        <Input
+                          value={codePortMax() === '' ? '' : String(codePortMax())}
+                          onInput={(event) => {
+                            const value = event.currentTarget.value.trim();
+                            setCodePortMax(value ? Number(value) : '');
+                            setCodespacesDirty(true);
+                          }}
+                          placeholder="21000"
+                          size="sm"
+                          class="w-full"
+                          disabled={!canInteract() || useDefaultCodePorts()}
+                        />
+                      </SettingsTableCell>
+                      <SettingsTableCell class="text-[11px] text-muted-foreground">End of the custom code-server port range.</SettingsTableCell>
+                    </SettingsTableRow>
+                  </SettingsTableBody>
+                </SettingsTable>
+              </Show>
+            </SettingsCard>
+          </div>
         </SectionGroup>
 
         {/* ── Security & AI ── */}
         <SectionGroup title="Security & AI">
-        {/* Permission Policy Card */}
-        <div id={settingsSectionElementID('permission_policy')} class="scroll-mt-6">
-          <SettingsCard
-            icon={Shield}
-            title="Permission Policy"
-            description="Control read, write, and execute permissions."
-            badge="Restart required"
-            badgeVariant="warning"
-            error={policyError()}
-            actions={
-              <>
-                <ViewToggle value={policyView} disabled={!canInteract()} onChange={(v) => switchPolicyView(v)} />
-                <AutoSaveIndicator
-                  dirty={policyDirty()}
-                  saving={policySaving()}
-                  error={policyError()}
-                  savedAt={policySavedAt()}
-                  enabled={canInteract()}
-                />
-              </>
-            }
-          >
-          <Show
-            when={policyView() === 'ui'}
-            fallback={
-              <JSONEditor
-                value={policyJSON()}
-                onChange={(v) => {
-                  setPolicyJSON(v);
-                  setPolicyDirty(true);
-                }}
-                disabled={!canInteract()}
-                rows={12}
-              />
-            }
-          >
-            <div class="space-y-6">
-              {/* Schema version */}
-              <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/40 border border-border">
-                <span class="text-xs text-muted-foreground">schema_version</span>
-                <CodeBadge>1</CodeBadge>
-              </div>
+          <div id={settingsSectionElementID('permission_policy')} class="scroll-mt-6">
+            <SettingsCard
+              icon={Shield}
+              title="Permission Policy"
+              description="Control read, write, and execute permissions."
+              badge="Restart required"
+              badgeVariant="warning"
+              error={policyError()}
+              actions={
+                <>
+                  <ViewToggle value={policyView} disabled={!canInteract()} onChange={(value) => switchPolicyView(value)} />
+                  <AutoSaveIndicator
+                    dirty={policyDirty()}
+                    saving={policySaving()}
+                    error={policyError()}
+                    savedAt={policySavedAt()}
+                    enabled={canInteract()}
+                  />
+                </>
+              }
+            >
+              <Show
+                when={policyView() === 'ui'}
+                fallback={
+                  <JSONEditor
+                    value={policyJSON()}
+                    onChange={(value) => {
+                      setPolicyJSON(value);
+                      setPolicyDirty(true);
+                    }}
+                    disabled={!canInteract()}
+                    rows={12}
+                  />
+                }
+              >
+                <div class="space-y-6">
+                  <div class="inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5">
+                    <span class="text-xs text-muted-foreground">schema_version</span>
+                    <CodeBadge>1</CodeBadge>
+                  </div>
 
-              {/* Local max */}
-              <div class="space-y-3">
-                <SubSectionHeader title="local_max" description="Global permission ceiling for this agent. User and app rules are clamped to these limits." />
-                <div class="flex flex-wrap items-center gap-4 p-3 rounded-lg bg-muted/30 border border-border">
-                  <Checkbox
-                    checked={policyLocalRead()}
-                    onChange={(v) => {
-                      setPolicyLocalRead(v);
-                      setPolicyDirty(true);
-                    }}
-                    disabled={!canInteract()}
-                    label="read"
-                    size="sm"
-                  />
-                  <div class="w-px h-4 bg-border" />
-                  <Checkbox
-                    checked={policyLocalWrite()}
-                    onChange={(v) => {
-                      setPolicyLocalWrite(v);
-                      setPolicyDirty(true);
-                    }}
-                    disabled={!canInteract()}
-                    label="write"
-                    size="sm"
-                  />
-                  <div class="w-px h-4 bg-border" />
-                  <Checkbox
-                    checked={policyLocalExecute()}
-                    onChange={(v) => {
-                      setPolicyLocalExecute(v);
-                      setPolicyDirty(true);
-                    }}
-                    disabled={!canInteract()}
-                    label="execute"
-                    size="sm"
-                  />
-                </div>
-              </div>
-
-              {/* by_user */}
-              <div class="space-y-3">
-                <SubSectionHeader
-                  title="by_user"
-                  description="Per-user permission overrides."
-                  actions={
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setPolicyByUser((prev) => [...prev, { key: '', read: policyLocalRead(), write: policyLocalWrite(), execute: policyLocalExecute() }]);
+                  <div class="space-y-3">
+                    <SubSectionHeader title="local_max" description="Global permission ceiling for this agent. User and app rules are clamped to these limits." />
+                    <PermissionMatrixTable
+                      read={policyLocalRead()}
+                      write={policyLocalWrite()}
+                      execute={policyLocalExecute()}
+                      canInteract={canInteract()}
+                      onChange={(key, value) => {
+                        if (key === 'read') setPolicyLocalRead(value);
+                        else if (key === 'write') setPolicyLocalWrite(value);
+                        else setPolicyLocalExecute(value);
                         setPolicyDirty(true);
                       }}
+                    />
+                  </div>
+
+                  <div class="space-y-3">
+                    <SubSectionHeader
+                      title="by_user"
+                      description="Per-user permission overrides."
+                      actions={
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setPolicyByUser((prev) => [...prev, { key: '', read: policyLocalRead(), write: policyLocalWrite(), execute: policyLocalExecute() }]);
+                            setPolicyDirty(true);
+                          }}
+                          disabled={!canInteract()}
+                        >
+                          Add Rule
+                        </Button>
+                      }
+                    />
+                    <PermissionRuleTable
+                      rows={policyByUser()}
+                      emptyMessage="No user-specific overrides."
+                      keyHeader="User"
+                      keyPlaceholder="user_public_id"
+                      canInteract={canInteract()}
+                      readEnabled={policyLocalRead()}
+                      writeEnabled={policyLocalWrite()}
+                      executeEnabled={policyLocalExecute()}
+                      onChangeKey={(index, value) => {
+                        setPolicyByUser((prev) => prev.map((item, rowIndex) => (rowIndex === index ? { ...item, key: value } : item)));
+                        setPolicyDirty(true);
+                      }}
+                      onChangePerm={(index, key, value) => {
+                        setPolicyByUser((prev) => prev.map((item, rowIndex) => (rowIndex === index ? { ...item, [key]: value } : item)));
+                        setPolicyDirty(true);
+                      }}
+                      onRemove={(index) => {
+                        setPolicyByUser((prev) => prev.filter((_, rowIndex) => rowIndex !== index));
+                        setPolicyDirty(true);
+                      }}
+                    />
+                  </div>
+
+                  <div class="space-y-3">
+                    <SubSectionHeader
+                      title="by_app"
+                      description="Per-application permission overrides."
+                      actions={
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setPolicyByApp((prev) => [...prev, { key: '', read: policyLocalRead(), write: policyLocalWrite(), execute: policyLocalExecute() }]);
+                            setPolicyDirty(true);
+                          }}
+                          disabled={!canInteract()}
+                        >
+                          Add Rule
+                        </Button>
+                      }
+                    />
+                    <PermissionRuleTable
+                      rows={policyByApp()}
+                      emptyMessage="No app-specific overrides."
+                      keyHeader="App"
+                      keyPlaceholder="floe_app identifier"
+                      canInteract={canInteract()}
+                      readEnabled={policyLocalRead()}
+                      writeEnabled={policyLocalWrite()}
+                      executeEnabled={policyLocalExecute()}
+                      onChangeKey={(index, value) => {
+                        setPolicyByApp((prev) => prev.map((item, rowIndex) => (rowIndex === index ? { ...item, key: value } : item)));
+                        setPolicyDirty(true);
+                      }}
+                      onChangePerm={(index, key, value) => {
+                        setPolicyByApp((prev) => prev.map((item, rowIndex) => (rowIndex === index ? { ...item, [key]: value } : item)));
+                        setPolicyDirty(true);
+                      }}
+                      onRemove={(index) => {
+                        setPolicyByApp((prev) => prev.filter((_, rowIndex) => rowIndex !== index));
+                        setPolicyDirty(true);
+                      }}
+                    />
+                  </div>
+                </div>
+              </Show>
+            </SettingsCard>
+          </div>
+
+          <div id={settingsSectionElementID('skills')} class="scroll-mt-6">
+            <SettingsCard
+              icon={Layers}
+              title="Skills"
+              description="Manage Flower skills: install from GitHub, browse skill files, toggle enable state, and maintain local skills."
+              badge={skillsReloading() || skillsLoading() ? 'Loading' : `${skillsCatalog()?.skills?.length ?? 0} skills`}
+              error={skillsError()}
+              actions={
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void refreshSkillsCatalog(true)}
+                    loading={skillsReloading()}
+                    disabled={!canInteract()}
+                  >
+                    Reload
+                  </Button>
+                  <Button size="sm" variant="default" onClick={() => openInstallDialog()} disabled={!canInteract() || !canAdmin()}>
+                    Install from GitHub
+                  </Button>
+                  <Button size="sm" variant="default" onClick={() => setSkillCreateOpen(true)} disabled={!canInteract() || !canAdmin()}>
+                    Create Skill
+                  </Button>
+                </>
+              }
+            >
+              <div class="space-y-4">
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div class="md:col-span-2">
+                    <FieldLabel>Search</FieldLabel>
+                    <Input
+                      value={skillQuery()}
+                      onInput={(event) => setSkillQuery(event.currentTarget.value)}
+                      placeholder="Search by name, description, or path"
+                      size="sm"
+                      class="w-full"
                       disabled={!canInteract()}
-                    >
-                      Add Rule
-                    </Button>
-                  }
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>Scope</FieldLabel>
+                    <Select
+                      value={skillScopeFilter()}
+                      onChange={(value) => setSkillScopeFilter(value as 'all' | 'user' | 'user_agents')}
+                      disabled={!canInteract()}
+                      options={[
+                        { value: 'all', label: 'All scopes' },
+                        { value: 'user', label: 'User (.redeven)' },
+                        { value: 'user_agents', label: 'User (.agents)' },
+                      ]}
+                      class="w-full"
+                    />
+                  </div>
+                </div>
+
+                <SkillsCatalogTable
+                  skills={filteredSkills()}
+                  sources={skillSources()}
+                  loading={skillsLoading()}
+                  canInteract={canInteract()}
+                  canAdmin={canAdmin()}
+                  toggleSaving={skillToggleSaving()}
+                  reinstalling={skillReinstalling()}
+                  onToggle={(entry, enabled) => {
+                    void toggleSkill(entry, enabled);
+                  }}
+                  onBrowse={openSkillBrowse}
+                  onReinstall={(entry) => {
+                    void reinstallSkill(entry);
+                  }}
+                  onDelete={askDeleteSkill}
                 />
 
-                <Show when={policyByUser().length > 0} fallback={<p class="text-xs text-muted-foreground italic">No user-specific overrides.</p>}>
-                  <div class="space-y-2">
-                    <For each={policyByUser()}>
-                      {(row, idx) => (
-                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border bg-muted/20">
-                          <div class="flex-1 min-w-0">
-                            <Input
-                              value={row.key}
-                              onInput={(e) => {
-                                const v = e.currentTarget.value;
-                                setPolicyByUser((prev) => prev.map((it, i) => (i === idx() ? { ...it, key: v } : it)));
-                                setPolicyDirty(true);
-                              }}
-                              placeholder="user_public_id"
-                              size="sm"
-                              class="w-full font-mono text-xs"
-                              disabled={!canInteract()}
-                            />
-                          </div>
-                          <div class="flex items-center gap-3">
-                            <Checkbox
-                              checked={row.read}
-                              onChange={(v) => {
-                                setPolicyByUser((prev) => prev.map((it, i) => (i === idx() ? { ...it, read: v } : it)));
-                                setPolicyDirty(true);
-                              }}
-                              disabled={!canInteract() || !policyLocalRead()}
-                              label="R"
-                              size="sm"
-                            />
-                            <Checkbox
-                              checked={row.write}
-                              onChange={(v) => {
-                                setPolicyByUser((prev) => prev.map((it, i) => (i === idx() ? { ...it, write: v } : it)));
-                                setPolicyDirty(true);
-                              }}
-                              disabled={!canInteract() || !policyLocalWrite()}
-                              label="W"
-                              size="sm"
-                            />
-                            <Checkbox
-                              checked={row.execute}
-                              onChange={(v) => {
-                                setPolicyByUser((prev) => prev.map((it, i) => (i === idx() ? { ...it, execute: v } : it)));
-                                setPolicyDirty(true);
-                              }}
-                              disabled={!canInteract() || !policyLocalExecute()}
-                              label="X"
-                              size="sm"
-                            />
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              class="text-muted-foreground hover:text-destructive h-7 w-7 p-0"
-                              onClick={() => {
-                                setPolicyByUser((prev) => prev.filter((_, i) => i !== idx()));
-                                setPolicyDirty(true);
-                              }}
-                              disabled={!canInteract()}
-                            >
-                              &times;
-                            </Button>
-                          </div>
-                        </div>
-                      )}
+                <Show when={(skillsCatalog()?.conflicts?.length ?? 0) > 0}>
+                  <div class="space-y-1 rounded-lg border border-warning/40 bg-warning/10 p-3">
+                    <div class="text-xs font-semibold text-warning">Conflicts detected: {skillsCatalog()?.conflicts?.length ?? 0}</div>
+                    <For each={(skillsCatalog()?.conflicts ?? []).slice(0, 5)}>
+                      {(item) => <div class="break-all text-[11px] text-warning">{item.name}: {item.path}</div>}
+                    </For>
+                  </div>
+                </Show>
+
+                <Show when={(skillsCatalog()?.errors?.length ?? 0) > 0}>
+                  <div class="space-y-1 rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+                    <div class="text-xs font-semibold text-destructive">Catalog errors: {skillsCatalog()?.errors?.length ?? 0}</div>
+                    <For each={(skillsCatalog()?.errors ?? []).slice(0, 5)}>
+                      {(item) => <div class="break-all text-[11px] text-destructive">{item.path}: {item.message}</div>}
                     </For>
                   </div>
                 </Show>
               </div>
+            </SettingsCard>
+          </div>
 
-              {/* by_app */}
-              <div class="space-y-3">
-                <SubSectionHeader
-                  title="by_app"
-                  description="Per-application permission overrides."
-                  actions={
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setPolicyByApp((prev) => [...prev, { key: '', read: policyLocalRead(), write: policyLocalWrite(), execute: policyLocalExecute() }]);
-                        setPolicyDirty(true);
-                      }}
-                      disabled={!canInteract()}
-                    >
-                      Add Rule
+          <div id={settingsSectionElementID('ai')} class="scroll-mt-6">
+            <SettingsCard
+              icon={FlowerIcon}
+              title="Flower"
+              description="Configure Flower: providers, models, and API keys. Changes are auto-saved when the form is valid."
+              badge={aiEnabled() ? 'Enabled' : 'Disabled'}
+              badgeVariant={aiEnabled() ? 'success' : 'default'}
+              error={aiError()}
+              actions={
+                <>
+                  <ViewToggle value={aiView} disabled={!canInteract()} onChange={(value) => switchAIView(value)} />
+                  <AutoSaveIndicator
+                    dirty={aiDirty()}
+                    saving={aiSaving()}
+                    error={aiError()}
+                    savedAt={aiSavedAt()}
+                    enabled={canInteract()}
+                  />
+                  <Show when={aiEnabled()}>
+                    <Button size="sm" variant="destructive" onClick={() => setDisableAIOpen(true)} disabled={!canInteract() || aiSaving()}>
+                      Disable Flower
                     </Button>
-                  }
-                />
-
-                <Show when={policyByApp().length > 0} fallback={<p class="text-xs text-muted-foreground italic">No app-specific overrides.</p>}>
-                  <div class="space-y-2">
-                    <For each={policyByApp()}>
-                      {(row, idx) => (
-                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-border bg-muted/20">
-                          <div class="flex-1 min-w-0">
-                            <Input
-                              value={row.key}
-                              onInput={(e) => {
-                                const v = e.currentTarget.value;
-                                setPolicyByApp((prev) => prev.map((it, i) => (i === idx() ? { ...it, key: v } : it)));
-                                setPolicyDirty(true);
-                              }}
-                              placeholder="floe_app identifier"
-                              size="sm"
-                              class="w-full font-mono text-xs"
-                              disabled={!canInteract()}
-                            />
-                          </div>
-                          <div class="flex items-center gap-3">
-                            <Checkbox
-                              checked={row.read}
-                              onChange={(v) => {
-                                setPolicyByApp((prev) => prev.map((it, i) => (i === idx() ? { ...it, read: v } : it)));
-                                setPolicyDirty(true);
-                              }}
-                              disabled={!canInteract() || !policyLocalRead()}
-                              label="R"
-                              size="sm"
-                            />
-                            <Checkbox
-                              checked={row.write}
-                              onChange={(v) => {
-                                setPolicyByApp((prev) => prev.map((it, i) => (i === idx() ? { ...it, write: v } : it)));
-                                setPolicyDirty(true);
-                              }}
-                              disabled={!canInteract() || !policyLocalWrite()}
-                              label="W"
-                              size="sm"
-                            />
-                            <Checkbox
-                              checked={row.execute}
-                              onChange={(v) => {
-                                setPolicyByApp((prev) => prev.map((it, i) => (i === idx() ? { ...it, execute: v } : it)));
-                                setPolicyDirty(true);
-                              }}
-                              disabled={!canInteract() || !policyLocalExecute()}
-                              label="X"
-                              size="sm"
-                            />
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              class="text-muted-foreground hover:text-destructive h-7 w-7 p-0"
-                              onClick={() => {
-                                setPolicyByApp((prev) => prev.filter((_, i) => i !== idx()));
-                                setPolicyDirty(true);
-                              }}
-                              disabled={!canInteract()}
-                            >
-                              &times;
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </For>
+                  </Show>
+                </>
+              }
+            >
+              <Show when={!aiEnabled() && !settings.loading && !settings.error}>
+                <div class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-4">
+                  <Zap class="h-5 w-5 text-muted-foreground" />
+                  <div class="text-sm text-muted-foreground">
+                    Flower is currently disabled. Once the settings below become valid, Flower will be enabled automatically.
                   </div>
-                </Show>
-              </div>
-            </div>
-          </Show>
-          </SettingsCard>
-        </div>
-
-        {/* Skills Card */}
-        <div id={settingsSectionElementID('skills')} class="scroll-mt-6">
-          <SettingsCard
-            icon={Layers}
-            title="Skills"
-            description="Manage Flower skills: install from GitHub, browse skill files, toggle enable state, and maintain local skills."
-            badge={skillsReloading() || skillsLoading() ? 'Loading' : `${skillsCatalog()?.skills?.length ?? 0} skills`}
-            error={skillsError()}
-            actions={
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void refreshSkillsCatalog(true)}
-                  loading={skillsReloading()}
-                  disabled={!canInteract()}
-                >
-                  Reload
-                </Button>
-                <Button size="sm" variant="default" onClick={() => openInstallDialog()} disabled={!canInteract() || !canAdmin()}>
-                  Install from GitHub
-                </Button>
-                <Button size="sm" variant="default" onClick={() => setSkillCreateOpen(true)} disabled={!canInteract() || !canAdmin()}>
-                  Create Skill
-                </Button>
-              </>
-            }
-          >
-            <div class="space-y-4">
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div class="md:col-span-2">
-                  <FieldLabel>Search</FieldLabel>
-                  <Input
-                    value={skillQuery()}
-                    onInput={(e) => setSkillQuery(e.currentTarget.value)}
-                    placeholder="Search by name, description, or path"
-                    size="sm"
-                    class="w-full"
-                    disabled={!canInteract()}
-                  />
                 </div>
-                <div>
-                  <FieldLabel>Scope</FieldLabel>
-                  <Select
-                    value={skillScopeFilter()}
-                    onChange={(v) => setSkillScopeFilter(v as 'all' | 'user' | 'user_agents')}
-                    disabled={!canInteract()}
-                    options={[
-                      { value: 'all', label: 'All scopes' },
-                      { value: 'user', label: 'User (.redeven)' },
-                      { value: 'user_agents', label: 'User (.agents)' },
-                    ]}
-                    class="w-full"
-                  />
-                </div>
-              </div>
-
-              <Show when={skillsLoading()}>
-                <div class="text-xs text-muted-foreground">Loading skills catalog...</div>
               </Show>
 
-              <Show when={!skillsLoading() && filteredSkills().length > 0} fallback={<p class="text-xs text-muted-foreground italic">No skills found for current filters.</p>}>
-                <div class="space-y-2">
-                  <For each={filteredSkills()}>
-                    {(item) => (
-                      <div class="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
-                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                          <div class="min-w-0">
-                            <div class="flex items-center gap-2 flex-wrap">
-                              <div class="text-sm font-semibold text-foreground">{item.name}</div>
-                              <Show when={item.effective}>
-                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">Effective</span>
-                              </Show>
-                              <Show when={!item.enabled}>
-                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">Disabled</span>
-                              </Show>
-                              <Show when={item.dependency_state === 'degraded'}>
-                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">Dependency degraded</span>
-                              </Show>
-                            </div>
-                            <div class="text-xs text-muted-foreground mt-1">{item.description || 'No description.'}</div>
-                            <div class="text-[11px] text-muted-foreground mt-1 font-mono break-all">{item.path}</div>
-                            <div class="text-[11px] text-muted-foreground mt-1">{skillScopeLabel(item.scope)}</div>
-                            <Show when={skillSources()?.[item.path]}>
-                              <div class="text-[11px] text-muted-foreground mt-1">
-                                Source: {skillSourceLabel(String(skillSources()?.[item.path]?.source_type ?? ''))}
-                                <Show when={String(skillSources()?.[item.path]?.source_id ?? '').trim()}>
-                                  <span class="font-mono ml-1 break-all">{skillSources()?.[item.path]?.source_id}</span>
-                                </Show>
-                              </div>
-                            </Show>
-                            <Show when={item.shadowed_by}>
-                              <div class="text-[11px] text-warning mt-1 break-all">Shadowed by: {item.shadowed_by}</div>
-                            </Show>
-                          </div>
-                          <div class="flex items-center gap-2">
-                            <Checkbox
-                              checked={!!item.enabled}
-                              onChange={(v) => {
-                                void toggleSkill(item, v);
-                              }}
-                              disabled={!canInteract() || !canAdmin() || !!skillToggleSaving()?.[item.path]}
-                              label={item.enabled ? 'Enabled' : 'Disabled'}
-                              size="sm"
-                            />
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openSkillBrowse(item)}
-                              disabled={!canInteract()}
-                            >
-                              Browse
-                            </Button>
-                            <Show when={String(skillSources()?.[item.path]?.source_type ?? '').toLowerCase() === 'github_import'}>
+              <Show
+                when={aiView() === 'ui'}
+                fallback={
+                  <JSONEditor
+                    value={aiJSON()}
+                    onChange={(value) => {
+                      setAiJSON(value);
+                      setAiDirty(true);
+                    }}
+                    disabled={!canInteract()}
+                    rows={14}
+                  />
+                }
+              >
+                <div class="space-y-6">
+                  <SettingsTable minWidthClass="min-w-[60rem]">
+                    <SettingsTableHead>
+                      <SettingsTableHeaderRow>
+                        <SettingsTableHeaderCell class="w-52">Setting</SettingsTableHeaderCell>
+                        <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
+                        <SettingsTableHeaderCell class="w-80">Notes</SettingsTableHeaderCell>
+                      </SettingsTableHeaderRow>
+                    </SettingsTableHead>
+                    <SettingsTableBody>
+                      <SettingsTableRow>
+                        <SettingsTableCell class="font-medium text-muted-foreground">Require user approval</SettingsTableCell>
+                        <SettingsTableCell>
+                          <Checkbox
+                            checked={aiRequireUserApproval()}
+                            onChange={(value) => {
+                              setAiRequireUserApproval(value);
+                              setAiDirty(true);
+                            }}
+                            disabled={!canInteract()}
+                            label="Require user approval for mutating tools"
+                            size="sm"
+                          />
+                        </SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">
+                          Plan mode remains strict readonly even when this toggle is off.
+                        </SettingsTableCell>
+                      </SettingsTableRow>
+                      <SettingsTableRow>
+                        <SettingsTableCell class="font-medium text-muted-foreground">Block dangerous commands</SettingsTableCell>
+                        <SettingsTableCell>
+                          <Checkbox
+                            checked={aiBlockDangerousCommands()}
+                            onChange={(value) => {
+                              setAiBlockDangerousCommands(value);
+                              setAiDirty(true);
+                            }}
+                            disabled={!canInteract()}
+                            label="Block dangerous terminal commands"
+                            size="sm"
+                          />
+                        </SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">
+                          Recommended safeguard for direct tool execution in act mode.
+                        </SettingsTableCell>
+                      </SettingsTableRow>
+                      <SettingsTableRow>
+                        <SettingsTableCell class="font-medium text-muted-foreground">Web search provider</SettingsTableCell>
+                        <SettingsTableCell>
+                          <Select
+                            value={aiWebSearchProvider()}
+                            onChange={(value) => {
+                              setAiWebSearchProvider(normalizeWebSearchProvider(value));
+                              setAiDirty(true);
+                            }}
+                            disabled={!canInteract()}
+                            options={[
+                              { value: 'prefer_openai', label: 'prefer_openai (recommended)' },
+                              { value: 'brave', label: 'brave' },
+                              { value: 'disabled', label: 'disabled' },
+                            ]}
+                            class="w-full"
+                          />
+                        </SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">
+                          `prefer_openai` prefers native OpenAI web search when available, otherwise falls back to Brave.
+                        </SettingsTableCell>
+                      </SettingsTableRow>
+                      <Show when={aiWebSearchProvider() === 'prefer_openai' || aiWebSearchProvider() === 'brave'}>
+                        <SettingsTableRow>
+                          <SettingsTableCell class="font-medium text-muted-foreground">brave_api_key</SettingsTableCell>
+                          <SettingsTableCell>
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                              <SettingsPill tone={webSearchKeySet()?.brave ? 'success' : 'default'}>
+                                {webSearchKeySet()?.brave ? 'Key set' : 'Key not set'}
+                              </SettingsPill>
+                              <Input
+                                type="password"
+                                value={webSearchKeyDraft()?.brave ?? ''}
+                                onInput={(event) => {
+                                  const value = event.currentTarget.value;
+                                  setWebSearchKeyDraft((prev) => ({ ...prev, brave: value }));
+                                }}
+                                placeholder="Paste Brave API key"
+                                size="sm"
+                                class="w-full"
+                                disabled={!canInteract() || !canAdmin()}
+                              />
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => void reinstallSkill(item)}
-                                loading={!!skillReinstalling()?.[item.path]}
+                                onClick={() => saveWebSearchKey('brave')}
+                                loading={!!webSearchKeySaving()?.brave}
                                 disabled={!canInteract() || !canAdmin()}
                               >
-                                Reinstall
+                                Save key
                               </Button>
-                            </Show>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              class="text-muted-foreground hover:text-destructive"
-                              onClick={() => askDeleteSkill(item)}
-                              disabled={!canInteract() || !canAdmin() || !!skillToggleSaving()?.[item.path] || !!skillReinstalling()?.[item.path]}
-                            >
-                              Delete
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </For>
-                </div>
-              </Show>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                class="text-muted-foreground hover:text-destructive"
+                                onClick={() => clearWebSearchKey('brave')}
+                                disabled={!canInteract() || !canAdmin()}
+                              >
+                                Clear
+                              </Button>
+                            </div>
+                          </SettingsTableCell>
+                          <SettingsTableCell class="text-[11px] text-muted-foreground">
+                            Stored locally only. You can also use <span class="font-mono">REDEVEN_BRAVE_API_KEY</span>.
+                          </SettingsTableCell>
+                        </SettingsTableRow>
+                      </Show>
+                      <SettingsTableRow>
+                        <SettingsTableCell class="font-medium text-muted-foreground">Current model</SettingsTableCell>
+                        <SettingsTableCell>
+                          <Select
+                            value={aiCurrentModelID()}
+                            options={aiModelOptions().map((item) => ({ value: item.id, label: item.label }))}
+                            onChange={(value) => {
+                              const nextModelID = normalizeAICurrentModelID(String(value ?? '').trim(), aiProviders());
+                              if (!nextModelID) return;
+                              const prevModelID = normalizeAICurrentModelID(aiCurrentModelID(), aiProviders());
+                              if (nextModelID === prevModelID) return;
+                              setAiCurrentModelID(nextModelID);
+                              const canDirectSave = aiView() === 'ui' && !aiDirty() && !aiSaving() && !disableAISaving();
+                              if (canDirectSave) {
+                                void saveAICurrentModelDirectly(nextModelID, prevModelID || '');
+                                return;
+                              }
+                              setAiDirty(true);
+                            }}
+                            placeholder="Select current model..."
+                            class="w-full"
+                            disabled={!canInteract() || aiModelOptions().length === 0 || aiSaving() || disableAISaving()}
+                          />
+                        </SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">Default model for new chats. Individual threads may still select a different model.</SettingsTableCell>
+                      </SettingsTableRow>
+                    </SettingsTableBody>
+                  </SettingsTable>
 
-              <Show when={(skillsCatalog()?.conflicts?.length ?? 0) > 0}>
-                <div class="rounded-lg border border-warning/40 bg-warning/10 p-3 space-y-1">
-                  <div class="text-xs font-semibold text-warning">Conflicts detected: {skillsCatalog()?.conflicts?.length ?? 0}</div>
-                  <For each={(skillsCatalog()?.conflicts ?? []).slice(0, 5)}>
-                    {(item) => <div class="text-[11px] text-warning break-all">{item.name}: {item.path}</div>}
-                  </For>
-                </div>
-              </Show>
-
-              <Show when={(skillsCatalog()?.errors?.length ?? 0) > 0}>
-                <div class="rounded-lg border border-destructive/40 bg-destructive/10 p-3 space-y-1">
-                  <div class="text-xs font-semibold text-destructive">Catalog errors: {skillsCatalog()?.errors?.length ?? 0}</div>
-                  <For each={(skillsCatalog()?.errors ?? []).slice(0, 5)}>
-                    {(item) => <div class="text-[11px] text-destructive break-all">{item.path}: {item.message}</div>}
-                  </For>
-                </div>
-              </Show>
-            </div>
-          </SettingsCard>
-        </div>
-
-        {/* Flower Card */}
-        <div id={settingsSectionElementID('ai')} class="scroll-mt-6">
-          <SettingsCard
-            icon={FlowerIcon}
-            title="Flower"
-            description="Configure Flower: providers, models, and API keys. Changes are auto-saved when the form is valid."
-            badge={aiEnabled() ? 'Enabled' : 'Disabled'}
-            badgeVariant={aiEnabled() ? 'success' : 'default'}
-            error={aiError()}
-            actions={
-              <>
-                <ViewToggle value={aiView} disabled={!canInteract()} onChange={(v) => switchAIView(v)} />
-                <AutoSaveIndicator
-                  dirty={aiDirty()}
-                  saving={aiSaving()}
-                  error={aiError()}
-                  savedAt={aiSavedAt()}
-                  enabled={canInteract()}
-                />
-                <Show when={aiEnabled()}>
-                  <Button size="sm" variant="destructive" onClick={() => setDisableAIOpen(true)} disabled={!canInteract() || aiSaving()}>
-                    Disable Flower
-                  </Button>
-                </Show>
-              </>
-            }
-          >
-            <Show when={!aiEnabled() && !settings.loading && !settings.error}>
-              <div class="flex items-center gap-3 p-4 rounded-lg bg-muted/30 border border-border">
-                <Zap class="w-5 h-5 text-muted-foreground" />
-                <div class="text-sm text-muted-foreground">
-                  Flower is currently disabled. Once the settings below become valid, Flower will be enabled automatically.
-                </div>
-              </div>
-            </Show>
-
-            <Show
-              when={aiView() === 'ui'}
-              fallback={
-                <JSONEditor
-                  value={aiJSON()}
-                  onChange={(v) => {
-                    setAiJSON(v);
-                    setAiDirty(true);
-                  }}
-                  disabled={!canInteract()}
-                  rows={14}
-                />
-              }
-            >
-              <div class="space-y-8">
-                {/* Execution policy */}
-                <div class="space-y-3">
-                  <SubSectionHeader
-                    title="Execution policy"
-                    description="Runtime guardrails for approvals and dangerous commands. Plan mode is always strict readonly."
-                  />
-                  <div class="space-y-2 p-4 rounded-lg border border-border bg-muted/20">
-                    <div class="settings-policy-toggle-row">
-                      <Checkbox
-                        checked={aiRequireUserApproval()}
-                        onChange={(v) => {
-                          setAiRequireUserApproval(v);
-                          setAiDirty(true);
-                        }}
-                        disabled={!canInteract()}
-                        label="Require user approval for mutating tools"
-                        size="sm"
-                      />
-                    </div>
-                    <div class="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                      Plan mode is always strict readonly. Mutating tools are blocked automatically, and edits require switching to Act mode.
-                    </div>
-                    <div class="settings-policy-toggle-row">
-                      <Checkbox
-                        checked={aiBlockDangerousCommands()}
-                        onChange={(v) => {
-                          setAiBlockDangerousCommands(v);
-                          setAiDirty(true);
-                        }}
-                        disabled={!canInteract()}
-                        label="Block dangerous terminal commands"
-                        size="sm"
-                      />
-                    </div>
-                  </div>
                   <Show when={!aiBlockDangerousCommands()}>
-                    <div class="flex items-start gap-2.5 p-3 rounded-lg border border-warning/50 bg-warning/10">
-                      <Shield class="w-4 h-4 mt-0.5 text-warning shrink-0" />
+                    <div class="flex items-start gap-2.5 rounded-lg border border-warning/50 bg-warning/10 p-3">
+                      <Shield class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                       <div class="text-xs font-medium text-foreground">
                         Dangerous command blocking is disabled. The agent may execute high-risk commands directly.
                       </div>
                     </div>
                   </Show>
-                </div>
 
-                {/* Web search */}
-                <div class="space-y-3">
-                  <SubSectionHeader
-                    title="Web search"
-                    description="Search backend for the runtime. Sources and citations are collected per request."
-                  />
-                  <div class="space-y-4 p-4 rounded-lg border border-border bg-muted/20">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <FieldLabel>provider</FieldLabel>
-                        <Select
-                          value={aiWebSearchProvider()}
-                          onChange={(v) => {
-                            setAiWebSearchProvider(normalizeWebSearchProvider(v));
-                            setAiDirty(true);
-                          }}
-                          disabled={!canInteract()}
-                          options={[
-                            { value: 'prefer_openai', label: 'prefer_openai (recommended)' },
-                            { value: 'brave', label: 'brave' },
-                            { value: 'disabled', label: 'disabled' },
-                          ]}
-                          class="w-full"
-                        />
-                        <p class="text-xs text-muted-foreground mt-1">
-                          prefer_openai prefers OpenAI built-in web search when using the official OpenAI base_url; otherwise it falls back to Brave.
-                        </p>
-                      </div>
-                    </div>
+                  <div class="space-y-3">
+                    <SubSectionHeader
+                      title="Providers"
+                      description="Provider registry exposed to Flower Chat."
+                      actions={
+                        <Button size="sm" variant="outline" onClick={() => addAIProviderAndOpenDialog()} disabled={!canInteract()}>
+                          Add Provider
+                        </Button>
+                      }
+                    />
 
-                    <Show when={aiWebSearchProvider() === 'prefer_openai' || aiWebSearchProvider() === 'brave'}>
-                      <div class="space-y-2">
-                        <FieldLabel hint="stored locally, never shown again">brave_api_key</FieldLabel>
-                        <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                          <div
-                            class={
-                              'text-xs px-2 py-1 rounded-md border ' +
-                              (webSearchKeySet()?.brave
-                                ? 'bg-success/10 border-success/50 text-success'
-                                : 'bg-muted/40 border-border text-muted-foreground')
-                            }
-                          >
-                            {webSearchKeySet()?.brave ? 'Key set' : 'Key not set'}
-                          </div>
-                          <Input
-                            type="password"
-                            value={webSearchKeyDraft()?.brave ?? ''}
-                            onInput={(e) => {
-                              const v = e.currentTarget.value;
-                              setWebSearchKeyDraft((prev) => ({ ...prev, brave: v }));
-                            }}
-                            placeholder="Paste Brave API key"
-                            size="sm"
-                            class="w-full"
-                            disabled={!canInteract() || !canAdmin()}
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => saveWebSearchKey('brave')}
-                            loading={!!webSearchKeySaving()?.brave}
-                            disabled={!canInteract() || !canAdmin()}
-                          >
-                            Save key
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            class="text-muted-foreground hover:text-destructive"
-                            onClick={() => clearWebSearchKey('brave')}
-                            disabled={!canInteract() || !canAdmin()}
-                          >
-                            Clear
-                          </Button>
-                        </div>
-                        <p class="text-xs text-muted-foreground">
-                          Keys are saved in a separate local secrets file and are never written to config.json. You may also set{' '}
-                          <span class="font-mono">REDEVEN_BRAVE_API_KEY</span>. The same key is used by <span class="font-mono">redeven search</span>.
-                        </p>
-                      </div>
-                    </Show>
-                  </div>
-                </div>
-
-                {/* Providers */}
-                <div class="space-y-3">
-                  <SubSectionHeader
-                    title="Providers"
-                    description="Configure providers and models. The current model is used by default for new chats."
-                    actions={
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => addAIProviderAndOpenDialog()}
-                        disabled={!canInteract()}
-                      >
-                        Add Provider
-                      </Button>
-                    }
-                  />
-
-                  <div class="rounded-lg border border-border bg-muted/10 p-3 space-y-3">
-                    <div class="text-xs text-muted-foreground">{aiProviders().length} provider(s) configured.</div>
-                    <div class="grid grid-cols-1 md:grid-cols-[200px_minmax(0,1fr)] gap-2 items-center">
-                      <FieldLabel>Current model</FieldLabel>
-                      <Select
-                        value={aiCurrentModelID()}
-                        options={aiModelOptions().map((it) => ({ value: it.id, label: it.label }))}
-                        onChange={(v) => {
-                          const nextModelID = normalizeAICurrentModelID(String(v ?? '').trim(), aiProviders());
-                          if (!nextModelID) return;
-                          const prevModelID = normalizeAICurrentModelID(aiCurrentModelID(), aiProviders());
-                          if (nextModelID === prevModelID) return;
-                          setAiCurrentModelID(nextModelID);
-                          const canDirectSave = aiView() === 'ui' && !aiDirty() && !aiSaving() && !disableAISaving();
-                          if (canDirectSave) {
-                            void saveAICurrentModelDirectly(nextModelID, prevModelID || '');
-                            return;
-                          }
-                          setAiDirty(true);
-                        }}
-                        placeholder="Select current model..."
-                        class="w-full"
-                        disabled={!canInteract() || aiModelOptions().length === 0 || aiSaving() || disableAISaving()}
-                      />
-                    </div>
-                    <div class="space-y-2">
-                      <For each={aiProviders()}>
-                        {(provider, idx) => {
-                          const providerID = () => String(provider.id ?? '').trim();
-                          const displayName = () => String(provider.name ?? '').trim() || providerID() || `Provider ${idx() + 1}`;
-                          return (
-                            <div class="rounded-lg border border-border bg-background px-3 py-2.5">
-                              <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                <div class="min-w-0 space-y-1">
-                                  <div class="flex items-center gap-2 flex-wrap">
-                                    <span class="text-sm font-semibold text-foreground">{displayName()}</span>
-                                    <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
-                                      {provider.type}
-                                    </span>
-                                    <Show when={aiProviderKeySet()?.[providerID()]}>
-                                      <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/30">
-                                        Key set
-                                      </span>
+                    <SettingsTable minWidthClass="min-w-[72rem]">
+                      <SettingsTableHead sticky>
+                        <SettingsTableHeaderRow>
+                          <SettingsTableHeaderCell class="w-48">Name</SettingsTableHeaderCell>
+                          <SettingsTableHeaderCell class="w-48">Provider ID</SettingsTableHeaderCell>
+                          <SettingsTableHeaderCell class="w-32">Type</SettingsTableHeaderCell>
+                          <SettingsTableHeaderCell>Base URL</SettingsTableHeaderCell>
+                          <SettingsTableHeaderCell class="w-28">API Key</SettingsTableHeaderCell>
+                          <SettingsTableHeaderCell class="w-56">Models</SettingsTableHeaderCell>
+                          <SettingsTableHeaderCell class="w-32">Actions</SettingsTableHeaderCell>
+                        </SettingsTableHeaderRow>
+                      </SettingsTableHead>
+                      <SettingsTableBody>
+                        <For each={aiProviders()}>
+                          {(provider, index) => {
+                            const providerID = () => String(provider.id ?? '').trim();
+                            const displayName = () => String(provider.name ?? '').trim() || providerID() || `Provider ${index() + 1}`;
+                            const modelNames = () =>
+                              (Array.isArray(provider.models) ? provider.models : [])
+                                .map((model) => String(model.model_name ?? '').trim())
+                                .filter(Boolean);
+                            return (
+                              <SettingsTableRow>
+                                <SettingsTableCell>
+                                  <div class="space-y-1">
+                                    <div class="text-sm font-semibold text-foreground">{displayName()}</div>
+                                    <Show when={aiCurrentModelID().startsWith(`${providerID()}/`)}>
+                                      <SettingsPill tone="success">Current provider</SettingsPill>
                                     </Show>
                                   </div>
-                                  <div class="text-[11px] text-muted-foreground">
-                                    ID: <span class="font-mono">{providerID() || '—'}</span>
+                                </SettingsTableCell>
+                                <SettingsTableCell class="font-mono text-[11px] break-all">{providerID() || '—'}</SettingsTableCell>
+                                <SettingsTableCell>
+                                  <SettingsPill>{provider.type}</SettingsPill>
+                                </SettingsTableCell>
+                                <SettingsTableCell class="font-mono text-[11px] break-all">{String(provider.base_url ?? '').trim() || '—'}</SettingsTableCell>
+                                <SettingsTableCell>
+                                  <SettingsPill tone={aiProviderKeySet()?.[providerID()] ? 'success' : 'default'}>
+                                    {aiProviderKeySet()?.[providerID()] ? 'Key set' : 'Key not set'}
+                                  </SettingsPill>
+                                </SettingsTableCell>
+                                <SettingsTableCell>
+                                  <div class="space-y-1 text-[11px] text-muted-foreground">
+                                    <div>{provider.models?.length ?? 0} model(s)</div>
+                                    <div class="break-all font-mono">
+                                      {modelNames().slice(0, 2).join(', ') || '—'}
+                                      <Show when={modelNames().length > 2}>
+                                        <span>{` +${modelNames().length - 2} more`}</span>
+                                      </Show>
+                                    </div>
                                   </div>
-                                  <div class="text-[11px] text-muted-foreground">
-                                    {provider.models?.length ?? 0} model(s)
+                                </SettingsTableCell>
+                                <SettingsTableCell>
+                                  <div class="flex items-center gap-2">
+                                    <Button size="sm" variant="outline" onClick={() => openAIProviderDialog(index())} disabled={!canInteract()}>
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      class="text-muted-foreground hover:text-destructive"
+                                      onClick={() => {
+                                        setAiProviders((prev) => {
+                                          const normalizedProviders = normalizeAIProviders(prev.filter((_, rowIndex) => rowIndex !== index()));
+                                          setAiCurrentModelID(normalizeAICurrentModelID(aiCurrentModelID(), normalizedProviders));
+                                          return normalizedProviders;
+                                        });
+                                        setAiDirty(true);
+                                      }}
+                                      disabled={!canInteract() || aiProviders().length <= 1}
+                                    >
+                                      Remove
+                                    </Button>
                                   </div>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                  <Button size="sm" variant="outline" onClick={() => openAIProviderDialog(idx())} disabled={!canInteract()}>
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    class="text-muted-foreground hover:text-destructive"
-                                    onClick={() => {
-                                      setAiProviders((prev) => {
-                                        const normalizedProviders = normalizeAIProviders(prev.filter((_, i) => i !== idx()));
-                                        setAiCurrentModelID(normalizeAICurrentModelID(aiCurrentModelID(), normalizedProviders));
-                                        return normalizedProviders;
-                                      });
-                                      setAiDirty(true);
-                                    }}
-                                    disabled={!canInteract() || aiProviders().length <= 1}
-                                  >
-                                    Remove
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        }}
-                      </For>
-                    </div>
+                                </SettingsTableCell>
+                              </SettingsTableRow>
+                            );
+                          }}
+                        </For>
+                      </SettingsTableBody>
+                    </SettingsTable>
                   </div>
                 </div>
-
-              </div>
-            </Show>
-          </SettingsCard>
-        </div>
+              </Show>
+            </SettingsCard>
+          </div>
         </SectionGroup>
           </div>
         </div>
       </div>
 
-      <Dialog
+      <AIProviderDialog
         open={aiProviderDialogOpen()}
         onOpenChange={(open) => {
           if (open) {
@@ -4053,306 +3512,87 @@ export function EnvSettingsPage() {
           closeAIProviderDialog();
         }}
         title={aiProviderDialogTitle()}
-        footer={
-          <div class="flex items-center justify-end gap-2">
-            <Button size="sm" variant="outline" onClick={() => closeAIProviderDialog()}>
-              Discard
-            </Button>
-            <Button size="sm" variant="default" onClick={() => confirmAIProviderDialog()} disabled={!canInteract() || aiSaving() || disableAISaving()}>
-              Confirm
-            </Button>
-          </div>
-        }
-      >
-        <Show when={aiProviderDialogProvider()} fallback={<div class="text-sm text-muted-foreground">Provider was removed.</div>}>
-          {(provider) => {
-            const providerID = () => String(provider().id ?? '').trim();
-            const updateDraft = (updater: (current: AIProviderRow) => AIProviderRow) => {
-              setAiProviderDialogDraft((prev) => {
-                if (!prev) return prev;
-                return normalizeAIProviderRowDraft(updater(cloneAIProviderRow(prev)));
-              });
+        provider={aiProviderDialogProvider()}
+        canInteract={canInteract()}
+        canAdmin={canAdmin()}
+        aiSaving={aiSaving()}
+        disableAISaving={disableAISaving()}
+        keySet={!!aiProviderKeySet()?.[String(aiProviderDialogProvider()?.id ?? '').trim()]}
+        keyDraft={aiProviderKeyDraft()?.[String(aiProviderDialogProvider()?.id ?? '').trim()] ?? ''}
+        keySaving={!!aiProviderKeySaving()?.[String(aiProviderDialogProvider()?.id ?? '').trim()]}
+        presetModel={aiProviderPresetModel()}
+        recommendedModels={aiProviderDialogRecommendedModels()}
+        recommendedModelOptions={aiProviderDialogRecommendedModelOptions()}
+        onConfirm={() => confirmAIProviderDialog()}
+        onChangeName={(value) => {
+          updateAIProviderDialogDraft((current) => ({ ...current, name: value }));
+        }}
+        onChangeType={(nextType) => {
+          const nextPreset = providerPresetForType(nextType);
+          const nextPresetModels = recommendedModelsForProviderType(nextType).map((model) => ({
+            model_name: model.model_name,
+            context_window: normalizePositiveInteger(model.context_window),
+            max_output_tokens: normalizePositiveInteger(model.max_output_tokens),
+            effective_context_window_percent: normalizeEffectiveContextPercent(model.effective_context_window_percent),
+          }));
+          updateAIProviderDialogDraft((current) => ({
+            ...current,
+            name:
+              !String(current.name ?? '').trim() || String(current.name ?? '').trim() === providerPresetForType(current.type).name
+                ? nextPreset.name
+                : current.name,
+            type: nextType,
+            base_url: defaultBaseURLForProviderType(nextType),
+            models:
+              nextPresetModels.length > 0
+                ? nextPresetModels
+                : [{ model_name: '', context_window: defaultContextWindowForProviderType(nextType) }],
+          }));
+          setAiProviderPresetModel(String(nextPreset.models[0]?.model_name ?? ''));
+        }}
+        onChangeBaseURL={(value) => {
+          updateAIProviderDialogDraft((current) => ({ ...current, base_url: value }));
+        }}
+        onChangeKeyDraft={(value) => {
+          const id = String(aiProviderDialogProvider()?.id ?? '').trim();
+          if (!id) return;
+          setAiProviderKeyDraft((prev) => ({ ...prev, [id]: value }));
+        }}
+        onSaveKey={() => saveAIProviderKey(String(aiProviderDialogProvider()?.id ?? '').trim())}
+        onClearKey={() => clearAIProviderKey(String(aiProviderDialogProvider()?.id ?? '').trim())}
+        onSetPresetModel={(value) => setAiProviderPresetModel(value)}
+        onApplyAllPresets={() => applyRecommendedModelsToDraft()}
+        onAddSelectedPreset={() => addRecommendedModelToDraft(aiProviderPresetModel())}
+        onAddModel={() => {
+          updateAIProviderDialogDraft((current) => ({
+            ...current,
+            models: [
+              ...(Array.isArray(current.models) ? current.models : []),
+              { model_name: '', context_window: defaultContextWindowForProviderType(current.type) },
+            ],
+          }));
+        }}
+        onChangeModelName={(index, value) => {
+          updateAIProviderDialogDraft((current) => ({
+            ...current,
+            models: (Array.isArray(current.models) ? current.models : []).map((model, modelIndex) =>
+              modelIndex === index ? { ...model, model_name: value } : model,
+            ),
+          }));
+        }}
+        onChangeModelNumber={(index, key, rawValue) => {
+          updateAIProviderDialogModelField(index, key, rawValue);
+        }}
+        onRemoveModel={(index) => {
+          updateAIProviderDialogDraft((current) => {
+            const nextModels = (Array.isArray(current.models) ? current.models : []).filter((_, modelIndex) => modelIndex !== index);
+            return {
+              ...current,
+              models: nextModels.length > 0 ? nextModels : [{ model_name: '', context_window: defaultContextWindowForProviderType(current.type) }],
             };
-            return (
-              <div class="space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <FieldLabel hint="optional">name</FieldLabel>
-                    <Input
-                      value={provider().name}
-                      onInput={(e) => {
-                        const v = e.currentTarget.value;
-                        updateDraft((current) => ({ ...current, name: v }));
-                      }}
-                      placeholder="OpenAI"
-                      size="sm"
-                      class="w-full"
-                      disabled={!canInteract()}
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel>type</FieldLabel>
-                    <Select
-                      value={provider().type}
-                      onChange={(v) => {
-                        const nextType = v as AIProviderType;
-                        const nextPreset = providerPresetForType(nextType);
-                        const nextPresetModels = recommendedModelsForProviderType(nextType).map((model) => ({
-                          model_name: model.model_name,
-                          context_window: normalizePositiveInteger(model.context_window),
-                          max_output_tokens: normalizePositiveInteger(model.max_output_tokens),
-                          effective_context_window_percent: normalizeEffectiveContextPercent(model.effective_context_window_percent),
-                        }));
-                        updateDraft((current) => ({
-                          ...current,
-                          name:
-                            !String(current.name ?? '').trim() || String(current.name ?? '').trim() === providerPresetForType(current.type).name
-                              ? nextPreset.name
-                              : current.name,
-                          type: nextType,
-                          base_url: defaultBaseURLForProviderType(nextType),
-                          models:
-                            nextPresetModels.length > 0
-                              ? nextPresetModels
-                              : [{ model_name: '', context_window: defaultContextWindowForProviderType(nextType) }],
-                        }));
-                        setAiProviderPresetModel(String(nextPreset.models[0]?.model_name ?? ''));
-                      }}
-                      disabled={!canInteract()}
-                      options={[...AI_PROVIDER_TYPE_OPTIONS]}
-                      class="w-full"
-                    />
-                  </div>
-                  <div class="md:col-span-2">
-                    <FieldLabel hint="read-only">provider_id</FieldLabel>
-                    <Input value={providerID()} size="sm" class="w-full font-mono" disabled />
-                  </div>
-                  <div class="md:col-span-2">
-                    <FieldLabel hint={providerTypeRequiresBaseURL(provider().type) ? 'required' : 'optional'}>
-                      base_url
-                    </FieldLabel>
-                    <Input
-                      value={provider().base_url}
-                      onInput={(e) => {
-                        const v = e.currentTarget.value;
-                        updateDraft((current) => ({ ...current, base_url: v }));
-                      }}
-                      placeholder={defaultBaseURLForProviderType(provider().type)}
-                      size="sm"
-                      class="w-full"
-                      disabled={!canInteract()}
-                    />
-                  </div>
-                </div>
-
-                <div class="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
-                  <FieldLabel hint="stored locally, never shown again">api_key</FieldLabel>
-                  <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <div
-                      class={
-                        'text-xs px-2 py-1 rounded-md border ' +
-                        (aiProviderKeySet()?.[providerID()] ? 'bg-success/10 border-success/50 text-success' : 'bg-muted/40 border-border text-muted-foreground')
-                      }
-                    >
-                      {aiProviderKeySet()?.[providerID()] ? 'Key set' : 'Key not set'}
-                    </div>
-                    <Input
-                      type="password"
-                      value={aiProviderKeyDraft()?.[providerID()] ?? ''}
-                      onInput={(e) => {
-                        const id = providerID();
-                        if (!id) return;
-                        const v = e.currentTarget.value;
-                        setAiProviderKeyDraft((prev) => ({ ...prev, [id]: v }));
-                      }}
-                      placeholder="Paste API key"
-                      size="sm"
-                      class="w-full"
-                      disabled={!canInteract() || !canAdmin() || !providerID()}
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => saveAIProviderKey(providerID())}
-                      loading={!!aiProviderKeySaving()?.[providerID()]}
-                      disabled={!canInteract() || !canAdmin() || !providerID()}
-                    >
-                      Save key
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      class="text-muted-foreground hover:text-destructive"
-                      onClick={() => clearAIProviderKey(providerID())}
-                      disabled={!canInteract() || !canAdmin() || !providerID()}
-                    >
-                      Clear
-                    </Button>
-                  </div>
-                  <p class="text-xs text-muted-foreground">
-                    Keys are saved in a separate local secrets file and are never written to config.json. The Go AI runtime resolves them per run.
-                  </p>
-                </div>
-
-                <div class="space-y-3">
-                  <Show when={aiProviderDialogRecommendedModels().length > 0}>
-                    <div class="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
-                      <SubSectionHeader
-                        title="Recommended models"
-                        description="Select from maintained presets (with context window metadata) for quick setup."
-                        actions={
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => applyRecommendedModelsToDraft()}
-                            disabled={!canInteract()}
-                          >
-                            Apply all presets
-                          </Button>
-                        }
-                      />
-                      <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-2">
-                        <Select
-                          value={aiProviderPresetModel()}
-                          onChange={(v) => setAiProviderPresetModel(String(v ?? '').trim())}
-                          options={aiProviderDialogRecommendedModelOptions()}
-                          placeholder="Select a recommended model..."
-                          class="w-full"
-                          disabled={!canInteract()}
-                        />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => addRecommendedModelToDraft(aiProviderPresetModel())}
-                          disabled={!canInteract() || !aiProviderPresetModel()}
-                        >
-                          Add selected preset
-                        </Button>
-                      </div>
-                      <div class="space-y-1">
-                        <For each={aiProviderDialogRecommendedModels()}>
-                          {(preset) => (
-                            <div class="flex flex-col gap-1 rounded-md border border-border/70 bg-background px-2 py-1.5">
-                              <div class="text-xs font-mono">{preset.model_name}</div>
-                              <div class="text-[11px] text-muted-foreground">
-                                context {formatTokenCount(preset.context_window)}
-                                <Show when={preset.max_output_tokens}>
-                                  {' '}
-                                  · max output {formatTokenCount(preset.max_output_tokens ?? 0)}
-                                </Show>
-                              </div>
-                              <Show when={preset.note}>
-                                <div class="text-[11px] text-muted-foreground">{preset.note}</div>
-                              </Show>
-                            </div>
-                          )}
-                        </For>
-                      </div>
-                    </div>
-                  </Show>
-
-                  <SubSectionHeader
-                    title="Models"
-                    description="Shown in Flower Chat."
-                    actions={
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          updateDraft((current) => ({
-                            ...current,
-                            models: [
-                              ...(Array.isArray(current.models) ? current.models : []),
-                              { model_name: '', context_window: defaultContextWindowForProviderType(current.type) },
-                            ],
-                          }));
-                        }}
-                        disabled={!canInteract()}
-                      >
-                        Add Model
-                      </Button>
-                    }
-                  />
-
-                  <div class="space-y-2">
-                    <Index each={provider().models}>
-                      {(model, modelIndex) => (
-                        <div class="p-3 rounded-lg border border-border bg-background space-y-2">
-                          <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_180px_auto] gap-2 items-center">
-                            <Input
-                              value={model().model_name}
-                              onInput={(e) => {
-                                const v = e.currentTarget.value;
-                                updateDraft((current) => ({
-                                  ...current,
-                                  models: (Array.isArray(current.models) ? current.models : []).map((itModel, j) =>
-                                    j === modelIndex ? { ...itModel, model_name: v } : itModel,
-                                  ),
-                                }));
-                              }}
-                              placeholder="model_name"
-                              size="sm"
-                              class="w-full font-mono text-xs"
-                              disabled={!canInteract()}
-                            />
-                            <Input
-                              type="number"
-                              value={model().context_window ?? ''}
-                              onInput={(e) => {
-                                const contextWindow = normalizePositiveInteger(e.currentTarget.value);
-                                updateDraft((current) => ({
-                                  ...current,
-                                  models: (Array.isArray(current.models) ? current.models : []).map((itModel, j) =>
-                                    j === modelIndex ? { ...itModel, context_window: contextWindow } : itModel,
-                                  ),
-                                }));
-                              }}
-                              placeholder="context_window"
-                              size="sm"
-                              class="w-full font-mono text-xs"
-                              disabled={!canInteract()}
-                            />
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              class="text-muted-foreground hover:text-destructive h-7 w-7 p-0"
-                              onClick={() => {
-                                updateDraft((current) => {
-                                  const models = (Array.isArray(current.models) ? current.models : []).filter((_, j) => j !== modelIndex);
-                                  return {
-                                    ...current,
-                                    models:
-                                      models.length > 0
-                                        ? models
-                                        : [{ model_name: '', context_window: defaultContextWindowForProviderType(current.type) }],
-                                  };
-                                });
-                              }}
-                              disabled={!canInteract() || (provider().models?.length ?? 0) <= 1}
-                            >
-                              &times;
-                            </Button>
-                          </div>
-                          <div class="text-[11px] text-muted-foreground">
-                            context {formatTokenCount(Number(model().context_window ?? 0))}
-                            <Show when={model().max_output_tokens}>
-                              {' '}
-                              · max output {formatTokenCount(Number(model().max_output_tokens ?? 0))}
-                            </Show>
-                          </div>
-                          <Show when={model().model_name}>
-                            <div class="text-[10px] text-muted-foreground font-mono sm:hidden">{modelID(providerID(), model().model_name)}</div>
-                          </Show>
-                        </div>
-                      )}
-                    </Index>
-                  </div>
-                </div>
-              </div>
-            );
-          }}
-        </Show>
-      </Dialog>
+          });
+        }}
+      />
 
       {/* Update Agent Confirmation Dialog */}
       <ConfirmDialog
