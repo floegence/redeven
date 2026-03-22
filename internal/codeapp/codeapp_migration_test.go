@@ -67,4 +67,16 @@ WHERE name = 'lane'
 	if laneColCount != 1 {
 		t.Fatalf("lane column count=%d, want 1", laneColCount)
 	}
+
+	var titleSourceColumns int
+	if err := raw.QueryRow(`
+SELECT COUNT(1)
+FROM pragma_table_info('ai_threads')
+WHERE name = 'title_source'
+`).Scan(&titleSourceColumns); err != nil {
+		t.Fatalf("check title_source column: %v", err)
+	}
+	if titleSourceColumns != 1 {
+		t.Fatalf("title_source column count=%d, want 1", titleSourceColumns)
+	}
 }
