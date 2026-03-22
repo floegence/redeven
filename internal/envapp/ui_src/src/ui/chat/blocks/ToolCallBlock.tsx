@@ -3014,8 +3014,15 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
   );
   const sourceLabel = createMemo(() => humanizeAskUserSource(props.display.source));
   const activeThreadId = createMemo(() => String(ai.activeThreadId() ?? '').trim());
+  const activeThreadRunStatus = createMemo(() => String(ai.activeThread()?.run_status ?? '').trim().toLowerCase());
   const waitingPrompt = createMemo(() => ai.activeThreadWaitingPrompt());
   const waitingPromptId = createMemo(() => String(waitingPrompt()?.prompt_id ?? '').trim());
+  const blockWaitingUser = createMemo(() => {
+    const result = asRecord(props.block.result);
+    if (!result) return false;
+    const waitingUser = result.waiting_user;
+    return waitingUser === true || String(waitingUser ?? '').trim().toLowerCase() === 'true';
+  });
   const promptDrafts = createMemo(() => {
     const tid = activeThreadId();
     const promptId = waitingPromptId();
@@ -3029,8 +3036,15 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
       String(prompt.tool_id ?? '').trim() === String(props.block.toolId ?? '').trim()
     );
   });
+  const missingActivePrompt = createMemo(() => (
+    !interactiveAllowed() &&
+    !waitingPrompt() &&
+    activeThreadRunStatus() === 'waiting_user' &&
+    blockWaitingUser()
+  ));
   const controlsDisabled = createMemo(() => submitting() || !interactiveAllowed());
   const resolvedReplyText = createMemo(() => 'This request has been handled.');
+  const unavailableReplyText = createMemo(() => 'Flower is still waiting for input, but the active prompt details are unavailable.');
   const currentQuestions = createMemo(() => {
     const prompt = waitingPrompt();
     if (interactiveAllowed() && Array.isArray(prompt?.questions) && prompt.questions.length > 0) {
@@ -3103,7 +3117,7 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
   };
 
   return (
-    <div class={cn('chat-tool-ask-user-block', !interactiveAllowed() && 'chat-tool-ask-user-block-completed', props.class)}>
+    <div class={cn('chat-tool-ask-user-block', !interactiveAllowed() && !missingActivePrompt() && 'chat-tool-ask-user-block-completed', props.class)}>
       <div class="chat-tool-ask-user-head">
         <span class="chat-tool-ask-user-badge">Input Requested</span>
         <Show when={sourceLabel()}>
@@ -3159,8 +3173,18 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
 
       <Show when={interactiveAllowed()} fallback={
         <div class="chat-tool-ask-user-submitted">
-          <span class="chat-tool-ask-user-submitted-label">Input resolved</span>
-          <p class="chat-tool-ask-user-submitted-text">{resolvedReplyText()}</p>
+          <Show
+            when={missingActivePrompt()}
+            fallback={
+              <>
+                <span class="chat-tool-ask-user-submitted-label">Input resolved</span>
+                <p class="chat-tool-ask-user-submitted-text">{resolvedReplyText()}</p>
+              </>
+            }
+          >
+            <span class="chat-tool-ask-user-submitted-label">Input unavailable</span>
+            <p class="chat-tool-ask-user-submitted-text">{unavailableReplyText()}</p>
+          </Show>
         </div>
       }>
         <div class="chat-tool-ask-user-submit-row">
