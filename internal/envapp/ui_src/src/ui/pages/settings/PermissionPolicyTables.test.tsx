@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PermissionMatrixTable, PermissionRuleTable } from './PermissionPolicyTables';
@@ -36,21 +37,57 @@ afterEach(() => {
 });
 
 describe('PermissionPolicyTables', () => {
-  it('shows permission state and emits matrix changes', () => {
+  it('reacts to parent state updates and emits matrix changes', () => {
     const onChange = vi.fn();
     const host = document.createElement('div');
     document.body.appendChild(host);
+    let setWrite = (_value: boolean) => undefined;
+    let setExecute = (_value: boolean) => undefined;
 
-    render(() => <PermissionMatrixTable read write={false} execute canInteract onChange={onChange} />, host);
+    render(() => {
+      const [read, setRead] = createSignal(true);
+      const [write, updateWrite] = createSignal(false);
+      const [execute, updateExecute] = createSignal(true);
+      setWrite = updateWrite;
+      setExecute = updateExecute;
+
+      return (
+        <PermissionMatrixTable
+          read={read()}
+          write={write()}
+          execute={execute()}
+          canInteract
+          onChange={(key, value) => {
+            onChange(key, value);
+            if (key === 'read') setRead(value);
+            if (key === 'write') setWrite(value);
+            if (key === 'execute') setExecute(value);
+          }}
+        />
+      );
+    }, host);
+
+    const countPills = (label: 'Enabled' | 'Disabled') => (host.textContent?.match(new RegExp(label, 'g')) ?? []).length;
+
+    expect(countPills('Enabled')).toBe(2);
+    expect(countPills('Disabled')).toBe(1);
+
+    setWrite(true);
+    expect(countPills('Enabled')).toBe(3);
+    expect(countPills('Disabled')).toBe(0);
+
+    setExecute(false);
+    expect(countPills('Enabled')).toBe(2);
+    expect(countPills('Disabled')).toBe(1);
 
     const toggles = host.querySelectorAll('input[type="checkbox"]');
-    const writeToggle = toggles[1] as HTMLInputElement;
-    writeToggle.checked = true;
-    writeToggle.dispatchEvent(new Event('change', { bubbles: true }));
+    const readToggle = toggles[0] as HTMLInputElement;
+    readToggle.checked = false;
+    readToggle.dispatchEvent(new Event('change', { bubbles: true }));
 
-    expect(host.textContent).toContain('Enabled');
-    expect(host.textContent).toContain('Disabled');
-    expect(onChange).toHaveBeenCalledWith('write', true);
+    expect(onChange).toHaveBeenCalledWith('read', false);
+    expect(countPills('Enabled')).toBe(1);
+    expect(countPills('Disabled')).toBe(2);
   });
 
   it('renders editable rule rows and empty state messaging', () => {
