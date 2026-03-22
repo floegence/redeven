@@ -95,20 +95,40 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
             }}
           >
             <Suspense fallback={<div class="flex h-full items-center justify-center text-sm text-muted-foreground">Loading editor...</div>}>
-              <CodeEditor
-                path={props.path}
-                language={resolvedLanguage()}
-                value={editorValue()}
-                options={editorOptions()}
-                onChange={(value: string) => {
-                  if (!props.editing) return;
-                  props.onDraftChange?.(value);
-                }}
-                onSelectionChange={(selectionText: string, _api: CodeEditorApi) => {
-                  props.onSelectionChange?.(selectionText);
-                }}
-                class="h-full"
-              />
+              <Show
+                when={props.editing}
+                fallback={(
+                  <CodeEditor
+                    path={props.path}
+                    language={resolvedLanguage()}
+                    value={editorValue()}
+                    options={editorOptions()}
+                    onChange={(value: string) => {
+                      if (!props.editing) return;
+                      props.onDraftChange?.(value);
+                    }}
+                    onSelectionChange={(selectionText: string, _api: CodeEditorApi) => {
+                      props.onSelectionChange?.(selectionText);
+                    }}
+                    class="h-full"
+                  />
+                )}
+              >
+                <CodeEditor
+                  path={props.path}
+                  language={resolvedLanguage()}
+                  value={editorValue()}
+                  options={editorOptions()}
+                  onChange={(value: string) => {
+                    if (!props.editing) return;
+                    props.onDraftChange?.(value);
+                  }}
+                  onSelectionChange={(selectionText: string, _api: CodeEditorApi) => {
+                    props.onSelectionChange?.(selectionText);
+                  }}
+                  class="h-full"
+                />
+              </Show>
             </Suspense>
           </ErrorBoundary>
         </Show>
