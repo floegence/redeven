@@ -427,6 +427,19 @@ function emitAssistantRealtimeDelta(messageId: string, delta: string) {
   });
 }
 
+function emitAssistantRealtimeBlockSet(messageId: string, blockIndex: number, block: Record<string, unknown>) {
+  emitRealtimeEvent({
+    threadId: 'thread-1',
+    eventType: 'stream_event',
+    streamEvent: {
+      type: 'block-set',
+      messageId,
+      blockIndex,
+      block,
+    },
+  });
+}
+
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
@@ -679,6 +692,24 @@ export function registerEnvAIPageSendTests() {
 
         await waitForActiveRunSnapshotRecovery();
         expect(getActiveRunSnapshotMock).toHaveBeenCalledTimes(1);
+      } finally {
+        dispose();
+      }
+    });
+
+    it('renders reasoning styling immediately when streaming switches the block to thinking', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        const messageId = emitAssistantRealtimeMessageStart('assistant-live-reasoning');
+        emitAssistantRealtimeBlockSet(messageId, 0, { type: 'thinking' });
+        emitAssistantRealtimeDelta(messageId, 'Tracing the live reducer path.');
+        await flushAsync();
+
+        const reasoning = host.querySelector('.chat-thinking-block');
+        expect(reasoning).toBeTruthy();
+        expect(reasoning?.textContent).toContain('Reasoning');
+        expect(reasoning?.textContent).toContain('Tracing the live reducer path.');
+        expect(host.querySelector('.chat-markdown-empty-streaming')).toBeNull();
       } finally {
         dispose();
       }
