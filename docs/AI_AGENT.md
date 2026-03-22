@@ -125,6 +125,8 @@ Behavior summary:
 - `task_complete` is rejected when todo tracking is active and open todos still exist.
 - `ask_user` follows a structured contract (`questions`, `reason_code`, `required_from_user`, `evidence_refs`) and is policy-classified by the model before entering `waiting_user`.
 - Structured prompt answers are submitted through a dedicated prompt-response action rather than the plain chat `sendMessage` path.
+- When a thread is still `waiting_user`, the waiting prompt snapshot in `ai_threads.waiting_user_input_json` should stay aligned with the assistant transcript `ask_user` block; read/write paths recover from the latest persisted assistant transcript when that snapshot is missing or invalid.
+- The Env App must distinguish a resolved prompt from a still-waiting thread whose active prompt details are temporarily unavailable; missing prompt state must not be rendered as already handled.
 - no-tool backpressure defaults to 3 rounds and inserts a completion-required nudge before falling back to `ask_user`.
 - `terminal.exec` output is rendered with structured shell blocks in the Env App (no markdown fallback conversion).
 - Subagents are for parallelizable or independently reviewable work. Simple local inspection tasks should stay in the main Flower run instead of spawning subagents.

@@ -55,10 +55,6 @@ func activeThreadEffectiveRunState(status string, runError string) (string, stri
 	return string(RunStateRunning), ""
 }
 
-func threadWaitingPromptView(t *threadstore.Thread, effectiveRunStatus string) *RequestUserInputPrompt {
-	return requestUserInputPromptFromThreadRecord(t, effectiveRunStatus)
-}
-
 func (s *Service) activeThreadRunSet(endpointID string) map[string]struct{} {
 	endpointID = strings.TrimSpace(endpointID)
 	if endpointID == "" || s == nil {
@@ -142,7 +138,7 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 		RunStatus:           runStatus,
 		RunUpdatedAtUnixMs:  th.RunUpdatedAtUnixMs,
 		RunError:            runError,
-		WaitingPrompt:       threadWaitingPromptView(th, runStatus),
+		WaitingPrompt:       s.threadWaitingPrompt(ctx, th, runStatus),
 		CreatedAtUnixMs:     th.CreatedAtUnixMs,
 		UpdatedAtUnixMs:     th.UpdatedAtUnixMs,
 		LastMessageAtUnixMs: th.LastMessageAtUnixMs,
@@ -209,7 +205,7 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 			RunStatus:           runStatus,
 			RunUpdatedAtUnixMs:  t.RunUpdatedAtUnixMs,
 			RunError:            runError,
-			WaitingPrompt:       threadWaitingPromptView(&t, runStatus),
+			WaitingPrompt:       s.threadWaitingPrompt(ctx, &t, runStatus),
 			CreatedAtUnixMs:     t.CreatedAtUnixMs,
 			UpdatedAtUnixMs:     t.UpdatedAtUnixMs,
 			LastMessageAtUnixMs: t.LastMessageAtUnixMs,

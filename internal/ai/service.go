@@ -1048,6 +1048,10 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		return err
 	}
 
+	assistantJSON := ""
+	assistantText := ""
+	var assistantAt int64
+
 	defer func() {
 		s.mu.Lock()
 		delete(s.runs, runID)
@@ -1061,10 +1065,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			return
 		}
 		runStatus, runStatusErr := deriveThreadRunState(r.getEndReason(), r.getFinalizationReason(), retErr)
-		var waitingPrompt *RequestUserInputPrompt
-		if NormalizeRunState(runStatus) == RunStateWaitingUser {
-			waitingPrompt = r.snapshotWaitingPrompt()
-		}
+		waitingPrompt := finalWaitingPromptForRunState(runStatus, r.snapshotWaitingPrompt(), assistantJSON)
 		if prepared.updateThreadRunState != nil {
 			prepared.updateThreadRunState(runStatus, runStatusErr, waitingPrompt)
 		}
@@ -1341,7 +1342,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		return finalErr
 	}
 
-	assistantJSON, assistantText, assistantAt, err := r.snapshotAssistantMessageJSON()
+	assistantJSON, assistantText, assistantAt, err = r.snapshotAssistantMessageJSON()
 	if err != nil {
 		if finalErr != nil {
 			return errors.Join(finalErr, err)

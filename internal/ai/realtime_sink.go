@@ -381,10 +381,10 @@ func (s *Service) broadcastThreadState(endpointID string, threadID string, runID
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), persistTO)
 			th, err := db.GetThread(ctx, strings.TrimSpace(endpointID), strings.TrimSpace(threadID))
-			cancel()
 			if err == nil && th != nil {
-				waitingPrompt = requestUserInputPromptFromThreadRecord(th, runStatus)
+				waitingPrompt = s.threadWaitingPrompt(ctx, th, runStatus)
 			}
+			cancel()
 		}
 	}
 	ev := RealtimeEvent{
@@ -497,8 +497,8 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 		return
 	}
 	queuedTurnCount, countErr := db.CountFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued)
-	cancel()
 	if countErr != nil {
+		cancel()
 		return
 	}
 
@@ -511,6 +511,8 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 		modeFallback = cfg.EffectiveMode()
 	}
 	executionMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback)
+	waitingPrompt := s.threadWaitingPrompt(ctx, th, runStatus)
+	cancel()
 
 	ev := RealtimeEvent{
 		EventType:           RealtimeEventTypeThreadSummary,
@@ -527,7 +529,7 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 		ActiveRunID:         activeRunID,
 		ExecutionMode:       executionMode,
 		QueuedTurnCount:     queuedTurnCount,
-		WaitingPrompt:       requestUserInputPromptFromThreadRecord(th, runStatus),
+		WaitingPrompt:       waitingPrompt,
 	}
 	s.broadcastRealtimeEvent(ev)
 }
