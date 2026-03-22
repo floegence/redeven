@@ -23,6 +23,7 @@ Env App targets a WCAG 2.2 AA baseline. The implementation follows an upstream-f
 Contributor rules for this surface:
 
 - Prefer upstream primitives and contracts over page-level ARIA patching.
+- Custom file-browser compositions that bypass the standard `FileBrowser` wrapper must mount `FileBrowserDragPreview` from `@floegence/floe-webapp-core/file-browser` whenever drag and drop stays enabled, so the shared drag affordance remains visible.
 - Use real buttons, inputs, fieldsets, tabs, and panels for interactive behavior. Do not nest interactive elements.
 - Keep visible focus indicators intact. Do not suppress focus rings on terminal, file, or chat surfaces without providing an equally visible replacement.
 - When a control behaves like tabs, it must implement tab semantics completely, including roving `tabindex`, arrow key handling, and `aria-controls` / `aria-labelledby` pairing.

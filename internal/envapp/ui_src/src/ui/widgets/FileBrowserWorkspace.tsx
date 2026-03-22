@@ -2,6 +2,7 @@ import { Show, createMemo, createSignal, onCleanup, onMount, type JSX } from 'so
 import { cn, useFileBrowserDrag } from '@floegence/floe-webapp-core';
 import { Files as FilesIcon, Search, ArrowUp } from '@floegence/floe-webapp-core/icons';
 import {
+  FileBrowserDragPreview,
   FileBrowserProvider,
   FileContextMenu,
   FileGridView,
@@ -333,6 +334,9 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
           </div>
           <FileWorkspaceStatusBar />
           <FileContextMenu callbacks={props.contextMenuCallbacks} overrideItems={props.overrideContextMenuItems} />
+          <Show when={dragEnabled()}>
+            <FileBrowserDragPreview />
+          </Show>
         </div>
       )}
       class={props.class}

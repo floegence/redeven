@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { LayoutProvider } from '@floegence/floe-webapp-core';
+import { FileBrowserDragProvider, LayoutProvider } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -37,6 +37,12 @@ function findGridLabel(tile: HTMLButtonElement | null, name: string) {
   if (!tile) return null;
   return Array.from(tile.querySelectorAll('span'))
     .find((node) => node.textContent === name) as HTMLSpanElement | null;
+}
+
+function countExactSpanText(root: ParentNode, value: string) {
+  return Array.from(root.querySelectorAll('span'))
+    .filter((node) => node.textContent === value)
+    .length;
 }
 
 function mockMatchMedia(matches: boolean) {
@@ -163,6 +169,32 @@ beforeEach(() => {
   });
   vi.stubGlobal('cancelAnimationFrame', (handle: number) => {
     window.clearTimeout(handle);
+  });
+
+  if (typeof PointerEvent === 'undefined') {
+    class TestPointerEvent extends MouseEvent {
+      pointerId: number;
+      pointerType: string;
+      isPrimary: boolean;
+
+      constructor(type: string, init: PointerEventInit = {}) {
+        super(type, init);
+        this.pointerId = init.pointerId ?? 1;
+        this.pointerType = init.pointerType ?? '';
+        this.isPrimary = init.isPrimary ?? true;
+      }
+    }
+
+    vi.stubGlobal('PointerEvent', TestPointerEvent as unknown as typeof PointerEvent);
+  }
+
+  Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
+    writable: true,
+    value: vi.fn(),
+  });
+  Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
+    writable: true,
+    value: vi.fn(),
   });
 
   vi.stubGlobal('ResizeObserver', class {
@@ -352,6 +384,71 @@ describe('FileBrowserWorkspace interactions', () => {
       await flush();
 
       expect(host.querySelector('.redeven-file-list-compact')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('renders the shared drag preview when the custom workspace starts dragging a file item', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <FileBrowserDragProvider>
+        <LayoutProvider>
+          <div class="h-[560px]">
+            <FileBrowserWorkspace
+              mode="files"
+              onModeChange={() => {}}
+              files={files}
+              currentPath="/"
+              initialPath="/"
+              persistenceKey="test-files-workspace-drag-preview"
+              instanceId="test-files-workspace-drag-preview"
+              resetKey={0}
+              width={260}
+              open
+              onDragMove={() => {}}
+            />
+          </div>
+        </LayoutProvider>
+      </FileBrowserDragProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const fileTile = host.querySelector('button[title="README.md"]') as HTMLButtonElement | null;
+      expect(fileTile).toBeTruthy();
+      expect(countExactSpanText(document.body, 'README.md')).toBe(1);
+
+      fileTile!.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        pointerId: 1,
+        pointerType: 'mouse',
+        button: 0,
+        clientX: 24,
+        clientY: 24,
+      }));
+      document.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        pointerId: 1,
+        pointerType: 'mouse',
+        clientX: 48,
+        clientY: 48,
+      }));
+      await flush();
+
+      expect(countExactSpanText(document.body, 'README.md')).toBeGreaterThan(1);
+
+      document.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        pointerId: 1,
+        pointerType: 'mouse',
+        clientX: 48,
+        clientY: 48,
+      }));
+      await flush();
     } finally {
       dispose();
     }
