@@ -390,13 +390,15 @@ func (c *cli) runCmd(args []string) int {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
-		_, err = config.BootstrapConfig(ctx, config.BootstrapArgs{
-			ControlplaneBaseURL:    *controlplane,
-			EnvironmentID:          *envID,
-			EnvironmentToken:       resolvedEnvToken,
-			ConfigPath:             cfgPathClean,
-			PermissionPolicyPreset: *permissionPolicy,
-		})
+		_, err = config.BootstrapConfig(ctx, buildRunBootstrapArgs(
+			cfgPathClean,
+			*controlplane,
+			*envID,
+			resolvedEnvToken,
+			*permissionPolicy,
+			mode,
+			*desktopManaged,
+		))
 		if err != nil {
 			fmt.Fprintf(c.stderr, "bootstrap failed: %v\n", err)
 			return 1
@@ -554,6 +556,30 @@ func (c *cli) runCmd(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+func buildRunBootstrapArgs(
+	configPath string,
+	controlplane string,
+	envID string,
+	envToken string,
+	permissionPolicy string,
+	mode runMode,
+	desktopManaged bool,
+) config.BootstrapArgs {
+	args := config.BootstrapArgs{
+		ControlplaneBaseURL:    controlplane,
+		EnvironmentID:          envID,
+		EnvironmentToken:       envToken,
+		ConfigPath:             configPath,
+		PermissionPolicyPreset: permissionPolicy,
+	}
+	if mode == runModeDesktop && desktopManaged {
+		// Desktop startup should stay on the normal logging baseline unless the
+		// user later opts into debug mode explicitly from Agent Settings.
+		args.LogLevel = "info"
+	}
+	return args
 }
 
 func (c *cli) printNotBootstrappedGuidance(reason error) int {

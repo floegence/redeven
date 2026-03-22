@@ -54,6 +54,7 @@ Behavior:
 - Remote control channel is enabled only when the local config is already bootstrapped and remote-valid.
 - `--desktop-managed` disables CLI self-upgrade semantics; restart remains available.
 - `--startup-report-file` lets Electron wait for a structured desktop launch report instead of scraping terminal output.
+- Desktop-managed inline bootstrap keeps the default logging baseline at `info` instead of inheriting a stale `debug` level implicitly.
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
 - Desktop-managed startup settings do not create a separate agent state directory; `~/.redeven` remains the runtime source of truth.
 
