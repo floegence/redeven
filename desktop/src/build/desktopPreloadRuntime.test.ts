@@ -12,20 +12,39 @@ import { buildDesktopPreloads } from './desktopPreloadBundle';
 const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
 const electronRuntimeIntegrationTimeoutMs = 30_000;
+const electronRuntimePreloadEnvName = 'REDEVEN_DESKTOP_TEST_PRELOAD_PATH';
 const linuxElectronLaunchArgs = ['--no-sandbox', '--disable-setuid-sandbox'] as const;
 
-function getElectronRuntimeLaunchArgs(
+function getElectronRuntimeLaunch(
   platform: NodeJS.Platform,
+  electronBinary: string,
   runtimeScript: string,
-  preloadScript: string,
-): string[] {
-  const scriptArgs = [runtimeScript, preloadScript];
-  if (platform !== 'linux') {
-    return scriptArgs;
+  hasDisplayServer: boolean,
+): { command: string; args: string[] } {
+  const electronArgs = platform === 'linux'
+    ? [...linuxElectronLaunchArgs, runtimeScript]
+    : [runtimeScript];
+
+  if (platform === 'linux' && !hasDisplayServer) {
+    // Headless Linux CI needs a virtual display before BrowserWindow can start.
+    return {
+      command: 'xvfb-run',
+      args: ['-a', electronBinary, ...electronArgs],
+    };
   }
-  // Linux CI runners cannot use Electron's downloaded chrome-sandbox helper,
-  // but the renderer windows under test still keep `sandbox: true` enabled.
-  return [...linuxElectronLaunchArgs, ...scriptArgs];
+
+  if (platform === 'linux') {
+    // Linux CI cannot use Electron's downloaded chrome-sandbox helper.
+    return {
+      command: electronBinary,
+      args: electronArgs,
+    };
+  }
+
+  return {
+    command: electronBinary,
+    args: electronArgs,
+  };
 }
 
 afterEach(async () => {
@@ -38,19 +57,24 @@ afterEach(async () => {
 
 describe('desktop preload runtime', () => {
   it('adds Linux-only Electron launch flags for the spawned runtime process', () => {
-    expect(getElectronRuntimeLaunchArgs('linux', 'runtime.js', 'browser.js')).toEqual([
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      'runtime.js',
-      'browser.js',
-    ]);
+    expect(getElectronRuntimeLaunch('linux', 'electron', 'runtime.js', true)).toEqual({
+      command: 'electron',
+      args: ['--no-sandbox', '--disable-setuid-sandbox', 'runtime.js'],
+    });
   });
 
-  it('keeps the default runtime launch arguments on non-Linux platforms', () => {
-    expect(getElectronRuntimeLaunchArgs('darwin', 'runtime.js', 'browser.js')).toEqual([
-      'runtime.js',
-      'browser.js',
-    ]);
+  it('wraps headless Linux launches in xvfb-run', () => {
+    expect(getElectronRuntimeLaunch('linux', 'electron', 'runtime.js', false)).toEqual({
+      command: 'xvfb-run',
+      args: ['-a', 'electron', '--no-sandbox', '--disable-setuid-sandbox', 'runtime.js'],
+    });
+  });
+
+  it('keeps the default runtime launch on non-Linux platforms', () => {
+    expect(getElectronRuntimeLaunch('darwin', 'electron', 'runtime.js', false)).toEqual({
+      command: 'electron',
+      args: ['runtime.js'],
+    });
   });
 
   it('exposes desktop bridges in sandboxed main and detached child windows', async () => {
@@ -67,7 +91,11 @@ describe('desktop preload runtime', () => {
     await fs.writeFile(runtimeScript, `
 const { app, BrowserWindow } = require('electron');
 
-const preload = process.argv[2];
+const preload = process.env.${electronRuntimePreloadEnvName};
+
+if (!preload) {
+  throw new Error('Missing ${electronRuntimePreloadEnvName}');
+}
 
 function snapshotBridgeState() {
   return JSON.stringify({
@@ -113,19 +141,23 @@ app.whenReady().then(async () => {
 });
 `, 'utf8');
 
-    const { stdout } = await execFileAsync(
+    const electronRuntimeLaunch = getElectronRuntimeLaunch(
+      process.platform,
       String(electronPath),
-      getElectronRuntimeLaunchArgs(process.platform, runtimeScript, path.join(outDir, 'browser.js')),
-      {
-        cwd: process.cwd(),
-        env: {
-          ...process.env,
-          ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
-        },
-        timeout: electronRuntimeIntegrationTimeoutMs,
-        maxBuffer: 1024 * 1024,
-      },
+      runtimeScript,
+      Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY),
     );
+
+    const { stdout } = await execFileAsync(electronRuntimeLaunch.command, electronRuntimeLaunch.args, {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
+        [electronRuntimePreloadEnvName]: path.join(outDir, 'browser.js'),
+      },
+      timeout: electronRuntimeIntegrationTimeoutMs,
+      maxBuffer: 1024 * 1024,
+    });
 
     const payload = JSON.parse(stdout.trim()) as {
       main: { hasAskFlowerBridge: boolean; hasStateStorageBridge: boolean };
