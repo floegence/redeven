@@ -4,6 +4,7 @@ import { Files as FilesIcon, Search, ArrowUp } from '@floegence/floe-webapp-core
 import {
   FileBrowserProvider,
   FileContextMenu,
+  FileGridView,
   FileListView,
   useFileBrowser,
   type ContextMenuCallbacks,
@@ -15,7 +16,6 @@ import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { FileBrowserPathBreadcrumb } from './FileBrowserPathBreadcrumb';
 import { FileBrowserSidebarTree } from './FileBrowserSidebarTree';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
-import { RedevenFileGridView } from './RedevenFileGridView';
 import { useFileBrowserTypeToFilter } from './fileBrowserTypeToFilter';
 import { resolveFileBrowserToolbarLayout } from './fileBrowserPathLayout';
 import {
@@ -327,7 +327,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             }}
             class="min-h-0 flex-1 overflow-auto bg-background"
           >
-            <Show when={browser.viewMode() === 'list'} fallback={<RedevenFileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
+            <Show when={browser.viewMode() === 'list'} fallback={<FileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
               <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full redeven-file-list-compact" />
             </Show>
           </div>
