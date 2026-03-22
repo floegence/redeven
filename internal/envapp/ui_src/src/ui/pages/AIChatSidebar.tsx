@@ -888,7 +888,7 @@ function ThreadCard(props: {
   return (
     <div
       data-thread-id={props.thread.thread_id}
-      class={`group relative w-full rounded-lg border transition-all duration-150 ${
+      class={`group relative w-full cursor-pointer rounded-lg border transition-all duration-150 ${
         props.active
           ? 'bg-sidebar-accent text-sidebar-foreground border-border/20 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
           : 'text-sidebar-foreground/80 border-transparent hover:bg-sidebar-accent/60 hover:border-border/15 hover:shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
@@ -901,7 +901,7 @@ function ThreadCard(props: {
 
       <button
         type="button"
-        class="flex w-full items-start gap-2 px-2.5 py-2 pr-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
+        class="flex w-full cursor-pointer items-start gap-2 px-2.5 py-2 pr-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
         onClick={props.onClick}
       >
         {/* Status dot */}
@@ -962,7 +962,7 @@ function ThreadCard(props: {
           </span>
           <button
             type="button"
-            class="pointer-events-auto absolute inset-0 flex items-center justify-center rounded text-muted-foreground/60 opacity-0 transition-all duration-150 hover:bg-error/10 hover:text-error focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 group-hover:opacity-100 group-focus-within:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+            class="pointer-events-auto absolute inset-0 flex cursor-pointer items-center justify-center rounded text-muted-foreground/60 opacity-0 transition-all duration-150 hover:bg-error/10 hover:text-error focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 group-hover:opacity-100 group-focus-within:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label={deleteLabel()}
             disabled={!props.connected}
             onClick={() => props.onDelete()}
