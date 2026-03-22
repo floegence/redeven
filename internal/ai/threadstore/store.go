@@ -2140,7 +2140,7 @@ func buildPreview(role string, text string, messageJSON string) string {
 	role = strings.TrimSpace(role)
 	text = strings.TrimSpace(text)
 	if role == "assistant" {
-		if latest := latestAssistantMarkdown(messageJSON); latest != "" {
+		if latest := latestAssistantPreviewText(messageJSON); latest != "" {
 			text = latest
 		}
 	}
@@ -2155,6 +2155,13 @@ func buildPreview(role string, text string, messageJSON string) string {
 	text = strings.ReplaceAll(text, "\r", " ")
 	text = strings.TrimSpace(text)
 	return truncateRunes(text, 160)
+}
+
+func latestAssistantPreviewText(messageJSON string) string {
+	if latest := latestAssistantMarkdown(messageJSON); latest != "" {
+		return latest
+	}
+	return latestAssistantStructuredPreview(messageJSON)
 }
 
 func latestAssistantMarkdown(messageJSON string) string {
@@ -2194,6 +2201,99 @@ func latestAssistantMarkdown(messageJSON string) string {
 		}
 	}
 	return ""
+}
+
+func latestAssistantStructuredPreview(messageJSON string) string {
+	raw := strings.TrimSpace(messageJSON)
+	if raw == "" {
+		return ""
+	}
+	var payload struct {
+		Blocks []json.RawMessage `json:"blocks"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return ""
+	}
+	for i := len(payload.Blocks) - 1; i >= 0; i-- {
+		if preview := assistantStructuredPreviewFromBlock(payload.Blocks[i]); preview != "" {
+			return preview
+		}
+	}
+	return ""
+}
+
+func assistantStructuredPreviewFromBlock(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var meta struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(meta.Type), "tool-call") {
+		return ""
+	}
+	var block struct {
+		ToolName string          `json:"toolName"`
+		Args     json.RawMessage `json:"args"`
+		Result   json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &block); err != nil {
+		return ""
+	}
+	switch strings.TrimSpace(block.ToolName) {
+	case "ask_user":
+		return extractAskUserPreviewText(block.Result, block.Args)
+	case "task_complete":
+		return extractTaskCompletePreviewText(block.Args)
+	default:
+		return ""
+	}
+}
+
+func extractAskUserPreviewText(candidates ...json.RawMessage) string {
+	for _, raw := range candidates {
+		if len(raw) == 0 {
+			continue
+		}
+		var payload struct {
+			PublicSummary string `json:"public_summary"`
+			Questions     []struct {
+				Header   string `json:"header"`
+				Question string `json:"question"`
+			} `json:"questions"`
+		}
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			continue
+		}
+		if summary := strings.TrimSpace(payload.PublicSummary); summary != "" {
+			return summary
+		}
+		for _, question := range payload.Questions {
+			if text := strings.TrimSpace(question.Question); text != "" {
+				return text
+			}
+			if header := strings.TrimSpace(question.Header); header != "" {
+				return header
+			}
+		}
+	}
+	return ""
+}
+
+func extractTaskCompletePreviewText(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var payload struct {
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(payload.Result)
 }
 
 func buildTitleCandidate(text string) string {

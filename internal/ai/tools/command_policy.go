@@ -29,6 +29,8 @@ type TerminalCommandProfile struct {
 	Reason            string
 }
 
+type terminalCommandClassifier func(segment string, args []string) TerminalCommandProfile
+
 var dangerousCommandPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`:\(\)\s*\{\s*:\|:&\s*\};:`),
 	regexp.MustCompile(`\brm\s+-rf\s+(?:--no-preserve-root\s+)?/\s*(?:$|[;&|])`),
@@ -43,6 +45,7 @@ var readonlyVerbs = map[string]struct{}{
 	"cut":      {},
 	"dirname":  {},
 	"egrep":    {},
+	"file":     {},
 	"find":     {},
 	"fgrep":    {},
 	"grep":     {},
@@ -54,6 +57,7 @@ var readonlyVerbs = map[string]struct{}{
 	"rg":       {},
 	"sort":     {},
 	"stat":     {},
+	"strings":  {},
 	"tail":     {},
 	"test":     {},
 	"uniq":     {},
@@ -72,6 +76,12 @@ var readonlyGitSubcommands = map[string]struct{}{
 	"show":      {},
 	"status":    {},
 	"tag":       {},
+}
+
+var terminalCommandClassifiers = map[string]terminalCommandClassifier{
+	"git":   classifyGitCommand,
+	"sed":   classifySedCommand,
+	"unzip": classifyUnzipCommand,
 }
 
 func NormalizeTerminalCommand(command string) string {
@@ -378,48 +388,8 @@ func classifyShellSegment(segment string) TerminalCommandProfile {
 		return profile
 	}
 
-	if verb == "git" {
-		sub := firstNonFlag(args)
-		if sub == "" {
-			return TerminalCommandProfile{
-				Risk:   TerminalCommandRiskMutating,
-				Reason: "git_missing_subcommand",
-			}
-		}
-		if _, ok := readonlyGitSubcommands[strings.ToLower(sub)]; ok {
-			return TerminalCommandProfile{
-				Risk:    TerminalCommandRiskReadonly,
-				Effects: []string{terminalCommandEffectLocalRead},
-				Reason:  "git_readonly_subcommand",
-			}
-		}
-		return TerminalCommandProfile{
-			Risk:    TerminalCommandRiskMutating,
-			Effects: []string{terminalCommandEffectLocalWrite},
-			Reason:  "git_mutating_or_unknown_subcommand",
-		}
-	}
-
-	if verb == "sed" {
-		lower := strings.ToLower(segment)
-		if strings.Contains(lower, " -i") || strings.HasPrefix(lower, "sed -i") {
-			return TerminalCommandProfile{
-				Risk:    TerminalCommandRiskMutating,
-				Effects: []string{terminalCommandEffectLocalWrite},
-				Reason:  "sed_in_place",
-			}
-		}
-		if strings.Contains(lower, "-n") {
-			return TerminalCommandProfile{
-				Risk:    TerminalCommandRiskReadonly,
-				Effects: []string{terminalCommandEffectLocalRead},
-				Reason:  "sed_print_only",
-			}
-		}
-		return TerminalCommandProfile{
-			Risk:   TerminalCommandRiskMutating,
-			Reason: "sed_without_print_only",
-		}
+	if profile, ok := classifyVerbCommand(verb, segment, args); ok {
+		return profile
 	}
 
 	if _, ok := readonlyVerbs[verb]; ok {
@@ -434,6 +404,139 @@ func classifyShellSegment(segment string) TerminalCommandProfile {
 		Risk:   TerminalCommandRiskMutating,
 		Reason: "unknown_command",
 	}
+}
+
+func classifyVerbCommand(verb string, segment string, args []string) (TerminalCommandProfile, bool) {
+	classifier, ok := terminalCommandClassifiers[strings.ToLower(strings.TrimSpace(verb))]
+	if !ok || classifier == nil {
+		return TerminalCommandProfile{}, false
+	}
+	return classifier(segment, args), true
+}
+
+func classifyGitCommand(_ string, args []string) TerminalCommandProfile {
+	sub := firstNonFlag(args)
+	if sub == "" {
+		return TerminalCommandProfile{
+			Risk:   TerminalCommandRiskMutating,
+			Reason: "git_missing_subcommand",
+		}
+	}
+	if _, ok := readonlyGitSubcommands[strings.ToLower(sub)]; ok {
+		return TerminalCommandProfile{
+			Risk:    TerminalCommandRiskReadonly,
+			Effects: []string{terminalCommandEffectLocalRead},
+			Reason:  "git_readonly_subcommand",
+		}
+	}
+	return TerminalCommandProfile{
+		Risk:    TerminalCommandRiskMutating,
+		Effects: []string{terminalCommandEffectLocalWrite},
+		Reason:  "git_mutating_or_unknown_subcommand",
+	}
+}
+
+func classifySedCommand(segment string, _ []string) TerminalCommandProfile {
+	lower := strings.ToLower(segment)
+	if strings.Contains(lower, " -i") || strings.HasPrefix(lower, "sed -i") {
+		return TerminalCommandProfile{
+			Risk:    TerminalCommandRiskMutating,
+			Effects: []string{terminalCommandEffectLocalWrite},
+			Reason:  "sed_in_place",
+		}
+	}
+	if strings.Contains(lower, "-n") {
+		return TerminalCommandProfile{
+			Risk:    TerminalCommandRiskReadonly,
+			Effects: []string{terminalCommandEffectLocalRead},
+			Reason:  "sed_print_only",
+		}
+	}
+	return TerminalCommandProfile{
+		Risk:   TerminalCommandRiskMutating,
+		Reason: "sed_without_print_only",
+	}
+}
+
+func classifyUnzipCommand(_ string, args []string) TerminalCommandProfile {
+	if len(args) == 0 {
+		return TerminalCommandProfile{
+			Risk:   TerminalCommandRiskMutating,
+			Reason: "unzip_without_mode",
+		}
+	}
+
+	readonlyMode := false
+	mutatingReason := ""
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		if arg == "" {
+			continue
+		}
+		if arg == "--" {
+			break
+		}
+		if !strings.HasPrefix(arg, "-") || arg == "-" {
+			continue
+		}
+		if strings.HasPrefix(arg, "--") {
+			name, value, hasValue := splitLongOption(arg)
+			switch strings.ToLower(name) {
+			case "directory":
+				if !hasValue {
+					value, i = consumeNextArg(args, i)
+				}
+				if !isNonPersistentOutputSink(value) {
+					mutatingReason = "unzip_extract_dir"
+				}
+			case "list", "test", "verbose":
+				readonlyMode = true
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-Z") {
+			readonlyMode = true
+			continue
+		}
+		short := arg[1:]
+		if strings.ContainsRune(short, 'd') {
+			if len(short) == 1 {
+				_, i = consumeNextArg(args, i)
+			}
+			mutatingReason = "unzip_extract_dir"
+		}
+		if containsAnyShortOption(short, "pltvz") {
+			readonlyMode = true
+		}
+	}
+
+	if readonlyMode && mutatingReason == "" {
+		return TerminalCommandProfile{
+			Risk:    TerminalCommandRiskReadonly,
+			Effects: []string{terminalCommandEffectLocalRead},
+			Reason:  "unzip_stdout_or_listing",
+		}
+	}
+	if mutatingReason != "" {
+		return TerminalCommandProfile{
+			Risk:    TerminalCommandRiskMutating,
+			Effects: []string{terminalCommandEffectLocalWrite},
+			Reason:  mutatingReason,
+		}
+	}
+	return TerminalCommandProfile{
+		Risk:   TerminalCommandRiskMutating,
+		Reason: "unzip_extract_or_unknown_mode",
+	}
+}
+
+func containsAnyShortOption(short string, options string) bool {
+	for _, ch := range short {
+		if strings.ContainsRune(options, ch) {
+			return true
+		}
+	}
+	return false
 }
 
 func classifyNetworkFetchCommand(verb string, args []string) (TerminalCommandProfile, bool) {

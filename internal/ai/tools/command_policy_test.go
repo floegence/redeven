@@ -41,6 +41,46 @@ func TestClassifyTerminalCommandRisk_FindPipeEgrepReadonly(t *testing.T) {
 	}
 }
 
+func TestClassifyTerminalCommandRisk_ReadonlyInspectionCommands(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		`file /tmp/demo.docx`,
+		`strings /tmp/demo.docx | head -n 20`,
+		`unzip -p /tmp/demo.docx word/document.xml | head -c 5000`,
+		`unzip -l /tmp/demo.zip | head -n 20`,
+	}
+	for _, command := range cases {
+		command := command
+		t.Run(command, func(t *testing.T) {
+			t.Parallel()
+			risk := ClassifyTerminalCommandRisk(command)
+			if risk != TerminalCommandRiskReadonly {
+				t.Fatalf("command=%q risk=%q, want %q", command, risk, TerminalCommandRiskReadonly)
+			}
+		})
+	}
+}
+
+func TestClassifyTerminalCommandRisk_UnzipExtractionIsMutating(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		`unzip archive.zip`,
+		`unzip -d out archive.zip`,
+	}
+	for _, command := range cases {
+		command := command
+		t.Run(command, func(t *testing.T) {
+			t.Parallel()
+			risk := ClassifyTerminalCommandRisk(command)
+			if risk != TerminalCommandRiskMutating {
+				t.Fatalf("command=%q risk=%q, want %q", command, risk, TerminalCommandRiskMutating)
+			}
+		})
+	}
+}
+
 func TestClassifyTerminalCommandRisk_CurlReadonlyFetches(t *testing.T) {
 	t.Parallel()
 

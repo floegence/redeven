@@ -2427,6 +2427,7 @@ mainLoop:
 				}
 				state.BlockedActionFacts = appendLimited(state.BlockedActionFacts, tr.ToolName+": "+strings.TrimSpace(tr.Details), 12)
 				if tr.ToolID != "" {
+					state.BlockedEvidenceRefs = appendLimited(state.BlockedEvidenceRefs, "tool:"+strings.TrimSpace(tr.ToolID), 12)
 					if tr.Status == toolResultStatusAborted {
 						state.ToolCallLedger[tr.ToolID] = "aborted"
 					} else {
@@ -4236,6 +4237,19 @@ func evaluateGuardAskUserGate(source string, state runtimeState, complexity stri
 	case "provider_repeated_error", "complex_task_missing_todos", "hard_max_summary_failed", "hard_max_steps":
 		return true, "ok"
 	}
+	signal := defaultGuardAskUserSignal("guard check", nil, source, state.BlockedEvidenceRefs...)
+	if askUserReasonRequiresEvidence(signal.ReasonCode) {
+		if len(signal.EvidenceRefs) == 0 {
+			return false, "missing_evidence_refs"
+		}
+		matched, blocked := askUserEvidenceMatch(state, signal.EvidenceRefs)
+		if matched == 0 {
+			return false, "unresolved_evidence_refs"
+		}
+		if signal.ReasonCode == AskUserReasonPermissionBlocked && blocked == 0 {
+			return false, "permission_reason_without_blocked_evidence"
+		}
+	}
 	if required, reason := todoTrackingRequirement(complexity, state); required {
 		return false, reason
 	}
@@ -4560,7 +4574,9 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"# Sub-agent Orchestration",
 		"- Delegate only when work can be parallelized, isolated, or independently reviewed.",
 		"- Do NOT delegate trivial single-step tasks that can be completed directly.",
+		"- Do NOT use subagents for one-off local inspection work such as reading a single file, checking one command, or answering a direct question about the current workspace.",
 		"- Create subagents with subagents(action=create) and include objective, agent_type, trigger_reason, deliverables, definition_of_done, and output_schema (title/context_mode/inputs when useful).",
+		"- Minimal create contract example: {\"action\":\"create\",\"agent_type\":\"worker\",\"objective\":\"Investigate the assigned slice\",\"trigger_reason\":\"Parallelizable sidecar work will speed up the parent task\",\"deliverables\":[\"Short findings summary\"],\"definition_of_done\":[\"Findings verified\"],\"output_schema\":{\"type\":\"object\",\"required\":[\"summary\"],\"properties\":{\"summary\":{\"type\":\"string\",\"description\":\"Verified findings for the parent run.\"}}}}",
 		"- Subagent timeout is fixed at 900 seconds (15 minutes); do not customize budget.timeout_sec.",
 		"- output_schema must include type=object, a non-empty properties object, and required keys that exist in properties.",
 		"- Use subagents(action=wait) to gather child status snapshots before final decisions.",

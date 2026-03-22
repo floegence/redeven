@@ -738,6 +738,28 @@ func TestBuildPreview_AssistantFallsBackWhenMessageJSONInvalid(t *testing.T) {
 	}
 }
 
+func TestBuildPreview_AssistantFallsBackToAskUserQuestion(t *testing.T) {
+	t.Parallel()
+
+	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"tool-call","toolName":"ask_user","toolId":"tool_1","args":{"questions":[{"id":"question_1","header":"Need guidance","question":"I hit repeated tool failures while inspecting the file. Choose the next direction.","is_other":true}],"reason_code":"conflicting_constraints","required_from_user":["Choose the next direction."],"evidence_refs":["tool:terminal_exec:1"]},"result":{"questions":[{"id":"question_1","header":"Need guidance","question":"I hit repeated tool failures while inspecting the file. Choose the next direction.","is_other":true}],"waiting_user":true}}],"status":"complete","timestamp":1}`
+
+	preview := buildPreview("assistant", "", messageJSON)
+	if !strings.Contains(preview, "Choose the next direction") {
+		t.Fatalf("preview=%q, want ask_user question fallback", preview)
+	}
+}
+
+func TestBuildPreview_AssistantFallsBackToTaskCompleteResult(t *testing.T) {
+	t.Parallel()
+
+	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"tool-call","toolName":"task_complete","toolId":"tool_1","args":{"result":"Completed the verification and documented the remaining risks."}}],"status":"complete","timestamp":1}`
+
+	preview := buildPreview("assistant", "", messageJSON)
+	if !strings.Contains(preview, "Completed the verification") {
+		t.Fatalf("preview=%q, want task_complete result fallback", preview)
+	}
+}
+
 func TestStore_ReplaceThreadTodosSnapshot(t *testing.T) {
 	t.Parallel()
 
