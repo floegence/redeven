@@ -6,6 +6,7 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from '../pages/EnvContext';
 import type { DetachedSurface } from '../services/detachedSurface';
 import { basenameFromAbsolutePath } from '../services/detachedSurface';
+import { writeTextToClipboard } from '../utils/clipboard';
 import { buildFilePreviewAskFlowerIntent } from '../utils/filePreviewAskFlower';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import {
@@ -13,7 +14,7 @@ import {
   shouldRequireDesktopAskFlowerMainWindowHandoff,
 } from '../services/desktopAskFlowerBridge';
 import { useFilePreviewContext } from './FilePreviewContext';
-import { FilePreviewContent } from './FilePreviewContent';
+import { FilePreviewControllerContent } from './FilePreviewControllerContent';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
 
 export interface DetachedSurfaceSceneProps {
@@ -72,8 +73,24 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
     filePreview.controller.closePreview();
   });
 
+  const handleCopyPath = async (): Promise<boolean> => {
+    const path = String(filePreview.controller.item()?.path ?? '').trim();
+    if (!path) {
+      notification.error('Copy failed', 'Missing file path');
+      return false;
+    }
+
+    try {
+      await writeTextToClipboard(path);
+      return true;
+    } catch (error) {
+      notification.error('Copy failed', error instanceof Error ? error.message : 'Failed to copy text to clipboard.');
+      return false;
+    }
+  };
+
   const handleAskFlower = () => {
-    const selectionText = readSelectionTextFromPreview(previewContentEl);
+    const selectionText = String(filePreview.controller.selectedText() ?? '').trim() || readSelectionTextFromPreview(previewContentEl);
     const path = String(filePreview.controller.item()?.path ?? '').trim();
     if (
       requestDesktopAskFlowerMainWindowHandoff({
@@ -104,18 +121,9 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
   const previewScene = () => (
     <div class="flex h-full min-h-0 flex-col bg-background">
       <div class="flex-1 min-h-0 overflow-hidden">
-        <FilePreviewContent
-          item={filePreview.controller.item()}
-          descriptor={filePreview.controller.descriptor()}
-          text={filePreview.controller.text()}
-          message={filePreview.controller.message()}
-          objectUrl={filePreview.controller.objectUrl()}
-          bytes={filePreview.controller.bytes()}
-          truncated={filePreview.controller.truncated()}
-          loading={filePreview.controller.loading()}
-          error={filePreview.controller.error()}
-          xlsxSheetName={filePreview.controller.xlsxSheetName()}
-          xlsxRows={filePreview.controller.xlsxRows()}
+        <FilePreviewControllerContent
+          controller={filePreview.controller}
+          onCopyPath={handleCopyPath}
           contentRef={(element) => {
             previewContentEl = element;
           }}
