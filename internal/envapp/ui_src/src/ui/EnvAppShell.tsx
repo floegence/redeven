@@ -388,7 +388,7 @@ export function EnvAppShell() {
   const [askFlowerComposerOpen, setAskFlowerComposerOpen] = createSignal(false);
   const [askFlowerComposerIntent, setAskFlowerComposerIntent] = createSignal<AskFlowerIntent | null>(null);
   const [askFlowerComposerAnchor, setAskFlowerComposerAnchor] = createSignal<AskFlowerComposerAnchor | null>(null);
-  let pendingMainWindowAskFlowerIntents: AskFlowerIntent[] = [];
+  let pendingMainWindowAskFlowerComposerIntent: AskFlowerIntent | null = null;
 
   const [settingsSeq, setSettingsSeq] = createSignal(0);
   const bumpSettingsSeq = () => setSettingsSeq((n) => n + 1);
@@ -437,16 +437,13 @@ export function EnvAppShell() {
     setAskFlowerComposerAnchor(null);
   };
 
-  const flushPendingMainWindowAskFlowerIntents = () => {
-    if (!canUseFlower() || pendingMainWindowAskFlowerIntents.length <= 0) {
+  const flushPendingMainWindowAskFlowerComposerIntent = () => {
+    if (!canUseFlower() || !pendingMainWindowAskFlowerComposerIntent) {
       return;
     }
-    const queue = [...pendingMainWindowAskFlowerIntents];
-    pendingMainWindowAskFlowerIntents = [];
-    goTab('ai');
-    for (const intent of queue) {
-      injectAskFlowerIntent(intent);
-    }
+    const intent = pendingMainWindowAskFlowerComposerIntent;
+    pendingMainWindowAskFlowerComposerIntent = null;
+    openAskFlowerComposer(intent);
   };
 
   const handleDesktopAskFlowerMainWindowHandoff = (payload: DesktopAskFlowerMainWindowHandoff) => {
@@ -473,12 +470,11 @@ export function EnvAppShell() {
         notify.error('Permission denied', 'Read/write/execute permission required.');
         return;
       }
-      pendingMainWindowAskFlowerIntents.push(result.intent);
+      pendingMainWindowAskFlowerComposerIntent = result.intent;
       return;
     }
 
-    goTab('ai');
-    injectAskFlowerIntent(result.intent);
+    openAskFlowerComposer(result.intent);
   };
 
   const uploadAskFlowerAttachment = async (file: File): Promise<string> => {
@@ -1258,7 +1254,7 @@ export function EnvAppShell() {
     if (env.state !== 'ready' || !canUseFlower()) {
       return;
     }
-    flushPendingMainWindowAskFlowerIntents();
+    flushPendingMainWindowAskFlowerComposerIntent();
   });
 
   // Never keep the user on Flower when RWX is not granted.
