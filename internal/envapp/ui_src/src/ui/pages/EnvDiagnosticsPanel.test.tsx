@@ -86,5 +86,8 @@ describe('EnvDiagnosticsPanel', () => {
     expect(host.textContent).toContain('POST /_redeven_proxy/api/settings');
     expect(host.textContent).toContain('Recent events');
     expect(host.textContent).toContain('GET /api/local/runtime');
+    expect(host.textContent).toContain('Slow ratio');
+    expect(host.querySelectorAll('table')).toHaveLength(3);
+    expect(host.innerHTML).toContain('text-[11px]');
   });
 });
