@@ -11,6 +11,21 @@ import { buildDesktopPreloads } from './desktopPreloadBundle';
 
 const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
+const linuxElectronLaunchArgs = ['--no-sandbox', '--disable-setuid-sandbox'] as const;
+
+function getElectronRuntimeLaunchArgs(
+  platform: NodeJS.Platform,
+  runtimeScript: string,
+  preloadScript: string,
+): string[] {
+  const scriptArgs = [runtimeScript, preloadScript];
+  if (platform !== 'linux') {
+    return scriptArgs;
+  }
+  // Linux CI runners cannot use Electron's downloaded chrome-sandbox helper,
+  // but the renderer windows under test still keep `sandbox: true` enabled.
+  return [...linuxElectronLaunchArgs, ...scriptArgs];
+}
 
 afterEach(async () => {
   while (tempDirs.length > 0) {
@@ -21,6 +36,22 @@ afterEach(async () => {
 });
 
 describe('desktop preload runtime', () => {
+  it('adds Linux-only Electron launch flags for the spawned runtime process', () => {
+    expect(getElectronRuntimeLaunchArgs('linux', 'runtime.js', 'browser.js')).toEqual([
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      'runtime.js',
+      'browser.js',
+    ]);
+  });
+
+  it('keeps the default runtime launch arguments on non-Linux platforms', () => {
+    expect(getElectronRuntimeLaunchArgs('darwin', 'runtime.js', 'browser.js')).toEqual([
+      'runtime.js',
+      'browser.js',
+    ]);
+  });
+
   it('exposes desktop bridges in sandboxed main and detached child windows', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preload-runtime-'));
     tempDirs.push(tempDir);
@@ -81,15 +112,19 @@ app.whenReady().then(async () => {
 });
 `, 'utf8');
 
-    const { stdout } = await execFileAsync(String(electronPath), [runtimeScript, path.join(outDir, 'browser.js')], {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
+    const { stdout } = await execFileAsync(
+      String(electronPath),
+      getElectronRuntimeLaunchArgs(process.platform, runtimeScript, path.join(outDir, 'browser.js')),
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
+        },
+        timeout: 30_000,
+        maxBuffer: 1024 * 1024,
       },
-      timeout: 30_000,
-      maxBuffer: 1024 * 1024,
-    });
+    );
 
     const payload = JSON.parse(stdout.trim()) as {
       main: { hasAskFlowerBridge: boolean; hasStateStorageBridge: boolean };
