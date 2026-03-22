@@ -25,6 +25,10 @@ describe('settingsPage', () => {
     expect(html).toContain('Desktop is currently targeting External Redeven. This request stays saved for the next This device start and is never sent to the external target.');
     expect(html).toContain('Skip to main content');
     expect(html).toContain('id="settings-main"');
+    expect(html).toContain('workspace-shell');
+    expect(html).toContain('summary-grid');
+    expect(html).toContain('id="page-status-badge"');
+    expect(html).toContain('Desktop-managed Local UI');
     expect(html).toContain('id="settings-error"');
     expect(html).toContain('role="alert"');
     expect(html).toContain('aria-describedby="local-ui-bind-help settings-error"');
@@ -50,6 +54,7 @@ describe('settingsPage', () => {
     expect(html).toContain('External Redeven');
     expect(html).toContain('<fieldset class="field">');
     expect(html).toContain('<legend class="field-label">Target</legend>');
+    expect(html).toContain('IP or localhost only');
     expect(html).toContain('aria-describedby="external-local-ui-url-help settings-error"');
     expect(html).not.toContain('<h2>Host This Device</h2>');
     expect(html).not.toContain('<h2>Register to Redeven on next start</h2>');
@@ -68,7 +73,9 @@ describe('settingsPage', () => {
     }, '', 'linux', 'desktop_settings');
 
     expect(html).not.toContain('gradient');
-    expect(html).toContain('background: var(--bg);');
+    expect(html).toContain('background: var(--background);');
+    expect(html).toContain('font-family: "Inter"');
+    expect(html).toContain('.workspace-shell');
     expect(html).toContain('env(titlebar-area-height, 0px)');
     expect(html).toContain('prefers-reduced-motion');
     expect(html).toContain('.skip-link');
