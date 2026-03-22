@@ -5,7 +5,7 @@ export const desktopTheme = {
   surfaceMuted: 'hsl(36 10% 88%)',
   border: 'hsl(36 10% 82%)',
   text: 'hsl(215 40% 13%)',
-  muted: 'hsl(215 20% 46%)',
+  muted: 'hsl(215 20% 42%)',
   accent: 'hsl(215 40% 13%)',
   accentText: 'hsl(0 0% 98%)',
   accentSoft: 'hsl(36 12% 91%)',

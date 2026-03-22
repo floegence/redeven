@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 
 import { LayoutProvider } from '@floegence/floe-webapp-core';
+import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { redevenV1Contract } from '../protocol/redeven_v1';
 import { GitWorkspace } from './GitWorkspace';
 
 function mockMatchMedia(matches: boolean) {
@@ -152,6 +155,70 @@ describe('GitWorkspace interactions', () => {
 
     try {
       expect(host.querySelector('button[aria-label="Toggle browser sidebar"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('supports vertical keyboard navigation across git view tabs', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => {
+      const [subview, setSubview] = createSignal<'changes' | 'branches' | 'history'>('changes');
+
+      return (
+        <LayoutProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitWorkspace
+                mode="git"
+                onModeChange={() => {}}
+                subview={subview()}
+                onSubviewChange={setSubview}
+                width={280}
+                open
+                currentPath="/workspace/repo/src"
+                repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  headCommit: 'abc1234',
+                  aheadCount: 1,
+                  behindCount: 0,
+                  workspaceSummary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
+                  remote: [],
+                }}
+                commits={[]}
+              />
+            </div>
+          </ProtocolProvider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      const activeTab = host.querySelector('[role="tab"][aria-selected="true"]') as HTMLButtonElement | null;
+      expect(activeTab?.id).toBe('git-workbench-subview-tab-changes');
+      expect(activeTab?.getAttribute('aria-controls')).toBe('git-workbench-subview-panel-changes');
+      expect(activeTab?.getAttribute('tabindex')).toBe('0');
+      expect(host.querySelector('#git-workbench-subview-panel-changes')).toBeTruthy();
+      activeTab!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(host.querySelector('#git-workbench-subview-tab-branches')?.getAttribute('aria-selected')).toBe('true');
+      expect(host.querySelector('#git-workbench-subview-panel-branches')).toBeTruthy();
     } finally {
       dispose();
     }

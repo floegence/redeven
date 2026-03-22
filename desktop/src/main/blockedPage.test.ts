@@ -26,6 +26,10 @@ describe('blockedPage', () => {
     expect(html).toContain('Default state directory: /Users/tester/.redeven');
     expect(html).toContain('Desktop Settings');
     expect(html).not.toContain('gradient');
+    expect(html).toContain('Skip to main content');
+    expect(html).toContain('id="blocked-main"');
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('aria-label="Blocked page actions"');
     expect(html).toContain('env(titlebar-area-height, 0px)');
   });
 
@@ -44,6 +48,7 @@ describe('blockedPage', () => {
     expect(html).toContain('appears to provide Local UI');
     expect(html).toContain('calc(24px + 0px)');
     expect(html).not.toContain('env(titlebar-area-height, 0px)');
+    expect(html).toContain("queueMicrotask(() => blockedSummary.focus())");
   });
 
   it('recognizes blocked page action urls', () => {
@@ -67,5 +72,6 @@ describe('blockedPage', () => {
     expect(html).toContain('Redeven target is unavailable');
     expect(html).toContain('Target URL: http://192.168.1.11:24000/');
     expect(html).toContain('Connect to Redeven');
+    expect(html).toContain('aria-describedby="blocked-meta"');
   });
 });

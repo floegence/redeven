@@ -1,6 +1,6 @@
 // ToolCallBlock — tool call display with approval workflow and ask_user interaction.
 
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, createUniqueId } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
@@ -2599,7 +2599,7 @@ const WebSearchToolCard: Component<WebSearchToolCardProps> = (props) => {
       </div>
 
       <Show when={domainFilters().length > 1}>
-        <div class="chat-tool-web-search-domain-filters" role="tablist" aria-label="Filter search results by domain">
+        <div class="chat-tool-web-search-domain-filters" role="group" aria-label="Filter search results by domain">
           <For each={domainFilters()}>
             {(item) => (
               <button
@@ -2609,8 +2609,7 @@ const WebSearchToolCard: Component<WebSearchToolCardProps> = (props) => {
                   activeDomain() === item.id && 'chat-tool-web-search-domain-chip-active',
                 )}
                 onClick={() => setActiveDomain(item.id)}
-                role="tab"
-                aria-selected={activeDomain() === item.id}
+                aria-pressed={activeDomain() === item.id}
               >
                 <span>{item.label}</span>
                 <span class="chat-tool-web-search-domain-chip-count">{item.count}</span>
@@ -3194,6 +3193,7 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
  */
 export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
   const ctx = useChatContext();
+  const bodyId = `chat-tool-call-body-${createUniqueId()}`;
   const askUserDisplay = createMemo(() => buildAskUserDisplay(props.block));
   const waitSubagentsDisplay = createMemo(() => buildWaitSubagentsDisplay(props.block));
   const applyPatchDisplay = createMemo(() => buildApplyPatchDisplay(props.block));
@@ -3238,13 +3238,11 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
     ctx.toggleToolCollapse(props.messageId, props.block.toolId);
   };
 
-  const handleApprove = (event: MouseEvent) => {
-    event.stopPropagation();
+  const handleApprove = () => {
     ctx.approveToolCall(props.messageId, props.block.toolId, true);
   };
 
-  const handleReject = (event: MouseEvent) => {
-    event.stopPropagation();
+  const handleReject = () => {
     ctx.approveToolCall(props.messageId, props.block.toolId, false);
   };
 
@@ -3312,27 +3310,38 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
 
   return (
     <div class={cn('chat-tool-call-block', props.class)}>
-      <div class="chat-tool-call-header" onClick={handleToggle}>
+      <div class="chat-tool-call-header">
         <button
-          class="chat-tool-collapse-btn"
-          aria-label={isCollapsed() ? 'Expand' : 'Collapse'}
+          type="button"
+          class="chat-tool-call-header-button"
+          onClick={handleToggle}
+          aria-expanded={!isCollapsed()}
+          aria-controls={bodyId}
         >
-          <ChevronIcon collapsed={isCollapsed()} />
+          <span class="chat-tool-collapse-btn" aria-hidden="true">
+            <ChevronIcon collapsed={isCollapsed()} />
+          </span>
+
+          <StatusIcon status={props.block.status} />
+
+          <span class="chat-tool-name">{props.block.toolName}</span>
+
+          <Show when={isCollapsed() && !showApproval()}>
+            <span class="chat-tool-summary">{collapsedSummary()}</span>
+          </Show>
         </button>
-
-        <StatusIcon status={props.block.status} />
-
-        <span class="chat-tool-name">{props.block.toolName}</span>
 
         <Show when={showApproval()}>
           <div class="chat-tool-approval-actions">
             <button
+              type="button"
               class="chat-tool-approval-btn chat-tool-approval-btn-approve"
               onClick={handleApprove}
             >
               Allow
             </button>
             <button
+              type="button"
               class="chat-tool-approval-btn chat-tool-approval-btn-reject"
               onClick={handleReject}
             >
@@ -3340,14 +3349,10 @@ export const ToolCallBlock: Component<ToolCallBlockProps> = (props) => {
             </button>
           </div>
         </Show>
-
-        <Show when={isCollapsed()}>
-          <span class="chat-tool-summary">{collapsedSummary()}</span>
-        </Show>
       </div>
 
       <Show when={!isCollapsed()}>
-        <div class="chat-tool-call-body">
+        <div class="chat-tool-call-body" id={bodyId}>
           <div class="chat-tool-section">
             <div class="chat-tool-section-label">Arguments</div>
             <pre class="chat-tool-args">

@@ -23,6 +23,12 @@ describe('settingsPage', () => {
     expect(html).toContain('--env-token-env');
     expect(html).toContain('These values apply to desktop-managed starts on this machine.');
     expect(html).toContain('Desktop is currently targeting External Redeven. This request stays saved for the next This device start and is never sent to the external target.');
+    expect(html).toContain('Skip to main content');
+    expect(html).toContain('id="settings-main"');
+    expect(html).toContain('id="settings-error"');
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('aria-describedby="local-ui-bind-help settings-error"');
+    expect(html).toContain('aria-describedby="env-token-help settings-error"');
     expect(html).toContain("return externalMode ? 'Save for this device' : 'Save and apply';");
   });
 
@@ -42,6 +48,9 @@ describe('settingsPage', () => {
     expect(html).toContain('Desktop Settings stay separate');
     expect(html).toContain('Redeven URL');
     expect(html).toContain('External Redeven');
+    expect(html).toContain('<fieldset class="field">');
+    expect(html).toContain('<legend class="field-label">Target</legend>');
+    expect(html).toContain('aria-describedby="external-local-ui-url-help settings-error"');
     expect(html).not.toContain('<h2>Host This Device</h2>');
     expect(html).not.toContain('<h2>Register to Redeven on next start</h2>');
     expect(html).toContain("return externalMode ? 'Connect' : 'Use this device';");
@@ -61,6 +70,8 @@ describe('settingsPage', () => {
     expect(html).not.toContain('gradient');
     expect(html).toContain('background: var(--bg);');
     expect(html).toContain('env(titlebar-area-height, 0px)');
+    expect(html).toContain('prefers-reduced-motion');
+    expect(html).toContain('.skip-link');
   });
 
   it('uses native spacing on macOS without titlebar safe-area CSS', () => {
@@ -90,5 +101,7 @@ describe('settingsPage', () => {
     }, 'Non-loopback Local UI binds require a Local UI password.', 'linux', 'desktop_settings');
 
     expect(html).toContain('Non-loopback Local UI binds require a Local UI password.');
+    expect(html).toContain('queueMicrotask(() => errorEl.focus())');
+    expect(html).toContain("errorEl.setAttribute('aria-hidden', text ? 'false' : 'true');");
   });
 });
