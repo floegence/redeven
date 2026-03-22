@@ -616,7 +616,7 @@ describe('TerminalPanel', () => {
     expect(host.textContent).toContain('Terminal settings');
   });
 
-  it('configures TerminalCore without focus-triggered fit or resize-on-focus behavior', async () => {
+  it('configures TerminalCore with copy-on-select disabled and no focus-triggered fit behavior', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -624,6 +624,9 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(terminalConfigState.values.length).toBeGreaterThan(0);
+    expect(terminalConfigState.values[0]?.clipboard).toEqual({
+      copyOnSelect: false,
+    });
     expect(terminalConfigState.values[0]?.responsive).toEqual({
       notifyResizeOnlyWhenFocused: true,
     });
@@ -958,7 +961,7 @@ describe('TerminalPanel', () => {
   });
 
   it('copies the active terminal selection from the custom context menu', async () => {
-    terminalSelectionState.text = 'echo redeven';
+    terminalSelectionState.text = '  echo redeven\n';
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -983,10 +986,10 @@ describe('TerminalPanel', () => {
     copyButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await settleTerminalPanel();
 
-    expect(writeTextToClipboardSpy).toHaveBeenCalledWith('echo redeven');
+    expect(writeTextToClipboardSpy).toHaveBeenCalledWith('  echo redeven\n');
   });
 
-  it('copies the active terminal selection on Cmd/Ctrl+C when selection exists', async () => {
+  it('does not route Cmd/Ctrl+C through a local keydown workaround', async () => {
     terminalSelectionState.text = 'pnpm test';
 
     const host = document.createElement('div');
@@ -1006,7 +1009,7 @@ describe('TerminalPanel', () => {
     }));
     await settleTerminalPanel();
 
-    expect(writeTextToClipboardSpy).toHaveBeenCalledWith('pnpm test');
+    expect(writeTextToClipboardSpy).not.toHaveBeenCalled();
   });
 
   it('does not hijack Cmd/Ctrl+C from non-terminal inputs inside the panel host', async () => {
