@@ -2158,13 +2158,13 @@ func buildPreview(role string, text string, messageJSON string) string {
 }
 
 func latestAssistantPreviewText(messageJSON string) string {
-	if latest := latestAssistantMarkdown(messageJSON); latest != "" {
+	if latest := latestAssistantVisibleText(messageJSON); latest != "" {
 		return latest
 	}
 	return latestAssistantStructuredPreview(messageJSON)
 }
 
-func latestAssistantMarkdown(messageJSON string) string {
+func latestAssistantVisibleText(messageJSON string) string {
 	raw := strings.TrimSpace(messageJSON)
 	if raw == "" {
 		return ""
@@ -2177,30 +2177,35 @@ func latestAssistantMarkdown(messageJSON string) string {
 		return ""
 	}
 	for i := len(payload.Blocks) - 1; i >= 0; i-- {
-		blk := payload.Blocks[i]
-		if len(blk) == 0 {
-			continue
-		}
-		var meta struct {
-			Type string `json:"type"`
-		}
-		if err := json.Unmarshal(blk, &meta); err != nil {
-			continue
-		}
-		if !strings.EqualFold(strings.TrimSpace(meta.Type), "markdown") {
-			continue
-		}
-		var md struct {
-			Content string `json:"content"`
-		}
-		if err := json.Unmarshal(blk, &md); err != nil {
-			continue
-		}
-		if content := strings.TrimSpace(md.Content); content != "" {
-			return content
+		if preview := assistantVisibleTextFromBlock(payload.Blocks[i]); preview != "" {
+			return preview
 		}
 	}
 	return ""
+}
+
+func assistantVisibleTextFromBlock(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var meta struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(meta.Type)) {
+	case "markdown", "thinking":
+		var block struct {
+			Content string `json:"content"`
+		}
+		if err := json.Unmarshal(raw, &block); err != nil {
+			return ""
+		}
+		return strings.TrimSpace(block.Content)
+	default:
+		return ""
+	}
 }
 
 func latestAssistantStructuredPreview(messageJSON string) string {
@@ -2208,6 +2213,7 @@ func latestAssistantStructuredPreview(messageJSON string) string {
 	if raw == "" {
 		return ""
 	}
+
 	var payload struct {
 		Blocks []json.RawMessage `json:"blocks"`
 	}
@@ -2232,22 +2238,24 @@ func assistantStructuredPreviewFromBlock(raw json.RawMessage) string {
 	if err := json.Unmarshal(raw, &meta); err != nil {
 		return ""
 	}
-	if !strings.EqualFold(strings.TrimSpace(meta.Type), "tool-call") {
-		return ""
-	}
-	var block struct {
-		ToolName string          `json:"toolName"`
-		Args     json.RawMessage `json:"args"`
-		Result   json.RawMessage `json:"result"`
-	}
-	if err := json.Unmarshal(raw, &block); err != nil {
-		return ""
-	}
-	switch strings.TrimSpace(block.ToolName) {
-	case "ask_user":
-		return extractAskUserPreviewText(block.Result, block.Args)
-	case "task_complete":
-		return extractTaskCompletePreviewText(block.Args)
+	switch strings.ToLower(strings.TrimSpace(meta.Type)) {
+	case "tool-call":
+		var block struct {
+			ToolName string          `json:"toolName"`
+			Args     json.RawMessage `json:"args"`
+			Result   json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(raw, &block); err != nil {
+			return ""
+		}
+		switch strings.TrimSpace(block.ToolName) {
+		case "ask_user":
+			return extractAskUserPreviewText(block.Result, block.Args)
+		case "task_complete":
+			return extractTaskCompletePreviewText(block.Args)
+		default:
+			return ""
+		}
 	default:
 		return ""
 	}

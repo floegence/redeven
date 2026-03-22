@@ -18,6 +18,12 @@ type persistedMarkdownBlock struct {
 	Content string `json:"content"`
 }
 
+type persistedThinkingBlock struct {
+	Type     string `json:"type"` // "thinking"
+	Content  string `json:"content,omitempty"`
+	Duration int64  `json:"duration,omitempty"`
+}
+
 type persistedTextBlock struct {
 	Type    string `json:"type"` // "text"
 	Content string `json:"content"`
@@ -38,11 +44,11 @@ type persistedFileBlock struct {
 }
 
 type persistedRequestUserInputResponseBlock struct {
-	Type          string                             `json:"type"` // "request_user_input_response"
-	PromptID      string                             `json:"prompt_id"`
-	ToolID        string                             `json:"tool_id,omitempty"`
-	ReasonCode    string                             `json:"reason_code,omitempty"`
-	Responses     []RequestUserInputResolvedQuestion `json:"responses,omitempty"`
-	PublicSummary string                             `json:"public_summary,omitempty"`
-	ContainsSecret bool                              `json:"contains_secret,omitempty"`
+	Type           string                             `json:"type"` // "request_user_input_response"
+	PromptID       string                             `json:"prompt_id"`
+	ToolID         string                             `json:"tool_id,omitempty"`
+	ReasonCode     string                             `json:"reason_code,omitempty"`
+	Responses      []RequestUserInputResolvedQuestion `json:"responses,omitempty"`
+	PublicSummary  string                             `json:"public_summary,omitempty"`
+	ContainsSecret bool                               `json:"contains_secret,omitempty"`
 }

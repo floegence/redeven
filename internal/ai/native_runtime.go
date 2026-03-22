@@ -2170,6 +2170,8 @@ mainLoop:
 					}
 				case StreamEventThinkingDelta:
 					if strings.TrimSpace(event.Text) != "" {
+						r.touchActivity()
+						_ = r.appendThinkingDelta(event.Text)
 						r.persistRunEvent("thinking.delta", RealtimeStreamKindLifecycle, map[string]any{"delta": truncateRunes(event.Text, 2000)})
 					}
 				case StreamEventToolCallDelta:
@@ -3057,6 +3059,8 @@ func (r *run) runNativeConversational(
 			}
 		case StreamEventThinkingDelta:
 			if strings.TrimSpace(event.Text) != "" {
+				r.touchActivity()
+				_ = r.appendThinkingDelta(event.Text)
 				r.persistRunEvent("thinking.delta", RealtimeStreamKindLifecycle, map[string]any{
 					"delta": truncateRunes(event.Text, 2000),
 				})
