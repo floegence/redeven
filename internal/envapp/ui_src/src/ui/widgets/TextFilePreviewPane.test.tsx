@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TextFilePreviewPane } from './TextFilePreviewPane';
 
 const editorRenderState = vi.hoisted(() => ({
   errorMessage: '',
+  nextInstanceId: 0,
 }));
 
 vi.mock('@floegence/floe-webapp-core/editor', () => ({
@@ -13,10 +15,12 @@ vi.mock('@floegence/floe-webapp-core/editor', () => ({
     if (editorRenderState.errorMessage) {
       throw new Error(editorRenderState.errorMessage);
     }
+    const instanceId = String(++editorRenderState.nextInstanceId);
     return (
       <button
         type="button"
         data-testid="mock-editor"
+        data-instance-id={instanceId}
         data-read-only={String(props.options.readOnly)}
         data-hover-enabled={String(props.options.hover?.enabled)}
         data-code-lens={String(props.options.codeLens)}
@@ -53,6 +57,7 @@ async function flushAsync(): Promise<void> {
 afterEach(() => {
   document.body.innerHTML = '';
   editorRenderState.errorMessage = '';
+  editorRenderState.nextInstanceId = 0;
 });
 
 describe('TextFilePreviewPane', () => {
@@ -121,6 +126,36 @@ describe('TextFilePreviewPane', () => {
 
     expect(onDraftChange).toHaveBeenCalledWith('changed from editor');
     expect(onSelectionChange).toHaveBeenCalledWith('selected from editor');
+  });
+
+  it('recreates the Monaco editor instance when switching from preview to edit mode', async () => {
+    const [editing, setEditing] = createSignal(false);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TextFilePreviewPane
+        path="/workspace/demo.ts"
+        descriptor={{ mode: 'text', textPresentation: 'code', language: 'typescript', wrapText: false }}
+        text="const value = 1;"
+        draftText="const value = 1;"
+        editing={editing()}
+        canEdit
+      />
+    ), host);
+    await flushAsync();
+
+    const previewEditor = host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null;
+    expect(previewEditor?.dataset.instanceId).toBe('1');
+    expect(previewEditor?.dataset.readOnly).toBe('true');
+
+    setEditing(true);
+    await flushAsync();
+
+    const editingEditor = host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null;
+    expect(editingEditor?.dataset.instanceId).toBe('2');
+    expect(editingEditor?.dataset.readOnly).toBe('false');
   });
 
   it('keeps unsupported code languages on the same read-only Monaco surface as Edit mode', async () => {
