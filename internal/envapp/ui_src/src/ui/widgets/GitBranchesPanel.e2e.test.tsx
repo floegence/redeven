@@ -391,6 +391,68 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
+  it('supports keyboard navigation for the branch detail tabs', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => {
+      const [subview, setSubview] = createSignal<'status' | 'history'>('status');
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  selectedBranchSubview={subview()}
+                  onSelectBranchSubview={setSubview}
+                  selectedBranch={{
+                    name: 'feature/demo',
+                    fullName: 'refs/heads/feature/demo',
+                    kind: 'local',
+                    current: true,
+                  }}
+                  branches={{
+                    repoRootPath: '/workspace/repo',
+                    currentRef: 'feature/demo',
+                    local: [
+                      { name: 'main', fullName: 'refs/heads/main', kind: 'local' },
+                      { name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local', current: true },
+                    ],
+                    remote: [],
+                  }}
+                  workspace={{
+                    repoRootPath: '/workspace/repo',
+                    summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                    staged: [],
+                    unstaged: [],
+                    untracked: [],
+                    conflicted: [],
+                  }}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      const statusTab = host.querySelector('#git-branch-subview-tab-status') as HTMLButtonElement | null;
+      expect(statusTab?.getAttribute('aria-controls')).toBe('git-branch-subview-panel-status');
+      statusTab!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await Promise.resolve();
+
+      const historyTab = host.querySelector('#git-branch-subview-tab-history') as HTMLButtonElement | null;
+      expect(historyTab?.getAttribute('aria-selected')).toBe('true');
+      expect(historyTab?.getAttribute('tabindex')).toBe('0');
+      expect(document.activeElement).toBe(historyTab);
+      expect(host.querySelector('#git-branch-subview-panel-history')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
   it('opens a lightweight confirmation dialog before deleting a local branch', async () => {
     let requestedBranch: string | undefined;
     let confirmedBranch: string | undefined;

@@ -30,6 +30,15 @@ const floeConfig = {
   },
   // Users frequently type in Terminal/Editor; command palette should always be available (Cmd/Ctrl+K).
   commands: { ignoreWhenTyping: false },
+  accessibility: {
+    mainContentId: 'redeven-env-main',
+    skipLinkLabel: 'Skip to Redeven environment content',
+    topBarLabel: 'Redeven environment toolbar',
+    primaryNavigationLabel: 'Redeven environment navigation',
+    mobileNavigationLabel: 'Redeven environment navigation',
+    sidebarLabel: 'Redeven environment sidebar',
+    mainLabel: 'Redeven environment content',
+  },
   deck: {
     storageKey: persistenceBinding.deckStorageKey,
     defaultActiveLayoutId: REDEVEN_DECK_LAYOUT_IDS.default,

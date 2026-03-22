@@ -21,6 +21,7 @@ import { gitSubviewTone, gitToneActionButtonClass } from './GitChrome';
 import { GitLabelBlock, GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimitives';
 import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import type { GitMergeBranchDialogConfirmOptions, GitMergeBranchDialogState } from './GitMergeBranchDialog';
+import { buildTabElementId, buildTabPanelElementId } from '../utils/tabNavigation';
 
 export interface GitWorkbenchProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -112,6 +113,8 @@ function subviewLabel(view: GitWorkbenchSubview): string {
 function normalizeSubview(view: GitWorkbenchSubview): GitWorkbenchSubview {
   return view === 'overview' ? 'changes' : view;
 }
+
+const GIT_WORKBENCH_SUBVIEW_ID_PREFIX = 'git-workbench-subview';
 
 export function GitWorkbench(props: GitWorkbenchProps) {
   const repoLabel = () => repoDisplayName(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath);
@@ -218,83 +221,107 @@ export function GitWorkbench(props: GitWorkbenchProps) {
 
       <div class="flex-1 min-h-0 overflow-hidden">
         <Show when={activeSubview() === 'changes'}>
-          <GitChangesPanel
-            repoSummary={props.repoSummary}
-            workspace={props.workspace}
-            selectedSection={props.selectedWorkspaceSection}
-            onSelectSection={props.onSelectWorkspaceSection}
-            selectedItem={props.selectedWorkspaceItem}
-            onSelectItem={props.onSelectWorkspaceItem}
-            busyWorkspaceKey={props.busyWorkspaceKey}
-            busyWorkspaceAction={props.busyWorkspaceAction}
-            loading={props.workspaceLoading}
-            error={props.workspaceError}
-            commitMessage={props.commitMessage}
-            onCommitMessageChange={props.onCommitMessageChange}
-            onCommit={props.onCommit}
-            commitBusy={props.commitBusy}
-            onStageSelected={props.onStageSelected}
-            onUnstageSelected={props.onUnstageSelected}
-            onBulkAction={props.onBulkAction}
-          />
+          <div
+            role="tabpanel"
+            id={buildTabPanelElementId(GIT_WORKBENCH_SUBVIEW_ID_PREFIX, 'changes')}
+            aria-labelledby={buildTabElementId(GIT_WORKBENCH_SUBVIEW_ID_PREFIX, 'changes')}
+            tabIndex={0}
+            class="h-full"
+          >
+            <GitChangesPanel
+              repoSummary={props.repoSummary}
+              workspace={props.workspace}
+              selectedSection={props.selectedWorkspaceSection}
+              onSelectSection={props.onSelectWorkspaceSection}
+              selectedItem={props.selectedWorkspaceItem}
+              onSelectItem={props.onSelectWorkspaceItem}
+              busyWorkspaceKey={props.busyWorkspaceKey}
+              busyWorkspaceAction={props.busyWorkspaceAction}
+              loading={props.workspaceLoading}
+              error={props.workspaceError}
+              commitMessage={props.commitMessage}
+              onCommitMessageChange={props.onCommitMessageChange}
+              onCommit={props.onCommit}
+              commitBusy={props.commitBusy}
+              onStageSelected={props.onStageSelected}
+              onUnstageSelected={props.onUnstageSelected}
+              onBulkAction={props.onBulkAction}
+            />
+          </div>
         </Show>
 
         <Show when={activeSubview() === 'branches'}>
-          <GitBranchesPanel
-            repoRootPath={props.repoSummary?.repoRootPath}
-            repoSummary={props.repoSummary}
-            workspace={props.workspace}
-            selectedBranch={props.selectedBranch}
-            selectedBranchSubview={props.selectedBranchSubview}
-            onSelectBranchSubview={props.onSelectBranchSubview}
-            branches={props.branches}
-            branchesLoading={props.branchesLoading}
-            branchesError={props.branchesError}
-            workspaceLoading={props.workspaceLoading}
-            workspaceError={props.workspaceError}
-            commits={props.commits}
-            listLoading={props.listLoading}
-            listLoadingMore={props.listLoadingMore}
-            listError={props.listError}
-            hasMore={props.hasMore}
-            selectedCommitHash={props.selectedCommitHash}
-            onSelectCommit={props.onSelectCommit}
-            onLoadMore={props.onLoadMore}
-            checkoutBusy={props.checkoutBusy}
-            mergeBusy={props.mergeBusy}
-            deleteBusy={props.deleteBusy}
-            mergeReviewOpen={props.mergeReviewOpen}
-            mergeReviewBranch={props.mergeReviewBranch}
-            mergePreview={props.mergePreview}
-            mergePreviewError={props.mergePreviewError}
-            mergeActionError={props.mergeActionError}
-            mergeDialogState={props.mergeDialogState}
-            deleteReviewOpen={props.deleteReviewOpen}
-            deleteReviewBranch={props.deleteReviewBranch}
-            deletePreview={props.deletePreview}
-            deletePreviewError={props.deletePreviewError}
-            deleteActionError={props.deleteActionError}
-            deleteDialogState={props.deleteDialogState}
-            onCheckoutBranch={props.onCheckoutBranch}
-            onMergeBranch={props.onMergeBranch}
-            onDeleteBranch={props.onDeleteBranch}
-            onCloseMergeReview={props.onCloseMergeReview}
-            onRetryMergePreview={props.onRetryMergePreview}
-            onConfirmMergeBranch={props.onConfirmMergeBranch}
-            onCloseDeleteReview={props.onCloseDeleteReview}
-            onRetryDeletePreview={props.onRetryDeletePreview}
-            onConfirmDeleteBranch={props.onConfirmDeleteBranch}
-          />
+          <div
+            role="tabpanel"
+            id={buildTabPanelElementId(GIT_WORKBENCH_SUBVIEW_ID_PREFIX, 'branches')}
+            aria-labelledby={buildTabElementId(GIT_WORKBENCH_SUBVIEW_ID_PREFIX, 'branches')}
+            tabIndex={0}
+            class="h-full"
+          >
+            <GitBranchesPanel
+              repoRootPath={props.repoSummary?.repoRootPath}
+              repoSummary={props.repoSummary}
+              workspace={props.workspace}
+              selectedBranch={props.selectedBranch}
+              selectedBranchSubview={props.selectedBranchSubview}
+              onSelectBranchSubview={props.onSelectBranchSubview}
+              branches={props.branches}
+              branchesLoading={props.branchesLoading}
+              branchesError={props.branchesError}
+              workspaceLoading={props.workspaceLoading}
+              workspaceError={props.workspaceError}
+              commits={props.commits}
+              listLoading={props.listLoading}
+              listLoadingMore={props.listLoadingMore}
+              listError={props.listError}
+              hasMore={props.hasMore}
+              selectedCommitHash={props.selectedCommitHash}
+              onSelectCommit={props.onSelectCommit}
+              onLoadMore={props.onLoadMore}
+              checkoutBusy={props.checkoutBusy}
+              mergeBusy={props.mergeBusy}
+              deleteBusy={props.deleteBusy}
+              mergeReviewOpen={props.mergeReviewOpen}
+              mergeReviewBranch={props.mergeReviewBranch}
+              mergePreview={props.mergePreview}
+              mergePreviewError={props.mergePreviewError}
+              mergeActionError={props.mergeActionError}
+              mergeDialogState={props.mergeDialogState}
+              deleteReviewOpen={props.deleteReviewOpen}
+              deleteReviewBranch={props.deleteReviewBranch}
+              deletePreview={props.deletePreview}
+              deletePreviewError={props.deletePreviewError}
+              deleteActionError={props.deleteActionError}
+              deleteDialogState={props.deleteDialogState}
+              onCheckoutBranch={props.onCheckoutBranch}
+              onMergeBranch={props.onMergeBranch}
+              onDeleteBranch={props.onDeleteBranch}
+              onCloseMergeReview={props.onCloseMergeReview}
+              onRetryMergePreview={props.onRetryMergePreview}
+              onConfirmMergeBranch={props.onConfirmMergeBranch}
+              onCloseDeleteReview={props.onCloseDeleteReview}
+              onRetryDeletePreview={props.onRetryDeletePreview}
+              onConfirmDeleteBranch={props.onConfirmDeleteBranch}
+            />
+          </div>
         </Show>
 
         <Show when={activeSubview() === 'history'}>
-          <GitHistoryBrowser
+          <div
+            role="tabpanel"
+            id={buildTabPanelElementId(GIT_WORKBENCH_SUBVIEW_ID_PREFIX, 'history')}
+            aria-labelledby={buildTabElementId(GIT_WORKBENCH_SUBVIEW_ID_PREFIX, 'history')}
+            tabIndex={0}
             class="h-full"
-            currentPath={props.currentPath}
-            repoInfo={props.repoInfo}
-            repoInfoLoading={props.repoInfoLoading}
-            selectedCommitHash={props.selectedCommitHash}
-          />
+          >
+            <GitHistoryBrowser
+              class="h-full"
+              currentPath={props.currentPath}
+              repoInfo={props.repoInfo}
+              repoInfoLoading={props.repoInfoLoading}
+              selectedCommitHash={props.selectedCommitHash}
+            />
+          </div>
         </Show>
       </div>
     </div>

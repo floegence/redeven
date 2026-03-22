@@ -92,8 +92,8 @@ function targetSectionHTML(): string {
         Switch between this machine and another Redeven Local UI endpoint without mixing that choice into Desktop startup settings.
       </p>
       <div class="grid">
-        <div class="field">
-          <label class="field-label">Target</label>
+        <fieldset class="field">
+          <legend class="field-label">Target</legend>
           <div class="choice-grid">
             <label class="choice-option" for="target-kind-managed-local">
               <input id="target-kind-managed-local" type="radio" name="target_kind" value="managed_local">
@@ -106,11 +106,12 @@ function targetSectionHTML(): string {
               <span class="choice-help">Open another machine’s Redeven Local UI directly inside this Desktop shell.</span>
             </label>
           </div>
-        </div>
+          <div id="target-kind-help" class="field-help">Choose where Desktop opens the Redeven Local UI.</div>
+        </fieldset>
         <div id="external-local-ui-url-row" class="field">
           <label class="field-label" for="external-local-ui-url">Redeven URL</label>
-          <input id="external-local-ui-url" name="external_local_ui_url" autocomplete="off" spellcheck="false" placeholder="http://192.168.1.11:24000/">
-          <div class="field-help">Paste the Local UI base URL. Hostnames are intentionally not supported; use localhost or an IP literal.</div>
+          <input id="external-local-ui-url" name="external_local_ui_url" autocomplete="url" inputmode="url" spellcheck="false" aria-describedby="external-local-ui-url-help settings-error" placeholder="http://192.168.1.11:24000/">
+          <div id="external-local-ui-url-help" class="field-help">Paste the Local UI base URL. Hostnames are intentionally not supported; use localhost or an IP literal.</div>
         </div>
       </div>
     </section>
@@ -124,18 +125,18 @@ function desktopSettingsSectionsHTML(hostThisDeviceStateNote: string, bootstrapS
       <h2>Host This Device</h2>
       <p class="section-note">
         Use <code>127.0.0.1:0</code> for the default loopback-only dynamic port, or an explicit address such as <code>0.0.0.0:24000</code> to make this Desktop reachable on your LAN.
-        <span id="host-this-device-state-note" class="state-note">${escapeHTML(hostThisDeviceStateNote)}</span>
+        <span id="host-this-device-state-note" class="state-note" aria-live="polite">${escapeHTML(hostThisDeviceStateNote)}</span>
       </p>
       <div class="grid">
         <div class="field">
           <label class="field-label" for="local-ui-bind">Local UI bind address</label>
-          <input id="local-ui-bind" name="local_ui_bind" autocomplete="off" spellcheck="false">
-          <div class="field-help">Non-loopback Local UI binds require a Local UI password.</div>
+          <input id="local-ui-bind" name="local_ui_bind" autocomplete="off" spellcheck="false" aria-describedby="local-ui-bind-help settings-error">
+          <div id="local-ui-bind-help" class="field-help">Non-loopback Local UI binds require a Local UI password.</div>
         </div>
         <div class="field">
           <label class="field-label" for="local-ui-password">Local UI password</label>
-          <input id="local-ui-password" name="local_ui_password" type="password" autocomplete="new-password" spellcheck="false">
-          <div class="field-help">Desktop stores this secret locally and passes it through <code>--password-env</code>.</div>
+          <input id="local-ui-password" name="local_ui_password" type="password" autocomplete="new-password" spellcheck="false" aria-describedby="local-ui-password-help settings-error">
+          <div id="local-ui-password-help" class="field-help">Desktop stores this secret locally and passes it through <code>--password-env</code>.</div>
         </div>
       </div>
     </section>
@@ -145,23 +146,23 @@ function desktopSettingsSectionsHTML(hostThisDeviceStateNote: string, bootstrapS
       <h2>Register to Redeven on next start</h2>
       <p class="section-note">
         These values are treated as a one-shot bootstrap request for the next successful desktop-managed start on this device, then cleared automatically.
-        <span id="bootstrap-state-note" class="state-note">${escapeHTML(bootstrapStateNote)}</span>
+        <span id="bootstrap-state-note" class="state-note" aria-live="polite">${escapeHTML(bootstrapStateNote)}</span>
       </p>
       <div class="grid two">
         <div class="field">
           <label class="field-label" for="controlplane-url">Control plane URL</label>
-          <input id="controlplane-url" name="controlplane_url" autocomplete="off" spellcheck="false">
+          <input id="controlplane-url" name="controlplane_url" autocomplete="url" inputmode="url" spellcheck="false" aria-describedby="settings-error">
         </div>
         <div class="field">
           <label class="field-label" for="env-id">Environment ID</label>
-          <input id="env-id" name="env_id" autocomplete="off" spellcheck="false">
+          <input id="env-id" name="env_id" autocomplete="off" spellcheck="false" aria-describedby="settings-error">
         </div>
       </div>
       <div class="grid">
         <div class="field">
           <label class="field-label" for="env-token">Environment token</label>
-          <input id="env-token" name="env_token" type="password" autocomplete="off" spellcheck="false">
-          <div class="field-help">Desktop passes this secret through <code>--env-token-env</code> instead of putting it in the process arguments.</div>
+          <input id="env-token" name="env_token" type="password" autocomplete="off" spellcheck="false" aria-describedby="env-token-help settings-error">
+          <div id="env-token-help" class="field-help">Desktop passes this secret through <code>--env-token-env</code> instead of putting it in the process arguments.</div>
         </div>
       </div>
     </section>
@@ -206,13 +207,35 @@ export function buildSettingsPageHTML(
         --danger: ${desktopTheme.danger};
       }
       * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
       body {
         margin: 0;
         min-height: 100vh;
         background: var(--bg);
         color: var(--text);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: "Aptos", "Avenir Next", "Segoe UI Variable", sans-serif;
         padding: calc(24px + ${titleBarInset}) 24px 24px;
+      }
+      input,
+      button {
+        font: inherit;
+      }
+      .skip-link {
+        position: absolute;
+        left: 24px;
+        top: calc(8px + ${titleBarInset});
+        z-index: 10;
+        padding: 0.6rem 0.9rem;
+        border-radius: 999px;
+        background: var(--accent);
+        color: var(--accent-text);
+        text-decoration: none;
+        transform: translateY(-220%);
+      }
+      .skip-link:focus-visible {
+        transform: translateY(0);
+        outline: 2px solid color-mix(in srgb, var(--accent) 35%, white);
+        outline-offset: 3px;
       }
       main {
         width: min(880px, 100%);
@@ -311,9 +334,20 @@ export function buildSettingsPageHTML(
         padding: 0 14px;
         font-size: 14px;
       }
+      input:focus-visible,
+      button:focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--accent) 40%, white);
+        outline-offset: 2px;
+      }
       .choice-grid {
         display: grid;
         gap: 12px;
+      }
+      fieldset {
+        margin: 0;
+        min-width: 0;
+        padding: 0;
+        border: 0;
       }
       .choice-option {
         display: grid;
@@ -325,6 +359,14 @@ export function buildSettingsPageHTML(
         border: 1px solid var(--border);
         background: var(--surface);
         cursor: pointer;
+      }
+      .choice-option:has(input:checked) {
+        border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+      }
+      .choice-option:has(input:focus-visible) {
+        outline: 2px solid color-mix(in srgb, var(--accent) 40%, white);
+        outline-offset: 2px;
       }
       .choice-option input {
         width: 18px;
@@ -392,27 +434,38 @@ export function buildSettingsPageHTML(
         opacity: 0.65;
         cursor: wait;
       }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
       @media (max-width: 720px) {
         body { padding: calc(12px + ${titleBarInset}) 12px 12px; }
         main { padding: 22px; border-radius: 18px; }
         .grid.two { grid-template-columns: 1fr; }
         .actions { flex-direction: column-reverse; }
         button { width: 100%; }
+        .skip-link { left: 12px; }
       }
     </style>
   </head>
   <body>
-    <main>
+    <a class="skip-link" href="#settings-main">Skip to main content</a>
+    <main id="settings-main" tabindex="-1">
       <div class="hero">
         <p class="eyebrow">Redeven Desktop</p>
         <h1>${escapeHTML(pageTitle)}</h1>
-        <p class="lead">${escapeHTML(pageLead(mode))}</p>
+        <p id="page-lead" class="lead">${escapeHTML(pageLead(mode))}</p>
       </div>
-      <form id="settings-form">
+      <form id="settings-form" aria-describedby="page-lead settings-error">
         ${modeCalloutHTML(mode, externalMode)}
         ${bodyHTML}
 
-        <div id="error" class="error">${escapeHTML(error)}</div>
+        <div id="settings-error" class="error" role="alert" aria-live="assertive" tabindex="-1">${escapeHTML(error)}</div>
 
         <div class="actions">
           <button id="cancel" type="button">Cancel</button>
@@ -427,7 +480,7 @@ export function buildSettingsPageHTML(
       const state = JSON.parse(document.getElementById('redeven-settings-state').textContent || '{}');
       const mode = JSON.parse(document.getElementById('redeven-settings-mode').textContent || '"desktop_settings"');
       const form = document.getElementById('settings-form');
-      const errorEl = document.getElementById('error');
+      const errorEl = document.getElementById('settings-error');
       const cancelButton = document.getElementById('cancel');
       const saveButton = document.getElementById('save');
       const fields = {
@@ -461,7 +514,7 @@ export function buildSettingsPageHTML(
       function syncTargetMode() {
         const externalMode = selectedTargetKind() === 'external_local_ui';
         if (externalLocalUIURLRow) {
-          externalLocalUIURLRow.style.display = externalMode ? 'grid' : 'none';
+          externalLocalUIURLRow.hidden = !externalMode;
         }
         if (fields.external_local_ui_url) {
           fields.external_local_ui_url.disabled = !externalMode;
@@ -499,6 +552,10 @@ export function buildSettingsPageHTML(
         const text = String(message || '').trim();
         errorEl.textContent = text;
         errorEl.style.display = text ? 'block' : 'none';
+        errorEl.setAttribute('aria-hidden', text ? 'false' : 'true');
+        if (text) {
+          queueMicrotask(() => errorEl.focus());
+        }
       }
 
       cancelButton.addEventListener('click', () => {
@@ -530,6 +587,13 @@ export function buildSettingsPageHTML(
           return;
         }
       });
+
+      if (errorEl.textContent.trim()) {
+        errorEl.setAttribute('aria-hidden', 'false');
+        queueMicrotask(() => errorEl.focus());
+      } else {
+        errorEl.setAttribute('aria-hidden', 'true');
+      }
     </script>
   </body>
 </html>`;

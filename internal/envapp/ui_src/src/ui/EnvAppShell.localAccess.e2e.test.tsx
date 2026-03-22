@@ -414,6 +414,46 @@ describe('EnvAppShell local access gate', () => {
     }
   });
 
+  it('labels the password field, links helper/error text, and restores focus after unlock failures', async () => {
+    unlockLocalAccessMock.mockRejectedValueOnce(new Error('Wrong password.'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const label = host.querySelector('label[for="redeven-access-password"]');
+      const input = host.querySelector('#redeven-access-password') as HTMLInputElement | null;
+      const help = host.querySelector('#redeven-access-password-help');
+      const notice = host.querySelector('#redeven-access-notice');
+
+      expect(label?.textContent).toContain('Access password');
+      expect(input).toBeTruthy();
+      expect(input?.getAttribute('aria-describedby')).toContain('redeven-access-password-help');
+      expect(help?.textContent).toContain('Use the full Local UI password');
+      expect(notice?.textContent).toContain('Password verification stays inside the agent-managed session');
+
+      input!.value = 'bad-secret';
+      input!.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+      await flushAsync();
+      await flushAsync();
+
+      const error = host.querySelector('#redeven-access-error');
+      expect(error?.getAttribute('role')).toBe('alert');
+      expect(error?.textContent).toContain('Wrong password.');
+      expect(input?.getAttribute('aria-invalid')).toBe('true');
+      expect(document.activeElement).toBe(input);
+    } finally {
+      dispose();
+    }
+  });
+
   it('reuses an existing unlocked local session without prompting for password', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: true });
 

@@ -883,96 +883,95 @@ function ThreadCard(props: {
     if (props.unread) return 'unread';
     return 'none';
   };
+  const deleteLabel = () => `Delete chat ${title()}`;
 
   return (
-    <button
-      type="button"
+    <div
       data-thread-id={props.thread.thread_id}
-      class={`group relative flex items-start gap-2 w-full rounded-lg px-2.5 py-2 text-left transition-all duration-150 cursor-pointer border ${
+      class={`group relative w-full rounded-lg border transition-all duration-150 ${
         props.active
           ? 'bg-sidebar-accent text-sidebar-foreground border-border/20 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
           : 'text-sidebar-foreground/80 border-transparent hover:bg-sidebar-accent/60 hover:border-border/15 hover:shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
       }`}
-      onClick={props.onClick}
     >
       {/* Left accent bar */}
       <Show when={props.active}>
         <div class="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-primary" />
       </Show>
 
-      {/* Status dot */}
-      <div class="relative mt-1.5 shrink-0 w-2 h-2" data-thread-indicator={indicatorMode()}>
-        <Show when={indicatorMode() === 'running'}>
-          <>
-            <div
-              class={`w-2 h-2 rounded-full ${statusDotClass(status())}`}
-              title={statusLabel(status())}
-            />
-            <Show when={status() === 'running'}>
-              <div class="absolute inset-0 w-2 h-2 rounded-full bg-primary/50 animate-pulse" />
-            </Show>
-          </>
-        </Show>
-        <Show when={indicatorMode() === 'unread'}>
-          <div class="w-2 h-2 rounded-full bg-primary" title="Unread" />
-        </Show>
-      </div>
-
-      {/* Content area */}
-      <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-        {/* Title row */}
-        <div class="flex items-center gap-1 min-w-0">
-          <span class="text-xs font-medium truncate flex-1">{title()}</span>
-          <Show when={Number(props.thread.queued_turn_count ?? 0) > 0}>
-            <span class="inline-flex items-center rounded-full border border-primary/20 bg-primary/8 px-1.5 py-0.5 text-[10px] font-semibold text-primary shrink-0">
-              {props.thread.queued_turn_count}
-            </span>
-          </Show>
-          {/* Timestamp / switches to delete button on hover (opacity avoids layout jump). */}
-          <div class="shrink-0 w-5 h-5 flex items-center justify-center relative">
-            <Show
-              when={props.canDelete}
-              fallback={
-                <span class="text-[10px] text-muted-foreground/60 pointer-events-none select-none">
-                  {timeStr()}
-                </span>
-              }
-            >
-              <span class="text-[10px] text-muted-foreground/60 transition-opacity duration-150 group-hover:opacity-0 pointer-events-none select-none">
-                {timeStr()}
-              </span>
+      <button
+        type="button"
+        class="flex w-full items-start gap-2 px-2.5 py-2 pr-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
+        onClick={props.onClick}
+      >
+        {/* Status dot */}
+        <div class="relative mt-1.5 h-2 w-2 shrink-0" data-thread-indicator={indicatorMode()}>
+          <Show when={indicatorMode() === 'running'}>
+            <>
               <div
-                role="button"
-                tabIndex={0}
-                class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 rounded text-muted-foreground/60 hover:text-error hover:bg-error/10 transition-all duration-150 cursor-pointer"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (props.connected) props.onDelete();
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.stopPropagation();
-                    if (props.connected) props.onDelete();
-                  }
-                }}
-                title="Delete chat"
-              >
-                <X class="w-3.5 h-3.5" />
-              </div>
-            </Show>
-          </div>
+                class={`h-2 w-2 rounded-full ${statusDotClass(status())}`}
+                title={statusLabel(status())}
+              />
+              <Show when={status() === 'running'}>
+                <div class="absolute inset-0 h-2 w-2 rounded-full bg-primary/50 animate-pulse" />
+              </Show>
+            </>
+          </Show>
+          <Show when={indicatorMode() === 'unread'}>
+            <div class="h-2 w-2 rounded-full bg-primary" title="Unread" />
+          </Show>
         </div>
 
-        {/* Preview text / running state */}
-        <Show when={status() === 'running'} fallback={
-          <Show when={!!preview()}>
-            <p class="text-[11px] text-muted-foreground/50 truncate leading-tight">{preview()}</p>
+        {/* Content area */}
+        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+          {/* Title row */}
+          <div class="flex min-w-0 items-center gap-1">
+            <span class="flex-1 truncate text-xs font-medium">{title()}</span>
+            <Show when={Number(props.thread.queued_turn_count ?? 0) > 0}>
+              <span class="inline-flex shrink-0 items-center rounded-full border border-primary/20 bg-primary/8 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                {props.thread.queued_turn_count}
+              </span>
+            </Show>
+          </div>
+
+          {/* Preview text / running state */}
+          <Show when={status() === 'running'} fallback={
+            <Show when={!!preview()}>
+              <p class="truncate text-[11px] leading-tight text-muted-foreground/50">{preview()}</p>
+            </Show>
+          }>
+            <ProcessingIndicator variant="minimal" status="Working" class="h-3.5" />
           </Show>
-        }>
-          <ProcessingIndicator variant="minimal" status="Working" class="h-3.5" />
+        </div>
+      </button>
+
+      <div class="pointer-events-none absolute right-2.5 top-2 flex h-5 min-w-7 items-center justify-end">
+        <Show
+          when={props.canDelete}
+          fallback={
+            <span class="select-none text-[10px] text-muted-foreground/60" aria-hidden="true">
+              {timeStr()}
+            </span>
+          }
+        >
+          <span
+            class="select-none text-[10px] text-muted-foreground/60 transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
+            aria-hidden="true"
+          >
+            {timeStr()}
+          </span>
+          <button
+            type="button"
+            class="pointer-events-auto absolute inset-0 flex items-center justify-center rounded text-muted-foreground/60 opacity-0 transition-all duration-150 hover:bg-error/10 hover:text-error focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 group-hover:opacity-100 group-focus-within:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label={deleteLabel()}
+            disabled={!props.connected}
+            onClick={() => props.onDelete()}
+          >
+            <X class="h-3.5 w-3.5" />
+          </button>
         </Show>
       </div>
-    </button>
+    </div>
   );
 }
 

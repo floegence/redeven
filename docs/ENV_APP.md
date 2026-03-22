@@ -13,6 +13,29 @@ Key points:
 - Truncated reads and Monaco load failures fall back to the lightweight Shiki/plain-text preview path so preview remains responsive.
 - Desktop-managed runs can promote serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` and `file_browser` today).
 
+## Accessibility baseline
+
+Env App targets a WCAG 2.2 AA baseline. The implementation follows an upstream-first split:
+
+- Shared shell landmarks, skip-link behavior, main-region targeting, dropdown semantics, and generic tab behavior come from released `@floegence/floe-webapp-*` packages.
+- Redeven-specific code only handles product-owned surfaces such as the local access gate, AI sidebar, custom tool blocks, git widgets, terminal integration, and file-browser composition.
+
+Contributor rules for this surface:
+
+- Prefer upstream primitives and contracts over page-level ARIA patching.
+- Use real buttons, inputs, fieldsets, tabs, and panels for interactive behavior. Do not nest interactive elements.
+- Keep visible focus indicators intact. Do not suppress focus rings on terminal, file, or chat surfaces without providing an equally visible replacement.
+- When a control behaves like tabs, it must implement tab semantics completely, including roving `tabindex`, arrow key handling, and `aria-controls` / `aria-labelledby` pairing.
+- Status and validation feedback should be programmatically associated with the relevant control, and blocking failures should move focus to the surfaced error or recovery target.
+
+Current product-specific accessibility contract:
+
+- The access gate uses explicit labels, help text, error associations, and focused recovery after unlock failures.
+- AI thread rows keep thread selection and deletion as separate buttons instead of nested interactive content.
+- Tool-call disclosures use a dedicated disclosure button, stable controlled content IDs, and separate approval actions. Web-search domain filters are grouped toggle buttons rather than fake tabs.
+- Git view switching and branch subviews use keyboard-complete tablists with roving focus.
+- The terminal surface keeps a visible focus treatment. Product-owned terminal, Ask Flower composer, and file-browser controls were audited during this work and intentionally kept on their existing semantic button/input patterns.
+
 ## What runs where
 
 Browser side:
