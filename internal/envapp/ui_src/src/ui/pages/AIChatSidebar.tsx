@@ -590,6 +590,7 @@ export function AIChatSidebar() {
                                 thread={thread()}
                                 active={threadID() === ctx.activeThreadId()}
                                 isRunning={ctx.isThreadRunning(threadID())}
+                                unread={ctx.isThreadUnread(threadID())}
                                 connected={protocol.status() === 'connected'}
                                 canDelete={canManageChats()}
                                 onClick={() => ctx.selectThreadId(threadID())}
@@ -859,6 +860,7 @@ function ThreadCard(props: {
   thread: ThreadView;
   active: boolean;
   isRunning: boolean;
+  unread: boolean;
   connected: boolean;
   canDelete: boolean;
   onClick: () => void;
@@ -876,10 +878,16 @@ function ThreadCard(props: {
   const title = () => props.thread.title?.trim() || 'New chat';
   const preview = () => props.thread.last_message_preview?.trim() || '';
   const timeStr = () => fmtShortTime(props.thread.updated_at_unix_ms);
+  const indicatorMode = (): 'running' | 'unread' | 'none' => {
+    if (props.isRunning) return 'running';
+    if (props.unread) return 'unread';
+    return 'none';
+  };
 
   return (
     <button
       type="button"
+      data-thread-id={props.thread.thread_id}
       class={`group relative flex items-start gap-2 w-full rounded-lg px-2.5 py-2 text-left transition-all duration-150 cursor-pointer border ${
         props.active
           ? 'bg-sidebar-accent text-sidebar-foreground border-border/20 shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
@@ -893,14 +901,20 @@ function ThreadCard(props: {
       </Show>
 
       {/* Status dot */}
-      <div class="relative mt-1.5 shrink-0">
-        <div
-          class={`w-2 h-2 rounded-full ${statusDotClass(status())}`}
-          title={statusLabel(status())}
-        />
-        {/* Running pulse animation */}
-        <Show when={status() === 'running'}>
-          <div class="absolute inset-0 w-2 h-2 rounded-full bg-primary/50 animate-pulse" />
+      <div class="relative mt-1.5 shrink-0 w-2 h-2" data-thread-indicator={indicatorMode()}>
+        <Show when={indicatorMode() === 'running'}>
+          <>
+            <div
+              class={`w-2 h-2 rounded-full ${statusDotClass(status())}`}
+              title={statusLabel(status())}
+            />
+            <Show when={status() === 'running'}>
+              <div class="absolute inset-0 w-2 h-2 rounded-full bg-primary/50 animate-pulse" />
+            </Show>
+          </>
+        </Show>
+        <Show when={indicatorMode() === 'unread'}>
+          <div class="w-2 h-2 rounded-full bg-primary" title="Unread" />
         </Show>
       </div>
 

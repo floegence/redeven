@@ -16,6 +16,14 @@ import { useEnvContext } from './EnvContext';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { readUIStorageItem, removeUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { hasRWXPermissions } from './aiPermissions';
+import {
+  buildThreadReadStateBaseline,
+  markThreadReadFromSnapshot,
+  normalizeThreadReadStateByThread,
+  threadHasUnreadFromSnapshot,
+  type ThreadReadStateByThread,
+  type ThreadUnreadSnapshot,
+} from './aiThreadUnreadState';
 
 // ---- API response types (shared between sidebar and main page) ----
 
@@ -106,6 +114,7 @@ export type ListThreadMessagesResponse = Readonly<{
 
 const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
 const DRAFT_WORKING_DIR_STORAGE_KEY = 'redeven_ai_draft_working_dir';
+const THREAD_READ_STATE_STORAGE_KEY_PREFIX = 'redeven_ai_thread_read_state_v1';
 
 function readPersistedActiveThreadId(): string | null {
   const v = String(readUIStorageItem(ACTIVE_THREAD_STORAGE_KEY) ?? '').trim();
@@ -309,6 +318,7 @@ export interface AIChatContextValue {
     sourceFollowupId?: string;
   }) => Promise<{ runId?: string; consumedWaitingPromptId?: string; appliedExecutionMode?: ExecutionMode }>;
   isThreadRunning: (threadId: string | null | undefined) => boolean;
+  isThreadUnread: (threadId: string | null | undefined) => boolean;
   onRealtimeEvent: (handler: (event: AIRealtimeEvent) => void) => () => void;
 }
 
@@ -434,8 +444,15 @@ export function createAIChatContextValue(): AIChatContextValue {
   const [pendingRunByThread, setPendingRunByThread] = createSignal<Record<string, true>>({});
   const [waitingPromptByThread, setWaitingPromptByThread] = createSignal<Record<string, WaitingPromptView | null>>({});
   const [structuredPromptDraftsByPrompt, setStructuredPromptDraftsByPrompt] = createSignal<Record<string, Record<string, StructuredPromptAnswerDraft>>>({});
+  const [threadReadStateByThread, setThreadReadStateByThread] = createSignal<ThreadReadStateByThread>({});
+  const [threadReadStateBootstrapped, setThreadReadStateBootstrapped] = createSignal(false);
 
   const realtimeListeners = new Set<(event: AIRealtimeEvent) => void>();
+
+  const threadReadStateStorageKey = createMemo(() => {
+    const envID = String(env.env_id() ?? '').trim();
+    return envID ? `${THREAD_READ_STATE_STORAGE_KEY_PREFIX}:${envID}` : '';
+  });
 
   const emitRealtimeEvent = (event: AIRealtimeEvent) => {
     for (const handler of realtimeListeners) {
@@ -454,6 +471,16 @@ export function createAIChatContextValue(): AIChatContextValue {
     return runId || null;
   };
 
+  const threadById = createMemo(() => {
+    const map = new Map<string, ThreadView>();
+    for (const thread of threads()?.threads ?? []) {
+      const tid = String(thread?.thread_id ?? '').trim();
+      if (!tid) continue;
+      map.set(tid, thread);
+    }
+    return map;
+  });
+
   const waitingPromptForThread = (threadId: string | null | undefined): WaitingPromptView | null => {
     const tid = String(threadId ?? '').trim();
     if (!tid) return null;
@@ -463,10 +490,75 @@ export function createAIChatContextValue(): AIChatContextValue {
       return realtimeMap[tid] ?? null;
     }
 
-    const list = threads()?.threads ?? [];
-    const th = list.find((it) => String(it.thread_id ?? '').trim() === tid);
+    const th = threadById().get(tid);
     return normalizeWaitingPrompt((th as any)?.waiting_prompt);
   };
+
+  const unreadSnapshotForThread = (threadId: string | null | undefined): ThreadUnreadSnapshot => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) {
+      return { lastMessageAtUnixMs: 0 };
+    }
+
+    const thread = threadById().get(tid);
+    const waitingPrompt = waitingPromptForThread(tid);
+    return {
+      lastMessageAtUnixMs: Math.max(0, Math.floor(Number(thread?.last_message_at_unix_ms ?? 0) || 0)),
+      waitingPromptId: String(waitingPrompt?.prompt_id ?? '').trim() || undefined,
+    };
+  };
+
+  createEffect(() => {
+    const key = threadReadStateStorageKey();
+    if (!key) {
+      setThreadReadStateByThread({});
+      setThreadReadStateBootstrapped(false);
+      return;
+    }
+
+    const raw = readUIStorageItem(key);
+    if (raw === null) {
+      setThreadReadStateByThread({});
+      setThreadReadStateBootstrapped(false);
+      return;
+    }
+
+    try {
+      setThreadReadStateByThread(normalizeThreadReadStateByThread(JSON.parse(raw)));
+      setThreadReadStateBootstrapped(true);
+    } catch {
+      setThreadReadStateByThread({});
+      setThreadReadStateBootstrapped(false);
+    }
+  });
+
+  createEffect(() => {
+    const key = threadReadStateStorageKey();
+    if (!key || threadReadStateBootstrapped()) return;
+    if (threads.loading || threads.error) return;
+
+    const list = threads();
+    if (!list) return;
+
+    const seeded = {
+      ...buildThreadReadStateBaseline(list.threads.map((thread) => ({
+        threadId: thread.thread_id,
+        snapshot: {
+          lastMessageAtUnixMs: thread.last_message_at_unix_ms,
+          waitingPromptId: String(thread.waiting_prompt?.prompt_id ?? '').trim() || undefined,
+        },
+      }))),
+      ...threadReadStateByThread(),
+    };
+    setThreadReadStateByThread(seeded);
+    setThreadReadStateBootstrapped(true);
+  });
+
+  createEffect(() => {
+    const key = threadReadStateStorageKey();
+    if (!key || !threadReadStateBootstrapped()) return;
+    writeUIStorageItem(key, JSON.stringify(threadReadStateByThread()));
+  });
 
   const waitingPromptKey = (threadId: string, promptId: string): string => {
     const tid = String(threadId ?? '').trim();
@@ -649,6 +741,13 @@ export function createAIChatContextValue(): AIChatContextValue {
     const list = threads()?.threads ?? [];
     const th = list.find((it) => String(it.thread_id ?? '').trim() === tid);
     return isActiveRunStatus(normalizeThreadRunStatus(th?.run_status));
+  };
+
+  const isThreadUnread = (threadId: string | null | undefined): boolean => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return false;
+    if (tid === String(activeThreadId() ?? '').trim()) return false;
+    return threadHasUnreadFromSnapshot(threadReadStateByThread(), tid, unreadSnapshotForThread(tid));
   };
 
   const onRealtimeEvent = (handler: (event: AIRealtimeEvent) => void) => {
@@ -876,6 +975,13 @@ export function createAIChatContextValue(): AIChatContextValue {
 
     selectThreadId(tid);
     bumpThreadsSeq();
+  });
+
+  createEffect(() => {
+    const tid = String(activeThreadId() ?? '').trim();
+    if (!tid) return;
+
+    setThreadReadStateByThread((prev) => markThreadReadFromSnapshot(prev, tid, unreadSnapshotForThread(tid)));
   });
 
   // Subscribe to full-fidelity events for the currently active thread only.
@@ -1212,6 +1318,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     getStructuredPromptDrafts,
     submitStructuredPromptResponse,
     isThreadRunning,
+    isThreadUnread,
     onRealtimeEvent,
   };
 }
