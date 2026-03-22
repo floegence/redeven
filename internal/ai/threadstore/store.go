@@ -30,6 +30,11 @@ type Store struct {
 	db *sql.DB
 }
 
+const (
+	ThreadTitleSourceAuto = "auto"
+	ThreadTitleSourceUser = "user"
+)
+
 func Open(path string) (*Store, error) {
 	p := filepath.Clean(strings.TrimSpace(path))
 	if p == "" {
@@ -62,18 +67,23 @@ func (s *Store) Close() error {
 }
 
 type Thread struct {
-	ThreadID             string `json:"thread_id"`
-	EndpointID           string `json:"endpoint_id"`
-	NamespacePublicID    string `json:"namespace_public_id"`
-	ModelID              string `json:"model_id"`
-	ModelLocked          bool   `json:"model_locked"`
-	ExecutionMode        string `json:"execution_mode"`
-	WorkingDir           string `json:"working_dir"`
-	Title                string `json:"title"`
-	RunStatus            string `json:"run_status"`
-	RunUpdatedAtUnixMs   int64  `json:"run_updated_at_unix_ms"`
-	RunError             string `json:"run_error"`
-	WaitingUserInputJSON string `json:"waiting_user_input_json"`
+	ThreadID               string `json:"thread_id"`
+	EndpointID             string `json:"endpoint_id"`
+	NamespacePublicID      string `json:"namespace_public_id"`
+	ModelID                string `json:"model_id"`
+	ModelLocked            bool   `json:"model_locked"`
+	ExecutionMode          string `json:"execution_mode"`
+	WorkingDir             string `json:"working_dir"`
+	Title                  string `json:"title"`
+	TitleSource            string `json:"title_source"`
+	TitleGeneratedAtUnixMs int64  `json:"title_generated_at_unix_ms"`
+	TitleInputMessageID    string `json:"title_input_message_id"`
+	TitleModelID           string `json:"title_model_id"`
+	TitlePromptVersion     string `json:"title_prompt_version"`
+	RunStatus              string `json:"run_status"`
+	RunUpdatedAtUnixMs     int64  `json:"run_updated_at_unix_ms"`
+	RunError               string `json:"run_error"`
+	WaitingUserInputJSON   string `json:"waiting_user_input_json"`
 
 	CreatedByUserPublicID string `json:"created_by_user_public_id"`
 	CreatedByUserEmail    string `json:"created_by_user_email"`
@@ -132,6 +142,62 @@ type QueuedTurn struct {
 type ThreadsCursor struct {
 	UpdatedAtUnixMs int64
 	ThreadID        string
+}
+
+const threadSelectColumnsSQL = `
+  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
+  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
+  run_status, run_updated_at_unix_ms, run_error,
+  waiting_user_input_json,
+  created_by_user_public_id, created_by_user_email,
+  updated_by_user_public_id, updated_by_user_email,
+  created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
+`
+
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanThreadRow(scan rowScanner, t *Thread) error {
+	if t == nil {
+		return errors.New("nil thread")
+	}
+	var modelLockedInt int
+	if err := scan.Scan(
+		&t.ThreadID,
+		&t.EndpointID,
+		&t.NamespacePublicID,
+		&t.ModelID,
+		&modelLockedInt,
+		&t.ExecutionMode,
+		&t.WorkingDir,
+		&t.Title,
+		&t.TitleSource,
+		&t.TitleGeneratedAtUnixMs,
+		&t.TitleInputMessageID,
+		&t.TitleModelID,
+		&t.TitlePromptVersion,
+		&t.RunStatus,
+		&t.RunUpdatedAtUnixMs,
+		&t.RunError,
+		&t.WaitingUserInputJSON,
+		&t.CreatedByUserPublicID,
+		&t.CreatedByUserEmail,
+		&t.UpdatedByUserPublicID,
+		&t.UpdatedByUserEmail,
+		&t.CreatedAtUnixMs,
+		&t.UpdatedAtUnixMs,
+		&t.LastMessageAtUnixMs,
+		&t.LastMessagePreview,
+	); err != nil {
+		return err
+	}
+	t.ModelLocked = modelLockedInt != 0
+	t.TitleSource = normalizeThreadTitleSource(t.TitleSource)
+	t.TitleInputMessageID = strings.TrimSpace(t.TitleInputMessageID)
+	t.TitleModelID = strings.TrimSpace(t.TitleModelID)
+	t.TitlePromptVersion = strings.TrimSpace(t.TitlePromptVersion)
+	return nil
 }
 
 // EncodeCursor encodes a cursor as a URL-safe base64 string.
@@ -217,18 +283,13 @@ func (s *Store) ListThreads(ctx context.Context, endpointID string, limit int, c
 
 	q := fmt.Sprintf(`
 SELECT
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
-  run_status, run_updated_at_unix_ms, run_error,
-  waiting_user_input_json,
-  created_by_user_public_id, created_by_user_email,
-  updated_by_user_public_id, updated_by_user_email,
-  created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
+%s
 FROM ai_threads
 WHERE endpoint_id = ?
 %s
 ORDER BY updated_at_unix_ms DESC, thread_id DESC
 LIMIT ?
-`, where)
+`, threadSelectColumnsSQL, where)
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -239,32 +300,9 @@ LIMIT ?
 	out := make([]Thread, 0, limit)
 	for rows.Next() {
 		var t Thread
-		var modelLockedInt int
-		if err := rows.Scan(
-			&t.ThreadID,
-			&t.EndpointID,
-			&t.NamespacePublicID,
-			&t.ModelID,
-			&modelLockedInt,
-			&t.ExecutionMode,
-			&t.WorkingDir,
-			&t.Title,
-			&t.RunStatus,
-			&t.RunUpdatedAtUnixMs,
-			&t.RunError,
-			&t.WaitingUserInputJSON,
-			&t.CreatedByUserPublicID,
-			&t.CreatedByUserEmail,
-			&t.UpdatedByUserPublicID,
-			&t.UpdatedByUserEmail,
-			&t.CreatedAtUnixMs,
-			&t.UpdatedAtUnixMs,
-			&t.LastMessageAtUnixMs,
-			&t.LastMessagePreview,
-		); err != nil {
+		if err := scanThreadRow(rows, &t); err != nil {
 			return nil, "", err
 		}
-		t.ModelLocked = modelLockedInt != 0
 		out = append(out, t)
 	}
 	if err := rows.Err(); err != nil {
@@ -292,46 +330,18 @@ func (s *Store) GetThread(ctx context.Context, endpointID string, threadID strin
 	}
 
 	var t Thread
-	var modelLockedInt int
-	err := s.db.QueryRowContext(ctx, `
+	err := scanThreadRow(s.db.QueryRowContext(ctx, fmt.Sprintf(`
 SELECT
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
-  run_status, run_updated_at_unix_ms, run_error,
-  waiting_user_input_json,
-  created_by_user_public_id, created_by_user_email,
-  updated_by_user_public_id, updated_by_user_email,
-  created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
+%s
 FROM ai_threads
 WHERE endpoint_id = ? AND thread_id = ?
-`, endpointID, threadID).Scan(
-		&t.ThreadID,
-		&t.EndpointID,
-		&t.NamespacePublicID,
-		&t.ModelID,
-		&modelLockedInt,
-		&t.ExecutionMode,
-		&t.WorkingDir,
-		&t.Title,
-		&t.RunStatus,
-		&t.RunUpdatedAtUnixMs,
-		&t.RunError,
-		&t.WaitingUserInputJSON,
-		&t.CreatedByUserPublicID,
-		&t.CreatedByUserEmail,
-		&t.UpdatedByUserPublicID,
-		&t.UpdatedByUserEmail,
-		&t.CreatedAtUnixMs,
-		&t.UpdatedAtUnixMs,
-		&t.LastMessageAtUnixMs,
-		&t.LastMessagePreview,
-	)
+`, threadSelectColumnsSQL), endpointID, threadID), &t)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	t.ModelLocked = modelLockedInt != 0
 	return &t, nil
 }
 
@@ -350,6 +360,13 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	t.ExecutionMode = normalizeExecutionMode(t.ExecutionMode)
 	t.WorkingDir = strings.TrimSpace(t.WorkingDir)
 	t.Title = strings.TrimSpace(t.Title)
+	t.TitleSource = normalizeThreadTitleSource(t.TitleSource)
+	if t.TitleSource == "" && t.Title != "" {
+		t.TitleSource = ThreadTitleSourceUser
+	}
+	t.TitleInputMessageID = strings.TrimSpace(t.TitleInputMessageID)
+	t.TitleModelID = strings.TrimSpace(t.TitleModelID)
+	t.TitlePromptVersion = strings.TrimSpace(t.TitlePromptVersion)
 	t.RunStatus = normalizeRunStatus(t.RunStatus)
 	t.RunError = strings.TrimSpace(t.RunError)
 	t.WaitingUserInputJSON = strings.TrimSpace(t.WaitingUserInputJSON)
@@ -376,13 +393,14 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	_, err := s.db.ExecContext(ctx, `
 	INSERT INTO ai_threads(
 	  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
+	  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
 	  run_status, run_updated_at_unix_ms, run_error,
 	  waiting_user_input_json,
 	  created_by_user_public_id, created_by_user_email,
 	  updated_by_user_public_id, updated_by_user_email,
 	  created_at_unix_ms, updated_at_unix_ms,
 	  last_message_at_unix_ms, last_message_preview
-	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		t.ThreadID,
 		t.EndpointID,
@@ -392,6 +410,11 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		t.ExecutionMode,
 		t.WorkingDir,
 		t.Title,
+		t.TitleSource,
+		t.TitleGeneratedAtUnixMs,
+		t.TitleInputMessageID,
+		t.TitleModelID,
+		t.TitlePromptVersion,
 		t.RunStatus,
 		t.RunUpdatedAtUnixMs,
 		t.RunError,
@@ -517,9 +540,17 @@ func (s *Store) RenameThread(ctx context.Context, endpointID string, threadID st
 	now := time.Now().UnixMilli()
 	res, err := s.db.ExecContext(ctx, `
 UPDATE ai_threads
-SET title = ?, updated_at_unix_ms = ?, updated_by_user_public_id = ?, updated_by_user_email = ?
+SET title = ?,
+    title_source = ?,
+    title_generated_at_unix_ms = 0,
+    title_input_message_id = '',
+    title_model_id = '',
+    title_prompt_version = '',
+    updated_at_unix_ms = ?,
+    updated_by_user_public_id = ?,
+    updated_by_user_email = ?
 WHERE endpoint_id = ? AND thread_id = ?
-`, title, now, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
+`, title, ThreadTitleSourceUser, now, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
 	if err != nil {
 		return err
 	}
@@ -528,6 +559,61 @@ WHERE endpoint_id = ? AND thread_id = ?
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+func (s *Store) SetAutoThreadTitle(ctx context.Context, endpointID string, threadID string, title string, inputMessageID string, modelID string, promptVersion string, generatedAtUnixMs int64, updatedByID string, updatedByEmail string) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	title = strings.TrimSpace(title)
+	inputMessageID = strings.TrimSpace(inputMessageID)
+	modelID = strings.TrimSpace(modelID)
+	promptVersion = strings.TrimSpace(promptVersion)
+	if endpointID == "" || threadID == "" || title == "" {
+		return false, errors.New("invalid request")
+	}
+	if len(title) > 200 {
+		return false, errors.New("title too long")
+	}
+	if generatedAtUnixMs <= 0 {
+		generatedAtUnixMs = time.Now().UnixMilli()
+	}
+	res, err := s.db.ExecContext(ctx, `
+UPDATE ai_threads
+SET title = ?,
+    title_source = ?,
+    title_generated_at_unix_ms = ?,
+    title_input_message_id = ?,
+    title_model_id = ?,
+    title_prompt_version = ?,
+    updated_at_unix_ms = ?,
+    updated_by_user_public_id = ?,
+    updated_by_user_email = ?
+WHERE endpoint_id = ? AND thread_id = ?
+  AND TRIM(COALESCE(title, '')) = ''
+  AND LOWER(TRIM(COALESCE(title_source, ''))) != ?
+`, title, ThreadTitleSourceAuto, generatedAtUnixMs, inputMessageID, modelID, promptVersion, generatedAtUnixMs, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID, ThreadTitleSourceUser)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+func normalizeThreadTitleSource(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case ThreadTitleSourceAuto:
+		return ThreadTitleSourceAuto
+	case ThreadTitleSourceUser:
+		return ThreadTitleSourceUser
+	default:
+		return ""
+	}
 }
 
 func normalizeRunStatus(status string) string {
@@ -1125,8 +1211,6 @@ LIMIT 1
 }
 
 // AppendMessage inserts a message into the thread and updates thread metadata in the same transaction.
-//
-// It also sets a default title if the thread title is empty and this is a user message with non-empty text_content.
 func (s *Store) AppendMessage(ctx context.Context, endpointID string, threadID string, m Message, updatedByID string, updatedByEmail string) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, errors.New("store not initialized")
@@ -1169,26 +1253,12 @@ func (s *Store) AppendMessage(ctx context.Context, endpointID string, threadID s
 	}
 
 	preview := buildPreview(m.Role, m.TextContent, m.MessageJSON)
-	titleCandidate := ""
-	if m.Role == "user" {
-		titleCandidate = buildTitleCandidate(m.TextContent)
-	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-
-	// Ensure thread exists (and belongs to the endpoint).
-	var existingTitle string
-	if err := tx.QueryRowContext(ctx, `
-SELECT title
-FROM ai_threads
-WHERE endpoint_id = ? AND thread_id = ?
-`, endpointID, threadID).Scan(&existingTitle); err != nil {
-		return 0, err
-	}
 
 	res, err := tx.ExecContext(ctx, `
 INSERT INTO transcript_messages(
@@ -1216,21 +1286,15 @@ INSERT INTO transcript_messages(
 	rowID, _ := res.LastInsertId()
 
 	// Update thread metadata.
-	nextTitle := strings.TrimSpace(existingTitle)
-	if nextTitle == "" && titleCandidate != "" {
-		nextTitle = titleCandidate
-	}
-	if _, err := tx.ExecContext(ctx, `
+	updateRes, err := tx.ExecContext(ctx, `
 UPDATE ai_threads
-SET title = ?,
-    updated_at_unix_ms = ?,
+SET updated_at_unix_ms = ?,
     updated_by_user_public_id = ?,
     updated_by_user_email = ?,
     last_message_at_unix_ms = ?,
     last_message_preview = ?
 WHERE endpoint_id = ? AND thread_id = ?
 `,
-		nextTitle,
 		m.UpdatedAtUnixMs,
 		strings.TrimSpace(updatedByID),
 		strings.TrimSpace(updatedByEmail),
@@ -1238,8 +1302,12 @@ WHERE endpoint_id = ? AND thread_id = ?
 		preview,
 		endpointID,
 		threadID,
-	); err != nil {
+	)
+	if err != nil {
 		return 0, err
+	}
+	if n, _ := updateRes.RowsAffected(); n == 0 {
+		return 0, sql.ErrNoRows
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -2302,17 +2370,6 @@ func extractTaskCompletePreviewText(raw json.RawMessage) string {
 		return ""
 	}
 	return strings.TrimSpace(payload.Result)
-}
-
-func buildTitleCandidate(text string) string {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return ""
-	}
-	text = strings.ReplaceAll(text, "\n", " ")
-	text = strings.ReplaceAll(text, "\r", " ")
-	text = strings.TrimSpace(text)
-	return truncateRunes(text, 48)
 }
 
 func truncateRunes(s string, max int) string {

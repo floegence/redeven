@@ -345,3 +345,74 @@ func TestThreadCheckpoint_RestoreReplacesDerivedAndPreservesUserTranscript(t *te
 		t.Fatalf("latest checkpoint=%+v, want nil after pop", latest)
 	}
 }
+
+func TestThreadCheckpoint_RestorePreservesTitleMetadata(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	endpointID := "env_cp_title"
+	threadID := "th_cp_title"
+	now := time.Now().UnixMilli()
+
+	if err := s.CreateThread(ctx, Thread{
+		ThreadID:            threadID,
+		EndpointID:          endpointID,
+		ModelID:             "openai/gpt-5-mini",
+		CreatedAtUnixMs:     now,
+		UpdatedAtUnixMs:     now,
+		LastMessageAtUnixMs: 0,
+	}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	updated, err := s.SetAutoThreadTitle(ctx, endpointID, threadID, "Fix flaky checkpoint test", "msg_title_1", "openai/gpt-5-mini", "thread_title_v1", now+1, "u1", "u1@example.com")
+	if err != nil {
+		t.Fatalf("SetAutoThreadTitle baseline: %v", err)
+	}
+	if !updated {
+		t.Fatalf("SetAutoThreadTitle baseline updated=false, want true")
+	}
+
+	cpID := "cp_title_meta"
+	if _, err := s.CreateThreadCheckpoint(ctx, endpointID, threadID, cpID, "run_title_meta", CheckpointKindPreRun); err != nil {
+		t.Fatalf("CreateThreadCheckpoint: %v", err)
+	}
+
+	if err := s.RenameThread(ctx, endpointID, threadID, "User override", "u2", "u2@example.com"); err != nil {
+		t.Fatalf("RenameThread: %v", err)
+	}
+
+	if _, err := s.RestoreThreadCheckpoint(ctx, endpointID, threadID, cpID); err != nil {
+		t.Fatalf("RestoreThreadCheckpoint: %v", err)
+	}
+
+	th, err := s.GetThread(ctx, endpointID, threadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if th == nil {
+		t.Fatalf("thread missing after restore")
+	}
+	if th.Title != "Fix flaky checkpoint test" {
+		t.Fatalf("Title=%q, want restored auto title", th.Title)
+	}
+	if th.TitleSource != ThreadTitleSourceAuto {
+		t.Fatalf("TitleSource=%q, want %q", th.TitleSource, ThreadTitleSourceAuto)
+	}
+	if th.TitleInputMessageID != "msg_title_1" {
+		t.Fatalf("TitleInputMessageID=%q, want msg_title_1", th.TitleInputMessageID)
+	}
+	if th.TitleModelID != "openai/gpt-5-mini" {
+		t.Fatalf("TitleModelID=%q, want openai/gpt-5-mini", th.TitleModelID)
+	}
+	if th.TitlePromptVersion != "thread_title_v1" {
+		t.Fatalf("TitlePromptVersion=%q, want thread_title_v1", th.TitlePromptVersion)
+	}
+}

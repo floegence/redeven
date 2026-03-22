@@ -119,6 +119,139 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 	}
 }
 
+func TestStore_AppendMessage_DoesNotPopulateEmptyTitle(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	if _, err := s.AppendMessage(ctx, "env_1", "th_1", Message{
+		ThreadID:           "th_1",
+		EndpointID:         "env_1",
+		MessageID:          "msg_1",
+		Role:               "user",
+		AuthorUserPublicID: "u1",
+		AuthorUserEmail:    "u1@example.com",
+		Status:             "complete",
+		CreatedAtUnixMs:    123,
+		UpdatedAtUnixMs:    123,
+		TextContent:        "Please investigate the failing regression tests.",
+		MessageJSON:        `{"id":"msg_1","role":"user","blocks":[{"type":"text","content":"Please investigate the failing regression tests."}],"status":"complete","timestamp":123}`,
+	}, "u1", "u1@example.com"); err != nil {
+		t.Fatalf("AppendMessage: %v", err)
+	}
+
+	th, err := s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if th == nil {
+		t.Fatalf("thread missing")
+	}
+	if th.Title != "" {
+		t.Fatalf("Title=%q, want empty", th.Title)
+	}
+	if th.TitleSource != "" {
+		t.Fatalf("TitleSource=%q, want empty", th.TitleSource)
+	}
+	if !strings.Contains(th.LastMessagePreview, "Please investigate") {
+		t.Fatalf("LastMessagePreview=%q, want user preview text", th.LastMessagePreview)
+	}
+}
+
+func TestStore_SetAutoThreadTitle_GuardsAndManualRename(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	updated, err := s.SetAutoThreadTitle(ctx, "env_1", "th_1", "Fix failing regression tests", "msg_1", "openai/gpt-5-mini", "thread_title_v1", 321, "u1", "u1@example.com")
+	if err != nil {
+		t.Fatalf("SetAutoThreadTitle first: %v", err)
+	}
+	if !updated {
+		t.Fatalf("SetAutoThreadTitle first updated=false, want true")
+	}
+
+	th, err := s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread after auto title: %v", err)
+	}
+	if th == nil {
+		t.Fatalf("thread missing after auto title")
+	}
+	if th.Title != "Fix failing regression tests" {
+		t.Fatalf("Title=%q, want auto title", th.Title)
+	}
+	if th.TitleSource != ThreadTitleSourceAuto {
+		t.Fatalf("TitleSource=%q, want %q", th.TitleSource, ThreadTitleSourceAuto)
+	}
+	if th.TitleInputMessageID != "msg_1" {
+		t.Fatalf("TitleInputMessageID=%q, want msg_1", th.TitleInputMessageID)
+	}
+	if th.TitleModelID != "openai/gpt-5-mini" {
+		t.Fatalf("TitleModelID=%q, want openai/gpt-5-mini", th.TitleModelID)
+	}
+	if th.TitlePromptVersion != "thread_title_v1" {
+		t.Fatalf("TitlePromptVersion=%q, want thread_title_v1", th.TitlePromptVersion)
+	}
+
+	updated, err = s.SetAutoThreadTitle(ctx, "env_1", "th_1", "Different auto title", "msg_2", "openai/gpt-5-mini", "thread_title_v1", 322, "u1", "u1@example.com")
+	if err != nil {
+		t.Fatalf("SetAutoThreadTitle second: %v", err)
+	}
+	if updated {
+		t.Fatalf("SetAutoThreadTitle second updated=true, want false")
+	}
+
+	if err := s.RenameThread(ctx, "env_1", "th_1", "", "u2", "u2@example.com"); err != nil {
+		t.Fatalf("RenameThread blank: %v", err)
+	}
+
+	th, err = s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread after blank rename: %v", err)
+	}
+	if th == nil {
+		t.Fatalf("thread missing after blank rename")
+	}
+	if th.Title != "" {
+		t.Fatalf("Title=%q, want empty after blank rename", th.Title)
+	}
+	if th.TitleSource != ThreadTitleSourceUser {
+		t.Fatalf("TitleSource=%q, want %q after blank rename", th.TitleSource, ThreadTitleSourceUser)
+	}
+	if th.TitleGeneratedAtUnixMs != 0 || th.TitleInputMessageID != "" || th.TitleModelID != "" || th.TitlePromptVersion != "" {
+		t.Fatalf("auto title metadata should be cleared after manual rename: %+v", th)
+	}
+
+	updated, err = s.SetAutoThreadTitle(ctx, "env_1", "th_1", "Should not overwrite user blank title", "msg_3", "openai/gpt-5-mini", "thread_title_v1", 323, "u3", "u3@example.com")
+	if err != nil {
+		t.Fatalf("SetAutoThreadTitle after manual rename: %v", err)
+	}
+	if updated {
+		t.Fatalf("SetAutoThreadTitle after manual rename updated=true, want false")
+	}
+}
+
 func TestStore_ResetStaleActiveThreadRunStates(t *testing.T) {
 	t.Parallel()
 
@@ -261,7 +394,7 @@ PRAGMA user_version=1;
 		t.Fatalf("rows err: %v", err)
 	}
 
-	for _, col := range []string{"model_id", "model_locked", "execution_mode", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json"} {
+	for _, col := range []string{"model_id", "model_locked", "execution_mode", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version"} {
 		if !cols[col] {
 			t.Fatalf("missing migrated column %q", col)
 		}
@@ -285,8 +418,8 @@ WHERE type = 'table' AND name = ?
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 17 {
-		t.Fatalf("user_version=%d, want 17", version)
+	if version != 18 {
+		t.Fatalf("user_version=%d, want 18", version)
 	}
 }
 
@@ -373,8 +506,8 @@ WHERE run_id = 'run_legacy'
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 17 {
-		t.Fatalf("user_version=%d, want 17", version)
+	if version != 18 {
+		t.Fatalf("user_version=%d, want 18", version)
 	}
 }
 

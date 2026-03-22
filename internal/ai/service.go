@@ -1232,7 +1232,9 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		s.broadcastTranscriptMessage(endpointID, threadID, runID, userRowID, userJSON, now)
 		s.broadcastThreadSummary(endpointID, threadID)
 	}
+	effectiveCurrentInput.MessageID = userMsgID
 	effectiveInput.MessageID = userMsgID
+	s.scheduleAutoThreadTitle(meta, threadID, effectiveCurrentInput)
 
 	select {
 	case <-ctx.Done():
@@ -1487,33 +1489,9 @@ func (s *Service) classifyRunPolicyByModel(ctx context.Context, resolved resolve
 	if s == nil {
 		return runPolicyDecision{}, errors.New("nil service")
 	}
-	providerType := strings.ToLower(strings.TrimSpace(resolved.Provider.Type))
-	switch providerType {
-	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible":
-	default:
-		return runPolicyDecision{}, fmt.Errorf("unsupported provider type %q", strings.TrimSpace(resolved.Provider.Type))
-	}
-	if s.resolveProviderKey == nil {
-		return runPolicyDecision{}, errors.New("missing provider key resolver")
-	}
-	apiKey, ok, err := s.resolveProviderKey(resolved.ProviderID)
+	adapter, responseFormat, err := s.initStructuredOutputProvider(resolved)
 	if err != nil {
-		return runPolicyDecision{}, fmt.Errorf("resolve provider key failed: %w", err)
-	}
-	if !ok || strings.TrimSpace(apiKey) == "" {
-		return runPolicyDecision{}, fmt.Errorf("missing api key for provider %q", resolved.ProviderID)
-	}
-	adapter, err := newProviderAdapter(providerType, strings.TrimSpace(resolved.Provider.BaseURL), strings.TrimSpace(apiKey), resolved.Provider.StrictToolSchema)
-	if err != nil {
-		return runPolicyDecision{}, fmt.Errorf("init provider adapter failed: %w", err)
-	}
-
-	responseFormat := "json_object"
-	switch providerType {
-	case "openai_compatible", "chatglm", "deepseek", "qwen":
-		// Some OpenAI-compatible gateways return empty/incomplete outputs under forced
-		// json_object mode. Keep prompt-level JSON constraints and parse the text payload.
-		responseFormat = ""
+		return runPolicyDecision{}, err
 	}
 
 	intentCtx := ctx

@@ -585,6 +585,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	// Transcript events are thread-scoped; they never go to summary subscribers.
 	a.mgr.svc.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
 	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
+	a.mgr.svc.scheduleAutoThreadTitle(meta, threadID, deriveEffectiveCurrentUserInput(req.Input))
 
 	startReq := RunStartRequest{
 		ThreadID: threadID,
@@ -741,6 +742,7 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 	req.Input = normalizedInput
 	a.mgr.svc.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
 	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
+	a.mgr.svc.scheduleAutoThreadTitle(meta, threadID, deriveEffectiveCurrentUserInput(req.Input))
 
 	startReq := RunStartRequest{
 		ThreadID: threadID,

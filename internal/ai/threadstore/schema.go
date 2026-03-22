@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 17
+	threadstoreCurrentSchemaVersion = 18
 )
 
 func initSchema(db *sql.DB) error {
@@ -40,6 +40,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 14, ToVersion: 15, Apply: migrateThreadstoreToV15},
 			{FromVersion: 15, ToVersion: 16, Apply: migrateThreadstoreToV16},
 			{FromVersion: 16, ToVersion: 17, Apply: migrateThreadstoreToV17},
+			{FromVersion: 17, ToVersion: 18, Apply: migrateThreadstoreToV18},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -180,6 +181,10 @@ func migrateThreadstoreToV17(tx *sql.Tx) error {
 	return ensureRequestUserInputSecretAnswersTableTx(tx)
 }
 
+func migrateThreadstoreToV18(tx *sql.Tx) error {
+	return ensureAIThreadsTitleMetadataColumnsTx(tx)
+}
+
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "model_id", `ALTER TABLE ai_threads ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`)
 }
@@ -237,6 +242,25 @@ func ensureAIThreadsWaitingPromptColumnsTx(tx *sql.Tx) error {
 
 func ensureAIThreadsWaitingUserInputJSONTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "waiting_user_input_json", `ALTER TABLE ai_threads ADD COLUMN waiting_user_input_json TEXT NOT NULL DEFAULT ''`)
+}
+
+func ensureAIThreadsTitleMetadataColumnsTx(tx *sql.Tx) error {
+	stmts := []struct {
+		column string
+		sql    string
+	}{
+		{column: "title_source", sql: `ALTER TABLE ai_threads ADD COLUMN title_source TEXT NOT NULL DEFAULT ''`},
+		{column: "title_generated_at_unix_ms", sql: `ALTER TABLE ai_threads ADD COLUMN title_generated_at_unix_ms INTEGER NOT NULL DEFAULT 0`},
+		{column: "title_input_message_id", sql: `ALTER TABLE ai_threads ADD COLUMN title_input_message_id TEXT NOT NULL DEFAULT ''`},
+		{column: "title_model_id", sql: `ALTER TABLE ai_threads ADD COLUMN title_model_id TEXT NOT NULL DEFAULT ''`},
+		{column: "title_prompt_version", sql: `ALTER TABLE ai_threads ADD COLUMN title_prompt_version TEXT NOT NULL DEFAULT ''`},
+	}
+	for _, stmt := range stmts {
+		if err := ensureColumnTx(tx, "ai_threads", stmt.column, stmt.sql); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func ensureRunStateTablesTx(tx *sql.Tx) error {
@@ -620,7 +644,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 	}
 
 	requiredColumns := map[string][]string{
-		"ai_threads":      {"model_id", "model_locked", "execution_mode", "working_dir", "followups_revision", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json"},
+		"ai_threads":      {"model_id", "model_locked", "execution_mode", "working_dir", "followups_revision", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version"},
 		"ai_queued_turns": {"channel_id", "lane", "sort_index", "updated_at_unix_ms"},
 	}
 	for tableName, columns := range requiredColumns {

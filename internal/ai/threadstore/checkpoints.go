@@ -39,14 +39,14 @@ type ThreadCheckpointRecord struct {
 }
 
 type threadCheckpointDerivedSnapshot struct {
-	MemoryItems               []MemoryItemRecord                `json:"memory_items"`
-	ThreadTodos               *ThreadTodosSnapshot              `json:"thread_todos,omitempty"`
-	ThreadState               *ThreadState                      `json:"thread_state,omitempty"`
-	ContextSnapshots          []ContextSnapshotRecord           `json:"context_snapshots"`
-	ExecutionSpans            []ExecutionSpanRecord             `json:"execution_spans"`
-	StructuredUserInputs      []StructuredUserInputRecord       `json:"structured_user_inputs"`
-	RequestUserInputSecrets   []RequestUserInputSecretAnswerRecord `json:"request_user_input_secret_answers"`
-	RunIDs                    []string                          `json:"run_ids"`
+	MemoryItems             []MemoryItemRecord                   `json:"memory_items"`
+	ThreadTodos             *ThreadTodosSnapshot                 `json:"thread_todos,omitempty"`
+	ThreadState             *ThreadState                         `json:"thread_state,omitempty"`
+	ContextSnapshots        []ContextSnapshotRecord              `json:"context_snapshots"`
+	ExecutionSpans          []ExecutionSpanRecord                `json:"execution_spans"`
+	StructuredUserInputs    []StructuredUserInputRecord          `json:"structured_user_inputs"`
+	RequestUserInputSecrets []RequestUserInputSecretAnswerRecord `json:"request_user_input_secret_answers"`
+	RunIDs                  []string                             `json:"run_ids"`
 }
 
 func normalizeCheckpointKind(kind string) string {
@@ -487,46 +487,18 @@ WHERE endpoint_id = ? AND thread_id = ? AND checkpoint_id = ?
 
 func (s *Store) getThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (*Thread, error) {
 	var t Thread
-	var modelLockedInt int
-	err := tx.QueryRowContext(ctx, `
+	err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`
 	SELECT
-	  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
-	  run_status, run_updated_at_unix_ms, run_error,
-	  waiting_user_input_json,
-	  created_by_user_public_id, created_by_user_email,
-	  updated_by_user_public_id, updated_by_user_email,
-	  created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
+%s
 	FROM ai_threads
 WHERE endpoint_id = ? AND thread_id = ?
-`, endpointID, threadID).Scan(
-		&t.ThreadID,
-		&t.EndpointID,
-		&t.NamespacePublicID,
-		&t.ModelID,
-		&modelLockedInt,
-		&t.ExecutionMode,
-		&t.WorkingDir,
-		&t.Title,
-		&t.RunStatus,
-		&t.RunUpdatedAtUnixMs,
-		&t.RunError,
-		&t.WaitingUserInputJSON,
-		&t.CreatedByUserPublicID,
-		&t.CreatedByUserEmail,
-		&t.UpdatedByUserPublicID,
-		&t.UpdatedByUserEmail,
-		&t.CreatedAtUnixMs,
-		&t.UpdatedAtUnixMs,
-		&t.LastMessageAtUnixMs,
-		&t.LastMessagePreview,
-	)
+`, threadSelectColumnsSQL), endpointID, threadID), &t)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	t.ModelLocked = modelLockedInt != 0
 	return &t, nil
 }
 
@@ -1008,6 +980,11 @@ func (s *Store) restoreThreadRowTx(ctx context.Context, tx *sql.Tx, endpointID s
 	    execution_mode = ?,
 	    working_dir = ?,
 	    title = ?,
+	    title_source = ?,
+	    title_generated_at_unix_ms = ?,
+	    title_input_message_id = ?,
+	    title_model_id = ?,
+	    title_prompt_version = ?,
 	    run_status = ?,
 	    run_updated_at_unix_ms = ?,
 	    run_error = ?,
@@ -1028,6 +1005,11 @@ WHERE endpoint_id = ? AND thread_id = ?
 		normalizeExecutionMode(strings.TrimSpace(th.ExecutionMode)),
 		strings.TrimSpace(th.WorkingDir),
 		strings.TrimSpace(th.Title),
+		normalizeThreadTitleSource(th.TitleSource),
+		th.TitleGeneratedAtUnixMs,
+		strings.TrimSpace(th.TitleInputMessageID),
+		strings.TrimSpace(th.TitleModelID),
+		strings.TrimSpace(th.TitlePromptVersion),
 		normalizeRunStatus(th.RunStatus),
 		th.RunUpdatedAtUnixMs,
 		strings.TrimSpace(th.RunError),
