@@ -719,7 +719,15 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
             >
               <button
                 type="button"
-                class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
+                onClick={handleAskFlowerFromProcess}
+              >
+                <Sparkles class="w-3.5 h-3.5 opacity-60" />
+                <span class="flex-1 text-left">Ask Flower</span>
+              </button>
+              <button
+                type="button"
+                class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer text-destructive transition-colors duration-75 hover:bg-destructive/10 hover:text-destructive focus:outline-none focus-visible:bg-destructive/10 focus-visible:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
                 onClick={() => {
                   void handleKillProcess();
                 }}
@@ -727,14 +735,6 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
               >
                 <Trash class="w-3.5 h-3.5 opacity-60" />
                 <span class="flex-1 text-left">Kill</span>
-              </button>
-              <button
-                type="button"
-                class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
-                onClick={handleAskFlowerFromProcess}
-              >
-                <Sparkles class="w-3.5 h-3.5 opacity-60" />
-                <span class="flex-1 text-left">Ask Flower</span>
               </button>
             </div>
           )}
