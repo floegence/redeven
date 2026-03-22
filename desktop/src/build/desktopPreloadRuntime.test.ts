@@ -11,6 +11,7 @@ import { buildDesktopPreloads } from './desktopPreloadBundle';
 
 const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
+const electronRuntimeIntegrationTimeoutMs = 30_000;
 const linuxElectronLaunchArgs = ['--no-sandbox', '--disable-setuid-sandbox'] as const;
 
 function getElectronRuntimeLaunchArgs(
@@ -121,7 +122,7 @@ app.whenReady().then(async () => {
           ...process.env,
           ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
         },
-        timeout: 30_000,
+        timeout: electronRuntimeIntegrationTimeoutMs,
         maxBuffer: 1024 * 1024,
       },
     );
@@ -135,5 +136,5 @@ app.whenReady().then(async () => {
     expect(payload.main.hasStateStorageBridge).toBe(true);
     expect(payload.child.hasAskFlowerBridge).toBe(true);
     expect(payload.child.hasStateStorageBridge).toBe(true);
-  });
+  }, electronRuntimeIntegrationTimeoutMs);
 });
