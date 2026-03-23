@@ -496,12 +496,14 @@ describe('GitBranchesPanel interactions', () => {
     ), host);
 
     try {
-      const branchHeader = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('sm:flex-row sm:flex-wrap sm:items-start sm:justify-between')) as HTMLDivElement | undefined;
+      const branchHeader = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('lg:flex-row lg:flex-wrap lg:items-start lg:justify-between')) as HTMLDivElement | undefined;
+      const actionsColumn = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('lg:w-auto lg:min-w-fit lg:items-end')) as HTMLDivElement | undefined;
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       const tablist = host.querySelector('[aria-label="Branch detail tabs"]') as HTMLDivElement | null;
 
       expect(branchHeader).toBeTruthy();
+      expect(actionsColumn?.className).toContain('w-full');
       expect(checkoutButton?.className).toContain('flex-1');
       expect(deleteButton?.className).toContain('flex-1');
       expect(tablist?.className).toContain('grid');
