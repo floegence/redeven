@@ -96,6 +96,11 @@ type Thread struct {
 	LastMessagePreview  string `json:"last_message_preview"`
 }
 
+type AutoThreadTitleCandidate struct {
+	EndpointID string `json:"endpoint_id"`
+	ThreadID   string `json:"thread_id"`
+}
+
 type Message struct {
 	ID         int64  `json:"id"`
 	ThreadID   string `json:"thread_id"`
@@ -314,6 +319,58 @@ LIMIT ?
 	last := out[len(out)-1]
 	next := EncodeCursor(ThreadsCursor{UpdatedAtUnixMs: last.UpdatedAtUnixMs, ThreadID: last.ThreadID})
 	return out, next, nil
+}
+
+func (s *Store) ListAutoThreadTitleCandidates(ctx context.Context, limit int) ([]AutoThreadTitleCandidate, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if limit <= 0 {
+		limit = 64
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+SELECT endpoint_id, thread_id
+FROM ai_threads
+WHERE TRIM(COALESCE(title, '')) = ''
+  AND LOWER(TRIM(COALESCE(title_source, ''))) != ?
+  AND last_message_at_unix_ms > 0
+ORDER BY
+  CASE
+    WHEN last_message_at_unix_ms > 0 THEN last_message_at_unix_ms
+    ELSE updated_at_unix_ms
+  END DESC,
+  thread_id DESC
+LIMIT ?
+`, ThreadTitleSourceUser, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]AutoThreadTitleCandidate, 0, limit)
+	for rows.Next() {
+		var candidate AutoThreadTitleCandidate
+		if err := rows.Scan(&candidate.EndpointID, &candidate.ThreadID); err != nil {
+			return nil, err
+		}
+		candidate.EndpointID = strings.TrimSpace(candidate.EndpointID)
+		candidate.ThreadID = strings.TrimSpace(candidate.ThreadID)
+		if candidate.EndpointID == "" || candidate.ThreadID == "" {
+			continue
+		}
+		out = append(out, candidate)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (s *Store) GetThread(ctx context.Context, endpointID string, threadID string) (*Thread, error) {
