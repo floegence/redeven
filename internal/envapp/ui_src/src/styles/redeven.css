@@ -1001,11 +1001,10 @@ html.dark {
   border-radius: 0.625rem;
   overflow: hidden;
   border: 1px solid #2d333b;
-  border-left: 3px solid #2d333b;
   background: linear-gradient(180deg, #0f141b 0%, #0d1117 100%);
   color: #e6edf3;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
-  transition: border-color 200ms ease, box-shadow 200ms ease;
+  transition: box-shadow 200ms ease;
 }
 
 .chat-tool-call-block {
@@ -1026,17 +1025,19 @@ html.dark {
 }
 
 .chat-shell-block-running {
-  border-left-color: #58a6ff;
-  box-shadow: 0 0 0 1px rgb(88 166 255 / 0.12);
+  border-color: #2d333b;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.18),
+    0 0 0 1px rgb(88 166 255 / 0.12);
 }
 
 .chat-shell-block-success {
-  border-left-color: #3fb950;
+  border-color: #2d333b;
 }
 
 .chat-shell-block-error {
-  border-left-color: #f85149;
-  box-shadow: 0 0 0 1px rgb(248 81 73 / 0.14);
+  border-color: #2d333b;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
 }
 
 .chat-shell-command {
