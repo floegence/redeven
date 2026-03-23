@@ -9,6 +9,7 @@ import { MessageAvatar } from './MessageAvatar';
 import { MessageBubble } from './MessageBubble';
 import { MessageMeta } from './MessageMeta';
 import { MessageActions } from './MessageActions';
+import { hasVisibleMessageContent } from './messageVisibility';
 
 export interface MessageItemProps {
   message: Message;
@@ -52,43 +53,46 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
       message: props.message,
       isActiveAssistantStreaming: isActiveAssistantStreaming(),
     }));
+  const shouldRenderMessage = createMemo(() => hasVisibleMessageContent(props.message) || !!messageOrnament());
 
   return (
-    <div
-      class={cn(
-        'chat-message-item',
-        props.message.role === 'user' && 'chat-message-item-user',
-        props.message.role === 'assistant' && 'chat-message-item-assistant',
-        props.class,
-      )}
-    >
-      <Show when={props.showAvatar !== false}>
-        <MessageAvatar
-          role={props.message.role}
-          avatar={avatar()}
-          isStreaming={isActiveAssistantStreaming()}
-        />
-      </Show>
-
-      <div class="chat-message-content-wrapper">
-        <MessageBubble message={props.message} />
-
-        <Show when={messageOrnament()}>
-          {(ornament) => (
-            <div class="chat-message-ornament">
-              {ornament()}
-            </div>
-          )}
+    <Show when={shouldRenderMessage()}>
+      <div
+        class={cn(
+          'chat-message-item',
+          props.message.role === 'user' && 'chat-message-item-user',
+          props.message.role === 'assistant' && 'chat-message-item-assistant',
+          props.class,
+        )}
+      >
+        <Show when={props.showAvatar !== false}>
+          <MessageAvatar
+            role={props.message.role}
+            avatar={avatar()}
+            isStreaming={isActiveAssistantStreaming()}
+          />
         </Show>
 
-        <div class="chat-message-footer">
-          <MessageMeta
-            timestamp={props.message.timestamp}
-            status={props.message.status}
-          />
-          <MessageActions message={props.message} />
+        <div class="chat-message-content-wrapper">
+          <MessageBubble message={props.message} />
+
+          <Show when={messageOrnament()}>
+            {(ornament) => (
+              <div class="chat-message-ornament">
+                {ornament()}
+              </div>
+            )}
+          </Show>
+
+          <div class="chat-message-footer">
+            <MessageMeta
+              timestamp={props.message.timestamp}
+              status={props.message.status}
+            />
+            <MessageActions message={props.message} />
+          </div>
         </div>
       </div>
-    </div>
+    </Show>
   );
 };

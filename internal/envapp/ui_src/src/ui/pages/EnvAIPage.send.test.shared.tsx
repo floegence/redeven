@@ -551,6 +551,18 @@ function makeCompletedAssistantTranscriptMessage(messageId = 'assistant-complete
   };
 }
 
+function makeCompletedEmptyAssistantMessage(messageId = 'assistant-empty-1') {
+  return {
+    id: messageId,
+    role: 'assistant',
+    status: 'complete',
+    timestamp: Date.now(),
+    blocks: [
+      { type: 'markdown', content: '' },
+    ],
+  };
+}
+
 function assistantRunIndicator(host: HTMLElement): HTMLElement | null {
   return host.querySelector('.chat-message-item-assistant .flower-message-run-indicator');
 }
@@ -764,6 +776,37 @@ export function registerEnvAIPageSendTests() {
         const assistant = host.querySelector('.chat-message-item-assistant');
         expect(assistant).toBeTruthy();
         expect(host.querySelector('.chat-markdown-empty-streaming')).toBeTruthy();
+      } finally {
+        dispose();
+      }
+    });
+
+    it('does not render completed assistant messages that have no visible content', async () => {
+      listMessagesMock.mockImplementation(async (req: any): Promise<any> => {
+        if (req?.tail) {
+          return { messages: [], nextAfterRowId: 0, hasMore: false };
+        }
+        if (Number(req?.afterRowId ?? 0) === 0) {
+          return {
+            messages: [
+              {
+                rowId: 1,
+                messageJson: makeCompletedEmptyAssistantMessage('assistant-empty-complete'),
+              },
+            ],
+            nextAfterRowId: 1,
+            hasMore: false,
+          };
+        }
+        return { messages: [], nextAfterRowId: 1, hasMore: false };
+      });
+
+      const { host, dispose } = await renderPage();
+      try {
+        await flushAsync();
+
+        expect(host.querySelector('.chat-message-item-assistant')).toBeNull();
+        expect(host.querySelector('.chat-markdown-block')).toBeNull();
       } finally {
         dispose();
       }
