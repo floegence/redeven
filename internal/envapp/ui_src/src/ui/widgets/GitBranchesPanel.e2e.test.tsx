@@ -27,6 +27,12 @@ vi.mock('../protocol/redeven_v1', async () => {
 import { redevenV1Contract } from '../protocol/redeven_v1';
 import { GitBranchesPanel } from './GitBranchesPanel';
 
+async function flush() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 beforeEach(() => {
   mockGetCommitDetail.mockReset();
   mockGetBranchCompare.mockReset();
@@ -89,12 +95,21 @@ afterEach(() => {
 });
 
 describe('GitBranchesPanel interactions', () => {
-  it('renders status as the default branch detail view', () => {
+  it('loads current branch status from the active worktree root', async () => {
     let checkoutCount = 0;
     let mergeCount = 0;
     let deleteCount = 0;
     const host = document.createElement('div');
     document.body.appendChild(host);
+
+    mockListWorkspaceChanges.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo-linked',
+      summary: { stagedCount: 1, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
+      staged: [{ section: 'staged', changeType: 'modified', path: 'README.md', displayPath: 'README.md', additions: 1, deletions: 0, patchText: '@@ -1 +1 @@' }],
+      unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts', additions: 2, deletions: 1, patchText: '@@ -1 +1 @@' }],
+      untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt' }],
+      conflicted: [],
+    });
 
     const dispose = render(() => (
       <LayoutProvider>
@@ -102,20 +117,12 @@ describe('GitBranchesPanel interactions', () => {
           <ProtocolProvider contract={redevenV1Contract}>
             <div class="h-[640px]">
               <GitBranchesPanel
-                repoRootPath="/workspace/repo"
+                repoRootPath="/workspace/repo-linked"
                 repoSummary={{
-                  repoRootPath: '/workspace/repo',
+                  repoRootPath: '/workspace/repo-linked',
                   headRef: 'feature/demo',
                   headCommit: 'abc1234',
                   workspaceSummary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 1, conflictedCount: 0 },
-                }}
-                workspace={{
-                  repoRootPath: '/workspace/repo',
-                  summary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 1, conflictedCount: 0 },
-                  staged: [{ section: 'staged', changeType: 'modified', path: 'README.md', displayPath: 'README.md', additions: 1, deletions: 0, patchText: '@@ -1 +1 @@' }],
-                  unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts', additions: 2, deletions: 1, patchText: '@@ -1 +1 @@' }],
-                  untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt' }],
-                  conflicted: [],
                 }}
                 selectedBranch={{
                   name: 'feature/demo',
@@ -152,6 +159,9 @@ describe('GitBranchesPanel interactions', () => {
     ), host);
 
     try {
+      await flush();
+
+      expect(mockListWorkspaceChanges).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo-linked' });
       expect(host.textContent).toContain('Status');
       expect(host.textContent).toContain('History');
       expect(host.textContent).toContain('Compare');
@@ -225,6 +235,9 @@ describe('GitBranchesPanel interactions', () => {
     ), host);
 
     try {
+      expect(host.textContent).toContain('Remote branch is not checked out');
+      expect(host.textContent).toContain('Status is only available for checked-out local worktrees.');
+      expect(mockListWorkspaceChanges).not.toHaveBeenCalled();
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
       const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Merge') as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
@@ -238,6 +251,106 @@ describe('GitBranchesPanel interactions', () => {
       expect(checkoutBranch).toBe('origin/feature/demo');
       expect(mergeBranch).toBe('origin/feature/demo');
       expect(deleteBranch).toBeUndefined();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('loads linked worktree branch status from the linked worktree root', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mockListWorkspaceChanges.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo-linked',
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
+      staged: [],
+      unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts', additions: 3, deletions: 1, patchText: '@@ -1 +1 @@\n-before\n+after' }],
+      untracked: [{ section: 'untracked', changeType: 'added', path: 'scratch.txt', displayPath: 'scratch.txt', patchText: '@@ -0,0 +1 @@\n+scratch' }],
+      conflicted: [],
+    });
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={{
+                  name: 'feature/linked',
+                  fullName: 'refs/heads/feature/linked',
+                  kind: 'local',
+                  worktreePath: '/workspace/repo-linked',
+                }}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    { name: 'feature/linked', fullName: 'refs/heads/feature/linked', kind: 'local', worktreePath: '/workspace/repo-linked' },
+                  ],
+                  remote: [],
+                }}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      expect(mockListWorkspaceChanges).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo-linked' });
+      expect(host.textContent).toContain('src/linked.ts');
+      expect(host.textContent).toContain('View Diff');
+
+      const untrackedButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Untracked')) as HTMLButtonElement | undefined;
+      expect(untrackedButton).toBeTruthy();
+      untrackedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(host.textContent).toContain('scratch.txt');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('shows an unavailable status message for a local branch without a checked-out worktree', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={{
+                  name: 'feature/offline',
+                  fullName: 'refs/heads/feature/offline',
+                  kind: 'local',
+                }}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    { name: 'feature/offline', fullName: 'refs/heads/feature/offline', kind: 'local' },
+                  ],
+                  remote: [],
+                }}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.textContent).toContain('Branch is not checked out');
+      expect(host.textContent).toContain('Status is only available for checked-out local worktrees.');
+      expect(host.textContent).toContain('Use Compare to inspect file diffs, or open this branch in a worktree to review workspace changes.');
+      expect(mockListWorkspaceChanges).not.toHaveBeenCalled();
     } finally {
       dispose();
     }
@@ -421,14 +534,6 @@ describe('GitBranchesPanel interactions', () => {
                     ],
                     remote: [],
                   }}
-                  workspace={{
-                    repoRootPath: '/workspace/repo',
-                    summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-                    staged: [],
-                    unstaged: [],
-                    untracked: [],
-                    conflicted: [],
-                  }}
                 />
               </div>
             </ProtocolProvider>
@@ -592,14 +697,6 @@ describe('GitBranchesPanel interactions', () => {
                     headCommit: 'abc1234',
                     workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
                   }}
-                  workspace={{
-                    repoRootPath: '/workspace/repo',
-                    summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-                    staged: [],
-                    unstaged: [],
-                    untracked: [],
-                    conflicted: [],
-                  }}
                   selectedBranch={branch}
                   branches={{
                     repoRootPath: '/workspace/repo',
@@ -696,14 +793,6 @@ describe('GitBranchesPanel interactions', () => {
                     headRef: 'main',
                     headCommit: 'abc1234',
                     workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
-                  }}
-                  workspace={{
-                    repoRootPath: '/workspace/repo',
-                    summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
-                    staged: [],
-                    unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/dirty.ts', displayPath: 'src/dirty.ts', additions: 2, deletions: 1, patchText: '@@ -1 +1 @@\n-before\n+after' }],
-                    untracked: [],
-                    conflicted: [],
                   }}
                   selectedBranch={branch}
                   branches={{

@@ -46,9 +46,6 @@ import { GitMergeBranchDialog, type GitMergeBranchDialogConfirmOptions, type Git
 export interface GitBranchesPanelProps {
   repoRootPath?: string;
   repoSummary?: GitRepoSummaryResponse | null;
-  workspace?: GitListWorkspaceChangesResponse | null;
-  workspaceLoading?: boolean;
-  workspaceError?: string;
   selectedBranch?: GitBranchSummary | null;
   selectedBranchSubview?: GitBranchSubview;
   onSelectBranchSubview?: (view: GitBranchSubview) => void;
@@ -133,11 +130,17 @@ function gitBranchSubviewPanelId(view: GitBranchSubview): string {
   return `git-branch-subview-panel-${view}`;
 }
 
-function branchStatusEmptyState(branch: GitBranchSummary | null | undefined): {
+function resolveBranchStatusRepoRootPath(branch: GitBranchSummary | null | undefined, activeRepoRootPath: string): string {
+  if (!branch) return '';
+  if (branch.current) return activeRepoRootPath;
+  return String(branch.worktreePath ?? '').trim();
+}
+
+function branchStatusEmptyState(branch: GitBranchSummary | null | undefined, statusRepoRootPath: string): {
   title: string;
   detail: string;
   hint?: string;
-  tone: 'neutral' | 'info' | 'violet' | 'success';
+  tone: 'neutral' | 'info' | 'violet';
 } {
   if (!branch) {
     return {
@@ -146,26 +149,20 @@ function branchStatusEmptyState(branch: GitBranchSummary | null | undefined): {
       tone: 'neutral',
     };
   }
-  if (branch.current) {
-    return {
-      title: 'Current workspace is clean',
-      detail: 'There are no staged or pending changes in this workspace.',
-      tone: 'success',
-    };
-  }
-  if (branch.worktreePath) {
-    return {
-      title: 'Linked worktree is clean',
-      detail: 'There are no staged or pending changes to review.',
-      tone: 'success',
-    };
-  }
   if (branch.kind === 'remote') {
     return {
       title: 'Remote branch is not checked out',
       detail: 'Status is only available for checked-out local worktrees.',
       hint: 'Use Compare to inspect file diffs, or check out this branch locally to review workspace changes.',
       tone: 'violet',
+    };
+  }
+  if (statusRepoRootPath) {
+    return {
+      title: 'Branch status is unavailable',
+      detail: 'The checked-out workspace for this branch could not be resolved right now.',
+      hint: 'Refresh the repository view or reopen the worktree to load the latest workspace status.',
+      tone: 'info',
     };
   }
   return {
@@ -742,14 +739,14 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   let statusReqSeq = 0;
 
   const branchSubview = () => props.selectedBranchSubview ?? 'status';
-  const compareRepoRootPath = () => String(props.repoRootPath || props.repoSummary?.repoRootPath || '').trim();
-  const currentWorkspaceStatus = () => Boolean(props.selectedBranch?.current);
-  const visibleStatusWorkspace = () => (currentWorkspaceStatus() ? props.workspace ?? null : statusWorkspace());
-  const visibleStatusLoading = () => (currentWorkspaceStatus() ? Boolean(props.workspaceLoading) : statusLoading());
-  const visibleStatusError = () => (currentWorkspaceStatus() ? String(props.workspaceError ?? '') : statusError());
+  const activeRepoRootPath = () => String(props.repoRootPath || props.repoSummary?.repoRootPath || '').trim();
+  const statusRepoRootPath = () => resolveBranchStatusRepoRootPath(props.selectedBranch, activeRepoRootPath());
+  const visibleStatusWorkspace = () => statusWorkspace();
+  const visibleStatusLoading = () => statusLoading();
+  const visibleStatusError = () => statusError();
   const visibleStatusItems = () => workspaceSectionItems(visibleStatusWorkspace(), selectedStatusSection());
   const visibleStatusKey = () => gitDiffEntryIdentity(diffDialogItem());
-  const statusEmptyState = () => branchStatusEmptyState(props.selectedBranch);
+  const statusEmptyState = () => branchStatusEmptyState(props.selectedBranch, statusRepoRootPath());
   const mergeReviewBranch = () => props.mergeReviewBranch ?? props.selectedBranch ?? null;
   const mergePreview = () => props.mergePreview ?? null;
   const mergeReviewState = () => props.mergeDialogState ?? 'idle';
@@ -811,6 +808,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   createEffect(() => {
     const branch = props.selectedBranch;
     const subview = branchSubview();
+    const repoRootPath = statusRepoRootPath();
     if (!branch) {
       statusReqSeq += 1;
       setStatusWorkspace(null);
@@ -818,16 +816,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       setStatusError('');
       return;
     }
-    if (branch.current) {
-      statusReqSeq += 1;
-      setStatusWorkspace(null);
-      setStatusLoading(false);
-      setStatusError('');
-      return;
-    }
     if (subview !== 'status') return;
-    const worktreePath = String(branch.worktreePath ?? '').trim();
-    if (!worktreePath) {
+    if (!repoRootPath) {
       statusReqSeq += 1;
       setStatusWorkspace(null);
       setStatusLoading(false);
@@ -838,7 +828,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     const seq = ++statusReqSeq;
     setStatusLoading(true);
     setStatusError('');
-    void rpc.git.listWorkspaceChanges({ repoRootPath: worktreePath }).then((resp) => {
+    void rpc.git.listWorkspaceChanges({ repoRootPath }).then((resp) => {
       if (seq !== statusReqSeq) return;
       setStatusWorkspace(resp);
     }).catch((err) => {
@@ -1113,7 +1103,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                   class="flex min-h-0 flex-1 flex-col overflow-hidden"
                 >
                   <HistoryList
-                    repoRootPath={compareRepoRootPath()}
+                    repoRootPath={activeRepoRootPath()}
                     selectedBranch={props.selectedBranch}
                     commits={props.commits}
                     listLoading={props.listLoading}
@@ -1133,7 +1123,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
       <BranchCompareDialog
         open={compareDialogOpen()}
-        repoRootPath={compareRepoRootPath()}
+        repoRootPath={activeRepoRootPath()}
         branches={props.branches}
         selectedBranch={props.selectedBranch}
         onClose={() => setCompareDialogOpen(false)}
