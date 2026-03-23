@@ -35,6 +35,7 @@ vi.mock('@floegence/floe-webapp-core/editor', () => ({
         type="button"
         data-testid="mock-editor"
         data-instance-id={instanceId}
+        data-language={String(props.language)}
         data-read-only={String(props.options.readOnly)}
         data-hover-enabled={String(props.options.hover?.enabled)}
         data-code-lens={String(props.options.codeLens)}
@@ -74,6 +75,7 @@ afterEach(() => {
   editorRenderState.errorMessage = '';
   editorRenderState.nextInstanceId = 0;
   resolveCodeEditorLanguageSpecMock.mockClear();
+  vi.restoreAllMocks();
 });
 
 describe('TextFilePreviewPane', () => {
@@ -131,8 +133,6 @@ describe('TextFilePreviewPane', () => {
         text="const value = 1;"
         draftText="const value = 2;"
         editing
-        dirty
-        canEdit
         onDraftChange={onDraftChange}
         onSelectionChange={onSelectionChange}
       />
@@ -176,7 +176,6 @@ describe('TextFilePreviewPane', () => {
         text="const value = 1;"
         draftText="const value = 1;"
         editing={editing()}
-        canEdit
         onDraftChange={onDraftChange}
         onSelectionChange={onSelectionChange}
       />
@@ -210,7 +209,6 @@ describe('TextFilePreviewPane', () => {
         path="/workspace/demo.vue"
         descriptor={{ mode: 'text', textPresentation: 'code', language: 'vue', wrapText: false }}
         text={'<script setup lang="ts">const value = 1;</script>'}
-        canEdit
       />
     ), host);
     await flushAsync();
@@ -233,7 +231,6 @@ describe('TextFilePreviewPane', () => {
         text={'<script setup lang="ts">const value = 1;</script>'}
         draftText={'<script setup lang="ts">const value = 2;</script>'}
         editing={editing()}
-        canEdit
       />
     ), host);
     await flushAsync();
@@ -269,6 +266,26 @@ describe('TextFilePreviewPane', () => {
     expect(host.textContent).toContain('plaintext:hello\nredeven:ro');
   });
 
+  it('keeps code-like filenames without an explicit language on the Monaco path instead of forcing plaintext fallback', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TextFilePreviewPane
+        path="/workspace/.gitignore"
+        descriptor={{ mode: 'text', textPresentation: 'code', wrapText: false }}
+        text={'node_modules/\ndist/'}
+      />
+    ), host);
+    await flushAsync();
+
+    const editor = host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null;
+    expect(editor).toBeTruthy();
+    expect(editor?.dataset.language).toBe('undefined');
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeNull();
+    expect(resolveCodeEditorLanguageSpecMock).not.toHaveBeenCalled();
+  });
+
   it('uses the lightweight fallback for truncated previews even when Monaco supports the language', async () => {
     const onSelectionChange = vi.fn();
     const host = document.createElement('div');
@@ -290,7 +307,7 @@ describe('TextFilePreviewPane', () => {
     expect(onSelectionChange).toHaveBeenCalledWith('');
   });
 
-  it('falls back to the lightweight preview when Monaco rendering fails', async () => {
+  it('shows an explicit editor-unavailable state instead of silent read-only fallback when Monaco fails in edit mode', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     editorRenderState.errorMessage = 'monaco unavailable';
     const onSelectionChange = vi.fn();
@@ -310,8 +327,33 @@ describe('TextFilePreviewPane', () => {
     await flushAsync();
 
     expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeNull();
+    expect(host.textContent).toContain('Editor unavailable');
+    expect(host.textContent).toContain('The Monaco editor could not start for this file.');
+    expect(onSelectionChange).toHaveBeenCalledWith('');
+  });
+
+  it('still falls back to the lightweight read-only preview when Monaco rendering fails outside edit mode', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    editorRenderState.errorMessage = 'monaco unavailable';
+    const onSelectionChange = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TextFilePreviewPane
+        path="/workspace/demo.ts"
+        descriptor={{ mode: 'text', textPresentation: 'code', language: 'typescript', wrapText: false }}
+        text="const value = 1;"
+        onSelectionChange={onSelectionChange}
+      />
+    ), host);
+    await flushAsync();
+
+    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
     expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
-    expect(host.textContent).toContain('typescript:const value = 2;');
+    expect(host.textContent).toContain('typescript:const value = 1;');
+    expect(host.textContent).not.toContain('Editor unavailable');
     expect(onSelectionChange).toHaveBeenCalledWith('');
   });
 });

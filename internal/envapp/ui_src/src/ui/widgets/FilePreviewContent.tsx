@@ -148,15 +148,9 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
             draftText={props.draftText ?? props.text ?? ''}
             truncated={props.truncated}
             editing={props.editing}
-            dirty={props.dirty}
-            saving={props.saving}
             saveError={props.saveError}
-            canEdit={props.canEdit}
-            onStartEdit={props.onStartEdit}
             onDraftChange={props.onDraftChange}
             onSelectionChange={props.onSelectionChange}
-            onSave={props.onSave}
-            onDiscard={props.onDiscard}
           />
         </Show>
 
