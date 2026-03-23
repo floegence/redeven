@@ -6,10 +6,11 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"testing"
 
+	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/session"
 	"github.com/floegence/redeven-agent/internal/testutil/legacydb"
-	"testing"
 
 	_ "modernc.org/sqlite"
 )
@@ -51,8 +52,8 @@ func TestNewMigratesLegacyFollowupQueueSchema(t *testing.T) {
 	if err := raw.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 17 {
-		t.Fatalf("user_version=%d, want 17", version)
+	if version != threadstore.CurrentSchemaVersion() {
+		t.Fatalf("user_version=%d, want %d", version, threadstore.CurrentSchemaVersion())
 	}
 
 	var laneColCount int

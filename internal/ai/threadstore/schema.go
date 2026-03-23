@@ -12,6 +12,10 @@ const (
 	threadstoreCurrentSchemaVersion = 18
 )
 
+func CurrentSchemaVersion() int {
+	return threadstoreCurrentSchemaVersion
+}
+
 func initSchema(db *sql.DB) error {
 	return sqliteutil.EnsureSchema(db, threadstoreSchemaSpec())
 }
