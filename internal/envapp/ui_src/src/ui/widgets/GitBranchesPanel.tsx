@@ -983,7 +983,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             <div class="flex h-full min-h-0 flex-col overflow-hidden">
               <div class="shrink-0 px-3 py-3 sm:px-4 sm:py-4">
                 <div class="rounded-md border border-border/70 bg-card px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]">
-                  <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+                  <div class="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-start lg:justify-between">
                     <GitLabelBlock
                       class="min-w-0 flex-1"
                       label="Branch"
@@ -1005,9 +1005,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       </div>
                     </GitLabelBlock>
 
-                    <div class="flex w-full min-w-0 flex-col gap-1.5 sm:w-auto sm:min-w-fit sm:items-end">
-                      <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-                        <div class="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+                    <div class="flex w-full min-w-0 flex-col gap-1.5 lg:w-auto lg:min-w-fit lg:items-end">
+                      <div class="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:w-auto lg:justify-end">
+                        <div class="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-start lg:justify-end">
                           <Show when={props.onCheckoutBranch}>
                             <Button
                               size="sm"
