@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { FileBrowserDragProvider, LayoutProvider } from '@floegence/floe-webapp-core';
-import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
+import type { ContextMenuItem, FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -807,6 +807,73 @@ describe('FileBrowserWorkspace interactions', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(navigatedPath).toBe('/Users/tester');
       expect(host.textContent).toContain('Home');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('resolves override context menu items from the right-click target items', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const openInTerminalSpy = vi.fn();
+
+    const resolveOverrideContextMenuItems = (items: FileItem[]): ContextMenuItem[] => {
+      if (items.length === 1 && items[0]?.type === 'folder') {
+        return [
+          {
+            id: 'open-in-terminal',
+            label: 'Open in Terminal',
+            type: 'custom',
+            onAction: openInTerminalSpy,
+          },
+        ];
+      }
+      return [];
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={files}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-context-menu-resolver"
+            instanceId="test-files-workspace-context-menu-resolver"
+            resetKey={0}
+            width={260}
+            open
+            resolveOverrideContextMenuItems={resolveOverrideContextMenuItems}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const folderButton = host.querySelector('button[title="src"]') as HTMLButtonElement | null;
+      const readmeButton = host.querySelector('button[title="README.md"]') as HTMLButtonElement | null;
+      expect(folderButton).toBeTruthy();
+      expect(readmeButton).toBeTruthy();
+
+      folderButton!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 24, clientY: 32 }));
+      await flush();
+
+      const openButton = Array.from(document.body.querySelectorAll('[role="menu"] button')).find((node) => node.textContent?.includes('Open in Terminal')) as HTMLButtonElement | undefined;
+      expect(openButton).toBeTruthy();
+
+      document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      readmeButton!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 44 }));
+      await flush();
+
+      const hiddenOpenButton = Array.from(document.body.querySelectorAll('[role="menu"] button')).find((node) => node.textContent?.includes('Open in Terminal')) as HTMLButtonElement | undefined;
+      expect(hiddenOpenButton).toBeUndefined();
+      expect(openInTerminalSpy).not.toHaveBeenCalled();
     } finally {
       dispose();
     }
