@@ -344,23 +344,22 @@ func askUserToolInputSchema() map[string]any {
 						"id":        map[string]any{"type": "string", "maxLength": 80},
 						"header":    map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
 						"question":  map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
-						"is_other":  map[string]any{"type": "boolean"},
 						"is_secret": map[string]any{"type": "boolean"},
-						"options": map[string]any{
+						"choices": map[string]any{
 							"type":     "array",
 							"minItems": 1,
 							"maxItems": 4,
 							"items": map[string]any{
 								"type": "object",
 								"properties": map[string]any{
-									"option_id":   map[string]any{"type": "string", "maxLength": 64},
+									"choice_id":   map[string]any{"type": "string", "maxLength": 64},
 									"label":       map[string]any{"type": "string", "maxLength": 200},
 									"description": map[string]any{"type": "string", "maxLength": 240},
-									"detail_input_mode": map[string]any{
+									"kind": map[string]any{
 										"type": "string",
-										"enum": []string{"required"},
+										"enum": []string{"select", "write"},
 									},
-									"detail_input_placeholder": map[string]any{"type": "string", "maxLength": 160},
+									"input_placeholder": map[string]any{"type": "string", "maxLength": 160},
 									"actions": map[string]any{
 										"type":     "array",
 										"maxItems": 4,
@@ -375,12 +374,12 @@ func askUserToolInputSchema() map[string]any {
 										},
 									},
 								},
-								"required":             []string{"option_id", "label"},
+								"required":             []string{"choice_id", "label", "kind"},
 								"additionalProperties": false,
 							},
 						},
 					},
-					"required":             []string{"id", "header", "question", "is_other", "is_secret"},
+					"required":             []string{"id", "header", "question", "is_secret", "choices"},
 					"additionalProperties": false,
 				},
 			},

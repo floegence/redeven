@@ -166,7 +166,7 @@ func TestSubmitStructuredPromptResponse_WaitingPromptMismatch_DoesNotPersistMess
 		Response: RequestUserInputResponse{
 			PromptID: "wp_wrong_id",
 			Answers: map[string]RequestUserInputAnswer{
-				"question_1": {Answers: []string{"wrong prompt"}},
+				"question_1": {Text: "wrong prompt"},
 			},
 		},
 		Input:   RunInput{Text: "reply with wrong waiting prompt id"},
@@ -213,7 +213,7 @@ func TestSubmitStructuredPromptResponse_WaitingPromptMatch_ReturnsConsumedPrompt
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Response: testResponseForPrompt(waitingPrompt, map[string]RequestUserInputAnswer{
-			"question_1": {Answers: []string{"reply with matching waiting prompt id"}},
+			"question_1": {Text: "reply with matching waiting prompt id"},
 		}),
 		Input: RunInput{
 			Text: "reply with matching waiting prompt id",
@@ -260,11 +260,11 @@ func TestSubmitStructuredPromptResponse_WaitingChoiceSetMode_UpdatesThreadExecut
 				ID:       "mode_decision",
 				Header:   "Execution mode",
 				Question: "Switch to Act mode?",
-				IsOther:  false,
-				Options: []RequestUserInputOption{
+				Choices: []RequestUserInputChoice{
 					{
-						OptionID: "switch_to_act",
+						ChoiceID: "switch_to_act",
 						Label:    "Switch to Act mode",
+						Kind:     requestUserInputChoiceKindSelect,
 						Actions: []RequestUserInputAction{
 							{
 								Type: requestUserInputActionSetMode,
@@ -285,7 +285,7 @@ func TestSubmitStructuredPromptResponse_WaitingChoiceSetMode_UpdatesThreadExecut
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Response: testResponseForPrompt(waitingPrompt, map[string]RequestUserInputAnswer{
-			"mode_decision": {SelectedOptionID: "switch_to_act"},
+			"mode_decision": {ChoiceID: "switch_to_act"},
 		}),
 		Input: RunInput{
 			Text: "confirmed, switch to act and continue",
@@ -335,9 +335,8 @@ func TestSubmitStructuredPromptResponse_PromptOnlyPersistsStructuredResponseCont
 				ID:       "direction",
 				Header:   "Direction",
 				Question: "Choose a direction.",
-				IsOther:  false,
-				Options: []RequestUserInputOption{
-					{OptionID: "proceed", Label: "Proceed"},
+				Choices: []RequestUserInputChoice{
+					{ChoiceID: "proceed", Label: "Proceed", Kind: requestUserInputChoiceKindSelect},
 				},
 			},
 		},
@@ -351,7 +350,7 @@ func TestSubmitStructuredPromptResponse_PromptOnlyPersistsStructuredResponseCont
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Response: testResponseForPrompt(waitingPrompt, map[string]RequestUserInputAnswer{
-			"direction": {SelectedOptionID: "proceed"},
+			"direction": {ChoiceID: "proceed"},
 		}),
 		Input:   RunInput{},
 		Options: RunOptions{MaxSteps: 1},
@@ -394,8 +393,8 @@ func TestSubmitStructuredPromptResponse_PromptOnlyPersistsStructuredResponseCont
 	if structured[0].ResponseMessageID != userMsg.MessageID {
 		t.Fatalf("structured response_message_id=%q, want %q", structured[0].ResponseMessageID, userMsg.MessageID)
 	}
-	if structured[0].SelectedOptionID != "proceed" {
-		t.Fatalf("structured selected_option_id=%q, want %q", structured[0].SelectedOptionID, "proceed")
+	if structured[0].SelectedChoiceID != "proceed" {
+		t.Fatalf("structured selected_choice_id=%q, want %q", structured[0].SelectedChoiceID, "proceed")
 	}
 	if structured[0].PublicSummary != "Direction: Proceed." {
 		t.Fatalf("structured public_summary=%q, want %q", structured[0].PublicSummary, "Direction: Proceed.")
@@ -423,8 +422,10 @@ func TestSubmitStructuredPromptResponse_SecretAnswerDoesNotLeakToTranscriptOrStr
 				ID:       "api_key",
 				Header:   "API key",
 				Question: "Provide the API key.",
-				IsOther:  true,
 				IsSecret: true,
+				Choices: []RequestUserInputChoice{
+					{ChoiceID: "write", Label: "API key", Kind: requestUserInputChoiceKindWrite},
+				},
 			},
 		},
 	)
@@ -438,7 +439,7 @@ func TestSubmitStructuredPromptResponse_SecretAnswerDoesNotLeakToTranscriptOrStr
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Response: testResponseForPrompt(waitingPrompt, map[string]RequestUserInputAnswer{
-			"api_key": {Answers: []string{secretValue}},
+			"api_key": {ChoiceID: "write", Text: secretValue},
 		}),
 		Input:   RunInput{},
 		Options: RunOptions{MaxSteps: 1},
@@ -478,7 +479,7 @@ func TestSubmitStructuredPromptResponse_SecretAnswerDoesNotLeakToTranscriptOrStr
 	if err != nil {
 		t.Fatalf("ListRequestUserInputSecretAnswers: %v", err)
 	}
-	if len(secrets) != 1 || len(secrets[0].Answers) != 1 || secrets[0].Answers[0] != secretValue {
+	if len(secrets) != 1 || secrets[0].Text != secretValue {
 		t.Fatalf("secret answers=%+v, want raw secret stored separately", secrets)
 	}
 
@@ -492,8 +493,8 @@ func TestSubmitStructuredPromptResponse_SecretAnswerDoesNotLeakToTranscriptOrStr
 	if strings.Contains(structured[0].PublicSummary, secretValue) {
 		t.Fatalf("structured public_summary leaked secret: %q", structured[0].PublicSummary)
 	}
-	if len(structured[0].Answers) != 0 {
-		t.Fatalf("structured answers should be empty for secret input, got %+v", structured[0].Answers)
+	if structured[0].Text != "" {
+		t.Fatalf("structured text should be empty for secret input, got %+v", structured[0].Text)
 	}
 	if !structured[0].ContainsSecret {
 		t.Fatalf("structured contains_secret=false, want true")
@@ -513,7 +514,7 @@ func TestSubmitStructuredPromptResponse_SecretAnswerDoesNotLeakToTranscriptOrStr
 	if len(pack.RecentStructuredUserInputs) == 0 {
 		t.Fatalf("expected structured projection in prompt pack")
 	}
-	if got := pack.RecentStructuredUserInputs[0]; strings.Contains(got.PublicSummary, secretValue) || strings.Join(got.Answers, " ") != "" {
+	if got := pack.RecentStructuredUserInputs[0]; strings.Contains(got.PublicSummary, secretValue) || got.Text != "" {
 		t.Fatalf("prompt pack leaked secret: %+v", got)
 	}
 }

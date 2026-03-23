@@ -118,12 +118,11 @@ Behavior summary:
 - In `plan`, HTTP commands that write local files/state or send request bodies/uploads are mutating and blocked (for example `curl -o`, `curl -d`, `curl -F`, `curl -T`, `wget -O file`, `wget --post-data`).
 - Execution mode is a thread-level server state (`execution_mode`) and is authoritative for every run.
 - If edits are needed in `plan`, Flower should use `ask_user` to request switching the thread to `act`.
-- The mode-switch `ask_user` must use structured `questions[]`, and deterministic UI actions belong on `questions[].options[].actions` (for example `[{type:"set_mode",mode:"act"}]`).
-- Use `questions[].is_other=true` only when the entire question should allow a freeform reply alongside or instead of predefined options.
-- When `questions[].is_other=true` is combined with predefined `options[]`, the Env App renders an explicit final fallback choice that opens the freeform answer field.
-- Do not combine `questions[].is_other=true` with option-level detail input on the same question.
-- When only a specific option needs extra detail, encode that on the option itself with `questions[].options[].detail_input_mode="required"` and `detail_input_placeholder` when useful.
-- Option-level detail input must block resolution until the user provides that detail; selecting that option alone is not a complete answer.
+- The mode-switch `ask_user` must use structured `questions[]`, and deterministic UI actions belong on `questions[].choices[].actions` (for example `[{type:"set_mode",mode:"act"}]`).
+- Every `ask_user` question should use the canonical `choices[]` contract. Each choice declares `kind:"select"` or `kind:"write"`.
+- Use an explicit `kind:"write"` choice for first-class custom answers such as `None of the above` or `Other: ___`; do not rely on implicit `is_other` fallback behavior.
+- A question that is purely freeform should still use `choices[]`, typically with a single `kind:"write"` choice.
+- A `kind:"write"` choice is incomplete until the user provides its text payload; selecting it alone is not a complete answer.
 - In no-user-interaction runs, Flower cannot ask for a mode switch and must finish with blockers in `task_complete`.
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.

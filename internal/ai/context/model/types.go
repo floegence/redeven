@@ -4,20 +4,20 @@ import "strings"
 
 // ModelCapability defines model/runtime feature support for prompt adaptation.
 type ModelCapability struct {
-	ProviderID               string `json:"provider_id"`
-	ProviderType             string `json:"provider_type,omitempty"`
-	ResolverVersion          int    `json:"resolver_version,omitempty"`
-	ModelName                string `json:"model_name"`
-	SupportsTools            bool   `json:"supports_tools"`
-	SupportsParallelTools    bool   `json:"supports_parallel_tools"`
-	SupportsStrictJSONSchema bool   `json:"supports_strict_json_schema"`
-	SupportsImageInput       bool   `json:"supports_image_input"`
-	SupportsFileInput        bool   `json:"supports_file_input"`
-	SupportsReasoningTokens  bool   `json:"supports_reasoning_tokens"`
-	SupportsAskUserQuestionBatches bool `json:"supports_ask_user_question_batches"`
-	MaxContextTokens         int    `json:"max_context_tokens"`
-	MaxOutputTokens          int    `json:"max_output_tokens"`
-	PreferredToolSchemaMode  string `json:"preferred_tool_schema_mode"`
+	ProviderID                     string `json:"provider_id"`
+	ProviderType                   string `json:"provider_type,omitempty"`
+	ResolverVersion                int    `json:"resolver_version,omitempty"`
+	ModelName                      string `json:"model_name"`
+	SupportsTools                  bool   `json:"supports_tools"`
+	SupportsParallelTools          bool   `json:"supports_parallel_tools"`
+	SupportsStrictJSONSchema       bool   `json:"supports_strict_json_schema"`
+	SupportsImageInput             bool   `json:"supports_image_input"`
+	SupportsFileInput              bool   `json:"supports_file_input"`
+	SupportsReasoningTokens        bool   `json:"supports_reasoning_tokens"`
+	SupportsAskUserQuestionBatches bool   `json:"supports_ask_user_question_batches"`
+	MaxContextTokens               int    `json:"max_context_tokens"`
+	MaxOutputTokens                int    `json:"max_output_tokens"`
+	PreferredToolSchemaMode        string `json:"preferred_tool_schema_mode"`
 }
 
 type MemoryScope string
@@ -87,40 +87,40 @@ type AttachmentManifest struct {
 }
 
 type StructuredUserInput struct {
-	ResponseMessageID   string   `json:"response_message_id"`
-	PromptID            string   `json:"prompt_id"`
-	ToolID              string   `json:"tool_id,omitempty"`
-	ReasonCode          string   `json:"reason_code,omitempty"`
-	QuestionID          string   `json:"question_id"`
-	Header              string   `json:"header,omitempty"`
-	Question            string   `json:"question"`
-	SelectedOptionID    string   `json:"selected_option_id,omitempty"`
-	SelectedOptionLabel string   `json:"selected_option_label,omitempty"`
-	Answers             []string `json:"answers,omitempty"`
-	PublicSummary       string   `json:"public_summary,omitempty"`
-	ContainsSecret      bool     `json:"contains_secret,omitempty"`
-	CreatedAtUnixMs     int64    `json:"created_at_unix_ms"`
+	ResponseMessageID   string `json:"response_message_id"`
+	PromptID            string `json:"prompt_id"`
+	ToolID              string `json:"tool_id,omitempty"`
+	ReasonCode          string `json:"reason_code,omitempty"`
+	QuestionID          string `json:"question_id"`
+	Header              string `json:"header,omitempty"`
+	Question            string `json:"question"`
+	SelectedChoiceID    string `json:"selected_choice_id,omitempty"`
+	SelectedChoiceLabel string `json:"selected_choice_label,omitempty"`
+	Text                string `json:"text,omitempty"`
+	PublicSummary       string `json:"public_summary,omitempty"`
+	ContainsSecret      bool   `json:"contains_secret,omitempty"`
+	CreatedAtUnixMs     int64  `json:"created_at_unix_ms"`
 }
 
 // PromptPack is the canonical model context envelope.
 type PromptPack struct {
-	ThreadID                  string               `json:"thread_id"`
-	RunID                     string               `json:"run_id"`
-	SystemContract            string               `json:"system_contract"`
-	Objective                 string               `json:"objective"`
-	ActiveConstraints         []string             `json:"active_constraints"`
-	RecentDialogue            []DialogueTurn       `json:"recent_dialogue"`
+	ThreadID                   string                `json:"thread_id"`
+	RunID                      string                `json:"run_id"`
+	SystemContract             string                `json:"system_contract"`
+	Objective                  string                `json:"objective"`
+	ActiveConstraints          []string              `json:"active_constraints"`
+	RecentDialogue             []DialogueTurn        `json:"recent_dialogue"`
 	RecentStructuredUserInputs []StructuredUserInput `json:"recent_structured_user_inputs"`
-	ExecutionEvidence         []ExecutionEvidence  `json:"execution_evidence"`
-	PendingTodos              []MemoryItem         `json:"pending_todos"`
-	Blockers                  []MemoryItem         `json:"blockers"`
-	RetrievedLongTermMemory   []MemoryItem         `json:"retrieved_long_term_memory"`
-	AttachmentsManifest       []AttachmentManifest `json:"attachments_manifest"`
-	ThreadSnapshot            string               `json:"thread_snapshot"`
-	EstimatedInputTokens      int                  `json:"estimated_input_tokens"`
-	CompressionSavingRatio    float64              `json:"compression_saving_ratio"`
-	CompressionQualityPass    bool                 `json:"compression_quality_pass"`
-	ContextSectionsTokenUsage map[string]int       `json:"context_sections_token_usage"`
+	ExecutionEvidence          []ExecutionEvidence   `json:"execution_evidence"`
+	PendingTodos               []MemoryItem          `json:"pending_todos"`
+	Blockers                   []MemoryItem          `json:"blockers"`
+	RetrievedLongTermMemory    []MemoryItem          `json:"retrieved_long_term_memory"`
+	AttachmentsManifest        []AttachmentManifest  `json:"attachments_manifest"`
+	ThreadSnapshot             string                `json:"thread_snapshot"`
+	EstimatedInputTokens       int                   `json:"estimated_input_tokens"`
+	CompressionSavingRatio     float64               `json:"compression_saving_ratio"`
+	CompressionQualityPass     bool                  `json:"compression_quality_pass"`
+	ContextSectionsTokenUsage  map[string]int        `json:"context_sections_token_usage"`
 }
 
 func (p PromptPack) ApproxText() string {
