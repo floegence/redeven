@@ -55,6 +55,11 @@ const terminalConfigState = vi.hoisted(() => ({
 }));
 
 const writeTextToClipboardSpy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const openBrowserSpy = vi.hoisted(() => vi.fn(async () => undefined));
+const terminalEnvPermissionsState = vi.hoisted(() => ({
+  canRead: true,
+  canExecute: true,
+}));
 
 const rpcFsMocks = vi.hoisted(() => ({
   getPathContext: vi.fn().mockResolvedValue({ agentHomePathAbs: '/workspace' }),
@@ -184,6 +189,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
     Copy: Icon,
+    Folder: Icon,
     Sparkles: Icon,
     Terminal: Icon,
     Trash: Icon,
@@ -448,7 +454,12 @@ vi.mock('../services/terminalPreferences', () => ({
 
 vi.mock('../pages/EnvContext', () => {
   const envAccessor = Object.assign(
-    () => ({ permissions: { can_execute: true } }),
+    () => ({
+      permissions: {
+        can_read: terminalEnvPermissionsState.canRead,
+        can_execute: terminalEnvPermissionsState.canExecute,
+      },
+    }),
     { state: 'ready' },
   );
 
@@ -463,6 +474,16 @@ vi.mock('../pages/EnvContext', () => {
     }),
   };
 });
+
+vi.mock('./FileBrowserSurfaceContext', () => ({
+  useFileBrowserSurfaceContext: () => ({
+    controller: {
+      open: () => false,
+    },
+    openBrowser: openBrowserSpy,
+    closeBrowser: vi.fn(),
+  }),
+}));
 
 vi.mock('../utils/permission', () => ({
   isPermissionDeniedError: () => false,
@@ -515,9 +536,12 @@ describe('TerminalPanel', () => {
     terminalViewportRectState.top = 24;
     terminalViewportRectState.width = 320;
     terminalViewportRectState.bottom = 320;
+    terminalEnvPermissionsState.canRead = true;
+    terminalEnvPermissionsState.canExecute = true;
     terminalSelectionState.text = '';
     terminalConfigState.values = [];
     writeTextToClipboardSpy.mockClear();
+    openBrowserSpy.mockClear();
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
       value: 372,
@@ -630,6 +654,8 @@ describe('TerminalPanel', () => {
   afterEach(() => {
     document.body.innerHTML = '';
     layoutState.mobile = false;
+    terminalEnvPermissionsState.canRead = true;
+    terminalEnvPermissionsState.canExecute = true;
     Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
       configurable: true,
       value: originalGetBoundingClientRect,
@@ -1092,6 +1118,60 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(writeTextToClipboardSpy).toHaveBeenCalledWith('  echo redeven\n');
+  });
+
+  it('opens the shared file browser from the terminal context menu', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    terminalSurface?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await settleTerminalPanel();
+
+    const browseButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Browse files'));
+    expect(browseButton).toBeTruthy();
+
+    browseButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await settleTerminalPanel();
+
+    expect(openBrowserSpy).toHaveBeenCalledWith({
+      path: '/workspace',
+      homePath: '/workspace',
+    });
+  });
+
+  it('hides the terminal file-browser action when read permission is unavailable', async () => {
+    terminalEnvPermissionsState.canRead = false;
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    terminalSurface?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await settleTerminalPanel();
+
+    const browseButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Browse files'));
+    expect(browseButton).toBeUndefined();
   });
 
   it('does not route Cmd/Ctrl+C through a local keydown workaround', async () => {

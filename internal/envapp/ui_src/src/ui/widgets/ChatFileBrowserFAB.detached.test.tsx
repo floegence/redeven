@@ -4,17 +4,10 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatFileBrowserFAB } from './ChatFileBrowserFAB';
 
-const detachedSurfaceState = vi.hoisted(() => ({
-  openDetachedSurfaceWindow: vi.fn(),
+const fileBrowserSurfaceState = vi.hoisted(() => ({
+  openBrowser: vi.fn(async () => undefined),
+  open: vi.fn(() => false),
 }));
-
-const controlplaneState = vi.hoisted(() => ({
-  getLocalRuntime: vi.fn(async () => null),
-}));
-
-const envState = {
-  localRuntime: () => null as any,
-};
 
 vi.mock('solid-motionone', () => ({
   Motion: {
@@ -26,43 +19,21 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Folder: (props: any) => <svg data-testid="folder-icon" class={props.class} />,
 }));
 
-vi.mock('../pages/EnvContext', () => ({
-  useEnvContext: () => envState,
-}));
-
-vi.mock('../services/controlplaneApi', () => ({
-  getLocalRuntime: controlplaneState.getLocalRuntime,
-}));
-
-vi.mock('../services/detachedSurface', async () => {
-  const actual = await vi.importActual('../services/detachedSurface');
-  return {
-    ...actual,
-    openDetachedSurfaceWindow: detachedSurfaceState.openDetachedSurfaceWindow,
-  };
-});
-
-vi.mock('./PersistentFloatingWindow', () => ({
-  PersistentFloatingWindow: (props: any) => (
-    props.open
-      ? (
-        <div data-testid="floating-window" data-title={props.title}>
-          {props.children}
-        </div>
-      )
-      : null
-  ),
-}));
-
-vi.mock('./RemoteFileBrowser', () => ({
-  RemoteFileBrowser: () => <div data-testid="remote-file-browser" />,
+vi.mock('./FileBrowserSurfaceContext', () => ({
+  useFileBrowserSurfaceContext: () => ({
+    controller: {
+      open: fileBrowserSurfaceState.open,
+    },
+    openBrowser: fileBrowserSurfaceState.openBrowser,
+    closeBrowser: vi.fn(),
+  }),
 }));
 
 afterEach(() => {
   document.body.innerHTML = '';
-  detachedSurfaceState.openDetachedSurfaceWindow.mockReset();
-  controlplaneState.getLocalRuntime.mockClear();
-  envState.localRuntime = () => null as any;
+  fileBrowserSurfaceState.openBrowser.mockReset();
+  fileBrowserSurfaceState.open.mockReset();
+  fileBrowserSurfaceState.open.mockReturnValue(false);
 });
 
 async function flush(): Promise<void> {
@@ -84,9 +55,8 @@ function clickFab(button: HTMLButtonElement): void {
   button.dispatchEvent(pointerUp);
 }
 
-describe('ChatFileBrowserFAB detached windows', () => {
-  it('opens a detached desktop file browser instead of the in-app floating window', async () => {
-    envState.localRuntime = () => ({ mode: 'local', env_public_id: 'env_demo', desktop_managed: true });
+describe('ChatFileBrowserFAB', () => {
+  it('routes a click through the shared file-browser opener', async () => {
     (window as any).PointerEvent = window.MouseEvent;
 
     const host = document.createElement('div');
@@ -98,27 +68,20 @@ describe('ChatFileBrowserFAB detached windows', () => {
     clickFab(button);
     await flush();
 
-    expect(detachedSurfaceState.openDetachedSurfaceWindow).toHaveBeenCalledWith({
-      kind: 'file_browser',
+    expect(fileBrowserSurfaceState.openBrowser).toHaveBeenCalledWith({
       path: '/workspace',
       homePath: '/Users/demo',
     });
-    expect(host.querySelector('[data-testid="floating-window"]')).toBeNull();
   });
 
-  it('keeps detached-window promotion disabled outside desktop-managed runtime', async () => {
-    (window as any).PointerEvent = window.MouseEvent;
+  it('hides the FAB while the shared browser surface is already open', () => {
+    fileBrowserSurfaceState.open.mockReturnValue(true);
 
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => <ChatFileBrowserFAB workingDir="/workspace/project" homePath="/Users/demo" />, host);
 
-    const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement;
-    clickFab(button);
-    await flush();
-
-    expect(detachedSurfaceState.openDetachedSurfaceWindow).not.toHaveBeenCalled();
-    expect(controlplaneState.getLocalRuntime).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('button[title="Browse files"]')).toBeNull();
   });
 });

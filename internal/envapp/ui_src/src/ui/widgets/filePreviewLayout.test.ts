@@ -74,7 +74,7 @@ describe('file preview wiring', () => {
     expect(askFlowerComposerSrc).toContain('zIndex={ASK_FLOWER_CONTEXT_PREVIEW_Z_INDEX}');
   });
 
-  it('routes remote and chat previews through the shared controller and app-level host', () => {
+  it('routes remote previews through the shared controller and browser entry points through the app-level browser host', () => {
     const controllerSrc = read('./createFilePreviewController.ts');
     const contextSrc = read('./FilePreviewContext.ts');
     const hostSrc = read('./FilePreviewHost.tsx');
@@ -101,30 +101,36 @@ describe('file preview wiring', () => {
     expect(hostSrc).toContain('writeTextToClipboard');
 
     expect(shellSrc).toContain("import { createFilePreviewController } from './widgets/createFilePreviewController';");
+    expect(shellSrc).toContain("import { createFileBrowserSurfaceController } from './widgets/createFileBrowserSurfaceController';");
+    expect(shellSrc).toContain("import { FileBrowserSurfaceContext } from './widgets/FileBrowserSurfaceContext';");
+    expect(shellSrc).toContain("import { FileBrowserSurfaceHost } from './widgets/FileBrowserSurfaceHost';");
+    expect(shellSrc).toContain("import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';");
     expect(shellSrc).toContain('const filePreviewController = createFilePreviewController');
+    expect(shellSrc).toContain('const fileBrowserSurfaceController = createFileBrowserSurfaceController();');
     expect(shellSrc).toContain('<FilePreviewHost />');
+    expect(shellSrc).toContain('<FileBrowserSurfaceHost />');
+    expect(shellSrc).toContain('<FileBrowserSurfaceContext.Provider value={fileBrowserSurfaceContextValue}>');
 
     expect(remoteSrc).toContain("import { useFilePreviewContext } from './FilePreviewContext';");
     expect(remoteSrc).not.toContain("import { createFilePreviewController } from './createFilePreviewController';");
     expect(remoteSrc).not.toContain("import { FilePreviewDialog } from './FilePreviewDialog';");
     expect(remoteSrc).not.toContain('<FilePreviewDialog');
 
-    expect(chatSrc).toContain("import { RemoteFileBrowser } from './RemoteFileBrowser';");
-    expect(chatSrc).not.toContain("import { createFilePreviewController } from './createFilePreviewController';");
-    expect(chatSrc).not.toContain("import { FilePreviewDialog } from './FilePreviewDialog';");
-    expect(chatSrc).not.toContain('<FilePreviewDialog');
-    expect(chatSrc).not.toContain("from '@floegence/floe-webapp-core/file-browser'");
-    expect(chatSrc).not.toContain('<FileBrowser');
+    expect(chatSrc).toContain("import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';");
+    expect(chatSrc).toContain('await fileBrowserSurface.openBrowser(browser);');
+    expect(chatSrc).not.toContain("import { RemoteFileBrowser } from './RemoteFileBrowser';");
+    expect(chatSrc).not.toContain("import { PersistentFloatingWindow } from './PersistentFloatingWindow';");
   });
 
-  it('routes the chat FAB through the shared browser surface with isolated scope', () => {
+  it('routes the chat FAB through the shared browser surface controller', () => {
     const chatSrc = read('./ChatFileBrowserFAB.tsx');
 
-    expect(chatSrc).toContain('title="Browser"');
-    expect(chatSrc).toContain('persistenceKey="chat-browser"');
-    expect(chatSrc).toContain('stateScope="chat-fab"');
-    expect(chatSrc).toContain('<RemoteFileBrowser');
-    expect(chatSrc).toContain('initialPathOverride={browser.path}');
-    expect(chatSrc).toContain('homePathOverride={browser.homePath}');
+    expect(chatSrc).toContain('const fileBrowserSurface = useFileBrowserSurfaceContext();');
+    expect(chatSrc).toContain('const showFab = () => (props.enabled ?? true) && !fileBrowserSurface.controller.open();');
+    expect(chatSrc).toContain('await fileBrowserSurface.openBrowser(browser);');
+    expect(chatSrc).not.toContain('title="Browser"');
+    expect(chatSrc).not.toContain('persistenceKey="chat-browser"');
+    expect(chatSrc).not.toContain('stateScope="chat-fab"');
+    expect(chatSrc).not.toContain('<RemoteFileBrowser');
   });
 });
