@@ -1487,9 +1487,19 @@ button.chat-tool-ask-user-custom-submit:disabled {
 .chat-tool-ask-user-submitted {
   margin-top: 0.75rem;
   border-radius: 0.625rem;
-  border: 1px solid color-mix(in srgb, var(--success) 35%, var(--border));
-  background-color: color-mix(in srgb, var(--success) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 22%, var(--border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--card) 98%, var(--background)),
+      color-mix(in srgb, var(--success) 5%, var(--card))
+    );
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--background) 78%, transparent);
   padding: 0.625rem 0.6875rem;
+}
+
+.chat-message-bubble-receipt .chat-tool-ask-user-submitted {
+  margin-top: 0;
 }
 
 .chat-tool-ask-user-submitted-label {
@@ -1497,11 +1507,11 @@ button.chat-tool-ask-user-custom-submit:disabled {
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--success) 76%, var(--foreground));
+  color: color-mix(in srgb, var(--success) 58%, var(--foreground));
 }
 
 .chat-tool-ask-user-submitted-text {
-  margin-top: 0.25rem;
+  margin-top: 0.3125rem;
   font-size: 0.75rem;
   line-height: 1.4;
   color: var(--foreground);

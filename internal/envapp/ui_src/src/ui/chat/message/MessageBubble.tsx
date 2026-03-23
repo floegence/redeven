@@ -35,13 +35,23 @@ function isCompactToolBlock(block: MessageBlock): boolean {
   return block.type === 'tool-call' || block.type === 'shell';
 }
 
+function isStructuredReceiptBlock(block: MessageBlock): boolean {
+  return block.type === 'request_user_input_response';
+}
+
 export const MessageBubble: Component<MessageBubbleProps> = (props) => {
   const blocks = createMemo(() => visibleMessageBlocks(props.message));
+  const isStructuredReceiptMessage = createMemo(() => (
+    props.message.role === 'user'
+    && blocks().length > 0
+    && blocks().every(({ block }) => isStructuredReceiptBlock(block))
+  ));
 
   const slotClass = (block: MessageBlock): string =>
     cn(
       'chat-message-block-slot',
       isCompactToolBlock(block) && 'chat-message-block-slot-compact',
+      isStructuredReceiptBlock(block) && 'chat-message-block-slot-receipt',
     );
 
   return (
@@ -49,6 +59,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
       class={cn(
         'chat-message-bubble',
         props.message.role === 'user' && 'chat-message-bubble-user',
+        isStructuredReceiptMessage() && 'chat-message-bubble-receipt',
         props.message.role === 'assistant' && 'chat-message-bubble-assistant',
         props.message.status === 'error' && 'chat-message-bubble-error',
         props.class,
