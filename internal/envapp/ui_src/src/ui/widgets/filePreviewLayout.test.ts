@@ -109,18 +109,22 @@ describe('file preview wiring', () => {
     expect(remoteSrc).not.toContain("import { FilePreviewDialog } from './FilePreviewDialog';");
     expect(remoteSrc).not.toContain('<FilePreviewDialog');
 
-    expect(chatSrc).toContain("import { useFilePreviewContext } from './FilePreviewContext';");
+    expect(chatSrc).toContain("import { RemoteFileBrowser } from './RemoteFileBrowser';");
     expect(chatSrc).not.toContain("import { createFilePreviewController } from './createFilePreviewController';");
     expect(chatSrc).not.toContain("import { FilePreviewDialog } from './FilePreviewDialog';");
     expect(chatSrc).not.toContain('<FilePreviewDialog');
+    expect(chatSrc).not.toContain("from '@floegence/floe-webapp-core/file-browser'");
+    expect(chatSrc).not.toContain('<FileBrowser');
   });
 
-  it('keeps the chat FAB file browser sidebar persistence scoped to its own surface', () => {
+  it('routes the chat FAB through the shared browser surface with isolated scope', () => {
     const chatSrc = read('./ChatFileBrowserFAB.tsx');
 
-    expect(chatSrc).toContain("const CHAT_FAB_SIDEBAR_WIDTH_STORAGE_KEY = 'chat-fab-files:sidebar-width';");
-    expect(chatSrc).toContain('initialViewMode="grid"');
-    expect(chatSrc).toContain('sidebarWidthStorageKey={CHAT_FAB_SIDEBAR_WIDTH_STORAGE_KEY}');
-    expect(chatSrc).toContain('persistenceKey="chat-fab-files"');
+    expect(chatSrc).toContain('title="Browser"');
+    expect(chatSrc).toContain('persistenceKey="chat-browser"');
+    expect(chatSrc).toContain('stateScope="chat-fab"');
+    expect(chatSrc).toContain('<RemoteFileBrowser');
+    expect(chatSrc).toContain('initialPathOverride={browser.path}');
+    expect(chatSrc).toContain('homePathOverride={browser.homePath}');
   });
 });

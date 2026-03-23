@@ -22,52 +22,12 @@ vi.mock('solid-motionone', () => ({
   },
 }));
 
-vi.mock('@floegence/floe-webapp-core', () => ({
-  useNotification: () => ({
-    error: vi.fn(),
-    success: vi.fn(),
-  }),
-}));
-
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Folder: (props: any) => <svg data-testid="folder-icon" class={props.class} />,
 }));
 
-vi.mock('@floegence/floe-webapp-core/file-browser', () => ({
-  FileBrowser: () => <div data-testid="file-browser" />,
-}));
-
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
-  ConfirmDialog: () => null,
-  DirectoryPicker: () => null,
-  Dialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
-  FileSavePicker: () => null,
-  FloatingWindow: (props: any) => (props.open ? <div data-testid="floating-window">{props.children}</div> : null),
-}));
-
-vi.mock('@floegence/floe-webapp-core/loading', () => ({
-  LoadingOverlay: () => null,
-}));
-
-vi.mock('@floegence/floe-webapp-protocol', () => ({
-  useProtocol: () => ({
-    client: () => ({}),
-  }),
-}));
-
 vi.mock('../pages/EnvContext', () => ({
   useEnvContext: () => envState,
-}));
-
-vi.mock('../protocol/redeven_v1', () => ({
-  useRedevenRpc: () => ({
-    fs: {
-      list: vi.fn(async () => ({ entries: [] })),
-      delete: vi.fn(async () => ({ success: true })),
-      rename: vi.fn(async () => ({ success: true, newPath: '/workspace/renamed.txt' })),
-      copy: vi.fn(async () => ({ success: true, newPath: '/workspace/copy.txt' })),
-    },
-  }),
 }));
 
 vi.mock('../services/controlplaneApi', () => ({
@@ -82,10 +42,20 @@ vi.mock('../services/detachedSurface', async () => {
   };
 });
 
-vi.mock('./FilePreviewContext', () => ({
-  useFilePreviewContext: () => ({
-    openPreview: vi.fn(async () => undefined),
-  }),
+vi.mock('./PersistentFloatingWindow', () => ({
+  PersistentFloatingWindow: (props: any) => (
+    props.open
+      ? (
+        <div data-testid="floating-window" data-title={props.title}>
+          {props.children}
+        </div>
+      )
+      : null
+  ),
+}));
+
+vi.mock('./RemoteFileBrowser', () => ({
+  RemoteFileBrowser: () => <div data-testid="remote-file-browser" />,
 }));
 
 afterEach(() => {
@@ -94,6 +64,12 @@ afterEach(() => {
   controlplaneState.getLocalRuntime.mockClear();
   envState.localRuntime = () => null as any;
 });
+
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 function clickFab(button: HTMLButtonElement): void {
   (button as any).setPointerCapture = vi.fn();
@@ -120,7 +96,7 @@ describe('ChatFileBrowserFAB detached windows', () => {
 
     const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement;
     clickFab(button);
-    await Promise.resolve();
+    await flush();
 
     expect(detachedSurfaceState.openDetachedSurfaceWindow).toHaveBeenCalledWith({
       kind: 'file_browser',
@@ -136,11 +112,11 @@ describe('ChatFileBrowserFAB detached windows', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <ChatFileBrowserFAB workingDir="/workspace" homePath="/Users/demo" />, host);
+    render(() => <ChatFileBrowserFAB workingDir="/workspace/project" homePath="/Users/demo" />, host);
 
     const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement;
     clickFab(button);
-    await Promise.resolve();
+    await flush();
 
     expect(detachedSurfaceState.openDetachedSurfaceWindow).not.toHaveBeenCalled();
     expect(controlplaneState.getLocalRuntime).toHaveBeenCalledTimes(1);

@@ -14,6 +14,7 @@ Key points:
 - Languages that Monaco can only treat as plain text still stay on the same Monaco surface so preview and Edit mode remain visually aligned.
 - Truncated reads and Monaco load failures fall back to the lightweight Shiki/plain-text preview path so preview remains responsive.
 - Desktop-managed runs can promote serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` and `file_browser` today).
+- The page browser, detached file-browser scene, Ask Flower linked-directory browser, and Flower chat floating browser all reuse the same `RemoteFileBrowser` surface; chat-specific code only owns the floating-shell behavior that opens it.
 
 ## Accessibility baseline
 
