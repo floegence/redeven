@@ -125,6 +125,8 @@ type Service struct {
 	snapshotCompactor  *contextcompactor.SnapshotCompactor
 	capabilityResolver *contextadapter.Resolver
 	skillManager       *skillManager
+
+	threadTitleCoordinator *autoThreadTitleCoordinator
 }
 
 type resolvedRunModel struct {
@@ -264,6 +266,10 @@ func NewService(opts Options) (*Service, error) {
 		svc.skillManager.Discover()
 	}
 	svc.threadMgr = newThreadManager(svc)
+	svc.threadTitleCoordinator = newAutoThreadTitleCoordinator(svc)
+	if svc.threadTitleCoordinator != nil {
+		svc.threadTitleCoordinator.ScheduleRecovery()
+	}
 	return svc, nil
 }
 
@@ -275,6 +281,8 @@ func (s *Service) Close() error {
 		s.threadMgr.Close()
 	}
 	s.mu.Lock()
+	coordinator := s.threadTitleCoordinator
+	s.threadTitleCoordinator = nil
 	ts := s.threadsDB
 	s.threadsDB = nil
 	writers := make([]*aiSinkWriter, 0, len(s.realtimeWriters))
@@ -291,6 +299,9 @@ func (s *Service) Close() error {
 	s.realtimeThreadBySRV = make(map[*rpc.Server]string)
 	s.mu.Unlock()
 
+	if coordinator != nil {
+		coordinator.Close()
+	}
 	for _, w := range writers {
 		w.Close()
 	}
@@ -328,13 +339,17 @@ func (s *Service) UpdateConfig(next *config.AIConfig, persist func() error) erro
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if err := persist(); err != nil {
+		s.mu.Unlock()
 		return err
 	}
 
 	s.cfg = next
+	coordinator := s.threadTitleCoordinator
+	s.mu.Unlock()
+	if coordinator != nil {
+		coordinator.Wake()
+	}
 	return nil
 }
 
@@ -382,25 +397,32 @@ func (s *Service) SetCurrentModelID(modelID string, persist func(next *config.AI
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.cfg == nil {
+		s.mu.Unlock()
 		return ErrNotConfigured
 	}
 	if !s.cfg.IsAllowedModelID(modelID) {
+		s.mu.Unlock()
 		return fmt.Errorf("model not allowed: %s", modelID)
 	}
 
 	next := *s.cfg
 	next.CurrentModelID = modelID
 	if err := next.Validate(); err != nil {
+		s.mu.Unlock()
 		return err
 	}
 	if err := persist(&next); err != nil {
+		s.mu.Unlock()
 		return err
 	}
 
 	s.cfg = &next
+	coordinator := s.threadTitleCoordinator
+	s.mu.Unlock()
+	if coordinator != nil {
+		coordinator.Wake()
+	}
 	return nil
 }
 

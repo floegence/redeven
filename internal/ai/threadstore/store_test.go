@@ -252,6 +252,71 @@ func TestStore_SetAutoThreadTitle_GuardsAndManualRename(t *testing.T) {
 	}
 }
 
+func TestStore_ListAutoThreadTitleCandidates_FiltersAndOrdersThreads(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	for _, th := range []Thread{
+		{ThreadID: "th_old", EndpointID: "env_1"},
+		{ThreadID: "th_new", EndpointID: "env_2"},
+		{ThreadID: "th_user_locked", EndpointID: "env_3"},
+		{ThreadID: "th_titled", EndpointID: "env_4", Title: "Existing title"},
+	} {
+		if err := s.CreateThread(ctx, th); err != nil {
+			t.Fatalf("CreateThread(%s): %v", th.ThreadID, err)
+		}
+	}
+
+	appendUser := func(endpointID string, threadID string, messageID string, at int64, text string) {
+		t.Helper()
+		if _, err := s.AppendMessage(ctx, endpointID, threadID, Message{
+			ThreadID:           threadID,
+			EndpointID:         endpointID,
+			MessageID:          messageID,
+			Role:               "user",
+			AuthorUserPublicID: "u1",
+			AuthorUserEmail:    "u1@example.com",
+			Status:             "complete",
+			CreatedAtUnixMs:    at,
+			UpdatedAtUnixMs:    at,
+			TextContent:        text,
+			MessageJSON:        `{"id":"` + messageID + `","role":"user","blocks":[{"type":"text","content":"` + text + `"}],"status":"complete","timestamp":` + "1" + `}`,
+		}, "u1", "u1@example.com"); err != nil {
+			t.Fatalf("AppendMessage(%s): %v", threadID, err)
+		}
+	}
+
+	appendUser("env_1", "th_old", "msg_old", 100, "older request")
+	appendUser("env_2", "th_new", "msg_new", 200, "newer request")
+	appendUser("env_3", "th_user_locked", "msg_user", 300, "should stay locked")
+	appendUser("env_4", "th_titled", "msg_titled", 400, "already titled")
+
+	if err := s.RenameThread(ctx, "env_3", "th_user_locked", "", "u2", "u2@example.com"); err != nil {
+		t.Fatalf("RenameThread user locked: %v", err)
+	}
+
+	candidates, err := s.ListAutoThreadTitleCandidates(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListAutoThreadTitleCandidates: %v", err)
+	}
+	if len(candidates) != 2 {
+		t.Fatalf("candidate count=%d, want 2", len(candidates))
+	}
+	if candidates[0].EndpointID != "env_2" || candidates[0].ThreadID != "th_new" {
+		t.Fatalf("candidate[0]=%+v, want env_2/th_new", candidates[0])
+	}
+	if candidates[1].EndpointID != "env_1" || candidates[1].ThreadID != "th_old" {
+		t.Fatalf("candidate[1]=%+v, want env_1/th_old", candidates[1])
+	}
+}
+
 func TestStore_ResetStaleActiveThreadRunStates(t *testing.T) {
 	t.Parallel()
 

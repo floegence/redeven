@@ -131,6 +131,8 @@ Behavior summary:
 - Thread `title` and `last_message_preview` serve different purposes: `title` is a durable conversation label, while `last_message_preview` is the latest sidebar snippet.
 - Empty thread titles stay empty until a dedicated auto-title generator summarizes public user intent; persisting the raw first user message as `title` is not allowed.
 - Auto titles are generated from public user-visible text only, recorded with title metadata (`title_source`, input message id, model id, prompt version), and may only fill a still-untitled thread.
+- Auto-title generation is a single-purpose background flow with bounded retry backoff. A transient provider, parsing, model-resolution, or persistence failure should not leave the thread permanently untitled.
+- Service startup performs a recovery scan for recent still-untitled threads and re-enqueues title generation from the latest persisted public user message, so an agent restart does not strand blank titles.
 - Manual rename always wins. Once a thread is manually renamed, later automatic generation must not overwrite that user-owned title state, even if the user intentionally renamed it to blank.
 - no-tool backpressure defaults to 3 rounds and inserts a completion-required nudge before falling back to `ask_user`.
 - `terminal.exec` output is rendered with structured shell blocks in the Env App (no markdown fallback conversion).
