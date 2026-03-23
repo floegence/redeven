@@ -23,7 +23,13 @@ import { Tooltip } from '@floegence/floe-webapp-core/ui';
 import type { ClientObserverLike } from '@floegence/flowersec-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
-import { EnvContext, type AskFlowerComposerAnchor, type EnvNavTab, type EnvSettingsSection } from './pages/EnvContext';
+import {
+  EnvContext,
+  type AskFlowerComposerAnchor,
+  type EnvNavTab,
+  type EnvSettingsSection,
+  type OpenTerminalInDirectoryRequest,
+} from './pages/EnvContext';
 import type { AskFlowerIntent } from './pages/askFlowerIntent';
 import { EnvDeckPage } from './pages/EnvDeckPage';
 import { EnvTerminalPage } from './pages/EnvTerminalPage';
@@ -50,7 +56,8 @@ import { DetachedSurfaceScene } from './widgets/DetachedSurfaceScene';
 import { FilePreviewContext } from './widgets/FilePreviewContext';
 import { FilePreviewHost } from './widgets/FilePreviewHost';
 import { buildAskFlowerDraftMarkdown } from './utils/askFlowerContextTemplate';
-import { resolveSuggestedWorkingDirAbsolute } from './utils/askFlowerPath';
+import { normalizeAbsolutePath, resolveSuggestedWorkingDirAbsolute } from './utils/askFlowerPath';
+import { createClientId } from './utils/clientId';
 import { buildFilePreviewAskFlowerIntent } from './utils/filePreviewAskFlower';
 import { reloadCurrentPage } from './utils/windowNavigation';
 import { subscribeDesktopAskFlowerMainWindowHandoff, type DesktopAskFlowerMainWindowHandoff } from './services/desktopAskFlowerBridge';
@@ -398,6 +405,8 @@ export function EnvAppShell() {
   const [askFlowerComposerOpen, setAskFlowerComposerOpen] = createSignal(false);
   const [askFlowerComposerIntent, setAskFlowerComposerIntent] = createSignal<AskFlowerIntent | null>(null);
   const [askFlowerComposerAnchor, setAskFlowerComposerAnchor] = createSignal<AskFlowerComposerAnchor | null>(null);
+  const [openTerminalInDirectoryRequestSeq, setOpenTerminalInDirectoryRequestSeq] = createSignal(0);
+  const [openTerminalInDirectoryRequest, setOpenTerminalInDirectoryRequest] = createSignal<OpenTerminalInDirectoryRequest | null>(null);
   let pendingMainWindowAskFlowerComposerIntent: AskFlowerIntent | null = null;
 
   const [settingsSeq, setSettingsSeq] = createSignal(0);
@@ -424,6 +433,16 @@ export function EnvAppShell() {
     setAskFlowerIntentSeq((n) => n + 1);
   };
 
+  const consumeOpenTerminalInDirectoryRequest = (requestId: string) => {
+    const normalizedRequestId = String(requestId ?? '').trim();
+    if (!normalizedRequestId) return;
+
+    setOpenTerminalInDirectoryRequest((current) => {
+      if (!current) return current;
+      return current.requestId === normalizedRequestId ? null : current;
+    });
+  };
+
   const focusAIThread = (threadId: string) => {
     const tid = String(threadId ?? '').trim();
     if (!tid) return;
@@ -439,6 +458,23 @@ export function EnvAppShell() {
     setAskFlowerComposerIntent(intent);
     setAskFlowerComposerAnchor(anchor ?? null);
     setAskFlowerComposerOpen(true);
+  };
+
+  const openTerminalInDirectory = (workingDir: string, options?: { preferredName?: string }) => {
+    const normalizedWorkingDir = normalizeAbsolutePath(workingDir);
+    if (!normalizedWorkingDir) {
+      notify.error('Invalid directory', 'Could not resolve a terminal working directory.');
+      return;
+    }
+
+    const preferredName = String(options?.preferredName ?? '').trim();
+    setOpenTerminalInDirectoryRequest({
+      requestId: createClientId(),
+      workingDir: normalizedWorkingDir,
+      preferredName: preferredName || basenameFromAbsolutePath(normalizedWorkingDir),
+    });
+    setOpenTerminalInDirectoryRequestSeq((n) => n + 1);
+    goTab('terminal');
   };
 
   const closeAskFlowerComposer = () => {
@@ -1834,6 +1870,10 @@ export function EnvAppShell() {
         askFlowerIntent,
         injectAskFlowerIntent,
         openAskFlowerComposer,
+        openTerminalInDirectoryRequestSeq,
+        openTerminalInDirectoryRequest,
+        openTerminalInDirectory,
+        consumeOpenTerminalInDirectoryRequest,
         aiThreadFocusSeq,
         aiThreadFocusId,
         focusAIThread,

@@ -60,6 +60,12 @@ export type TerminalPanelVariant = 'panel' | 'deck';
 
 export interface TerminalPanelProps {
   variant?: TerminalPanelVariant;
+  openSessionRequest?: {
+    requestId: string;
+    workingDir: string;
+    preferredName?: string;
+  } | null;
+  onOpenSessionRequestHandled?: (requestId: string) => void;
 }
 
 type TerminalPanelInnerProps = TerminalPanelProps & {
@@ -96,6 +102,20 @@ function pickPreferredActiveId(list: TerminalSessionInfo[], preferredId: string 
   if (active) return active.id;
   const byLastActive = [...list].sort((a, b) => (b.lastActiveAtMs ?? 0) - (a.lastActiveAtMs ?? 0));
   return byLastActive[0]?.id ?? null;
+}
+
+function resolveRequestedSessionName(preferredName: string | undefined, workingDir: string, nextIndex: number): string {
+  const normalizedPreferredName = String(preferredName ?? '').trim();
+  if (normalizedPreferredName) return normalizedPreferredName;
+
+  const normalizedWorkingDir = String(workingDir ?? '').trim();
+  if (normalizedWorkingDir && normalizedWorkingDir !== '/') {
+    const parts = normalizedWorkingDir.split('/').filter(Boolean);
+    const basename = parts[parts.length - 1] ?? '';
+    if (basename) return basename;
+  }
+
+  return `Terminal ${nextIndex}`;
 }
 
 function buildLogger(): Logger {
@@ -1218,6 +1238,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   };
 
+  const activateSession = (sessionId: string) => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) return;
+
+    setActiveSessionId(normalizedSessionId);
+    setMountedSessionIds((prev) => {
+      if (prev.has(normalizedSessionId)) return prev;
+      const next = new Set(prev);
+      next.add(normalizedSessionId);
+      return next;
+    });
+  };
+
   const createSession = async () => {
     if (!connected()) return;
     setCreating(true);
@@ -1227,13 +1260,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const session = await sessionsCoordinator.createSession(`Terminal ${nextIndex}`, agentHomePathAbs() || '', 80, 24);
       if (!session?.id) throw new Error('Invalid create response');
 
-      setActiveSessionId(session.id);
-      setMountedSessionIds((prev) => {
-        if (prev.has(session.id)) return prev;
-        const next = new Set(prev);
-        next.add(session.id);
-        return next;
-      });
+      activateSession(session.id);
     } catch (e) {
       if (handleExecuteDenied(e)) return;
       setError(e instanceof Error ? e.message : String(e));
@@ -1241,6 +1268,45 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       setCreating(false);
     }
   };
+
+  let lastHandledOpenSessionRequestId = '';
+  createEffect(() => {
+    const request = props.openSessionRequest;
+    const requestId = String(request?.requestId ?? '').trim();
+    if (!requestId || requestId === lastHandledOpenSessionRequestId) return;
+    if (!connected()) return;
+
+    const workingDir = normalizeAskFlowerAbsolutePath(String(request?.workingDir ?? '').trim());
+    if (!workingDir) {
+      lastHandledOpenSessionRequestId = requestId;
+      props.onOpenSessionRequestHandled?.(requestId);
+      setError('Invalid working directory.');
+      return;
+    }
+
+    lastHandledOpenSessionRequestId = requestId;
+    void (async () => {
+      setCreating(true);
+      setError(null);
+      try {
+        const nextIndex = (sessions()?.length ?? 0) + 1;
+        const session = await sessionsCoordinator.createSession(
+          resolveRequestedSessionName(request?.preferredName, workingDir, nextIndex),
+          workingDir,
+          80,
+          24,
+        );
+        if (!session?.id) throw new Error('Invalid create response');
+        activateSession(session.id);
+      } catch (e) {
+        if (handleExecuteDenied(e)) return;
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        props.onOpenSessionRequestHandled?.(requestId);
+        setCreating(false);
+      }
+    })();
+  });
 
   const clearActive = async () => {
     const sid = activeSessionId();

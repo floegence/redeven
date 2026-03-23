@@ -11,6 +11,7 @@ Key points:
 - Flower auto titles are best-effort but resilient: the agent retries transient generation failures in the background, can expand the title-generation output budget once for reasoning-heavy models, and also recovers recent untitled threads after restart, so users should see the final title appear without manual refresh or rename in normal cases.
 - File Browser text/code previews now use a Monaco-based viewer/editor path for the primary experience, matching the shared Floe Webapp editor surface.
 - When the environment grants `can_write`, text previews can switch into an editable mode and save changes back through the agent file RPC.
+- File Browser directory context menus can hand off into Terminal by opening the terminal page and creating a new session rooted at the selected directory.
 - Languages that Monaco can only treat as plain text still stay on the same Monaco surface so preview and Edit mode remain visually aligned.
 - Truncated reads and Monaco load failures fall back to the lightweight Shiki/plain-text preview path so preview remains responsive.
 - Desktop-managed runs can promote serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` and `file_browser` today).
@@ -22,6 +23,7 @@ Env App targets a WCAG 2.2 AA baseline. The implementation follows an upstream-f
 
 - Shared shell landmarks, skip-link behavior, main-region targeting, dropdown semantics, and generic tab behavior come from released `@floegence/floe-webapp-*` packages.
 - Redeven-specific code only handles product-owned surfaces such as the local access gate, AI sidebar, custom tool blocks, git widgets, terminal integration, and file-browser composition.
+- Product-owned file-browser composition is also responsible for cross-surface handoffs such as `Open in Terminal` for a selected directory; shared file-browser primitives still only provide generic menu/rendering behavior.
 
 Contributor rules for this surface:
 

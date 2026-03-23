@@ -6,6 +6,7 @@ This folder contains the **source code** for the agent-bundled Env App UI:
 - Served by the agent local gateway under: `/_redeven_proxy/env/*`
 - Delivered to the browser over Flowersec E2EE (runtime mode) when running the sandbox origin:
   - `https://env-<env_id>.<region>.<base-sandbox-domain>/_redeven_boot/`
+- Cross-surface product flows such as `File Browser -> Open in Terminal` are implemented here through Env App shell/context orchestration rather than in the region frontend.
 
 Notes:
 

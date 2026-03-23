@@ -2,7 +2,7 @@
 
 import { LayoutProvider } from '@floegence/floe-webapp-core';
 import type { ContextMenuCallbacks, ContextMenuItem, FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { createEffect, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -63,6 +63,10 @@ const workspaceLifecycleStore = vi.hoisted(() => ({
 const filePreviewStore = vi.hoisted(() => ({
   openPreview: vi.fn(),
   closePreview: vi.fn(),
+}));
+
+const envActionSpies = vi.hoisted(() => ({
+  openTerminalInDirectory: vi.fn(),
 }));
 
 const mockRpc = vi.hoisted(() => ({
@@ -173,6 +177,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     onResize?: (delta: number) => void;
     contextMenuCallbacks?: ContextMenuCallbacks;
     overrideContextMenuItems?: ContextMenuItem[];
+    resolveOverrideContextMenuItems?: (items: FileItem[]) => ContextMenuItem[] | undefined;
   }) => {
     const [localCount, setLocalCount] = createSignal(0);
     const copyNameTarget: FileItem = {
@@ -181,6 +186,17 @@ vi.mock('./FileBrowserWorkspace', () => ({
       type: 'file',
       path: '/workspace/repo/src/.env',
     };
+    const folderTarget: FileItem = {
+      id: '/workspace/repo/src',
+      name: 'src',
+      type: 'folder',
+      path: '/workspace/repo/src',
+    };
+    const resolver = props.resolveOverrideContextMenuItems;
+    const copyNameItems = resolver?.([copyNameTarget]) ?? props.overrideContextMenuItems ?? [];
+    const folderItems = resolver?.([folderTarget]) ?? props.overrideContextMenuItems ?? [];
+    const fileItems = resolver?.([copyNameTarget]) ?? props.overrideContextMenuItems ?? [];
+    const multiSelectItems = resolver?.([folderTarget, copyNameTarget]) ?? props.overrideContextMenuItems ?? [];
 
     onMount(() => {
       workspaceLifecycleStore.filesMounts += 1;
@@ -197,13 +213,27 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <button type="button" onClick={() => setLocalCount((count) => count + 1)}>mock-files-bump</button>
         <button type="button" onClick={() => props.onModeChange?.('git')}>mock-to-git</button>
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
-        {props.overrideContextMenuItems?.some((item) => item.type === 'copy-name') ? (
+        {copyNameItems.some((item) => item.type === 'copy-name') ? (
           <button
             type="button"
             onClick={() => props.contextMenuCallbacks?.onCopyName?.([copyNameTarget])}
           >
             mock-copy-name
           </button>
+        ) : null}
+        {folderItems.some((item) => item.id === 'open-in-terminal') ? (
+          <button
+            type="button"
+            onClick={() => folderItems.find((item) => item.id === 'open-in-terminal')?.onAction?.([folderTarget])}
+          >
+            mock-open-terminal-folder
+          </button>
+        ) : null}
+        {fileItems.some((item) => item.id === 'open-in-terminal') ? (
+          <button type="button">mock-open-terminal-file</button>
+        ) : null}
+        {multiSelectItems.some((item) => item.id === 'open-in-terminal') ? (
+          <button type="button">mock-open-terminal-multi</button>
         ) : null}
       </div>
     );
@@ -356,12 +386,16 @@ async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function createEnvContext(): EnvContextValue {
-  return createEnvContextWithIdAccessor(() => 'env-1');
+function createEnvContext(options?: { canExecute?: boolean }): EnvContextValue {
+  return createEnvContextWithIdAccessor(() => 'env-1', options);
 }
 
-function createEnvContextWithIdAccessor(envId: () => string): EnvContextValue {
-  const [envResource] = createResource(async () => null);
+function createEnvContextWithIdAccessor(envId: () => string, options?: { canExecute?: boolean }): EnvContextValue {
+  const canExecute = options?.canExecute ?? true;
+  const envResource = Object.assign(
+    () => ({ permissions: { can_execute: canExecute } } as any),
+    { state: 'ready' as const },
+  ) as unknown as EnvContextValue['env'];
   return {
     env_id: envId,
     env: envResource,
@@ -382,6 +416,10 @@ function createEnvContextWithIdAccessor(envId: () => string): EnvContextValue {
     askFlowerIntent: () => null,
     injectAskFlowerIntent: () => {},
     openAskFlowerComposer: () => {},
+    openTerminalInDirectoryRequestSeq: () => 0,
+    openTerminalInDirectoryRequest: () => null,
+    openTerminalInDirectory: envActionSpies.openTerminalInDirectory,
+    consumeOpenTerminalInDirectoryRequest: () => {},
     aiThreadFocusSeq: () => 0,
     aiThreadFocusId: () => null,
     focusAIThread: () => {},
@@ -900,6 +938,72 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it('shows Open in Terminal only for a single folder target and dispatches the request with the absolute directory', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const folderButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-folder') as HTMLButtonElement | undefined;
+      const fileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-file') as HTMLButtonElement | undefined;
+      const multiButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-multi') as HTMLButtonElement | undefined;
+
+      expect(folderButton).toBeTruthy();
+      expect(fileButton).toBeUndefined();
+      expect(multiButton).toBeUndefined();
+
+      folderButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(envActionSpies.openTerminalInDirectory).toHaveBeenCalledWith('/workspace/repo/src', { preferredName: 'src' });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('hides Open in Terminal when execute permission is unavailable', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext({ canExecute: false })}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const folderButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-folder') as HTMLButtonElement | undefined;
+      expect(folderButton).toBeUndefined();
+    } finally {
+      dispose();
+    }
+  });
+
   it('enables page-level type-to-filter routing only for the dedicated browser page', async () => {
     widgetStateStore.values['widget-1'] = {
       lastPathByEnv: { 'env-1': '/workspace/repo/src' },
@@ -944,6 +1048,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
       filePreviewStore.openPreview.mockClear();
       filePreviewStore.closePreview.mockClear();
+      envActionSpies.openTerminalInDirectory.mockReset();
 
       filePreviewStore.openPreview({
         id: '/workspace/repo/src/index.ts',
