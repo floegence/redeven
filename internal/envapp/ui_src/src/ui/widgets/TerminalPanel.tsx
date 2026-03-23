@@ -1,6 +1,6 @@
 import { Index, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { Copy, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { Copy, Folder, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button, Dropdown, type DropdownItem, Input, MobileKeyboard, Tabs, TabPanel, type TabItem } from '@floegence/floe-webapp-core/ui';
@@ -53,6 +53,7 @@ import { resolveTerminalSurfaceTouchAction } from '../mobileViewportPolicy';
 import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSettingsDialog';
 import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
 import { writeTextToClipboard } from '../utils/clipboard';
+import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
 
@@ -637,6 +638,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const env = useEnvContext();
+  const fileBrowserSurface = useFileBrowserSurfaceContext();
   const layout = useLayout();
   const notify = useNotification();
   const theme = useTheme();
@@ -667,7 +669,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     x: number;
     y: number;
     workingDir: string;
+    homePath?: string;
     selection: string;
+    showBrowseFiles: boolean;
   } | null>(null);
   let terminalAskMenuEl: HTMLDivElement | null = null;
   const [terminalContextMenuHostEl, setTerminalContextMenuHostEl] = createSignal<HTMLDivElement | null>(null);
@@ -685,6 +689,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const connected = () => Boolean(protocol.client());
   const viewActive = () => view.active();
   const isInDeckWidget = Boolean(String(widgetId ?? '').trim());
+  const permissionReady = () => env.env.state === 'ready';
+  const canBrowseFiles = createMemo(() => connected() && permissionReady() && Boolean(env.env()?.permissions?.can_read));
 
   createEffect(() => {
     if (viewActive()) return;
@@ -1745,12 +1751,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return items;
   });
 
-  const clampAskMenuPosition = (x: number, y: number): { x: number; y: number } => {
+  const clampAskMenuPosition = (x: number, y: number, itemCount: number): { x: number; y: number } => {
     if (typeof window === 'undefined') return { x, y };
 
     const margin = 8;
     const menuWidth = 180;
-    const menuHeight = 44;
+    const menuPaddingY = 8;
+    const menuItemHeight = 30;
+    const menuHeight = menuPaddingY + Math.max(1, itemCount) * menuItemHeight + menuPaddingY;
     const maxX = Math.max(margin, window.innerWidth - menuWidth - margin);
     const maxY = Math.max(margin, window.innerHeight - menuHeight - margin);
 
@@ -1790,10 +1798,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const workingDir = normalizeAskFlowerAbsolutePath(String(resolvedSession.workingDir ?? '').trim())
       || normalizeAskFlowerAbsolutePath(agentHomePathAbs())
       || '';
+    const homePath = normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || undefined;
     const core = coreRegistry.get(resolvedSession.id) ?? getActiveCore();
     const selection = readTerminalSelectionText(core);
+    const showBrowseFiles = Boolean(workingDir) && canBrowseFiles();
 
-    const pos = clampAskMenuPosition(event.clientX, event.clientY);
+    const pos = clampAskMenuPosition(event.clientX, event.clientY, showBrowseFiles ? 3 : 2);
     event.preventDefault();
     event.stopPropagation();
 
@@ -1805,7 +1815,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       x: pos.x,
       y: pos.y,
       workingDir,
+      homePath,
       selection,
+      showBrowseFiles,
     });
   };
 
@@ -1828,6 +1840,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     void copyTerminalSelection(menu?.selection).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       notify.error('Copy failed', message || 'Failed to copy text to clipboard.');
+    });
+  };
+
+  const handleBrowseFilesFromTerminal = () => {
+    const menu = terminalAskMenu();
+    if (!menu || !menu.showBrowseFiles) return;
+    setTerminalAskMenu(null);
+
+    void fileBrowserSurface.openBrowser({
+      path: menu.workingDir,
+      homePath: menu.homePath,
     });
   };
 
@@ -2263,6 +2286,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               <Copy class="w-3.5 h-3.5 opacity-60" />
               <span class="flex-1 text-left">Copy selection</span>
             </button>
+            <Show when={menu.showBrowseFiles}>
+              <button
+                type="button"
+                class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
+                onClick={handleBrowseFilesFromTerminal}
+              >
+                <Folder class="w-3.5 h-3.5 opacity-60" />
+                <span class="flex-1 text-left">Browse files</span>
+              </button>
+            </Show>
             <button
               type="button"
               class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
