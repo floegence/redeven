@@ -44,7 +44,10 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
     if (props.descriptor.textPresentation !== 'code') return 'plaintext';
     return props.descriptor.language || 'plaintext';
   });
-  const shouldUseMonaco = createMemo(() => !props.truncated && !monacoFailed());
+  const shouldUseCodePreview = createMemo(
+    () => !props.editing && props.descriptor.textPresentation === 'code',
+  );
+  const shouldUseMonaco = createMemo(() => !shouldUseCodePreview() && !props.truncated && !monacoFailed());
   const editorValue = createMemo(() => (props.editing ? props.draftText ?? props.text : props.text));
   const editorOptions = createMemo<CodeEditorOptions>(() => ({
     ...PREVIEW_MONACO_INTERACTION_OPTIONS,
@@ -58,7 +61,7 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   }));
   const fallbackPreview = () => (
     <CodePreviewPane
-      code={props.text}
+      code={editorValue()}
       language={props.descriptor.textPresentation === 'code' ? props.descriptor.language : undefined}
     />
   );
