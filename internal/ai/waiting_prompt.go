@@ -16,6 +16,12 @@ const (
 	requestUserInputDetailInputRequired = "required"
 )
 
+const (
+	askUserGateReasonDetailPlaceholderWithoutMode     = "detail_placeholder_without_mode"
+	askUserGateReasonUnsupportedOptionalOptionDetail  = "unsupported_optional_option_detail_mode"
+	askUserGateReasonQuestionOtherConflictsOptionText = "question_other_conflicts_with_option_detail"
+)
+
 func buildRequestUserInputPromptID(messageID string, toolID string) string {
 	messageID = strings.TrimSpace(messageID)
 	toolID = strings.TrimSpace(toolID)
@@ -45,6 +51,53 @@ func normalizeRequestUserInputDetailInputMode(mode string) string {
 	default:
 		return ""
 	}
+}
+
+func canonicalRequestUserInputDetailInputMode(mode string) string {
+	switch normalizeRequestUserInputDetailInputMode(mode) {
+	case requestUserInputDetailInputOptional, requestUserInputDetailInputRequired:
+		return requestUserInputDetailInputRequired
+	default:
+		return ""
+	}
+}
+
+func canonicalizeRequestUserInputQuestions(questions []RequestUserInputQuestion) []RequestUserInputQuestion {
+	if len(questions) == 0 {
+		return nil
+	}
+	out := make([]RequestUserInputQuestion, 0, len(questions))
+	for _, question := range questions {
+		canonical := question
+		if len(question.Options) > 0 {
+			canonical.Options = make([]RequestUserInputOption, 0, len(question.Options))
+			for _, option := range question.Options {
+				canonicalOption := option
+				canonicalOption.DetailInputMode = canonicalRequestUserInputDetailInputMode(option.DetailInputMode)
+				canonical.Options = append(canonical.Options, canonicalOption)
+			}
+		}
+		out = append(out, canonical)
+	}
+	return out
+}
+
+func validateRequestUserInputQuestionsContract(questions []RequestUserInputQuestion) string {
+	for _, question := range normalizeRequestUserInputQuestions(questions) {
+		for _, option := range question.Options {
+			mode := normalizeRequestUserInputDetailInputMode(option.DetailInputMode)
+			if strings.TrimSpace(option.DetailInputPlaceholder) != "" && mode == "" {
+				return askUserGateReasonDetailPlaceholderWithoutMode
+			}
+			if question.IsOther && mode != "" {
+				return askUserGateReasonQuestionOtherConflictsOptionText
+			}
+			if mode == requestUserInputDetailInputOptional {
+				return askUserGateReasonUnsupportedOptionalOptionDetail
+			}
+		}
+	}
+	return ""
 }
 
 func normalizeRequestUserInputActions(actions []RequestUserInputAction) []RequestUserInputAction {
@@ -226,6 +279,7 @@ func normalizeRequestUserInputPrompt(prompt *RequestUserInputPrompt) *RequestUse
 	out.RequiredFromUser = normalizeRequestUserInputStringList(out.RequiredFromUser, 8, 200)
 	out.EvidenceRefs = normalizeRequestUserInputStringList(out.EvidenceRefs, 12, 120)
 	out.Questions = normalizeRequestUserInputQuestions(out.Questions)
+	out.Questions = canonicalizeRequestUserInputQuestions(out.Questions)
 	if len(out.Questions) == 0 {
 		return nil
 	}
@@ -404,9 +458,7 @@ func requestUserInputQuestionAnswerRequirements(question *RequestUserInputQuesti
 	allowText = question.IsOther || optionCount == 0
 	requireText = optionCount == 0
 	if option, ok := requestUserInputOptionByID(question, answer.SelectedOptionID); ok && option != nil {
-		switch normalizeRequestUserInputDetailInputMode(option.DetailInputMode) {
-		case requestUserInputDetailInputOptional:
-			allowText = true
+		switch canonicalRequestUserInputDetailInputMode(option.DetailInputMode) {
 		case requestUserInputDetailInputRequired:
 			allowText = true
 			requireText = true

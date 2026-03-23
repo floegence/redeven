@@ -26,7 +26,7 @@ type MockWaitingPrompt = {
       option_id: string;
       label: string;
       description?: string;
-      detail_input_mode?: 'optional' | 'required';
+      detail_input_mode?: string;
       detail_input_placeholder?: string;
     }>;
   }>;
@@ -1207,6 +1207,66 @@ export function registerEnvAIPageSendTests() {
           threadId: 'thread-1',
           promptId: 'prompt-1',
           text: '',
+          answers: {
+            'question-1': {
+              selectedOptionId: 'other',
+              answers: ['Working and studying part time.'],
+            },
+          },
+        }));
+      } finally {
+        dispose();
+      }
+    });
+
+    it('treats legacy optional option detail as required in composer submission flow', async () => {
+      aiState.activeThread = {
+        ...(aiState.activeThread as MockThread),
+        run_status: 'waiting_user',
+      };
+      aiState.waitingPrompt = {
+        prompt_id: 'prompt-1',
+        message_id: 'assistant-1',
+        tool_id: 'tool-ask-user',
+        questions: [
+          {
+            id: 'question-1',
+            header: 'Situation',
+            question: 'Choose the closest situation.',
+            is_other: false,
+            is_secret: false,
+            options: [
+              { option_id: 'working', label: 'Already working' },
+              {
+                option_id: 'other',
+                label: 'Other',
+                detail_input_mode: 'optional',
+                detail_input_placeholder: 'Describe your current situation',
+              },
+            ],
+          },
+        ],
+      };
+      aiState.structuredDrafts = {
+        'question-1': {
+          selectedOptionId: 'other',
+          answers: [],
+        },
+      };
+
+      const { host, dispose } = await renderPage();
+      try {
+        const replyButton = Array.from(host.querySelectorAll('button')).find((item) => item.getAttribute('title') === 'Reply now') as HTMLButtonElement | undefined;
+        expect(replyButton).toBeTruthy();
+        expect(replyButton?.disabled).toBe(true);
+        expect(submitStructuredPromptResponseMock).not.toHaveBeenCalled();
+
+        inputComposer(host, 'Working and studying part time.');
+        submitComposer(host, 'button', 'Reply now');
+        await flushAsync();
+
+        expect(submitStructuredPromptResponseMock).toHaveBeenCalledTimes(1);
+        expect(submitStructuredPromptResponseMock).toHaveBeenCalledWith(expect.objectContaining({
           answers: {
             'question-1': {
               selectedOptionId: 'other',
