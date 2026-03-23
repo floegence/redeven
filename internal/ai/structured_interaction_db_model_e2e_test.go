@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -149,6 +150,9 @@ func TestE2E_DBConfiguredModel_GuidedStructuredInteractionProducesWaitingPrompt(
 	}
 
 	question := view.WaitingPrompt.Questions[0]
+	if containsDirectAgeCue(question.Question) {
+		t.Fatalf("question leaked direct age cue: %+v", question)
+	}
 	if len(question.Choices) < 2 {
 		t.Fatalf("question choices=%d, want at least 2: %+v", len(question.Choices), question)
 	}
@@ -157,6 +161,9 @@ func TestE2E_DBConfiguredModel_GuidedStructuredInteractionProducesWaitingPrompt(
 	}
 	hasSelect := false
 	for _, choice := range question.Choices {
+		if containsDirectAgeCue(choice.Label) {
+			t.Fatalf("choice leaked direct age cue: %+v", choice)
+		}
 		switch strings.TrimSpace(choice.Kind) {
 		case requestUserInputChoiceKindSelect:
 			hasSelect = true
@@ -192,4 +199,23 @@ func TestE2E_DBConfiguredModel_GuidedStructuredInteractionProducesWaitingPrompt(
 	if !foundWaiting {
 		t.Fatalf("missing ask_user.waiting event")
 	}
+}
+
+var directAgeRangePattern = regexp.MustCompile(`\d+\s*[-~到]\s*\d+`)
+
+func containsDirectAgeCue(text string) bool {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return false
+	}
+	if directAgeRangePattern.MatchString(text) {
+		return true
+	}
+	signals := []string{"几岁", "多少岁", "年龄", "岁数", "岁）", "岁)", "岁（", "岁("}
+	for _, signal := range signals {
+		if strings.Contains(text, signal) {
+			return true
+		}
+	}
+	return false
 }
