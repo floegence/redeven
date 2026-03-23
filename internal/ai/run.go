@@ -2463,48 +2463,11 @@ func parseAskUserQuestionsAny(value any) []RequestUserInputQuestion {
 		if !ok || record == nil {
 			continue
 		}
-		options := make([]RequestUserInputOption, 0, 4)
-		if rawOptions, ok := record["options"].([]any); ok {
-			optionItems := make([]RequestUserInputOption, 0, len(rawOptions))
-			for _, raw := range rawOptions {
-				optionRecord, ok := raw.(map[string]any)
-				if !ok || optionRecord == nil {
-					continue
-				}
-				actions := make([]RequestUserInputAction, 0, 4)
-				if rawActions, ok := optionRecord["actions"].([]any); ok {
-					for _, rawAction := range rawActions {
-						actionRecord, ok := rawAction.(map[string]any)
-						if !ok || actionRecord == nil {
-							continue
-						}
-						actions = append(actions, RequestUserInputAction{
-							Type: strings.TrimSpace(anyToString(actionRecord["type"])),
-							Mode: strings.TrimSpace(anyToString(actionRecord["mode"])),
-						})
-					}
-				}
-				optionItems = append(optionItems, RequestUserInputOption{
-					OptionID:               strings.TrimSpace(anyToString(optionRecord["option_id"])),
-					Label:                  strings.TrimSpace(anyToString(optionRecord["label"])),
-					Description:            strings.TrimSpace(anyToString(optionRecord["description"])),
-					DetailInputMode:        strings.TrimSpace(anyToString(optionRecord["detail_input_mode"])),
-					DetailInputPlaceholder: strings.TrimSpace(anyToString(optionRecord["detail_input_placeholder"])),
-					Actions:                actions,
-				})
-			}
-			if normalized := normalizeRequestUserInputOptions(optionItems); len(normalized) > 0 {
-				options = normalized
-			}
+		question, ok := requestUserInputQuestionFromRecord(record)
+		if !ok {
+			continue
 		}
-		questions = append(questions, RequestUserInputQuestion{
-			ID:       strings.TrimSpace(anyToString(record["id"])),
-			Header:   strings.TrimSpace(anyToString(record["header"])),
-			Question: strings.TrimSpace(anyToString(record["question"])),
-			IsOther:  anyToBool(record["is_other"]),
-			IsSecret: anyToBool(record["is_secret"]),
-			Options:  options,
-		})
+		questions = append(questions, question)
 	}
 	return normalizeRequestUserInputQuestions(questions)
 }

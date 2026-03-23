@@ -14,12 +14,12 @@ export type AIRequestUserInputAction = {
   mode?: 'act' | 'plan';
 };
 
-export type AIRequestUserInputOption = {
-  optionId: string;
+export type AIRequestUserInputChoice = {
+  choiceId: string;
   label: string;
   description?: string;
-  detailInputMode?: 'required';
-  detailInputPlaceholder?: string;
+  kind: 'select' | 'write';
+  inputPlaceholder?: string;
   actions?: AIRequestUserInputAction[];
 };
 
@@ -27,9 +27,8 @@ export type AIRequestUserInputQuestion = {
   id: string;
   header: string;
   question: string;
-  isOther: boolean;
   isSecret: boolean;
-  options?: AIRequestUserInputOption[];
+  choices?: AIRequestUserInputChoice[];
 };
 
 export type AIRequestUserInputPrompt = {
@@ -45,8 +44,8 @@ export type AIRequestUserInputPrompt = {
 };
 
 export type AIRequestUserInputAnswer = {
-  selectedOptionId?: string;
-  answers: string[];
+  choiceId?: string;
+  text?: string;
 };
 
 export type AIRequestUserInputResponse = {

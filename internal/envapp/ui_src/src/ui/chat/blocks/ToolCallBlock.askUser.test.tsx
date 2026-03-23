@@ -24,8 +24,15 @@ const askUserBlock: ToolCallBlockType = {
         id: 'question_1',
         header: 'Direction',
         question: 'Choose a direction.',
-        is_other: true,
         is_secret: false,
+        choices: [
+          {
+            choice_id: 'custom',
+            label: 'Your answer',
+            kind: 'write',
+            input_placeholder: 'Type your answer',
+          },
+        ],
       },
     ],
   },
@@ -36,39 +43,49 @@ const askUserBlock: ToolCallBlockType = {
         id: 'question_1',
         header: 'Direction',
         question: 'Choose a direction.',
-        is_other: true,
         is_secret: false,
+        choices: [
+          {
+            choice_id: 'custom',
+            label: 'Your answer',
+            kind: 'write',
+            input_placeholder: 'Type your answer',
+          },
+        ],
       },
     ],
   },
 };
 
+type MockAskUserChoice = {
+  choiceId: string;
+  label: string;
+  description?: string;
+  kind: 'select' | 'write';
+  inputPlaceholder?: string;
+};
+
+type MockAskUserQuestion = {
+  id: string;
+  header: string;
+  question: string;
+  isSecret?: boolean;
+  choices: MockAskUserChoice[];
+};
+
 function renderAskUserBlock(opts: {
   runStatus: string;
-  initialDrafts?: Record<string, { selectedOptionId?: string; answers: string[]; useOtherFallback?: boolean }>;
+  initialDrafts?: Record<string, { choiceId?: string; text?: string }>;
   waitingPrompt?: {
-    prompt_id: string;
-    message_id: string;
-    tool_id: string;
-    questions?: Array<{
-      id: string;
-      header: string;
-      question: string;
-      is_other: boolean;
-      is_secret: boolean;
-      options?: Array<{
-        option_id: string;
-        label: string;
-        description?: string;
-        detail_input_mode?: string;
-        detail_input_placeholder?: string;
-      }>;
-    }>;
+    promptId: string;
+    messageId: string;
+    toolId: string;
+    questions?: MockAskUserQuestion[];
   } | null;
 }) {
   const host = document.createElement('div');
   document.body.appendChild(host);
-  const [drafts, setDrafts] = createSignal<Record<string, { selectedOptionId?: string; answers: string[]; useOtherFallback?: boolean }>>(opts.initialDrafts ?? {});
+  const [drafts, setDrafts] = createSignal<Record<string, { choiceId?: string; text?: string }>>(opts.initialDrafts ?? {});
   const submitStructuredPromptResponse = vi.fn(async () => ({}));
 
   const aiContextValue: any = {
@@ -80,7 +97,7 @@ function renderAskUserBlock(opts: {
     }),
     activeThreadWaitingPrompt: () => opts.waitingPrompt ?? null,
     getStructuredPromptDrafts: () => drafts(),
-    setStructuredPromptDraft: (_threadId: string, _promptId: string, questionId: string, draft: { selectedOptionId?: string; answers: string[]; useOtherFallback?: boolean } | null) => {
+    setStructuredPromptDraft: (_threadId: string, _promptId: string, questionId: string, draft: { choiceId?: string; text?: string } | null) => {
       setDrafts((prev) => {
         const next = { ...prev };
         if (!draft) {
@@ -136,19 +153,18 @@ describe('ToolCallBlock ask_user states', () => {
     const { host, submitStructuredPromptResponse } = renderAskUserBlock({
       runStatus: 'waiting_user',
       waitingPrompt: {
-        prompt_id: 'prompt-1',
-        message_id: 'message-ask-user-1',
-        tool_id: 'tool-ask-user-1',
+        promptId: 'prompt-1',
+        messageId: 'message-ask-user-1',
+        toolId: 'tool-ask-user-1',
         questions: [
           {
             id: 'question_1',
             header: 'Direction',
             question: 'Choose a direction.',
-            is_other: false,
-            is_secret: false,
-            options: [
-              { option_id: 'proceed', label: 'Proceed' },
-              { option_id: 'pause', label: 'Pause' },
+            isSecret: false,
+            choices: [
+              { choiceId: 'proceed', label: 'Proceed', kind: 'select' },
+              { choiceId: 'pause', label: 'Pause', kind: 'select' },
             ],
           },
         ],
@@ -170,30 +186,35 @@ describe('ToolCallBlock ask_user states', () => {
       promptId: 'prompt-1',
       answers: {
         question_1: {
-          selectedOptionId: 'proceed',
-          answers: [],
+          choiceId: 'proceed',
         },
       },
     }));
   });
 
-  it('renders an explicit none-of-the-above fallback for is_other questions with options', async () => {
+  it('renders an explicit custom write choice alongside fixed options', async () => {
     const { host } = renderAskUserBlock({
       runStatus: 'waiting_user',
       waitingPrompt: {
-        prompt_id: 'prompt-1',
-        message_id: 'message-ask-user-1',
-        tool_id: 'tool-ask-user-1',
+        promptId: 'prompt-1',
+        messageId: 'message-ask-user-1',
+        toolId: 'tool-ask-user-1',
         questions: [
           {
             id: 'question_1',
             header: 'Situation',
             question: 'Choose the closest situation.',
-            is_other: true,
-            is_secret: false,
-            options: [
-              { option_id: 'working', label: 'Already working' },
-              { option_id: 'studying', label: 'Studying full time' },
+            isSecret: false,
+            choices: [
+              { choiceId: 'working', label: 'Already working', kind: 'select' },
+              { choiceId: 'studying', label: 'Studying full time', kind: 'select' },
+              {
+                choiceId: 'other',
+                label: 'None of the above',
+                description: 'Type another answer.',
+                kind: 'write',
+                inputPlaceholder: 'Type another answer',
+              },
             ],
           },
         ],
@@ -235,23 +256,22 @@ describe('ToolCallBlock ask_user states', () => {
     const { host } = renderAskUserBlock({
       runStatus: 'waiting_user',
       waitingPrompt: {
-        prompt_id: 'prompt-1',
-        message_id: 'message-ask-user-1',
-        tool_id: 'tool-ask-user-1',
+        promptId: 'prompt-1',
+        messageId: 'message-ask-user-1',
+        toolId: 'tool-ask-user-1',
         questions: [
           {
             id: 'question_1',
             header: 'Situation',
             question: 'Choose the closest situation.',
-            is_other: false,
-            is_secret: false,
-            options: [
-              { option_id: 'working', label: 'Already working' },
+            isSecret: false,
+            choices: [
+              { choiceId: 'working', label: 'Already working', kind: 'select' },
               {
-                option_id: 'other',
+                choiceId: 'other',
                 label: 'Other',
-                detail_input_mode: 'required',
-                detail_input_placeholder: 'Describe your current situation',
+                kind: 'write',
+                inputPlaceholder: 'Describe your current situation',
               },
             ],
           },
@@ -271,7 +291,7 @@ describe('ToolCallBlock ask_user states', () => {
     const detailInput = host.querySelector('.chat-tool-ask-user-custom-input') as HTMLInputElement | null;
     expect(detailInput).toBeTruthy();
     expect(detailInput?.placeholder).toBe('Describe your current situation');
-    expect(host.textContent).toContain('More detail is required for the selected option.');
+    expect(host.textContent).toContain('Type your answer to continue.');
 
     const continueButton = host.querySelector('.chat-tool-ask-user-custom-submit') as HTMLButtonElement | null;
     expect(continueButton).toBeTruthy();
@@ -284,27 +304,25 @@ describe('ToolCallBlock ask_user states', () => {
     expect((host.querySelector('.chat-tool-ask-user-custom-submit') as HTMLButtonElement | null)?.disabled).toBe(false);
   });
 
-  it('treats legacy optional detail prompts as required detail before submit', async () => {
+  it('renders a direct input for write-only questions without radio choices', async () => {
     const { host } = renderAskUserBlock({
       runStatus: 'waiting_user',
       waitingPrompt: {
-        prompt_id: 'prompt-1',
-        message_id: 'message-ask-user-1',
-        tool_id: 'tool-ask-user-1',
+        promptId: 'prompt-1',
+        messageId: 'message-ask-user-1',
+        toolId: 'tool-ask-user-1',
         questions: [
           {
             id: 'question_1',
-            header: 'Situation',
-            question: 'Choose the closest situation.',
-            is_other: false,
-            is_secret: false,
-            options: [
-              { option_id: 'working', label: 'Already working' },
+            header: 'Clarify',
+            question: 'What should Flower inspect next?',
+            isSecret: false,
+            choices: [
               {
-                option_id: 'other',
-                label: 'Other',
-                detail_input_mode: 'optional',
-                detail_input_placeholder: 'Describe your current situation',
+                choiceId: 'write',
+                label: 'Your answer',
+                kind: 'write',
+                inputPlaceholder: 'Type your answer',
               },
             ],
           },
@@ -312,14 +330,16 @@ describe('ToolCallBlock ask_user states', () => {
       },
     });
 
-    const radios = host.querySelectorAll('input[type="radio"]');
-    expect(radios.length).toBe(2);
-    const otherRadio = radios[1] as HTMLInputElement;
-    otherRadio.checked = true;
-    otherRadio.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(host.querySelectorAll('input[type="radio"]').length).toBe(0);
+    const detailInput = host.querySelector('.chat-tool-ask-user-custom-input') as HTMLInputElement | null;
+    expect(detailInput).toBeTruthy();
+    expect(detailInput?.placeholder).toBe('Type your answer');
+    expect((host.querySelector('.chat-tool-ask-user-custom-submit') as HTMLButtonElement | null)?.disabled).toBe(true);
+
+    detailInput!.value = 'Inspect the build logs.';
+    detailInput!.dispatchEvent(new Event('input', { bubbles: true }));
     await flushAsync();
 
-    expect(host.textContent).toContain('More detail is required for the selected option.');
-    expect((host.querySelector('.chat-tool-ask-user-custom-submit') as HTMLButtonElement | null)?.disabled).toBe(true);
+    expect((host.querySelector('.chat-tool-ask-user-custom-submit') as HTMLButtonElement | null)?.disabled).toBe(false);
   });
 });

@@ -6,6 +6,18 @@ import { cn } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { useChatContext } from '../ChatProvider';
 import type { ToolCallBlock as ToolCallBlockType } from '../types';
+import {
+  getSelectedAskUserChoice,
+  normalizeAskUserDraft,
+  normalizeAskUserQuestions,
+  questionHasDraftAnswer,
+  questionInputPlaceholder,
+  questionRequiresText,
+  questionSupportsAutoSubmit,
+  questionUsesDirectWriteInput,
+  type AskUserDraft,
+  type AskUserQuestion,
+} from '../askUserContract';
 import { BlockRenderer } from './BlockRenderer';
 import { useAIChatContext } from '../../pages/AIChatContext';
 
@@ -25,31 +37,7 @@ export interface ToolCallBlockProps {
 
 type AskUserDisplay = {
   source: string;
-  questions: AskUserQuestionDisplay[];
-};
-
-type AskUserOptionDisplay = {
-  optionId: string;
-  label: string;
-  description?: string;
-  detailInputMode?: 'required';
-  detailInputPlaceholder?: string;
-  hasActions: boolean;
-};
-
-type AskUserQuestionDisplay = {
-  id: string;
-  header: string;
-  question: string;
-  isOther: boolean;
-  isSecret: boolean;
-  options: AskUserOptionDisplay[];
-};
-
-type AskUserDraft = {
-  selectedOptionId?: string;
-  answers: string[];
-  useOtherFallback?: boolean;
+  questions: AskUserQuestion[];
 };
 
 // Chevron icon for collapse toggle (rotatable)
@@ -161,39 +149,6 @@ function asTrimmedString(value: unknown): string {
   return value.trim();
 }
 
-function normalizeAskUserOptions(value: unknown): AskUserOptionDisplay[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  const out: AskUserOptionDisplay[] = [];
-  const seenOption = new Set<string>();
-  const seenLabel = new Set<string>();
-  for (const item of value) {
-    if (!item || typeof item !== 'object') continue;
-    const label = asTrimmedString((item as any).label);
-    if (!label) continue;
-    const optionId = asTrimmedString((item as any).option_id ?? (item as any).optionId) || `option_${out.length + 1}`;
-    const optionKey = optionId.toLowerCase();
-    const labelKey = label.toLowerCase();
-    if (seenOption.has(optionKey) || seenLabel.has(labelKey)) continue;
-    seenOption.add(optionKey);
-    seenLabel.add(labelKey);
-    out.push({
-      optionId,
-      label,
-      description: asTrimmedString((item as any).description) || undefined,
-      detailInputMode: (() => {
-        const mode = asTrimmedString((item as any).detail_input_mode).toLowerCase();
-        return mode === 'optional' || mode === 'required' ? ('required' as const) : undefined;
-      })(),
-      detailInputPlaceholder: asTrimmedString((item as any).detail_input_placeholder) || undefined,
-      hasActions: Array.isArray((item as any).actions) && (item as any).actions.length > 0,
-    });
-    if (out.length >= 4) break;
-  }
-  return out;
-}
-
 function buildAskUserDisplay(block: ToolCallBlockType): AskUserDisplay | null {
   if (String(block.toolName ?? '').trim() !== ASK_USER_TOOL_NAME) {
     return null;
@@ -202,28 +157,7 @@ function buildAskUserDisplay(block: ToolCallBlockType): AskUserDisplay | null {
   const result = asRecord(block.result);
   const source = asTrimmedString(result?.source);
 
-  const readQuestions = (value: unknown): AskUserQuestionDisplay[] => {
-    if (!Array.isArray(value)) return [];
-    const out: AskUserQuestionDisplay[] = [];
-    for (const item of value) {
-      if (!item || typeof item !== 'object') continue;
-      const id = asTrimmedString((item as any).id) || `question_${out.length + 1}`;
-      const header = asTrimmedString((item as any).header);
-      const question = asTrimmedString((item as any).question);
-      if (!header || !question) continue;
-      const options = normalizeAskUserOptions((item as any).options);
-      out.push({
-        id,
-        header,
-        question,
-        isOther: Boolean((item as any).is_other),
-        isSecret: Boolean((item as any).is_secret),
-        options,
-      });
-      if (out.length >= 5) break;
-    }
-    return out;
-  };
+  const readQuestions = (value: unknown): AskUserQuestion[] => normalizeAskUserQuestions(value);
 
   const questionsFromResult = readQuestions(result?.questions);
   const questionsFromArgs = readQuestions(args?.questions);
@@ -3025,14 +2959,14 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
   const promptKey = createMemo(
     () =>
       `${props.messageId}\u001f${props.block.toolId}\u001f${props.display.questions
-        .map((question) => `${question.id}:${question.question}:${question.options.map((option) => option.optionId).join('|')}`)
+        .map((question) => `${question.id}:${question.question}:${question.choices.map((choice) => choice.choiceId).join('|')}`)
         .join('\u001f')}`,
   );
   const sourceLabel = createMemo(() => humanizeAskUserSource(props.display.source));
   const activeThreadId = createMemo(() => String(ai.activeThreadId() ?? '').trim());
   const activeThreadRunStatus = createMemo(() => String(ai.activeThread()?.run_status ?? '').trim().toLowerCase());
   const waitingPrompt = createMemo(() => ai.activeThreadWaitingPrompt());
-  const waitingPromptId = createMemo(() => String(waitingPrompt()?.prompt_id ?? '').trim());
+  const waitingPromptId = createMemo(() => String(waitingPrompt()?.promptId ?? '').trim());
   const blockWaitingUser = createMemo(() => {
     const result = asRecord(props.block.result);
     if (!result) return false;
@@ -3048,8 +2982,8 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
     const prompt = waitingPrompt();
     if (!prompt) return false;
     return (
-      String(prompt.message_id ?? '').trim() === props.messageId &&
-      String(prompt.tool_id ?? '').trim() === String(props.block.toolId ?? '').trim()
+      String(prompt.messageId ?? '').trim() === props.messageId &&
+      String(prompt.toolId ?? '').trim() === String(props.block.toolId ?? '').trim()
     );
   });
   const missingActivePrompt = createMemo(() => (
@@ -3064,25 +2998,7 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
   const currentQuestions = createMemo(() => {
     const prompt = waitingPrompt();
     if (interactiveAllowed() && Array.isArray(prompt?.questions) && prompt.questions.length > 0) {
-      return prompt.questions.map((question) => ({
-        id: question.id,
-        header: question.header,
-        question: question.question,
-        isOther: Boolean(question.is_other),
-        isSecret: Boolean(question.is_secret),
-        options: Array.isArray(question.options)
-          ? question.options.map((option) => ({
-              optionId: option.option_id,
-              label: option.label,
-              description: option.description,
-              detailInputMode: option.detail_input_mode === 'required' || option.detail_input_mode === 'optional'
-                ? ('required' as const)
-                : undefined,
-              detailInputPlaceholder: option.detail_input_placeholder,
-              hasActions: Array.isArray(option.actions) && option.actions.length > 0,
-            }))
-          : [],
-      }));
+      return prompt.questions;
     }
     return props.display.questions;
   });
@@ -3101,105 +3017,15 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
     }
   });
 
-  const setQuestionDraft = (questionId: string, next: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean }) => {
+  const setQuestionDraft = (questionId: string, next: AskUserDraft) => {
     const tid = activeThreadId();
     const promptId = waitingPromptId();
     if (!tid || !promptId) return;
     setSubmitError('');
-    ai.setStructuredPromptDraft(tid, promptId, questionId, {
-      selectedOptionId: String(next.selectedOptionId ?? '').trim() || undefined,
-      answers: Array.isArray(next.answers) ? next.answers.map((item) => String(item ?? '').trim()).filter(Boolean) : [],
-      useOtherFallback: Boolean(next.useOtherFallback) || undefined,
-    });
+    ai.setStructuredPromptDraft(tid, promptId, questionId, normalizeAskUserDraft(next));
   };
 
-  const selectedOptionForDraft = (question: AskUserQuestionDisplay, draft: AskUserDraft) => (
-    question.options.find((option) => option.optionId === String(draft.selectedOptionId ?? '').trim())
-  );
-
-  const questionHasOtherFallback = (question: AskUserQuestionDisplay): boolean => (
-    question.isOther && question.options.length > 0
-  );
-
-  const questionUsesOtherFallback = (question: AskUserQuestionDisplay, draft: AskUserDraft): boolean => (
-    questionHasOtherFallback(question) &&
-    !String(draft.selectedOptionId ?? '').trim() &&
-    (Boolean(draft.useOtherFallback) || draft.answers.length > 0)
-  );
-
-  const questionAllowsDetailText = (question: AskUserQuestionDisplay, draft: AskUserDraft): boolean => {
-    if (question.options.length === 0) {
-      return true;
-    }
-    const option = selectedOptionForDraft(question, draft);
-    return Boolean(option?.detailInputMode) || questionUsesOtherFallback(question, draft);
-  };
-
-  const questionRequiresDetailText = (question: AskUserQuestionDisplay, draft: AskUserDraft): boolean => {
-    if (question.options.length === 0) {
-      return true;
-    }
-    const option = selectedOptionForDraft(question, draft);
-    return Boolean(option?.detailInputMode) || questionUsesOtherFallback(question, draft);
-  };
-
-  const questionRequiresSelection = (question: AskUserQuestionDisplay): boolean => (
-    question.options.length > 0 && !question.isOther
-  );
-
-  const questionShowsDetailInput = (question: AskUserQuestionDisplay, draft: AskUserDraft): boolean => (
-    question.options.length === 0 || questionAllowsDetailText(question, draft)
-  );
-
-  const questionDetailInputPlaceholder = (question: AskUserQuestionDisplay, draft: AskUserDraft): string => {
-    const option = selectedOptionForDraft(question, draft);
-    if (option?.detailInputPlaceholder) {
-      return option.detailInputPlaceholder;
-    }
-    if (question.isSecret) {
-      return 'Enter secret value';
-    }
-    if (question.options.length === 0) {
-      return 'Type your answer';
-    }
-    if (option?.detailInputMode === 'required') {
-      return 'Add the required detail';
-    }
-    if (questionUsesOtherFallback(question, draft) || question.isOther) {
-      return 'Type another answer';
-    }
-    return 'Type your answer';
-  };
-
-  const questionSupportsAutoSubmit = (question: AskUserQuestionDisplay): boolean => (
-    currentQuestions().length === 1 &&
-    !question.isOther &&
-    !question.isSecret &&
-    question.options.length > 0 &&
-    question.options.every((option) => !option.detailInputMode && !option.hasActions)
-  );
-
-  const questionAnswered = (question: AskUserQuestionDisplay): boolean => {
-    const draft = promptDrafts()[question.id];
-    if (!draft) return false;
-    const selectedOptionId = String(draft.selectedOptionId ?? '').trim();
-    const hasText = draft.answers.length > 0;
-    if (questionRequiresSelection(question) && !selectedOptionId) {
-      return false;
-    }
-    if (!questionRequiresSelection(question) && !selectedOptionId && !hasText) {
-      return false;
-    }
-    if (!questionAllowsDetailText(question, draft) && hasText) {
-      return false;
-    }
-    if (questionRequiresDetailText(question, draft) && !hasText) {
-      return false;
-    }
-    return true;
-  };
-
-  const unansweredQuestions = createMemo(() => currentQuestions().filter((question) => !questionAnswered(question)));
+  const unansweredQuestions = createMemo(() => currentQuestions().filter((question) => !questionHasDraftAnswer(question, promptDrafts()[question.id])));
   const canSubmit = createMemo(() => interactiveAllowed() && unansweredQuestions().length === 0 && !submitting());
 
   const handleSubmit = async () => {
@@ -3234,17 +3060,15 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
 
       <For each={currentQuestions()}>
         {(question) => {
-          const draft = createMemo(() => promptDrafts()[question.id] ?? { answers: [] });
-          const selectedOption = createMemo(() => selectedOptionForDraft(question, draft()));
-          const showDetailInput = createMemo(() => questionShowsDetailInput(question, draft()));
-          const otherFallbackSelected = createMemo(() => questionUsesOtherFallback(question, draft()));
-          const autoSubmit = createMemo(() => questionSupportsAutoSubmit(question));
-          const selectOption = (option: AskUserOptionDisplay) => {
-            const keepAnswers = question.options.length === 0 || Boolean(option.detailInputMode);
+          const draft = createMemo(() => normalizeAskUserDraft(promptDrafts()[question.id]));
+          const selectedChoice = createMemo(() => getSelectedAskUserChoice(question, draft()));
+          const showChoiceList = createMemo(() => !questionUsesDirectWriteInput(question));
+          const showTextInput = createMemo(() => questionRequiresText(question, draft()));
+          const autoSubmit = createMemo(() => questionSupportsAutoSubmit(question, currentQuestions().length));
+          const selectChoice = (choice: AskUserQuestion['choices'][number]) => {
             setQuestionDraft(question.id, {
-              selectedOptionId: option.optionId,
-              answers: keepAnswers ? draft().answers : [],
-              useOtherFallback: false,
+              choiceId: choice.choiceId,
+              text: choice.kind === 'write' ? draft().text : undefined,
             });
             if (autoSubmit()) {
               queueMicrotask(() => {
@@ -3252,90 +3076,58 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
               });
             }
           };
-          const selectOtherFallback = () => {
-            setQuestionDraft(question.id, {
-              selectedOptionId: undefined,
-              answers: draft().answers,
-              useOtherFallback: true,
-            });
-          };
           return (
             <div class="chat-tool-ask-user-question-group">
               <p class="chat-tool-ask-user-question">{question.question}</p>
-              <Show when={question.options.length > 0}>
+              <Show when={showChoiceList()}>
                 <div class="chat-tool-ask-user-options" role="radiogroup" aria-label={question.header}>
-                  <For each={question.options}>
-                    {(option) => (
+                  <For each={question.choices}>
+                    {(choice) => (
                       <label
                         class={cn(
                           'chat-tool-ask-user-option-row',
-                          draft().selectedOptionId === option.optionId && 'chat-tool-ask-user-option-row-selected',
+                          draft().choiceId === choice.choiceId && 'chat-tool-ask-user-option-row-selected',
                         )}
                       >
                         <input
                           type="radio"
                           class="chat-tool-ask-user-option-radio"
                           name={`ask-user-reply-${props.block.toolId}-${question.id}`}
-                          checked={draft().selectedOptionId === option.optionId}
-                          onChange={() => selectOption(option)}
+                          checked={draft().choiceId === choice.choiceId}
+                          onChange={() => selectChoice(choice)}
                           disabled={controlsDisabled()}
                         />
                         <span class="chat-tool-ask-user-option-copy">
-                          <span class="chat-tool-ask-user-option-text">{option.label}</span>
-                          <Show when={option.description}>
-                            <span class="chat-tool-ask-user-option-description">{option.description}</span>
+                          <span class="chat-tool-ask-user-option-text">{choice.label}</span>
+                          <Show when={choice.description}>
+                            <span class="chat-tool-ask-user-option-description">{choice.description}</span>
+                          </Show>
+                          <Show when={choice.kind === 'write' && !choice.description}>
+                            <span class="chat-tool-ask-user-option-description">Type your answer.</span>
                           </Show>
                         </span>
-                      </label>
-                    )}
-                  </For>
-                  <Show when={questionHasOtherFallback(question)}>
-                    <label
-                      class={cn(
-                        'chat-tool-ask-user-option-row',
-                        otherFallbackSelected() && 'chat-tool-ask-user-option-row-selected',
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        class="chat-tool-ask-user-option-radio"
-                        name={`ask-user-reply-${props.block.toolId}-${question.id}`}
-                        checked={otherFallbackSelected()}
-                        onChange={() => selectOtherFallback()}
-                        disabled={controlsDisabled()}
-                      />
-                      <span class="chat-tool-ask-user-option-copy">
-                        <span class="chat-tool-ask-user-option-text">None of the above</span>
-                        <span class="chat-tool-ask-user-option-description">Type another answer.</span>
-                      </span>
                     </label>
-                  </Show>
+                  )}
+                  </For>
                 </div>
               </Show>
-              <Show when={showDetailInput()}>
+              <Show when={showTextInput()}>
                 <div class="chat-tool-ask-user-detail-input-wrap">
                   <input
                     type={question.isSecret ? 'password' : 'text'}
                     class="chat-tool-ask-user-custom-input"
-                    value={draft().answers[0] ?? ''}
+                    value={draft().text ?? ''}
                     onInput={(event) => setQuestionDraft(question.id, {
-                      selectedOptionId: draft().selectedOptionId,
-                      answers: [event.currentTarget.value],
-                      useOtherFallback: questionUsesOtherFallback(question, draft()),
+                      choiceId: selectedChoice()?.choiceId ?? question.choices[0]?.choiceId,
+                      text: event.currentTarget.value,
                     })}
-                    placeholder={questionDetailInputPlaceholder(question, draft())}
-                    aria-label={selectedOption()?.label
-                      ? `${question.header} - ${selectedOption()!.label}`
-                      : otherFallbackSelected()
-                      ? `${question.header} - None of the above`
-                      : question.header}
+                    placeholder={questionInputPlaceholder(question, draft())}
+                    aria-label={selectedChoice()?.label ? `${question.header} - ${selectedChoice()!.label}` : question.header}
                     disabled={controlsDisabled()}
                   />
-                  <Show when={questionRequiresDetailText(question, draft())}>
+                  <Show when={questionRequiresText(question, draft())}>
                     <p class="chat-tool-ask-user-detail-hint">
-                      {otherFallbackSelected()
-                        ? 'Type your answer to continue.'
-                        : 'More detail is required for the selected option.'}
+                      Type your answer to continue.
                     </p>
                   </Show>
                 </div>
@@ -3364,7 +3156,7 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
           </Show>
         </div>
       }>
-        <Show when={!currentQuestions().some((question) => questionSupportsAutoSubmit(question)) || submitError()}>
+        <Show when={!currentQuestions().some((question) => questionSupportsAutoSubmit(question, currentQuestions().length)) || submitError()}>
         <div class="chat-tool-ask-user-submit-row">
           <button
             type="button"
