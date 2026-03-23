@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/floegence/redeven-agent/internal/ai"
+	"github.com/floegence/redeven-agent/internal/ai/threadstore"
+)
 
 func TestDetectPhasePingPong(t *testing.T) {
 	t.Parallel()
@@ -17,31 +22,15 @@ func TestDetectPhasePingPong(t *testing.T) {
 	}
 }
 
-func TestEvaluateGate_RejectWhenRecommendedFails(t *testing.T) {
+func TestEvaluateGate_RejectBelowBaseline(t *testing.T) {
 	t.Parallel()
-	variants := []evalVariant{
-		{ID: "v_a", PromptProfile: "p1", LoopProfile: "l1"},
-		{ID: "v_b", PromptProfile: "p2", LoopProfile: "l2"},
-	}
-	metrics := map[string]variantMetrics{
-		"v_a": {
-			VariantID:           "v_a",
-			PassRate:            0.9,
-			LoopSafetyRate:      0.98,
-			RecoverySuccessRate: 0.92,
-			FallbackFreeRate:    0.99,
-			AverageAccuracy:     90,
-			AverageOverall:      88,
-		},
-		"v_b": {
-			VariantID:           "v_b",
-			PassRate:            0.6,
-			LoopSafetyRate:      0.7,
-			RecoverySuccessRate: 0.5,
-			FallbackFreeRate:    0.6,
-			AverageAccuracy:     50,
-			AverageOverall:      92,
-		},
+
+	metrics := suiteMetrics{
+		PassRate:            0.60,
+		LoopSafetyRate:      0.80,
+		RecoverySuccessRate: 0.70,
+		FallbackFreeRate:    0.75,
+		AverageAccuracy:     65,
 	}
 	baselines := benchmarkBaselines{Sources: map[string]benchmarkMetrics{
 		"codex": {
@@ -58,20 +47,99 @@ func TestEvaluateGate_RejectWhenRecommendedFails(t *testing.T) {
 		MinFallbackFreeRate: 0.9,
 		MinAverageAccuracy:  75,
 	}
-	report := evaluateGate(variants, metrics, baselines, thresholds, evalVariant{ID: "v_b"})
+	report := evaluateGate(metrics, baselines, thresholds)
 	if report.Status != "reject" {
 		t.Fatalf("status=%s, want reject", report.Status)
+	}
+	if report.Passed {
+		t.Fatalf("expected gate to fail")
+	}
+}
+
+func TestAssessTaskOutcome_PassesStructuredFlowerAssertions(t *testing.T) {
+	t.Parallel()
+
+	task := evalTask{
+		ID: "todo_task",
+		Assertions: taskAssertionsSpec{
+			Output: taskOutputAssertions{
+				RequireEvidence:  true,
+				MinEvidencePaths: 2,
+				MustContain:      []string{"risk"},
+				MinLength:        60,
+			},
+			Thread: taskThreadAssertions{
+				RunStatus:     "success",
+				ExecutionMode: "act",
+				WaitingPrompt: "forbidden",
+			},
+			Tools: taskToolAssertions{
+				MustCall:    []string{"terminal.exec", "write_todos", "task_complete"},
+				MustSucceed: []string{"terminal.exec", "write_todos", "task_complete"},
+				MustNotCall: []string{"apply_patch"},
+				MaxCalls:    6,
+			},
+			Events: taskEventAssertions{
+				MustInclude: []string{"todos.updated"},
+				HardFail:    []string{"turn.loop.exhausted"},
+			},
+			Todos: taskTodoAssertions{
+				RequireSnapshot:             true,
+				RequireNonEmpty:             true,
+				RequireClosed:               true,
+				RequireInProgressDiscipline: true,
+			},
+		},
+	}
+	result := taskResult{
+		Task:          task,
+		WorkspacePath: "/tmp/workspace",
+		FinalText:     "Risk: config drift. Evidence: /tmp/workspace/README.md and /tmp/workspace/cmd/app/main.go. Verification: run tests.",
+		EvidencePaths: []string{"/tmp/workspace/README.md", "/tmp/workspace/cmd/app/main.go"},
+		ThreadState: threadStateSummary{
+			RunStatus:     "success",
+			ExecutionMode: "act",
+			WaitingPrompt: false,
+		},
+		EventCounts: map[string]int{"todos.updated": 1},
+		rawToolCalls: []threadstore.ToolCallRecord{
+			{ToolName: "terminal.exec", Status: "success"},
+			{ToolName: "write_todos", Status: "success", ArgsJSON: `{"todos":[{"content":"Inspect repo","status":"in_progress"},{"content":"Summarize risk","status":"pending"},{"content":"Verify command","status":"pending"}]}`},
+			{ToolName: "write_todos", Status: "success", ArgsJSON: `{"todos":[{"content":"Inspect repo","status":"completed"},{"content":"Summarize risk","status":"completed"},{"content":"Verify command","status":"completed"}]}`},
+			{ToolName: "task_complete", Status: "success"},
+		},
+		rawTodos: &ai.ThreadTodosView{
+			Version: 1,
+			Todos: []ai.TodoItem{
+				{Content: "Inspect repo", Status: ai.TodoStatusCompleted},
+				{Content: "Summarize risk", Status: ai.TodoStatusCompleted},
+				{Content: "Verify command", Status: ai.TodoStatusCompleted},
+			},
+		},
+	}
+	outcome := assessTaskOutcome(task, result)
+	if !outcome.Passed {
+		t.Fatalf("expected passing outcome, got reasons=%v", outcome.HardFailReasons)
+	}
+	if !outcome.LoopSafe {
+		t.Fatalf("expected loop-safe outcome")
 	}
 }
 
 func TestAssessTaskOutcome_FallbackFails(t *testing.T) {
 	t.Parallel()
 	task := evalTask{
-		ID:              "t1",
-		RequireEvidence: true,
-		MustContain:     []string{"conclusion"},
-		Forbidden:       []string{"No response"},
-		HardFailEvents:  []string{"turn.loop.exhausted"},
+		ID: "t1",
+		Assertions: taskAssertionsSpec{
+			Output: taskOutputAssertions{
+				RequireEvidence: true,
+				MustContain:     []string{"conclusion"},
+				Forbidden:       []string{"No response"},
+			},
+			Events: taskEventAssertions{
+				HardFail: []string{"turn.loop.exhausted"},
+			},
+		},
 	}
 	result := taskResult{
 		Task:          task,

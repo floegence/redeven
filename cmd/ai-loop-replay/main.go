@@ -79,6 +79,8 @@ func runReplay(path string) (replayReport, error) {
 		if strings.TrimSpace(strings.ToLower(message.Role)) != "assistant" {
 			continue
 		}
+		visibleParts := make([]string, 0, len(message.Blocks))
+		structuredFallback := ""
 		for _, rawBlock := range message.Blocks {
 			block, ok := rawBlock.(map[string]any)
 			if !ok {
@@ -88,13 +90,23 @@ func runReplay(path string) (replayReport, error) {
 			switch typeName {
 			case "tool-call":
 				toolCalls++
-			case "markdown", "text":
+				if structuredFallback == "" {
+					structuredFallback = structuredAssistantText(block)
+				}
+			case "markdown", "text", "thinking":
 				content := strings.TrimSpace(anyToString(block["content"]))
 				if content == "" {
 					continue
 				}
-				assistantText = content
+				visibleParts = append(visibleParts, content)
 			}
+		}
+		if len(visibleParts) > 0 {
+			assistantText = strings.Join(visibleParts, "\n\n")
+			continue
+		}
+		if structuredFallback != "" {
+			assistantText = structuredFallback
 		}
 	}
 
@@ -147,6 +159,51 @@ func containsAny(text string, hints []string) bool {
 		}
 	}
 	return false
+}
+
+func structuredAssistantText(block map[string]any) string {
+	if strings.TrimSpace(strings.ToLower(anyToString(block["type"]))) != "tool-call" {
+		return ""
+	}
+	switch strings.TrimSpace(anyToString(block["toolName"])) {
+	case "ask_user":
+		return extractAskUserText(block["result"], block["args"])
+	case "task_complete":
+		return extractTaskCompleteText(block["args"])
+	default:
+		return ""
+	}
+}
+
+func extractAskUserText(candidates ...any) string {
+	for _, raw := range candidates {
+		obj, _ := raw.(map[string]any)
+		if len(obj) == 0 {
+			continue
+		}
+		if summary := strings.TrimSpace(anyToString(obj["public_summary"])); summary != "" {
+			return summary
+		}
+		questions, _ := obj["questions"].([]any)
+		for _, rawQuestion := range questions {
+			question, _ := rawQuestion.(map[string]any)
+			if text := strings.TrimSpace(anyToString(question["question"])); text != "" {
+				return text
+			}
+			if header := strings.TrimSpace(anyToString(question["header"])); header != "" {
+				return header
+			}
+		}
+	}
+	return ""
+}
+
+func extractTaskCompleteText(raw any) string {
+	obj, _ := raw.(map[string]any)
+	if len(obj) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(anyToString(obj["result"]))
 }
 
 func anyToString(v any) string {

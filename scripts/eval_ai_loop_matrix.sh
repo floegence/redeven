@@ -7,8 +7,6 @@ ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
 
 WORKSPACE_PATH="${1:-/Users/tangjianyin/Downloads/code/openclaw}"
 REPORT_DIR="${2:-}"
-TOP_K="${TOP_K:-6}"
-MAX_VARIANTS="${MAX_VARIANTS:-0}"
 TASK_SPEC_PATH="${TASK_SPEC_PATH:-$ROOT_DIR/eval/tasks/default.yaml}"
 BASELINE_PATH="${BASELINE_PATH:-$ROOT_DIR/eval/baselines/open_source_best.json}"
 ENFORCE_GATE="${ENFORCE_GATE:-0}"
@@ -19,8 +17,6 @@ ARGS=(
   --workspace "$WORKSPACE_PATH"
   --task-spec "$TASK_SPEC_PATH"
   --baseline "$BASELINE_PATH"
-  --top-k "$TOP_K"
-  --max-variants "$MAX_VARIANTS"
 )
 
 if [[ -n "$REPORT_DIR" ]]; then
@@ -31,5 +27,5 @@ if [[ "$ENFORCE_GATE" == "1" ]]; then
   ARGS+=(--enforce-gate)
 fi
 
-echo "[eval] workspace=$WORKSPACE_PATH top_k=$TOP_K max_variants=$MAX_VARIANTS enforce_gate=$ENFORCE_GATE"
+echo "[eval] workspace=$WORKSPACE_PATH behavioral_suite=1 enforce_gate=$ENFORCE_GATE"
 go run ./cmd/ai-loop-eval "${ARGS[@]}"

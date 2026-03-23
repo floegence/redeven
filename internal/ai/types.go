@@ -22,15 +22,15 @@ type Model struct {
 }
 
 type RequestUserInputPrompt struct {
-	PromptID          string                     `json:"prompt_id"`
-	MessageID         string                     `json:"message_id"`
-	ToolID            string                     `json:"tool_id"`
-	ReasonCode        string                     `json:"reason_code,omitempty"`
-	RequiredFromUser  []string                   `json:"required_from_user,omitempty"`
-	EvidenceRefs      []string                   `json:"evidence_refs,omitempty"`
-	Questions         []RequestUserInputQuestion `json:"questions,omitempty"`
-	PublicSummary     string                     `json:"public_summary,omitempty"`
-	ContainsSecret    bool                       `json:"contains_secret,omitempty"`
+	PromptID         string                     `json:"prompt_id"`
+	MessageID        string                     `json:"message_id"`
+	ToolID           string                     `json:"tool_id"`
+	ReasonCode       string                     `json:"reason_code,omitempty"`
+	RequiredFromUser []string                   `json:"required_from_user,omitempty"`
+	EvidenceRefs     []string                   `json:"evidence_refs,omitempty"`
+	Questions        []RequestUserInputQuestion `json:"questions,omitempty"`
+	PublicSummary    string                     `json:"public_summary,omitempty"`
+	ContainsSecret   bool                       `json:"contains_secret,omitempty"`
 }
 
 type RequestUserInputQuestion struct {
@@ -76,13 +76,13 @@ type RequestUserInputResolvedQuestion struct {
 }
 
 type RequestUserInputResponseRecord struct {
-	PromptID         string                             `json:"prompt_id"`
-	ToolID           string                             `json:"tool_id,omitempty"`
-	ReasonCode       string                             `json:"reason_code,omitempty"`
-	Responses        []RequestUserInputResolvedQuestion `json:"responses,omitempty"`
-	PublicSummary    string                             `json:"public_summary,omitempty"`
-	ContainsSecret   bool                               `json:"contains_secret,omitempty"`
-	ResponseMessageID string                            `json:"response_message_id,omitempty"`
+	PromptID          string                             `json:"prompt_id"`
+	ToolID            string                             `json:"tool_id,omitempty"`
+	ReasonCode        string                             `json:"reason_code,omitempty"`
+	Responses         []RequestUserInputResolvedQuestion `json:"responses,omitempty"`
+	PublicSummary     string                             `json:"public_summary,omitempty"`
+	ContainsSecret    bool                               `json:"contains_secret,omitempty"`
+	ResponseMessageID string                             `json:"response_message_id,omitempty"`
 }
 
 type RequestUserInputSecretAnswer struct {
@@ -115,21 +115,21 @@ type ModelsResponse struct {
 }
 
 type ThreadView struct {
-	ThreadID            string         `json:"thread_id"`
-	Title               string         `json:"title"`
-	ModelID             string         `json:"model_id"`
-	ModelLocked         bool           `json:"model_locked"`
-	ExecutionMode       string         `json:"execution_mode"`
-	WorkingDir          string         `json:"working_dir"`
-	QueuedTurnCount     int            `json:"queued_turn_count"`
-	RunStatus           string         `json:"run_status"`
-	RunUpdatedAtUnixMs  int64          `json:"run_updated_at_unix_ms"`
-	RunError            string         `json:"run_error,omitempty"`
+	ThreadID            string                  `json:"thread_id"`
+	Title               string                  `json:"title"`
+	ModelID             string                  `json:"model_id"`
+	ModelLocked         bool                    `json:"model_locked"`
+	ExecutionMode       string                  `json:"execution_mode"`
+	WorkingDir          string                  `json:"working_dir"`
+	QueuedTurnCount     int                     `json:"queued_turn_count"`
+	RunStatus           string                  `json:"run_status"`
+	RunUpdatedAtUnixMs  int64                   `json:"run_updated_at_unix_ms"`
+	RunError            string                  `json:"run_error,omitempty"`
 	WaitingPrompt       *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
-	CreatedAtUnixMs     int64          `json:"created_at_unix_ms"`
-	UpdatedAtUnixMs     int64          `json:"updated_at_unix_ms"`
-	LastMessageAtUnixMs int64          `json:"last_message_at_unix_ms"`
-	LastMessagePreview  string         `json:"last_message_preview"`
+	CreatedAtUnixMs     int64                   `json:"created_at_unix_ms"`
+	UpdatedAtUnixMs     int64                   `json:"updated_at_unix_ms"`
+	LastMessageAtUnixMs int64                   `json:"last_message_at_unix_ms"`
+	LastMessagePreview  string                  `json:"last_message_preview"`
 }
 
 type ListThreadsResponse struct {
@@ -240,11 +240,11 @@ type RunInput struct {
 	//
 	// When set, the agent will prefer this id over generating a new one so the UI can keep a stable
 	// message id across optimistic rendering, realtime events, and history backfill.
-	MessageID           string                        `json:"message_id,omitempty"`
-	Text                string                        `json:"text"`
-	Attachments         []RunAttachmentIn             `json:"attachments"`
-	StructuredResponse  *RequestUserInputResponseRecord `json:"-"`
-	SecretAnswers       []RequestUserInputSecretAnswer  `json:"-"`
+	MessageID          string                          `json:"message_id,omitempty"`
+	Text               string                          `json:"text"`
+	Attachments        []RunAttachmentIn               `json:"attachments"`
+	StructuredResponse *RequestUserInputResponseRecord `json:"-"`
+	SecretAnswers      []RequestUserInputSecretAnswer  `json:"-"`
 }
 
 type RunAttachmentIn struct {
@@ -265,6 +265,9 @@ type RunOptions struct {
 
 	// RequireUserConfirmOnTaskComplete forces explicit user confirmation when model emits task_complete.
 	RequireUserConfirmOnTaskComplete bool `json:"require_user_confirm_on_task_complete,omitempty"`
+
+	// NoUserInteraction disables ask_user and approval waits for autonomous runs.
+	NoUserInteraction bool `json:"no_user_interaction,omitempty"`
 
 	// Mode overrides runtime mode for this run (act|plan).
 	Mode string `json:"mode,omitempty"`
@@ -487,17 +490,17 @@ const (
 //
 // JSON fields use snake_case because this payload is transported over Redeven RPC wire.
 type RealtimeEvent struct {
-	EventType     RealtimeEventType      `json:"event_type"`
-	EndpointID    string                 `json:"endpoint_id"`
-	ThreadID      string                 `json:"thread_id"`
-	RunID         string                 `json:"run_id"`
-	AtUnixMs      int64                  `json:"at_unix_ms"`
-	StreamKind    RealtimeStreamKind     `json:"stream_kind,omitempty"`
-	Phase         RealtimeLifecyclePhase `json:"phase,omitempty"`
-	Diag          map[string]any         `json:"diag,omitempty"`
-	StreamEvent   any                    `json:"stream_event,omitempty"`
-	RunStatus     string                 `json:"run_status,omitempty"`
-	RunError      string                 `json:"run_error,omitempty"`
+	EventType     RealtimeEventType       `json:"event_type"`
+	EndpointID    string                  `json:"endpoint_id"`
+	ThreadID      string                  `json:"thread_id"`
+	RunID         string                  `json:"run_id"`
+	AtUnixMs      int64                   `json:"at_unix_ms"`
+	StreamKind    RealtimeStreamKind      `json:"stream_kind,omitempty"`
+	Phase         RealtimeLifecyclePhase  `json:"phase,omitempty"`
+	Diag          map[string]any          `json:"diag,omitempty"`
+	StreamEvent   any                     `json:"stream_event,omitempty"`
+	RunStatus     string                  `json:"run_status,omitempty"`
+	RunError      string                  `json:"run_error,omitempty"`
 	WaitingPrompt *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
 
 	// Transcript message events (EventType=transcript_message).
