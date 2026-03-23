@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/floegence/redeven-agent/internal/config"
@@ -95,6 +96,25 @@ func TestClassifyRunPolicy_TaskByAttachment(t *testing.T) {
 	}
 	if got.TodoPolicy != TodoPolicyRecommended {
 		t.Fatalf("todo_policy=%q, want %q", got.TodoPolicy, TodoPolicyRecommended)
+	}
+}
+
+func TestBuildRunPolicyClassifierMessages_GuidedStructuredInteractionsAreTask(t *testing.T) {
+	t.Parallel()
+
+	msgs := buildRunPolicyClassifierMessages("请你和我一问一答猜我的岁数，每个问题都提供几个选项", "")
+	if len(msgs) != 2 {
+		t.Fatalf("message count=%d, want 2", len(msgs))
+	}
+	system := msgs[0].Content[0].Text
+	if !strings.Contains(system, "guided structured interaction") {
+		t.Fatalf("system prompt missing guided structured interaction guidance: %q", system)
+	}
+	if !strings.Contains(system, "questionnaires, interviews, quizzes, guessing games, decision trees, and multi-step option-driven conversations") {
+		t.Fatalf("system prompt missing structured interaction examples: %q", system)
+	}
+	if !strings.Contains(system, "casual freeform chat") {
+		t.Fatalf("system prompt missing narrowed social guidance: %q", system)
 	}
 }
 
