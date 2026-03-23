@@ -11,7 +11,9 @@ import (
 )
 
 const (
-	requestUserInputActionSetMode = "set_mode"
+	requestUserInputActionSetMode       = "set_mode"
+	requestUserInputDetailInputOptional = "optional"
+	requestUserInputDetailInputRequired = "required"
 )
 
 func buildRequestUserInputPromptID(messageID string, toolID string) string {
@@ -31,6 +33,17 @@ func normalizeRequestUserInputAction(action RequestUserInputAction) (RequestUser
 		return action, true
 	default:
 		return RequestUserInputAction{}, false
+	}
+}
+
+func normalizeRequestUserInputDetailInputMode(mode string) string {
+	switch strings.TrimSpace(strings.ToLower(mode)) {
+	case requestUserInputDetailInputOptional:
+		return requestUserInputDetailInputOptional
+	case requestUserInputDetailInputRequired:
+		return requestUserInputDetailInputRequired
+	default:
+		return ""
 	}
 }
 
@@ -88,10 +101,12 @@ func normalizeRequestUserInputOptions(options []RequestUserInputOption) []Reques
 		seenOption[optionKey] = struct{}{}
 		seenLabel[labelKey] = struct{}{}
 		out = append(out, RequestUserInputOption{
-			OptionID:    optionID,
-			Label:       label,
-			Description: truncateRunes(strings.TrimSpace(option.Description), 240),
-			Actions:     normalizeRequestUserInputActions(option.Actions),
+			OptionID:               optionID,
+			Label:                  label,
+			Description:            truncateRunes(strings.TrimSpace(option.Description), 240),
+			DetailInputMode:        normalizeRequestUserInputDetailInputMode(option.DetailInputMode),
+			DetailInputPlaceholder: truncateRunes(strings.TrimSpace(option.DetailInputPlaceholder), 160),
+			Actions:                normalizeRequestUserInputActions(option.Actions),
 		})
 		if len(out) >= 4 {
 			break
@@ -380,6 +395,26 @@ func requestUserInputOptionByID(question *RequestUserInputQuestion, optionID str
 	return nil, false
 }
 
+func requestUserInputQuestionAnswerRequirements(question *RequestUserInputQuestion, answer RequestUserInputAnswer) (allowText bool, requireText bool, requireSelection bool) {
+	if question == nil {
+		return false, false, false
+	}
+	optionCount := len(question.Options)
+	requireSelection = optionCount > 0 && !question.IsOther
+	allowText = question.IsOther || optionCount == 0
+	requireText = optionCount == 0
+	if option, ok := requestUserInputOptionByID(question, answer.SelectedOptionID); ok && option != nil {
+		switch normalizeRequestUserInputDetailInputMode(option.DetailInputMode) {
+		case requestUserInputDetailInputOptional:
+			allowText = true
+		case requestUserInputDetailInputRequired:
+			allowText = true
+			requireText = true
+		}
+	}
+	return allowText, requireText, requireSelection
+}
+
 func validateRequestUserInputResponse(prompt *RequestUserInputPrompt, response *RequestUserInputResponse) (*RequestUserInputResponse, error) {
 	prompt = normalizeRequestUserInputPrompt(prompt)
 	response = normalizeRequestUserInputResponse(response)
@@ -399,10 +434,20 @@ func validateRequestUserInputResponse(prompt *RequestUserInputPrompt, response *
 				return nil, ErrWaitingPromptChanged
 			}
 		}
-		if !question.IsOther && len(answer.Answers) == 0 && answer.SelectedOptionID == "" {
+		allowText, requireText, requireSelection := requestUserInputQuestionAnswerRequirements(&question, answer)
+		if requireSelection && answer.SelectedOptionID == "" {
 			return nil, ErrWaitingPromptChanged
 		}
-		if question.IsOther && len(answer.Answers) == 0 && answer.SelectedOptionID == "" {
+		if !allowText && len(answer.Answers) > 0 {
+			return nil, ErrWaitingPromptChanged
+		}
+		if requireText && len(answer.Answers) == 0 {
+			return nil, ErrWaitingPromptChanged
+		}
+		if !allowText && answer.SelectedOptionID == "" {
+			return nil, ErrWaitingPromptChanged
+		}
+		if allowText && !requireSelection && len(answer.Answers) == 0 && answer.SelectedOptionID == "" {
 			return nil, ErrWaitingPromptChanged
 		}
 	}

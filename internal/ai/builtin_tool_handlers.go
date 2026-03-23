@@ -356,6 +356,11 @@ func askUserToolInputSchema() map[string]any {
 									"option_id":   map[string]any{"type": "string", "maxLength": 64},
 									"label":       map[string]any{"type": "string", "maxLength": 200},
 									"description": map[string]any{"type": "string", "maxLength": 240},
+									"detail_input_mode": map[string]any{
+										"type": "string",
+										"enum": []string{"optional", "required"},
+									},
+									"detail_input_placeholder": map[string]any{"type": "string", "maxLength": 160},
 									"actions": map[string]any{
 										"type":     "array",
 										"maxItems": 4,

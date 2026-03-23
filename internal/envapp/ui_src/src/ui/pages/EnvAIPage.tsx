@@ -3708,19 +3708,79 @@ export function EnvAIPage() {
     answers: Array.isArray(draft?.answers) ? draft.answers.map((item) => String(item ?? '').trim()).filter(Boolean) : [],
   });
 
-  const hasStructuredDraftAnswer = (draft: { selectedOptionId?: string; answers?: string[] } | undefined): boolean => {
+  const selectedWaitingPromptOption = (question: {
+    options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
+  }, draft: { selectedOptionId?: string; answers?: string[] } | undefined) => {
     const normalized = normalizeStructuredDraftAnswer(draft);
-    return Boolean(normalized.selectedOptionId) || normalized.answers.length > 0;
+    const selectedOptionId = String(normalized.selectedOptionId ?? '').trim();
+    if (!selectedOptionId) return undefined;
+    const options = Array.isArray(question.options) ? question.options : [];
+    return options.find((option) => String(option?.option_id ?? '').trim() === selectedOptionId);
+  };
+
+  const waitingPromptQuestionAllowsText = (question: {
+    is_other?: boolean;
+    options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
+  }, draft: { selectedOptionId?: string; answers?: string[] } | undefined): boolean => {
+    const options = Array.isArray(question.options) ? question.options : [];
+    if (Boolean(question.is_other) || options.length === 0) {
+      return true;
+    }
+    const selectedOption = selectedWaitingPromptOption(question, draft);
+    const mode = String(selectedOption?.detail_input_mode ?? '').trim().toLowerCase();
+    return mode === 'optional' || mode === 'required';
+  };
+
+  const waitingPromptQuestionRequiresText = (question: {
+    options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
+  }, draft: { selectedOptionId?: string; answers?: string[] } | undefined): boolean => {
+    const options = Array.isArray(question.options) ? question.options : [];
+    if (options.length === 0) {
+      return true;
+    }
+    return String(selectedWaitingPromptOption(question, draft)?.detail_input_mode ?? '').trim().toLowerCase() === 'required';
+  };
+
+  const waitingPromptQuestionRequiresSelection = (question: {
+    is_other?: boolean;
+    options?: ReadonlyArray<unknown>;
+  }): boolean => {
+    const options = Array.isArray(question.options) ? question.options : [];
+    return options.length > 0 && !question.is_other;
+  };
+
+  const hasStructuredDraftAnswer = (
+    question: {
+      is_other?: boolean;
+      options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
+    },
+    draft: { selectedOptionId?: string; answers?: string[] } | undefined,
+  ): boolean => {
+    const normalized = normalizeStructuredDraftAnswer(draft);
+    const hasSelection = Boolean(normalized.selectedOptionId);
+    const hasText = normalized.answers.length > 0;
+    if (waitingPromptQuestionRequiresSelection(question) && !hasSelection) {
+      return false;
+    }
+    if (!waitingPromptQuestionRequiresSelection(question) && !hasSelection && !hasText) {
+      return false;
+    }
+    if (!waitingPromptQuestionAllowsText(question, normalized) && hasText) {
+      return false;
+    }
+    if (waitingPromptQuestionRequiresText(question, normalized) && !hasText) {
+      return false;
+    }
+    return true;
   };
 
   const canComposerAutofillWaitingQuestion = (question: {
     is_secret?: boolean;
     is_other?: boolean;
-    options?: ReadonlyArray<unknown>;
-  }): boolean => {
+    options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
+  }, draft: { selectedOptionId?: string; answers?: string[] } | undefined): boolean => {
     if (question.is_secret) return false;
-    const options = Array.isArray(question.options) ? question.options : [];
-    return Boolean(question.is_other) || options.length === 0;
+    return waitingPromptQuestionAllowsText(question, draft);
   };
 
   const buildStructuredComposerSendPlan = (args: {
@@ -3745,11 +3805,13 @@ export function EnvAIPage() {
     });
 
     const questions = Array.isArray(args.waitingPrompt?.questions) ? args.waitingPrompt.questions : [];
-    const unanswered = questions.filter((question) => !hasStructuredDraftAnswer(answers[String(question.id ?? '').trim()]));
+    const unanswered = questions.filter((question) => !hasStructuredDraftAnswer(question, answers[String(question.id ?? '').trim()]));
     const composerText = String(args.composerText ?? '').trim();
 
     if (composerText && unanswered.length === 1) {
       const question = unanswered[0];
+      const questionId = String(question.id ?? '').trim();
+      const currentDraft = answers[questionId];
       if (question.is_secret) {
         return {
           kind: 'error',
@@ -3757,14 +3819,15 @@ export function EnvAIPage() {
           description: 'Use the inline input card to answer secret requests.',
         };
       }
-      if (!canComposerAutofillWaitingQuestion(question)) {
+      if (!canComposerAutofillWaitingQuestion(question, currentDraft)) {
         return {
           kind: 'error',
           title: 'Input required',
           description: 'Select one of the requested options before replying.',
         };
       }
-      answers[String(question.id ?? '').trim()] = {
+      answers[questionId] = {
+        selectedOptionId: currentDraft?.selectedOptionId,
         answers: [composerText],
       };
     } else if (composerText && unanswered.length > 1) {
@@ -3775,7 +3838,7 @@ export function EnvAIPage() {
       };
     }
 
-    const remaining = questions.filter((question) => !hasStructuredDraftAnswer(answers[String(question.id ?? '').trim()]));
+    const remaining = questions.filter((question) => !hasStructuredDraftAnswer(question, answers[String(question.id ?? '').trim()]));
     if (remaining.length > 0) {
       const secretOnly = remaining.every((question) => Boolean(question.is_secret));
       return {
