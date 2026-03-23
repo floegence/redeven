@@ -243,7 +243,7 @@ func TestSnapshotAssistantMessageJSON_UsesAskUserQuestionWhenMarkdownEmpty(t *te
 	}
 }
 
-func TestSnapshotAssistantMessageJSON_IncludesThinkingBlocksInAssistantText(t *testing.T) {
+func TestSnapshotAssistantMessageJSON_UsesVisibleMarkdownOnlyForAssistantText(t *testing.T) {
 	t.Parallel()
 
 	r := &run{
@@ -259,11 +259,8 @@ func TestSnapshotAssistantMessageJSON_IncludesThinkingBlocksInAssistantText(t *t
 	if err != nil {
 		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
 	}
-	if !strings.Contains(assistantText, "Checked the theme registry") {
-		t.Fatalf("assistantText=%q, want reasoning text", assistantText)
-	}
-	if !strings.Contains(assistantText, "Design tokens live in") {
-		t.Fatalf("assistantText=%q, want markdown text", assistantText)
+	if assistantText != "Design tokens live in packages/core/src/styles/tokens.ts." {
+		t.Fatalf("assistantText=%q, want visible markdown only", assistantText)
 	}
 	if assistantAt != 1700000000123 {
 		t.Fatalf("assistantAt=%d, want %d", assistantAt, 1700000000123)
