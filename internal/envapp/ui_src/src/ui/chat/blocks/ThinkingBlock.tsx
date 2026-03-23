@@ -3,6 +3,7 @@
 import { Show } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { Sparkles } from '@floegence/floe-webapp-core/icons';
 
 export interface ThinkingBlockProps {
   content?: string;
@@ -24,21 +25,24 @@ function formatDuration(ms: number): string {
  */
 export const ThinkingBlock: Component<ThinkingBlockProps> = (props) => {
   return (
-    <div class={cn('chat-thinking-block', props.class)}>
-      <div class="chat-thinking-header">
-        <span class="chat-thinking-label">Reasoning</span>
+    <div class={cn('chat-thinking-block', props.class)} role="note" aria-label="Reasoning">
+      <Sparkles class="chat-thinking-icon" aria-hidden="true" />
+
+      <div class="chat-thinking-body">
         <Show when={props.duration !== undefined}>
-          <span class="chat-thinking-duration">
-            {formatDuration(props.duration!)}
-          </span>
+          <div class="chat-thinking-meta">
+            <span class="chat-thinking-duration">
+              {formatDuration(props.duration!)}
+            </span>
+          </div>
+        </Show>
+
+        <Show when={props.content}>
+          <div class="chat-thinking-content" style={{ 'white-space': 'pre-wrap' }}>
+            {props.content}
+          </div>
         </Show>
       </div>
-
-      <Show when={props.content}>
-        <div class="chat-thinking-content" style={{ 'white-space': 'pre-wrap' }}>
-          {props.content}
-        </div>
-      </Show>
     </div>
   );
 };
