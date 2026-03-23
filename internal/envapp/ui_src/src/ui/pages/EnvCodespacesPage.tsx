@@ -14,6 +14,7 @@ import {
   Dialog,
   DirectoryInput,
   Input,
+  Tag,
   Tooltip,
 } from "@floegence/floe-webapp-core/ui";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
@@ -164,16 +165,15 @@ async function openCodespace(codeSpaceID: string, setStatus: (s: string) => void
 function StatusBadge(props: { running: boolean; pid?: number }) {
   return (
     <Tooltip content={props.running ? `Process ID: ${props.pid}` : "Codespace is stopped"} placement="top">
-      <span
-        class={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-          props.running
-            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-            : "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400"
-        }`}
+      <Tag
+        variant={props.running ? "success" : "neutral"}
+        tone="soft"
+        size="sm"
+        dot
+        class="cursor-default"
       >
-        <span class={`w-1.5 h-1.5 rounded-full ${props.running ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"}`} />
         {props.running ? "Running" : "Stopped"}
-      </span>
+      </Tag>
     </Tooltip>
   );
 }

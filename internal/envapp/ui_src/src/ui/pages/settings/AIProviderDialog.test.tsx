@@ -42,6 +42,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       ))}
     </select>
   ),
+  Tag: (props: any) => <span class={props.class}>{props.children}</span>,
 }));
 
 function baseProvider(): AIProviderRow {

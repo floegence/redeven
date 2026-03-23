@@ -1303,11 +1303,6 @@ html.dark {
   padding: 0.125rem 0.5rem;
 }
 
-.chat-tool-ask-user-source-tag {
-  font-size: 0.625rem;
-  color: var(--muted-foreground);
-}
-
 .chat-tool-ask-user-question {
   margin: 0;
   font-size: 0.8125rem;

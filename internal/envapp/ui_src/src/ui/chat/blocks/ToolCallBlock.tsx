@@ -4,6 +4,7 @@ import { For, Show, createEffect, createMemo, createSignal, createUniqueId } fro
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
+import { Tag } from '@floegence/floe-webapp-core/ui';
 import { useChatContext } from '../ChatProvider';
 import type { ToolCallBlock as ToolCallBlockType } from '../types';
 import {
@@ -2781,7 +2782,11 @@ const KnowledgeToolCard: Component<KnowledgeToolCardProps> = (props) => {
           <span class="chat-tool-knowledge-request-label">Tags</span>
           <div class="chat-tool-knowledge-chip-list">
             <For each={props.display.requestedTags}>
-              {(tag) => <span class="chat-tool-knowledge-chip">{tag}</span>}
+              {(tag) => (
+                <Tag variant="info" tone="soft" size="sm" class="chat-tool-knowledge-tag">
+                  {tag}
+                </Tag>
+              )}
             </For>
           </div>
         </div>
@@ -2792,7 +2797,11 @@ const KnowledgeToolCard: Component<KnowledgeToolCardProps> = (props) => {
           <span class="chat-tool-knowledge-request-label">Repos</span>
           <div class="chat-tool-knowledge-chip-list">
             <For each={props.display.sourceRepos}>
-              {(repo) => <span class="chat-tool-knowledge-chip chat-tool-knowledge-chip-repo">{repo}</span>}
+              {(repo) => (
+                <Tag variant="primary" tone="soft" size="sm" class="chat-tool-knowledge-tag">
+                  {repo}
+                </Tag>
+              )}
             </For>
           </div>
         </div>
@@ -2836,7 +2845,11 @@ const KnowledgeToolCard: Component<KnowledgeToolCardProps> = (props) => {
                 <Show when={item.tags.length > 0}>
                   <div class="chat-tool-knowledge-item-tags">
                     <For each={item.tags}>
-                      {(tag) => <span class="chat-tool-knowledge-item-tag">{tag}</span>}
+                      {(tag) => (
+                        <Tag variant="neutral" tone="soft" size="sm" class="chat-tool-knowledge-tag">
+                          {tag}
+                        </Tag>
+                      )}
                     </For>
                   </div>
                 </Show>
@@ -2844,7 +2857,11 @@ const KnowledgeToolCard: Component<KnowledgeToolCardProps> = (props) => {
                 <Show when={item.sourceRepos.length > 0}>
                   <div class="chat-tool-knowledge-item-repos">
                     <For each={item.sourceRepos}>
-                      {(repo) => <span class="chat-tool-knowledge-item-repo">{repo}</span>}
+                      {(repo) => (
+                        <Tag variant="primary" tone="soft" size="sm" class="chat-tool-knowledge-tag">
+                          {repo}
+                        </Tag>
+                      )}
                     </For>
                   </div>
                 </Show>
@@ -3054,7 +3071,9 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
       <div class="chat-tool-ask-user-head">
         <span class="chat-tool-ask-user-badge">Input Requested</span>
         <Show when={sourceLabel()}>
-          <span class="chat-tool-ask-user-source-tag">{sourceLabel()}</span>
+          <Tag variant="neutral" tone="soft" size="sm" class="max-w-full">
+            {sourceLabel()}
+          </Tag>
         </Show>
       </div>
 
