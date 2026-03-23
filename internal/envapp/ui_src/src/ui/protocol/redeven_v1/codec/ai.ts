@@ -79,6 +79,12 @@ function normalizeExecutionMode(raw: unknown): 'act' | 'plan' | undefined {
   return undefined;
 }
 
+function normalizeAskUserResponseMode(raw: unknown): 'select' | 'write' | 'select_or_write' | undefined {
+  const mode = String(raw ?? '').trim().toLowerCase();
+  if (mode === 'select' || mode === 'write' || mode === 'select_or_write') return mode;
+  return undefined;
+}
+
 
 function fromWireAIFollowupAttachment(raw: wire_ai_followup_attachment): AIFollowupAttachment | null {
   const name = String(raw?.name ?? '').trim();
@@ -187,6 +193,9 @@ function fromWireAIRequestUserInputQuestion(raw: wire_ai_request_user_input_ques
     header,
     question,
     isSecret: Boolean(raw?.is_secret),
+    responseMode: normalizeAskUserResponseMode(raw?.response_mode),
+    writeLabel: String(raw?.write_label ?? '').trim() || undefined,
+    writePlaceholder: String(raw?.write_placeholder ?? '').trim() || undefined,
     choices: legacyChoices.length > 0 ? legacyChoices : undefined,
   };
 }

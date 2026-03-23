@@ -28,6 +28,9 @@ export type AIRequestUserInputQuestion = {
   header: string;
   question: string;
   isSecret: boolean;
+  responseMode?: 'select' | 'write' | 'select_or_write';
+  writeLabel?: string;
+  writePlaceholder?: string;
   choices?: AIRequestUserInputChoice[];
 };
 

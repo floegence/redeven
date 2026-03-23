@@ -18,6 +18,7 @@ import { readUIStorageItem, removeUIStorageItem, writeUIStorageItem } from '../s
 import { hasRWXPermissions } from './aiPermissions';
 import {
   normalizeAskUserDraft,
+  normalizeAskUserDraftForQuestion,
   normalizeAskUserQuestions,
   type AskUserAction,
   type AskUserChoice,
@@ -546,11 +547,18 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (!model) {
       throw new Error('Missing model.');
     }
+    const waitingPrompt = waitingPromptForThread(tid);
+    const questionById = new Map((waitingPrompt?.questions ?? []).map((question) => [question.id, question] as const));
     const answers: Record<string, { choiceId?: string; text?: string }> = {};
     for (const [questionId, draft] of Object.entries(args.answers ?? {})) {
       const qid = String(questionId ?? '').trim();
       if (!qid) continue;
-      answers[qid] = normalizeAskUserDraft(draft);
+      const question = questionById.get(qid);
+      const normalized = question ? normalizeAskUserDraftForQuestion(question, draft) : normalizeAskUserDraft(draft);
+      answers[qid] = {
+        choiceId: normalized.choiceId,
+        text: normalized.text,
+      };
     }
 
     markThreadPendingRun(tid);

@@ -926,17 +926,17 @@ func TestBuildPreview_AssistantUsesLatestMarkdownBlock(t *testing.T) {
 	}
 }
 
-func TestBuildPreview_AssistantUsesLatestThinkingBlock(t *testing.T) {
+func TestBuildPreview_AssistantIgnoresThinkingBlocks(t *testing.T) {
 	t.Parallel()
 
 	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"markdown","content":"Initial summary."},{"type":"thinking","content":"Verified the runtime emits visible reasoning blocks."}],"status":"complete","timestamp":1}`
 
 	preview := buildPreview("assistant", "", messageJSON)
-	if !strings.Contains(preview, "visible reasoning blocks") {
-		t.Fatalf("preview=%q, want latest thinking content", preview)
+	if !strings.Contains(preview, "Initial summary") {
+		t.Fatalf("preview=%q, want latest visible markdown content", preview)
 	}
-	if strings.Contains(preview, "Initial summary") {
-		t.Fatalf("preview=%q, should prefer latest visible block", preview)
+	if strings.Contains(preview, "visible reasoning blocks") {
+		t.Fatalf("preview=%q, should ignore thinking content", preview)
 	}
 }
 
@@ -946,11 +946,8 @@ func TestBuildPreview_AssistantPrefersVisibleTextOverToolCallFallback(t *testing
 	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"thinking","content":"Visible reasoning should stay user-facing."},{"type":"tool-call","toolName":"ask_user","toolId":"tool_1","args":{"questions":[{"id":"question_1","header":"Need guidance","question":"Choose the next direction."}]}}],"status":"complete","timestamp":1}`
 
 	preview := buildPreview("assistant", "", messageJSON)
-	if !strings.Contains(preview, "Visible reasoning should stay user-facing") {
-		t.Fatalf("preview=%q, want visible text to win over tool-call fallback", preview)
-	}
-	if strings.Contains(preview, "Choose the next direction") {
-		t.Fatalf("preview=%q, should not prefer tool-call fallback when visible text exists", preview)
+	if !strings.Contains(preview, "Choose the next direction") {
+		t.Fatalf("preview=%q, want tool-call fallback when only thinking is present", preview)
 	}
 }
 

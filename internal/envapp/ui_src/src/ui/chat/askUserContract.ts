@@ -1,5 +1,5 @@
 export type AskUserExecutionMode = 'act' | 'plan';
-export type AskUserChoiceKind = 'select' | 'write';
+export type AskUserResponseMode = 'select' | 'write' | 'select_or_write';
 
 export type AskUserAction = Readonly<{
   type: string;
@@ -10,8 +10,7 @@ export type AskUserChoice = Readonly<{
   choiceId: string;
   label: string;
   description?: string;
-  kind: AskUserChoiceKind;
-  inputPlaceholder?: string;
+  kind: 'select';
   actions?: AskUserAction[];
 }>;
 
@@ -20,12 +19,23 @@ export type AskUserQuestion = Readonly<{
   header: string;
   question: string;
   isSecret: boolean;
+  responseMode: AskUserResponseMode;
+  writeLabel?: string;
+  writePlaceholder?: string;
   choices: AskUserChoice[];
 }>;
 
 export type AskUserDraft = Readonly<{
   choiceId?: string;
   text?: string;
+  writeSelected?: boolean;
+}>;
+
+type NormalizedChoiceSource = Readonly<{
+  choices: AskUserChoice[];
+  hasWritePath: boolean;
+  writeLabel?: string;
+  writePlaceholder?: string;
 }>;
 
 function asTrimmedString(value: unknown): string {
@@ -36,7 +46,13 @@ function normalizeExecutionMode(raw: unknown): AskUserExecutionMode {
   return String(raw ?? '').trim().toLowerCase() === 'plan' ? 'plan' : 'act';
 }
 
-function normalizeAskUserChoiceKind(raw: unknown): AskUserChoiceKind {
+function normalizeAskUserResponseMode(raw: unknown): AskUserResponseMode | undefined {
+  const mode = String(raw ?? '').trim().toLowerCase();
+  if (mode === 'select' || mode === 'write' || mode === 'select_or_write') return mode;
+  return undefined;
+}
+
+function normalizeAskUserChoiceKind(raw: unknown): 'select' | 'write' {
   return String(raw ?? '').trim().toLowerCase() === 'write' ? 'write' : 'select';
 }
 
@@ -58,90 +74,98 @@ function normalizeAskUserActions(raw: unknown): AskUserAction[] {
   return out;
 }
 
-function normalizeAskUserChoicesArray(raw: unknown): AskUserChoice[] {
-  if (!Array.isArray(raw)) return [];
-  const out: AskUserChoice[] = [];
+function defaultWriteLabel(responseMode: AskUserResponseMode, header: string, question: string): string {
+  if (responseMode === 'select_or_write') return 'None of the above';
+  return header || question || 'Your answer';
+}
+
+function defaultWritePlaceholder(responseMode: AskUserResponseMode): string {
+  return responseMode === 'select_or_write' ? 'Type another answer' : 'Type your answer';
+}
+
+function normalizeAskUserChoicesArray(raw: unknown): NormalizedChoiceSource {
+  if (!Array.isArray(raw)) return { choices: [], hasWritePath: false };
+  const choices: AskUserChoice[] = [];
   const seenChoice = new Set<string>();
   const seenLabel = new Set<string>();
+  let hasWritePath = false;
+  let writeLabel: string | undefined;
+  let writePlaceholder: string | undefined;
+
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const kind = normalizeAskUserChoiceKind((item as any).kind);
     const label = asTrimmedString((item as any).label) || (kind === 'write' ? 'Other' : '');
     if (!label) continue;
-    const choiceId = asTrimmedString((item as any).choice_id ?? (item as any).choiceId) || `${kind}_${out.length + 1}`;
+    const choiceId = asTrimmedString((item as any).choice_id ?? (item as any).choiceId) || `${kind}_${choices.length + 1}`;
+    const actions = normalizeAskUserActions((item as any).actions);
+
+    if (kind === 'write') {
+      if (!hasWritePath) {
+        hasWritePath = true;
+        writeLabel = label || undefined;
+        writePlaceholder = asTrimmedString((item as any).input_placeholder ?? (item as any).inputPlaceholder) || undefined;
+      }
+      continue;
+    }
+
     const choiceKey = choiceId.toLowerCase();
     const labelKey = label.toLowerCase();
     if (seenChoice.has(choiceKey) || seenLabel.has(labelKey)) continue;
     seenChoice.add(choiceKey);
     seenLabel.add(labelKey);
-    const actions = normalizeAskUserActions((item as any).actions);
-    out.push({
+    choices.push({
       choiceId,
       label,
       description: asTrimmedString((item as any).description) || undefined,
-      kind,
-      inputPlaceholder: kind === 'write'
-        ? asTrimmedString((item as any).input_placeholder ?? (item as any).inputPlaceholder) || undefined
-        : undefined,
+      kind: 'select',
       actions: actions.length > 0 ? actions : undefined,
     });
-    if (out.length >= 4) break;
+    if (choices.length >= 4) break;
   }
-  return out;
+
+  return {
+    choices,
+    hasWritePath,
+    writeLabel,
+    writePlaceholder,
+  };
 }
 
-function normalizeLegacyAskUserChoices(raw: unknown, allowOther: boolean, header: string, question: string): AskUserChoice[] {
-  const out: AskUserChoice[] = [];
+function normalizeLegacyAskUserChoices(raw: unknown, allowOther: boolean): NormalizedChoiceSource {
   const items = Array.isArray(raw) ? raw : [];
-  for (const item of items) {
-    if (!item || typeof item !== 'object') continue;
-    const label = asTrimmedString((item as any).label);
-    if (!label) continue;
+  const projected = items.map((item) => {
+    if (!item || typeof item !== 'object') return null;
     const detailMode = asTrimmedString((item as any).detail_input_mode).toLowerCase();
-    const kind: AskUserChoiceKind = detailMode === 'required' || detailMode === 'optional' ? 'write' : 'select';
-    const actions = normalizeAskUserActions((item as any).actions);
-    out.push({
-      choiceId: asTrimmedString((item as any).option_id ?? (item as any).optionId) || `${kind}_${out.length + 1}`,
-      label,
+    return {
+      choice_id: asTrimmedString((item as any).option_id ?? (item as any).optionId),
+      label: asTrimmedString((item as any).label),
       description: asTrimmedString((item as any).description) || undefined,
-      kind,
-      inputPlaceholder: kind === 'write'
-        ? asTrimmedString((item as any).detail_input_placeholder) || undefined
-        : undefined,
-      actions: actions.length > 0 ? actions : undefined,
-    });
-  }
+      kind: detailMode === 'required' || detailMode === 'optional' ? 'write' : 'select',
+      input_placeholder: asTrimmedString((item as any).detail_input_placeholder) || undefined,
+      actions: (item as any).actions,
+    };
+  }).filter(Boolean);
+
   if (allowOther) {
-    out.push({
-      choiceId: 'other',
+    projected.push({
+      choice_id: 'other',
       label: 'None of the above',
       description: 'Type another answer.',
       kind: 'write',
-      inputPlaceholder: 'Type another answer',
+      input_placeholder: 'Type another answer',
+      actions: undefined,
     });
   }
-  if (out.length === 0) {
-    out.push({
-      choiceId: 'write',
-      label: header || question || 'Your answer',
-      kind: 'write',
-      inputPlaceholder: 'Type your answer',
-    });
-  }
-  return normalizeAskUserChoicesArray(out.map((choice) => ({
-    choice_id: choice.choiceId,
-    label: choice.label,
-    description: choice.description,
-    kind: choice.kind,
-    input_placeholder: choice.inputPlaceholder,
-    actions: choice.actions,
-  })));
+
+  return normalizeAskUserChoicesArray(projected);
 }
 
 export function normalizeAskUserQuestions(raw: unknown): AskUserQuestion[] {
   if (!Array.isArray(raw)) return [];
   const out: AskUserQuestion[] = [];
   const seen = new Set<string>();
+
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const id = asTrimmedString((item as any).id) || `question_${out.length + 1}`;
@@ -151,27 +175,59 @@ export function normalizeAskUserQuestions(raw: unknown): AskUserQuestion[] {
     const key = id.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
+
     const normalizedHeader = header || question;
     const normalizedQuestion = question || normalizedHeader;
-    const choices = (() => {
-      const canonical = normalizeAskUserChoicesArray((item as any).choices);
-      if (canonical.length > 0) return canonical;
-      return normalizeLegacyAskUserChoices(
-        (item as any).options,
-        Boolean((item as any).is_other),
-        normalizedHeader,
-        normalizedQuestion,
-      );
-    })();
+    const explicitResponseMode = normalizeAskUserResponseMode((item as any).response_mode ?? (item as any).responseMode);
+    const canonicalChoices = normalizeAskUserChoicesArray((item as any).choices);
+    const legacyChoices = canonicalChoices.choices.length > 0 || canonicalChoices.hasWritePath
+      ? canonicalChoices
+      : normalizeLegacyAskUserChoices((item as any).options, Boolean((item as any).is_other));
+
+    let responseMode = explicitResponseMode;
+    if (!responseMode) {
+      const explicitExhaustive = typeof (item as any).choices_exhaustive === 'boolean'
+        ? Boolean((item as any).choices_exhaustive)
+        : undefined;
+      if (explicitExhaustive === false && legacyChoices.choices.length > 0) {
+        responseMode = 'select_or_write';
+      } else if (legacyChoices.hasWritePath && legacyChoices.choices.length > 0) {
+        responseMode = 'select_or_write';
+      } else if (legacyChoices.hasWritePath || legacyChoices.choices.length === 0) {
+        responseMode = 'write';
+      } else {
+        responseMode = 'select';
+      }
+    }
+
+    if ((responseMode === 'select' || responseMode === 'select_or_write') && legacyChoices.choices.length === 0) {
+      responseMode = 'write';
+    }
+
+    const writeLabel = responseMode === 'write' || responseMode === 'select_or_write'
+      ? asTrimmedString((item as any).write_label ?? (item as any).writeLabel)
+        || legacyChoices.writeLabel
+        || defaultWriteLabel(responseMode, normalizedHeader, normalizedQuestion)
+      : undefined;
+    const writePlaceholder = responseMode === 'write' || responseMode === 'select_or_write'
+      ? asTrimmedString((item as any).write_placeholder ?? (item as any).writePlaceholder)
+        || legacyChoices.writePlaceholder
+        || defaultWritePlaceholder(responseMode)
+      : undefined;
+
     out.push({
       id,
       header: normalizedHeader,
       question: normalizedQuestion,
       isSecret: Boolean((item as any).is_secret ?? (item as any).isSecret),
-      choices,
+      responseMode,
+      writeLabel,
+      writePlaceholder,
+      choices: responseMode === 'write' ? [] : legacyChoices.choices,
     });
     if (out.length >= 5) break;
   }
+
   return out;
 }
 
@@ -179,6 +235,7 @@ export function normalizeAskUserDraft(draft: AskUserDraft | undefined | null): A
   return {
     choiceId: asTrimmedString(draft?.choiceId) || undefined,
     text: asTrimmedString(draft?.text) || undefined,
+    writeSelected: Boolean(draft?.writeSelected) || undefined,
   };
 }
 
@@ -188,40 +245,32 @@ export function findAskUserChoice(question: AskUserQuestion, choiceId: string | 
   return question.choices.find((choice) => choice.choiceId === normalizedChoiceId);
 }
 
-export function getSingleWriteChoice(question: AskUserQuestion): AskUserChoice | undefined {
-  const writes = question.choices.filter((choice) => choice.kind === 'write');
-  return writes.length === 1 ? writes[0] : undefined;
-}
-
 export function questionUsesDirectWriteInput(question: AskUserQuestion): boolean {
-  return question.choices.length === 1 && question.choices[0].kind === 'write';
+  return question.responseMode === 'write';
 }
 
 export function normalizeAskUserDraftForQuestion(question: AskUserQuestion, draft: AskUserDraft | undefined | null): AskUserDraft {
   const normalized = normalizeAskUserDraft(draft);
   const selectedChoice = findAskUserChoice(question, normalized.choiceId);
+
+  if (question.responseMode === 'write') {
+    return {
+      text: normalized.text,
+      writeSelected: true,
+    };
+  }
   if (selectedChoice) {
     return {
       choiceId: selectedChoice.choiceId,
-      text: selectedChoice.kind === 'write' ? normalized.text : undefined,
     };
   }
-  if (questionUsesDirectWriteInput(question)) {
+  if (question.responseMode === 'select_or_write' && (normalized.writeSelected || normalized.text)) {
     return {
-      choiceId: question.choices[0]?.choiceId,
       text: normalized.text,
+      writeSelected: true,
     };
   }
-  if (normalized.text) {
-    const writeChoice = getSingleWriteChoice(question);
-    if (writeChoice) {
-      return {
-        choiceId: writeChoice.choiceId,
-        text: normalized.text,
-      };
-    }
-  }
-  return normalized;
+  return {};
 }
 
 export function getSelectedAskUserChoice(question: AskUserQuestion, draft: AskUserDraft | undefined | null): AskUserChoice | undefined {
@@ -230,51 +279,46 @@ export function getSelectedAskUserChoice(question: AskUserQuestion, draft: AskUs
 }
 
 export function questionRequiresChoiceSelection(question: AskUserQuestion): boolean {
-  return !questionUsesDirectWriteInput(question);
+  return question.responseMode === 'select';
 }
 
 export function questionAllowsText(question: AskUserQuestion, draft: AskUserDraft | undefined | null): boolean {
-  return getSelectedAskUserChoice(question, draft)?.kind === 'write';
+  const normalized = normalizeAskUserDraftForQuestion(question, draft);
+  return question.responseMode === 'write' || (question.responseMode === 'select_or_write' && !!normalized.writeSelected);
 }
 
 export function questionRequiresText(question: AskUserQuestion, draft: AskUserDraft | undefined | null): boolean {
-  return getSelectedAskUserChoice(question, draft)?.kind === 'write';
+  return questionAllowsText(question, draft);
 }
 
 export function questionHasDraftAnswer(question: AskUserQuestion, draft: AskUserDraft | undefined | null): boolean {
   const normalized = normalizeAskUserDraftForQuestion(question, draft);
-  const selectedChoice = getSelectedAskUserChoice(question, normalized);
-  if (!selectedChoice) {
-    return false;
-  }
-  if (selectedChoice.kind === 'write') {
+  if (question.responseMode === 'write') {
     return Boolean(normalized.text);
   }
-  return !normalized.text;
+  if (normalized.choiceId) {
+    return true;
+  }
+  return question.responseMode === 'select_or_write' && !!normalized.writeSelected && !!normalized.text;
 }
 
 export function questionCanAutofillFromComposer(question: AskUserQuestion, draft: AskUserDraft | undefined | null): boolean {
   if (question.isSecret) return false;
-  return questionUsesDirectWriteInput(question) || getSelectedAskUserChoice(question, draft)?.kind === 'write';
+  const normalized = normalizeAskUserDraftForQuestion(question, draft);
+  return question.responseMode === 'write' || (question.responseMode === 'select_or_write' && !!normalized.writeSelected);
 }
 
 export function questionSupportsAutoSubmit(question: AskUserQuestion, totalQuestions: number): boolean {
   return totalQuestions === 1
     && !question.isSecret
+    && question.responseMode === 'select'
     && question.choices.length > 0
-    && question.choices.every((choice) => choice.kind === 'select' && !(choice.actions?.length));
+    && question.choices.every((choice) => !(choice.actions?.length));
 }
 
-export function questionInputPlaceholder(question: AskUserQuestion, draft: AskUserDraft | undefined | null): string {
-  const choice = getSelectedAskUserChoice(question, draft);
-  if (choice?.inputPlaceholder) {
-    return choice.inputPlaceholder;
-  }
+export function questionInputPlaceholder(question: AskUserQuestion, _draft: AskUserDraft | undefined | null): string {
   if (question.isSecret) {
-    return 'Enter secret value';
+    return question.writePlaceholder || 'Enter secret value';
   }
-  if (choice?.kind === 'write' || questionUsesDirectWriteInput(question)) {
-    return 'Type your answer';
-  }
-  return 'Type your answer';
+  return question.writePlaceholder || defaultWritePlaceholder(question.responseMode);
 }

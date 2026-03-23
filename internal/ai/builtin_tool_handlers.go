@@ -331,6 +331,47 @@ func subagentsToolInputSchema() map[string]any {
 }
 
 func askUserToolInputSchema() map[string]any {
+	questionBase := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"id":                map[string]any{"type": "string", "maxLength": 80},
+			"header":            map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
+			"question":          map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
+			"is_secret":         map[string]any{"type": "boolean"},
+			"response_mode":     map[string]any{"type": "string", "enum": []string{"select", "write", "select_or_write"}},
+			"write_label":       map[string]any{"type": "string", "maxLength": 200, "description": "For select_or_write, this is the standardized typed fallback label such as None of the above. For write, it can label the direct input."},
+			"write_placeholder": map[string]any{"type": "string", "maxLength": 160},
+			"choices": map[string]any{
+				"type":     "array",
+				"maxItems": 4,
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"choice_id":   map[string]any{"type": "string", "maxLength": 64},
+						"label":       map[string]any{"type": "string", "maxLength": 200},
+						"description": map[string]any{"type": "string", "maxLength": 240},
+						"actions": map[string]any{
+							"type":     "array",
+							"maxItems": 4,
+							"items": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"type": map[string]any{"type": "string", "enum": []string{"set_mode"}},
+									"mode": map[string]any{"type": "string", "enum": []string{"act", "plan"}},
+								},
+								"required":             []string{"type"},
+								"additionalProperties": false,
+							},
+						},
+					},
+					"required":             []string{"choice_id", "label"},
+					"additionalProperties": false,
+				},
+			},
+		},
+		"required":             []string{"id", "header", "question", "is_secret", "response_mode"},
+		"additionalProperties": false,
+	}
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -339,49 +380,32 @@ func askUserToolInputSchema() map[string]any {
 				"minItems": 1,
 				"maxItems": 5,
 				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"id":                 map[string]any{"type": "string", "maxLength": 80},
-						"header":             map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
-						"question":           map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
-						"is_secret":          map[string]any{"type": "boolean"},
-						"choices_exhaustive": map[string]any{"type": "boolean", "description": "Set true only when the fixed choices are genuinely exhaustive by construction. Set false when the user should still have a custom typed answer path."},
-						"choices": map[string]any{
-							"type":     "array",
-							"minItems": 1,
-							"maxItems": 4,
-							"items": map[string]any{
-								"type": "object",
-								"properties": map[string]any{
-									"choice_id":   map[string]any{"type": "string", "maxLength": 64},
-									"label":       map[string]any{"type": "string", "maxLength": 200},
-									"description": map[string]any{"type": "string", "maxLength": 240},
-									"kind": map[string]any{
-										"type": "string",
-										"enum": []string{"select", "write"},
+					"allOf": []any{
+						questionBase,
+						map[string]any{
+							"oneOf": []any{
+								map[string]any{
+									"properties": map[string]any{
+										"response_mode": map[string]any{"const": "select"},
+										"choices":       map[string]any{"type": "array", "minItems": 1, "maxItems": 4},
 									},
-									"input_placeholder": map[string]any{"type": "string", "maxLength": 160},
-									"actions": map[string]any{
-										"type":     "array",
-										"maxItems": 4,
-										"items": map[string]any{
-											"type": "object",
-											"properties": map[string]any{
-												"type": map[string]any{"type": "string", "enum": []string{"set_mode"}},
-												"mode": map[string]any{"type": "string", "enum": []string{"act", "plan"}},
-											},
-											"required":             []string{"type"},
-											"additionalProperties": false,
-										},
+									"required": []string{"choices"},
+								},
+								map[string]any{
+									"properties": map[string]any{
+										"response_mode": map[string]any{"const": "write"},
 									},
 								},
-								"required":             []string{"choice_id", "label", "kind"},
-								"additionalProperties": false,
+								map[string]any{
+									"properties": map[string]any{
+										"response_mode": map[string]any{"const": "select_or_write"},
+										"choices":       map[string]any{"type": "array", "minItems": 1, "maxItems": 4},
+									},
+									"required": []string{"choices"},
+								},
 							},
 						},
 					},
-					"required":             []string{"id", "header", "question", "is_secret", "choices_exhaustive", "choices"},
-					"additionalProperties": false,
 				},
 			},
 			"reason_code": map[string]any{
@@ -484,7 +508,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "ask_user",
-			Description:  "Ask user for required structured input when the next step depends on a user decision, external input, approval, or a guided interaction turn. Mark choices_exhaustive=true only for genuinely exhaustive fixed enums; otherwise include a write choice for a custom answer. Do not use it to delegate tool-collectable work. Include reason_code, required_from_user, and evidence_refs for explainable policy checks.",
+			Description:  "Ask user for required structured input when the next step depends on a user decision, external input, approval, or a guided interaction turn. Each question must declare response_mode: use select for fixed choices, write for direct free text, and select_or_write for fixed choices plus a standardized typed fallback such as None of the above. choices[] should contain fixed options only. Do not use it to delegate tool-collectable work. Include reason_code, required_from_user, and evidence_refs for explainable policy checks.",
 			InputSchema:  toSchema(askUserToolInputSchema()),
 			ParallelSafe: true,
 			Mutating:     false,

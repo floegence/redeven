@@ -8,14 +8,12 @@ import (
 func testAskUserSignal(question string) askUserSignal {
 	return askUserSignal{
 		Questions: []RequestUserInputQuestion{{
-			ID:       "question_1",
-			Header:   question,
-			Question: question,
-			Choices: []RequestUserInputChoice{{
-				ChoiceID: "write",
-				Label:    "Your answer",
-				Kind:     requestUserInputChoiceKindWrite,
-			}},
+			ID:               "question_1",
+			Header:           question,
+			Question:         question,
+			ResponseMode:     requestUserInputResponseModeWrite,
+			WriteLabel:       "Your answer",
+			WritePlaceholder: "Type your answer",
 		}},
 	}
 }
@@ -72,48 +70,25 @@ func TestEvaluateAskUserGate(t *testing.T) {
 
 	signal = askUserSignal{
 		Questions: []RequestUserInputQuestion{{
-			ID:       "question_1",
-			Header:   "Direction",
-			Question: "Pick a direction.",
-			Choices: []RequestUserInputChoice{{
-				ChoiceID: "custom",
-				Label:    "Custom path",
-				Kind:     requestUserInputChoiceKindWrite,
-			}},
+			ID:               "question_1",
+			Header:           "Direction",
+			Question:         "Pick a direction.",
+			ResponseMode:     requestUserInputResponseModeWrite,
+			WriteLabel:       "Custom path",
+			WritePlaceholder: "Describe the custom path",
 		}},
 		ReasonCode:       AskUserReasonUserDecisionRequired,
 		RequiredFromUser: []string{"Pick canary-first or full rollout."},
 	}
 	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); !pass || reason != "ok" {
-		t.Fatalf("explicit write choice => pass=%v reason=%q", pass, reason)
+		t.Fatalf("explicit write response mode => pass=%v reason=%q", pass, reason)
 	}
 
 	signal = askUserSignal{
 		Questions: []RequestUserInputQuestion{{
-			ID:                "question_1",
-			Header:            "Direction",
-			Question:          "Pick a direction.",
-			ChoicesExhaustive: requestUserInputBoolPtr(false),
-			Choices: []RequestUserInputChoice{{
-				ChoiceID:         "custom",
-				Label:            "Custom path",
-				Kind:             requestUserInputChoiceKindSelect,
-				InputPlaceholder: "Describe the custom path",
-			}},
-		}},
-		ReasonCode:       AskUserReasonUserDecisionRequired,
-		RequiredFromUser: []string{"Pick canary-first or full rollout."},
-	}
-	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonNonExhaustiveChoicesWithoutWrite {
-		t.Fatalf("non-exhaustive fixed choices without write => pass=%v reason=%q", pass, reason)
-	}
-
-	signal = askUserSignal{
-		Questions: []RequestUserInputQuestion{{
-			ID:                "question_1",
-			Header:            "Direction",
-			Question:          "Pick a direction.",
-			ChoicesExhaustive: requestUserInputBoolPtr(true),
+			ID:       "question_1",
+			Header:   "Direction",
+			Question: "Pick a direction.",
 			Choices: []RequestUserInputChoice{{
 				ChoiceID: "canary",
 				Label:    "Canary first",
@@ -128,47 +103,69 @@ func TestEvaluateAskUserGate(t *testing.T) {
 		RequiredFromUser: []string{"Pick canary-first or full rollout."},
 	}
 	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); !pass || reason != "ok" {
-		t.Fatalf("explicit exhaustive fixed choices => pass=%v reason=%q", pass, reason)
+		t.Fatalf("legacy fixed choices default to select => pass=%v reason=%q", pass, reason)
 	}
 
 	signal = askUserSignal{
 		Questions: []RequestUserInputQuestion{{
-			ID:                "question_1",
-			Header:            "Direction",
-			Question:          "Pick a direction.",
-			ChoicesExhaustive: requestUserInputBoolPtr(false),
+			ID:           "question_1",
+			Header:       "Direction",
+			Question:     "Pick a direction.",
+			ResponseMode: requestUserInputResponseModeSelect,
 			Choices: []RequestUserInputChoice{{
-				ChoiceID:         "custom",
-				Label:            "Custom path",
-				Kind:             requestUserInputChoiceKindWrite,
-				InputPlaceholder: "Describe the custom path",
+				ChoiceID: "canary",
+				Label:    "Canary first",
+				Kind:     requestUserInputChoiceKindSelect,
+			}, {
+				ChoiceID: "full",
+				Label:    "Full rollout",
+				Kind:     requestUserInputChoiceKindSelect,
 			}},
 		}},
 		ReasonCode:       AskUserReasonUserDecisionRequired,
 		RequiredFromUser: []string{"Pick canary-first or full rollout."},
 	}
 	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); !pass || reason != "ok" {
-		t.Fatalf("non-exhaustive write choice => pass=%v reason=%q", pass, reason)
+		t.Fatalf("explicit select response mode => pass=%v reason=%q", pass, reason)
 	}
 
 	signal = askUserSignal{
 		Questions: []RequestUserInputQuestion{{
-			ID:                "question_1",
-			Header:            "Direction",
-			Question:          "Pick a direction.",
-			ChoicesExhaustive: requestUserInputBoolPtr(true),
+			ID:               "question_1",
+			Header:           "Direction",
+			Question:         "Pick a direction.",
+			ResponseMode:     requestUserInputResponseModeSelectText,
+			WriteLabel:       "None of the above",
+			WritePlaceholder: "Describe the custom path",
 			Choices: []RequestUserInputChoice{{
-				ChoiceID:         "custom",
-				Label:            "Custom path",
-				Kind:             requestUserInputChoiceKindSelect,
-				InputPlaceholder: "Describe the custom path",
+				ChoiceID: "canary",
+				Label:    "Canary first",
+				Kind:     requestUserInputChoiceKindSelect,
+			}, {
+				ChoiceID: "full",
+				Label:    "Full rollout",
+				Kind:     requestUserInputChoiceKindSelect,
 			}},
 		}},
 		ReasonCode:       AskUserReasonUserDecisionRequired,
 		RequiredFromUser: []string{"Pick canary-first or full rollout."},
 	}
-	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonChoiceInputPlaceholderWithoutWrite {
-		t.Fatalf("input placeholder without write choice => pass=%v reason=%q", pass, reason)
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); !pass || reason != "ok" {
+		t.Fatalf("explicit select_or_write response mode => pass=%v reason=%q", pass, reason)
+	}
+
+	signal = askUserSignal{
+		Questions: []RequestUserInputQuestion{{
+			ID:           "question_1",
+			Header:       "Direction",
+			Question:     "Pick a direction.",
+			ResponseMode: requestUserInputResponseModeSelect,
+		}},
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Pick canary-first or full rollout."},
+	}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonMissingChoices {
+		t.Fatalf("select response mode without fixed choices => pass=%v reason=%q", pass, reason)
 	}
 
 	signal = testAskUserSignal("I need your decision on deployment order.")
@@ -277,19 +274,19 @@ func TestBuildLayeredSystemPrompt_AskUserCoversStructuredInteractionTurns(t *tes
 	if !strings.Contains(prompt, "prefer ask_user over freeform markdown option lists") {
 		t.Fatalf("prompt missing structured-interaction ask_user preference: %q", prompt)
 	}
-	if !strings.Contains(prompt, "every question must include id, header, question, is_secret, choices_exhaustive, and choices[]") {
-		t.Fatalf("prompt missing choices_exhaustive contract: %q", prompt)
+	if !strings.Contains(prompt, "every question must include id, header, question, is_secret, and response_mode") {
+		t.Fatalf("prompt missing response_mode contract: %q", prompt)
 	}
-	if !strings.Contains(prompt, "Set `choices_exhaustive:true` only when the fixed choices are genuinely exhaustive by construction") {
-		t.Fatalf("prompt missing choices_exhaustive semantics: %q", prompt)
+	if !strings.Contains(prompt, "Use `response_mode:\"select\"` for fixed-choice questions") {
+		t.Fatalf("prompt missing response_mode semantics: %q", prompt)
 	}
-	if !strings.Contains(prompt, "include a final catch-all `kind:\"write\"` choice unless the option set is genuinely exhaustive by construction") {
-		t.Fatalf("prompt missing non-exhaustive write-choice rule: %q", prompt)
+	if !strings.Contains(prompt, "`choices[]` contains fixed options only") {
+		t.Fatalf("prompt missing fixed-choice-only rule: %q", prompt)
 	}
 	if !strings.Contains(prompt, `None of the above: ___`) {
-		t.Fatalf("prompt missing explicit write-choice fallback guidance: %q", prompt)
+		t.Fatalf("prompt missing standardized typed fallback guidance: %q", prompt)
 	}
-	if !strings.Contains(prompt, "If the user explicitly asks for an `Other` or `None of the above` path, you MUST represent it as a `kind:\"write\"` choice") {
+	if !strings.Contains(prompt, "If the user explicitly asks for an `Other` or `None of the above` path, you MUST represent it via `response_mode:\"select_or_write\"`") {
 		t.Fatalf("prompt missing explicit requested fallback rule: %q", prompt)
 	}
 	if !strings.Contains(prompt, "Do NOT use ask_user to delegate commands, file inspection, log gathering, screenshots, or web research") {
