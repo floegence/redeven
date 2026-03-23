@@ -3703,19 +3703,28 @@ export function EnvAIPage() {
     chatInputApi()?.focusInput();
   };
 
-  const normalizeStructuredDraftAnswer = (draft: { selectedOptionId?: string; answers?: string[] } | undefined) => ({
+  const normalizeStructuredDraftAnswer = (draft: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean } | undefined) => ({
     selectedOptionId: String(draft?.selectedOptionId ?? '').trim() || undefined,
     answers: Array.isArray(draft?.answers) ? draft.answers.map((item) => String(item ?? '').trim()).filter(Boolean) : [],
+    useOtherFallback: Boolean(draft?.useOtherFallback),
   });
 
   const selectedWaitingPromptOption = (question: {
     options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
-  }, draft: { selectedOptionId?: string; answers?: string[] } | undefined) => {
+  }, draft: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean } | undefined) => {
     const normalized = normalizeStructuredDraftAnswer(draft);
     const selectedOptionId = String(normalized.selectedOptionId ?? '').trim();
     if (!selectedOptionId) return undefined;
     const options = Array.isArray(question.options) ? question.options : [];
     return options.find((option) => String(option?.option_id ?? '').trim() === selectedOptionId);
+  };
+
+  const waitingPromptQuestionHasOtherFallback = (question: {
+    is_other?: boolean;
+    options?: ReadonlyArray<unknown>;
+  }): boolean => {
+    const options = Array.isArray(question.options) ? question.options : [];
+    return Boolean(question.is_other) && options.length > 0;
   };
 
   const canonicalWaitingPromptDetailMode = (mode: unknown): 'required' | '' => {
@@ -3726,23 +3735,34 @@ export function EnvAIPage() {
   const waitingPromptQuestionAllowsText = (question: {
     is_other?: boolean;
     options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
-  }, draft: { selectedOptionId?: string; answers?: string[] } | undefined): boolean => {
-    const options = Array.isArray(question.options) ? question.options : [];
-    if (Boolean(question.is_other) || options.length === 0) {
-      return true;
-    }
-    const selectedOption = selectedWaitingPromptOption(question, draft);
-    return canonicalWaitingPromptDetailMode(selectedOption?.detail_input_mode) === 'required';
-  };
-
-  const waitingPromptQuestionRequiresText = (question: {
-    options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
-  }, draft: { selectedOptionId?: string; answers?: string[] } | undefined): boolean => {
+  }, draft: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean } | undefined): boolean => {
+    const normalized = normalizeStructuredDraftAnswer(draft);
     const options = Array.isArray(question.options) ? question.options : [];
     if (options.length === 0) {
       return true;
     }
-    return canonicalWaitingPromptDetailMode(selectedWaitingPromptOption(question, draft)?.detail_input_mode) === 'required';
+    const selectedOption = selectedWaitingPromptOption(question, normalized);
+    if (canonicalWaitingPromptDetailMode(selectedOption?.detail_input_mode) === 'required') {
+      return true;
+    }
+    return waitingPromptQuestionHasOtherFallback(question) && !normalized.selectedOptionId;
+  };
+
+  const waitingPromptQuestionRequiresText = (question: {
+    is_other?: boolean;
+    options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
+  }, draft: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean } | undefined): boolean => {
+    const normalized = normalizeStructuredDraftAnswer(draft);
+    const options = Array.isArray(question.options) ? question.options : [];
+    if (options.length === 0) {
+      return true;
+    }
+    if (canonicalWaitingPromptDetailMode(selectedWaitingPromptOption(question, normalized)?.detail_input_mode) === 'required') {
+      return true;
+    }
+    return waitingPromptQuestionHasOtherFallback(question)
+      && !normalized.selectedOptionId
+      && (normalized.useOtherFallback || normalized.answers.length > 0);
   };
 
   const waitingPromptQuestionRequiresSelection = (question: {
@@ -3758,7 +3778,7 @@ export function EnvAIPage() {
       is_other?: boolean;
       options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
     },
-    draft: { selectedOptionId?: string; answers?: string[] } | undefined,
+    draft: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean } | undefined,
   ): boolean => {
     const normalized = normalizeStructuredDraftAnswer(draft);
     const hasSelection = Boolean(normalized.selectedOptionId);
@@ -3782,7 +3802,7 @@ export function EnvAIPage() {
     is_secret?: boolean;
     is_other?: boolean;
     options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
-  }, draft: { selectedOptionId?: string; answers?: string[] } | undefined): boolean => {
+  }, draft: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean } | undefined): boolean => {
     if (question.is_secret) return false;
     return waitingPromptQuestionAllowsText(question, draft);
   };

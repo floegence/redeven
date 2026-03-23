@@ -4686,7 +4686,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			"- evidence_refs must reference relevant tool IDs when evidence is required.",
 			"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_other, is_secret, and optional options[].",
 			"- For each question, include 2-4 concise mutually exclusive options (best option first) when predefined choices are appropriate.",
-			"- Use `is_other=true` only when the whole question should allow a freeform reply. Do not combine `is_other=true` with option-level detail input on the same question.",
+			"- Use `is_other=true` only when the whole question should allow a freeform reply. If you want predefined options plus a typed catch-all, keep the question-level fallback on `is_other=true`; the Env App renders an explicit final fallback choice for that path. Do not combine `is_other=true` with option-level detail input on the same question.",
 			"- When only one option needs extra detail, use `options[].detail_input_mode=\"required\"` plus `options[].detail_input_placeholder` when helpful. Option-level detail input must block resolution until the user provides that detail.",
 			"- For deterministic UI actions, place actions on `questions[].options[].actions` (for example {type:\"set_mode\",mode:\"act\"}).",
 		)
