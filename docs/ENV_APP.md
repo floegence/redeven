@@ -8,7 +8,7 @@ Key points:
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower).
 - Flower thread history keeps the chat `title` separate from the latest `last_message_preview` snippet: untitled chats render as `New chat` until the agent later writes a generated title, while the preview line continues to reflect the newest visible message text.
-- Flower auto titles are best-effort but resilient: the agent retries transient generation failures in the background and also recovers recent untitled threads after restart, so users should see the final title appear without manual refresh or rename in normal cases.
+- Flower auto titles are best-effort but resilient: the agent retries transient generation failures in the background, can expand the title-generation output budget once for reasoning-heavy models, and also recovers recent untitled threads after restart, so users should see the final title appear without manual refresh or rename in normal cases.
 - File Browser text/code previews now use a Monaco-based viewer/editor path for the primary experience, matching the shared Floe Webapp editor surface.
 - When the environment grants `can_write`, text previews can switch into an editable mode and save changes back through the agent file RPC.
 - Languages that Monaco can only treat as plain text still stay on the same Monaco surface so preview and Edit mode remain visually aligned.
