@@ -1751,6 +1751,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	emptyTaskCompleteRejects := 0
 	lastSignature := ""
 	signatureHits := map[string]int{}
+	askUserRejectionHits := map[string]int{}
 	failedSignatures := map[string]bool{}
 	mistakeWindow := make([]int, 0, 8)
 	exceptionOverlay := ""
@@ -1855,6 +1856,23 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 		return nil
 	}
+	buildAskUserRejectionSignature := func(source string, signal askUserSignal, gateReason string) string {
+		signal = normalizeAskUserSignal(signal)
+		payload := map[string]any{
+			"source":             strings.TrimSpace(source),
+			"gate_reason":        strings.TrimSpace(gateReason),
+			"reason_code":        signal.ReasonCode,
+			"required_from_user": signal.RequiredFromUser,
+			"evidence_refs":      signal.EvidenceRefs,
+			"questions":          signal.Questions,
+		}
+		b, err := json.Marshal(payload)
+		if err != nil {
+			return ""
+		}
+		sum := sha256.Sum256(b)
+		return hex.EncodeToString(sum[:8])
+	}
 	rejectAskUser := func(source string, gateReason string) {
 		rejectionMsg := "ask_user was rejected by contract gate. Continue autonomously with available tools and call task_complete when done."
 		recoveryOverlay := "[RECOVERY] ask_user rejected by contract gate. Continue with tools and call task_complete when done."
@@ -1866,14 +1884,8 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			rejectionMsg = "ask_user was rejected because required_from_user is empty. Specify exactly what information is needed from the user."
 			recoveryOverlay = "[CONTRACT] ask_user requires required_from_user."
 		case askUserGateReasonMissingChoices:
-			rejectionMsg = "ask_user was rejected because each question must provide explicit choices. Use choices[].kind=\"select\" for fixed answers and choices[].kind=\"write\" for typed answers."
-			recoveryOverlay = "[CONTRACT] ask_user requires explicit choices[]."
-		case askUserGateReasonNonExhaustiveChoicesWithoutWrite:
-			rejectionMsg = "ask_user was rejected because a non-exhaustive question did not include a `kind=\"write\"` catch-all choice. Add a custom-answer write choice or mark choices_exhaustive=true only if the fixed options are genuinely exhaustive."
-			recoveryOverlay = "[CONTRACT] Non-exhaustive questions require a `kind=\"write\"` catch-all choice."
-		case askUserGateReasonChoiceInputPlaceholderWithoutWrite:
-			rejectionMsg = "ask_user was rejected because input_placeholder is only supported on choices with kind=\"write\"."
-			recoveryOverlay = "[CONTRACT] input_placeholder requires choices[].kind=\"write\"."
+			rejectionMsg = "ask_user was rejected because a select-style question had no fixed choices. Use response_mode=\"select\" for fixed choices, response_mode=\"write\" for direct input, or response_mode=\"select_or_write\" for fixed choices plus a standardized typed fallback."
+			recoveryOverlay = "[CONTRACT] ask_user requires valid response_mode semantics and fixed choices for select-style questions."
 		case "missing_evidence_refs":
 			rejectionMsg = "ask_user was rejected because evidence_refs is empty for an evidence-backed reason. Provide concrete evidence refs from tool calls."
 			recoveryOverlay = "[CONTRACT] ask_user requires evidence_refs for this reason_code."
@@ -1956,6 +1968,32 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			"todo_open_count":       state.TodoOpenCount,
 		})
 		if !askPassed {
+			rejectionSignature := buildAskUserRejectionSignature(source, signal, askReason)
+			rejectionHits := 1
+			if rejectionSignature != "" {
+				askUserRejectionHits[rejectionSignature] = askUserRejectionHits[rejectionSignature] + 1
+				rejectionHits = askUserRejectionHits[rejectionSignature]
+			}
+			if source == "model_signal" && rejectionHits >= 3 {
+				guardSignal := defaultGuardAskUserSignal(
+					"I could not form a valid structured input request after repeated contract errors. Please provide the missing direction or clarification in one reply so I can continue.",
+					nil,
+					"ask_user_contract_loop",
+				)
+				guardPassed, guardReason := evaluateGuardAskUserGate("ask_user_contract_loop", state, taskComplexity)
+				r.persistRunEvent("ask_user.contract_loop", RealtimeStreamKindLifecycle, map[string]any{
+					"step_index":          step,
+					"source":              source,
+					"gate_reason":         askReason,
+					"guard_gate_passed":   guardPassed,
+					"guard_gate_reason":   guardReason,
+					"rejection_hits":      rejectionHits,
+					"rejection_signature": rejectionSignature,
+				})
+				if guardPassed {
+					return true, endAskUser(step, guardSignal, "ask_user_contract_loop")
+				}
+			}
 			rejectAskUser(source, askReason)
 			return false, nil
 		}
@@ -4645,14 +4683,14 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			"- reason_code must be one of: user_decision_required | permission_blocked | missing_external_input | conflicting_constraints | safety_confirmation.",
 			"- required_from_user must list concrete user inputs or decisions needed to proceed.",
 			"- evidence_refs must reference relevant tool IDs when evidence is required.",
-			"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_secret, choices_exhaustive, and choices[].",
+			"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_secret, and response_mode.",
 			"- For guided questionnaires, interviews, quizzes, guessing games, or decision trees, prefer ask_user over freeform markdown option lists.",
-			"- Every choice must declare `kind`: use `kind:\"select\"` for fixed answers and `kind:\"write\"` for answers that require typed user input.",
-			"- Set `choices_exhaustive:true` only when the fixed choices are genuinely exhaustive by construction. Otherwise set `choices_exhaustive:false` and provide a custom-answer `kind:\"write\"` path.",
-			"- When offering fixed options about the user's real situation, preference, habit, background, or other potentially non-exhaustive state, include a final catch-all `kind:\"write\"` choice unless the option set is genuinely exhaustive by construction.",
-			"- Express typed catch-all answers like `None of the above: ___` as an explicit `choices[]` entry with `kind:\"write\"`, its own label, and optional `input_placeholder`.",
-			"- If the user explicitly asks for an `Other` or `None of the above` path, you MUST represent it as a `kind:\"write\"` choice instead of omitting it.",
-			"- For a direct-input question, use a single `kind:\"write\"` choice instead of omitting choices.",
+			"- Use `response_mode:\"select\"` for fixed-choice questions, `response_mode:\"write\"` for direct-input questions, and `response_mode:\"select_or_write\"` for fixed choices plus a standardized typed fallback.",
+			"- `choices[]` contains fixed options only. Do not encode the typed fallback as a fake write choice inside `choices[]`.",
+			"- For `response_mode:\"select_or_write\"`, the UI will render a standardized typed fallback such as `None of the above: ___`; provide `write_label` and optional `write_placeholder` when that wording matters.",
+			"- When offering fixed options about the user's real situation, preference, habit, background, or other potentially non-exhaustive state, prefer `response_mode:\"select_or_write\"` unless the option set is genuinely exhaustive by construction.",
+			"- If the user explicitly asks for an `Other` or `None of the above` path, you MUST represent it via `response_mode:\"select_or_write\"` rather than omitting the typed fallback.",
+			"- For a direct-input question, use `response_mode:\"write\"` and omit fixed choices.",
 			"- Keep choices concise and mutually exclusive. Put the best/default path first when that ordering matters.",
 			"- For deterministic UI actions, place actions on `questions[].choices[].actions` (for example {type:\"set_mode\",mode:\"act\"}).",
 		)

@@ -152,24 +152,21 @@ func TestE2E_DBConfiguredModel_GuidedStructuredInteractionProducesWaitingPrompt(
 	if len(question.Choices) < 2 {
 		t.Fatalf("question choices=%d, want at least 2: %+v", len(question.Choices), question)
 	}
-	if question.ChoicesExhaustive == nil || *question.ChoicesExhaustive {
-		t.Fatalf("question should declare non-exhaustive choices for a guided profiling prompt: %+v", question)
+	if got := strings.TrimSpace(question.ResponseMode); got != requestUserInputResponseModeSelectText {
+		t.Fatalf("response_mode=%q, want %q", got, requestUserInputResponseModeSelectText)
 	}
 	hasSelect := false
-	hasWrite := false
 	for _, choice := range question.Choices {
 		switch strings.TrimSpace(choice.Kind) {
 		case requestUserInputChoiceKindSelect:
 			hasSelect = true
-		case requestUserInputChoiceKindWrite:
-			hasWrite = true
 		}
 	}
 	if !hasSelect {
 		t.Fatalf("expected at least one select choice: %+v", question.Choices)
 	}
-	if !hasWrite {
-		t.Fatalf("expected at least one write choice for custom fallback: %+v", question.Choices)
+	if strings.TrimSpace(question.WriteLabel) == "" {
+		t.Fatalf("expected write_label for custom fallback: %+v", question)
 	}
 
 	runEvents, err := svc.ListRunEvents(ctx, &meta, runID, 2000)

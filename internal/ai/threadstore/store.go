@@ -2320,7 +2320,7 @@ func assistantVisibleTextFromBlock(raw json.RawMessage) string {
 		return ""
 	}
 	switch strings.ToLower(strings.TrimSpace(meta.Type)) {
-	case "markdown", "thinking":
+	case "markdown":
 		var block struct {
 			Content string `json:"content"`
 		}

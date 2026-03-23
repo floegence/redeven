@@ -25,14 +25,9 @@ const askUserBlock: ToolCallBlockType = {
         header: 'Direction',
         question: 'Choose a direction.',
         is_secret: false,
-        choices: [
-          {
-            choice_id: 'custom',
-            label: 'Your answer',
-            kind: 'write',
-            input_placeholder: 'Type your answer',
-          },
-        ],
+        response_mode: 'write',
+        write_label: 'Your answer',
+        write_placeholder: 'Type your answer',
       },
     ],
   },
@@ -44,14 +39,9 @@ const askUserBlock: ToolCallBlockType = {
         header: 'Direction',
         question: 'Choose a direction.',
         is_secret: false,
-        choices: [
-          {
-            choice_id: 'custom',
-            label: 'Your answer',
-            kind: 'write',
-            input_placeholder: 'Type your answer',
-          },
-        ],
+        response_mode: 'write',
+        write_label: 'Your answer',
+        write_placeholder: 'Type your answer',
       },
     ],
   },
@@ -61,8 +51,7 @@ type MockAskUserChoice = {
   choiceId: string;
   label: string;
   description?: string;
-  kind: 'select' | 'write';
-  inputPlaceholder?: string;
+  kind?: 'select';
 };
 
 type MockAskUserQuestion = {
@@ -70,12 +59,15 @@ type MockAskUserQuestion = {
   header: string;
   question: string;
   isSecret?: boolean;
-  choices: MockAskUserChoice[];
+  responseMode?: 'select' | 'write' | 'select_or_write';
+  writeLabel?: string;
+  writePlaceholder?: string;
+  choices?: MockAskUserChoice[];
 };
 
 function renderAskUserBlock(opts: {
   runStatus: string;
-  initialDrafts?: Record<string, { choiceId?: string; text?: string }>;
+  initialDrafts?: Record<string, { choiceId?: string; text?: string; writeSelected?: boolean }>;
   waitingPrompt?: {
     promptId: string;
     messageId: string;
@@ -85,7 +77,7 @@ function renderAskUserBlock(opts: {
 }) {
   const host = document.createElement('div');
   document.body.appendChild(host);
-  const [drafts, setDrafts] = createSignal<Record<string, { choiceId?: string; text?: string }>>(opts.initialDrafts ?? {});
+  const [drafts, setDrafts] = createSignal<Record<string, { choiceId?: string; text?: string; writeSelected?: boolean }>>(opts.initialDrafts ?? {});
   const submitStructuredPromptResponse = vi.fn(async () => ({}));
 
   const aiContextValue: any = {
@@ -97,7 +89,7 @@ function renderAskUserBlock(opts: {
     }),
     activeThreadWaitingPrompt: () => opts.waitingPrompt ?? null,
     getStructuredPromptDrafts: () => drafts(),
-    setStructuredPromptDraft: (_threadId: string, _promptId: string, questionId: string, draft: { choiceId?: string; text?: string } | null) => {
+    setStructuredPromptDraft: (_threadId: string, _promptId: string, questionId: string, draft: { choiceId?: string; text?: string; writeSelected?: boolean } | null) => {
       setDrafts((prev) => {
         const next = { ...prev };
         if (!draft) {
@@ -162,9 +154,10 @@ describe('ToolCallBlock ask_user states', () => {
             header: 'Direction',
             question: 'Choose a direction.',
             isSecret: false,
+            responseMode: 'select',
             choices: [
-              { choiceId: 'proceed', label: 'Proceed', kind: 'select' },
-              { choiceId: 'pause', label: 'Pause', kind: 'select' },
+              { choiceId: 'proceed', label: 'Proceed' },
+              { choiceId: 'pause', label: 'Pause' },
             ],
           },
         ],
@@ -192,7 +185,7 @@ describe('ToolCallBlock ask_user states', () => {
     }));
   });
 
-  it('renders an explicit custom write choice alongside fixed options', async () => {
+  it('renders a standardized write fallback alongside fixed options', async () => {
     const { host } = renderAskUserBlock({
       runStatus: 'waiting_user',
       waitingPrompt: {
@@ -205,16 +198,12 @@ describe('ToolCallBlock ask_user states', () => {
             header: 'Situation',
             question: 'Choose the closest situation.',
             isSecret: false,
+            responseMode: 'select_or_write',
+            writeLabel: 'None of the above',
+            writePlaceholder: 'Type another answer',
             choices: [
-              { choiceId: 'working', label: 'Already working', kind: 'select' },
-              { choiceId: 'studying', label: 'Studying full time', kind: 'select' },
-              {
-                choiceId: 'other',
-                label: 'None of the above',
-                description: 'Type another answer.',
-                kind: 'write',
-                inputPlaceholder: 'Type another answer',
-              },
+              { choiceId: 'working', label: 'Already working' },
+              { choiceId: 'studying', label: 'Studying full time' },
             ],
           },
         ],
@@ -252,7 +241,7 @@ describe('ToolCallBlock ask_user states', () => {
     expect((host.querySelector('.chat-tool-ask-user-custom-submit') as HTMLButtonElement | null)?.disabled).toBe(false);
   });
 
-  it('shows a detail input when the selected option requires extra detail', async () => {
+  it('uses the configured write placeholder for the standardized write fallback', async () => {
     const { host } = renderAskUserBlock({
       runStatus: 'waiting_user',
       waitingPrompt: {
@@ -265,14 +254,11 @@ describe('ToolCallBlock ask_user states', () => {
             header: 'Situation',
             question: 'Choose the closest situation.',
             isSecret: false,
+            responseMode: 'select_or_write',
+            writeLabel: 'Other',
+            writePlaceholder: 'Describe your current situation',
             choices: [
-              { choiceId: 'working', label: 'Already working', kind: 'select' },
-              {
-                choiceId: 'other',
-                label: 'Other',
-                kind: 'write',
-                inputPlaceholder: 'Describe your current situation',
-              },
+              { choiceId: 'working', label: 'Already working' },
             ],
           },
         ],
@@ -317,14 +303,10 @@ describe('ToolCallBlock ask_user states', () => {
             header: 'Clarify',
             question: 'What should Flower inspect next?',
             isSecret: false,
-            choices: [
-              {
-                choiceId: 'write',
-                label: 'Your answer',
-                kind: 'write',
-                inputPlaceholder: 'Type your answer',
-              },
-            ],
+            responseMode: 'write',
+            writeLabel: 'Your answer',
+            writePlaceholder: 'Type your answer',
+            choices: [],
           },
         ],
       },

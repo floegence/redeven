@@ -26,6 +26,9 @@ export type wire_ai_request_user_input_question = {
   header: string;
   question: string;
   is_secret: boolean;
+  response_mode?: string;
+  write_label?: string;
+  write_placeholder?: string;
   choices?: wire_ai_request_user_input_choice[];
   is_other?: boolean;
   options?: wire_ai_request_user_input_choice[];

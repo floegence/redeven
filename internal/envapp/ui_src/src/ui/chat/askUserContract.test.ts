@@ -8,7 +8,7 @@ import {
 } from './askUserContract';
 
 describe('askUserContract', () => {
-  it('normalizes legacy is_other prompts into an explicit write choice', () => {
+  it('normalizes legacy is_other prompts into select_or_write with a standardized write fallback', () => {
     const [question] = normalizeAskUserQuestions([
       {
         id: 'question-1',
@@ -22,14 +22,22 @@ describe('askUserContract', () => {
       },
     ]);
 
-    expect(question?.choices).toEqual([
-      { choiceId: 'working', label: 'Already working', kind: 'select', description: undefined, inputPlaceholder: undefined, actions: undefined },
-      { choiceId: 'studying', label: 'Studying full time', kind: 'select', description: undefined, inputPlaceholder: undefined, actions: undefined },
-      { choiceId: 'other', label: 'None of the above', kind: 'write', description: 'Type another answer.', inputPlaceholder: 'Type another answer', actions: undefined },
-    ]);
+    expect(question).toEqual({
+      id: 'question-1',
+      header: 'Situation',
+      question: 'Choose the closest situation.',
+      isSecret: false,
+      responseMode: 'select_or_write',
+      writeLabel: 'None of the above',
+      writePlaceholder: 'Type another answer',
+      choices: [
+        { choiceId: 'working', label: 'Already working', kind: 'select', description: undefined, actions: undefined },
+        { choiceId: 'studying', label: 'Studying full time', kind: 'select', description: undefined, actions: undefined },
+      ],
+    });
   });
 
-  it('normalizes legacy option detail modes into write choices', () => {
+  it('normalizes legacy option detail modes into a question-level write fallback', () => {
     const [question] = normalizeAskUserQuestions([
       {
         id: 'question-1',
@@ -47,21 +55,31 @@ describe('askUserContract', () => {
       },
     ]);
 
-    expect(question?.choices).toEqual([
-      { choiceId: 'working', label: 'Already working', kind: 'select', description: undefined, inputPlaceholder: undefined, actions: undefined },
-      { choiceId: 'other', label: 'Other', kind: 'write', description: undefined, inputPlaceholder: 'Describe your current situation', actions: undefined },
-    ]);
+    expect(question).toEqual({
+      id: 'question-1',
+      header: 'Situation',
+      question: 'Choose the closest situation.',
+      isSecret: false,
+      responseMode: 'select_or_write',
+      writeLabel: 'Other',
+      writePlaceholder: 'Describe your current situation',
+      choices: [
+        { choiceId: 'working', label: 'Already working', kind: 'select', description: undefined, actions: undefined },
+      ],
+    });
   });
 
-  it('only autofills composer text when the question is direct-write or a write choice is already selected', () => {
+  it('only autofills composer text when the question is direct-write or the write path is selected', () => {
     const [mixedQuestion] = normalizeAskUserQuestions([
       {
         id: 'question-1',
         header: 'Situation',
         question: 'Choose the closest situation.',
+        response_mode: 'select_or_write',
+        write_label: 'None of the above',
+        write_placeholder: 'Type another answer',
         choices: [
           { choice_id: 'working', label: 'Already working', kind: 'select' },
-          { choice_id: 'other', label: 'None of the above', kind: 'write', input_placeholder: 'Type another answer' },
         ],
       },
     ]);
@@ -70,32 +88,33 @@ describe('askUserContract', () => {
         id: 'question-2',
         header: 'Clarify',
         question: 'What should Flower inspect next?',
-        choices: [
-          { choice_id: 'write', label: 'Your answer', kind: 'write', input_placeholder: 'Type your answer' },
-        ],
+        response_mode: 'write',
+        write_placeholder: 'Type your answer',
       },
     ]);
 
     expect(questionCanAutofillFromComposer(mixedQuestion, undefined)).toBe(false);
-    expect(questionCanAutofillFromComposer(mixedQuestion, { choiceId: 'other' })).toBe(true);
+    expect(questionCanAutofillFromComposer(mixedQuestion, { writeSelected: true })).toBe(true);
     expect(questionCanAutofillFromComposer(directWriteQuestion, undefined)).toBe(true);
   });
 
-  it('requires text before a write choice counts as answered', () => {
+  it('requires text before a write path counts as answered', () => {
     const [question] = normalizeAskUserQuestions([
       {
         id: 'question-1',
         header: 'Situation',
         question: 'Choose the closest situation.',
+        response_mode: 'select_or_write',
+        write_label: 'Other',
+        write_placeholder: 'Describe your current situation',
         choices: [
           { choice_id: 'working', label: 'Already working', kind: 'select' },
-          { choice_id: 'other', label: 'Other', kind: 'write', input_placeholder: 'Describe your current situation' },
         ],
       },
     ]);
 
-    expect(questionRequiresText(question, { choiceId: 'other' })).toBe(true);
-    expect(questionHasDraftAnswer(question, { choiceId: 'other' })).toBe(false);
-    expect(questionHasDraftAnswer(question, { choiceId: 'other', text: 'Working and studying part time' })).toBe(true);
+    expect(questionRequiresText(question, { writeSelected: true })).toBe(true);
+    expect(questionHasDraftAnswer(question, { writeSelected: true })).toBe(false);
+    expect(questionHasDraftAnswer(question, { writeSelected: true, text: 'Working and studying part time' })).toBe(true);
   });
 });

@@ -12,8 +12,7 @@ export function isMessageBlockVisible(block: MessageBlock, messageStatus: Messag
     case 'text':
       return hasVisibleString(block.content);
     case 'thinking':
-      return hasVisibleString(block.content)
-        || (typeof block.duration === 'number' && Number.isFinite(block.duration));
+      return false;
     default:
       return true;
   }

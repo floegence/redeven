@@ -21,12 +21,14 @@ type MockWaitingPrompt = {
     header: string;
     question: string;
     isSecret?: boolean;
-    choices: Array<{
+    responseMode?: 'select' | 'write' | 'select_or_write';
+    writeLabel?: string;
+    writePlaceholder?: string;
+    choices?: Array<{
       choiceId: string;
       label: string;
       description?: string;
-      kind: 'select' | 'write';
-      inputPlaceholder?: string;
+      kind?: 'select';
     }>;
   }>;
 };
@@ -139,7 +141,7 @@ const aiState = {
   activeThreadId: '' as string,
   activeThread: null as MockThread | null,
   waitingPrompt: null as MockWaitingPrompt | null,
-  structuredDrafts: {} as Record<string, { choiceId?: string; text?: string }>,
+  structuredDrafts: {} as Record<string, { choiceId?: string; text?: string; writeSelected?: boolean }>,
   runIdByThread: {} as Record<string, string>,
 };
 
@@ -158,7 +160,7 @@ const aiContextValue = new Proxy({
   activeThreadWaitingPrompt: () => aiState.waitingPrompt,
   getStructuredPromptDrafts: () => aiState.structuredDrafts,
   submitStructuredPromptResponse: submitStructuredPromptResponseMock,
-  setStructuredPromptDraft: (_threadId: string, _promptId: string, questionId: string, draft: { choiceId?: string; text?: string } | null) => {
+  setStructuredPromptDraft: (_threadId: string, _promptId: string, questionId: string, draft: { choiceId?: string; text?: string; writeSelected?: boolean } | null) => {
     const qid = String(questionId ?? '').trim();
     if (!qid) return;
     if (!draft) {
@@ -168,6 +170,7 @@ const aiContextValue = new Proxy({
     aiState.structuredDrafts[qid] = {
       choiceId: draft.choiceId,
       text: draft.text,
+      writeSelected: draft.writeSelected,
     };
   },
   createThread: async () => ({ thread_id: 'thread-created' }),
@@ -739,7 +742,7 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('renders reasoning styling immediately when streaming switches the block to thinking', async () => {
+    it('keeps thinking blocks hidden from the default transcript view', async () => {
       const { host, dispose } = await renderPage();
       try {
         const messageId = emitAssistantRealtimeMessageStart('assistant-live-reasoning');
@@ -748,10 +751,7 @@ export function registerEnvAIPageSendTests() {
         await flushAsync();
 
         const reasoning = host.querySelector('.chat-thinking-block');
-        expect(reasoning).toBeTruthy();
-        expect(reasoning?.getAttribute('aria-label')).toBe('Reasoning');
-        expect(reasoning?.textContent).not.toContain('Reasoning');
-        expect(reasoning?.textContent).toContain('Tracing the live reducer path.');
+        expect(reasoning).toBeNull();
         expect(host.querySelector('.chat-markdown-empty-streaming')).toBeNull();
       } finally {
         dispose();
@@ -865,7 +865,6 @@ export function registerEnvAIPageSendTests() {
         await flushAsync();
         await flushAsync();
 
-        expect(host.textContent).toContain('Tracing the live reducer path. Capturing the missing tail.');
         expect(host.textContent).toContain('Final answer recovered from transcript.');
         expect(host.querySelector('.chat-markdown-empty-streaming')).toBeNull();
       } finally {
@@ -1028,9 +1027,10 @@ export function registerEnvAIPageSendTests() {
               header: 'Clarify',
               question: 'What logs should Flower inspect?',
               isSecret: false,
-              choices: [
-                { choiceId: 'write', label: 'Your answer', kind: 'write', inputPlaceholder: 'Type your answer' },
-              ],
+              responseMode: 'write',
+              writeLabel: 'Your answer',
+              writePlaceholder: 'Type your answer',
+              choices: [],
             },
           ],
         };
@@ -1050,8 +1050,8 @@ export function registerEnvAIPageSendTests() {
             text: '',
             answers: {
               'question-1': {
-                choiceId: 'write',
                 text: 'Please inspect the build logs.',
+                writeSelected: true,
               },
             },
           }));
@@ -1072,27 +1072,24 @@ export function registerEnvAIPageSendTests() {
         messageId: 'assistant-1',
         toolId: 'tool-ask-user',
         questions: [
-          {
-            id: 'question-1',
-            header: 'Situation',
-            question: 'Choose the closest situation.',
-            isSecret: false,
-            choices: [
-              { choiceId: 'working', label: 'Already working', kind: 'select' },
-              { choiceId: 'studying', label: 'Studying full time', kind: 'select' },
-              {
-                choiceId: 'other',
-                label: 'None of the above',
-                kind: 'write',
-                inputPlaceholder: 'Type another answer',
-              },
-            ],
-          },
-        ],
-      };
+            {
+              id: 'question-1',
+              header: 'Situation',
+              question: 'Choose the closest situation.',
+              isSecret: false,
+              responseMode: 'select_or_write',
+              writeLabel: 'None of the above',
+              writePlaceholder: 'Type another answer',
+              choices: [
+                { choiceId: 'working', label: 'Already working', kind: 'select' },
+                { choiceId: 'studying', label: 'Studying full time', kind: 'select' },
+              ],
+            },
+          ],
+        };
       aiState.structuredDrafts = {
         'question-1': {
-          choiceId: 'other',
+          writeSelected: true,
         },
       };
 
@@ -1106,8 +1103,8 @@ export function registerEnvAIPageSendTests() {
         expect(submitStructuredPromptResponseMock).toHaveBeenCalledWith(expect.objectContaining({
           answers: {
             'question-1': {
-              choiceId: 'other',
               text: 'Working and studying part time.',
+              writeSelected: true,
             },
           },
         }));
@@ -1126,17 +1123,18 @@ export function registerEnvAIPageSendTests() {
         messageId: 'assistant-1',
         toolId: 'tool-ask-user',
         questions: [
-          {
-            id: 'question-1',
-            header: 'Clarify',
-            question: 'What logs should Flower inspect?',
-            isSecret: false,
-            choices: [
-              { choiceId: 'write', label: 'Your answer', kind: 'write', inputPlaceholder: 'Type your answer' },
-            ],
-          },
-        ],
-      };
+            {
+              id: 'question-1',
+              header: 'Clarify',
+              question: 'What logs should Flower inspect?',
+              isSecret: false,
+              responseMode: 'write',
+              writeLabel: 'Your answer',
+              writePlaceholder: 'Type your answer',
+              choices: [],
+            },
+          ],
+        };
       getActiveRunSnapshotMock
         .mockResolvedValueOnce({ ok: false })
         .mockResolvedValueOnce(makeStreamingAssistantSnapshot('assistant-waiting-recovery'));
@@ -1179,15 +1177,17 @@ export function registerEnvAIPageSendTests() {
               header: 'Scope',
               question: 'Which subsystem should Flower inspect?',
               isSecret: false,
-              choices: [
-                { choiceId: 'write', label: 'Your answer', kind: 'write', inputPlaceholder: 'Type your answer' },
-              ],
+              responseMode: 'write',
+              writeLabel: 'Your answer',
+              writePlaceholder: 'Type your answer',
+              choices: [],
             },
             {
               id: 'question-2',
               header: 'Mode',
               question: 'Should Flower patch or only review?',
               isSecret: false,
+              responseMode: 'select',
               choices: [
                 { choiceId: 'plan', label: 'Plan', kind: 'select' },
                 { choiceId: 'act', label: 'Act', kind: 'select' },
@@ -1227,26 +1227,23 @@ export function registerEnvAIPageSendTests() {
         messageId: 'assistant-1',
         toolId: 'tool-ask-user',
         questions: [
-          {
-            id: 'question-1',
-            header: 'Situation',
-            question: 'Choose the closest situation.',
-            isSecret: false,
-            choices: [
-              { choiceId: 'working', label: 'Already working', kind: 'select' },
-              {
-                choiceId: 'other',
-                label: 'Other',
-                kind: 'write',
-                inputPlaceholder: 'Describe your current situation',
-              },
-            ],
-          },
-        ],
-      };
+            {
+              id: 'question-1',
+              header: 'Situation',
+              question: 'Choose the closest situation.',
+              isSecret: false,
+              responseMode: 'select_or_write',
+              writeLabel: 'Other',
+              writePlaceholder: 'Describe your current situation',
+              choices: [
+                { choiceId: 'working', label: 'Already working', kind: 'select' },
+              ],
+            },
+          ],
+        };
       aiState.structuredDrafts = {
         'question-1': {
-          choiceId: 'other',
+          writeSelected: true,
         },
       };
 
@@ -1263,8 +1260,8 @@ export function registerEnvAIPageSendTests() {
           text: '',
           answers: {
             'question-1': {
-              choiceId: 'other',
               text: 'Working and studying part time.',
+              writeSelected: true,
             },
           },
         }));
@@ -1283,22 +1280,19 @@ export function registerEnvAIPageSendTests() {
         messageId: 'assistant-1',
         toolId: 'tool-ask-user',
         questions: [
-          {
-            id: 'question-1',
-            header: 'Situation',
-            question: 'Choose the closest situation.',
-            isSecret: false,
-            choices: [
-              { choiceId: 'working', label: 'Already working', kind: 'select' },
-              {
-                choiceId: 'other',
-                label: 'None of the above',
-                kind: 'write',
-                inputPlaceholder: 'Type another answer',
-              },
-            ],
-          },
-        ],
+            {
+              id: 'question-1',
+              header: 'Situation',
+              question: 'Choose the closest situation.',
+              isSecret: false,
+              responseMode: 'select_or_write',
+              writeLabel: 'None of the above',
+              writePlaceholder: 'Type another answer',
+              choices: [
+                { choiceId: 'working', label: 'Already working', kind: 'select' },
+              ],
+            },
+          ],
       };
 
       const { host, dispose } = await renderPage();

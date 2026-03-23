@@ -10,6 +10,7 @@ import type { ToolCallBlock as ToolCallBlockType } from '../types';
 import {
   getSelectedAskUserChoice,
   normalizeAskUserDraft,
+  normalizeAskUserDraftForQuestion,
   normalizeAskUserQuestions,
   questionHasDraftAnswer,
   questionInputPlaceholder,
@@ -3079,21 +3080,30 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
 
       <For each={currentQuestions()}>
         {(question) => {
-          const draft = createMemo(() => normalizeAskUserDraft(promptDrafts()[question.id]));
+          const draft = createMemo(() => normalizeAskUserDraftForQuestion(question, promptDrafts()[question.id]));
           const selectedChoice = createMemo(() => getSelectedAskUserChoice(question, draft()));
-          const showChoiceList = createMemo(() => !questionUsesDirectWriteInput(question));
+          const writeSelected = createMemo(() => question.responseMode === 'write' || (!!draft().writeSelected && !draft().choiceId));
+          const showChoiceList = createMemo(() => !questionUsesDirectWriteInput(question) && question.choices.length > 0);
           const showTextInput = createMemo(() => questionRequiresText(question, draft()));
           const autoSubmit = createMemo(() => questionSupportsAutoSubmit(question, currentQuestions().length));
           const selectChoice = (choice: AskUserQuestion['choices'][number]) => {
             setQuestionDraft(question.id, {
               choiceId: choice.choiceId,
-              text: choice.kind === 'write' ? draft().text : undefined,
+              text: draft().text,
+              writeSelected: undefined,
             });
             if (autoSubmit()) {
               queueMicrotask(() => {
                 void handleSubmit();
               });
             }
+          };
+          const selectWritePath = () => {
+            setQuestionDraft(question.id, {
+              choiceId: undefined,
+              text: draft().text,
+              writeSelected: true,
+            });
           };
           return (
             <div class="chat-tool-ask-user-question-group">
@@ -3121,13 +3131,31 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
                           <Show when={choice.description}>
                             <span class="chat-tool-ask-user-option-description">{choice.description}</span>
                           </Show>
-                          <Show when={choice.kind === 'write' && !choice.description}>
-                            <span class="chat-tool-ask-user-option-description">Type your answer.</span>
-                          </Show>
                         </span>
                     </label>
                   )}
                   </For>
+                  <Show when={question.responseMode === 'select_or_write'}>
+                    <label
+                      class={cn(
+                        'chat-tool-ask-user-option-row',
+                        writeSelected() && 'chat-tool-ask-user-option-row-selected',
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        class="chat-tool-ask-user-option-radio"
+                        name={`ask-user-reply-${props.block.toolId}-${question.id}`}
+                        checked={writeSelected()}
+                        onChange={selectWritePath}
+                        disabled={controlsDisabled()}
+                      />
+                      <span class="chat-tool-ask-user-option-copy">
+                        <span class="chat-tool-ask-user-option-text">{question.writeLabel ?? 'None of the above'}</span>
+                        <span class="chat-tool-ask-user-option-description">Type another answer.</span>
+                      </span>
+                    </label>
+                  </Show>
                 </div>
               </Show>
               <Show when={showTextInput()}>
@@ -3137,11 +3165,16 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
                     class="chat-tool-ask-user-custom-input"
                     value={draft().text ?? ''}
                     onInput={(event) => setQuestionDraft(question.id, {
-                      choiceId: selectedChoice()?.choiceId ?? question.choices[0]?.choiceId,
+                      choiceId: undefined,
                       text: event.currentTarget.value,
+                      writeSelected: true,
                     })}
                     placeholder={questionInputPlaceholder(question, draft())}
-                    aria-label={selectedChoice()?.label ? `${question.header} - ${selectedChoice()!.label}` : question.header}
+                    aria-label={selectedChoice()?.label
+                      ? `${question.header} - ${selectedChoice()!.label}`
+                      : question.writeLabel
+                      ? `${question.header} - ${question.writeLabel}`
+                      : question.header}
                     disabled={controlsDisabled()}
                   />
                   <Show when={questionRequiresText(question, draft())}>

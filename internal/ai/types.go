@@ -34,12 +34,14 @@ type RequestUserInputPrompt struct {
 }
 
 type RequestUserInputQuestion struct {
-	ID                string                   `json:"id"`
-	Header            string                   `json:"header"`
-	Question          string                   `json:"question"`
-	IsSecret          bool                     `json:"is_secret"`
-	ChoicesExhaustive *bool                    `json:"choices_exhaustive,omitempty"`
-	Choices           []RequestUserInputChoice `json:"choices,omitempty"`
+	ID               string                   `json:"id"`
+	Header           string                   `json:"header"`
+	Question         string                   `json:"question"`
+	IsSecret         bool                     `json:"is_secret"`
+	ResponseMode     string                   `json:"response_mode,omitempty"`
+	WriteLabel       string                   `json:"write_label,omitempty"`
+	WritePlaceholder string                   `json:"write_placeholder,omitempty"`
+	Choices          []RequestUserInputChoice `json:"choices,omitempty"`
 }
 
 type RequestUserInputChoice struct {

@@ -14,17 +14,14 @@ func TestValidateRequestUserInputResponse_RequiresWriteChoiceText(t *testing.T) 
 		AskUserReasonUserDecisionRequired,
 		[]RequestUserInputQuestion{
 			{
-				ID:       "situation",
-				Header:   "Situation",
-				Question: "Choose the closest situation.",
+				ID:               "situation",
+				Header:           "Situation",
+				Question:         "Choose the closest situation.",
+				ResponseMode:     requestUserInputResponseModeSelectText,
+				WriteLabel:       "None of the above",
+				WritePlaceholder: "Describe your current situation",
 				Choices: []RequestUserInputChoice{
 					{ChoiceID: "working", Label: "Already working", Kind: requestUserInputChoiceKindSelect},
-					{
-						ChoiceID:         "other",
-						Label:            "Other",
-						Kind:             requestUserInputChoiceKindWrite,
-						InputPlaceholder: "Describe your current situation",
-					},
 				},
 			},
 		},
@@ -49,8 +46,7 @@ func TestValidateRequestUserInputResponse_RequiresWriteChoiceText(t *testing.T) 
 		PromptID: prompt.PromptID,
 		Answers: map[string]RequestUserInputAnswer{
 			"situation": {
-				ChoiceID: "other",
-				Text:     "Working and studying part time",
+				Text: "Working and studying part time",
 			},
 		},
 	})
@@ -78,11 +74,11 @@ func TestValidateRequestUserInputResponse_LegacyOtherFallbackInfersWriteChoice(t
 	if prompt == nil {
 		t.Fatalf("prompt should not be nil")
 	}
-	if len(prompt.Questions) != 1 || len(prompt.Questions[0].Choices) != 2 {
+	if len(prompt.Questions) != 1 || len(prompt.Questions[0].Choices) != 1 {
 		t.Fatalf("prompt questions=%+v", prompt.Questions)
 	}
-	if got := prompt.Questions[0].Choices[1].Kind; got != requestUserInputChoiceKindWrite {
-		t.Fatalf("write choice kind=%q, want %q", got, requestUserInputChoiceKindWrite)
+	if got := prompt.Questions[0].ResponseMode; got != requestUserInputResponseModeSelectText {
+		t.Fatalf("response_mode=%q, want %q", got, requestUserInputResponseModeSelectText)
 	}
 
 	normalized, err := validateRequestUserInputResponse(prompt, &RequestUserInputResponse{
@@ -96,8 +92,8 @@ func TestValidateRequestUserInputResponse_LegacyOtherFallbackInfersWriteChoice(t
 	if err != nil {
 		t.Fatalf("validateRequestUserInputResponse legacy other fallback: %v", err)
 	}
-	if got := normalized.Answers["direction"].ChoiceID; got != "other" {
-		t.Fatalf("choice_id=%q, want %q", got, "other")
+	if got := normalized.Answers["direction"].ChoiceID; got != "" {
+		t.Fatalf("choice_id=%q, want empty custom-answer path", got)
 	}
 }
 
@@ -124,18 +120,18 @@ func TestParseRequestUserInputPromptJSON_NormalizesLegacyOptionDetailToWriteChoi
 	if prompt == nil {
 		t.Fatalf("prompt should not be nil")
 	}
-	if len(prompt.Questions) != 1 || len(prompt.Questions[0].Choices) != 1 {
+	if len(prompt.Questions) != 1 {
 		t.Fatalf("prompt questions=%+v", prompt.Questions)
 	}
-	if got := prompt.Questions[0].Choices[0].Kind; got != requestUserInputChoiceKindWrite {
-		t.Fatalf("choice kind=%q, want %q", got, requestUserInputChoiceKindWrite)
+	if got := prompt.Questions[0].ResponseMode; got != requestUserInputResponseModeWrite {
+		t.Fatalf("response_mode=%q, want %q", got, requestUserInputResponseModeWrite)
 	}
-	if got := prompt.Questions[0].Choices[0].InputPlaceholder; got != "Describe the custom path" {
-		t.Fatalf("input placeholder=%q, want %q", got, "Describe the custom path")
+	if got := prompt.Questions[0].WritePlaceholder; got != "Describe the custom path" {
+		t.Fatalf("write placeholder=%q, want %q", got, "Describe the custom path")
 	}
 }
 
-func TestParseRequestUserInputPromptJSON_DefaultsChoicesExhaustiveFromChoiceKinds(t *testing.T) {
+func TestParseRequestUserInputPromptJSON_DefaultsResponseModeFromChoiceKinds(t *testing.T) {
 	t.Parallel()
 
 	pureSelect := parseRequestUserInputPromptJSON(`{
@@ -156,8 +152,8 @@ func TestParseRequestUserInputPromptJSON_DefaultsChoicesExhaustiveFromChoiceKind
 	if pureSelect == nil || len(pureSelect.Questions) != 1 {
 		t.Fatalf("pureSelect prompt=%+v", pureSelect)
 	}
-	if pureSelect.Questions[0].ChoicesExhaustive == nil || !*pureSelect.Questions[0].ChoicesExhaustive {
-		t.Fatalf("pure select prompt should default to exhaustive=true: %+v", pureSelect.Questions[0])
+	if pureSelect.Questions[0].ResponseMode != requestUserInputResponseModeSelect {
+		t.Fatalf("pure select prompt should default to response_mode=select: %+v", pureSelect.Questions[0])
 	}
 
 	withWrite := parseRequestUserInputPromptJSON(`{
@@ -178,8 +174,11 @@ func TestParseRequestUserInputPromptJSON_DefaultsChoicesExhaustiveFromChoiceKind
 	if withWrite == nil || len(withWrite.Questions) != 1 {
 		t.Fatalf("withWrite prompt=%+v", withWrite)
 	}
-	if withWrite.Questions[0].ChoicesExhaustive == nil || *withWrite.Questions[0].ChoicesExhaustive {
-		t.Fatalf("write-choice prompt should default to exhaustive=false: %+v", withWrite.Questions[0])
+	if withWrite.Questions[0].ResponseMode != requestUserInputResponseModeSelectText {
+		t.Fatalf("write-choice prompt should default to response_mode=select_or_write: %+v", withWrite.Questions[0])
+	}
+	if len(withWrite.Questions[0].Choices) != 1 {
+		t.Fatalf("canonical mixed prompt should keep only fixed choices: %+v", withWrite.Questions[0].Choices)
 	}
 }
 
@@ -192,16 +191,10 @@ func TestBuildRequestUserInputResponseRecord_IncludesWriteChoiceTextInSummary(t 
 		AskUserReasonUserDecisionRequired,
 		[]RequestUserInputQuestion{
 			{
-				ID:       "situation",
-				Header:   "Situation",
-				Question: "Choose the closest situation.",
-				Choices: []RequestUserInputChoice{
-					{
-						ChoiceID: "other",
-						Label:    "Other",
-						Kind:     requestUserInputChoiceKindWrite,
-					},
-				},
+				ID:           "situation",
+				Header:       "Situation",
+				Question:     "Choose the closest situation.",
+				ResponseMode: requestUserInputResponseModeWrite,
 			},
 		},
 	)
@@ -213,8 +206,7 @@ func TestBuildRequestUserInputResponseRecord_IncludesWriteChoiceTextInSummary(t 
 		PromptID: prompt.PromptID,
 		Answers: map[string]RequestUserInputAnswer{
 			"situation": {
-				ChoiceID: "other",
-				Text:     "Working and studying part time",
+				Text: "Working and studying part time",
 			},
 		},
 	}, "msg_user_1")
@@ -224,10 +216,10 @@ func TestBuildRequestUserInputResponseRecord_IncludesWriteChoiceTextInSummary(t 
 	if len(record.Responses) != 1 {
 		t.Fatalf("len(record.Responses)=%d, want 1", len(record.Responses))
 	}
-	if got := record.Responses[0].PublicSummary; got != "Situation: Other; Working and studying part time." {
-		t.Fatalf("response public_summary=%q, want %q", got, "Situation: Other; Working and studying part time.")
+	if got := record.Responses[0].PublicSummary; got != "Situation: Working and studying part time." {
+		t.Fatalf("response public_summary=%q, want %q", got, "Situation: Working and studying part time.")
 	}
-	if got := record.PublicSummary; got != "Situation: Other; Working and studying part time." {
-		t.Fatalf("record public_summary=%q, want %q", got, "Situation: Other; Working and studying part time.")
+	if got := record.PublicSummary; got != "Situation: Working and studying part time." {
+		t.Fatalf("record public_summary=%q, want %q", got, "Situation: Working and studying part time.")
 	}
 }

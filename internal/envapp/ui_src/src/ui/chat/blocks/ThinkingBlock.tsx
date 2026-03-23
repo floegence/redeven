@@ -1,4 +1,4 @@
-// ThinkingBlock renders user-visible model reasoning with optional duration metadata.
+// ThinkingBlock renders reasoning metadata when surfaced by a diagnostic view.
 
 import { Show } from 'solid-js';
 import type { Component } from 'solid-js';
@@ -20,7 +20,7 @@ function formatDuration(ms: number): string {
 }
 
 /**
- * Renders an AI thinking indicator, optionally showing the thinking content
+ * Renders an AI thinking indicator, optionally showing reasoning content
  * and the time taken.
  */
 export const ThinkingBlock: Component<ThinkingBlockProps> = (props) => {
