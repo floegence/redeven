@@ -32,6 +32,9 @@ type AskUserOptionDisplay = {
   optionId: string;
   label: string;
   description?: string;
+  detailInputMode?: 'optional' | 'required';
+  detailInputPlaceholder?: string;
+  hasActions: boolean;
 };
 
 type AskUserQuestionDisplay = {
@@ -173,6 +176,12 @@ function normalizeAskUserOptions(value: unknown): AskUserOptionDisplay[] {
       optionId,
       label,
       description: asTrimmedString((item as any).description) || undefined,
+      detailInputMode: (() => {
+        const mode = asTrimmedString((item as any).detail_input_mode).toLowerCase();
+        return mode === 'optional' || mode === 'required' ? mode : undefined;
+      })(),
+      detailInputPlaceholder: asTrimmedString((item as any).detail_input_placeholder) || undefined,
+      hasActions: Array.isArray((item as any).actions) && (item as any).actions.length > 0,
     });
     if (out.length >= 4) break;
   }
@@ -3006,6 +3015,7 @@ interface AskUserToolCardProps {
 const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
   const ai = useAIChatContext();
   const [submitting, setSubmitting] = createSignal(false);
+  const [submitError, setSubmitError] = createSignal('');
   const promptKey = createMemo(
     () =>
       `${props.messageId}\u001f${props.block.toolId}\u001f${props.display.questions
@@ -3059,6 +3069,11 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
               optionId: option.option_id,
               label: option.label,
               description: option.description,
+              detailInputMode: option.detail_input_mode === 'required' || option.detail_input_mode === 'optional'
+                ? option.detail_input_mode
+                : undefined,
+              detailInputPlaceholder: option.detail_input_placeholder,
+              hasActions: Array.isArray(option.actions) && option.actions.length > 0,
             }))
           : [],
       }));
@@ -3069,6 +3084,7 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
   createEffect(() => {
     promptKey();
     setSubmitting(false);
+    setSubmitError('');
   });
 
   createEffect(() => {
@@ -3083,16 +3099,90 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
     const tid = activeThreadId();
     const promptId = waitingPromptId();
     if (!tid || !promptId) return;
+    setSubmitError('');
     ai.setStructuredPromptDraft(tid, promptId, questionId, {
       selectedOptionId: String(next.selectedOptionId ?? '').trim() || undefined,
       answers: Array.isArray(next.answers) ? next.answers.map((item) => String(item ?? '').trim()).filter(Boolean) : [],
     });
   };
 
+  const selectedOptionForDraft = (question: AskUserQuestionDisplay, draft: { selectedOptionId?: string; answers: string[] }) => (
+    question.options.find((option) => option.optionId === String(draft.selectedOptionId ?? '').trim())
+  );
+
+  const questionAllowsDetailText = (question: AskUserQuestionDisplay, draft: { selectedOptionId?: string; answers: string[] }): boolean => {
+    if (question.isOther || question.options.length === 0) {
+      return true;
+    }
+    const option = selectedOptionForDraft(question, draft);
+    return Boolean(option?.detailInputMode);
+  };
+
+  const questionRequiresDetailText = (question: AskUserQuestionDisplay, draft: { selectedOptionId?: string; answers: string[] }): boolean => {
+    if (question.options.length === 0) {
+      return true;
+    }
+    const option = selectedOptionForDraft(question, draft);
+    return option?.detailInputMode === 'required';
+  };
+
+  const questionRequiresSelection = (question: AskUserQuestionDisplay): boolean => (
+    question.options.length > 0 && !question.isOther
+  );
+
+  const questionShowsDetailInput = (question: AskUserQuestionDisplay, draft: { selectedOptionId?: string; answers: string[] }): boolean => (
+    question.isOther || question.options.length === 0 || questionAllowsDetailText(question, draft)
+  );
+
+  const questionDetailInputPlaceholder = (question: AskUserQuestionDisplay, draft: { selectedOptionId?: string; answers: string[] }): string => {
+    const option = selectedOptionForDraft(question, draft);
+    if (option?.detailInputPlaceholder) {
+      return option.detailInputPlaceholder;
+    }
+    if (question.isSecret) {
+      return 'Enter secret value';
+    }
+    if (question.options.length === 0) {
+      return 'Type your answer';
+    }
+    if (option?.detailInputMode === 'required') {
+      return 'Add the required detail';
+    }
+    if (option?.detailInputMode === 'optional') {
+      return 'Add more detail (optional)';
+    }
+    if (question.isOther) {
+      return 'Type another answer';
+    }
+    return 'Type your answer';
+  };
+
+  const questionSupportsAutoSubmit = (question: AskUserQuestionDisplay): boolean => (
+    currentQuestions().length === 1 &&
+    !question.isOther &&
+    !question.isSecret &&
+    question.options.length > 0 &&
+    question.options.every((option) => !option.detailInputMode && !option.hasActions)
+  );
+
   const questionAnswered = (question: AskUserQuestionDisplay): boolean => {
     const draft = promptDrafts()[question.id];
     if (!draft) return false;
-    return Boolean(String(draft.selectedOptionId ?? '').trim()) || draft.answers.length > 0;
+    const selectedOptionId = String(draft.selectedOptionId ?? '').trim();
+    const hasText = draft.answers.length > 0;
+    if (questionRequiresSelection(question) && !selectedOptionId) {
+      return false;
+    }
+    if (!questionRequiresSelection(question) && !selectedOptionId && !hasText) {
+      return false;
+    }
+    if (!questionAllowsDetailText(question, draft) && hasText) {
+      return false;
+    }
+    if (questionRequiresDetailText(question, draft) && !hasText) {
+      return false;
+    }
+    return true;
   };
 
   const unansweredQuestions = createMemo(() => currentQuestions().filter((question) => !questionAnswered(question)));
@@ -3104,6 +3194,7 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
     const promptId = waitingPromptId();
     if (!tid || !promptId) return;
     setSubmitting(true);
+    setSubmitError('');
     try {
       await ai.submitStructuredPromptResponse({
         threadId: tid,
@@ -3111,7 +3202,9 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
         answers: promptDrafts(),
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       console.error('structured prompt submit failed', error);
+      setSubmitError(message || 'Failed to continue. Try again.');
       setSubmitting(false);
     }
   };
@@ -3128,6 +3221,21 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
       <For each={currentQuestions()}>
         {(question) => {
           const draft = createMemo(() => promptDrafts()[question.id] ?? { answers: [] });
+          const selectedOption = createMemo(() => selectedOptionForDraft(question, draft()));
+          const showDetailInput = createMemo(() => questionShowsDetailInput(question, draft()));
+          const autoSubmit = createMemo(() => questionSupportsAutoSubmit(question));
+          const selectOption = (option: AskUserOptionDisplay) => {
+            const keepAnswers = question.isOther || question.options.length === 0 || Boolean(option.detailInputMode);
+            setQuestionDraft(question.id, {
+              selectedOptionId: option.optionId,
+              answers: keepAnswers ? draft().answers : [],
+            });
+            if (autoSubmit()) {
+              queueMicrotask(() => {
+                void handleSubmit();
+              });
+            }
+          };
           return (
             <div class="chat-tool-ask-user-question-group">
               <p class="chat-tool-ask-user-question">{question.question}</p>
@@ -3146,25 +3254,38 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
                           class="chat-tool-ask-user-option-radio"
                           name={`ask-user-reply-${props.block.toolId}-${question.id}`}
                           checked={draft().selectedOptionId === option.optionId}
-                          onChange={() => setQuestionDraft(question.id, { selectedOptionId: option.optionId, answers: draft().answers })}
+                          onChange={() => selectOption(option)}
                           disabled={controlsDisabled()}
                         />
-                        <span class="chat-tool-ask-user-option-text">{option.label}</span>
+                        <span class="chat-tool-ask-user-option-copy">
+                          <span class="chat-tool-ask-user-option-text">{option.label}</span>
+                          <Show when={option.description}>
+                            <span class="chat-tool-ask-user-option-description">{option.description}</span>
+                          </Show>
+                        </span>
                       </label>
                     )}
                   </For>
                 </div>
               </Show>
-              <Show when={question.isOther || question.options.length === 0}>
-                <input
-                  type={question.isSecret ? 'password' : 'text'}
-                  class="chat-tool-ask-user-custom-input"
-                  value={draft().answers[0] ?? ''}
-                  onInput={(event) => setQuestionDraft(question.id, { selectedOptionId: draft().selectedOptionId, answers: [event.currentTarget.value] })}
-                  placeholder={question.isSecret ? 'Enter secret value' : 'Type your answer'}
-                  aria-label={question.header}
-                  disabled={controlsDisabled()}
-                />
+              <Show when={showDetailInput()}>
+                <div class="chat-tool-ask-user-detail-input-wrap">
+                  <input
+                    type={question.isSecret ? 'password' : 'text'}
+                    class="chat-tool-ask-user-custom-input"
+                    value={draft().answers[0] ?? ''}
+                    onInput={(event) => setQuestionDraft(question.id, { selectedOptionId: draft().selectedOptionId, answers: [event.currentTarget.value] })}
+                    placeholder={questionDetailInputPlaceholder(question, draft())}
+                    aria-label={selectedOption()?.label ? `${question.header} - ${selectedOption()!.label}` : question.header}
+                    disabled={controlsDisabled()}
+                  />
+                  <Show when={questionRequiresDetailText(question, draft())}>
+                    <p class="chat-tool-ask-user-detail-hint">More detail is required for the selected option.</p>
+                  </Show>
+                </div>
+              </Show>
+              <Show when={autoSubmit() && !submitError()}>
+                <p class="chat-tool-ask-user-inline-hint">Selecting an option will continue immediately.</p>
               </Show>
             </div>
           );
@@ -3187,6 +3308,7 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
           </Show>
         </div>
       }>
+        <Show when={!currentQuestions().some((question) => questionSupportsAutoSubmit(question)) || submitError()}>
         <div class="chat-tool-ask-user-submit-row">
           <button
             type="button"
@@ -3194,14 +3316,17 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
             disabled={!canSubmit()}
             onClick={() => void handleSubmit()}
           >
-            Submit
+            {submitError() ? 'Retry' : 'Continue'}
           </button>
           <p class="chat-tool-ask-user-hint">
-            {unansweredQuestions().length > 0
+            {submitError()
+              ? submitError()
+              : unansweredQuestions().length > 0
               ? `Answer ${unansweredQuestions().length} more question${unansweredQuestions().length === 1 ? '' : 's'} before submitting.`
-              : 'Select or type answers, then submit explicitly.'}
+              : 'Select or type your reply, then continue.'}
           </p>
         </div>
+        </Show>
       </Show>
 
       <Show when={props.block.error}>

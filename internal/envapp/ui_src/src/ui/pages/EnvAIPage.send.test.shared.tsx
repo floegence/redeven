@@ -22,7 +22,13 @@ type MockWaitingPrompt = {
     question: string;
     is_other?: boolean;
     is_secret?: boolean;
-    options?: Array<{ option_id: string; label: string; description?: string }>;
+    options?: Array<{
+      option_id: string;
+      label: string;
+      description?: string;
+      detail_input_mode?: 'optional' | 'required';
+      detail_input_placeholder?: string;
+    }>;
   }>;
 };
 
@@ -153,7 +159,18 @@ const aiContextValue = new Proxy({
   activeThreadWaitingPrompt: () => aiState.waitingPrompt,
   getStructuredPromptDrafts: () => aiState.structuredDrafts,
   submitStructuredPromptResponse: submitStructuredPromptResponseMock,
-  setStructuredPromptDraft: () => {},
+  setStructuredPromptDraft: (_threadId: string, _promptId: string, questionId: string, draft: { selectedOptionId?: string; answers: string[] } | null) => {
+    const qid = String(questionId ?? '').trim();
+    if (!qid) return;
+    if (!draft) {
+      delete aiState.structuredDrafts[qid];
+      return;
+    }
+    aiState.structuredDrafts[qid] = {
+      selectedOptionId: draft.selectedOptionId,
+      answers: Array.isArray(draft.answers) ? draft.answers : [],
+    };
+  },
   createThread: async () => ({ thread_id: 'thread-created' }),
   creatingThread: () => false,
   ensureThreadForSend: async () => {
@@ -1142,6 +1159,64 @@ export function registerEnvAIPageSendTests() {
           dispose();
         }
       });
+    });
+
+    it('uses composer text as required option detail when the option is already selected', async () => {
+      aiState.activeThread = {
+        ...(aiState.activeThread as MockThread),
+        run_status: 'waiting_user',
+      };
+      aiState.waitingPrompt = {
+        prompt_id: 'prompt-1',
+        message_id: 'assistant-1',
+        tool_id: 'tool-ask-user',
+        questions: [
+          {
+            id: 'question-1',
+            header: 'Situation',
+            question: 'Choose the closest situation.',
+            is_other: false,
+            is_secret: false,
+            options: [
+              { option_id: 'working', label: 'Already working' },
+              {
+                option_id: 'other',
+                label: 'Other',
+                detail_input_mode: 'required',
+                detail_input_placeholder: 'Describe your current situation',
+              },
+            ],
+          },
+        ],
+      };
+      aiState.structuredDrafts = {
+        'question-1': {
+          selectedOptionId: 'other',
+          answers: [],
+        },
+      };
+
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'Working and studying part time.');
+        submitComposer(host, 'button', 'Reply now');
+        await flushAsync();
+
+        expect(submitStructuredPromptResponseMock).toHaveBeenCalledTimes(1);
+        expect(submitStructuredPromptResponseMock).toHaveBeenCalledWith(expect.objectContaining({
+          threadId: 'thread-1',
+          promptId: 'prompt-1',
+          text: '',
+          answers: {
+            'question-1': {
+              selectedOptionId: 'other',
+              answers: ['Working and studying part time.'],
+            },
+          },
+        }));
+      } finally {
+        dispose();
+      }
     });
   });
 

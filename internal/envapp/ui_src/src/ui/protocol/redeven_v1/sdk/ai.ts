@@ -18,6 +18,8 @@ export type AIRequestUserInputOption = {
   optionId: string;
   label: string;
   description?: string;
+  detailInputMode?: 'optional' | 'required';
+  detailInputPlaceholder?: string;
   actions?: AIRequestUserInputAction[];
 };
 
