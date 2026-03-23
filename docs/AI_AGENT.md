@@ -120,7 +120,9 @@ Behavior summary:
 - If edits are needed in `plan`, Flower should use `ask_user` to request switching the thread to `act`.
 - The mode-switch `ask_user` must use structured `questions[]`, and deterministic UI actions belong on `questions[].options[].actions` (for example `[{type:"set_mode",mode:"act"}]`).
 - Use `questions[].is_other=true` only when the entire question should allow a freeform reply alongside or instead of predefined options.
-- When only a specific option needs extra detail, encode that on the option itself with `questions[].options[].detail_input_mode` (`optional` or `required`) and `detail_input_placeholder` when useful.
+- Do not combine `questions[].is_other=true` with option-level detail input on the same question.
+- When only a specific option needs extra detail, encode that on the option itself with `questions[].options[].detail_input_mode="required"` and `detail_input_placeholder` when useful.
+- Option-level detail input must block resolution until the user provides that detail; selecting that option alone is not a complete answer.
 - In no-user-interaction runs, Flower cannot ask for a mode switch and must finish with blockers in `task_complete`.
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.

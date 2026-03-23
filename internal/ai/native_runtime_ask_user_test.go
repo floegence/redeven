@@ -63,6 +63,61 @@ func TestEvaluateAskUserGate(t *testing.T) {
 		t.Fatalf("valid signal => pass=%v reason=%q", pass, reason)
 	}
 
+	signal = askUserSignal{
+		Questions: []RequestUserInputQuestion{{
+			ID:       "question_1",
+			Header:   "Direction",
+			Question: "Pick a direction.",
+			Options: []RequestUserInputOption{{
+				OptionID:        "other",
+				Label:           "Other",
+				DetailInputMode: requestUserInputDetailInputOptional,
+			}},
+		}},
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Pick canary-first or full rollout."},
+	}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonUnsupportedOptionalOptionDetail {
+		t.Fatalf("optional option detail => pass=%v reason=%q", pass, reason)
+	}
+
+	signal = askUserSignal{
+		Questions: []RequestUserInputQuestion{{
+			ID:       "question_1",
+			Header:   "Direction",
+			Question: "Pick a direction.",
+			IsOther:  true,
+			Options: []RequestUserInputOption{{
+				OptionID:        "custom",
+				Label:           "Custom path",
+				DetailInputMode: requestUserInputDetailInputRequired,
+			}},
+		}},
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Pick canary-first or full rollout."},
+	}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonQuestionOtherConflictsOptionText {
+		t.Fatalf("question-level other with option detail => pass=%v reason=%q", pass, reason)
+	}
+
+	signal = askUserSignal{
+		Questions: []RequestUserInputQuestion{{
+			ID:       "question_1",
+			Header:   "Direction",
+			Question: "Pick a direction.",
+			Options: []RequestUserInputOption{{
+				OptionID:               "custom",
+				Label:                  "Custom path",
+				DetailInputPlaceholder: "Describe the custom path",
+			}},
+		}},
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Pick canary-first or full rollout."},
+	}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonDetailPlaceholderWithoutMode {
+		t.Fatalf("detail placeholder without mode => pass=%v reason=%q", pass, reason)
+	}
+
 	signal = testAskUserSignal("I need your decision on deployment order.")
 	signal.ReasonCode = AskUserReasonUserDecisionRequired
 	signal.RequiredFromUser = []string{"Pick canary-first or full rollout."}

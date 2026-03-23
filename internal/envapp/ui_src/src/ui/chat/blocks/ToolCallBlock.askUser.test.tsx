@@ -59,7 +59,7 @@ function renderAskUserBlock(opts: {
         option_id: string;
         label: string;
         description?: string;
-        detail_input_mode?: 'optional' | 'required';
+        detail_input_mode?: string;
         detail_input_placeholder?: string;
       }>;
     }>;
@@ -227,5 +227,44 @@ describe('ToolCallBlock ask_user states', () => {
     await flushAsync();
 
     expect((host.querySelector('.chat-tool-ask-user-custom-submit') as HTMLButtonElement | null)?.disabled).toBe(false);
+  });
+
+  it('treats legacy optional detail prompts as required detail before submit', async () => {
+    const { host } = renderAskUserBlock({
+      runStatus: 'waiting_user',
+      waitingPrompt: {
+        prompt_id: 'prompt-1',
+        message_id: 'message-ask-user-1',
+        tool_id: 'tool-ask-user-1',
+        questions: [
+          {
+            id: 'question_1',
+            header: 'Situation',
+            question: 'Choose the closest situation.',
+            is_other: false,
+            is_secret: false,
+            options: [
+              { option_id: 'working', label: 'Already working' },
+              {
+                option_id: 'other',
+                label: 'Other',
+                detail_input_mode: 'optional',
+                detail_input_placeholder: 'Describe your current situation',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const radios = host.querySelectorAll('input[type="radio"]');
+    expect(radios.length).toBe(2);
+    const otherRadio = radios[1] as HTMLInputElement;
+    otherRadio.checked = true;
+    otherRadio.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushAsync();
+
+    expect(host.textContent).toContain('More detail is required for the selected option.');
+    expect((host.querySelector('.chat-tool-ask-user-custom-submit') as HTMLButtonElement | null)?.disabled).toBe(true);
   });
 });

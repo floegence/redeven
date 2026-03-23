@@ -3718,6 +3718,11 @@ export function EnvAIPage() {
     return options.find((option) => String(option?.option_id ?? '').trim() === selectedOptionId);
   };
 
+  const canonicalWaitingPromptDetailMode = (mode: unknown): 'required' | '' => {
+    const normalized = String(mode ?? '').trim().toLowerCase();
+    return normalized === 'optional' || normalized === 'required' ? 'required' : '';
+  };
+
   const waitingPromptQuestionAllowsText = (question: {
     is_other?: boolean;
     options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
@@ -3727,8 +3732,7 @@ export function EnvAIPage() {
       return true;
     }
     const selectedOption = selectedWaitingPromptOption(question, draft);
-    const mode = String(selectedOption?.detail_input_mode ?? '').trim().toLowerCase();
-    return mode === 'optional' || mode === 'required';
+    return canonicalWaitingPromptDetailMode(selectedOption?.detail_input_mode) === 'required';
   };
 
   const waitingPromptQuestionRequiresText = (question: {
@@ -3738,7 +3742,7 @@ export function EnvAIPage() {
     if (options.length === 0) {
       return true;
     }
-    return String(selectedWaitingPromptOption(question, draft)?.detail_input_mode ?? '').trim().toLowerCase() === 'required';
+    return canonicalWaitingPromptDetailMode(selectedWaitingPromptOption(question, draft)?.detail_input_mode) === 'required';
   };
 
   const waitingPromptQuestionRequiresSelection = (question: {
