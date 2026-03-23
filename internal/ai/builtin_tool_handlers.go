@@ -341,10 +341,11 @@ func askUserToolInputSchema() map[string]any {
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"id":        map[string]any{"type": "string", "maxLength": 80},
-						"header":    map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
-						"question":  map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
-						"is_secret": map[string]any{"type": "boolean"},
+						"id":                 map[string]any{"type": "string", "maxLength": 80},
+						"header":             map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
+						"question":           map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
+						"is_secret":          map[string]any{"type": "boolean"},
+						"choices_exhaustive": map[string]any{"type": "boolean", "description": "Set true only when the fixed choices are genuinely exhaustive by construction. Set false when the user should still have a custom typed answer path."},
 						"choices": map[string]any{
 							"type":     "array",
 							"minItems": 1,
@@ -379,7 +380,7 @@ func askUserToolInputSchema() map[string]any {
 							},
 						},
 					},
-					"required":             []string{"id", "header", "question", "is_secret", "choices"},
+					"required":             []string{"id", "header", "question", "is_secret", "choices_exhaustive", "choices"},
 					"additionalProperties": false,
 				},
 			},
@@ -483,7 +484,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "ask_user",
-			Description:  "Ask user for clarification only for true external blockers. Include reason_code, required_from_user, and evidence_refs for explainable policy checks.",
+			Description:  "Ask user for required structured input when the next step depends on a user decision, external input, approval, or a guided interaction turn. Mark choices_exhaustive=true only for genuinely exhaustive fixed enums; otherwise include a write choice for a custom answer. Do not use it to delegate tool-collectable work. Include reason_code, required_from_user, and evidence_refs for explainable policy checks.",
 			InputSchema:  toSchema(askUserToolInputSchema()),
 			ParallelSafe: true,
 			Mutating:     false,

@@ -19,6 +19,7 @@ const (
 const (
 	askUserGateReasonMissingChoices                     = "missing_choices"
 	askUserGateReasonChoiceInputPlaceholderWithoutWrite = "choice_input_placeholder_without_write"
+	askUserGateReasonNonExhaustiveChoicesWithoutWrite   = "non_exhaustive_choices_without_write"
 )
 
 func buildRequestUserInputPromptID(messageID string, toolID string) string {
@@ -82,6 +83,31 @@ func requestUserInputLegacyFallbackWriteChoice(header string, question string) R
 	}
 }
 
+func requestUserInputBoolPtr(v bool) *bool {
+	b := v
+	return &b
+}
+
+func requestUserInputChoicesContainWrite(choices []RequestUserInputChoice) bool {
+	for _, choice := range choices {
+		if normalizeRequestUserInputChoiceKind(choice.Kind) == requestUserInputChoiceKindWrite {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeRequestUserInputChoicesExhaustive(raw *bool, choices []RequestUserInputChoice) *bool {
+	hasWrite := requestUserInputChoicesContainWrite(choices)
+	if hasWrite {
+		return requestUserInputBoolPtr(false)
+	}
+	if raw != nil {
+		return requestUserInputBoolPtr(*raw)
+	}
+	return requestUserInputBoolPtr(true)
+}
+
 func requestUserInputQuestionFromRecord(record map[string]any) (RequestUserInputQuestion, bool) {
 	if record == nil {
 		return RequestUserInputQuestion{}, false
@@ -101,12 +127,17 @@ func requestUserInputQuestionFromRecord(record map[string]any) (RequestUserInput
 			requestUserInputLegacyFallbackWriteChoice(header, question),
 		})
 	}
+	var choicesExhaustive *bool
+	if raw, ok := record["choices_exhaustive"]; ok {
+		choicesExhaustive = requestUserInputBoolPtr(anyToBool(raw))
+	}
 	return RequestUserInputQuestion{
-		ID:       id,
-		Header:   header,
-		Question: question,
-		IsSecret: anyToBool(record["is_secret"]),
-		Choices:  choices,
+		ID:                id,
+		Header:            header,
+		Question:          question,
+		IsSecret:          anyToBool(record["is_secret"]),
+		ChoicesExhaustive: choicesExhaustive,
+		Choices:           choices,
 	}, true
 }
 
@@ -200,6 +231,9 @@ func validateRequestUserInputQuestionsContract(questions []RequestUserInputQuest
 	for _, question := range normalizeRequestUserInputQuestions(questions) {
 		if len(question.Choices) == 0 {
 			return askUserGateReasonMissingChoices
+		}
+		if question.ChoicesExhaustive != nil && !*question.ChoicesExhaustive && !requestUserInputChoicesContainWrite(question.Choices) {
+			return askUserGateReasonNonExhaustiveChoicesWithoutWrite
 		}
 		for _, choice := range question.Choices {
 			if strings.TrimSpace(choice.InputPlaceholder) != "" && choice.Kind != requestUserInputChoiceKindWrite {
@@ -345,12 +379,14 @@ func normalizeRequestUserInputQuestions(questions []RequestUserInputQuestion) []
 				requestUserInputLegacyFallbackWriteChoice(header, text),
 			})
 		}
+		choicesExhaustive := normalizeRequestUserInputChoicesExhaustive(question.ChoicesExhaustive, choices)
 		out = append(out, RequestUserInputQuestion{
-			ID:       id,
-			Header:   header,
-			Question: text,
-			IsSecret: question.IsSecret,
-			Choices:  choices,
+			ID:                id,
+			Header:            header,
+			Question:          text,
+			IsSecret:          question.IsSecret,
+			ChoicesExhaustive: choicesExhaustive,
+			Choices:           choices,
 		})
 		if len(out) >= 5 {
 			break

@@ -1868,6 +1868,9 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		case askUserGateReasonMissingChoices:
 			rejectionMsg = "ask_user was rejected because each question must provide explicit choices. Use choices[].kind=\"select\" for fixed answers and choices[].kind=\"write\" for typed answers."
 			recoveryOverlay = "[CONTRACT] ask_user requires explicit choices[]."
+		case askUserGateReasonNonExhaustiveChoicesWithoutWrite:
+			rejectionMsg = "ask_user was rejected because a non-exhaustive question did not include a `kind=\"write\"` catch-all choice. Add a custom-answer write choice or mark choices_exhaustive=true only if the fixed options are genuinely exhaustive."
+			recoveryOverlay = "[CONTRACT] Non-exhaustive questions require a `kind=\"write\"` catch-all choice."
 		case askUserGateReasonChoiceInputPlaceholderWithoutWrite:
 			rejectionMsg = "ask_user was rejected because input_placeholder is only supported on choices with kind=\"write\"."
 			recoveryOverlay = "[CONTRACT] input_placeholder requires choices[].kind=\"write\"."
@@ -4635,14 +4638,20 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		core = append(core,
 			"",
 			"# Ask User Policy",
-			"- Use ask_user only for true external blockers that tools cannot resolve.",
+			"- Use ask_user when you genuinely need the user's next structured input to continue.",
+			"- Allowed ask_user cases include true external blockers and guided interaction turns where the next step depends on an explicit user choice or typed answer.",
+			"- Do NOT use ask_user to delegate commands, file inspection, log gathering, screenshots, or web research that available tools can do directly.",
 			"- ask_user must include reason_code, required_from_user, and evidence_refs.",
 			"- reason_code must be one of: user_decision_required | permission_blocked | missing_external_input | conflicting_constraints | safety_confirmation.",
-			"- required_from_user must list concrete user inputs needed to proceed.",
+			"- required_from_user must list concrete user inputs or decisions needed to proceed.",
 			"- evidence_refs must reference relevant tool IDs when evidence is required.",
-			"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_secret, and choices[].",
+			"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_secret, choices_exhaustive, and choices[].",
+			"- For guided questionnaires, interviews, quizzes, guessing games, or decision trees, prefer ask_user over freeform markdown option lists.",
 			"- Every choice must declare `kind`: use `kind:\"select\"` for fixed answers and `kind:\"write\"` for answers that require typed user input.",
+			"- Set `choices_exhaustive:true` only when the fixed choices are genuinely exhaustive by construction. Otherwise set `choices_exhaustive:false` and provide a custom-answer `kind:\"write\"` path.",
+			"- When offering fixed options about the user's real situation, preference, habit, background, or other potentially non-exhaustive state, include a final catch-all `kind:\"write\"` choice unless the option set is genuinely exhaustive by construction.",
 			"- Express typed catch-all answers like `None of the above: ___` as an explicit `choices[]` entry with `kind:\"write\"`, its own label, and optional `input_placeholder`.",
+			"- If the user explicitly asks for an `Other` or `None of the above` path, you MUST represent it as a `kind:\"write\"` choice instead of omitting it.",
 			"- For a direct-input question, use a single `kind:\"write\"` choice instead of omitting choices.",
 			"- Keep choices concise and mutually exclusive. Put the best/default path first when that ordering matters.",
 			"- For deterministic UI actions, place actions on `questions[].choices[].actions` (for example {type:\"set_mode\",mode:\"act\"}).",

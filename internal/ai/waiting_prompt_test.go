@@ -135,6 +135,54 @@ func TestParseRequestUserInputPromptJSON_NormalizesLegacyOptionDetailToWriteChoi
 	}
 }
 
+func TestParseRequestUserInputPromptJSON_DefaultsChoicesExhaustiveFromChoiceKinds(t *testing.T) {
+	t.Parallel()
+
+	pureSelect := parseRequestUserInputPromptJSON(`{
+		"prompt_id":"rui_msg_select_tool_select",
+		"message_id":"msg_select",
+		"tool_id":"tool_select",
+		"questions":[{
+			"id":"direction",
+			"header":"Direction",
+			"question":"Choose the next direction.",
+			"is_secret":false,
+			"choices":[
+				{"choice_id":"a","label":"Option A","kind":"select"},
+				{"choice_id":"b","label":"Option B","kind":"select"}
+			]
+		}]
+	}`)
+	if pureSelect == nil || len(pureSelect.Questions) != 1 {
+		t.Fatalf("pureSelect prompt=%+v", pureSelect)
+	}
+	if pureSelect.Questions[0].ChoicesExhaustive == nil || !*pureSelect.Questions[0].ChoicesExhaustive {
+		t.Fatalf("pure select prompt should default to exhaustive=true: %+v", pureSelect.Questions[0])
+	}
+
+	withWrite := parseRequestUserInputPromptJSON(`{
+		"prompt_id":"rui_msg_write_tool_write",
+		"message_id":"msg_write",
+		"tool_id":"tool_write",
+		"questions":[{
+			"id":"direction",
+			"header":"Direction",
+			"question":"Choose the next direction.",
+			"is_secret":false,
+			"choices":[
+				{"choice_id":"default","label":"Default path","kind":"select"},
+				{"choice_id":"other","label":"Other","kind":"write","input_placeholder":"Describe the custom path"}
+			]
+		}]
+	}`)
+	if withWrite == nil || len(withWrite.Questions) != 1 {
+		t.Fatalf("withWrite prompt=%+v", withWrite)
+	}
+	if withWrite.Questions[0].ChoicesExhaustive == nil || *withWrite.Questions[0].ChoicesExhaustive {
+		t.Fatalf("write-choice prompt should default to exhaustive=false: %+v", withWrite.Questions[0])
+	}
+}
+
 func TestBuildRequestUserInputResponseRecord_IncludesWriteChoiceTextInSummary(t *testing.T) {
 	t.Parallel()
 

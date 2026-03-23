@@ -164,9 +164,11 @@ func buildRunPolicyClassifierMessages(userInput string, openGoal string) []Messa
 		"When todo_policy=required, minimum_todo_items must be >=3.",
 		"For intent social or creative, always output complexity=simple, todo_policy=none, minimum_todo_items=0.",
 		"confidence must be a float between 0 and 1.",
-		"social means greetings, thanks, casual chat, or no actionable request.",
+		"social means greetings, thanks, casual freeform chat, or no actionable request.",
+		"If the user wants a guided structured interaction with explicit answer choices or typed input, that is not social.",
 		"creative means story/poem/copywriting/roleplay style generation that should not execute tools.",
 		"task means any actionable request about code, files, shell commands, debugging, analysis, planning, or implementation.",
+		"task also includes guided structured interactions that should continue through the task runtime, such as questionnaires, interviews, quizzes, guessing games, decision trees, and multi-step option-driven conversations.",
 		"Do not include markdown or extra text.",
 	}, "\n")
 

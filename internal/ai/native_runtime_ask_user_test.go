@@ -1,6 +1,9 @@
 package ai
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func testAskUserSignal(question string) askUserSignal {
 	return askUserSignal{
@@ -87,9 +90,73 @@ func TestEvaluateAskUserGate(t *testing.T) {
 
 	signal = askUserSignal{
 		Questions: []RequestUserInputQuestion{{
-			ID:       "question_1",
-			Header:   "Direction",
-			Question: "Pick a direction.",
+			ID:                "question_1",
+			Header:            "Direction",
+			Question:          "Pick a direction.",
+			ChoicesExhaustive: requestUserInputBoolPtr(false),
+			Choices: []RequestUserInputChoice{{
+				ChoiceID:         "custom",
+				Label:            "Custom path",
+				Kind:             requestUserInputChoiceKindSelect,
+				InputPlaceholder: "Describe the custom path",
+			}},
+		}},
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Pick canary-first or full rollout."},
+	}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonNonExhaustiveChoicesWithoutWrite {
+		t.Fatalf("non-exhaustive fixed choices without write => pass=%v reason=%q", pass, reason)
+	}
+
+	signal = askUserSignal{
+		Questions: []RequestUserInputQuestion{{
+			ID:                "question_1",
+			Header:            "Direction",
+			Question:          "Pick a direction.",
+			ChoicesExhaustive: requestUserInputBoolPtr(true),
+			Choices: []RequestUserInputChoice{{
+				ChoiceID: "canary",
+				Label:    "Canary first",
+				Kind:     requestUserInputChoiceKindSelect,
+			}, {
+				ChoiceID: "full",
+				Label:    "Full rollout",
+				Kind:     requestUserInputChoiceKindSelect,
+			}},
+		}},
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Pick canary-first or full rollout."},
+	}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); !pass || reason != "ok" {
+		t.Fatalf("explicit exhaustive fixed choices => pass=%v reason=%q", pass, reason)
+	}
+
+	signal = askUserSignal{
+		Questions: []RequestUserInputQuestion{{
+			ID:                "question_1",
+			Header:            "Direction",
+			Question:          "Pick a direction.",
+			ChoicesExhaustive: requestUserInputBoolPtr(false),
+			Choices: []RequestUserInputChoice{{
+				ChoiceID:         "custom",
+				Label:            "Custom path",
+				Kind:             requestUserInputChoiceKindWrite,
+				InputPlaceholder: "Describe the custom path",
+			}},
+		}},
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Pick canary-first or full rollout."},
+	}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); !pass || reason != "ok" {
+		t.Fatalf("non-exhaustive write choice => pass=%v reason=%q", pass, reason)
+	}
+
+	signal = askUserSignal{
+		Questions: []RequestUserInputQuestion{{
+			ID:                "question_1",
+			Header:            "Direction",
+			Question:          "Pick a direction.",
+			ChoicesExhaustive: requestUserInputBoolPtr(true),
 			Choices: []RequestUserInputChoice{{
 				ChoiceID:         "custom",
 				Label:            "Custom path",
@@ -178,5 +245,54 @@ func TestEvaluateGuardAskUserGate(t *testing.T) {
 		MinimumTodoItems: 3,
 	}, TaskComplexityStandard); pass || reason != todoRequirementMissingPolicyRequired {
 		t.Fatalf("required todo policy guard without snapshot => pass=%v reason=%q", pass, reason)
+	}
+}
+
+func TestBuildLayeredSystemPrompt_AskUserCoversStructuredInteractionTurns(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{
+		AgentHomeDir: t.TempDir(),
+		WorkingDir:   t.TempDir(),
+		Shell:        "bash",
+	})
+	prompt := r.buildLayeredSystemPrompt(
+		"Run a guided questionnaire",
+		"act",
+		TaskComplexityStandard,
+		0,
+		4,
+		true,
+		[]ToolDef{{Name: "ask_user"}},
+		runtimeState{},
+		"",
+		runCapabilityContract{
+			AllowUserInteraction:           true,
+			SupportsAskUserQuestionBatches: true,
+		},
+	)
+	if !strings.Contains(prompt, "Allowed ask_user cases include true external blockers and guided interaction turns") {
+		t.Fatalf("prompt missing generalized ask_user guidance: %q", prompt)
+	}
+	if !strings.Contains(prompt, "prefer ask_user over freeform markdown option lists") {
+		t.Fatalf("prompt missing structured-interaction ask_user preference: %q", prompt)
+	}
+	if !strings.Contains(prompt, "every question must include id, header, question, is_secret, choices_exhaustive, and choices[]") {
+		t.Fatalf("prompt missing choices_exhaustive contract: %q", prompt)
+	}
+	if !strings.Contains(prompt, "Set `choices_exhaustive:true` only when the fixed choices are genuinely exhaustive by construction") {
+		t.Fatalf("prompt missing choices_exhaustive semantics: %q", prompt)
+	}
+	if !strings.Contains(prompt, "include a final catch-all `kind:\"write\"` choice unless the option set is genuinely exhaustive by construction") {
+		t.Fatalf("prompt missing non-exhaustive write-choice rule: %q", prompt)
+	}
+	if !strings.Contains(prompt, `None of the above: ___`) {
+		t.Fatalf("prompt missing explicit write-choice fallback guidance: %q", prompt)
+	}
+	if !strings.Contains(prompt, "If the user explicitly asks for an `Other` or `None of the above` path, you MUST represent it as a `kind:\"write\"` choice") {
+		t.Fatalf("prompt missing explicit requested fallback rule: %q", prompt)
+	}
+	if !strings.Contains(prompt, "Do NOT use ask_user to delegate commands, file inspection, log gathering, screenshots, or web research") {
+		t.Fatalf("prompt missing collectable-work rejection: %q", prompt)
 	}
 }

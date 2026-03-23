@@ -123,6 +123,13 @@ func classifyIntentResponseToken(req map[string]any) string {
 	if userText == "" {
 		return `{"intent":"task","reason":"empty_input","objective_mode":"replace","complexity":"simple","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.42}`
 	}
+	if strings.Contains(userMessage, "猜我的岁数") || strings.Contains(userMessage, "每个问题") || strings.Contains(userMessage, "几个选项") {
+		instructionsLower := strings.ToLower(strings.TrimSpace(instructions))
+		if strings.Contains(instructionsLower, "guided structured interaction") && strings.Contains(instructionsLower, "option-driven conversations") {
+			return `{"intent":"task","reason":"guided_structured_interaction_requested","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.89}`
+		}
+		return `{"intent":"social","reason":"guided_interaction_misclassified_without_prompt","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.61}`
+	}
 	if strings.TrimSpace(openGoalText) != "" {
 		continuationSignals := []string{"continue", "go on", "keep going", "proceed"}
 		for _, signal := range continuationSignals {
