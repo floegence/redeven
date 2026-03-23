@@ -1,7 +1,6 @@
 import { ErrorBoundary, Suspense, Show, createEffect, createMemo, createSignal, lazy, on } from 'solid-js';
-import { resolveCodeEditorLanguageSpec, type CodeEditorApi, type CodeEditorProps } from '@floegence/floe-webapp-core/editor';
+import type { CodeEditorApi, CodeEditorProps } from '@floegence/floe-webapp-core/editor';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
-import { CodePreviewPane } from './CodePreviewPane';
 
 const CodeEditor = lazy(() => import('@floegence/floe-webapp-core/editor').then((module) => ({ default: module.CodeEditor })));
 
@@ -20,12 +19,31 @@ const PREVIEW_MONACO_INTERACTION_OPTIONS: CodeEditorOptions = {
   dragAndDrop: false,
 };
 
-function shouldUseCodePreviewFallback(language?: string): boolean {
-  const normalizedLanguage = String(language ?? '').trim().toLowerCase();
-  if (!normalizedLanguage || normalizedLanguage === 'plaintext' || normalizedLanguage === 'text' || normalizedLanguage === 'txt') {
-    return false;
-  }
-  return resolveCodeEditorLanguageSpec(normalizedLanguage).id === 'plaintext';
+interface StaticTextPreviewPaneProps {
+  text: string;
+  wrapText?: boolean;
+  showEditorUnavailableNotice?: boolean;
+}
+
+function StaticTextPreviewPane(props: StaticTextPreviewPaneProps) {
+  return (
+    <div class="flex h-full min-h-0 flex-col overflow-hidden">
+      <Show when={props.showEditorUnavailableNotice}>
+        <div class="shrink-0 border-b border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
+          Editor unavailable. Showing a plain-text fallback for this preview.
+        </div>
+      </Show>
+
+      <pre
+        data-testid="text-preview-fallback"
+        class={`min-h-0 flex-1 overflow-auto px-3 py-3 font-mono text-xs leading-5 text-foreground ${
+          props.wrapText === false ? 'whitespace-pre' : 'whitespace-pre-wrap break-words'
+        }`}
+      >
+        <code>{props.text}</code>
+      </pre>
+    </div>
+  );
 }
 
 export interface TextFilePreviewPaneProps {
@@ -46,13 +64,7 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
     if (props.descriptor.textPresentation !== 'code') return 'plaintext';
     return props.descriptor.language;
   });
-  const shouldUseFallbackPreview = createMemo(() => {
-    if (props.editing) return false;
-    if (props.truncated || monacoFailed()) return true;
-    if (props.descriptor.textPresentation !== 'code') return false;
-    return shouldUseCodePreviewFallback(resolvedLanguage());
-  });
-  const shouldUseMonaco = createMemo(() => !shouldUseFallbackPreview());
+  const shouldUseMonaco = createMemo(() => !props.truncated && !monacoFailed());
   const editorValue = createMemo(() => (props.editing ? props.draftText ?? props.text : props.text));
   const editorOptions = createMemo<CodeEditorOptions>(() => ({
     ...PREVIEW_MONACO_INTERACTION_OPTIONS,
@@ -64,10 +76,11 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
     renderLineHighlight: props.editing ? ('line' as const) : ('none' as const),
     renderWhitespace: 'selection' as const,
   }));
-  const fallbackPreview = () => (
-    <CodePreviewPane
-      code={editorValue()}
-      language={props.descriptor.textPresentation === 'code' ? props.descriptor.language : undefined}
+  const previewFallback = (showEditorUnavailableNotice = false) => (
+    <StaticTextPreviewPane
+      text={editorValue()}
+      wrapText={props.descriptor.wrapText}
+      showEditorUnavailableNotice={showEditorUnavailableNotice}
     />
   );
   const editFailureFallback = () => (
@@ -96,13 +109,16 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
       class="h-full"
     />
   );
+  const renderReadonlyMonaco = () => renderMonacoEditor();
+  const renderEditingMonaco = () => renderMonacoEditor();
+  const renderFallbackSurface = () => (props.editing ? editFailureFallback() : previewFallback(monacoFailed()));
 
   createEffect(on(() => [props.path, props.truncated, resolvedLanguage(), props.editing], () => {
     setMonacoFailed(false);
   }));
 
   createEffect(() => {
-    if (!shouldUseMonaco() || monacoFailed()) {
+    if (!shouldUseMonaco()) {
       props.onSelectionChange?.('');
     }
   });
@@ -118,22 +134,22 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
       <div class="min-h-0 flex-1 overflow-hidden">
         <Show
           when={shouldUseMonaco()}
-          fallback={fallbackPreview()}
+          fallback={renderFallbackSurface()}
         >
           <ErrorBoundary
             fallback={() => {
               queueMicrotask(() => {
                 setMonacoFailed(true);
               });
-              return props.editing ? editFailureFallback() : fallbackPreview();
+              return props.editing ? editFailureFallback() : previewFallback(true);
             }}
           >
             <Suspense fallback={<div class="flex h-full items-center justify-center text-sm text-muted-foreground">Loading editor...</div>}>
               {/* Monaco must remount when switching between read-only preview and edit mode.
                   Reusing a preview instance can leak stale readOnly state and trigger
                   "Cannot edit in read-only editor" after the user clicks Edit. */}
-              <Show when={props.editing} fallback={renderMonacoEditor()}>
-                {renderMonacoEditor()}
+              <Show when={props.editing} fallback={renderReadonlyMonaco()}>
+                {renderEditingMonaco()}
               </Show>
             </Suspense>
           </ErrorBoundary>
