@@ -3540,6 +3540,8 @@ export function EnvAIPage() {
 
       if (tid === String(ai.activeThreadId() ?? '').trim()) {
         setRunPhaseLabel('Working');
+        cancelActiveRunSnapshotRecovery();
+        void loadThreadMessages(tid, { reset: false });
       }
 
       const runId = String(event.runId ?? '').trim();
