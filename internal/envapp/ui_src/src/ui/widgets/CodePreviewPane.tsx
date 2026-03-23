@@ -67,7 +67,7 @@ export function CodePreviewPane(props: CodePreviewPaneProps) {
       <Show
         when={highlightedHtml()}
         fallback={(
-          <pre class="code-preview-pane__plain min-h-0 flex-1 overflow-auto px-4 py-3 text-xs leading-relaxed whitespace-pre font-mono select-text">
+          <pre class="code-preview-pane__plain min-h-0 flex-1 overflow-auto whitespace-pre select-text">
             <code>{props.code}</code>
           </pre>
         )}
