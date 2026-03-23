@@ -1,103 +1,259 @@
-version: v1
+version: v2
 tasks:
-  - id: project_brief
-    title: Project brief analysis
+  - id: readonly_project_brief
+    title: Readonly repository brief
     stage: screen
-    category: failure_real
+    category: readonly
     turns:
-      - "Quickly analyze project ${workspace} using real files, and report the tech stack, directory layout, and run instructions. You must cite at least 2 absolute evidence file paths."
-    max_steps: 4
-    timeout_seconds: 35
-    require_evidence: true
-    must_contain:
-      - "tech stack|stack"
-      - "structure|module"
-      - "run|start"
-    forbidden:
-      - "Tool workflow failed"
-      - "Assistant finished without a visible response"
-      - "No response"
-    hard_fail_events:
-      - "turn.loop.exhausted"
-      - "turn.completion.continue"
-      - "task.loop.continue"
-    must_not_end_with_fallback: true
+      - "Analyze workspace ${workspace} using real files. Report repository purpose, major directories or modules, and one concrete validation path. Cite at least 2 absolute evidence file paths."
+    runtime:
+      execution_mode: act
+      max_steps: 4
+      max_no_tool_rounds: 2
+      timeout_seconds: 40
+    assertions:
+      output:
+        require_evidence: true
+        min_evidence_paths: 2
+        min_length: 180
+        must_contain:
+          - "purpose|repository|project"
+          - "directory|layout|module|structure"
+          - "validation|verify|test|check"
+        forbidden:
+          - "Tool workflow failed"
+          - "Assistant finished without a visible response"
+          - "No response"
+        must_not_end_with_fallback: true
+      thread:
+        run_status: success
+        execution_mode: act
+        waiting_prompt: forbidden
+      tools:
+        must_call:
+          - "terminal.exec"
+          - "task_complete"
+        must_succeed:
+          - "terminal.exec"
+          - "task_complete"
+        must_not_call:
+          - "apply_patch"
+        max_calls: 12
+      events:
+        hard_fail:
+          - "turn.loop.exhausted"
+          - "task.loop.continue"
 
-  - id: root_stat
-    title: Root stat synthesis
+  - id: readonly_review_question
+    title: Answer versus act review question
     stage: screen
-    category: generic
+    category: readonly
     turns:
-      - "Run terminal.exec with command `stat /` and then report whether / is a directory."
-    max_steps: 3
-    timeout_seconds: 20
-    require_evidence: false
-    must_contain:
-      - "directory"
-    forbidden:
-      - "Tool workflow failed"
-      - "No response"
-    hard_fail_events:
-      - "turn.loop.exhausted"
-    must_not_end_with_fallback: true
+      - "Do not edit any files. Based on real files in ${workspace}, answer this question: is there a likely bug, risk, or inconsistency worth checking first? Give one finding, or explicitly say none found, with concrete evidence paths."
+    runtime:
+      execution_mode: act
+      max_steps: 4
+      max_no_tool_rounds: 2
+      timeout_seconds: 35
+    assertions:
+      output:
+        require_evidence: true
+        min_evidence_paths: 2
+        min_length: 140
+        must_contain:
+          - "risk|bug|finding|none found"
+        forbidden:
+          - "Tool workflow failed"
+          - "No response"
+        must_not_end_with_fallback: true
+      thread:
+        run_status: success
+        execution_mode: act
+        waiting_prompt: forbidden
+      tools:
+        must_call:
+          - "terminal.exec"
+          - "task_complete"
+        must_succeed:
+          - "terminal.exec"
+          - "task_complete"
+        must_not_call:
+          - "apply_patch"
+        max_calls: 10
+      events:
+        hard_fail:
+          - "turn.loop.exhausted"
+          - "task.loop.continue"
 
-  - id: approval_fallback
-    title: Approval denied fallback
+  - id: plan_mode_requests_act_switch
+    title: Plan mode asks user to switch to act
     stage: screen
-    category: failure_real
+    category: flower_contract
     turns:
-      - "First try terminal.exec with `printf test > denied.txt` (cwd=${workspace}). If approval fails or is denied, immediately switch to readonly terminal.exec commands (rg/sed/cat) and still provide a usable conclusion. Do not stop at the failure."
-    max_steps: 5
-    timeout_seconds: 35
-    require_evidence: true
-    must_contain:
-      - "conclusion|result"
-    forbidden:
-      - "Tool workflow failed"
-      - "No response"
-    hard_fail_events:
-      - "turn.loop.exhausted"
-      - "task.loop.continue"
-    must_not_end_with_fallback: true
+      - "I need you to edit a file in ${workspace} to add a missing note. In this thread, do whatever is required to proceed safely."
+    runtime:
+      execution_mode: plan
+      max_steps: 3
+      max_no_tool_rounds: 1
+      timeout_seconds: 30
+    assertions:
+      output:
+        min_length: 20
+        forbidden:
+          - "Tool workflow failed"
+          - "No response"
+        must_not_end_with_fallback: true
+      thread:
+        run_status: waiting_user
+        execution_mode: plan
+        waiting_prompt: required
+      tools:
+        must_call:
+          - "ask_user"
+        must_succeed:
+          - "ask_user"
+        must_not_call:
+          - "apply_patch"
+          - "task_complete"
+      events:
+        must_include:
+          - "ask_user.waiting"
+        hard_fail:
+          - "turn.loop.exhausted"
+          - "task.loop.continue"
 
-  - id: project_deep
-    title: Project deep analysis
+  - id: multi_step_todo_discipline
+    title: Multi-step readonly task uses todo discipline
     stage: deep
-    category: generic
+    category: flower_contract
     turns:
-      - "Deeply analyze project ${workspace}: tech stack, module boundaries, run instructions, risk list, and next-step suggestions. You must cite at least 3 absolute evidence file paths."
-    max_steps: 6
-    timeout_seconds: 45
-    require_evidence: true
-    must_contain:
-      - "tech stack|stack"
-      - "risk"
-      - "next steps|recommend"
-    forbidden:
-      - "Tool workflow failed"
-      - "No response"
-    hard_fail_events:
-      - "turn.loop.exhausted"
-      - "task.loop.continue"
-    must_not_end_with_fallback: true
+      - "Perform a 3-step readonly repository audit for ${workspace}: identify entrypoints, name one risky area, and describe one verification command. Keep your todo list updated while you work."
+    runtime:
+      execution_mode: act
+      max_steps: 6
+      max_no_tool_rounds: 2
+      timeout_seconds: 50
+    assertions:
+      output:
+        require_evidence: true
+        min_evidence_paths: 3
+        min_length: 220
+        must_contain:
+          - "entry|entrypoint"
+          - "risk"
+          - "verify|validation|test|check"
+        forbidden:
+          - "Tool workflow failed"
+          - "No response"
+        must_not_end_with_fallback: true
+      thread:
+        run_status: success
+        execution_mode: act
+        waiting_prompt: forbidden
+      tools:
+        must_call:
+          - "terminal.exec"
+          - "write_todos"
+          - "task_complete"
+        must_succeed:
+          - "terminal.exec"
+          - "write_todos"
+          - "task_complete"
+        must_not_call:
+          - "apply_patch"
+        max_calls: 14
+      events:
+        must_include:
+          - "todos.updated"
+        hard_fail:
+          - "turn.loop.exhausted"
+          - "task.loop.continue"
+      todos:
+        require_snapshot: true
+        require_non_empty: true
+        require_closed: true
+        require_in_progress_discipline: true
 
-  - id: continue_context
-    title: Continue context follow-up
+  - id: continue_context_followup
+    title: Continue preserves thread context
     stage: deep
-    category: failure_real
+    category: flower_contract
     turns:
-      - "Analyze ${workspace} using real files and provide an initial conclusion (at least 2 evidence paths), then explicitly state that deeper analysis can continue."
+      - "Analyze ${workspace} using real files and provide an initial summary with at least 2 absolute evidence paths. Make it clear that deeper analysis can continue."
       - "continue"
-    max_steps: 5
-    timeout_seconds: 40
-    require_evidence: true
-    must_contain:
-      - "continue"
-      - "summary|findings|conclusion"
-    forbidden:
-      - "Tool workflow failed"
-      - "No response"
-    hard_fail_events:
-      - "turn.loop.exhausted"
-      - "task.loop.continue"
-    must_not_end_with_fallback: true
+    runtime:
+      execution_mode: act
+      max_steps: 5
+      max_no_tool_rounds: 2
+      timeout_seconds: 45
+    assertions:
+      output:
+        require_evidence: true
+        min_evidence_paths: 2
+        min_length: 180
+        must_contain:
+          - "continue"
+          - "summary|finding|conclusion"
+        forbidden:
+          - "Tool workflow failed"
+          - "No response"
+        must_not_end_with_fallback: true
+      thread:
+        run_status: success
+        execution_mode: act
+        waiting_prompt: forbidden
+      tools:
+        must_call:
+          - "terminal.exec"
+          - "task_complete"
+        must_succeed:
+          - "terminal.exec"
+          - "task_complete"
+        must_not_call:
+          - "apply_patch"
+        max_calls: 14
+      events:
+        hard_fail:
+          - "turn.loop.exhausted"
+          - "task.loop.continue"
+
+  - id: no_user_interaction_closeout
+    title: No-user-interaction run closes with blockers
+    stage: deep
+    category: flower_contract
+    turns:
+      - "You need to make a code change in ${workspace}, but this run cannot ask me anything. Finish in the correct Flower way."
+    runtime:
+      execution_mode: plan
+      max_steps: 3
+      max_no_tool_rounds: 1
+      timeout_seconds: 30
+      no_user_interaction: true
+    assertions:
+      output:
+        min_length: 120
+        must_contain:
+          - "blocker|blocked|cannot"
+          - "next action|suggested|switch to act"
+        forbidden:
+          - "Tool workflow failed"
+          - "No response"
+        must_not_end_with_fallback: true
+      thread:
+        run_status: success
+        execution_mode: plan
+        waiting_prompt: forbidden
+      tools:
+        must_call:
+          - "task_complete"
+        must_succeed:
+          - "task_complete"
+        must_not_call:
+          - "ask_user"
+          - "apply_patch"
+      events:
+        must_not_include:
+          - "ask_user.waiting"
+        hard_fail:
+          - "turn.loop.exhausted"
+          - "task.loop.continue"
