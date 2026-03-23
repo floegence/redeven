@@ -1,7 +1,7 @@
 import { Show, createEffect, createMemo, createSignal, untrack } from 'solid-js';
 import { useDeck, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
-import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Sparkles, Trash } from '@floegence/floe-webapp-core/icons';
+import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { type ContextMenuCallbacks, type ContextMenuItem, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button, ConfirmDialog, DirectoryPicker, Dropdown, FileSavePicker, type DropdownItem } from '@floegence/floe-webapp-core/ui';
@@ -2274,6 +2274,26 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     })();
   };
 
+  const canOpenDirectoryInTerminal = (items: FileItem[]) => (
+    Boolean(ctx.env()?.permissions?.can_execute)
+    && items.length === 1
+    && items[0]?.type === 'folder'
+    && Boolean(normalizeAbsolutePath(items[0]?.path ?? ''))
+  );
+
+  const handleOpenInTerminal = (items: FileItem[]) => {
+    const item = items[0];
+    if (!item || item.type !== 'folder') return;
+
+    const workingDir = normalizeAbsolutePath(item.path);
+    if (!workingDir) {
+      notification.error('Invalid directory', 'Could not resolve a terminal working directory.');
+      return;
+    }
+
+    ctx.openTerminalInDirectory(workingDir, { preferredName: item.name });
+  };
+
   const ctxMenu: ContextMenuCallbacks = {
     onDelete: (items: FileItem[]) => {
       setDeleteDialogItems(items);
@@ -2327,7 +2347,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
   };
 
-  const overrideContextMenuItems: ContextMenuItem[] = [
+  const baseOverrideContextMenuItems: ContextMenuItem[] = [
     {
       id: 'ask-flower',
       label: 'Ask Flower',
@@ -2379,6 +2399,26 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       shortcut: 'Del',
     },
   ];
+
+  const resolveOverrideContextMenuItems = (items: FileItem[]): ContextMenuItem[] => {
+    if (!canOpenDirectoryInTerminal(items)) {
+      return baseOverrideContextMenuItems;
+    }
+
+    return [
+      {
+        id: 'open-in-terminal',
+        label: 'Open in Terminal',
+        type: 'custom',
+        icon: (props) => <Terminal class={props.class} />,
+        separator: true,
+        onAction: (selectedItems: FileItem[]) => {
+          handleOpenInTerminal(selectedItems);
+        },
+      },
+      ...baseOverrideContextMenuItems,
+    ];
+  };
 
   return (
     <div class="h-full relative">
@@ -2438,7 +2478,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onOpen={(item) => void filePreview.openPreview(item)}
                       onDragMove={(items, targetPath) => void handleDragMove(items, targetPath)}
                       contextMenuCallbacks={ctxMenu}
-                      overrideContextMenuItems={overrideContextMenuItems}
+                      resolveOverrideContextMenuItems={resolveOverrideContextMenuItems}
                     />
                   ),
                 },

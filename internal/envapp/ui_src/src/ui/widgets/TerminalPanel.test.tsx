@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { For, Show } from 'solid-js';
+import { For, Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -97,28 +97,64 @@ const transportMocks = vi.hoisted(() => ({
   clear: vi.fn().mockResolvedValue(undefined),
 }));
 
-const sessionsCoordinatorMocks = vi.hoisted(() => {
-  const sessions = [
+const terminalSessionsState = vi.hoisted(() => ({
+  sessions: [
     {
       id: 'session-1',
       name: 'Terminal 1',
       workingDir: '/workspace',
+      createdAtMs: 1,
       isActive: true,
       lastActiveAtMs: 10,
     },
-  ];
+  ] as Array<{
+    id: string;
+    name: string;
+    workingDir: string;
+    createdAtMs: number;
+    isActive: boolean;
+    lastActiveAtMs: number;
+  }>,
+  subscribers: [] as Array<(value: Array<{
+    id: string;
+    name: string;
+    workingDir: string;
+    createdAtMs: number;
+    isActive: boolean;
+    lastActiveAtMs: number;
+  }>) => void>,
+}));
 
-  return {
-    refresh: vi.fn().mockResolvedValue(undefined),
-    createSession: vi.fn(),
-    deleteSession: vi.fn(),
-    updateSessionMeta: vi.fn(),
-    subscribe: (callback: (value: typeof sessions) => void) => {
-      callback(sessions);
-      return () => undefined;
-    },
-  };
-});
+const sessionsCoordinatorMocks = vi.hoisted(() => ({
+  refresh: vi.fn().mockResolvedValue(undefined),
+  createSession: vi.fn(async (name?: string, workingDir?: string, _cols?: number, _rows?: number) => {
+    const session = {
+      id: 'session-2',
+      name: String(name ?? '').trim() || 'Terminal 2',
+      workingDir: String(workingDir ?? '').trim() || '/workspace',
+      createdAtMs: 2,
+      isActive: true,
+      lastActiveAtMs: 20,
+    };
+    terminalSessionsState.sessions = [
+      ...terminalSessionsState.sessions.map((entry) => ({ ...entry, isActive: false })),
+      session,
+    ];
+    for (const subscriber of terminalSessionsState.subscribers) {
+      subscriber(terminalSessionsState.sessions);
+    }
+    return session;
+  }),
+  deleteSession: vi.fn(),
+  updateSessionMeta: vi.fn(),
+  subscribe: (callback: (value: typeof terminalSessionsState.sessions) => void) => {
+    terminalSessionsState.subscribers.push(callback);
+    callback(terminalSessionsState.sessions);
+    return () => {
+      terminalSessionsState.subscribers = terminalSessionsState.subscribers.filter((entry) => entry !== callback);
+    };
+  },
+}));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
@@ -420,6 +456,10 @@ vi.mock('../pages/EnvContext', () => {
     useEnvContext: () => ({
       env: envAccessor,
       openAskFlowerComposer: vi.fn(),
+      openTerminalInDirectoryRequestSeq: () => 0,
+      openTerminalInDirectoryRequest: () => null,
+      openTerminalInDirectory: vi.fn(),
+      consumeOpenTerminalInDirectoryRequest: vi.fn(),
     }),
   };
 });
@@ -521,7 +561,19 @@ describe('TerminalPanel', () => {
         },
       }),
     });
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+    ];
+    terminalSessionsState.subscribers = [];
     sessionsCoordinatorMocks.refresh.mockClear();
+    sessionsCoordinatorMocks.createSession.mockClear();
     sessionsCoordinatorMocks.updateSessionMeta.mockClear();
 
     let nextAnimationFrameId = 0;
@@ -630,6 +682,59 @@ describe('TerminalPanel', () => {
     expect(terminalConfigState.values[0]?.responsive).toEqual({
       notifyResizeOnlyWhenFocused: true,
     });
+  });
+
+  it('creates and focuses a terminal session from a page-scoped open-session request', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const handledSpy = vi.fn();
+
+    render(() => (
+      <TerminalPanel
+        variant="deck"
+        openSessionRequest={{
+          requestId: 'request-1',
+          workingDir: '/workspace/repo',
+          preferredName: 'repo',
+        }}
+        onOpenSessionRequestHandled={handledSpy}
+      />
+    ), host);
+    await settleTerminalPanel();
+
+    expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('repo', '/workspace/repo', 80, 24);
+    expect(handledSpy).toHaveBeenCalledWith('request-1');
+    expect(host.textContent).toContain('repo');
+  });
+
+  it('does not recreate a session when the same open-session request id is replayed', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const handledSpy = vi.fn();
+    const [request, setRequest] = createSignal({
+      requestId: 'request-1',
+      workingDir: '/workspace/repo',
+      preferredName: 'repo',
+    });
+
+    render(() => (
+      <TerminalPanel
+        variant="deck"
+        openSessionRequest={request()}
+        onOpenSessionRequestHandled={handledSpy}
+      />
+    ), host);
+    await settleTerminalPanel();
+
+    setRequest({
+      requestId: 'request-1',
+      workingDir: '/workspace/repo',
+      preferredName: 'repo-again',
+    });
+    await settleTerminalPanel();
+
+    expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledTimes(1);
+    expect(handledSpy).toHaveBeenCalledTimes(1);
   });
 
   it('restores focus to the active terminal after closing settings', async () => {
