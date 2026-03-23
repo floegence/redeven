@@ -683,14 +683,14 @@ ORDER BY id ASC
 			answersJSON string
 			secretInt   int
 		)
-		if err := suiRows.Scan(&rec.ID, &rec.EndpointID, &rec.ThreadID, &rec.ResponseMessageID, &rec.PromptID, &rec.ToolID, &rec.ReasonCode, &rec.QuestionID, &rec.Header, &rec.QuestionText, &rec.SelectedOptionID, &rec.SelectedOptionLabel, &answersJSON, &rec.PublicSummary, &secretInt, &rec.CreatedAtUnixMs); err != nil {
+		if err := suiRows.Scan(&rec.ID, &rec.EndpointID, &rec.ThreadID, &rec.ResponseMessageID, &rec.PromptID, &rec.ToolID, &rec.ReasonCode, &rec.QuestionID, &rec.Header, &rec.QuestionText, &rec.SelectedChoiceID, &rec.SelectedChoiceLabel, &answersJSON, &rec.PublicSummary, &secretInt, &rec.CreatedAtUnixMs); err != nil {
 			_ = suiRows.Close()
 			return out, err
 		}
 		if strings.TrimSpace(answersJSON) != "" {
 			var answers []string
 			if err := json.Unmarshal([]byte(answersJSON), &answers); err == nil {
-				rec.Answers = answers
+				rec.Text = requestUserInputTextFromLegacyAnswers(answers)
 			}
 		}
 		rec.ContainsSecret = secretInt != 0
@@ -739,7 +739,15 @@ ORDER BY response_message_id ASC, question_id ASC, answer_index ASC
 			idx = len(out.RequestUserInputSecrets) - 1
 			secretIndex[key] = idx
 		}
-		out.RequestUserInputSecrets[idx].Answers = append(out.RequestUserInputSecrets[idx].Answers, strings.TrimSpace(answerText))
+		answerText = strings.TrimSpace(answerText)
+		if answerText == "" {
+			continue
+		}
+		if out.RequestUserInputSecrets[idx].Text == "" {
+			out.RequestUserInputSecrets[idx].Text = answerText
+		} else {
+			out.RequestUserInputSecrets[idx].Text = strings.TrimSpace(out.RequestUserInputSecrets[idx].Text + "\n" + answerText)
+		}
 	}
 	if err := secretRows.Err(); err != nil {
 		_ = secretRows.Close()
@@ -845,8 +853,8 @@ INSERT INTO execution_spans(
 			continue
 		}
 		answersJSON := "[]"
-		if len(rec.Answers) > 0 {
-			if raw, err := json.Marshal(rec.Answers); err == nil {
+		if answers := requestUserInputTextToLegacyAnswers(rec.Text); len(answers) > 0 {
+			if raw, err := json.Marshal(answers); err == nil {
 				answersJSON = string(raw)
 			}
 		}
@@ -855,10 +863,10 @@ INSERT INTO structured_user_inputs(
   endpoint_id, thread_id, response_message_id,
   prompt_id, tool_id, reason_code, question_id,
   header, question_text,
-  selected_option_id, selected_option_label,
+ selected_option_id, selected_option_label,
   answers_json, public_summary, contains_secret, created_at_unix_ms
 ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, endpointID, threadID, strings.TrimSpace(rec.ResponseMessageID), strings.TrimSpace(rec.PromptID), strings.TrimSpace(rec.ToolID), strings.TrimSpace(rec.ReasonCode), strings.TrimSpace(rec.QuestionID), strings.TrimSpace(rec.Header), strings.TrimSpace(rec.QuestionText), strings.TrimSpace(rec.SelectedOptionID), strings.TrimSpace(rec.SelectedOptionLabel), strings.TrimSpace(answersJSON), strings.TrimSpace(rec.PublicSummary), boolToInt(rec.ContainsSecret), rec.CreatedAtUnixMs); err != nil {
+`, endpointID, threadID, strings.TrimSpace(rec.ResponseMessageID), strings.TrimSpace(rec.PromptID), strings.TrimSpace(rec.ToolID), strings.TrimSpace(rec.ReasonCode), strings.TrimSpace(rec.QuestionID), strings.TrimSpace(rec.Header), strings.TrimSpace(rec.QuestionText), strings.TrimSpace(rec.SelectedChoiceID), strings.TrimSpace(rec.SelectedChoiceLabel), strings.TrimSpace(answersJSON), strings.TrimSpace(rec.PublicSummary), boolToInt(rec.ContainsSecret), rec.CreatedAtUnixMs); err != nil {
 			return err
 		}
 	}
@@ -869,22 +877,20 @@ INSERT INTO structured_user_inputs(
 	for _, rec := range snap.RequestUserInputSecrets {
 		questionID := strings.TrimSpace(rec.QuestionID)
 		responseMessageID := strings.TrimSpace(rec.ResponseMessageID)
+		answerText := strings.TrimSpace(rec.Text)
 		if questionID == "" || responseMessageID == "" {
 			continue
 		}
-		for idx, answer := range rec.Answers {
-			answer = strings.TrimSpace(answer)
-			if answer == "" {
-				continue
-			}
-			if _, err := tx.ExecContext(ctx, `
+		if answerText == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `
 INSERT INTO request_user_input_secret_answers(
   endpoint_id, thread_id, response_message_id,
   question_id, answer_index, answer_text, created_at_unix_ms
 ) VALUES(?, ?, ?, ?, ?, ?, ?)
-`, endpointID, threadID, responseMessageID, questionID, idx, answer, rec.CreatedAtUnixMs); err != nil {
-				return err
-			}
+`, endpointID, threadID, responseMessageID, questionID, 0, answerText, rec.CreatedAtUnixMs); err != nil {
+			return err
 		}
 	}
 

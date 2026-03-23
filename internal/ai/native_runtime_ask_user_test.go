@@ -8,7 +8,11 @@ func testAskUserSignal(question string) askUserSignal {
 			ID:       "question_1",
 			Header:   question,
 			Question: question,
-			IsOther:  true,
+			Choices: []RequestUserInputChoice{{
+				ChoiceID: "write",
+				Label:    "Your answer",
+				Kind:     requestUserInputChoiceKindWrite,
+			}},
 		}},
 	}
 }
@@ -68,17 +72,17 @@ func TestEvaluateAskUserGate(t *testing.T) {
 			ID:       "question_1",
 			Header:   "Direction",
 			Question: "Pick a direction.",
-			Options: []RequestUserInputOption{{
-				OptionID:        "other",
-				Label:           "Other",
-				DetailInputMode: requestUserInputDetailInputOptional,
+			Choices: []RequestUserInputChoice{{
+				ChoiceID: "custom",
+				Label:    "Custom path",
+				Kind:     requestUserInputChoiceKindWrite,
 			}},
 		}},
 		ReasonCode:       AskUserReasonUserDecisionRequired,
 		RequiredFromUser: []string{"Pick canary-first or full rollout."},
 	}
-	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonUnsupportedOptionalOptionDetail {
-		t.Fatalf("optional option detail => pass=%v reason=%q", pass, reason)
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); !pass || reason != "ok" {
+		t.Fatalf("explicit write choice => pass=%v reason=%q", pass, reason)
 	}
 
 	signal = askUserSignal{
@@ -86,36 +90,18 @@ func TestEvaluateAskUserGate(t *testing.T) {
 			ID:       "question_1",
 			Header:   "Direction",
 			Question: "Pick a direction.",
-			IsOther:  true,
-			Options: []RequestUserInputOption{{
-				OptionID:        "custom",
-				Label:           "Custom path",
-				DetailInputMode: requestUserInputDetailInputRequired,
+			Choices: []RequestUserInputChoice{{
+				ChoiceID:         "custom",
+				Label:            "Custom path",
+				Kind:             requestUserInputChoiceKindSelect,
+				InputPlaceholder: "Describe the custom path",
 			}},
 		}},
 		ReasonCode:       AskUserReasonUserDecisionRequired,
 		RequiredFromUser: []string{"Pick canary-first or full rollout."},
 	}
-	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonQuestionOtherConflictsOptionText {
-		t.Fatalf("question-level other with option detail => pass=%v reason=%q", pass, reason)
-	}
-
-	signal = askUserSignal{
-		Questions: []RequestUserInputQuestion{{
-			ID:       "question_1",
-			Header:   "Direction",
-			Question: "Pick a direction.",
-			Options: []RequestUserInputOption{{
-				OptionID:               "custom",
-				Label:                  "Custom path",
-				DetailInputPlaceholder: "Describe the custom path",
-			}},
-		}},
-		ReasonCode:       AskUserReasonUserDecisionRequired,
-		RequiredFromUser: []string{"Pick canary-first or full rollout."},
-	}
-	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonDetailPlaceholderWithoutMode {
-		t.Fatalf("detail placeholder without mode => pass=%v reason=%q", pass, reason)
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonChoiceInputPlaceholderWithoutWrite {
+		t.Fatalf("input placeholder without write choice => pass=%v reason=%q", pass, reason)
 	}
 
 	signal = testAskUserSignal("I need your decision on deployment order.")

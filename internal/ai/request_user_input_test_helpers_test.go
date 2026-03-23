@@ -19,14 +19,13 @@ func testRequestUserInputPrompt(messageID string, toolID string, reasonCode stri
 	})
 }
 
-func testSingleQuestionPrompt(messageID string, toolID string, questionID string, question string, options []RequestUserInputOption) *RequestUserInputPrompt {
+func testSingleQuestionPrompt(messageID string, toolID string, questionID string, question string, choices []RequestUserInputChoice) *RequestUserInputPrompt {
 	return testRequestUserInputPrompt(messageID, toolID, AskUserReasonUserDecisionRequired, []RequestUserInputQuestion{
 		{
 			ID:       strings.TrimSpace(questionID),
 			Header:   strings.TrimSpace(question),
 			Question: strings.TrimSpace(question),
-			IsOther:  true,
-			Options:  options,
+			Choices:  choices,
 		},
 	})
 }

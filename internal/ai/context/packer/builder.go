@@ -184,7 +184,7 @@ func enforceSectionBudget(pack model.PromptPack, budget map[string]int) model.Pr
 	structured := make([]model.StructuredUserInput, 0, len(out.RecentStructuredUserInputs))
 	for i := len(out.RecentStructuredUserInputs) - 1; i >= 0; i-- {
 		item := out.RecentStructuredUserInputs[i]
-		cost := textTokens(item.Header) + textTokens(item.Question) + textTokens(item.SelectedOptionLabel) + textTokens(strings.Join(item.Answers, "\n")) + textTokens(item.PublicSummary)
+		cost := textTokens(item.Header) + textTokens(item.Question) + textTokens(item.SelectedChoiceLabel) + textTokens(item.Text) + textTokens(item.PublicSummary)
 		if structuredBudget-cost < 0 {
 			continue
 		}
@@ -237,8 +237,8 @@ func collectSectionTokens(pack model.PromptPack) map[string]int {
 	for _, item := range pack.RecentStructuredUserInputs {
 		structuredTokens += textTokens(item.Header)
 		structuredTokens += textTokens(item.Question)
-		structuredTokens += textTokens(item.SelectedOptionLabel)
-		structuredTokens += textTokens(strings.Join(item.Answers, "\n"))
+		structuredTokens += textTokens(item.SelectedChoiceLabel)
+		structuredTokens += textTokens(item.Text)
 		structuredTokens += textTokens(item.PublicSummary)
 	}
 	usage["structured"] = structuredTokens

@@ -5,27 +5,25 @@ import (
 	"testing"
 )
 
-func TestValidateRequestUserInputResponse_RequiresSelectedOptionDetailWhenConfigured(t *testing.T) {
+func TestValidateRequestUserInputResponse_RequiresWriteChoiceText(t *testing.T) {
 	t.Parallel()
 
 	prompt := testRequestUserInputPrompt(
-		"msg_detail_required",
-		"tool_detail_required",
+		"msg_write_required",
+		"tool_write_required",
 		AskUserReasonUserDecisionRequired,
 		[]RequestUserInputQuestion{
 			{
 				ID:       "situation",
 				Header:   "Situation",
 				Question: "Choose the closest situation.",
-				IsOther:  false,
-				IsSecret: false,
-				Options: []RequestUserInputOption{
-					{OptionID: "working", Label: "Already working"},
+				Choices: []RequestUserInputChoice{
+					{ChoiceID: "working", Label: "Already working", Kind: requestUserInputChoiceKindSelect},
 					{
-						OptionID:               "other",
-						Label:                  "Other",
-						DetailInputMode:        requestUserInputDetailInputRequired,
-						DetailInputPlaceholder: "Describe your current situation",
+						ChoiceID:         "other",
+						Label:            "Other",
+						Kind:             requestUserInputChoiceKindWrite,
+						InputPlaceholder: "Describe your current situation",
 					},
 				},
 			},
@@ -39,7 +37,7 @@ func TestValidateRequestUserInputResponse_RequiresSelectedOptionDetailWhenConfig
 		PromptID: prompt.PromptID,
 		Answers: map[string]RequestUserInputAnswer{
 			"situation": {
-				SelectedOptionID: "other",
+				ChoiceID: "other",
 			},
 		},
 	})
@@ -51,103 +49,93 @@ func TestValidateRequestUserInputResponse_RequiresSelectedOptionDetailWhenConfig
 		PromptID: prompt.PromptID,
 		Answers: map[string]RequestUserInputAnswer{
 			"situation": {
-				SelectedOptionID: "other",
-				Answers:          []string{"Working and studying part time"},
+				ChoiceID: "other",
+				Text:     "Working and studying part time",
 			},
 		},
 	})
 	if err != nil {
-		t.Fatalf("validateRequestUserInputResponse with required detail: %v", err)
+		t.Fatalf("validateRequestUserInputResponse with write choice text: %v", err)
 	}
 }
 
-func TestValidateRequestUserInputResponse_CanonicalizesOptionalSelectedOptionDetailToRequired(t *testing.T) {
+func TestValidateRequestUserInputResponse_LegacyOtherFallbackInfersWriteChoice(t *testing.T) {
 	t.Parallel()
 
-	prompt := testRequestUserInputPrompt(
-		"msg_detail_optional",
-		"tool_detail_optional",
-		AskUserReasonUserDecisionRequired,
-		[]RequestUserInputQuestion{
-			{
-				ID:       "direction",
-				Header:   "Direction",
-				Question: "Choose the next direction.",
-				IsOther:  false,
-				IsSecret: false,
-				Options: []RequestUserInputOption{
-					{
-						OptionID:        "other",
-						Label:           "Other",
-						DetailInputMode: requestUserInputDetailInputOptional,
-					},
-				},
-			},
-		},
-	)
+	prompt := parseRequestUserInputPromptJSON(`{
+		"prompt_id":"rui_msg_legacy_other_tool_legacy_other",
+		"message_id":"msg_legacy_other",
+		"tool_id":"tool_legacy_other",
+		"questions":[{
+			"id":"direction",
+			"header":"Direction",
+			"question":"Choose the next direction.",
+			"is_secret":false,
+			"is_other":true,
+			"options":[{"option_id":"default","label":"Default path"}]
+		}]
+	}`)
 	if prompt == nil {
 		t.Fatalf("prompt should not be nil")
 	}
-
-	_, err := validateRequestUserInputResponse(prompt, &RequestUserInputResponse{
-		PromptID: prompt.PromptID,
-		Answers: map[string]RequestUserInputAnswer{
-			"direction": {
-				SelectedOptionID: "other",
-			},
-		},
-	})
-	if !errors.Is(err, ErrWaitingPromptChanged) {
-		t.Fatalf("validateRequestUserInputResponse err=%v, want %v", err, ErrWaitingPromptChanged)
-	}
-
-	_, err = validateRequestUserInputResponse(prompt, &RequestUserInputResponse{
-		PromptID: prompt.PromptID,
-		Answers: map[string]RequestUserInputAnswer{
-			"direction": {
-				SelectedOptionID: "other",
-				Answers:          []string{"Need a custom direction"},
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("validateRequestUserInputResponse with canonicalized optional detail: %v", err)
-	}
-}
-
-func TestNormalizeRequestUserInputPrompt_CanonicalizesLegacyOptionalDetailMode(t *testing.T) {
-	t.Parallel()
-
-	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
-		MessageID: "msg_legacy_optional_detail",
-		ToolID:    "tool_legacy_optional_detail",
-		Questions: []RequestUserInputQuestion{
-			{
-				ID:       "direction",
-				Header:   "Direction",
-				Question: "Choose the next direction.",
-				Options: []RequestUserInputOption{
-					{
-						OptionID:        "other",
-						Label:           "Other",
-						DetailInputMode: requestUserInputDetailInputOptional,
-					},
-				},
-			},
-		},
-	})
-	if prompt == nil {
-		t.Fatalf("prompt should not be nil")
-	}
-	if len(prompt.Questions) != 1 || len(prompt.Questions[0].Options) != 1 {
+	if len(prompt.Questions) != 1 || len(prompt.Questions[0].Choices) != 2 {
 		t.Fatalf("prompt questions=%+v", prompt.Questions)
 	}
-	if got := prompt.Questions[0].Options[0].DetailInputMode; got != requestUserInputDetailInputRequired {
-		t.Fatalf("detail mode=%q, want %q", got, requestUserInputDetailInputRequired)
+	if got := prompt.Questions[0].Choices[1].Kind; got != requestUserInputChoiceKindWrite {
+		t.Fatalf("write choice kind=%q, want %q", got, requestUserInputChoiceKindWrite)
+	}
+
+	normalized, err := validateRequestUserInputResponse(prompt, &RequestUserInputResponse{
+		PromptID: prompt.PromptID,
+		Answers: map[string]RequestUserInputAnswer{
+			"direction": {
+				Text: "Need a custom direction",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("validateRequestUserInputResponse legacy other fallback: %v", err)
+	}
+	if got := normalized.Answers["direction"].ChoiceID; got != "other" {
+		t.Fatalf("choice_id=%q, want %q", got, "other")
 	}
 }
 
-func TestBuildRequestUserInputResponseRecord_IncludesSelectedOptionDetailInSummary(t *testing.T) {
+func TestParseRequestUserInputPromptJSON_NormalizesLegacyOptionDetailToWriteChoice(t *testing.T) {
+	t.Parallel()
+
+	prompt := parseRequestUserInputPromptJSON(`{
+		"prompt_id":"rui_msg_legacy_optional_tool_legacy_optional",
+		"message_id":"msg_legacy_optional",
+		"tool_id":"tool_legacy_optional",
+		"questions":[{
+			"id":"direction",
+			"header":"Direction",
+			"question":"Choose the next direction.",
+			"is_secret":false,
+			"options":[{
+				"option_id":"other",
+				"label":"Other",
+				"detail_input_mode":"optional",
+				"detail_input_placeholder":"Describe the custom path"
+			}]
+		}]
+	}`)
+	if prompt == nil {
+		t.Fatalf("prompt should not be nil")
+	}
+	if len(prompt.Questions) != 1 || len(prompt.Questions[0].Choices) != 1 {
+		t.Fatalf("prompt questions=%+v", prompt.Questions)
+	}
+	if got := prompt.Questions[0].Choices[0].Kind; got != requestUserInputChoiceKindWrite {
+		t.Fatalf("choice kind=%q, want %q", got, requestUserInputChoiceKindWrite)
+	}
+	if got := prompt.Questions[0].Choices[0].InputPlaceholder; got != "Describe the custom path" {
+		t.Fatalf("input placeholder=%q, want %q", got, "Describe the custom path")
+	}
+}
+
+func TestBuildRequestUserInputResponseRecord_IncludesWriteChoiceTextInSummary(t *testing.T) {
 	t.Parallel()
 
 	prompt := testRequestUserInputPrompt(
@@ -159,13 +147,11 @@ func TestBuildRequestUserInputResponseRecord_IncludesSelectedOptionDetailInSumma
 				ID:       "situation",
 				Header:   "Situation",
 				Question: "Choose the closest situation.",
-				IsOther:  false,
-				IsSecret: false,
-				Options: []RequestUserInputOption{
+				Choices: []RequestUserInputChoice{
 					{
-						OptionID:        "other",
-						Label:           "Other",
-						DetailInputMode: requestUserInputDetailInputRequired,
+						ChoiceID: "other",
+						Label:    "Other",
+						Kind:     requestUserInputChoiceKindWrite,
 					},
 				},
 			},
@@ -179,8 +165,8 @@ func TestBuildRequestUserInputResponseRecord_IncludesSelectedOptionDetailInSumma
 		PromptID: prompt.PromptID,
 		Answers: map[string]RequestUserInputAnswer{
 			"situation": {
-				SelectedOptionID: "other",
-				Answers:          []string{"Working and studying part time"},
+				ChoiceID: "other",
+				Text:     "Working and studying part time",
 			},
 		},
 	}, "msg_user_1")

@@ -692,11 +692,11 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 	nextExecutionMode := resolvedExecutionMode
 	for _, question := range openPrompt.Questions {
 		answer := validatedResponse.Answers[question.ID]
-		option, ok := requestUserInputOptionByID(&question, answer.SelectedOptionID)
-		if !ok || option == nil {
+		choice, ok := requestUserInputChoiceByID(&question, answer.ChoiceID)
+		if !ok || choice == nil {
 			continue
 		}
-		for _, action := range option.Actions {
+		for _, action := range choice.Actions {
 			normalizedAction, ok := normalizeRequestUserInputAction(action)
 			if !ok {
 				continue

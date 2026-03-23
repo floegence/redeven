@@ -28,6 +28,14 @@ import {
   type Message,
   type MessageRole,
 } from '../chat';
+import {
+  normalizeAskUserDraft,
+  normalizeAskUserDraftForQuestion,
+  questionCanAutofillFromComposer,
+  questionHasDraftAnswer,
+  type AskUserDraft,
+  type AskUserQuestion,
+} from '../chat/askUserContract';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
 import { useAIChatContext } from './AIChatContext';
@@ -1613,7 +1621,7 @@ const SUGGESTIONS: SuggestionItem[] = [
     description: 'Guided Q&A to choose your destination',
     prompt: [
       'Help me choose a travel destination through guided Q&A.',
-      'Use ask_user one question at a time with 3 concise options (best option first).',
+      'Use ask_user one question at a time with concise explicit choices (best choice first).',
       'Cover budget, trip length, weather preference, travel pace, and visa constraints.',
       'After enough info, recommend top 3 destinations with pros/cons, best season, and budget range.',
     ].join('\n'),
@@ -2493,7 +2501,7 @@ export function EnvAIPage() {
     if (!hasDraftPayload) return null;
 
     const tid = String(ai.activeThreadId() ?? '').trim();
-    const promptId = String(waitingPrompt?.prompt_id ?? '').trim();
+    const promptId = String(waitingPrompt?.promptId ?? '').trim();
     if (!tid || !promptId) {
       return 'The pending input request is no longer available.';
     }
@@ -3658,7 +3666,7 @@ export function EnvAIPage() {
     | {
         kind: 'submit';
         promptId: string;
-        answers: Record<string, { selectedOptionId?: string; answers: string[] }>;
+        answers: Record<string, AskUserDraft>;
         inputText: string;
       }
     | {
@@ -3703,116 +3711,18 @@ export function EnvAIPage() {
     chatInputApi()?.focusInput();
   };
 
-  const normalizeStructuredDraftAnswer = (draft: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean } | undefined) => ({
-    selectedOptionId: String(draft?.selectedOptionId ?? '').trim() || undefined,
-    answers: Array.isArray(draft?.answers) ? draft.answers.map((item) => String(item ?? '').trim()).filter(Boolean) : [],
-    useOtherFallback: Boolean(draft?.useOtherFallback),
-  });
+  const normalizeStructuredDraftAnswer = (draft: AskUserDraft | undefined) => normalizeAskUserDraft(draft);
 
-  const selectedWaitingPromptOption = (question: {
-    options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
-  }, draft: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean } | undefined) => {
-    const normalized = normalizeStructuredDraftAnswer(draft);
-    const selectedOptionId = String(normalized.selectedOptionId ?? '').trim();
-    if (!selectedOptionId) return undefined;
-    const options = Array.isArray(question.options) ? question.options : [];
-    return options.find((option) => String(option?.option_id ?? '').trim() === selectedOptionId);
-  };
-
-  const waitingPromptQuestionHasOtherFallback = (question: {
-    is_other?: boolean;
-    options?: ReadonlyArray<unknown>;
-  }): boolean => {
-    const options = Array.isArray(question.options) ? question.options : [];
-    return Boolean(question.is_other) && options.length > 0;
-  };
-
-  const canonicalWaitingPromptDetailMode = (mode: unknown): 'required' | '' => {
-    const normalized = String(mode ?? '').trim().toLowerCase();
-    return normalized === 'optional' || normalized === 'required' ? 'required' : '';
-  };
-
-  const waitingPromptQuestionAllowsText = (question: {
-    is_other?: boolean;
-    options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
-  }, draft: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean } | undefined): boolean => {
-    const normalized = normalizeStructuredDraftAnswer(draft);
-    const options = Array.isArray(question.options) ? question.options : [];
-    if (options.length === 0) {
-      return true;
-    }
-    const selectedOption = selectedWaitingPromptOption(question, normalized);
-    if (canonicalWaitingPromptDetailMode(selectedOption?.detail_input_mode) === 'required') {
-      return true;
-    }
-    return waitingPromptQuestionHasOtherFallback(question) && !normalized.selectedOptionId;
-  };
-
-  const waitingPromptQuestionRequiresText = (question: {
-    is_other?: boolean;
-    options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
-  }, draft: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean } | undefined): boolean => {
-    const normalized = normalizeStructuredDraftAnswer(draft);
-    const options = Array.isArray(question.options) ? question.options : [];
-    if (options.length === 0) {
-      return true;
-    }
-    if (canonicalWaitingPromptDetailMode(selectedWaitingPromptOption(question, normalized)?.detail_input_mode) === 'required') {
-      return true;
-    }
-    return waitingPromptQuestionHasOtherFallback(question)
-      && !normalized.selectedOptionId
-      && (normalized.useOtherFallback || normalized.answers.length > 0);
-  };
-
-  const waitingPromptQuestionRequiresSelection = (question: {
-    is_other?: boolean;
-    options?: ReadonlyArray<unknown>;
-  }): boolean => {
-    const options = Array.isArray(question.options) ? question.options : [];
-    return options.length > 0 && !question.is_other;
-  };
-
-  const hasStructuredDraftAnswer = (
-    question: {
-      is_other?: boolean;
-      options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
-    },
-    draft: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean } | undefined,
-  ): boolean => {
-    const normalized = normalizeStructuredDraftAnswer(draft);
-    const hasSelection = Boolean(normalized.selectedOptionId);
-    const hasText = normalized.answers.length > 0;
-    if (waitingPromptQuestionRequiresSelection(question) && !hasSelection) {
-      return false;
-    }
-    if (!waitingPromptQuestionRequiresSelection(question) && !hasSelection && !hasText) {
-      return false;
-    }
-    if (!waitingPromptQuestionAllowsText(question, normalized) && hasText) {
-      return false;
-    }
-    if (waitingPromptQuestionRequiresText(question, normalized) && !hasText) {
-      return false;
-    }
-    return true;
-  };
-
-  const canComposerAutofillWaitingQuestion = (question: {
-    is_secret?: boolean;
-    is_other?: boolean;
-    options?: ReadonlyArray<{ option_id?: string; detail_input_mode?: string }>;
-  }, draft: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean } | undefined): boolean => {
-    if (question.is_secret) return false;
-    return waitingPromptQuestionAllowsText(question, draft);
-  };
+  const hasStructuredDraftAnswer = (question: AskUserQuestion, draft: AskUserDraft | undefined): boolean => (
+    questionHasDraftAnswer(question, draft)
+  );
 
   const buildStructuredComposerSendPlan = (args: {
     waitingPrompt: ReturnType<typeof ai.activeThreadWaitingPrompt>;
     composerText: string;
-    drafts: Record<string, { selectedOptionId?: string; answers: string[] }>;
+    drafts: Record<string, AskUserDraft>;
   }): StructuredComposerSendPlan => {
-    const promptId = String(args.waitingPrompt?.prompt_id ?? '').trim();
+    const promptId = String(args.waitingPrompt?.promptId ?? '').trim();
     if (!promptId) {
       return {
         kind: 'error',
@@ -3821,14 +3731,15 @@ export function EnvAIPage() {
       };
     }
 
-    const answers: Record<string, { selectedOptionId?: string; answers: string[] }> = {};
-    Object.entries(args.drafts ?? {}).forEach(([questionId, draft]) => {
-      const qid = String(questionId ?? '').trim();
-      if (!qid) return;
-      answers[qid] = normalizeStructuredDraftAnswer(draft);
-    });
-
     const questions = Array.isArray(args.waitingPrompt?.questions) ? args.waitingPrompt.questions : [];
+    const answers: Record<string, AskUserDraft> = {};
+    questions.forEach((question) => {
+      const qid = String(question.id ?? '').trim();
+      if (!qid) return;
+      const draft = args.drafts?.[qid];
+      if (!draft) return;
+      answers[qid] = normalizeAskUserDraftForQuestion(question, normalizeStructuredDraftAnswer(draft));
+    });
     const unanswered = questions.filter((question) => !hasStructuredDraftAnswer(question, answers[String(question.id ?? '').trim()]));
     const composerText = String(args.composerText ?? '').trim();
 
@@ -3836,14 +3747,14 @@ export function EnvAIPage() {
       const question = unanswered[0];
       const questionId = String(question.id ?? '').trim();
       const currentDraft = answers[questionId];
-      if (question.is_secret) {
+      if (question.isSecret) {
         return {
           kind: 'error',
           title: 'Input required',
           description: 'Use the inline input card to answer secret requests.',
         };
       }
-      if (!canComposerAutofillWaitingQuestion(question, currentDraft)) {
+      if (!questionCanAutofillFromComposer(question, currentDraft)) {
         return {
           kind: 'error',
           title: 'Input required',
@@ -3851,9 +3762,10 @@ export function EnvAIPage() {
         };
       }
       answers[questionId] = {
-        selectedOptionId: currentDraft?.selectedOptionId,
-        answers: [composerText],
+        choiceId: currentDraft?.choiceId,
+        text: composerText,
       };
+      answers[questionId] = normalizeAskUserDraftForQuestion(question, answers[questionId]);
     } else if (composerText && unanswered.length > 1) {
       return {
         kind: 'error',
@@ -3864,7 +3776,7 @@ export function EnvAIPage() {
 
     const remaining = questions.filter((question) => !hasStructuredDraftAnswer(question, answers[String(question.id ?? '').trim()]));
     if (remaining.length > 0) {
-      const secretOnly = remaining.every((question) => Boolean(question.is_secret));
+      const secretOnly = remaining.every((question) => Boolean(question.isSecret));
       return {
         kind: 'error',
         title: 'Input required',
@@ -3891,7 +3803,7 @@ export function EnvAIPage() {
   ) => {
     const tid = String(threadId ?? '').trim();
     const waitingPrompt = ai.activeThreadWaitingPrompt();
-    const promptId = String(waitingPrompt?.prompt_id ?? '').trim();
+    const promptId = String(waitingPrompt?.promptId ?? '').trim();
     if (!tid || !promptId) {
       rollbackRejectedComposerSend(context);
       throw new Error('The pending input request is no longer available.');
@@ -4028,7 +3940,7 @@ export function EnvAIPage() {
     }));
     const activeTid = String(ai.activeThreadId() ?? '').trim();
     const activeWaitingPrompt = tid === activeTid ? ai.activeThreadWaitingPrompt() : null;
-    const waitingPromptId = String(activeWaitingPrompt?.prompt_id ?? '').trim();
+    const waitingPromptId = String(activeWaitingPrompt?.promptId ?? '').trim();
 
     ai.markThreadPendingRun(tid);
 

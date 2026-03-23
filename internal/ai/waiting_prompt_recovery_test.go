@@ -19,29 +19,30 @@ func testWaitingPromptAssistantMessageJSON(t *testing.T, prompt *RequestUserInpu
 
 	questionPayloads := make([]any, 0, len(prompt.Questions))
 	for _, question := range prompt.Questions {
-		optionPayloads := make([]any, 0, len(question.Options))
-		for _, option := range question.Options {
-			actionPayloads := make([]any, 0, len(option.Actions))
-			for _, action := range option.Actions {
+		choicePayloads := make([]any, 0, len(question.Choices))
+		for _, choice := range question.Choices {
+			actionPayloads := make([]any, 0, len(choice.Actions))
+			for _, action := range choice.Actions {
 				actionPayloads = append(actionPayloads, map[string]any{
 					"type": action.Type,
 					"mode": action.Mode,
 				})
 			}
-			optionPayloads = append(optionPayloads, map[string]any{
-				"option_id":   option.OptionID,
-				"label":       option.Label,
-				"description": option.Description,
-				"actions":     actionPayloads,
+			choicePayloads = append(choicePayloads, map[string]any{
+				"choice_id":         choice.ChoiceID,
+				"label":             choice.Label,
+				"description":       choice.Description,
+				"kind":              choice.Kind,
+				"input_placeholder": choice.InputPlaceholder,
+				"actions":           actionPayloads,
 			})
 		}
 		questionPayloads = append(questionPayloads, map[string]any{
 			"id":        question.ID,
 			"header":    question.Header,
 			"question":  question.Question,
-			"is_other":  question.IsOther,
 			"is_secret": question.IsSecret,
-			"options":   optionPayloads,
+			"choices":   choicePayloads,
 		})
 	}
 
@@ -127,10 +128,11 @@ func TestRequestUserInputPromptFromMessageJSON_ExtractsWaitingPrompt(t *testing.
 				ID:       "mode_decision",
 				Header:   "Execution mode",
 				Question: "Switch to Act mode?",
-				Options: []RequestUserInputOption{
+				Choices: []RequestUserInputChoice{
 					{
-						OptionID: "switch_to_act",
+						ChoiceID: "switch_to_act",
 						Label:    "Switch to Act mode",
+						Kind:     requestUserInputChoiceKindSelect,
 						Actions: []RequestUserInputAction{
 							{Type: requestUserInputActionSetMode, Mode: "act"},
 						},
@@ -154,8 +156,8 @@ func TestRequestUserInputPromptFromMessageJSON_ExtractsWaitingPrompt(t *testing.
 	if len(got.Questions) != 1 || got.Questions[0].ID != "mode_decision" {
 		t.Fatalf("Questions=%+v", got.Questions)
 	}
-	if len(got.Questions[0].Options) != 1 || got.Questions[0].Options[0].OptionID != "switch_to_act" {
-		t.Fatalf("Options=%+v", got.Questions[0].Options)
+	if len(got.Questions[0].Choices) != 1 || got.Questions[0].Choices[0].ChoiceID != "switch_to_act" {
+		t.Fatalf("Choices=%+v", got.Questions[0].Choices)
 	}
 }
 
@@ -308,7 +310,7 @@ func TestSubmitStructuredPromptResponse_RecoversWaitingPromptFromTranscriptWhenS
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Response: testResponseForPrompt(prompt, map[string]RequestUserInputAnswer{
-			"question_1": {Answers: []string{"continue with the fix"}},
+			"question_1": {Text: "continue with the fix"},
 		}),
 		Input: RunInput{
 			Text: "continue with the fix",

@@ -17,6 +17,14 @@ import { fetchGatewayJSON } from '../services/gatewayApi';
 import { readUIStorageItem, removeUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { hasRWXPermissions } from './aiPermissions';
 import {
+  normalizeAskUserDraft,
+  normalizeAskUserQuestions,
+  type AskUserAction,
+  type AskUserChoice,
+  type AskUserDraft,
+  type AskUserQuestion,
+} from '../chat/askUserContract';
+import {
   buildThreadReadStateBaseline,
   markThreadReadFromSnapshot,
   normalizeThreadReadStateByThread,
@@ -39,46 +47,23 @@ export type SettingsResponse = Readonly<{
 export type ThreadRunStatus = 'idle' | 'accepted' | 'running' | 'waiting_approval' | 'recovering' | 'finalizing' | 'waiting_user' | 'success' | 'failed' | 'canceled' | 'timed_out';
 export type ExecutionMode = 'act' | 'plan';
 
-export type WaitingPromptActionView = Readonly<{
-  type: string;
-  mode?: ExecutionMode;
-}>;
-
-export type WaitingPromptOptionView = Readonly<{
-  option_id: string;
-  label: string;
-  description?: string;
-  detail_input_mode?: 'required';
-  detail_input_placeholder?: string;
-  actions?: WaitingPromptActionView[];
-}>;
-
-export type WaitingPromptQuestionView = Readonly<{
-  id: string;
-  header: string;
-  question: string;
-  is_other: boolean;
-  is_secret: boolean;
-  options?: WaitingPromptOptionView[];
-}>;
+export type WaitingPromptActionView = AskUserAction;
+export type WaitingPromptChoiceView = AskUserChoice;
+export type WaitingPromptQuestionView = AskUserQuestion;
 
 export type WaitingPromptView = Readonly<{
-  prompt_id: string;
-  message_id: string;
-  tool_id: string;
-  reason_code?: string;
-  required_from_user?: string[];
-  evidence_refs?: string[];
-  public_summary?: string;
-  contains_secret?: boolean;
+  promptId: string;
+  messageId: string;
+  toolId: string;
+  reasonCode?: string;
+  requiredFromUser?: string[];
+  evidenceRefs?: string[];
+  publicSummary?: string;
+  containsSecret?: boolean;
   questions?: WaitingPromptQuestionView[];
 }>;
 
-export type StructuredPromptAnswerDraft = Readonly<{
-  selectedOptionId?: string;
-  answers: string[];
-  useOtherFallback?: boolean;
-}>;
+export type StructuredPromptAnswerDraft = AskUserDraft;
 
 export type ThreadView = Readonly<{
   thread_id: string;
@@ -170,102 +155,26 @@ function normalizeExecutionMode(raw: unknown): ExecutionMode {
   return mode === 'plan' ? 'plan' : 'act';
 }
 
-function normalizeWaitingPromptActions(raw: unknown): WaitingPromptActionView[] {
-  if (!Array.isArray(raw)) return [];
-  const out: WaitingPromptActionView[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') continue;
-    const type = String((item as any).type ?? '').trim().toLowerCase();
-    if (!type) continue;
-    const mode = normalizeExecutionMode((item as any).mode);
-    out.push({
-      type,
-      mode: type === 'set_mode' ? mode : undefined,
-    });
-    if (out.length >= 4) break;
-  }
-  return out;
-}
-
-function normalizeWaitingPromptOptions(raw: unknown): WaitingPromptOptionView[] {
-  if (!Array.isArray(raw)) return [];
-  const out: WaitingPromptOptionView[] = [];
-  const seenOption = new Set<string>();
-  const seenLabel = new Set<string>();
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') continue;
-    const label = String((item as any).label ?? '').trim();
-    if (!label) continue;
-    const optionID = String((item as any).option_id ?? (item as any).optionId ?? '').trim() || `option_${out.length + 1}`;
-    const optionKey = optionID.toLowerCase();
-    const labelKey = label.toLowerCase();
-    if (seenOption.has(optionKey) || seenLabel.has(labelKey)) continue;
-    seenOption.add(optionKey);
-    seenLabel.add(labelKey);
-    const actions = normalizeWaitingPromptActions((item as any).actions);
-    out.push({
-      option_id: optionID,
-      label,
-      description: String((item as any).description ?? '').trim() || undefined,
-      detail_input_mode: (() => {
-        const mode = String((item as any).detail_input_mode ?? '').trim().toLowerCase();
-        return mode === 'optional' || mode === 'required' ? 'required' : undefined;
-      })(),
-      detail_input_placeholder: String((item as any).detail_input_placeholder ?? '').trim() || undefined,
-      actions: actions.length > 0 ? actions : undefined,
-    });
-    if (out.length >= 4) break;
-  }
-  return out;
-}
-
-function normalizeWaitingPromptQuestions(raw: unknown): WaitingPromptQuestionView[] {
-  if (!Array.isArray(raw)) return [];
-  const out: WaitingPromptQuestionView[] = [];
-  const seen = new Set<string>();
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') continue;
-    const id = String((item as any).id ?? '').trim();
-    const header = String((item as any).header ?? '').trim();
-    const question = String((item as any).question ?? '').trim();
-    if (!id || !header || !question) continue;
-    const key = id.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const options = normalizeWaitingPromptOptions((item as any).options);
-    out.push({
-      id,
-      header,
-      question,
-      is_other: Boolean((item as any).is_other),
-      is_secret: Boolean((item as any).is_secret),
-      options: options.length > 0 ? options : undefined,
-    });
-    if (out.length >= 5) break;
-  }
-  return out;
-}
-
 function normalizeWaitingPrompt(raw: any): WaitingPromptView | null {
   if (!raw || typeof raw !== 'object') return null;
   const promptID = String((raw as any).prompt_id ?? (raw as any).promptId ?? '').trim();
   const messageID = String((raw as any).message_id ?? (raw as any).messageId ?? '').trim();
   const toolID = String((raw as any).tool_id ?? (raw as any).toolId ?? '').trim();
   if (!promptID || !messageID || !toolID) return null;
-  const questions = normalizeWaitingPromptQuestions((raw as any).questions);
+  const questions = normalizeAskUserQuestions((raw as any).questions);
   return {
-    prompt_id: promptID,
-    message_id: messageID,
-    tool_id: toolID,
-    reason_code: String((raw as any).reason_code ?? (raw as any).reasonCode ?? '').trim() || undefined,
-    required_from_user: Array.isArray((raw as any).required_from_user)
+    promptId: promptID,
+    messageId: messageID,
+    toolId: toolID,
+    reasonCode: String((raw as any).reason_code ?? (raw as any).reasonCode ?? '').trim() || undefined,
+    requiredFromUser: Array.isArray((raw as any).required_from_user)
       ? (raw as any).required_from_user.map((item: unknown) => String(item ?? '').trim()).filter(Boolean)
       : undefined,
-    evidence_refs: Array.isArray((raw as any).evidence_refs)
+    evidenceRefs: Array.isArray((raw as any).evidence_refs)
       ? (raw as any).evidence_refs.map((item: unknown) => String(item ?? '').trim()).filter(Boolean)
       : undefined,
-    public_summary: String((raw as any).public_summary ?? (raw as any).publicSummary ?? '').trim() || undefined,
-    contains_secret: Boolean((raw as any).contains_secret ?? (raw as any).containsSecret),
+    publicSummary: String((raw as any).public_summary ?? (raw as any).publicSummary ?? '').trim() || undefined,
+    containsSecret: Boolean((raw as any).contains_secret ?? (raw as any).containsSecret),
     questions: questions.length > 0 ? questions : undefined,
   };
 }
@@ -512,7 +421,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const waitingPrompt = waitingPromptForThread(tid);
     return {
       lastMessageAtUnixMs: Math.max(0, Math.floor(Number(thread?.last_message_at_unix_ms ?? 0) || 0)),
-      waitingPromptId: String(waitingPrompt?.prompt_id ?? '').trim() || undefined,
+      waitingPromptId: String(waitingPrompt?.promptId ?? '').trim() || undefined,
     };
   };
 
@@ -553,7 +462,7 @@ export function createAIChatContextValue(): AIChatContextValue {
         threadId: thread.thread_id,
         snapshot: {
           lastMessageAtUnixMs: thread.last_message_at_unix_ms,
-          waitingPromptId: String(thread.waiting_prompt?.prompt_id ?? '').trim() || undefined,
+          waitingPromptId: normalizeWaitingPrompt((thread as any)?.waiting_prompt)?.promptId,
         },
       }))),
       ...threadReadStateByThread(),
@@ -611,11 +520,7 @@ export function createAIChatContextValue(): AIChatContextValue {
       });
       return;
     }
-    const normalized: StructuredPromptAnswerDraft = {
-      selectedOptionId: String(draft.selectedOptionId ?? '').trim() || undefined,
-      answers: Array.isArray(draft.answers) ? draft.answers.map((item) => String(item ?? '').trim()).filter(Boolean) : [],
-      useOtherFallback: Boolean(draft.useOtherFallback) || undefined,
-    };
+    const normalized = normalizeAskUserDraft(draft);
     setStructuredPromptDraftsByPrompt((prev) => ({
       ...prev,
       [key]: {
@@ -641,14 +546,11 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (!model) {
       throw new Error('Missing model.');
     }
-    const answers: Record<string, { selectedOptionId?: string; answers: string[] }> = {};
+    const answers: Record<string, { choiceId?: string; text?: string }> = {};
     for (const [questionId, draft] of Object.entries(args.answers ?? {})) {
       const qid = String(questionId ?? '').trim();
       if (!qid) continue;
-      answers[qid] = {
-        selectedOptionId: String(draft?.selectedOptionId ?? '').trim() || undefined,
-        answers: Array.isArray(draft?.answers) ? draft.answers.map((item) => String(item ?? '').trim()).filter(Boolean) : [],
-      };
+      answers[qid] = normalizeAskUserDraft(draft);
     }
 
     markThreadPendingRun(tid);
@@ -735,7 +637,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (!tid || !pid) return;
 
     const current = waitingPromptForThread(tid);
-    if (!current || String(current.prompt_id ?? '').trim() !== pid) return;
+    if (!current || String(current.promptId ?? '').trim() !== pid) return;
     setWaitingPromptByThread((prev) => ({ ...prev, [tid]: null }));
     clearPendingWaitingChoicesForThread(tid);
   };
@@ -789,7 +691,7 @@ export function createAIChatContextValue(): AIChatContextValue {
         clearThreadPendingRun(tid);
       }
       if (waitingPrompt) {
-        clearPendingWaitingChoicesForThread(tid, waitingPrompt.prompt_id);
+        clearPendingWaitingChoicesForThread(tid, waitingPrompt.promptId);
       } else {
         clearPendingWaitingChoicesForThread(tid);
       }
@@ -830,7 +732,7 @@ export function createAIChatContextValue(): AIChatContextValue {
       clearThreadPendingRun(tid);
     }
     if (waitingPrompt) {
-      clearPendingWaitingChoicesForThread(tid, waitingPrompt.prompt_id);
+      clearPendingWaitingChoicesForThread(tid, waitingPrompt.promptId);
     } else {
       clearPendingWaitingChoicesForThread(tid);
     }

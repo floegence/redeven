@@ -127,9 +127,9 @@ export interface RequestUserInputResponseBlock {
     question_id: string;
     header?: string;
     question?: string;
-    selected_option_id?: string;
-    selected_option_label?: string;
-    answers?: string[];
+    selected_choice_id?: string;
+    selected_choice_label?: string;
+    text?: string;
     public_summary?: string;
     contains_secret?: boolean;
   }>;

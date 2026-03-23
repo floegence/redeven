@@ -293,12 +293,12 @@ func TestSnapshotWaitingPrompt_ExtractsStructuredQuestions(t *testing.T) {
 							"id":        "mode_decision",
 							"header":    "Execution mode",
 							"question":  "Need your confirmation",
-							"is_other":  false,
 							"is_secret": false,
-							"options": []any{
+							"choices": []any{
 								map[string]any{
-									"option_id": "switch_to_act",
+									"choice_id": "switch_to_act",
 									"label":     "Switch to Act mode",
+									"kind":      "select",
 									"actions": []any{
 										map[string]any{
 											"type": "set_mode",
@@ -316,12 +316,12 @@ func TestSnapshotWaitingPrompt_ExtractsStructuredQuestions(t *testing.T) {
 							"id":        "mode_decision",
 							"header":    "Execution mode",
 							"question":  "Need your confirmation",
-							"is_other":  false,
 							"is_secret": false,
-							"options": []any{
+							"choices": []any{
 								map[string]any{
-									"option_id": "switch_to_act",
+									"choice_id": "switch_to_act",
 									"label":     "Switch to Act mode",
+									"kind":      "select",
 									"actions": []any{
 										map[string]any{
 											"type": "set_mode",
@@ -363,22 +363,22 @@ func TestSnapshotWaitingPrompt_ExtractsStructuredQuestions(t *testing.T) {
 	if got := strings.TrimSpace(prompt.Questions[0].ID); got != "mode_decision" {
 		t.Fatalf("question id=%q, want %q", got, "mode_decision")
 	}
-	if len(prompt.Questions[0].Options) != 1 {
-		t.Fatalf("options len=%d, want 1", len(prompt.Questions[0].Options))
+	if len(prompt.Questions[0].Choices) != 1 {
+		t.Fatalf("choices len=%d, want 1", len(prompt.Questions[0].Choices))
 	}
-	if got := strings.TrimSpace(prompt.Questions[0].Options[0].OptionID); got != "switch_to_act" {
-		t.Fatalf("option id=%q, want %q", got, "switch_to_act")
+	if got := strings.TrimSpace(prompt.Questions[0].Choices[0].ChoiceID); got != "switch_to_act" {
+		t.Fatalf("choice id=%q, want %q", got, "switch_to_act")
 	}
-	if got := strings.TrimSpace(prompt.Questions[0].Options[0].Label); got != "Switch to Act mode" {
+	if got := strings.TrimSpace(prompt.Questions[0].Choices[0].Label); got != "Switch to Act mode" {
 		t.Fatalf("label=%q, want %q", got, "Switch to Act mode")
 	}
-	if len(prompt.Questions[0].Options[0].Actions) != 1 {
-		t.Fatalf("actions len=%d, want 1", len(prompt.Questions[0].Options[0].Actions))
+	if len(prompt.Questions[0].Choices[0].Actions) != 1 {
+		t.Fatalf("actions len=%d, want 1", len(prompt.Questions[0].Choices[0].Actions))
 	}
-	if got := strings.TrimSpace(prompt.Questions[0].Options[0].Actions[0].Type); got != requestUserInputActionSetMode {
+	if got := strings.TrimSpace(prompt.Questions[0].Choices[0].Actions[0].Type); got != requestUserInputActionSetMode {
 		t.Fatalf("action type=%q, want %q", got, requestUserInputActionSetMode)
 	}
-	if got := strings.TrimSpace(prompt.Questions[0].Options[0].Actions[0].Mode); got != "act" {
+	if got := strings.TrimSpace(prompt.Questions[0].Choices[0].Actions[0].Mode); got != "act" {
 		t.Fatalf("action mode=%q, want %q", got, "act")
 	}
 }

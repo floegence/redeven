@@ -231,8 +231,7 @@ func defaultGuardAskUserSignal(question string, options []string, source string,
 			ID:       "question_1",
 			Header:   strings.TrimSpace(question),
 			Question: strings.TrimSpace(question),
-			IsOther:  true,
-			Options:  requestUserInputOptionsFromLabels(options),
+			Choices:  requestUserInputChoicesFromLabels(options),
 		}}),
 	}
 	switch strings.TrimSpace(source) {

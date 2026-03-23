@@ -37,18 +37,17 @@ type RequestUserInputQuestion struct {
 	ID       string                   `json:"id"`
 	Header   string                   `json:"header"`
 	Question string                   `json:"question"`
-	IsOther  bool                     `json:"is_other"`
 	IsSecret bool                     `json:"is_secret"`
-	Options  []RequestUserInputOption `json:"options,omitempty"`
+	Choices  []RequestUserInputChoice `json:"choices,omitempty"`
 }
 
-type RequestUserInputOption struct {
-	OptionID               string                   `json:"option_id"`
-	Label                  string                   `json:"label"`
-	Description            string                   `json:"description,omitempty"`
-	DetailInputMode        string                   `json:"detail_input_mode,omitempty"`
-	DetailInputPlaceholder string                   `json:"detail_input_placeholder,omitempty"`
-	Actions                []RequestUserInputAction `json:"actions,omitempty"`
+type RequestUserInputChoice struct {
+	ChoiceID         string                   `json:"choice_id"`
+	Label            string                   `json:"label"`
+	Description      string                   `json:"description,omitempty"`
+	Kind             string                   `json:"kind"`
+	InputPlaceholder string                   `json:"input_placeholder,omitempty"`
+	Actions          []RequestUserInputAction `json:"actions,omitempty"`
 }
 
 type RequestUserInputAction struct {
@@ -62,19 +61,19 @@ type RequestUserInputResponse struct {
 }
 
 type RequestUserInputAnswer struct {
-	SelectedOptionID string   `json:"selected_option_id,omitempty"`
-	Answers          []string `json:"answers,omitempty"`
+	ChoiceID string `json:"choice_id,omitempty"`
+	Text     string `json:"text,omitempty"`
 }
 
 type RequestUserInputResolvedQuestion struct {
-	QuestionID          string   `json:"question_id"`
-	Header              string   `json:"header,omitempty"`
-	Question            string   `json:"question,omitempty"`
-	SelectedOptionID    string   `json:"selected_option_id,omitempty"`
-	SelectedOptionLabel string   `json:"selected_option_label,omitempty"`
-	Answers             []string `json:"answers,omitempty"`
-	PublicSummary       string   `json:"public_summary,omitempty"`
-	ContainsSecret      bool     `json:"contains_secret,omitempty"`
+	QuestionID          string `json:"question_id"`
+	Header              string `json:"header,omitempty"`
+	Question            string `json:"question,omitempty"`
+	SelectedChoiceID    string `json:"selected_choice_id,omitempty"`
+	SelectedChoiceLabel string `json:"selected_choice_label,omitempty"`
+	Text                string `json:"text,omitempty"`
+	PublicSummary       string `json:"public_summary,omitempty"`
+	ContainsSecret      bool   `json:"contains_secret,omitempty"`
 }
 
 type RequestUserInputResponseRecord struct {
@@ -88,8 +87,42 @@ type RequestUserInputResponseRecord struct {
 }
 
 type RequestUserInputSecretAnswer struct {
-	QuestionID string   `json:"question_id"`
-	Answers    []string `json:"answers,omitempty"`
+	QuestionID string `json:"question_id"`
+	Text       string `json:"text,omitempty"`
+}
+
+func (a *RequestUserInputAnswer) UnmarshalJSON(data []byte) error {
+	type answerJSON struct {
+		ChoiceID         string   `json:"choice_id"`
+		Text             string   `json:"text"`
+		SelectedOptionID string   `json:"selected_option_id"`
+		Answers          []string `json:"answers"`
+	}
+	var raw answerJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	choiceID := strings.TrimSpace(raw.ChoiceID)
+	if choiceID == "" {
+		choiceID = strings.TrimSpace(raw.SelectedOptionID)
+	}
+	text := strings.TrimSpace(raw.Text)
+	if text == "" && len(raw.Answers) > 0 {
+		parts := make([]string, 0, len(raw.Answers))
+		for _, item := range raw.Answers {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			parts = append(parts, item)
+		}
+		text = strings.TrimSpace(strings.Join(parts, "\n"))
+	}
+	*a = RequestUserInputAnswer{
+		ChoiceID: choiceID,
+		Text:     text,
+	}
+	return nil
 }
 
 type SubmitStructuredPromptResponseRequest struct {

@@ -13,21 +13,20 @@ type MockThread = {
 };
 
 type MockWaitingPrompt = {
-  prompt_id: string;
-  message_id: string;
-  tool_id: string;
+  promptId: string;
+  messageId: string;
+  toolId: string;
   questions?: Array<{
     id: string;
     header: string;
     question: string;
-    is_other?: boolean;
-    is_secret?: boolean;
-    options?: Array<{
-      option_id: string;
+    isSecret?: boolean;
+    choices: Array<{
+      choiceId: string;
       label: string;
       description?: string;
-      detail_input_mode?: string;
-      detail_input_placeholder?: string;
+      kind: 'select' | 'write';
+      inputPlaceholder?: string;
     }>;
   }>;
 };
@@ -140,7 +139,7 @@ const aiState = {
   activeThreadId: '' as string,
   activeThread: null as MockThread | null,
   waitingPrompt: null as MockWaitingPrompt | null,
-  structuredDrafts: {} as Record<string, { selectedOptionId?: string; answers: string[]; useOtherFallback?: boolean }>,
+  structuredDrafts: {} as Record<string, { choiceId?: string; text?: string }>,
   runIdByThread: {} as Record<string, string>,
 };
 
@@ -159,7 +158,7 @@ const aiContextValue = new Proxy({
   activeThreadWaitingPrompt: () => aiState.waitingPrompt,
   getStructuredPromptDrafts: () => aiState.structuredDrafts,
   submitStructuredPromptResponse: submitStructuredPromptResponseMock,
-  setStructuredPromptDraft: (_threadId: string, _promptId: string, questionId: string, draft: { selectedOptionId?: string; answers: string[]; useOtherFallback?: boolean } | null) => {
+  setStructuredPromptDraft: (_threadId: string, _promptId: string, questionId: string, draft: { choiceId?: string; text?: string } | null) => {
     const qid = String(questionId ?? '').trim();
     if (!qid) return;
     if (!draft) {
@@ -167,9 +166,8 @@ const aiContextValue = new Proxy({
       return;
     }
     aiState.structuredDrafts[qid] = {
-      selectedOptionId: draft.selectedOptionId,
-      answers: Array.isArray(draft.answers) ? draft.answers : [],
-      useOtherFallback: Boolean(draft.useOtherFallback) || undefined,
+      choiceId: draft.choiceId,
+      text: draft.text,
     };
   },
   createThread: async () => ({ thread_id: 'thread-created' }),
@@ -1021,37 +1019,39 @@ export function registerEnvAIPageSendTests() {
           run_status: 'waiting_user',
         };
         aiState.waitingPrompt = {
-          prompt_id: 'prompt-1',
-          message_id: 'assistant-1',
-          tool_id: 'tool-ask-user',
+          promptId: 'prompt-1',
+          messageId: 'assistant-1',
+          toolId: 'tool-ask-user',
           questions: [
             {
               id: 'question-1',
               header: 'Clarify',
               question: 'What logs should Flower inspect?',
-              is_other: true,
-              is_secret: false,
-              options: [],
+              isSecret: false,
+              choices: [
+                { choiceId: 'write', label: 'Your answer', kind: 'write', inputPlaceholder: 'Type your answer' },
+              ],
             },
           ],
         };
 
-      const { host, dispose } = await renderPage();
-      try {
-        inputComposer(host, 'Please inspect the build logs.');
-        const metaRail = composerMetaRail(host);
-        expect(metaRail?.textContent).toContain('Queue for later');
-        submitComposer(host, trigger, buttonTitle);
-        await flushAsync();
+        const { host, dispose } = await renderPage();
+        try {
+          inputComposer(host, 'Please inspect the build logs.');
+          const metaRail = composerMetaRail(host);
+          expect(metaRail?.textContent).toContain('Queue for later');
+          submitComposer(host, trigger, buttonTitle);
+          await flushAsync();
 
-        expect(submitStructuredPromptResponseMock).toHaveBeenCalledTimes(1);
+          expect(submitStructuredPromptResponseMock).toHaveBeenCalledTimes(1);
           expect(submitStructuredPromptResponseMock).toHaveBeenCalledWith(expect.objectContaining({
             threadId: 'thread-1',
             promptId: 'prompt-1',
             text: '',
             answers: {
               'question-1': {
-                answers: ['Please inspect the build logs.'],
+                choiceId: 'write',
+                text: 'Please inspect the build logs.',
               },
             },
           }));
@@ -1062,28 +1062,38 @@ export function registerEnvAIPageSendTests() {
       });
     });
 
-    it('uses composer text as the other-fallback answer when is_other questions also provide options', async () => {
+    it('uses composer text as the selected custom write answer when the explicit write choice is already selected', async () => {
       aiState.activeThread = {
         ...(aiState.activeThread as MockThread),
         run_status: 'waiting_user',
       };
       aiState.waitingPrompt = {
-        prompt_id: 'prompt-1',
-        message_id: 'assistant-1',
-        tool_id: 'tool-ask-user',
+        promptId: 'prompt-1',
+        messageId: 'assistant-1',
+        toolId: 'tool-ask-user',
         questions: [
           {
             id: 'question-1',
             header: 'Situation',
             question: 'Choose the closest situation.',
-            is_other: true,
-            is_secret: false,
-            options: [
-              { option_id: 'working', label: 'Already working' },
-              { option_id: 'studying', label: 'Studying full time' },
+            isSecret: false,
+            choices: [
+              { choiceId: 'working', label: 'Already working', kind: 'select' },
+              { choiceId: 'studying', label: 'Studying full time', kind: 'select' },
+              {
+                choiceId: 'other',
+                label: 'None of the above',
+                kind: 'write',
+                inputPlaceholder: 'Type another answer',
+              },
             ],
           },
         ],
+      };
+      aiState.structuredDrafts = {
+        'question-1': {
+          choiceId: 'other',
+        },
       };
 
       const { host, dispose } = await renderPage();
@@ -1096,7 +1106,8 @@ export function registerEnvAIPageSendTests() {
         expect(submitStructuredPromptResponseMock).toHaveBeenCalledWith(expect.objectContaining({
           answers: {
             'question-1': {
-              answers: ['Working and studying part time.'],
+              choiceId: 'other',
+              text: 'Working and studying part time.',
             },
           },
         }));
@@ -1111,17 +1122,18 @@ export function registerEnvAIPageSendTests() {
         run_status: 'waiting_user',
       };
       aiState.waitingPrompt = {
-        prompt_id: 'prompt-1',
-        message_id: 'assistant-1',
-        tool_id: 'tool-ask-user',
+        promptId: 'prompt-1',
+        messageId: 'assistant-1',
+        toolId: 'tool-ask-user',
         questions: [
           {
             id: 'question-1',
             header: 'Clarify',
             question: 'What logs should Flower inspect?',
-            is_other: true,
-            is_secret: false,
-            options: [],
+            isSecret: false,
+            choices: [
+              { choiceId: 'write', label: 'Your answer', kind: 'write', inputPlaceholder: 'Type your answer' },
+            ],
           },
         ],
       };
@@ -1158,27 +1170,27 @@ export function registerEnvAIPageSendTests() {
           run_status: 'waiting_user',
         };
         aiState.waitingPrompt = {
-          prompt_id: 'prompt-1',
-          message_id: 'assistant-1',
-          tool_id: 'tool-ask-user',
+          promptId: 'prompt-1',
+          messageId: 'assistant-1',
+          toolId: 'tool-ask-user',
           questions: [
             {
               id: 'question-1',
               header: 'Scope',
               question: 'Which subsystem should Flower inspect?',
-              is_other: true,
-              is_secret: false,
-              options: [],
+              isSecret: false,
+              choices: [
+                { choiceId: 'write', label: 'Your answer', kind: 'write', inputPlaceholder: 'Type your answer' },
+              ],
             },
             {
               id: 'question-2',
               header: 'Mode',
               question: 'Should Flower patch or only review?',
-              is_other: false,
-              is_secret: false,
-              options: [
-                { option_id: 'plan', label: 'Plan' },
-                { option_id: 'act', label: 'Act' },
+              isSecret: false,
+              choices: [
+                { choiceId: 'plan', label: 'Plan', kind: 'select' },
+                { choiceId: 'act', label: 'Act', kind: 'select' },
               ],
             },
           ],
@@ -1211,23 +1223,22 @@ export function registerEnvAIPageSendTests() {
         run_status: 'waiting_user',
       };
       aiState.waitingPrompt = {
-        prompt_id: 'prompt-1',
-        message_id: 'assistant-1',
-        tool_id: 'tool-ask-user',
+        promptId: 'prompt-1',
+        messageId: 'assistant-1',
+        toolId: 'tool-ask-user',
         questions: [
           {
             id: 'question-1',
             header: 'Situation',
             question: 'Choose the closest situation.',
-            is_other: false,
-            is_secret: false,
-            options: [
-              { option_id: 'working', label: 'Already working' },
+            isSecret: false,
+            choices: [
+              { choiceId: 'working', label: 'Already working', kind: 'select' },
               {
-                option_id: 'other',
+                choiceId: 'other',
                 label: 'Other',
-                detail_input_mode: 'required',
-                detail_input_placeholder: 'Describe your current situation',
+                kind: 'write',
+                inputPlaceholder: 'Describe your current situation',
               },
             ],
           },
@@ -1235,8 +1246,7 @@ export function registerEnvAIPageSendTests() {
       };
       aiState.structuredDrafts = {
         'question-1': {
-          selectedOptionId: 'other',
-          answers: [],
+          choiceId: 'other',
         },
       };
 
@@ -1253,8 +1263,8 @@ export function registerEnvAIPageSendTests() {
           text: '',
           answers: {
             'question-1': {
-              selectedOptionId: 'other',
-              answers: ['Working and studying part time.'],
+              choiceId: 'other',
+              text: 'Working and studying part time.',
             },
           },
         }));
@@ -1263,61 +1273,49 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('treats legacy optional option detail as required in composer submission flow', async () => {
+    it('blocks composer text until an explicit custom write choice is selected for mixed-choice questions', async () => {
       aiState.activeThread = {
         ...(aiState.activeThread as MockThread),
         run_status: 'waiting_user',
       };
       aiState.waitingPrompt = {
-        prompt_id: 'prompt-1',
-        message_id: 'assistant-1',
-        tool_id: 'tool-ask-user',
+        promptId: 'prompt-1',
+        messageId: 'assistant-1',
+        toolId: 'tool-ask-user',
         questions: [
           {
             id: 'question-1',
             header: 'Situation',
             question: 'Choose the closest situation.',
-            is_other: false,
-            is_secret: false,
-            options: [
-              { option_id: 'working', label: 'Already working' },
+            isSecret: false,
+            choices: [
+              { choiceId: 'working', label: 'Already working', kind: 'select' },
               {
-                option_id: 'other',
-                label: 'Other',
-                detail_input_mode: 'optional',
-                detail_input_placeholder: 'Describe your current situation',
+                choiceId: 'other',
+                label: 'None of the above',
+                kind: 'write',
+                inputPlaceholder: 'Type another answer',
               },
             ],
           },
         ],
-      };
-      aiState.structuredDrafts = {
-        'question-1': {
-          selectedOptionId: 'other',
-          answers: [],
-        },
       };
 
       const { host, dispose } = await renderPage();
       try {
         const replyButton = Array.from(host.querySelectorAll('button')).find((item) => item.getAttribute('title') === 'Reply now') as HTMLButtonElement | undefined;
         expect(replyButton).toBeTruthy();
-        expect(replyButton?.disabled).toBe(true);
-        expect(submitStructuredPromptResponseMock).not.toHaveBeenCalled();
-
         inputComposer(host, 'Working and studying part time.');
+        await flushAsync();
+
+        expect(replyButton?.disabled).toBe(true);
+        expect(host.textContent).toContain('Select one of the requested options before replying.');
+
         submitComposer(host, 'button', 'Reply now');
         await flushAsync();
 
-        expect(submitStructuredPromptResponseMock).toHaveBeenCalledTimes(1);
-        expect(submitStructuredPromptResponseMock).toHaveBeenCalledWith(expect.objectContaining({
-          answers: {
-            'question-1': {
-              selectedOptionId: 'other',
-              answers: ['Working and studying part time.'],
-            },
-          },
-        }));
+        expect(submitStructuredPromptResponseMock).not.toHaveBeenCalled();
+        expect(sendUserTurnMock).not.toHaveBeenCalled();
       } finally {
         dispose();
       }

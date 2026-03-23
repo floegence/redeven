@@ -11,15 +11,14 @@ import (
 )
 
 const (
-	requestUserInputActionSetMode       = "set_mode"
-	requestUserInputDetailInputOptional = "optional"
-	requestUserInputDetailInputRequired = "required"
+	requestUserInputActionSetMode    = "set_mode"
+	requestUserInputChoiceKindSelect = "select"
+	requestUserInputChoiceKindWrite  = "write"
 )
 
 const (
-	askUserGateReasonDetailPlaceholderWithoutMode     = "detail_placeholder_without_mode"
-	askUserGateReasonUnsupportedOptionalOptionDetail  = "unsupported_optional_option_detail_mode"
-	askUserGateReasonQuestionOtherConflictsOptionText = "question_other_conflicts_with_option_detail"
+	askUserGateReasonMissingChoices                     = "missing_choices"
+	askUserGateReasonChoiceInputPlaceholderWithoutWrite = "choice_input_placeholder_without_write"
 )
 
 func buildRequestUserInputPromptID(messageID string, toolID string) string {
@@ -42,58 +41,169 @@ func normalizeRequestUserInputAction(action RequestUserInputAction) (RequestUser
 	}
 }
 
-func normalizeRequestUserInputDetailInputMode(mode string) string {
+func normalizeRequestUserInputChoiceKind(kind string) string {
+	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case requestUserInputChoiceKindSelect:
+		return requestUserInputChoiceKindSelect
+	case requestUserInputChoiceKindWrite:
+		return requestUserInputChoiceKindWrite
+	default:
+		return ""
+	}
+}
+
+func normalizeLegacyRequestUserInputDetailInputMode(mode string) string {
 	switch strings.TrimSpace(strings.ToLower(mode)) {
-	case requestUserInputDetailInputOptional:
-		return requestUserInputDetailInputOptional
-	case requestUserInputDetailInputRequired:
-		return requestUserInputDetailInputRequired
+	case "optional", "required":
+		return requestUserInputChoiceKindWrite
 	default:
 		return ""
 	}
 }
 
-func canonicalRequestUserInputDetailInputMode(mode string) string {
-	switch normalizeRequestUserInputDetailInputMode(mode) {
-	case requestUserInputDetailInputOptional, requestUserInputDetailInputRequired:
-		return requestUserInputDetailInputRequired
-	default:
-		return ""
+func defaultRequestUserInputWriteChoiceLabel(header string, question string) string {
+	header = strings.TrimSpace(header)
+	if header != "" {
+		return header
+	}
+	question = strings.TrimSpace(question)
+	if question != "" {
+		return question
+	}
+	return "Your answer"
+}
+
+func requestUserInputLegacyFallbackWriteChoice(header string, question string) RequestUserInputChoice {
+	return RequestUserInputChoice{
+		ChoiceID:         "write",
+		Label:            defaultRequestUserInputWriteChoiceLabel(header, question),
+		Kind:             requestUserInputChoiceKindWrite,
+		InputPlaceholder: "Type your answer",
 	}
 }
 
-func canonicalizeRequestUserInputQuestions(questions []RequestUserInputQuestion) []RequestUserInputQuestion {
-	if len(questions) == 0 {
+func requestUserInputQuestionFromRecord(record map[string]any) (RequestUserInputQuestion, bool) {
+	if record == nil {
+		return RequestUserInputQuestion{}, false
+	}
+	id := strings.TrimSpace(anyToString(record["id"]))
+	header := strings.TrimSpace(anyToString(record["header"]))
+	question := strings.TrimSpace(anyToString(record["question"]))
+	if id == "" && header == "" && question == "" {
+		return RequestUserInputQuestion{}, false
+	}
+	choices := parseRequestUserInputChoicesAny(record["choices"])
+	if len(choices) == 0 {
+		choices = parseLegacyRequestUserInputChoices(record["options"], anyToBool(record["is_other"]), header, question)
+	}
+	if len(choices) == 0 {
+		choices = normalizeRequestUserInputChoices([]RequestUserInputChoice{
+			requestUserInputLegacyFallbackWriteChoice(header, question),
+		})
+	}
+	return RequestUserInputQuestion{
+		ID:       id,
+		Header:   header,
+		Question: question,
+		IsSecret: anyToBool(record["is_secret"]),
+		Choices:  choices,
+	}, true
+}
+
+func parseRequestUserInputChoicesAny(value any) []RequestUserInputChoice {
+	items := toAnySlice(value)
+	if len(items) == 0 {
 		return nil
 	}
-	out := make([]RequestUserInputQuestion, 0, len(questions))
-	for _, question := range questions {
-		canonical := question
-		if len(question.Options) > 0 {
-			canonical.Options = make([]RequestUserInputOption, 0, len(question.Options))
-			for _, option := range question.Options {
-				canonicalOption := option
-				canonicalOption.DetailInputMode = canonicalRequestUserInputDetailInputMode(option.DetailInputMode)
-				canonical.Options = append(canonical.Options, canonicalOption)
-			}
+	choices := make([]RequestUserInputChoice, 0, len(items))
+	for _, item := range items {
+		record, ok := item.(map[string]any)
+		if !ok || record == nil {
+			continue
 		}
-		out = append(out, canonical)
+		actionsRaw, _ := record["actions"].([]any)
+		actions := make([]RequestUserInputAction, 0, len(actionsRaw))
+		for _, actionItem := range actionsRaw {
+			actionRecord, ok := actionItem.(map[string]any)
+			if !ok || actionRecord == nil {
+				continue
+			}
+			actions = append(actions, RequestUserInputAction{
+				Type: anyToString(actionRecord["type"]),
+				Mode: anyToString(actionRecord["mode"]),
+			})
+		}
+		choices = append(choices, RequestUserInputChoice{
+			ChoiceID:         anyToString(record["choice_id"]),
+			Label:            anyToString(record["label"]),
+			Description:      anyToString(record["description"]),
+			Kind:             anyToString(record["kind"]),
+			InputPlaceholder: anyToString(record["input_placeholder"]),
+			Actions:          actions,
+		})
 	}
-	return out
+	return normalizeRequestUserInputChoices(choices)
+}
+
+func parseLegacyRequestUserInputChoices(value any, allowOther bool, header string, question string) []RequestUserInputChoice {
+	items := toAnySlice(value)
+	choices := make([]RequestUserInputChoice, 0, len(items)+1)
+	for _, item := range items {
+		record, ok := item.(map[string]any)
+		if !ok || record == nil {
+			continue
+		}
+		actionsRaw, _ := record["actions"].([]any)
+		actions := make([]RequestUserInputAction, 0, len(actionsRaw))
+		for _, actionItem := range actionsRaw {
+			actionRecord, ok := actionItem.(map[string]any)
+			if !ok || actionRecord == nil {
+				continue
+			}
+			actions = append(actions, RequestUserInputAction{
+				Type: anyToString(actionRecord["type"]),
+				Mode: anyToString(actionRecord["mode"]),
+			})
+		}
+		kind := requestUserInputChoiceKindSelect
+		if normalizeLegacyRequestUserInputDetailInputMode(anyToString(record["detail_input_mode"])) == requestUserInputChoiceKindWrite {
+			kind = requestUserInputChoiceKindWrite
+		}
+		choices = append(choices, RequestUserInputChoice{
+			ChoiceID:         anyToString(record["option_id"]),
+			Label:            anyToString(record["label"]),
+			Description:      anyToString(record["description"]),
+			Kind:             kind,
+			InputPlaceholder: anyToString(record["detail_input_placeholder"]),
+			Actions:          actions,
+		})
+	}
+	if allowOther {
+		choices = append(choices, RequestUserInputChoice{
+			ChoiceID:         "other",
+			Label:            "None of the above",
+			Description:      "Type another answer.",
+			Kind:             requestUserInputChoiceKindWrite,
+			InputPlaceholder: "Type another answer",
+		})
+	}
+	if len(choices) == 0 {
+		choices = append(choices, requestUserInputLegacyFallbackWriteChoice(header, question))
+	}
+	return normalizeRequestUserInputChoices(choices)
 }
 
 func validateRequestUserInputQuestionsContract(questions []RequestUserInputQuestion) string {
+	if len(questions) == 0 {
+		return askUserGateReasonMissingChoices
+	}
 	for _, question := range normalizeRequestUserInputQuestions(questions) {
-		for _, option := range question.Options {
-			mode := normalizeRequestUserInputDetailInputMode(option.DetailInputMode)
-			if strings.TrimSpace(option.DetailInputPlaceholder) != "" && mode == "" {
-				return askUserGateReasonDetailPlaceholderWithoutMode
-			}
-			if question.IsOther && mode != "" {
-				return askUserGateReasonQuestionOtherConflictsOptionText
-			}
-			if mode == requestUserInputDetailInputOptional {
-				return askUserGateReasonUnsupportedOptionalOptionDetail
+		if len(question.Choices) == 0 {
+			return askUserGateReasonMissingChoices
+		}
+		for _, choice := range question.Choices {
+			if strings.TrimSpace(choice.InputPlaceholder) != "" && choice.Kind != requestUserInputChoiceKindWrite {
+				return askUserGateReasonChoiceInputPlaceholderWithoutWrite
 			}
 		}
 	}
@@ -127,39 +237,51 @@ func normalizeRequestUserInputActions(actions []RequestUserInputAction) []Reques
 	return out
 }
 
-func normalizeRequestUserInputOptions(options []RequestUserInputOption) []RequestUserInputOption {
-	if len(options) == 0 {
+func normalizeRequestUserInputChoices(choices []RequestUserInputChoice) []RequestUserInputChoice {
+	if len(choices) == 0 {
 		return nil
 	}
-	out := make([]RequestUserInputOption, 0, len(options))
-	seenOption := map[string]struct{}{}
+	out := make([]RequestUserInputChoice, 0, len(choices))
+	seenChoice := map[string]struct{}{}
 	seenLabel := map[string]struct{}{}
-	for idx, option := range options {
-		label := truncateRunes(strings.TrimSpace(option.Label), 200)
+	for idx, choice := range choices {
+		kind := normalizeRequestUserInputChoiceKind(choice.Kind)
+		if kind == "" {
+			kind = requestUserInputChoiceKindSelect
+		}
+		label := truncateRunes(strings.TrimSpace(choice.Label), 200)
 		if label == "" {
-			continue
+			if kind == requestUserInputChoiceKindWrite {
+				label = "Other"
+			} else {
+				continue
+			}
 		}
-		optionID := truncateRunes(strings.TrimSpace(option.OptionID), 64)
-		if optionID == "" {
-			optionID = fmt.Sprintf("option_%d", idx+1)
+		choiceID := truncateRunes(strings.TrimSpace(choice.ChoiceID), 64)
+		if choiceID == "" {
+			prefix := "choice"
+			if kind == requestUserInputChoiceKindWrite {
+				prefix = "write"
+			}
+			choiceID = fmt.Sprintf("%s_%d", prefix, idx+1)
 		}
-		optionKey := strings.ToLower(optionID)
+		choiceKey := strings.ToLower(choiceID)
 		labelKey := strings.ToLower(label)
-		if _, exists := seenOption[optionKey]; exists {
+		if _, exists := seenChoice[choiceKey]; exists {
 			continue
 		}
 		if _, exists := seenLabel[labelKey]; exists {
 			continue
 		}
-		seenOption[optionKey] = struct{}{}
+		seenChoice[choiceKey] = struct{}{}
 		seenLabel[labelKey] = struct{}{}
-		out = append(out, RequestUserInputOption{
-			OptionID:               optionID,
-			Label:                  label,
-			Description:            truncateRunes(strings.TrimSpace(option.Description), 240),
-			DetailInputMode:        normalizeRequestUserInputDetailInputMode(option.DetailInputMode),
-			DetailInputPlaceholder: truncateRunes(strings.TrimSpace(option.DetailInputPlaceholder), 160),
-			Actions:                normalizeRequestUserInputActions(option.Actions),
+		out = append(out, RequestUserInputChoice{
+			ChoiceID:         choiceID,
+			Label:            label,
+			Description:      truncateRunes(strings.TrimSpace(choice.Description), 240),
+			Kind:             kind,
+			InputPlaceholder: truncateRunes(strings.TrimSpace(choice.InputPlaceholder), 160),
+			Actions:          normalizeRequestUserInputActions(choice.Actions),
 		})
 		if len(out) >= 4 {
 			break
@@ -171,22 +293,23 @@ func normalizeRequestUserInputOptions(options []RequestUserInputOption) []Reques
 	return out
 }
 
-func requestUserInputOptionsFromLabels(labels []string) []RequestUserInputOption {
+func requestUserInputChoicesFromLabels(labels []string) []RequestUserInputChoice {
 	if len(labels) == 0 {
 		return nil
 	}
-	options := make([]RequestUserInputOption, 0, len(labels))
+	choices := make([]RequestUserInputChoice, 0, len(labels))
 	for idx, label := range labels {
 		label = strings.TrimSpace(label)
 		if label == "" {
 			continue
 		}
-		options = append(options, RequestUserInputOption{
-			OptionID: fmt.Sprintf("option_%d", idx+1),
+		choices = append(choices, RequestUserInputChoice{
+			ChoiceID: fmt.Sprintf("choice_%d", idx+1),
 			Label:    label,
+			Kind:     requestUserInputChoiceKindSelect,
 		})
 	}
-	return normalizeRequestUserInputOptions(options)
+	return normalizeRequestUserInputChoices(choices)
 }
 
 func normalizeRequestUserInputQuestions(questions []RequestUserInputQuestion) []RequestUserInputQuestion {
@@ -216,13 +339,18 @@ func normalizeRequestUserInputQuestions(questions []RequestUserInputQuestion) []
 		if text == "" {
 			text = header
 		}
+		choices := normalizeRequestUserInputChoices(question.Choices)
+		if len(choices) == 0 {
+			choices = normalizeRequestUserInputChoices([]RequestUserInputChoice{
+				requestUserInputLegacyFallbackWriteChoice(header, text),
+			})
+		}
 		out = append(out, RequestUserInputQuestion{
 			ID:       id,
 			Header:   header,
 			Question: text,
-			IsOther:  question.IsOther,
 			IsSecret: question.IsSecret,
-			Options:  normalizeRequestUserInputOptions(question.Options),
+			Choices:  choices,
 		})
 		if len(out) >= 5 {
 			break
@@ -279,7 +407,6 @@ func normalizeRequestUserInputPrompt(prompt *RequestUserInputPrompt) *RequestUse
 	out.RequiredFromUser = normalizeRequestUserInputStringList(out.RequiredFromUser, 8, 200)
 	out.EvidenceRefs = normalizeRequestUserInputStringList(out.EvidenceRefs, 12, 120)
 	out.Questions = normalizeRequestUserInputQuestions(out.Questions)
-	out.Questions = canonicalizeRequestUserInputQuestions(out.Questions)
 	if len(out.Questions) == 0 {
 		return nil
 	}
@@ -314,11 +441,39 @@ func parseRequestUserInputPromptJSON(raw string) *RequestUserInputPrompt {
 	if raw == "" {
 		return nil
 	}
-	var prompt RequestUserInputPrompt
-	if err := json.Unmarshal([]byte(raw), &prompt); err != nil {
+	var payload struct {
+		PromptID         string           `json:"prompt_id"`
+		MessageID        string           `json:"message_id"`
+		ToolID           string           `json:"tool_id"`
+		ReasonCode       string           `json:"reason_code"`
+		RequiredFromUser []string         `json:"required_from_user"`
+		EvidenceRefs     []string         `json:"evidence_refs"`
+		Questions        []map[string]any `json:"questions"`
+		PublicSummary    string           `json:"public_summary"`
+		ContainsSecret   bool             `json:"contains_secret"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		return nil
 	}
-	return normalizeRequestUserInputPrompt(&prompt)
+	questions := make([]RequestUserInputQuestion, 0, len(payload.Questions))
+	for _, item := range payload.Questions {
+		question, ok := requestUserInputQuestionFromRecord(item)
+		if !ok {
+			continue
+		}
+		questions = append(questions, question)
+	}
+	return normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
+		PromptID:         payload.PromptID,
+		MessageID:        payload.MessageID,
+		ToolID:           payload.ToolID,
+		ReasonCode:       payload.ReasonCode,
+		RequiredFromUser: payload.RequiredFromUser,
+		EvidenceRefs:     payload.EvidenceRefs,
+		Questions:        questions,
+		PublicSummary:    payload.PublicSummary,
+		ContainsSecret:   payload.ContainsSecret,
+	})
 }
 
 func requestUserInputPromptFromThreadRecord(t *threadstore.Thread, effectiveRunStatus string) *RequestUserInputPrompt {
@@ -389,11 +544,10 @@ func requestUserInputPromptFromMessages(messages []threadstore.Message, effectiv
 }
 
 func normalizeRequestUserInputAnswer(answer RequestUserInputAnswer) RequestUserInputAnswer {
-	out := RequestUserInputAnswer{
-		SelectedOptionID: truncateRunes(strings.TrimSpace(answer.SelectedOptionID), 64),
-		Answers:          normalizeRequestUserInputStringList(answer.Answers, 8, 2000),
+	return RequestUserInputAnswer{
+		ChoiceID: truncateRunes(strings.TrimSpace(answer.ChoiceID), 64),
+		Text:     truncateRunes(strings.TrimSpace(answer.Text), 2000),
 	}
-	return out
 }
 
 func normalizeRequestUserInputResponse(raw *RequestUserInputResponse) *RequestUserInputResponse {
@@ -412,7 +566,7 @@ func normalizeRequestUserInputResponse(raw *RequestUserInputResponse) *RequestUs
 			continue
 		}
 		normalized := normalizeRequestUserInputAnswer(answer)
-		if normalized.SelectedOptionID == "" && len(normalized.Answers) == 0 {
+		if normalized.ChoiceID == "" && normalized.Text == "" {
 			continue
 		}
 		answers[questionID] = normalized
@@ -432,39 +586,58 @@ func normalizeRequestUserInputResponse(raw *RequestUserInputResponse) *RequestUs
 	return out
 }
 
-func requestUserInputOptionByID(question *RequestUserInputQuestion, optionID string) (*RequestUserInputOption, bool) {
+func requestUserInputChoiceByID(question *RequestUserInputQuestion, choiceID string) (*RequestUserInputChoice, bool) {
 	if question == nil {
 		return nil, false
 	}
-	optionID = strings.TrimSpace(optionID)
-	if optionID == "" {
+	choiceID = strings.TrimSpace(choiceID)
+	if choiceID == "" {
 		return nil, false
 	}
-	for i := range question.Options {
-		if strings.TrimSpace(question.Options[i].OptionID) == optionID {
-			option := question.Options[i]
-			return &option, true
+	for i := range question.Choices {
+		if strings.TrimSpace(question.Choices[i].ChoiceID) == choiceID {
+			choice := question.Choices[i]
+			return &choice, true
 		}
 	}
 	return nil, false
 }
 
-func requestUserInputQuestionAnswerRequirements(question *RequestUserInputQuestion, answer RequestUserInputAnswer) (allowText bool, requireText bool, requireSelection bool) {
+func requestUserInputQuestionSingleWriteChoice(question *RequestUserInputQuestion) (*RequestUserInputChoice, bool) {
 	if question == nil {
-		return false, false, false
+		return nil, false
 	}
-	optionCount := len(question.Options)
-	requireSelection = optionCount > 0 && !question.IsOther
-	allowText = question.IsOther || optionCount == 0
-	requireText = optionCount == 0
-	if option, ok := requestUserInputOptionByID(question, answer.SelectedOptionID); ok && option != nil {
-		switch canonicalRequestUserInputDetailInputMode(option.DetailInputMode) {
-		case requestUserInputDetailInputRequired:
-			allowText = true
-			requireText = true
+	var selected *RequestUserInputChoice
+	for i := range question.Choices {
+		if question.Choices[i].Kind != requestUserInputChoiceKindWrite {
+			continue
+		}
+		if selected != nil {
+			return nil, false
+		}
+		choice := question.Choices[i]
+		selected = &choice
+	}
+	if selected == nil {
+		return nil, false
+	}
+	return selected, true
+}
+
+func normalizeRequestUserInputAnswerForQuestion(question *RequestUserInputQuestion, answer RequestUserInputAnswer) RequestUserInputAnswer {
+	answer = normalizeRequestUserInputAnswer(answer)
+	if answer.ChoiceID == "" && answer.Text != "" {
+		if choice, ok := requestUserInputQuestionSingleWriteChoice(question); ok && choice != nil {
+			answer.ChoiceID = choice.ChoiceID
 		}
 	}
-	return allowText, requireText, requireSelection
+	if choice, ok := requestUserInputChoiceByID(question, answer.ChoiceID); ok && choice != nil {
+		answer.ChoiceID = choice.ChoiceID
+		if choice.Kind != requestUserInputChoiceKindWrite {
+			answer.Text = ""
+		}
+	}
+	return answer
 }
 
 func validateRequestUserInputResponse(prompt *RequestUserInputPrompt, response *RequestUserInputResponse) (*RequestUserInputResponse, error) {
@@ -476,34 +649,30 @@ func validateRequestUserInputResponse(prompt *RequestUserInputPrompt, response *
 	if strings.TrimSpace(prompt.PromptID) != strings.TrimSpace(response.PromptID) {
 		return nil, ErrWaitingPromptChanged
 	}
+	normalizedAnswers := make(map[string]RequestUserInputAnswer, len(prompt.Questions))
 	for _, question := range prompt.Questions {
 		answer, exists := response.Answers[question.ID]
 		if !exists {
 			return nil, ErrWaitingPromptChanged
 		}
-		if answer.SelectedOptionID != "" {
-			if _, ok := requestUserInputOptionByID(&question, answer.SelectedOptionID); !ok {
+		answer = normalizeRequestUserInputAnswerForQuestion(&question, answer)
+		choice, ok := requestUserInputChoiceByID(&question, answer.ChoiceID)
+		if !ok || choice == nil {
+			return nil, ErrWaitingPromptChanged
+		}
+		if choice.Kind == requestUserInputChoiceKindWrite {
+			if answer.Text == "" {
 				return nil, ErrWaitingPromptChanged
 			}
-		}
-		allowText, requireText, requireSelection := requestUserInputQuestionAnswerRequirements(&question, answer)
-		if requireSelection && answer.SelectedOptionID == "" {
+		} else if answer.Text != "" {
 			return nil, ErrWaitingPromptChanged
 		}
-		if !allowText && len(answer.Answers) > 0 {
-			return nil, ErrWaitingPromptChanged
-		}
-		if requireText && len(answer.Answers) == 0 {
-			return nil, ErrWaitingPromptChanged
-		}
-		if !allowText && answer.SelectedOptionID == "" {
-			return nil, ErrWaitingPromptChanged
-		}
-		if allowText && !requireSelection && len(answer.Answers) == 0 && answer.SelectedOptionID == "" {
-			return nil, ErrWaitingPromptChanged
-		}
+		normalizedAnswers[question.ID] = answer
 	}
-	return response, nil
+	return &RequestUserInputResponse{
+		PromptID: response.PromptID,
+		Answers:  normalizedAnswers,
+	}, nil
 }
 
 func formatRequestUserInputAssistantSummary(prompt RequestUserInputPrompt) string {
@@ -558,27 +727,28 @@ func buildRequestUserInputResponseRecord(prompt RequestUserInputPrompt, response
 			Header:     question.Header,
 			Question:   question.Question,
 		}
-		if option, ok := requestUserInputOptionByID(&question, answer.SelectedOptionID); ok {
-			resolved.SelectedOptionID = option.OptionID
-			resolved.SelectedOptionLabel = option.Label
+		choice, ok := requestUserInputChoiceByID(&question, answer.ChoiceID)
+		if ok && choice != nil {
+			resolved.SelectedChoiceID = choice.ChoiceID
+			resolved.SelectedChoiceLabel = choice.Label
 		}
 		if question.IsSecret {
 			record.ContainsSecret = true
 			resolved.ContainsSecret = true
-			if len(answer.Answers) > 0 {
+			if answer.Text != "" {
 				secrets = append(secrets, RequestUserInputSecretAnswer{
 					QuestionID: question.ID,
-					Answers:    append([]string(nil), answer.Answers...),
+					Text:       answer.Text,
 				})
 			}
-			if resolved.SelectedOptionLabel != "" {
-				resolved.PublicSummary = formatQuestionPublicSummary(question, resolved.SelectedOptionLabel, nil, true)
-			} else {
-				resolved.PublicSummary = formatQuestionPublicSummary(question, "", nil, true)
+			secretLabel := resolved.SelectedChoiceLabel
+			if choice != nil && choice.Kind == requestUserInputChoiceKindWrite {
+				secretLabel = ""
 			}
+			resolved.PublicSummary = formatQuestionPublicSummary(question, secretLabel, "", true)
 		} else {
-			resolved.Answers = append([]string(nil), answer.Answers...)
-			resolved.PublicSummary = formatQuestionPublicSummary(question, resolved.SelectedOptionLabel, resolved.Answers, false)
+			resolved.Text = answer.Text
+			resolved.PublicSummary = formatQuestionPublicSummary(question, resolved.SelectedChoiceLabel, resolved.Text, false)
 		}
 		record.Responses = append(record.Responses, resolved)
 		if summary := strings.TrimSpace(resolved.PublicSummary); summary != "" {
@@ -589,8 +759,8 @@ func buildRequestUserInputResponseRecord(prompt RequestUserInputPrompt, response
 	return record, secrets, nil
 }
 
-func formatQuestionPublicSummary(question RequestUserInputQuestion, selectedOptionLabel string, answers []string, containsSecret bool) string {
-	label := strings.TrimSpace(selectedOptionLabel)
+func formatQuestionPublicSummary(question RequestUserInputQuestion, selectedChoiceLabel string, text string, containsSecret bool) string {
+	label := strings.TrimSpace(selectedChoiceLabel)
 	header := strings.TrimSpace(question.Header)
 	if header == "" {
 		header = strings.TrimSpace(question.Question)
@@ -601,11 +771,13 @@ func formatQuestionPublicSummary(question RequestUserInputQuestion, selectedOpti
 		}
 		return truncateRunes(header+": secret provided.", 240)
 	}
-	values := make([]string, 0, 1+len(answers))
+	values := make([]string, 0, 2)
 	if label != "" {
 		values = append(values, label)
 	}
-	values = append(values, answers...)
+	if text = strings.TrimSpace(text); text != "" {
+		values = append(values, text)
+	}
 	if len(values) == 0 {
 		return truncateRunes(header+": answered.", 240)
 	}
