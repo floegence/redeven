@@ -4687,6 +4687,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_secret, and response_mode.",
 			"- For guided questionnaires, interviews, quizzes, guessing games, or decision trees, prefer ask_user over freeform markdown option lists.",
 			"- If you are going to call `ask_user`, do NOT first emit a separate markdown questionnaire, duplicated prose question, or A/B/C option list outside the structured ask_user payload.",
+			"- When the user requires an indirect, non-leading, or proxy-based interaction, preserve that constraint in both `question` and `choices[]`. Do NOT directly name, bucket, or reveal the target attribute the user asked you to infer indirectly; ask about proxy signals or correlated situations instead.",
 			"- Use `response_mode:\"select\"` for fixed-choice questions, `response_mode:\"write\"` for direct-input questions, and `response_mode:\"select_or_write\"` for fixed choices plus a standardized typed fallback.",
 			"- `choices[]` contains fixed options only. Do not encode the typed fallback as a fake write choice inside `choices[]`.",
 			"- For `response_mode:\"select_or_write\"`, the UI will render a standardized typed fallback such as `None of the above: ___`; provide `write_label` and optional `write_placeholder` when that wording matters.",

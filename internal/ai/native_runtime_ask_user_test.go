@@ -277,6 +277,12 @@ func TestBuildLayeredSystemPrompt_AskUserCoversStructuredInteractionTurns(t *tes
 	if !strings.Contains(prompt, "do NOT first emit a separate markdown questionnaire") {
 		t.Fatalf("prompt missing no-duplicate-markdown-before-ask_user rule: %q", prompt)
 	}
+	if !strings.Contains(prompt, "preserve that constraint in both `question` and `choices[]`") {
+		t.Fatalf("prompt missing indirect-interaction preservation rule: %q", prompt)
+	}
+	if !strings.Contains(prompt, "Do NOT directly name, bucket, or reveal the target attribute") {
+		t.Fatalf("prompt missing no-direct-target-attribute rule: %q", prompt)
+	}
 	if !strings.Contains(prompt, "every question must include id, header, question, is_secret, and response_mode") {
 		t.Fatalf("prompt missing response_mode contract: %q", prompt)
 	}
