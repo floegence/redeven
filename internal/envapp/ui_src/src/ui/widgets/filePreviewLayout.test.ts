@@ -29,10 +29,13 @@ describe('file preview wiring', () => {
     expect(docxPaneSrc).toContain('Fit');
     expect(docxPaneSrc).toContain('Zoom in docx preview');
     expect(textPaneSrc).toContain("from '@floegence/floe-webapp-core/editor';");
+    expect(textPaneSrc).toContain('resolveCodeEditorLanguageSpec');
     expect(textPaneSrc).toContain('ErrorBoundary');
-    expect(textPaneSrc).toContain('import type { CodeEditorApi, CodeEditorProps }');
-    expect(textPaneSrc).toContain("!props.editing && props.descriptor.textPresentation === 'code'");
-    expect(textPaneSrc).toContain('!shouldUseCodePreview() && !props.truncated && !monacoFailed()');
+    expect(textPaneSrc).toContain('type CodeEditorApi, type CodeEditorProps');
+    expect(textPaneSrc).toContain('props.truncated || monacoFailed()');
+    expect(textPaneSrc).toContain("if (props.editing) return false;");
+    expect(textPaneSrc).toContain("resolveCodeEditorLanguageSpec(normalizedLanguage).id === 'plaintext'");
+    expect(textPaneSrc).not.toContain("!props.editing && props.descriptor.textPresentation === 'code'");
     expect(textPaneSrc).toContain('queueMicrotask');
     expect(textPaneSrc).toContain('Loading editor...');
     expect(contentSrc).toContain('Copy path');

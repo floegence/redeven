@@ -1,5 +1,5 @@
 import { ErrorBoundary, Suspense, Show, createEffect, createMemo, createSignal, lazy, on } from 'solid-js';
-import type { CodeEditorApi, CodeEditorProps } from '@floegence/floe-webapp-core/editor';
+import { resolveCodeEditorLanguageSpec, type CodeEditorApi, type CodeEditorProps } from '@floegence/floe-webapp-core/editor';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { CodePreviewPane } from './CodePreviewPane';
 
@@ -19,6 +19,14 @@ const PREVIEW_MONACO_INTERACTION_OPTIONS: CodeEditorOptions = {
   pasteAs: { enabled: false, showPasteSelector: 'never' },
   dragAndDrop: false,
 };
+
+function shouldUseCodePreviewFallback(language?: string): boolean {
+  const normalizedLanguage = String(language ?? '').trim().toLowerCase();
+  if (!normalizedLanguage || normalizedLanguage === 'plaintext' || normalizedLanguage === 'text' || normalizedLanguage === 'txt') {
+    return false;
+  }
+  return resolveCodeEditorLanguageSpec(normalizedLanguage).id === 'plaintext';
+}
 
 export interface TextFilePreviewPaneProps {
   path: string;
@@ -44,10 +52,13 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
     if (props.descriptor.textPresentation !== 'code') return 'plaintext';
     return props.descriptor.language || 'plaintext';
   });
-  const shouldUseCodePreview = createMemo(
-    () => !props.editing && props.descriptor.textPresentation === 'code',
-  );
-  const shouldUseMonaco = createMemo(() => !shouldUseCodePreview() && !props.truncated && !monacoFailed());
+  const shouldUseFallbackPreview = createMemo(() => {
+    if (props.truncated || monacoFailed()) return true;
+    if (props.editing) return false;
+    if (props.descriptor.textPresentation !== 'code') return false;
+    return shouldUseCodePreviewFallback(props.descriptor.language);
+  });
+  const shouldUseMonaco = createMemo(() => !shouldUseFallbackPreview());
   const editorValue = createMemo(() => (props.editing ? props.draftText ?? props.text : props.text));
   const editorOptions = createMemo<CodeEditorOptions>(() => ({
     ...PREVIEW_MONACO_INTERACTION_OPTIONS,
@@ -66,7 +77,7 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
     />
   );
 
-  createEffect(on(() => [props.path, props.truncated, resolvedLanguage()], () => {
+  createEffect(on(() => [props.path, props.truncated, resolvedLanguage(), props.editing], () => {
     setMonacoFailed(false);
   }));
 
@@ -98,40 +109,20 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
             }}
           >
             <Suspense fallback={<div class="flex h-full items-center justify-center text-sm text-muted-foreground">Loading editor...</div>}>
-              <Show
-                when={props.editing}
-                fallback={(
-                  <CodeEditor
-                    path={props.path}
-                    language={resolvedLanguage()}
-                    value={editorValue()}
-                    options={editorOptions()}
-                    onChange={(value: string) => {
-                      if (!props.editing) return;
-                      props.onDraftChange?.(value);
-                    }}
-                    onSelectionChange={(selectionText: string, _api: CodeEditorApi) => {
-                      props.onSelectionChange?.(selectionText);
-                    }}
-                    class="h-full"
-                  />
-                )}
-              >
-                <CodeEditor
-                  path={props.path}
-                  language={resolvedLanguage()}
-                  value={editorValue()}
-                  options={editorOptions()}
-                  onChange={(value: string) => {
-                    if (!props.editing) return;
-                    props.onDraftChange?.(value);
-                  }}
-                  onSelectionChange={(selectionText: string, _api: CodeEditorApi) => {
-                    props.onSelectionChange?.(selectionText);
-                  }}
-                  class="h-full"
-                />
-              </Show>
+              <CodeEditor
+                path={props.path}
+                language={resolvedLanguage()}
+                value={editorValue()}
+                options={editorOptions()}
+                onChange={(value: string) => {
+                  if (!props.editing) return;
+                  props.onDraftChange?.(value);
+                }}
+                onSelectionChange={(selectionText: string, _api: CodeEditorApi) => {
+                  props.onSelectionChange?.(selectionText);
+                }}
+                class="h-full"
+              />
             </Suspense>
           </ErrorBoundary>
         </Show>

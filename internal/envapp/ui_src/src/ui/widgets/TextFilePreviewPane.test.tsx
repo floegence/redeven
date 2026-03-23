@@ -9,6 +9,20 @@ const editorRenderState = vi.hoisted(() => ({
   errorMessage: '',
   nextInstanceId: 0,
 }));
+const resolveCodeEditorLanguageSpecMock = vi.hoisted(() => vi.fn((language?: string) => {
+  switch (language) {
+    case 'typescript':
+      return { id: 'typescript' };
+    case 'css':
+      return { id: 'css' };
+    case 'shellscript':
+      return { id: 'shell' };
+    case 'html':
+      return { id: 'html' };
+    default:
+      return { id: 'plaintext' };
+  }
+}));
 
 vi.mock('@floegence/floe-webapp-core/editor', () => ({
   CodeEditor: (props: any) => {
@@ -41,6 +55,7 @@ vi.mock('@floegence/floe-webapp-core/editor', () => ({
       </button>
     );
   },
+  resolveCodeEditorLanguageSpec: (language?: string) => resolveCodeEditorLanguageSpecMock(language),
 }));
 
 vi.mock('./CodePreviewPane', () => ({
@@ -58,10 +73,11 @@ afterEach(() => {
   document.body.innerHTML = '';
   editorRenderState.errorMessage = '';
   editorRenderState.nextInstanceId = 0;
+  resolveCodeEditorLanguageSpecMock.mockClear();
 });
 
 describe('TextFilePreviewPane', () => {
-  it('uses the lightweight highlighted preview for read-only code previews', async () => {
+  it('keeps Monaco as the shared surface for supported read-only code previews', async () => {
     const onSelectionChange = vi.fn();
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -76,13 +92,14 @@ describe('TextFilePreviewPane', () => {
     ), host);
     await flushAsync();
 
-    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
-    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
-    expect(host.textContent).toContain('typescript:const value = 1;');
-    expect(onSelectionChange).toHaveBeenCalledWith('');
+    const editor = host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null;
+    expect(editor).toBeTruthy();
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeNull();
+    expect(host.textContent).toContain('typescript:const value = 1;:ro');
+    expect(onSelectionChange).not.toHaveBeenCalled();
   });
 
-  it('keeps stylesheet previews on the highlighted preview surface so css stays syntax-colored', async () => {
+  it('keeps stylesheet previews on the same Monaco path so css stays aligned with edit mode', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -95,9 +112,9 @@ describe('TextFilePreviewPane', () => {
     ), host);
     await flushAsync();
 
-    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
-    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
-    expect(host.textContent).toContain('css:.card { color: var(--accent); }');
+    expect(host.querySelector('[data-testid="mock-editor"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeNull();
+    expect(host.textContent).toContain('css:.card { color: var(--accent); }:ro');
   });
 
   it('renders the Monaco editor path for supported languages and forwards edits and selections', async () => {
@@ -144,7 +161,7 @@ describe('TextFilePreviewPane', () => {
     expect(onSelectionChange).toHaveBeenCalledWith('selected from editor');
   });
 
-  it('switches from the read-only preview surface to a fresh Monaco editor when entering edit mode', async () => {
+  it('keeps the same Monaco surface and makes it writable when entering edit mode', async () => {
     const [editing, setEditing] = createSignal(false);
 
     const host = document.createElement('div');
@@ -162,8 +179,10 @@ describe('TextFilePreviewPane', () => {
     ), host);
     await flushAsync();
 
-    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
-    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
+    const previewEditor = host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null;
+    expect(previewEditor?.dataset.instanceId).toBe('1');
+    expect(previewEditor?.dataset.readOnly).toBe('true');
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeNull();
 
     setEditing(true);
     await flushAsync();
@@ -173,7 +192,7 @@ describe('TextFilePreviewPane', () => {
     expect(editingEditor?.dataset.readOnly).toBe('false');
   });
 
-  it('keeps preview-only languages on the lightweight preview surface instead of a plain Monaco viewer', async () => {
+  it('keeps Monaco-unsupported read-only languages on the highlighted fallback surface', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -190,6 +209,37 @@ describe('TextFilePreviewPane', () => {
     expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
     expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
     expect(host.textContent).toContain('vue:<script setup lang="ts">const value = 1;</script>');
+  });
+
+  it('still opens Monaco for unsupported code files once the user starts editing', async () => {
+    const [editing, setEditing] = createSignal(false);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TextFilePreviewPane
+        path="/workspace/demo.vue"
+        descriptor={{ mode: 'text', textPresentation: 'code', language: 'vue', wrapText: false }}
+        text={'<script setup lang="ts">const value = 1;</script>'}
+        draftText={'<script setup lang="ts">const value = 2;</script>'}
+        editing={editing()}
+        canEdit
+      />
+    ), host);
+    await flushAsync();
+
+    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
+
+    setEditing(true);
+    await flushAsync();
+
+    const editingEditor = host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null;
+    expect(editingEditor).toBeTruthy();
+    expect(editingEditor?.dataset.readOnly).toBe('false');
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeNull();
+    expect(host.textContent).toContain('vue:<script setup lang="ts">const value = 2;</script>:rw');
   });
 
   it('keeps plain-text previews on the Monaco viewer path until the user enters edit mode', async () => {
