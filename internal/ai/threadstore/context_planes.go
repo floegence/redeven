@@ -71,32 +71,55 @@ type ContextSnapshotRecord struct {
 }
 
 type StructuredUserInputRecord struct {
-	ID                  int64    `json:"id"`
-	EndpointID          string   `json:"endpoint_id"`
-	ThreadID            string   `json:"thread_id"`
-	ResponseMessageID   string   `json:"response_message_id"`
-	PromptID            string   `json:"prompt_id"`
-	ToolID              string   `json:"tool_id"`
-	ReasonCode          string   `json:"reason_code"`
-	QuestionID          string   `json:"question_id"`
-	Header              string   `json:"header"`
-	QuestionText        string   `json:"question_text"`
-	SelectedOptionID    string   `json:"selected_option_id"`
-	SelectedOptionLabel string   `json:"selected_option_label"`
-	Answers             []string `json:"answers,omitempty"`
-	PublicSummary       string   `json:"public_summary"`
-	ContainsSecret      bool     `json:"contains_secret"`
-	CreatedAtUnixMs     int64    `json:"created_at_unix_ms"`
+	ID                  int64  `json:"id"`
+	EndpointID          string `json:"endpoint_id"`
+	ThreadID            string `json:"thread_id"`
+	ResponseMessageID   string `json:"response_message_id"`
+	PromptID            string `json:"prompt_id"`
+	ToolID              string `json:"tool_id"`
+	ReasonCode          string `json:"reason_code"`
+	QuestionID          string `json:"question_id"`
+	Header              string `json:"header"`
+	QuestionText        string `json:"question_text"`
+	SelectedChoiceID    string `json:"selected_choice_id"`
+	SelectedChoiceLabel string `json:"selected_choice_label"`
+	Text                string `json:"text,omitempty"`
+	PublicSummary       string `json:"public_summary"`
+	ContainsSecret      bool   `json:"contains_secret"`
+	CreatedAtUnixMs     int64  `json:"created_at_unix_ms"`
 }
 
 type RequestUserInputSecretAnswerRecord struct {
-	ID                int64    `json:"id"`
-	EndpointID        string   `json:"endpoint_id"`
-	ThreadID          string   `json:"thread_id"`
-	ResponseMessageID string   `json:"response_message_id"`
-	QuestionID        string   `json:"question_id"`
-	Answers           []string `json:"answers,omitempty"`
-	CreatedAtUnixMs   int64    `json:"created_at_unix_ms"`
+	ID                int64  `json:"id"`
+	EndpointID        string `json:"endpoint_id"`
+	ThreadID          string `json:"thread_id"`
+	ResponseMessageID string `json:"response_message_id"`
+	QuestionID        string `json:"question_id"`
+	Text              string `json:"text,omitempty"`
+	CreatedAtUnixMs   int64  `json:"created_at_unix_ms"`
+}
+
+func requestUserInputTextToLegacyAnswers(text string) []string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	return []string{text}
+}
+
+func requestUserInputTextFromLegacyAnswers(items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		out = append(out, item)
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
 }
 
 // ProviderCapabilityRecord caches capability json by provider/model.
@@ -1131,8 +1154,8 @@ WHERE endpoint_id = ? AND thread_id = ? AND response_message_id = ?
 			continue
 		}
 		answersJSON := "[]"
-		if len(rec.Answers) > 0 {
-			if raw, err := json.Marshal(rec.Answers); err == nil {
+		if answers := requestUserInputTextToLegacyAnswers(rec.Text); len(answers) > 0 {
+			if raw, err := json.Marshal(answers); err == nil {
 				answersJSON = string(raw)
 			}
 		}
@@ -1145,10 +1168,10 @@ INSERT INTO structured_user_inputs(
   endpoint_id, thread_id, response_message_id,
   prompt_id, tool_id, reason_code, question_id,
   header, question_text,
-  selected_option_id, selected_option_label,
+ selected_option_id, selected_option_label,
   answers_json, public_summary, contains_secret, created_at_unix_ms
 ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, endpointID, threadID, responseMessageID, strings.TrimSpace(rec.PromptID), strings.TrimSpace(rec.ToolID), strings.TrimSpace(rec.ReasonCode), strings.TrimSpace(rec.QuestionID), strings.TrimSpace(rec.Header), strings.TrimSpace(rec.QuestionText), strings.TrimSpace(rec.SelectedOptionID), strings.TrimSpace(rec.SelectedOptionLabel), strings.TrimSpace(answersJSON), strings.TrimSpace(rec.PublicSummary), boolToInt(rec.ContainsSecret), createdAt); err != nil {
+`, endpointID, threadID, responseMessageID, strings.TrimSpace(rec.PromptID), strings.TrimSpace(rec.ToolID), strings.TrimSpace(rec.ReasonCode), strings.TrimSpace(rec.QuestionID), strings.TrimSpace(rec.Header), strings.TrimSpace(rec.QuestionText), strings.TrimSpace(rec.SelectedChoiceID), strings.TrimSpace(rec.SelectedChoiceLabel), strings.TrimSpace(answersJSON), strings.TrimSpace(rec.PublicSummary), boolToInt(rec.ContainsSecret), createdAt); err != nil {
 			return err
 		}
 	}
@@ -1192,13 +1215,13 @@ LIMIT ?
 			answersJSON string
 			secretInt   int
 		)
-		if err := rows.Scan(&rec.ID, &rec.EndpointID, &rec.ThreadID, &rec.ResponseMessageID, &rec.PromptID, &rec.ToolID, &rec.ReasonCode, &rec.QuestionID, &rec.Header, &rec.QuestionText, &rec.SelectedOptionID, &rec.SelectedOptionLabel, &answersJSON, &rec.PublicSummary, &secretInt, &rec.CreatedAtUnixMs); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.EndpointID, &rec.ThreadID, &rec.ResponseMessageID, &rec.PromptID, &rec.ToolID, &rec.ReasonCode, &rec.QuestionID, &rec.Header, &rec.QuestionText, &rec.SelectedChoiceID, &rec.SelectedChoiceLabel, &answersJSON, &rec.PublicSummary, &secretInt, &rec.CreatedAtUnixMs); err != nil {
 			return nil, err
 		}
 		if strings.TrimSpace(answersJSON) != "" {
 			var answers []string
 			if err := json.Unmarshal([]byte(answersJSON), &answers); err == nil {
-				rec.Answers = answers
+				rec.Text = requestUserInputTextFromLegacyAnswers(answers)
 			}
 		}
 		rec.ContainsSecret = secretInt != 0
@@ -1241,6 +1264,7 @@ WHERE endpoint_id = ? AND thread_id = ? AND response_message_id = ?
 	now := time.Now().UnixMilli()
 	for _, rec := range records {
 		questionID := strings.TrimSpace(rec.QuestionID)
+		answerText := strings.TrimSpace(rec.Text)
 		if questionID == "" {
 			continue
 		}
@@ -1248,19 +1272,16 @@ WHERE endpoint_id = ? AND thread_id = ? AND response_message_id = ?
 		if createdAt <= 0 {
 			createdAt = now
 		}
-		for idx, answer := range rec.Answers {
-			answer = strings.TrimSpace(answer)
-			if answer == "" {
-				continue
-			}
-			if _, err := tx.ExecContext(ctx, `
+		if answerText == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `
 INSERT INTO request_user_input_secret_answers(
   endpoint_id, thread_id, response_message_id,
   question_id, answer_index, answer_text, created_at_unix_ms
 ) VALUES(?, ?, ?, ?, ?, ?, ?)
-`, endpointID, threadID, responseMessageID, questionID, idx, answer, createdAt); err != nil {
-				return err
-			}
+`, endpointID, threadID, responseMessageID, questionID, 0, answerText, createdAt); err != nil {
+			return err
 		}
 	}
 	return tx.Commit()
@@ -1317,7 +1338,11 @@ ORDER BY question_id ASC, answer_index ASC
 			grouped[questionID] = rec
 			order = append(order, questionID)
 		}
-		rec.Answers = append(rec.Answers, answerText)
+		if rec.Text == "" {
+			rec.Text = answerText
+			continue
+		}
+		rec.Text = strings.TrimSpace(rec.Text + "\n" + answerText)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
