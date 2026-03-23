@@ -45,6 +45,7 @@ const askUserBlock: ToolCallBlockType = {
 
 function renderAskUserBlock(opts: {
   runStatus: string;
+  initialDrafts?: Record<string, { selectedOptionId?: string; answers: string[]; useOtherFallback?: boolean }>;
   waitingPrompt?: {
     prompt_id: string;
     message_id: string;
@@ -67,7 +68,7 @@ function renderAskUserBlock(opts: {
 }) {
   const host = document.createElement('div');
   document.body.appendChild(host);
-  const [drafts, setDrafts] = createSignal<Record<string, { selectedOptionId?: string; answers: string[] }>>({});
+  const [drafts, setDrafts] = createSignal<Record<string, { selectedOptionId?: string; answers: string[]; useOtherFallback?: boolean }>>(opts.initialDrafts ?? {});
   const submitStructuredPromptResponse = vi.fn(async () => ({}));
 
   const aiContextValue: any = {
@@ -79,7 +80,7 @@ function renderAskUserBlock(opts: {
     }),
     activeThreadWaitingPrompt: () => opts.waitingPrompt ?? null,
     getStructuredPromptDrafts: () => drafts(),
-    setStructuredPromptDraft: (_threadId: string, _promptId: string, questionId: string, draft: { selectedOptionId?: string; answers: string[] } | null) => {
+    setStructuredPromptDraft: (_threadId: string, _promptId: string, questionId: string, draft: { selectedOptionId?: string; answers: string[]; useOtherFallback?: boolean } | null) => {
       setDrafts((prev) => {
         const next = { ...prev };
         if (!draft) {
@@ -174,6 +175,60 @@ describe('ToolCallBlock ask_user states', () => {
         },
       },
     }));
+  });
+
+  it('renders an explicit none-of-the-above fallback for is_other questions with options', async () => {
+    const { host } = renderAskUserBlock({
+      runStatus: 'waiting_user',
+      waitingPrompt: {
+        prompt_id: 'prompt-1',
+        message_id: 'message-ask-user-1',
+        tool_id: 'tool-ask-user-1',
+        questions: [
+          {
+            id: 'question_1',
+            header: 'Situation',
+            question: 'Choose the closest situation.',
+            is_other: true,
+            is_secret: false,
+            options: [
+              { option_id: 'working', label: 'Already working' },
+              { option_id: 'studying', label: 'Studying full time' },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(host.textContent).toContain('None of the above');
+    expect(host.querySelector('.chat-tool-ask-user-custom-input')).toBeNull();
+
+    const radios = host.querySelectorAll('input[type="radio"]');
+    expect(radios.length).toBe(3);
+    const fallbackRadio = radios[2] as HTMLInputElement;
+    fallbackRadio.checked = true;
+    fallbackRadio.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushAsync();
+
+    const detailInput = host.querySelector('.chat-tool-ask-user-custom-input') as HTMLInputElement | null;
+    expect(detailInput).toBeTruthy();
+    expect(detailInput?.placeholder).toBe('Type another answer');
+    expect(host.textContent).toContain('Type your answer to continue.');
+    expect((host.querySelector('.chat-tool-ask-user-custom-submit') as HTMLButtonElement | null)?.disabled).toBe(true);
+
+    detailInput!.value = 'Working and studying part time';
+    detailInput!.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushAsync();
+
+    expect((host.querySelector('.chat-tool-ask-user-custom-submit') as HTMLButtonElement | null)?.disabled).toBe(false);
+
+    const firstRadio = radios[0] as HTMLInputElement;
+    firstRadio.checked = true;
+    firstRadio.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushAsync();
+
+    expect(host.querySelector('.chat-tool-ask-user-custom-input')).toBeNull();
+    expect((host.querySelector('.chat-tool-ask-user-custom-submit') as HTMLButtonElement | null)?.disabled).toBe(false);
   });
 
   it('shows a detail input when the selected option requires extra detail', async () => {

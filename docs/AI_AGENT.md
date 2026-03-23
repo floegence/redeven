@@ -120,6 +120,7 @@ Behavior summary:
 - If edits are needed in `plan`, Flower should use `ask_user` to request switching the thread to `act`.
 - The mode-switch `ask_user` must use structured `questions[]`, and deterministic UI actions belong on `questions[].options[].actions` (for example `[{type:"set_mode",mode:"act"}]`).
 - Use `questions[].is_other=true` only when the entire question should allow a freeform reply alongside or instead of predefined options.
+- When `questions[].is_other=true` is combined with predefined `options[]`, the Env App renders an explicit final fallback choice that opens the freeform answer field.
 - Do not combine `questions[].is_other=true` with option-level detail input on the same question.
 - When only a specific option needs extra detail, encode that on the option itself with `questions[].options[].detail_input_mode="required"` and `detail_input_placeholder` when useful.
 - Option-level detail input must block resolution until the user provides that detail; selecting that option alone is not a complete answer.

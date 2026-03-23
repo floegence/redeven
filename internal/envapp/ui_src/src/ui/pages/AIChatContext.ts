@@ -77,6 +77,7 @@ export type WaitingPromptView = Readonly<{
 export type StructuredPromptAnswerDraft = Readonly<{
   selectedOptionId?: string;
   answers: string[];
+  useOtherFallback?: boolean;
 }>;
 
 export type ThreadView = Readonly<{
@@ -613,6 +614,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const normalized: StructuredPromptAnswerDraft = {
       selectedOptionId: String(draft.selectedOptionId ?? '').trim() || undefined,
       answers: Array.isArray(draft.answers) ? draft.answers.map((item) => String(item ?? '').trim()).filter(Boolean) : [],
+      useOtherFallback: Boolean(draft.useOtherFallback) || undefined,
     };
     setStructuredPromptDraftsByPrompt((prev) => ({
       ...prev,

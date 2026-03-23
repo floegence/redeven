@@ -46,6 +46,12 @@ type AskUserQuestionDisplay = {
   options: AskUserOptionDisplay[];
 };
 
+type AskUserDraft = {
+  selectedOptionId?: string;
+  answers: string[];
+  useOtherFallback?: boolean;
+};
+
 // Chevron icon for collapse toggle (rotatable)
 const ChevronIcon: Component<{ collapsed: boolean }> = (props) => (
   <svg
@@ -3095,7 +3101,7 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
     }
   });
 
-  const setQuestionDraft = (questionId: string, next: { selectedOptionId?: string; answers?: string[] }) => {
+  const setQuestionDraft = (questionId: string, next: { selectedOptionId?: string; answers?: string[]; useOtherFallback?: boolean }) => {
     const tid = activeThreadId();
     const promptId = waitingPromptId();
     if (!tid || !promptId) return;
@@ -3103,38 +3109,49 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
     ai.setStructuredPromptDraft(tid, promptId, questionId, {
       selectedOptionId: String(next.selectedOptionId ?? '').trim() || undefined,
       answers: Array.isArray(next.answers) ? next.answers.map((item) => String(item ?? '').trim()).filter(Boolean) : [],
+      useOtherFallback: Boolean(next.useOtherFallback) || undefined,
     });
   };
 
-  const selectedOptionForDraft = (question: AskUserQuestionDisplay, draft: { selectedOptionId?: string; answers: string[] }) => (
+  const selectedOptionForDraft = (question: AskUserQuestionDisplay, draft: AskUserDraft) => (
     question.options.find((option) => option.optionId === String(draft.selectedOptionId ?? '').trim())
   );
 
-  const questionAllowsDetailText = (question: AskUserQuestionDisplay, draft: { selectedOptionId?: string; answers: string[] }): boolean => {
-    if (question.isOther || question.options.length === 0) {
-      return true;
-    }
-    const option = selectedOptionForDraft(question, draft);
-    return Boolean(option?.detailInputMode);
-  };
+  const questionHasOtherFallback = (question: AskUserQuestionDisplay): boolean => (
+    question.isOther && question.options.length > 0
+  );
 
-  const questionRequiresDetailText = (question: AskUserQuestionDisplay, draft: { selectedOptionId?: string; answers: string[] }): boolean => {
+  const questionUsesOtherFallback = (question: AskUserQuestionDisplay, draft: AskUserDraft): boolean => (
+    questionHasOtherFallback(question) &&
+    !String(draft.selectedOptionId ?? '').trim() &&
+    (Boolean(draft.useOtherFallback) || draft.answers.length > 0)
+  );
+
+  const questionAllowsDetailText = (question: AskUserQuestionDisplay, draft: AskUserDraft): boolean => {
     if (question.options.length === 0) {
       return true;
     }
     const option = selectedOptionForDraft(question, draft);
-    return Boolean(option?.detailInputMode);
+    return Boolean(option?.detailInputMode) || questionUsesOtherFallback(question, draft);
+  };
+
+  const questionRequiresDetailText = (question: AskUserQuestionDisplay, draft: AskUserDraft): boolean => {
+    if (question.options.length === 0) {
+      return true;
+    }
+    const option = selectedOptionForDraft(question, draft);
+    return Boolean(option?.detailInputMode) || questionUsesOtherFallback(question, draft);
   };
 
   const questionRequiresSelection = (question: AskUserQuestionDisplay): boolean => (
     question.options.length > 0 && !question.isOther
   );
 
-  const questionShowsDetailInput = (question: AskUserQuestionDisplay, draft: { selectedOptionId?: string; answers: string[] }): boolean => (
-    question.isOther || question.options.length === 0 || questionAllowsDetailText(question, draft)
+  const questionShowsDetailInput = (question: AskUserQuestionDisplay, draft: AskUserDraft): boolean => (
+    question.options.length === 0 || questionAllowsDetailText(question, draft)
   );
 
-  const questionDetailInputPlaceholder = (question: AskUserQuestionDisplay, draft: { selectedOptionId?: string; answers: string[] }): string => {
+  const questionDetailInputPlaceholder = (question: AskUserQuestionDisplay, draft: AskUserDraft): string => {
     const option = selectedOptionForDraft(question, draft);
     if (option?.detailInputPlaceholder) {
       return option.detailInputPlaceholder;
@@ -3148,7 +3165,7 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
     if (option?.detailInputMode === 'required') {
       return 'Add the required detail';
     }
-    if (question.isOther) {
+    if (questionUsesOtherFallback(question, draft) || question.isOther) {
       return 'Type another answer';
     }
     return 'Type your answer';
@@ -3220,18 +3237,27 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
           const draft = createMemo(() => promptDrafts()[question.id] ?? { answers: [] });
           const selectedOption = createMemo(() => selectedOptionForDraft(question, draft()));
           const showDetailInput = createMemo(() => questionShowsDetailInput(question, draft()));
+          const otherFallbackSelected = createMemo(() => questionUsesOtherFallback(question, draft()));
           const autoSubmit = createMemo(() => questionSupportsAutoSubmit(question));
           const selectOption = (option: AskUserOptionDisplay) => {
-            const keepAnswers = question.isOther || question.options.length === 0 || Boolean(option.detailInputMode);
+            const keepAnswers = question.options.length === 0 || Boolean(option.detailInputMode);
             setQuestionDraft(question.id, {
               selectedOptionId: option.optionId,
               answers: keepAnswers ? draft().answers : [],
+              useOtherFallback: false,
             });
             if (autoSubmit()) {
               queueMicrotask(() => {
                 void handleSubmit();
               });
             }
+          };
+          const selectOtherFallback = () => {
+            setQuestionDraft(question.id, {
+              selectedOptionId: undefined,
+              answers: draft().answers,
+              useOtherFallback: true,
+            });
           };
           return (
             <div class="chat-tool-ask-user-question-group">
@@ -3263,6 +3289,27 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
                       </label>
                     )}
                   </For>
+                  <Show when={questionHasOtherFallback(question)}>
+                    <label
+                      class={cn(
+                        'chat-tool-ask-user-option-row',
+                        otherFallbackSelected() && 'chat-tool-ask-user-option-row-selected',
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        class="chat-tool-ask-user-option-radio"
+                        name={`ask-user-reply-${props.block.toolId}-${question.id}`}
+                        checked={otherFallbackSelected()}
+                        onChange={() => selectOtherFallback()}
+                        disabled={controlsDisabled()}
+                      />
+                      <span class="chat-tool-ask-user-option-copy">
+                        <span class="chat-tool-ask-user-option-text">None of the above</span>
+                        <span class="chat-tool-ask-user-option-description">Type another answer.</span>
+                      </span>
+                    </label>
+                  </Show>
                 </div>
               </Show>
               <Show when={showDetailInput()}>
@@ -3271,13 +3318,25 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
                     type={question.isSecret ? 'password' : 'text'}
                     class="chat-tool-ask-user-custom-input"
                     value={draft().answers[0] ?? ''}
-                    onInput={(event) => setQuestionDraft(question.id, { selectedOptionId: draft().selectedOptionId, answers: [event.currentTarget.value] })}
+                    onInput={(event) => setQuestionDraft(question.id, {
+                      selectedOptionId: draft().selectedOptionId,
+                      answers: [event.currentTarget.value],
+                      useOtherFallback: questionUsesOtherFallback(question, draft()),
+                    })}
                     placeholder={questionDetailInputPlaceholder(question, draft())}
-                    aria-label={selectedOption()?.label ? `${question.header} - ${selectedOption()!.label}` : question.header}
+                    aria-label={selectedOption()?.label
+                      ? `${question.header} - ${selectedOption()!.label}`
+                      : otherFallbackSelected()
+                      ? `${question.header} - None of the above`
+                      : question.header}
                     disabled={controlsDisabled()}
                   />
                   <Show when={questionRequiresDetailText(question, draft())}>
-                    <p class="chat-tool-ask-user-detail-hint">More detail is required for the selected option.</p>
+                    <p class="chat-tool-ask-user-detail-hint">
+                      {otherFallbackSelected()
+                        ? 'Type your answer to continue.'
+                        : 'More detail is required for the selected option.'}
+                    </p>
                   </Show>
                 </div>
               </Show>

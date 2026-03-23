@@ -140,7 +140,7 @@ const aiState = {
   activeThreadId: '' as string,
   activeThread: null as MockThread | null,
   waitingPrompt: null as MockWaitingPrompt | null,
-  structuredDrafts: {} as Record<string, { selectedOptionId?: string; answers: string[] }>,
+  structuredDrafts: {} as Record<string, { selectedOptionId?: string; answers: string[]; useOtherFallback?: boolean }>,
   runIdByThread: {} as Record<string, string>,
 };
 
@@ -159,7 +159,7 @@ const aiContextValue = new Proxy({
   activeThreadWaitingPrompt: () => aiState.waitingPrompt,
   getStructuredPromptDrafts: () => aiState.structuredDrafts,
   submitStructuredPromptResponse: submitStructuredPromptResponseMock,
-  setStructuredPromptDraft: (_threadId: string, _promptId: string, questionId: string, draft: { selectedOptionId?: string; answers: string[] } | null) => {
+  setStructuredPromptDraft: (_threadId: string, _promptId: string, questionId: string, draft: { selectedOptionId?: string; answers: string[]; useOtherFallback?: boolean } | null) => {
     const qid = String(questionId ?? '').trim();
     if (!qid) return;
     if (!draft) {
@@ -169,6 +169,7 @@ const aiContextValue = new Proxy({
     aiState.structuredDrafts[qid] = {
       selectedOptionId: draft.selectedOptionId,
       answers: Array.isArray(draft.answers) ? draft.answers : [],
+      useOtherFallback: Boolean(draft.useOtherFallback) || undefined,
     };
   },
   createThread: async () => ({ thread_id: 'thread-created' }),
@@ -1059,6 +1060,49 @@ export function registerEnvAIPageSendTests() {
           dispose();
         }
       });
+    });
+
+    it('uses composer text as the other-fallback answer when is_other questions also provide options', async () => {
+      aiState.activeThread = {
+        ...(aiState.activeThread as MockThread),
+        run_status: 'waiting_user',
+      };
+      aiState.waitingPrompt = {
+        prompt_id: 'prompt-1',
+        message_id: 'assistant-1',
+        tool_id: 'tool-ask-user',
+        questions: [
+          {
+            id: 'question-1',
+            header: 'Situation',
+            question: 'Choose the closest situation.',
+            is_other: true,
+            is_secret: false,
+            options: [
+              { option_id: 'working', label: 'Already working' },
+              { option_id: 'studying', label: 'Studying full time' },
+            ],
+          },
+        ],
+      };
+
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'Working and studying part time.');
+        submitComposer(host, 'button', 'Reply now');
+        await flushAsync();
+
+        expect(submitStructuredPromptResponseMock).toHaveBeenCalledTimes(1);
+        expect(submitStructuredPromptResponseMock).toHaveBeenCalledWith(expect.objectContaining({
+          answers: {
+            'question-1': {
+              answers: ['Working and studying part time.'],
+            },
+          },
+        }));
+      } finally {
+        dispose();
+      }
     });
 
     it('falls back to the active run snapshot after waiting-user submit when realtime start is missing', async () => {
