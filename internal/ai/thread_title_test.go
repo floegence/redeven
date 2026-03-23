@@ -30,6 +30,12 @@ type autoTitleMockResponse struct {
 	WaitCh     <-chan struct{}
 }
 
+type moonshotAutoTitleMock struct {
+	mu           sync.Mutex
+	requestCount int
+	maxTokens    []int
+}
+
 func (m *autoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
 	if r == nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -135,6 +141,182 @@ func (m *autoTitleMock) count() int {
 	return m.requestCount
 }
 
+func (m *moonshotAutoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
+	if r == nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if strings.TrimSpace(r.Header.Get("Authorization")) != "Bearer sk-test" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/chat/completions") {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	var req map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	maxTokens := jsonNumberToInt(req["max_tokens"])
+	m.mu.Lock()
+	m.requestCount++
+	m.maxTokens = append(m.maxTokens, maxTokens)
+	m.mu.Unlock()
+
+	f, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+
+	if maxTokens < autoThreadTitleMaxOutputHigh {
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_auto_title_low",
+			"object":  "chat.completion.chunk",
+			"created": 123,
+			"model":   "kimi-k2.5",
+			"choices": []any{
+				map[string]any{
+					"index":         0,
+					"finish_reason": nil,
+					"delta": map[string]any{
+						"role":              "assistant",
+						"reasoning_content": "Need to summarize the thread issue before returning JSON.",
+					},
+				},
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_auto_title_low",
+			"object":  "chat.completion.chunk",
+			"created": 123,
+			"model":   "kimi-k2.5",
+			"choices": []any{
+				map[string]any{
+					"index":         0,
+					"finish_reason": "length",
+					"delta":         map[string]any{},
+				},
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_auto_title_low",
+			"object":  "chat.completion.chunk",
+			"created": 123,
+			"model":   "kimi-k2.5",
+			"choices": []any{},
+			"usage": map[string]any{
+				"prompt_tokens":     12,
+				"completion_tokens": 4,
+				"total_tokens":      16,
+				"completion_tokens_details": map[string]any{
+					"reasoning_tokens": 4,
+				},
+			},
+		})
+		return
+	}
+
+	writeOpenAISSEJSON(w, f, map[string]any{
+		"id":      "chatcmpl_auto_title_high",
+		"object":  "chat.completion.chunk",
+		"created": 124,
+		"model":   "kimi-k2.5",
+		"choices": []any{
+			map[string]any{
+				"index":         0,
+				"finish_reason": nil,
+				"delta": map[string]any{
+					"role":              "assistant",
+					"reasoning_content": "Expanded budget allows the final JSON payload to be emitted.",
+				},
+			},
+		},
+	})
+	writeOpenAISSEJSON(w, f, map[string]any{
+		"id":      "chatcmpl_auto_title_high",
+		"object":  "chat.completion.chunk",
+		"created": 124,
+		"model":   "kimi-k2.5",
+		"choices": []any{
+			map[string]any{
+				"index":         0,
+				"finish_reason": nil,
+				"delta": map[string]any{
+					"content": `{"title":"Investigate thread title stuck on New Chat","reason":"debug_thread_title"}`,
+				},
+			},
+		},
+	})
+	writeOpenAISSEJSON(w, f, map[string]any{
+		"id":      "chatcmpl_auto_title_high",
+		"object":  "chat.completion.chunk",
+		"created": 124,
+		"model":   "kimi-k2.5",
+		"choices": []any{
+			map[string]any{
+				"index":         0,
+				"finish_reason": "stop",
+				"delta":         map[string]any{},
+			},
+		},
+	})
+	writeOpenAISSEJSON(w, f, map[string]any{
+		"id":      "chatcmpl_auto_title_high",
+		"object":  "chat.completion.chunk",
+		"created": 124,
+		"model":   "kimi-k2.5",
+		"choices": []any{},
+		"usage": map[string]any{
+			"prompt_tokens":     14,
+			"completion_tokens": 8,
+			"total_tokens":      22,
+			"completion_tokens_details": map[string]any{
+				"reasoning_tokens": 6,
+			},
+		},
+	})
+}
+
+func (m *moonshotAutoTitleMock) count() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.requestCount
+}
+
+func (m *moonshotAutoTitleMock) maxTokensSnapshot() []int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]int(nil), m.maxTokens...)
+}
+
+func jsonNumberToInt(v any) int {
+	switch val := v.(type) {
+	case float64:
+		return int(val)
+	case float32:
+		return int(val)
+	case int:
+		return val
+	case int64:
+		return int(val)
+	case json.Number:
+		n, _ := val.Int64()
+		return int(n)
+	default:
+		return 0
+	}
+}
+
 func newAutoTitleTestService(t *testing.T, mock *autoTitleMock) (*Service, session.Meta) {
 	t.Helper()
 	return newAutoTitleTestServiceWithStateDir(t, mock, t.TempDir())
@@ -180,6 +362,59 @@ func newAutoTitleTestServiceWithStateDir(t *testing.T, mock *autoTitleMock, stat
 		RunIdleTimeout:   2 * time.Second,
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			if strings.TrimSpace(providerID) != "openai" {
+				return "", false, nil
+			}
+			return "sk-test", true, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+
+	return svc, meta
+}
+
+func newMoonshotAutoTitleTestService(t *testing.T, mock *moonshotAutoTitleMock) (*Service, session.Meta) {
+	t.Helper()
+
+	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
+	t.Cleanup(srv.Close)
+
+	cfg := &config.AIConfig{
+		Providers: []config.AIProvider{
+			{
+				ID:      "moonshot",
+				Name:    "Moonshot",
+				Type:    "moonshot",
+				BaseURL: strings.TrimSuffix(srv.URL, "/") + "/v1",
+				Models:  []config.AIProviderModel{{ModelName: "kimi-k2.5"}},
+			},
+		},
+	}
+
+	meta := session.Meta{
+		EndpointID:        "env_auto_title_test",
+		NamespacePublicID: "ns_auto_title_test",
+		ChannelID:         "ch_auto_title_test",
+		UserPublicID:      "u_auto_title_test",
+		UserEmail:         "u_auto_title_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+	}
+
+	svc, err := NewService(Options{
+		Logger:           slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo})),
+		StateDir:         t.TempDir(),
+		AgentHomeDir:     t.TempDir(),
+		Shell:            "bash",
+		Config:           cfg,
+		PersistOpTimeout: 2 * time.Second,
+		RunMaxWallTime:   5 * time.Second,
+		RunIdleTimeout:   2 * time.Second,
+		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
+			if strings.TrimSpace(providerID) != "moonshot" {
 				return "", false, nil
 			}
 			return "sk-test", true, nil
@@ -290,6 +525,47 @@ func TestApplyAutoThreadTitle_ManualBlankRenamePreventsOverwrite(t *testing.T) {
 	}
 	if mock.count() != 0 {
 		t.Fatalf("requestCount=%d, want 0", mock.count())
+	}
+}
+
+func TestApplyAutoThreadTitle_ExpandsOutputBudgetForReasoningHeavyProvider(t *testing.T) {
+	t.Parallel()
+
+	mock := &moonshotAutoTitleMock{}
+	svc, meta := newMoonshotAutoTitleTestService(t, mock)
+
+	ctx := context.Background()
+	thread, err := svc.CreateThread(ctx, &meta, "", "moonshot/kimi-k2.5", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	svc.applyAutoThreadTitle(ctx, meta.EndpointID, thread.ThreadID, "msg_auto_title_budget", "please investigate why the thread title stays on New Chat", meta.UserPublicID, meta.UserEmail)
+
+	th, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if th == nil {
+		t.Fatalf("thread missing")
+	}
+	if th.Title != "Investigate thread title stuck on New Chat" {
+		t.Fatalf("Title=%q, want adaptive retry title", th.Title)
+	}
+	if th.TitleSource != "auto" {
+		t.Fatalf("TitleSource=%q, want auto", th.TitleSource)
+	}
+	if th.TitleInputMessageID != "msg_auto_title_budget" {
+		t.Fatalf("TitleInputMessageID=%q, want msg_auto_title_budget", th.TitleInputMessageID)
+	}
+	if th.TitleModelID != "moonshot/kimi-k2.5" {
+		t.Fatalf("TitleModelID=%q, want moonshot/kimi-k2.5", th.TitleModelID)
+	}
+	if mock.count() != 2 {
+		t.Fatalf("requestCount=%d, want 2 attempts within one apply call", mock.count())
+	}
+	if got := mock.maxTokensSnapshot(); len(got) != 2 || got[0] != autoThreadTitleMaxOutputLow || got[1] != autoThreadTitleMaxOutputHigh {
+		t.Fatalf("maxTokens=%v, want [%d %d]", got, autoThreadTitleMaxOutputLow, autoThreadTitleMaxOutputHigh)
 	}
 }
 

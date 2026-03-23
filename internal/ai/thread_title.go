@@ -17,12 +17,18 @@ import (
 const (
 	autoThreadTitlePromptVersion = "thread_title_v1"
 	autoThreadTitleMaxRunes      = 80
+	autoThreadTitleMaxOutputLow  = 128
+	autoThreadTitleMaxOutputHigh = 4096
 	autoThreadTitleRecoveryLimit = 128
 )
 
 type autoThreadTitleDecision struct {
 	Title  string
 	Reason string
+}
+
+type autoThreadTitleGenerationAttempt struct {
+	MaxOutputTokens int
 }
 
 type autoThreadTitleRequest struct {
@@ -215,17 +221,68 @@ func (s *Service) generateAutoThreadTitleByModel(ctx context.Context, resolved r
 	}
 	defer cancel()
 
-	result, err := adapter.StreamTurn(titleCtx, TurnRequest{
+	attempts := []autoThreadTitleGenerationAttempt{
+		{MaxOutputTokens: autoThreadTitleMaxOutputLow},
+		{MaxOutputTokens: autoThreadTitleMaxOutputHigh},
+	}
+	var lastErr error
+	for idx, attempt := range attempts {
+		result, runErr := s.runAutoThreadTitleAttempt(titleCtx, adapter, responseFormat, resolved, userInput, attempt)
+		if runErr != nil {
+			return autoThreadTitleDecision{}, runErr
+		}
+		decision, parseErr := parseAutoThreadTitleDecision(result.Text)
+		if parseErr == nil {
+			return decision, nil
+		}
+		lastErr = parseErr
+		if idx >= len(attempts)-1 || !shouldRetryAutoThreadTitleWithExpandedBudget(result, attempt) {
+			break
+		}
+	}
+	if lastErr == nil {
+		lastErr = errors.New("auto title generation returned no parseable text")
+	}
+	return autoThreadTitleDecision{}, lastErr
+}
+
+func (s *Service) runAutoThreadTitleAttempt(
+	ctx context.Context,
+	adapter Provider,
+	responseFormat string,
+	resolved resolvedRunModel,
+	userInput string,
+	attempt autoThreadTitleGenerationAttempt,
+) (TurnResult, error) {
+	if s == nil {
+		return TurnResult{}, errors.New("nil service")
+	}
+	if adapter == nil {
+		return TurnResult{}, errors.New("missing auto title provider")
+	}
+
+	maxOutputTokens := attempt.MaxOutputTokens
+	if maxOutputTokens <= 0 {
+		maxOutputTokens = autoThreadTitleMaxOutputLow
+	}
+
+	return adapter.StreamTurn(ctx, TurnRequest{
 		Model:            strings.TrimSpace(resolved.ModelName),
 		Messages:         buildAutoThreadTitleMessages(userInput),
-		Budgets:          TurnBudgets{MaxSteps: 1, MaxOutputToken: 128},
+		Budgets:          TurnBudgets{MaxSteps: 1, MaxOutputToken: maxOutputTokens},
 		ModeFlags:        ModeFlags{Mode: config.AIModePlan},
 		ProviderControls: ProviderControls{ResponseFormat: responseFormat},
 	}, nil)
-	if err != nil {
-		return autoThreadTitleDecision{}, err
+}
+
+func shouldRetryAutoThreadTitleWithExpandedBudget(result TurnResult, attempt autoThreadTitleGenerationAttempt) bool {
+	if attempt.MaxOutputTokens >= autoThreadTitleMaxOutputHigh {
+		return false
 	}
-	return parseAutoThreadTitleDecision(result.Text)
+	if strings.EqualFold(strings.TrimSpace(result.FinishReason), "length") {
+		return true
+	}
+	return strings.TrimSpace(result.Text) == "" && strings.TrimSpace(result.Reasoning) != ""
 }
 
 func (s *Service) scheduleAutoThreadTitle(meta *session.Meta, threadID string, input effectiveCurrentUserInput) {
