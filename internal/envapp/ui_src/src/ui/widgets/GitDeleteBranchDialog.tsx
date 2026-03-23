@@ -3,6 +3,7 @@ import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitBranchSummary, GitPreviewDeleteBranchResponse, GitWorkspaceSummary } from '../protocol/redeven_v1';
 import { branchDisplayName } from '../utils/gitWorkbench';
+import { GitDeleteBranchConfirmButton, resolveDeleteBranchConfirmDisabledReason } from './GitDeleteBranchConfirmButton';
 import { GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
 
 export type GitDeleteBranchDialogState = 'idle' | 'previewing' | 'deleting';
@@ -55,6 +56,14 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
   const linkedWorktreePath = () => linkedWorktree()?.worktreePath || 'the linked worktree path';
   const worktreeAccessible = () => Boolean(linkedWorktree()?.accessible);
   const pendingChangeSummary = () => formatPendingSummary(linkedWorktree()?.summary);
+  const confirmDisabledReason = () => resolveDeleteBranchConfirmDisabledReason({
+    branch: props.branch,
+    preview: preview(),
+    previewError: props.previewError,
+    loading: loading(),
+    deleting: deleting(),
+    blockingReason: blockingReason(),
+  });
 
   const canConfirm = () => {
     return Boolean(
@@ -112,11 +121,11 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
                 Retry
               </Button>
             </Show>
-            <Button
-              size="sm"
-              variant="destructive"
+            <GitDeleteBranchConfirmButton
+              label={confirmLabel()}
               class="w-full sm:w-auto"
               disabled={!canConfirm()}
+              disabledReason={confirmDisabledReason()}
               loading={deleting()}
               onClick={() => {
                 const branch = props.branch;
@@ -128,9 +137,7 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
                   planFingerprint: currentPreview.planFingerprint,
                 });
               }}
-            >
-              {confirmLabel()}
-            </Button>
+            />
           </div>
         </div>
       )}
