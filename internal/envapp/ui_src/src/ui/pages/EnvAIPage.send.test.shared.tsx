@@ -220,6 +220,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     FileText: Icon,
     Pencil: Icon,
     Settings: Icon,
+    Sparkles: Icon,
     Stop: Icon,
     Terminal: Icon,
     Trash: Icon,
@@ -720,7 +721,8 @@ export function registerEnvAIPageSendTests() {
 
         const reasoning = host.querySelector('.chat-thinking-block');
         expect(reasoning).toBeTruthy();
-        expect(reasoning?.textContent).toContain('Reasoning');
+        expect(reasoning?.getAttribute('aria-label')).toBe('Reasoning');
+        expect(reasoning?.textContent).not.toContain('Reasoning');
         expect(reasoning?.textContent).toContain('Tracing the live reducer path.');
         expect(host.querySelector('.chat-markdown-empty-streaming')).toBeNull();
       } finally {
