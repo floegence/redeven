@@ -247,3 +247,56 @@ func TestIntentRouting_ContinuationWithOpenGoalStaysTask(t *testing.T) {
 		t.Fatalf("intent path=%q, want task_engine", got)
 	}
 }
+
+func TestIntentRouting_GuidedStructuredInteractionUsesTaskPath(t *testing.T) {
+	t.Parallel()
+
+	mock := &openAIMock{token: "GUIDED_TASK_REPLY_OK"}
+	svc, meta := newIntentRoutingService(t, mock)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	thread, err := svc.CreateThread(ctx, &meta, "guided interaction test", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_intent_guided_task_1"
+	rr := httptest.NewRecorder()
+	err = svc.StartRun(ctx, &meta, runID, RunStartRequest{
+		ThreadID: thread.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "请你和我一问一答猜我的岁数，不要有直接的问题，每个问题应该提供几个选项。"},
+		Options:  RunOptions{MaxSteps: 1, MaxNoToolRounds: 1, Mode: "plan"},
+	}, rr)
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	if !strings.Contains(rr.Body.String(), "GUIDED_TASK_REPLY_OK") {
+		t.Fatalf("stream output missing guided task reply token, body=%q", rr.Body.String())
+	}
+	if names := mock.toolNamesSnapshot(); len(names) == 0 {
+		t.Fatalf("guided structured interaction should route to task path with tools, got none")
+	}
+
+	runEvents, err := svc.ListRunEvents(ctx, &meta, runID, 2000)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	classified := findRunEventPayload(t, runEvents.Events, "intent.classified")
+	if got := strings.TrimSpace(fmt.Sprint(classified["intent"])); got != RunIntentTask {
+		t.Fatalf("intent=%q, want %q", got, RunIntentTask)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(classified["intent_source"])); got != RunIntentSourceModel {
+		t.Fatalf("intent_source=%q, want %q", got, RunIntentSourceModel)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(classified["reason"])); got != "guided_structured_interaction_requested" {
+		t.Fatalf("reason=%q, want %q", got, "guided_structured_interaction_requested")
+	}
+	routed := findRunEventPayload(t, runEvents.Events, "intent.routed")
+	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != "task_engine" {
+		t.Fatalf("intent path=%q, want task_engine", got)
+	}
+}

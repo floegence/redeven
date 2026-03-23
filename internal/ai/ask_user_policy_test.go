@@ -56,6 +56,37 @@ func TestBuildAskUserPolicyClassifierMessages(t *testing.T) {
 	}
 }
 
+func TestBuildAskUserPolicyClassifierMessages_AllowsStructuredInteractionTurns(t *testing.T) {
+	t.Parallel()
+
+	msgs := buildAskUserPolicyClassifierMessages("Run a guided music-preference questionnaire", askUserSignal{
+		Questions: []RequestUserInputQuestion{{
+			ID:       "music_habit",
+			Header:   "Music Habit",
+			Question: "How do you usually listen to music?",
+			Choices: []RequestUserInputChoice{
+				{ChoiceID: "streaming", Label: "Streaming apps", Kind: requestUserInputChoiceKindSelect},
+				{ChoiceID: "other", Label: "Other", Kind: requestUserInputChoiceKindWrite},
+			},
+		}},
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Choose the closest listening habit."},
+	}, runtimeState{})
+	if len(msgs) != 2 {
+		t.Fatalf("message count=%d, want 2", len(msgs))
+	}
+	system := msgs[0].Content[0].Text
+	if !strings.Contains(system, "guided structured interaction turns") {
+		t.Fatalf("system prompt missing structured interaction allowance: %q", system)
+	}
+	if !strings.Contains(system, "questionnaires, interviews, quizzes, guessing games, decision trees, and option-driven conversations") {
+		t.Fatalf("system prompt missing structured interaction examples: %q", system)
+	}
+	if !strings.Contains(system, "delegates collectable work") {
+		t.Fatalf("system prompt missing collectable-work rejection: %q", system)
+	}
+}
+
 func TestDefaultGuardAskUserSignal(t *testing.T) {
 	t.Parallel()
 

@@ -130,6 +130,8 @@ func buildAskUserPolicyClassifierMessages(objective string, signal askUserSignal
 		"Reject (allow=false) if the ask_user request delegates collectable work to the user that available tools can do directly.",
 		"Collectable work includes running commands, gathering logs/output/screenshots/files, and fetching web content when tools can do it.",
 		"Allow (allow=true) for true external blockers: user decisions, unavailable credentials, policy approvals, conflicting constraints, or safety confirmations.",
+		"Allow (allow=true) for guided structured interaction turns when the assistant intentionally needs the user's next constrained answer to continue, such as questionnaires, interviews, quizzes, guessing games, decision trees, and option-driven conversations.",
+		"Structured interaction turns are allowed only when the user's next answer materially determines the next step; they are not a license to delegate solvable work.",
 		"Use runtime facts and the structured ask_user payload. Do not include markdown or extra text.",
 	}, "\n")
 	user := strings.Join([]string{
