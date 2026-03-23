@@ -2485,10 +2485,12 @@ func parseAskUserQuestionsAny(value any) []RequestUserInputQuestion {
 					}
 				}
 				optionItems = append(optionItems, RequestUserInputOption{
-					OptionID:    strings.TrimSpace(anyToString(optionRecord["option_id"])),
-					Label:       strings.TrimSpace(anyToString(optionRecord["label"])),
-					Description: strings.TrimSpace(anyToString(optionRecord["description"])),
-					Actions:     actions,
+					OptionID:               strings.TrimSpace(anyToString(optionRecord["option_id"])),
+					Label:                  strings.TrimSpace(anyToString(optionRecord["label"])),
+					Description:            strings.TrimSpace(anyToString(optionRecord["description"])),
+					DetailInputMode:        strings.TrimSpace(anyToString(optionRecord["detail_input_mode"])),
+					DetailInputPlaceholder: strings.TrimSpace(anyToString(optionRecord["detail_input_placeholder"])),
+					Actions:                actions,
 				})
 			}
 			if normalized := normalizeRequestUserInputOptions(optionItems); len(normalized) > 0 {

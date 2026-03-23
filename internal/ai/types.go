@@ -43,10 +43,12 @@ type RequestUserInputQuestion struct {
 }
 
 type RequestUserInputOption struct {
-	OptionID    string                   `json:"option_id"`
-	Label       string                   `json:"label"`
-	Description string                   `json:"description,omitempty"`
-	Actions     []RequestUserInputAction `json:"actions,omitempty"`
+	OptionID               string                   `json:"option_id"`
+	Label                  string                   `json:"label"`
+	Description            string                   `json:"description,omitempty"`
+	DetailInputMode        string                   `json:"detail_input_mode,omitempty"`
+	DetailInputPlaceholder string                   `json:"detail_input_placeholder,omitempty"`
+	Actions                []RequestUserInputAction `json:"actions,omitempty"`
 }
 
 type RequestUserInputAction struct {

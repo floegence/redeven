@@ -48,6 +48,8 @@ export type WaitingPromptOptionView = Readonly<{
   option_id: string;
   label: string;
   description?: string;
+  detail_input_mode?: 'optional' | 'required';
+  detail_input_placeholder?: string;
   actions?: WaitingPromptActionView[];
 }>;
 
@@ -204,6 +206,11 @@ function normalizeWaitingPromptOptions(raw: unknown): WaitingPromptOptionView[] 
       option_id: optionID,
       label,
       description: String((item as any).description ?? '').trim() || undefined,
+      detail_input_mode: (() => {
+        const mode = String((item as any).detail_input_mode ?? '').trim().toLowerCase();
+        return mode === 'optional' || mode === 'required' ? mode : undefined;
+      })(),
+      detail_input_placeholder: String((item as any).detail_input_placeholder ?? '').trim() || undefined,
       actions: actions.length > 0 ? actions : undefined,
     });
     if (out.length >= 4) break;

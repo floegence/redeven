@@ -13,6 +13,8 @@ export type wire_ai_request_user_input_option = {
   option_id: string;
   label: string;
   description?: string;
+  detail_input_mode?: string;
+  detail_input_placeholder?: string;
   actions?: wire_ai_request_user_input_action[];
 };
 

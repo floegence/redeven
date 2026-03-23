@@ -4110,10 +4110,12 @@ func extractSignalRequestUserInputOptions(call ToolCall, key string) []RequestUs
 			})
 		}
 		options = append(options, RequestUserInputOption{
-			OptionID:    anyToString(record["option_id"]),
-			Label:       anyToString(record["label"]),
-			Description: anyToString(record["description"]),
-			Actions:     actions,
+			OptionID:               anyToString(record["option_id"]),
+			Label:                  anyToString(record["label"]),
+			Description:            anyToString(record["description"]),
+			DetailInputMode:        anyToString(record["detail_input_mode"]),
+			DetailInputPlaceholder: anyToString(record["detail_input_placeholder"]),
+			Actions:                actions,
 		})
 	}
 	return normalizeRequestUserInputOptions(options)
@@ -4672,6 +4674,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			"- evidence_refs must reference relevant tool IDs when evidence is required.",
 			"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_other, is_secret, and optional options[].",
 			"- For each question, include 2-4 concise mutually exclusive options (best option first) when predefined choices are appropriate.",
+			"- Use `is_other=true` only when the whole question should allow a freeform reply. When only one option needs extra detail, use `options[].detail_input_mode` with `optional` or `required`, plus `options[].detail_input_placeholder` when helpful.",
 			"- For deterministic UI actions, place actions on `questions[].options[].actions` (for example {type:\"set_mode\",mode:\"act\"}).",
 		)
 		if capability.SupportsAskUserQuestionBatches {
