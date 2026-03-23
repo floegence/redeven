@@ -24,6 +24,7 @@ import { fetchGatewayJSON } from "../services/gatewayApi";
 import { appendLocalAccessResumeQuery } from "../services/localAccessAuth";
 import { trustedLauncherOriginFromSandboxLocation } from "../services/sandboxOrigins";
 import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
+import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPickerTreeAbsolutePath } from "../utils/directoryPickerTree";
 
 type SpaceStatus = Readonly<{
   code_space_id: string;
@@ -157,70 +158,6 @@ async function openCodespace(codeSpaceID: string, setStatus: (s: string) => void
     }
     throw e;
   }
-}
-
-// File tree utilities
-function normalizePath(path: string): string {
-  const raw = String(path ?? "").trim();
-  if (!raw) return "/";
-  const p = raw.startsWith("/") ? raw : `/${raw}`;
-  if (p === "/") return "/";
-  return p.endsWith("/") ? p.replace(/\/+$/, "") || "/" : p;
-}
-
-function extNoDot(name: string): string | undefined {
-  const idx = name.lastIndexOf(".");
-  if (idx <= 0) return undefined;
-  return name.slice(idx + 1).toLowerCase();
-}
-
-function toFileItem(entry: FsFileInfo): FileItem {
-  const isDir = !!entry.isDirectory;
-  const name = String(entry.name ?? "");
-  // Normalize path so it matches the comparisons inside withChildren.
-  const p = normalizePath(String(entry.path ?? ""));
-  const modifiedAtMs = Number(entry.modifiedAt ?? 0);
-  return {
-    id: p,
-    name,
-    type: isDir ? "folder" : "file",
-    path: p,
-    size: Number.isFinite(entry.size) ? entry.size : undefined,
-    modifiedAt: Number.isFinite(modifiedAtMs) && modifiedAtMs > 0 ? new Date(modifiedAtMs) : undefined,
-    extension: isDir ? undefined : extNoDot(name),
-  };
-}
-
-function sortFileItems(items: FileItem[]): FileItem[] {
-  return [...items].sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "folder" ? -1 : 1));
-}
-
-function withChildren(tree: FileItem[], folderPath: string, children: FileItem[], rootPath = "/"): FileItem[] {
-  const target = normalizePath(folderPath);
-  const normalizedRoot = normalizePath(rootPath);
-  if (target === normalizedRoot || target === "") {
-    return children;
-  }
-
-  const visit = (items: FileItem[]): [FileItem[], boolean] => {
-    let changed = false;
-    const next = items.map((it) => {
-      if (it.type !== "folder") return it;
-      if (it.path === target) {
-        changed = true;
-        return { ...it, children };
-      }
-      if (!it.children || it.children.length === 0) return it;
-      const [nextChildren, hit] = visit(it.children);
-      if (!hit) return it;
-      changed = true;
-      return { ...it, children: nextChildren };
-    });
-    return [changed ? next : items, changed];
-  };
-
-  const [next] = visit(tree);
-  return next;
 }
 
 // Status badge component
@@ -582,62 +519,38 @@ export function EnvCodespacesPage() {
     })();
   });
 
-  // Load a single directory's children and update the tree.
-  const loadDir = async (path: string) => {
-    const client = protocol.client();
-    if (!client) return;
+  createEffect(() => {
+    homePath();
+    cache = new Map();
+    setFiles([]);
+  });
 
-    const p = normalizePath(path);
-    const scopedRootPath = normalizePath(homePath() ?? "") || p;
+  const loadPickerDir = async (pickerPath: string) => {
+    if (!protocol.client()) return;
 
-    // If cached, update the tree from cache.
-    if (cache.has(p)) {
-      setFiles((prev) => withChildren(prev, p, cache.get(p)!, scopedRootPath));
+    const absolutePath = toPickerTreeAbsolutePath(pickerPath, homePath());
+    if (!absolutePath) return;
+
+    if (cache.has(absolutePath)) {
+      setFiles((prev) => replacePickerChildren(prev, pickerPath, cache.get(absolutePath)!));
       return;
     }
 
     try {
-      const resp = await rpc.fs.list({ path: p, showHidden: false });
+      const resp = await rpc.fs.list({ path: absolutePath, showHidden: false });
       const entries = resp?.entries ?? [];
-      const items = sortFileItems(entries.map(toFileItem).filter((item) => item.type === "folder"));
-      cache.set(p, items);
-      setFiles((prev) => withChildren(prev, p, items, scopedRootPath));
+      const items = sortPickerFolderItems(
+        entries.map((entry) => toPickerFolderItem(entry as FsFileInfo, homePath())).filter((item): item is FileItem => !!item)
+      );
+      cache.set(absolutePath, items);
+      setFiles((prev) => replacePickerChildren(prev, pickerPath, items));
     } catch {
-      // ignore errors for now
-    }
-  };
-
-  // Load root directory (for initialization).
-  const loadRootDir = async () => {
-    const client = protocol.client();
-    if (!client) return;
-
-    const p = normalizePath(homePath() ?? "");
-    if (!p) return;
-    if (cache.has(p)) {
-      setFiles(cache.get(p)!);
-      return;
-    }
-
-    try {
-      const resp = await rpc.fs.list({ path: p, showHidden: false });
-      const entries = resp?.entries ?? [];
-      const items = sortFileItems(entries.map(toFileItem).filter((item) => item.type === "folder"));
-      cache.set(p, items);
-      setFiles(items);
-    } catch {
-      // ignore errors for now
+      // ignore
     }
   };
 
   const handleLoadDir = (path: string) => {
-    const p = normalizePath(path);
-    const home = normalizePath(homePath() ?? "");
-    if (!p || (home && p === home)) {
-      void loadRootDir();
-    } else {
-      void loadDir(p);
-    }
+    void loadPickerDir(path);
   };
 
   const handleCreate = async (path: string, name: string, description: string) => {
