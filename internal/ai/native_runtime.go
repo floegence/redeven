@@ -836,15 +836,18 @@ func extractMoonshotReasoningJSON(raw string) string {
 func extractMoonshotReasoningValue(v any) string {
 	switch val := v.(type) {
 	case string:
-		return strings.TrimSpace(val)
+		// Preserve provider fragment whitespace exactly as streamed. Moonshot/Kimi may
+		// emit reasoning as token-like fragments such as "Let" + " me", and trimming
+		// each fragment corrupts the visible reasoning transcript.
+		return val
 	case []any:
-		parts := make([]string, 0, len(val))
+		var b strings.Builder
 		for _, item := range val {
 			if text := extractMoonshotReasoningValue(item); text != "" {
-				parts = append(parts, text)
+				b.WriteString(text)
 			}
 		}
-		return strings.Join(parts, "\n")
+		return b.String()
 	case map[string]any:
 		for _, key := range []string{"text", "content", "reasoning_content", "reasoning"} {
 			if text := extractMoonshotReasoningValue(val[key]); text != "" {
