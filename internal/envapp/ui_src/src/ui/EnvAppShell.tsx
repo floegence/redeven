@@ -51,10 +51,14 @@ import { createAgentVersionModel } from './maintenance/createAgentVersionModel';
 import { AuditLogDialog } from './widgets/AuditLogDialog';
 import { AgentUpdateFloatingPrompt } from './widgets/AgentUpdateFloatingPrompt';
 import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
+import { createFileBrowserSurfaceController } from './widgets/createFileBrowserSurfaceController';
 import { createFilePreviewController } from './widgets/createFilePreviewController';
 import { DetachedSurfaceScene } from './widgets/DetachedSurfaceScene';
+import { FileBrowserSurfaceContext } from './widgets/FileBrowserSurfaceContext';
+import { FileBrowserSurfaceHost } from './widgets/FileBrowserSurfaceHost';
 import { FilePreviewContext } from './widgets/FilePreviewContext';
 import { FilePreviewHost } from './widgets/FilePreviewHost';
+import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';
 import { buildAskFlowerDraftMarkdown } from './utils/askFlowerContextTemplate';
 import { normalizeAbsolutePath, resolveSuggestedWorkingDirAbsolute } from './utils/askFlowerPath';
 import { createClientId } from './utils/clientId';
@@ -87,7 +91,13 @@ import {
   type LocalAccessStatus,
   type LocalRuntimeInfo,
 } from './services/controlplaneApi';
-import { basenameFromAbsolutePath, buildDetachedFilePreviewSurface, isDesktopManagedRuntime, openDetachedSurfaceWindow, parseDetachedSurfaceFromURL } from './services/detachedSurface';
+import {
+  basenameFromAbsolutePath,
+  buildDetachedFilePreviewSurface,
+  isDesktopManagedRuntime,
+  openDetachedSurfaceWindow,
+  parseDetachedSurfaceFromURL,
+} from './services/detachedSurface';
 import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 
@@ -229,6 +239,7 @@ export function EnvAppShell() {
       notify.error('Save failed', `${path}: ${message}`);
     },
   });
+  const fileBrowserSurfaceController = createFileBrowserSurfaceController();
 
   type ProtocolConnectConfig = Parameters<typeof protocol.connect>[0];
   const reconnectPolicy = {
@@ -1728,6 +1739,24 @@ export function EnvAppShell() {
     },
     closePreview: filePreviewController.closePreview,
   } as const;
+  const fileBrowserSurfaceContextValue = {
+    controller: fileBrowserSurfaceController,
+    openBrowser: async (params: {
+      path: string;
+      homePath?: string;
+      title?: string;
+      persistenceKey?: string;
+      stateScope?: string;
+    }) => {
+      await openFileBrowserSurface({
+        input: params,
+        controller: fileBrowserSurfaceController,
+        localRuntime,
+        resolveLocalRuntime: getLocalRuntime,
+      });
+    },
+    closeBrowser: fileBrowserSurfaceController.closeSurface,
+  } as const;
 
   const renderDetachedSurface = () => {
     const surface = detachedSurface();
@@ -1832,6 +1861,7 @@ export function EnvAppShell() {
 
       <AuditLogDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
       <FilePreviewHost />
+      <FileBrowserSurfaceHost />
       <AgentUpdateFloatingPrompt
         open={agentUpdatePrompt.visible()}
         mode={agentUpdatePrompt.mode()}
@@ -1879,29 +1909,31 @@ export function EnvAppShell() {
         focusAIThread,
       }}
     >
-      <FilePreviewContext.Provider value={filePreviewContextValue}>
-        <AgentUpdateContext.Provider
-          value={{
-            version: agentVersionModel,
-            maintenance: agentMaintenanceController,
-          }}
-        >
-          <FloeRegistryRuntime components={components()}>
-            <AIChatProviderBridge>
-              <Show when={detachedSurface()} fallback={renderMainShell()}>
-                {renderDetachedSurface()}
-              </Show>
-              <AskFlowerComposerWindow
-                open={askFlowerComposerOpen()}
-                intent={askFlowerComposerIntent()}
-                anchor={askFlowerComposerAnchor()}
-                onClose={closeAskFlowerComposer}
-                onSend={submitAskFlowerComposer}
-              />
-            </AIChatProviderBridge>
-          </FloeRegistryRuntime>
-        </AgentUpdateContext.Provider>
-      </FilePreviewContext.Provider>
+      <FileBrowserSurfaceContext.Provider value={fileBrowserSurfaceContextValue}>
+        <FilePreviewContext.Provider value={filePreviewContextValue}>
+          <AgentUpdateContext.Provider
+            value={{
+              version: agentVersionModel,
+              maintenance: agentMaintenanceController,
+            }}
+          >
+            <FloeRegistryRuntime components={components()}>
+              <AIChatProviderBridge>
+                <Show when={detachedSurface()} fallback={renderMainShell()}>
+                  {renderDetachedSurface()}
+                </Show>
+                <AskFlowerComposerWindow
+                  open={askFlowerComposerOpen()}
+                  intent={askFlowerComposerIntent()}
+                  anchor={askFlowerComposerAnchor()}
+                  onClose={closeAskFlowerComposer}
+                  onSend={submitAskFlowerComposer}
+                />
+              </AIChatProviderBridge>
+            </FloeRegistryRuntime>
+          </AgentUpdateContext.Provider>
+        </FilePreviewContext.Provider>
+      </FileBrowserSurfaceContext.Provider>
     </EnvContext.Provider>
   );
 }

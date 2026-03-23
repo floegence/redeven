@@ -3,12 +3,8 @@
 import { Show, createMemo, createSignal, untrack } from 'solid-js';
 import { Motion } from 'solid-motionone';
 import { Folder } from '@floegence/floe-webapp-core/icons';
-import { useEnvContext } from '../pages/EnvContext';
-import { getLocalRuntime } from '../services/controlplaneApi';
-import { buildDetachedFileBrowserSurface, isDesktopManagedRuntime, openDetachedSurfaceWindow } from '../services/detachedSurface';
 import { normalizePath } from './FileBrowserShared';
-import { PersistentFloatingWindow } from './PersistentFloatingWindow';
-import { RemoteFileBrowser } from './RemoteFileBrowser';
+import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
 
 export interface ChatFileBrowserFABProps {
   workingDir: string;
@@ -26,12 +22,8 @@ function normalizeAbsolutePath(path: string): string {
 
 const FAB_SIZE = 44;
 const EDGE_MARGIN = 12;
-const BROWSER_WINDOW_Z_INDEX = 44;
-
 export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
-  const env = useEnvContext();
-
-  const [browserOpen, setBrowserOpen] = createSignal(false);
+  const fileBrowserSurface = useFileBrowserSurfaceContext();
   const [fabLeft, setFabLeft] = createSignal<number | null>(null);
   const [fabTop, setFabTop] = createSignal<number | null>(null);
   const [isDragging, setIsDragging] = createSignal(false);
@@ -148,25 +140,11 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
     void (async () => {
       const browser = untrack(browserSeed);
       if (!browser) return;
-
-      try {
-        const runtime = env.localRuntime() ?? await getLocalRuntime();
-        if (isDesktopManagedRuntime(runtime)) {
-          const surface = buildDetachedFileBrowserSurface(browser);
-          if (surface) {
-            openDetachedSurfaceWindow(surface);
-            return;
-          }
-        }
-      } catch {
-        // Fall back to the in-app floating window when local runtime inspection fails.
-      }
-
-      setBrowserOpen(true);
+      await fileBrowserSurface.openBrowser(browser);
     })();
   }
 
-  const showFab = () => (props.enabled ?? true) && !browserOpen();
+  const showFab = () => (props.enabled ?? true) && !fileBrowserSurface.controller.open();
 
   const fabStyle = () => {
     const left = fabLeft();
@@ -184,48 +162,24 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   };
 
   return (
-    <>
-      <Show when={showFab()}>
-        <div class="redeven-fab-file-browser" style={fabStyle()}>
-          <Motion.div
-            initial={{ opacity: 0, scale: 0.6 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3, easing: 'ease-out' }}
+    <Show when={showFab()}>
+      <div class="redeven-fab-file-browser" style={fabStyle()}>
+        <Motion.div
+          initial={{ opacity: 0, scale: 0.6 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3, easing: 'ease-out' }}
+        >
+          <button
+            class="redeven-fab-file-browser-btn"
+            title="Browse files"
+            onPointerDown={onFabPointerDown}
+            onPointerMove={onFabPointerMove}
+            onPointerUp={onFabPointerUp}
           >
-            <button
-              class="redeven-fab-file-browser-btn"
-              title="Browse files"
-              onPointerDown={onFabPointerDown}
-              onPointerMove={onFabPointerMove}
-              onPointerUp={onFabPointerUp}
-            >
-              <Folder class="w-5 h-5" />
-            </button>
-          </Motion.div>
-        </div>
-      </Show>
-
-      <PersistentFloatingWindow
-        open={browserOpen()}
-        onOpenChange={setBrowserOpen}
-        title="Browser"
-        persistenceKey="chat-browser"
-        defaultSize={{ width: 760, height: 580 }}
-        minSize={{ width: 420, height: 320 }}
-        zIndex={BROWSER_WINDOW_Z_INDEX}
-      >
-        <div class="h-full min-h-0 overflow-hidden bg-background">
-          <Show when={browserOpen() ? browserSeed() : null} keyed>
-            {(browser) => (
-              <RemoteFileBrowser
-                stateScope="chat-fab"
-                initialPathOverride={browser.path}
-                homePathOverride={browser.homePath}
-              />
-            )}
-          </Show>
-        </div>
-      </PersistentFloatingWindow>
-    </>
+            <Folder class="w-5 h-5" />
+          </button>
+        </Motion.div>
+      </div>
+    </Show>
   );
 }
