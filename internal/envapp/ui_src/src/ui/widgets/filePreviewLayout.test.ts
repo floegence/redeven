@@ -31,7 +31,8 @@ describe('file preview wiring', () => {
     expect(textPaneSrc).toContain("from '@floegence/floe-webapp-core/editor';");
     expect(textPaneSrc).toContain('ErrorBoundary');
     expect(textPaneSrc).toContain('import type { CodeEditorApi, CodeEditorProps }');
-    expect(textPaneSrc).toContain('!props.truncated && !monacoFailed()');
+    expect(textPaneSrc).toContain("!props.editing && props.descriptor.textPresentation === 'code'");
+    expect(textPaneSrc).toContain('!shouldUseCodePreview() && !props.truncated && !monacoFailed()');
     expect(textPaneSrc).toContain('queueMicrotask');
     expect(textPaneSrc).toContain('Loading editor...');
     expect(contentSrc).toContain('Copy path');

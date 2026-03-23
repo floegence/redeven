@@ -9,12 +9,12 @@ Key points:
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower).
 - Flower thread history keeps the chat `title` separate from the latest `last_message_preview` snippet: untitled chats render as `New chat` until the agent later writes a generated title, while the preview line continues to reflect the newest visible message text.
 - Flower auto titles are best-effort but resilient: the agent retries transient generation failures in the background, can expand the title-generation output budget once for reasoning-heavy models, and also recovers recent untitled threads after restart, so users should see the final title appear without manual refresh or rename in normal cases.
-- File Browser text/code previews now use a Monaco-based viewer/editor path for the primary experience, matching the shared Floe Webapp editor surface.
-- When the environment grants `can_write`, text previews can switch into an editable mode and save changes back through the agent file RPC.
+- File Browser read-only code previews now use the lightweight Shiki-based preview surface, while edit mode continues to use the shared Floe Webapp Monaco editor.
+- When the environment grants `can_write`, text previews can switch into Monaco-backed edit mode and save changes back through the agent file RPC.
 - File Browser directory context menus can hand off into Terminal by opening the terminal page and creating a new session rooted at the selected directory.
 - Terminal right-click menus can hand off back into File Browser by opening the shared floating browser surface at the active terminal working directory.
-- Languages that Monaco can only treat as plain text still stay on the same Monaco surface so preview and Edit mode remain visually aligned.
-- Truncated reads and Monaco load failures fall back to the lightweight Shiki/plain-text preview path so preview remains responsive.
+- Read-only code previews no longer depend on Monaco tokenization, so languages such as CSS use the same syntax-highlighted preview path as other code files.
+- Plain-text previews stay on the Monaco viewer path until the user edits or the preview is truncated; truncated reads and Monaco load failures still fall back to the lightweight preview path so the surface remains responsive.
 - Desktop-managed runs can promote serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` and `file_browser` today).
 - The page browser, detached file-browser scene, Ask Flower linked-directory browser, and Flower chat floating browser all reuse the same `RemoteFileBrowser` surface; chat-specific code only owns the floating-shell behavior that opens it.
 - Env App now keeps the reusable chat/terminal floating browser shell at the root level, so cross-surface entry points share the same detached fallback, persistence, and explicit browser-seed handling.
