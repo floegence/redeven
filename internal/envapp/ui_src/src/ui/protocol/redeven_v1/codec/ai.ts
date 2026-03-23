@@ -131,7 +131,7 @@ function fromWireAIRequestUserInputOption(raw: wire_ai_request_user_input_option
   if (!optionId || !label) return null;
   const detailInputModeRaw = String(raw?.detail_input_mode ?? '').trim().toLowerCase();
   const detailInputMode = detailInputModeRaw === 'required' || detailInputModeRaw === 'optional'
-    ? detailInputModeRaw
+    ? 'required'
     : undefined;
   const actions = Array.isArray(raw?.actions)
     ? raw.actions.map(fromWireAIRequestUserInputAction).filter(Boolean) as AIRequestUserInputAction[]

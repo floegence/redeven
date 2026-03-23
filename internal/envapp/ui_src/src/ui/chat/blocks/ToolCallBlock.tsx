@@ -32,7 +32,7 @@ type AskUserOptionDisplay = {
   optionId: string;
   label: string;
   description?: string;
-  detailInputMode?: 'optional' | 'required';
+  detailInputMode?: 'required';
   detailInputPlaceholder?: string;
   hasActions: boolean;
 };
@@ -178,7 +178,7 @@ function normalizeAskUserOptions(value: unknown): AskUserOptionDisplay[] {
       description: asTrimmedString((item as any).description) || undefined,
       detailInputMode: (() => {
         const mode = asTrimmedString((item as any).detail_input_mode).toLowerCase();
-        return mode === 'optional' || mode === 'required' ? mode : undefined;
+        return mode === 'optional' || mode === 'required' ? ('required' as const) : undefined;
       })(),
       detailInputPlaceholder: asTrimmedString((item as any).detail_input_placeholder) || undefined,
       hasActions: Array.isArray((item as any).actions) && (item as any).actions.length > 0,
@@ -3070,7 +3070,7 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
               label: option.label,
               description: option.description,
               detailInputMode: option.detail_input_mode === 'required' || option.detail_input_mode === 'optional'
-                ? option.detail_input_mode
+                ? ('required' as const)
                 : undefined,
               detailInputPlaceholder: option.detail_input_placeholder,
               hasActions: Array.isArray(option.actions) && option.actions.length > 0,
@@ -3123,7 +3123,7 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
       return true;
     }
     const option = selectedOptionForDraft(question, draft);
-    return option?.detailInputMode === 'required';
+    return Boolean(option?.detailInputMode);
   };
 
   const questionRequiresSelection = (question: AskUserQuestionDisplay): boolean => (
@@ -3147,9 +3147,6 @@ const AskUserToolCard: Component<AskUserToolCardProps> = (props) => {
     }
     if (option?.detailInputMode === 'required') {
       return 'Add the required detail';
-    }
-    if (option?.detailInputMode === 'optional') {
-      return 'Add more detail (optional)';
     }
     if (question.isOther) {
       return 'Type another answer';

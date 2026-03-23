@@ -1865,6 +1865,15 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		case "missing_required_from_user":
 			rejectionMsg = "ask_user was rejected because required_from_user is empty. Specify exactly what information is needed from the user."
 			recoveryOverlay = "[CONTRACT] ask_user requires required_from_user."
+		case askUserGateReasonDetailPlaceholderWithoutMode:
+			rejectionMsg = "ask_user was rejected because a detail_input_placeholder was provided without a supported detail_input_mode. Either remove the placeholder or make that option require detail input."
+			recoveryOverlay = "[CONTRACT] detail_input_placeholder requires a supported option detail mode."
+		case askUserGateReasonUnsupportedOptionalOptionDetail:
+			rejectionMsg = "ask_user was rejected because option-level detail input must require detail before the prompt resolves. Use detail_input_mode=\"required\" or remove the detail input."
+			recoveryOverlay = "[CONTRACT] option-level detail input no longer supports optional resolution."
+		case askUserGateReasonQuestionOtherConflictsOptionText:
+			rejectionMsg = "ask_user was rejected because the question uses is_other=true while also attaching option-level detail input. Choose one freeform path: question-level other input or a specific detail-required option."
+			recoveryOverlay = "[CONTRACT] is_other=true cannot coexist with option-level detail input."
 		case "missing_evidence_refs":
 			rejectionMsg = "ask_user was rejected because evidence_refs is empty for an evidence-backed reason. Provide concrete evidence refs from tool calls."
 			recoveryOverlay = "[CONTRACT] ask_user requires evidence_refs for this reason_code."
@@ -4299,6 +4308,9 @@ func evaluateAskUserGate(signal askUserSignal, state runtimeState, complexity st
 	if len(signal.RequiredFromUser) == 0 {
 		return false, "missing_required_from_user"
 	}
+	if reason := validateRequestUserInputQuestionsContract(signal.Questions); reason != "" {
+		return false, reason
+	}
 	if askUserReasonRequiresEvidence(signal.ReasonCode) {
 		if len(signal.EvidenceRefs) == 0 {
 			return false, "missing_evidence_refs"
@@ -4674,7 +4686,8 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			"- evidence_refs must reference relevant tool IDs when evidence is required.",
 			"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_other, is_secret, and optional options[].",
 			"- For each question, include 2-4 concise mutually exclusive options (best option first) when predefined choices are appropriate.",
-			"- Use `is_other=true` only when the whole question should allow a freeform reply. When only one option needs extra detail, use `options[].detail_input_mode` with `optional` or `required`, plus `options[].detail_input_placeholder` when helpful.",
+			"- Use `is_other=true` only when the whole question should allow a freeform reply. Do not combine `is_other=true` with option-level detail input on the same question.",
+			"- When only one option needs extra detail, use `options[].detail_input_mode=\"required\"` plus `options[].detail_input_placeholder` when helpful. Option-level detail input must block resolution until the user provides that detail.",
 			"- For deterministic UI actions, place actions on `questions[].options[].actions` (for example {type:\"set_mode\",mode:\"act\"}).",
 		)
 		if capability.SupportsAskUserQuestionBatches {

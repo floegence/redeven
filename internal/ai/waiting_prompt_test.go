@@ -61,7 +61,7 @@ func TestValidateRequestUserInputResponse_RequiresSelectedOptionDetailWhenConfig
 	}
 }
 
-func TestValidateRequestUserInputResponse_AllowsOptionalSelectedOptionDetailToBeOmitted(t *testing.T) {
+func TestValidateRequestUserInputResponse_CanonicalizesOptionalSelectedOptionDetailToRequired(t *testing.T) {
 	t.Parallel()
 
 	prompt := testRequestUserInputPrompt(
@@ -97,8 +97,53 @@ func TestValidateRequestUserInputResponse_AllowsOptionalSelectedOptionDetailToBe
 			},
 		},
 	})
+	if !errors.Is(err, ErrWaitingPromptChanged) {
+		t.Fatalf("validateRequestUserInputResponse err=%v, want %v", err, ErrWaitingPromptChanged)
+	}
+
+	_, err = validateRequestUserInputResponse(prompt, &RequestUserInputResponse{
+		PromptID: prompt.PromptID,
+		Answers: map[string]RequestUserInputAnswer{
+			"direction": {
+				SelectedOptionID: "other",
+				Answers:          []string{"Need a custom direction"},
+			},
+		},
+	})
 	if err != nil {
-		t.Fatalf("validateRequestUserInputResponse with optional detail: %v", err)
+		t.Fatalf("validateRequestUserInputResponse with canonicalized optional detail: %v", err)
+	}
+}
+
+func TestNormalizeRequestUserInputPrompt_CanonicalizesLegacyOptionalDetailMode(t *testing.T) {
+	t.Parallel()
+
+	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
+		MessageID: "msg_legacy_optional_detail",
+		ToolID:    "tool_legacy_optional_detail",
+		Questions: []RequestUserInputQuestion{
+			{
+				ID:       "direction",
+				Header:   "Direction",
+				Question: "Choose the next direction.",
+				Options: []RequestUserInputOption{
+					{
+						OptionID:        "other",
+						Label:           "Other",
+						DetailInputMode: requestUserInputDetailInputOptional,
+					},
+				},
+			},
+		},
+	})
+	if prompt == nil {
+		t.Fatalf("prompt should not be nil")
+	}
+	if len(prompt.Questions) != 1 || len(prompt.Questions[0].Options) != 1 {
+		t.Fatalf("prompt questions=%+v", prompt.Questions)
+	}
+	if got := prompt.Questions[0].Options[0].DetailInputMode; got != requestUserInputDetailInputRequired {
+		t.Fatalf("detail mode=%q, want %q", got, requestUserInputDetailInputRequired)
 	}
 }
 
