@@ -3,6 +3,7 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,60 @@ import (
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
 )
+
+func isGatewayRunPolicyClassifierRequest(req map[string]any) bool {
+	if req == nil {
+		return false
+	}
+	instructions, _ := req["instructions"].(string)
+	return strings.Contains(strings.TrimSpace(instructions), "RUN_POLICY_CLASSIFIER_V1")
+}
+
+func extractGatewayResponsesUserText(req map[string]any) string {
+	if req == nil {
+		return ""
+	}
+	rawInput, ok := req["input"]
+	if !ok {
+		return ""
+	}
+	items, ok := rawInput.([]any)
+	if !ok {
+		return ""
+	}
+	for i := len(items) - 1; i >= 0; i-- {
+		msg, ok := items[i].(map[string]any)
+		if !ok || msg == nil {
+			continue
+		}
+		role := strings.ToLower(strings.TrimSpace(fmt.Sprint(msg["role"])))
+		if role != "user" {
+			continue
+		}
+		content, ok := msg["content"].([]any)
+		if !ok {
+			continue
+		}
+		parts := make([]string, 0, len(content))
+		for _, item := range content {
+			part, ok := item.(map[string]any)
+			if !ok || part == nil {
+				continue
+			}
+			if strings.ToLower(strings.TrimSpace(fmt.Sprint(part["type"]))) != "input_text" {
+				continue
+			}
+			txt := strings.TrimSpace(fmt.Sprint(part["text"]))
+			if txt != "" {
+				parts = append(parts, txt)
+			}
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, "\n")
+		}
+	}
+	return ""
+}
 
 func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 	t.Parallel()
@@ -41,6 +96,11 @@ func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 			return
 		}
 
+		body, _ := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+		var req map[string]any
+		_ = json.Unmarshal(body, &req)
+
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusOK)
@@ -59,6 +119,29 @@ func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 		}
 
 		now := time.Now().Unix()
+		if isGatewayRunPolicyClassifierRequest(req) {
+			userText := strings.ToLower(strings.TrimSpace(extractGatewayResponsesUserText(req)))
+			classifierToken := `{"intent":"task","reason":"actionable_request_detected","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.78}`
+			if strings.Contains(userText, "hi") || strings.Contains(userText, "hello") {
+				classifierToken = `{"intent":"social","reason":"small_talk_detected","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.95}`
+			}
+			write(map[string]any{
+				"type":  "response.output_text.delta",
+				"delta": classifierToken,
+			})
+			write(map[string]any{
+				"type": "response.completed",
+				"response": map[string]any{
+					"id":     "resp_gateway_classifier",
+					"model":  "gpt-5-mini",
+					"status": "completed",
+				},
+			})
+			_, _ = io.WriteString(w, "data: [DONE]\n\n")
+			f.Flush()
+			return
+		}
+
 		itemID := "msg_gateway_1"
 		write(map[string]any{
 			"type": "response.created",

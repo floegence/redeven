@@ -1368,6 +1368,19 @@ func (r *run) markdownBlockIndicesLocked() []int {
 	return idxs
 }
 
+func (r *run) hasWaitingAskUserBlockLocked() bool {
+	if r == nil {
+		return false
+	}
+	for _, blk := range r.assistantBlocks {
+		_, askUser, waitingUser, _ := extractAskUserToolIdentity(blk)
+		if askUser && waitingUser {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *run) reconcileCanonicalMarkdownMessage(fallback string) bool {
 	if r == nil {
 		return false
@@ -1457,6 +1470,50 @@ func (r *run) reconcileCanonicalMarkdownMessage(fallback string) bool {
 				BlockType:  "markdown",
 			})
 		}
+		r.sendStreamEvent(streamEventBlockSet{
+			Type:       "block-set",
+			MessageID:  r.messageID,
+			BlockIndex: update.index,
+			Block:      update.block,
+		})
+	}
+	return true
+}
+
+func (r *run) reconcileCanonicalWaitingUserMessage() bool {
+	if r == nil {
+		return false
+	}
+
+	type markdownUpdate struct {
+		index int
+		block persistedMarkdownBlock
+	}
+
+	r.muAssistant.Lock()
+	if !r.hasWaitingAskUserBlockLocked() {
+		r.muAssistant.Unlock()
+		return false
+	}
+
+	updates := make([]markdownUpdate, 0, 4)
+	for _, idx := range r.markdownBlockIndicesLocked() {
+		block, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
+		if !ok || block == nil || strings.TrimSpace(block.Content) == "" {
+			continue
+		}
+		block.Content = ""
+		updates = append(updates, markdownUpdate{
+			index: idx,
+			block: persistedMarkdownBlock{Type: "markdown", Content: ""},
+		})
+	}
+	r.muAssistant.Unlock()
+
+	if len(updates) == 0 {
+		return false
+	}
+	for _, update := range updates {
 		r.sendStreamEvent(streamEventBlockSet{
 			Type:       "block-set",
 			MessageID:  r.messageID,
@@ -2376,11 +2433,6 @@ func assistantVisibleTextFromBlock(block any) string {
 			return ""
 		}
 		return strings.TrimSpace(v.Content)
-	case *persistedThinkingBlock:
-		if v == nil {
-			return ""
-		}
-		return strings.TrimSpace(v.Content)
 	default:
 		return ""
 	}
@@ -2453,6 +2505,10 @@ func extractAskUserQuestions(args any, result any) []RequestUserInputQuestion {
 }
 
 func parseAskUserQuestionsAny(value any) []RequestUserInputQuestion {
+	switch v := value.(type) {
+	case []RequestUserInputQuestion:
+		return normalizeRequestUserInputQuestions(append([]RequestUserInputQuestion(nil), v...))
+	}
 	items := toAnySlice(value)
 	if len(items) == 0 {
 		return nil

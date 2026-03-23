@@ -170,15 +170,20 @@ func (m *openAIToolLoopMock) handle(w http.ResponseWriter, r *http.Request) {
 			},
 		})
 		writeOpenAISSEJSON(w, f, map[string]any{
-			"type":  "response.output_text.delta",
-			"delta": finalToken,
-		})
-		writeOpenAISSEJSON(w, f, map[string]any{
 			"type": "response.completed",
 			"response": map[string]any{
 				"id":     "resp_test_step_2",
 				"model":  model,
 				"status": "completed",
+				"output": []any{
+					map[string]any{
+						"type":      "function_call",
+						"id":        "fc_test_2",
+						"call_id":   "call_test_2",
+						"name":      "task_complete",
+						"arguments": fmt.Sprintf(`{"result":%q}`, finalToken),
+					},
+				},
 				"usage": map[string]any{
 					"input_tokens":  1,
 					"output_tokens": 1,
