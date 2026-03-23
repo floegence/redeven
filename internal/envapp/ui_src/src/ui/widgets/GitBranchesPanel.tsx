@@ -1005,9 +1005,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       </div>
                     </GitLabelBlock>
 
-                    <div class="flex w-full min-w-0 flex-col gap-1.5 lg:w-auto lg:min-w-fit lg:items-end">
-                      <div class="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:w-auto lg:justify-end">
-                        <div class="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-start lg:justify-end">
+                    <div class="flex w-full min-w-0 flex-col gap-1.5 lg:flex-[0_1_20rem] lg:max-w-[min(50%,22rem)] lg:items-stretch">
+                      <div class="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:w-full lg:justify-end">
+                        <div class="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-start lg:w-full lg:justify-end">
                           <Show when={props.onCheckoutBranch}>
                             <Button
                               size="sm"
