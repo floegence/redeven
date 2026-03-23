@@ -67,6 +67,13 @@ import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';
 import { FlowerMessageRunIndicator } from '../widgets/FlowerMessageRunIndicator';
 import {
+  replacePickerChildren,
+  sortPickerFolderItems,
+  toPickerFolderItem,
+  toPickerTreeAbsolutePath,
+  toPickerTreePath,
+} from '../utils/directoryPickerTree';
+import {
   composeFollowupOrder,
   composerSnapshotHasContent,
   moveFollowupByDelta,
@@ -79,58 +86,7 @@ import {
   type ListFollowupsResponse,
 } from './followupsState';
 
-// ---- Working dir picker (directory tree utilities) ----
-
 type DirCache = Map<string, FileItem[]>;
-
-function normalizeBrowserPath(path: string): string {
-  return normalizeAskFlowerAbsolutePath(path) || '';
-}
-
-function toFolderFileItem(entry: FsFileInfo): FileItem {
-  const name = String(entry.name ?? '');
-  const p = normalizeBrowserPath(String(entry.path ?? ''));
-  const modifiedAtMs = Number(entry.modifiedAt ?? 0);
-  return {
-    id: p,
-    name,
-    type: 'folder',
-    path: p,
-    modifiedAt: Number.isFinite(modifiedAtMs) && modifiedAtMs > 0 ? new Date(modifiedAtMs) : undefined,
-  };
-}
-
-function sortFileItems(items: FileItem[]): FileItem[] {
-  return [...items].sort((a, b) => a.name.localeCompare(b.name));
-}
-
-function withChildren(tree: FileItem[], folderPath: string, children: FileItem[], rootPath = '/'): FileItem[] {
-  const target = normalizeBrowserPath(folderPath);
-  const normalizedRoot = normalizeBrowserPath(rootPath);
-  if (!target || target === normalizedRoot) {
-    return children;
-  }
-
-  const visit = (items: FileItem[]): [FileItem[], boolean] => {
-    let changed = false;
-    const next = items.map((it) => {
-      if (it.type !== 'folder') return it;
-      if (it.path === target) {
-        changed = true;
-        return { ...it, children };
-      }
-      if (!it.children || it.children.length === 0) return it;
-      const [nextChildren, hit] = visit(it.children);
-      if (!hit) return it;
-      changed = true;
-      return { ...it, children: nextChildren };
-    });
-    return [changed ? next : items, changed];
-  };
-
-  const [next] = visit(tree);
-  return next;
-}
 
 type ExecutionMode = 'act' | 'plan';
 
@@ -1884,6 +1840,12 @@ export function EnvAIPage() {
     })();
   });
 
+  createEffect(() => {
+    homePath();
+    workingDirCache = new Map();
+    setWorkingDirFiles([]);
+  });
+
   const validateWorkingDirSilently = async (workingDir: string): Promise<string> => {
     const value = String(workingDir ?? '').trim();
     if (!value) return '';
@@ -2561,7 +2523,7 @@ export function EnvAIPage() {
       ai.creatingThread() ||
       !String(homePath() ?? '').trim(),
   );
-  const workingDirPickerInitialPath = createMemo(() => normalizeAskFlowerAbsolutePath(activeWorkingDir()) || String(homePath() ?? '').trim());
+  const workingDirPickerInitialPath = createMemo(() => toPickerTreePath(activeWorkingDir(), homePath()));
 
   const applyAskFlowerIntent = (intent: AskFlowerIntent): boolean => {
     const inputApi = chatInputApi();
@@ -2614,67 +2576,37 @@ export function EnvAIPage() {
     }
   });
 
-  const loadWorkingDirRoot = async () => {
+  const loadWorkingDirTree = async (pickerPath: string) => {
     if (!protocol.client()) return;
-    const p = normalizeAskFlowerAbsolutePath(homePath() ?? '');
-    if (!p) return;
-    if (workingDirCache.has(p)) {
-      setWorkingDirFiles(workingDirCache.get(p)!);
+    const absolutePath = toPickerTreeAbsolutePath(pickerPath, homePath());
+    if (!absolutePath) return;
+    if (workingDirCache.has(absolutePath)) {
+      setWorkingDirFiles((prev) => replacePickerChildren(prev, pickerPath, workingDirCache.get(absolutePath)!));
       return;
     }
     try {
-      const resp = await rpc.fs.list({ path: p, showHidden: false });
+      const resp = await rpc.fs.list({ path: absolutePath, showHidden: false });
       const entries = resp?.entries ?? [];
-      const items = sortFileItems(
+      const items = sortPickerFolderItems(
         entries
-          .filter((e) => !!e?.isDirectory)
-          .map((e) => toFolderFileItem(e as FsFileInfo)),
+          .map((entry) => toPickerFolderItem(entry as FsFileInfo, homePath()))
+          .filter((item): item is FileItem => !!item),
       );
-      workingDirCache.set(p, items);
-      setWorkingDirFiles(items);
-    } catch {
-      // ignore
-    }
-  };
-
-  const loadWorkingDirDir = async (path: string) => {
-    if (!protocol.client()) return;
-    const p = normalizeAskFlowerAbsolutePath(path);
-    const scopedRootPath = normalizeAskFlowerAbsolutePath(homePath() ?? '') || p;
-    if (!p) return;
-    if (workingDirCache.has(p)) {
-      setWorkingDirFiles((prev) => withChildren(prev, p, workingDirCache.get(p)!, scopedRootPath));
-      return;
-    }
-    try {
-      const resp = await rpc.fs.list({ path: p, showHidden: false });
-      const entries = resp?.entries ?? [];
-      const items = sortFileItems(
-        entries
-          .filter((e) => !!e?.isDirectory)
-          .map((e) => toFolderFileItem(e as FsFileInfo)),
-      );
-      workingDirCache.set(p, items);
-      setWorkingDirFiles((prev) => withChildren(prev, p, items, scopedRootPath));
+      workingDirCache.set(absolutePath, items);
+      setWorkingDirFiles((prev) => replacePickerChildren(prev, pickerPath, items));
     } catch {
       // ignore
     }
   };
 
   const handleWorkingDirExpand = (path: string) => {
-    const p = normalizeAskFlowerAbsolutePath(path);
-    const home = normalizeAskFlowerAbsolutePath(homePath() ?? '');
-    if (!p || (home && p === home)) {
-      void loadWorkingDirRoot();
-      return;
-    }
-    void loadWorkingDirDir(p);
+    void loadWorkingDirTree(path);
   };
 
   createEffect(() => {
     if (!workingDirPickerOpen()) return;
     if (workingDirFiles().length > 0) return;
-    void loadWorkingDirRoot();
+    void loadWorkingDirTree('/');
   });
 
   const updateExecutionMode = async (nextMode: ExecutionMode) => {
@@ -4879,7 +4811,7 @@ export function EnvAIPage() {
               onExpand={handleWorkingDirExpand}
               onSelect={(selectedPath) => {
                 if (workingDirLocked()) return;
-                const realPath = normalizeAskFlowerAbsolutePath(selectedPath);
+                const realPath = toPickerTreeAbsolutePath(selectedPath, homePath());
                 if (realPath) {
                   ai.setDraftWorkingDir(realPath);
                 }
