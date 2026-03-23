@@ -14,6 +14,8 @@ import {
   ConfirmDialog,
   Dialog,
   Input,
+  Tag,
+  type TagProps,
   Tooltip,
 } from '@floegence/floe-webapp-core/ui';
 
@@ -115,25 +117,14 @@ function HealthBadge(props: { health?: Health }) {
   const latency = () => props.health?.latency_ms;
   const lastError = () => props.health?.last_error;
 
-  const badgeClass = () => {
+  const badgeVariant = (): TagProps['variant'] => {
     switch (status()) {
       case 'healthy':
-        return 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
+        return 'success';
       case 'unreachable':
-        return 'bg-destructive/15 text-destructive';
+        return 'error';
       default:
-        return 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400';
-    }
-  };
-
-  const dotClass = () => {
-    switch (status()) {
-      case 'healthy':
-        return 'bg-emerald-500 animate-pulse';
-      case 'unreachable':
-        return 'bg-destructive';
-      default:
-        return 'bg-zinc-400';
+        return 'neutral';
     }
   };
 
@@ -161,12 +152,9 @@ function HealthBadge(props: { health?: Health }) {
 
   return (
     <Tooltip content={tooltipContent()} placement="top">
-      <span
-        class={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium cursor-default', badgeClass())}
-      >
-        <span class={cn('w-1.5 h-1.5 rounded-full', dotClass())} />
+      <Tag variant={badgeVariant()} tone="soft" size="sm" dot class="cursor-default">
         {label()}
-      </span>
+      </Tag>
     </Tooltip>
   );
 }

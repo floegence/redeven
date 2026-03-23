@@ -30,6 +30,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       onInput={props.onInput}
     />
   ),
+  Tag: (props: any) => <span class={props.class}>{props.children}</span>,
 }));
 
 afterEach(() => {

@@ -1,7 +1,21 @@
 import { For, Show, createMemo, type JSX } from 'solid-js';
-import { Card } from '@floegence/floe-webapp-core/ui';
+import { Card, Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
 
 export type ViewMode = 'ui' | 'json';
+
+function settingsTagVariant(tone: 'default' | 'success' | 'warning' | 'danger' = 'default'): TagProps['variant'] {
+  switch (tone) {
+    case 'success':
+      return 'success';
+    case 'warning':
+      return 'warning';
+    case 'danger':
+      return 'error';
+    case 'default':
+    default:
+      return 'neutral';
+  }
+}
 
 export function ViewToggle(props: { value: () => ViewMode; disabled?: boolean; onChange: (v: ViewMode) => void }) {
   const btnClass = (active: boolean) => {
@@ -33,13 +47,18 @@ function formatSavedTime(unixMs: number | null): string {
 }
 
 export function AutoSaveIndicator(props: { dirty: boolean; saving: boolean; error?: string | null; savedAt: number | null; enabled?: boolean }) {
-  const badgeClass = createMemo(() => {
-    if (props.saving) return 'border-primary/30 bg-primary/10 text-primary';
-    if (!props.enabled) return 'border-border bg-muted/40 text-muted-foreground';
-    if (props.error) return 'border-destructive/30 bg-destructive/10 text-destructive';
-    if (props.dirty) return 'border-warning/30 bg-warning/10 text-warning';
-    if (props.savedAt) return 'border-success/30 bg-success/10 text-success';
-    return 'border-border bg-muted/40 text-muted-foreground';
+  const tagVariant = createMemo<TagProps['variant']>(() => {
+    if (props.saving) return 'primary';
+    if (!props.enabled) return 'neutral';
+    if (props.error) return 'error';
+    if (props.dirty) return 'warning';
+    if (props.savedAt) return 'success';
+    return 'neutral';
+  });
+
+  const tagTone = createMemo<'solid' | 'soft'>(() => {
+    if (props.saving) return 'solid';
+    return 'soft';
   });
 
   const label = createMemo(() => {
@@ -54,7 +73,17 @@ export function AutoSaveIndicator(props: { dirty: boolean; saving: boolean; erro
     return 'Auto-save on';
   });
 
-  return <span class={`inline-flex items-center rounded-md border px-2 py-1 text-[11px] font-medium ${badgeClass()}`}>{label()}</span>;
+  return (
+    <Tag
+      variant={tagVariant()}
+      tone={tagTone()}
+      size="sm"
+      dot={props.saving || props.dirty || Boolean(props.savedAt)}
+      class="whitespace-nowrap"
+    >
+      {label()}
+    </Tag>
+  );
 }
 
 export interface SettingsCardProps {
@@ -69,12 +98,6 @@ export interface SettingsCardProps {
 }
 
 export function SettingsCard(props: SettingsCardProps) {
-  const badgeColors = {
-    default: 'bg-muted text-muted-foreground',
-    warning: 'bg-warning/10 text-warning border border-warning/50',
-    success: 'bg-success/10 text-success border border-success/50',
-  };
-
   return (
     <Card class="overflow-hidden shadow-sm">
       <div class="border-b border-border bg-muted/20 px-4 py-3.5 sm:px-5">
@@ -87,9 +110,9 @@ export function SettingsCard(props: SettingsCardProps) {
               <div class="flex flex-wrap items-center gap-2">
                 <h3 class="text-sm font-semibold tracking-tight text-foreground">{props.title}</h3>
                 <Show when={props.badge}>
-                  <span class={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badgeColors[props.badgeVariant ?? 'default']}`}>
+                  <Tag variant={settingsTagVariant(props.badgeVariant ?? 'default')} tone="soft" size="sm">
                     {props.badge}
-                  </span>
+                  </Tag>
                 </Show>
               </div>
               <p class="mt-0.5 break-words text-xs leading-relaxed text-muted-foreground">{props.description}</p>
@@ -171,20 +194,11 @@ export function JSONEditor(props: { value: string; onChange: (v: string) => void
 }
 
 export function SettingsPill(props: { tone?: 'default' | 'success' | 'warning' | 'danger'; children: JSX.Element }) {
-  const toneClass = () => {
-    switch (props.tone) {
-      case 'success':
-        return 'border-success/30 bg-success/10 text-success';
-      case 'warning':
-        return 'border-warning/40 bg-warning/10 text-warning';
-      case 'danger':
-        return 'border-destructive/30 bg-destructive/10 text-destructive';
-      default:
-        return 'border-border bg-muted/40 text-muted-foreground';
-    }
-  };
-
-  return <span class={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${toneClass()}`}>{props.children}</span>;
+  return (
+    <Tag variant={settingsTagVariant(props.tone ?? 'default')} tone="soft" size="sm">
+      {props.children}
+    </Tag>
+  );
 }
 
 export function SettingsTable(props: { children: JSX.Element; minWidthClass?: string; class?: string; stickyHeader?: boolean }) {
