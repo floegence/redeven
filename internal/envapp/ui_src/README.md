@@ -14,6 +14,7 @@ Notes:
 - This Env App contains the **env details** features (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower).
 - File Browser uses Monaco for both preview and edit when the shared editor supports the file language; the Shiki preview surface is kept only for unsupported code languages and fallback scenarios such as truncated previews or Monaco runtime failures.
 - Supported code previews remount Monaco when the user enters Edit mode so the writable editor never inherits stale read-only lifecycle state from preview mode.
+- Edit mode never silently downgrades back to a read-only highlighted surface: if Monaco fails to start, the text pane shows an explicit editor-unavailable state until the user discards or retries the edit session.
 
 ## Verification
 
