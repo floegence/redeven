@@ -14,10 +14,10 @@ describe('file preview wiring', () => {
     const contentSrc = read('./FilePreviewContent.tsx');
     const docxPaneSrc = read('./DocxPreviewPane.tsx');
     const textPaneSrc = read('./TextFilePreviewPane.tsx');
-    const codePreviewSrc = read('./CodePreviewPane.tsx');
     const surfaceSrc = read('./FilePreviewSurface.tsx');
     const previewWindowSrc = read('./PreviewWindow.tsx');
     const askFlowerComposerSrc = read('./AskFlowerComposerWindow.tsx');
+    const codePreviewPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), './CodePreviewPane.tsx');
 
     expect(contentSrc).toContain("import { DocxPreviewPane } from './DocxPreviewPane';");
     expect(contentSrc).toContain("import { TextFilePreviewPane } from './TextFilePreviewPane';");
@@ -29,18 +29,22 @@ describe('file preview wiring', () => {
     expect(docxPaneSrc).toContain('Fit');
     expect(docxPaneSrc).toContain('Zoom in docx preview');
     expect(textPaneSrc).toContain("from '@floegence/floe-webapp-core/editor';");
-    expect(textPaneSrc).toContain('resolveCodeEditorLanguageSpec');
     expect(textPaneSrc).toContain('ErrorBoundary');
-    expect(textPaneSrc).toContain('type CodeEditorApi, type CodeEditorProps');
-    expect(textPaneSrc).toContain('props.truncated || monacoFailed()');
-    expect(textPaneSrc).toContain("if (props.editing) return false;");
-    expect(textPaneSrc).toContain("resolveCodeEditorLanguageSpec(normalizedLanguage).id === 'plaintext'");
+    expect(textPaneSrc).toContain('CodeEditorApi, CodeEditorProps');
+    expect(textPaneSrc).toContain('StaticTextPreviewPane');
+    expect(textPaneSrc).toContain('!props.truncated && !monacoFailed()');
     expect(textPaneSrc).toContain("return props.descriptor.language;");
     expect(textPaneSrc).not.toContain("props.descriptor.language || 'plaintext'");
+    expect(textPaneSrc).not.toContain('resolveCodeEditorLanguageSpec');
+    expect(textPaneSrc).not.toContain('CodePreviewPane');
+    expect(textPaneSrc).not.toContain('shouldUseCodePreviewFallback');
     expect(textPaneSrc).toContain('Monaco must remount when switching between read-only preview and edit mode');
     expect(textPaneSrc).toContain('Cannot edit in read-only editor');
-    expect(textPaneSrc).toContain('<Show when={props.editing} fallback={renderMonacoEditor()}>');
+    expect(textPaneSrc).toContain('renderReadonlyMonaco');
+    expect(textPaneSrc).toContain('renderEditingMonaco');
     expect(textPaneSrc).toContain('Editor unavailable');
+    expect(textPaneSrc).toContain('Showing a plain-text fallback for this preview.');
+    expect(textPaneSrc).toContain('data-testid="text-preview-fallback"');
     expect(textPaneSrc).toContain('Discard this edit session or try again later.');
     expect(textPaneSrc).toContain('queueMicrotask');
     expect(textPaneSrc).toContain('Loading editor...');
@@ -55,8 +59,7 @@ describe('file preview wiring', () => {
     expect(contentSrc).not.toContain('onStartEdit={props.onStartEdit}');
     expect(contentSrc).not.toContain('onSave={props.onSave}');
     expect(contentSrc).not.toContain('onDiscard={props.onDiscard}');
-    expect(codePreviewSrc).toContain('Syntax highlighting disabled for large files.');
-    expect(codePreviewSrc).toContain('resolveCodeHighlightTheme');
+    expect(fs.existsSync(codePreviewPath)).toBe(false);
     expect(contentSrc).toContain('Loading file...');
     expect(contentSrc).toContain('Failed to load file');
 

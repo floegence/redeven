@@ -39,10 +39,28 @@ describe('describeFilePreview', () => {
       language: 'astro',
       wrapText: false,
     });
+    expect(describeFilePreview('Cargo.toml')).toEqual({
+      mode: 'text',
+      textPresentation: 'code',
+      language: 'toml',
+      wrapText: false,
+    });
     expect(describeFilePreview('Dockerfile')).toEqual({
       mode: 'text',
       textPresentation: 'code',
       language: 'dockerfile',
+      wrapText: false,
+    });
+    expect(describeFilePreview('Makefile')).toEqual({
+      mode: 'text',
+      textPresentation: 'code',
+      language: 'makefile',
+      wrapText: false,
+    });
+    expect(describeFilePreview('Jenkinsfile')).toEqual({
+      mode: 'text',
+      textPresentation: 'code',
+      language: 'groovy',
       wrapText: false,
     });
     expect(describeFilePreview('CMakeLists.txt')).toEqual({
