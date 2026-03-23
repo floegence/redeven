@@ -12,7 +12,7 @@ Notes:
 
 - The Redeven web app that opens the Env App stays outside this repository.
 - This Env App contains the **env details** features (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower).
-- File Browser read-only code previews use the lightweight Shiki preview surface; Monaco is reserved for edit mode and plain-text viewer cases that still benefit from the editor shell.
+- File Browser uses Monaco for both preview and edit when the shared editor supports the file language; the Shiki preview surface is kept only for unsupported code languages and fallback scenarios such as truncated previews or Monaco runtime failures.
 
 ## Verification
 
