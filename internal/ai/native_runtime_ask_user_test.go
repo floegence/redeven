@@ -274,6 +274,9 @@ func TestBuildLayeredSystemPrompt_AskUserCoversStructuredInteractionTurns(t *tes
 	if !strings.Contains(prompt, "prefer ask_user over freeform markdown option lists") {
 		t.Fatalf("prompt missing structured-interaction ask_user preference: %q", prompt)
 	}
+	if !strings.Contains(prompt, "do NOT first emit a separate markdown questionnaire") {
+		t.Fatalf("prompt missing no-duplicate-markdown-before-ask_user rule: %q", prompt)
+	}
 	if !strings.Contains(prompt, "every question must include id, header, question, is_secret, and response_mode") {
 		t.Fatalf("prompt missing response_mode contract: %q", prompt)
 	}

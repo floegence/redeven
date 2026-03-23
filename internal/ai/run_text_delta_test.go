@@ -262,3 +262,83 @@ func TestReconcileCanonicalMarkdownMessage_UpdatesPersistedAssistantSnapshotText
 		t.Fatalf("blocks[2]=%T %+v, want canonical final answer", msg.Blocks[2], msg.Blocks[2])
 	}
 }
+
+func TestReconcileCanonicalWaitingUserMessage_ClearsProvisionalMarkdownBlocks(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 4)
+	r := &run{
+		messageID: "msg_waiting_user",
+		onStreamEvent: func(ev any) {
+			events = append(events, ev)
+		},
+		assistantBlocks: []any{
+			&persistedMarkdownBlock{Type: "markdown", Content: "Provisional question text"},
+			ToolCallBlock{
+				Type:     "tool-call",
+				ToolName: "ask_user",
+				ToolID:   "tool_waiting",
+				Status:   ToolCallStatusSuccess,
+				Args: map[string]any{
+					"questions": []map[string]any{{
+						"id":            "question_1",
+						"header":        "Need input",
+						"question":      "Choose the next direction.",
+						"is_secret":     false,
+						"response_mode": "select",
+						"choices": []map[string]any{{
+							"choice_id": "choice_1",
+							"label":     "Option 1",
+							"kind":      "select",
+						}},
+					}},
+				},
+				Result: map[string]any{
+					"waiting_user": true,
+					"questions": []map[string]any{{
+						"id":            "question_1",
+						"header":        "Need input",
+						"question":      "Choose the next direction.",
+						"is_secret":     false,
+						"response_mode": "select",
+						"choices": []map[string]any{{
+							"choice_id": "choice_1",
+							"label":     "Option 1",
+							"kind":      "select",
+						}},
+					}},
+				},
+			},
+		},
+	}
+
+	if !r.reconcileCanonicalWaitingUserMessage() {
+		t.Fatalf("reconcileCanonicalWaitingUserMessage returned false, want true")
+	}
+
+	block, _ := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	if block == nil || block.Content != "" {
+		t.Fatalf("assistantBlocks[0]=%+v, want cleared markdown block", block)
+	}
+	if len(events) != 1 {
+		t.Fatalf("stream events=%d, want 1", len(events))
+	}
+	ev, ok := events[0].(streamEventBlockSet)
+	if !ok {
+		t.Fatalf("event type=%T, want streamEventBlockSet", events[0])
+	}
+	if ev.BlockIndex != 0 || ev.MessageID != "msg_waiting_user" {
+		t.Fatalf("block-set=%+v, want markdown clear for index 0", ev)
+	}
+
+	rawJSON, assistantText, _, err := r.snapshotAssistantMessageJSON()
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
+	}
+	if assistantText != "Choose the next direction." {
+		t.Fatalf("assistantText=%q, want ask_user summary fallback", assistantText)
+	}
+	if !json.Valid([]byte(rawJSON)) {
+		t.Fatalf("assistant JSON invalid: %q", rawJSON)
+	}
+}

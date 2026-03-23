@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
 )
@@ -732,6 +733,141 @@ func (m *openAINoToolTextOnlyMock) handle(w http.ResponseWriter, r *http.Request
 	f.Flush()
 }
 
+type openAITextThenAskUserMock struct {
+	mu sync.Mutex
+
+	step            int
+	provisionalText string
+	questionText    string
+}
+
+func (m *openAITextThenAskUserMock) handle(w http.ResponseWriter, r *http.Request) {
+	if r == nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if strings.TrimSpace(r.Header.Get("Authorization")) != "Bearer sk-test" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/responses") {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	body, _ := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	var req map[string]any
+	_ = json.Unmarshal(body, &req)
+	if isIntentClassifierRequest(req) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		f, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":  "response.output_text.delta",
+			"delta": classifyIntentResponseToken(req),
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_text_then_ask_intent",
+				"model":  "gpt-5-mini",
+				"status": "completed",
+			},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
+		return
+	}
+
+	m.mu.Lock()
+	m.step++
+	step := m.step
+	provisionalText := m.provisionalText
+	questionText := m.questionText
+	m.mu.Unlock()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	f, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	writeOpenAISSEJSON(w, f, map[string]any{
+		"type": "response.created",
+		"response": map[string]any{
+			"id":         fmt.Sprintf("resp_text_then_ask_%d", step),
+			"created_at": time.Now().Unix(),
+			"model":      "gpt-5-mini",
+		},
+	})
+
+	if step == 1 {
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":  "response.output_text.delta",
+			"delta": provisionalText,
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":            "resp_text_then_ask_1",
+				"model":         "gpt-5-mini",
+				"status":        "completed",
+				"finish_reason": "stop",
+				"output": []any{
+					map[string]any{
+						"type": "output_text",
+						"text": provisionalText,
+					},
+				},
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+				},
+			},
+		})
+	} else {
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_text_then_ask_2",
+				"model":  "gpt-5-mini",
+				"status": "completed",
+				"output": []any{
+					map[string]any{
+						"type":    "function_call",
+						"id":      "fc_text_then_ask_2",
+						"call_id": "call_text_then_ask_2",
+						"name":    "ask_user",
+						"arguments": fmt.Sprintf(
+							`{"questions":[{"id":"question_1","header":"Need input","question":%q,"is_secret":false,"response_mode":"select","choices":[{"choice_id":"choice_1","label":"Option 1","kind":"select"},{"choice_id":"choice_2","label":"Option 2","kind":"select"}]}],"reason_code":"user_decision_required","required_from_user":["Choose one option."],"evidence_refs":["model asked for the next user choice"]}`,
+							questionText,
+						),
+					},
+				},
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+				},
+			},
+		})
+	}
+
+	_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	f.Flush()
+}
+
 func TestIntegration_NativeSDK_OpenAI_MissingExplicitCompletionDoesNotPolluteAssistantText(t *testing.T) {
 	t.Parallel()
 
@@ -850,5 +986,159 @@ func TestIntegration_NativeSDK_OpenAI_MissingExplicitCompletionDoesNotPolluteAss
 	}
 	if !foundAskUserWaiting {
 		t.Fatalf("missing ask_user.waiting event")
+	}
+}
+
+func TestIntegration_NativeSDK_OpenAI_TextThenAskUser_ReconcilesFinalWaitingTranscript(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	stateDir := t.TempDir()
+	agentHomeDir := t.TempDir()
+
+	mock := &openAITextThenAskUserMock{
+		provisionalText: "PROVISIONAL_MARKDOWN_QUESTION",
+		questionText:    "Choose the real structured path.",
+	}
+	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
+	t.Cleanup(srv.Close)
+
+	baseURL := strings.TrimSuffix(srv.URL, "/") + "/v1"
+	cfg := &config.AIConfig{
+		Providers: []config.AIProvider{
+			{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: baseURL,
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+			},
+		},
+	}
+
+	meta := session.Meta{
+		EndpointID:        "env_test_text_then_ask",
+		NamespacePublicID: "ns_test_text_then_ask",
+		ChannelID:         "ch_test_text_then_ask",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc, err := NewService(Options{
+		Logger:              logger,
+		StateDir:            stateDir,
+		AgentHomeDir:        agentHomeDir,
+		Shell:               "bash",
+		Config:              cfg,
+		RunMaxWallTime:      30 * time.Second,
+		RunIdleTimeout:      10 * time.Second,
+		ToolApprovalTimeout: 5 * time.Second,
+		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
+			if strings.TrimSpace(providerID) != "openai" {
+				return "", false, nil
+			}
+			return "sk-test", true, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	th, err := svc.CreateThread(ctx, &meta, "hello", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_test_native_openai_text_then_ask_user_1"
+	rr := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "start a guided interaction"},
+		Options:  RunOptions{MaxSteps: 4, MaxNoToolRounds: 2},
+	}, rr); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	body := rr.Body.String()
+	if !strings.Contains(body, mock.provisionalText) {
+		t.Fatalf("stream output missing provisional text %q, body=%q", mock.provisionalText, body)
+	}
+	if !strings.Contains(body, `"toolName":"ask_user"`) {
+		t.Fatalf("stream output missing ask_user tool block, body=%q", body)
+	}
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	var assistantMsg *threadstore.Message
+	for i := range msgs {
+		if strings.TrimSpace(msgs[i].Role) != "assistant" {
+			continue
+		}
+		assistantMsg = &msgs[i]
+	}
+	if assistantMsg == nil {
+		t.Fatalf("assistant message missing")
+	}
+	if got := strings.TrimSpace(assistantMsg.TextContent); got != mock.questionText {
+		t.Fatalf("assistant text_content=%q, want %q", got, mock.questionText)
+	}
+	if strings.Contains(assistantMsg.MessageJSON, mock.provisionalText) {
+		t.Fatalf("assistant message_json still contains provisional text: %s", assistantMsg.MessageJSON)
+	}
+
+	var persisted struct {
+		Blocks []json.RawMessage `json:"blocks"`
+	}
+	if err := json.Unmarshal([]byte(assistantMsg.MessageJSON), &persisted); err != nil {
+		t.Fatalf("json.Unmarshal assistant message: %v", err)
+	}
+	if len(persisted.Blocks) == 0 {
+		t.Fatalf("assistant blocks missing")
+	}
+
+	foundAskUser := false
+	for _, raw := range persisted.Blocks {
+		var metaBlock struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(raw, &metaBlock); err != nil {
+			t.Fatalf("json.Unmarshal block meta: %v", err)
+		}
+		switch strings.TrimSpace(metaBlock.Type) {
+		case "markdown":
+			var markdown struct {
+				Content string `json:"content"`
+			}
+			if err := json.Unmarshal(raw, &markdown); err != nil {
+				t.Fatalf("json.Unmarshal markdown block: %v", err)
+			}
+			if strings.TrimSpace(markdown.Content) != "" {
+				t.Fatalf("markdown block should be cleared, got %q", markdown.Content)
+			}
+		case "tool-call":
+			var tool struct {
+				ToolName string `json:"toolName"`
+			}
+			if err := json.Unmarshal(raw, &tool); err != nil {
+				t.Fatalf("json.Unmarshal tool block: %v", err)
+			}
+			if strings.TrimSpace(tool.ToolName) == "ask_user" {
+				foundAskUser = true
+			}
+		}
+	}
+	if !foundAskUser {
+		t.Fatalf("assistant message missing ask_user tool block")
 	}
 }

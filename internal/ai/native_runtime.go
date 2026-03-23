@@ -1829,6 +1829,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		}
 		finalReason := finalizationReasonForAskUserSource(source)
 		r.emitAskUserToolBlock(signal, source)
+		r.reconcileCanonicalWaitingUserMessage()
 		r.persistRunEvent("ask_user.waiting", RealtimeStreamKindLifecycle, map[string]any{
 			"question":            question,
 			"questions_count":     len(signal.Questions),
@@ -4685,6 +4686,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			"- evidence_refs must reference relevant tool IDs when evidence is required.",
 			"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_secret, and response_mode.",
 			"- For guided questionnaires, interviews, quizzes, guessing games, or decision trees, prefer ask_user over freeform markdown option lists.",
+			"- If you are going to call `ask_user`, do NOT first emit a separate markdown questionnaire, duplicated prose question, or A/B/C option list outside the structured ask_user payload.",
 			"- Use `response_mode:\"select\"` for fixed-choice questions, `response_mode:\"write\"` for direct-input questions, and `response_mode:\"select_or_write\"` for fixed choices plus a standardized typed fallback.",
 			"- `choices[]` contains fixed options only. Do not encode the typed fallback as a fake write choice inside `choices[]`.",
 			"- For `response_mode:\"select_or_write\"`, the UI will render a standardized typed fallback such as `None of the above: ___`; provide `write_label` and optional `write_placeholder` when that wording matters.",

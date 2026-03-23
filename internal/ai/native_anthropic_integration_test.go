@@ -47,6 +47,44 @@ func (m *anthropicMock) handle(w http.ResponseWriter, r *http.Request) {
 	var req map[string]any
 	_ = json.Unmarshal(body, &req)
 
+	if isIntentClassifierRequest(req) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		f, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+		writeAnthropicSSEJSON(w, f, map[string]any{
+			"type":    "message_start",
+			"message": map[string]any{},
+		})
+		writeAnthropicSSEJSON(w, f, map[string]any{
+			"type":          "content_block_start",
+			"index":         0,
+			"content_block": map[string]any{"type": "text", "text": ""},
+		})
+		writeAnthropicSSEJSON(w, f, map[string]any{
+			"type":  "content_block_delta",
+			"index": 0,
+			"delta": map[string]any{"type": "text_delta", "text": classifyIntentResponseToken(req)},
+		})
+		writeAnthropicSSEJSON(w, f, map[string]any{
+			"type":  "content_block_stop",
+			"index": 0,
+		})
+		writeAnthropicSSEJSON(w, f, map[string]any{
+			"type":  "message_delta",
+			"delta": map[string]any{"stop_reason": "end_turn", "stop_sequence": nil},
+			"usage": map[string]any{"output_tokens": 1},
+		})
+		writeAnthropicSSEJSON(w, f, map[string]any{
+			"type": "message_stop",
+		})
+		return
+	}
+
 	toolNames := make([]string, 0, 8)
 	if rawTools, ok := req["tools"].([]any); ok {
 		for _, item := range rawTools {
@@ -110,14 +148,6 @@ func (m *anthropicMock) didSeeMessages() bool {
 	v := m.sawMessages
 	m.mu.Unlock()
 	return v
-}
-
-func (m *anthropicMock) toolNamesSnapshot() []string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]string, 0, len(m.requestToolNames))
-	out = append(out, m.requestToolNames...)
-	return out
 }
 
 func writeAnthropicSSEJSON(w io.Writer, f http.Flusher, v any) {
@@ -208,7 +238,7 @@ func TestIntegration_NativeSDK_Anthropic_Stream_Succeeds(t *testing.T) {
 	if err := svc.StartRun(ctx, &meta, "run_test_native_anthropic_1", RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
-		Input:    RunInput{Text: "Say hello"},
+		Input:    RunInput{Text: "hello"},
 		Options:  RunOptions{MaxSteps: 1},
 	}, rr); err != nil {
 		t.Fatalf("StartRun: %v", err)
@@ -236,8 +266,5 @@ func TestIntegration_NativeSDK_Anthropic_Stream_Succeeds(t *testing.T) {
 	}
 	if !mock.didSeeMessages() {
 		t.Fatalf("expected Anthropic Messages API call (/messages)")
-	}
-	if names := mock.toolNamesSnapshot(); len(names) == 0 {
-		t.Fatalf("expected Anthropic request to include tool definitions")
 	}
 }

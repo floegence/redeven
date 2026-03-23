@@ -125,6 +125,7 @@ Behavior summary:
 - When Flower offers fixed options about a user's real-world state, preferences, habits, background, or other non-exhaustive situations, it should prefer `response_mode:"select_or_write"` instead of pretending the list is exhaustive.
 - Use `write_label` and optional `write_placeholder` to control the standardized typed fallback wording when `response_mode:"select_or_write"` is used.
 - A `response_mode:"write"` or `response_mode:"select_or_write"` path is incomplete until the user provides its text payload.
+- If a turn is going to end in `waiting_user` via `ask_user`, Flower should put the user-facing question inside the structured `ask_user` payload rather than first emitting a duplicated standalone markdown questionnaire or option list.
 - Intent routing should classify guided structured interactions that need `ask_user` as `task`, not `social`; `social` is reserved for casual freeform chat without structured interaction needs.
 - In no-user-interaction runs, Flower cannot ask for a mode switch and must finish with blockers in `task_complete`.
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
@@ -132,6 +133,7 @@ Behavior summary:
 - `task_complete` is rejected when todo tracking is active and open todos still exist.
 - When a run completes through `task_complete`, its `task_complete.result` is the canonical final assistant completion text. Persisted assistant transcript snapshots must keep that canonical completion text aligned with the user-visible markdown content even if the run streamed mixed `thinking`, `tool-call`, and `markdown` blocks before completion.
 - `ask_user` follows a structured contract (`questions`, `reason_code`, `required_from_user`, `evidence_refs`) and is policy-classified by the model before entering `waiting_user`.
+- When a run completes into `waiting_user` through `ask_user`, the final assistant transcript must canonically converge to the structured waiting interaction instead of keeping provisional text-only markdown from earlier no-tool turns.
 - Structured prompt answers are submitted through a dedicated prompt-response action rather than the plain chat `sendMessage` path.
 - The Env App may auto-submit a waiting prompt only for the narrow single-question, non-secret, pure-choice case with no extra detail requirement or option action; every richer interaction still uses explicit structured submission.
 - When a thread is still `waiting_user`, the waiting prompt snapshot in `ai_threads.waiting_user_input_json` should stay aligned with the assistant transcript `ask_user` block; read/write paths recover from the latest persisted assistant transcript when that snapshot is missing or invalid.
