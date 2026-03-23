@@ -1355,6 +1355,19 @@ func (r *run) pureMarkdownBlockIndexLocked() int {
 	return idx
 }
 
+func (r *run) markdownBlockIndicesLocked() []int {
+	if r == nil {
+		return nil
+	}
+	idxs := make([]int, 0, len(r.assistantBlocks))
+	for i, blk := range r.assistantBlocks {
+		if _, ok := blk.(*persistedMarkdownBlock); ok {
+			idxs = append(idxs, i)
+		}
+	}
+	return idxs
+}
+
 func (r *run) reconcileCanonicalMarkdownMessage(fallback string) bool {
 	if r == nil {
 		return false
@@ -1364,30 +1377,93 @@ func (r *run) reconcileCanonicalMarkdownMessage(fallback string) bool {
 		return false
 	}
 
+	type markdownUpdate struct {
+		index int
+		start bool
+		block persistedMarkdownBlock
+	}
+
 	r.muAssistant.Lock()
-	idx := r.pureMarkdownBlockIndexLocked()
-	if idx < 0 || idx >= len(r.assistantBlocks) {
-		r.muAssistant.Unlock()
-		return false
+	updates := make([]markdownUpdate, 0, 4)
+
+	// Keep mixed tool/thinking transcripts intact, but ensure the canonical completion
+	// text is what remains user-visible at the end of the assistant message.
+	if idx := r.pureMarkdownBlockIndexLocked(); idx >= 0 && idx < len(r.assistantBlocks) {
+		block, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
+		if !ok || block == nil {
+			r.muAssistant.Unlock()
+			return false
+		}
+		if strings.TrimSpace(block.Content) == canonical {
+			r.muAssistant.Unlock()
+			return false
+		}
+		block.Content = canonical
+		updates = append(updates, markdownUpdate{
+			index: idx,
+			block: persistedMarkdownBlock{Type: "markdown", Content: canonical},
+		})
+	} else {
+		idxs := r.markdownBlockIndicesLocked()
+		if len(idxs) == 0 {
+			idx := len(r.assistantBlocks)
+			r.persistEnsureIndex(idx)
+			r.assistantBlocks[idx] = &persistedMarkdownBlock{Type: "markdown", Content: canonical}
+			if r.nextBlockIndex <= idx {
+				r.nextBlockIndex = idx + 1
+			}
+			updates = append(updates, markdownUpdate{
+				index: idx,
+				start: true,
+				block: persistedMarkdownBlock{Type: "markdown", Content: canonical},
+			})
+		} else {
+			target := idxs[len(idxs)-1]
+			for _, idx := range idxs[:len(idxs)-1] {
+				block, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
+				if !ok || block == nil {
+					continue
+				}
+				if block.Content == "" {
+					continue
+				}
+				block.Content = ""
+				updates = append(updates, markdownUpdate{
+					index: idx,
+					block: persistedMarkdownBlock{Type: "markdown", Content: ""},
+				})
+			}
+			block, ok := r.assistantBlocks[target].(*persistedMarkdownBlock)
+			if ok && block != nil && strings.TrimSpace(block.Content) != canonical {
+				block.Content = canonical
+				updates = append(updates, markdownUpdate{
+					index: target,
+					block: persistedMarkdownBlock{Type: "markdown", Content: canonical},
+				})
+			}
+		}
 	}
-	block, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
-	if !ok || block == nil {
-		r.muAssistant.Unlock()
-		return false
-	}
-	if strings.TrimSpace(block.Content) == canonical {
-		r.muAssistant.Unlock()
-		return false
-	}
-	block.Content = canonical
 	r.muAssistant.Unlock()
 
-	r.sendStreamEvent(streamEventBlockSet{
-		Type:       "block-set",
-		MessageID:  r.messageID,
-		BlockIndex: idx,
-		Block:      persistedMarkdownBlock{Type: "markdown", Content: canonical},
-	})
+	if len(updates) == 0 {
+		return false
+	}
+	for _, update := range updates {
+		if update.start {
+			r.sendStreamEvent(streamEventBlockStart{
+				Type:       "block-start",
+				MessageID:  r.messageID,
+				BlockIndex: update.index,
+				BlockType:  "markdown",
+			})
+		}
+		r.sendStreamEvent(streamEventBlockSet{
+			Type:       "block-set",
+			MessageID:  r.messageID,
+			BlockIndex: update.index,
+			Block:      update.block,
+		})
+	}
 	return true
 }
 

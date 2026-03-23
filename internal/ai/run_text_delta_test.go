@@ -1,6 +1,9 @@
 package ai
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestTrimMarkdownDeltaOverlap_RemovesLargePrefixOverlap(t *testing.T) {
 	t.Parallel()
@@ -143,18 +146,119 @@ func TestReconcileCanonicalMarkdownMessage_ReplacesPureMarkdownBlock(t *testing.
 	}
 }
 
-func TestReconcileCanonicalMarkdownMessage_SkipsMixedBlocks(t *testing.T) {
+func TestReconcileCanonicalMarkdownMessage_ReplacesLastMarkdownInMixedBlocks(t *testing.T) {
 	t.Parallel()
 
+	events := make([]any, 0, 4)
 	r := &run{
+		messageID: "msg_mixed",
+		onStreamEvent: func(ev any) {
+			events = append(events, ev)
+		},
 		assistantBlocks: []any{
-			&persistedMarkdownBlock{Type: "markdown", Content: "keep"},
+			&persistedMarkdownBlock{Type: "markdown", Content: "intro"},
 			ToolCallBlock{Type: "tool-call", ToolName: "terminal.exec"},
+			&persistedMarkdownBlock{Type: "markdown", Content: "teaser"},
 		},
 	}
 	r.rememberCanonicalMarkdownTurn("canonical")
 
-	if r.reconcileCanonicalMarkdownMessage("") {
-		t.Fatalf("reconcileCanonicalMarkdownMessage returned true, want false")
+	if !r.reconcileCanonicalMarkdownMessage("") {
+		t.Fatalf("reconcileCanonicalMarkdownMessage returned false, want true")
+	}
+
+	first, _ := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	last, _ := r.assistantBlocks[2].(*persistedMarkdownBlock)
+	if first == nil || first.Content != "" {
+		t.Fatalf("assistantBlocks[0]=%+v, want cleared markdown block", first)
+	}
+	if last == nil || last.Content != "canonical" {
+		t.Fatalf("assistantBlocks[2]=%+v, want canonical markdown block", last)
+	}
+	if len(events) != 2 {
+		t.Fatalf("stream events=%d, want 2", len(events))
+	}
+}
+
+func TestReconcileCanonicalMarkdownMessage_AppendsMarkdownWhenNoMarkdownBlocksExist(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 2)
+	r := &run{
+		messageID: "msg_append",
+		onStreamEvent: func(ev any) {
+			events = append(events, ev)
+		},
+		assistantBlocks: []any{
+			&persistedThinkingBlock{Type: "thinking", Content: "thinking"},
+			ToolCallBlock{Type: "tool-call", ToolName: "task_complete"},
+		},
+		nextBlockIndex: 2,
+	}
+	r.rememberCanonicalMarkdownTurn("canonical")
+
+	if !r.reconcileCanonicalMarkdownMessage("") {
+		t.Fatalf("reconcileCanonicalMarkdownMessage returned false, want true")
+	}
+
+	if len(r.assistantBlocks) != 3 {
+		t.Fatalf("assistantBlocks len=%d, want 3", len(r.assistantBlocks))
+	}
+	block, _ := r.assistantBlocks[2].(*persistedMarkdownBlock)
+	if block == nil || block.Content != "canonical" {
+		t.Fatalf("assistantBlocks[2]=%+v, want appended canonical markdown block", block)
+	}
+	if len(events) != 2 {
+		t.Fatalf("stream events=%d, want 2", len(events))
+	}
+	if _, ok := events[0].(streamEventBlockStart); !ok {
+		t.Fatalf("event[0]=%T, want streamEventBlockStart", events[0])
+	}
+	if ev, ok := events[1].(streamEventBlockSet); !ok || ev.BlockIndex != 2 {
+		t.Fatalf("event[1]=%+v, want block-set for index 2", events[1])
+	}
+}
+
+func TestReconcileCanonicalMarkdownMessage_UpdatesPersistedAssistantSnapshotText(t *testing.T) {
+	t.Parallel()
+
+	r := &run{
+		messageID:                "msg_snapshot",
+		assistantCreatedAtUnixMs: 123,
+		assistantBlocks: []any{
+			&persistedMarkdownBlock{Type: "markdown", Content: "intro"},
+			ToolCallBlock{Type: "tool-call", ToolName: "terminal.exec"},
+			&persistedMarkdownBlock{Type: "markdown", Content: "teaser"},
+		},
+	}
+	r.rememberCanonicalMarkdownTurn("canonical final answer")
+
+	if !r.reconcileCanonicalMarkdownMessage("") {
+		t.Fatalf("reconcileCanonicalMarkdownMessage returned false, want true")
+	}
+
+	rawJSON, assistantText, _, err := r.snapshotAssistantMessageJSON()
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
+	}
+	if assistantText != "canonical final answer" {
+		t.Fatalf("assistantText=%q, want canonical final answer", assistantText)
+	}
+
+	var msg persistedMessage
+	if err := json.Unmarshal([]byte(rawJSON), &msg); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if len(msg.Blocks) != 3 {
+		t.Fatalf("blocks len=%d, want 3", len(msg.Blocks))
+	}
+
+	first, ok := msg.Blocks[0].(map[string]any)
+	if !ok || first["type"] != "markdown" || first["content"] != "" {
+		t.Fatalf("blocks[0]=%T %+v, want cleared markdown block", msg.Blocks[0], msg.Blocks[0])
+	}
+	last, ok := msg.Blocks[2].(map[string]any)
+	if !ok || last["type"] != "markdown" || last["content"] != "canonical final answer" {
+		t.Fatalf("blocks[2]=%T %+v, want canonical final answer", msg.Blocks[2], msg.Blocks[2])
 	}
 }

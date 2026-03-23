@@ -123,6 +123,7 @@ Behavior summary:
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.
 - `task_complete` is rejected when todo tracking is active and open todos still exist.
+- When a run completes through `task_complete`, its `task_complete.result` is the canonical final assistant completion text. Persisted assistant transcript snapshots must keep that canonical completion text aligned with the user-visible markdown content even if the run streamed mixed `thinking`, `tool-call`, and `markdown` blocks before completion.
 - `ask_user` follows a structured contract (`questions`, `reason_code`, `required_from_user`, `evidence_refs`) and is policy-classified by the model before entering `waiting_user`.
 - Structured prompt answers are submitted through a dedicated prompt-response action rather than the plain chat `sendMessage` path.
 - When a thread is still `waiting_user`, the waiting prompt snapshot in `ai_threads.waiting_user_input_json` should stay aligned with the assistant transcript `ask_user` block; read/write paths recover from the latest persisted assistant transcript when that snapshot is missing or invalid.
@@ -135,11 +136,26 @@ Behavior summary:
 - Manual rename always wins. Once a thread is manually renamed, later automatic generation must not overwrite that user-owned title state, even if the user intentionally renamed it to blank.
 - no-tool backpressure defaults to 3 rounds and inserts a completion-required nudge before falling back to `ask_user`.
 - `terminal.exec` output is rendered with structured shell blocks in the Env App (no markdown fallback conversion).
+- Live assistant `block-delta` transport must preserve complete user-visible markdown/reasoning content. The realtime sink may coalesce low-priority assistant/context updates, but it must not silently truncate visible assistant block content that will later appear in snapshots/transcript recovery.
 - Subagents are for parallelizable or independently reviewable work. Simple local inspection tasks should stay in the main Flower run instead of spawning subagents.
 
 Installer note:
 
 - `scripts/install.sh` installs pinned ripgrep binaries into `~/.redeven/tools/rg/<version>/<platform>/rg` and links `~/.redeven/bin/rg`, so shell-first search is available even when the system does not provide `rg`.
+
+## Behavioral evaluation
+
+Flower quality is validated with a behavioral eval harness, not just transcript keyword checks.
+
+The eval harness runs real Flower tasks and asserts:
+
+- final thread state (`run_status`, `execution_mode`, waiting prompt behavior)
+- structural tool behavior (`terminal.exec`, `write_todos`, `ask_user`, `task_complete`, forbidden tools)
+- runtime events such as `ask_user.waiting`, `todos.updated`, and loop-failure signals
+- todo discipline, including final closeout and single `in_progress` execution
+- assistant-visible output, evidence paths, and fallback-free closeout
+
+Each eval task runs in an isolated workspace copy so Flower can keep normal RWX permissions without mutating the source repository under test.
 
 See also:
 - `PERMISSION_POLICY.md` for how the local RWX cap works (and what it does not cap).

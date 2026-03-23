@@ -12,6 +12,7 @@ const (
 	threadstoreCurrentSchemaVersion = 18
 )
 
+// CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
 func CurrentSchemaVersion() int {
 	return threadstoreCurrentSchemaVersion
 }
