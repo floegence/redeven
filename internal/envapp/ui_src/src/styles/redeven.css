@@ -256,7 +256,7 @@ html.dark {
 .flower-chat-input.chat-input-container {
   margin: 0.75rem;
   margin-top: 0.5rem;
-  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  border: none;
   border-radius: 1rem;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--card) 98%, var(--background)), color-mix(in srgb, var(--card) 95%, var(--muted) 5%));
@@ -264,7 +264,6 @@ html.dark {
 }
 
 .flower-chat-input.chat-input-container-focused {
-  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--primary) 12%, transparent),
     0 12px 32px -26px color-mix(in srgb, var(--primary) 24%, transparent);
