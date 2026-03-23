@@ -1825,20 +1825,8 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
   gap: 0.34rem;
 }
 
-.chat-tool-knowledge-chip {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 9999px;
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  background: color-mix(in srgb, var(--background) 84%, transparent);
-  color: var(--muted-foreground);
-  font-size: 0.63rem;
-  line-height: 1;
-  padding: 0.16rem 0.46rem;
-}
-
-.chat-tool-knowledge-chip-repo {
-  color: color-mix(in srgb, #7c3aed 80%, var(--foreground));
+.chat-tool-knowledge-tag {
+  max-width: 100%;
 }
 
 .chat-tool-knowledge-details {
@@ -1964,21 +1952,9 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
   gap: 0.3rem;
 }
 
-.chat-tool-knowledge-item-tag,
-.chat-tool-knowledge-item-repo {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 9999px;
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  background: color-mix(in srgb, var(--muted) 44%, transparent);
-  color: var(--muted-foreground);
-  font-size: 0.6rem;
-  line-height: 1;
-  padding: 0.12rem 0.38rem;
-}
-
-.chat-tool-knowledge-item-repo {
-  color: color-mix(in srgb, #7c3aed 76%, var(--foreground));
+.chat-tool-knowledge-item-tags .floe-tag,
+.chat-tool-knowledge-item-repos .floe-tag {
+  max-width: 100%;
 }
 
 .chat-tool-knowledge-toggle-row {

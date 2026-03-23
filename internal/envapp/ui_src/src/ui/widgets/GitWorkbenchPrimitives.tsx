@@ -1,7 +1,27 @@
 import { For, Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { gitChangeLabel, gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneInsetClass, gitToneSurfaceClass, type GitChromeTone } from './GitChrome';
+
+function gitTagVariant(tone?: GitChromeTone): TagProps['variant'] {
+  switch (tone) {
+    case 'brand':
+      return 'primary';
+    case 'success':
+      return 'success';
+    case 'warning':
+      return 'warning';
+    case 'danger':
+      return 'error';
+    case 'info':
+    case 'violet':
+      return 'info';
+    case 'neutral':
+    default:
+      return 'neutral';
+  }
+}
 
 export interface GitSectionProps {
   label: string;
@@ -222,9 +242,9 @@ export interface GitMetaPillProps {
 
 export function GitMetaPill(props: GitMetaPillProps) {
   return (
-    <span class={cn('inline-flex max-w-full items-center rounded px-2 py-0.5 text-[10px] font-medium tracking-[0.04em]', gitToneBadgeClass(props.tone), props.class)}>
-      <span class="truncate">{props.children}</span>
-    </span>
+    <Tag variant={gitTagVariant(props.tone)} tone="soft" size="sm" class={cn('max-w-full align-middle', props.class)}>
+      {props.children}
+    </Tag>
   );
 }
 
