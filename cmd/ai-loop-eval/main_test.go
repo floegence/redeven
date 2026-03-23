@@ -2,50 +2,6 @@ package main
 
 import "testing"
 
-func TestSummarizeVariants_PenalizesStage1OnlyVariant(t *testing.T) {
-	t.Parallel()
-
-	vPromoted := evalVariant{ID: "v_promoted", PromptProfile: "p1", LoopProfile: "l1"}
-	vScreenOnly := evalVariant{ID: "v_screen_only", PromptProfile: "p2", LoopProfile: "l2"}
-
-	results := []taskResult{
-		{Variant: vPromoted, Task: evalTask{ID: "openclaw_brief"}, Score: scoreBreakdown{Overall: 70}},
-		{Variant: vPromoted, Task: evalTask{ID: "openclaw_deep"}, Score: scoreBreakdown{Overall: 50}},
-		{Variant: vScreenOnly, Task: evalTask{ID: "openclaw_brief"}, Score: scoreBreakdown{Overall: 78}},
-	}
-
-	stage1 := map[string]float64{
-		vPromoted.ID:   70,
-		vScreenOnly.ID: 78,
-	}
-	stage2 := map[string]float64{
-		vPromoted.ID: 50,
-	}
-
-	summaries := summarizeVariants([]evalVariant{vPromoted, vScreenOnly}, results, stage1, stage2)
-	if len(summaries) != 2 {
-		t.Fatalf("len(summaries)=%d, want 2", len(summaries))
-	}
-
-	byID := map[string]variantSummary{}
-	for _, s := range summaries {
-		byID[s.Variant.ID] = s
-	}
-
-	promoted := byID[vPromoted.ID]
-	screenOnly := byID[vScreenOnly.ID]
-
-	if promoted.Stage2Avg <= 0 {
-		t.Fatalf("promoted Stage2Avg=%.2f, want > 0", promoted.Stage2Avg)
-	}
-	if screenOnly.Stage2Avg != 0 {
-		t.Fatalf("screen-only Stage2Avg=%.2f, want 0", screenOnly.Stage2Avg)
-	}
-	if promoted.FinalOverall <= screenOnly.FinalOverall {
-		t.Fatalf("promoted final=%.2f, screen-only final=%.2f, want promoted > screen-only", promoted.FinalOverall, screenOnly.FinalOverall)
-	}
-}
-
 func TestMatchesRequirement_WithAlternatives(t *testing.T) {
 	t.Parallel()
 
@@ -54,5 +10,34 @@ func TestMatchesRequirement_WithAlternatives(t *testing.T) {
 	}
 	if matchesRequirement("short text", "risk") {
 		t.Fatalf("expected matchesRequirement to fail when no alternative matches")
+	}
+}
+
+func TestExtractEvidencePaths_FiltersToWorkspace(t *testing.T) {
+	t.Parallel()
+
+	workspace := "/tmp/eval/workspace"
+	text := "Use /tmp/eval/workspace/README.md and /tmp/eval/workspace/cmd/app/main.go, not /etc/hosts."
+	paths := extractEvidencePaths(text, workspace)
+	if len(paths) != 2 {
+		t.Fatalf("len(paths)=%d, want 2", len(paths))
+	}
+	if paths[0] != "/tmp/eval/workspace/README.md" {
+		t.Fatalf("paths[0]=%q", paths[0])
+	}
+	if paths[1] != "/tmp/eval/workspace/cmd/app/main.go" {
+		t.Fatalf("paths[1]=%q", paths[1])
+	}
+}
+
+func TestRenderTaskTurns_ReplacesWorkspacePlaceholder(t *testing.T) {
+	t.Parallel()
+
+	turns := renderTaskTurns([]string{"Analyze ${workspace}", "continue in ${workspace}"}, "/tmp/run")
+	if turns[0] != "Analyze /tmp/run" {
+		t.Fatalf("turns[0]=%q", turns[0])
+	}
+	if turns[1] != "continue in /tmp/run" {
+		t.Fatalf("turns[1]=%q", turns[1])
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -17,31 +18,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/floegence/redeven-agent/internal/ai"
+	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
 	"github.com/floegence/redeven-agent/internal/settings"
 )
-
-type evalVariant struct {
-	ID            string `json:"id"`
-	PromptProfile string `json:"prompt_profile"`
-	LoopProfile   string `json:"loop_profile"`
-}
-
-type evalTask struct {
-	ID                     string        `json:"id"`
-	Title                  string        `json:"title"`
-	Stage                  string        `json:"stage"`
-	Category               string        `json:"category,omitempty"`
-	Turns                  []string      `json:"turns"`
-	MaxSteps               int           `json:"max_steps"`
-	TimeoutPerTurn         time.Duration `json:"timeout_per_turn"`
-	RequireEvidence        bool          `json:"require_evidence"`
-	MustContain            []string      `json:"must_contain"`
-	Forbidden              []string      `json:"forbidden"`
-	HardFailEvents         []string      `json:"hard_fail_events,omitempty"`
-	MustNotEndWithFallback bool          `json:"must_not_end_with_fallback"`
-}
 
 type turnMetrics struct {
 	RunID                string        `json:"run_id"`
@@ -63,14 +44,55 @@ type turnMetrics struct {
 }
 
 type taskResult struct {
-	Variant         evalVariant    `json:"variant"`
-	Task            evalTask       `json:"task"`
-	Turns           []turnMetrics  `json:"turns"`
-	FinalText       string         `json:"final_text"`
-	DurationTotalMS int64          `json:"duration_total_ms"`
-	Score           scoreBreakdown `json:"score"`
-	Outcome         taskOutcome    `json:"outcome"`
-	WorkspacePath   string         `json:"workspace_path"`
+	Task                evalTask             `json:"task"`
+	Inputs              []string             `json:"inputs,omitempty"`
+	Turns               []turnMetrics        `json:"turns"`
+	FinalText           string               `json:"final_text"`
+	DurationTotalMS     int64                `json:"duration_total_ms"`
+	Score               scoreBreakdown       `json:"score"`
+	Outcome             taskOutcome          `json:"outcome"`
+	SourceWorkspacePath string               `json:"source_workspace_path"`
+	WorkspacePath       string               `json:"workspace_path"`
+	ThreadState         threadStateSummary   `json:"thread_state"`
+	ToolCalls           []toolCallSummary    `json:"tool_calls,omitempty"`
+	TodoSnapshot        *todoSnapshotSummary `json:"todo_snapshot,omitempty"`
+	EventCounts         map[string]int       `json:"event_counts,omitempty"`
+	FinalizationReasons []string             `json:"finalization_reasons,omitempty"`
+	EvidencePaths       []string             `json:"evidence_paths,omitempty"`
+
+	rawThread    *ai.ThreadView               `json:"-"`
+	rawTodos     *ai.ThreadTodosView          `json:"-"`
+	rawToolCalls []threadstore.ToolCallRecord `json:"-"`
+}
+
+type threadStateSummary struct {
+	ThreadID           string   `json:"thread_id,omitempty"`
+	ExecutionMode      string   `json:"execution_mode,omitempty"`
+	RunStatus          string   `json:"run_status,omitempty"`
+	WaitingPrompt      bool     `json:"waiting_prompt"`
+	WaitingReasonCode  string   `json:"waiting_reason_code,omitempty"`
+	WaitingQuestions   []string `json:"waiting_questions,omitempty"`
+	LastMessagePreview string   `json:"last_message_preview,omitempty"`
+}
+
+type toolCallSummary struct {
+	RunID          string `json:"run_id"`
+	ToolID         string `json:"tool_id"`
+	ToolName       string `json:"tool_name"`
+	Status         string `json:"status"`
+	ErrorCode      string `json:"error_code,omitempty"`
+	RecoveryAction string `json:"recovery_action,omitempty"`
+}
+
+type todoSnapshotSummary struct {
+	Version         int64         `json:"version"`
+	UpdatedAtUnixMs int64         `json:"updated_at_unix_ms"`
+	Total           int           `json:"total"`
+	Pending         int           `json:"pending"`
+	InProgress      int           `json:"in_progress"`
+	Completed       int           `json:"completed"`
+	Cancelled       int           `json:"cancelled"`
+	Todos           []ai.TodoItem `json:"todos,omitempty"`
 }
 
 type scoreBreakdown struct {
@@ -80,27 +102,17 @@ type scoreBreakdown struct {
 	Overall    float64 `json:"overall"`
 }
 
-type variantSummary struct {
-	Variant      evalVariant        `json:"variant"`
-	Stage1Avg    float64            `json:"stage1_avg"`
-	Stage2Avg    float64            `json:"stage2_avg"`
-	FinalOverall float64            `json:"final_overall"`
-	TaskResults  map[string]float64 `json:"task_results"`
-}
-
 type evalReport struct {
-	GeneratedAt       time.Time                 `json:"generated_at"`
-	ModelID           string                    `json:"model_id"`
-	WorkspacePath     string                    `json:"workspace_path"`
-	VariantCount      int                       `json:"variant_count"`
-	Stage1TaskIDs     []string                  `json:"stage1_task_ids"`
-	Stage2TaskIDs     []string                  `json:"stage2_task_ids"`
-	Results           []taskResult              `json:"results"`
-	Summaries         []variantSummary          `json:"summaries"`
-	Recommended       evalVariant               `json:"recommended"`
-	RecommendedReason string                    `json:"recommended_reason"`
-	Gate              gateReport                `json:"gate"`
-	VariantMetrics    map[string]variantMetrics `json:"variant_metrics"`
+	GeneratedAt          time.Time               `json:"generated_at"`
+	ModelID              string                  `json:"model_id"`
+	TaskSpecPath         string                  `json:"task_spec_path"`
+	SourceWorkspacePath  string                  `json:"source_workspace_path"`
+	IsolatedWorkspaceDir string                  `json:"isolated_workspace_dir"`
+	TaskCount            int                     `json:"task_count"`
+	Results              []taskResult            `json:"results"`
+	Metrics              suiteMetrics            `json:"metrics"`
+	StageMetrics         map[string]suiteMetrics `json:"stage_metrics,omitempty"`
+	Gate                 gateReport              `json:"gate"`
 }
 
 type monitoredResponseWriter struct {
@@ -283,10 +295,8 @@ func main() {
 	workspace := flag.String("workspace", "/Users/tangjianyin/Downloads/code/openclaw", "workspace absolute path for evaluation tasks")
 	reportDir := flag.String("report-dir", "", "output directory for reports (default: ~/.redeven/ai/evals/<timestamp>)")
 	taskSpecPath := flag.String("task-spec", filepath.Clean("eval/tasks/default.yaml"), "task specification yaml path")
-	baselinePath := flag.String("baseline", filepath.Clean("eval/baselines/open_source_best.json"), "benchmark baseline json path")
-	topK := flag.Int("top-k", 6, "top variants promoted from stage1 to stage2")
-	maxVariants := flag.Int("max-variants", 0, "optional cap of evaluated variants (0 = all)")
-	enforceGate := flag.Bool("enforce-gate", false, "enforce hard gate against open-source benchmark baselines")
+	baselinePath := flag.String("baseline", filepath.Clean("eval/baselines/open_source_best.json"), "behavioral benchmark baseline json path")
+	enforceGate := flag.Bool("enforce-gate", false, "enforce hard gate against configured baselines")
 	minPassRate := flag.Float64("min-pass-rate", 0.8, "hard gate minimum pass rate")
 	minLoopSafetyRate := flag.Float64("min-loop-safety-rate", 0.95, "hard gate minimum loop safety rate")
 	minFallbackFreeRate := flag.Float64("min-fallback-free-rate", 0.98, "hard gate minimum fallback-free rate")
@@ -334,6 +344,10 @@ func main() {
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		fatalf("failed to create state dir: %v", err)
 	}
+	taskWorkspaceRoot := filepath.Join(outDir, "workspaces")
+	if err := os.MkdirAll(taskWorkspaceRoot, 0o700); err != nil {
+		fatalf("failed to create isolated workspace dir: %v", err)
+	}
 
 	service, err := ai.NewService(ai.Options{
 		StateDir:              stateDir,
@@ -351,52 +365,32 @@ func main() {
 	}
 	defer func() { _ = service.Close() }()
 
-	variants := buildVariants()
-	if *maxVariants > 0 && *maxVariants < len(variants) {
-		variants = variants[:*maxVariants]
-	}
-	if len(variants) < 20 && *maxVariants == 0 {
-		fatalf("variant count must be at least 20, current=%d", len(variants))
-	}
-
-	tasks, loadErr := loadTaskSpecs(strings.TrimSpace(*taskSpecPath), workspacePath)
+	tasks, loadErr := loadTaskSpecs(strings.TrimSpace(*taskSpecPath))
 	if loadErr != nil {
 		fatalf("failed to load task specs: %v", loadErr)
 	}
-	stage1Tasks := filterTasksByStage(tasks, "screen")
-	stage2Tasks := filterTasksByStage(tasks, "deep")
-	if len(stage1Tasks) == 0 || len(stage2Tasks) == 0 {
-		fatalf("task stage configuration invalid")
-	}
 
-	fmt.Printf("[ai-loop-eval] model=%s variants=%d stage1_tasks=%d stage2_tasks=%d\n", modelID, len(variants), len(stage1Tasks), len(stage2Tasks))
+	stageMetrics := make(map[string]suiteMetrics)
+	fmt.Printf("[ai-loop-eval] model=%s tasks=%d workspace=%s\n", modelID, len(tasks), workspacePath)
 
 	ctx := context.Background()
-	results := make([]taskResult, 0, len(variants)*(len(stage1Tasks)+len(stage2Tasks)))
-
-	stage1Scores := make(map[string]float64, len(variants))
-	for i, v := range variants {
-		fmt.Printf("[stage1] (%d/%d) variant=%s\n", i+1, len(variants), v.ID)
-		avg, stageResults := runVariantTasks(ctx, service, modelID, workspacePath, v, stage1Tasks)
-		stage1Scores[v.ID] = avg
-		results = append(results, stageResults...)
+	results := make([]taskResult, 0, len(tasks))
+	for i, task := range tasks {
+		fmt.Printf("[task] (%d/%d) %s\n", i+1, len(tasks), task.ID)
+		res := runTask(ctx, service, modelID, workspacePath, taskWorkspaceRoot, task)
+		results = append(results, res)
+		fmt.Printf("  - score=%.2f acc=%.2f nat=%.2f eff=%.2f pass=%t\n", res.Score.Overall, res.Score.Accuracy, res.Score.Natural, res.Score.Efficiency, res.Outcome.Passed)
 	}
 
-	topVariants := pickTopVariants(variants, stage1Scores, *topK)
-	stage2Scores := make(map[string]float64, len(topVariants))
-	for i, v := range topVariants {
-		fmt.Printf("[stage2] (%d/%d) variant=%s\n", i+1, len(topVariants), v.ID)
-		avg, stageResults := runVariantTasks(ctx, service, modelID, workspacePath, v, stage2Tasks)
-		stage2Scores[v.ID] = avg
-		results = append(results, stageResults...)
+	metrics := aggregateSuiteMetrics(results)
+	for _, stage := range []string{"screen", "deep"} {
+		stageResults := filterTaskResultsByStage(results, stage)
+		if len(stageResults) == 0 {
+			continue
+		}
+		stageMetrics[stage] = aggregateSuiteMetrics(stageResults)
 	}
 
-	summaries := summarizeVariants(variants, results, stage1Scores, stage2Scores)
-	sort.Slice(summaries, func(i, j int) bool {
-		return summaries[i].FinalOverall > summaries[j].FinalOverall
-	})
-
-	variantMetricsMap := aggregateVariantMetrics(results)
 	thresholds := gateThresholds{
 		MinPassRate:         clamp01(*minPassRate),
 		MinLoopSafetyRate:   clamp01(*minLoopSafetyRate),
@@ -404,13 +398,12 @@ func main() {
 		MinAverageAccuracy:  clampScore(*minAverageAccuracy),
 	}
 	gate := gateReport{
-		Enabled:          false,
-		Thresholds:       thresholds,
-		Status:           "skipped",
-		VariantDecisions: nil,
+		Enabled:    false,
+		Thresholds: thresholds,
+		Status:     "skipped",
+		Metrics:    metrics,
 	}
 
-	recommended := summaries[0].Variant
 	if baseline := strings.TrimSpace(*baselinePath); baseline != "" {
 		baselines, loadErr := loadBenchmarkBaselines(baseline)
 		if loadErr != nil {
@@ -419,32 +412,22 @@ func main() {
 			}
 			fmt.Printf("[ai-loop-eval] baseline skipped: %v\n", loadErr)
 		} else {
-			gate = evaluateGate(variants, variantMetricsMap, baselines, thresholds, recommended)
-			gate.Enabled = true
+			gate = evaluateGate(metrics, baselines, thresholds)
 			gate.BaselinePath = filepath.Clean(baseline)
-			if gate.Status == "pass" {
-				if v, ok := pickBestPassedVariant(summaries, gate.PassedVariantIDs); ok {
-					recommended = v
-					gate.RecommendedVariantID = v.ID
-				}
-			}
 		}
 	}
 
-	reason := buildRecommendReason(summaries, recommended, gate)
 	report := evalReport{
-		GeneratedAt:       time.Now(),
-		ModelID:           modelID,
-		WorkspacePath:     workspacePath,
-		VariantCount:      len(variants),
-		Stage1TaskIDs:     taskIDs(stage1Tasks),
-		Stage2TaskIDs:     taskIDs(stage2Tasks),
-		Results:           results,
-		Summaries:         summaries,
-		Recommended:       recommended,
-		RecommendedReason: reason,
-		Gate:              gate,
-		VariantMetrics:    variantMetricsMap,
+		GeneratedAt:          time.Now(),
+		ModelID:              modelID,
+		TaskSpecPath:         filepath.Clean(strings.TrimSpace(*taskSpecPath)),
+		SourceWorkspacePath:  workspacePath,
+		IsolatedWorkspaceDir: taskWorkspaceRoot,
+		TaskCount:            len(results),
+		Results:              results,
+		Metrics:              metrics,
+		StageMetrics:         stageMetrics,
+		Gate:                 gate,
 	}
 
 	jsonPath := filepath.Join(outDir, "report.json")
@@ -456,12 +439,12 @@ func main() {
 		fatalf("failed to write report.md: %v", err)
 	}
 
-	fmt.Printf("[ai-loop-eval] recommended prompt=%s loop=%s (%s)\n", recommended.PromptProfile, recommended.LoopProfile, reason)
+	fmt.Printf("[ai-loop-eval] suite pass_rate=%.2f loop_safe=%.2f accuracy=%.2f\n", metrics.PassRate, metrics.LoopSafetyRate, metrics.AverageAccuracy)
 	fmt.Printf("[ai-loop-eval] report dir: %s\n", outDir)
 	if gate.Enabled {
 		fmt.Printf("[ai-loop-eval] gate status: %s\n", gate.Status)
-		if len(gate.FailReasons) > 0 {
-			fmt.Printf("[ai-loop-eval] gate reasons: %s\n", strings.Join(gate.FailReasons, "; "))
+		if len(gate.Reasons) > 0 {
+			fmt.Printf("[ai-loop-eval] gate reasons: %s\n", strings.Join(gate.Reasons, "; "))
 		}
 	}
 
@@ -475,48 +458,14 @@ func main() {
 	}
 }
 
-func buildVariants() []evalVariant {
-	promptProfiles := []string{
-		"natural_evidence_v2",
-		"concise_direct_v1",
-		"strict_no_preamble_v1",
-		"evidence_sections_v1",
-		"recovery_heavy_v1",
-		"minimal_progress_v1",
+func runTask(ctx context.Context, svc *ai.Service, modelID string, sourceWorkspace string, taskWorkspaceRoot string, task evalTask) taskResult {
+	taskWorkspace, err := prepareTaskWorkspace(taskWorkspaceRoot, task.ID, sourceWorkspace)
+	inputs := renderTaskTurns(task.Turns, taskWorkspace)
+	if err != nil {
+		return failedTaskResult(task, sourceWorkspace, taskWorkspace, inputs, "prepare_task_workspace_failed", err)
 	}
-	loopProfiles := []string{
-		"adaptive_default_v2",
-		"fast_exit_v1",
-		"deep_analysis_v1",
-		"conservative_recovery_v1",
-	}
-	out := make([]evalVariant, 0, len(promptProfiles)*len(loopProfiles))
-	for _, pp := range promptProfiles {
-		for _, lp := range loopProfiles {
-			id := pp + "__" + lp
-			out = append(out, evalVariant{ID: id, PromptProfile: pp, LoopProfile: lp})
-		}
-	}
-	return out
-}
 
-func runVariantTasks(ctx context.Context, svc *ai.Service, modelID string, workspacePath string, variant evalVariant, tasks []evalTask) (float64, []taskResult) {
-	if len(tasks) == 0 {
-		return 0, nil
-	}
-	results := make([]taskResult, 0, len(tasks))
-	total := 0.0
-	for _, task := range tasks {
-		res := runTask(ctx, svc, modelID, workspacePath, variant, task)
-		results = append(results, res)
-		total += res.Score.Overall
-		fmt.Printf("  - task=%s score=%.2f acc=%.2f nat=%.2f eff=%.2f\n", task.ID, res.Score.Overall, res.Score.Accuracy, res.Score.Natural, res.Score.Efficiency)
-	}
-	return total / float64(len(tasks)), results
-}
-
-func runTask(ctx context.Context, svc *ai.Service, modelID string, workspacePath string, variant evalVariant, task evalTask) taskResult {
-	channelID := sanitizeID("ch_eval_" + variant.ID + "_" + task.ID)
+	channelID := sanitizeID("ch_eval_" + task.ID)
 	meta := &session.Meta{
 		EndpointID:        "env_ai_loop_eval",
 		NamespacePublicID: "ns_ai_loop_eval",
@@ -524,24 +473,27 @@ func runTask(ctx context.Context, svc *ai.Service, modelID string, workspacePath
 		UserPublicID:      "u_ai_loop_eval",
 		UserEmail:         "u_ai_loop_eval@example.com",
 		CanRead:           true,
-		CanWrite:          false,
+		CanWrite:          true,
 		CanExecute:        true,
 		CanAdmin:          false,
 	}
-	thread, err := svc.CreateThread(ctx, meta, "eval-"+task.ID, modelID, "", workspacePath)
+	thread, err := svc.CreateThread(ctx, meta, "eval-"+task.ID, modelID, task.Runtime.ExecutionMode, taskWorkspace)
 	if err != nil {
-		return taskResult{Variant: variant, Task: task, Score: scoreBreakdown{Overall: 0}}
+		return failedTaskResult(task, sourceWorkspace, taskWorkspace, inputs, "create_thread_failed", err)
 	}
 
-	turns := make([]turnMetrics, 0, len(task.Turns))
+	turns := make([]turnMetrics, 0, len(inputs))
+	eventCounts := make(map[string]int)
+	finalizationReasons := make([]string, 0, len(inputs))
 	started := time.Now()
-	for _, turnText := range task.Turns {
+
+	for _, turnText := range inputs {
 		runID, ridErr := ai.NewRunID()
 		if ridErr != nil {
 			turns = append(turns, turnMetrics{RunError: ridErr.Error()})
 			continue
 		}
-		timeout := task.TimeoutPerTurn
+		timeout := task.Runtime.TimeoutPerTurn
 		if timeout <= 0 {
 			timeout = 90 * time.Second
 		}
@@ -555,8 +507,11 @@ func runTask(ctx context.Context, svc *ai.Service, modelID string, workspacePath
 			Model:    modelID,
 			Input:    ai.RunInput{Text: turnText},
 			Options: ai.RunOptions{
-				MaxSteps: task.MaxSteps,
-				Mode:     strings.TrimSpace(variant.LoopProfile),
+				MaxSteps:                         task.Runtime.MaxSteps,
+				MaxNoToolRounds:                  task.Runtime.MaxNoToolRounds,
+				ReasoningOnly:                    task.Runtime.ReasoningOnly,
+				RequireUserConfirmOnTaskComplete: task.Runtime.RequireUserConfirmOnTaskComplete,
+				NoUserInteraction:                task.Runtime.NoUserInteraction,
 			},
 		}, writer)
 		dur := time.Since(oneStart)
@@ -567,10 +522,11 @@ func runTask(ctx context.Context, svc *ai.Service, modelID string, workspacePath
 			metrics.RunError = runErr.Error()
 		}
 		reasonFlow := make([]string, 0, 12)
-		events, evErr := svc.ListRunEvents(context.Background(), meta, runID, 1200)
+		events, evErr := svc.ListRunEvents(context.Background(), meta, runID, 2000)
 		if evErr == nil {
 			for _, ev := range events.Events {
-				eventType := strings.TrimSpace(strings.ToLower(ev.EventType))
+				eventType := normalizeName(ev.EventType)
+				eventCounts[eventType] = eventCounts[eventType] + 1
 				switch eventType {
 				case "turn.attempt.started":
 					metrics.AttemptCount++
@@ -606,69 +562,120 @@ func runTask(ctx context.Context, svc *ai.Service, modelID string, workspacePath
 		if metrics.AttemptCount == 0 {
 			metrics.AttemptCount = 1
 		}
+		if strings.TrimSpace(metrics.FinalizationReason) != "" {
+			finalizationReasons = append(finalizationReasons, strings.TrimSpace(metrics.FinalizationReason))
+		}
 		turns = append(turns, metrics)
 	}
 
+	threadView, _ := svc.GetThread(context.Background(), meta, thread.ThreadID)
+	todoView, todoErr := svc.GetThreadTodos(context.Background(), meta, thread.ThreadID)
+	if todoErr != nil {
+		todoView = nil
+	}
+	toolCalls, toolErr := svc.ListRecentThreadToolCalls(context.Background(), meta, thread.ThreadID, 200)
+	if toolErr != nil {
+		toolCalls = nil
+	}
+
 	finalText := extractLatestAssistantText(ctx, svc, meta, thread.ThreadID)
+	if strings.TrimSpace(finalText) == "" && threadView != nil {
+		finalText = strings.TrimSpace(threadView.LastMessagePreview)
+	}
 	totalDur := time.Since(started)
-	score := evaluateScore(task, workspacePath, finalText, turns)
+
 	result := taskResult{
-		Variant:         variant,
-		Task:            task,
-		Turns:           turns,
-		FinalText:       finalText,
-		DurationTotalMS: totalDur.Milliseconds(),
-		Score:           score,
-		WorkspacePath:   workspacePath,
+		Task:                task,
+		Inputs:              inputs,
+		Turns:               turns,
+		FinalText:           finalText,
+		DurationTotalMS:     totalDur.Milliseconds(),
+		SourceWorkspacePath: sourceWorkspace,
+		WorkspacePath:       taskWorkspace,
+		ThreadState:         summarizeThreadState(threadView),
+		ToolCalls:           summarizeToolCalls(toolCalls),
+		TodoSnapshot:        buildTodoSnapshotSummary(todoView),
+		EventCounts:         eventCounts,
+		FinalizationReasons: uniqueStrings(finalizationReasons),
+		EvidencePaths:       extractEvidencePaths(finalText, taskWorkspace),
+		rawThread:           threadView,
+		rawTodos:            todoView,
+		rawToolCalls:        toolCalls,
 	}
 	result.Outcome = assessTaskOutcome(task, result)
+	result.Score = evaluateScore(task, result, result.Outcome)
 	return result
 }
 
-func evaluateScore(task evalTask, workspacePath string, finalText string, turns []turnMetrics) scoreBreakdown {
+func failedTaskResult(task evalTask, sourceWorkspace string, taskWorkspace string, inputs []string, reason string, err error) taskResult {
+	msg := strings.TrimSpace(reason)
+	if err != nil {
+		msg = msg + ": " + strings.TrimSpace(err.Error())
+	}
+	return taskResult{
+		Task:                task,
+		Inputs:              inputs,
+		FinalText:           msg,
+		Score:               scoreBreakdown{},
+		Outcome:             taskOutcome{Passed: false, LoopSafe: false, RecoverySucceeded: false, HardFailReasons: []string{reason}},
+		SourceWorkspacePath: sourceWorkspace,
+		WorkspacePath:       taskWorkspace,
+		EventCounts:         map[string]int{},
+	}
+}
+
+func evaluateScore(task evalTask, result taskResult, outcome taskOutcome) scoreBreakdown {
 	accuracy := 100.0
 	natural := 100.0
 	efficiency := 100.0
 
-	lower := strings.ToLower(finalText)
-	for _, must := range task.MustContain {
+	output := task.Assertions.Output
+	lower := strings.ToLower(result.FinalText)
+	for _, must := range output.MustContain {
 		if !matchesRequirement(lower, must) {
-			accuracy -= 15
+			accuracy -= 12
 		}
 	}
-	for _, ban := range task.Forbidden {
+	for _, ban := range output.Forbidden {
 		if strings.Contains(lower, strings.ToLower(strings.TrimSpace(ban))) {
 			accuracy -= 35
 			natural -= 20
 		}
 	}
-	if task.RequireEvidence && !containsEvidencePath(finalText, workspacePath) {
+	if output.RequireEvidence && len(result.EvidencePaths) == 0 {
 		accuracy -= 28
 	}
-	if utf8.RuneCountInString(strings.TrimSpace(finalText)) < 40 {
+	if output.MinEvidencePaths > 0 && len(result.EvidencePaths) < output.MinEvidencePaths {
 		accuracy -= 18
+	}
+	if output.MinLength > 0 && utf8.RuneCountInString(strings.TrimSpace(result.FinalText)) < output.MinLength {
+		accuracy -= 18
+		natural -= 12
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(result.FinalText)) < 40 {
+		accuracy -= 12
 		natural -= 15
 	}
-	if looksPreambleOnly(finalText) {
+	if looksPreambleOnly(result.FinalText) {
 		natural -= 35
 	}
 	for _, phrase := range fallbackFinalPhrases {
 		if strings.Contains(lower, phrase) {
 			accuracy -= 40
 			natural -= 25
+			efficiency -= 20
 			break
 		}
 	}
-	natural -= float64(repetitionPenalty(finalText))
+	natural -= float64(repetitionPenalty(result.FinalText))
 
 	totalSeconds := 0.0
 	attempts := 0
-	toolCalls := 0
+	toolCalls := len(result.rawToolCalls)
 	toolErrors := 0
-	for _, turn := range turns {
+	for _, turn := range result.Turns {
 		totalSeconds += turn.Duration.Seconds()
 		attempts += turn.AttemptCount
-		toolCalls += turn.ToolCallCount
 		toolErrors += turn.ToolErrorCount
 		if turn.MonitorAbort != "" {
 			accuracy -= 20
@@ -690,9 +697,13 @@ func evaluateScore(task evalTask, workspacePath string, finalText string, turns 
 			efficiency -= 18
 		}
 	}
+
+	if len(outcome.HardFailReasons) > 0 {
+		accuracy -= math.Min(56, float64(len(outcome.HardFailReasons))*8)
+	}
 	efficiency -= math.Min(55, totalSeconds*1.2)
-	if attempts > len(turns) {
-		efficiency -= float64((attempts - len(turns)) * 9)
+	if attempts > len(result.Turns) {
+		efficiency -= float64((attempts - len(result.Turns)) * 9)
 	}
 	if toolCalls > 5 {
 		efficiency -= float64((toolCalls - 5) * 3)
@@ -705,8 +716,231 @@ func evaluateScore(task evalTask, workspacePath string, finalText string, turns 
 	natural = clampScore(natural)
 	efficiency = clampScore(efficiency)
 	overall := clampScore(accuracy*0.5 + natural*0.3 + efficiency*0.2)
-
 	return scoreBreakdown{Accuracy: accuracy, Natural: natural, Efficiency: efficiency, Overall: overall}
+}
+
+func renderTaskTurns(turns []string, workspace string) []string {
+	out := make([]string, 0, len(turns))
+	for _, turn := range turns {
+		out = append(out, strings.ReplaceAll(turn, "${workspace}", workspace))
+	}
+	return out
+}
+
+func summarizeThreadState(thread *ai.ThreadView) threadStateSummary {
+	if thread == nil {
+		return threadStateSummary{}
+	}
+	out := threadStateSummary{
+		ThreadID:           strings.TrimSpace(thread.ThreadID),
+		ExecutionMode:      strings.TrimSpace(thread.ExecutionMode),
+		RunStatus:          strings.TrimSpace(thread.RunStatus),
+		WaitingPrompt:      thread.WaitingPrompt != nil,
+		LastMessagePreview: strings.TrimSpace(thread.LastMessagePreview),
+	}
+	if thread.WaitingPrompt != nil {
+		out.WaitingReasonCode = strings.TrimSpace(thread.WaitingPrompt.ReasonCode)
+		for _, question := range thread.WaitingPrompt.Questions {
+			text := strings.TrimSpace(question.Question)
+			if text == "" {
+				text = strings.TrimSpace(question.Header)
+			}
+			if text != "" {
+				out.WaitingQuestions = append(out.WaitingQuestions, text)
+			}
+		}
+	}
+	return out
+}
+
+func summarizeToolCalls(calls []threadstore.ToolCallRecord) []toolCallSummary {
+	if len(calls) == 0 {
+		return nil
+	}
+	out := make([]toolCallSummary, 0, len(calls))
+	for _, call := range calls {
+		out = append(out, toolCallSummary{
+			RunID:          strings.TrimSpace(call.RunID),
+			ToolID:         strings.TrimSpace(call.ToolID),
+			ToolName:       strings.TrimSpace(call.ToolName),
+			Status:         strings.TrimSpace(call.Status),
+			ErrorCode:      strings.TrimSpace(call.ErrorCode),
+			RecoveryAction: strings.TrimSpace(call.RecoveryAction),
+		})
+	}
+	return out
+}
+
+func buildTodoSnapshotSummary(view *ai.ThreadTodosView) *todoSnapshotSummary {
+	if view == nil {
+		return nil
+	}
+	summary := summarizeTodoItems(view.Todos)
+	return &todoSnapshotSummary{
+		Version:         view.Version,
+		UpdatedAtUnixMs: view.UpdatedAtUnixMs,
+		Total:           summary.Total,
+		Pending:         summary.Pending,
+		InProgress:      summary.InProgress,
+		Completed:       summary.Completed,
+		Cancelled:       summary.Cancelled,
+		Todos:           append([]ai.TodoItem(nil), view.Todos...),
+	}
+}
+
+type todoStats struct {
+	Total      int
+	Pending    int
+	InProgress int
+	Completed  int
+	Cancelled  int
+}
+
+func summarizeTodoItems(items []ai.TodoItem) todoStats {
+	stats := todoStats{Total: len(items)}
+	for _, item := range items {
+		switch strings.TrimSpace(strings.ToLower(item.Status)) {
+		case ai.TodoStatusPending:
+			stats.Pending++
+		case ai.TodoStatusInProgress:
+			stats.InProgress++
+		case ai.TodoStatusCompleted:
+			stats.Completed++
+		case ai.TodoStatusCancelled:
+			stats.Cancelled++
+		}
+	}
+	return stats
+}
+
+func extractLatestAssistantText(ctx context.Context, svc *ai.Service, meta *session.Meta, threadID string) string {
+	msgs, err := svc.ListThreadMessages(ctx, meta, threadID, 100, 0)
+	if err != nil || msgs == nil || len(msgs.Messages) == 0 {
+		return ""
+	}
+	for i := len(msgs.Messages) - 1; i >= 0; i-- {
+		obj := toMessageMap(msgs.Messages[i])
+		if len(obj) == 0 {
+			continue
+		}
+		if strings.TrimSpace(strings.ToLower(anyToString(obj["role"]))) != "assistant" {
+			continue
+		}
+		blocks, _ := obj["blocks"].([]any)
+		visible := make([]string, 0, len(blocks))
+		for _, rawBlock := range blocks {
+			block, _ := rawBlock.(map[string]any)
+			switch strings.TrimSpace(strings.ToLower(anyToString(block["type"]))) {
+			case "markdown", "text", "thinking":
+				content := strings.TrimSpace(anyToString(block["content"]))
+				if content != "" {
+					visible = append(visible, content)
+				}
+			}
+		}
+		if len(visible) > 0 {
+			return strings.Join(visible, "\n\n")
+		}
+		for j := len(blocks) - 1; j >= 0; j-- {
+			block, _ := blocks[j].(map[string]any)
+			if structured := structuredAssistantText(block); structured != "" {
+				return structured
+			}
+		}
+	}
+	return ""
+}
+
+func structuredAssistantText(block map[string]any) string {
+	if normalizeName(anyToString(block["type"])) != "tool-call" {
+		return ""
+	}
+	switch strings.TrimSpace(anyToString(block["toolName"])) {
+	case "ask_user":
+		return extractAskUserText(block["result"], block["args"])
+	case "task_complete":
+		return extractTaskCompleteText(block["args"])
+	default:
+		return ""
+	}
+}
+
+func extractAskUserText(candidates ...any) string {
+	for _, raw := range candidates {
+		obj, _ := raw.(map[string]any)
+		if len(obj) == 0 {
+			continue
+		}
+		if summary := strings.TrimSpace(anyToString(obj["public_summary"])); summary != "" {
+			return summary
+		}
+		questions, _ := obj["questions"].([]any)
+		for _, rawQuestion := range questions {
+			question, _ := rawQuestion.(map[string]any)
+			if text := strings.TrimSpace(anyToString(question["question"])); text != "" {
+				return text
+			}
+			if header := strings.TrimSpace(anyToString(question["header"])); header != "" {
+				return header
+			}
+		}
+	}
+	return ""
+}
+
+func extractTaskCompleteText(raw any) string {
+	obj, _ := raw.(map[string]any)
+	if len(obj) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(anyToString(obj["result"]))
+}
+
+func toMessageMap(v any) map[string]any {
+	switch x := v.(type) {
+	case map[string]any:
+		return x
+	case json.RawMessage:
+		var out map[string]any
+		if err := json.Unmarshal(x, &out); err == nil {
+			return out
+		}
+		return nil
+	case []byte:
+		var out map[string]any
+		if err := json.Unmarshal(x, &out); err == nil {
+			return out
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+var absolutePathPattern = regexp.MustCompile(`/(?:[^ \t\r\n"'` + "`" + `()<>{}\[\],;:])+`)
+
+func extractEvidencePaths(text string, workspacePath string) []string {
+	matches := absolutePathPattern.FindAllString(text, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	workspacePath = filepath.Clean(strings.TrimSpace(workspacePath))
+	seen := make(map[string]struct{}, len(matches))
+	out := make([]string, 0, len(matches))
+	for _, match := range matches {
+		path := strings.TrimSpace(match)
+		path = strings.TrimRight(path, ".)]")
+		if workspacePath != "" && !strings.HasPrefix(path, workspacePath) {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		out = append(out, path)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func matchesRequirement(text string, requirement string) bool {
@@ -728,11 +962,11 @@ func matchesRequirement(text string, requirement string) bool {
 }
 
 func containsEvidencePath(text string, workspacePath string) bool {
-	workspacePath = filepath.Clean(workspacePath)
-	if workspacePath == "" {
-		return false
+	if len(extractEvidencePaths(text, workspacePath)) > 0 {
+		return true
 	}
-	if strings.Contains(text, workspacePath) {
+	workspacePath = filepath.Clean(workspacePath)
+	if workspacePath != "" && strings.Contains(text, workspacePath) {
 		return true
 	}
 	lower := strings.ToLower(text)
@@ -808,133 +1042,13 @@ func repetitionPenalty(text string) int {
 	return penalty
 }
 
-func summarizeVariants(variants []evalVariant, results []taskResult, stage1 map[string]float64, stage2 map[string]float64) []variantSummary {
-	byVariant := make(map[string][]taskResult, len(variants))
-	for _, r := range results {
-		byVariant[r.Variant.ID] = append(byVariant[r.Variant.ID], r)
-	}
-	out := make([]variantSummary, 0, len(variants))
-	for _, v := range variants {
-		vr := byVariant[v.ID]
-		taskScores := make(map[string]float64, len(vr))
-		for _, tr := range vr {
-			taskScores[tr.Task.ID] = tr.Score.Overall
+func filterTaskResultsByStage(results []taskResult, stage string) []taskResult {
+	stage = normalizeName(stage)
+	out := make([]taskResult, 0, len(results))
+	for _, result := range results {
+		if normalizeName(result.Task.Stage) == stage {
+			out = append(out, result)
 		}
-		s1 := stage1[v.ID]
-		s2, promoted := stage2[v.ID]
-		final := 0.0
-		if promoted {
-			final = clampScore(s1*0.45 + s2*0.55)
-		} else {
-			// Stage1-only variants are intentionally penalized so final ranking prefers deep-evaluated candidates.
-			s2 = 0
-			final = clampScore(s1 * 0.4)
-		}
-		out = append(out, variantSummary{
-			Variant:      v,
-			Stage1Avg:    s1,
-			Stage2Avg:    s2,
-			FinalOverall: final,
-			TaskResults:  taskScores,
-		})
-	}
-	return out
-}
-
-func pickTopVariants(variants []evalVariant, scores map[string]float64, topK int) []evalVariant {
-	type pair struct {
-		V evalVariant
-		S float64
-	}
-	pairs := make([]pair, 0, len(variants))
-	for _, v := range variants {
-		pairs = append(pairs, pair{V: v, S: scores[v.ID]})
-	}
-	sort.Slice(pairs, func(i, j int) bool {
-		if pairs[i].S == pairs[j].S {
-			return pairs[i].V.ID < pairs[j].V.ID
-		}
-		return pairs[i].S > pairs[j].S
-	})
-	if topK <= 0 || topK > len(pairs) {
-		topK = len(pairs)
-	}
-	out := make([]evalVariant, 0, topK)
-	for i := 0; i < topK; i++ {
-		out = append(out, pairs[i].V)
-	}
-	return out
-}
-
-func extractLatestAssistantText(ctx context.Context, svc *ai.Service, meta *session.Meta, threadID string) string {
-	msgs, err := svc.ListThreadMessages(ctx, meta, threadID, 100, 0)
-	if err != nil || msgs == nil || len(msgs.Messages) == 0 {
-		return ""
-	}
-	for i := len(msgs.Messages) - 1; i >= 0; i-- {
-		obj := toMessageMap(msgs.Messages[i])
-		if len(obj) == 0 {
-			continue
-		}
-		if strings.TrimSpace(strings.ToLower(anyToString(obj["role"]))) != "assistant" {
-			continue
-		}
-		blocks, _ := obj["blocks"].([]any)
-		parts := make([]string, 0, len(blocks))
-		for _, b := range blocks {
-			bm, _ := b.(map[string]any)
-			if strings.TrimSpace(strings.ToLower(anyToString(bm["type"]))) != "markdown" {
-				continue
-			}
-			content := strings.TrimSpace(anyToString(bm["content"]))
-			if content == "" {
-				continue
-			}
-			parts = append(parts, content)
-		}
-		if len(parts) > 0 {
-			return strings.Join(parts, "\n\n")
-		}
-	}
-	return ""
-}
-
-func toMessageMap(v any) map[string]any {
-	switch x := v.(type) {
-	case map[string]any:
-		return x
-	case json.RawMessage:
-		var out map[string]any
-		if err := json.Unmarshal(x, &out); err == nil {
-			return out
-		}
-		return nil
-	case []byte:
-		var out map[string]any
-		if err := json.Unmarshal(x, &out); err == nil {
-			return out
-		}
-		return nil
-	default:
-		return nil
-	}
-}
-
-func filterTasksByStage(tasks []evalTask, stage string) []evalTask {
-	stage = strings.TrimSpace(strings.ToLower(stage))
-	out := make([]evalTask, 0, len(tasks))
-	for _, t := range tasks {
-		if strings.TrimSpace(strings.ToLower(t.Stage)) == stage {
-			out = append(out, t)
-		}
-	}
-	return out
-}
-
-func taskIDs(tasks []evalTask) []string {
-	out := make([]string, 0, len(tasks))
-	for _, t := range tasks {
-		out = append(out, t.ID)
 	}
 	return out
 }
@@ -1036,42 +1150,6 @@ func clamp01(v float64) float64 {
 	return v
 }
 
-func pickBestPassedVariant(summaries []variantSummary, passedIDs []string) (evalVariant, bool) {
-	if len(summaries) == 0 || len(passedIDs) == 0 {
-		return evalVariant{}, false
-	}
-	allowed := make(map[string]struct{}, len(passedIDs))
-	for _, id := range passedIDs {
-		allowed[strings.TrimSpace(id)] = struct{}{}
-	}
-	for _, summary := range summaries {
-		if _, ok := allowed[summary.Variant.ID]; ok {
-			return summary.Variant, true
-		}
-	}
-	return evalVariant{}, false
-}
-
-func buildRecommendReason(summaries []variantSummary, recommended evalVariant, gate gateReport) string {
-	stage1 := 0.0
-	stage2 := 0.0
-	final := 0.0
-	for _, summary := range summaries {
-		if summary.Variant.ID != recommended.ID {
-			continue
-		}
-		stage1 = summary.Stage1Avg
-		stage2 = summary.Stage2Avg
-		final = summary.FinalOverall
-		break
-	}
-	reason := fmt.Sprintf("stage1=%.2f, stage2=%.2f, final=%.2f", stage1, stage2, final)
-	if gate.Enabled {
-		reason += ", gate=" + strings.TrimSpace(strings.ToLower(gate.Status))
-	}
-	return reason
-}
-
 func payloadFieldString(payload any, key string) string {
 	obj, ok := payload.(map[string]any)
 	if !ok || obj == nil {
@@ -1115,19 +1193,38 @@ func writeJSON(path string, v any) error {
 }
 
 func writeMarkdown(path string, report evalReport) error {
-	if len(report.Summaries) == 0 {
-		return errors.New("empty summary")
+	if report.TaskCount == 0 {
+		return errors.New("empty report")
 	}
 	var b strings.Builder
-	b.WriteString("# AI Loop Evaluation Report\n\n")
+	b.WriteString("# Flower Behavioral Eval Report\n\n")
 	b.WriteString(fmt.Sprintf("- Generated at: %s\n", report.GeneratedAt.Format(time.RFC3339)))
 	b.WriteString(fmt.Sprintf("- Model: `%s`\n", report.ModelID))
-	b.WriteString(fmt.Sprintf("- Workspace: `%s`\n", report.WorkspacePath))
-	b.WriteString(fmt.Sprintf("- Variant count: %d\n", report.VariantCount))
-	b.WriteString("\n## Recommended Variant\n\n")
-	b.WriteString(fmt.Sprintf("- Prompt profile: `%s`\n", report.Recommended.PromptProfile))
-	b.WriteString(fmt.Sprintf("- Loop profile: `%s`\n", report.Recommended.LoopProfile))
-	b.WriteString(fmt.Sprintf("- Reason: %s\n", report.RecommendedReason))
+	b.WriteString(fmt.Sprintf("- Task spec: `%s`\n", report.TaskSpecPath))
+	b.WriteString(fmt.Sprintf("- Source workspace: `%s`\n", report.SourceWorkspacePath))
+	b.WriteString(fmt.Sprintf("- Isolated workspaces: `%s`\n", report.IsolatedWorkspaceDir))
+	b.WriteString(fmt.Sprintf("- Tasks: %d\n", report.TaskCount))
+
+	b.WriteString("\n## Suite Metrics\n\n")
+	b.WriteString(fmt.Sprintf("- Pass rate: %.2f\n", report.Metrics.PassRate))
+	b.WriteString(fmt.Sprintf("- Loop safety rate: %.2f\n", report.Metrics.LoopSafetyRate))
+	b.WriteString(fmt.Sprintf("- Recovery success rate: %.2f\n", report.Metrics.RecoverySuccessRate))
+	b.WriteString(fmt.Sprintf("- Fallback-free rate: %.2f\n", report.Metrics.FallbackFreeRate))
+	b.WriteString(fmt.Sprintf("- Average accuracy: %.2f\n", report.Metrics.AverageAccuracy))
+	b.WriteString(fmt.Sprintf("- Average overall: %.2f\n", report.Metrics.AverageOverall))
+
+	if len(report.StageMetrics) > 0 {
+		b.WriteString("\n## Stage Metrics\n\n")
+		b.WriteString("| Stage | Pass | LoopSafe | Recovery | FallbackFree | Accuracy |\n")
+		b.WriteString("|---|---:|---:|---:|---:|---:|\n")
+		for _, stage := range []string{"screen", "deep"} {
+			metrics, ok := report.StageMetrics[stage]
+			if !ok {
+				continue
+			}
+			b.WriteString(fmt.Sprintf("| `%s` | %.2f | %.2f | %.2f | %.2f | %.2f |\n", stage, metrics.PassRate, metrics.LoopSafetyRate, metrics.RecoverySuccessRate, metrics.FallbackFreeRate, metrics.AverageAccuracy))
+		}
+	}
 
 	if report.Gate.Enabled {
 		b.WriteString("\n## Gate Status\n\n")
@@ -1146,39 +1243,14 @@ func writeMarkdown(path string, report evalReport) error {
 			report.Gate.ReferenceBest.FallbackFreeRate,
 			report.Gate.ReferenceBest.AverageAccuracy,
 		))
-		if len(report.Gate.FailReasons) > 0 {
-			b.WriteString("- Fail reasons: " + strings.Join(report.Gate.FailReasons, "; ") + "\n")
-		}
-	}
-
-	b.WriteString("\n## Ranking\n\n")
-	b.WriteString("| Rank | Variant | Stage1 | Stage2 | Final |\n")
-	b.WriteString("|---:|---|---:|---:|---:|\n")
-	for i, summary := range report.Summaries {
-		b.WriteString(fmt.Sprintf("| %d | `%s` | %.2f | %.2f | %.2f |\n", i+1, summary.Variant.ID, summary.Stage1Avg, summary.Stage2Avg, summary.FinalOverall))
-	}
-
-	if report.Gate.Enabled && len(report.Gate.VariantDecisions) > 0 {
-		b.WriteString("\n## Gate Decisions\n\n")
-		b.WriteString("| Variant | Pass | PassRate | LoopSafe | Recovery | FallbackFree | Accuracy |\n")
-		b.WriteString("|---|---:|---:|---:|---:|---:|---:|\n")
-		for _, decision := range report.Gate.VariantDecisions {
-			b.WriteString(fmt.Sprintf(
-				"| `%s` | %t | %.2f | %.2f | %.2f | %.2f | %.2f |\n",
-				decision.Variant.ID,
-				decision.Passed,
-				decision.Metrics.PassRate,
-				decision.Metrics.LoopSafetyRate,
-				decision.Metrics.RecoverySuccessRate,
-				decision.Metrics.FallbackFreeRate,
-				decision.Metrics.AverageAccuracy,
-			))
+		if len(report.Gate.Reasons) > 0 {
+			b.WriteString("- Reasons: " + strings.Join(report.Gate.Reasons, "; ") + "\n")
 		}
 	}
 
 	b.WriteString("\n## Task Results\n\n")
 	for _, result := range report.Results {
-		b.WriteString(fmt.Sprintf("### %s / %s\n\n", result.Variant.ID, result.Task.ID))
+		b.WriteString(fmt.Sprintf("### %s\n\n", result.Task.ID))
 		b.WriteString(fmt.Sprintf("- Score: %.2f (acc %.2f / nat %.2f / eff %.2f)\n", result.Score.Overall, result.Score.Accuracy, result.Score.Natural, result.Score.Efficiency))
 		b.WriteString(fmt.Sprintf("- Outcome: passed=%t loop_safe=%t fallback=%t recovery_candidate=%t recovery_succeeded=%t\n",
 			result.Outcome.Passed,
@@ -1187,7 +1259,24 @@ func writeMarkdown(path string, report evalReport) error {
 			result.Outcome.RecoveryCandidate,
 			result.Outcome.RecoverySucceeded,
 		))
-		b.WriteString(fmt.Sprintf("- Duration: %d ms\n", result.DurationTotalMS))
+		b.WriteString(fmt.Sprintf("- Thread: mode=`%s` status=`%s` waiting_prompt=%t\n",
+			result.ThreadState.ExecutionMode,
+			result.ThreadState.RunStatus,
+			result.ThreadState.WaitingPrompt,
+		))
+		b.WriteString(fmt.Sprintf("- Tool calls: %d\n", len(result.ToolCalls)))
+		if result.TodoSnapshot != nil {
+			b.WriteString(fmt.Sprintf("- Todos: total=%d pending=%d in_progress=%d completed=%d cancelled=%d\n",
+				result.TodoSnapshot.Total,
+				result.TodoSnapshot.Pending,
+				result.TodoSnapshot.InProgress,
+				result.TodoSnapshot.Completed,
+				result.TodoSnapshot.Cancelled,
+			))
+		}
+		if len(result.EvidencePaths) > 0 {
+			b.WriteString("- Evidence paths: " + strings.Join(result.EvidencePaths, ", ") + "\n")
+		}
 		if len(result.Outcome.HardFailReasons) > 0 {
 			b.WriteString("- Hard fail reasons: " + strings.Join(result.Outcome.HardFailReasons, ", ") + "\n")
 		}

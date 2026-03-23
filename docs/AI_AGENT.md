@@ -141,6 +141,20 @@ Installer note:
 
 - `scripts/install.sh` installs pinned ripgrep binaries into `~/.redeven/tools/rg/<version>/<platform>/rg` and links `~/.redeven/bin/rg`, so shell-first search is available even when the system does not provide `rg`.
 
+## Behavioral evaluation
+
+Flower quality is validated with a behavioral eval harness, not just transcript keyword checks.
+
+The eval harness runs real Flower tasks and asserts:
+
+- final thread state (`run_status`, `execution_mode`, waiting prompt behavior)
+- structural tool behavior (`terminal.exec`, `write_todos`, `ask_user`, `task_complete`, forbidden tools)
+- runtime events such as `ask_user.waiting`, `todos.updated`, and loop-failure signals
+- todo discipline, including final closeout and single `in_progress` execution
+- assistant-visible output, evidence paths, and fallback-free closeout
+
+Each eval task runs in an isolated workspace copy so Flower can keep normal RWX permissions without mutating the source repository under test.
+
 See also:
 - `PERMISSION_POLICY.md` for how the local RWX cap works (and what it does not cap).
 - `CAPABILITY_PERMISSIONS.md` for the complete capability-to-permission mapping.
