@@ -20,6 +20,14 @@ type autoTitleMock struct {
 	mu           sync.Mutex
 	requestCount int
 	token        string
+	responses    []autoTitleMockResponse
+}
+
+type autoTitleMockResponse struct {
+	StatusCode int
+	Token      string
+	Delay      time.Duration
+	WaitCh     <-chan struct{}
 }
 
 func (m *autoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
@@ -43,7 +51,23 @@ func (m *autoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
 
 	m.mu.Lock()
 	m.requestCount++
+	var response autoTitleMockResponse
+	if len(m.responses) > 0 {
+		response = m.responses[0]
+		m.responses = append([]autoTitleMockResponse(nil), m.responses[1:]...)
+	}
 	m.mu.Unlock()
+
+	if response.WaitCh != nil {
+		<-response.WaitCh
+	}
+	if response.Delay > 0 {
+		time.Sleep(response.Delay)
+	}
+	if response.StatusCode >= 400 {
+		http.Error(w, http.StatusText(response.StatusCode), response.StatusCode)
+		return
+	}
 
 	if strings.TrimSpace(r.URL.Path) != "/v1/responses" {
 		http.Error(w, "not found", http.StatusNotFound)
@@ -80,7 +104,12 @@ func (m *autoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
 	writeSSEJSON(w, f, map[string]any{
 		"type":    "response.output_text.delta",
 		"item_id": itemID,
-		"delta":   m.token,
+		"delta": func() string {
+			if strings.TrimSpace(response.Token) != "" {
+				return response.Token
+			}
+			return m.token
+		}(),
 	})
 	writeSSEJSON(w, f, map[string]any{
 		"type":         "response.output_item.done",
@@ -107,6 +136,11 @@ func (m *autoTitleMock) count() int {
 }
 
 func newAutoTitleTestService(t *testing.T, mock *autoTitleMock) (*Service, session.Meta) {
+	t.Helper()
+	return newAutoTitleTestServiceWithStateDir(t, mock, t.TempDir())
+}
+
+func newAutoTitleTestServiceWithStateDir(t *testing.T, mock *autoTitleMock, stateDir string) (*Service, session.Meta) {
 	t.Helper()
 
 	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
@@ -137,7 +171,7 @@ func newAutoTitleTestService(t *testing.T, mock *autoTitleMock) (*Service, sessi
 
 	svc, err := NewService(Options{
 		Logger:           slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo})),
-		StateDir:         t.TempDir(),
+		StateDir:         stateDir,
 		AgentHomeDir:     t.TempDir(),
 		Shell:            "bash",
 		Config:           cfg,
@@ -257,4 +291,174 @@ func TestApplyAutoThreadTitle_ManualBlankRenamePreventsOverwrite(t *testing.T) {
 	if mock.count() != 0 {
 		t.Fatalf("requestCount=%d, want 0", mock.count())
 	}
+}
+
+func TestScheduleAutoThreadTitle_RetriesUntilSuccess(t *testing.T) {
+	t.Parallel()
+
+	mock := &autoTitleMock{
+		responses: []autoTitleMockResponse{
+			{Token: `{"title":`},
+			{Token: `{"title":"Retry failing CI regression tests","reason":"intent_summary"}`},
+		},
+	}
+	svc, meta := newAutoTitleTestService(t, mock)
+
+	ctx := context.Background()
+	thread, err := svc.CreateThread(ctx, &meta, "", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	svc.scheduleAutoThreadTitle(&meta, thread.ThreadID, effectiveCurrentUserInput{
+		MessageID:  "msg_retry_1",
+		PublicText: "please fix the retry failure in CI",
+	})
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		th, getErr := svc.threadsDB.GetThread(ctx, meta.EndpointID, thread.ThreadID)
+		if getErr != nil {
+			t.Fatalf("GetThread: %v", getErr)
+		}
+		if th != nil && strings.TrimSpace(th.Title) != "" {
+			if th.Title != "Retry failing CI regression tests" {
+				t.Fatalf("Title=%q, want retry result", th.Title)
+			}
+			if th.TitleInputMessageID != "msg_retry_1" {
+				t.Fatalf("TitleInputMessageID=%q, want msg_retry_1", th.TitleInputMessageID)
+			}
+			if mock.count() < 2 {
+				t.Fatalf("requestCount=%d, want >=2 after retry", mock.count())
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	t.Fatalf("auto title was not applied after retry")
+}
+
+func TestScheduleAutoThreadTitle_NewerPendingInputReplacesOlderFailedRequest(t *testing.T) {
+	t.Parallel()
+
+	mock := &autoTitleMock{
+		responses: []autoTitleMockResponse{
+			{Token: `{"title":`},
+			{Token: `{"title":"Prepare a focused sandbox smoke fix","reason":"intent_summary"}`},
+		},
+	}
+	svc, meta := newAutoTitleTestService(t, mock)
+	svc.threadTitleCoordinator.retryDelay = func(int) time.Duration { return 5 * time.Second }
+
+	ctx := context.Background()
+	thread, err := svc.CreateThread(ctx, &meta, "", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	svc.scheduleAutoThreadTitle(&meta, thread.ThreadID, effectiveCurrentUserInput{
+		MessageID:  "msg_retry_old",
+		PublicText: "please inspect the failing CI job",
+	})
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		key := runThreadKey(meta.EndpointID, thread.ThreadID)
+		svc.threadTitleCoordinator.mu.Lock()
+		pending, ok := svc.threadTitleCoordinator.pending[key]
+		svc.threadTitleCoordinator.mu.Unlock()
+		if ok && pending.MessageID == "msg_retry_old" && pending.Attempts == 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	key := runThreadKey(meta.EndpointID, thread.ThreadID)
+	svc.threadTitleCoordinator.mu.Lock()
+	pending, ok := svc.threadTitleCoordinator.pending[key]
+	svc.threadTitleCoordinator.mu.Unlock()
+	if !ok || pending.MessageID != "msg_retry_old" || pending.Attempts != 1 {
+		t.Fatalf("old retry was not pending before replacement: %+v", pending)
+	}
+	svc.scheduleAutoThreadTitle(&meta, thread.ThreadID, effectiveCurrentUserInput{
+		MessageID:  "msg_retry_new",
+		PublicText: "please prepare a focused sandbox smoke fix",
+	})
+
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		th, getErr := svc.threadsDB.GetThread(ctx, meta.EndpointID, thread.ThreadID)
+		if getErr != nil {
+			t.Fatalf("GetThread: %v", getErr)
+		}
+		if th != nil && strings.TrimSpace(th.Title) != "" {
+			if th.Title != "Prepare a focused sandbox smoke fix" {
+				t.Fatalf("Title=%q, want latest retry result", th.Title)
+			}
+			if th.TitleInputMessageID != "msg_retry_new" {
+				t.Fatalf("TitleInputMessageID=%q, want msg_retry_new", th.TitleInputMessageID)
+			}
+			if mock.count() < 2 {
+				t.Fatalf("requestCount=%d, want >=2", mock.count())
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	t.Fatalf("newer pending input was not applied")
+}
+
+func TestNewService_RecoversPendingAutoThreadTitles(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	initialMock := &autoTitleMock{}
+	svc, meta := newAutoTitleTestServiceWithStateDir(t, initialMock, stateDir)
+
+	ctx := context.Background()
+	thread, err := svc.CreateThread(ctx, &meta, "", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	persisted, _, err := svc.persistUserMessage(ctx, &meta, meta.EndpointID, thread.ThreadID, RunInput{
+		Text: "please recover the blank thread title after restart",
+	})
+	if err != nil {
+		t.Fatalf("persistUserMessage: %v", err)
+	}
+	if err := svc.Close(); err != nil {
+		t.Fatalf("Close initial service: %v", err)
+	}
+
+	recoveryMock := &autoTitleMock{
+		responses: []autoTitleMockResponse{
+			{Token: `{"title":"Recover blank thread title after restart","reason":"intent_summary"}`},
+		},
+	}
+	recoveredSvc, recoveredMeta := newAutoTitleTestServiceWithStateDir(t, recoveryMock, stateDir)
+	defer func() { _ = recoveredSvc.Close() }()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		th, getErr := recoveredSvc.threadsDB.GetThread(ctx, recoveredMeta.EndpointID, thread.ThreadID)
+		if getErr != nil {
+			t.Fatalf("GetThread: %v", getErr)
+		}
+		if th != nil && strings.TrimSpace(th.Title) != "" {
+			if th.Title != "Recover blank thread title after restart" {
+				t.Fatalf("Title=%q, want recovery title", th.Title)
+			}
+			if th.TitleInputMessageID != persisted.MessageID {
+				t.Fatalf("TitleInputMessageID=%q, want %q", th.TitleInputMessageID, persisted.MessageID)
+			}
+			if recoveryMock.count() == 0 {
+				t.Fatalf("recovery requestCount=0, want >=1")
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	t.Fatalf("recovery auto title was not applied")
 }
