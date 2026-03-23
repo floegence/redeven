@@ -61,7 +61,7 @@ afterEach(() => {
 });
 
 describe('TextFilePreviewPane', () => {
-  it('renders Monaco in read-only mode for Monaco-supported preview languages', async () => {
+  it('uses the lightweight highlighted preview for read-only code previews', async () => {
     const onSelectionChange = vi.fn();
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -76,12 +76,28 @@ describe('TextFilePreviewPane', () => {
     ), host);
     await flushAsync();
 
-    const editor = host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null;
-    expect(editor).toBeTruthy();
-    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeNull();
-    expect(host.textContent).toContain('typescript:const value = 1;:ro');
-    expect(editor?.dataset.readOnly).toBe('true');
-    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
+    expect(host.textContent).toContain('typescript:const value = 1;');
+    expect(onSelectionChange).toHaveBeenCalledWith('');
+  });
+
+  it('keeps stylesheet previews on the highlighted preview surface so css stays syntax-colored', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TextFilePreviewPane
+        path="/workspace/styles.css"
+        descriptor={{ mode: 'text', textPresentation: 'code', language: 'css', wrapText: false }}
+        text=".card { color: var(--accent); }"
+      />
+    ), host);
+    await flushAsync();
+
+    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
+    expect(host.textContent).toContain('css:.card { color: var(--accent); }');
   });
 
   it('renders the Monaco editor path for supported languages and forwards edits and selections', async () => {
@@ -128,7 +144,7 @@ describe('TextFilePreviewPane', () => {
     expect(onSelectionChange).toHaveBeenCalledWith('selected from editor');
   });
 
-  it('recreates the Monaco editor instance when switching from preview to edit mode', async () => {
+  it('switches from the read-only preview surface to a fresh Monaco editor when entering edit mode', async () => {
     const [editing, setEditing] = createSignal(false);
 
     const host = document.createElement('div');
@@ -146,19 +162,18 @@ describe('TextFilePreviewPane', () => {
     ), host);
     await flushAsync();
 
-    const previewEditor = host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null;
-    expect(previewEditor?.dataset.instanceId).toBe('1');
-    expect(previewEditor?.dataset.readOnly).toBe('true');
+    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
 
     setEditing(true);
     await flushAsync();
 
     const editingEditor = host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null;
-    expect(editingEditor?.dataset.instanceId).toBe('2');
+    expect(editingEditor?.dataset.instanceId).toBe('1');
     expect(editingEditor?.dataset.readOnly).toBe('false');
   });
 
-  it('keeps unsupported code languages on the same read-only Monaco surface as Edit mode', async () => {
+  it('keeps preview-only languages on the lightweight preview surface instead of a plain Monaco viewer', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -172,28 +187,27 @@ describe('TextFilePreviewPane', () => {
     ), host);
     await flushAsync();
 
-    expect(host.querySelector('[data-testid="mock-editor"]')).toBeTruthy();
-    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeNull();
-    expect(host.textContent).toContain('vue:<script setup lang="ts">const value = 1;</script>:ro');
+    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
+    expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
+    expect(host.textContent).toContain('vue:<script setup lang="ts">const value = 1;</script>');
   });
 
-  it('keeps richer preview-only languages on the Monaco surface to match Edit mode', async () => {
+  it('keeps plain-text previews on the Monaco viewer path until the user enters edit mode', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => (
       <TextFilePreviewPane
-        path="/workspace/demo.mdx"
-        descriptor={{ mode: 'text', textPresentation: 'code', language: 'mdx', wrapText: false }}
-        text={'# Hello\n\nexport const value = 1;'}
-        canEdit
+        path="/workspace/README.md"
+        descriptor={{ mode: 'text', textPresentation: 'plain', wrapText: true }}
+        text={'hello\nredeven'}
       />
     ), host);
     await flushAsync();
 
     expect(host.querySelector('[data-testid="mock-editor"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="fallback-preview"]')).toBeNull();
-    expect(host.textContent).toContain('mdx:# Hello');
+    expect(host.textContent).toContain('plaintext:hello\nredeven:ro');
   });
 
   it('uses the lightweight fallback for truncated previews even when Monaco supports the language', async () => {
@@ -229,6 +243,8 @@ describe('TextFilePreviewPane', () => {
         path="/workspace/demo.ts"
         descriptor={{ mode: 'text', textPresentation: 'code', language: 'typescript', wrapText: false }}
         text="const value = 1;"
+        draftText="const value = 2;"
+        editing
         onSelectionChange={onSelectionChange}
       />
     ), host);
@@ -236,7 +252,7 @@ describe('TextFilePreviewPane', () => {
 
     expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
     expect(host.querySelector('[data-testid="fallback-preview"]')).toBeTruthy();
-    expect(host.textContent).toContain('typescript:const value = 1;');
+    expect(host.textContent).toContain('typescript:const value = 2;');
     expect(onSelectionChange).toHaveBeenCalledWith('');
   });
 });

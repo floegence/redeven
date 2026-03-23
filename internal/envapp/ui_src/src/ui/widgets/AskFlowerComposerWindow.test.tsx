@@ -460,8 +460,10 @@ describe('AskFlowerComposerWindow', () => {
     fileButton?.click();
     await flushAsync();
 
-    expect(host.querySelector('[data-testid="preview-window"]')).toBeTruthy();
-    expect(host.textContent).toContain('Showing the attached snapshot that Flower will receive.');
-    expect(host.textContent).toContain('export default [];');
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-testid="preview-window"]')).toBeTruthy();
+      expect(host.textContent).toContain('Showing the attached snapshot that Flower will receive.');
+      expect(host.textContent).toContain('export default [];');
+    });
   });
 });
