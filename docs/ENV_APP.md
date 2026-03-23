@@ -39,6 +39,18 @@ Current product-specific accessibility contract:
 - Git view switching and branch subviews use keyboard-complete tablists with roving focus.
 - The terminal surface keeps a visible focus treatment. Product-owned terminal, Ask Flower composer, and file-browser controls were audited during this work and intentionally kept on their existing semantic button/input patterns.
 
+## Git browse worktree status
+
+Git browse mode distinguishes between the active repository workspace and per-branch checked-out worktrees:
+
+- The top-level `Changes` view shows the workspace state for the active repository root.
+- `Branches -> Status` resolves its own workspace snapshot from an explicit checked-out repository root instead of reusing cached data from `Changes`.
+- For the current branch, branch status uses the active repository root.
+- For a linked local branch, branch status uses the branch `worktreePath`.
+- For remote branches or local branches without a checked-out worktree, branch status stays unavailable and the UI points users to `Compare` or to opening the branch in a worktree.
+
+This keeps worktree status consistent even when the user opens `Branches` first without visiting `Changes`.
+
 ## What runs where
 
 Browser side:
