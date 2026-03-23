@@ -256,7 +256,7 @@ html.dark {
 .flower-chat-input.chat-input-container {
   margin: 0.75rem;
   margin-top: 0.5rem;
-  border: none;
+  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
   border-radius: 1rem;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--card) 98%, var(--background)), color-mix(in srgb, var(--card) 95%, var(--muted) 5%));
@@ -264,6 +264,7 @@ html.dark {
 }
 
 .flower-chat-input.chat-input-container-focused {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--primary) 12%, transparent),
     0 12px 32px -26px color-mix(in srgb, var(--primary) 24%, transparent);
@@ -294,6 +295,12 @@ html.dark {
 .flower-chat-input-textarea {
   min-height: 4rem;
   padding: 0;
+  border: none !important;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none !important;
+  -webkit-appearance: none;
+  appearance: none;
   font-size: 0.875rem;
   line-height: 1.55;
 }
@@ -301,7 +308,8 @@ html.dark {
 .flower-chat-input-textarea:focus,
 .flower-chat-input-textarea:focus-visible {
   outline: none;
-  box-shadow: none;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .flower-chat-input-send-slot {
