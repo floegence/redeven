@@ -76,6 +76,22 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
       language={props.descriptor.textPresentation === 'code' ? props.descriptor.language : undefined}
     />
   );
+  const renderMonacoEditor = () => (
+    <CodeEditor
+      path={props.path}
+      language={resolvedLanguage()}
+      value={editorValue()}
+      options={editorOptions()}
+      onChange={(value: string) => {
+        if (!props.editing) return;
+        props.onDraftChange?.(value);
+      }}
+      onSelectionChange={(selectionText: string, _api: CodeEditorApi) => {
+        props.onSelectionChange?.(selectionText);
+      }}
+      class="h-full"
+    />
+  );
 
   createEffect(on(() => [props.path, props.truncated, resolvedLanguage(), props.editing], () => {
     setMonacoFailed(false);
@@ -109,20 +125,12 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
             }}
           >
             <Suspense fallback={<div class="flex h-full items-center justify-center text-sm text-muted-foreground">Loading editor...</div>}>
-              <CodeEditor
-                path={props.path}
-                language={resolvedLanguage()}
-                value={editorValue()}
-                options={editorOptions()}
-                onChange={(value: string) => {
-                  if (!props.editing) return;
-                  props.onDraftChange?.(value);
-                }}
-                onSelectionChange={(selectionText: string, _api: CodeEditorApi) => {
-                  props.onSelectionChange?.(selectionText);
-                }}
-                class="h-full"
-              />
+              {/* Monaco must remount when switching between read-only preview and edit mode.
+                  Reusing a preview instance can leak stale readOnly state and trigger
+                  "Cannot edit in read-only editor" after the user clicks Edit. */}
+              <Show when={props.editing} fallback={renderMonacoEditor()}>
+                {renderMonacoEditor()}
+              </Show>
             </Suspense>
           </ErrorBoundary>
         </Show>
