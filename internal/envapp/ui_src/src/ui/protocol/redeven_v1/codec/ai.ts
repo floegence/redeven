@@ -129,6 +129,10 @@ function fromWireAIRequestUserInputOption(raw: wire_ai_request_user_input_option
   const optionId = String(raw?.option_id ?? '').trim();
   const label = String(raw?.label ?? '').trim();
   if (!optionId || !label) return null;
+  const detailInputModeRaw = String(raw?.detail_input_mode ?? '').trim().toLowerCase();
+  const detailInputMode = detailInputModeRaw === 'required' || detailInputModeRaw === 'optional'
+    ? detailInputModeRaw
+    : undefined;
   const actions = Array.isArray(raw?.actions)
     ? raw.actions.map(fromWireAIRequestUserInputAction).filter(Boolean) as AIRequestUserInputAction[]
     : [];
@@ -136,6 +140,8 @@ function fromWireAIRequestUserInputOption(raw: wire_ai_request_user_input_option
     optionId,
     label,
     description: String(raw?.description ?? '').trim() || undefined,
+    detailInputMode,
+    detailInputPlaceholder: String(raw?.detail_input_placeholder ?? '').trim() || undefined,
     actions: actions.length > 0 ? actions : undefined,
   };
 }

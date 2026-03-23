@@ -119,6 +119,8 @@ Behavior summary:
 - Execution mode is a thread-level server state (`execution_mode`) and is authoritative for every run.
 - If edits are needed in `plan`, Flower should use `ask_user` to request switching the thread to `act`.
 - The mode-switch `ask_user` must use structured `questions[]`, and deterministic UI actions belong on `questions[].options[].actions` (for example `[{type:"set_mode",mode:"act"}]`).
+- Use `questions[].is_other=true` only when the entire question should allow a freeform reply alongside or instead of predefined options.
+- When only a specific option needs extra detail, encode that on the option itself with `questions[].options[].detail_input_mode` (`optional` or `required`) and `detail_input_placeholder` when useful.
 - In no-user-interaction runs, Flower cannot ask for a mode switch and must finish with blockers in `task_complete`.
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.
@@ -126,6 +128,7 @@ Behavior summary:
 - When a run completes through `task_complete`, its `task_complete.result` is the canonical final assistant completion text. Persisted assistant transcript snapshots must keep that canonical completion text aligned with the user-visible markdown content even if the run streamed mixed `thinking`, `tool-call`, and `markdown` blocks before completion.
 - `ask_user` follows a structured contract (`questions`, `reason_code`, `required_from_user`, `evidence_refs`) and is policy-classified by the model before entering `waiting_user`.
 - Structured prompt answers are submitted through a dedicated prompt-response action rather than the plain chat `sendMessage` path.
+- The Env App may auto-submit a waiting prompt only for the narrow single-question, non-secret, pure-choice case with no extra detail requirement or option action; every richer interaction still uses explicit structured submission.
 - When a thread is still `waiting_user`, the waiting prompt snapshot in `ai_threads.waiting_user_input_json` should stay aligned with the assistant transcript `ask_user` block; read/write paths recover from the latest persisted assistant transcript when that snapshot is missing or invalid.
 - The Env App must distinguish a resolved prompt from a still-waiting thread whose active prompt details are temporarily unavailable; missing prompt state must not be rendered as already handled.
 - Thread `title` and `last_message_preview` serve different purposes: `title` is a durable conversation label, while `last_message_preview` is the latest sidebar snippet.
