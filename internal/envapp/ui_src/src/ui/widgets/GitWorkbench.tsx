@@ -261,15 +261,12 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             <GitBranchesPanel
               repoRootPath={props.repoSummary?.repoRootPath}
               repoSummary={props.repoSummary}
-              workspace={props.workspace}
               selectedBranch={props.selectedBranch}
               selectedBranchSubview={props.selectedBranchSubview}
               onSelectBranchSubview={props.onSelectBranchSubview}
               branches={props.branches}
               branchesLoading={props.branchesLoading}
               branchesError={props.branchesError}
-              workspaceLoading={props.workspaceLoading}
-              workspaceError={props.workspaceError}
               commits={props.commits}
               listLoading={props.listLoading}
               listLoadingMore={props.listLoadingMore}
