@@ -20,6 +20,12 @@ export type AskFlowerComposerAnchor = {
   y: number;
 };
 
+export type OpenTerminalInDirectoryRequest = {
+  requestId: string;
+  workingDir: string;
+  preferredName?: string;
+};
+
 export type EnvContextValue = {
   env_id: () => string;
   env: Resource<EnvironmentDetail | null>;
@@ -43,6 +49,10 @@ export type EnvContextValue = {
   askFlowerIntent: () => AskFlowerIntent | null;
   injectAskFlowerIntent: (intent: AskFlowerIntent) => void;
   openAskFlowerComposer: (intent: AskFlowerIntent, anchor?: AskFlowerComposerAnchor) => void;
+  openTerminalInDirectoryRequestSeq: () => number;
+  openTerminalInDirectoryRequest: () => OpenTerminalInDirectoryRequest | null;
+  openTerminalInDirectory: (workingDir: string, options?: { preferredName?: string }) => void;
+  consumeOpenTerminalInDirectoryRequest: (requestId: string) => void;
 
   aiThreadFocusSeq: () => number;
   aiThreadFocusId: () => string | null;

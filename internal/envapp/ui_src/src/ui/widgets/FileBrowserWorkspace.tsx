@@ -63,6 +63,7 @@ export interface FileBrowserWorkspaceProps {
   toolbarEndActions?: JSX.Element;
   contextMenuCallbacks?: ContextMenuCallbacks;
   overrideContextMenuItems?: ContextMenuItem[];
+  resolveOverrideContextMenuItems?: (items: FileItem[]) => ContextMenuItem[] | undefined;
   class?: string;
 }
 
@@ -232,6 +233,12 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   const browser = useFileBrowser();
   const drag = useFileBrowserDrag();
   const dragEnabled = () => Boolean(drag && props.onDragMove);
+  const resolvedOverrideContextMenuItems = createMemo(() => {
+    if (!props.resolveOverrideContextMenuItems) {
+      return props.overrideContextMenuItems;
+    }
+    return props.resolveOverrideContextMenuItems(browser.contextMenu()?.items ?? []);
+  });
   let contentScrollEl: HTMLDivElement | null = null;
   let treeScrollEl: HTMLDivElement | null = null;
   let workspaceRootEl: HTMLDivElement | null = null;
@@ -333,7 +340,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             </Show>
           </div>
           <FileWorkspaceStatusBar />
-          <FileContextMenu callbacks={props.contextMenuCallbacks} overrideItems={props.overrideContextMenuItems} />
+          <FileContextMenu callbacks={props.contextMenuCallbacks} overrideItems={resolvedOverrideContextMenuItems()} />
           <Show when={dragEnabled()}>
             <FileBrowserDragPreview />
           </Show>
@@ -350,6 +357,14 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
   const displayInitialPath = createMemo(() => toFileBrowserDisplayPath(props.initialPath, props.homePath));
   const displayContextMenuCallbacks = createMemo(() => mapContextMenuCallbacksToAbsolute(props.contextMenuCallbacks, props.homePath));
   const displayOverrideContextMenuItems = createMemo(() => mapContextMenuItemsToAbsolute(props.overrideContextMenuItems, props.homePath));
+  const resolveDisplayOverrideContextMenuItems = (items: FileItem[]) => (
+    mapContextMenuItemsToAbsolute(
+      props.resolveOverrideContextMenuItems?.(
+        items.map((item) => mapFileItemToAbsolutePath(item, props.homePath)),
+      ),
+      props.homePath,
+    )
+  );
 
   const toAbsolutePath = (path: string): string => {
     return toFileBrowserAbsolutePath(path, props.homePath) || props.currentPath || props.homePath || '';
@@ -391,6 +406,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           toolbarEndActions={props.toolbarEndActions}
           contextMenuCallbacks={displayContextMenuCallbacks()}
           overrideContextMenuItems={displayOverrideContextMenuItems()}
+          resolveOverrideContextMenuItems={props.resolveOverrideContextMenuItems ? resolveDisplayOverrideContextMenuItems : undefined}
           class={props.class}
         />
       </FileBrowserProvider>
