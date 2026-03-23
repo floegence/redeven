@@ -52,8 +52,8 @@ func TestNewMigratesLegacyFollowupQueueSchema(t *testing.T) {
 	if err := raw.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != threadstore.CurrentSchemaVersion() {
-		t.Fatalf("user_version=%d, want %d", version, threadstore.CurrentSchemaVersion())
+	if want := threadstore.CurrentSchemaVersion(); version != want {
+		t.Fatalf("user_version=%d, want %d", version, want)
 	}
 
 	var laneColCount int
@@ -66,5 +66,17 @@ WHERE name = 'lane'
 	}
 	if laneColCount != 1 {
 		t.Fatalf("lane column count=%d, want 1", laneColCount)
+	}
+
+	var titleSourceColumns int
+	if err := raw.QueryRow(`
+SELECT COUNT(1)
+FROM pragma_table_info('ai_threads')
+WHERE name = 'title_source'
+`).Scan(&titleSourceColumns); err != nil {
+		t.Fatalf("check title_source column: %v", err)
+	}
+	if titleSourceColumns != 1 {
+		t.Fatalf("title_source column count=%d, want 1", titleSourceColumns)
 	}
 }

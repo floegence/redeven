@@ -642,6 +642,30 @@ func (s *Service) GetThreadTodos(ctx context.Context, meta *session.Meta, thread
 	}, nil
 }
 
+func (s *Service) ListRecentThreadToolCalls(ctx context.Context, meta *session.Meta, threadID string, limit int) ([]threadstore.ToolCallRecord, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	if err := requireRWX(meta); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil, errors.New("missing thread_id")
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if endpointID == "" {
+		return nil, errors.New("invalid request")
+	}
+	return db.ListRecentThreadToolCalls(ctx, endpointID, threadID, limit)
+}
+
 func (s *Service) AppendThreadMessage(ctx context.Context, meta *session.Meta, threadID string, role string, text string, format string) error {
 	if s == nil {
 		return errors.New("nil service")

@@ -1,19 +1,95 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
-func TestEvaluateReplay_FallbackMessageFails(t *testing.T) {
+func TestRunReplay_UsesTaskCompleteFallback(t *testing.T) {
 	t.Parallel()
-	reasons := evaluateReplay("I have reached the current automatic loop limit. Reply with one concrete next step.", 8)
-	if len(reasons) == 0 {
-		t.Fatalf("expected failure reasons")
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "message.log.json")
+	content := `{
+  "ok": true,
+  "data": {
+    "messages": [
+      {
+        "role": "assistant",
+        "blocks": [
+          {
+            "type": "tool-call",
+            "toolName": "task_complete",
+            "args": {
+              "result": "Completed the verification and documented the remaining risks."
+            }
+          }
+        ]
+      }
+    ]
+  }
+}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	report, err := runReplay(path)
+	if err != nil {
+		t.Fatalf("runReplay: %v", err)
+	}
+	if report.Status != "pass" {
+		t.Fatalf("status=%q reasons=%v", report.Status, report.Reasons)
+	}
+	if report.AssistantChars == 0 {
+		t.Fatalf("expected structured fallback text to count as assistant text")
 	}
 }
 
-func TestEvaluateReplay_NormalConclusionPasses(t *testing.T) {
+func TestRunReplay_UsesAskUserFallback(t *testing.T) {
 	t.Parallel()
-	reasons := evaluateReplay("Findings: project structure clear. Evidence: /workspace/README.md. Conclusion: ready.", 3)
-	if len(reasons) != 0 {
-		t.Fatalf("unexpected reasons: %v", reasons)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "message.log.json")
+	content := `{
+  "ok": true,
+  "data": {
+    "messages": [
+      {
+        "role": "assistant",
+        "blocks": [
+          {
+            "type": "tool-call",
+            "toolName": "ask_user",
+            "args": {
+              "questions": [
+                {
+                  "header": "Need mode switch",
+                  "question": "Switch this thread to act mode so I can apply the change."
+                }
+              ]
+            },
+            "result": {
+              "waiting_user": true
+            }
+          }
+        ]
+      }
+    ]
+  }
+}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	report, err := runReplay(path)
+	if err != nil {
+		t.Fatalf("runReplay: %v", err)
+	}
+	if report.Status != "pass" {
+		t.Fatalf("status=%q reasons=%v", report.Status, report.Reasons)
+	}
+	if report.AssistantChars == 0 {
+		t.Fatalf("expected ask_user fallback text to count as assistant text")
 	}
 }

@@ -917,6 +917,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		ThreadsDB:           db,
 		PersistOpTimeout:    persistTO,
 		SkillManager:        s.skillManager,
+		NoUserInteraction:   req.Options.NoUserInteraction,
 		OnStreamEvent: func(ev any) {
 			if !finalizingThreadStatePublished && isFinalizingLifecycleStreamEvent(ev) {
 				finalizingThreadStatePublished = true

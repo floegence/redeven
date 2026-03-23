@@ -1,34 +1,34 @@
-# AI Loop Evaluation Workflow
+# Flower Behavioral Eval Workflow
 
-This document describes the current validation workflow for loop and prompt profile selection in Redeven Agent.
+This document describes the current Flower evaluation workflow in Redeven Agent.
 
 The workflow is gate-first:
 
-1. replay known failure trajectories
-2. evaluate profile variants with real models and real tools
-3. compare results against open-source baselines
-4. block default promotion when hard gates are not met
+1. replay known bad trajectories
+2. run a behavioral task suite against the live Flower runtime
+3. compare suite metrics against configured baselines
+4. block promotion when the hard gate fails
 
 ## Entry points
 
-### Matrix ranking
+Behavioral suite:
 
 ```bash
 ./scripts/eval_ai_loop_matrix.sh /abs/path/to/target-repo
 ```
 
-### Full hard-gate evaluation
+Hard-gate suite:
 
 ```bash
 ./scripts/eval_gate.sh /abs/path/to/target-repo
 ```
 
+`eval_ai_loop_matrix.sh` keeps its historical name for compatibility, but it now runs the single behavioral suite rather than a prompt/loop profile matrix.
+
 ## Inputs
 
 Environment variables:
 
-- `TOP_K`
-- `MAX_VARIANTS`
 - `TASK_SPEC_PATH`
 - `BASELINE_PATH`
 - `ENFORCE_GATE`
@@ -43,43 +43,67 @@ CLI flags from `cmd/ai-loop-eval`:
 - `--min-fallback-free-rate`
 - `--min-accuracy`
 
-## Variant matrix
+## Behavioral suite model
 
-Prompt profiles:
+The suite is task-centric, not profile-centric.
 
-- `natural_evidence_v2`
-- `concise_direct_v1`
-- `strict_no_preamble_v1`
-- `evidence_sections_v1`
-- `recovery_heavy_v1`
-- `minimal_progress_v1`
+Each task runs against the real Flower runtime with:
 
-Loop profiles:
+- a real thread execution mode (`act` or `plan`)
+- real run knobs (`max_steps`, `max_no_tool_rounds`, `reasoning_only`, `no_user_interaction`, `require_user_confirm_on_task_complete`)
+- real tools and real persisted runtime state
 
-- `adaptive_default_v2`
-- `fast_exit_v1`
-- `deep_analysis_v1`
-- `conservative_recovery_v1`
+Each task gets its own isolated workspace copy under the report directory. This protects the source repo while still allowing Flower to run with normal RWX permissions and real tool semantics.
 
-## Task specs
+## Task spec schema
 
 Tasks are loaded from YAML under `eval/tasks/` and support:
 
-- stage (`screen` / `deep`)
-- category (`failure_real` / `generic`)
-- required evidence
-- required keywords
-- forbidden phrases
-- hard-fail events
+- `stage`
+- `category`
+- `turns`
+- `runtime`
+- `assertions.output`
+- `assertions.thread`
+- `assertions.tools`
+- `assertions.events`
+- `assertions.todos`
+
+Assertion groups are intentionally structural:
+
+- output: evidence, minimum path count, minimum length, required phrases, forbidden phrases
+- thread: final `run_status`, final `execution_mode`, waiting prompt presence
+- tools: required tool calls, forbidden tool calls, success requirements, call budget
+- events: required event types, forbidden event types, hard-fail event types
+- todos: snapshot presence, non-empty plan, closed plan, in-progress discipline
+
+## Report model
+
+The report is suite-oriented:
+
+- per-task results include output preview, thread state, tool summary, todo snapshot, event counts, evidence paths, and hard-fail reasons
+- suite metrics aggregate pass rate, loop safety, recovery success, fallback-free rate, and average scores
+- stage metrics aggregate the same metrics for `screen` and `deep`
+
+Artifacts:
+
+- `report.json`
+- `report.md`
+- `state/`
+- `workspaces/`
+
+Default output directory:
+
+- `~/.redeven/ai/evals/<timestamp>/`
 
 ## Hard gate
 
-Hard gate compares each variant against:
+The hard gate compares the suite against:
 
 1. absolute thresholds
-2. best metrics across configured open-source baselines
+2. best metrics across configured baseline sources
 
-Metrics currently used by the gate:
+Metrics:
 
 - `pass_rate`
 - `loop_safety_rate`
@@ -87,35 +111,19 @@ Metrics currently used by the gate:
 - `fallback_free_rate`
 - `average_accuracy`
 
-Gate output is written into `report.json` under `gate` and `variant_metrics`.
+Gate output is written into `report.json` under `gate`.
 
 ## Replay validation
 
-`cmd/ai-loop-replay` replays message logs and rejects known anti-patterns such as:
+`cmd/ai-loop-replay` replays persisted transcripts and rejects known anti-patterns such as:
 
 - fallback final text
 - tool-heavy runs without a concrete conclusion
+- empty assistant output after structured Flower tool completion
+
+Replay now treats `ask_user` and `task_complete` blocks as valid assistant-visible output when no markdown/text block exists.
 
 Fixtures live in:
 
 - `eval/replay_cases/loop_exhausted_fail.message.log.json`
 - `eval/replay_cases/normal_pass.message.log.json`
-
-## Outputs
-
-Default output directory:
-
-- `~/.redeven/ai/evals/<timestamp>/`
-
-Artifacts:
-
-- `report.json`
-- `report.md`
-- `state/`
-
-## Current runtime default
-
-- Prompt profile: `natural_evidence_v2`
-- Loop profile: `fast_exit_v1`
-
-Any future default update should be made only after `scripts/eval_gate.sh` passes.

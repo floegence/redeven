@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -280,7 +281,7 @@ func (s *Service) broadcastRealtimeEvent(ev RealtimeEvent) {
 		return
 	}
 
-	msg := aiSinkMsg{TypeID: TypeID_AI_EVENT_NOTIFY, Payload: payload}
+	msg := newAISinkMsg(TypeID_AI_EVENT_NOTIFY, ev, payload)
 	priority := classifyRealtimePriority(ev)
 	for _, w := range writers {
 		w.TrySend(priority, msg)
@@ -537,25 +538,117 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 type aiSinkMsg struct {
 	TypeID  uint32
 	Payload json.RawMessage
+
+	lowKey   string
+	lowMode  aiSinkCoalesceMode
+	lowBlock *aiSinkBlockDeltaEnvelope
+}
+
+type aiSinkCoalesceMode uint8
+
+const (
+	aiSinkCoalesceNone aiSinkCoalesceMode = iota
+	aiSinkCoalesceAppendBlockDelta
+	aiSinkCoalesceReplaceLatest
+)
+
+type aiSinkBlockDeltaEnvelope struct {
+	Event RealtimeEvent
+	Delta streamEventBlockDelta
+}
+
+type aiSinkNotifier interface {
+	Notify(typeID uint32, payload json.RawMessage) error
+}
+
+func newAISinkMsg(typeID uint32, ev RealtimeEvent, payload json.RawMessage) aiSinkMsg {
+	msg := aiSinkMsg{TypeID: typeID, Payload: payload}
+	switch stream := ev.StreamEvent.(type) {
+	case streamEventBlockDelta:
+		msg.lowKey = strings.Join([]string{
+			"block-delta",
+			ev.EndpointID,
+			ev.ThreadID,
+			ev.RunID,
+			stream.MessageID,
+			strconv.Itoa(stream.BlockIndex),
+		}, "\x00")
+		msg.lowMode = aiSinkCoalesceAppendBlockDelta
+		msg.lowBlock = &aiSinkBlockDeltaEnvelope{
+			Event: ev,
+			Delta: stream,
+		}
+	case streamEventContextUsage:
+		msg.lowKey = strings.Join([]string{
+			"context-usage",
+			ev.EndpointID,
+			ev.ThreadID,
+			ev.RunID,
+		}, "\x00")
+		msg.lowMode = aiSinkCoalesceReplaceLatest
+	}
+	return msg
+}
+
+func mergeAISinkLowMsg(existing aiSinkMsg, incoming aiSinkMsg) aiSinkMsg {
+	if existing.lowKey == "" || existing.lowKey != incoming.lowKey {
+		return incoming
+	}
+	switch existing.lowMode {
+	case aiSinkCoalesceAppendBlockDelta:
+		return mergeAISinkBlockDeltaMsg(existing, incoming)
+	case aiSinkCoalesceReplaceLatest:
+		return incoming
+	default:
+		return incoming
+	}
+}
+
+func mergeAISinkBlockDeltaMsg(existing aiSinkMsg, incoming aiSinkMsg) aiSinkMsg {
+	if existing.lowBlock == nil || incoming.lowBlock == nil {
+		return incoming
+	}
+	merged := existing
+	block := *existing.lowBlock
+	block.Delta.Delta += incoming.lowBlock.Delta.Delta
+	block.Event.AtUnixMs = incoming.lowBlock.Event.AtUnixMs
+	block.Event.StreamEvent = block.Delta
+	payload, err := json.Marshal(block.Event)
+	if err != nil {
+		return incoming
+	}
+	merged.Payload = payload
+	merged.lowBlock = &block
+	return merged
 }
 
 type aiSinkWriter struct {
-	srv *rpc.Server
+	notifier aiSinkNotifier
 
-	hiCh chan aiSinkMsg
-	loCh chan aiSinkMsg
-	stop chan struct{}
-	once sync.Once
-	done chan struct{}
+	hiCh   chan aiSinkMsg
+	loWake chan struct{}
+	stop   chan struct{}
+	once   sync.Once
+	done   chan struct{}
+
+	mu         sync.Mutex
+	lowSeq     uint64
+	lowPending map[string]aiSinkMsg
+	lowOrder   []string
 }
 
 func newAISinkWriter(srv *rpc.Server) *aiSinkWriter {
+	return newAISinkWriterWithNotifier(srv)
+}
+
+func newAISinkWriterWithNotifier(notifier aiSinkNotifier) *aiSinkWriter {
 	w := &aiSinkWriter{
-		srv:  srv,
-		hiCh: make(chan aiSinkMsg, 1024),
-		loCh: make(chan aiSinkMsg, 256),
-		stop: make(chan struct{}),
-		done: make(chan struct{}),
+		notifier:   notifier,
+		hiCh:       make(chan aiSinkMsg, 1024),
+		loWake:     make(chan struct{}, 1),
+		stop:       make(chan struct{}),
+		done:       make(chan struct{}),
+		lowPending: make(map[string]aiSinkMsg),
 	}
 	go w.loop()
 	return w
@@ -563,41 +656,34 @@ func newAISinkWriter(srv *rpc.Server) *aiSinkWriter {
 
 func (w *aiSinkWriter) loop() {
 	defer close(w.done)
-	hiCh := w.hiCh
-	loCh := w.loCh
-	for hiCh != nil || loCh != nil {
+	for {
 		// Drain high-priority queue first so terminal state events are never starved by delta floods.
 		select {
 		case <-w.stop:
 			return
-		case msg := <-hiCh:
-			if w.srv == nil {
-				return
-			}
-			if err := w.srv.Notify(msg.TypeID, msg.Payload); err != nil {
+		case msg := <-w.hiCh:
+			if err := w.notify(msg); err != nil {
 				return
 			}
 			continue
 		default:
 		}
 
+		if msg, ok := w.popLow(); ok {
+			if err := w.notify(msg); err != nil {
+				return
+			}
+			continue
+		}
+
 		select {
 		case <-w.stop:
 			return
-		case msg := <-hiCh:
-			if w.srv == nil {
+		case msg := <-w.hiCh:
+			if err := w.notify(msg); err != nil {
 				return
 			}
-			if err := w.srv.Notify(msg.TypeID, msg.Payload); err != nil {
-				return
-			}
-		case msg := <-loCh:
-			if w.srv == nil {
-				return
-			}
-			if err := w.srv.Notify(msg.TypeID, msg.Payload); err != nil {
-				return
-			}
+		case <-w.loWake:
 		}
 	}
 }
@@ -612,13 +698,78 @@ func (w *aiSinkWriter) TrySend(priority aiSinkPriority, msg aiSinkMsg) {
 	default:
 	}
 
-	ch := w.loCh
 	if priority == aiSinkPriorityHigh {
-		ch = w.hiCh
+		select {
+		case w.hiCh <- msg:
+		default:
+		}
+		return
 	}
+	w.enqueueLow(msg)
+}
 
+func (w *aiSinkWriter) notify(msg aiSinkMsg) error {
+	if w == nil || w.notifier == nil {
+		return errors.New("nil notifier")
+	}
+	return w.notifier.Notify(msg.TypeID, msg.Payload)
+}
+
+func (w *aiSinkWriter) enqueueLow(msg aiSinkMsg) {
+	if w == nil {
+		return
+	}
+	shouldWake := false
+	w.mu.Lock()
+	key := msg.lowKey
+	if key == "" {
+		w.lowSeq++
+		key = "low\x00" + strconv.FormatUint(w.lowSeq, 10)
+		msg.lowKey = key
+	}
+	if existing, ok := w.lowPending[key]; ok {
+		w.lowPending[key] = mergeAISinkLowMsg(existing, msg)
+	} else {
+		w.lowPending[key] = msg
+		w.lowOrder = append(w.lowOrder, key)
+		shouldWake = true
+	}
+	w.mu.Unlock()
+	if shouldWake {
+		w.signalLowWake()
+	}
+}
+
+func (w *aiSinkWriter) popLow() (aiSinkMsg, bool) {
+	if w == nil {
+		return aiSinkMsg{}, false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for len(w.lowOrder) > 0 {
+		key := w.lowOrder[0]
+		w.lowOrder = w.lowOrder[1:]
+		msg, ok := w.lowPending[key]
+		if !ok {
+			continue
+		}
+		delete(w.lowPending, key)
+		return msg, true
+	}
+	return aiSinkMsg{}, false
+}
+
+func (w *aiSinkWriter) signalLowWake() {
+	if w == nil {
+		return
+	}
 	select {
-	case ch <- msg:
+	case <-w.stop:
+		return
+	default:
+	}
+	select {
+	case w.loWake <- struct{}{}:
 	default:
 	}
 }
