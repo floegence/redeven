@@ -1831,7 +1831,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		r.persistRunEvent("ask_user.waiting", RealtimeStreamKindLifecycle, map[string]any{
 			"question":            question,
 			"questions_count":     len(signal.Questions),
-			"options_count":       requestUserInputQuestionOptionCount(signal.Questions),
+			"choices_count":       requestUserInputQuestionChoiceCount(signal.Questions),
 			"reason_code":         signal.ReasonCode,
 			"required_inputs":     len(signal.RequiredFromUser),
 			"evidence_refs":       len(signal.EvidenceRefs),
@@ -1865,15 +1865,12 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		case "missing_required_from_user":
 			rejectionMsg = "ask_user was rejected because required_from_user is empty. Specify exactly what information is needed from the user."
 			recoveryOverlay = "[CONTRACT] ask_user requires required_from_user."
-		case askUserGateReasonDetailPlaceholderWithoutMode:
-			rejectionMsg = "ask_user was rejected because a detail_input_placeholder was provided without a supported detail_input_mode. Either remove the placeholder or make that option require detail input."
-			recoveryOverlay = "[CONTRACT] detail_input_placeholder requires a supported option detail mode."
-		case askUserGateReasonUnsupportedOptionalOptionDetail:
-			rejectionMsg = "ask_user was rejected because option-level detail input must require detail before the prompt resolves. Use detail_input_mode=\"required\" or remove the detail input."
-			recoveryOverlay = "[CONTRACT] option-level detail input no longer supports optional resolution."
-		case askUserGateReasonQuestionOtherConflictsOptionText:
-			rejectionMsg = "ask_user was rejected because the question uses is_other=true while also attaching option-level detail input. Choose one freeform path: question-level other input or a specific detail-required option."
-			recoveryOverlay = "[CONTRACT] is_other=true cannot coexist with option-level detail input."
+		case askUserGateReasonMissingChoices:
+			rejectionMsg = "ask_user was rejected because each question must provide explicit choices. Use choices[].kind=\"select\" for fixed answers and choices[].kind=\"write\" for typed answers."
+			recoveryOverlay = "[CONTRACT] ask_user requires explicit choices[]."
+		case askUserGateReasonChoiceInputPlaceholderWithoutWrite:
+			rejectionMsg = "ask_user was rejected because input_placeholder is only supported on choices with kind=\"write\"."
+			recoveryOverlay = "[CONTRACT] input_placeholder requires choices[].kind=\"write\"."
 		case "missing_evidence_refs":
 			rejectionMsg = "ask_user was rejected because evidence_refs is empty for an evidence-backed reason. Provide concrete evidence refs from tool calls."
 			recoveryOverlay = "[CONTRACT] ask_user requires evidence_refs for this reason_code."
@@ -1940,7 +1937,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			"gate_reason":           askReason,
 			"question_len":          len([]rune(strings.TrimSpace(signal.Question))),
 			"questions_count":       len(signal.Questions),
-			"options_count":         requestUserInputQuestionOptionCount(signal.Questions),
+			"choices_count":         requestUserInputQuestionChoiceCount(signal.Questions),
 			"reason_code":           signal.ReasonCode,
 			"required_inputs_count": len(signal.RequiredFromUser),
 			"evidence_refs_count":   len(signal.EvidenceRefs),
@@ -4092,44 +4089,6 @@ func extractSignalStringList(call ToolCall, key string) []string {
 	}
 }
 
-func extractSignalRequestUserInputOptions(call ToolCall, key string) []RequestUserInputOption {
-	if call.Args == nil {
-		return nil
-	}
-	rawItems := toAnySlice(call.Args[key])
-	if len(rawItems) == 0 {
-		return nil
-	}
-	options := make([]RequestUserInputOption, 0, len(rawItems))
-	for _, item := range rawItems {
-		record, ok := item.(map[string]any)
-		if !ok || record == nil {
-			continue
-		}
-		actionsRaw, _ := record["actions"].([]any)
-		actions := make([]RequestUserInputAction, 0, len(actionsRaw))
-		for _, actionItem := range actionsRaw {
-			actionRecord, ok := actionItem.(map[string]any)
-			if !ok || actionRecord == nil {
-				continue
-			}
-			actions = append(actions, RequestUserInputAction{
-				Type: anyToString(actionRecord["type"]),
-				Mode: anyToString(actionRecord["mode"]),
-			})
-		}
-		options = append(options, RequestUserInputOption{
-			OptionID:               anyToString(record["option_id"]),
-			Label:                  anyToString(record["label"]),
-			Description:            anyToString(record["description"]),
-			DetailInputMode:        anyToString(record["detail_input_mode"]),
-			DetailInputPlaceholder: anyToString(record["detail_input_placeholder"]),
-			Actions:                actions,
-		})
-	}
-	return normalizeRequestUserInputOptions(options)
-}
-
 func extractSignalRequestUserInputQuestions(call ToolCall, key string) []RequestUserInputQuestion {
 	if call.Args == nil {
 		return nil
@@ -4144,14 +4103,11 @@ func extractSignalRequestUserInputQuestions(call ToolCall, key string) []Request
 		if !ok || record == nil {
 			continue
 		}
-		questions = append(questions, RequestUserInputQuestion{
-			ID:       anyToString(record["id"]),
-			Header:   anyToString(record["header"]),
-			Question: anyToString(record["question"]),
-			IsOther:  anyToBool(record["is_other"]),
-			IsSecret: anyToBool(record["is_secret"]),
-			Options:  extractSignalRequestUserInputOptions(ToolCall{Args: map[string]any{"options": record["options"]}}, "options"),
-		})
+		question, ok := requestUserInputQuestionFromRecord(record)
+		if !ok {
+			continue
+		}
+		questions = append(questions, question)
 	}
 	return normalizeRequestUserInputQuestions(questions)
 }
@@ -4684,11 +4640,12 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			"- reason_code must be one of: user_decision_required | permission_blocked | missing_external_input | conflicting_constraints | safety_confirmation.",
 			"- required_from_user must list concrete user inputs needed to proceed.",
 			"- evidence_refs must reference relevant tool IDs when evidence is required.",
-			"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_other, is_secret, and optional options[].",
-			"- For each question, include 2-4 concise mutually exclusive options (best option first) when predefined choices are appropriate.",
-			"- Use `is_other=true` only when the whole question should allow a freeform reply. If you want predefined options plus a typed catch-all, keep the question-level fallback on `is_other=true`; the Env App renders an explicit final fallback choice for that path. Do not combine `is_other=true` with option-level detail input on the same question.",
-			"- When only one option needs extra detail, use `options[].detail_input_mode=\"required\"` plus `options[].detail_input_placeholder` when helpful. Option-level detail input must block resolution until the user provides that detail.",
-			"- For deterministic UI actions, place actions on `questions[].options[].actions` (for example {type:\"set_mode\",mode:\"act\"}).",
+			"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_secret, and choices[].",
+			"- Every choice must declare `kind`: use `kind:\"select\"` for fixed answers and `kind:\"write\"` for answers that require typed user input.",
+			"- Express typed catch-all answers like `None of the above: ___` as an explicit `choices[]` entry with `kind:\"write\"`, its own label, and optional `input_placeholder`.",
+			"- For a direct-input question, use a single `kind:\"write\"` choice instead of omitting choices.",
+			"- Keep choices concise and mutually exclusive. Put the best/default path first when that ordering matters.",
+			"- For deterministic UI actions, place actions on `questions[].choices[].actions` (for example {type:\"set_mode\",mode:\"act\"}).",
 		)
 		if capability.SupportsAskUserQuestionBatches {
 			core = append(core, "- Default to one question at a time. Use multiple questions only when the questions are tightly coupled and must be answered together.")
@@ -5041,10 +4998,10 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
 	r.emitPersistedToolBlockSet(idx, block)
 }
 
-func requestUserInputQuestionOptionCount(questions []RequestUserInputQuestion) int {
+func requestUserInputQuestionChoiceCount(questions []RequestUserInputQuestion) int {
 	total := 0
 	for _, question := range normalizeRequestUserInputQuestions(questions) {
-		total += len(question.Options)
+		total += len(question.Choices)
 	}
 	return total
 }

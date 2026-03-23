@@ -9,10 +9,13 @@ export type wire_ai_request_user_input_action = {
   mode?: string;
 };
 
-export type wire_ai_request_user_input_option = {
-  option_id: string;
+export type wire_ai_request_user_input_choice = {
+  choice_id?: string;
+  option_id?: string;
   label: string;
   description?: string;
+  kind?: string;
+  input_placeholder?: string;
   detail_input_mode?: string;
   detail_input_placeholder?: string;
   actions?: wire_ai_request_user_input_action[];
@@ -22,9 +25,10 @@ export type wire_ai_request_user_input_question = {
   id: string;
   header: string;
   question: string;
-  is_other: boolean;
   is_secret: boolean;
-  options?: wire_ai_request_user_input_option[];
+  choices?: wire_ai_request_user_input_choice[];
+  is_other?: boolean;
+  options?: wire_ai_request_user_input_choice[];
 };
 
 export type wire_ai_waiting_prompt = {
@@ -40,6 +44,8 @@ export type wire_ai_waiting_prompt = {
 };
 
 export type wire_ai_request_user_input_answer = {
+  choice_id?: string;
+  text?: string;
   selected_option_id?: string;
   answers?: string[];
 };

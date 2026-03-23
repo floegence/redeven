@@ -17,13 +17,13 @@ var ErrFollowupsRevisionChanged = errors.New("followups revision changed")
 var ErrInvalidFollowupLane = errors.New("invalid followup lane")
 
 type SendUserTurnRequest struct {
-	ThreadID              string                 `json:"thread_id"`
-	Model                 string                 `json:"model,omitempty"`
-	Input                 RunInput               `json:"input"`
-	Options               RunOptions             `json:"options"`
-	ExpectedRunID         string                 `json:"expected_run_id,omitempty"`
-	QueueAfterWaitingUser bool                   `json:"queue_after_waiting_user,omitempty"`
-	SourceFollowupID      string                 `json:"source_followup_id,omitempty"`
+	ThreadID              string     `json:"thread_id"`
+	Model                 string     `json:"model,omitempty"`
+	Input                 RunInput   `json:"input"`
+	Options               RunOptions `json:"options"`
+	ExpectedRunID         string     `json:"expected_run_id,omitempty"`
+	QueueAfterWaitingUser bool       `json:"queue_after_waiting_user,omitempty"`
+	SourceFollowupID      string     `json:"source_followup_id,omitempty"`
 }
 
 type SendUserTurnResponse struct {
@@ -257,9 +257,9 @@ func (s *Service) persistStructuredUserInputContext(ctx context.Context, endpoin
 			QuestionID:          strings.TrimSpace(response.QuestionID),
 			Header:              strings.TrimSpace(response.Header),
 			QuestionText:        strings.TrimSpace(response.Question),
-			SelectedOptionID:    strings.TrimSpace(response.SelectedOptionID),
-			SelectedOptionLabel: strings.TrimSpace(response.SelectedOptionLabel),
-			Answers:             append([]string(nil), response.Answers...),
+			SelectedChoiceID:    strings.TrimSpace(response.SelectedChoiceID),
+			SelectedChoiceLabel: strings.TrimSpace(response.SelectedChoiceLabel),
+			Text:                strings.TrimSpace(response.Text),
 			PublicSummary:       strings.TrimSpace(response.PublicSummary),
 			ContainsSecret:      response.ContainsSecret,
 			CreatedAtUnixMs:     createdAtUnixMs,
@@ -272,7 +272,7 @@ func (s *Service) persistStructuredUserInputContext(ctx context.Context, endpoin
 			ThreadID:          threadID,
 			ResponseMessageID: strings.TrimSpace(messageID),
 			QuestionID:        strings.TrimSpace(secret.QuestionID),
-			Answers:           append([]string(nil), secret.Answers...),
+			Text:              strings.TrimSpace(secret.Text),
 			CreatedAtUnixMs:   createdAtUnixMs,
 		})
 	}

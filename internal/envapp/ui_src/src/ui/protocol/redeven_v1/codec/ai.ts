@@ -19,7 +19,7 @@ import type {
   AIStopThreadResponse,
   AIRequestUserInputAction,
   AIRequestUserInputAnswer,
-  AIRequestUserInputOption,
+  AIRequestUserInputChoice,
   AIRequestUserInputPrompt,
   AIRequestUserInputQuestion,
   AISubscribeSummaryResponse,
@@ -61,7 +61,7 @@ import type {
   wire_ai_tool_approval_resp,
   wire_ai_request_user_input_action,
   wire_ai_request_user_input_answer,
-  wire_ai_request_user_input_option,
+  wire_ai_request_user_input_choice,
   wire_ai_request_user_input_question,
   wire_ai_waiting_prompt,
 } from '../wire/ai';
@@ -125,23 +125,26 @@ function fromWireAIRequestUserInputAction(raw: wire_ai_request_user_input_action
   };
 }
 
-function fromWireAIRequestUserInputOption(raw: wire_ai_request_user_input_option): AIRequestUserInputOption | null {
-  const optionId = String(raw?.option_id ?? '').trim();
+function fromWireAIRequestUserInputChoice(raw: wire_ai_request_user_input_choice): AIRequestUserInputChoice | null {
+  const choiceId = String(raw?.choice_id ?? raw?.option_id ?? '').trim();
   const label = String(raw?.label ?? '').trim();
-  if (!optionId || !label) return null;
+  if (!choiceId || !label) return null;
+  const kindRaw = String(raw?.kind ?? '').trim().toLowerCase();
   const detailInputModeRaw = String(raw?.detail_input_mode ?? '').trim().toLowerCase();
-  const detailInputMode = detailInputModeRaw === 'required' || detailInputModeRaw === 'optional'
-    ? 'required'
-    : undefined;
+  const kind = kindRaw === 'write' || detailInputModeRaw === 'required' || detailInputModeRaw === 'optional'
+    ? 'write'
+    : 'select';
   const actions = Array.isArray(raw?.actions)
     ? raw.actions.map(fromWireAIRequestUserInputAction).filter(Boolean) as AIRequestUserInputAction[]
     : [];
   return {
-    optionId,
+    choiceId,
     label,
     description: String(raw?.description ?? '').trim() || undefined,
-    detailInputMode,
-    detailInputPlaceholder: String(raw?.detail_input_placeholder ?? '').trim() || undefined,
+    kind,
+    inputPlaceholder: kind === 'write'
+      ? String(raw?.input_placeholder ?? raw?.detail_input_placeholder ?? '').trim() || undefined
+      : undefined,
     actions: actions.length > 0 ? actions : undefined,
   };
 }
@@ -151,16 +154,40 @@ function fromWireAIRequestUserInputQuestion(raw: wire_ai_request_user_input_ques
   const header = String(raw?.header ?? '').trim();
   const question = String(raw?.question ?? '').trim();
   if (!id || !header || !question) return null;
-  const options = Array.isArray(raw?.options)
-    ? raw.options.map(fromWireAIRequestUserInputOption).filter(Boolean) as AIRequestUserInputOption[]
+  const choices = Array.isArray(raw?.choices)
+    ? raw.choices.map(fromWireAIRequestUserInputChoice).filter(Boolean) as AIRequestUserInputChoice[]
     : [];
+  const legacyChoices = choices.length > 0
+    ? choices
+    : Array.isArray(raw?.options)
+    ? raw.options.map(fromWireAIRequestUserInputChoice).filter(Boolean) as AIRequestUserInputChoice[]
+    : [];
+  if (legacyChoices.length === 0) {
+    legacyChoices.push({
+      choiceId: 'write',
+      label: header || question,
+      kind: 'write',
+      inputPlaceholder: 'Type your answer',
+    });
+  }
+  if (raw?.is_other) {
+    const hasOther = legacyChoices.some((choice) => choice.choiceId === 'other' || choice.label.toLowerCase() === 'none of the above');
+    if (!hasOther) {
+      legacyChoices.push({
+        choiceId: 'other',
+        label: 'None of the above',
+        description: 'Type another answer.',
+        kind: 'write',
+        inputPlaceholder: 'Type another answer',
+      });
+    }
+  }
   return {
     id,
     header,
     question,
-    isOther: Boolean(raw?.is_other),
     isSecret: Boolean(raw?.is_secret),
-    options: options.length > 0 ? options : undefined,
+    choices: legacyChoices.length > 0 ? legacyChoices : undefined,
   };
 }
 
@@ -193,10 +220,8 @@ function fromWireAIWaitingPrompt(raw: wire_ai_waiting_prompt | undefined): AIReq
 
 function toWireAIRequestUserInputAnswer(answer: AIRequestUserInputAnswer): wire_ai_request_user_input_answer {
   return {
-    selected_option_id: String(answer?.selectedOptionId ?? '').trim() || undefined,
-    answers: Array.isArray(answer?.answers)
-      ? answer.answers.map((item) => String(item ?? '').trim()).filter(Boolean)
-      : [],
+    choice_id: String(answer?.choiceId ?? '').trim() || undefined,
+    text: String(answer?.text ?? '').trim() || undefined,
   };
 }
 
