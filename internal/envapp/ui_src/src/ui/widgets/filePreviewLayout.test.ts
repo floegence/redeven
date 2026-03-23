@@ -35,9 +35,13 @@ describe('file preview wiring', () => {
     expect(textPaneSrc).toContain('props.truncated || monacoFailed()');
     expect(textPaneSrc).toContain("if (props.editing) return false;");
     expect(textPaneSrc).toContain("resolveCodeEditorLanguageSpec(normalizedLanguage).id === 'plaintext'");
+    expect(textPaneSrc).toContain("return props.descriptor.language;");
+    expect(textPaneSrc).not.toContain("props.descriptor.language || 'plaintext'");
     expect(textPaneSrc).toContain('Monaco must remount when switching between read-only preview and edit mode');
     expect(textPaneSrc).toContain('Cannot edit in read-only editor');
     expect(textPaneSrc).toContain('<Show when={props.editing} fallback={renderMonacoEditor()}>');
+    expect(textPaneSrc).toContain('Editor unavailable');
+    expect(textPaneSrc).toContain('Discard this edit session or try again later.');
     expect(textPaneSrc).toContain('queueMicrotask');
     expect(textPaneSrc).toContain('Loading editor...');
     expect(contentSrc).toContain('Copy path');
@@ -45,6 +49,12 @@ describe('file preview wiring', () => {
     expect(contentSrc).toContain('Save');
     expect(contentSrc).toContain('Discard');
     expect(contentSrc).toContain('truncated={props.truncated}');
+    expect(contentSrc).not.toContain('dirty={props.dirty}');
+    expect(contentSrc).not.toContain('saving={props.saving}');
+    expect(contentSrc).not.toContain('canEdit={props.canEdit}');
+    expect(contentSrc).not.toContain('onStartEdit={props.onStartEdit}');
+    expect(contentSrc).not.toContain('onSave={props.onSave}');
+    expect(contentSrc).not.toContain('onDiscard={props.onDiscard}');
     expect(codePreviewSrc).toContain('Syntax highlighting disabled for large files.');
     expect(codePreviewSrc).toContain('resolveCodeHighlightTheme');
     expect(contentSrc).toContain('Loading file...');

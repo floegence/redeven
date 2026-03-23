@@ -35,28 +35,22 @@ export interface TextFilePreviewPaneProps {
   draftText?: string;
   truncated?: boolean;
   editing?: boolean;
-  dirty?: boolean;
-  saving?: boolean;
   saveError?: string | null;
-  canEdit?: boolean;
-  onStartEdit?: () => void;
   onDraftChange?: (value: string) => void;
   onSelectionChange?: (selectionText: string) => void;
-  onSave?: () => void;
-  onDiscard?: () => void;
 }
 
 export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   const [monacoFailed, setMonacoFailed] = createSignal(false);
-  const resolvedLanguage = createMemo(() => {
+  const resolvedLanguage = createMemo<string | undefined>(() => {
     if (props.descriptor.textPresentation !== 'code') return 'plaintext';
-    return props.descriptor.language || 'plaintext';
+    return props.descriptor.language;
   });
   const shouldUseFallbackPreview = createMemo(() => {
-    if (props.truncated || monacoFailed()) return true;
     if (props.editing) return false;
+    if (props.truncated || monacoFailed()) return true;
     if (props.descriptor.textPresentation !== 'code') return false;
-    return shouldUseCodePreviewFallback(props.descriptor.language);
+    return shouldUseCodePreviewFallback(resolvedLanguage());
   });
   const shouldUseMonaco = createMemo(() => !shouldUseFallbackPreview());
   const editorValue = createMemo(() => (props.editing ? props.draftText ?? props.text : props.text));
@@ -75,6 +69,16 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
       code={editorValue()}
       language={props.descriptor.textPresentation === 'code' ? props.descriptor.language : undefined}
     />
+  );
+  const editFailureFallback = () => (
+    <div class="flex h-full items-center justify-center p-4">
+      <div class="max-w-md rounded-md border border-warning/20 bg-warning/10 px-4 py-3 text-sm">
+        <div class="font-medium text-foreground">Editor unavailable</div>
+        <div class="mt-1 text-xs text-muted-foreground">
+          The Monaco editor could not start for this file. Discard this edit session or try again later.
+        </div>
+      </div>
+    </div>
   );
   const renderMonacoEditor = () => (
     <CodeEditor
@@ -98,7 +102,7 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   }));
 
   createEffect(() => {
-    if (!shouldUseMonaco()) {
+    if (!shouldUseMonaco() || monacoFailed()) {
       props.onSelectionChange?.('');
     }
   });
@@ -121,7 +125,7 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
               queueMicrotask(() => {
                 setMonacoFailed(true);
               });
-              return fallbackPreview();
+              return props.editing ? editFailureFallback() : fallbackPreview();
             }}
           >
             <Suspense fallback={<div class="flex h-full items-center justify-center text-sm text-muted-foreground">Loading editor...</div>}>

@@ -11,6 +11,7 @@ Key points:
 - Flower auto titles are best-effort but resilient: the agent retries transient generation failures in the background, can expand the title-generation output budget once for reasoning-heavy models, and also recovers recent untitled threads after restart, so users should see the final title appear without manual refresh or rename in normal cases.
 - File Browser keeps Monaco as the primary surface for both preview and edit whenever the shared Floe Webapp editor supports the file language, so read-only and editable code views stay visually and behaviorally aligned.
 - When a supported code file switches from read-only preview into Edit mode, Env App intentionally remounts the Monaco instance instead of only flipping `readOnly`; this lifecycle boundary prevents stale preview state from leaking into editability.
+- If Monaco cannot start while the user is entering Edit mode, Env App shows an explicit editor-unavailable state instead of silently dropping back to a read-only highlighted preview under an editing shell.
 - When the environment grants `can_write`, text previews can switch into Monaco-backed edit mode and save changes back through the agent file RPC.
 - File Browser directory context menus can hand off into Terminal by opening the terminal page and creating a new session rooted at the selected directory.
 - Terminal right-click menus can hand off back into File Browser by opening the shared floating browser surface at the active terminal working directory.
