@@ -88,6 +88,14 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+async function revealTooltipForButton(button: HTMLButtonElement | undefined): Promise<HTMLElement | null> {
+  const host = button?.closest('.relative.inline-block') as HTMLElement | null;
+  expect(host).toBeTruthy();
+  host!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+  await Promise.resolve();
+  return host!.querySelector('[role="tooltip"]') as HTMLElement | null;
+}
+
 describe('GitBranchesPanel interactions', () => {
   it('renders status as the default branch detail view', () => {
     let checkoutCount = 0;
@@ -541,6 +549,68 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
+  it('shows a tooltip on the plain delete confirm button when safe delete is blocked', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const branch = {
+      name: 'feature/unmerged',
+      fullName: 'refs/heads/feature/unmerged',
+      kind: 'local' as const,
+    };
+    const blockedReason = 'Branch is not fully merged into HEAD.';
+    const preview = {
+      repoRootPath: '/workspace/repo',
+      name: 'feature/unmerged',
+      fullName: 'refs/heads/feature/unmerged',
+      kind: 'local' as const,
+      requiresWorktreeRemoval: false,
+      requiresDiscardConfirmation: false,
+      safeDeleteAllowed: false,
+      safeDeleteReason: blockedReason,
+      safeDeleteBaseRef: 'HEAD',
+      planFingerprint: 'plan-blocked-plain',
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={branch}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    branch,
+                  ],
+                  remote: [],
+                }}
+                deleteReviewOpen
+                deleteReviewBranch={branch}
+                deletePreview={preview}
+                onCloseDeleteReview={() => {}}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete Branch') as HTMLButtonElement | undefined;
+      expect(confirmButton).toBeTruthy();
+      expect(confirmButton?.disabled).toBe(true);
+      const tooltip = await revealTooltipForButton(confirmButton);
+      expect(tooltip?.textContent).toContain(blockedReason);
+    } finally {
+      dispose();
+    }
+  });
+
   it('opens merge review dialog and confirms with the preview fingerprint', async () => {
     let requestedBranch: string | undefined;
     let confirmedFingerprint: string | undefined;
@@ -750,6 +820,78 @@ describe('GitBranchesPanel interactions', () => {
       const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Merge Into main') as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.disabled).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('shows a tooltip on the linked-worktree delete confirm button when safe delete is blocked', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const branch = {
+      name: 'feature/linked-blocked',
+      fullName: 'refs/heads/feature/linked-blocked',
+      kind: 'local' as const,
+      worktreePath: '/workspace/repo-linked-blocked',
+    };
+    const blockedReason = 'Branch is not fully merged into HEAD.';
+    const preview = {
+      repoRootPath: '/workspace/repo',
+      name: 'feature/linked-blocked',
+      fullName: 'refs/heads/feature/linked-blocked',
+      kind: 'local' as const,
+      requiresWorktreeRemoval: true,
+      requiresDiscardConfirmation: false,
+      safeDeleteAllowed: false,
+      safeDeleteReason: blockedReason,
+      safeDeleteBaseRef: 'HEAD',
+      planFingerprint: 'plan-blocked-linked',
+      linkedWorktree: {
+        worktreePath: '/workspace/repo-linked-blocked',
+        accessible: true,
+        summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+        staged: [],
+        unstaged: [],
+        untracked: [],
+        conflicted: [],
+      },
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={branch}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    branch,
+                  ],
+                  remote: [],
+                }}
+                deleteReviewOpen
+                deleteReviewBranch={branch}
+                deletePreview={preview}
+                onCloseDeleteReview={() => {}}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete Branch and Worktree') as HTMLButtonElement | undefined;
+      expect(confirmButton).toBeTruthy();
+      expect(confirmButton?.disabled).toBe(true);
+      const tooltip = await revealTooltipForButton(confirmButton);
+      expect(tooltip?.textContent).toContain(blockedReason);
     } finally {
       dispose();
     }

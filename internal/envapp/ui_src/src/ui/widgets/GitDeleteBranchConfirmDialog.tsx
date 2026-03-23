@@ -4,6 +4,7 @@ import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitBranchSummary, GitPreviewDeleteBranchResponse } from '../protocol/redeven_v1';
 import { branchDisplayName } from '../utils/gitWorkbench';
 import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
+import { GitDeleteBranchConfirmButton, resolveDeleteBranchConfirmDisabledReason } from './GitDeleteBranchConfirmButton';
 import { GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
 
 export interface GitDeleteBranchConfirmDialogProps {
@@ -27,6 +28,14 @@ export function GitDeleteBranchConfirmDialog(props: GitDeleteBranchConfirmDialog
   const state = () => props.state ?? 'idle';
   const loading = () => state() === 'previewing';
   const deleting = () => state() === 'deleting';
+  const confirmDisabledReason = () => resolveDeleteBranchConfirmDisabledReason({
+    branch: props.branch,
+    preview: preview(),
+    previewError: props.previewError,
+    loading: loading(),
+    deleting: deleting(),
+    blockingReason: blockingReason(),
+  });
   const canConfirm = () => Boolean(
     props.open
     && props.branch
@@ -62,11 +71,11 @@ export function GitDeleteBranchConfirmDialog(props: GitDeleteBranchConfirmDialog
                 Retry
               </Button>
             </Show>
-            <Button
-              size="sm"
-              variant="destructive"
+            <GitDeleteBranchConfirmButton
+              label="Delete Branch"
               class="w-full sm:w-auto"
               disabled={!canConfirm()}
+              disabledReason={confirmDisabledReason()}
               loading={deleting()}
               onClick={() => {
                 const branch = props.branch;
@@ -78,9 +87,7 @@ export function GitDeleteBranchConfirmDialog(props: GitDeleteBranchConfirmDialog
                   planFingerprint: currentPreview.planFingerprint,
                 });
               }}
-            >
-              Delete Branch
-            </Button>
+            />
           </div>
         </div>
       )}
