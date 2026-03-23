@@ -537,6 +537,19 @@ function makeStreamingAssistantSnapshot(messageId = 'assistant-streaming-1') {
   };
 }
 
+function makeCompletedAssistantTranscriptMessage(messageId = 'assistant-complete-1') {
+  return {
+    id: messageId,
+    role: 'assistant',
+    status: 'complete',
+    timestamp: Date.now(),
+    blocks: [
+      { type: 'thinking', content: 'Tracing the live reducer path. Capturing the missing tail.' },
+      { type: 'markdown', content: 'Final answer recovered from transcript.' },
+    ],
+  };
+}
+
 function assistantRunIndicator(host: HTMLElement): HTMLElement | null {
   return host.querySelector('.chat-message-item-assistant .flower-message-run-indicator');
 }
@@ -749,6 +762,51 @@ export function registerEnvAIPageSendTests() {
         const assistant = host.querySelector('.chat-message-item-assistant');
         expect(assistant).toBeTruthy();
         expect(host.querySelector('.chat-markdown-empty-streaming')).toBeTruthy();
+      } finally {
+        dispose();
+      }
+    });
+
+    it('converges to the final transcript on terminal thread state after incomplete realtime delivery', async () => {
+      listMessagesMock.mockImplementation(async (req: any): Promise<any> => {
+        if (req?.tail) {
+          return { messages: [], nextAfterRowId: 0, hasMore: false };
+        }
+        if (Number(req?.afterRowId ?? 0) === 0) {
+          return {
+            messages: [
+              {
+                rowId: 1,
+                messageJson: makeCompletedAssistantTranscriptMessage('assistant-terminal-recovery'),
+              },
+            ],
+            nextAfterRowId: 1,
+            hasMore: false,
+          };
+        }
+        return { messages: [], nextAfterRowId: 1, hasMore: false };
+      });
+
+      const { host, dispose } = await renderPage();
+      try {
+        const messageId = emitAssistantRealtimeMessageStart('assistant-terminal-recovery');
+        emitAssistantRealtimeBlockSet(messageId, 0, { type: 'thinking' });
+        emitAssistantRealtimeDelta(messageId, 'Tracing the live reducer path.');
+        await flushAsync();
+
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          runId: 'run-send-1',
+          eventType: 'thread_state',
+          runStatus: 'success',
+          runError: '',
+        });
+        await flushAsync();
+        await flushAsync();
+
+        expect(host.textContent).toContain('Tracing the live reducer path. Capturing the missing tail.');
+        expect(host.textContent).toContain('Final answer recovered from transcript.');
+        expect(host.querySelector('.chat-markdown-empty-streaming')).toBeNull();
       } finally {
         dispose();
       }

@@ -159,6 +159,125 @@ func TestMoonshotProvider_StreamTurn_TextResponse(t *testing.T) {
 	}
 }
 
+func TestMoonshotProvider_StreamTurn_PreservesReasoningFragmentWhitespace(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/chat/completions") {
+			t.Fatalf("path=%s, want /chat/completions", r.URL.Path)
+		}
+
+		f, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatalf("response writer does not support flushing")
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_reasoning_spacing_1",
+			"object":  "chat.completion.chunk",
+			"created": 124,
+			"model":   "kimi-k2.5",
+			"choices": []any{
+				map[string]any{
+					"index":         0,
+					"finish_reason": nil,
+					"delta": map[string]any{
+						"role":              "assistant",
+						"reasoning_content": "Let",
+					},
+				},
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_reasoning_spacing_1",
+			"object":  "chat.completion.chunk",
+			"created": 124,
+			"model":   "kimi-k2.5",
+			"choices": []any{
+				map[string]any{
+					"index":         0,
+					"finish_reason": nil,
+					"delta": map[string]any{
+						"reasoning_content": " me",
+					},
+				},
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_reasoning_spacing_1",
+			"object":  "chat.completion.chunk",
+			"created": 124,
+			"model":   "kimi-k2.5",
+			"choices": []any{
+				map[string]any{
+					"index":         0,
+					"finish_reason": nil,
+					"delta": map[string]any{
+						"reasoning_content": " think clearly.",
+					},
+				},
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_reasoning_spacing_1",
+			"object":  "chat.completion.chunk",
+			"created": 124,
+			"model":   "kimi-k2.5",
+			"choices": []any{
+				map[string]any{
+					"index":         0,
+					"finish_reason": "stop",
+					"delta":         map[string]any{},
+				},
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_reasoning_spacing_1",
+			"object":  "chat.completion.chunk",
+			"created": 124,
+			"model":   "kimi-k2.5",
+			"choices": []any{},
+			"usage": map[string]any{
+				"prompt_tokens":     14,
+				"completion_tokens": 4,
+				"total_tokens":      18,
+				"completion_tokens_details": map[string]any{
+					"reasoning_tokens": 3,
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	provider, err := newProviderAdapter("moonshot", srv.URL+"/v1", "sk-test", nil)
+	if err != nil {
+		t.Fatalf("newProviderAdapter: %v", err)
+	}
+
+	events := make([]StreamEvent, 0, 5)
+	result, err := provider.StreamTurn(context.Background(), TurnRequest{
+		Model: "kimi-k2.5",
+		Messages: []Message{
+			{Role: "user", Content: []ContentPart{{Type: "text", Text: "think out loud"}}},
+		},
+	}, func(event StreamEvent) {
+		events = append(events, event)
+	})
+	if err != nil {
+		t.Fatalf("StreamTurn: %v", err)
+	}
+
+	if result.Reasoning != "Let me think clearly." {
+		t.Fatalf("reasoning=%q, want %q", result.Reasoning, "Let me think clearly.")
+	}
+	if got := strings.Join(streamEventTexts(events, StreamEventThinkingDelta), ""); got != "Let me think clearly." {
+		t.Fatalf("thinking deltas=%q, want %q", got, "Let me think clearly.")
+	}
+	if countStreamEvent(events, StreamEventThinkingDelta) != 3 {
+		t.Fatalf("thinking delta count=%d, want 3", countStreamEvent(events, StreamEventThinkingDelta))
+	}
+}
+
 func TestMoonshotProvider_StreamTurn_ToolCallAliasRoundTrip(t *testing.T) {
 	t.Parallel()
 
