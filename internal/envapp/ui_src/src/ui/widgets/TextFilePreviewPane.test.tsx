@@ -161,8 +161,10 @@ describe('TextFilePreviewPane', () => {
     expect(onSelectionChange).toHaveBeenCalledWith('selected from editor');
   });
 
-  it('keeps the same Monaco surface and makes it writable when entering edit mode', async () => {
+  it('recreates the Monaco editor instance when entering edit mode so read-only state cannot leak', async () => {
     const [editing, setEditing] = createSignal(false);
+    const onDraftChange = vi.fn();
+    const onSelectionChange = vi.fn();
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -175,6 +177,8 @@ describe('TextFilePreviewPane', () => {
         draftText="const value = 1;"
         editing={editing()}
         canEdit
+        onDraftChange={onDraftChange}
+        onSelectionChange={onSelectionChange}
       />
     ), host);
     await flushAsync();
@@ -188,8 +192,13 @@ describe('TextFilePreviewPane', () => {
     await flushAsync();
 
     const editingEditor = host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null;
-    expect(editingEditor?.dataset.instanceId).toBe('1');
+    expect(editingEditor?.dataset.instanceId).toBe('2');
     expect(editingEditor?.dataset.readOnly).toBe('false');
+
+    editingEditor?.click();
+
+    expect(onDraftChange).toHaveBeenCalledWith('changed from editor');
+    expect(onSelectionChange).toHaveBeenCalledWith('selected from editor');
   });
 
   it('keeps Monaco-unsupported read-only languages on the highlighted fallback surface', async () => {

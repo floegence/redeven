@@ -35,7 +35,9 @@ describe('file preview wiring', () => {
     expect(textPaneSrc).toContain('props.truncated || monacoFailed()');
     expect(textPaneSrc).toContain("if (props.editing) return false;");
     expect(textPaneSrc).toContain("resolveCodeEditorLanguageSpec(normalizedLanguage).id === 'plaintext'");
-    expect(textPaneSrc).not.toContain("!props.editing && props.descriptor.textPresentation === 'code'");
+    expect(textPaneSrc).toContain('Monaco must remount when switching between read-only preview and edit mode');
+    expect(textPaneSrc).toContain('Cannot edit in read-only editor');
+    expect(textPaneSrc).toContain('<Show when={props.editing} fallback={renderMonacoEditor()}>');
     expect(textPaneSrc).toContain('queueMicrotask');
     expect(textPaneSrc).toContain('Loading editor...');
     expect(contentSrc).toContain('Copy path');
