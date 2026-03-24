@@ -606,14 +606,17 @@ describe('GitBranchesPanel interactions', () => {
       expect(branchHeader).toBeTruthy();
       expect(controlBar).toBeTruthy();
       expect(controlBar?.textContent).toContain('Actions');
-      expect(checkoutButton?.className).toContain('rounded-full');
-      expect(deleteButton?.className).toContain('rounded-full');
+      expect(checkoutButton?.className).toContain('rounded-md');
+      expect(deleteButton?.className).toContain('rounded-md');
+      expect(checkoutButton?.className).toContain('cursor-pointer');
       expect(deleteButton?.className).toContain('bg-destructive/[0.08]');
       expect(tablist?.className).toContain('grid');
       expect(tablist?.className).toContain('w-full');
       expect(tablist?.className).toContain('grid-cols-2');
-      expect(tablist?.className).toContain('rounded-full');
+      expect(tablist?.className).toContain('rounded-lg');
       expect(tablist?.className).toContain('sm:w-[15rem]');
+      const activeTab = Array.from(host.querySelectorAll('button')).find((node) => node.getAttribute('role') === 'tab' && node.getAttribute('aria-selected') === 'false') as HTMLButtonElement | undefined;
+      expect(activeTab?.className).toContain('cursor-pointer');
     } finally {
       dispose();
     }
