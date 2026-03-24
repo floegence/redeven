@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -229,6 +230,41 @@ func TestParseModelRunPolicyDecision_NonTaskForcesTodoNone(t *testing.T) {
 	}
 	if got.MinimumTodoItems != 0 {
 		t.Fatalf("minimum_todo_items=%d, want 0", got.MinimumTodoItems)
+	}
+}
+
+func TestRunPolicyClassifierToolDef_IncludesInteractionContractSchema(t *testing.T) {
+	t.Parallel()
+
+	def := runPolicyClassifierToolDef()
+	var schema map[string]any
+	if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
+		t.Fatalf("Unmarshal(InputSchema): %v", err)
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema properties missing: %v", schema)
+	}
+	rawContract, ok := properties["interaction_contract"].(map[string]any)
+	if !ok {
+		t.Fatalf("interaction_contract schema missing: %v", properties)
+	}
+	contractProps, ok := rawContract["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("interaction_contract properties missing: %v", rawContract)
+	}
+	for _, key := range []string{
+		"enabled",
+		"reason",
+		"single_question_per_turn",
+		"fixed_choices_required",
+		"open_text_fallback_required",
+		"indirect_questions_only",
+		"confidence",
+	} {
+		if _, ok := contractProps[key]; !ok {
+			t.Fatalf("interaction_contract.%s missing from schema: %v", key, contractProps)
+		}
 	}
 }
 

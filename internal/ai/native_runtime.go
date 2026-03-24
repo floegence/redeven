@@ -1903,41 +1903,6 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		}
 		return out
 	}
-	classifyAskUserByModel := func(signal askUserSignal) askUserPolicyDecision {
-		if decision, ok := structuredContinuationAskUserPolicyDecision(state, structuredResponseContinuation); ok {
-			return decision
-		}
-		signal = normalizeAskUserSignal(signal)
-		policyCtx := execCtx
-		cancel := func() {}
-		if _, hasDeadline := execCtx.Deadline(); !hasDeadline {
-			policyCtx, cancel = context.WithTimeout(execCtx, 12*time.Second)
-		}
-		defer cancel()
-		result, err := runStructuredClassifierTurn(policyCtx, adapter, modelName, buildAskUserPolicyClassifierMessages(taskObjective, signal, state), askUserPolicyClassifierToolDef(), structuredClassifierDefaultMaxOutputTokens)
-		if err != nil {
-			if r.log != nil {
-				r.log.Warn("ask_user policy classification failed",
-					"run_id", strings.TrimSpace(r.id),
-					"thread_id", strings.TrimSpace(r.threadID),
-					"error", err,
-				)
-			}
-			return fallbackAskUserPolicyDecision("policy_classifier_failed")
-		}
-		decision, err := parseAskUserPolicyDecision(structuredClassifierResultPayload(result, structuredClassifierAskUserPolicyToolName))
-		if err != nil {
-			if r.log != nil {
-				r.log.Warn("ask_user policy parse failed",
-					"run_id", strings.TrimSpace(r.id),
-					"thread_id", strings.TrimSpace(r.threadID),
-					"error", err,
-				)
-			}
-			return fallbackAskUserPolicyDecision("policy_classifier_parse_failed")
-		}
-		return decision
-	}
 	endAskUser := func(step int, signal askUserSignal, source string) error {
 		signal = normalizeAskUserSignal(signal)
 		question := signal.Question
@@ -2071,23 +2036,8 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 
 		var askPassed bool
 		var askReason string
-		policyDecision := askUserPolicyDecision{
-			Allow:      true,
-			Reason:     "not_applicable",
-			Confidence: 1,
-			Source:     askUserPolicySourceFallback,
-		}
-		policyGateEnforced := false
 		if source == "model_signal" {
-			policyDecision = classifyAskUserByModel(signal)
 			askPassed, askReason = evaluateAskUserGate(signal, state, taskComplexity)
-			if askPassed {
-				if enforcedReason, ok := enforcedAskUserPolicyReason(policyDecision); ok {
-					askPassed = false
-					askReason = enforcedReason
-					policyGateEnforced = true
-				}
-			}
 		} else {
 			askPassed, askReason = evaluateGuardAskUserGate(source, state, taskComplexity)
 		}
@@ -2102,13 +2052,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			"reason_code":                      signal.ReasonCode,
 			"required_inputs_count":            len(signal.RequiredFromUser),
 			"evidence_refs_count":              len(signal.EvidenceRefs),
-			"policy_allow":                     policyDecision.Allow,
-			"policy_reason":                    policyDecision.Reason,
-			"policy_source":                    policyDecision.Source,
-			"policy_confidence":                policyDecision.Confidence,
-			"policy_advisory_mode":             source == "model_signal",
-			"policy_gate_enforced":             policyGateEnforced,
-			"policy_advisory_block":            source == "model_signal" && !policyDecision.Allow,
+			"validation_mode":                  "deterministic_contract_state",
 			"complexity":                       taskComplexity,
 			"todo_tracking":                    state.TodoTrackingEnabled,
 			"todo_open_count":                  state.TodoOpenCount,
@@ -2803,9 +2747,6 @@ mainLoop:
 				if gateReason == "pending_todos" {
 					rejectionMsg = "task_complete was rejected because todos are still open. Update write_todos first, then call task_complete."
 					recoveryOverlay = "[RECOVERY] Completion blocked: todos still open. Update write_todos to close remaining items, then call task_complete."
-				} else if gateReason == "result_requests_user_input" {
-					rejectionMsg = "task_complete was rejected because the result still asks the user for a new answer. Use ask_user and end in waiting_user instead of completing successfully."
-					recoveryOverlay = "[CONTRACT] Do not finish successfully while still asking the user a new question. If a reply is still needed, emit ask_user."
 				} else if gateReason == todoRequirementMissingPolicyRequired {
 					rejectionMsg = "task_complete was rejected because the run policy requires todo tracking, but no todo snapshot exists. Call write_todos first, then continue and complete."
 					recoveryOverlay = "[RECOVERY] Completion blocked: run policy requires write_todos before task_complete."
@@ -4466,9 +4407,6 @@ func evaluateTaskCompletionGate(resultText string, state runtimeState, complexit
 	text := strings.TrimSpace(resultText)
 	if text == "" {
 		return false, "empty_result"
-	}
-	if completionResultRequestsUserInput(text, state.InteractionContract) {
-		return false, "result_requests_user_input"
 	}
 	mode = strings.ToLower(strings.TrimSpace(mode))
 	if required, reason := todoTrackingRequirement(complexity, state); required {
