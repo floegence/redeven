@@ -97,12 +97,25 @@ func TestE2E_DBConfiguredModel_GuidedStructuredInteractionPreservesContractAcros
 	if got := strings.TrimSpace(fmt.Sprint(secondIntent["objective_mode"])); got != RunObjectiveModeContinue {
 		t.Fatalf("second turn objective_mode=%q, want %q", got, RunObjectiveModeContinue)
 	}
+	if got := strings.TrimSpace(fmt.Sprint(secondIntent["intent_source"])); got != RunIntentSourceDeterministic {
+		t.Fatalf("second turn intent_source=%q, want %q", got, RunIntentSourceDeterministic)
+	}
 	secondInteraction := findRunEventPayload(t, secondEvents.Events, "interaction.contract.classified")
 	if got := anyToBool(secondInteraction["enabled"]); !got {
 		t.Fatalf("interaction contract should stay enabled on second turn: %+v", secondInteraction)
 	}
 	if got := anyToBool(secondInteraction["open_text_fallback_required"]); !got {
 		t.Fatalf("second turn should keep open_text_fallback_required=true: %+v", secondInteraction)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(secondInteraction["classification_mode"])); got != interactionContractClassificationModeSeedReuse {
+		t.Fatalf("second turn classification_mode=%q, want %q", got, interactionContractClassificationModeSeedReuse)
+	}
+	if got := anyToBool(secondInteraction["seed_reused"]); !got {
+		t.Fatalf("second turn seed_reused should be true: %+v", secondInteraction)
+	}
+	secondAskUser := findRunEventPayload(t, secondEvents.Events, "ask_user.attempt")
+	if got := strings.TrimSpace(fmt.Sprint(secondAskUser["policy_source"])); got != askUserPolicySourceStructuredContinuation {
+		t.Fatalf("second turn ask_user policy_source=%q, want %q", got, askUserPolicySourceStructuredContinuation)
 	}
 }
 

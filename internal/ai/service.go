@@ -1159,22 +1159,24 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	req.Options.TodoPolicy = normalizeTodoPolicy(policyDecision.TodoPolicy)
 	req.Options.MinimumTodoItems = normalizeMinimumTodoItems(req.Options.TodoPolicy, policyDecision.MinimumTodoItems)
 	r.persistRunEvent("intent.classified", RealtimeStreamKindLifecycle, map[string]any{
-		"intent":         policyDecision.Intent,
-		"reason":         policyDecision.Reason,
-		"source":         policyDecision.Source,
-		"objective_mode": policyDecision.ObjectiveMode,
-		"intent_source":  policyDecision.Source,
-		"intent_reason":  policyDecision.Reason,
-		"mode":           req.Options.Mode,
+		"intent":                           policyDecision.Intent,
+		"reason":                           policyDecision.Reason,
+		"source":                           policyDecision.Source,
+		"objective_mode":                   policyDecision.ObjectiveMode,
+		"intent_source":                    policyDecision.Source,
+		"intent_reason":                    policyDecision.Reason,
+		"mode":                             req.Options.Mode,
+		"structured_response_continuation": structuredResponseContinuation,
 	})
 	r.persistRunEvent("policy.classified", RealtimeStreamKindLifecycle, map[string]any{
-		"intent":             req.Options.Intent,
-		"complexity":         req.Options.Complexity,
-		"todo_policy":        req.Options.TodoPolicy,
-		"minimum_todo_items": req.Options.MinimumTodoItems,
-		"source":             policyDecision.Source,
-		"reason":             policyDecision.Reason,
-		"confidence":         policyDecision.Confidence,
+		"intent":                           req.Options.Intent,
+		"complexity":                       req.Options.Complexity,
+		"todo_policy":                      req.Options.TodoPolicy,
+		"minimum_todo_items":               req.Options.MinimumTodoItems,
+		"source":                           policyDecision.Source,
+		"reason":                           policyDecision.Reason,
+		"confidence":                       policyDecision.Confidence,
+		"structured_response_continuation": structuredResponseContinuation,
 	})
 	if policyDecision.Intent == RunIntentSocial {
 		r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{
@@ -1204,16 +1206,22 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	if !interactionContractSeed.Enabled {
 		interactionContractSeed = normalizeInteractionContract(policyDecision.InteractionContract)
 	}
-	policyDecision.InteractionContract = classifyInteractionContract(
+	var interactionMeta interactionContractClassificationMetadata
+	policyDecision.InteractionContract, interactionMeta = classifyInteractionContractWithMetadata(
 		req.Options.Intent,
 		openGoal,
 		effectiveCurrentInput.PublicText,
 		interactionContractSeed,
+		structuredResponseContinuation,
 		func() (interactionContract, error) {
 			return s.classifyInteractionContractByModel(ctx, resolvedModel, policyDecision.ObjectiveMode, openGoal, effectiveCurrentInput.PublicText)
 		},
 	)
-	r.persistRunEvent("interaction.contract.classified", RealtimeStreamKindLifecycle, policyDecision.InteractionContract.eventPayload())
+	interactionPayload := policyDecision.InteractionContract.eventPayload()
+	interactionPayload["classification_mode"] = interactionMeta.Mode
+	interactionPayload["seed_reused"] = interactionMeta.SeedReused
+	interactionPayload["structured_response_continuation"] = interactionMeta.StructuredResponseContinuation
+	r.persistRunEvent("interaction.contract.classified", RealtimeStreamKindLifecycle, interactionPayload)
 	effectiveInput := req.Input
 
 	userMsgID := ""

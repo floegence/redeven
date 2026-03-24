@@ -17,6 +17,7 @@ const (
 	askUserPolicyClassifierMarker                = "ASK_USER_POLICY_CLASSIFIER_V1"
 	askUserPolicySourceModel                     = "model"
 	askUserPolicySourceFallback                  = "deterministic_fallback"
+	askUserPolicySourceStructuredContinuation    = "structured_response_continuation"
 	askUserPolicyReasonInteractionShapeViolation = "violates_requested_interaction_shape"
 )
 
@@ -272,6 +273,21 @@ func fallbackAskUserPolicyDecision(reason string) askUserPolicyDecision {
 		Confidence: 0,
 		Source:     askUserPolicySourceFallback,
 	}
+}
+
+func structuredContinuationAskUserPolicyDecision(state runtimeState, structuredResponseContinuation bool) (askUserPolicyDecision, bool) {
+	if !structuredResponseContinuation {
+		return askUserPolicyDecision{}, false
+	}
+	if !normalizeInteractionContract(state.InteractionContract).Enabled {
+		return askUserPolicyDecision{}, false
+	}
+	return askUserPolicyDecision{
+		Allow:      true,
+		Reason:     "structured_response_contract_continuation",
+		Confidence: 1,
+		Source:     askUserPolicySourceStructuredContinuation,
+	}, true
 }
 
 func defaultGuardAskUserSignal(question string, options []string, source string, evidenceRefs ...string) askUserSignal {

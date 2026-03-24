@@ -158,3 +158,28 @@ func TestAskUserReasonRequiresEvidence(t *testing.T) {
 		t.Fatalf("user_decision_required should not require evidence")
 	}
 }
+
+func TestStructuredContinuationAskUserPolicyDecision(t *testing.T) {
+	t.Parallel()
+
+	decision, ok := structuredContinuationAskUserPolicyDecision(runtimeState{
+		InteractionContract: interactionContract{
+			Enabled:                  true,
+			SingleQuestionPerTurn:    true,
+			FixedChoicesRequired:     true,
+			OpenTextFallbackRequired: true,
+		},
+	}, true)
+	if !ok {
+		t.Fatalf("structured continuation fast path should be enabled")
+	}
+	if !decision.Allow {
+		t.Fatalf("allow=%v, want true", decision.Allow)
+	}
+	if decision.Source != askUserPolicySourceStructuredContinuation {
+		t.Fatalf("source=%q, want %q", decision.Source, askUserPolicySourceStructuredContinuation)
+	}
+	if decision.Reason != "structured_response_contract_continuation" {
+		t.Fatalf("reason=%q, want structured_response_contract_continuation", decision.Reason)
+	}
+}

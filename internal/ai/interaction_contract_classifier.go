@@ -11,26 +11,53 @@ const interactionContractClassifierMarker = "INTERACTION_CONTRACT_CLASSIFIER_V1"
 
 type modelInteractionContractClassifier func() (interactionContract, error)
 
+const (
+	interactionContractClassificationModeModel         = "model_classifier"
+	interactionContractClassificationModeSeedReuse     = "structured_response_seed_reuse"
+	interactionContractClassificationModeDeterministic = "deterministic_fallback"
+)
+
+type interactionContractClassificationMetadata struct {
+	Mode                           string
+	SeedReused                     bool
+	StructuredResponseContinuation bool
+}
+
 func classifyInteractionContract(intent string, activeObjective string, userInput string, seed interactionContract, classifyByModel modelInteractionContractClassifier) interactionContract {
+	contract, _ := classifyInteractionContractWithMetadata(intent, activeObjective, userInput, seed, false, classifyByModel)
+	return contract
+}
+
+func classifyInteractionContractWithMetadata(intent string, activeObjective string, userInput string, seed interactionContract, structuredResponseContinuation bool, classifyByModel modelInteractionContractClassifier) (interactionContract, interactionContractClassificationMetadata) {
+	meta := interactionContractClassificationMetadata{
+		Mode:                           interactionContractClassificationModeDeterministic,
+		StructuredResponseContinuation: structuredResponseContinuation,
+	}
 	if normalizeRunIntent(intent) != RunIntentTask {
-		return normalizeInteractionContract(interactionContract{Source: interactionContractSourceDeterministic})
+		return normalizeInteractionContract(interactionContract{Source: interactionContractSourceDeterministic}), meta
 	}
 	activeObjective = strings.TrimSpace(activeObjective)
 	userInput = strings.TrimSpace(userInput)
 	if activeObjective == "" && userInput == "" {
-		return normalizeInteractionContract(interactionContract{Source: interactionContractSourceDeterministic})
+		return normalizeInteractionContract(interactionContract{Source: interactionContractSourceDeterministic}), meta
+	}
+	normalizedSeed := normalizeInteractionContract(seed)
+	if structuredResponseContinuation && normalizedSeed.Enabled {
+		meta.Mode = interactionContractClassificationModeSeedReuse
+		meta.SeedReused = true
+		return normalizedSeed, meta
 	}
 	if classifyByModel != nil {
 		contract, err := classifyByModel()
 		if err == nil {
-			return mergeInteractionContractSeed(contract, seed)
+			meta.Mode = interactionContractClassificationModeModel
+			return mergeInteractionContractSeed(contract, seed), meta
 		}
 	}
-	normalizedSeed := normalizeInteractionContract(seed)
 	if normalizedSeed.Enabled {
-		return normalizedSeed
+		return normalizedSeed, meta
 	}
-	return normalizeInteractionContract(interactionContract{Source: interactionContractSourceDeterministic})
+	return normalizeInteractionContract(interactionContract{Source: interactionContractSourceDeterministic}), meta
 }
 
 func buildInteractionContractClassifierMessages(objectiveMode string, activeObjective string, userInput string) []Message {
