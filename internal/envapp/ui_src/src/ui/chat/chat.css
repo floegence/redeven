@@ -44,6 +44,9 @@
   overflow-x: hidden;
   scrollbar-width: thin;
   overflow-anchor: none;
+  box-sizing: border-box;
+  padding-bottom: var(--flower-chat-transcript-overlay-bottom-inset, 0px);
+  scroll-padding-bottom: var(--flower-chat-transcript-overlay-bottom-inset, 0px);
 }
 
 .chat-message-list-inner {
@@ -81,7 +84,7 @@
 
 .chat-scroll-to-bottom-btn {
   position: absolute;
-  bottom: 1rem;
+  bottom: calc(var(--flower-chat-transcript-overlay-edge-gap, 1rem) + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   display: inline-flex;

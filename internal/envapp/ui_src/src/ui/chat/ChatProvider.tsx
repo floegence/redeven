@@ -14,7 +14,6 @@ import {
 import { createStore, reconcile, produce } from 'solid-js/store';
 import type {
   Message,
-  MessageBlock,
   ColdMessage,
   Attachment,
   ChatConfig,
@@ -24,6 +23,7 @@ import type {
 } from './types';
 import { DEFAULT_VIRTUAL_LIST_CONFIG } from './types';
 import { createClientId } from '../utils/clientId';
+import { applyStreamEventToMessages, buildUserBlocks } from './messageState';
 
 // ---- Defer helper (avoids blocking the UI thread) ----
 
@@ -241,115 +241,18 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
   };
 
   const applySingleStreamEvent = (event: StreamEvent): void => {
-    const ensureStreamingAssistantMessage = (msgs: Message[], messageId: string, timestamp: number): number => {
-      let idx = msgs.findIndex((m) => m.id === messageId);
-      if (idx === -1) {
-        msgs.push({
-          id: messageId,
-          role: 'assistant',
-          blocks: [],
-          status: 'streaming',
-          timestamp,
-        });
-        return msgs.length - 1;
-      }
-
-      const prev = msgs[idx];
-      msgs[idx] = {
-        ...prev,
-        role: 'assistant',
-        status: 'streaming',
-        error: undefined,
-      };
-      return idx;
-    };
-
-    switch (event.type) {
-      case 'message-start': {
-        consumeOnePrepId();
-        const id = event.messageId;
-        const ts = Date.now();
-        setMessages(produce((msgs) => {
-          ensureStreamingAssistantMessage(msgs, id, ts);
-        }));
-        setStreamingMessageId(id);
-        break;
-      }
-      case 'block-start': {
-        const id = event.messageId;
-        const ts = Date.now();
-        setMessages(produce((msgs) => {
-          const idx = ensureStreamingAssistantMessage(msgs, id, ts);
-          const msg = msgs[idx];
-          const blocks = [...msg.blocks];
-          const target = Math.max(0, event.blockIndex);
-          while (blocks.length <= target) {
-            blocks.push(createEmptyBlock(event.blockType));
-          }
-          const existing = blocks[target];
-          if (existing && existing.type !== event.blockType) {
-            blocks[target] = createEmptyBlock(event.blockType);
-          }
-          msgs[idx] = { ...msg, blocks };
-        }));
-        setStreamingMessageId(id);
-        break;
-      }
-      case 'block-delta': {
-        const id = event.messageId;
-        const ts = Date.now();
-        setMessages(produce((msgs) => {
-          const idx = ensureStreamingAssistantMessage(msgs, id, ts);
-          const msg = msgs[idx];
-          const blocks = [...msg.blocks];
-          const target = Math.max(0, event.blockIndex);
-          while (blocks.length <= target) {
-            blocks.push(createEmptyBlock('text'));
-          }
-          blocks[target] = appendDeltaToBlock(blocks[target], event.delta);
-          msgs[idx] = { ...msg, blocks };
-        }));
-        setStreamingMessageId(id);
-        break;
-      }
-      case 'block-set': {
-        const id = event.messageId;
-        const ts = Date.now();
-        setMessages(produce((msgs) => {
-          const idx = ensureStreamingAssistantMessage(msgs, id, ts);
-          const msg = msgs[idx];
-          const blocks = [...msg.blocks];
-          const target = Math.max(0, event.blockIndex);
-          while (blocks.length < target) {
-            blocks.push(createEmptyBlock(event.block.type));
-          }
-          if (target === blocks.length) {
-            blocks.push(event.block);
-          } else {
-            blocks[target] = event.block;
-          }
-          msgs[idx] = { ...msg, blocks };
-        }));
-        setStreamingMessageId(id);
-        break;
-      }
-      case 'block-end':
-        // No-op for now; individual blocks handle their own finalization.
-        break;
-      case 'message-end': {
-        updateMessage(event.messageId, (msg) => ({ ...msg, status: 'complete' }));
-        setStreamingMessageId(null);
-        break;
-      }
-      case 'error': {
-        updateMessage(event.messageId, (msg) => ({
-          ...msg,
-          status: 'error',
-          error: event.error,
-        }));
-        setStreamingMessageId(null);
-        break;
-      }
+    const result = applyStreamEventToMessages(messages, event, {
+      currentStreamingMessageId: streamingMessageId(),
+      now: Date.now(),
+    });
+    if (result.consumeOnePrepId) {
+      consumeOnePrepId();
+    }
+    if (result.messages !== messages) {
+      setMessages(reconcile(result.messages));
+    }
+    if (streamingMessageId() !== result.streamingMessageId) {
+      setStreamingMessageId(result.streamingMessageId);
     }
   };
 
@@ -536,92 +439,3 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
 
   return <ChatContext.Provider value={ctx}>{props.children}</ChatContext.Provider>;
 };
-
-// ---- Helpers ----
-
-function createEmptyBlock(blockType: MessageBlock['type']): MessageBlock {
-  switch (blockType) {
-    case 'text':
-      return { type: 'text', content: '' };
-    case 'markdown':
-      return { type: 'markdown', content: '' };
-    case 'code':
-      return { type: 'code', language: '', content: '' };
-    case 'code-diff':
-      return { type: 'code-diff', language: '', oldCode: '', newCode: '' };
-    case 'image':
-      return { type: 'image', src: '' };
-    case 'svg':
-      return { type: 'svg', content: '' };
-    case 'mermaid':
-      return { type: 'mermaid', content: '' };
-    case 'checklist':
-      return { type: 'checklist', items: [] };
-    case 'shell':
-      return { type: 'shell', command: '', status: 'running' };
-    case 'file':
-      return { type: 'file', name: '', size: 0, mimeType: '' };
-    case 'thinking':
-      return { type: 'thinking' };
-    case 'tool-call':
-      return { type: 'tool-call', toolName: '', toolId: '', args: {}, status: 'pending' };
-    case 'todos':
-      return { type: 'todos', version: 0, updatedAtUnixMs: 0, todos: [] };
-    case 'sources':
-      return { type: 'sources', sources: [] };
-    default:
-      return { type: 'text', content: '' };
-  }
-}
-
-function appendDeltaToBlock(block: MessageBlock | undefined, delta: string): MessageBlock {
-  const nextContent = `${readBlockContent(block)}${delta}`;
-  switch (block?.type) {
-    case 'text':
-      return { ...block, content: nextContent };
-    case 'markdown':
-      return { ...block, content: nextContent };
-    case 'code':
-      return { ...block, content: nextContent };
-    case 'svg':
-      return { ...block, content: nextContent };
-    case 'mermaid':
-      return { ...block, content: nextContent };
-    case 'thinking':
-      return { ...block, content: nextContent };
-    default:
-      return { type: 'text', content: delta };
-  }
-}
-
-function readBlockContent(block: MessageBlock | undefined): string {
-  if (!block) {
-    return '';
-  }
-  switch (block.type) {
-    case 'text':
-    case 'markdown':
-    case 'code':
-    case 'svg':
-    case 'mermaid':
-    case 'thinking':
-      return typeof block.content === 'string' ? block.content : '';
-    default:
-      return '';
-  }
-}
-
-function buildUserBlocks(content: string, attachments: Attachment[]): MessageBlock[] {
-  const blocks: MessageBlock[] = [];
-  for (const att of attachments) {
-    if (att.type === 'image') {
-      blocks.push({ type: 'image', src: att.url || att.preview || '', alt: att.file.name });
-    } else {
-      blocks.push({ type: 'file', name: att.file.name, size: att.file.size, mimeType: att.file.type, url: att.url });
-    }
-  }
-  if (content.trim()) {
-    blocks.push({ type: 'text', content: content.trim() });
-  }
-  return blocks;
-}
