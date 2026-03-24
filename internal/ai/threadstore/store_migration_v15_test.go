@@ -64,8 +64,11 @@ VALUES('q_1', 'env_1', 'th_1', 'ch_1', 'msg_1', 'openai/gpt-5-mini', 'queued fol
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 18 {
-		t.Fatalf("user_version=%d, want 18", version)
+	if version != CurrentSchemaVersion() {
+		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
+	}
+	if tableExistsForTest(t, s.db, "memory_embeddings") {
+		t.Fatalf("memory_embeddings should be removed from the current schema")
 	}
 
 	var indexExists int

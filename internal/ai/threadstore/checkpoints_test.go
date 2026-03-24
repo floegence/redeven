@@ -337,6 +337,34 @@ func TestThreadCheckpoint_RestoreReplacesDerivedAndPreservesUserTranscript(t *te
 		t.Fatalf("spans=%v, want only span_1", spans)
 	}
 
+	toolCalls, err := s.ListRecentThreadToolCalls(ctx, endpointID, threadID, 10)
+	if err != nil {
+		t.Fatalf("ListRecentThreadToolCalls: %v", err)
+	}
+	if len(toolCalls) != 1 || toolCalls[0].RunID != "run_old" || toolCalls[0].ToolID != "tool_old" {
+		t.Fatalf("toolCalls=%v, want only run_old/tool_old", toolCalls)
+	}
+
+	runNewEvents, err := s.ListRunEvents(ctx, endpointID, "run_new", 10)
+	if err != nil {
+		t.Fatalf("ListRunEvents run_new: %v", err)
+	}
+	if len(runNewEvents) != 0 {
+		t.Fatalf("run_new events=%v, want none after restore", runNewEvents)
+	}
+
+	var runCount int
+	if err := s.db.QueryRowContext(ctx, `
+SELECT COUNT(1)
+FROM ai_runs
+WHERE endpoint_id = ? AND thread_id = ?
+`, endpointID, threadID).Scan(&runCount); err != nil {
+		t.Fatalf("count ai_runs: %v", err)
+	}
+	if runCount != 1 {
+		t.Fatalf("ai_runs count=%d, want 1", runCount)
+	}
+
 	latest, err := s.GetLatestThreadCheckpoint(ctx, endpointID, threadID)
 	if err != nil {
 		t.Fatalf("GetLatestThreadCheckpoint: %v", err)

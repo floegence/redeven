@@ -618,13 +618,16 @@ WHERE type = 'table' AND name = ?
 			t.Fatalf("missing migrated table %q", table)
 		}
 	}
+	if tableExistsForTest(t, s.db, "memory_embeddings") {
+		t.Fatalf("memory_embeddings should be removed from the current schema")
+	}
 
 	var version int
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 18 {
-		t.Fatalf("user_version=%d, want 18", version)
+	if version != CurrentSchemaVersion() {
+		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
 	}
 }
 
@@ -711,8 +714,237 @@ WHERE run_id = 'run_legacy'
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 18 {
-		t.Fatalf("user_version=%d, want 18", version)
+	if version != CurrentSchemaVersion() {
+		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
+	}
+}
+
+func TestStore_DeleteThread_CleansThreadScopedPersistence(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	endpointID := "env_delete"
+	threadID := "th_delete"
+
+	if err := s.CreateThread(ctx, Thread{ThreadID: threadID, EndpointID: endpointID, Title: "cleanup"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `
+INSERT INTO ai_messages(
+  thread_id, endpoint_id, message_id, role,
+  author_user_public_id, author_user_email,
+  status, created_at_unix_ms, updated_at_unix_ms,
+  text_content, message_json
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, threadID, endpointID, "legacy_msg_1", "user", "u1", "u1@example.com", "complete", 100, 100, "legacy", `{"id":"legacy_msg_1"}`); err != nil {
+		t.Fatalf("seed ai_messages: %v", err)
+	}
+	if _, err := s.AppendMessage(ctx, endpointID, threadID, Message{
+		ThreadID:           threadID,
+		EndpointID:         endpointID,
+		MessageID:          "msg_1",
+		Role:               "user",
+		AuthorUserPublicID: "u1",
+		AuthorUserEmail:    "u1@example.com",
+		Status:             "complete",
+		CreatedAtUnixMs:    101,
+		UpdatedAtUnixMs:    101,
+		TextContent:        "hello",
+		MessageJSON:        `{"id":"msg_1","role":"user"}`,
+	}, "u1", "u1@example.com"); err != nil {
+		t.Fatalf("AppendMessage: %v", err)
+	}
+	if err := s.AppendConversationTurn(ctx, ConversationTurn{
+		TurnID:             "turn_1",
+		EndpointID:         endpointID,
+		ThreadID:           threadID,
+		RunID:              "run_1",
+		UserMessageID:      "msg_1",
+		AssistantMessageID: "msg_2",
+		CreatedAtUnixMs:    102,
+	}); err != nil {
+		t.Fatalf("AppendConversationTurn: %v", err)
+	}
+	if err := s.ReplaceStructuredUserInputs(ctx, endpointID, threadID, "assistant_wait_1", []StructuredUserInputRecord{{
+		QuestionID:        "q1",
+		QuestionText:      "Need detail",
+		Text:              "more context",
+		ContainsSecret:    false,
+		CreatedAtUnixMs:   103,
+		PublicSummary:     "user provided detail",
+		ResponseMessageID: "assistant_wait_1",
+	}}); err != nil {
+		t.Fatalf("ReplaceStructuredUserInputs: %v", err)
+	}
+	if err := s.ReplaceRequestUserInputSecretAnswers(ctx, endpointID, threadID, "assistant_wait_1", []RequestUserInputSecretAnswerRecord{{
+		QuestionID:      "q_secret",
+		Text:            "secret answer",
+		CreatedAtUnixMs: 104,
+	}}); err != nil {
+		t.Fatalf("ReplaceRequestUserInputSecretAnswers: %v", err)
+	}
+	if err := s.UpsertMemoryItem(ctx, MemoryItemRecord{
+		MemoryID:        "mem_1",
+		EndpointID:      endpointID,
+		ThreadID:        threadID,
+		Scope:           "working",
+		Kind:            "fact",
+		Content:         "keep track",
+		SourceRefsJSON:  "[]",
+		CreatedAtUnixMs: 105,
+		UpdatedAtUnixMs: 105,
+	}); err != nil {
+		t.Fatalf("UpsertMemoryItem: %v", err)
+	}
+	if err := s.InsertContextSnapshot(ctx, ContextSnapshotRecord{
+		SnapshotID:      "snap_1",
+		EndpointID:      endpointID,
+		ThreadID:        threadID,
+		Level:           "thread",
+		SummaryText:     "snapshot",
+		QualityScore:    0.9,
+		CreatedAtUnixMs: 106,
+	}); err != nil {
+		t.Fatalf("InsertContextSnapshot: %v", err)
+	}
+	if err := s.UpsertExecutionSpan(ctx, ExecutionSpanRecord{
+		SpanID:          "span_1",
+		EndpointID:      endpointID,
+		ThreadID:        threadID,
+		RunID:           "run_1",
+		Kind:            "tool",
+		Name:            "terminal.exec",
+		Status:          "success",
+		PayloadJSON:     `{"ok":true}`,
+		StartedAtUnixMs: 107,
+		EndedAtUnixMs:   107,
+		UpdatedAtUnixMs: 107,
+	}); err != nil {
+		t.Fatalf("UpsertExecutionSpan: %v", err)
+	}
+	if err := s.UpsertThreadState(ctx, ThreadState{
+		EndpointID:           endpointID,
+		ThreadID:             threadID,
+		OpenGoal:             "finish cleanup",
+		LastAssistantSummary: "summary",
+		UpdatedAtUnixMs:      108,
+	}); err != nil {
+		t.Fatalf("UpsertThreadState: %v", err)
+	}
+	if _, err := s.ReplaceThreadTodosSnapshot(ctx, ThreadTodosSnapshot{
+		EndpointID:      endpointID,
+		ThreadID:        threadID,
+		TodosJSON:       `[{"id":"todo_1","title":"cleanup","status":"pending"}]`,
+		UpdatedAtUnixMs: 109,
+	}, nil); err != nil {
+		t.Fatalf("ReplaceThreadTodosSnapshot: %v", err)
+	}
+	if _, _, _, err := s.CreateFollowup(ctx, QueuedTurn{
+		QueueID:               "followup_1",
+		EndpointID:            endpointID,
+		ThreadID:              threadID,
+		ChannelID:             "ch_1",
+		MessageID:             "followup_msg_1",
+		ModelID:               "openai/gpt-5-mini",
+		TextContent:           "follow up",
+		CreatedByUserPublicID: "u1",
+		CreatedByUserEmail:    "u1@example.com",
+		CreatedAtUnixMs:       110,
+	}); err != nil {
+		t.Fatalf("CreateFollowup: %v", err)
+	}
+	if err := s.UpsertRun(ctx, RunRecord{
+		RunID:           "run_1",
+		EndpointID:      endpointID,
+		ThreadID:        threadID,
+		State:           "success",
+		StartedAtUnixMs: 111,
+		EndedAtUnixMs:   112,
+		UpdatedAtUnixMs: 112,
+	}); err != nil {
+		t.Fatalf("UpsertRun: %v", err)
+	}
+	if err := s.UpsertToolCall(ctx, ToolCallRecord{
+		RunID:           "run_1",
+		ToolID:          "tool_1",
+		ToolName:        "terminal.exec",
+		Status:          "success",
+		ResultJSON:      `{"stdout":"ok"}`,
+		StartedAtUnixMs: 111,
+		EndedAtUnixMs:   112,
+	}); err != nil {
+		t.Fatalf("UpsertToolCall: %v", err)
+	}
+	if err := s.AppendRunEvent(ctx, RunEventRecord{
+		EndpointID:  endpointID,
+		ThreadID:    threadID,
+		RunID:       "run_1",
+		EventType:   "tool.result",
+		StreamKind:  "tool",
+		PayloadJSON: `{"ok":true}`,
+		AtUnixMs:    113,
+	}); err != nil {
+		t.Fatalf("AppendRunEvent: %v", err)
+	}
+	if _, err := s.CreateThreadCheckpoint(ctx, endpointID, threadID, "cp_1", "run_1", CheckpointKindPreRun); err != nil {
+		t.Fatalf("CreateThreadCheckpoint: %v", err)
+	}
+	if err := s.UpsertProviderCapability(ctx, ProviderCapabilityRecord{
+		ProviderID:      "openai",
+		ModelName:       "gpt-5-mini",
+		CapabilityJSON:  `{"supports_reasoning":true}`,
+		UpdatedAtUnixMs: 114,
+	}); err != nil {
+		t.Fatalf("UpsertProviderCapability: %v", err)
+	}
+
+	if err := s.DeleteThread(ctx, endpointID, threadID); err != nil {
+		t.Fatalf("DeleteThread: %v", err)
+	}
+
+	if th, err := s.GetThread(ctx, endpointID, threadID); err != nil {
+		t.Fatalf("GetThread after delete: %v", err)
+	} else if th != nil {
+		t.Fatalf("thread should be deleted, got %+v", th)
+	}
+
+	threadScopedCounts := map[string]int{
+		"ai_threads":                        countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"ai_messages":                       countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_messages WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"transcript_messages":               countRowsForTest(t, s.db, `SELECT COUNT(1) FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"conversation_turns":                countRowsForTest(t, s.db, `SELECT COUNT(1) FROM conversation_turns WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"structured_user_inputs":            countRowsForTest(t, s.db, `SELECT COUNT(1) FROM structured_user_inputs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"request_user_input_secret_answers": countRowsForTest(t, s.db, `SELECT COUNT(1) FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"memory_items":                      countRowsForTest(t, s.db, `SELECT COUNT(1) FROM memory_items WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"context_snapshots":                 countRowsForTest(t, s.db, `SELECT COUNT(1) FROM context_snapshots WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"execution_spans":                   countRowsForTest(t, s.db, `SELECT COUNT(1) FROM execution_spans WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"ai_thread_state":                   countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_state WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"ai_thread_todos":                   countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_todos WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"ai_queued_turns":                   countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_queued_turns WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"ai_runs":                           countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_runs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"ai_run_events":                     countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_run_events WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"ai_thread_checkpoints":             countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_checkpoints WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"ai_tool_calls": countRowsForTest(t, s.db, `
+SELECT COUNT(1)
+FROM ai_tool_calls tc
+JOIN ai_runs r ON r.run_id = tc.run_id
+WHERE r.endpoint_id = ? AND r.thread_id = ?
+`, endpointID, threadID),
+	}
+	for table, count := range threadScopedCounts {
+		if count != 0 {
+			t.Fatalf("%s rows=%d, want 0", table, count)
+		}
+	}
+	if count := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM provider_capabilities WHERE provider_id = ? AND model_name = ?`, "openai", "gpt-5-mini"); count != 1 {
+		t.Fatalf("provider_capabilities rows=%d, want 1", count)
 	}
 }
 
@@ -1576,4 +1808,24 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 	if len(drafts) != 2 {
 		t.Fatalf("len(drafts)=%d, want 2", len(drafts))
 	}
+}
+
+func countRowsForTest(t *testing.T, db *sql.DB, query string, args ...any) int {
+	t.Helper()
+
+	var count int
+	if err := db.QueryRow(query, args...).Scan(&count); err != nil {
+		t.Fatalf("count rows query failed: %v", err)
+	}
+	return count
+}
+
+func tableExistsForTest(t *testing.T, db *sql.DB, tableName string) bool {
+	t.Helper()
+
+	return countRowsForTest(t, db, `
+SELECT COUNT(1)
+FROM sqlite_master
+WHERE type = 'table' AND name = ?
+`, tableName) == 1
 }
