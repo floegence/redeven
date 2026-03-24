@@ -204,7 +204,7 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-  it('exposes Ask Flower, Open in Terminal, and Browse Files from the workspace card', () => {
+  it('exposes Ask Flower, Terminal, and Files from the workspace card', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const onAskFlower = vi.fn();
@@ -243,8 +243,8 @@ describe('GitChangesPanel interactions', () => {
 
     try {
       const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Ask Flower'));
-      const openInTerminalButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Open in Terminal'));
-      const browseFilesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Browse Files'));
+      const openInTerminalButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Terminal'));
+      const browseFilesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Files'));
 
       expect(askFlowerButton).toBeTruthy();
       expect(openInTerminalButton).toBeTruthy();
