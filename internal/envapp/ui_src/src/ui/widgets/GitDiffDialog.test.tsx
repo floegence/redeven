@@ -110,8 +110,13 @@ describe('GitDiffDialog', () => {
       expect(document.body.textContent).toContain('newMiddle();');
       expect(mockGetFullContextDiff).not.toHaveBeenCalled();
 
-      const fullContextButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.includes('Full Context'));
+      const patchButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Patch');
+      const fullContextButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Full Context');
+      expect(patchButton).toBeTruthy();
       expect(fullContextButton).toBeTruthy();
+      expect(patchButton!.className).toContain('cursor-pointer');
+      expect(fullContextButton!.className).toContain('cursor-pointer');
+      expect(fullContextButton!.className).toContain('disabled:cursor-not-allowed');
       fullContextButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
@@ -128,6 +133,43 @@ describe('GitDiffDialog', () => {
       expect(document.body.textContent).toContain('Includes unchanged lines for broader review context.');
       expect(document.body.textContent).toContain('context-before');
       expect(document.body.textContent).toContain('trailing-line');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps unavailable full-context mode visibly disabled with a non-clickable cursor affordance', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <GitDiffDialog
+            open
+            onOpenChange={() => {}}
+            item={{
+              changeType: 'modified',
+              path: 'src/app.ts',
+              displayPath: 'src/app.ts',
+              patchText: ['@@ -4,1 +4,1 @@', '-oldMiddle();', '+newMiddle();'].join('\n'),
+            }}
+            title="Workspace Diff"
+            emptyMessage="Select a file to inspect its diff."
+          />
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const patchButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Patch');
+      const fullContextButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Full Context') as HTMLButtonElement | undefined;
+      expect(patchButton).toBeTruthy();
+      expect(fullContextButton).toBeTruthy();
+      expect(patchButton!.className).toContain('cursor-pointer');
+      expect(fullContextButton!.className).toContain('cursor-pointer');
+      expect(fullContextButton!.className).toContain('disabled:cursor-not-allowed');
+      expect(fullContextButton!.disabled).toBe(true);
     } finally {
       dispose();
     }

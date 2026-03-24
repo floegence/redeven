@@ -25,6 +25,9 @@ export type GitDiffDialogSource =
 
 type GitDiffDialogMode = 'patch' | 'full-context';
 
+const gitDiffModeButtonClass =
+  'cursor-pointer rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-50';
+
 export interface GitDiffDialogProps<T extends GitPatchRenderable> {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -146,7 +149,7 @@ export function GitDiffDialog<T extends GitPatchRenderable>(props: GitDiffDialog
             <button
               type="button"
               class={cn(
-                'rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
+                gitDiffModeButtonClass,
                 mode() === 'patch' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
               )}
               aria-pressed={mode() === 'patch'}
@@ -157,9 +160,8 @@ export function GitDiffDialog<T extends GitPatchRenderable>(props: GitDiffDialog
             <button
               type="button"
               class={cn(
-                'rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
+                gitDiffModeButtonClass,
                 mode() === 'full-context' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                !canLoadFullContext() && 'cursor-not-allowed opacity-50',
               )}
               aria-pressed={mode() === 'full-context'}
               disabled={!canLoadFullContext()}
