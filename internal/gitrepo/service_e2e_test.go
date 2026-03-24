@@ -113,6 +113,34 @@ func TestE2E_GitRepoRPC_ResolveListDetail(t *testing.T) {
 		t.Fatalf("detail patch text not embedded: %+v", detailResp.Files[0])
 	}
 
+	fullContextPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_FULL_CONTEXT_DIFF, mustMarshalJSON(t, getFullContextDiffReq{
+		RepoRootPath: fixture.Root,
+		SourceKind:   "commit",
+		Commit:       fixture.RenameCommit,
+		File: gitDiffFileRef{
+			ChangeType: "renamed",
+			Path:       "src/main.txt",
+			OldPath:    "src/app.txt",
+			NewPath:    "src/main.txt",
+		},
+	}))
+	if err != nil {
+		t.Fatalf("get full-context diff call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("get full-context diff rpc error: %+v", rpcErr)
+	}
+	var fullContextResp getFullContextDiffResp
+	if err := json.Unmarshal(fullContextPayload, &fullContextResp); err != nil {
+		t.Fatalf("unmarshal full-context diff: %v", err)
+	}
+	if fullContextResp.File.ChangeType != "renamed" || fullContextResp.File.OldPath != "src/app.txt" || fullContextResp.File.NewPath != "src/main.txt" {
+		t.Fatalf("unexpected full-context diff file: %+v", fullContextResp.File)
+	}
+	if !strings.Contains(fullContextResp.File.PatchText, "rename from src/app.txt") || strings.Contains(fullContextResp.File.PatchText, "new file mode") {
+		t.Fatalf("full-context rename diff should preserve rename metadata: %+v", fullContextResp.File)
+	}
+
 	cancel()
 	_ = clientConn.Close()
 	select {

@@ -187,6 +187,98 @@ func TestGetCommitDetail_RenameAndBinary(t *testing.T) {
 	}
 }
 
+func TestGetFullContextDiff_CommitRenamePreservesRenameMetadata(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp, err := svc.getFullContextDiff(context.Background(), repo, getFullContextDiffReq{
+		RepoRootPath: fixture.Root,
+		SourceKind:   "commit",
+		Commit:       fixture.RenameCommit,
+		File: gitDiffFileRef{
+			ChangeType: "renamed",
+			Path:       "src/main.txt",
+			OldPath:    "src/app.txt",
+			NewPath:    "src/main.txt",
+		},
+	})
+	if err != nil {
+		t.Fatalf("getFullContextDiff(rename): %v", err)
+	}
+	if resp.File.ChangeType != "renamed" || resp.File.OldPath != "src/app.txt" || resp.File.NewPath != "src/main.txt" {
+		t.Fatalf("unexpected rename summary: %+v", resp.File)
+	}
+	if !strings.Contains(resp.File.PatchText, "rename from src/app.txt") || !strings.Contains(resp.File.PatchText, "rename to src/main.txt") {
+		t.Fatalf("rename metadata missing from full-context diff: %+v", resp.File)
+	}
+	if strings.Contains(resp.File.PatchText, "new file mode") {
+		t.Fatalf("rename diff should not degrade into an added file view: %+v", resp.File)
+	}
+}
+
+func TestGetFullContextDiff_WorkspaceUnstagedIncludesFullFileContext(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	writeFixtureFile(t, fixture.Root, "src/context.txt", []byte(strings.Join([]string{
+		"line-1",
+		"line-2",
+		"line-3",
+		"line-4",
+		"line-5",
+		"line-6",
+		"line-7",
+		"line-8",
+		"",
+	}, "\n")))
+	runGitFixture(t, fixture.Root, "add", "src/context.txt")
+	runGitFixture(t, fixture.Root, "commit", "-m", "add full context fixture")
+	writeFixtureFile(t, fixture.Root, "src/context.txt", []byte(strings.Join([]string{
+		"line-1",
+		"line-2",
+		"line-3",
+		"line-4 updated",
+		"line-5",
+		"line-6",
+		"line-7",
+		"line-8",
+		"",
+	}, "\n")))
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp, err := svc.getFullContextDiff(context.Background(), repo, getFullContextDiffReq{
+		RepoRootPath:     fixture.Root,
+		SourceKind:       "workspace",
+		WorkspaceSection: "unstaged",
+		File: gitDiffFileRef{
+			ChangeType: "modified",
+			Path:       "src/context.txt",
+			NewPath:    "src/context.txt",
+		},
+	})
+	if err != nil {
+		t.Fatalf("getFullContextDiff(unstaged): %v", err)
+	}
+	if !strings.Contains(resp.File.PatchText, "@@ -1,8 +1,8 @@") {
+		t.Fatalf("full-context patch should expand to the whole file hunk: %+v", resp.File)
+	}
+	if !strings.Contains(resp.File.PatchText, " line-8") {
+		t.Fatalf("full-context patch should include trailing unchanged lines outside the compact patch window: %+v", resp.File)
+	}
+	if !strings.Contains(resp.File.PatchText, "+line-4 updated") {
+		t.Fatalf("updated line missing from full-context patch: %+v", resp.File)
+	}
+}
+
 func TestListWorkspaceChanges_EmbedsPatchText(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)

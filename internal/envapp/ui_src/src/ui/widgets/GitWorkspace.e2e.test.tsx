@@ -42,45 +42,47 @@ describe('GitWorkspace interactions', () => {
 
     const dispose = render(() => (
       <LayoutProvider>
-        <div class="h-[620px]">
-          <GitWorkspace
-            mode="git"
-            onModeChange={(mode) => {
-              nextMode = mode;
-            }}
-            subview="changes"
-            onSubviewChange={(view) => {
-              nextSubview = view;
-            }}
-            width={280}
-            open
-            currentPath="/workspace/repo/src"
-            repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
-            repoSummary={{
-              repoRootPath: '/workspace/repo',
-              headRef: 'main',
-              headCommit: 'abc1234',
-              aheadCount: 1,
-              behindCount: 0,
-              workspaceSummary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-            }}
-            workspace={{
-              repoRootPath: '/workspace/repo',
-              summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-              staged: [],
-              unstaged: [],
-              untracked: [],
-              conflicted: [],
-            }}
-            branches={{
-              repoRootPath: '/workspace/repo',
-              currentRef: 'main',
-              local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
-              remote: [],
-            }}
-            commits={[]}
-          />
-        </div>
+        <ProtocolProvider contract={redevenV1Contract}>
+          <div class="h-[620px]">
+            <GitWorkspace
+              mode="git"
+              onModeChange={(mode) => {
+                nextMode = mode;
+              }}
+              subview="changes"
+              onSubviewChange={(view) => {
+                nextSubview = view;
+              }}
+              width={280}
+              open
+              currentPath="/workspace/repo/src"
+              repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
+              repoSummary={{
+                repoRootPath: '/workspace/repo',
+                headRef: 'main',
+                headCommit: 'abc1234',
+                aheadCount: 1,
+                behindCount: 0,
+                workspaceSummary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+              }}
+              workspace={{
+                repoRootPath: '/workspace/repo',
+                summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                staged: [],
+                unstaged: [],
+                untracked: [],
+                conflicted: [],
+              }}
+              branches={{
+                repoRootPath: '/workspace/repo',
+                currentRef: 'main',
+                local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
+                remote: [],
+              }}
+              commits={[]}
+            />
+          </div>
+        </ProtocolProvider>
       </LayoutProvider>
     ), host);
 
@@ -115,41 +117,43 @@ describe('GitWorkspace interactions', () => {
 
     const dispose = render(() => (
       <LayoutProvider>
-        <div class="h-[620px]">
-          <GitWorkspace
-            mode="git"
-            onModeChange={() => {}}
-            subview="changes"
-            onSubviewChange={() => {}}
-            width={280}
-            open={false}
-            currentPath="/workspace/repo/src"
-            repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
-            repoSummary={{
-              repoRootPath: '/workspace/repo',
-              headRef: 'main',
-              headCommit: 'abc1234',
-              aheadCount: 1,
-              behindCount: 0,
-              workspaceSummary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-            }}
-            workspace={{
-              repoRootPath: '/workspace/repo',
-              summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-              staged: [],
-              unstaged: [],
-              untracked: [],
-              conflicted: [],
-            }}
-            branches={{
-              repoRootPath: '/workspace/repo',
-              currentRef: 'main',
-              local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
-              remote: [],
-            }}
-            commits={[]}
-          />
-        </div>
+        <ProtocolProvider contract={redevenV1Contract}>
+          <div class="h-[620px]">
+            <GitWorkspace
+              mode="git"
+              onModeChange={() => {}}
+              subview="changes"
+              onSubviewChange={() => {}}
+              width={280}
+              open={false}
+              currentPath="/workspace/repo/src"
+              repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
+              repoSummary={{
+                repoRootPath: '/workspace/repo',
+                headRef: 'main',
+                headCommit: 'abc1234',
+                aheadCount: 1,
+                behindCount: 0,
+                workspaceSummary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+              }}
+              workspace={{
+                repoRootPath: '/workspace/repo',
+                summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                staged: [],
+                unstaged: [],
+                untracked: [],
+                conflicted: [],
+              }}
+              branches={{
+                repoRootPath: '/workspace/repo',
+                currentRef: 'main',
+                local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
+                remote: [],
+              }}
+              commits={[]}
+            />
+          </div>
+        </ProtocolProvider>
       </LayoutProvider>
     ), host);
 
@@ -232,45 +236,47 @@ describe('GitWorkspace interactions', () => {
 
     const dispose = render(() => (
       <LayoutProvider>
-        <div class="h-[620px]">
-          <GitWorkspace
-            mode="git"
-            onModeChange={() => {}}
-            subview="changes"
-            onSubviewChange={() => {}}
-            width={280}
-            open={false}
-            showMobileSidebarButton
-            onToggleSidebar={() => {
-              toggleSidebarCount += 1;
-            }}
-            currentPath="/workspace/repo/src"
-            repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
-            repoSummary={{
-              repoRootPath: '/workspace/repo',
-              headRef: 'main',
-              headCommit: 'abc1234',
-              aheadCount: 1,
-              behindCount: 0,
-              workspaceSummary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-            }}
-            workspace={{
-              repoRootPath: '/workspace/repo',
-              summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-              staged: [],
-              unstaged: [],
-              untracked: [],
-              conflicted: [],
-            }}
-            branches={{
-              repoRootPath: '/workspace/repo',
-              currentRef: 'main',
-              local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
-              remote: [],
-            }}
-            commits={[]}
-          />
-        </div>
+        <ProtocolProvider contract={redevenV1Contract}>
+          <div class="h-[620px]">
+            <GitWorkspace
+              mode="git"
+              onModeChange={() => {}}
+              subview="changes"
+              onSubviewChange={() => {}}
+              width={280}
+              open={false}
+              showMobileSidebarButton
+              onToggleSidebar={() => {
+                toggleSidebarCount += 1;
+              }}
+              currentPath="/workspace/repo/src"
+              repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
+              repoSummary={{
+                repoRootPath: '/workspace/repo',
+                headRef: 'main',
+                headCommit: 'abc1234',
+                aheadCount: 1,
+                behindCount: 0,
+                workspaceSummary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+              }}
+              workspace={{
+                repoRootPath: '/workspace/repo',
+                summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                staged: [],
+                unstaged: [],
+                untracked: [],
+                conflicted: [],
+              }}
+              branches={{
+                repoRootPath: '/workspace/repo',
+                currentRef: 'main',
+                local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
+                remote: [],
+              }}
+              commits={[]}
+            />
+          </div>
+        </ProtocolProvider>
       </LayoutProvider>
     ), host);
 
