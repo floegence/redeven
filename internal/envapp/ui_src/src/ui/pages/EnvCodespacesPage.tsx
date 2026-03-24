@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createResource, createSignal, onCleanup } from "solid-js";
 import { cn, useNotification } from "@floegence/floe-webapp-core";
-import { Sparkles } from "@floegence/floe-webapp-core/icons";
+import { Sparkles, Terminal } from "@floegence/floe-webapp-core/icons";
 import type { FileItem } from "@floegence/floe-webapp-core/file-browser";
 import { Panel, PanelContent } from "@floegence/floe-webapp-core/layout";
 import { LoadingOverlay, SnakeLoader } from "@floegence/floe-webapp-core/loading";
@@ -28,6 +28,7 @@ import { appendLocalAccessResumeQuery } from "../services/localAccessAuth";
 import { trustedLauncherOriginFromSandboxLocation } from "../services/sandboxOrigins";
 import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
 import { buildFilePathAskFlowerIntent } from "../utils/filePathAskFlower";
+import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../utils/openDirectoryInTerminal";
 import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPickerTreeAbsolutePath } from "../utils/directoryPickerTree";
 
 type SpaceStatus = Readonly<{
@@ -84,7 +85,7 @@ function clampCodespaceContextMenuPosition(x: number, y: number): { x: number; y
 
   const margin = 8;
   const menuWidth = 180;
-  const menuHeight = 48;
+  const menuHeight = 84;
   const maxX = Math.max(margin, window.innerWidth - menuWidth - margin);
   const maxY = Math.max(margin, window.innerHeight - menuHeight - margin);
 
@@ -737,6 +738,26 @@ export function EnvCodespacesPage() {
     env.openAskFlowerComposer(result.intent, anchor);
   };
 
+  const canOpenCodespaceInTerminal = (space: SpaceStatus): boolean => (
+    Boolean(env.env()?.permissions?.can_execute)
+    && canOpenDirectoryPathInTerminal(space.workspace_path)
+  );
+
+  const handleOpenCodespaceInTerminal = () => {
+    const menu = codespaceContextMenu();
+    if (!menu) return;
+
+    setCodespaceContextMenu(null);
+    openDirectoryInTerminal({
+      path: menu.space.workspace_path,
+      preferredName: menu.space.name || menu.space.code_space_id,
+      openTerminalInDirectory: env.openTerminalInDirectory,
+      onInvalidDirectory: () => {
+        notification.error("Invalid directory", "Could not resolve a terminal working directory.");
+      },
+    });
+  };
+
   const spaceList = () => spaces() ?? [];
   const sortedSpaces = () => {
     return [...spaceList()].sort((a, b) => {
@@ -862,6 +883,16 @@ export function EnvCodespacesPage() {
             style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
             onContextMenu={(event) => event.preventDefault()}
           >
+            <Show when={canOpenCodespaceInTerminal(menu.space)}>
+              <button
+                type="button"
+                class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
+                onClick={handleOpenCodespaceInTerminal}
+              >
+                <Terminal class="w-3.5 h-3.5 opacity-60" />
+                <span class="flex-1 text-left">Open in Terminal</span>
+              </button>
+            </Show>
             <button
               type="button"
               class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
