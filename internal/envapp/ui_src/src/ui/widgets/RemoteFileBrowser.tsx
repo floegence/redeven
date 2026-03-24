@@ -2344,7 +2344,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       type: 'duplicate',
       icon: (props) => <Copy class={props.class} />,
       shortcut: 'Cmd+D',
-      separator: true,
     },
     {
       id: 'copy-name',
@@ -2384,7 +2383,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const resolveOverrideContextMenuItems = (items: FileItem[]): ContextMenuItem[] => {
     if (!canOpenDirectoryInTerminal(items)) {
       return [
-        ...priorityOverrideContextMenuItems,
+        {
+          ...priorityOverrideContextMenuItems[0],
+          separator: true,
+        },
         ...secondaryOverrideContextMenuItems,
       ];
     }
@@ -2396,6 +2398,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         label: 'Open in Terminal',
         type: 'custom',
         icon: (props) => <Terminal class={props.class} />,
+        separator: true,
         onAction: (selectedItems: FileItem[]) => {
           handleOpenInTerminal(selectedItems);
         },
