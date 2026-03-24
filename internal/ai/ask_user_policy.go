@@ -14,9 +14,10 @@ const (
 	AskUserReasonConflictingWork      = "conflicting_constraints"
 	AskUserReasonSafetyConfirmation   = "safety_confirmation"
 
-	askUserPolicyClassifierMarker = "ASK_USER_POLICY_CLASSIFIER_V1"
-	askUserPolicySourceModel      = "model"
-	askUserPolicySourceFallback   = "deterministic_fallback"
+	askUserPolicyClassifierMarker                = "ASK_USER_POLICY_CLASSIFIER_V1"
+	askUserPolicySourceModel                     = "model"
+	askUserPolicySourceFallback                  = "deterministic_fallback"
+	askUserPolicyReasonInteractionShapeViolation = "violates_requested_interaction_shape"
 )
 
 type askUserSignal struct {
@@ -46,6 +47,18 @@ func normalizeAskUserSignal(signal askUserSignal) askUserSignal {
 		normalized.Question = strings.TrimSpace(normalized.Questions[0].Question)
 	}
 	return normalized
+}
+
+func enforcedAskUserPolicyReason(decision askUserPolicyDecision) (string, bool) {
+	if decision.Allow || strings.TrimSpace(decision.Source) != askUserPolicySourceModel {
+		return "", false
+	}
+	switch strings.TrimSpace(decision.Reason) {
+	case askUserPolicyReasonInteractionShapeViolation:
+		return askUserGateReasonInteractionShapeMismatch, true
+	default:
+		return "", false
+	}
 }
 
 func normalizeAskUserReasonCode(raw string) string {
@@ -129,6 +142,7 @@ func buildAskUserPolicyClassifierMessages(objective string, signal askUserSignal
 		"confidence must be a float between 0 and 1.",
 		"Reject (allow=false) if the ask_user request delegates collectable work to the user that available tools can do directly.",
 		"Collectable work includes running commands, gathering logs/output/screenshots/files, and fetching web content when tools can do it.",
+		"Reject (allow=false) with reason=violates_requested_interaction_shape if the structured ask_user payload violates explicit interaction-shape constraints from the user's request or objective, such as fixed options, clickable choices, one-question-at-a-time, or indirect/non-leading questioning.",
 		"Allow (allow=true) for true external blockers: user decisions, unavailable credentials, policy approvals, conflicting constraints, or safety confirmations.",
 		"Allow (allow=true) for guided structured interaction turns when the assistant intentionally needs the user's next constrained answer to continue, such as questionnaires, interviews, quizzes, guessing games, decision trees, and option-driven conversations.",
 		"Structured interaction turns are allowed only when the user's next answer materially determines the next step; they are not a license to delegate solvable work.",

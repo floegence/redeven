@@ -334,13 +334,14 @@ func askUserToolInputSchema() map[string]any {
 	questionBase := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
-			"id":                map[string]any{"type": "string", "maxLength": 80},
-			"header":            map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
-			"question":          map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
-			"is_secret":         map[string]any{"type": "boolean"},
-			"response_mode":     map[string]any{"type": "string", "enum": []string{"select", "write", "select_or_write"}},
-			"write_label":       map[string]any{"type": "string", "maxLength": 200, "description": "For select_or_write, this is the standardized typed fallback label such as None of the above. For write, it can label the direct input."},
-			"write_placeholder": map[string]any{"type": "string", "maxLength": 160},
+			"id":                 map[string]any{"type": "string", "maxLength": 80},
+			"header":             map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
+			"question":           map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
+			"is_secret":          map[string]any{"type": "boolean"},
+			"response_mode":      map[string]any{"type": "string", "enum": []string{"select", "write", "select_or_write"}},
+			"choices_exhaustive": map[string]any{"type": "boolean", "description": "For choice-based questions, true means the fixed choices are genuinely exhaustive; false means the user may need a typed fallback beyond the listed choices."},
+			"write_label":        map[string]any{"type": "string", "maxLength": 200, "description": "For select_or_write, this is the standardized typed fallback label such as None of the above. For write, it can label the direct input."},
+			"write_placeholder":  map[string]any{"type": "string", "maxLength": 160},
 			"choices": map[string]any{
 				"type":     "array",
 				"maxItems": 4,
@@ -386,10 +387,11 @@ func askUserToolInputSchema() map[string]any {
 							"oneOf": []any{
 								map[string]any{
 									"properties": map[string]any{
-										"response_mode": map[string]any{"const": "select"},
-										"choices":       map[string]any{"type": "array", "minItems": 1, "maxItems": 4},
+										"response_mode":      map[string]any{"const": "select"},
+										"choices_exhaustive": map[string]any{"const": true},
+										"choices":            map[string]any{"type": "array", "minItems": 1, "maxItems": 4},
 									},
-									"required": []string{"choices"},
+									"required": []string{"choices", "choices_exhaustive"},
 								},
 								map[string]any{
 									"properties": map[string]any{
@@ -398,10 +400,11 @@ func askUserToolInputSchema() map[string]any {
 								},
 								map[string]any{
 									"properties": map[string]any{
-										"response_mode": map[string]any{"const": "select_or_write"},
-										"choices":       map[string]any{"type": "array", "minItems": 1, "maxItems": 4},
+										"response_mode":      map[string]any{"const": "select_or_write"},
+										"choices_exhaustive": map[string]any{"const": false},
+										"choices":            map[string]any{"type": "array", "minItems": 1, "maxItems": 4},
 									},
-									"required": []string{"choices"},
+									"required": []string{"choices", "choices_exhaustive"},
 								},
 							},
 						},
@@ -508,7 +511,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "ask_user",
-			Description:  "Ask user for required structured input when the next step depends on a user decision, external input, approval, or a guided interaction turn. Each question must declare response_mode: use select for fixed choices, write for direct free text, and select_or_write for fixed choices plus a standardized typed fallback such as None of the above. choices[] should contain fixed options only. Do not use it to delegate tool-collectable work. Include reason_code, required_from_user, and evidence_refs for explainable policy checks.",
+			Description:  "Ask user for required structured input when the next step depends on a user decision, external input, approval, or a guided interaction turn. Preserve explicit interaction-shape constraints from the user, such as asking for fixed options, clickable choices, one-question-at-a-time, or indirect questioning. Each question must declare response_mode. Choice-based questions must also declare choices_exhaustive: use select only when choices_exhaustive=true, write for direct free text, and select_or_write when choices_exhaustive=false so the UI keeps a standardized typed fallback such as None of the above. If the user asks for answer choices, do not downgrade the question into pure write mode. choices[] should contain fixed options only. Do not use it to delegate tool-collectable work. Include reason_code, required_from_user, and evidence_refs for explainable policy checks.",
 			InputSchema:  toSchema(askUserToolInputSchema()),
 			ParallelSafe: true,
 			Mutating:     false,

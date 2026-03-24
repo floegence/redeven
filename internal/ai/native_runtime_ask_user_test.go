@@ -102,16 +102,17 @@ func TestEvaluateAskUserGate(t *testing.T) {
 		ReasonCode:       AskUserReasonUserDecisionRequired,
 		RequiredFromUser: []string{"Pick canary-first or full rollout."},
 	}
-	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); !pass || reason != "ok" {
-		t.Fatalf("legacy fixed choices default to select => pass=%v reason=%q", pass, reason)
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonMissingChoicesExhaustive {
+		t.Fatalf("fixed choices without choices_exhaustive => pass=%v reason=%q", pass, reason)
 	}
 
 	signal = askUserSignal{
 		Questions: []RequestUserInputQuestion{{
-			ID:           "question_1",
-			Header:       "Direction",
-			Question:     "Pick a direction.",
-			ResponseMode: requestUserInputResponseModeSelect,
+			ID:                "question_1",
+			Header:            "Direction",
+			Question:          "Pick a direction.",
+			ResponseMode:      requestUserInputResponseModeSelect,
+			ChoicesExhaustive: testBoolPtr(true),
 			Choices: []RequestUserInputChoice{{
 				ChoiceID: "canary",
 				Label:    "Canary first",
@@ -131,12 +132,13 @@ func TestEvaluateAskUserGate(t *testing.T) {
 
 	signal = askUserSignal{
 		Questions: []RequestUserInputQuestion{{
-			ID:               "question_1",
-			Header:           "Direction",
-			Question:         "Pick a direction.",
-			ResponseMode:     requestUserInputResponseModeSelectText,
-			WriteLabel:       "None of the above",
-			WritePlaceholder: "Describe the custom path",
+			ID:                "question_1",
+			Header:            "Direction",
+			Question:          "Pick a direction.",
+			ResponseMode:      requestUserInputResponseModeSelectText,
+			ChoicesExhaustive: testBoolPtr(false),
+			WriteLabel:        "None of the above",
+			WritePlaceholder:  "Describe the custom path",
 			Choices: []RequestUserInputChoice{{
 				ChoiceID: "canary",
 				Label:    "Canary first",
@@ -152,6 +154,46 @@ func TestEvaluateAskUserGate(t *testing.T) {
 	}
 	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); !pass || reason != "ok" {
 		t.Fatalf("explicit select_or_write response mode => pass=%v reason=%q", pass, reason)
+	}
+
+	signal = askUserSignal{
+		Questions: []RequestUserInputQuestion{{
+			ID:                "question_1",
+			Header:            "Direction",
+			Question:          "Pick a direction.",
+			ResponseMode:      requestUserInputResponseModeSelect,
+			ChoicesExhaustive: testBoolPtr(false),
+			Choices: []RequestUserInputChoice{{
+				ChoiceID: "canary",
+				Label:    "Canary first",
+				Kind:     requestUserInputChoiceKindSelect,
+			}},
+		}},
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Pick canary-first or full rollout."},
+	}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonInconsistentChoiceContract {
+		t.Fatalf("select with non-exhaustive choices => pass=%v reason=%q", pass, reason)
+	}
+
+	signal = askUserSignal{
+		Questions: []RequestUserInputQuestion{{
+			ID:                "question_1",
+			Header:            "Direction",
+			Question:          "Pick a direction.",
+			ResponseMode:      requestUserInputResponseModeSelectText,
+			ChoicesExhaustive: testBoolPtr(true),
+			Choices: []RequestUserInputChoice{{
+				ChoiceID: "canary",
+				Label:    "Canary first",
+				Kind:     requestUserInputChoiceKindSelect,
+			}},
+		}},
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Pick canary-first or full rollout."},
+	}
+	if pass, reason := evaluateAskUserGate(signal, runtimeState{}, TaskComplexityStandard); pass || reason != askUserGateReasonInconsistentChoiceContract {
+		t.Fatalf("select_or_write with exhaustive choices => pass=%v reason=%q", pass, reason)
 	}
 
 	signal = askUserSignal{
@@ -277,6 +319,9 @@ func TestBuildLayeredSystemPrompt_AskUserCoversStructuredInteractionTurns(t *tes
 	if !strings.Contains(prompt, "do NOT first emit a separate markdown questionnaire") {
 		t.Fatalf("prompt missing no-duplicate-markdown-before-ask_user rule: %q", prompt)
 	}
+	if !strings.Contains(prompt, "Preserve explicit interaction-shape constraints from the user") {
+		t.Fatalf("prompt missing interaction-shape preservation rule: %q", prompt)
+	}
 	if !strings.Contains(prompt, "preserve that constraint in both `question` and `choices[]`") {
 		t.Fatalf("prompt missing indirect-interaction preservation rule: %q", prompt)
 	}
@@ -286,8 +331,17 @@ func TestBuildLayeredSystemPrompt_AskUserCoversStructuredInteractionTurns(t *tes
 	if !strings.Contains(prompt, "every question must include id, header, question, is_secret, and response_mode") {
 		t.Fatalf("prompt missing response_mode contract: %q", prompt)
 	}
-	if !strings.Contains(prompt, "Use `response_mode:\"select\"` for fixed-choice questions") {
-		t.Fatalf("prompt missing response_mode semantics: %q", prompt)
+	if !strings.Contains(prompt, "Any question with fixed choices MUST also declare `choices_exhaustive`") {
+		t.Fatalf("prompt missing choices_exhaustive contract: %q", prompt)
+	}
+	if !strings.Contains(prompt, "Use `response_mode:\"select\"` only when fixed choices are genuinely exhaustive by construction") {
+		t.Fatalf("prompt missing exhaustive select semantics: %q", prompt)
+	}
+	if !strings.Contains(prompt, "Use `response_mode:\"select_or_write\"` when fixed choices are not exhaustive") {
+		t.Fatalf("prompt missing non-exhaustive select_or_write semantics: %q", prompt)
+	}
+	if !strings.Contains(prompt, "If the user explicitly asks for answer choices, fixed options, buttons, or clickable options, do NOT downgrade the question into pure `response_mode:\"write\"`") {
+		t.Fatalf("prompt missing no-downgrade-to-write rule: %q", prompt)
 	}
 	if !strings.Contains(prompt, "`choices[]` contains fixed options only") {
 		t.Fatalf("prompt missing fixed-choice-only rule: %q", prompt)
@@ -295,7 +349,7 @@ func TestBuildLayeredSystemPrompt_AskUserCoversStructuredInteractionTurns(t *tes
 	if !strings.Contains(prompt, `None of the above: ___`) {
 		t.Fatalf("prompt missing standardized typed fallback guidance: %q", prompt)
 	}
-	if !strings.Contains(prompt, "If the user explicitly asks for an `Other` or `None of the above` path, you MUST represent it via `response_mode:\"select_or_write\"`") {
+	if !strings.Contains(prompt, "If the user explicitly asks for an `Other` or `None of the above` path, you MUST represent it via `response_mode:\"select_or_write\"` with `choices_exhaustive:false`") {
 		t.Fatalf("prompt missing explicit requested fallback rule: %q", prompt)
 	}
 	if !strings.Contains(prompt, "Do NOT use ask_user to delegate commands, file inspection, log gathering, screenshots, or web research") {

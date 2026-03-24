@@ -120,10 +120,14 @@ Behavior summary:
 - Execution mode is a thread-level server state (`execution_mode`) and is authoritative for every run.
 - If edits are needed in `plan`, Flower should use `ask_user` to request switching the thread to `act`.
 - The mode-switch `ask_user` must use structured `questions[]`, and deterministic UI actions belong on `questions[].choices[].actions` (for example `[{type:"set_mode",mode:"act"}]`).
-- Every `ask_user` question should use the canonical question-level response contract. Each question declares `response_mode`, and `choices[]` contains fixed options only.
+- Every `ask_user` question should use the canonical question-level response contract. Each question declares `response_mode`, `choices[]` contains fixed options only, and any choice-based question must also declare `choices_exhaustive`.
 - `ask_user` is the canonical structured-input primitive both for true blockers and for guided structured interaction turns such as questionnaires, interviews, quizzes, guessing games, decision trees, and other option-driven conversations.
-- Use `response_mode:"select"` for fixed-choice questions, `response_mode:"write"` for direct-input questions, and `response_mode:"select_or_write"` for fixed choices plus a standardized typed fallback such as `None of the above: ___`.
-- When Flower offers fixed options about a user's real-world state, preferences, habits, background, or other non-exhaustive situations, it should prefer `response_mode:"select_or_write"` instead of pretending the list is exhaustive.
+- Flower should preserve explicit interaction-shape constraints from the user, such as fixed options, clickable choices, one-question-at-a-time, or indirect questioning.
+- Use `response_mode:"select"` only when fixed choices are genuinely exhaustive by construction and `choices_exhaustive:true`.
+- Use `response_mode:"select_or_write"` when fixed choices are not exhaustive and `choices_exhaustive:false`, so the UI preserves a standardized typed fallback such as `None of the above: ___`.
+- Use `response_mode:"write"` for direct-input questions with no fixed choices.
+- If the user explicitly asks for answer choices or clickable options, Flower should not silently downgrade the turn into a pure `response_mode:"write"` question.
+- When Flower offers fixed options about a user's real-world state, preferences, habits, background, or other non-exhaustive situations, it should treat the set as non-exhaustive by default and use `response_mode:"select_or_write"` with `choices_exhaustive:false` instead of pretending the list is exhaustive.
 - Use `write_label` and optional `write_placeholder` to control the standardized typed fallback wording when `response_mode:"select_or_write"` is used.
 - A `response_mode:"write"` or `response_mode:"select_or_write"` path is incomplete until the user provides its text payload.
 - If a turn is going to end in `waiting_user` via `ask_user`, Flower should put the user-facing question inside the structured `ask_user` payload rather than first emitting a duplicated standalone markdown questionnaire or option list.
