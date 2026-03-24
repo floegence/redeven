@@ -123,22 +123,9 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			req = &terminalCreateReq{}
 		}
 
-		cols := req.Cols
-		rows := req.Rows
-		if cols <= 0 || rows <= 0 {
-			return nil, &rpc.Error{Code: 400, Message: "cols and rows are required"}
-		}
-
-		workingDirAbs, err := m.resolveWorkingDir(req.WorkingDir)
+		sess, err := m.createSession(strings.TrimSpace(req.Name), strings.TrimSpace(req.WorkingDir))
 		if err != nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid working_dir"}
-		}
-
-		name := strings.TrimSpace(req.Name)
-		sess, err := m.term.CreateSession(name, workingDirAbs, cols, rows)
-		if err != nil {
-			m.log.Warn("terminal create failed", "error", err)
-			return nil, &rpc.Error{Code: 500, Message: "failed to create terminal session"}
+			return nil, err
 		}
 
 		return &terminalCreateResp{Session: toWireSessionInfo(sess.ToSessionInfo())}, nil
@@ -185,13 +172,9 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, &rpc.Error{Code: 400, Message: "cols and rows are required"}
 		}
 
-		sess, ok := m.term.GetSession(sessionID)
-		if !ok || sess == nil {
-			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
+		if err := m.attachSession(sessionID, connID, req.Cols, req.Rows, streamServer); err != nil {
+			return nil, err
 		}
-
-		m.attachSink(sessionID, connID, streamServer)
-		sess.AddConnection(connID, req.Cols, req.Rows)
 
 		return &terminalAttachResp{OK: true}, nil
 	})
@@ -464,6 +447,29 @@ func (m *Manager) attachSink(sessionID string, connID string, sink *rpc.Server) 
 	servers[sink] = connID
 }
 
+func (m *Manager) detachSessionSink(sessionID string, sink *rpc.Server) {
+	if m == nil || sink == nil || sessionID == "" {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if sessions := m.byServer[sink]; sessions != nil {
+		delete(sessions, sessionID)
+		if len(sessions) == 0 {
+			delete(m.byServer, sink)
+		}
+	}
+
+	if servers := m.bySession[sessionID]; servers != nil {
+		delete(servers, sink)
+		if len(servers) == 0 {
+			delete(m.bySession, sessionID)
+		}
+	}
+}
+
 func (m *Manager) broadcast(sessionID string, payload json.RawMessage) {
 	if m == nil || sessionID == "" || len(payload) == 0 {
 		return
@@ -592,6 +598,66 @@ func (m *Manager) write(sessionID string, connID string, dataB64 string) error {
 	return nil
 }
 
+func (m *Manager) createSession(name string, workingDir string) (*termgo.Session, error) {
+	if m == nil {
+		return nil, &rpc.Error{Code: 500, Message: "internal error"}
+	}
+
+	workingDirAbs, err := m.resolveWorkingDir(workingDir)
+	if err != nil {
+		return nil, &rpc.Error{Code: 400, Message: "invalid working_dir"}
+	}
+
+	sess, err := m.term.CreateSession(name, workingDirAbs)
+	if err != nil {
+		m.log.Warn("terminal create failed", "error", err)
+		return nil, &rpc.Error{Code: 500, Message: "failed to create terminal session"}
+	}
+	return sess, nil
+}
+
+func (m *Manager) attachSession(sessionID string, connID string, cols int, rows int, streamServer *rpc.Server) error {
+	if m == nil {
+		return &rpc.Error{Code: 500, Message: "internal error"}
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	connID = strings.TrimSpace(connID)
+	if sessionID == "" {
+		return &rpc.Error{Code: 400, Message: "session_id is required"}
+	}
+	if connID == "" {
+		return &rpc.Error{Code: 400, Message: "conn_id is required"}
+	}
+	if cols <= 0 || rows <= 0 {
+		return &rpc.Error{Code: 400, Message: "cols and rows are required"}
+	}
+
+	sess, ok := m.term.GetSession(sessionID)
+	if !ok || sess == nil {
+		return &rpc.Error{Code: 404, Message: "terminal session not found"}
+	}
+
+	if streamServer != nil {
+		m.attachSink(sessionID, connID, streamServer)
+	}
+
+	sess.AddConnection(connID, cols, rows)
+	if sess.IsActive() {
+		return nil
+	}
+
+	if err := m.term.ActivateSession(sessionID, cols, rows); err != nil {
+		sess.RemoveConnection(connID)
+		if streamServer != nil {
+			m.detachSessionSink(sessionID, streamServer)
+		}
+		m.log.Warn("terminal attach activation failed", "session_id", sessionID, "conn_id", connID, "error", err)
+		return &rpc.Error{Code: 500, Message: "failed to attach terminal session"}
+	}
+
+	return nil
+}
+
 func (m *Manager) resize(sessionID string, connID string, cols int, rows int) error {
 	if m == nil {
 		return &rpc.Error{Code: 500, Message: "internal error"}
@@ -713,8 +779,6 @@ func toWireSessionInfo(info termgo.TerminalSessionInfo) *terminalSessionInfo {
 type terminalCreateReq struct {
 	Name       string `json:"name,omitempty"`
 	WorkingDir string `json:"working_dir,omitempty"`
-	Cols       int    `json:"cols"`
-	Rows       int    `json:"rows"`
 }
 
 type terminalCreateResp struct {

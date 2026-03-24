@@ -103,12 +103,10 @@ export function createRedevenTerminalTransport(rpc: RedevenV1Rpc, connId: string
       const sessions: TerminalSessionInfo[] = Array.isArray(resp?.sessions) ? resp.sessions : [];
       return sessions;
     },
-    createSession: async (name, workingDir, cols, rows) => {
+    createSession: async (name, workingDir) => {
       const resp = await rpc.terminal.createSession({
         name: name?.trim() ? name.trim() : undefined,
         workingDir: workingDir?.trim() ? workingDir.trim() : undefined,
-        cols: typeof cols === 'number' ? cols : 80,
-        rows: typeof rows === 'number' ? rows : 24,
       });
       return resp.session;
     },
@@ -124,4 +122,3 @@ export function createRedevenTerminalTransport(rpc: RedevenV1Rpc, connId: string
     },
   };
 }
-

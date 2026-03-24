@@ -8,6 +8,7 @@ This folder contains the **source code** for the agent-bundled Env App UI:
 - `https://env-<env_id>.<region>.<base-sandbox-domain>/_redeven_boot/`
 - Cross-surface product flows such as `File Browser -> Open in Terminal` and `Terminal -> Browse files` are implemented here through Env App shell/context orchestration rather than in the region frontend.
 - Right-click menus that expose cross-surface handoffs are also normalized here so `Ask Flower` stays first, `Open in Terminal` stays second when available, `Browse files` follows when available, and separators isolate lower-priority follow-up actions.
+- Terminal handoffs are attach-activated: opening a session only creates the logical terminal record, while the mounted terminal view performs the first attach with measured dimensions and then sends one explicit post-attach resize confirmation once layout has settled.
 
 Notes:
 

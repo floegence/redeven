@@ -358,6 +358,21 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
   let initSeq = 0;
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+  const nextAnimationFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  const confirmAttachedViewportSize = async (core: TerminalCore, id: string, seq: number) => {
+    await nextAnimationFrame();
+    if (seq !== initSeq) return;
+
+    core.forceResize();
+
+    await nextAnimationFrame();
+    if (seq !== initSeq) return;
+
+    const dims = core.getDimensions();
+    if (dims.cols <= 0 || dims.rows <= 0) return;
+    await props.transport.resize(id, dims.cols, dims.rows);
+  };
 
   const reload = async (opts?: { fadeOut?: boolean }) => {
     const id = sessionId();
@@ -503,6 +518,9 @@ function TerminalSessionView(props: terminal_session_view_props) {
         queued.push(c.data);
       }
       if (queued.length > 0) scheduleFlush();
+
+      await confirmAttachedViewportSize(core, id, seq);
+      if (seq !== initSeq) return;
 
       setLoading('idle');
       setReadyOnce(true);
@@ -1264,7 +1282,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setError(null);
     try {
       const nextIndex = (sessions()?.length ?? 0) + 1;
-      const session = await sessionsCoordinator.createSession(`Terminal ${nextIndex}`, agentHomePathAbs() || '', 80, 24);
+      const session = await sessionsCoordinator.createSession(`Terminal ${nextIndex}`, agentHomePathAbs() || '');
       if (!session?.id) throw new Error('Invalid create response');
 
       activateSession(session.id);
@@ -1300,8 +1318,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         const session = await sessionsCoordinator.createSession(
           resolveRequestedSessionName(request?.preferredName, workingDir, nextIndex),
           workingDir,
-          80,
-          24,
         );
         if (!session?.id) throw new Error('Invalid create response');
         activateSession(session.id);

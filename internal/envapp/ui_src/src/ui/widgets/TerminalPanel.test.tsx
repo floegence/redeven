@@ -132,7 +132,7 @@ const terminalSessionsState = vi.hoisted(() => ({
 
 const sessionsCoordinatorMocks = vi.hoisted(() => ({
   refresh: vi.fn().mockResolvedValue(undefined),
-  createSession: vi.fn(async (name?: string, workingDir?: string, _cols?: number, _rows?: number) => {
+  createSession: vi.fn(async (name?: string, workingDir?: string) => {
     const session = {
       id: 'session-2',
       name: String(name ?? '').trim() || 'Terminal 2',
@@ -728,9 +728,38 @@ describe('TerminalPanel', () => {
     ), host);
     await settleTerminalPanel();
 
-    expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('repo', '/workspace/repo', 80, 24);
+    expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('repo', '/workspace/repo');
     expect(handledSpy).toHaveBeenCalledWith('request-1');
     expect(host.textContent).toContain('repo');
+  });
+
+  it('creates a new terminal session without sending a fixed 80x24 create size', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
+    expect(button).toBeTruthy();
+
+    button?.click();
+    await settleTerminalPanel();
+
+    expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('Terminal 2', '/workspace');
+  });
+
+  it('attaches with measured dimensions and performs one final size confirmation after attach', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await vi.waitFor(() => {
+      expect(transportMocks.attach).toHaveBeenCalledWith('session-1', 80, 24);
+    });
+    await vi.waitFor(() => {
+      expect(transportMocks.resize).toHaveBeenCalledWith('session-1', 80, 24);
+    });
   });
 
   it('does not recreate a session when the same open-session request id is replayed', async () => {

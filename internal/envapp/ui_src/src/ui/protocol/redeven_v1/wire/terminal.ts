@@ -10,8 +10,6 @@ export type wire_terminal_session_info = {
 export type wire_terminal_session_create_req = {
   name?: string;
   working_dir?: string;
-  cols: number;
-  rows: number;
 };
 
 export type wire_terminal_session_create_resp = {
