@@ -1419,6 +1419,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		}
 		return err
 	}
+	r.markAssistantPersisted()
 	s.broadcastTranscriptMessage(endpointID, threadID, runID, assistantRowID, assistantJSON, assistantAt)
 	s.broadcastThreadSummary(endpointID, threadID)
 	if s.contextRepo != nil {

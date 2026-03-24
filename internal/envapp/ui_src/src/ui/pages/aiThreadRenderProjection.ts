@@ -6,6 +6,7 @@ type ChecklistBlock = Extract<MessageBlock, { type: 'checklist' }>;
 
 export interface ProjectThreadTranscriptMessagesArgs {
   transcriptMessages: Message[];
+  liveAssistantMessage?: Message | null;
   previousRenderedMessages: Message[];
   subagentById: Record<string, SubagentView>;
 }
@@ -53,6 +54,13 @@ export function projectThreadTranscriptMessages(args: ProjectThreadTranscriptMes
     if (!shouldCarryForwardLocalOnlyMessage(previous)) continue;
     projected.push(previous);
     seen.add(id);
+  }
+
+  const liveAssistantMessage = args.liveAssistantMessage;
+  const liveAssistantID = String(liveAssistantMessage?.id ?? '').trim();
+  if (liveAssistantMessage && liveAssistantMessage.role === 'assistant' && liveAssistantID && !seen.has(liveAssistantID)) {
+    projected.push(liveAssistantMessage);
+    seen.add(liveAssistantID);
   }
 
   const withSubagentSync = syncSubagentBlocksWithLatest(projected, args.subagentById);

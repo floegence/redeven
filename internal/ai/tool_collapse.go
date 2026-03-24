@@ -31,6 +31,9 @@ func (s *Service) GetActiveRunSnapshot(meta *session.Meta, threadID string) (str
 	if runID == "" || r == nil {
 		return "", "", nil
 	}
+	if r.assistantAlreadyPersisted() {
+		return "", "", nil
+	}
 
 	msgJSON, _, _, err := r.snapshotAssistantMessageJSONWithStatus("streaming")
 	if err == nil && strings.TrimSpace(msgJSON) != "" {

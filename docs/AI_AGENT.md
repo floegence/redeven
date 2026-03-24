@@ -160,6 +160,7 @@ Behavior summary:
 - Runtime observability for these fast paths should stay explicit through `interaction.contract.classified.classification_mode`, `ask_user.attempt.validation_mode`, and `signal.recovery.attempt`.
 - `terminal.exec` output is rendered with structured shell blocks in the Env App (no markdown fallback conversion).
 - Live assistant `block-delta` transport must preserve complete user-visible markdown/reasoning content. Provider adapters must keep provider-emitted visible whitespace semantics intact for streamed reasoning fragments so persisted transcripts and live blocks stay human-readable.
+- Active-run snapshots are a recovery path for the in-flight assistant turn, not a second transcript source. Once the assistant message has been appended to persisted transcript history, snapshot reads must return empty for that turn so the UI cannot render duplicate assistant answers from both transcript and live state.
 - The realtime sink may coalesce low-priority assistant/context updates, but the active thread UI must still converge to the canonical persisted assistant transcript when the run reaches a terminal state, even if some tail realtime frames were missed.
 - Subagents are for parallelizable or independently reviewable work. Simple local inspection tasks should stay in the main Flower run instead of spawning subagents.
 

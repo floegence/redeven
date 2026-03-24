@@ -105,6 +105,7 @@ type run struct {
 	busyCount        atomic.Int32
 	runtimeToolCalls atomic.Int64
 	runtimeTokens    atomic.Int64
+	assistantPersisted atomic.Bool
 
 	uploadsDir       string
 	threadsDB        *threadstore.Store
@@ -560,6 +561,17 @@ func (r *run) markDone() {
 	r.doneOnce.Do(func() {
 		close(r.doneCh)
 	})
+}
+
+func (r *run) markAssistantPersisted() {
+	if r == nil {
+		return
+	}
+	r.assistantPersisted.Store(true)
+}
+
+func (r *run) assistantAlreadyPersisted() bool {
+	return r != nil && r.assistantPersisted.Load()
 }
 
 func (r *run) debug(event string, attrs ...any) {
