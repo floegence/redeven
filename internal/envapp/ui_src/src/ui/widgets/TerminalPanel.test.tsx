@@ -1138,7 +1138,18 @@ describe('TerminalPanel', () => {
     }));
     await settleTerminalPanel();
 
-    const browseButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Browse files'));
+    const menu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
+    expect(menu).toBeTruthy();
+
+    const menuButtons = Array.from(menu?.querySelectorAll('button') ?? []);
+    expect(menuButtons.map((button) => button.textContent?.trim())).toEqual([
+      'Ask Flower',
+      'Browse files',
+      'Copy selection',
+    ]);
+    expect(menu?.querySelectorAll('[role="separator"]')).toHaveLength(1);
+
+    const browseButton = menuButtons.find((button) => button.textContent?.includes('Browse files'));
     expect(browseButton).toBeTruthy();
 
     browseButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -1170,7 +1181,17 @@ describe('TerminalPanel', () => {
     }));
     await settleTerminalPanel();
 
-    const browseButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Browse files'));
+    const menu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
+    expect(menu).toBeTruthy();
+
+    const menuButtons = Array.from(menu?.querySelectorAll('button') ?? []);
+    expect(menuButtons.map((button) => button.textContent?.trim())).toEqual([
+      'Ask Flower',
+      'Copy selection',
+    ]);
+    expect(menu?.querySelectorAll('[role="separator"]')).toHaveLength(1);
+
+    const browseButton = menuButtons.find((button) => button.textContent?.includes('Browse files'));
     expect(browseButton).toBeUndefined();
   });
 

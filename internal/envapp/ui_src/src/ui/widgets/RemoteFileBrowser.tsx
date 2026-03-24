@@ -2325,23 +2325,26 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
   };
 
-  const baseOverrideContextMenuItems: ContextMenuItem[] = [
+  const priorityOverrideContextMenuItems: ContextMenuItem[] = [
     {
       id: 'ask-flower',
       label: 'Ask Flower',
       type: 'custom',
       icon: (props) => <Sparkles class={props.class} />,
-      separator: true,
       onAction: (items: FileItem[]) => {
         void askFlowerFromFileBrowser(items);
       },
     },
+  ];
+
+  const secondaryOverrideContextMenuItems: ContextMenuItem[] = [
     {
       id: 'duplicate',
       label: 'Duplicate',
       type: 'duplicate',
       icon: (props) => <Copy class={props.class} />,
       shortcut: 'Cmd+D',
+      separator: true,
     },
     {
       id: 'copy-name',
@@ -2380,21 +2383,24 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const resolveOverrideContextMenuItems = (items: FileItem[]): ContextMenuItem[] => {
     if (!canOpenDirectoryInTerminal(items)) {
-      return baseOverrideContextMenuItems;
+      return [
+        ...priorityOverrideContextMenuItems,
+        ...secondaryOverrideContextMenuItems,
+      ];
     }
 
     return [
+      ...priorityOverrideContextMenuItems,
       {
         id: 'open-in-terminal',
         label: 'Open in Terminal',
         type: 'custom',
         icon: (props) => <Terminal class={props.class} />,
-        separator: true,
         onAction: (selectedItems: FileItem[]) => {
           handleOpenInTerminal(selectedItems);
         },
       },
-      ...baseOverrideContextMenuItems,
+      ...secondaryOverrideContextMenuItems,
     ];
   };
 

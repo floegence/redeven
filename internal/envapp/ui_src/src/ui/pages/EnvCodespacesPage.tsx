@@ -30,6 +30,7 @@ import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
 import { buildFilePathAskFlowerIntent } from "../utils/filePathAskFlower";
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../utils/openDirectoryInTerminal";
 import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPickerTreeAbsolutePath } from "../utils/directoryPickerTree";
+import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingContextMenuHeight, type FloatingContextMenuItem } from "../widgets/FloatingContextMenu";
 
 type SpaceStatus = Readonly<{
   code_space_id: string;
@@ -84,8 +85,8 @@ function clampCodespaceContextMenuPosition(x: number, y: number): { x: number; y
   if (typeof window === "undefined") return { x, y };
 
   const margin = 8;
-  const menuWidth = 180;
-  const menuHeight = 84;
+  const menuWidth = FLOATING_CONTEXT_MENU_WIDTH_PX;
+  const menuHeight = estimateFloatingContextMenuHeight(2);
   const maxX = Math.max(margin, window.innerWidth - menuWidth - margin);
   const maxY = Math.max(margin, window.innerHeight - menuHeight - margin);
 
@@ -758,6 +759,30 @@ export function EnvCodespacesPage() {
     });
   };
 
+  const buildCodespaceContextMenuItems = (space: SpaceStatus): FloatingContextMenuItem[] => {
+    const items: FloatingContextMenuItem[] = [
+      {
+        id: "ask-flower",
+        kind: "action",
+        label: "Ask Flower",
+        icon: Sparkles,
+        onSelect: handleAskFlowerFromCodespace,
+      },
+    ];
+
+    if (canOpenCodespaceInTerminal(space)) {
+      items.push({
+        id: "open-in-terminal",
+        kind: "action",
+        label: "Open in Terminal",
+        icon: Terminal,
+        onSelect: handleOpenCodespaceInTerminal,
+      });
+    }
+
+    return items;
+  };
+
   const spaceList = () => spaces() ?? [];
   const sortedSpaces = () => {
     return [...spaceList()].sort((a, b) => {
@@ -875,33 +900,14 @@ export function EnvCodespacesPage() {
 
       <Show when={codespaceContextMenu()} keyed>
         {(menu) => (
-          <div
-            ref={(el) => {
+          <FloatingContextMenu
+            x={menu.x}
+            y={menu.y}
+            items={buildCodespaceContextMenuItems(menu.space)}
+            menuRef={(el) => {
               codespaceContextMenuEl = el;
             }}
-            class="fixed z-50 min-w-[180px] py-1 bg-popover border border-border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100"
-            style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
-            onContextMenu={(event) => event.preventDefault()}
-          >
-            <Show when={canOpenCodespaceInTerminal(menu.space)}>
-              <button
-                type="button"
-                class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
-                onClick={handleOpenCodespaceInTerminal}
-              >
-                <Terminal class="w-3.5 h-3.5 opacity-60" />
-                <span class="flex-1 text-left">Open in Terminal</span>
-              </button>
-            </Show>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
-              onClick={handleAskFlowerFromCodespace}
-            >
-              <Sparkles class="w-3.5 h-3.5 opacity-60" />
-              <span class="flex-1 text-left">Ask Flower</span>
-            </button>
-          </div>
+          />
         )}
       </Show>
     </div>

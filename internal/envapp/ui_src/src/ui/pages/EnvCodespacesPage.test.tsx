@@ -198,12 +198,13 @@ describe('EnvCodespacesPage', () => {
     }));
     await flushPage();
 
-    const menuButtons = Array.from(host.querySelectorAll('button')).filter((button) => (
-      button.textContent?.includes('Open in Terminal') || button.textContent?.includes('Ask Flower')
-    ));
-    expect(menuButtons.map((button) => button.textContent?.trim())).toEqual(['Open in Terminal', 'Ask Flower']);
+    const menu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
+    expect(menu).toBeTruthy();
 
-    const askFlowerButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Ask Flower'));
+    const menuButtons = Array.from(menu?.querySelectorAll('button') ?? []);
+    expect(menuButtons.map((button) => button.textContent?.trim())).toEqual(['Ask Flower', 'Open in Terminal']);
+
+    const askFlowerButton = menuButtons.find((button) => button.textContent?.includes('Ask Flower'));
     expect(askFlowerButton).toBeTruthy();
 
     askFlowerButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

@@ -197,6 +197,9 @@ vi.mock('./FileBrowserWorkspace', () => ({
     const folderItems = resolver?.([folderTarget]) ?? props.overrideContextMenuItems ?? [];
     const fileItems = resolver?.([copyNameTarget]) ?? props.overrideContextMenuItems ?? [];
     const multiSelectItems = resolver?.([folderTarget, copyNameTarget]) ?? props.overrideContextMenuItems ?? [];
+    const describeMenuItems = (items: ContextMenuItem[]) => items.flatMap((item) => (
+      item.separator ? [`separator:${item.id}`, item.id] : [item.id]
+    )).join(',');
 
     onMount(() => {
       workspaceLifecycleStore.filesMounts += 1;
@@ -210,6 +213,9 @@ vi.mock('./FileBrowserWorkspace', () => ({
       <div data-testid="files-workspace">
         <div>files:{props.mode}:{props.currentPath}:{props.width ?? 0}:{localCount()}:{props.captureTypingFromPage ? 'page' : 'scoped'}</div>
         <div>{props.toolbarEndActions}</div>
+        <div data-testid="mock-folder-menu-order">{describeMenuItems(folderItems)}</div>
+        <div data-testid="mock-file-menu-order">{describeMenuItems(fileItems)}</div>
+        <div data-testid="mock-multi-menu-order">{describeMenuItems(multiSelectItems)}</div>
         <button type="button" onClick={() => setLocalCount((count) => count + 1)}>mock-files-bump</button>
         <button type="button" onClick={() => props.onModeChange?.('git')}>mock-to-git</button>
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
@@ -959,6 +965,16 @@ describe('RemoteFileBrowser persistence', () => {
     try {
       await flush();
 
+      expect(host.querySelector('[data-testid="mock-folder-menu-order"]')?.textContent).toBe(
+        'ask-flower,open-in-terminal,separator:duplicate,duplicate,copy-name,copy-to,separator:move-to,move-to,rename,delete',
+      );
+      expect(host.querySelector('[data-testid="mock-file-menu-order"]')?.textContent).toBe(
+        'ask-flower,separator:duplicate,duplicate,copy-name,copy-to,separator:move-to,move-to,rename,delete',
+      );
+      expect(host.querySelector('[data-testid="mock-multi-menu-order"]')?.textContent).toBe(
+        'ask-flower,separator:duplicate,duplicate,copy-name,copy-to,separator:move-to,move-to,rename,delete',
+      );
+
       const folderButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-folder') as HTMLButtonElement | undefined;
       const fileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-file') as HTMLButtonElement | undefined;
       const multiButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-multi') as HTMLButtonElement | undefined;
@@ -997,6 +1013,9 @@ describe('RemoteFileBrowser persistence', () => {
     try {
       await flush();
 
+      expect(host.querySelector('[data-testid="mock-folder-menu-order"]')?.textContent).toBe(
+        'ask-flower,separator:duplicate,duplicate,copy-name,copy-to,separator:move-to,move-to,rename,delete',
+      );
       const folderButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-folder') as HTMLButtonElement | undefined;
       expect(folderButton).toBeUndefined();
     } finally {

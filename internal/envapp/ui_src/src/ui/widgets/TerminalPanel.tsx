@@ -54,6 +54,7 @@ import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSet
 import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
+import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingContextMenuHeight, type FloatingContextMenuItem } from './FloatingContextMenu';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
 
@@ -1755,10 +1756,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (typeof window === 'undefined') return { x, y };
 
     const margin = 8;
-    const menuWidth = 180;
-    const menuPaddingY = 8;
-    const menuItemHeight = 30;
-    const menuHeight = menuPaddingY + Math.max(1, itemCount) * menuItemHeight + menuPaddingY;
+    const menuWidth = FLOATING_CONTEXT_MENU_WIDTH_PX;
+    const menuHeight = estimateFloatingContextMenuHeight(itemCount, 1);
     const maxX = Math.max(margin, window.innerWidth - menuWidth - margin);
     const maxY = Math.max(margin, window.innerHeight - menuHeight - margin);
 
@@ -1914,6 +1913,43 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       pendingAttachments,
       notes,
     }, { x: menu.x, y: menu.y });
+  };
+
+  const buildTerminalAskMenuItems = (menu: NonNullable<ReturnType<typeof terminalAskMenu>>): FloatingContextMenuItem[] => {
+    const items: FloatingContextMenuItem[] = [
+      {
+        id: 'ask-flower',
+        kind: 'action',
+        label: 'Ask Flower',
+        icon: Sparkles,
+        onSelect: askFlowerFromTerminal,
+      },
+    ];
+
+    if (menu.showBrowseFiles) {
+      items.push({
+        id: 'browse-files',
+        kind: 'action',
+        label: 'Browse files',
+        icon: Folder,
+        onSelect: handleBrowseFilesFromTerminal,
+      });
+    }
+
+    items.push({
+      id: 'priority-secondary-separator',
+      kind: 'separator',
+    });
+    items.push({
+      id: 'copy-selection',
+      kind: 'action',
+      label: 'Copy selection',
+      icon: Copy,
+      onSelect: handleCopyTerminalSelection,
+      disabled: String(menu.selection ?? '').length === 0,
+    });
+
+    return items;
   };
 
   const bindSearchCore = (core: TerminalCore | null) => {
@@ -2269,42 +2305,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
       <Show when={terminalAskMenu()} keyed>
         {(menu) => (
-          <div
-            ref={(el) => {
+          <FloatingContextMenu
+            x={menu.x}
+            y={menu.y}
+            items={buildTerminalAskMenuItems(menu)}
+            menuRef={(el) => {
               terminalAskMenuEl = el;
             }}
-            class="fixed z-50 min-w-[180px] py-1 bg-popover border border-border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100"
-            style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
-            onContextMenu={(event) => event.preventDefault()}
-          >
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-40"
-              onClick={handleCopyTerminalSelection}
-              disabled={String(menu.selection ?? '').length === 0}
-            >
-              <Copy class="w-3.5 h-3.5 opacity-60" />
-              <span class="flex-1 text-left">Copy selection</span>
-            </button>
-            <Show when={menu.showBrowseFiles}>
-              <button
-                type="button"
-                class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
-                onClick={handleBrowseFilesFromTerminal}
-              >
-                <Folder class="w-3.5 h-3.5 opacity-60" />
-                <span class="flex-1 text-left">Browse files</span>
-              </button>
-            </Show>
-            <button
-              type="button"
-              class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
-              onClick={askFlowerFromTerminal}
-            >
-              <Sparkles class="w-3.5 h-3.5 opacity-60" />
-              <span class="flex-1 text-left">Ask Flower</span>
-            </button>
-          </div>
+          />
         )}
       </Show>
 
