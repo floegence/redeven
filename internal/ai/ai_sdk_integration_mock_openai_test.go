@@ -109,7 +109,7 @@ func isIntentClassifierRequest(req map[string]any) bool {
 		return false
 	}
 	instructions := extractClassifierInstructions(req)
-	return strings.Contains(instructions, runPolicyClassifierMarker) || strings.Contains(instructions, askUserPolicyClassifierMarker)
+	return strings.Contains(instructions, runPolicyClassifierMarker) || strings.Contains(instructions, askUserPolicyClassifierMarker) || strings.Contains(instructions, interactionContractClassifierMarker)
 }
 
 func classifyIntentResponseToken(req map[string]any) string {
@@ -117,15 +117,26 @@ func classifyIntentResponseToken(req map[string]any) string {
 	if strings.Contains(strings.TrimSpace(instructions), askUserPolicyClassifierMarker) {
 		return classifyAskUserPolicyResponseToken(req)
 	}
+	if strings.Contains(strings.TrimSpace(instructions), interactionContractClassifierMarker) {
+		return classifyInteractionContractResponseToken(req)
+	}
 	userText := strings.ToLower(strings.TrimSpace(extractResponsesUserText(req)))
 	openGoalText, userMessage := extractIntentClassifierContext(userText)
+	guidedAgeGuess := strings.Contains(userMessage, "猜我的岁数") || strings.Contains(userMessage, "每个问题") || strings.Contains(userMessage, "几个选项")
+	guidedAgeGuess = guidedAgeGuess || strings.Contains(openGoalText, "猜我的岁数") || strings.Contains(openGoalText, "每个问题") || strings.Contains(openGoalText, "几个选项")
 	if userText == "" {
 		return `{"intent":"task","reason":"empty_input","objective_mode":"replace","complexity":"simple","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.42}`
 	}
-	if strings.Contains(userMessage, "猜我的岁数") || strings.Contains(userMessage, "每个问题") || strings.Contains(userMessage, "几个选项") {
+	if guidedAgeGuess {
 		instructionsLower := strings.ToLower(strings.TrimSpace(instructions))
 		if strings.Contains(instructionsLower, "guided structured interaction") && strings.Contains(instructionsLower, "option-driven conversations") {
-			return `{"intent":"task","reason":"guided_structured_interaction_requested","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.89}`
+			objectiveMode := "replace"
+			reason := "guided_structured_interaction_requested"
+			if strings.TrimSpace(openGoalText) != "" && !strings.Contains(userMessage, "猜我的岁数") {
+				objectiveMode = "continue"
+				reason = "guided_structured_interaction_continuation"
+			}
+			return fmt.Sprintf(`{"intent":"task","reason":"%s","objective_mode":"%s","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.89,"interaction_contract":{"enabled":true,"reason":"guided_option_interaction","single_question_per_turn":true,"fixed_choices_required":true,"open_text_fallback_required":true,"indirect_questions_only":true,"confidence":0.93}}`, reason, objectiveMode)
 		}
 		return `{"intent":"social","reason":"guided_interaction_misclassified_without_prompt","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.61}`
 	}
@@ -159,6 +170,14 @@ func classifyIntentResponseToken(req map[string]any) string {
 		}
 	}
 	return `{"intent":"task","reason":"actionable_request_detected","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.78}`
+}
+
+func classifyInteractionContractResponseToken(req map[string]any) string {
+	userText := strings.ToLower(strings.TrimSpace(extractResponsesUserText(req)))
+	if strings.Contains(userText, "猜我的岁数") || strings.Contains(userText, "每个问题") || strings.Contains(userText, "几个选项") || strings.Contains(userText, "active objective:\n请你和我一问一答猜我的岁数") {
+		return `{"enabled":true,"reason":"guided_option_interaction","single_question_per_turn":true,"fixed_choices_required":true,"open_text_fallback_required":true,"indirect_questions_only":true,"confidence":0.94}`
+	}
+	return `{"enabled":false,"reason":"no_guided_interaction_contract","single_question_per_turn":false,"fixed_choices_required":false,"open_text_fallback_required":false,"indirect_questions_only":false,"confidence":0}`
 }
 
 func extractClassifierInstructions(req map[string]any) string {

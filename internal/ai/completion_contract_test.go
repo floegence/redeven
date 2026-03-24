@@ -92,4 +92,10 @@ func TestEvaluateTaskCompletionGate(t *testing.T) {
 	}, TaskComplexityStandard, config.AIModeAct); pass || reason != todoRequirementInsufficientPolicyRequired {
 		t.Fatalf("required todo policy with too few todos => pass=%v reason=%q", pass, reason)
 	}
+
+	if pass, reason := evaluateTaskCompletionGate("I think you are in your late twenties. Did I guess right?", runtimeState{
+		InteractionContract: interactionContract{Enabled: true},
+	}, TaskComplexityStandard, config.AIModeAct); pass || reason != "result_requests_user_input" {
+		t.Fatalf("question-shaped completion under interaction contract => pass=%v reason=%q", pass, reason)
+	}
 }

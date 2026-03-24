@@ -10,7 +10,7 @@ import (
 func TestClassifyRunPolicy_UsesModelDecision(t *testing.T) {
 	t.Parallel()
 
-	got := classifyRunPolicy("hello", nil, "", func() (runPolicyDecision, error) {
+	got := classifyRunPolicy("hello", nil, "", false, func() (runPolicyDecision, error) {
 		return runPolicyDecision{
 			Intent:           RunIntentSocial,
 			Reason:           "small_talk_detected_by_model",
@@ -39,7 +39,7 @@ func TestClassifyRunPolicy_UsesModelDecision(t *testing.T) {
 func TestClassifyRunPolicy_ModelFailureFallsBackToTask(t *testing.T) {
 	t.Parallel()
 
-	got := classifyRunPolicy("please analyze this repository architecture", nil, "", func() (runPolicyDecision, error) {
+	got := classifyRunPolicy("please analyze this repository architecture", nil, "", false, func() (runPolicyDecision, error) {
 		return runPolicyDecision{}, assertErr{}
 	})
 	if got.Intent != RunIntentTask {
@@ -59,7 +59,7 @@ func TestClassifyRunPolicy_ModelFailureFallsBackToTask(t *testing.T) {
 func TestClassifyRunPolicy_ModelControlsContinuationObjectiveMode(t *testing.T) {
 	t.Parallel()
 
-	got := classifyRunPolicy("continue", nil, "fix startup failure", func() (runPolicyDecision, error) {
+	got := classifyRunPolicy("continue", nil, "fix startup failure", false, func() (runPolicyDecision, error) {
 		return runPolicyDecision{
 			Intent:           RunIntentTask,
 			Reason:           "follow_up_to_open_goal",
@@ -84,7 +84,7 @@ func TestClassifyRunPolicy_ModelControlsContinuationObjectiveMode(t *testing.T) 
 func TestClassifyRunPolicy_TaskByAttachment(t *testing.T) {
 	t.Parallel()
 
-	got := classifyRunPolicy("take a look at this", []RunAttachmentIn{{URL: "file:///tmp/a.txt"}}, "", nil)
+	got := classifyRunPolicy("take a look at this", []RunAttachmentIn{{URL: "file:///tmp/a.txt"}}, "", false, nil)
 	if got.Intent != RunIntentTask {
 		t.Fatalf("intent=%q, want %q", got.Intent, RunIntentTask)
 	}
@@ -102,7 +102,7 @@ func TestClassifyRunPolicy_TaskByAttachment(t *testing.T) {
 func TestBuildRunPolicyClassifierMessages_GuidedStructuredInteractionsAreTask(t *testing.T) {
 	t.Parallel()
 
-	msgs := buildRunPolicyClassifierMessages("请你和我一问一答猜我的岁数，每个问题都提供几个选项", "")
+	msgs := buildRunPolicyClassifierMessages("请你和我一问一答猜我的岁数，每个问题都提供几个选项", "", false)
 	if len(msgs) != 2 {
 		t.Fatalf("message count=%d, want 2", len(msgs))
 	}
@@ -110,18 +110,56 @@ func TestBuildRunPolicyClassifierMessages_GuidedStructuredInteractionsAreTask(t 
 	if !strings.Contains(system, "guided structured interaction") {
 		t.Fatalf("system prompt missing guided structured interaction guidance: %q", system)
 	}
+	if !strings.Contains(system, structuredClassifierRunPolicyToolName) {
+		t.Fatalf("system prompt missing classifier tool name: %q", system)
+	}
 	if !strings.Contains(system, "questionnaires, interviews, quizzes, guessing games, decision trees, and multi-step option-driven conversations") {
 		t.Fatalf("system prompt missing structured interaction examples: %q", system)
 	}
 	if !strings.Contains(system, "casual freeform chat") {
 		t.Fatalf("system prompt missing narrowed social guidance: %q", system)
 	}
+	if !strings.Contains(system, "interaction_contract") {
+		t.Fatalf("system prompt missing interaction_contract contract: %q", system)
+	}
+	if !strings.Contains(system, "open_text_fallback_required") {
+		t.Fatalf("system prompt missing open fallback guidance: %q", system)
+	}
+	if !strings.Contains(system, "indirect_questions_only") {
+		t.Fatalf("system prompt missing indirect-question guidance: %q", system)
+	}
+}
+
+func TestClassifyRunPolicy_StructuredResponseForcesContinuation(t *testing.T) {
+	t.Parallel()
+
+	got := classifyRunPolicy("Streaming apps", nil, "Run a guided music-preference questionnaire", true, func() (runPolicyDecision, error) {
+		return runPolicyDecision{
+			Intent:           RunIntentSocial,
+			Reason:           "small_talk_detected_by_model",
+			Source:           RunIntentSourceModel,
+			ObjectiveMode:    RunObjectiveModeReplace,
+			Complexity:       TaskComplexitySimple,
+			TodoPolicy:       TodoPolicyNone,
+			MinimumTodoItems: 0,
+			Confidence:       0.82,
+		}, nil
+	})
+	if got.Intent != RunIntentTask {
+		t.Fatalf("intent=%q, want %q", got.Intent, RunIntentTask)
+	}
+	if got.ObjectiveMode != RunObjectiveModeContinue {
+		t.Fatalf("objective_mode=%q, want %q", got.ObjectiveMode, RunObjectiveModeContinue)
+	}
+	if got.Reason != "structured_response_continuation" {
+		t.Fatalf("reason=%q, want structured_response_continuation", got.Reason)
+	}
 }
 
 func TestParseModelRunPolicyDecision_CodeFenceJSON(t *testing.T) {
 	t.Parallel()
 
-	got, err := parseModelRunPolicyDecision("```json\n{\"intent\":\"task\",\"reason\":\"needs_multi_step_execution\",\"objective_mode\":\"replace\",\"complexity\":\"complex\",\"todo_policy\":\"required\",\"minimum_todo_items\":4,\"confidence\":0.91}\n```")
+	got, err := parseModelRunPolicyDecision("```json\n{\"intent\":\"task\",\"reason\":\"needs_multi_step_execution\",\"objective_mode\":\"replace\",\"complexity\":\"complex\",\"todo_policy\":\"required\",\"minimum_todo_items\":4,\"confidence\":0.91,\"interaction_contract\":{\"enabled\":true,\"reason\":\"guided_interaction_requested\",\"single_question_per_turn\":true,\"fixed_choices_required\":true,\"open_text_fallback_required\":true,\"indirect_questions_only\":true,\"confidence\":0.87}}\n```")
 	if err != nil {
 		t.Fatalf("parseModelRunPolicyDecision: %v", err)
 	}
@@ -139,6 +177,18 @@ func TestParseModelRunPolicyDecision_CodeFenceJSON(t *testing.T) {
 	}
 	if got.MinimumTodoItems != 4 {
 		t.Fatalf("minimum_todo_items=%d, want 4", got.MinimumTodoItems)
+	}
+	if !got.InteractionContract.Enabled {
+		t.Fatalf("interaction contract should be enabled")
+	}
+	if !got.InteractionContract.MustUseStructuredAskUser {
+		t.Fatalf("must_use_structured_ask_user=false, want true")
+	}
+	if !got.InteractionContract.OpenTextFallbackRequired {
+		t.Fatalf("open_text_fallback_required=false, want true")
+	}
+	if !got.InteractionContract.DisallowDirectTargetAttribute {
+		t.Fatalf("disallow_direct_target_attribute=false, want true")
 	}
 }
 

@@ -22,15 +22,16 @@ type Model struct {
 }
 
 type RequestUserInputPrompt struct {
-	PromptID         string                     `json:"prompt_id"`
-	MessageID        string                     `json:"message_id"`
-	ToolID           string                     `json:"tool_id"`
-	ReasonCode       string                     `json:"reason_code,omitempty"`
-	RequiredFromUser []string                   `json:"required_from_user,omitempty"`
-	EvidenceRefs     []string                   `json:"evidence_refs,omitempty"`
-	Questions        []RequestUserInputQuestion `json:"questions,omitempty"`
-	PublicSummary    string                     `json:"public_summary,omitempty"`
-	ContainsSecret   bool                       `json:"contains_secret,omitempty"`
+	PromptID            string                     `json:"prompt_id"`
+	MessageID           string                     `json:"message_id"`
+	ToolID              string                     `json:"tool_id"`
+	ReasonCode          string                     `json:"reason_code,omitempty"`
+	RequiredFromUser    []string                   `json:"required_from_user,omitempty"`
+	EvidenceRefs        []string                   `json:"evidence_refs,omitempty"`
+	InteractionContract interactionContract        `json:"interaction_contract,omitempty"`
+	Questions           []RequestUserInputQuestion `json:"questions,omitempty"`
+	PublicSummary       string                     `json:"public_summary,omitempty"`
+	ContainsSecret      bool                       `json:"contains_secret,omitempty"`
 }
 
 type RequestUserInputQuestion struct {
@@ -260,13 +261,14 @@ type RunStartRequest struct {
 
 // RunRequest is the internal run request for Go runtime execution (includes history).
 type RunRequest struct {
-	Model           string                       `json:"model"`
-	Objective       string                       `json:"objective,omitempty"`
-	History         []RunHistoryMsg              `json:"history"`
-	Input           RunInput                     `json:"input"`
-	Options         RunOptions                   `json:"options"`
-	ContextPack     contextmodel.PromptPack      `json:"-"`
-	ModelCapability contextmodel.ModelCapability `json:"-"`
+	Model               string                       `json:"model"`
+	Objective           string                       `json:"objective,omitempty"`
+	History             []RunHistoryMsg              `json:"history"`
+	Input               RunInput                     `json:"input"`
+	Options             RunOptions                   `json:"options"`
+	ContextPack         contextmodel.PromptPack      `json:"-"`
+	ModelCapability     contextmodel.ModelCapability `json:"-"`
+	InteractionContract interactionContract          `json:"-"`
 }
 
 type RunHistoryMsg struct {
@@ -279,11 +281,12 @@ type RunInput struct {
 	//
 	// When set, the agent will prefer this id over generating a new one so the UI can keep a stable
 	// message id across optimistic rendering, realtime events, and history backfill.
-	MessageID          string                          `json:"message_id,omitempty"`
-	Text               string                          `json:"text"`
-	Attachments        []RunAttachmentIn               `json:"attachments"`
-	StructuredResponse *RequestUserInputResponseRecord `json:"-"`
-	SecretAnswers      []RequestUserInputSecretAnswer  `json:"-"`
+	MessageID               string                          `json:"message_id,omitempty"`
+	Text                    string                          `json:"text"`
+	Attachments             []RunAttachmentIn               `json:"attachments"`
+	StructuredResponse      *RequestUserInputResponseRecord `json:"-"`
+	SecretAnswers           []RequestUserInputSecretAnswer  `json:"-"`
+	InteractionContractSeed interactionContract             `json:"-"`
 }
 
 type RunAttachmentIn struct {

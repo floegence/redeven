@@ -2579,12 +2579,13 @@ func extractAskUserPromptSnapshot(block any, messageID string) (*RequestUserInpu
 	}
 
 	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
-		MessageID:        strings.TrimSpace(messageID),
-		ToolID:           strings.TrimSpace(toolID),
-		ReasonCode:       strings.TrimSpace(anyToString(payload["reason_code"])),
-		RequiredFromUser: extractStringListFromAny(payload["required_from_user"]),
-		EvidenceRefs:     extractStringListFromAny(payload["evidence_refs"]),
-		Questions:        questions,
+		MessageID:           strings.TrimSpace(messageID),
+		ToolID:              strings.TrimSpace(toolID),
+		ReasonCode:          strings.TrimSpace(anyToString(payload["reason_code"])),
+		RequiredFromUser:    extractStringListFromAny(payload["required_from_user"]),
+		EvidenceRefs:        extractStringListFromAny(payload["evidence_refs"]),
+		InteractionContract: interactionContractFromAny(payload["interaction_contract"]),
+		Questions:           questions,
 	})
 	return prompt, waitingUser
 }
