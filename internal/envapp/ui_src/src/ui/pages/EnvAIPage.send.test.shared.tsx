@@ -857,6 +857,51 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
+    it('does not leave a ghost streaming cursor above later markdown content when block indices skip ahead', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        const messageId = 'assistant-gap-cursor';
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'message-start',
+            messageId,
+          },
+        });
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-start',
+            messageId,
+            blockIndex: 1,
+            blockType: 'markdown',
+          },
+        });
+        await flushAsync();
+
+        expect(host.querySelectorAll('.chat-markdown-empty-streaming')).toHaveLength(1);
+
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-delta',
+            messageId,
+            blockIndex: 1,
+            delta: 'Hello from the latest block',
+          },
+        });
+        await flushAsync();
+
+        expect(host.querySelectorAll('.chat-markdown-empty-streaming')).toHaveLength(0);
+        expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello from the latest block');
+      } finally {
+        dispose();
+      }
+    });
+
     it('keeps thinking blocks hidden from the default transcript view', async () => {
       const { host, dispose } = await renderPage();
       try {
