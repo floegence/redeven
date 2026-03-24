@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
 import { LayoutProvider, NotificationProvider } from '@floegence/floe-webapp-core';
+import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { redevenV1Contract } from '../protocol/redeven_v1';
 import { GitChangesPanel } from './GitChangesPanel';
 
 beforeEach(() => {
@@ -34,24 +36,26 @@ describe('GitChangesPanel interactions', () => {
     const dispose = render(() => (
       <LayoutProvider>
         <NotificationProvider>
-          <div class="h-[620px]">
-            <GitChangesPanel
-              repoSummary={{
-                repoRootPath: '/workspace/repo',
-                headRef: 'main',
-                workspaceSummary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 1, conflictedCount: 0 },
-              }}
-              workspace={{
-                repoRootPath: '/workspace/repo',
-                summary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 1, conflictedCount: 0 },
-                staged: [{ section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 3, deletions: 1 }],
-                unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts', additions: 4, deletions: 2 }],
-                untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 }],
-                conflicted: [],
-              }}
-              selectedSection="unstaged"
-            />
-          </div>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  workspaceSummary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 1, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 1, conflictedCount: 0 },
+                  staged: [{ section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 3, deletions: 1 }],
+                  unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts', additions: 4, deletions: 2 }],
+                  untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 }],
+                  conflicted: [],
+                }}
+                selectedSection="unstaged"
+              />
+            </div>
+          </ProtocolProvider>
         </NotificationProvider>
       </LayoutProvider>
     ), host);
@@ -78,25 +82,27 @@ describe('GitChangesPanel interactions', () => {
     const dispose = render(() => (
       <LayoutProvider>
         <NotificationProvider>
-          <div class="h-[620px]">
-            <GitChangesPanel
-              repoSummary={{
-                repoRootPath: '/workspace/repo',
-                headRef: 'main',
-                workspaceSummary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-              }}
-              workspace={{
-                repoRootPath: '/workspace/repo',
-                summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-                staged: [{ section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 3, deletions: 1 }],
-                unstaged: [],
-                untracked: [],
-                conflicted: [],
-              }}
-              selectedSection="staged"
-              commitMessage="ship it"
-            />
-          </div>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  workspaceSummary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [{ section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 3, deletions: 1 }],
+                  unstaged: [],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                selectedSection="staged"
+                commitMessage="ship it"
+              />
+            </div>
+          </ProtocolProvider>
         </NotificationProvider>
       </LayoutProvider>
     ), host);
@@ -129,20 +135,22 @@ describe('GitChangesPanel interactions', () => {
     const dispose = render(() => (
       <LayoutProvider>
         <NotificationProvider>
-          <div class="h-[620px]">
-            <GitChangesPanel
-              workspace={{
-                repoRootPath: '/workspace/repo',
-                summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 1, conflictedCount: 0 },
-                staged: [],
-                unstaged: [],
-                untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 }],
-                conflicted: [],
-              }}
-              selectedSection="untracked"
-              onBulkAction={onBulkAction}
-            />
-          </div>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 1, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [],
+                  untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 }],
+                  conflicted: [],
+                }}
+                selectedSection="untracked"
+                onBulkAction={onBulkAction}
+              />
+            </div>
+          </ProtocolProvider>
         </NotificationProvider>
       </LayoutProvider>
     ), host);
@@ -164,24 +172,26 @@ describe('GitChangesPanel interactions', () => {
     const dispose = render(() => (
       <LayoutProvider>
         <NotificationProvider>
-          <div class="h-[620px]">
-            <GitChangesPanel
-              repoSummary={{
-                repoRootPath: '/workspace/repo',
-                headRef: 'main',
-                workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-              }}
-              workspace={{
-                repoRootPath: '/workspace/repo',
-                summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-                staged: [],
-                unstaged: [],
-                untracked: [],
-                conflicted: [],
-              }}
-              selectedSection="staged"
-            />
-          </div>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                selectedSection="staged"
+              />
+            </div>
+          </ProtocolProvider>
         </NotificationProvider>
       </LayoutProvider>
     ), host);
@@ -201,32 +211,34 @@ describe('GitChangesPanel interactions', () => {
     const dispose = render(() => (
       <LayoutProvider>
         <NotificationProvider>
-          <div class="h-[620px]">
-            <GitChangesPanel
-              repoSummary={{
-                repoRootPath: '/workspace/repo',
-                headRef: 'main',
-                workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
-              }}
-              workspace={{
-                repoRootPath: '/workspace/repo',
-                summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
-                staged: [],
-                unstaged: [{
-                  section: 'unstaged',
-                  changeType: 'modified',
-                  path: 'src/next.ts',
-                  displayPath: 'src/next.ts',
-                  additions: 4,
-                  deletions: 2,
-                  patchText: ['@@ -1,2 +1,2 @@', '-oldLine();', '+newLine();'].join('\n'),
-                }],
-                untracked: [],
-                conflicted: [],
-              }}
-              selectedSection="unstaged"
-            />
-          </div>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [{
+                    section: 'unstaged',
+                    changeType: 'modified',
+                    path: 'src/next.ts',
+                    displayPath: 'src/next.ts',
+                    additions: 4,
+                    deletions: 2,
+                    patchText: ['@@ -1,2 +1,2 @@', '-oldLine();', '+newLine();'].join('\n'),
+                  }],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                selectedSection="unstaged"
+              />
+            </div>
+          </ProtocolProvider>
         </NotificationProvider>
       </LayoutProvider>
     ), host);
@@ -257,35 +269,37 @@ describe('GitChangesPanel interactions', () => {
     const dispose = render(() => (
       <LayoutProvider>
         <NotificationProvider>
-          <div class="h-[620px]">
-            <GitChangesPanel
-              workspace={{
-                repoRootPath: '/workspace/repo',
-                summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 1, conflictedCount: 0 },
-                staged: [],
-                unstaged: [],
-                untracked: [{
-                  section: 'untracked',
-                  changeType: 'added',
-                  path: 'docs/architecture/global-control-plane.md',
-                  displayPath: 'docs/architecture/global-control-plane.md',
-                  additions: 2,
-                  deletions: 0,
-                  patchText: [
-                    'diff --git a/docs/architecture/global-control-plane.md b/docs/architecture/global-control-plane.md',
-                    'new file mode 100644',
-                    '--- /dev/null',
-                    '+++ b/docs/architecture/global-control-plane.md',
-                    '@@ -0,0 +1,2 @@',
-                    '+# Control Plane',
-                    '+More details',
-                  ].join('\n'),
-                }],
-                conflicted: [],
-              }}
-              selectedSection="untracked"
-            />
-          </div>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 1, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [],
+                  untracked: [{
+                    section: 'untracked',
+                    changeType: 'added',
+                    path: 'docs/architecture/global-control-plane.md',
+                    displayPath: 'docs/architecture/global-control-plane.md',
+                    additions: 2,
+                    deletions: 0,
+                    patchText: [
+                      'diff --git a/docs/architecture/global-control-plane.md b/docs/architecture/global-control-plane.md',
+                      'new file mode 100644',
+                      '--- /dev/null',
+                      '+++ b/docs/architecture/global-control-plane.md',
+                      '@@ -0,0 +1,2 @@',
+                      '+# Control Plane',
+                      '+More details',
+                    ].join('\n'),
+                  }],
+                  conflicted: [],
+                }}
+                selectedSection="untracked"
+              />
+            </div>
+          </ProtocolProvider>
         </NotificationProvider>
       </LayoutProvider>
     ), host);

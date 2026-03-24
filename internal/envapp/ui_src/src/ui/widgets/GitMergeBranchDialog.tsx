@@ -346,6 +346,12 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
           if (!open) setDiffDialogItem(null);
         }}
         item={diffDialogItem()}
+        source={diffDialogItem() && preview() ? {
+          kind: 'compare',
+          repoRootPath: String(preview()?.repoRootPath ?? '').trim(),
+          baseRef: String(preview()?.currentRef ?? '').trim(),
+          targetRef: String(preview()?.sourceName ?? '').trim() || branchName(),
+        } : null}
         title="Merge Preview Diff"
         description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected merge diff.'}
         emptyMessage="Select a changed file to inspect its diff."

@@ -60,6 +60,7 @@ Git browse mode distinguishes between the active repository workspace and per-br
 - For the current branch, branch status uses the active repository root.
 - For a linked local branch, branch status uses the branch `worktreePath`.
 - For remote branches or local branches without a checked-out worktree, branch status stays unavailable and the UI points users to `Compare` or to opening the branch in a worktree.
+- Git diff dialogs keep the embedded `Patch` preview as the default fast path, and now also expose an on-demand `Full Context` mode that re-fetches a single selected file diff with unchanged lines included for broader review context.
 
 This keeps worktree status consistent even when the user opens `Branches` first without visiting `Changes`.
 

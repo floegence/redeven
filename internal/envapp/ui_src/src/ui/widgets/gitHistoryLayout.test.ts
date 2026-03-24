@@ -365,6 +365,10 @@ describe('browser workspace layout wiring', () => {
     expect(dialogSrc).toContain('rounded-md p-0');
     expect(dialogSrc).toContain('[&>div:last-child]:min-h-0');
     expect(dialogSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
+    expect(dialogSrc).toContain('Full Context');
+    expect(dialogSrc).toContain('Loading full-context diff...');
+    expect(dialogSrc).toContain('Compact patch preview from the current Git payload.');
+    expect(dialogSrc).toContain('Includes unchanged lines for broader review context.');
     expect(dialogSrc).not.toContain('border-0');
     expect(dialogSrc).not.toContain('rounded-[20px]');
     expect(dialogSrc).not.toContain('rounded-xl');

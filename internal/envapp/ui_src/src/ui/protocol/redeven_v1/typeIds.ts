@@ -27,6 +27,7 @@ export const redevenV1TypeIds = {
     deleteBranch: 1116,
     previewMergeBranch: 1117,
     mergeBranch: 1118,
+    getFullContextDiff: 1119,
   },
   terminal: {
     sessionCreate: 2001,
