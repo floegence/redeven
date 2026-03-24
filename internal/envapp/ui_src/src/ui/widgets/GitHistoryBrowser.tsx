@@ -296,6 +296,11 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
           if (!open) setDiffDialogItem(null);
         }}
         item={diffDialogItem()}
+        source={diffDialogItem() ? {
+          kind: 'commit',
+          repoRootPath: String(props.repoInfo?.repoRootPath ?? '').trim(),
+          commit: commitHash(),
+        } : null}
         title="Commit Diff"
         description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected file diff.'}
         emptyMessage="Select a changed file to inspect its diff."

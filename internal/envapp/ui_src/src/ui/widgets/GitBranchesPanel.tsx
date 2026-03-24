@@ -343,6 +343,7 @@ function HistoryList(props: Pick<
   const [commitDetails, setCommitDetails] = createSignal<Record<string, BranchHistoryCommitDetailState>>({});
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitCommitFileSummary | null>(null);
+  const [diffDialogCommitHash, setDiffDialogCommitHash] = createSignal('');
 
   const expandedCommitHash = createMemo(() => String(props.selectedCommitHash ?? '').trim());
   const repoRootPath = createMemo(() => String(props.repoRootPath ?? '').trim());
@@ -357,6 +358,7 @@ function HistoryList(props: Pick<
     void props.selectedBranch?.fullName;
     setCommitDetails({});
     setDiffDialogItem(null);
+    setDiffDialogCommitHash('');
     setDiffDialogOpen(false);
   });
 
@@ -491,6 +493,7 @@ function HistoryList(props: Pick<
                                                       selectedKey={selectedDiffKey()}
                                                       onOpenDiff={(item) => {
                                                         setDiffDialogItem(item);
+                                                        setDiffDialogCommitHash(commit.hash);
                                                         setDiffDialogOpen(true);
                                                       }}
                                                     />
@@ -530,9 +533,17 @@ function HistoryList(props: Pick<
         open={diffDialogOpen()}
         onOpenChange={(open) => {
           setDiffDialogOpen(open);
-          if (!open) setDiffDialogItem(null);
+          if (!open) {
+            setDiffDialogItem(null);
+            setDiffDialogCommitHash('');
+          }
         }}
         item={diffDialogItem()}
+        source={diffDialogItem() ? {
+          kind: 'commit',
+          repoRootPath: repoRootPath(),
+          commit: diffDialogCommitHash(),
+        } : null}
         title="Commit Diff"
         description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected file diff.'}
         emptyMessage="Select a changed file to inspect its diff."
@@ -721,6 +732,12 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
           if (!open) setDiffDialogItem(null);
         }}
         item={diffDialogItem()}
+        source={diffDialogItem() && compare() ? {
+          kind: 'compare',
+          repoRootPath: String(compare()?.repoRootPath ?? props.repoRootPath ?? '').trim(),
+          baseRef: String(compare()?.baseRef ?? targetRef()).trim(),
+          targetRef: String(compare()?.targetRef ?? sourceRef()).trim(),
+        } : null}
         title="Branch Compare Diff"
         description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected compare diff.'}
         emptyMessage="Select a compared file to inspect its diff."
@@ -1115,6 +1132,11 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
           if (!open) setDiffDialogItem(null);
         }}
         item={diffDialogItem()}
+        source={diffDialogItem() ? {
+          kind: 'workspace',
+          repoRootPath: statusRepoRootPath(),
+          workspaceSection: String(diffDialogItem()?.section ?? '').trim(),
+        } : null}
         title="Branch Status Diff"
         description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected branch status diff.'}
         emptyMessage="Select a branch status file to inspect its diff."

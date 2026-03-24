@@ -9,7 +9,10 @@ import (
 	"github.com/floegence/redeven-agent/internal/gitutil"
 )
 
-const embeddedGitDiffEntryMaxBytes = 256 * 1024
+const (
+	embeddedGitDiffEntryMaxBytes    = 256 * 1024
+	fullContextGitDiffEntryMaxBytes = 4 * 1024 * 1024
+)
 
 type gitDiffEntryData struct {
 	ChangeType     string
@@ -64,18 +67,26 @@ func (s *Service) readGitDiffEntries(ctx context.Context, repoRoot string, args 
 }
 
 func (s *Service) readGitDiffEntriesWithAllowedExitCodes(ctx context.Context, repoRoot string, allowedExitCodes []int, args ...string) ([]gitDiffEntryData, []byte, error) {
+	return s.readGitDiffEntriesWithLimit(ctx, repoRoot, embeddedGitDiffEntryMaxBytes, allowedExitCodes, args...)
+}
+
+func (s *Service) readGitDiffEntriesWithLimit(ctx context.Context, repoRoot string, maxBytes int, allowedExitCodes []int, args ...string) ([]gitDiffEntryData, []byte, error) {
 	out, err := gitutil.RunCombinedOutputAllowExitCodes(ctx, repoRoot, nil, allowedExitCodes, args...)
 	if err != nil {
 		return nil, nil, err
 	}
-	return parseGitDiffEntries(out), out, nil
+	return parseGitDiffEntriesWithLimit(out, maxBytes), out, nil
 }
 
 func parseGitDiffEntries(out []byte) []gitDiffEntryData {
+	return parseGitDiffEntriesWithLimit(out, embeddedGitDiffEntryMaxBytes)
+}
+
+func parseGitDiffEntriesWithLimit(out []byte, maxBytes int) []gitDiffEntryData {
 	sections := splitGitDiffSections(string(out))
 	entries := make([]gitDiffEntryData, 0, len(sections))
 	for _, section := range sections {
-		entry := parseGitDiffEntry(section)
+		entry := parseGitDiffEntryWithLimit(section, maxBytes)
 		if entry.Path == "" && entry.OldPath == "" && entry.NewPath == "" && strings.TrimSpace(entry.PatchText) == "" {
 			continue
 		}
@@ -115,7 +126,7 @@ func isGitDiffSectionStart(line string) bool {
 		strings.HasPrefix(line, "diff --combined ")
 }
 
-func parseGitDiffEntry(section string) gitDiffEntryData {
+func parseGitDiffEntryWithLimit(section string, maxBytes int) gitDiffEntryData {
 	lines := strings.Split(strings.ReplaceAll(strings.ReplaceAll(section, "\r\n", "\n"), "\r", "\n"), "\n")
 	entry := gitDiffEntryData{ChangeType: "modified"}
 	if len(lines) == 0 {
@@ -166,7 +177,7 @@ func parseGitDiffEntry(section string) gitDiffEntryData {
 
 	entry.Path = preferredDiffPath(entry.ChangeType, entry.OldPath, entry.NewPath)
 	entry.DisplayPath = preferredDiffDisplayPath(entry.Path, entry.OldPath, entry.NewPath)
-	entry.PatchText, entry.PatchTruncated = truncateEmbeddedPatchText(strings.TrimSpace(section), embeddedGitDiffEntryMaxBytes)
+	entry.PatchText, entry.PatchTruncated = truncateEmbeddedPatchText(strings.TrimSpace(section), maxBytes)
 	return entry
 }
 

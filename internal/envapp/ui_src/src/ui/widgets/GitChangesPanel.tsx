@@ -292,6 +292,11 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
           if (!open) setDiffDialogItem(null);
         }}
         item={diffItem()}
+        source={diffItem() ? {
+          kind: 'workspace',
+          repoRootPath: String(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim(),
+          workspaceSection: String(diffItem()?.section ?? '').trim(),
+        } : null}
         title="Workspace Diff"
         description={diffItem() ? changeSecondaryPath(diffItem()) : 'Review the selected workspace change.'}
         emptyMessage="Select a workspace file to inspect its diff."

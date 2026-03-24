@@ -34,6 +34,7 @@ const (
 	TypeID_GIT_DELETE_BRANCH     uint32 = 1116
 	TypeID_GIT_PREVIEW_MERGE     uint32 = 1117
 	TypeID_GIT_MERGE_BRANCH      uint32 = 1118
+	TypeID_GIT_FULL_CONTEXT_DIFF uint32 = 1119
 
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
@@ -228,6 +229,30 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			return nil, classifyGitRPCError(err)
 		}
 		return compare, nil
+	})
+
+	accessgate.RegisterTyped[getFullContextDiffReq, getFullContextDiffResp](r, TypeID_GIT_FULL_CONTEXT_DIFF, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getFullContextDiffReq) (*getFullContextDiffResp, error) {
+		if meta == nil || !meta.CanRead {
+			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		}
+		if req == nil {
+			req = &getFullContextDiffReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		if strings.TrimSpace(req.SourceKind) == "" {
+			return nil, &rpc.Error{Code: 400, Message: "missing source kind"}
+		}
+		if strings.TrimSpace(req.File.Path) == "" && strings.TrimSpace(req.File.OldPath) == "" && strings.TrimSpace(req.File.NewPath) == "" {
+			return nil, &rpc.Error{Code: 400, Message: "missing diff file"}
+		}
+		resp, err := s.getFullContextDiff(ctx, repo, *req)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		return resp, nil
 	})
 
 	accessgate.RegisterTyped[stageWorkspaceReq, stageWorkspaceResp](r, TypeID_GIT_STAGE_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *stageWorkspaceReq) (*stageWorkspaceResp, error) {
@@ -763,6 +788,22 @@ func classifyGitRPCError(err error) *rpc.Error {
 		return &rpc.Error{Code: 404, Message: "commit not found"}
 	case strings.Contains(lower, "pathspec") && strings.Contains(lower, "did not match"):
 		return &rpc.Error{Code: 404, Message: "file not found in commit"}
+	case strings.Contains(lower, "invalid git path"):
+		return &rpc.Error{Code: 400, Message: "invalid path"}
+	case strings.Contains(lower, "invalid source kind"):
+		return &rpc.Error{Code: 400, Message: "invalid source kind"}
+	case strings.Contains(lower, "missing source kind"):
+		return &rpc.Error{Code: 400, Message: "missing source kind"}
+	case strings.Contains(lower, "missing workspace section"):
+		return &rpc.Error{Code: 400, Message: "missing workspace section"}
+	case strings.Contains(lower, "missing commit"):
+		return &rpc.Error{Code: 400, Message: "missing commit"}
+	case strings.Contains(lower, "missing diff file"):
+		return &rpc.Error{Code: 400, Message: "missing diff file"}
+	case strings.Contains(lower, "missing ref"):
+		return &rpc.Error{Code: 400, Message: "missing ref"}
+	case strings.Contains(lower, "file not found in diff"):
+		return &rpc.Error{Code: 404, Message: "file not found in diff"}
 	case strings.Contains(lower, "not a git repository"):
 		return &rpc.Error{Code: 404, Message: "repository not found"}
 	default:
