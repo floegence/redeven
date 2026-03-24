@@ -17,6 +17,7 @@ import {
   Terminal,
 } from '@floegence/floe-webapp-core/icons';
 import { FlowerIcon } from './icons/FlowerIcon';
+import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Tooltip } from '@floegence/floe-webapp-core/ui';
@@ -1383,7 +1384,12 @@ export function EnvAppShell() {
       items.push({ id: 'ports', icon: Globe, label: 'Ports', collapseBehavior: 'preserve' });
     }
     if (canUseFlower()) {
-      items.push({ id: 'ai', icon: FlowerIcon, label: 'Flower', collapseBehavior: 'toggle' });
+      items.push({
+        id: 'ai',
+        icon: (props) => <FlowerSoftAuraIcon class={props.class} tone="current" />,
+        label: 'Flower',
+        collapseBehavior: 'toggle',
+      });
     }
     return items;
   };
