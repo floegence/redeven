@@ -850,9 +850,12 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         ? 'grid-cols-2'
         : 'grid-cols-1'
   );
-  const headerActionDeckClass = 'space-y-1.5 rounded-lg border border-border/60 bg-muted/[0.14] p-1.5 shadow-sm shadow-black/5';
-  const headerActionDeckLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';
-  const headerActionButtonClass = 'w-full rounded-md bg-background/88 shadow-sm shadow-black/5';
+  const headerControlBarClass = 'rounded-xl border border-border/60 bg-muted/[0.12] p-2 shadow-sm shadow-black/5';
+  const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';
+  const helperActionButtonClass = 'w-full rounded-full border border-border/55 bg-background/72 px-3 text-muted-foreground shadow-sm shadow-black/5 hover:bg-background hover:text-foreground sm:w-auto';
+  const secondaryActionButtonClass = 'w-full rounded-full border border-border/60 bg-background/88 px-4 shadow-sm shadow-black/5 sm:w-auto';
+  const primaryActionButtonClass = 'w-full rounded-full px-4 shadow-sm shadow-black/10 sm:w-auto';
+  const dangerActionButtonClass = 'w-full rounded-full border border-destructive/20 bg-destructive/[0.08] px-4 text-destructive hover:bg-destructive/[0.14] hover:text-destructive sm:w-auto';
   const handleBranchSubviewKeyDown = (event: KeyboardEvent, currentView: GitBranchSubview) => {
     const nextView = resolveRovingTabTargetId(GIT_BRANCH_SUBVIEW_IDS, currentView, event.key, 'horizontal');
     if (!nextView || nextView === currentView) return;
@@ -1061,115 +1064,32 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             <div class="flex h-full min-h-0 flex-col overflow-hidden">
               <div class="shrink-0 px-3 py-3 sm:px-4 sm:py-4">
                 <div class="rounded-md border border-border/70 bg-card px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]">
-                  <div class="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-start lg:justify-between">
-                    <GitLabelBlock
-                      class="min-w-0 flex-1"
-                      label="Branch"
-                      tone={gitBranchTone(props.selectedBranch)}
-                      meta={
-                        <div class="flex min-h-5 items-center gap-1.5">
-                          <Show when={props.selectedBranch?.current}>
-                            <GitMetaPill tone="success">Current</GitMetaPill>
-                          </Show>
-                          <Show when={props.selectedBranch?.kind === 'remote'}>
-                            <GitMetaPill tone="violet">Remote</GitMetaPill>
-                          </Show>
-                        </div>
-                      }
-                    >
-                      <GitPrimaryTitle>{branchDisplayName(props.selectedBranch)}</GitPrimaryTitle>
-                      <div class="min-h-[2rem] text-[11px] leading-relaxed line-clamp-2 text-muted-foreground" title={branchStatusSummary(props.selectedBranch)}>
-                        {branchContextSummary(props.selectedBranch)}
-                      </div>
-                    </GitLabelBlock>
-
-                    <div class="flex w-full min-w-0 flex-col gap-2 lg:flex-[0_1_20rem] lg:max-w-[min(50%,22rem)] lg:items-stretch">
-                      <Show when={showWorkspaceHelpers()}>
-                        <div class={headerActionDeckClass}>
-                          <div class={headerActionDeckLabelClass}>Workspace</div>
-                          <div class={cn('grid gap-1.5', workspaceHelperGridClass())}>
-                            <Show when={props.onOpenInTerminal}>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                icon={Terminal}
-                                class={headerActionButtonClass}
-                                disabled={!canOpenInTerminal()}
-                                onClick={() => {
-                                  const request = branchDirectoryRequest();
-                                  if (!request) return;
-                                  props.onOpenInTerminal?.(request);
-                                }}
-                              >
-                                Terminal
-                              </Button>
+                  <div class="flex flex-col gap-3">
+                    <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                      <GitLabelBlock
+                        class="min-w-0 flex-1"
+                        label="Branch"
+                        tone={gitBranchTone(props.selectedBranch)}
+                        meta={
+                          <div class="flex min-h-5 items-center gap-1.5">
+                            <Show when={props.selectedBranch?.current}>
+                              <GitMetaPill tone="success">Current</GitMetaPill>
                             </Show>
-
-                            <Show when={props.onBrowseFiles}>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                icon={Folder}
-                                class={headerActionButtonClass}
-                                disabled={!canBrowseFiles()}
-                                onClick={() => {
-                                  const request = branchDirectoryRequest();
-                                  if (!request) return;
-                                  void props.onBrowseFiles?.(request);
-                                }}
-                              >
-                                Files
-                              </Button>
+                            <Show when={props.selectedBranch?.kind === 'remote'}>
+                              <GitMetaPill tone="violet">Remote</GitMetaPill>
                             </Show>
                           </div>
+                        }
+                      >
+                        <GitPrimaryTitle>{branchDisplayName(props.selectedBranch)}</GitPrimaryTitle>
+                        <div class="min-h-[2rem] text-[11px] leading-relaxed line-clamp-2 text-muted-foreground" title={branchStatusSummary(props.selectedBranch)}>
+                          {branchContextSummary(props.selectedBranch)}
                         </div>
-                      </Show>
+                      </GitLabelBlock>
 
-                      <div class={headerActionDeckClass}>
-                        <div class={headerActionDeckLabelClass}>Actions</div>
-                        <div class={cn('grid gap-1.5', branchActionGridClass())}>
-                          <Show when={props.onCheckoutBranch}>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              class={headerActionButtonClass}
-                              disabled={checkoutDisabled()}
-                              onClick={() => props.selectedBranch && props.onCheckoutBranch?.(props.selectedBranch)}
-                            >
-                              {checkoutLabel()}
-                            </Button>
-                          </Show>
-
-                          <Show when={mergeAvailable()}>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              class={headerActionButtonClass}
-                              disabled={mergeDisabled()}
-                              onClick={() => props.selectedBranch && props.onMergeBranch?.(props.selectedBranch)}
-                            >
-                              {mergeLabel()}
-                            </Button>
-                          </Show>
-
-                          <Show when={deleteAvailable()}>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              class={cn(headerActionButtonClass, 'text-destructive hover:text-destructive')}
-                              disabled={deleteDisabled()}
-                              onClick={() => props.selectedBranch && props.onDeleteBranch?.(props.selectedBranch)}
-                            >
-                              {deleteLabel()}
-                            </Button>
-                          </Show>
-                        </div>
-                      </div>
-
-                      <div class={headerActionDeckClass}>
-                        <div class={headerActionDeckLabelClass}>View</div>
+                      <div class="flex w-full xl:w-auto xl:justify-end">
                         <div
-                          class="grid w-full grid-cols-2 rounded-md border border-border/65 bg-background/72 p-0.5"
+                          class="grid w-full grid-cols-2 rounded-full border border-border/65 bg-muted/[0.16] p-0.5 shadow-sm shadow-black/5 sm:w-[15rem]"
                           role="tablist"
                           aria-label="Branch detail tabs"
                           aria-orientation="horizontal"
@@ -1189,7 +1109,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                   aria-controls={gitBranchSubviewPanelId(view)}
                                   tabIndex={active() ? 0 : -1}
                                   class={cn(
-                                    'rounded px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150',
+                                    'rounded-full px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150',
                                     active() ? 'git-browser-selection-chip' : 'text-muted-foreground hover:bg-background/80 hover:text-foreground'
                                   )}
                                   onClick={() => props.onSelectBranchSubview?.(view)}
@@ -1200,6 +1120,92 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                               );
                             }}
                           </For>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class={headerControlBarClass}>
+                      <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                        <Show when={showWorkspaceHelpers()}>
+                          <div class="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
+                            <div class={headerControlGroupLabelClass}>Workspace</div>
+                            <div class={cn('grid gap-1.5 sm:flex sm:flex-wrap', workspaceHelperGridClass())}>
+                              <Show when={props.onOpenInTerminal}>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  icon={Terminal}
+                                  class={helperActionButtonClass}
+                                  disabled={!canOpenInTerminal()}
+                                  onClick={() => {
+                                    const request = branchDirectoryRequest();
+                                    if (!request) return;
+                                    props.onOpenInTerminal?.(request);
+                                  }}
+                                >
+                                  Terminal
+                                </Button>
+                              </Show>
+
+                              <Show when={props.onBrowseFiles}>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  icon={Folder}
+                                  class={helperActionButtonClass}
+                                  disabled={!canBrowseFiles()}
+                                  onClick={() => {
+                                    const request = branchDirectoryRequest();
+                                    if (!request) return;
+                                    void props.onBrowseFiles?.(request);
+                                  }}
+                                >
+                                  Files
+                                </Button>
+                              </Show>
+                            </div>
+                          </div>
+                        </Show>
+
+                        <div class="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:ml-auto">
+                          <div class={headerControlGroupLabelClass}>Actions</div>
+                          <div class={cn('grid gap-1.5 sm:flex sm:flex-wrap sm:justify-end', branchActionGridClass())}>
+                            <Show when={props.onCheckoutBranch}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                class={secondaryActionButtonClass}
+                                disabled={checkoutDisabled()}
+                                onClick={() => props.selectedBranch && props.onCheckoutBranch?.(props.selectedBranch)}
+                              >
+                                {checkoutLabel()}
+                              </Button>
+                            </Show>
+
+                            <Show when={mergeAvailable()}>
+                              <Button
+                                size="sm"
+                                variant={mergeDisabled() ? 'outline' : 'default'}
+                                class={mergeDisabled() ? secondaryActionButtonClass : primaryActionButtonClass}
+                                disabled={mergeDisabled()}
+                                onClick={() => props.selectedBranch && props.onMergeBranch?.(props.selectedBranch)}
+                              >
+                                {mergeLabel()}
+                              </Button>
+                            </Show>
+
+                            <Show when={deleteAvailable()}>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                class={dangerActionButtonClass}
+                                disabled={deleteDisabled()}
+                                onClick={() => props.selectedBranch && props.onDeleteBranch?.(props.selectedBranch)}
+                              >
+                                {deleteLabel()}
+                              </Button>
+                            </Show>
+                          </div>
                         </div>
                       </div>
                     </div>
