@@ -753,22 +753,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const deleteReviewBranch = () => props.deleteReviewBranch ?? props.selectedBranch ?? null;
   const deletePreview = () => props.deletePreview ?? null;
   const deleteReviewState = () => props.deleteDialogState ?? 'idle';
-  const mergeHelperText = () => {
-    const branch = props.selectedBranch;
-    if (!branch || !props.onMergeBranch) return '';
-    if (branch.current) return 'Select another branch to merge into the current branch.';
-    return '';
-  };
-  const deleteHelperText = () => {
-    const branch = props.selectedBranch;
-    if (!branch || branch.kind !== 'local') return '';
-    if (branch.current) return 'Switch to another branch before deleting it.';
-    return '';
-  };
-  const actionHelperTexts = createMemo(() => {
-    const items = [mergeHelperText(), deleteHelperText()].filter(Boolean);
-    return Array.from(new Set(items));
-  });
   const mergeAvailable = () => Boolean(props.onMergeBranch && (props.selectedBranch?.kind === 'local' || props.selectedBranch?.kind === 'remote'));
   const mergeDisabled = () => Boolean(
     !mergeAvailable()
@@ -1079,16 +1063,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           </For>
                         </div>
                       </div>
-
-                      <Show when={actionHelperTexts().length > 0}>
-                        <div class="w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[24rem] sm:text-right">
-                          <For each={actionHelperTexts()}>
-                            {(item, index) => (
-                              <div class={cn(index() > 0 && 'mt-1')}>{item}</div>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
                     </div>
                   </div>
                 </div>
