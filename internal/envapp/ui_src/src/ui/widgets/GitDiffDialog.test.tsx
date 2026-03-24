@@ -138,6 +138,84 @@ describe('GitDiffDialog', () => {
     }
   });
 
+  it('keeps the existing patch preview visible while full context is loading', async () => {
+    let resolveFullContext: ((value: Awaited<ReturnType<typeof mockGetFullContextDiff>>) => void) | undefined;
+    mockGetFullContextDiff.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveFullContext = resolve;
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <GitDiffDialog
+            open
+            onOpenChange={() => {}}
+            item={{
+              changeType: 'modified',
+              path: 'src/app.ts',
+              displayPath: 'src/app.ts',
+              additions: 1,
+              deletions: 1,
+              patchText: ['@@ -4,1 +4,1 @@', '-oldMiddle();', '+newMiddle();'].join('\n'),
+            }}
+            source={{
+              kind: 'commit',
+              repoRootPath: '/workspace/repo',
+              commit: 'abc123',
+            }}
+            title="Commit Diff"
+            emptyMessage="Select a file to inspect its diff."
+          />
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const fullContextButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Full Context');
+      expect(fullContextButton).toBeTruthy();
+      fullContextButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockGetFullContextDiff).toHaveBeenCalledTimes(1);
+      expect(document.body.textContent).toContain('Loading full-context diff...');
+      expect(document.body.textContent).toContain('newMiddle();');
+      expect(resolveFullContext).toBeTruthy();
+
+      resolveFullContext!({
+        repoRootPath: '/workspace/repo',
+        file: {
+          changeType: 'modified',
+          path: 'src/app.ts',
+          displayPath: 'src/app.ts',
+          additions: 1,
+          deletions: 1,
+          patchText: [
+            'diff --git a/src/app.ts b/src/app.ts',
+            '--- a/src/app.ts',
+            '+++ b/src/app.ts',
+            '@@ -1,5 +1,5 @@',
+            ' context-before',
+            ' stable-line',
+            '-oldMiddle();',
+            '+newMiddle();',
+            ' context-after',
+            ' trailing-line',
+          ].join('\n'),
+        },
+      });
+      await flush();
+
+      expect(document.body.textContent).toContain('Includes unchanged lines for broader review context.');
+      expect(document.body.textContent).toContain('context-before');
+      expect(document.body.textContent).not.toContain('Loading full-context diff...');
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps unavailable full-context mode visibly disabled with a non-clickable cursor affordance', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
