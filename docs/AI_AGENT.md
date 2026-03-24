@@ -122,7 +122,12 @@ Behavior summary:
 - The mode-switch `ask_user` must use structured `questions[]`, and deterministic UI actions belong on `questions[].choices[].actions` (for example `[{type:"set_mode",mode:"act"}]`).
 - Every `ask_user` question should use the canonical question-level response contract. Each question declares `response_mode`, `choices[]` contains fixed options only, and any choice-based question must also declare `choices_exhaustive`.
 - `ask_user` is the canonical structured-input primitive both for true blockers and for guided structured interaction turns such as questionnaires, interviews, quizzes, guessing games, decision trees, and other option-driven conversations.
+- Guided structured interactions should be front-loaded into an explicit interaction contract classified with the run policy, then preserved consistently across prompts, gates, waiting-user rendering, and completion.
+- Structured classifiers (`run policy`, `interaction contract`, `ask_user policy`) should prefer a single synthetic tool call with an explicit schema and only fall back to text JSON parsing when tool calls are unavailable, so reasoning-heavy providers do not leak prose into classifier payloads.
 - Flower should preserve explicit interaction-shape constraints from the user, such as fixed options, clickable choices, one-question-at-a-time, or indirect questioning.
+- When the active interaction contract requires fixed choices plus an open fallback, Flower should keep `response_mode:"select_or_write"` with `choices_exhaustive:false` instead of regressing to exhaustive `select` or pure `write`.
+- When the active interaction contract requires indirect questioning, Flower should not directly name, bucket, or reveal the hidden target attribute in either the question text or the fixed choices.
+- For guided questionnaires, quizzes, guessing games, or hidden-target inference about the user's real-world state, Flower should usually narrow the next turn with fixed choices plus a typed fallback rather than a pure write-only question.
 - Use `response_mode:"select"` only when fixed choices are genuinely exhaustive by construction and `choices_exhaustive:true`.
 - Use `response_mode:"select_or_write"` when fixed choices are not exhaustive and `choices_exhaustive:false`, so the UI preserves a standardized typed fallback such as `None of the above: ___`.
 - Use `response_mode:"write"` for direct-input questions with no fixed choices.
@@ -136,6 +141,7 @@ Behavior summary:
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.
 - `task_complete` is rejected when todo tracking is active and open todos still exist.
+- `task_complete` is also rejected when the active interaction contract still requires a user reply and the completion text ends by asking the user a new question; that turn must end with structured `ask_user` and `waiting_user` instead.
 - When a run completes through `task_complete`, its `task_complete.result` is the canonical final assistant completion text. Persisted assistant transcript snapshots must keep that canonical completion text aligned with the user-visible markdown content even if the run streamed mixed `thinking`, `tool-call`, and `markdown` blocks before completion.
 - `ask_user` follows a structured contract (`questions`, `reason_code`, `required_from_user`, `evidence_refs`) and is policy-classified by the model before entering `waiting_user`.
 - When a run completes into `waiting_user` through `ask_user`, the final assistant transcript must canonically converge to the structured waiting interaction instead of keeping provisional text-only markdown from earlier no-tool turns.
