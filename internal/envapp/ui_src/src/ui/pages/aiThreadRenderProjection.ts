@@ -1,13 +1,11 @@
 import type { Message, MessageBlock } from '../chat/types';
-import { hasNonEmptyVisibleMessageContent } from '../chat/message/messageVisibility';
 import type { SubagentView } from './aiDataNormalizers';
 
 type ToolCallBlock = Extract<MessageBlock, { type: 'tool-call' }>;
 type ChecklistBlock = Extract<MessageBlock, { type: 'checklist' }>;
 
-export interface ProjectThreadRenderMessagesArgs {
+export interface ProjectThreadTranscriptMessagesArgs {
   transcriptMessages: Message[];
-  overlayMessages: Message[];
   previousRenderedMessages: Message[];
   subagentById: Record<string, SubagentView>;
 }
@@ -41,75 +39,19 @@ export function sameSubagentViewContent(left: SubagentView | null | undefined, r
   );
 }
 
-export function pruneConvergedOverlayMessages(transcriptMessages: Message[], overlayMessages: Message[]): Message[] {
-  const transcriptIds = new Set(
-    transcriptMessages
+export function projectThreadTranscriptMessages(args: ProjectThreadTranscriptMessagesArgs): Message[] {
+  const projected = args.transcriptMessages.slice();
+  const seen = new Set(
+    projected
       .map((message) => String(message?.id ?? '').trim())
       .filter(Boolean),
   );
-  if (transcriptIds.size === 0) {
-    return overlayMessages;
-  }
-  let changed = false;
-  const next = overlayMessages.filter((message) => {
-    const keep = !transcriptIds.has(String(message?.id ?? '').trim());
-    if (!keep) changed = true;
-    return keep;
-  });
-  return changed ? next : overlayMessages;
-}
-
-export function projectThreadRenderMessages(args: ProjectThreadRenderMessagesArgs): Message[] {
-  const transcriptOrder: string[] = [];
-  const transcriptById = new Map<string, Message>();
-  for (const message of args.transcriptMessages) {
-    const id = String(message?.id ?? '').trim();
-    if (!id || transcriptById.has(id)) continue;
-    transcriptOrder.push(id);
-    transcriptById.set(id, message);
-  }
-
-  const overlayOrder: string[] = [];
-  const overlayById = new Map<string, Message>();
-  for (const message of args.overlayMessages) {
-    const id = String(message?.id ?? '').trim();
-    if (!id || overlayById.has(id)) continue;
-    overlayOrder.push(id);
-    overlayById.set(id, message);
-  }
-
-  const projected: Message[] = [];
-  const seen = new Set<string>();
-
-  for (const id of transcriptOrder) {
-    const nextMessage = overlayById.get(id) ?? transcriptById.get(id);
-    if (!nextMessage) continue;
-    projected.push(nextMessage);
-    seen.add(id);
-  }
 
   for (const previous of args.previousRenderedMessages) {
     const id = String(previous?.id ?? '').trim();
     if (!id || seen.has(id)) continue;
-
-    const overlayMessage = overlayById.get(id);
-    if (overlayMessage) {
-      projected.push(overlayMessage);
-      seen.add(id);
-      continue;
-    }
-
-    if (shouldCarryForwardLocalOnlyMessage(previous)) {
-      projected.push(previous);
-      seen.add(id);
-    }
-  }
-
-  for (const id of overlayOrder) {
-    if (seen.has(id)) continue;
-    const message = overlayById.get(id);
-    if (!message) continue;
-    projected.push(message);
+    if (!shouldCarryForwardLocalOnlyMessage(previous)) continue;
+    projected.push(previous);
     seen.add(id);
   }
 
@@ -244,23 +186,17 @@ export function carryForwardTransientMessageState(previousRenderedMessages: Mess
   const carried = nextMessages.map((message) => {
     const previous = previousById.get(String(message?.id ?? '').trim());
     if (!previous) return message;
-    let nextMessage = message;
+
     const mergedBlocks = carryForwardBlocks(previous.blocks, message.blocks);
-    if (mergedBlocks !== message.blocks) {
-      changed = true;
-      nextMessage = {
-        ...nextMessage,
-        blocks: mergedBlocks,
-      };
+    if (mergedBlocks === message.blocks) {
+      return message;
     }
 
-    const stabilizedMessage = carryForwardStreamingVisibleContent(previous, nextMessage);
-    if (stabilizedMessage !== nextMessage) {
-      changed = true;
-      return stabilizedMessage;
-    }
-
-    return nextMessage;
+    changed = true;
+    return {
+      ...message,
+      blocks: mergedBlocks,
+    };
   });
 
   return changed ? carried : nextMessages;
@@ -299,27 +235,6 @@ function carryForwardBlocks(previousBlocks: MessageBlock[], nextBlocks: MessageB
   return changed ? merged : nextBlocks;
 }
 
-function carryForwardStreamingVisibleContent(previous: Message, next: Message): Message {
-  if (
-    previous.role !== 'assistant'
-    || next.role !== 'assistant'
-    || next.status !== 'streaming'
-    || !hasNonEmptyVisibleMessageContent(previous)
-    || hasNonEmptyVisibleMessageContent(next)
-  ) {
-    return next;
-  }
-
-  if (previous.blocks === next.blocks) {
-    return next;
-  }
-
-  return {
-    ...next,
-    blocks: previous.blocks,
-  };
-}
-
 function findMatchingPreviousBlock(previousBlocks: MessageBlock[], nextBlock: MessageBlock, index: number): MessageBlock | null {
   if (nextBlock.type === 'tool-call') {
     const toolId = String(nextBlock.toolId ?? '').trim();
@@ -348,7 +263,12 @@ function carryForwardToolCallState(previous: ToolCallBlock, next: ToolCallBlock)
     changed = true;
   }
 
-  if (previous.requiresApproval === true && next.requiresApproval === true && previous.approvalState && previous.approvalState !== next.approvalState) {
+  if (
+    previous.requiresApproval === true
+    && next.requiresApproval === true
+    && previous.approvalState
+    && previous.approvalState !== next.approvalState
+  ) {
     carried = {
       ...carried,
       approvalState: previous.approvalState,
@@ -356,8 +276,8 @@ function carryForwardToolCallState(previous: ToolCallBlock, next: ToolCallBlock)
         previous.approvalState === 'approved' && next.status === 'pending'
           ? 'running'
           : previous.approvalState === 'rejected'
-          ? 'error'
-          : carried.status,
+            ? 'error'
+            : carried.status,
       error:
         previous.approvalState === 'rejected'
           ? carried.error || previous.error || 'Rejected by user'
