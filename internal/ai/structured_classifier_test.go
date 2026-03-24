@@ -6,18 +6,31 @@ func TestStructuredClassifierResultPayload_PrefersToolPayload(t *testing.T) {
 	t.Parallel()
 
 	got := structuredClassifierResultPayload(TurnResult{
-		Text:      `{"allow":false}`,
-		Reasoning: `{"allow":false,"reason":"wrong"}`,
+		Text:      `{"intent":"social"}`,
+		Reasoning: `{"intent":"creative","reason":"wrong"}`,
 		ToolCalls: []ToolCall{{
-			Name: structuredClassifierAskUserPolicyToolName,
+			Name: structuredClassifierRunPolicyToolName,
 			Args: map[string]any{
-				"allow":      true,
-				"reason":     "policy_allowed_by_model",
-				"confidence": 0.91,
+				"intent":             "task",
+				"reason":             "actionable_request_detected",
+				"objective_mode":     "replace",
+				"complexity":         "standard",
+				"todo_policy":        "recommended",
+				"minimum_todo_items": 0,
+				"confidence":         0.91,
+				"interaction_contract": map[string]any{
+					"enabled":                     true,
+					"reason":                      "guided_interaction_requested",
+					"single_question_per_turn":    true,
+					"fixed_choices_required":      true,
+					"open_text_fallback_required": true,
+					"indirect_questions_only":     false,
+					"confidence":                  0.83,
+				},
 			},
 		}},
-	}, structuredClassifierAskUserPolicyToolName)
-	want := `{"allow":true,"confidence":0.91,"reason":"policy_allowed_by_model"}`
+	}, structuredClassifierRunPolicyToolName)
+	want := `{"complexity":"standard","confidence":0.91,"intent":"task","interaction_contract":{"confidence":0.83,"enabled":true,"fixed_choices_required":true,"indirect_questions_only":false,"open_text_fallback_required":true,"reason":"guided_interaction_requested","single_question_per_turn":true},"minimum_todo_items":0,"objective_mode":"replace","reason":"actionable_request_detected","todo_policy":"recommended"}`
 	if got != want {
 		t.Fatalf("structuredClassifierResultPayload=%q, want %q", got, want)
 	}

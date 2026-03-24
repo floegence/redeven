@@ -177,8 +177,8 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 		if strings.TrimSpace(reqString(req, "model")) != "kimi-k2.5" {
 			t.Fatalf("model=%q, want kimi-k2.5", reqString(req, "model"))
 		}
-		if got := extractOpenAIToolNames(req); len(got) != 1 || got[0] != structuredClassifierInteractionContractToolName {
-			t.Fatalf("tool_names=%v, want [%s]", got, structuredClassifierInteractionContractToolName)
+		if got := extractOpenAIToolNames(req); len(got) != 1 || got[0] != structuredClassifierRunPolicyToolName {
+			t.Fatalf("tool_names=%v, want [%s]", got, structuredClassifierRunPolicyToolName)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -197,11 +197,11 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 						"reasoning_content": "Use the tool payload as the classifier result.",
 						"tool_calls": []any{
 							map[string]any{
-								"id":   "emit_interaction_contract:0",
+								"id":   "emit_run_policy:0",
 								"type": "function",
 								"function": map[string]any{
-									"name":      structuredClassifierInteractionContractToolName,
-									"arguments": `{"enabled":true,"reason":"guided_option_interaction","single_question_per_turn":true,"fixed_choices_required":true,"open_text_fallback_required":true,"indirect_questions_only":true,"confidence":0.95}`,
+									"name":      structuredClassifierRunPolicyToolName,
+									"arguments": `{"intent":"task","reason":"guided_structured_interaction_requested","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.95,"interaction_contract":{"enabled":true,"reason":"guided_option_interaction","single_question_per_turn":true,"fixed_choices_required":true,"open_text_fallback_required":true,"indirect_questions_only":true,"confidence":0.95}}`,
 								},
 							},
 						},
@@ -234,7 +234,7 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "classify this objective"}}},
 		},
-		Tools: []ToolDef{interactionContractClassifierToolDef()},
+		Tools: []ToolDef{runPolicyClassifierToolDef()},
 	})
 	if err != nil {
 		t.Fatalf("Turn: %v", err)
@@ -248,11 +248,11 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 	if len(result.ToolCalls) != 1 {
 		t.Fatalf("tool_calls=%d, want 1", len(result.ToolCalls))
 	}
-	if result.ToolCalls[0].Name != structuredClassifierInteractionContractToolName {
-		t.Fatalf("tool_name=%q, want %q", result.ToolCalls[0].Name, structuredClassifierInteractionContractToolName)
+	if result.ToolCalls[0].Name != structuredClassifierRunPolicyToolName {
+		t.Fatalf("tool_name=%q, want %q", result.ToolCalls[0].Name, structuredClassifierRunPolicyToolName)
 	}
-	if got := anyBool(result.ToolCalls[0].Args["enabled"]); !got {
-		t.Fatalf("tool_args=%v, want enabled=true", result.ToolCalls[0].Args)
+	if got := strings.TrimSpace(anyString(result.ToolCalls[0].Args["intent"])); got != RunIntentTask {
+		t.Fatalf("tool_args=%v, want intent=task", result.ToolCalls[0].Args)
 	}
 }
 

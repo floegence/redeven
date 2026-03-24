@@ -1025,8 +1025,8 @@ func TestIntegration_NativeSDK_OpenAI_StructuredContinuationTextOnlyRecoveryUses
 		t.Fatalf("signal recovery strategy=%q, want structured_signal_recovery", got)
 	}
 	askAttempt := findRunEventPayload(t, events.Events, "ask_user.attempt")
-	if got := strings.TrimSpace(fmt.Sprint(askAttempt["policy_source"])); got != askUserPolicySourceStructuredContinuation {
-		t.Fatalf("ask_user policy_source=%q, want %q", got, askUserPolicySourceStructuredContinuation)
+	if got := strings.TrimSpace(fmt.Sprint(askAttempt["validation_mode"])); got != "deterministic_contract_state" {
+		t.Fatalf("ask_user validation_mode=%q, want deterministic_contract_state", got)
 	}
 }
 

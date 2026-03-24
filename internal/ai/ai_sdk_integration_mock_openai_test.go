@@ -109,17 +109,11 @@ func isIntentClassifierRequest(req map[string]any) bool {
 		return false
 	}
 	instructions := extractClassifierInstructions(req)
-	return strings.Contains(instructions, runPolicyClassifierMarker) || strings.Contains(instructions, askUserPolicyClassifierMarker) || strings.Contains(instructions, interactionContractClassifierMarker)
+	return strings.Contains(instructions, runPolicyClassifierMarker)
 }
 
 func classifyIntentResponseToken(req map[string]any) string {
 	instructions := extractClassifierInstructions(req)
-	if strings.Contains(strings.TrimSpace(instructions), askUserPolicyClassifierMarker) {
-		return classifyAskUserPolicyResponseToken(req)
-	}
-	if strings.Contains(strings.TrimSpace(instructions), interactionContractClassifierMarker) {
-		return classifyInteractionContractResponseToken(req)
-	}
 	userText := strings.ToLower(strings.TrimSpace(extractResponsesUserText(req)))
 	openGoalText, userMessage := extractIntentClassifierContext(userText)
 	guidedAgeGuess := strings.Contains(userMessage, "猜我的岁数") || strings.Contains(userMessage, "每个问题") || strings.Contains(userMessage, "几个选项")
@@ -172,14 +166,6 @@ func classifyIntentResponseToken(req map[string]any) string {
 	return `{"intent":"task","reason":"actionable_request_detected","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.78}`
 }
 
-func classifyInteractionContractResponseToken(req map[string]any) string {
-	userText := strings.ToLower(strings.TrimSpace(extractResponsesUserText(req)))
-	if strings.Contains(userText, "猜我的岁数") || strings.Contains(userText, "每个问题") || strings.Contains(userText, "几个选项") || strings.Contains(userText, "active objective:\n请你和我一问一答猜我的岁数") {
-		return `{"enabled":true,"reason":"guided_option_interaction","single_question_per_turn":true,"fixed_choices_required":true,"open_text_fallback_required":true,"indirect_questions_only":true,"confidence":0.94}`
-	}
-	return `{"enabled":false,"reason":"no_guided_interaction_contract","single_question_per_turn":false,"fixed_choices_required":false,"open_text_fallback_required":false,"indirect_questions_only":false,"confidence":0}`
-}
-
 func extractClassifierInstructions(req map[string]any) string {
 	if req == nil {
 		return ""
@@ -213,14 +199,6 @@ func extractClassifierInstructions(req map[string]any) string {
 	default:
 		return ""
 	}
-}
-
-func classifyAskUserPolicyResponseToken(req map[string]any) string {
-	userText := strings.ToLower(strings.TrimSpace(extractResponsesUserText(req)))
-	if strings.Contains(userText, `"reason_code":""`) || strings.Contains(userText, `"required_from_user":[]`) {
-		return `{"allow":false,"reason":"contract_incomplete","confidence":0.72}`
-	}
-	return `{"allow":true,"reason":"policy_allowed_by_model","confidence":0.88}`
 }
 
 func extractIntentClassifierContext(text string) (string, string) {

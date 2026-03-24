@@ -114,12 +114,12 @@ func TestE2E_DBConfiguredModel_GuidedStructuredInteractionPreservesContractAcros
 		t.Fatalf("second turn seed_reused should be true: %+v", secondInteraction)
 	}
 	secondAskUser := findRunEventPayload(t, secondEvents.Events, "ask_user.attempt")
-	if got := strings.TrimSpace(fmt.Sprint(secondAskUser["policy_source"])); got != askUserPolicySourceStructuredContinuation {
-		t.Fatalf("second turn ask_user policy_source=%q, want %q", got, askUserPolicySourceStructuredContinuation)
+	if got := strings.TrimSpace(fmt.Sprint(secondAskUser["validation_mode"])); got != "deterministic_contract_state" {
+		t.Fatalf("second turn ask_user validation_mode=%q, want deterministic_contract_state", got)
 	}
 }
 
-func TestE2E_DBConfiguredModel_InteractionContractClassifier(t *testing.T) {
+func TestE2E_DBConfiguredModel_RunPolicyClassifierCarriesInteractionContract(t *testing.T) {
 	t.Parallel()
 
 	svc, _, modelID := newDBConfiguredModelE2EService(t)
@@ -130,18 +130,18 @@ func TestE2E_DBConfiguredModel_InteractionContractClassifier(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveRunModel: %v", err)
 	}
-	contract, err := svc.classifyInteractionContractByModel(
+	policy, err := svc.classifyRunPolicyByModel(
 		ctx,
 		resolved,
-		RunObjectiveModeReplace,
 		"请你和我一问一答猜我的岁数，不要有直接的问题，每个问题应该提供几个选项。",
-		"请你和我一问一答猜我的岁数，不要有直接的问题，每个问题应该提供几个选项。",
+		"",
+		false,
 	)
 	if err != nil {
-		t.Fatalf("classifyInteractionContractByModel: %v", err)
+		t.Fatalf("classifyRunPolicyByModel: %v", err)
 	}
-	if !contract.Enabled {
-		t.Fatalf("interaction contract should be enabled: %+v", contract)
+	if !policy.InteractionContract.Enabled {
+		t.Fatalf("interaction contract should be enabled: %+v", policy.InteractionContract)
 	}
 }
 
