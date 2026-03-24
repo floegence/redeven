@@ -12,7 +12,12 @@ const notificationMocks = vi.hoisted(() => ({
 }));
 
 const envContextMocks = vi.hoisted(() => ({
+  env: Object.assign(
+    () => ({ permissions: { can_execute: true } }),
+    { state: 'ready', loading: false, error: null },
+  ),
   openAskFlowerComposer: vi.fn(),
+  openTerminalInDirectory: vi.fn(),
 }));
 
 const protocolMocks = vi.hoisted(() => ({
@@ -37,6 +42,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Sparkles: (props: any) => <span class={props.class} data-testid="sparkles-icon" />,
+  Terminal: (props: any) => <span class={props.class} data-testid="terminal-icon" />,
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
@@ -80,7 +86,9 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
+    env: envContextMocks.env,
     openAskFlowerComposer: envContextMocks.openAskFlowerComposer,
+    openTerminalInDirectory: envContextMocks.openTerminalInDirectory,
   }),
 }));
 
@@ -133,7 +141,12 @@ describe('EnvCodespacesPage', () => {
   beforeEach(() => {
     notificationMocks.success.mockReset();
     notificationMocks.error.mockReset();
+    envContextMocks.env = Object.assign(
+      () => ({ permissions: { can_execute: true } }),
+      { state: 'ready', loading: false, error: null },
+    );
     envContextMocks.openAskFlowerComposer.mockReset();
+    envContextMocks.openTerminalInDirectory.mockReset();
     protocolMocks.client.mockReset();
     protocolMocks.client.mockReturnValue(null);
     rpcMocks.fs.getPathContext.mockReset();
@@ -185,6 +198,11 @@ describe('EnvCodespacesPage', () => {
     }));
     await flushPage();
 
+    const menuButtons = Array.from(host.querySelectorAll('button')).filter((button) => (
+      button.textContent?.includes('Open in Terminal') || button.textContent?.includes('Ask Flower')
+    ));
+    expect(menuButtons.map((button) => button.textContent?.trim())).toEqual(['Open in Terminal', 'Ask Flower']);
+
     const askFlowerButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Ask Flower'));
     expect(askFlowerButton).toBeTruthy();
 
@@ -209,6 +227,55 @@ describe('EnvCodespacesPage', () => {
       notes: [],
     });
     expect(buildAskFlowerComposerCopy(intent).question).toBe('What would you like to explore inside it?');
+  });
+
+  it('opens Terminal from a codespace card context menu with the absolute directory and preferred name', async () => {
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const card = host.querySelector('[data-testid="codespace-card"]') as HTMLDivElement | null;
+    expect(card).toBeTruthy();
+
+    card?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 40,
+      clientY: 56,
+    }));
+    await flushPage();
+
+    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Open in Terminal'));
+    expect(openButton).toBeTruthy();
+
+    openButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPage();
+
+    expect(envContextMocks.openTerminalInDirectory).toHaveBeenCalledTimes(1);
+    expect(envContextMocks.openTerminalInDirectory).toHaveBeenCalledWith('/workspace/demo', { preferredName: 'Demo Space' });
+  });
+
+  it('hides Open in Terminal when execute permission is unavailable', async () => {
+    envContextMocks.env = Object.assign(
+      () => ({ permissions: { can_execute: false } }),
+      { state: 'ready', loading: false, error: null },
+    );
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const card = host.querySelector('[data-testid="codespace-card"]') as HTMLDivElement | null;
+    expect(card).toBeTruthy();
+
+    card?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 40,
+      clientY: 56,
+    }));
+    await flushPage();
+
+    expect(Array.from(host.querySelectorAll('button')).some((button) => button.textContent?.includes('Open in Terminal'))).toBe(false);
+    expect(Array.from(host.querySelectorAll('button')).some((button) => button.textContent?.includes('Ask Flower'))).toBe(true);
   });
 
   it('closes the codespace context menu on Escape', async () => {
