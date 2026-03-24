@@ -16,6 +16,7 @@ Key points:
 - When the environment grants `can_write`, text previews can switch into Monaco-backed edit mode and save changes back through the agent file RPC.
 - File Browser directory context menus can hand off into Terminal by opening the terminal page and creating a new session rooted at the selected directory.
 - Terminal session creation is dormant-first: `createSession` records the logical session, the first terminal attach starts the PTY with the measured viewport, and the terminal surface performs one explicit post-attach resize confirmation after mount so remote size converges to the settled visible viewport instead of a provisional fallback.
+- Terminal size handoff is focus-driven after attach: when multiple surfaces can reopen the same session, only the focused surface is allowed to emit remote resize updates, and regaining focus re-fits plus re-emits the settled viewport so the active surface can reclaim remote PTY ownership from a previously active narrower or wider surface.
 - Codespaces cards can hand off from their right-click menu into Terminal and Ask Flower, reusing the same directory-level actions used by File Browser folders.
 - Terminal right-click menus can hand off back into File Browser by opening the shared floating browser surface at the active terminal working directory.
 - Env App right-click menus that expose cross-surface handoff actions keep a shared priority order: `Ask Flower` first, `Open in Terminal` second when present, `Browse files` next when present, then a separator before any remaining actions.
