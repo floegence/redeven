@@ -284,6 +284,45 @@ func runPolicyClassifierToolDef() ToolDef {
 				"minimum": 0,
 				"maximum": 1,
 			},
+			"interaction_contract": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties": map[string]any{
+					"enabled": map[string]any{
+						"type": "boolean",
+					},
+					"reason": map[string]any{
+						"type":        "string",
+						"description": "Short snake_case phrase.",
+					},
+					"single_question_per_turn": map[string]any{
+						"type": "boolean",
+					},
+					"fixed_choices_required": map[string]any{
+						"type": "boolean",
+					},
+					"open_text_fallback_required": map[string]any{
+						"type": "boolean",
+					},
+					"indirect_questions_only": map[string]any{
+						"type": "boolean",
+					},
+					"confidence": map[string]any{
+						"type":    "number",
+						"minimum": 0,
+						"maximum": 1,
+					},
+				},
+				"required": []string{
+					"enabled",
+					"reason",
+					"single_question_per_turn",
+					"fixed_choices_required",
+					"open_text_fallback_required",
+					"indirect_questions_only",
+					"confidence",
+				},
+			},
 		},
 		"required": []string{
 			"intent",
@@ -293,6 +332,7 @@ func runPolicyClassifierToolDef() ToolDef {
 			"todo_policy",
 			"minimum_todo_items",
 			"confidence",
+			"interaction_contract",
 		},
 	})
 }

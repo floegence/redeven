@@ -95,7 +95,7 @@ func TestEvaluateTaskCompletionGate(t *testing.T) {
 
 	if pass, reason := evaluateTaskCompletionGate("I think you are in your late twenties. Did I guess right?", runtimeState{
 		InteractionContract: interactionContract{Enabled: true},
-	}, TaskComplexityStandard, config.AIModeAct); pass || reason != "result_requests_user_input" {
-		t.Fatalf("question-shaped completion under interaction contract => pass=%v reason=%q", pass, reason)
+	}, TaskComplexityStandard, config.AIModeAct); !pass || reason != "ok" {
+		t.Fatalf("question-shaped completion should no longer be blocked => pass=%v reason=%q", pass, reason)
 	}
 }

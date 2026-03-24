@@ -1207,15 +1207,10 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		interactionContractSeed = normalizeInteractionContract(policyDecision.InteractionContract)
 	}
 	var interactionMeta interactionContractClassificationMetadata
-	policyDecision.InteractionContract, interactionMeta = classifyInteractionContractWithMetadata(
+	policyDecision.InteractionContract, interactionMeta = resolveInteractionContractWithMetadata(
 		req.Options.Intent,
-		openGoal,
-		effectiveCurrentInput.PublicText,
 		interactionContractSeed,
 		structuredResponseContinuation,
-		func() (interactionContract, error) {
-			return s.classifyInteractionContractByModel(ctx, resolvedModel, policyDecision.ObjectiveMode, openGoal, effectiveCurrentInput.PublicText)
-		},
 	)
 	interactionPayload := policyDecision.InteractionContract.eventPayload()
 	interactionPayload["classification_mode"] = interactionMeta.Mode
@@ -1553,29 +1548,6 @@ func (s *Service) classifyRunPolicyByModel(ctx context.Context, resolved resolve
 		return runPolicyDecision{}, err
 	}
 	return parseModelRunPolicyDecision(structuredClassifierResultPayload(result, structuredClassifierRunPolicyToolName))
-}
-
-func (s *Service) classifyInteractionContractByModel(ctx context.Context, resolved resolvedRunModel, objectiveMode string, activeObjective string, userInput string) (interactionContract, error) {
-	if s == nil {
-		return interactionContract{}, errors.New("nil service")
-	}
-	adapter, _, err := s.initStructuredOutputProvider(resolved)
-	if err != nil {
-		return interactionContract{}, err
-	}
-
-	classifyCtx := ctx
-	cancel := func() {}
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		classifyCtx, cancel = context.WithTimeout(ctx, 12*time.Second)
-	}
-	defer cancel()
-
-	result, err := runStructuredClassifierTurn(classifyCtx, adapter, strings.TrimSpace(resolved.ModelName), buildInteractionContractClassifierMessages(objectiveMode, activeObjective, userInput), interactionContractClassifierToolDef(), structuredClassifierDefaultMaxOutputTokens)
-	if err != nil {
-		return interactionContract{}, err
-	}
-	return parseInteractionContractDecision(structuredClassifierResultPayload(result, structuredClassifierInteractionContractToolName))
 }
 
 func shouldClearThreadState(finalReason string) bool {

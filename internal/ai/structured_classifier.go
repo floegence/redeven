@@ -11,9 +11,7 @@ import (
 const (
 	structuredClassifierDefaultMaxOutputTokens = 1024
 
-	structuredClassifierRunPolicyToolName           = "emit_run_policy"
-	structuredClassifierInteractionContractToolName = "emit_interaction_contract"
-	structuredClassifierAskUserPolicyToolName       = "emit_ask_user_policy"
+	structuredClassifierRunPolicyToolName = "emit_run_policy"
 )
 
 func structuredClassifierToolDef(name string, description string, schema map[string]any) ToolDef {
