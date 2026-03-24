@@ -14,6 +14,7 @@ Key points:
 - If Monaco cannot start while the user is entering Edit mode, Env App shows an explicit editor-unavailable state instead of silently dropping back to a fake editable fallback.
 - When the environment grants `can_write`, text previews can switch into Monaco-backed edit mode and save changes back through the agent file RPC.
 - File Browser directory context menus can hand off into Terminal by opening the terminal page and creating a new session rooted at the selected directory.
+- Codespaces cards can hand off into Ask Flower from their right-click menu, reusing the same directory-context composer flow as File Browser folders.
 - Terminal right-click menus can hand off back into File Browser by opening the shared floating browser surface at the active terminal working directory.
 - CSS, HTML, SCSS, Less, TOML, Makefile-family files, Vue/Svelte-class files, and other text formats now stay on the same Monaco-backed preview/edit path instead of splitting by language support tables.
 - File preview no longer uses a separate Shiki renderer. The only remaining preview fallbacks are a plain-text truncated view and a plain-text emergency view when Monaco fails outside edit mode.
@@ -152,6 +153,7 @@ Notes:
 
 - Codespace/3rd-party app windows never receive `boot_ticket` or `env_session`. They only get one-time `entry_ticket`.
 - If a codespace window is refreshed after the hash is cleared, it can request a fresh `entry_ticket` from the opener Env App via `postMessage` handshake.
+- Codespaces cards also expose a right-click `Ask Flower` action that sends the codespace `workspace_path` as directory context, so the composer keeps the same folder-oriented prompt copy used by File Browser directory launches.
 
 ## Build
 
