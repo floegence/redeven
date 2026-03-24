@@ -181,8 +181,8 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).not.toContain('Current · Upstream origin/feature/demo');
       expect(host.textContent).toContain('Staged');
       expect(host.textContent).toContain('View Diff');
-      expect(host.textContent).toContain('Select another branch to merge into the current branch.');
-      expect(host.textContent).toContain('Switch to another branch before deleting it.');
+      expect(host.textContent).not.toContain('Select another branch to merge into the current branch.');
+      expect(host.textContent).not.toContain('Switch to another branch before deleting it.');
       expect(host.textContent).not.toContain('pending review');
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
       const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Merge') as HTMLButtonElement | undefined;
