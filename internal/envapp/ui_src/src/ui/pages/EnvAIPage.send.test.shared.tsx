@@ -153,8 +153,13 @@ const aiContextValue = new Proxy({
   threads: { loading: false, error: null },
   aiEnabled: () => true,
   modelsReady: () => true,
-  modelOptions: () => [{ id: 'model-test', label: 'Model Test' }],
-  selectedModel: () => 'model-test',
+  modelOptions: () => [{ value: 'model-test', label: 'Model Test' }],
+  selectedDefaultModel: () => 'model-test',
+  selectDefaultModel: vi.fn(),
+  selectedThreadModel: () => String(aiState.activeThread?.model_id ?? 'model-test').trim() || 'model-test',
+  selectThreadModel: vi.fn(),
+  selectedSendModel: () => String(aiState.activeThread?.model_id ?? 'model-test').trim() || 'model-test',
+  activeThreadModelLocked: () => false,
   activeThreadId: () => aiState.activeThreadId || null,
   activeThread: () => aiState.activeThread,
   activeThreadWaitingPrompt: () => aiState.waitingPrompt,
@@ -294,10 +299,26 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     />
   ),
   Select: (props: any) => (
-    <button type="button" class={props.class} disabled={props.disabled}>
-      {props.value ?? props.placeholder}
-    </button>
+    <select
+      data-testid={props['data-testid']}
+      class={props.class}
+      value={props.value}
+      disabled={props.disabled}
+      title={props.title}
+      onChange={(event) => props.onChange?.((event.currentTarget as HTMLSelectElement).value)}
+    >
+      {props.placeholder ? <option value="">{props.placeholder}</option> : null}
+      {(props.options ?? []).map((option: any) => {
+        const value = String(option?.value ?? option?.id ?? '').trim();
+        return (
+          <option value={value}>
+            {String(option?.label ?? value)}
+          </option>
+        );
+      })}
+    </select>
   ),
+  Tag: (props: any) => <span class={props.class}>{props.children}</span>,
   Tooltip: (props: any) => <>{props.children}</>,
 }));
 
@@ -390,6 +411,12 @@ function resetScenario() {
   fetchGatewayJSONMock.mockImplementation(defaultFetchGatewayJSON);
   uploadGatewayFileMock.mockImplementation(async (_file: File) => '/_redeven_proxy/api/ai/uploads/upl_test');
   prepareGatewayRequestInitMock.mockImplementation(async (init: RequestInit = {}) => init);
+  aiContextValue.selectedDefaultModel = () => 'model-test';
+  aiContextValue.selectDefaultModel = vi.fn();
+  aiContextValue.selectedThreadModel = () => String(aiState.activeThread?.model_id ?? 'model-test').trim() || 'model-test';
+  aiContextValue.selectThreadModel = vi.fn();
+  aiContextValue.selectedSendModel = () => String(aiState.activeThread?.model_id ?? 'model-test').trim() || 'model-test';
+  aiContextValue.activeThreadModelLocked = () => false;
   aiState.activeThreadId = 'thread-1';
   aiState.activeThread = {
     thread_id: 'thread-1',
@@ -642,6 +669,94 @@ export function registerEnvAIPageSendTests() {
   afterEach(() => {
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
+  });
+
+  describe('EnvAIPage header model controls', () => {
+    it('shows a default-model picker for a new chat and wires it to selectDefaultModel', async () => {
+      aiState.activeThreadId = '';
+      aiState.activeThread = null;
+      aiContextValue.modelOptions = () => [
+        { value: 'model-test', label: 'Model Test' },
+        { value: 'model-next', label: 'Model Next' },
+      ];
+      aiContextValue.selectedDefaultModel = () => 'model-test';
+      aiContextValue.selectDefaultModel = vi.fn();
+
+      const { host, dispose } = await renderPage();
+      try {
+        const defaultControl = host.querySelector('[data-testid="default-model-control"]');
+        const defaultSelect = defaultControl?.querySelector('select') as HTMLSelectElement | null;
+
+        expect(defaultControl).toBeTruthy();
+        expect(host.querySelector('[data-testid="thread-model-control"]')).toBeNull();
+        expect(host.querySelector('[data-testid="thread-model-locked-badge"]')).toBeNull();
+
+        defaultSelect!.value = 'model-next';
+        defaultSelect!.dispatchEvent(new Event('change', { bubbles: true }));
+
+        expect(aiContextValue.selectDefaultModel).toHaveBeenCalledWith('model-next');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('shows a thread-model picker for an unlocked active thread and wires it to selectThreadModel', async () => {
+      aiContextValue.modelOptions = () => [
+        { value: 'model-test', label: 'Model Test' },
+        { value: 'model-next', label: 'Model Next' },
+      ];
+      aiContextValue.selectedThreadModel = () => 'model-test';
+      aiContextValue.selectThreadModel = vi.fn();
+      aiContextValue.activeThreadModelLocked = () => false;
+
+      const { host, dispose } = await renderPage();
+      try {
+        const threadControl = host.querySelector('[data-testid="thread-model-control"]');
+        const threadSelect = threadControl?.querySelector('select') as HTMLSelectElement | null;
+
+        expect(threadControl).toBeTruthy();
+        expect(host.querySelector('[data-testid="default-model-control"]')).toBeNull();
+        expect(host.querySelector('[data-testid="thread-model-locked-badge"]')).toBeNull();
+
+        threadSelect!.value = 'model-next';
+        threadSelect!.dispatchEvent(new Event('change', { bubbles: true }));
+
+        expect(aiContextValue.selectThreadModel).toHaveBeenCalledWith('model-next');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('shows a locked thread model badge instead of an editable picker', async () => {
+      aiState.activeThread = {
+        ...(aiState.activeThread ?? {
+          thread_id: 'thread-1',
+          title: 'Thread 1',
+          model_id: 'model-locked',
+          execution_mode: 'act',
+          working_dir: '/workspace',
+          queued_turn_count: 0,
+          run_status: 'idle',
+        }),
+        model_id: 'model-locked',
+      };
+      aiContextValue.modelOptions = () => [{ value: 'model-locked', label: 'Locked Model' }];
+      aiContextValue.selectedThreadModel = () => 'model-locked';
+      aiContextValue.activeThreadModelLocked = () => true;
+
+      const { host, dispose } = await renderPage();
+      try {
+        const lockedBadge = host.querySelector('[data-testid="thread-model-locked-badge"]');
+
+        expect(lockedBadge).toBeTruthy();
+        expect(lockedBadge?.textContent).toContain('Locked Model');
+        expect(lockedBadge?.textContent).toContain('Locked');
+        expect(host.querySelector('[data-testid="thread-model-control"]')).toBeNull();
+        expect(host.querySelector('[data-testid="default-model-control"]')).toBeNull();
+      } finally {
+        dispose();
+      }
+    });
   });
 
   describe('EnvAIPage composer send flow', () => {
