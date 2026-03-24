@@ -155,4 +155,56 @@ describe('aiThreadRenderProjection', () => {
 
     expect(projected).toEqual([]);
   });
+
+  it('appends the active live assistant after optimistic local user messages', () => {
+    const optimisticUser: Message = {
+      id: 'u_local_2',
+      role: 'user',
+      blocks: [{ type: 'text', content: 'latest optimistic turn' }],
+      status: 'complete',
+      timestamp: 30,
+    };
+    const liveAssistant: Message = {
+      id: 'm_ai_live_1',
+      role: 'assistant',
+      blocks: [{ type: 'markdown', content: 'Streaming answer' }],
+      status: 'streaming',
+      timestamp: 31,
+    };
+
+    const projected = projectThreadTranscriptMessages({
+      transcriptMessages: [],
+      liveAssistantMessage: liveAssistant,
+      previousRenderedMessages: [optimisticUser],
+      subagentById: {},
+    });
+
+    expect(projected.map((message: Message) => message.id)).toEqual(['u_local_2', 'm_ai_live_1']);
+  });
+
+  it('suppresses the live assistant once the transcript already contains the same assistant id', () => {
+    const transcriptAssistant: Message = {
+      id: 'm_ai_live_2',
+      role: 'assistant',
+      blocks: [{ type: 'markdown', content: 'Persisted answer' }],
+      status: 'complete',
+      timestamp: 40,
+    };
+    const liveAssistant: Message = {
+      id: 'm_ai_live_2',
+      role: 'assistant',
+      blocks: [{ type: 'markdown', content: 'Streaming answer' }],
+      status: 'streaming',
+      timestamp: 39,
+    };
+
+    const projected = projectThreadTranscriptMessages({
+      transcriptMessages: [transcriptAssistant],
+      liveAssistantMessage: liveAssistant,
+      previousRenderedMessages: [],
+      subagentById: {},
+    });
+
+    expect(projected).toEqual([transcriptAssistant]);
+  });
 });

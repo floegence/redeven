@@ -1,11 +1,6 @@
 import { applyStreamEventBatchToMessages } from '../chat/messageState';
 import type { Message, MessageBlock, StreamEvent } from '../chat/types';
 
-export interface LiveRunBlockEntry {
-  block: MessageBlock;
-  index: number;
-}
-
 function hasVisibleString(value: unknown): boolean {
   return String(value ?? '').trim() !== '';
 }
@@ -45,35 +40,14 @@ export function isLiveRunAnswerBlock(block: MessageBlock): boolean {
   }
 }
 
-export function getLiveRunAnswerBlockEntries(message: Message | null | undefined): LiveRunBlockEntry[] {
-  if (!message) {
-    return [];
-  }
-  return message.blocks.flatMap((block, index) => (
-    isLiveRunAnswerBlock(block) && hasVisibleLiveRunAnswerContent(block)
-      ? [{ block, index }]
-      : []
-  ));
-}
-
-export function getLiveRunActivityBlockEntries(message: Message | null | undefined): LiveRunBlockEntry[] {
-  if (!message) {
-    return [];
-  }
-  return message.blocks.flatMap((block, index) => (
-    block.type !== 'thinking' && !isLiveRunAnswerBlock(block)
-      ? [{ block, index }]
-      : []
-  ));
-}
-
 function hasVisibleLiveRunMessageContent(message: Message | null | undefined): boolean {
   if (!message) {
     return false;
   }
-  return getLiveRunAnswerBlockEntries(message).length > 0
-    || getLiveRunActivityBlockEntries(message).length > 0
-    || hasVisibleString(message.error);
+  return message.blocks.some((block) => (
+    (isLiveRunAnswerBlock(block) && hasVisibleLiveRunAnswerContent(block))
+    || (block.type !== 'thinking' && !isLiveRunAnswerBlock(block))
+  )) || hasVisibleString(message.error);
 }
 
 function normalizeLiveRunMessage(message: Message | null | undefined): Message | null {
@@ -139,4 +113,11 @@ export function clearLiveRunMessageIfTranscriptCaughtUp(
   return transcriptMessages.some((message) => String(message?.id ?? '').trim() === currentId)
     ? null
     : current;
+}
+
+export function resolveRenderableLiveRunMessage(
+  current: Message | null,
+  transcriptMessages: Message[],
+): Message | null {
+  return clearLiveRunMessageIfTranscriptCaughtUp(current, transcriptMessages);
 }

@@ -48,3 +48,40 @@ func TestGetActiveRunSnapshot_UsesStreamingStatus(t *testing.T) {
 		t.Fatalf("status=%q, want streaming", gotStatus)
 	}
 }
+
+func TestGetActiveRunSnapshot_SuppressesSnapshotsAfterAssistantPersisted(t *testing.T) {
+	t.Parallel()
+
+	r := &run{
+		messageID:                "msg_snapshot_persisted",
+		assistantCreatedAtUnixMs: 1700000000004,
+		assistantBlocks: []any{
+			&persistedMarkdownBlock{Type: "markdown", Content: "persisted already"},
+		},
+	}
+	r.markAssistantPersisted()
+
+	svc := &Service{
+		activeRunByTh: map[string]string{
+			runThreadKey("env_test", "th_test"): "run_test",
+		},
+		runs: map[string]*run{
+			"run_test": r,
+		},
+	}
+	meta := &session.Meta{
+		EndpointID: "env_test",
+		CanRead:    true,
+	}
+
+	runID, rawJSON, err := svc.GetActiveRunSnapshot(meta, "th_test")
+	if err != nil {
+		t.Fatalf("GetActiveRunSnapshot: %v", err)
+	}
+	if runID != "" {
+		t.Fatalf("runID=%q, want empty", runID)
+	}
+	if rawJSON != "" {
+		t.Fatalf("rawJSON=%q, want empty", rawJSON)
+	}
+}

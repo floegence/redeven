@@ -31,6 +31,7 @@ import {
   type StreamEvent,
 } from '../chat';
 import { upsertMessageById } from '../chat/messageState';
+import { hasVisibleMessageContent } from '../chat/message/messageVisibility';
 import {
   normalizeAskUserDraft,
   normalizeAskUserDraftForQuestion,
@@ -100,10 +101,12 @@ import {
   sameSubagentViewContent,
 } from './aiThreadRenderProjection';
 import { FlowerLiveRunPane } from './FlowerLiveRunPane';
+import { FlowerMessageRunIndicator } from '../widgets/FlowerMessageRunIndicator';
 import {
   applyStreamEventBatchToLiveRunMessage,
   clearLiveRunMessageIfTranscriptCaughtUp,
   mergeLiveRunSnapshot,
+  resolveRenderableLiveRunMessage,
 } from './flowerLiveRunState';
 
 type DirCache = Map<string, FileItem[]>;
@@ -1837,6 +1840,13 @@ export function EnvAIPage() {
   const sendIntentByMessageId = new Map<string, SendIntent>();
   const sourceFollowupIDByMessageId = new Map<string, string>();
   const draftSnapshotByMessageId = new Map<string, AIChatInputDraftSnapshot>();
+  const activeLiveRunMessage = createMemo(() =>
+    resolveRenderableLiveRunMessage(liveRunMessage(), transcriptMessages()),
+  );
+  const visibleLiveRunMessage = createMemo(() => {
+    const liveMessage = activeLiveRunMessage();
+    return liveMessage && hasVisibleMessageContent(liveMessage) ? liveMessage : null;
+  });
 
   let chat: ChatContextValue | null = null;
   const [chatReady, setChatReady] = createSignal(false);
@@ -2103,8 +2113,12 @@ export function EnvAIPage() {
     setLiveRunPending(false);
   };
   const setLiveRunSnapshotMessage = (message: Message): void => {
-    setLiveRunPending(false);
-    setLiveRunMessage((current) => mergeLiveRunSnapshot(current, message));
+    const transcript = untrack(transcriptMessages);
+    setLiveRunMessage((current) => {
+      const next = clearLiveRunMessageIfTranscriptCaughtUp(mergeLiveRunSnapshot(current, message), transcript);
+      setLiveRunPending(next ? !hasVisibleMessageContent(next) : false);
+      return next;
+    });
   };
   const flushLiveRunStreamEvents = (): void => {
     const events = pendingLiveRunEvents;
@@ -2112,8 +2126,12 @@ export function EnvAIPage() {
     liveRunRaf = null;
     if (events.length === 0) return;
 
-    setLiveRunMessage((current) =>
-      applyStreamEventBatchToLiveRunMessage(current, events));
+    const transcript = untrack(transcriptMessages);
+    setLiveRunMessage((current) => {
+      const next = clearLiveRunMessageIfTranscriptCaughtUp(applyStreamEventBatchToLiveRunMessage(current, events), transcript);
+      setLiveRunPending(next ? !hasVisibleMessageContent(next) : false);
+      return next;
+    });
   };
   const applyLiveRunStreamEvent = (event: StreamEvent): void => {
     pendingLiveRunEvents.push(event);
@@ -2317,14 +2335,19 @@ export function EnvAIPage() {
     return true;
   };
   createEffect(() => {
+    const liveMessage = liveRunMessage();
     const transcript = transcriptMessages();
-    setLiveRunMessage((current) => clearLiveRunMessageIfTranscriptCaughtUp(current, transcript));
+    const nextLiveMessage = clearLiveRunMessageIfTranscriptCaughtUp(liveMessage, transcript);
+    if (nextLiveMessage !== liveMessage) {
+      setLiveRunMessage(nextLiveMessage);
+    }
   });
   createEffect(() => {
     if (!chatReady()) return;
 
     const projectedMessages = projectThreadTranscriptMessages({
       transcriptMessages: transcriptMessages(),
+      liveAssistantMessage: visibleLiveRunMessage(),
       previousRenderedMessages: untrack(() => chat?.messages() ?? []),
       subagentById: threadSubagentsById(),
     });
@@ -2333,8 +2356,7 @@ export function EnvAIPage() {
     if (!sameRenderedMessageSequence(currentMessages, projectedMessages)) {
       chat?.setMessages(projectedMessages);
     }
-    const liveMessage = liveRunMessage();
-    rebuildSubagentsFromMessages(liveMessage ? [...projectedMessages, liveMessage] : projectedMessages);
+    rebuildSubagentsFromMessages(projectedMessages);
   });
   const subagentsUpdatedLabel = createMemo(() => {
     const latest = activeThreadSubagents()[0];
@@ -2391,11 +2413,11 @@ export function EnvAIPage() {
   };
 
   const activeThreadRunning = createMemo(() => ai.isThreadRunning(ai.activeThreadId()));
-  const showLiveRunSurface = createMemo(() =>
-    liveRunPending() || activeThreadRunning() || liveRunMessage() !== null,
+  const showPendingLiveRunFooter = createMemo(() =>
+    liveRunPending() && visibleLiveRunMessage() === null,
   );
   const hasMessages = createMemo(() =>
-    transcriptMessages().length > 0 || showLiveRunSurface(),
+    transcriptMessages().length > 0 || visibleLiveRunMessage() !== null || showPendingLiveRunFooter(),
   );
   const activeThreadWaitingUser = createMemo(() => {
     const status = String(ai.activeThread()?.run_status ?? '').trim().toLowerCase();
@@ -2687,7 +2709,7 @@ export function EnvAIPage() {
     status === 'success' || status === 'failed' || status === 'canceled' || status === 'timed_out' || status === 'waiting_user';
 
   const hasStreamingAssistantMessage = (): boolean => {
-    return liveRunMessage()?.status === 'streaming';
+    return activeLiveRunMessage()?.status === 'streaming';
   };
 
   const cancelActiveRunSnapshotRecovery = (): void => {
@@ -3299,6 +3321,7 @@ export function EnvAIPage() {
     resetContextTelemetryState();
     setTodosError('');
     setTodosLoading(true);
+    setLiveRunPending(ai.isThreadRunning(tidStr));
     void loadThreadMessages(tid, { scrollToBottom: true, reset: true });
     void loadActiveRunSnapshot(tidStr);
     void loadThreadTodos(tid, { silent: false, notifyError: false });
@@ -3333,6 +3356,7 @@ export function EnvAIPage() {
         resetContextTelemetryState();
         setTodosError('');
         setTodosLoading(true);
+        setLiveRunPending(ai.isThreadRunning(tid));
 
         void loadThreadMessages(tid, { reset: true });
         void loadActiveRunSnapshot(tid);
@@ -3814,6 +3838,7 @@ export function EnvAIPage() {
 
       const runId = String(resp.runId ?? '').trim();
       if (runId) {
+        void loadActiveRunSnapshot(tid);
         ensureContextRun(runId, { reset: true });
         void loadContextRunEvents(runId, { reset: true });
         scheduleActiveRunSnapshotRecovery(tid, runId);
@@ -3972,6 +3997,7 @@ export function EnvAIPage() {
       }
       if (rid) {
         ai.confirmThreadRun(tid, rid);
+        void loadActiveRunSnapshot(tid);
         ensureContextRun(rid, { reset: true });
         void loadContextRunEvents(rid, { reset: true });
         scheduleActiveRunSnapshotRecovery(tid, rid);
@@ -4174,6 +4200,11 @@ export function EnvAIPage() {
           placeholder: 'Describe what you want to do...',
           assistantAvatar: FlowerAssistantAvatar,
           showListWorkingIndicator: false,
+          renderMessageOrnament: (props) => (
+            props.message.role === 'assistant' && props.isActiveAssistantStreaming
+              ? <FlowerMessageRunIndicator phaseLabel={runPhaseLabel()} />
+              : <></>
+          ),
           allowAttachments: canInteract(),
           maxAttachments: 5,
           maxAttachmentSize: 10 * 1024 * 1024,
@@ -4426,14 +4457,11 @@ export function EnvAIPage() {
                         loading={messagesLoading()}
                         onSuggestionClick={handleSuggestionClick}
                         disabled={!canInteract()}
-                        hasFooter={showLiveRunSurface()}
+                        hasFooter={showPendingLiveRunFooter()}
                         footer={(
-                          <Show when={showLiveRunSurface()}>
+                          <Show when={showPendingLiveRunFooter()}>
                             <FlowerLiveRunPane
-                              message={liveRunMessage()}
                               phaseLabel={runPhaseLabel()}
-                              assistantAvatar={FlowerAssistantAvatar}
-                              showPending={liveRunPending() || activeThreadRunning()}
                             />
                           </Show>
                         )}
