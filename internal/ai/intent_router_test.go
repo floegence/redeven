@@ -154,6 +154,25 @@ func TestClassifyRunPolicy_StructuredResponseForcesContinuation(t *testing.T) {
 	if got.Reason != "structured_response_continuation" {
 		t.Fatalf("reason=%q, want structured_response_continuation", got.Reason)
 	}
+	if got.Source != RunIntentSourceDeterministic {
+		t.Fatalf("source=%q, want %q", got.Source, RunIntentSourceDeterministic)
+	}
+}
+
+func TestClassifyRunPolicy_StructuredResponseContinuationSkipsModelClassifier(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	got := classifyRunPolicy("Streaming apps", nil, "Run a guided music-preference questionnaire", true, func() (runPolicyDecision, error) {
+		called = true
+		return runPolicyDecision{}, nil
+	})
+	if called {
+		t.Fatalf("model classifier should be skipped for structured response continuations")
+	}
+	if got.ObjectiveMode != RunObjectiveModeContinue {
+		t.Fatalf("objective_mode=%q, want %q", got.ObjectiveMode, RunObjectiveModeContinue)
+	}
 }
 
 func TestParseModelRunPolicyDecision_CodeFenceJSON(t *testing.T) {

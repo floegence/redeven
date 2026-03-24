@@ -680,6 +680,356 @@ func TestIntegration_NativeSDK_OpenAI_TextOnlyContinuationCommitsAssistantHistor
 	}
 }
 
+type openAIStructuredSignalRecoveryMock struct {
+	mu sync.Mutex
+
+	step            int
+	classifierCount int
+	stepToolNames   [][]string
+}
+
+func isStructuredSignalRecoveryToolset(names []string) bool {
+	if len(names) != 2 {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, name := range names {
+		seen[strings.TrimSpace(name)] = true
+	}
+	return seen["ask_user"] && seen["task_complete"]
+}
+
+func (m *openAIStructuredSignalRecoveryMock) snapshot() (int, int, [][]string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([][]string, 0, len(m.stepToolNames))
+	for _, names := range m.stepToolNames {
+		copyNames := append([]string(nil), names...)
+		out = append(out, copyNames)
+	}
+	return m.step, m.classifierCount, out
+}
+
+func (m *openAIStructuredSignalRecoveryMock) handle(w http.ResponseWriter, r *http.Request) {
+	if r == nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if strings.TrimSpace(r.Header.Get("Authorization")) != "Bearer sk-test" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/responses") {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	body, _ := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	var req map[string]any
+	_ = json.Unmarshal(body, &req)
+	if isIntentClassifierRequest(req) {
+		m.mu.Lock()
+		m.classifierCount++
+		m.mu.Unlock()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		f, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+		model := strings.TrimSpace(fmt.Sprint(req["model"]))
+		if model == "" {
+			model = "gpt-5-mini"
+		}
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.created",
+			"response": map[string]any{
+				"id":         "resp_classifier_structured_signal_recovery",
+				"created_at": time.Now().Unix(),
+				"model":      model,
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":  "response.output_text.delta",
+			"delta": classifyIntentResponseToken(req),
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_classifier_structured_signal_recovery",
+				"model":  model,
+				"status": "completed",
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+				},
+			},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
+		return
+	}
+
+	toolNames := extractOpenAIToolNames(req)
+	m.mu.Lock()
+	m.step++
+	step := m.step
+	m.stepToolNames = append(m.stepToolNames, append([]string(nil), toolNames...))
+	m.mu.Unlock()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	f, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	model := strings.TrimSpace(fmt.Sprint(req["model"]))
+	if model == "" {
+		model = "gpt-5-mini"
+	}
+
+	writeOpenAISSEJSON(w, f, map[string]any{
+		"type": "response.created",
+		"response": map[string]any{
+			"id":         fmt.Sprintf("resp_structured_signal_recovery_%d", step),
+			"created_at": time.Now().Unix(),
+			"model":      model,
+		},
+	})
+
+	switch step {
+	case 1:
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":  "response.output_text.delta",
+			"delta": "GUIDED_TEXT_ONLY_RECOVERY",
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_structured_signal_recovery_1",
+				"model":  model,
+				"status": "completed",
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+				},
+			},
+		})
+	case 2:
+		if isStructuredSignalRecoveryToolset(toolNames) {
+			writeOpenAISSEJSON(w, f, map[string]any{
+				"type": "response.completed",
+				"response": map[string]any{
+					"id":     "resp_structured_signal_recovery_2",
+					"model":  model,
+					"status": "completed",
+					"output": []any{
+						map[string]any{
+							"type":      "function_call",
+							"id":        "fc_structured_signal_recovery_ask",
+							"call_id":   "call_structured_signal_recovery_ask",
+							"name":      "ask_user",
+							"arguments": `{"questions":[{"id":"question_1","header":"Music Habit","question":"Which option fits best next?","response_mode":"select_or_write","choices_exhaustive":false,"write_label":"None of the above","write_placeholder":"Type another answer","choices":[{"choice_id":"streaming","label":"Streaming apps","kind":"select"},{"choice_id":"radio","label":"Radio","kind":"select"}]}],"reason_code":"user_decision_required","required_from_user":["Choose the closest option or type your own."],"evidence_refs":[]}`,
+						},
+					},
+					"usage": map[string]any{
+						"input_tokens":  1,
+						"output_tokens": 1,
+					},
+				},
+			})
+			break
+		}
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":  "response.output_text.delta",
+			"delta": "GUIDED_TEXT_ONLY_RECOVERY_AGAIN",
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_structured_signal_recovery_2_text_only",
+				"model":  model,
+				"status": "completed",
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+				},
+			},
+		})
+	default:
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     fmt.Sprintf("resp_structured_signal_recovery_%d", step),
+				"model":  model,
+				"status": "completed",
+				"output": []any{
+					map[string]any{
+						"type":      "function_call",
+						"id":        "fc_structured_signal_recovery_ask_late",
+						"call_id":   "call_structured_signal_recovery_ask_late",
+						"name":      "ask_user",
+						"arguments": `{"questions":[{"id":"question_1","header":"Music Habit","question":"Which option fits best next?","response_mode":"select_or_write","choices_exhaustive":false,"write_label":"None of the above","write_placeholder":"Type another answer","choices":[{"choice_id":"streaming","label":"Streaming apps","kind":"select"},{"choice_id":"radio","label":"Radio","kind":"select"}]}],"reason_code":"user_decision_required","required_from_user":["Choose the closest option or type your own."],"evidence_refs":[]}`,
+					},
+				},
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+				},
+			},
+		})
+	}
+
+	_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	f.Flush()
+}
+
+func TestIntegration_NativeSDK_OpenAI_StructuredContinuationTextOnlyRecoveryUsesSignalOnlyTurn(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	stateDir := t.TempDir()
+	agentHomeDir := t.TempDir()
+
+	mock := &openAIStructuredSignalRecoveryMock{}
+	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
+	t.Cleanup(srv.Close)
+
+	baseURL := strings.TrimSuffix(srv.URL, "/") + "/v1"
+	cfg := &config.AIConfig{
+		Providers: []config.AIProvider{
+			{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: baseURL,
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+			},
+		},
+	}
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_test_structured_signal_recovery",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc, err := NewService(Options{
+		Logger:              logger,
+		StateDir:            stateDir,
+		AgentHomeDir:        agentHomeDir,
+		Shell:               "bash",
+		Config:              cfg,
+		RunMaxWallTime:      30 * time.Second,
+		RunIdleTimeout:      10 * time.Second,
+		ToolApprovalTimeout: 5 * time.Second,
+		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
+			if strings.TrimSpace(providerID) != "openai" {
+				return "", false, nil
+			}
+			return "sk-test", true, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	thread, err := svc.CreateThread(ctx, &meta, "guided recovery", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if svc.contextRepo == nil {
+		t.Fatalf("context repository is not initialized")
+	}
+	if err := svc.contextRepo.SetOpenGoal(ctx, meta.EndpointID, thread.ThreadID, "Run a guided music-preference questionnaire"); err != nil {
+		t.Fatalf("SetOpenGoal: %v", err)
+	}
+
+	runID := "run_test_native_openai_structured_signal_recovery_1"
+	rr := httptest.NewRecorder()
+	err = svc.StartRun(ctx, &meta, runID, RunStartRequest{
+		ThreadID: thread.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			Text: "Streaming apps",
+			StructuredResponse: &RequestUserInputResponseRecord{
+				PromptID:      "prompt_music_1",
+				ReasonCode:    AskUserReasonUserDecisionRequired,
+				PublicSummary: "Streaming apps",
+				Responses: []RequestUserInputResolvedQuestion{{
+					QuestionID:          "question_1",
+					Header:              "Music Habit",
+					Question:            "How do you usually listen to music?",
+					SelectedChoiceID:    "streaming",
+					SelectedChoiceLabel: "Streaming apps",
+					PublicSummary:       "Streaming apps",
+				}},
+			},
+			InteractionContractSeed: interactionContract{
+				Enabled:                  true,
+				Source:                   interactionContractSourceModel,
+				SingleQuestionPerTurn:    true,
+				FixedChoicesRequired:     true,
+				OpenTextFallbackRequired: true,
+			},
+		},
+		Options: RunOptions{MaxSteps: 4, MaxNoToolRounds: 1, Mode: "plan"},
+	}, rr)
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	view := waitForThreadStatus(t, ctx, svc, &meta, thread.ThreadID, runID, RunStateWaitingUser)
+	if view == nil || view.WaitingPrompt == nil {
+		t.Fatalf("waiting prompt missing after structured recovery: %+v", view)
+	}
+
+	stepCount, classifierCount, stepToolNames := mock.snapshot()
+	if stepCount != 2 {
+		t.Fatalf("provider step count=%d, want 2; tool_names=%v", stepCount, stepToolNames)
+	}
+	if classifierCount != 0 {
+		t.Fatalf("classifier_count=%d, want 0", classifierCount)
+	}
+	if len(stepToolNames) < 2 || !isStructuredSignalRecoveryToolset(stepToolNames[1]) {
+		t.Fatalf("second turn should use signal-only recovery tools, got=%v", stepToolNames)
+	}
+
+	events, err := svc.ListRunEvents(ctx, &meta, runID, 200)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	recovery := findRunEventPayload(t, events.Events, "signal.recovery.attempt")
+	if got := strings.TrimSpace(fmt.Sprint(recovery["strategy"])); got != "structured_signal_recovery" {
+		t.Fatalf("signal recovery strategy=%q, want structured_signal_recovery", got)
+	}
+	askAttempt := findRunEventPayload(t, events.Events, "ask_user.attempt")
+	if got := strings.TrimSpace(fmt.Sprint(askAttempt["policy_source"])); got != askUserPolicySourceStructuredContinuation {
+		t.Fatalf("ask_user policy_source=%q, want %q", got, askUserPolicySourceStructuredContinuation)
+	}
+}
+
 type openAIMixedSignalSameTurnMock struct {
 	mu sync.Mutex
 

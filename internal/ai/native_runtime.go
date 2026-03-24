@@ -1828,6 +1828,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	state.TodoPolicy = normalizeTodoPolicy(req.Options.TodoPolicy)
 	state.MinimumTodoItems = normalizeMinimumTodoItems(state.TodoPolicy, req.Options.MinimumTodoItems)
 	state.InteractionContract = normalizeInteractionContract(req.InteractionContract)
+	structuredResponseContinuation := req.Input.StructuredResponse != nil
 	if source, hydrated := r.hydrateTodoRuntimeState(execCtx, &state, req.ContextPack); hydrated {
 		r.persistRunEvent("todo.hydrated", RealtimeStreamKindLifecycle, map[string]any{
 			"source":           source,
@@ -1874,7 +1875,38 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	resetMistakes := func() {
 		mistakeWindow = mistakeWindow[:0]
 	}
+	guidedStructuredContinuationActive := func() bool {
+		return structuredResponseContinuation && normalizeInteractionContract(state.InteractionContract).Enabled
+	}
+	selectSignalOnlyTools := func(names ...string) []ToolDef {
+		if len(names) == 0 {
+			return nil
+		}
+		wanted := make(map[string]struct{}, len(names))
+		for _, name := range names {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			wanted[name] = struct{}{}
+		}
+		if len(wanted) == 0 {
+			return nil
+		}
+		activeTools := scheduler.ActiveTools(mode)
+		out := make([]ToolDef, 0, len(wanted))
+		for _, tool := range activeTools {
+			if _, ok := wanted[strings.TrimSpace(tool.Name)]; !ok {
+				continue
+			}
+			out = append(out, tool)
+		}
+		return out
+	}
 	classifyAskUserByModel := func(signal askUserSignal) askUserPolicyDecision {
+		if decision, ok := structuredContinuationAskUserPolicyDecision(state, structuredResponseContinuation); ok {
+			return decision
+		}
 		signal = normalizeAskUserSignal(signal)
 		policyCtx := execCtx
 		cancel := func() {}
@@ -2060,27 +2092,28 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			askPassed, askReason = evaluateGuardAskUserGate(source, state, taskComplexity)
 		}
 		r.persistRunEvent("ask_user.attempt", RealtimeStreamKindLifecycle, map[string]any{
-			"step_index":                   step,
-			"source":                       source,
-			"gate_passed":                  askPassed,
-			"gate_reason":                  askReason,
-			"question_len":                 len([]rune(strings.TrimSpace(signal.Question))),
-			"questions_count":              len(signal.Questions),
-			"choices_count":                requestUserInputQuestionChoiceCount(signal.Questions),
-			"reason_code":                  signal.ReasonCode,
-			"required_inputs_count":        len(signal.RequiredFromUser),
-			"evidence_refs_count":          len(signal.EvidenceRefs),
-			"policy_allow":                 policyDecision.Allow,
-			"policy_reason":                policyDecision.Reason,
-			"policy_source":                policyDecision.Source,
-			"policy_confidence":            policyDecision.Confidence,
-			"policy_advisory_mode":         source == "model_signal",
-			"policy_gate_enforced":         policyGateEnforced,
-			"policy_advisory_block":        source == "model_signal" && !policyDecision.Allow,
-			"complexity":                   taskComplexity,
-			"todo_tracking":                state.TodoTrackingEnabled,
-			"todo_open_count":              state.TodoOpenCount,
-			"interaction_contract_enabled": normalizeInteractionContract(state.InteractionContract).Enabled,
+			"step_index":                       step,
+			"source":                           source,
+			"gate_passed":                      askPassed,
+			"gate_reason":                      askReason,
+			"question_len":                     len([]rune(strings.TrimSpace(signal.Question))),
+			"questions_count":                  len(signal.Questions),
+			"choices_count":                    requestUserInputQuestionChoiceCount(signal.Questions),
+			"reason_code":                      signal.ReasonCode,
+			"required_inputs_count":            len(signal.RequiredFromUser),
+			"evidence_refs_count":              len(signal.EvidenceRefs),
+			"policy_allow":                     policyDecision.Allow,
+			"policy_reason":                    policyDecision.Reason,
+			"policy_source":                    policyDecision.Source,
+			"policy_confidence":                policyDecision.Confidence,
+			"policy_advisory_mode":             source == "model_signal",
+			"policy_gate_enforced":             policyGateEnforced,
+			"policy_advisory_block":            source == "model_signal" && !policyDecision.Allow,
+			"complexity":                       taskComplexity,
+			"todo_tracking":                    state.TodoTrackingEnabled,
+			"todo_open_count":                  state.TodoOpenCount,
+			"interaction_contract_enabled":     normalizeInteractionContract(state.InteractionContract).Enabled,
+			"structured_response_continuation": structuredResponseContinuation,
 		})
 		if !askPassed {
 			rejectionSignature := buildAskUserRejectionSignature(source, signal, askReason)
@@ -2906,7 +2939,8 @@ mainLoop:
 			"no_tool_rounds":     noToolRounds,
 			"max_no_tool_rounds": maxNoToolRounds,
 		})
-		if noToolRounds <= maxNoToolRounds {
+		preferStructuredSignalRecovery := guidedStructuredContinuationActive() && capabilityContract.AllowUserInteraction && noToolRounds >= maxNoToolRounds
+		if noToolRounds < maxNoToolRounds || (noToolRounds == maxNoToolRounds && !preferStructuredSignalRecovery) {
 			if noToolRounds == maxNoToolRounds {
 				exceptionOverlay = fmt.Sprintf("[COMPLETION REQUIRED] You have produced no-tool rounds (%d/%d). Unless an external blocker exists, finalize with task_complete now after summarizing verified outcomes.", noToolRounds, maxNoToolRounds)
 				nudgeText := "Try to finish autonomously in this run. If done, call task_complete now with concrete evidence."
@@ -2937,25 +2971,40 @@ mainLoop:
 			"complexity":          taskComplexity,
 		})
 
-		// One last chance: force a signal-only turn to produce task_complete instead of
-		// prematurely waiting_user when the model forgets explicit completion.
+		forcedSignalTools := selectSignalOnlyTools("task_complete")
+		forcedStrategy := "task_complete_only"
+		// Active structured continuations should recover with an explicit signal turn
+		// instead of paying for another generic freeform round.
 		forcedMsg := "You have produced repeated no-tool rounds. Summarize what you accomplished and what remains (if anything), then call task_complete."
 		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: forcedMsg}}})
 		forcedOverlay := "[FINAL SUMMARY] Repeated no-tool rounds. You MUST call task_complete now with a verified summary (include remaining work and next actions if incomplete)."
+		if guidedStructuredContinuationActive() && capabilityContract.AllowUserInteraction {
+			forcedStrategy = "structured_signal_recovery"
+			forcedSignalTools = selectSignalOnlyTools("ask_user", "task_complete")
+			forcedMsg = "You are continuing an active guided structured interaction and just produced a text-only turn. Do not reply with plain text. Emit the next explicit signal now: call ask_user if another constrained user reply is needed, or call task_complete if the objective is complete."
+			messages[len(messages)-1] = Message{Role: "user", Content: []ContentPart{{Type: "text", Text: forcedMsg}}}
+			forcedOverlay = "[STRUCTURED SIGNAL REQUIRED] Active interaction contract plus text-only continuation. You MUST emit an explicit signal now. Call ask_user to continue the guided interaction, or call task_complete only if the objective is complete. Do not output a plain-text questionnaire."
+		}
 		forcedSystemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, taskComplexity, step, maxSteps, false, scheduler.ActiveTools(mode), state, forcedOverlay, capabilityContract)
 		forcedTurnMessages := composeTurnMessages(forcedSystemPrompt, messages)
-
-		signalOnlyTools := make([]ToolDef, 0, 1)
-		for _, t := range scheduler.ActiveTools(mode) {
-			if t.Name == "task_complete" {
-				signalOnlyTools = append(signalOnlyTools, t)
-				break
-			}
+		forcedToolNames := make([]string, 0, len(forcedSignalTools))
+		for _, tool := range forcedSignalTools {
+			forcedToolNames = append(forcedToolNames, strings.TrimSpace(tool.Name))
 		}
+		r.persistRunEvent("signal.recovery.attempt", RealtimeStreamKindLifecycle, map[string]any{
+			"step_index":                       step,
+			"source":                           "text_only_continuation",
+			"strategy":                         forcedStrategy,
+			"no_tool_rounds":                   noToolRounds,
+			"max_no_tool_rounds":               maxNoToolRounds,
+			"tools":                            forcedToolNames,
+			"interaction_contract_enabled":     normalizeInteractionContract(state.InteractionContract).Enabled,
+			"structured_response_continuation": structuredResponseContinuation,
+		})
 		forcedReq := TurnRequest{
 			Model:            modelName,
 			Messages:         forcedTurnMessages,
-			Tools:            signalOnlyTools,
+			Tools:            forcedSignalTools,
 			Budgets:          TurnBudgets{MaxSteps: 1, MaxInputTokens: req.Options.MaxInputTokens, MaxOutputToken: req.Options.MaxOutputTokens, MaxCostUSD: req.Options.MaxCostUSD},
 			ModeFlags:        ModeFlags{Mode: mode},
 			ProviderControls: ProviderControls{ThinkingBudgetTokens: req.Options.ThinkingBudgetTokens, CacheControl: req.Options.CacheControl, ResponseFormat: req.Options.ResponseFormat, Temperature: req.Options.Temperature, TopP: req.Options.TopP},
@@ -2969,7 +3018,25 @@ mainLoop:
 		endForcedBusy()
 		if forcedErr == nil {
 			forcedSplit := splitSignalsByPolicy(forcedResult.ToolCalls, capabilityContract)
+			forcedAskUser := forcedSplit.AskUserCall
 			forcedTaskComplete := forcedSplit.TaskCompleteCall
+			if forcedAskUser != nil {
+				signal := askUserSignal{
+					Questions:        extractSignalRequestUserInputQuestions(*forcedAskUser, "questions"),
+					ReasonCode:       extractSignalText(*forcedAskUser, "reason_code"),
+					RequiredFromUser: extractSignalStringList(*forcedAskUser, "required_from_user"),
+					EvidenceRefs:     extractSignalStringList(*forcedAskUser, "evidence_refs"),
+				}
+				ended, askErr := tryAskUser(step, signal, "model_signal")
+				if askErr != nil {
+					return askErr
+				}
+				if ended {
+					return nil
+				}
+				noToolRounds = 0
+				continue
+			}
 			if forcedTaskComplete != nil {
 				resultText := extractSignalText(*forcedTaskComplete, "result")
 				if resultText == "" {
@@ -3000,6 +3067,9 @@ mainLoop:
 					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 					return nil
 				}
+			}
+			if strings.TrimSpace(forcedResult.Text) != "" || strings.TrimSpace(forcedResult.Reasoning) != "" {
+				appendAssistantHistory(step, "forced_signal_recovery_text_only", forcedResult.Text, forcedResult.Reasoning, nil)
 			}
 		}
 
