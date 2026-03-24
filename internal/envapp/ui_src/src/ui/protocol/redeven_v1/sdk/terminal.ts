@@ -10,8 +10,6 @@ export type TerminalSessionInfo = {
 export type TerminalSessionCreateRequest = {
   name?: string;
   workingDir?: string;
-  cols: number;
-  rows: number;
 };
 
 export type TerminalSessionCreateResponse = {

@@ -54,8 +54,6 @@ export function toWireTerminalSessionCreateRequest(req: TerminalSessionCreateReq
   return {
     name: req.name?.trim() ? req.name.trim() : undefined,
     working_dir: req.workingDir?.trim() ? req.workingDir.trim() : undefined,
-    cols: req.cols,
-    rows: req.rows,
   };
 }
 
@@ -183,4 +181,3 @@ export function toWireTerminalInputNotify(args: { sessionId: string; connId: str
     data_b64: bytesToBase64(args.data),
   };
 }
-
