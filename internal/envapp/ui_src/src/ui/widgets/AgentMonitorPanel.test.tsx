@@ -213,11 +213,15 @@ describe('AgentMonitorPanel', () => {
     }));
     await flushPanel();
 
-    const menuButtons = Array.from(host.querySelectorAll('div.fixed.z-50 button')) as HTMLButtonElement[];
+    const menu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
+    expect(menu).toBeTruthy();
+
+    const menuButtons = Array.from(menu?.querySelectorAll('button') ?? []) as HTMLButtonElement[];
     expect(menuButtons).toHaveLength(2);
     expect(menuButtons[0]?.textContent).toContain('Ask Flower');
     expect(menuButtons[1]?.textContent).toContain('Kill');
     expect(menuButtons[1]?.className).toContain('text-destructive');
+    expect(menu?.querySelectorAll('[role="separator"]')).toHaveLength(1);
   });
 
   it('opens Ask Flower from the row context menu with process snapshot context', async () => {
