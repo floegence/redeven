@@ -199,7 +199,7 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('class="flex-1 rounded-md bg-background/80 sm:flex-none"');
     expect(branchesSrc).toContain('class="flex-1 rounded-md bg-background/80 text-destructive hover:text-destructive sm:flex-none"');
     expect(branchesSrc).toContain('grid w-full grid-cols-2 rounded-md border border-border/65 bg-muted/[0.14] p-0.5 sm:inline-flex sm:w-auto');
-    expect(branchesSrc).toContain('w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[24rem] sm:text-right');
+    expect(branchesSrc).not.toContain('w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[24rem] sm:text-right');
     expect(branchesSrc).not.toContain('Subject');
   });
 
