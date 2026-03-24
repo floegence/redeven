@@ -834,6 +834,25 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const canAskFlowerStatus = () => Boolean(props.onAskFlower && props.selectedBranch && statusRepoRootPath() && visibleStatusItems().length > 0);
   const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && branchDirectoryRequest());
   const canBrowseFiles = () => Boolean(props.onBrowseFiles && branchDirectoryRequest());
+  const showWorkspaceHelpers = () => Boolean(props.onOpenInTerminal || props.onBrowseFiles);
+  const workspaceHelperGridClass = () => (
+    (Number(Boolean(props.onOpenInTerminal)) + Number(Boolean(props.onBrowseFiles))) > 1
+      ? 'grid-cols-2'
+      : 'grid-cols-1'
+  );
+  const branchActionCount = () => Number(Boolean(props.onCheckoutBranch))
+    + Number(mergeAvailable())
+    + Number(deleteAvailable());
+  const branchActionGridClass = () => (
+    branchActionCount() >= 3
+      ? 'grid-cols-3'
+      : branchActionCount() === 2
+        ? 'grid-cols-2'
+        : 'grid-cols-1'
+  );
+  const headerActionDeckClass = 'space-y-1.5 rounded-lg border border-border/60 bg-muted/[0.14] p-1.5 shadow-sm shadow-black/5';
+  const headerActionDeckLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';
+  const headerActionButtonClass = 'w-full rounded-md bg-background/88 shadow-sm shadow-black/5';
   const handleBranchSubviewKeyDown = (event: KeyboardEvent, currentView: GitBranchSubview) => {
     const nextView = resolveRovingTabTargetId(GIT_BRANCH_SUBVIEW_IDS, currentView, event.key, 'horizontal');
     if (!nextView || nextView === currentView) return;
@@ -1064,50 +1083,56 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       </div>
                     </GitLabelBlock>
 
-                    <div class="flex w-full min-w-0 flex-col gap-1.5 lg:flex-[0_1_20rem] lg:max-w-[min(50%,22rem)] lg:items-stretch">
-                      <div class="flex w-full flex-col gap-2 lg:w-full lg:items-stretch">
-                        <div class="flex w-full flex-wrap gap-2 sm:justify-end">
-                          <Show when={props.onOpenInTerminal}>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              icon={Terminal}
-                              class="flex-1 rounded-md bg-background/80 sm:flex-none"
-                              disabled={!canOpenInTerminal()}
-                              onClick={() => {
-                                const request = branchDirectoryRequest();
-                                if (!request) return;
-                                props.onOpenInTerminal?.(request);
-                              }}
-                            >
-                              Terminal
-                            </Button>
-                          </Show>
+                    <div class="flex w-full min-w-0 flex-col gap-2 lg:flex-[0_1_20rem] lg:max-w-[min(50%,22rem)] lg:items-stretch">
+                      <Show when={showWorkspaceHelpers()}>
+                        <div class={headerActionDeckClass}>
+                          <div class={headerActionDeckLabelClass}>Workspace</div>
+                          <div class={cn('grid gap-1.5', workspaceHelperGridClass())}>
+                            <Show when={props.onOpenInTerminal}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                icon={Terminal}
+                                class={headerActionButtonClass}
+                                disabled={!canOpenInTerminal()}
+                                onClick={() => {
+                                  const request = branchDirectoryRequest();
+                                  if (!request) return;
+                                  props.onOpenInTerminal?.(request);
+                                }}
+                              >
+                                Terminal
+                              </Button>
+                            </Show>
 
-                          <Show when={props.onBrowseFiles}>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              icon={Folder}
-                              class="flex-1 rounded-md bg-background/80 sm:flex-none"
-                              disabled={!canBrowseFiles()}
-                              onClick={() => {
-                                const request = branchDirectoryRequest();
-                                if (!request) return;
-                                void props.onBrowseFiles?.(request);
-                              }}
-                            >
-                              Files
-                            </Button>
-                          </Show>
+                            <Show when={props.onBrowseFiles}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                icon={Folder}
+                                class={headerActionButtonClass}
+                                disabled={!canBrowseFiles()}
+                                onClick={() => {
+                                  const request = branchDirectoryRequest();
+                                  if (!request) return;
+                                  void props.onBrowseFiles?.(request);
+                                }}
+                              >
+                                Files
+                              </Button>
+                            </Show>
+                          </div>
                         </div>
+                      </Show>
 
-                        <div class="flex w-full flex-wrap gap-2 sm:justify-end">
+                      <div class={headerActionDeckClass}>
+                        <div class={headerActionDeckLabelClass}>Actions</div>
+                        <div class={cn('grid gap-1.5', branchActionGridClass())}>
                           <Show when={props.onCheckoutBranch}>
                             <Button
                               size="sm"
                               variant="outline"
-                              class="flex-1 rounded-md bg-background/80 sm:flex-none"
+                              class={headerActionButtonClass}
                               disabled={checkoutDisabled()}
                               onClick={() => props.selectedBranch && props.onCheckoutBranch?.(props.selectedBranch)}
                             >
@@ -1119,7 +1144,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                             <Button
                               size="sm"
                               variant="outline"
-                              class="flex-1 rounded-md bg-background/80 sm:flex-none"
+                              class={headerActionButtonClass}
                               disabled={mergeDisabled()}
                               onClick={() => props.selectedBranch && props.onMergeBranch?.(props.selectedBranch)}
                             >
@@ -1131,7 +1156,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                             <Button
                               size="sm"
                               variant="outline"
-                              class="flex-1 rounded-md bg-background/80 text-destructive hover:text-destructive sm:flex-none"
+                              class={cn(headerActionButtonClass, 'text-destructive hover:text-destructive')}
                               disabled={deleteDisabled()}
                               onClick={() => props.selectedBranch && props.onDeleteBranch?.(props.selectedBranch)}
                             >
@@ -1139,9 +1164,12 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                             </Button>
                           </Show>
                         </div>
+                      </div>
 
+                      <div class={headerActionDeckClass}>
+                        <div class={headerActionDeckLabelClass}>View</div>
                         <div
-                          class="grid w-full grid-cols-2 rounded-md border border-border/65 bg-muted/[0.14] p-0.5 sm:inline-flex sm:w-auto"
+                          class="grid w-full grid-cols-2 rounded-md border border-border/65 bg-background/72 p-0.5"
                           role="tablist"
                           aria-label="Branch detail tabs"
                           aria-orientation="horizontal"
