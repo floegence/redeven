@@ -1,8 +1,9 @@
 // MarkdownBlock — renders markdown content as stable committed segments plus a live tail.
 //
-// During streaming, only the committed prefix is kept as HTML. The unstable suffix falls back
-// to raw streaming text until a fresh worker snapshot arrives, which preserves immediate
-// streaming while avoiding retroactive re-layout of older content.
+// During streaming, committed content keeps a stable HTML projection. Once a markdown tail has
+// rendered, the UI keeps that tail visible until a fresher snapshot arrives instead of regressing
+// it back into raw markdown source. Raw streaming text is only used before the first compatible
+// snapshot exists or when the current snapshot still has no rendered tail.
 
 import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import type { Component } from 'solid-js';
@@ -11,7 +12,7 @@ import { cn } from '@floegence/floe-webapp-core';
 
 import { StreamingMarkdownTail } from '../markdown/StreamingMarkdownTail';
 import { createMarkdownRenderer } from '../markdown/markedConfig';
-import { normalizeMarkdownForDisplay } from '../markdown/normalizeMarkdownForDisplay';
+import { normalizeMarkdownForDisplay, normalizeMarkdownForStreamingDisplay } from '../markdown/normalizeMarkdownForDisplay';
 import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel';
 import { StreamingCursor } from '../status/StreamingCursor';
 import type { MarkdownRenderSnapshot } from '../types';
@@ -172,8 +173,13 @@ function isAppendCompatible(base: string, current: string): boolean {
 export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
   const [renderedSnapshot, setRenderedSnapshot] = createSignal<MarkdownRenderSnapshot | null>(null);
   const [renderedText, setRenderedText] = createSignal('');
-  const normalizedContent = createMemo(() => normalizeMarkdownForDisplay(String(props.content ?? '')));
-  const isEmptyStreaming = createMemo(() => props.streaming === true && normalizedContent() === '');
+  const displayContent = createMemo(() => (
+    props.streaming === true
+      ? normalizeMarkdownForStreamingDisplay(String(props.content ?? ''))
+      : normalizeMarkdownForDisplay(String(props.content ?? ''))
+  ));
+  const isEmptyStreaming = createMemo(() => props.streaming === true && displayContent() === '');
+  const showStreamingCursor = createMemo(() => props.streaming === true && !isEmptyStreaming());
 
   let destroyed = false;
   let inFlight = false;
@@ -262,7 +268,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
   });
 
   createEffect(() => {
-    scheduleRender(normalizedContent(), props.streaming === true);
+    scheduleRender(displayContent(), props.streaming === true);
   });
 
   const renderState = createMemo(() => {
@@ -270,13 +276,12 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
     if (!snapshot) return null;
 
     const base = renderedText();
-    const current = normalizedContent();
+    const current = displayContent();
     if (!isAppendCompatible(base, current)) return null;
 
     return {
       snapshot,
       current,
-      fresh: current.length === base.length,
     };
   });
 
@@ -290,27 +295,32 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
           </div>
         }
       >
-        <Show when={renderState()} fallback={<StreamingText text={normalizedContent()} />}>
+        <Show when={renderState()} fallback={<StreamingText text={displayContent()} />}>
           {(stateAccessor) => {
             const state = () => stateAccessor();
             const shouldRenderRawSuffix = () =>
-              state().snapshot.committedSourceLength < state().current.length
-              && (!state().fresh || state().snapshot.tail.kind !== 'html');
+              state().snapshot.tail.kind !== 'html'
+              && state().snapshot.committedSourceLength < state().current.length;
+            const shouldRenderTailHtml = () =>
+              state().snapshot.tail.kind === 'html';
+            const committedSegmentKeys = () => state().snapshot.committedSegments.map((segment) => segment.key);
+            const committedSegmentHtml = (key: string) =>
+              state().snapshot.committedSegments.find((segment) => segment.key === key)?.html ?? '';
 
             return (
               <>
-                <For each={state().snapshot.committedSegments}>
-                  {(segment) => (
+                <For each={committedSegmentKeys()}>
+                  {(key) => (
                     <div
                       class="chat-markdown-committed-segment"
-                      data-segment-key={segment.key}
+                      data-segment-key={key}
                       // eslint-disable-next-line solid/no-innerhtml
-                      innerHTML={segment.html}
+                      innerHTML={committedSegmentHtml(key)}
                     />
                   )}
                 </For>
 
-                <Show when={state().fresh && state().snapshot.tail.kind === 'html'}>
+                <Show when={shouldRenderTailHtml()}>
                   <StreamingMarkdownTail tail={state().snapshot.tail} />
                 </Show>
 
@@ -323,6 +333,12 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
               </>
             );
           }}
+        </Show>
+
+        <Show when={showStreamingCursor()}>
+          <div class="chat-markdown-streaming-cursor-row" aria-hidden="true">
+            <StreamingCursor />
+          </div>
         </Show>
       </Show>
     </div>

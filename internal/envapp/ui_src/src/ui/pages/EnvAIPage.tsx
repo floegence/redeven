@@ -29,7 +29,7 @@ import {
   type MessageRole,
   type StreamEvent,
 } from '../chat';
-import { applyStreamEventToMessages, upsertMessageById } from '../chat/messageState';
+import { applyStreamEventBatchToMessages, upsertMessageById } from '../chat/messageState';
 import {
   normalizeAskUserDraft,
   normalizeAskUserDraftForQuestion,
@@ -1932,6 +1932,8 @@ export function EnvAIPage() {
   let activeContextRunID = '';
   let activeContextEventCursor = 0;
   let activeContextReplaySeq = 0;
+  let pendingAssistantOverlayEvents: StreamEvent[] = [];
+  let assistantOverlayRaf: number | null = null;
   const failureNotifiedRuns = new Set<string>();
   const [runPhaseLabel, setRunPhaseLabel] = createSignal('Working');
   const resetContextTelemetryState = (opts?: { keepRunId?: boolean }) => {
@@ -2087,15 +2089,48 @@ export function EnvAIPage() {
     return true;
   };
   const resetThreadRenderSources = (): void => {
+    pendingAssistantOverlayEvents = [];
+    if (assistantOverlayRaf !== null) {
+      if (typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(assistantOverlayRaf);
+      }
+      assistantOverlayRaf = null;
+    }
     setTranscriptMessages([]);
     setAssistantOverlayMessages([]);
   };
   const setAssistantOverlayMessage = (message: Message): void => {
     setAssistantOverlayMessages((current) => upsertMessageById(current, message));
   };
-  const applyAssistantOverlayStreamEvent = (event: StreamEvent): void => {
-    setAssistantOverlayMessages((current) => applyStreamEventToMessages(current, event).messages);
+  const flushAssistantOverlayStreamEvents = (): void => {
+    const events = pendingAssistantOverlayEvents;
+    pendingAssistantOverlayEvents = [];
+    assistantOverlayRaf = null;
+    if (events.length === 0) return;
+
+    setAssistantOverlayMessages((current) =>
+      applyStreamEventBatchToMessages(current, events).messages);
   };
+  const applyAssistantOverlayStreamEvent = (event: StreamEvent): void => {
+    pendingAssistantOverlayEvents.push(event);
+    if (assistantOverlayRaf !== null) {
+      return;
+    }
+    if (typeof requestAnimationFrame !== 'function') {
+      flushAssistantOverlayStreamEvents();
+      return;
+    }
+    assistantOverlayRaf = requestAnimationFrame(flushAssistantOverlayStreamEvents);
+  };
+  onCleanup(() => {
+    pendingAssistantOverlayEvents = [];
+    if (assistantOverlayRaf !== null) {
+      if (typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(assistantOverlayRaf);
+      }
+      assistantOverlayRaf = null;
+    }
+  });
   const rebuildSubagentsFromMessages = (messages: Message[]): void => {
     const normalizeSubagentHistory = (raw: any): Array<{ role: 'user' | 'assistant' | 'system'; text: string }> => {
       if (!Array.isArray(raw)) return [];
