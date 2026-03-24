@@ -204,6 +204,79 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
+  it('exposes Ask Flower, Open in Terminal, and Browse Files from the workspace card', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onAskFlower = vi.fn();
+    const onOpenInTerminal = vi.fn();
+    const onBrowseFiles = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts', additions: 4, deletions: 2 }],
+                  untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt' }],
+                  conflicted: [],
+                }}
+                selectedSection="changes"
+                onAskFlower={onAskFlower}
+                onOpenInTerminal={onOpenInTerminal}
+                onBrowseFiles={onBrowseFiles}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Ask Flower'));
+      const openInTerminalButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Open in Terminal'));
+      const browseFilesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Browse Files'));
+
+      expect(askFlowerButton).toBeTruthy();
+      expect(openInTerminalButton).toBeTruthy();
+      expect(browseFilesButton).toBeTruthy();
+
+      askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      openInTerminalButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      browseFilesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onAskFlower).toHaveBeenCalledWith({
+        kind: 'workspace_section',
+        repoRootPath: '/workspace/repo',
+        headRef: 'main',
+        section: 'changes',
+        items: [
+          { section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts', additions: 4, deletions: 2 },
+          { section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt' },
+        ],
+      });
+      expect(onOpenInTerminal).toHaveBeenCalledWith({
+        path: '/workspace/repo',
+        preferredName: 'repo',
+      });
+      expect(onBrowseFiles).toHaveBeenCalledWith({
+        path: '/workspace/repo',
+        preferredName: 'repo',
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('opens the diff dialog when the file name is clicked', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

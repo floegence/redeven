@@ -283,6 +283,15 @@ export function branchStatusSummary(branch: GitBranchSummary | null | undefined)
   return parts.join(' · ') || 'No extra status';
 }
 
+export function resolveGitBranchWorktreePath(
+  branch: GitBranchSummary | null | undefined,
+  activeRepoRootPath: string,
+): string {
+  if (!branch) return '';
+  if (branch.current) return String(activeRepoRootPath ?? '').trim();
+  return String(branch.worktreePath ?? '').trim();
+}
+
 export function compareHeadline(compare: GitGetBranchCompareResponse | null | undefined): string {
   if (!compare) return 'Select branches to inspect compare details.';
   const ahead = Number(compare.targetAheadCount ?? 0);

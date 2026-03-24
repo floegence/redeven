@@ -18,6 +18,7 @@ import { GitWorkbench } from './GitWorkbench';
 import { GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
 import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import type { GitMergeBranchDialogConfirmOptions, GitMergeBranchDialogState } from './GitMergeBranchDialog';
+import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 
 export interface GitWorkspaceProps {
   mode: GitHistoryMode;
@@ -49,6 +50,9 @@ export interface GitWorkspaceProps {
   onStageWorkspaceItem?: (item: GitWorkspaceChange) => void;
   onUnstageWorkspaceItem?: (item: GitWorkspaceChange) => void;
   onBulkWorkspaceAction?: (section: GitWorkspaceViewSection) => void;
+  onAskFlower?: (request: GitAskFlowerRequest) => void;
+  onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
+  onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
   busyWorkspaceKey?: string;
   busyWorkspaceAction?: 'stage' | 'unstage' | '';
   branches?: GitListBranchesResponse | null;
@@ -238,6 +242,9 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               onStageSelected={props.onStageWorkspaceItem}
               onUnstageSelected={props.onUnstageWorkspaceItem}
               onBulkAction={props.onBulkWorkspaceAction}
+              onAskFlower={props.onAskFlower}
+              onOpenInTerminal={props.onOpenInTerminal}
+              onBrowseFiles={props.onBrowseFiles}
               fetchBusy={props.fetchBusy}
               pullBusy={props.pullBusy}
               pushBusy={props.pushBusy}

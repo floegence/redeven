@@ -30,8 +30,10 @@ import {
 import { setAskFlowerAttachmentSourcePath } from '../utils/askFlowerAttachmentMetadata';
 import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from '../utils/fileBrowserClipboard';
 import { buildFilePathAskFlowerIntent } from '../utils/filePathAskFlower';
+import { buildGitAskFlowerIntent, type GitAskFlowerRequest, type GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from '../utils/openDirectoryInTerminal';
 import { useFilePreviewContext } from './FilePreviewContext';
+import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
@@ -205,6 +207,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const layout = useLayout();
   const notification = useNotification();
   const filePreview = useFilePreviewContext();
+  const fileBrowserSurface = useFileBrowserSurfaceContext();
 
   const envId = () => (ctx.env_id() ?? '').trim();
   const useExternalMobileSidebarToggle = () => !props.widgetId;
@@ -2147,6 +2150,41 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     ctx.openAskFlowerComposer(intent);
   };
 
+  const handleGitAskFlower = (request: GitAskFlowerRequest) => {
+    const result = buildGitAskFlowerIntent(request);
+    if (!result.intent) {
+      notification.error('Ask Flower unavailable', result.error ?? 'Failed to build Git context.');
+      return;
+    }
+    dispatchAskFlowerIntent(result.intent);
+  };
+
+  const handleGitOpenInTerminal = (request: GitDirectoryShortcutRequest) => {
+    openDirectoryInTerminal({
+      path: request.path,
+      preferredName: request.preferredName,
+      openTerminalInDirectory: ctx.openTerminalInDirectory,
+      onInvalidDirectory: () => {
+        notification.error('Invalid directory', 'Could not resolve a terminal working directory.');
+      },
+    });
+  };
+
+  const handleGitBrowseFiles = async (request: GitDirectoryShortcutRequest) => {
+    const path = normalizeAbsolutePath(request.path);
+    const homePath = normalizeAbsolutePath(request.homePath ?? '') || agentHomePathAbs() || undefined;
+    if (!path) {
+      notification.error('Browse files unavailable', 'Could not resolve a valid directory path.');
+      return;
+    }
+
+    await fileBrowserSurface.openBrowser({
+      path,
+      homePath,
+      title: request.title,
+    });
+  };
+
   const createAttachmentFromFileItem = async (
     item: FileItem,
     client: Client,
@@ -2504,6 +2542,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onStageWorkspaceItem={handleStageWorkspaceItem}
                       onUnstageWorkspaceItem={handleUnstageWorkspaceItem}
                       onBulkWorkspaceAction={handleBulkWorkspaceAction}
+                      onAskFlower={handleGitAskFlower}
+                      onOpenInTerminal={ctx.env()?.permissions?.can_execute ? handleGitOpenInTerminal : undefined}
+                      onBrowseFiles={handleGitBrowseFiles}
                       busyWorkspaceKey={gitMutationKey()}
                       busyWorkspaceAction={busyWorkspaceAction()}
                       branches={gitBranches()}

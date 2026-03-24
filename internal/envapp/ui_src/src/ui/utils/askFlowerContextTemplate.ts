@@ -5,6 +5,7 @@ import { buildMonitorProcessSnapshotText } from './monitorProcessAskFlower';
 function sourceLabel(source: AskFlowerIntent['source']): string {
   if (source === 'file_browser') return 'file browser';
   if (source === 'file_preview') return 'file preview';
+  if (source === 'git_browser') return 'git browser';
   if (source === 'monitoring') return 'monitoring';
   return 'terminal';
 }
@@ -28,6 +29,14 @@ function buildContextSection(item: AskFlowerContextItem): string {
   if (item.kind === 'process_snapshot') {
     const body = sanitizeFenceContent(buildMonitorProcessSnapshotText(item));
     return `- Process snapshot:\n\n\`\`\`text\n${body}\n\`\`\``;
+  }
+
+  if (item.kind === 'text_snapshot') {
+    const header = String(item.detail ?? '').trim()
+      ? `${item.title} (${String(item.detail ?? '').trim()})`
+      : item.title;
+    const body = sanitizeFenceContent(item.content);
+    return `- ${header}:\n\n\`\`\`text\n${body}\n\`\`\``;
   }
 
   const wd = String(item.workingDir ?? '').trim() || 'Working directory unavailable';
