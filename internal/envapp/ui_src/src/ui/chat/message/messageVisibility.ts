@@ -5,6 +5,12 @@ function hasVisibleString(value: unknown): boolean {
   return String(value ?? '').trim() !== '';
 }
 
+function isEmptyStreamingMarkdownPlaceholder(block: MessageBlock, messageStatus: MessageStatus): boolean {
+  return block.type === 'markdown'
+    && messageStatus === 'streaming'
+    && normalizeMarkdownForDisplay(String(block.content ?? '')) === '';
+}
+
 export function isMessageBlockVisible(block: MessageBlock, messageStatus: MessageStatus): boolean {
   switch (block.type) {
     case 'markdown':
@@ -40,11 +46,22 @@ export function hasNonEmptyVisibleBlockContent(block: MessageBlock, messageStatu
 }
 
 export function visibleMessageBlocks(message: Message): Array<{ block: MessageBlock; index: number }> {
-  return message.blocks.flatMap((block, index) => (
-    isMessageBlockVisible(block, message.status)
-      ? [{ block, index }]
-      : []
-  ));
+  let lastRenderableIndex = -1;
+  message.blocks.forEach((block, index) => {
+    if (isMessageBlockVisible(block, message.status)) {
+      lastRenderableIndex = index;
+    }
+  });
+
+  return message.blocks.flatMap((block, index) => {
+    if (!isMessageBlockVisible(block, message.status)) {
+      return [];
+    }
+    if (isEmptyStreamingMarkdownPlaceholder(block, message.status) && index !== lastRenderableIndex) {
+      return [];
+    }
+    return [{ block, index }];
+  });
 }
 
 export function hasNonEmptyVisibleMessageContent(message: Message): boolean {

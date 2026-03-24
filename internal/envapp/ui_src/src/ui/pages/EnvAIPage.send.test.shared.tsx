@@ -902,6 +902,57 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
+    it('hides an earlier empty streaming markdown block once a later markdown block starts rendering', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        const messageId = 'assistant-multi-markdown-cursor';
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'message-start',
+            messageId,
+          },
+        });
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-start',
+            messageId,
+            blockIndex: 0,
+            blockType: 'markdown',
+          },
+        });
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-start',
+            messageId,
+            blockIndex: 1,
+            blockType: 'markdown',
+          },
+        });
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-delta',
+            messageId,
+            blockIndex: 1,
+            delta: 'Tail block content',
+          },
+        });
+        await flushAsync();
+
+        expect(host.querySelectorAll('.chat-markdown-empty-streaming')).toHaveLength(0);
+        expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Tail block content');
+      } finally {
+        dispose();
+      }
+    });
+
     it('keeps thinking blocks hidden from the default transcript view', async () => {
       const { host, dispose } = await renderPage();
       try {
