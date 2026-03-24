@@ -252,6 +252,146 @@ func TestStore_SetAutoThreadTitle_GuardsAndManualRename(t *testing.T) {
 	}
 }
 
+func TestStore_SetAutoThreadTitle_OverwritesFallbackTitle(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	updated, err := s.SetFallbackThreadTitle(ctx, "env_1", "th_1", "First request fallback", "msg_first", 321, "u1", "u1@example.com")
+	if err != nil {
+		t.Fatalf("SetFallbackThreadTitle: %v", err)
+	}
+	if !updated {
+		t.Fatalf("SetFallbackThreadTitle updated=false, want true")
+	}
+
+	updated, err = s.SetAutoThreadTitle(ctx, "env_1", "th_1", "Generated better title", "msg_second", "openai/gpt-5-mini", "thread_title_v1", 322, "u2", "u2@example.com")
+	if err != nil {
+		t.Fatalf("SetAutoThreadTitle overwrite fallback: %v", err)
+	}
+	if !updated {
+		t.Fatalf("SetAutoThreadTitle overwrite fallback updated=false, want true")
+	}
+
+	th, err := s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if th == nil {
+		t.Fatalf("thread missing")
+	}
+	if th.Title != "Generated better title" {
+		t.Fatalf("Title=%q, want overwritten auto title", th.Title)
+	}
+	if th.TitleSource != ThreadTitleSourceAuto {
+		t.Fatalf("TitleSource=%q, want %q", th.TitleSource, ThreadTitleSourceAuto)
+	}
+	if th.TitleInputMessageID != "msg_second" {
+		t.Fatalf("TitleInputMessageID=%q, want msg_second", th.TitleInputMessageID)
+	}
+	if th.TitleModelID != "openai/gpt-5-mini" {
+		t.Fatalf("TitleModelID=%q, want openai/gpt-5-mini", th.TitleModelID)
+	}
+}
+
+func TestStore_GetFirstUserThreadMessage_ReturnsOldestNonEmptyUserMessage(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	appendMessage := func(msg Message) {
+		t.Helper()
+		if _, err := s.AppendMessage(ctx, "env_1", "th_1", msg, "u1", "u1@example.com"); err != nil {
+			t.Fatalf("AppendMessage(%s): %v", msg.MessageID, err)
+		}
+	}
+	appendMessage(Message{
+		ThreadID:           "th_1",
+		EndpointID:         "env_1",
+		MessageID:          "msg_assistant",
+		Role:               "assistant",
+		Status:             "complete",
+		CreatedAtUnixMs:    100,
+		UpdatedAtUnixMs:    100,
+		TextContent:        "assistant text",
+		MessageJSON:        `{"id":"msg_assistant"}`,
+		AuthorUserPublicID: "u1",
+		AuthorUserEmail:    "u1@example.com",
+	})
+	appendMessage(Message{
+		ThreadID:           "th_1",
+		EndpointID:         "env_1",
+		MessageID:          "msg_blank",
+		Role:               "user",
+		Status:             "complete",
+		CreatedAtUnixMs:    110,
+		UpdatedAtUnixMs:    110,
+		TextContent:        "   ",
+		MessageJSON:        `{"id":"msg_blank"}`,
+		AuthorUserPublicID: "u1",
+		AuthorUserEmail:    "u1@example.com",
+	})
+	appendMessage(Message{
+		ThreadID:           "th_1",
+		EndpointID:         "env_1",
+		MessageID:          "msg_first",
+		Role:               "user",
+		Status:             "complete",
+		CreatedAtUnixMs:    120,
+		UpdatedAtUnixMs:    120,
+		TextContent:        "first non-empty user input",
+		MessageJSON:        `{"id":"msg_first"}`,
+		AuthorUserPublicID: "u1",
+		AuthorUserEmail:    "u1@example.com",
+	})
+	appendMessage(Message{
+		ThreadID:           "th_1",
+		EndpointID:         "env_1",
+		MessageID:          "msg_second",
+		Role:               "user",
+		Status:             "complete",
+		CreatedAtUnixMs:    130,
+		UpdatedAtUnixMs:    130,
+		TextContent:        "later user input",
+		MessageJSON:        `{"id":"msg_second"}`,
+		AuthorUserPublicID: "u1",
+		AuthorUserEmail:    "u1@example.com",
+	})
+
+	msg, err := s.GetFirstUserThreadMessage(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetFirstUserThreadMessage: %v", err)
+	}
+	if msg == nil {
+		t.Fatalf("GetFirstUserThreadMessage=nil, want message")
+	}
+	if msg.MessageID != "msg_first" {
+		t.Fatalf("MessageID=%q, want msg_first", msg.MessageID)
+	}
+	if msg.TextContent != "first non-empty user input" {
+		t.Fatalf("TextContent=%q, want first non-empty user input", msg.TextContent)
+	}
+}
+
 func TestStore_ListAutoThreadTitleCandidates_FiltersAndOrdersThreads(t *testing.T) {
 	t.Parallel()
 

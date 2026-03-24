@@ -19,6 +19,7 @@ const (
 	autoThreadTitleMaxRunes      = 80
 	autoThreadTitleMaxOutputLow  = 128
 	autoThreadTitleMaxOutputHigh = 4096
+	autoThreadTitleMaxAttempts   = 3
 	autoThreadTitleRecoveryLimit = 128
 )
 
@@ -550,16 +551,29 @@ func (c *autoThreadTitleCoordinator) handleResult(req autoThreadTitleRequest, re
 
 	switch result.Status {
 	case autoThreadTitleApplyStatusRetry:
+		attempt := req.Attempts + 1
+		if attempt >= autoThreadTitleMaxAttempts {
+			if c.svc != nil {
+				_ = c.svc.applyFallbackThreadTitleOnce(context.Background(), req, attempt)
+			}
+			c.mu.Lock()
+			current, ok := c.pending[key]
+			if ok && autoThreadTitleRequestsMatch(current, req) {
+				delete(c.pending, key)
+			}
+			c.mu.Unlock()
+			return
+		}
 		delayFn := c.retryDelay
 		if delayFn == nil {
 			delayFn = autoThreadTitleRetryDelay
 		}
-		delay := delayFn(req.Attempts + 1)
+		delay := delayFn(attempt)
 		scheduled := false
 		c.mu.Lock()
 		current, ok := c.pending[key]
 		if ok && autoThreadTitleRequestsMatch(current, req) {
-			current.Attempts = req.Attempts + 1
+			current.Attempts = attempt
 			current.NextAttemptAt = time.Now().Add(delay)
 			c.pending[key] = current
 			scheduled = true
@@ -571,7 +585,7 @@ func (c *autoThreadTitleCoordinator) handleResult(req autoThreadTitleRequest, re
 				"endpoint_id", req.EndpointID,
 				"thread_id", req.ThreadID,
 				"message_id", req.MessageID,
-				"attempt", req.Attempts+1,
+				"attempt", attempt,
 				"retry_in_ms", delay.Milliseconds(),
 				"reason", result.Reason,
 				"error", result.Err,
@@ -621,6 +635,19 @@ func autoThreadTitleRetryDelay(attempt int) time.Duration {
 	default:
 		return 30 * time.Second
 	}
+}
+
+func canRegenerateFromFallbackTitle(th *threadstore.Thread, req autoThreadTitleRequest) bool {
+	if th == nil {
+		return false
+	}
+	if strings.TrimSpace(th.TitleSource) != threadstore.ThreadTitleSourceAutoFallback {
+		return false
+	}
+	if strings.TrimSpace(th.Title) == "" {
+		return false
+	}
+	return strings.TrimSpace(th.TitleInputMessageID) != "" && strings.TrimSpace(th.TitleInputMessageID) != strings.TrimSpace(req.MessageID)
 }
 
 func (s *Service) recoverAutoThreadTitleRequest(ctx context.Context, endpointID string, threadID string) (autoThreadTitleRequest, bool, error) {
@@ -727,7 +754,7 @@ func (s *Service) applyAutoThreadTitleOnce(ctx context.Context, req autoThreadTi
 	if th == nil {
 		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "missing_thread"}
 	}
-	if strings.TrimSpace(th.Title) != "" {
+	if strings.TrimSpace(th.Title) != "" && !canRegenerateFromFallbackTitle(th, req) {
 		if logger != nil {
 			logger.Info("thread auto title skipped",
 				"endpoint_id", req.EndpointID,
@@ -833,4 +860,134 @@ func (s *Service) applyAutoThreadTitleOnce(ctx context.Context, req autoThreadTi
 	}
 	s.broadcastThreadSummary(req.EndpointID, req.ThreadID)
 	return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusApplied, Reason: "applied"}
+}
+
+func (s *Service) applyFallbackThreadTitleOnce(ctx context.Context, req autoThreadTitleRequest, attempts int) autoThreadTitleApplyResult {
+	if s == nil {
+		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "nil_service"}
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	req.EndpointID = strings.TrimSpace(req.EndpointID)
+	req.ThreadID = strings.TrimSpace(req.ThreadID)
+	req.MessageID = strings.TrimSpace(req.MessageID)
+	req.UpdatedByID = strings.TrimSpace(req.UpdatedByID)
+	req.UpdatedByEmail = strings.TrimSpace(req.UpdatedByEmail)
+	if req.EndpointID == "" || req.ThreadID == "" {
+		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "invalid_request"}
+	}
+
+	opCtx := ctx
+	cancel := func() {}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		opCtx, cancel = context.WithTimeout(ctx, 20*time.Second)
+	}
+	defer cancel()
+
+	s.mu.Lock()
+	db := s.threadsDB
+	persistTO := s.persistOpTO
+	logger := s.log
+	s.mu.Unlock()
+	if db == nil {
+		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "service_not_ready"}
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+
+	loadCtx, loadCancel := context.WithTimeout(opCtx, persistTO)
+	firstUser, err := db.GetFirstUserThreadMessage(loadCtx, req.EndpointID, req.ThreadID)
+	loadCancel()
+	if err != nil {
+		if logger != nil {
+			logger.Warn("thread auto title fallback load failed",
+				"endpoint_id", req.EndpointID,
+				"thread_id", req.ThreadID,
+				"message_id", req.MessageID,
+				"attempt", attempts,
+				"error", err,
+			)
+		}
+		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "fallback_load_failed", Err: err}
+	}
+	if firstUser == nil {
+		if logger != nil {
+			logger.Info("thread auto title fallback skipped",
+				"endpoint_id", req.EndpointID,
+				"thread_id", req.ThreadID,
+				"message_id", req.MessageID,
+				"attempt", attempts,
+				"reason", "fallback_missing_first_user_message",
+			)
+		}
+		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "fallback_missing_first_user_message"}
+	}
+
+	title := normalizeAutoThreadTitle(firstUser.TextContent)
+	if title == "" {
+		if logger != nil {
+			logger.Info("thread auto title fallback skipped",
+				"endpoint_id", req.EndpointID,
+				"thread_id", req.ThreadID,
+				"message_id", req.MessageID,
+				"attempt", attempts,
+				"reason", "fallback_empty_first_user_message",
+			)
+		}
+		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "fallback_empty_first_user_message"}
+	}
+
+	generatedAtUnixMs := time.Now().UnixMilli()
+	saveCtx, saveCancel := context.WithTimeout(opCtx, persistTO)
+	updated, err := db.SetFallbackThreadTitle(
+		saveCtx,
+		req.EndpointID,
+		req.ThreadID,
+		title,
+		strings.TrimSpace(firstUser.MessageID),
+		generatedAtUnixMs,
+		req.UpdatedByID,
+		req.UpdatedByEmail,
+	)
+	saveCancel()
+	if err != nil {
+		if logger != nil {
+			logger.Warn("thread auto title fallback persist failed",
+				"endpoint_id", req.EndpointID,
+				"thread_id", req.ThreadID,
+				"message_id", req.MessageID,
+				"attempt", attempts,
+				"error", err,
+			)
+		}
+		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "fallback_persist_failed", Err: err}
+	}
+	if !updated {
+		if logger != nil {
+			logger.Info("thread auto title fallback skipped",
+				"endpoint_id", req.EndpointID,
+				"thread_id", req.ThreadID,
+				"message_id", req.MessageID,
+				"attempt", attempts,
+				"reason", "fallback_guard_rejected",
+			)
+		}
+		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "fallback_guard_rejected"}
+	}
+
+	if logger != nil {
+		logger.Info("thread auto title fallback applied",
+			"endpoint_id", req.EndpointID,
+			"thread_id", req.ThreadID,
+			"message_id", req.MessageID,
+			"attempt", attempts,
+			"title_source", threadstore.ThreadTitleSourceAutoFallback,
+			"title_input_message_id", strings.TrimSpace(firstUser.MessageID),
+		)
+	}
+	s.broadcastThreadSummary(req.EndpointID, req.ThreadID)
+	return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusApplied, Reason: "fallback_applied"}
 }

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
 )
@@ -613,6 +614,129 @@ func TestScheduleAutoThreadTitle_RetriesUntilSuccess(t *testing.T) {
 	}
 
 	t.Fatalf("auto title was not applied after retry")
+}
+
+func TestScheduleAutoThreadTitle_FallsBackAfterThreeFailures(t *testing.T) {
+	t.Parallel()
+
+	mock := &autoTitleMock{
+		responses: []autoTitleMockResponse{
+			{Token: `{"title":`},
+			{Token: `{"title":`},
+			{Token: `{"title":`},
+		},
+	}
+	svc, meta := newAutoTitleTestService(t, mock)
+	svc.threadTitleCoordinator.retryDelay = func(int) time.Duration { return 5 * time.Millisecond }
+
+	ctx := context.Background()
+	thread, err := svc.CreateThread(ctx, &meta, "", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	firstText := "please fix the failing regression tests in CI before the release cut ships today"
+	persisted, _, err := svc.persistUserMessage(ctx, &meta, meta.EndpointID, thread.ThreadID, RunInput{Text: firstText})
+	if err != nil {
+		t.Fatalf("persistUserMessage: %v", err)
+	}
+
+	svc.scheduleAutoThreadTitle(&meta, thread.ThreadID, effectiveCurrentUserInput{
+		MessageID:  persisted.MessageID,
+		PublicText: firstText,
+	})
+
+	wantFallback := normalizeAutoThreadTitle(firstText)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		th, getErr := svc.threadsDB.GetThread(ctx, meta.EndpointID, thread.ThreadID)
+		if getErr != nil {
+			t.Fatalf("GetThread: %v", getErr)
+		}
+		if th != nil && strings.TrimSpace(th.Title) != "" {
+			if th.Title != wantFallback {
+				t.Fatalf("Title=%q, want fallback %q", th.Title, wantFallback)
+			}
+			if th.TitleSource != threadstore.ThreadTitleSourceAutoFallback {
+				t.Fatalf("TitleSource=%q, want %q", th.TitleSource, threadstore.ThreadTitleSourceAutoFallback)
+			}
+			if th.TitleInputMessageID != persisted.MessageID {
+				t.Fatalf("TitleInputMessageID=%q, want %q", th.TitleInputMessageID, persisted.MessageID)
+			}
+			if th.TitleModelID != "" {
+				t.Fatalf("TitleModelID=%q, want empty for fallback", th.TitleModelID)
+			}
+			if th.TitlePromptVersion != "" {
+				t.Fatalf("TitlePromptVersion=%q, want empty for fallback", th.TitlePromptVersion)
+			}
+			if mock.count() != 3 {
+				t.Fatalf("requestCount=%d, want 3 generation attempts before fallback", mock.count())
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	t.Fatalf("fallback title was not applied before timeout")
+}
+
+func TestScheduleAutoThreadTitle_RegeneratesAfterFallbackWhenNewUserMessageArrives(t *testing.T) {
+	t.Parallel()
+
+	mock := &autoTitleMock{token: `{"title":"Prepare focused sandbox smoke fix","reason":"intent_summary"}`}
+	svc, meta := newAutoTitleTestService(t, mock)
+
+	ctx := context.Background()
+	thread, err := svc.CreateThread(ctx, &meta, "", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	firstPersisted, _, err := svc.persistUserMessage(ctx, &meta, meta.EndpointID, thread.ThreadID, RunInput{Text: "first request that becomes fallback title"})
+	if err != nil {
+		t.Fatalf("persistUserMessage first: %v", err)
+	}
+	updated, err := svc.threadsDB.SetFallbackThreadTitle(ctx, meta.EndpointID, thread.ThreadID, normalizeAutoThreadTitle("first request that becomes fallback title"), firstPersisted.MessageID, 321, meta.UserPublicID, meta.UserEmail)
+	if err != nil {
+		t.Fatalf("SetFallbackThreadTitle: %v", err)
+	}
+	if !updated {
+		t.Fatalf("SetFallbackThreadTitle updated=false, want true")
+	}
+	secondText := "please prepare a focused sandbox smoke fix"
+	secondPersisted, _, err := svc.persistUserMessage(ctx, &meta, meta.EndpointID, thread.ThreadID, RunInput{Text: secondText})
+	if err != nil {
+		t.Fatalf("persistUserMessage second: %v", err)
+	}
+
+	svc.scheduleAutoThreadTitle(&meta, thread.ThreadID, effectiveCurrentUserInput{
+		MessageID:  secondPersisted.MessageID,
+		PublicText: secondText,
+	})
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		th, getErr := svc.threadsDB.GetThread(ctx, meta.EndpointID, thread.ThreadID)
+		if getErr != nil {
+			t.Fatalf("GetThread: %v", getErr)
+		}
+		if th != nil && strings.TrimSpace(th.Title) == "Prepare focused sandbox smoke fix" {
+			if th.TitleSource != threadstore.ThreadTitleSourceAuto {
+				t.Fatalf("TitleSource=%q, want %q", th.TitleSource, threadstore.ThreadTitleSourceAuto)
+			}
+			if th.TitleInputMessageID != secondPersisted.MessageID {
+				t.Fatalf("TitleInputMessageID=%q, want %q", th.TitleInputMessageID, secondPersisted.MessageID)
+			}
+			if th.TitleModelID != "openai/gpt-5-mini" {
+				t.Fatalf("TitleModelID=%q, want openai/gpt-5-mini", th.TitleModelID)
+			}
+			if mock.count() != 1 {
+				t.Fatalf("requestCount=%d, want 1 regeneration attempt", mock.count())
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	t.Fatalf("auto title was not regenerated after fallback")
 }
 
 func TestScheduleAutoThreadTitle_NewerPendingInputReplacesOlderFailedRequest(t *testing.T) {

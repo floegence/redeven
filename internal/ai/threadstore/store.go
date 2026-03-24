@@ -31,8 +31,9 @@ type Store struct {
 }
 
 const (
-	ThreadTitleSourceAuto = "auto"
-	ThreadTitleSourceUser = "user"
+	ThreadTitleSourceAuto         = "auto"
+	ThreadTitleSourceAutoFallback = "auto_fallback"
+	ThreadTitleSourceUser         = "user"
 )
 
 func Open(path string) (*Store, error) {
@@ -652,9 +653,53 @@ SET title = ?,
     updated_by_user_public_id = ?,
     updated_by_user_email = ?
 WHERE endpoint_id = ? AND thread_id = ?
-  AND TRIM(COALESCE(title, '')) = ''
+  AND (
+    TRIM(COALESCE(title, '')) = ''
+    OR LOWER(TRIM(COALESCE(title_source, ''))) = ?
+  )
   AND LOWER(TRIM(COALESCE(title_source, ''))) != ?
-`, title, ThreadTitleSourceAuto, generatedAtUnixMs, inputMessageID, modelID, promptVersion, generatedAtUnixMs, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID, ThreadTitleSourceUser)
+`, title, ThreadTitleSourceAuto, generatedAtUnixMs, inputMessageID, modelID, promptVersion, generatedAtUnixMs, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID, ThreadTitleSourceAutoFallback, ThreadTitleSourceUser)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+func (s *Store) SetFallbackThreadTitle(ctx context.Context, endpointID string, threadID string, title string, inputMessageID string, generatedAtUnixMs int64, updatedByID string, updatedByEmail string) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	title = strings.TrimSpace(title)
+	inputMessageID = strings.TrimSpace(inputMessageID)
+	if endpointID == "" || threadID == "" || title == "" {
+		return false, errors.New("invalid request")
+	}
+	if len(title) > 200 {
+		return false, errors.New("title too long")
+	}
+	if generatedAtUnixMs <= 0 {
+		generatedAtUnixMs = time.Now().UnixMilli()
+	}
+	res, err := s.db.ExecContext(ctx, `
+UPDATE ai_threads
+SET title = ?,
+    title_source = ?,
+    title_generated_at_unix_ms = ?,
+    title_input_message_id = ?,
+    title_model_id = '',
+    title_prompt_version = '',
+    updated_at_unix_ms = ?,
+    updated_by_user_public_id = ?,
+    updated_by_user_email = ?
+WHERE endpoint_id = ? AND thread_id = ?
+  AND LOWER(TRIM(COALESCE(title_source, ''))) != ?
+`, title, ThreadTitleSourceAutoFallback, generatedAtUnixMs, inputMessageID, generatedAtUnixMs, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID, ThreadTitleSourceUser)
 	if err != nil {
 		return false, err
 	}
@@ -666,6 +711,8 @@ func normalizeThreadTitleSource(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case ThreadTitleSourceAuto:
 		return ThreadTitleSourceAuto
+	case ThreadTitleSourceAutoFallback:
+		return ThreadTitleSourceAutoFallback
 	case ThreadTitleSourceUser:
 		return ThreadTitleSourceUser
 	default:
@@ -1627,6 +1674,54 @@ WHERE endpoint_id = ? AND thread_id = ? AND message_id = ?
 		return 0, "", err
 	}
 	return rowID, strings.TrimSpace(raw), nil
+}
+
+func (s *Store) GetFirstUserThreadMessage(ctx context.Context, endpointID string, threadID string) (*Message, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return nil, errors.New("invalid request")
+	}
+
+	var msg Message
+	err := s.db.QueryRowContext(ctx, `
+SELECT id, thread_id, endpoint_id, message_id, role,
+       author_user_public_id, author_user_email,
+       status, created_at_unix_ms, updated_at_unix_ms,
+       text_content, message_json
+FROM transcript_messages
+WHERE endpoint_id = ? AND thread_id = ?
+  AND LOWER(TRIM(COALESCE(role, ''))) = 'user'
+  AND TRIM(COALESCE(text_content, '')) != ''
+ORDER BY id ASC
+LIMIT 1
+`, endpointID, threadID).Scan(
+		&msg.ID,
+		&msg.ThreadID,
+		&msg.EndpointID,
+		&msg.MessageID,
+		&msg.Role,
+		&msg.AuthorUserPublicID,
+		&msg.AuthorUserEmail,
+		&msg.Status,
+		&msg.CreatedAtUnixMs,
+		&msg.UpdatedAtUnixMs,
+		&msg.TextContent,
+		&msg.MessageJSON,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &msg, nil
 }
 
 // UpdateTranscriptMessageJSONByRowID updates transcript_messages.message_json without mutating thread metadata.
