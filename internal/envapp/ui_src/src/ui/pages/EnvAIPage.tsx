@@ -13,6 +13,7 @@ import {
   Trash,
 } from '@floegence/floe-webapp-core/icons';
 import { FlowerIcon } from '../icons/FlowerIcon';
+import { FlowerSoftAuraIcon } from '../icons/FlowerSoftAuraIcon';
 import { LoadingOverlay, SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Button, ConfirmDialog, Dialog, DirectoryPicker, Dropdown, Input, Select, Tooltip, type DropdownItem } from '@floegence/floe-webapp-core/ui';
@@ -585,7 +586,7 @@ const UploadIcon: Component = () => (
 );
 
 const FlowerAssistantAvatar: Component<{ role: MessageRole }> = () => (
-  <FlowerIcon class="w-8 h-8 text-primary" />
+  <FlowerSoftAuraIcon class="redeven-flower-soft-aura-avatar h-full w-full" />
 );
 
 function InlineButtonSnakeLoading() {

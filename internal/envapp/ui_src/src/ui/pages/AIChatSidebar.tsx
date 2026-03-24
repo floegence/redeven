@@ -1,6 +1,6 @@
 import { For, Index, Show, createEffect, createMemo, createSignal } from 'solid-js';
-import { History, Plus, Refresh, Sparkles, Trash, X } from '@floegence/floe-webapp-core/icons';
-import { FlowerIcon } from '../icons/FlowerIcon';
+import { History, Plus, Refresh, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { FlowerSoftAuraIcon } from '../icons/FlowerSoftAuraIcon';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { SidebarContent, SidebarSection } from '@floegence/floe-webapp-core/layout';
@@ -980,26 +980,15 @@ function ThreadCard(props: {
 function EmptyState() {
   return (
     <div class="px-2.5 py-8 text-center">
-      {/* Icon container */}
       <Motion.div
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.4, easing: 'ease-out' }}
-        class="relative w-14 h-14 rounded-2xl bg-sidebar-accent/80 flex items-center justify-center mx-auto mb-3"
+        class="mx-auto mb-3 flex h-14 w-14 items-center justify-center"
       >
-        <FlowerIcon class="w-7 h-7" />
-        {/* Sparkles decoration */}
-        <Motion.div
-          initial={{ opacity: 0, scale: 0 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.3, delay: 0.3, easing: 'ease-out' }}
-          class="absolute -top-1 -right-1"
-        >
-          <Sparkles class="w-4 h-4 text-primary/60" />
-        </Motion.div>
+        <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-full w-full" />
       </Motion.div>
 
-      {/* Text */}
       <Motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}

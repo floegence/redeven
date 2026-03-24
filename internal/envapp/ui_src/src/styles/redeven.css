@@ -555,6 +555,69 @@ html.dark {
   color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
 }
 
+.redeven-flower-soft-aura {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  isolation: isolate;
+}
+
+.redeven-flower-soft-aura-primary {
+  color: var(--primary);
+}
+
+.redeven-flower-soft-aura-current {
+  color: inherit;
+}
+
+.redeven-flower-soft-aura-glow {
+  position: absolute;
+  inset: 8%;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      82% 82% at 34% 28%,
+      color-mix(in srgb, var(--primary) 24%, transparent) 0%,
+      color-mix(in srgb, var(--primary) 17%, transparent) 30%,
+      color-mix(in srgb, #f59e0b 12%, transparent) 54%,
+      transparent 78%
+    );
+  filter: blur(4px);
+  opacity: 0.95;
+  transform: translateZ(0);
+}
+
+.redeven-flower-soft-aura-svg {
+  position: relative;
+  z-index: 1;
+  width: 76%;
+  height: 76%;
+  flex-shrink: 0;
+}
+
+.redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-glow {
+  inset: 4%;
+  filter: blur(3px);
+}
+
+.redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-svg {
+  width: 86%;
+  height: 86%;
+}
+
+.redeven-flower-soft-aura-lg .redeven-flower-soft-aura-glow {
+  inset: 2%;
+  filter: blur(8px);
+  opacity: 1;
+}
+
+.redeven-flower-soft-aura-lg .redeven-flower-soft-aura-svg {
+  width: 64%;
+  height: 64%;
+}
+
 @media (max-width: 640px) {
   .flower-chat-header {
     padding: 0.75rem 0.875rem;
