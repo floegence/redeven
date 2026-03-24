@@ -1,9 +1,11 @@
 import { For, Show, createEffect, createSignal } from 'solid-js';
+import { Folder, Sparkles, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type { GitListWorkspaceChangesResponse, GitRepoSummaryResponse, GitWorkspaceChange } from '../protocol/redeven_v1';
 import {
   changeSecondaryPath,
   pickDefaultWorkspaceViewSection,
+  repoDisplayName,
   workspaceEntryKey,
   workspaceViewBulkActionLabel,
   workspaceViewSectionActionKey,
@@ -33,6 +35,8 @@ import {
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
+import type { GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
+import type { GitAskFlowerRequest } from '../utils/gitBrowserShortcuts';
 
 export interface GitChangesPanelProps {
   repoSummary?: GitRepoSummaryResponse | null;
@@ -52,6 +56,9 @@ export interface GitChangesPanelProps {
   onStageSelected?: (item: GitWorkspaceChange) => void;
   onUnstageSelected?: (item: GitWorkspaceChange) => void;
   onBulkAction?: (section: GitWorkspaceViewSection) => void;
+  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'workspace_section' }>) => void;
+  onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
+  onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
 }
 
 function itemPath(item: GitWorkspaceChange): string {
@@ -183,12 +190,24 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const stagedCount = () => stagedItems().length;
   const selectedTone = () => workspaceSectionTone(selectedSection());
   const visibleSectionLabel = () => workspaceViewSectionLabel(selectedSection());
+  const repoRootPath = () => String(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim();
+  const repoShortcutRequest = (): GitDirectoryShortcutRequest | null => {
+    const path = repoRootPath();
+    if (!path) return null;
+    return {
+      path,
+      preferredName: repoDisplayName(path),
+    };
+  };
   const diffItem = () => diffDialogItem() ?? props.selectedItem ?? null;
   const selectedKey = () => workspaceEntryKey(diffItem());
   const canCommit = () => stagedCount() > 0 && String(props.commitMessage ?? '').trim().length > 0 && !props.commitBusy;
   const bulkActionLabel = () => workspaceViewBulkActionLabel(selectedSection());
   const bulkAction = () => (selectedSection() === 'staged' ? 'unstage' : 'stage');
   const bulkActionBusy = () => props.busyWorkspaceKey === workspaceViewSectionActionKey(selectedSection()) && props.busyWorkspaceAction === bulkAction();
+  const canAskFlower = () => Boolean(props.onAskFlower && repoRootPath() && visibleItems().length > 0);
+  const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && repoShortcutRequest());
+  const canBrowseFiles = () => Boolean(props.onBrowseFiles && repoShortcutRequest());
 
   createEffect(() => {
     if (!commitDialogOpen()) return;
@@ -227,6 +246,59 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                     </div>
                   </GitLabelBlock>
                   <div class="flex shrink-0 items-center justify-end gap-2 self-start">
+                    <Show when={props.onAskFlower}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        icon={Sparkles}
+                        class="rounded-md bg-background/80"
+                        disabled={!canAskFlower()}
+                        onClick={() => {
+                          if (!canAskFlower()) return;
+                          props.onAskFlower?.({
+                            kind: 'workspace_section',
+                            repoRootPath: repoRootPath(),
+                            headRef: props.repoSummary?.headRef,
+                            section: selectedSection(),
+                            items: visibleItems(),
+                          });
+                        }}
+                      >
+                        Ask Flower
+                      </Button>
+                    </Show>
+                    <Show when={props.onOpenInTerminal}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        icon={Terminal}
+                        class="rounded-md bg-background/80"
+                        disabled={!canOpenInTerminal()}
+                        onClick={() => {
+                          const request = repoShortcutRequest();
+                          if (!request) return;
+                          props.onOpenInTerminal?.(request);
+                        }}
+                      >
+                        Open in Terminal
+                      </Button>
+                    </Show>
+                    <Show when={props.onBrowseFiles}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        icon={Folder}
+                        class="rounded-md bg-background/80"
+                        disabled={!canBrowseFiles()}
+                        onClick={() => {
+                          const request = repoShortcutRequest();
+                          if (!request) return;
+                          void props.onBrowseFiles?.(request);
+                        }}
+                      >
+                        Browse Files
+                      </Button>
+                    </Show>
                     <Button
                       size="sm"
                       variant="outline"

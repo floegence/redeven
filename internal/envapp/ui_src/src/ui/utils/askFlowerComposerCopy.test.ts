@@ -114,4 +114,33 @@ describe('buildAskFlowerComposerCopy', () => {
       detail: 'alice · 87.3% CPU · 256 MB',
     });
   });
+
+  it('builds Git-focused copy for snapshot context', () => {
+    const copy = buildAskFlowerComposerCopy({
+      ...baseIntent,
+      source: 'git_browser',
+      contextItems: [
+        {
+          kind: 'text_snapshot',
+          title: 'Commit summary',
+          detail: '3a47b67b',
+          content: 'Context: Git commit detail\nCommit: 3a47b67b',
+        },
+      ],
+    });
+
+    expect(copy.placeholder).toBe('Ask about this Git context, request a change, or describe what you need');
+    expect(copy.question).toBe('What should Flower inspect or help with?');
+    expect(copy.contextEntries).toEqual([
+      {
+        id: 'context-0-snapshot',
+        kind: 'snapshot',
+        itemIndex: 0,
+        label: 'Commit summary',
+        title: 'Preview Commit summary',
+        detail: '3a47b67b',
+        content: 'Context: Git commit detail\nCommit: 3a47b67b',
+      },
+    ]);
+  });
 });

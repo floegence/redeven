@@ -22,6 +22,7 @@ import { GitLabelBlock, GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimi
 import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import type { GitMergeBranchDialogConfirmOptions, GitMergeBranchDialogState } from './GitMergeBranchDialog';
 import { buildTabElementId, buildTabPanelElementId } from '../utils/tabNavigation';
+import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 
 export interface GitWorkbenchProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -85,6 +86,9 @@ export interface GitWorkbenchProps {
   onStageSelected?: (item: GitWorkspaceChange) => void;
   onUnstageSelected?: (item: GitWorkspaceChange) => void;
   onBulkAction?: (section: GitWorkspaceViewSection) => void;
+  onAskFlower?: (request: GitAskFlowerRequest) => void;
+  onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
+  onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
   fetchBusy?: boolean;
   pullBusy?: boolean;
   pushBusy?: boolean;
@@ -246,6 +250,9 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               onStageSelected={props.onStageSelected}
               onUnstageSelected={props.onUnstageSelected}
               onBulkAction={props.onBulkAction}
+              onAskFlower={(request) => props.onAskFlower?.(request)}
+              onOpenInTerminal={props.onOpenInTerminal}
+              onBrowseFiles={props.onBrowseFiles}
             />
           </div>
         </Show>
@@ -299,6 +306,9 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               onCloseDeleteReview={props.onCloseDeleteReview}
               onRetryDeletePreview={props.onRetryDeletePreview}
               onConfirmDeleteBranch={props.onConfirmDeleteBranch}
+              onAskFlower={(request) => props.onAskFlower?.(request)}
+              onOpenInTerminal={props.onOpenInTerminal}
+              onBrowseFiles={props.onBrowseFiles}
             />
           </div>
         </Show>
@@ -317,6 +327,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               repoInfo={props.repoInfo}
               repoInfoLoading={props.repoInfoLoading}
               selectedCommitHash={props.selectedCommitHash}
+              onAskFlower={(request) => props.onAskFlower?.(request)}
             />
           </div>
         </Show>

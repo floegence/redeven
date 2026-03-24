@@ -65,8 +65,14 @@ const filePreviewStore = vi.hoisted(() => ({
   closePreview: vi.fn(),
 }));
 
+const fileBrowserSurfaceStore = vi.hoisted(() => ({
+  openBrowser: vi.fn(async () => undefined),
+  closeBrowser: vi.fn(),
+}));
+
 const envActionSpies = vi.hoisted(() => ({
   openTerminalInDirectory: vi.fn(),
+  openAskFlowerComposer: vi.fn(),
 }));
 
 const mockRpc = vi.hoisted(() => ({
@@ -162,6 +168,14 @@ vi.mock('./FilePreviewContext', () => ({
     openPreview: filePreviewStore.openPreview,
     closePreview: filePreviewStore.closePreview,
     controller: {},
+  }),
+}));
+
+vi.mock('./FileBrowserSurfaceContext', () => ({
+  useFileBrowserSurfaceContext: () => ({
+    controller: {},
+    openBrowser: fileBrowserSurfaceStore.openBrowser,
+    closeBrowser: fileBrowserSurfaceStore.closeBrowser,
   }),
 }));
 
@@ -278,6 +292,15 @@ vi.mock('./GitWorkspace', () => ({
     onCheckoutBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
     onMergeBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
     onDeleteBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
+    onAskFlower?: (request: {
+      kind: 'workspace_section';
+      repoRootPath: string;
+      headRef?: string;
+      section: 'changes' | 'staged' | 'unstaged' | 'untracked' | 'conflicted';
+      items: Array<{ section: 'staged' | 'unstaged' | 'untracked' | 'conflicted'; changeType: string; path: string; displayPath: string }>;
+    }) => void;
+    onOpenInTerminal?: (request: { path: string; preferredName?: string }) => void;
+    onBrowseFiles?: (request: { path: string; preferredName?: string; title?: string }) => void | Promise<void>;
     onConfirmMergeBranch?: (
       branch: { name?: string; fullName?: string; kind?: string },
       options: { planFingerprint?: string },
@@ -321,6 +344,50 @@ vi.mock('./GitWorkspace', () => ({
         <button type="button" onClick={() => props.onFetch?.()}>mock-fetch</button>
         <button type="button" onClick={() => props.onPull?.()}>mock-pull</button>
         <button type="button" onClick={() => props.onPush?.()}>mock-push</button>
+        {props.onAskFlower ? (
+          <button
+            type="button"
+            onClick={() => props.onAskFlower?.({
+              kind: 'workspace_section',
+              repoRootPath: '/workspace/repo',
+              headRef: 'main',
+              section: 'changes',
+              items: [
+                {
+                  section: 'unstaged',
+                  changeType: 'modified',
+                  path: 'src/app.ts',
+                  displayPath: 'src/app.ts',
+                },
+              ],
+            })}
+          >
+            mock-git-ask-flower
+          </button>
+        ) : null}
+        {props.onOpenInTerminal ? (
+          <button
+            type="button"
+            onClick={() => props.onOpenInTerminal?.({
+              path: '/workspace/repo',
+              preferredName: 'repo',
+            })}
+          >
+            mock-git-open-terminal
+          </button>
+        ) : null}
+        {props.onBrowseFiles ? (
+          <button
+            type="button"
+            onClick={() => props.onBrowseFiles?.({
+              path: '/workspace/repo',
+              preferredName: 'repo',
+              title: 'Repo',
+            })}
+          >
+            mock-git-browse-files
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => props.onCheckoutBranch?.({
@@ -421,7 +488,7 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canExec
     askFlowerIntentSeq: () => 0,
     askFlowerIntent: () => null,
     injectAskFlowerIntent: () => {},
-    openAskFlowerComposer: () => {},
+    openAskFlowerComposer: envActionSpies.openAskFlowerComposer,
     openTerminalInDirectoryRequestSeq: () => 0,
     openTerminalInDirectoryRequest: () => null,
     openTerminalInDirectory: envActionSpies.openTerminalInDirectory,
@@ -474,6 +541,10 @@ beforeEach(() => {
   workspaceLifecycleStore.filesUnmounts = 0;
   workspaceLifecycleStore.gitMounts = 0;
   workspaceLifecycleStore.gitUnmounts = 0;
+  fileBrowserSurfaceStore.openBrowser.mockReset();
+  fileBrowserSurfaceStore.openBrowser.mockResolvedValue(undefined);
+  fileBrowserSurfaceStore.closeBrowser.mockReset();
+  envActionSpies.openAskFlowerComposer.mockReset();
 
   Object.defineProperty(window.navigator, 'clipboard', {
     configurable: true,
@@ -852,6 +923,60 @@ describe('RemoteFileBrowser persistence', () => {
       expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
       expect(filesWorkspace?.parentElement?.style.display).toBe('block');
       expect(filesWorkspace?.textContent).toContain('files:files:/workspace/repo/src:312:1');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('routes Git helper actions through the host integrations', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-git-ask-flower') as HTMLButtonElement | undefined;
+      const openTerminalButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-git-open-terminal') as HTMLButtonElement | undefined;
+      const browseFilesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-git-browse-files') as HTMLButtonElement | undefined;
+
+      expect(askFlowerButton).toBeTruthy();
+      expect(openTerminalButton).toBeTruthy();
+      expect(browseFilesButton).toBeTruthy();
+
+      askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      openTerminalButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      browseFilesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(envActionSpies.openAskFlowerComposer).toHaveBeenCalledTimes(1);
+      expect(envActionSpies.openAskFlowerComposer.mock.calls[0]?.[0]).toMatchObject({
+        source: 'git_browser',
+        mode: 'append',
+        suggestedWorkingDirAbs: '/workspace/repo',
+        contextItems: [
+          {
+            kind: 'text_snapshot',
+            title: 'Workspace changes',
+            detail: 'main · Changes',
+          },
+        ],
+      });
+      const intent = envActionSpies.openAskFlowerComposer.mock.calls[0]?.[0];
+      expect(intent?.contextItems?.[0]?.content ?? '').toContain('Context: Git workspace changes');
+      expect(envActionSpies.openTerminalInDirectory).toHaveBeenCalledWith('/workspace/repo', { preferredName: 'repo' });
+      expect(fileBrowserSurfaceStore.openBrowser).toHaveBeenCalledWith({
+        path: '/workspace/repo',
+        homePath: '/workspace',
+        title: 'Repo',
+      });
     } finally {
       dispose();
     }

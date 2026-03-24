@@ -183,6 +183,67 @@ describe('GitHistoryBrowser interactions', () => {
     }
   });
 
+  it('shows a commit-scoped Ask Flower action in graph detail', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onAskFlower = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <div class="h-[640px]">
+            <GitHistoryBrowser
+              repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: '3a47b67b1234567890' }}
+              currentPath="/workspace/repo/src"
+              selectedCommitHash="3a47b67b1234567890"
+              onAskFlower={onAskFlower}
+            />
+          </div>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Ask Flower'));
+      expect(askFlowerButton).toBeTruthy();
+
+      askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onAskFlower).toHaveBeenCalledWith({
+        kind: 'commit',
+        repoRootPath: '/workspace/repo',
+        location: 'graph',
+        commit: {
+          hash: '3a47b67b1234567890',
+          shortHash: '3a47b67b',
+          parents: [],
+          subject: 'Refine bootstrap',
+          body: ['Refine bootstrap', '', 'Keep diff rendering stable.'].join('\n'),
+        },
+        files: [
+          {
+            changeType: 'modified',
+            path: 'src/app.ts',
+            displayPath: 'src/app.ts',
+            additions: 1,
+            deletions: 1,
+            patchText: [
+              'diff --git a/src/app.ts b/src/app.ts',
+              '--- a/src/app.ts',
+              '+++ b/src/app.ts',
+              '@@ -1 +1 @@',
+              '-oldValue',
+              '+newValue',
+            ].join('\n'),
+          },
+        ],
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('uses left-rail guidance before a commit is selected', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

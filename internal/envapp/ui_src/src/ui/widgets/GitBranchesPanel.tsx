@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
-import { ChevronRight } from '@floegence/floe-webapp-core/icons';
+import { ChevronRight, Folder, Sparkles, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { useRedevenRpc, type GitBranchSummary, type GitCommitFileSummary, type GitCommitSummary, type GitGetBranchCompareResponse, type GitListBranchesResponse, type GitListWorkspaceChangesResponse, type GitPreviewDeleteBranchResponse, type GitPreviewMergeBranchResponse, type GitRepoSummaryResponse, type GitWorkspaceChange, type GitWorkspaceSection } from '../protocol/redeven_v1';
 import {
@@ -14,15 +14,18 @@ import {
   changeSecondaryPath,
   gitDiffEntryIdentity,
   pickDefaultWorkspaceViewSection,
+  repoDisplayName,
   workspaceEntryKey,
   workspaceSectionLabel,
   workspaceViewSectionCount,
   workspaceViewSectionItems,
   workspaceViewSectionLabel,
+  resolveGitBranchWorktreePath,
   type GitBranchSubview,
   type GitWorkspaceViewSection,
 } from '../utils/gitWorkbench';
 import { resolveRovingTabTargetId } from '../utils/tabNavigation';
+import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import { gitBranchTone, gitChangePathClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import {
@@ -89,6 +92,9 @@ export interface GitBranchesPanelProps {
   onCloseDeleteReview?: () => void;
   onRetryDeletePreview?: (branch: GitBranchSummary) => void;
   onConfirmDeleteBranch?: (branch: GitBranchSummary, options: GitDeleteBranchDialogConfirmOptions) => void;
+  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'branch_status' | 'commit' }>) => void;
+  onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
+  onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
 }
 
 function formatAbsoluteTime(ms?: number): string {
@@ -133,12 +139,6 @@ function gitBranchSubviewTabId(view: GitBranchSubview): string {
 
 function gitBranchSubviewPanelId(view: GitBranchSubview): string {
   return `git-branch-subview-panel-${view}`;
-}
-
-function resolveBranchStatusRepoRootPath(branch: GitBranchSummary | null | undefined, activeRepoRootPath: string): string {
-  if (!branch) return '';
-  if (branch.current) return activeRepoRootPath;
-  return String(branch.worktreePath ?? '').trim();
 }
 
 function branchStatusEmptyState(branch: GitBranchSummary | null | undefined, statusRepoRootPath: string): {
@@ -336,7 +336,7 @@ function summarizeCommitFileChanges(files: GitCommitFileSummary[]): { additions:
 
 function HistoryList(props: Pick<
   GitBranchesPanelProps,
-  'repoRootPath' | 'selectedBranch' | 'commits' | 'listLoading' | 'listLoadingMore' | 'listError' | 'hasMore' | 'selectedCommitHash' | 'onSelectCommit' | 'onLoadMore'
+  'repoRootPath' | 'selectedBranch' | 'commits' | 'listLoading' | 'listLoadingMore' | 'listError' | 'hasMore' | 'selectedCommitHash' | 'onSelectCommit' | 'onLoadMore' | 'onAskFlower'
 >) {
   const rpc = useRedevenRpc();
 
@@ -485,7 +485,27 @@ function HistoryList(props: Pick<
                                                           <GitChangeMetrics additions={fileTotals().additions} deletions={fileTotals().deletions} />
                                                         </div>
                                                       </div>
-                                                      <div class="text-[11px] text-muted-foreground">Select a file to inspect the diff.</div>
+                                                      <div class="flex items-center gap-2">
+                                                        <Show when={props.onAskFlower}>
+                                                          <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            icon={Sparkles}
+                                                            class="rounded-md bg-background/80"
+                                                            onClick={() => props.onAskFlower?.({
+                                                              kind: 'commit',
+                                                              repoRootPath: repoRootPath(),
+                                                              location: 'branch_history',
+                                                              branchName: props.selectedBranch ? branchDisplayName(props.selectedBranch) : undefined,
+                                                              commit,
+                                                              files: files(),
+                                                            })}
+                                                          >
+                                                            Ask Flower
+                                                          </Button>
+                                                        </Show>
+                                                        <div class="text-[11px] text-muted-foreground">Select a file to inspect the diff.</div>
+                                                      </div>
                                                     </div>
 
                                                     <BranchCompareFilesTable
@@ -762,7 +782,15 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
   const branchSubview = () => props.selectedBranchSubview ?? 'status';
   const activeRepoRootPath = () => String(props.repoRootPath || props.repoSummary?.repoRootPath || '').trim();
-  const statusRepoRootPath = () => resolveBranchStatusRepoRootPath(props.selectedBranch, activeRepoRootPath());
+  const statusRepoRootPath = () => resolveGitBranchWorktreePath(props.selectedBranch, activeRepoRootPath());
+  const branchDirectoryRequest = (): GitDirectoryShortcutRequest | null => {
+    const path = statusRepoRootPath();
+    if (!path) return null;
+    return {
+      path,
+      preferredName: repoDisplayName(path),
+    };
+  };
   const visibleStatusWorkspace = () => statusWorkspace();
   const visibleStatusLoading = () => statusLoading();
   const visibleStatusError = () => statusError();
@@ -803,6 +831,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     || props.selectedBranch?.current
   );
   const deleteLabel = () => (props.deleteBusy ? 'Deleting...' : 'Delete');
+  const canAskFlowerStatus = () => Boolean(props.onAskFlower && props.selectedBranch && statusRepoRootPath() && visibleStatusItems().length > 0);
+  const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && branchDirectoryRequest());
+  const canBrowseFiles = () => Boolean(props.onBrowseFiles && branchDirectoryRequest());
   const handleBranchSubviewKeyDown = (event: KeyboardEvent, currentView: GitBranchSubview) => {
     const nextView = resolveRovingTabTargetId(GIT_BRANCH_SUBVIEW_IDS, currentView, event.key, 'horizontal');
     if (!nextView || nextView === currentView) return;
@@ -887,7 +918,29 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1.5">
                 <GitLabelBlock class="min-w-0" label="Status" tone="neutral" />
 
-                <div class="flex min-w-fit items-start justify-end">
+                <div class="flex min-w-fit items-start justify-end gap-2">
+                  <Show when={props.onAskFlower}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      icon={Sparkles}
+                      class="rounded-md bg-background/80"
+                      disabled={!canAskFlowerStatus()}
+                      onClick={() => {
+                        if (!props.selectedBranch || !canAskFlowerStatus()) return;
+                        props.onAskFlower?.({
+                          kind: 'branch_status',
+                          repoRootPath: activeRepoRootPath(),
+                          worktreePath: statusRepoRootPath(),
+                          branch: props.selectedBranch,
+                          section: selectedStatusSection(),
+                          items: visibleStatusItems(),
+                        });
+                      }}
+                    >
+                      Ask Flower
+                    </Button>
+                  </Show>
                   <Button size="sm" variant="outline" class="rounded-md bg-background/80" onClick={() => setCompareDialogOpen(true)}>
                     Compare
                   </Button>
@@ -1012,8 +1065,44 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     </GitLabelBlock>
 
                     <div class="flex w-full min-w-0 flex-col gap-1.5 lg:flex-[0_1_20rem] lg:max-w-[min(50%,22rem)] lg:items-stretch">
-                      <div class="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:w-full lg:justify-end">
-                        <div class="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-start lg:w-full lg:justify-end">
+                      <div class="flex w-full flex-col gap-2 lg:w-full lg:items-stretch">
+                        <div class="flex w-full flex-wrap gap-2 sm:justify-end">
+                          <Show when={props.onOpenInTerminal}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              icon={Terminal}
+                              class="flex-1 rounded-md bg-background/80 sm:flex-none"
+                              disabled={!canOpenInTerminal()}
+                              onClick={() => {
+                                const request = branchDirectoryRequest();
+                                if (!request) return;
+                                props.onOpenInTerminal?.(request);
+                              }}
+                            >
+                              Open in Terminal
+                            </Button>
+                          </Show>
+
+                          <Show when={props.onBrowseFiles}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              icon={Folder}
+                              class="flex-1 rounded-md bg-background/80 sm:flex-none"
+                              disabled={!canBrowseFiles()}
+                              onClick={() => {
+                                const request = branchDirectoryRequest();
+                                if (!request) return;
+                                void props.onBrowseFiles?.(request);
+                              }}
+                            >
+                              Browse Files
+                            </Button>
+                          </Show>
+                        </div>
+
+                        <div class="flex w-full flex-wrap gap-2 sm:justify-end">
                           <Show when={props.onCheckoutBranch}>
                             <Button
                               size="sm"
@@ -1109,6 +1198,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     selectedCommitHash={props.selectedCommitHash}
                     onSelectCommit={props.onSelectCommit}
                     onLoadMore={props.onLoadMore}
+                    onAskFlower={props.onAskFlower}
                   />
                 </div>
               </Show>

@@ -58,6 +58,15 @@ export type AskFlowerComposerEntry =
     }>
   | Readonly<{
       id: string;
+      kind: 'snapshot';
+      itemIndex: number;
+      label: string;
+      title: string;
+      detail: string;
+      content: string;
+    }>
+  | Readonly<{
+      id: string;
       kind: 'attachment';
       itemIndex: number | null;
       label: string;
@@ -130,6 +139,19 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerComposerEntry[] 
         detail: `${String(item.username ?? '').trim() || 'system'} · ${Number(item.cpuPercent ?? 0).toFixed(1)}% CPU · ${formatMonitorProcessBytes(item.memoryBytes)}`,
         content: buildMonitorProcessSnapshotText(item),
         pid: item.pid,
+      });
+      return;
+    }
+
+    if (item.kind === 'text_snapshot') {
+      entries.push({
+        id: `context-${index}-snapshot`,
+        kind: 'snapshot',
+        itemIndex: index,
+        label: String(item.title ?? '').trim() || 'snapshot',
+        title: `Preview ${String(item.title ?? '').trim() || 'snapshot'}`,
+        detail: String(item.detail ?? '').trim() || 'Snapshot',
+        content: item.content,
       });
       return;
     }
@@ -230,6 +252,22 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
         contextEntries,
       };
     }
+  }
+
+  if (firstContext?.kind === 'text_snapshot') {
+    if (intent.source === 'git_browser') {
+      return {
+        placeholder: 'Ask about this Git context, request a change, or describe what you need',
+        question: 'What should Flower inspect or help with?',
+        contextEntries,
+      };
+    }
+
+    return {
+      placeholder: 'Ask about this context, request a change, or describe what you need',
+      question: 'What would you like me to inspect or explain?',
+      contextEntries,
+    };
   }
 
   if (intent.source === 'file_preview') {

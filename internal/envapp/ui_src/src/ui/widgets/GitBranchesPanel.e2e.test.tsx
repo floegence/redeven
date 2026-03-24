@@ -334,6 +334,95 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
+  it('exposes Ask Flower, Open in Terminal, and Browse Files for linked branch worktrees', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onAskFlower = vi.fn();
+    const onOpenInTerminal = vi.fn();
+    const onBrowseFiles = vi.fn();
+
+    mockListWorkspaceChanges.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo-linked',
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
+      staged: [],
+      unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts', additions: 3, deletions: 1 }],
+      untracked: [{ section: 'untracked', changeType: 'added', path: 'scratch.txt', displayPath: 'scratch.txt' }],
+      conflicted: [],
+    });
+
+    const branch = {
+      name: 'feature/linked',
+      fullName: 'refs/heads/feature/linked',
+      kind: 'local' as const,
+      worktreePath: '/workspace/repo-linked',
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={branch}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    branch,
+                  ],
+                  remote: [],
+                }}
+                onAskFlower={onAskFlower}
+                onOpenInTerminal={onOpenInTerminal}
+                onBrowseFiles={onBrowseFiles}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Ask Flower')) as HTMLButtonElement | undefined;
+      const openInTerminalButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Open in Terminal')) as HTMLButtonElement | undefined;
+      const browseFilesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Browse Files')) as HTMLButtonElement | undefined;
+
+      expect(askFlowerButton).toBeTruthy();
+      expect(openInTerminalButton).toBeTruthy();
+      expect(browseFilesButton).toBeTruthy();
+
+      askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      openInTerminalButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      browseFilesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onAskFlower).toHaveBeenCalledWith({
+        kind: 'branch_status',
+        repoRootPath: '/workspace/repo',
+        worktreePath: '/workspace/repo-linked',
+        branch,
+        section: 'changes',
+        items: [
+          { section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts', additions: 3, deletions: 1 },
+          { section: 'untracked', changeType: 'added', path: 'scratch.txt', displayPath: 'scratch.txt' },
+        ],
+      });
+      expect(onOpenInTerminal).toHaveBeenCalledWith({
+        path: '/workspace/repo-linked',
+        preferredName: 'repo-linked',
+      });
+      expect(onBrowseFiles).toHaveBeenCalledWith({
+        path: '/workspace/repo-linked',
+        preferredName: 'repo-linked',
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('shows an unavailable status message for a local branch without a checked-out worktree', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1004,6 +1093,7 @@ describe('GitBranchesPanel interactions', () => {
   it('shows expandable commit files and opens diffs from branch history', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
+    const onAskFlower = vi.fn();
 
     mockGetCommitDetail.mockResolvedValue({
       repoRootPath: '/workspace/repo',
@@ -1046,6 +1136,7 @@ describe('GitBranchesPanel interactions', () => {
                   { hash: '2222222222222222', shortHash: '22222222', parents: ['1111111111111111', '9999999999999999'], subject: 'Merge feature', authorName: 'Bob', authorTimeMs: 1706003600000 },
                 ]}
                 selectedCommitHash="2222222222222222"
+                onAskFlower={onAskFlower}
               />
             </div>
           </ProtocolProvider>
@@ -1064,6 +1155,29 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).toContain('src/history.ts');
       expect(host.textContent).toContain('+8');
       expect(host.textContent).toContain('-3');
+      expect(host.textContent).toContain('Ask Flower');
+
+      const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Ask Flower')) as HTMLButtonElement | undefined;
+      expect(askFlowerButton).toBeTruthy();
+      askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onAskFlower).toHaveBeenCalledWith({
+        kind: 'commit',
+        repoRootPath: '/workspace/repo',
+        location: 'branch_history',
+        branchName: 'feature/demo',
+        commit: { hash: '2222222222222222', shortHash: '22222222', parents: ['1111111111111111', '9999999999999999'], subject: 'Merge feature', authorName: 'Bob', authorTimeMs: 1706003600000 },
+        files: [
+          {
+            changeType: 'modified',
+            path: 'src/history.ts',
+            displayPath: 'src/history.ts',
+            additions: 8,
+            deletions: 3,
+            patchText: '@@ -1 +1 @@\n-history\n+history updated',
+          },
+        ],
+      });
 
       const diffButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('View Diff')) as HTMLButtonElement | undefined;
       expect(diffButton).toBeTruthy();

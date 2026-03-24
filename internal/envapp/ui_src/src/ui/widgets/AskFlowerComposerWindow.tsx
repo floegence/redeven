@@ -508,6 +508,7 @@ function entryIcon(entry: AskFlowerComposerEntry) {
   if (entry.kind === 'directory') return <Folder class="size-3.5 shrink-0" />;
   if (entry.kind === 'attachment') return <Paperclip class="size-3.5 shrink-0" />;
   if (entry.kind === 'process_snapshot') return <Activity class="size-3.5 shrink-0" />;
+  if (entry.kind === 'snapshot') return <FileText class="size-3.5 shrink-0" />;
   if (entry.kind === 'terminal_selection') return <Terminal class="size-3.5 shrink-0" />;
   if (entry.kind === 'selection') return <FileText class="size-3.5 shrink-0" />;
   return <FileText class="size-3.5 shrink-0" />;
@@ -519,6 +520,9 @@ function entryButtonClass(entry: AskFlowerComposerEntry): string {
   }
   if (entry.kind === 'selection' || entry.kind === 'terminal_selection') {
     return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 hover:border-emerald-500/35 hover:bg-emerald-500/16 dark:text-emerald-200';
+  }
+  if (entry.kind === 'snapshot') {
+    return 'border-violet-500/20 bg-violet-500/10 text-violet-700 hover:border-violet-500/35 hover:bg-violet-500/16 dark:text-violet-200';
   }
   if (entry.kind === 'attachment') {
     return 'border-sky-500/20 bg-sky-500/10 text-sky-700 hover:border-sky-500/35 hover:bg-sky-500/16 dark:text-sky-200';
@@ -753,6 +757,18 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
         item: fileItemForContextPreview(entry.workingDir || entry.detail, 'Selected terminal output'),
         text: preview.body,
         helper: preview.truncated ? 'Showing the first part of the selected terminal output.' : undefined,
+      }));
+      return;
+    }
+
+    if (entry.kind === 'snapshot') {
+      const preview = trimPreviewBody(entry.content);
+      updateContextPreview(contextPreviewStateForText({
+        title: entry.label,
+        subtitle: entry.detail,
+        item: fileItemForContextPreview(`snapshot://${entry.label}`, entry.label),
+        text: preview.body,
+        helper: preview.truncated ? 'Showing the first part of this context snapshot.' : undefined,
       }));
       return;
     }

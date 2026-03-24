@@ -1,8 +1,11 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
+import { Sparkles } from '@floegence/floe-webapp-core/icons';
+import { Button } from '@floegence/floe-webapp-core/ui';
 import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
 import { changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench';
+import type { GitAskFlowerRequest } from '../utils/gitBrowserShortcuts';
 import { gitChangePathClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import {
@@ -32,6 +35,7 @@ export interface GitHistoryBrowserProps {
   repoInfoLoading?: boolean;
   currentPath: string;
   selectedCommitHash?: string;
+  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'commit' }>) => void;
   class?: string;
 }
 
@@ -214,6 +218,23 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 </div>
                               </Show>
                             </GitLabelBlock>
+                            <Show when={props.onAskFlower}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                icon={Sparkles}
+                                class="shrink-0 rounded-md bg-background/80"
+                                onClick={() => props.onAskFlower?.({
+                                  kind: 'commit',
+                                  repoRootPath: String(props.repoInfo?.repoRootPath ?? '').trim(),
+                                  location: 'graph',
+                                  commit: detail,
+                                  files: commitFiles(),
+                                })}
+                              >
+                                Ask Flower
+                              </Button>
+                            </Show>
                           </div>
                         </section>
 

@@ -1,4 +1,4 @@
-export type AskFlowerIntentSource = 'file_browser' | 'terminal' | 'file_preview' | 'monitoring';
+export type AskFlowerIntentSource = 'file_browser' | 'terminal' | 'file_preview' | 'monitoring' | 'git_browser';
 
 export type AskFlowerIntentMode = 'append' | 'replace';
 
@@ -29,6 +29,12 @@ export type AskFlowerContextItem =
       memoryBytes: number;
       platform?: string;
       capturedAtMs?: number;
+    }
+  | {
+      kind: 'text_snapshot';
+      title: string;
+      detail?: string;
+      content: string;
     };
 
 export type AskFlowerIntent = {
