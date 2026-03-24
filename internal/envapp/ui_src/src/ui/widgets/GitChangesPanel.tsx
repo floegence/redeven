@@ -280,7 +280,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                           props.onOpenInTerminal?.(request);
                         }}
                       >
-                        Open in Terminal
+                        Terminal
                       </Button>
                     </Show>
                     <Show when={props.onBrowseFiles}>
@@ -296,7 +296,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                           void props.onBrowseFiles?.(request);
                         }}
                       >
-                        Browse Files
+                        Files
                       </Button>
                     </Show>
                     <Button

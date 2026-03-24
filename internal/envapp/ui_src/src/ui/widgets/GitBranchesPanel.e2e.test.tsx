@@ -334,7 +334,7 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
-  it('exposes Ask Flower, Open in Terminal, and Browse Files for linked branch worktrees', async () => {
+  it('exposes Ask Flower, Terminal, and Files for linked branch worktrees', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const onAskFlower = vi.fn();
@@ -388,8 +388,8 @@ describe('GitBranchesPanel interactions', () => {
       await flush();
 
       const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Ask Flower')) as HTMLButtonElement | undefined;
-      const openInTerminalButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Open in Terminal')) as HTMLButtonElement | undefined;
-      const browseFilesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Browse Files')) as HTMLButtonElement | undefined;
+      const openInTerminalButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Terminal')) as HTMLButtonElement | undefined;
+      const browseFilesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Files')) as HTMLButtonElement | undefined;
 
       expect(askFlowerButton).toBeTruthy();
       expect(openInTerminalButton).toBeTruthy();

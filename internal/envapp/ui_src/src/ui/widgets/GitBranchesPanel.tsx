@@ -1080,7 +1080,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                 props.onOpenInTerminal?.(request);
                               }}
                             >
-                              Open in Terminal
+                              Terminal
                             </Button>
                           </Show>
 
@@ -1097,7 +1097,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                 void props.onBrowseFiles?.(request);
                               }}
                             >
-                              Browse Files
+                              Files
                             </Button>
                           </Show>
                         </div>
