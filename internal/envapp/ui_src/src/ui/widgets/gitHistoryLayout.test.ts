@@ -194,8 +194,8 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('min-h-[2rem] text-[11px] leading-relaxed line-clamp-2 text-muted-foreground');
     expect(branchesSrc).toContain('flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-start lg:justify-between');
     expect(branchesSrc).toContain('flex w-full min-w-0 flex-col gap-1.5 lg:flex-[0_1_20rem] lg:max-w-[min(50%,22rem)] lg:items-stretch');
-    expect(branchesSrc).toContain('flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:w-full lg:justify-end');
-    expect(branchesSrc).toContain('flex w-full flex-wrap gap-2 sm:w-auto sm:justify-start lg:w-full lg:justify-end');
+    expect(branchesSrc).toContain('flex w-full flex-col gap-2 lg:w-full lg:items-stretch');
+    expect(branchesSrc).toContain('flex w-full flex-wrap gap-2 sm:justify-end');
     expect(branchesSrc).toContain('class="flex-1 rounded-md bg-background/80 sm:flex-none"');
     expect(branchesSrc).toContain('class="flex-1 rounded-md bg-background/80 text-destructive hover:text-destructive sm:flex-none"');
     expect(branchesSrc).toContain('grid w-full grid-cols-2 rounded-md border border-border/65 bg-muted/[0.14] p-0.5 sm:inline-flex sm:w-auto');

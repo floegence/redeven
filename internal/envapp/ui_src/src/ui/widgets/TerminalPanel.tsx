@@ -440,8 +440,11 @@ function TerminalSessionView(props: terminal_session_view_props) {
           copyOnSelect: false,
         },
         // When multiple views/panels show the same terminal session, only the focused terminal should emit remote resize.
-        // This prevents hidden terminals from locking the remote PTY cols/rows to an inactive size.
+        // Focus also re-fits and re-emits the current size so the active surface can reclaim remote PTY ownership after
+        // another view with a different width was previously attached to the same session/connection.
         responsive: {
+          fitOnFocus: true,
+          emitResizeOnFocus: true,
           notifyResizeOnlyWhenFocused: true,
         } satisfies TerminalResponsiveConfig,
       }),
