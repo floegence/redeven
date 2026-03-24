@@ -440,7 +440,7 @@ function HistoryList(props: Pick<
                                             type="button"
                                             aria-label={expanded() ? 'Collapse commit' : 'Expand commit'}
                                             aria-expanded={expanded()}
-                                            class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border/40 bg-background/80 text-muted-foreground transition-colors duration-150 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                                            class="mt-0.5 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded border border-border/40 bg-background/80 text-muted-foreground transition-colors duration-150 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
                                             onClick={(event) => {
                                               event.stopPropagation();
                                               toggleCommit(commit.hash);
@@ -852,10 +852,10 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   );
   const headerControlBarClass = 'rounded-xl border border-border/60 bg-muted/[0.12] p-2 shadow-sm shadow-black/5';
   const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';
-  const helperActionButtonClass = 'w-full rounded-full border border-border/55 bg-background/72 px-3 text-muted-foreground shadow-sm shadow-black/5 hover:bg-background hover:text-foreground sm:w-auto';
-  const secondaryActionButtonClass = 'w-full rounded-full border border-border/60 bg-background/88 px-4 shadow-sm shadow-black/5 sm:w-auto';
-  const primaryActionButtonClass = 'w-full rounded-full px-4 shadow-sm shadow-black/10 sm:w-auto';
-  const dangerActionButtonClass = 'w-full rounded-full border border-destructive/20 bg-destructive/[0.08] px-4 text-destructive hover:bg-destructive/[0.14] hover:text-destructive sm:w-auto';
+  const helperActionButtonClass = 'w-full cursor-pointer rounded-md border border-border/55 bg-background/72 px-3 text-muted-foreground shadow-sm shadow-black/5 hover:bg-background hover:text-foreground sm:w-auto';
+  const secondaryActionButtonClass = 'w-full cursor-pointer rounded-md border border-border/60 bg-background/88 px-4 shadow-sm shadow-black/5 hover:bg-background sm:w-auto';
+  const primaryActionButtonClass = 'w-full cursor-pointer rounded-md px-4 shadow-sm shadow-black/10 sm:w-auto';
+  const dangerActionButtonClass = 'w-full cursor-pointer rounded-md border border-destructive/20 bg-destructive/[0.08] px-4 text-destructive shadow-sm shadow-black/5 hover:bg-destructive/[0.14] hover:text-destructive sm:w-auto';
   const handleBranchSubviewKeyDown = (event: KeyboardEvent, currentView: GitBranchSubview) => {
     const nextView = resolveRovingTabTargetId(GIT_BRANCH_SUBVIEW_IDS, currentView, event.key, 'horizontal');
     if (!nextView || nextView === currentView) return;
@@ -1089,7 +1089,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
                       <div class="flex w-full xl:w-auto xl:justify-end">
                         <div
-                          class="grid w-full grid-cols-2 rounded-full border border-border/65 bg-muted/[0.16] p-0.5 shadow-sm shadow-black/5 sm:w-[15rem]"
+                          class="grid w-full grid-cols-2 rounded-lg border border-border/65 bg-muted/[0.16] p-0.5 shadow-sm shadow-black/5 sm:w-[15rem]"
                           role="tablist"
                           aria-label="Branch detail tabs"
                           aria-orientation="horizontal"
@@ -1109,7 +1109,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                   aria-controls={gitBranchSubviewPanelId(view)}
                                   tabIndex={active() ? 0 : -1}
                                   class={cn(
-                                    'rounded-full px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150',
+                                    'cursor-pointer rounded-md px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150',
                                     active() ? 'git-browser-selection-chip' : 'text-muted-foreground hover:bg-background/80 hover:text-foreground'
                                   )}
                                   onClick={() => props.onSelectBranchSubview?.(view)}

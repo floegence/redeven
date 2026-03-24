@@ -196,12 +196,13 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between');
     expect(branchesSrc).toContain("const headerControlBarClass = 'rounded-xl border border-border/60 bg-muted/[0.12] p-2 shadow-sm shadow-black/5';");
     expect(branchesSrc).toContain("const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';");
-    expect(branchesSrc).toContain("const helperActionButtonClass = 'w-full rounded-full border border-border/55 bg-background/72 px-3 text-muted-foreground shadow-sm shadow-black/5 hover:bg-background hover:text-foreground sm:w-auto';");
-    expect(branchesSrc).toContain("const primaryActionButtonClass = 'w-full rounded-full px-4 shadow-sm shadow-black/10 sm:w-auto';");
-    expect(branchesSrc).toContain("const dangerActionButtonClass = 'w-full rounded-full border border-destructive/20 bg-destructive/[0.08] px-4 text-destructive hover:bg-destructive/[0.14] hover:text-destructive sm:w-auto';");
+    expect(branchesSrc).toContain("const helperActionButtonClass = 'w-full cursor-pointer rounded-md border border-border/55 bg-background/72 px-3 text-muted-foreground shadow-sm shadow-black/5 hover:bg-background hover:text-foreground sm:w-auto';");
+    expect(branchesSrc).toContain("const primaryActionButtonClass = 'w-full cursor-pointer rounded-md px-4 shadow-sm shadow-black/10 sm:w-auto';");
+    expect(branchesSrc).toContain("const dangerActionButtonClass = 'w-full cursor-pointer rounded-md border border-destructive/20 bg-destructive/[0.08] px-4 text-destructive shadow-sm shadow-black/5 hover:bg-destructive/[0.14] hover:text-destructive sm:w-auto';");
     expect(branchesSrc).toContain('>Workspace<');
     expect(branchesSrc).toContain('>Actions<');
-    expect(branchesSrc).toContain('grid w-full grid-cols-2 rounded-full border border-border/65 bg-muted/[0.16] p-0.5 shadow-sm shadow-black/5 sm:w-[15rem]');
+    expect(branchesSrc).toContain('grid w-full grid-cols-2 rounded-lg border border-border/65 bg-muted/[0.16] p-0.5 shadow-sm shadow-black/5 sm:w-[15rem]');
+    expect(branchesSrc).toContain("'cursor-pointer rounded-md px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150'");
     expect(branchesSrc).toContain("class={cn('grid gap-1.5 sm:flex sm:flex-wrap', workspaceHelperGridClass())}");
     expect(branchesSrc).toContain("class={cn('grid gap-1.5 sm:flex sm:flex-wrap sm:justify-end', branchActionGridClass())}");
     expect(branchesSrc).not.toContain('w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[24rem] sm:text-right');
