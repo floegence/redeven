@@ -13,6 +13,7 @@ import {
   monitorProcessDisplayLabel,
 } from '../utils/monitorProcessAskFlower';
 import { isPermissionDeniedError } from '../utils/permission';
+import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingContextMenuHeight, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { PermissionEmptyState } from './PermissionEmptyState';
 
 export type AgentMonitorPanelVariant = 'page' | 'deck';
@@ -314,8 +315,8 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
     if (typeof window === 'undefined') return { x, y };
 
     const margin = 8;
-    const menuWidth = 180;
-    const menuHeight = 84;
+    const menuWidth = FLOATING_CONTEXT_MENU_WIDTH_PX;
+    const menuHeight = estimateFloatingContextMenuHeight(2, 1);
     const maxX = Math.max(margin, window.innerWidth - menuWidth - margin);
     const maxY = Math.max(margin, window.innerHeight - menuHeight - margin);
 
@@ -399,6 +400,31 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
       setKillingPid((current) => (current === pid ? null : current));
     }
   };
+
+  const buildProcessContextMenuItems = (menu: NonNullable<ReturnType<typeof processContextMenu>>): FloatingContextMenuItem[] => [
+    {
+      id: 'ask-flower',
+      kind: 'action',
+      label: 'Ask Flower',
+      icon: Sparkles,
+      onSelect: handleAskFlowerFromProcess,
+    },
+    {
+      id: 'primary-secondary-separator',
+      kind: 'separator',
+    },
+    {
+      id: 'kill',
+      kind: 'action',
+      label: 'Kill',
+      icon: Trash,
+      onSelect: () => {
+        void handleKillProcess();
+      },
+      disabled: killingPid() === menu.process.pid,
+      destructive: true,
+    },
+  ];
 
   const handleAskFlowerFromProcess = () => {
     const menu = processContextMenu();
@@ -709,34 +735,14 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
 
         <Show when={processContextMenu()} keyed>
           {(menu) => (
-            <div
-              ref={(el) => {
+            <FloatingContextMenu
+              x={menu.x}
+              y={menu.y}
+              items={buildProcessContextMenuItems(menu)}
+              menuRef={(el) => {
                 processContextMenuEl = el;
               }}
-              class="fixed z-50 min-w-[180px] py-1 bg-popover border border-border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100"
-              style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
-              onContextMenu={(event) => event.preventDefault()}
-            >
-              <button
-                type="button"
-                class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
-                onClick={handleAskFlowerFromProcess}
-              >
-                <Sparkles class="w-3.5 h-3.5 opacity-60" />
-                <span class="flex-1 text-left">Ask Flower</span>
-              </button>
-              <button
-                type="button"
-                class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer text-destructive transition-colors duration-75 hover:bg-destructive/10 hover:text-destructive focus:outline-none focus-visible:bg-destructive/10 focus-visible:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
-                onClick={() => {
-                  void handleKillProcess();
-                }}
-                disabled={killingPid() === menu.process.pid}
-              >
-                <Trash class="w-3.5 h-3.5 opacity-60" />
-                <span class="flex-1 text-left">Kill</span>
-              </button>
-            </div>
+            />
           )}
         </Show>
       </Show>
