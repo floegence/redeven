@@ -1141,8 +1141,9 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		"thread_locked":   prepared.threadModelLocked,
 	})
 
-	policyDecision := classifyRunPolicy(effectiveCurrentInput.PublicText, req.Input.Attachments, existingOpenGoal, func() (runPolicyDecision, error) {
-		decision, classifyErr := s.classifyRunPolicyByModel(ctx, resolvedModel, effectiveCurrentInput.PublicText, existingOpenGoal)
+	structuredResponseContinuation := req.Input.StructuredResponse != nil && strings.TrimSpace(existingOpenGoal) != ""
+	policyDecision := classifyRunPolicy(effectiveCurrentInput.PublicText, req.Input.Attachments, existingOpenGoal, structuredResponseContinuation, func() (runPolicyDecision, error) {
+		decision, classifyErr := s.classifyRunPolicyByModel(ctx, resolvedModel, effectiveCurrentInput.PublicText, existingOpenGoal, structuredResponseContinuation)
 		if classifyErr != nil && r.log != nil {
 			r.log.Warn("model policy classification failed",
 				"thread_id", threadID,
@@ -1199,6 +1200,20 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			openGoal = effectiveCurrentInput.PublicText
 		}
 	}
+	interactionContractSeed := normalizeInteractionContract(req.Input.InteractionContractSeed)
+	if !interactionContractSeed.Enabled {
+		interactionContractSeed = normalizeInteractionContract(policyDecision.InteractionContract)
+	}
+	policyDecision.InteractionContract = classifyInteractionContract(
+		req.Options.Intent,
+		openGoal,
+		effectiveCurrentInput.PublicText,
+		interactionContractSeed,
+		func() (interactionContract, error) {
+			return s.classifyInteractionContractByModel(ctx, resolvedModel, policyDecision.ObjectiveMode, openGoal, effectiveCurrentInput.PublicText)
+		},
+	)
+	r.persistRunEvent("interaction.contract.classified", RealtimeStreamKindLifecycle, policyDecision.InteractionContract.eventPayload())
 	effectiveInput := req.Input
 
 	userMsgID := ""
@@ -1331,13 +1346,14 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	historyForRun := promptPackToHistory(promptPack, effectiveCurrentInput.PublicText)
 
 	runReq := RunRequest{
-		Model:           model,
-		Objective:       strings.TrimSpace(openGoal),
-		History:         historyForRun,
-		Input:           effectiveInput,
-		Options:         req.Options,
-		ContextPack:     promptPack,
-		ModelCapability: modelCapability,
+		Model:               model,
+		Objective:           strings.TrimSpace(openGoal),
+		History:             historyForRun,
+		Input:               effectiveInput,
+		Options:             req.Options,
+		ContextPack:         promptPack,
+		ModelCapability:     modelCapability,
+		InteractionContract: normalizeInteractionContract(policyDecision.InteractionContract),
 	}
 	runErr := r.run(ctx, runReq)
 	finalErr := runErr
@@ -1508,11 +1524,11 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	}, nil
 }
 
-func (s *Service) classifyRunPolicyByModel(ctx context.Context, resolved resolvedRunModel, userInput string, openGoal string) (runPolicyDecision, error) {
+func (s *Service) classifyRunPolicyByModel(ctx context.Context, resolved resolvedRunModel, userInput string, openGoal string, structuredResponse bool) (runPolicyDecision, error) {
 	if s == nil {
 		return runPolicyDecision{}, errors.New("nil service")
 	}
-	adapter, responseFormat, err := s.initStructuredOutputProvider(resolved)
+	adapter, _, err := s.initStructuredOutputProvider(resolved)
 	if err != nil {
 		return runPolicyDecision{}, err
 	}
@@ -1524,17 +1540,34 @@ func (s *Service) classifyRunPolicyByModel(ctx context.Context, resolved resolve
 	}
 	defer cancel()
 
-	result, err := adapter.StreamTurn(intentCtx, TurnRequest{
-		Model:            strings.TrimSpace(resolved.ModelName),
-		Messages:         buildRunPolicyClassifierMessages(userInput, openGoal),
-		Budgets:          TurnBudgets{MaxSteps: 1, MaxOutputToken: 512},
-		ModeFlags:        ModeFlags{Mode: config.AIModePlan},
-		ProviderControls: ProviderControls{ResponseFormat: responseFormat},
-	}, nil)
+	result, err := runStructuredClassifierTurn(intentCtx, adapter, strings.TrimSpace(resolved.ModelName), buildRunPolicyClassifierMessages(userInput, openGoal, structuredResponse), runPolicyClassifierToolDef(), structuredClassifierDefaultMaxOutputTokens)
 	if err != nil {
 		return runPolicyDecision{}, err
 	}
-	return parseModelRunPolicyDecision(result.Text)
+	return parseModelRunPolicyDecision(structuredClassifierResultPayload(result, structuredClassifierRunPolicyToolName))
+}
+
+func (s *Service) classifyInteractionContractByModel(ctx context.Context, resolved resolvedRunModel, objectiveMode string, activeObjective string, userInput string) (interactionContract, error) {
+	if s == nil {
+		return interactionContract{}, errors.New("nil service")
+	}
+	adapter, _, err := s.initStructuredOutputProvider(resolved)
+	if err != nil {
+		return interactionContract{}, err
+	}
+
+	classifyCtx := ctx
+	cancel := func() {}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		classifyCtx, cancel = context.WithTimeout(ctx, 12*time.Second)
+	}
+	defer cancel()
+
+	result, err := runStructuredClassifierTurn(classifyCtx, adapter, strings.TrimSpace(resolved.ModelName), buildInteractionContractClassifierMessages(objectiveMode, activeObjective, userInput), interactionContractClassifierToolDef(), structuredClassifierDefaultMaxOutputTokens)
+	if err != nil {
+		return interactionContract{}, err
+	}
+	return parseInteractionContractDecision(structuredClassifierResultPayload(result, structuredClassifierInteractionContractToolName))
 }
 
 func shouldClearThreadState(finalReason string) bool {

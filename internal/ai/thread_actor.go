@@ -688,6 +688,7 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 	}
 	req.Input.StructuredResponse = &responseRecord
 	req.Input.SecretAnswers = secretAnswers
+	req.Input.InteractionContractSeed = normalizeInteractionContract(openPrompt.InteractionContract)
 
 	nextExecutionMode := resolvedExecutionMode
 	for _, question := range openPrompt.Questions {

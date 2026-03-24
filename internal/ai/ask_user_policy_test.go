@@ -47,6 +47,12 @@ func TestBuildAskUserPolicyClassifierMessages(t *testing.T) {
 		EvidenceRefs:     []string{"tool_123"},
 	}, runtimeState{
 		BlockedActionFacts: []string{"terminal.exec: permission denied"},
+		InteractionContract: interactionContract{
+			Enabled:                  true,
+			SingleQuestionPerTurn:    true,
+			FixedChoicesRequired:     true,
+			OpenTextFallbackRequired: true,
+		},
 	})
 	if len(msgs) != 2 {
 		t.Fatalf("message count=%d, want 2", len(msgs))
@@ -54,8 +60,17 @@ func TestBuildAskUserPolicyClassifierMessages(t *testing.T) {
 	if got := msgs[0].Content[0].Text; got == "" || !strings.Contains(got, askUserPolicyClassifierMarker) {
 		t.Fatalf("missing classifier marker in system prompt")
 	}
+	if got := msgs[0].Content[0].Text; !strings.Contains(got, structuredClassifierAskUserPolicyToolName) {
+		t.Fatalf("system prompt missing classifier tool name: %q", got)
+	}
 	if got := msgs[0].Content[0].Text; !strings.Contains(got, "violates_requested_interaction_shape") {
 		t.Fatalf("system prompt missing interaction-shape rejection guidance: %q", got)
+	}
+	if got := msgs[0].Content[0].Text; !strings.Contains(got, "active interaction contract") {
+		t.Fatalf("system prompt missing interaction-contract guidance: %q", got)
+	}
+	if got := msgs[1].Content[0].Text; !strings.Contains(got, "\"fixed_choices_required\":true") {
+		t.Fatalf("user prompt missing interaction contract payload: %q", got)
 	}
 }
 

@@ -244,6 +244,89 @@ func TestEvaluateAskUserGate(t *testing.T) {
 	}
 }
 
+func TestEvaluateAskUserGate_EnforcesInteractionContract(t *testing.T) {
+	t.Parallel()
+
+	contractState := runtimeState{
+		InteractionContract: interactionContract{
+			Enabled:                  true,
+			SingleQuestionPerTurn:    true,
+			FixedChoicesRequired:     true,
+			OpenTextFallbackRequired: true,
+		},
+	}
+	writeOnly := askUserSignal{
+		Questions: []RequestUserInputQuestion{{
+			ID:               "question_1",
+			Header:           "Proxy Signal",
+			Question:         "Which description feels closest?",
+			ResponseMode:     requestUserInputResponseModeWrite,
+			WriteLabel:       "Your answer",
+			WritePlaceholder: "Type your answer",
+		}},
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Choose the closest option or type your own."},
+	}
+	if pass, reason := evaluateAskUserGate(writeOnly, contractState, TaskComplexityStandard); pass || reason != askUserGateReasonInteractionShapeMismatch {
+		t.Fatalf("write-only question under contract => pass=%v reason=%q", pass, reason)
+	}
+
+	multiQuestion := askUserSignal{
+		Questions: []RequestUserInputQuestion{
+			{
+				ID:                "question_1",
+				Header:            "Proxy Signal",
+				Question:          "Which description feels closest?",
+				ResponseMode:      requestUserInputResponseModeSelectText,
+				ChoicesExhaustive: testBoolPtr(false),
+				WriteLabel:        "None of the above",
+				WritePlaceholder:  "Type another answer",
+				Choices: []RequestUserInputChoice{
+					{ChoiceID: "a", Label: "Option A", Kind: requestUserInputChoiceKindSelect},
+				},
+			},
+			{
+				ID:                "question_2",
+				Header:            "Proxy Signal 2",
+				Question:          "Which situation sounds closer?",
+				ResponseMode:      requestUserInputResponseModeSelectText,
+				ChoicesExhaustive: testBoolPtr(false),
+				WriteLabel:        "None of the above",
+				WritePlaceholder:  "Type another answer",
+				Choices: []RequestUserInputChoice{
+					{ChoiceID: "b", Label: "Option B", Kind: requestUserInputChoiceKindSelect},
+				},
+			},
+		},
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Choose the closest option or type your own."},
+	}
+	if pass, reason := evaluateAskUserGate(multiQuestion, contractState, TaskComplexityStandard); pass || reason != askUserGateReasonInteractionShapeMismatch {
+		t.Fatalf("multi-question contract violation => pass=%v reason=%q", pass, reason)
+	}
+
+	valid := askUserSignal{
+		Questions: []RequestUserInputQuestion{{
+			ID:                "question_1",
+			Header:            "Proxy Signal",
+			Question:          "Which description feels closest?",
+			ResponseMode:      requestUserInputResponseModeSelectText,
+			ChoicesExhaustive: testBoolPtr(false),
+			WriteLabel:        "None of the above",
+			WritePlaceholder:  "Type another answer",
+			Choices: []RequestUserInputChoice{
+				{ChoiceID: "a", Label: "Option A", Kind: requestUserInputChoiceKindSelect},
+				{ChoiceID: "b", Label: "Option B", Kind: requestUserInputChoiceKindSelect},
+			},
+		}},
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Choose the closest option or type your own."},
+	}
+	if pass, reason := evaluateAskUserGate(valid, contractState, TaskComplexityStandard); !pass || reason != "ok" {
+		t.Fatalf("valid contract-preserving ask_user => pass=%v reason=%q", pass, reason)
+	}
+}
+
 func TestEvaluateGuardAskUserGate(t *testing.T) {
 	t.Parallel()
 
@@ -303,7 +386,13 @@ func TestBuildLayeredSystemPrompt_AskUserCoversStructuredInteractionTurns(t *tes
 		4,
 		true,
 		[]ToolDef{{Name: "ask_user"}},
-		runtimeState{},
+		runtimeState{InteractionContract: interactionContract{
+			Enabled:                  true,
+			SingleQuestionPerTurn:    true,
+			FixedChoicesRequired:     true,
+			OpenTextFallbackRequired: true,
+			IndirectQuestionsOnly:    true,
+		}},
 		"",
 		runCapabilityContract{
 			AllowUserInteraction:           true,
@@ -340,6 +429,9 @@ func TestBuildLayeredSystemPrompt_AskUserCoversStructuredInteractionTurns(t *tes
 	if !strings.Contains(prompt, "Use `response_mode:\"select_or_write\"` when fixed choices are not exhaustive") {
 		t.Fatalf("prompt missing non-exhaustive select_or_write semantics: %q", prompt)
 	}
+	if !strings.Contains(prompt, "default to a few fixed select choices plus a typed fallback instead of a pure write-only question") {
+		t.Fatalf("prompt missing guided fixed-choice default: %q", prompt)
+	}
 	if !strings.Contains(prompt, "If the user explicitly asks for answer choices, fixed options, buttons, or clickable options, do NOT downgrade the question into pure `response_mode:\"write\"`") {
 		t.Fatalf("prompt missing no-downgrade-to-write rule: %q", prompt)
 	}
@@ -354,5 +446,14 @@ func TestBuildLayeredSystemPrompt_AskUserCoversStructuredInteractionTurns(t *tes
 	}
 	if !strings.Contains(prompt, "Do NOT use ask_user to delegate commands, file inspection, log gathering, screenshots, or web research") {
 		t.Fatalf("prompt missing collectable-work rejection: %q", prompt)
+	}
+	if !strings.Contains(prompt, "# Active Interaction Contract") {
+		t.Fatalf("prompt missing explicit interaction-contract section: %q", prompt)
+	}
+	if !strings.Contains(prompt, "Ask exactly one question per turn") {
+		t.Fatalf("prompt missing single-question contract rule: %q", prompt)
+	}
+	if !strings.Contains(prompt, "Do not end with `task_complete` while still asking the user a new question") {
+		t.Fatalf("prompt missing completion-consistency contract rule: %q", prompt)
 	}
 }

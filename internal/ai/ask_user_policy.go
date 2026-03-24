@@ -107,6 +107,7 @@ func normalizeAskUserStringList(items []string, maxItems int, maxLen int) []stri
 
 func buildAskUserPolicyClassifierMessages(objective string, signal askUserSignal, state runtimeState) []Message {
 	normalizedSignal := normalizeAskUserSignal(signal)
+	contract := normalizeInteractionContract(state.InteractionContract)
 	payload := map[string]any{
 		"questions":          normalizedSignal.Questions,
 		"reason_code":        normalizedSignal.ReasonCode,
@@ -116,6 +117,10 @@ func buildAskUserPolicyClassifierMessages(objective string, signal askUserSignal
 	payloadJSON := "{}"
 	if b, err := json.Marshal(payload); err == nil {
 		payloadJSON = string(b)
+	}
+	contractJSON := "{}"
+	if b, err := json.Marshal(contract); err == nil {
+		contractJSON = string(b)
 	}
 	objective = strings.TrimSpace(objective)
 	if objective == "" {
@@ -136,13 +141,16 @@ func buildAskUserPolicyClassifierMessages(objective string, signal askUserSignal
 	system := strings.Join([]string{
 		askUserPolicyClassifierMarker,
 		"You classify whether an ask_user signal is policy-allowed for an on-device autonomous assistant.",
-		"Return exactly one JSON object with keys: allow, reason, confidence.",
+		fmt.Sprintf("Call tool `%s` exactly once with the final ask_user policy decision.", structuredClassifierAskUserPolicyToolName),
+		"If tool calls are unavailable, return exactly one JSON object with keys: allow, reason, confidence.",
 		"allow must be true or false.",
 		"reason must be a short snake_case phrase.",
 		"confidence must be a float between 0 and 1.",
 		"Reject (allow=false) if the ask_user request delegates collectable work to the user that available tools can do directly.",
 		"Collectable work includes running commands, gathering logs/output/screenshots/files, and fetching web content when tools can do it.",
-		"Reject (allow=false) with reason=violates_requested_interaction_shape if the structured ask_user payload violates explicit interaction-shape constraints from the user's request or objective, such as fixed options, clickable choices, one-question-at-a-time, or indirect/non-leading questioning.",
+		"Reject (allow=false) with reason=violates_requested_interaction_shape if the structured ask_user payload violates the active interaction contract or the user's explicit interaction-shape constraints, such as fixed options, clickable choices, one-question-at-a-time, or indirect/non-leading questioning.",
+		"When an active interaction contract is enabled, enforce it as the primary source of truth for guided interaction shape across turns.",
+		"Reject with reason=violates_requested_interaction_shape if the payload removes required fixed choices, omits a required typed fallback, asks multiple questions when single-question turns are required, or semantically violates indirect/hidden-target constraints.",
 		"Allow (allow=true) for true external blockers: user decisions, unavailable credentials, policy approvals, conflicting constraints, or safety confirmations.",
 		"Allow (allow=true) for guided structured interaction turns when the assistant intentionally needs the user's next constrained answer to continue, such as questionnaires, interviews, quizzes, guessing games, decision trees, and option-driven conversations.",
 		"Structured interaction turns are allowed only when the user's next answer materially determines the next step; they are not a license to delegate solvable work.",
@@ -151,6 +159,9 @@ func buildAskUserPolicyClassifierMessages(objective string, signal askUserSignal
 	user := strings.Join([]string{
 		"Objective:",
 		objective,
+		"",
+		"Active interaction contract:",
+		contractJSON,
 		"",
 		"Structured ask_user payload:",
 		payloadJSON,
@@ -165,6 +176,28 @@ func buildAskUserPolicyClassifierMessages(objective string, signal askUserSignal
 		{Role: "system", Content: []ContentPart{{Type: "text", Text: system}}},
 		{Role: "user", Content: []ContentPart{{Type: "text", Text: user}}},
 	}
+}
+
+func askUserPolicyClassifierToolDef() ToolDef {
+	return structuredClassifierToolDef(structuredClassifierAskUserPolicyToolName, "Emit the ask_user policy decision.", map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"allow": map[string]any{
+				"type": "boolean",
+			},
+			"reason": map[string]any{
+				"type":        "string",
+				"description": "Short snake_case phrase.",
+			},
+			"confidence": map[string]any{
+				"type":    "number",
+				"minimum": 0,
+				"maximum": 1,
+			},
+		},
+		"required": []string{"allow", "reason", "confidence"},
+	})
 }
 
 func parseAskUserPolicyDecision(raw string) (askUserPolicyDecision, error) {

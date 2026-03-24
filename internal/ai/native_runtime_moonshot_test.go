@@ -159,6 +159,103 @@ func TestMoonshotProvider_StreamTurn_TextResponse(t *testing.T) {
 	}
 }
 
+func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/chat/completions") {
+			t.Fatalf("path=%s, want /chat/completions", r.URL.Path)
+		}
+		if got := strings.TrimSpace(r.Header.Get("Authorization")); got != "Bearer sk-test" {
+			t.Fatalf("authorization=%q, want Bearer sk-test", got)
+		}
+
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if strings.TrimSpace(reqString(req, "model")) != "kimi-k2.5" {
+			t.Fatalf("model=%q, want kimi-k2.5", reqString(req, "model"))
+		}
+		if got := extractOpenAIToolNames(req); len(got) != 1 || got[0] != structuredClassifierInteractionContractToolName {
+			t.Fatalf("tool_names=%v, want [%s]", got, structuredClassifierInteractionContractToolName)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":      "chatcmpl_turn_tool_1",
+			"object":  "chat.completion",
+			"created": 125,
+			"model":   "kimi-k2.5",
+			"choices": []any{
+				map[string]any{
+					"index":         0,
+					"finish_reason": "tool_calls",
+					"message": map[string]any{
+						"role":              "assistant",
+						"content":           "",
+						"reasoning_content": "Use the tool payload as the classifier result.",
+						"tool_calls": []any{
+							map[string]any{
+								"id":   "emit_interaction_contract:0",
+								"type": "function",
+								"function": map[string]any{
+									"name":      structuredClassifierInteractionContractToolName,
+									"arguments": `{"enabled":true,"reason":"guided_option_interaction","single_question_per_turn":true,"fixed_choices_required":true,"open_text_fallback_required":true,"indirect_questions_only":true,"confidence":0.95}`,
+								},
+							},
+						},
+					},
+				},
+			},
+			"usage": map[string]any{
+				"prompt_tokens":     20,
+				"completion_tokens": 12,
+				"total_tokens":      32,
+				"completion_tokens_details": map[string]any{
+					"reasoning_tokens": 4,
+				},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	provider, err := newProviderAdapter("moonshot", srv.URL+"/v1", "sk-test", nil)
+	if err != nil {
+		t.Fatalf("newProviderAdapter: %v", err)
+	}
+	direct, ok := provider.(directTurnProvider)
+	if !ok {
+		t.Fatalf("provider does not implement directTurnProvider")
+	}
+
+	result, err := direct.Turn(context.Background(), TurnRequest{
+		Model: "kimi-k2.5",
+		Messages: []Message{
+			{Role: "user", Content: []ContentPart{{Type: "text", Text: "classify this objective"}}},
+		},
+		Tools: []ToolDef{interactionContractClassifierToolDef()},
+	})
+	if err != nil {
+		t.Fatalf("Turn: %v", err)
+	}
+	if result.FinishReason != "tool_calls" {
+		t.Fatalf("finish_reason=%q, want tool_calls", result.FinishReason)
+	}
+	if strings.TrimSpace(result.Reasoning) != "Use the tool payload as the classifier result." {
+		t.Fatalf("reasoning=%q", result.Reasoning)
+	}
+	if len(result.ToolCalls) != 1 {
+		t.Fatalf("tool_calls=%d, want 1", len(result.ToolCalls))
+	}
+	if result.ToolCalls[0].Name != structuredClassifierInteractionContractToolName {
+		t.Fatalf("tool_name=%q, want %q", result.ToolCalls[0].Name, structuredClassifierInteractionContractToolName)
+	}
+	if got := anyBool(result.ToolCalls[0].Args["enabled"]); !got {
+		t.Fatalf("tool_args=%v, want enabled=true", result.ToolCalls[0].Args)
+	}
+}
+
 func TestMoonshotProvider_StreamTurn_PreservesReasoningFragmentWhitespace(t *testing.T) {
 	t.Parallel()
 

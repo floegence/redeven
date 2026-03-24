@@ -611,6 +611,7 @@ func normalizeRequestUserInputPrompt(prompt *RequestUserInputPrompt) *RequestUse
 	out.ReasonCode = normalizeAskUserReasonCode(out.ReasonCode)
 	out.RequiredFromUser = normalizeRequestUserInputStringList(out.RequiredFromUser, 8, 200)
 	out.EvidenceRefs = normalizeRequestUserInputStringList(out.EvidenceRefs, 12, 120)
+	out.InteractionContract = normalizeInteractionContract(out.InteractionContract)
 	out.Questions = normalizeRequestUserInputQuestions(out.Questions)
 	if len(out.Questions) == 0 {
 		return nil
@@ -647,15 +648,16 @@ func parseRequestUserInputPromptJSON(raw string) *RequestUserInputPrompt {
 		return nil
 	}
 	var payload struct {
-		PromptID         string           `json:"prompt_id"`
-		MessageID        string           `json:"message_id"`
-		ToolID           string           `json:"tool_id"`
-		ReasonCode       string           `json:"reason_code"`
-		RequiredFromUser []string         `json:"required_from_user"`
-		EvidenceRefs     []string         `json:"evidence_refs"`
-		Questions        []map[string]any `json:"questions"`
-		PublicSummary    string           `json:"public_summary"`
-		ContainsSecret   bool             `json:"contains_secret"`
+		PromptID            string              `json:"prompt_id"`
+		MessageID           string              `json:"message_id"`
+		ToolID              string              `json:"tool_id"`
+		ReasonCode          string              `json:"reason_code"`
+		RequiredFromUser    []string            `json:"required_from_user"`
+		EvidenceRefs        []string            `json:"evidence_refs"`
+		InteractionContract interactionContract `json:"interaction_contract"`
+		Questions           []map[string]any    `json:"questions"`
+		PublicSummary       string              `json:"public_summary"`
+		ContainsSecret      bool                `json:"contains_secret"`
 	}
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		return nil
@@ -669,15 +671,16 @@ func parseRequestUserInputPromptJSON(raw string) *RequestUserInputPrompt {
 		questions = append(questions, question)
 	}
 	return normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
-		PromptID:         payload.PromptID,
-		MessageID:        payload.MessageID,
-		ToolID:           payload.ToolID,
-		ReasonCode:       payload.ReasonCode,
-		RequiredFromUser: payload.RequiredFromUser,
-		EvidenceRefs:     payload.EvidenceRefs,
-		Questions:        questions,
-		PublicSummary:    payload.PublicSummary,
-		ContainsSecret:   payload.ContainsSecret,
+		PromptID:            payload.PromptID,
+		MessageID:           payload.MessageID,
+		ToolID:              payload.ToolID,
+		ReasonCode:          payload.ReasonCode,
+		RequiredFromUser:    payload.RequiredFromUser,
+		EvidenceRefs:        payload.EvidenceRefs,
+		InteractionContract: payload.InteractionContract,
+		Questions:           questions,
+		PublicSummary:       payload.PublicSummary,
+		ContainsSecret:      payload.ContainsSecret,
 	})
 }
 

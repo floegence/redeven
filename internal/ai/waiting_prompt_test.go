@@ -224,6 +224,48 @@ func TestParseRequestUserInputPromptJSON_ChoicesExhaustiveIsAuthoritative(t *tes
 	}
 }
 
+func TestParseRequestUserInputPromptJSON_PreservesInteractionContract(t *testing.T) {
+	t.Parallel()
+
+	prompt := parseRequestUserInputPromptJSON(`{
+		"prompt_id":"rui_msg_contract_tool_contract",
+		"message_id":"msg_contract",
+		"tool_id":"tool_contract",
+		"reason_code":"user_decision_required",
+		"interaction_contract":{
+			"enabled":true,
+			"reason":"guided_option_interaction",
+			"single_question_per_turn":true,
+			"fixed_choices_required":true,
+			"open_text_fallback_required":true,
+			"indirect_questions_only":true,
+			"confidence":0.93,
+			"source":"model"
+		},
+		"questions":[{
+			"id":"direction",
+			"header":"Direction",
+			"question":"Choose the closest direction.",
+			"is_secret":false,
+			"response_mode":"select_or_write",
+			"choices_exhaustive":false,
+			"choices":[
+				{"choice_id":"a","label":"Option A","kind":"select"},
+				{"choice_id":"b","label":"Option B","kind":"select"}
+			]
+		}]
+	}`)
+	if prompt == nil {
+		t.Fatalf("prompt should not be nil")
+	}
+	if !prompt.InteractionContract.Enabled {
+		t.Fatalf("interaction contract should be enabled: %+v", prompt.InteractionContract)
+	}
+	if !prompt.InteractionContract.OpenTextFallbackRequired {
+		t.Fatalf("open_text_fallback_required=false, want true: %+v", prompt.InteractionContract)
+	}
+}
+
 func TestBuildRequestUserInputResponseRecord_IncludesWriteChoiceTextInSummary(t *testing.T) {
 	t.Parallel()
 

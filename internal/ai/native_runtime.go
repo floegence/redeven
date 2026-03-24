@@ -47,6 +47,15 @@ type openAIProvider struct {
 	strictToolSchema bool
 }
 
+func runProviderTurn(ctx context.Context, provider Provider, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
+	if onEvent == nil {
+		if direct, ok := provider.(directTurnProvider); ok {
+			return direct.Turn(ctx, req)
+		}
+	}
+	return provider.StreamTurn(ctx, req, onEvent)
+}
+
 func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
 	if p == nil {
 		return TurnResult{}, errors.New("nil provider")
@@ -636,6 +645,96 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req TurnRequest, onEv
 		ReasoningTokens: result.Usage.ReasoningTokens,
 	}})
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventFinishReason, FinishHint: result.FinishReason})
+	return result, nil
+}
+
+func (p *moonshotProvider) Turn(ctx context.Context, req TurnRequest) (TurnResult, error) {
+	if p == nil {
+		return TurnResult{}, errors.New("nil provider")
+	}
+	if strings.TrimSpace(req.Model) == "" {
+		return TurnResult{}, errors.New("missing model")
+	}
+
+	messages := buildOpenAIChatMessages(req.Messages)
+	if len(messages) == 0 {
+		messages = append(messages, openai.UserMessage("Continue."))
+	}
+
+	params := openai.ChatCompletionNewParams{
+		Model:             oshared.ChatModel(strings.TrimSpace(req.Model)),
+		Messages:          messages,
+		ParallelToolCalls: openai.Bool(false),
+	}
+	if req.Budgets.MaxOutputToken > 0 {
+		params.MaxTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
+	}
+	if req.ProviderControls.Temperature != nil {
+		params.Temperature = openai.Float(*req.ProviderControls.Temperature)
+	}
+	if req.ProviderControls.TopP != nil {
+		params.TopP = openai.Float(*req.ProviderControls.TopP)
+	}
+	switch strings.ToLower(strings.TrimSpace(req.ProviderControls.ResponseFormat)) {
+	case "":
+		// default behavior
+	case "text":
+		txt := oshared.NewResponseFormatTextParam()
+		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{OfText: &txt}
+	case "json_object":
+		obj := oshared.NewResponseFormatJSONObjectParam()
+		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONObject: &obj}
+	}
+	tools, aliasToReal := buildOpenAIChatTools(req.Tools, p.strictToolSchema)
+	if len(tools) > 0 {
+		params.Tools = tools
+	}
+
+	completion, err := p.client.Chat.Completions.New(ctx, params)
+	if err != nil {
+		return TurnResult{}, err
+	}
+	result := TurnResult{
+		FinishReason:    "unknown",
+		RawProviderDiag: map[string]any{"response_id": strings.TrimSpace(completion.ID)},
+		Usage: TurnUsage{
+			InputTokens:     completion.Usage.PromptTokens,
+			OutputTokens:    completion.Usage.CompletionTokens,
+			ReasoningTokens: completion.Usage.CompletionTokensDetails.ReasoningTokens,
+		},
+	}
+	if len(completion.Choices) == 0 {
+		return TurnResult{}, errors.New("missing completion choices")
+	}
+	choice := completion.Choices[0]
+	result.FinishReason = mapOpenAIChatFinishReason(string(choice.FinishReason))
+	result.Text = strings.TrimSpace(choice.Message.Content)
+	result.Reasoning = strings.TrimSpace(extractMoonshotReasoningJSON(choice.Message.RawJSON()))
+	for _, tc := range choice.Message.ToolCalls {
+		name := strings.TrimSpace(tc.Function.Name)
+		if realName, ok := aliasToReal[name]; ok {
+			name = realName
+		}
+		args := map[string]any{}
+		rawArgs := strings.TrimSpace(tc.Function.Arguments)
+		if rawArgs != "" {
+			_ = json.Unmarshal([]byte(rawArgs), &args)
+		}
+		result.ToolCalls = append(result.ToolCalls, ToolCall{
+			ID:   strings.TrimSpace(tc.ID),
+			Name: name,
+			Args: cloneAnyMap(args),
+		})
+	}
+	if len(result.ToolCalls) > 0 {
+		result.FinishReason = "tool_calls"
+	}
+	if result.FinishReason == "unknown" && (result.Text != "" || result.Reasoning != "") {
+		result.FinishReason = "stop"
+	}
+	if result.Text == "" && result.Reasoning == "" && len(result.ToolCalls) == 0 {
+		return TurnResult{}, errors.New("missing completion content")
+	}
 	return result, nil
 }
 
@@ -1660,12 +1759,13 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	})
 
 	r.persistRunEvent("native.runtime.start", RealtimeStreamKindLifecycle, map[string]any{
-		"provider_type": providerType,
-		"model":         modelName,
-		"max_steps":     maxSteps,
-		"mode":          mode,
-		"intent":        intent,
-		"complexity":    taskComplexity,
+		"provider_type":                providerType,
+		"model":                        modelName,
+		"max_steps":                    maxSteps,
+		"mode":                         mode,
+		"intent":                       intent,
+		"complexity":                   taskComplexity,
+		"interaction_contract_enabled": normalizeInteractionContract(req.InteractionContract).Enabled,
 	})
 
 	if intent == RunIntentSocial {
@@ -1727,6 +1827,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	state := newRuntimeState(taskObjective)
 	state.TodoPolicy = normalizeTodoPolicy(req.Options.TodoPolicy)
 	state.MinimumTodoItems = normalizeMinimumTodoItems(state.TodoPolicy, req.Options.MinimumTodoItems)
+	state.InteractionContract = normalizeInteractionContract(req.InteractionContract)
 	if source, hydrated := r.hydrateTodoRuntimeState(execCtx, &state, req.ContextPack); hydrated {
 		r.persistRunEvent("todo.hydrated", RealtimeStreamKindLifecycle, map[string]any{
 			"source":           source,
@@ -1781,13 +1882,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			policyCtx, cancel = context.WithTimeout(execCtx, 12*time.Second)
 		}
 		defer cancel()
-		result, err := adapter.StreamTurn(policyCtx, TurnRequest{
-			Model:            modelName,
-			Messages:         buildAskUserPolicyClassifierMessages(taskObjective, signal, state),
-			Budgets:          TurnBudgets{MaxSteps: 1, MaxOutputToken: 120},
-			ModeFlags:        ModeFlags{Mode: config.AIModePlan},
-			ProviderControls: ProviderControls{ResponseFormat: "json_object"},
-		}, nil)
+		result, err := runStructuredClassifierTurn(policyCtx, adapter, modelName, buildAskUserPolicyClassifierMessages(taskObjective, signal, state), askUserPolicyClassifierToolDef(), structuredClassifierDefaultMaxOutputTokens)
 		if err != nil {
 			if r.log != nil {
 				r.log.Warn("ask_user policy classification failed",
@@ -1798,7 +1893,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			}
 			return fallbackAskUserPolicyDecision("policy_classifier_failed")
 		}
-		decision, err := parseAskUserPolicyDecision(result.Text)
+		decision, err := parseAskUserPolicyDecision(structuredClassifierResultPayload(result, structuredClassifierAskUserPolicyToolName))
 		if err != nil {
 			if r.log != nil {
 				r.log.Warn("ask_user policy parse failed",
@@ -1828,18 +1923,19 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			return closeoutErr
 		}
 		finalReason := finalizationReasonForAskUserSource(source)
-		r.emitAskUserToolBlock(signal, source)
+		r.emitAskUserToolBlock(signal, source, state.InteractionContract)
 		r.reconcileCanonicalWaitingUserMessage()
 		r.persistRunEvent("ask_user.waiting", RealtimeStreamKindLifecycle, map[string]any{
-			"question":            question,
-			"questions_count":     len(signal.Questions),
-			"choices_count":       requestUserInputQuestionChoiceCount(signal.Questions),
-			"reason_code":         signal.ReasonCode,
-			"required_inputs":     len(signal.RequiredFromUser),
-			"evidence_refs":       len(signal.EvidenceRefs),
-			"source":              strings.TrimSpace(source),
-			"appended_to_message": false,
-			"finalization_reason": finalReason,
+			"question":                     question,
+			"questions_count":              len(signal.Questions),
+			"choices_count":                requestUserInputQuestionChoiceCount(signal.Questions),
+			"reason_code":                  signal.ReasonCode,
+			"required_inputs":              len(signal.RequiredFromUser),
+			"evidence_refs":                len(signal.EvidenceRefs),
+			"source":                       strings.TrimSpace(source),
+			"appended_to_message":          false,
+			"finalization_reason":          finalReason,
+			"interaction_contract_enabled": normalizeInteractionContract(state.InteractionContract).Enabled,
 			"todo_closeout": map[string]any{
 				"updated":          closeout.Updated,
 				"version_before":   closeout.VersionBefore,
@@ -1964,26 +2060,27 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			askPassed, askReason = evaluateGuardAskUserGate(source, state, taskComplexity)
 		}
 		r.persistRunEvent("ask_user.attempt", RealtimeStreamKindLifecycle, map[string]any{
-			"step_index":            step,
-			"source":                source,
-			"gate_passed":           askPassed,
-			"gate_reason":           askReason,
-			"question_len":          len([]rune(strings.TrimSpace(signal.Question))),
-			"questions_count":       len(signal.Questions),
-			"choices_count":         requestUserInputQuestionChoiceCount(signal.Questions),
-			"reason_code":           signal.ReasonCode,
-			"required_inputs_count": len(signal.RequiredFromUser),
-			"evidence_refs_count":   len(signal.EvidenceRefs),
-			"policy_allow":          policyDecision.Allow,
-			"policy_reason":         policyDecision.Reason,
-			"policy_source":         policyDecision.Source,
-			"policy_confidence":     policyDecision.Confidence,
-			"policy_advisory_mode":  source == "model_signal",
-			"policy_gate_enforced":  policyGateEnforced,
-			"policy_advisory_block": source == "model_signal" && !policyDecision.Allow,
-			"complexity":            taskComplexity,
-			"todo_tracking":         state.TodoTrackingEnabled,
-			"todo_open_count":       state.TodoOpenCount,
+			"step_index":                   step,
+			"source":                       source,
+			"gate_passed":                  askPassed,
+			"gate_reason":                  askReason,
+			"question_len":                 len([]rune(strings.TrimSpace(signal.Question))),
+			"questions_count":              len(signal.Questions),
+			"choices_count":                requestUserInputQuestionChoiceCount(signal.Questions),
+			"reason_code":                  signal.ReasonCode,
+			"required_inputs_count":        len(signal.RequiredFromUser),
+			"evidence_refs_count":          len(signal.EvidenceRefs),
+			"policy_allow":                 policyDecision.Allow,
+			"policy_reason":                policyDecision.Reason,
+			"policy_source":                policyDecision.Source,
+			"policy_confidence":            policyDecision.Confidence,
+			"policy_advisory_mode":         source == "model_signal",
+			"policy_gate_enforced":         policyGateEnforced,
+			"policy_advisory_block":        source == "model_signal" && !policyDecision.Allow,
+			"complexity":                   taskComplexity,
+			"todo_tracking":                state.TodoTrackingEnabled,
+			"todo_open_count":              state.TodoOpenCount,
+			"interaction_contract_enabled": normalizeInteractionContract(state.InteractionContract).Enabled,
 		})
 		if !askPassed {
 			rejectionSignature := buildAskUserRejectionSignature(source, signal, askReason)
@@ -2673,6 +2770,9 @@ mainLoop:
 				if gateReason == "pending_todos" {
 					rejectionMsg = "task_complete was rejected because todos are still open. Update write_todos first, then call task_complete."
 					recoveryOverlay = "[RECOVERY] Completion blocked: todos still open. Update write_todos to close remaining items, then call task_complete."
+				} else if gateReason == "result_requests_user_input" {
+					rejectionMsg = "task_complete was rejected because the result still asks the user for a new answer. Use ask_user and end in waiting_user instead of completing successfully."
+					recoveryOverlay = "[CONTRACT] Do not finish successfully while still asking the user a new question. If a reply is still needed, emit ask_user."
 				} else if gateReason == todoRequirementMissingPolicyRequired {
 					rejectionMsg = "task_complete was rejected because the run policy requires todo tracking, but no todo snapshot exists. Call write_todos first, then continue and complete."
 					recoveryOverlay = "[RECOVERY] Completion blocked: run policy requires write_todos before task_complete."
@@ -4297,6 +4397,9 @@ func evaluateTaskCompletionGate(resultText string, state runtimeState, complexit
 	if text == "" {
 		return false, "empty_result"
 	}
+	if completionResultRequestsUserInput(text, state.InteractionContract) {
+		return false, "result_requests_user_input"
+	}
 	mode = strings.ToLower(strings.TrimSpace(mode))
 	if required, reason := todoTrackingRequirement(complexity, state); required {
 		return false, reason
@@ -4325,6 +4428,9 @@ func evaluateAskUserGate(signal askUserSignal, state runtimeState, complexity st
 		return false, "missing_required_from_user"
 	}
 	if reason := validateRequestUserInputQuestionsContract(rawQuestions); reason != "" {
+		return false, reason
+	}
+	if reason := validateAskUserInteractionContract(state.InteractionContract, rawQuestions); reason != "" {
 		return false, reason
 	}
 	if askUserReasonRequiresEvidence(signal.ReasonCode) {
@@ -4711,6 +4817,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			"- Use `response_mode:\"select\"` only when fixed choices are genuinely exhaustive by construction and you set `choices_exhaustive:true`.",
 			"- Use `response_mode:\"select_or_write\"` when fixed choices are not exhaustive and you set `choices_exhaustive:false`, so the UI preserves a standardized typed fallback.",
 			"- Use `response_mode:\"write\"` for direct-input questions with no fixed choices.",
+			"- For guided questionnaires, quizzes, guessing games, or hidden-target inference turns that narrow hypotheses about the user's real situation, default to a few fixed select choices plus a typed fallback instead of a pure write-only question.",
 			"- If the user explicitly asks for answer choices, fixed options, buttons, or clickable options, do NOT downgrade the question into pure `response_mode:\"write\"`; keep fixed choices and add a typed fallback via `response_mode:\"select_or_write\"` when needed.",
 			"- `choices[]` contains fixed options only. Do not encode the typed fallback as a fake write choice inside `choices[]`.",
 			"- For `response_mode:\"select_or_write\"`, the UI will render a standardized typed fallback such as `None of the above: ___`; provide `write_label` and optional `write_placeholder` when that wording matters.",
@@ -4733,6 +4840,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			"- If blocked, finish with task_complete and include blockers plus suggested parent actions.",
 		)
 	}
+	core = append(core, interactionContractPromptLines(state.InteractionContract)...)
 	availableSkills := r.listSkills()
 	activeSkills := r.activeSkills()
 
@@ -4765,6 +4873,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		fmt.Sprintf("- Recent errors: %s", recentErrors),
 		fmt.Sprintf("- Todo tracking: %s", todoStatus),
 	}
+	runtime = append(runtime, interactionContractRuntimeLines(state.InteractionContract)...)
 	if allowUserInteraction {
 		runtime = append(runtime, fmt.Sprintf("- Ask-user question batches supported: %t", capability.SupportsAskUserQuestionBatches))
 	}
@@ -5019,12 +5128,13 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 	}
 }
 
-func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
+func (r *run) emitAskUserToolBlock(signal askUserSignal, source string, contract interactionContract) {
 	if r == nil {
 		return
 	}
 	signal = normalizeAskUserSignal(signal)
 	source = strings.TrimSpace(source)
+	contract = normalizeInteractionContract(contract)
 	questions := normalizeRequestUserInputQuestions(signal.Questions)
 	if len(questions) == 0 {
 		return
@@ -5046,18 +5156,20 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
 	r.needNewTextBlock = true
 	r.mu.Unlock()
 	args := map[string]any{
-		"questions":          questions,
-		"reason_code":        signal.ReasonCode,
-		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
-		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
+		"questions":            questions,
+		"reason_code":          signal.ReasonCode,
+		"required_from_user":   append([]string(nil), signal.RequiredFromUser...),
+		"evidence_refs":        append([]string(nil), signal.EvidenceRefs...),
+		"interaction_contract": contract,
 	}
 	result := map[string]any{
-		"questions":          questions,
-		"source":             source,
-		"reason_code":        signal.ReasonCode,
-		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
-		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
-		"waiting_user":       true,
+		"questions":            questions,
+		"source":               source,
+		"reason_code":          signal.ReasonCode,
+		"required_from_user":   append([]string(nil), signal.RequiredFromUser...),
+		"evidence_refs":        append([]string(nil), signal.EvidenceRefs...),
+		"interaction_contract": contract,
+		"waiting_user":         true,
 	}
 	block := ToolCallBlock{
 		Type:     "tool-call",
