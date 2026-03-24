@@ -849,37 +849,7 @@ func (s *Store) DeleteThread(ctx context.Context, endpointID string, threadID st
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM ai_messages WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM conversation_turns WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM structured_user_inputs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM memory_items WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM context_snapshots WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM execution_spans WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM ai_thread_state WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM ai_thread_todos WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM ai_queued_turns WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+	if err := deleteThreadScopedRowsTx(ctx, tx, endpointID, threadID); err != nil {
 		return err
 	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID)
