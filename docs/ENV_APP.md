@@ -56,6 +56,7 @@ Git browse mode distinguishes between the active repository workspace and per-br
 
 - The top-level `Changes` view shows the workspace state for the active repository root.
 - `Branches -> Status` resolves its own workspace snapshot from an explicit checked-out repository root instead of reusing cached data from `Changes`.
+- `Changes` is the shared user-facing pending-work category in both places, so `unstaged` and `untracked` entries are grouped together there while row-level metadata still keeps the original Git section visible.
 - For the current branch, branch status uses the active repository root.
 - For a linked local branch, branch status uses the branch `worktreePath`.
 - For remote branches or local branches without a checked-out worktree, branch status stays unavailable and the UI points users to `Compare` or to opening the branch in a worktree.

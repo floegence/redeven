@@ -4,6 +4,7 @@ import { ChevronRight } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { useRedevenRpc, type GitBranchSummary, type GitCommitFileSummary, type GitCommitSummary, type GitGetBranchCompareResponse, type GitListBranchesResponse, type GitListWorkspaceChangesResponse, type GitPreviewDeleteBranchResponse, type GitPreviewMergeBranchResponse, type GitRepoSummaryResponse, type GitWorkspaceChange, type GitWorkspaceSection } from '../protocol/redeven_v1';
 import {
+  WORKSPACE_VIEW_SECTIONS,
   allGitBranches,
   branchContextSummary,
   branchDisplayName,
@@ -12,10 +13,14 @@ import {
   branchSubviewLabel,
   changeSecondaryPath,
   gitDiffEntryIdentity,
-  pickDefaultWorkspaceSection,
-  workspaceSectionItems,
+  pickDefaultWorkspaceViewSection,
+  workspaceEntryKey,
   workspaceSectionLabel,
+  workspaceViewSectionCount,
+  workspaceViewSectionItems,
+  workspaceViewSectionLabel,
   type GitBranchSubview,
+  type GitWorkspaceViewSection,
 } from '../utils/gitWorkbench';
 import { resolveRovingTabTargetId } from '../utils/tabNavigation';
 import { gitBranchTone, gitChangePathClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
@@ -274,7 +279,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
             <tbody>
               <For each={props.items}>
                 {(item) => {
-                  const active = () => props.selectedKey === gitDiffEntryIdentity(item);
+                  const active = () => props.selectedKey === workspaceEntryKey(item);
                   return (
                     <tr
                       aria-selected={active()}
@@ -731,7 +736,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const [statusWorkspace, setStatusWorkspace] = createSignal<GitListWorkspaceChangesResponse | null>(null);
   const [statusLoading, setStatusLoading] = createSignal(false);
   const [statusError, setStatusError] = createSignal('');
-  const [selectedStatusSection, setSelectedStatusSection] = createSignal<GitWorkspaceSection>('unstaged');
+  const [selectedStatusSection, setSelectedStatusSection] = createSignal<GitWorkspaceViewSection>('changes');
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitWorkspaceChange | null>(null);
   const [compareDialogOpen, setCompareDialogOpen] = createSignal(false);
@@ -744,8 +749,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const visibleStatusWorkspace = () => statusWorkspace();
   const visibleStatusLoading = () => statusLoading();
   const visibleStatusError = () => statusError();
-  const visibleStatusItems = () => workspaceSectionItems(visibleStatusWorkspace(), selectedStatusSection());
-  const visibleStatusKey = () => gitDiffEntryIdentity(diffDialogItem());
+  const visibleStatusItems = () => workspaceViewSectionItems(visibleStatusWorkspace(), selectedStatusSection());
+  const visibleStatusKey = () => workspaceEntryKey(diffDialogItem());
   const statusEmptyState = () => branchStatusEmptyState(props.selectedBranch, statusRepoRootPath());
   const mergeReviewBranch = () => props.mergeReviewBranch ?? props.selectedBranch ?? null;
   const mergePreview = () => props.mergePreview ?? null;
@@ -826,7 +831,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
   createEffect(() => {
     const nextWorkspace = visibleStatusWorkspace();
-    setSelectedStatusSection(pickDefaultWorkspaceSection(nextWorkspace));
+    setSelectedStatusSection(pickDefaultWorkspaceViewSection(nextWorkspace));
   });
 
   createEffect(() => {
@@ -896,11 +901,11 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       )}
                     >
                       {(workspaceAccessor) => (
-                        <div class="grid gap-0.5 rounded-md bg-background/40 p-0.5 text-[11px] grid-cols-2 xl:grid-cols-4">
-                          <For each={(['unstaged', 'untracked', 'conflicted', 'staged'] as GitWorkspaceSection[])}>
+                        <div class="grid grid-cols-1 gap-0.5 rounded-md bg-background/40 p-0.5 text-[11px] sm:grid-cols-3">
+                          <For each={WORKSPACE_VIEW_SECTIONS}>
                             {(section) => {
                               const active = () => selectedStatusSection() === section;
-                              const count = () => workspaceSectionItems(workspaceAccessor(), section).length;
+                              const count = () => workspaceViewSectionCount(workspaceAccessor().summary, section);
                               return (
                                 <button
                                   type="button"
@@ -911,9 +916,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                   onClick={() => setSelectedStatusSection(section)}
                                 >
                                   <div class="flex min-h-[1.85rem] flex-col justify-center gap-0.5">
-                                      <div class="flex items-center justify-between gap-1.5">
+                                    <div class="flex items-center justify-between gap-1.5">
                                       <div class={cn('min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.14em]', active() ? 'text-current opacity-80' : 'text-muted-foreground/80')}>
-                                        {workspaceSectionLabel(section)}
+                                        {workspaceViewSectionLabel(section)}
                                       </div>
                                       <div
                                         class={cn(
@@ -926,7 +931,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                     </div>
 
                                     <div class={cn('truncate text-[10px] leading-tight', active() ? 'text-current opacity-70' : 'text-muted-foreground')}>
-                                        {count() === 0 ? 'No files to review.' : `${count()} file${count() === 1 ? '' : 's'} ready.`}
+                                      {count() === 0 ? 'No files to review.' : `${count()} file${count() === 1 ? '' : 's'} ready.`}
                                     </div>
                                   </div>
                                 </button>
