@@ -6,13 +6,6 @@
     0 0 0 4px color-mix(in srgb, var(--background) 84%, transparent) !important;
 }
 
-*,
-*::before,
-*::after {
-  --tw-border-style: solid;
-  border-style: solid;
-}
-
 :root {
   --git-browser-selection-bg:
     linear-gradient(

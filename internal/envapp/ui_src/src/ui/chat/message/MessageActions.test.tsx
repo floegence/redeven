@@ -61,6 +61,8 @@ describe('MessageActions', () => {
     expect(writeTextToClipboardMock).toHaveBeenCalledWith('Alpha block\n\nconst value = 1;\n\npwd\n\n/workspace');
     expect(host.querySelector('button[aria-label="Copied"]')).toBeTruthy();
     expect(host.querySelector('.chat-message-action-btn-copied')).toBeTruthy();
+    expect(host.querySelector('button[aria-label="Copied"] rect')).toBeNull();
+    expect(host.querySelector('button[aria-label="Copied"] polyline')).toBeTruthy();
 
     vi.advanceTimersByTime(1600);
     await flushAsync();
