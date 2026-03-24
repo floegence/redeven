@@ -1,4 +1,4 @@
-import { normalizeMarkdownForDisplay } from '../markdown/normalizeMarkdownForDisplay';
+import { normalizeMarkdownForDisplay, normalizeMarkdownForStreamingDisplay } from '../markdown/normalizeMarkdownForDisplay';
 import type { Message, MessageBlock, MessageStatus } from '../types';
 
 function hasVisibleString(value: unknown): boolean {
@@ -8,13 +8,20 @@ function hasVisibleString(value: unknown): boolean {
 function isEmptyStreamingMarkdownPlaceholder(block: MessageBlock, messageStatus: MessageStatus): boolean {
   return block.type === 'markdown'
     && messageStatus === 'streaming'
-    && normalizeMarkdownForDisplay(String(block.content ?? '')) === '';
+    && normalizeMarkdownForStreamingDisplay(String(block.content ?? '')) === '';
+}
+
+function normalizeMarkdownBlockContent(block: Extract<MessageBlock, { type: 'markdown' }>, messageStatus: MessageStatus): string {
+  const content = String(block.content ?? '');
+  return messageStatus === 'streaming'
+    ? normalizeMarkdownForStreamingDisplay(content)
+    : normalizeMarkdownForDisplay(content);
 }
 
 export function isMessageBlockVisible(block: MessageBlock, messageStatus: MessageStatus): boolean {
   switch (block.type) {
     case 'markdown':
-      return messageStatus === 'streaming' || normalizeMarkdownForDisplay(String(block.content ?? '')) !== '';
+      return messageStatus === 'streaming' || normalizeMarkdownBlockContent(block, messageStatus) !== '';
     case 'text':
       return hasVisibleString(block.content);
     case 'thinking':
@@ -30,7 +37,7 @@ export function hasNonEmptyVisibleBlockContent(block: MessageBlock, messageStatu
   }
   switch (block.type) {
     case 'markdown':
-      return normalizeMarkdownForDisplay(String(block.content ?? '')) !== '';
+      return normalizeMarkdownBlockContent(block, messageStatus) !== '';
     case 'text':
     case 'code':
     case 'svg':
@@ -45,7 +52,7 @@ export function hasNonEmptyVisibleBlockContent(block: MessageBlock, messageStatu
   }
 }
 
-export function visibleMessageBlocks(message: Message): Array<{ block: MessageBlock; index: number }> {
+export function visibleMessageBlocks(message: Message): number[] {
   let lastRenderableIndex = -1;
   message.blocks.forEach((block, index) => {
     if (isMessageBlockVisible(block, message.status)) {
@@ -60,7 +67,7 @@ export function visibleMessageBlocks(message: Message): Array<{ block: MessageBl
     if (isEmptyStreamingMarkdownPlaceholder(block, message.status) && index !== lastRenderableIndex) {
       return [];
     }
-    return [{ block, index }];
+    return [index];
   });
 }
 

@@ -40,11 +40,14 @@ function isStructuredReceiptBlock(block: MessageBlock): boolean {
 }
 
 export const MessageBubble: Component<MessageBubbleProps> = (props) => {
-  const blocks = createMemo(() => visibleMessageBlocks(props.message));
+  const visibleBlockIndices = createMemo(() => visibleMessageBlocks(props.message));
   const isStructuredReceiptMessage = createMemo(() => (
     props.message.role === 'user'
-    && blocks().length > 0
-    && blocks().every(({ block }) => isStructuredReceiptBlock(block))
+    && visibleBlockIndices().length > 0
+    && visibleBlockIndices().every((index) => {
+      const block = props.message.blocks[index];
+      return !!block && isStructuredReceiptBlock(block);
+    })
   ));
 
   const slotClass = (block: MessageBlock): string =>
@@ -65,17 +68,20 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
         props.class,
       )}
     >
-      <For each={blocks()}>
-        {({ block, index }) => (
-          <div class={slotClass(block)}>
-            <BlockRenderer
-              block={block}
-              messageId={props.message.id}
-              blockIndex={index}
-              isStreaming={block.type === 'markdown' ? props.message.status === 'streaming' : undefined}
-            />
-          </div>
-        )}
+      <For each={visibleBlockIndices()}>
+        {(index) => {
+          const block = () => props.message.blocks[index];
+          return (
+            <div class={slotClass(block()!)}>
+              <BlockRenderer
+                block={block()!}
+                messageId={props.message.id}
+                blockIndex={index}
+                isStreaming={block()!.type === 'markdown' ? props.message.status === 'streaming' : undefined}
+              />
+            </div>
+          );
+        }}
       </For>
 
       <Show when={props.message.status === 'error' && props.message.error}>
