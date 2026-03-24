@@ -30,8 +30,8 @@ export { ChatInput, AttachmentPreview, type ChatInputProps, type AttachmentPrevi
 
 // Status
 export {
-  WorkingIndicator, StreamingCursor, ConnectionStatus,
-  type WorkingIndicatorProps, type StreamingCursorProps, type ConnectionStatusProps, type ConnectionState,
+  WorkingIndicator, StreamingCursor, ConnectionStatus, AppendOnlyText, isAppendOnlyTextCompatible,
+  type WorkingIndicatorProps, type StreamingCursorProps, type ConnectionStatusProps, type ConnectionState, type AppendOnlyTextProps,
 } from './status';
 
 // Hooks
