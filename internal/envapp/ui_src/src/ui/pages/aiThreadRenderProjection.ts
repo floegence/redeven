@@ -1,4 +1,5 @@
 import type { Message, MessageBlock } from '../chat/types';
+import { hasNonEmptyVisibleMessageContent } from '../chat/message/messageVisibility';
 import type { SubagentView } from './aiDataNormalizers';
 
 type ToolCallBlock = Extract<MessageBlock, { type: 'tool-call' }>;
@@ -243,15 +244,23 @@ export function carryForwardTransientMessageState(previousRenderedMessages: Mess
   const carried = nextMessages.map((message) => {
     const previous = previousById.get(String(message?.id ?? '').trim());
     if (!previous) return message;
+    let nextMessage = message;
     const mergedBlocks = carryForwardBlocks(previous.blocks, message.blocks);
-    if (mergedBlocks === message.blocks) {
-      return message;
+    if (mergedBlocks !== message.blocks) {
+      changed = true;
+      nextMessage = {
+        ...nextMessage,
+        blocks: mergedBlocks,
+      };
     }
-    changed = true;
-    return {
-      ...message,
-      blocks: mergedBlocks,
-    };
+
+    const stabilizedMessage = carryForwardStreamingVisibleContent(previous, nextMessage);
+    if (stabilizedMessage !== nextMessage) {
+      changed = true;
+      return stabilizedMessage;
+    }
+
+    return nextMessage;
   });
 
   return changed ? carried : nextMessages;
@@ -288,6 +297,27 @@ function carryForwardBlocks(previousBlocks: MessageBlock[], nextBlocks: MessageB
   });
 
   return changed ? merged : nextBlocks;
+}
+
+function carryForwardStreamingVisibleContent(previous: Message, next: Message): Message {
+  if (
+    previous.role !== 'assistant'
+    || next.role !== 'assistant'
+    || next.status !== 'streaming'
+    || !hasNonEmptyVisibleMessageContent(previous)
+    || hasNonEmptyVisibleMessageContent(next)
+  ) {
+    return next;
+  }
+
+  if (previous.blocks === next.blocks) {
+    return next;
+  }
+
+  return {
+    ...next,
+    blocks: previous.blocks,
+  };
 }
 
 function findMatchingPreviousBlock(previousBlocks: MessageBlock[], nextBlock: MessageBlock, index: number): MessageBlock | null {

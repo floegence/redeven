@@ -25,7 +25,7 @@ Notes:
 
 ## Flower Chat Render Contract
 
-The Flower chat UI now follows three explicit constraints:
+The Flower chat UI now follows four explicit constraints:
 
 1. `EnvAIPage` owns the message source states.
    - Transcript rows, active-run snapshot recovery, live assistant stream overlays, and optimistic local user messages must converge through a single render projection before the chat store is updated.
@@ -37,6 +37,11 @@ The Flower chat UI now follows three explicit constraints:
 
 3. Transcript overlays consume a shared bottom inset contract.
    - The transcript scroll area, file-browser FAB, and scroll-to-bottom affordance must use the shared transcript overlay inset variables instead of ad-hoc message margins.
+
+4. Streaming assistant visibility is monotonic while a run is live.
+   - Hidden `thinking` blocks are sideband data and must never reuse or replace an already-visible markdown slot.
+   - Backend stream reconciliation should publish the next visible markdown state before clearing obsolete markdown slots whenever possible.
+   - The render projection may temporarily carry forward the last non-empty visible assistant content for a still-streaming message when an intermediate overlay frame regresses to hidden-only content.
 
 ## Verification
 
