@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 18
+	threadstoreCurrentSchemaVersion = 19
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -46,6 +46,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 15, ToVersion: 16, Apply: migrateThreadstoreToV16},
 			{FromVersion: 16, ToVersion: 17, Apply: migrateThreadstoreToV17},
 			{FromVersion: 17, ToVersion: 18, Apply: migrateThreadstoreToV18},
+			{FromVersion: 18, ToVersion: 19, Apply: migrateThreadstoreToV19},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -188,6 +189,13 @@ func migrateThreadstoreToV17(tx *sql.Tx) error {
 
 func migrateThreadstoreToV18(tx *sql.Tx) error {
 	return ensureAIThreadsTitleMetadataColumnsTx(tx)
+}
+
+func migrateThreadstoreToV19(tx *sql.Tx) error {
+	// Older databases may still carry the abandoned embeddings table from historical
+	// schema versions. The current runtime contract removes it entirely.
+	_, err := tx.Exec(`DROP TABLE IF EXISTS memory_embeddings`)
+	return err
 }
 
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
@@ -634,7 +642,6 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"request_user_input_secret_answers",
 		"execution_spans",
 		"memory_items",
-		"memory_embeddings",
 		"context_snapshots",
 		"provider_capabilities",
 	}
@@ -647,10 +654,98 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			return fmt.Errorf("missing table %q", tableName)
 		}
 	}
+	for _, tableName := range []string{"memory_embeddings"} {
+		exists, err := sqliteutil.TableExistsTx(tx, tableName)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return fmt.Errorf("unexpected legacy table %q", tableName)
+		}
+	}
 
 	requiredColumns := map[string][]string{
-		"ai_threads":      {"model_id", "model_locked", "execution_mode", "working_dir", "followups_revision", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version"},
-		"ai_queued_turns": {"channel_id", "lane", "sort_index", "updated_at_unix_ms"},
+		"ai_threads": {
+			"thread_id", "endpoint_id", "namespace_public_id", "model_id", "model_locked",
+			"execution_mode", "working_dir", "title", "title_source", "title_generated_at_unix_ms",
+			"title_input_message_id", "title_model_id", "title_prompt_version", "followups_revision",
+			"run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json",
+			"created_by_user_public_id", "created_by_user_email", "updated_by_user_public_id",
+			"updated_by_user_email", "created_at_unix_ms", "updated_at_unix_ms",
+			"last_message_at_unix_ms", "last_message_preview",
+		},
+		"ai_messages": {
+			"id", "thread_id", "endpoint_id", "message_id", "role", "author_user_public_id",
+			"author_user_email", "status", "created_at_unix_ms", "updated_at_unix_ms",
+			"text_content", "message_json",
+		},
+		"ai_runs": {
+			"run_id", "endpoint_id", "thread_id", "message_id", "state", "error_code",
+			"error_message", "attempt_count", "started_at_unix_ms", "ended_at_unix_ms",
+			"updated_at_unix_ms",
+		},
+		"ai_tool_calls": {
+			"id", "run_id", "tool_id", "tool_name", "status", "args_json", "result_json",
+			"error_code", "error_message", "retryable", "recovery_action", "started_at_unix_ms",
+			"ended_at_unix_ms", "latency_ms",
+		},
+		"ai_run_events": {
+			"id", "endpoint_id", "thread_id", "run_id", "stream_kind", "event_type",
+			"payload_json", "at_unix_ms",
+		},
+		"ai_thread_state": {
+			"endpoint_id", "thread_id", "open_goal", "last_assistant_summary", "updated_at_unix_ms",
+		},
+		"ai_thread_todos": {
+			"endpoint_id", "thread_id", "version", "todos_json", "updated_at_unix_ms",
+			"updated_by_run_id", "updated_by_tool_id",
+		},
+		"ai_thread_checkpoints": {
+			"checkpoint_id", "endpoint_id", "thread_id", "run_id", "kind", "created_at_unix_ms",
+			"thread_json", "derived_json", "workspace_json", "transcript_max_id",
+			"turns_max_id", "tool_calls_max_id", "run_events_max_id",
+		},
+		"ai_queued_turns": {
+			"queue_id", "endpoint_id", "thread_id", "channel_id", "lane", "sort_index",
+			"message_id", "model_id", "text_content", "attachments_json", "options_json",
+			"created_by_user_public_id", "created_by_user_email", "created_at_unix_ms",
+			"updated_at_unix_ms",
+		},
+		"transcript_messages": {
+			"id", "thread_id", "endpoint_id", "message_id", "role", "author_user_public_id",
+			"author_user_email", "status", "created_at_unix_ms", "updated_at_unix_ms",
+			"text_content", "message_json",
+		},
+		"conversation_turns": {
+			"id", "turn_id", "endpoint_id", "thread_id", "run_id", "user_message_id",
+			"assistant_message_id", "created_at_unix_ms",
+		},
+		"execution_spans": {
+			"span_id", "endpoint_id", "thread_id", "run_id", "kind", "name", "status",
+			"payload_json", "started_at_unix_ms", "ended_at_unix_ms", "updated_at_unix_ms",
+		},
+		"memory_items": {
+			"memory_id", "endpoint_id", "thread_id", "scope", "kind", "content",
+			"source_refs_json", "importance", "freshness", "confidence", "created_at_unix_ms",
+			"updated_at_unix_ms",
+		},
+		"context_snapshots": {
+			"snapshot_id", "endpoint_id", "thread_id", "level", "summary_text",
+			"covers_turn_from_id", "covers_turn_to_id", "quality_score", "created_at_unix_ms",
+		},
+		"provider_capabilities": {
+			"provider_id", "model_name", "capability_json", "updated_at_unix_ms",
+		},
+		"structured_user_inputs": {
+			"id", "endpoint_id", "thread_id", "response_message_id", "prompt_id", "tool_id",
+			"reason_code", "question_id", "header", "question_text", "selected_option_id",
+			"selected_option_label", "answers_json", "public_summary", "contains_secret",
+			"created_at_unix_ms",
+		},
+		"request_user_input_secret_answers": {
+			"id", "endpoint_id", "thread_id", "response_message_id", "question_id",
+			"answer_index", "answer_text", "created_at_unix_ms",
+		},
 	}
 	for tableName, columns := range requiredColumns {
 		for _, columnName := range columns {
@@ -667,10 +762,24 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 	requiredIndexes := []string{
 		"idx_ai_threads_endpoint_updated",
 		"idx_ai_messages_thread_id",
+		"idx_ai_runs_endpoint_thread_updated",
+		"idx_ai_tool_calls_run_id",
+		"idx_ai_run_events_run_id",
+		"idx_ai_run_events_endpoint_thread",
+		"idx_ai_thread_todos_updated",
+		"idx_ai_thread_checkpoints_thread_created",
+		"idx_ai_thread_checkpoints_run_id",
 		"idx_ai_queued_turns_thread_created",
 		"idx_ai_queued_turns_thread_lane_sort",
 		"idx_ai_queued_turns_message_id",
 		"idx_transcript_messages_thread_id",
+		"idx_conversation_turns_thread_id",
+		"idx_conversation_turns_run_id",
+		"idx_execution_spans_thread_started",
+		"idx_execution_spans_run_started",
+		"idx_memory_items_thread_updated",
+		"idx_memory_items_scope_kind",
+		"idx_context_snapshots_thread_level",
 		"idx_structured_user_inputs_recent",
 		"idx_request_user_input_secret_answers_message",
 	}

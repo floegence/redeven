@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 )
@@ -1368,19 +1367,15 @@ func (s *Store) DeleteThreadContextData(ctx context.Context, endpointID string, 
 	if endpointID == "" || threadID == "" {
 		return errors.New("invalid request")
 	}
-	queries := []string{
-		`DELETE FROM conversation_turns WHERE endpoint_id = ? AND thread_id = ?`,
-		`DELETE FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ?`,
-		`DELETE FROM structured_user_inputs WHERE endpoint_id = ? AND thread_id = ?`,
-		`DELETE FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`,
-		`DELETE FROM memory_items WHERE endpoint_id = ? AND thread_id = ?`,
-		`DELETE FROM context_snapshots WHERE endpoint_id = ? AND thread_id = ?`,
-		`DELETE FROM execution_spans WHERE endpoint_id = ? AND thread_id = ?`,
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
 	}
-	for _, q := range queries {
-		if _, err := s.db.ExecContext(ctx, q, endpointID, threadID); err != nil {
-			return fmt.Errorf("delete thread context data failed: %w", err)
-		}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := deleteThreadContextPlanesTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
 	}
-	return nil
+	return tx.Commit()
 }
