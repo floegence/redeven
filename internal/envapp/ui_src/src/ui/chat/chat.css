@@ -68,6 +68,11 @@
   padding: 0.75rem 1rem;
 }
 
+.chat-message-list-footer {
+  width: 100%;
+  padding: 0 1rem 0.75rem;
+}
+
 .chat-message-list-simple > .chat-message-list-item {
   animation: chatMessageFadeIn 250ms ease-out both;
 }
@@ -259,6 +264,58 @@
 
 .chat-message-block-slot {
   min-width: 0;
+}
+
+.flower-live-run-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.flower-live-run-header {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.flower-live-run-item {
+  align-items: flex-start;
+}
+
+.flower-live-run-answer-bubble,
+.flower-live-run-activity-bubble {
+  overflow: clip;
+}
+
+.flower-live-run-answer-text {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.flower-live-run-answer-text > .chat-streaming-text {
+  display: inline;
+  white-space: inherit;
+}
+
+.flower-live-run-answer-text-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.6875rem;
+  line-height: 1.6;
+}
+
+.flower-live-run-inline-cursor {
+  display: inline-flex;
+  align-items: baseline;
+  margin-left: 0.125rem;
+}
+
+.flower-live-run-answer-placeholder,
+.flower-live-run-answer-tail {
+  min-height: 1rem;
+  display: flex;
+  align-items: center;
 }
 
 .chat-markdown-empty-streaming {

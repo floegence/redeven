@@ -13,6 +13,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { StreamingMarkdownTail } from '../markdown/StreamingMarkdownTail';
 import { createMarkdownRenderer } from '../markdown/markedConfig';
 import { normalizeMarkdownForDisplay, normalizeMarkdownForStreamingDisplay } from '../markdown/normalizeMarkdownForDisplay';
+import { AppendOnlyText, isAppendOnlyTextCompatible } from '../status/AppendOnlyText';
 import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel';
 import { StreamingCursor } from '../status/StreamingCursor';
 import type { MarkdownRenderSnapshot } from '../types';
@@ -23,8 +24,6 @@ export interface MarkdownBlockProps {
   streaming?: boolean;
   class?: string;
 }
-
-const STREAM_APPEND_GUARD_LEN = 64;
 
 let markedInstance: Marked<string, string> | null = null;
 let markedLoading = false;
@@ -69,105 +68,6 @@ async function renderMarkdownFallback(
     throw new Error('marked failed to load');
   }
   return buildMarkdownRenderSnapshot(marked, content, streaming);
-}
-
-type StreamingTextProps = {
-  text: string;
-  offset?: number;
-  class?: string;
-};
-
-const StreamingText: Component<StreamingTextProps> = (props) => {
-  const [el, setEl] = createSignal<HTMLDivElement | null>(null);
-
-  let lastOffset = 0;
-  let lastLen = 0;
-  let lastGuard = '';
-
-  let pending = '';
-  let rafId: number | null = null;
-
-  const scheduleFlush = () => {
-    if (rafId !== null) return;
-    rafId = requestAnimationFrame(() => {
-      rafId = null;
-      const node = el();
-      if (!node || !pending) return;
-      const text = pending;
-      pending = '';
-      node.appendChild(document.createTextNode(text));
-    });
-  };
-
-  const reset = (fullText: string, offset: number) => {
-    const node = el();
-    if (!node) return;
-
-    node.textContent = '';
-    pending = fullText.slice(offset);
-
-    lastOffset = offset;
-    lastLen = fullText.length;
-
-    const guardLen = Math.min(STREAM_APPEND_GUARD_LEN, lastLen);
-    lastGuard = guardLen > 0 ? fullText.slice(lastLen - guardLen, lastLen) : '';
-    scheduleFlush();
-  };
-
-  createEffect(() => {
-    const node = el();
-    if (!node) return;
-
-    const fullText = String(props.text ?? '');
-    const rawOffset = typeof props.offset === 'number' && Number.isFinite(props.offset) ? props.offset : 0;
-    const offset = Math.max(0, Math.min(rawOffset, fullText.length));
-
-    if (offset !== lastOffset || fullText.length < lastLen) {
-      reset(fullText, offset);
-      return;
-    }
-
-    const guardLen = Math.min(STREAM_APPEND_GUARD_LEN, lastLen);
-    if (guardLen > 0) {
-      const currentGuard = fullText.slice(lastLen - guardLen, lastLen);
-      if (currentGuard !== lastGuard) {
-        reset(fullText, offset);
-        return;
-      }
-    }
-
-    if (fullText.length === lastLen) return;
-
-    pending += fullText.slice(lastLen);
-    lastLen = fullText.length;
-
-    const newGuardLen = Math.min(STREAM_APPEND_GUARD_LEN, lastLen);
-    lastGuard = newGuardLen > 0 ? fullText.slice(lastLen - newGuardLen, lastLen) : '';
-    scheduleFlush();
-  });
-
-  onCleanup(() => {
-    if (rafId !== null) {
-      cancelAnimationFrame(rafId);
-      rafId = null;
-    }
-  });
-
-  return (
-    <div
-      ref={(node) => setEl(node)}
-      class={cn('chat-streaming-text', props.class)}
-      style={{ 'white-space': 'pre-wrap' }}
-    />
-  );
-};
-
-function isAppendCompatible(base: string, current: string): boolean {
-  if (current.length < base.length) return false;
-  const guardLen = Math.min(STREAM_APPEND_GUARD_LEN, base.length);
-  if (guardLen === 0) return true;
-  const guard = base.slice(base.length - guardLen);
-  return current.slice(base.length - guardLen, base.length) === guard;
 }
 
 export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
@@ -277,7 +177,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
 
     const base = renderedText();
     const current = displayContent();
-    if (!isAppendCompatible(base, current)) return null;
+    if (!isAppendOnlyTextCompatible(base, current)) return null;
 
     return {
       snapshot,
@@ -295,7 +195,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
           </div>
         }
       >
-        <Show when={renderState()} fallback={<StreamingText text={displayContent()} />}>
+        <Show when={renderState()} fallback={<AppendOnlyText text={displayContent()} />}>
           {(stateAccessor) => {
             const state = () => stateAccessor();
             const shouldRenderRawSuffix = () =>
@@ -325,7 +225,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
                 </Show>
 
                 <Show when={shouldRenderRawSuffix()}>
-                  <StreamingText
+                  <AppendOnlyText
                     text={state().current}
                     offset={state().snapshot.committedSourceLength}
                   />
