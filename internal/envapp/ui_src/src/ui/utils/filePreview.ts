@@ -56,6 +56,11 @@ const PDF_PREVIEW_EXTENSION_SET = new Set<string>(PDF_PREVIEW_EXTENSIONS);
 const DOCX_PREVIEW_EXTENSION_SET = new Set<string>(DOCX_PREVIEW_EXTENSIONS);
 const XLSX_PREVIEW_EXTENSION_SET = new Set<string>(XLSX_PREVIEW_EXTENSIONS);
 
+const LANGUAGE_BY_PLAIN_TEXT_EXTENSION: Record<string, string | undefined> = {
+  '.md': 'markdown',
+  '.markdown': 'markdown',
+};
+
 const LANGUAGE_BY_EXTENSION: Record<string, string | undefined> = {
   '.json': 'json',
   '.jsonc': 'json',
@@ -217,7 +222,10 @@ export function describeFilePreview(name: string): FilePreviewDescriptor {
   }
 
   if (PLAIN_TEXT_EXTENSION_SET.has(ext)) {
-    return { ...FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR };
+    return {
+      ...FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR,
+      language: LANGUAGE_BY_PLAIN_TEXT_EXTENSION[ext],
+    };
   }
 
   return { mode: 'binary' };
