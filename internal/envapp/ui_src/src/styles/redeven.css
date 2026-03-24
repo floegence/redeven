@@ -579,15 +579,15 @@ html.dark {
   background:
     radial-gradient(
       72% 72% at 50% 50%,
-      color-mix(in srgb, var(--primary) 44%, transparent) 0%,
-      color-mix(in srgb, var(--primary) 34%, transparent) 34%,
-      color-mix(in srgb, #f59e0b 28%, transparent) 60%,
+      rgb(244 182 197 / 0.72) 0%,
+      rgb(245 192 204 / 0.58) 34%,
+      rgb(247 210 218 / 0.34) 60%,
       transparent 84%
     ),
     radial-gradient(
       44% 44% at 50% 50%,
-      color-mix(in srgb, #f59e0b 26%, transparent) 0%,
-      color-mix(in srgb, var(--primary) 18%, transparent) 52%,
+      rgb(240 166 186 / 0.52) 0%,
+      rgb(244 190 202 / 0.24) 52%,
       transparent 76%
     );
   filter: blur(5px);
