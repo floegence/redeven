@@ -70,6 +70,7 @@ export type ThreadView = Readonly<{
   thread_id: string;
   title: string;
   model_id?: string;
+  model_locked?: boolean;
   execution_mode?: ExecutionMode;
   working_dir?: string;
   queued_turn_count?: number;
@@ -194,8 +195,12 @@ export interface AIChatContextValue {
   // Models
   models: Resource<ModelsResponse | null>;
   modelsReady: Accessor<boolean>;
-  selectedModel: Accessor<string>;
-  selectModel: (modelID: string) => void;
+  selectedDefaultModel: Accessor<string>;
+  selectDefaultModel: (modelID: string) => void;
+  selectedThreadModel: Accessor<string>;
+  selectThreadModel: (modelID: string) => void;
+  selectedSendModel: Accessor<string>;
+  activeThreadModelLocked: Accessor<boolean>;
   modelOptions: Accessor<Array<{ value: string; label: string }>>;
 
   // Threads
@@ -280,7 +285,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     return env.settingsSeq();
   });
 
-  const [models] = createResource<ModelsResponse | null, number | null>(
+  const [models, { mutate: mutateModels }] = createResource<ModelsResponse | null, number | null>(
     () => modelsKey(),
     async (k) => (k == null ? null : await fetchGatewayJSON<ModelsResponse>('/_redeven_proxy/api/ai/models', { method: 'GET' })),
   );
@@ -543,7 +548,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (!tid || !promptId) {
       throw new Error('Missing thread or prompt.');
     }
-    const model = String(selectedModel() ?? '').trim();
+    const model = resolveThreadModelSelection(tid);
     if (!model) {
       throw new Error('Missing model.');
     }
@@ -953,29 +958,44 @@ export function createAIChatContextValue(): AIChatContextValue {
     return t?.title?.trim() || 'New chat';
   });
   const activeThreadWaitingPrompt = createMemo<WaitingPromptView | null>(() => waitingPromptForThread(activeThreadId()));
+  const activeThreadModelLocked = createMemo(() => !!activeThread()?.model_locked);
 
-  const selectedModel = createMemo(() => {
+  const resolveThreadModelSelection = (threadId: string | null | undefined): string => {
     if (!modelsReady()) return '';
+
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return '';
 
     const allowed = allowedModelIDs();
     const fallback = fallbackModelId();
-
-    const tid = String(activeThreadId() ?? '').trim();
-    if (!tid) {
-      const draft = String(draftModelId() ?? '').trim();
-      if (draft && allowed.has(draft)) return draft;
-      return fallback;
-    }
 
     const overrides = threadModelOverride();
     const overridden = String(overrides?.[tid] ?? '').trim();
     if (overridden && allowed.has(overridden)) return overridden;
 
-    const th = activeThread();
+    const th = threadById().get(tid);
     const server = String(th?.model_id ?? '').trim();
     if (server && allowed.has(server)) return server;
 
     return fallback;
+  };
+
+  // Keep the default model for future chats separate from the active thread model.
+  const selectedDefaultModel = createMemo(() => {
+    if (!modelsReady()) return '';
+
+    const allowed = allowedModelIDs();
+    const draft = String(draftModelId() ?? '').trim();
+    if (draft && allowed.has(draft)) return draft;
+
+    return fallbackModelId();
+  });
+
+  const selectedThreadModel = createMemo(() => resolveThreadModelSelection(activeThreadId()));
+  const selectedSendModel = createMemo(() => {
+    const tid = String(activeThreadId() ?? '').trim();
+    if (tid) return resolveThreadModelSelection(tid);
+    return selectedDefaultModel();
   });
 
   const patchThreadModel = async (threadId: string, nextModelId: string, prevModelId: string | null, silent?: boolean): Promise<boolean> => {
@@ -1008,11 +1028,12 @@ export function createAIChatContextValue(): AIChatContextValue {
     const mid = String(nextModelId ?? '').trim();
     if (!mid) return false;
     try {
-      await fetchGatewayJSON<ModelsResponse>('/_redeven_proxy/api/ai/current_model', {
+      const resp = await fetchGatewayJSON<ModelsResponse>('/_redeven_proxy/api/ai/current_model', {
         method: 'PUT',
         body: JSON.stringify({ model_id: mid }),
       });
       setDraftModelId(mid);
+      mutateModels(resp);
       return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -1021,7 +1042,29 @@ export function createAIChatContextValue(): AIChatContextValue {
     }
   };
 
-  const selectModel = (modelID: string) => {
+  const selectDefaultModel = (modelID: string) => {
+    const id = String(modelID ?? '').trim();
+    if (!id) return;
+
+    if (!modelsReady()) {
+      notify.error('AI unavailable', 'Loading models...');
+      return;
+    }
+    const allowed = allowedModelIDs();
+    if (!allowed.has(id)) {
+      notify.error('Invalid model', 'This model is not allowed.');
+      return;
+    }
+    const prev = selectedDefaultModel();
+    if (prev === id) return;
+    setDraftModelId(id);
+    void patchCurrentModel(id, false).then((ok) => {
+      if (ok) return;
+      setDraftModelId(prev);
+    });
+  };
+
+  const selectThreadModel = (modelID: string) => {
     const id = String(modelID ?? '').trim();
     if (!id) return;
 
@@ -1036,9 +1079,13 @@ export function createAIChatContextValue(): AIChatContextValue {
     }
 
     const tid = String(activeThreadId() ?? '').trim();
-    if (!tid) {
-      setDraftModelId(id);
-      void patchCurrentModel(id, false);
+    if (!tid) return;
+    if (activeThreadModelLocked()) {
+      notify.error('Model locked', 'Restart the thread to switch models.');
+      return;
+    }
+    if (isThreadRunning(tid)) {
+      notify.error('Model locked', 'Stop the current run before switching models.');
       return;
     }
 
@@ -1047,14 +1094,12 @@ export function createAIChatContextValue(): AIChatContextValue {
       return;
     }
 
-    const prev = String(selectedModel() ?? '').trim();
+    const prev = resolveThreadModelSelection(tid);
     if (prev === id) return;
 
     setThreadModelOverride((prevMap) => ({ ...prevMap, [tid]: id }));
-    void patchThreadModel(tid, id, prev, false).then((ok) => {
-      if (!ok) return;
-      void patchCurrentModel(id, true);
-    });
+    // Thread model changes are intentionally thread-scoped. Do not mutate current_model_id here.
+    void patchThreadModel(tid, id, prev, false);
   };
 
   // Clear local overrides once the server state catches up.
@@ -1091,6 +1136,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const tid = String(activeThreadId() ?? '').trim();
     const th = activeThread();
     if (!tid || !th) return;
+    if (th.model_locked) return;
 
     const overrides = threadModelOverride();
     if (String(overrides?.[tid] ?? '').trim()) return;
@@ -1122,7 +1168,7 @@ export function createAIChatContextValue(): AIChatContextValue {
   const [creatingThread, setCreatingThread] = createSignal(false);
 
   const createThread = async (opts?: { executionMode?: ExecutionMode }): Promise<ThreadView> => {
-    const modelID = String(selectedModel() ?? '').trim();
+    const modelID = String(selectedDefaultModel() ?? '').trim();
     const body: any = { title: '' };
     if (modelID) body.model_id = modelID;
     if (opts?.executionMode) body.execution_mode = normalizeExecutionMode(opts.executionMode);
@@ -1212,8 +1258,12 @@ export function createAIChatContextValue(): AIChatContextValue {
     aiEnabled,
     models,
     modelsReady,
-    selectedModel,
-    selectModel,
+    selectedDefaultModel,
+    selectDefaultModel,
+    selectedThreadModel,
+    selectThreadModel,
+    selectedSendModel,
+    activeThreadModelLocked,
     modelOptions,
     threads,
     bumpThreadsSeq,

@@ -2467,6 +2467,25 @@ export function EnvAIPage() {
   const canInteract = createMemo(
     () => protocol.status() === 'connected' && ai.aiEnabled() && ai.modelsReady() && canRWXReady(),
   );
+  const hasActiveThread = createMemo(() => !!String(ai.activeThreadId() ?? '').trim());
+  const headerModelControlDisabled = createMemo(() => ai.models.loading || !!ai.models.error || !canRWXReady());
+  const defaultModelControlDisabled = createMemo(() => headerModelControlDisabled());
+  const threadModelControlDisabled = createMemo(() => headerModelControlDisabled() || activeThreadRunning());
+  const modelLabelById = createMemo(() => {
+    const map = new Map<string, string>();
+    for (const option of ai.modelOptions()) {
+      const value = String(option.value ?? '').trim();
+      if (!value) continue;
+      map.set(value, String(option.label ?? option.value).trim() || value);
+    }
+    return map;
+  });
+  const formatModelLabel = (modelId: string): string => {
+    const id = String(modelId ?? '').trim();
+    if (!id) return '';
+    return modelLabelById().get(id) ?? id;
+  };
+  const activeThreadModelLabel = createMemo(() => formatModelLabel(ai.selectedThreadModel()));
   const ensureRWX = (): boolean => {
     if (!permissionReady()) {
       notify.error('Not ready', 'Loading environment permissions...');
@@ -3900,7 +3919,7 @@ export function EnvAIPage() {
       throw new Error(msg || 'Failed to load models.');
     }
 
-    const model = ai.selectedModel().trim();
+    const model = ai.selectedSendModel().trim();
     if (!model) {
       notify.error('Missing model', 'Please select a model.');
       rollbackRejectedComposerSend(context);
@@ -4358,14 +4377,61 @@ export function EnvAIPage() {
                   </div>
                   <div class="flower-chat-header-actions">
                     <Show when={ai.aiEnabled() && ai.modelOptions().length > 0}>
-                      <Select
-                        value={ai.selectedModel()}
-                        onChange={(v) => ai.selectModel(String(v ?? '').trim())}
-                        options={ai.modelOptions()}
-                        placeholder="Select model..."
-                        disabled={ai.models.loading || !!ai.models.error || activeThreadRunning() || !canRWXReady()}
-                        class="ai-model-select-trigger flower-chat-model-select min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
-                      />
+                      <Show
+                        when={hasActiveThread()}
+                        fallback={(
+                          <div
+                            data-testid="default-model-control"
+                            class="inline-flex max-w-full items-center gap-2 rounded-full border border-border/70 bg-muted/20 px-2 py-1"
+                          >
+                            <span class="hidden sm:inline text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                              Default model
+                            </span>
+                            <Select
+                              value={ai.selectedDefaultModel()}
+                              onChange={(v) => ai.selectDefaultModel(String(v ?? '').trim())}
+                              options={ai.modelOptions()}
+                              placeholder="Select default model..."
+                              disabled={defaultModelControlDisabled()}
+                              class="ai-model-select-trigger flower-chat-model-select min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
+                            />
+                          </div>
+                        )}
+                      >
+                        <Show
+                          when={!ai.activeThreadModelLocked()}
+                          fallback={(
+                            <div
+                              data-testid="thread-model-locked-badge"
+                              class="inline-flex max-w-full items-center gap-2 rounded-full border border-border/70 bg-muted/20 px-2 py-1 text-[11px]"
+                              title={ai.selectedThreadModel()}
+                            >
+                              <span class="hidden sm:inline text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                                Thread model
+                              </span>
+                              <span class="max-w-[160px] truncate font-medium text-foreground">{activeThreadModelLabel() || 'Unknown model'}</span>
+                              <span class="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Locked</span>
+                            </div>
+                          )}
+                        >
+                          <div
+                            data-testid="thread-model-control"
+                            class="inline-flex max-w-full items-center gap-2 rounded-full border border-border/70 bg-muted/20 px-2 py-1"
+                          >
+                            <span class="hidden sm:inline text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                              Thread model
+                            </span>
+                            <Select
+                              value={ai.selectedThreadModel()}
+                              onChange={(v) => ai.selectThreadModel(String(v ?? '').trim())}
+                              options={ai.modelOptions()}
+                              placeholder="Select thread model..."
+                              disabled={threadModelControlDisabled()}
+                              class="ai-model-select-trigger flower-chat-model-select min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
+                            />
+                          </div>
+                        </Show>
+                      </Show>
                     </Show>
 
                     <Show when={activeThreadRunning()}>

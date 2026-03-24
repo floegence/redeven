@@ -75,7 +75,7 @@ Important rules:
 - `context_window` is used by runtime budgeting.
 - `max_output_tokens` and `effective_context_window_percent` are optional overrides.
 
-Each thread stores its own selected `model_id`; switching threads follows the thread selection instead of a global session override.
+Each thread stores its own selected `model_id`; switching threads follows the thread selection instead of a global session override. Updating a thread model never rewrites `current_model_id`.
 
 ## 4. Runtime key handling
 
@@ -93,7 +93,9 @@ Current Agent Settings UI behavior is:
 - Provider id is shown as read-only.
 - API keys are stored locally and shown only as status (`Key set` / `Key not set`).
 - Models are configured inside each provider entry.
-- Chat shows a single model selector rendered as `<provider name> / <model_name>`.
+- In a draft chat with no active thread, the chat model picker updates `current_model_id` immediately for future new chats.
+- In an active unlocked thread, the chat model picker updates only that thread's `model_id`.
+- Locked threads show the current thread model as read-only instead of as an editable picker.
 
 ## 6. Permissions
 

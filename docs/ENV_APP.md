@@ -7,6 +7,7 @@ Key points:
 - The Env App UI is **agent-bundled** (built + embedded into the agent binary).
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower).
+- Flower chat keeps model-picking scope explicit: the draft chat picker updates the default model for future new chats, active unlocked threads edit only their own thread model, and locked threads show a read-only model badge instead of a misleading editable control.
 - Flower thread history keeps the chat `title` separate from the latest `last_message_preview` snippet: untitled chats render as `New chat` until the agent later writes a generated title, while the preview line continues to reflect the newest visible message text.
 - Flower auto titles are best-effort but resilient: the agent retries transient generation failures in the background, can expand the title-generation output budget once for reasoning-heavy models, falls back to a truncated first user message after three failed generation passes, and also recovers recent untitled threads after restart, so users should see a usable title appear without manual refresh or rename in normal cases.
 - File Browser keeps Monaco as the single text surface for both preview and edit, so read-only and editable text/code views stay visually and behaviorally aligned without branching on syntax-support gaps.
