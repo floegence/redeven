@@ -218,6 +218,16 @@
   overflow: hidden;
 }
 
+.chat-message-avatar-assistant:has(.redeven-flower-soft-aura) {
+  background: transparent;
+  color: var(--primary);
+  border-color: transparent;
+}
+
+.chat-message-avatar-assistant:has(.redeven-flower-soft-aura) .chat-message-avatar-custom-wrapper {
+  overflow: visible;
+}
+
 .chat-message-avatar-fallback {
   font-size: 0.625rem;
   text-transform: uppercase;
