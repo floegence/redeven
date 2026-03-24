@@ -8,6 +8,7 @@ import { useVirtualList } from '../hooks/useVirtualList';
 import { WorkingIndicator } from '../status/WorkingIndicator';
 import { MessageItem } from '../message/MessageItem';
 import type { Message } from '../types';
+import { captureViewportAnchor, resolveViewportAnchorScrollTop, type ViewportAnchor } from './scrollAnchor';
 
 export interface VirtualMessageListProps {
   class?: string;
@@ -80,6 +81,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   let didInitialBottomSync = false;
   let lastHandledScrollRequestSeq = 0;
   let followToBottomRaf: number | null = null;
+  let viewportAnchor: ViewportAnchor | null = null;
 
   const getDistanceToBottom = (el: HTMLElement) =>
     Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight);
@@ -97,6 +99,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     if (followMode() !== 'following') {
       setFollowMode('following');
     }
+    viewportAnchor = null;
     if (pendingMessageCount() !== 0) {
       setPendingMessageCount(0);
     }
@@ -106,6 +109,22 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     if (followMode() !== 'paused') {
       setFollowMode('paused');
     }
+  };
+
+  const capturePausedViewportAnchor = (el: HTMLElement): void => {
+    viewportAnchor = captureViewportAnchor({
+      messageIds: messages().map((message) => message.id),
+      visibleRangeStart: virtualList.visibleRange().start,
+      scrollTop: el.scrollTop,
+      getItemOffset: virtualList.getItemOffset,
+      getItemHeight: (index) => {
+        const message = messages()[index];
+        if (!message) {
+          return ctx.virtualListConfig().defaultItemHeight;
+        }
+        return ctx.getMessageHeight(message.id);
+      },
+    });
   };
 
   const scrollToBottomNow = (behavior: 'auto' | 'smooth' = 'auto'): boolean => {
@@ -212,6 +231,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
         applyFollowingMode();
       } else if (Math.abs(nextScrollTop - prevScrollTop) > 0.5) {
         applyPausedMode();
+        capturePausedViewportAnchor(el);
       }
 
       prevScrollTop = nextScrollTop;
@@ -269,25 +289,22 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
 
     const target = scrollContainerEl;
     const keepViewportAnchor = followMode() === 'paused' && !!target;
-    const anchorScrollTop = keepViewportAnchor && target ? target.scrollTop : 0;
-    let scrollCompensation = 0;
-
-    if (keepViewportAnchor) {
-      for (const update of updates) {
-        if (update.startOffset < anchorScrollTop - 0.5) {
-          scrollCompensation += update.delta;
-        }
-      }
-    }
 
     for (const update of updates) {
       ctx.setMessageHeight(update.messageId, update.nextHeight);
       virtualList.setItemHeight(update.index, update.nextHeight);
     }
 
-    if (keepViewportAnchor && target && Math.abs(scrollCompensation) > 0.5) {
-      target.scrollTop = Math.max(0, anchorScrollTop + scrollCompensation);
-      prevScrollTop = target.scrollTop;
+    if (keepViewportAnchor && target) {
+      const nextAnchorScrollTop = resolveViewportAnchorScrollTop(
+        viewportAnchor,
+        messageIndexById(),
+        virtualList.getItemOffset,
+      );
+      if (nextAnchorScrollTop !== null && Math.abs(nextAnchorScrollTop - target.scrollTop) > 0.5) {
+        target.scrollTop = nextAnchorScrollTop;
+        prevScrollTop = target.scrollTop;
+      }
     }
 
     updateDistanceToBottom(target);

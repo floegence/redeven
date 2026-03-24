@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Component } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type Component } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { Motion } from 'solid-motionone';
 import {
@@ -27,7 +27,9 @@ import {
   type ChatContextValue,
   type Message,
   type MessageRole,
+  type StreamEvent,
 } from '../chat';
+import { applyStreamEventToMessages, upsertMessageById } from '../chat/messageState';
 import {
   normalizeAskUserDraft,
   normalizeAskUserDraftForQuestion,
@@ -93,6 +95,11 @@ import {
   type FollowupLane,
   type ListFollowupsResponse,
 } from './followupsState';
+import {
+  projectThreadRenderMessages,
+  pruneConvergedOverlayMessages,
+  sameSubagentViewContent,
+} from './aiThreadRenderProjection';
 
 type DirCache = Map<string, FileItem[]>;
 
@@ -1793,9 +1800,10 @@ export function EnvAIPage() {
   const [threadSubagentsById, setThreadSubagentsById] = createSignal<Record<string, SubagentView>>({});
   const [contextUsage, setContextUsage] = createSignal<ContextUsageView | null>(null);
   const [contextCompactions, setContextCompactions] = createSignal<ContextCompactionEventView[]>([]);
-  const [hasMessages, setHasMessages] = createSignal(false);
   // Turns true immediately after send to keep instant feedback before run state events arrive.
   const [sendPending, setSendPending] = createSignal(false);
+  const [transcriptMessages, setTranscriptMessages] = createSignal<Message[]>([]);
+  const [assistantOverlayMessages, setAssistantOverlayMessages] = createSignal<Message[]>([]);
   const [draftExecutionMode, setDraftExecutionMode] = createSignal<ExecutionMode>(readPersistedExecutionMode());
   const [threadExecutionModeOverrideById, setThreadExecutionModeOverrideById] = createSignal<Record<string, ExecutionMode>>({});
   const [queuedFollowups, setQueuedFollowups] = createSignal<FollowupItem[]>([]);
@@ -1824,6 +1832,12 @@ export function EnvAIPage() {
 
   let chat: ChatContextValue | null = null;
   const [chatReady, setChatReady] = createSignal(false);
+  const hasMessages = createMemo(() => {
+    if (!chatReady()) {
+      return sendPending();
+    }
+    return sendPending() || (chat?.messages() ?? []).length > 0;
+  });
   const [chatInputApi, setChatInputApi] = createSignal<AIChatInputApi | null>(null);
   let queuedAskFlowerIntents: AskFlowerIntent[] = [];
   let messageAreaRef: HTMLDivElement | undefined;
@@ -2056,6 +2070,32 @@ export function EnvAIPage() {
   const resetThreadSubagents = (): void => {
     setThreadSubagentsById({});
   };
+  const sameSubagentMap = (
+    left: Record<string, SubagentView>,
+    right: Record<string, SubagentView>,
+  ): boolean => {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    if (leftKeys.length !== rightKeys.length) {
+      return false;
+    }
+    for (const key of leftKeys) {
+      if (!sameSubagentViewContent(left[key], right[key])) {
+        return false;
+      }
+    }
+    return true;
+  };
+  const resetThreadRenderSources = (): void => {
+    setTranscriptMessages([]);
+    setAssistantOverlayMessages([]);
+  };
+  const setAssistantOverlayMessage = (message: Message): void => {
+    setAssistantOverlayMessages((current) => upsertMessageById(current, message));
+  };
+  const applyAssistantOverlayStreamEvent = (event: StreamEvent): void => {
+    setAssistantOverlayMessages((current) => applyStreamEventToMessages(current, event).messages);
+  };
   const rebuildSubagentsFromMessages = (messages: Message[]): void => {
     const normalizeSubagentHistory = (raw: any): Array<{ role: 'user' | 'assistant' | 'system'; text: string }> => {
       if (!Array.isArray(raw)) return [];
@@ -2217,114 +2257,7 @@ export function EnvAIPage() {
       const blocks = Array.isArray((message as any)?.blocks) ? ((message as any).blocks as any[]) : [];
       walkBlocks(blocks, messageTimestamp);
     }
-    setThreadSubagentsById(nextMap);
-
-    const syncSubagentBlocksWithLatest = (inputMessages: Message[]): Message[] | null => {
-      let changed = false;
-      const patchBlocks = (blocks: any[]): any[] => {
-        let blockChanged = false;
-        const nextBlocks = blocks.map((block) => {
-          if (!block || typeof block !== 'object') return block;
-          let nextBlock = block;
-          const blockType = String((block as any).type ?? '').trim().toLowerCase();
-          if (blockType === 'subagent') {
-            const subagentId = String((block as any).subagentId ?? '').trim();
-            const latest = nextMap[subagentId];
-            if (latest) {
-              const latestStatus = normalizeSubagentStatus(latest.status);
-              const latestError = String(latest.error ?? '').trim();
-              const currentStatus = normalizeSubagentStatus((block as any).status);
-              const currentError = String((block as any).error ?? '').trim();
-              const currentUpdatedAt = Math.max(0, Number((block as any).updatedAtUnixMs ?? 0) || 0);
-              const same =
-                currentStatus === latestStatus &&
-                String((block as any).summary ?? '').trim() === latest.summary &&
-                String((block as any).title ?? '').trim() === String(latest.title ?? '').trim() &&
-                String((block as any).objective ?? '').trim() === String(latest.objective ?? '').trim() &&
-                String((block as any).contextMode ?? '').trim() === String(latest.contextMode ?? '').trim() &&
-                String((block as any).promptHash ?? '').trim() === String(latest.promptHash ?? '').trim() &&
-                String((block as any).delegationPromptMarkdown ?? '').trim() === String(latest.delegationPromptMarkdown ?? '').trim() &&
-                String((block as any).agentType ?? '').trim() === latest.agentType &&
-                String((block as any).triggerReason ?? '').trim() === latest.triggerReason &&
-                String((block as any).taskId ?? '').trim() === latest.taskId &&
-                String((block as any).specId ?? '').trim() === String(latest.specId ?? '').trim() &&
-                currentError === latestError &&
-                currentUpdatedAt === latest.updatedAtUnixMs &&
-                JSON.stringify((block as any).deliverables ?? []) === JSON.stringify(latest.deliverables ?? []) &&
-                JSON.stringify((block as any).definitionOfDone ?? []) === JSON.stringify(latest.definitionOfDone ?? []) &&
-                JSON.stringify((block as any).outputSchema ?? {}) === JSON.stringify(latest.outputSchema ?? {}) &&
-                JSON.stringify((block as any).evidenceRefs ?? []) === JSON.stringify(latest.evidenceRefs) &&
-                JSON.stringify((block as any).keyFiles ?? []) === JSON.stringify(latest.keyFiles) &&
-                JSON.stringify((block as any).openRisks ?? []) === JSON.stringify(latest.openRisks) &&
-                JSON.stringify((block as any).nextActions ?? []) === JSON.stringify(latest.nextActions) &&
-                JSON.stringify((block as any).history ?? []) === JSON.stringify(latest.history) &&
-                JSON.stringify((block as any).stats ?? {}) === JSON.stringify(latest.stats);
-              if (!same) {
-                nextBlock = {
-                  ...(block as any),
-                  subagentId: latest.subagentId,
-                  taskId: latest.taskId,
-                  specId: latest.specId,
-                  title: latest.title,
-                  objective: latest.objective,
-                  contextMode: latest.contextMode,
-                  promptHash: latest.promptHash,
-                  delegationPromptMarkdown: latest.delegationPromptMarkdown,
-                  deliverables: latest.deliverables ?? [],
-                  definitionOfDone: latest.definitionOfDone ?? [],
-                  outputSchema: latest.outputSchema ?? {},
-                  agentType: latest.agentType,
-                  triggerReason: latest.triggerReason,
-                  status: latestStatus,
-                  summary: latest.summary,
-                  evidenceRefs: latest.evidenceRefs,
-                  keyFiles: latest.keyFiles,
-                  openRisks: latest.openRisks,
-                  nextActions: latest.nextActions,
-                  history: latest.history,
-                  stats: latest.stats,
-                  updatedAtUnixMs: latest.updatedAtUnixMs,
-                  error: latest.error,
-                };
-                blockChanged = true;
-              }
-            }
-          }
-          const children = Array.isArray((nextBlock as any).children) ? ((nextBlock as any).children as any[]) : [];
-          if (children.length > 0) {
-            const patchedChildren = patchBlocks(children);
-            if (patchedChildren !== children) {
-              nextBlock = {
-                ...(nextBlock as any),
-                children: patchedChildren,
-              };
-              blockChanged = true;
-            }
-          }
-          return nextBlock;
-        });
-        if (!blockChanged) return blocks;
-        changed = true;
-        return nextBlocks;
-      };
-
-      const nextMessages = inputMessages.map((message) => {
-        const blocks = Array.isArray((message as any)?.blocks) ? ((message as any).blocks as any[]) : [];
-        const patchedBlocks = patchBlocks(blocks);
-        if (patchedBlocks === blocks) return message;
-        return {
-          ...message,
-          blocks: patchedBlocks,
-        };
-      });
-      if (!changed) return null;
-      return nextMessages;
-    };
-
-    const patchedMessages = syncSubagentBlocksWithLatest(messages);
-    if (patchedMessages && chat) {
-      chat.setMessages(patchedMessages);
-    }
+    setThreadSubagentsById((current) => (sameSubagentMap(current, nextMap) ? current : nextMap));
   };
   const activeThreadTodos = createMemo(() => threadTodos()?.todos ?? []);
   const unresolvedTodoCount = createMemo(() =>
@@ -2333,6 +2266,38 @@ export function EnvAIPage() {
   const activeThreadSubagents = createMemo(() =>
     Object.values(threadSubagentsById()).sort((a, b) => b.updatedAtUnixMs - a.updatedAtUnixMs),
   );
+  const sameRenderedMessageSequence = (left: Message[], right: Message[]): boolean => {
+    if (left.length !== right.length) {
+      return false;
+    }
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) {
+        return false;
+      }
+    }
+    return true;
+  };
+  createEffect(() => {
+    if (activeThreadRunning()) return;
+    const transcript = transcriptMessages();
+    setAssistantOverlayMessages((current) => pruneConvergedOverlayMessages(transcript, current));
+  });
+  createEffect(() => {
+    if (!chatReady()) return;
+
+    const projectedMessages = projectThreadRenderMessages({
+      transcriptMessages: transcriptMessages(),
+      overlayMessages: assistantOverlayMessages(),
+      previousRenderedMessages: untrack(() => chat?.messages() ?? []),
+      subagentById: threadSubagentsById(),
+    });
+    const currentMessages = untrack(() => chat?.messages() ?? []);
+
+    if (!sameRenderedMessageSequence(currentMessages, projectedMessages)) {
+      chat?.setMessages(projectedMessages);
+    }
+    rebuildSubagentsFromMessages(projectedMessages);
+  });
   const subagentsUpdatedLabel = createMemo(() => {
     const latest = activeThreadSubagents()[0];
     if (!latest || latest.updatedAtUnixMs <= 0) return '';
@@ -2677,8 +2642,6 @@ export function EnvAIPage() {
   const isTerminalRunStatus = (status: string) =>
     status === 'success' || status === 'failed' || status === 'canceled' || status === 'timed_out' || status === 'waiting_user';
 
-  const normalizeMessageID = (m: any): string => String(m?.id ?? '').trim();
-
   const hasStreamingAssistantMessage = (): boolean => {
     const messages = chat?.messages() ?? [];
     return messages.some((message) => message.role === 'assistant' && message.status === 'streaming');
@@ -2701,65 +2664,6 @@ export function EnvAIPage() {
     activeSnapshotReqSeq += 1;
   };
 
-  const upsertMessageById = (existing: Message[], next: Message): Message[] => {
-    const id = normalizeMessageID(next);
-    if (!id) return existing;
-    const idx = existing.findIndex((m) => normalizeMessageID(m) === id);
-    if (idx === -1) return [...existing, next];
-    const out = existing.slice();
-    out[idx] = next;
-    return out;
-  };
-
-  const mergeBaselineTranscript = (existing: Message[], loaded: Message[]): Message[] => {
-    const loadedByID = new Map<string, Message>();
-    const loadedOrder: string[] = [];
-    loaded.forEach((m) => {
-      const id = normalizeMessageID(m);
-      if (!id || loadedByID.has(id)) return;
-      loadedByID.set(id, m);
-      loadedOrder.push(id);
-    });
-
-    const existingByID = new Map<string, Message>();
-    const existingOrder: string[] = [];
-    existing.forEach((m) => {
-      const id = normalizeMessageID(m);
-      if (!id || existingByID.has(id)) return;
-      existingByID.set(id, m);
-      existingOrder.push(id);
-    });
-
-    const out: Message[] = [];
-    const seen = new Set<string>();
-
-    loadedOrder.forEach((id) => {
-      const m = loadedByID.get(id);
-      if (!m) return;
-      out.push(m);
-      seen.add(id);
-    });
-
-    // Keep any optimistic/local-only messages that are not yet persisted.
-    existingOrder.forEach((id) => {
-      if (seen.has(id)) return;
-      const m = existingByID.get(id);
-      if (!m) return;
-      out.push(m);
-      seen.add(id);
-    });
-
-    return out;
-  };
-
-  const mergeDeltaTranscript = (existing: Message[], delta: Message[]): Message[] => {
-    let out = existing;
-    delta.forEach((m) => {
-      out = upsertMessageById(out, m);
-    });
-    return out;
-  };
-
   const loadThreadMessages = async (
     threadId: string,
     opts?: { scrollToBottom?: boolean; reset?: boolean },
@@ -2779,7 +2683,7 @@ export function EnvAIPage() {
       if (reqNo !== lastMessagesReq) return;
 
       const items = Array.isArray((resp as any)?.messages) ? (resp as any).messages : [];
-      const loaded = items
+      const loaded: Message[] = items
         .map((it: any) => decorateMessageBlocks((it?.messageJson ?? it?.message_json) as Message))
         .filter((m: any) => !!String(m?.id ?? '').trim());
 
@@ -2801,11 +2705,17 @@ export function EnvAIPage() {
         activeTranscriptCursor = 0;
       }
 
-      const existing = chat.messages() ?? [];
-      const merged = baseline ? mergeBaselineTranscript(existing, loaded) : mergeDeltaTranscript(existing, loaded);
-      chat.setMessages(merged);
-      rebuildSubagentsFromMessages(merged);
-      setHasMessages(merged.length > 0);
+      if (baseline) {
+        setTranscriptMessages(loaded);
+      } else {
+        setTranscriptMessages((current) => {
+          let next = current;
+          loaded.forEach((message) => {
+            next = upsertMessageById(next, message);
+          });
+          return next;
+        });
+      }
       if (opts?.scrollToBottom) {
         requestScrollToBottom('system');
       }
@@ -2841,11 +2751,7 @@ export function EnvAIPage() {
       if (assistantSeqAtStart !== activeAssistantMessageSeq) return;
 
       const decorated = decorateMessageBlocks(resp.messageJson as Message);
-      const current = chat.messages() ?? [];
-      const next = upsertMessageById(current, decorated);
-      chat.setMessages(next);
-      rebuildSubagentsFromMessages(next);
-      setHasMessages(next.length > 0);
+      setAssistantOverlayMessage(decorated);
     } catch {
       // Best-effort: ignore snapshot failures (realtime frames / transcript refresh can self-heal).
     }
@@ -3305,7 +3211,7 @@ export function EnvAIPage() {
 
     if (protocol.status() !== 'connected' || !ai.aiEnabled()) {
       chat?.clearMessages();
-      setHasMessages(false);
+      resetThreadRenderSources();
       setRunPhaseLabel('Working');
       setThreadTodos(null);
       resetFollowupsState();
@@ -3321,7 +3227,7 @@ export function EnvAIPage() {
 
     if (!tid) {
       chat?.clearMessages();
-      setHasMessages(false);
+      resetThreadRenderSources();
       setRunPhaseLabel('Working');
       setThreadTodos(null);
       resetFollowupsState();
@@ -3339,12 +3245,10 @@ export function EnvAIPage() {
     // Draft -> thread promotion: keep the optimistic user message already rendered in the chat store.
     if (skipNextThreadLoad) {
       skipNextThreadLoad = false;
-      const current = chat?.messages() ?? [];
-      setHasMessages(current.length > 0);
     } else {
       chat?.clearMessages();
-      setHasMessages(false);
     }
+    resetThreadRenderSources();
 
     setRunPhaseLabel('Working');
     setThreadTodos(null);
@@ -3379,7 +3283,7 @@ export function EnvAIPage() {
 
         resetActiveTranscriptCursor(tid);
         chat?.clearMessages();
-        setHasMessages(false);
+        resetThreadRenderSources();
         setRunPhaseLabel('Working');
         setThreadTodos(null);
         resetThreadSubagents();
@@ -3417,11 +3321,7 @@ export function EnvAIPage() {
             activeTranscriptCursor = Math.max(activeTranscriptCursor, rowId);
           }
 
-          const current = chat?.messages() ?? [];
-          const next = upsertMessageById(current, decorated);
-          chat?.setMessages(next);
-          rebuildSubagentsFromMessages(next);
-          setHasMessages(true);
+          setTranscriptMessages((current) => upsertMessageById(current, decorated));
         }
         return;
       }
@@ -3485,9 +3385,7 @@ export function EnvAIPage() {
             activeAssistantMessageSeq += 1;
             cancelActiveRunSnapshotRecovery();
           }
-          chat?.handleStreamEvent(decorateStreamEvent(streamEvent) as any);
-          rebuildSubagentsFromMessages(chat?.messages() ?? []);
-          setHasMessages(true);
+          applyAssistantOverlayStreamEvent(decorateStreamEvent(streamEvent) as StreamEvent);
         }
         return;
       }
@@ -3717,9 +3615,6 @@ export function EnvAIPage() {
   const rollbackRejectedComposerSend = (context?: Partial<PendingSendContext>) => {
     setSendPending(false);
     setRunPhaseLabel('Working');
-    const optimisticOffset = context?.hasOptimisticMessage ? 1 : 0;
-    const remainingMessages = Math.max(0, (chat?.messages() ?? []).length - optimisticOffset);
-    setHasMessages(remainingMessages > 0);
 
     const sourceFollowupId = String(context?.sourceFollowupId ?? '').trim();
     if (!sourceFollowupId || !context?.sourceDraftSnapshot || !chatInputApi()) {
@@ -3930,7 +3825,6 @@ export function EnvAIPage() {
     const sendIntent = context.sendIntent;
     const sourceFollowupId = context.sourceFollowupId;
 
-    setHasMessages(true);
     setSendPending(true);
     setRunPhaseLabel('Planning...');
     if (userMessageId) {
@@ -4022,7 +3916,6 @@ export function EnvAIPage() {
         ai.clearThreadPendingRun(tid);
         if (userMessageId) {
           chat?.deleteMessage(userMessageId);
-          setHasMessages((chat?.messages() ?? []).length > 0);
         }
         setRunPhaseLabel('Working');
         void loadFollowups(tid, { silent: true });
@@ -4080,7 +3973,6 @@ export function EnvAIPage() {
 
       if (!canInteract()) return;
       setSendPending(true);
-      setHasMessages(true);
       setRunPhaseLabel('Planning...');
       requestScrollToBottom('user');
     },
@@ -4177,7 +4069,7 @@ export function EnvAIPage() {
       ai.clearActiveThreadPersistence();
       ai.enterDraftChat();
       chat?.clearMessages();
-      setHasMessages(false);
+      resetThreadRenderSources();
       ai.bumpThreadsSeq();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
