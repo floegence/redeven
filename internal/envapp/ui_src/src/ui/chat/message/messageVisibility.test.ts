@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { hasVisibleMessageContent, visibleMessageBlocks } from './messageVisibility';
+import { hasNonEmptyVisibleMessageContent, hasVisibleMessageContent, visibleMessageBlocks } from './messageVisibility';
 import type { Message } from '../types';
 
 describe('messageVisibility', () => {
@@ -33,5 +33,20 @@ describe('messageVisibility', () => {
 
     expect(visibleMessageBlocks(message).map(({ block }) => block.type)).toEqual(['markdown']);
     expect(hasVisibleMessageContent(message)).toBe(true);
+  });
+
+  it('distinguishes streaming placeholder markdown from non-empty visible content', () => {
+    const placeholder: Message = {
+      id: 'm3',
+      role: 'assistant',
+      status: 'streaming',
+      timestamp: 1,
+      blocks: [
+        { type: 'markdown', content: '' },
+      ],
+    };
+
+    expect(hasVisibleMessageContent(placeholder)).toBe(true);
+    expect(hasNonEmptyVisibleMessageContent(placeholder)).toBe(false);
   });
 });

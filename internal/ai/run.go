@@ -1169,27 +1169,14 @@ func (r *run) appendThinkingDelta(delta string) error {
 		return nil
 	}
 	if r.needNewThinkingBlock || r.currentThinkingBlockIndex < 0 {
-		if idx, reused := r.reuseInitialMarkdownBlockForThinking(); reused {
-			r.currentThinkingBlockIndex = idx
-			r.needNewThinkingBlock = false
-			r.needNewTextBlock = true
-			r.currentTextBlockIndex = -1
-			r.sendStreamEvent(streamEventBlockSet{
-				Type:       "block-set",
-				MessageID:  r.messageID,
-				BlockIndex: idx,
-				Block:      persistedThinkingBlock{Type: "thinking"},
-			})
-		} else {
-			idx := r.nextBlockIndex
-			r.nextBlockIndex++
-			r.currentThinkingBlockIndex = idx
-			r.needNewThinkingBlock = false
-			r.needNewTextBlock = true
-			r.currentTextBlockIndex = -1
-			r.persistSetThinkingBlock(idx)
-			r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "thinking"})
-		}
+		idx := r.nextBlockIndex
+		r.nextBlockIndex++
+		r.currentThinkingBlockIndex = idx
+		r.needNewThinkingBlock = false
+		r.needNewTextBlock = true
+		r.currentTextBlockIndex = -1
+		r.persistSetThinkingBlock(idx)
+		r.sendStreamEvent(streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: idx, BlockType: "thinking"})
 	}
 	delta = r.normalizeThinkingDelta(r.currentThinkingBlockIndex, delta)
 	if delta == "" {
@@ -1432,6 +1419,14 @@ func (r *run) reconcileCanonicalMarkdownMessage(fallback string) bool {
 			})
 		} else {
 			target := idxs[len(idxs)-1]
+			block, ok := r.assistantBlocks[target].(*persistedMarkdownBlock)
+			if ok && block != nil && strings.TrimSpace(block.Content) != canonical {
+				block.Content = canonical
+				updates = append(updates, markdownUpdate{
+					index: target,
+					block: persistedMarkdownBlock{Type: "markdown", Content: canonical},
+				})
+			}
 			for _, idx := range idxs[:len(idxs)-1] {
 				block, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
 				if !ok || block == nil {
@@ -1444,14 +1439,6 @@ func (r *run) reconcileCanonicalMarkdownMessage(fallback string) bool {
 				updates = append(updates, markdownUpdate{
 					index: idx,
 					block: persistedMarkdownBlock{Type: "markdown", Content: ""},
-				})
-			}
-			block, ok := r.assistantBlocks[target].(*persistedMarkdownBlock)
-			if ok && block != nil && strings.TrimSpace(block.Content) != canonical {
-				block.Content = canonical
-				updates = append(updates, markdownUpdate{
-					index: target,
-					block: persistedMarkdownBlock{Type: "markdown", Content: canonical},
 				})
 			}
 		}
@@ -2241,23 +2228,6 @@ func (r *run) persistAppendThinkingDelta(idx int, delta string) {
 	if b, ok := r.assistantBlocks[idx].(*persistedThinkingBlock); ok && b != nil {
 		b.Content += delta
 	}
-}
-
-func (r *run) reuseInitialMarkdownBlockForThinking() (int, bool) {
-	if r == nil {
-		return -1, false
-	}
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	if len(r.assistantBlocks) != 1 {
-		return -1, false
-	}
-	block, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
-	if !ok || block == nil || strings.TrimSpace(block.Content) != "" {
-		return -1, false
-	}
-	r.assistantBlocks[0] = &persistedThinkingBlock{Type: "thinking"}
-	return 0, true
 }
 
 func (r *run) persistSetToolBlock(idx int, block ToolCallBlock) {

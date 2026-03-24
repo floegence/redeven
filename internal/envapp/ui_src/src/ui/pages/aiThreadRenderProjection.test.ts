@@ -150,4 +150,66 @@ describe('aiThreadRenderProjection', () => {
     const pruned = pruneConvergedOverlayMessages(transcript, overlay);
     expect(pruned.map((message) => message.id)).toEqual(['m_ai_2']);
   });
+
+  it('keeps prior non-empty assistant content when a streaming overlay temporarily loses it', () => {
+    const previousRendered: Message[] = [
+      {
+        id: 'm_ai_1',
+        role: 'assistant',
+        blocks: [{ type: 'markdown', content: 'Visible partial answer' }],
+        status: 'streaming',
+        timestamp: 10,
+      },
+    ];
+    const overlay: Message[] = [
+      {
+        id: 'm_ai_1',
+        role: 'assistant',
+        blocks: [{ type: 'thinking', content: 'Hidden reasoning' }],
+        status: 'streaming',
+        timestamp: 11,
+      },
+    ];
+
+    const projected = projectThreadRenderMessages({
+      transcriptMessages: [],
+      overlayMessages: overlay,
+      previousRenderedMessages: previousRendered,
+      subagentById: {},
+    });
+
+    expect(projected).toHaveLength(1);
+    expect(projected[0].status).toBe('streaming');
+    expect(projected[0].blocks).toEqual(previousRendered[0].blocks);
+  });
+
+  it('releases carried assistant content once the message leaves streaming state', () => {
+    const previousRendered: Message[] = [
+      {
+        id: 'm_ai_1',
+        role: 'assistant',
+        blocks: [{ type: 'markdown', content: 'Visible partial answer' }],
+        status: 'streaming',
+        timestamp: 10,
+      },
+    ];
+    const transcript: Message[] = [
+      {
+        id: 'm_ai_1',
+        role: 'assistant',
+        blocks: [{ type: 'markdown', content: 'Final persisted answer' }],
+        status: 'complete',
+        timestamp: 12,
+      },
+    ];
+
+    const projected = projectThreadRenderMessages({
+      transcriptMessages: transcript,
+      overlayMessages: [],
+      previousRenderedMessages: previousRendered,
+      subagentById: {},
+    });
+
+    expect(projected).toEqual(transcript);
+  });
 });

@@ -55,7 +55,7 @@ func TestAssistantMarkdownTextSnapshot_JoinsMarkdownBlocksOnly(t *testing.T) {
 	}
 }
 
-func TestAppendThinkingDelta_ReusesInitialMarkdownBlock(t *testing.T) {
+func TestAppendThinkingDelta_PreservesInitialMarkdownBlock(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 2)
@@ -74,9 +74,19 @@ func TestAppendThinkingDelta_ReusesInitialMarkdownBlock(t *testing.T) {
 		t.Fatalf("appendThinkingDelta: %v", err)
 	}
 
-	block, ok := r.assistantBlocks[0].(*persistedThinkingBlock)
+	if len(r.assistantBlocks) != 2 {
+		t.Fatalf("assistantBlocks len=%d, want 2", len(r.assistantBlocks))
+	}
+	initialBlock, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	if !ok || initialBlock == nil {
+		t.Fatalf("assistantBlocks[0]=%T, want *persistedMarkdownBlock", r.assistantBlocks[0])
+	}
+	if initialBlock.Content != "" {
+		t.Fatalf("initial markdown content=%q, want empty", initialBlock.Content)
+	}
+	block, ok := r.assistantBlocks[1].(*persistedThinkingBlock)
 	if !ok || block == nil {
-		t.Fatalf("assistantBlocks[0]=%T, want *persistedThinkingBlock", r.assistantBlocks[0])
+		t.Fatalf("assistantBlocks[1]=%T, want *persistedThinkingBlock", r.assistantBlocks[1])
 	}
 	if block.Content != "Inspecting repository layout." {
 		t.Fatalf("thinking content=%q", block.Content)
@@ -87,14 +97,18 @@ func TestAppendThinkingDelta_ReusesInitialMarkdownBlock(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatalf("stream events=%d, want 2", len(events))
 	}
-	if _, ok := events[0].(streamEventBlockSet); !ok {
-		t.Fatalf("event[0]=%T, want streamEventBlockSet", events[0])
+	evStart, ok := events[0].(streamEventBlockStart)
+	if !ok {
+		t.Fatalf("event[0]=%T, want streamEventBlockStart", events[0])
+	}
+	if evStart.BlockIndex != 1 || evStart.BlockType != "thinking" || evStart.MessageID != "msg_reasoning" {
+		t.Fatalf("block-start=%+v, want thinking block at index 1", evStart)
 	}
 	ev, ok := events[1].(streamEventBlockDelta)
 	if !ok {
 		t.Fatalf("event[1]=%T, want streamEventBlockDelta", events[1])
 	}
-	if ev.BlockIndex != 0 || ev.Delta != "Inspecting repository layout." {
+	if ev.BlockIndex != 1 || ev.Delta != "Inspecting repository layout." {
 		t.Fatalf("block-delta=%+v", ev)
 	}
 }
@@ -146,7 +160,7 @@ func TestReconcileCanonicalMarkdownMessage_ReplacesPureMarkdownBlock(t *testing.
 	}
 }
 
-func TestReconcileCanonicalMarkdownMessage_ReplacesLastMarkdownInMixedBlocks(t *testing.T) {
+func TestReconcileCanonicalMarkdownMessage_PublishesCanonicalBeforeClearingEarlierMarkdown(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 4)
@@ -177,6 +191,28 @@ func TestReconcileCanonicalMarkdownMessage_ReplacesLastMarkdownInMixedBlocks(t *
 	}
 	if len(events) != 2 {
 		t.Fatalf("stream events=%d, want 2", len(events))
+	}
+	firstEvent, ok := events[0].(streamEventBlockSet)
+	if !ok {
+		t.Fatalf("event[0]=%T, want streamEventBlockSet", events[0])
+	}
+	if firstEvent.BlockIndex != 2 {
+		t.Fatalf("event[0]=%+v, want canonical update for index 2 first", firstEvent)
+	}
+	firstBlock, ok := firstEvent.Block.(persistedMarkdownBlock)
+	if !ok || firstBlock.Content != "canonical" {
+		t.Fatalf("event[0] block=%T %+v, want canonical markdown block", firstEvent.Block, firstEvent.Block)
+	}
+	secondEvent, ok := events[1].(streamEventBlockSet)
+	if !ok {
+		t.Fatalf("event[1]=%T, want streamEventBlockSet", events[1])
+	}
+	if secondEvent.BlockIndex != 0 {
+		t.Fatalf("event[1]=%+v, want trailing clear for index 0", secondEvent)
+	}
+	secondBlock, ok := secondEvent.Block.(persistedMarkdownBlock)
+	if !ok || secondBlock.Content != "" {
+		t.Fatalf("event[1] block=%T %+v, want cleared markdown block", secondEvent.Block, secondEvent.Block)
 	}
 }
 
