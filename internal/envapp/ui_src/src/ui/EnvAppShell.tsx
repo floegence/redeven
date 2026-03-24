@@ -1386,7 +1386,7 @@ export function EnvAppShell() {
     if (canUseFlower()) {
       items.push({
         id: 'ai',
-        icon: (props) => <FlowerSoftAuraIcon class={props.class} tone="current" />,
+        icon: (props) => <FlowerSoftAuraIcon class={props.class} tone="primary" />,
         label: 'Flower',
         collapseBehavior: 'toggle',
       });
