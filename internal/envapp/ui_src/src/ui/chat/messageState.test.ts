@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Message } from './types';
-import { applyStreamEventToMessages, upsertMessageById } from './messageState';
+import { applyStreamEventBatchToMessages, applyStreamEventToMessages, upsertMessageById } from './messageState';
 
 describe('messageState', () => {
   it('upserts by id without changing message order', () => {
@@ -75,5 +75,27 @@ describe('messageState', () => {
     expect(withLaterBlock.messages[0].blocks[0]).toMatchObject({ type: 'thinking' });
     expect(withLaterBlock.messages[0].blocks[1]).toMatchObject({ type: 'thinking' });
     expect(withLaterBlock.messages[0].blocks[2]).toMatchObject({ type: 'markdown', content: '' });
+  });
+
+  it('reduces batched stream events into one final streaming message state', () => {
+    const result = applyStreamEventBatchToMessages([], [
+      { type: 'message-start', messageId: 'm_ai_batch' },
+      { type: 'block-start', messageId: 'm_ai_batch', blockIndex: 0, blockType: 'markdown' },
+      { type: 'block-delta', messageId: 'm_ai_batch', blockIndex: 0, delta: 'Hello' },
+      { type: 'block-delta', messageId: 'm_ai_batch', blockIndex: 0, delta: ' world' },
+    ], { now: 100 });
+
+    expect(result.consumePrepCount).toBe(1);
+    expect(result.streamingMessageId).toBe('m_ai_batch');
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]).toMatchObject({
+      id: 'm_ai_batch',
+      role: 'assistant',
+      status: 'streaming',
+    });
+    expect(result.messages[0].blocks[0]).toMatchObject({
+      type: 'markdown',
+      content: 'Hello world',
+    });
   });
 });

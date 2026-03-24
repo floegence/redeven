@@ -122,8 +122,16 @@ function normalizeProseSegment(segment: string): string {
     .join('\n');
 }
 
+function normalizeMarkdownLineEndings(input: string): string {
+  return String(input ?? '').replace(/\r\n?/g, '\n');
+}
+
+export function normalizeMarkdownForStreamingDisplay(input: string): string {
+  return normalizeMarkdownLineEndings(input);
+}
+
 export function normalizeMarkdownForDisplay(input: string): string {
-  const source = String(input ?? '').replace(/\r\n?/g, '\n');
+  const source = normalizeMarkdownLineEndings(input);
   if (!source) return '';
 
   let out = '';

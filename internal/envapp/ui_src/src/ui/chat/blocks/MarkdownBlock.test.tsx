@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Marked } from 'marked';
 
 import { createMarkdownRenderer } from '../markdown/markedConfig';
-import { normalizeMarkdownForDisplay } from '../markdown/normalizeMarkdownForDisplay';
+import { normalizeMarkdownForDisplay, normalizeMarkdownForStreamingDisplay } from '../markdown/normalizeMarkdownForDisplay';
 import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel';
 import { MarkdownBlock } from './MarkdownBlock';
 
@@ -86,7 +86,40 @@ describe('MarkdownBlock', () => {
     expect(cursor).toBeTruthy();
   });
 
-  it('keeps committed segments stable and falls back to raw suffix while a fresher snapshot is pending', async () => {
+  it('anchors the streaming cursor at the tail of non-empty streaming content', async () => {
+    const content = 'Hello **Flower**';
+    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(content, true));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <MarkdownBlock content={content} streaming />, host);
+
+    await waitFor(() => {
+      const block = host.querySelector('.chat-markdown-block');
+      expect(block?.lastElementChild?.classList.contains('chat-markdown-streaming-cursor-row')).toBe(true);
+      expect(host.querySelector('[aria-label="Assistant is responding"]')).toBeNull();
+    });
+  });
+
+  it('uses append-safe normalization while content is still streaming', async () => {
+    const content = '# Title##Chapter One';
+    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(content, true));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <MarkdownBlock content={content} streaming />, host);
+
+    await waitFor(() => {
+      expect(renderMarkdownSnapshotMock).toHaveBeenCalledWith(
+        normalizeMarkdownForStreamingDisplay(content),
+        { streaming: true },
+      );
+    });
+  });
+
+  it('keeps the latest rendered markdown tail visible while a fresher snapshot is pending', async () => {
     const firstContent = 'First paragraph.\n\n## Second';
     const nextContent = 'First paragraph.\n\n## Second block';
 
@@ -115,13 +148,54 @@ describe('MarkdownBlock', () => {
     setContent(nextContent);
     await flushAsync();
 
-    expect(host.querySelector('h2')).toBeNull();
+    expect(host.querySelector('h2')?.textContent).toBe('Second');
     expect(host.textContent).toContain('First paragraph.');
-    expect(host.textContent).toContain('## Second block');
+    expect(host.textContent).not.toContain('## Second block');
 
     secondSnapshot.resolve(createSnapshot(nextContent, true));
     await waitFor(() => {
       expect(host.querySelector('h2')?.textContent).toBe('Second block');
+    });
+  });
+
+  it('keeps committed segment DOM nodes stable when fresher snapshots arrive', async () => {
+    const firstContent = 'First paragraph.\n\nSecond paragraph.\n\n## Third';
+    const nextContent = 'First paragraph.\n\nSecond paragraph.\n\n## Third block';
+
+    const firstSnapshot = createSnapshot(firstContent, true);
+    const secondSnapshot = deferred<ReturnType<typeof createSnapshot>>();
+
+    renderMarkdownSnapshotMock
+      .mockResolvedValueOnce(firstSnapshot)
+      .mockImplementationOnce(() => secondSnapshot.promise);
+
+    let setContent!: (value: string) => void;
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => {
+      const [content, updateContent] = createSignal(firstContent);
+      setContent = updateContent;
+      return <MarkdownBlock content={content()} streaming />;
+    }, host);
+
+    let committedNode: Element | null = null;
+    let committedKey = '';
+    await waitFor(() => {
+      committedNode = host.querySelector('.chat-markdown-committed-segment');
+      committedKey = String(committedNode?.getAttribute('data-segment-key') ?? '');
+      expect(committedNode).toBeTruthy();
+      expect(committedKey).not.toBe('');
+    });
+
+    setContent(nextContent);
+    await flushAsync();
+
+    secondSnapshot.resolve(createSnapshot(nextContent, true));
+    await waitFor(() => {
+      const nextNode = host.querySelector(`[data-segment-key="${committedKey}"]`);
+      expect(nextNode).toBe(committedNode);
     });
   });
 

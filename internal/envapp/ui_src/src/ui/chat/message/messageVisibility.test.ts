@@ -31,7 +31,7 @@ describe('messageVisibility', () => {
       ],
     };
 
-    expect(visibleMessageBlocks(message).map(({ block }) => block.type)).toEqual(['markdown']);
+    expect(visibleMessageBlocks(message).map((index) => message.blocks[index]?.type)).toEqual(['markdown']);
     expect(hasVisibleMessageContent(message)).toBe(true);
   });
 
@@ -62,7 +62,7 @@ describe('messageVisibility', () => {
       ],
     };
 
-    expect(visibleMessageBlocks(message).map(({ index, block }) => ({ index, type: block.type }))).toEqual([
+    expect(visibleMessageBlocks(message).map((index) => ({ index, type: message.blocks[index]?.type }))).toEqual([
       { index: 1, type: 'markdown' },
     ]);
   });
@@ -79,7 +79,7 @@ describe('messageVisibility', () => {
       ],
     };
 
-    expect(visibleMessageBlocks(message).map(({ index }) => index)).toEqual([1]);
+    expect(visibleMessageBlocks(message)).toEqual([1]);
     expect(hasVisibleMessageContent(message)).toBe(true);
     expect(hasNonEmptyVisibleMessageContent(message)).toBe(false);
   });
