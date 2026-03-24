@@ -1,4 +1,4 @@
-import { Match, Switch, createEffect, createMemo, createSignal, on } from 'solid-js';
+import { Match, Show, Switch, createEffect, createMemo, createSignal, on } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
 import { useRedevenRpc, type GitGetFullContextDiffRequest } from '../protocol/redeven_v1';
@@ -96,6 +96,7 @@ export function GitDiffDialog<T extends GitPatchRenderable>(props: GitDiffDialog
   const request = createMemo(() => buildFullContextDiffRequest(props.source, props.item));
   const requestKey = createMemo(() => fullContextRequestKey(request()));
   const canLoadFullContext = createMemo(() => requestKey() !== '');
+  const keepPatchVisibleWhileLoading = createMemo(() => mode() === 'patch' || (mode() === 'full-context' && fullContextLoading()));
 
   createEffect(on(() => [props.open, requestKey()] as const, () => {
     fullContextReqSeq += 1;
@@ -180,37 +181,44 @@ export function GitDiffDialog<T extends GitPatchRenderable>(props: GitDiffDialog
           </div>
         </div>
 
-        <Switch>
-          <Match when={mode() === 'patch'}>
-            <GitPatchViewer
-              class="min-h-0 flex-1"
-              item={props.item}
-              emptyMessage={props.emptyMessage}
-              unavailableMessage={props.unavailableMessage}
+        <div class="relative min-h-0 flex-1">
+          <Switch>
+            <Match when={keepPatchVisibleWhileLoading()}>
+              <GitPatchViewer
+                class="min-h-0 flex-1"
+                item={props.item}
+                emptyMessage={props.emptyMessage}
+                unavailableMessage={props.unavailableMessage}
+              />
+            </Match>
+
+            <Match when={Boolean(fullContextError())}>
+              <GitStatePane tone="error" message={fullContextError()} surface class="min-h-0 flex-1" />
+            </Match>
+
+            <Match when={fullContextItem()}>
+              <GitPatchViewer
+                class="min-h-0 flex-1"
+                item={fullContextItem()}
+                emptyMessage="Full-context diff is unavailable for this file."
+                unavailableMessage={props.unavailableMessage as string | ((item: GitPatchRenderable) => string | undefined) | undefined}
+              />
+            </Match>
+
+            <Match when={true}>
+              <GitStatePane message="Full-context diff is unavailable for this file." surface class="min-h-0 flex-1" />
+            </Match>
+          </Switch>
+
+          <Show when={mode() === 'full-context' && fullContextLoading()}>
+            <GitStatePane
+              loading
+              message="Loading full-context diff..."
+              class="absolute inset-0 z-10 h-full rounded-md bg-background/44 backdrop-blur-[1px]"
+              contentClass="rounded-md border border-border/45 bg-background/90 px-4 py-3 shadow-sm"
             />
-          </Match>
-
-          <Match when={fullContextLoading()}>
-            <GitStatePane loading message="Loading full-context diff..." surface class="min-h-0 flex-1" />
-          </Match>
-
-          <Match when={Boolean(fullContextError())}>
-            <GitStatePane tone="error" message={fullContextError()} surface class="min-h-0 flex-1" />
-          </Match>
-
-          <Match when={fullContextItem()}>
-            <GitPatchViewer
-              class="min-h-0 flex-1"
-              item={fullContextItem()}
-              emptyMessage="Full-context diff is unavailable for this file."
-              unavailableMessage={props.unavailableMessage as string | ((item: GitPatchRenderable) => string | undefined) | undefined}
-            />
-          </Match>
-
-          <Match when={true}>
-            <GitStatePane message="Full-context diff is unavailable for this file." surface class="min-h-0 flex-1" />
-          </Match>
-        </Switch>
+          </Show>
+        </div>
       </div>
     </Dialog>
   );
