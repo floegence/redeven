@@ -1885,8 +1885,17 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			rejectionMsg = "ask_user was rejected because required_from_user is empty. Specify exactly what information is needed from the user."
 			recoveryOverlay = "[CONTRACT] ask_user requires required_from_user."
 		case askUserGateReasonMissingChoices:
-			rejectionMsg = "ask_user was rejected because a select-style question had no fixed choices. Use response_mode=\"select\" for fixed choices, response_mode=\"write\" for direct input, or response_mode=\"select_or_write\" for fixed choices plus a standardized typed fallback."
+			rejectionMsg = "ask_user was rejected because a choice-based question had no fixed choices. Use response_mode=\"select\" only for exhaustive fixed choices, response_mode=\"write\" for direct input, or response_mode=\"select_or_write\" for non-exhaustive fixed choices plus a standardized typed fallback."
 			recoveryOverlay = "[CONTRACT] ask_user requires valid response_mode semantics and fixed choices for select-style questions."
+		case askUserGateReasonMissingChoicesExhaustive:
+			rejectionMsg = "ask_user was rejected because a choice-based question omitted choices_exhaustive. Declare whether the fixed options are exhaustive."
+			recoveryOverlay = "[CONTRACT] Choice-based ask_user questions must declare choices_exhaustive."
+		case askUserGateReasonInconsistentChoiceContract:
+			rejectionMsg = "ask_user was rejected because response_mode and choices_exhaustive disagree. Exhaustive fixed choices must use response_mode=\"select\" with choices_exhaustive=true; non-exhaustive fixed choices must use response_mode=\"select_or_write\" with choices_exhaustive=false."
+			recoveryOverlay = "[CONTRACT] Keep response_mode and choices_exhaustive consistent for choice-based ask_user questions."
+		case askUserGateReasonInteractionShapeMismatch:
+			rejectionMsg = "ask_user was rejected because it violated the user's requested interaction shape. Preserve explicit requirements such as fixed options, clickable choices, one-question-at-a-time, and indirect questioning."
+			recoveryOverlay = "[CONTRACT] Preserve the user's requested interaction shape. If the user asked for options or clickable choices, keep fixed choices and use select_or_write when the options are not exhaustive."
 		case "missing_evidence_refs":
 			rejectionMsg = "ask_user was rejected because evidence_refs is empty for an evidence-backed reason. Provide concrete evidence refs from tool calls."
 			recoveryOverlay = "[CONTRACT] ask_user requires evidence_refs for this reason_code."
@@ -1940,9 +1949,17 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			Confidence: 1,
 			Source:     askUserPolicySourceFallback,
 		}
+		policyGateEnforced := false
 		if source == "model_signal" {
 			policyDecision = classifyAskUserByModel(signal)
 			askPassed, askReason = evaluateAskUserGate(signal, state, taskComplexity)
+			if askPassed {
+				if enforcedReason, ok := enforcedAskUserPolicyReason(policyDecision); ok {
+					askPassed = false
+					askReason = enforcedReason
+					policyGateEnforced = true
+				}
+			}
 		} else {
 			askPassed, askReason = evaluateGuardAskUserGate(source, state, taskComplexity)
 		}
@@ -1962,7 +1979,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			"policy_source":         policyDecision.Source,
 			"policy_confidence":     policyDecision.Confidence,
 			"policy_advisory_mode":  source == "model_signal",
-			"policy_gate_enforced":  false,
+			"policy_gate_enforced":  policyGateEnforced,
 			"policy_advisory_block": source == "model_signal" && !policyDecision.Allow,
 			"complexity":            taskComplexity,
 			"todo_tracking":         state.TodoTrackingEnabled,
@@ -4296,6 +4313,7 @@ func evaluateTaskCompletionGate(resultText string, state runtimeState, complexit
 }
 
 func evaluateAskUserGate(signal askUserSignal, state runtimeState, complexity string) (bool, string) {
+	rawQuestions := append([]RequestUserInputQuestion(nil), signal.Questions...)
 	signal = normalizeAskUserSignal(signal)
 	if strings.TrimSpace(signal.Question) == "" {
 		return false, "empty_question"
@@ -4306,7 +4324,7 @@ func evaluateAskUserGate(signal askUserSignal, state runtimeState, complexity st
 	if len(signal.RequiredFromUser) == 0 {
 		return false, "missing_required_from_user"
 	}
-	if reason := validateRequestUserInputQuestionsContract(signal.Questions); reason != "" {
+	if reason := validateRequestUserInputQuestionsContract(rawQuestions); reason != "" {
 		return false, reason
 	}
 	if askUserReasonRequiresEvidence(signal.ReasonCode) {
@@ -4685,15 +4703,19 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 			"- required_from_user must list concrete user inputs or decisions needed to proceed.",
 			"- evidence_refs must reference relevant tool IDs when evidence is required.",
 			"- ask_user arguments are structured as `questions[]`; every question must include id, header, question, is_secret, and response_mode.",
+			"- Any question with fixed choices MUST also declare `choices_exhaustive`.",
 			"- For guided questionnaires, interviews, quizzes, guessing games, or decision trees, prefer ask_user over freeform markdown option lists.",
 			"- If you are going to call `ask_user`, do NOT first emit a separate markdown questionnaire, duplicated prose question, or A/B/C option list outside the structured ask_user payload.",
+			"- Preserve explicit interaction-shape constraints from the user, such as fixed options, clickable choices, one-question-at-a-time, indirect questioning, or similar format requirements.",
 			"- When the user requires an indirect, non-leading, or proxy-based interaction, preserve that constraint in both `question` and `choices[]`. Do NOT directly name, bucket, or reveal the target attribute the user asked you to infer indirectly; ask about proxy signals or correlated situations instead.",
-			"- Use `response_mode:\"select\"` for fixed-choice questions, `response_mode:\"write\"` for direct-input questions, and `response_mode:\"select_or_write\"` for fixed choices plus a standardized typed fallback.",
+			"- Use `response_mode:\"select\"` only when fixed choices are genuinely exhaustive by construction and you set `choices_exhaustive:true`.",
+			"- Use `response_mode:\"select_or_write\"` when fixed choices are not exhaustive and you set `choices_exhaustive:false`, so the UI preserves a standardized typed fallback.",
+			"- Use `response_mode:\"write\"` for direct-input questions with no fixed choices.",
+			"- If the user explicitly asks for answer choices, fixed options, buttons, or clickable options, do NOT downgrade the question into pure `response_mode:\"write\"`; keep fixed choices and add a typed fallback via `response_mode:\"select_or_write\"` when needed.",
 			"- `choices[]` contains fixed options only. Do not encode the typed fallback as a fake write choice inside `choices[]`.",
 			"- For `response_mode:\"select_or_write\"`, the UI will render a standardized typed fallback such as `None of the above: ___`; provide `write_label` and optional `write_placeholder` when that wording matters.",
-			"- When offering fixed options about the user's real situation, preference, habit, background, or other potentially non-exhaustive state, prefer `response_mode:\"select_or_write\"` unless the option set is genuinely exhaustive by construction.",
-			"- If the user explicitly asks for an `Other` or `None of the above` path, you MUST represent it via `response_mode:\"select_or_write\"` rather than omitting the typed fallback.",
-			"- For a direct-input question, use `response_mode:\"write\"` and omit fixed choices.",
+			"- When offering fixed options about the user's real situation, preference, habit, background, or other potentially non-exhaustive state, treat the set as non-exhaustive by default: use `response_mode:\"select_or_write\"` and `choices_exhaustive:false` unless the option set is genuinely exhaustive by construction.",
+			"- If the user explicitly asks for an `Other` or `None of the above` path, you MUST represent it via `response_mode:\"select_or_write\"` with `choices_exhaustive:false` rather than omitting the typed fallback.",
 			"- Keep choices concise and mutually exclusive. Put the best/default path first when that ordering matters.",
 			"- For deterministic UI actions, place actions on `questions[].choices[].actions` (for example {type:\"set_mode\",mode:\"act\"}).",
 		)

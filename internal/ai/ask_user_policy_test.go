@@ -54,6 +54,9 @@ func TestBuildAskUserPolicyClassifierMessages(t *testing.T) {
 	if got := msgs[0].Content[0].Text; got == "" || !strings.Contains(got, askUserPolicyClassifierMarker) {
 		t.Fatalf("missing classifier marker in system prompt")
 	}
+	if got := msgs[0].Content[0].Text; !strings.Contains(got, "violates_requested_interaction_shape") {
+		t.Fatalf("system prompt missing interaction-shape rejection guidance: %q", got)
+	}
 }
 
 func TestBuildAskUserPolicyClassifierMessages_AllowsStructuredInteractionTurns(t *testing.T) {
@@ -82,8 +85,31 @@ func TestBuildAskUserPolicyClassifierMessages_AllowsStructuredInteractionTurns(t
 	if !strings.Contains(system, "questionnaires, interviews, quizzes, guessing games, decision trees, and option-driven conversations") {
 		t.Fatalf("system prompt missing structured interaction examples: %q", system)
 	}
+	if !strings.Contains(system, "interaction-shape constraints") {
+		t.Fatalf("system prompt missing interaction-shape guidance: %q", system)
+	}
 	if !strings.Contains(system, "delegates collectable work") {
 		t.Fatalf("system prompt missing collectable-work rejection: %q", system)
+	}
+}
+
+func TestEnforcedAskUserPolicyReason(t *testing.T) {
+	t.Parallel()
+
+	if reason, ok := enforcedAskUserPolicyReason(askUserPolicyDecision{
+		Allow:  false,
+		Reason: askUserPolicyReasonInteractionShapeViolation,
+		Source: askUserPolicySourceModel,
+	}); !ok || reason != askUserGateReasonInteractionShapeMismatch {
+		t.Fatalf("enforced reason => ok=%v reason=%q", ok, reason)
+	}
+
+	if reason, ok := enforcedAskUserPolicyReason(askUserPolicyDecision{
+		Allow:  false,
+		Reason: askUserPolicyReasonInteractionShapeViolation,
+		Source: askUserPolicySourceFallback,
+	}); ok || reason != "" {
+		t.Fatalf("fallback classifier should not enforce => ok=%v reason=%q", ok, reason)
 	}
 }
 

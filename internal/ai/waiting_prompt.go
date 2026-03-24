@@ -20,7 +20,10 @@ const (
 )
 
 const (
-	askUserGateReasonMissingChoices = "missing_choices"
+	askUserGateReasonMissingChoices             = "missing_choices"
+	askUserGateReasonMissingChoicesExhaustive   = "missing_choices_exhaustive"
+	askUserGateReasonInconsistentChoiceContract = "inconsistent_choice_contract"
+	askUserGateReasonInteractionShapeMismatch   = "interaction_shape_mismatch"
 )
 
 func buildRequestUserInputPromptID(messageID string, toolID string) string {
@@ -61,6 +64,14 @@ func normalizeLegacyRequestUserInputDetailInputMode(mode string) string {
 	default:
 		return ""
 	}
+}
+
+func cloneBoolPtr(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	return &out
 }
 
 func defaultRequestUserInputWriteChoiceLabel(header string, question string) string {
@@ -159,15 +170,15 @@ func requestUserInputSelectChoices(choices []RequestUserInputChoice) []RequestUs
 	return out
 }
 
-func deriveRequestUserInputResponseMode(explicitMode string, legacyChoicesExhaustive *bool, fixedChoices []RequestUserInputChoice, hasWriteChoice bool) string {
+func deriveRequestUserInputResponseMode(explicitMode string, choicesExhaustive *bool, fixedChoices []RequestUserInputChoice, hasWriteChoice bool) string {
+	if len(fixedChoices) > 0 && choicesExhaustive != nil {
+		if *choicesExhaustive {
+			return requestUserInputResponseModeSelect
+		}
+		return requestUserInputResponseModeSelectText
+	}
 	if mode := normalizeRequestUserInputResponseMode(explicitMode); mode != "" {
 		return mode
-	}
-	if legacyChoicesExhaustive != nil && !*legacyChoicesExhaustive {
-		if len(fixedChoices) > 0 {
-			return requestUserInputResponseModeSelectText
-		}
-		return requestUserInputResponseModeWrite
 	}
 	if hasWriteChoice {
 		if len(fixedChoices) > 0 {
@@ -179,6 +190,28 @@ func deriveRequestUserInputResponseMode(explicitMode string, legacyChoicesExhaus
 		return requestUserInputResponseModeWrite
 	}
 	return requestUserInputResponseModeSelect
+}
+
+func deriveRequestUserInputChoicesExhaustive(explicit *bool, responseMode string, fixedChoices []RequestUserInputChoice, hasWriteChoice bool) *bool {
+	if len(fixedChoices) == 0 {
+		return nil
+	}
+	if explicit != nil {
+		return cloneBoolPtr(explicit)
+	}
+	switch normalizeRequestUserInputResponseMode(responseMode) {
+	case requestUserInputResponseModeSelect:
+		value := true
+		return &value
+	case requestUserInputResponseModeSelectText:
+		value := false
+		return &value
+	}
+	if hasWriteChoice {
+		value := false
+		return &value
+	}
+	return nil
 }
 
 func buildCanonicalRequestUserInputQuestion(question RequestUserInputQuestion, legacyChoicesExhaustive *bool) (RequestUserInputQuestion, bool) {
@@ -198,14 +231,20 @@ func buildCanonicalRequestUserInputQuestion(question RequestUserInputQuestion, l
 	normalizedChoices := normalizeRequestUserInputChoices(question.Choices)
 	fixedChoices := requestUserInputSelectChoices(normalizedChoices)
 	writeChoice, hasWriteChoice := requestUserInputFirstWriteChoice(normalizedChoices)
-	responseMode := deriveRequestUserInputResponseMode(question.ResponseMode, legacyChoicesExhaustive, fixedChoices, hasWriteChoice)
+	choicesExhaustive := cloneBoolPtr(question.ChoicesExhaustive)
+	if choicesExhaustive == nil {
+		choicesExhaustive = cloneBoolPtr(legacyChoicesExhaustive)
+	}
+	responseMode := deriveRequestUserInputResponseMode(question.ResponseMode, choicesExhaustive, fixedChoices, hasWriteChoice)
+	choicesExhaustive = deriveRequestUserInputChoicesExhaustive(choicesExhaustive, responseMode, fixedChoices, hasWriteChoice)
 
 	out := RequestUserInputQuestion{
-		ID:           id,
-		Header:       header,
-		Question:     text,
-		IsSecret:     question.IsSecret,
-		ResponseMode: responseMode,
+		ID:                id,
+		Header:            header,
+		Question:          text,
+		IsSecret:          question.IsSecret,
+		ResponseMode:      responseMode,
+		ChoicesExhaustive: choicesExhaustive,
 	}
 
 	if requestUserInputResponseModeRequiresChoices(responseMode) {
@@ -258,14 +297,15 @@ func requestUserInputQuestionFromRecord(record map[string]any) (RequestUserInput
 		choicesExhaustive = &value
 	}
 	return buildCanonicalRequestUserInputQuestion(RequestUserInputQuestion{
-		ID:               id,
-		Header:           header,
-		Question:         question,
-		IsSecret:         anyToBool(record["is_secret"]),
-		ResponseMode:     anyToString(record["response_mode"]),
-		WriteLabel:       anyToString(record["write_label"]),
-		WritePlaceholder: anyToString(record["write_placeholder"]),
-		Choices:          choices,
+		ID:                id,
+		Header:            header,
+		Question:          question,
+		IsSecret:          anyToBool(record["is_secret"]),
+		ResponseMode:      anyToString(record["response_mode"]),
+		ChoicesExhaustive: choicesExhaustive,
+		WriteLabel:        anyToString(record["write_label"]),
+		WritePlaceholder:  anyToString(record["write_placeholder"]),
+		Choices:           choices,
 	}, choicesExhaustive)
 }
 
@@ -356,9 +396,29 @@ func validateRequestUserInputQuestionsContract(questions []RequestUserInputQuest
 	if len(questions) == 0 {
 		return askUserGateReasonMissingChoices
 	}
-	for _, question := range normalizeRequestUserInputQuestions(questions) {
-		if requestUserInputResponseModeRequiresChoices(question.ResponseMode) && len(question.Choices) == 0 {
+	for _, question := range questions {
+		responseMode := normalizeRequestUserInputResponseMode(question.ResponseMode)
+		fixedChoices := requestUserInputSelectChoices(normalizeRequestUserInputChoices(question.Choices))
+		if requestUserInputResponseModeRequiresChoices(responseMode) && len(fixedChoices) == 0 {
 			return askUserGateReasonMissingChoices
+		}
+		if len(fixedChoices) == 0 {
+			continue
+		}
+		if question.ChoicesExhaustive == nil {
+			return askUserGateReasonMissingChoicesExhaustive
+		}
+		switch responseMode {
+		case requestUserInputResponseModeSelect:
+			if !*question.ChoicesExhaustive {
+				return askUserGateReasonInconsistentChoiceContract
+			}
+		case requestUserInputResponseModeSelectText:
+			if *question.ChoicesExhaustive {
+				return askUserGateReasonInconsistentChoiceContract
+			}
+		default:
+			return askUserGateReasonInconsistentChoiceContract
 		}
 	}
 	return ""
@@ -483,14 +543,15 @@ func normalizeRequestUserInputQuestions(questions []RequestUserInputQuestion) []
 		}
 		seenID[idKey] = struct{}{}
 		canonical, ok := buildCanonicalRequestUserInputQuestion(RequestUserInputQuestion{
-			ID:               id,
-			Header:           question.Header,
-			Question:         question.Question,
-			IsSecret:         question.IsSecret,
-			ResponseMode:     question.ResponseMode,
-			WriteLabel:       question.WriteLabel,
-			WritePlaceholder: question.WritePlaceholder,
-			Choices:          question.Choices,
+			ID:                id,
+			Header:            question.Header,
+			Question:          question.Question,
+			IsSecret:          question.IsSecret,
+			ResponseMode:      question.ResponseMode,
+			ChoicesExhaustive: question.ChoicesExhaustive,
+			WriteLabel:        question.WriteLabel,
+			WritePlaceholder:  question.WritePlaceholder,
+			Choices:           question.Choices,
 		}, nil)
 		if !ok {
 			continue

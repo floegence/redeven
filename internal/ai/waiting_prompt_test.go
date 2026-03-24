@@ -14,12 +14,13 @@ func TestValidateRequestUserInputResponse_RequiresWriteChoiceText(t *testing.T) 
 		AskUserReasonUserDecisionRequired,
 		[]RequestUserInputQuestion{
 			{
-				ID:               "situation",
-				Header:           "Situation",
-				Question:         "Choose the closest situation.",
-				ResponseMode:     requestUserInputResponseModeSelectText,
-				WriteLabel:       "None of the above",
-				WritePlaceholder: "Describe your current situation",
+				ID:                "situation",
+				Header:            "Situation",
+				Question:          "Choose the closest situation.",
+				ResponseMode:      requestUserInputResponseModeSelectText,
+				ChoicesExhaustive: testBoolPtr(false),
+				WriteLabel:        "None of the above",
+				WritePlaceholder:  "Describe your current situation",
 				Choices: []RequestUserInputChoice{
 					{ChoiceID: "working", Label: "Already working", Kind: requestUserInputChoiceKindSelect},
 				},
@@ -155,6 +156,9 @@ func TestParseRequestUserInputPromptJSON_DefaultsResponseModeFromChoiceKinds(t *
 	if pureSelect.Questions[0].ResponseMode != requestUserInputResponseModeSelect {
 		t.Fatalf("pure select prompt should default to response_mode=select: %+v", pureSelect.Questions[0])
 	}
+	if pureSelect.Questions[0].ChoicesExhaustive == nil || !*pureSelect.Questions[0].ChoicesExhaustive {
+		t.Fatalf("pure select prompt should infer choices_exhaustive=true: %+v", pureSelect.Questions[0])
+	}
 
 	withWrite := parseRequestUserInputPromptJSON(`{
 		"prompt_id":"rui_msg_write_tool_write",
@@ -177,8 +181,46 @@ func TestParseRequestUserInputPromptJSON_DefaultsResponseModeFromChoiceKinds(t *
 	if withWrite.Questions[0].ResponseMode != requestUserInputResponseModeSelectText {
 		t.Fatalf("write-choice prompt should default to response_mode=select_or_write: %+v", withWrite.Questions[0])
 	}
+	if withWrite.Questions[0].ChoicesExhaustive == nil || *withWrite.Questions[0].ChoicesExhaustive {
+		t.Fatalf("write-choice prompt should infer choices_exhaustive=false: %+v", withWrite.Questions[0])
+	}
 	if len(withWrite.Questions[0].Choices) != 1 {
 		t.Fatalf("canonical mixed prompt should keep only fixed choices: %+v", withWrite.Questions[0].Choices)
+	}
+}
+
+func TestParseRequestUserInputPromptJSON_ChoicesExhaustiveIsAuthoritative(t *testing.T) {
+	t.Parallel()
+
+	prompt := parseRequestUserInputPromptJSON(`{
+		"prompt_id":"rui_msg_non_exhaustive_tool_non_exhaustive",
+		"message_id":"msg_non_exhaustive",
+		"tool_id":"tool_non_exhaustive",
+		"questions":[{
+			"id":"direction",
+			"header":"Direction",
+			"question":"Choose the closest direction.",
+			"is_secret":false,
+			"response_mode":"select",
+			"choices_exhaustive":false,
+			"choices":[
+				{"choice_id":"a","label":"Option A","kind":"select"},
+				{"choice_id":"b","label":"Option B","kind":"select"}
+			]
+		}]
+	}`)
+	if prompt == nil || len(prompt.Questions) != 1 {
+		t.Fatalf("prompt=%+v", prompt)
+	}
+	question := prompt.Questions[0]
+	if got := question.ResponseMode; got != requestUserInputResponseModeSelectText {
+		t.Fatalf("response_mode=%q, want %q", got, requestUserInputResponseModeSelectText)
+	}
+	if question.ChoicesExhaustive == nil || *question.ChoicesExhaustive {
+		t.Fatalf("choices_exhaustive=%v, want false", question.ChoicesExhaustive)
+	}
+	if question.WriteLabel == "" {
+		t.Fatalf("expected write_label for non-exhaustive fixed choices: %+v", question)
 	}
 }
 

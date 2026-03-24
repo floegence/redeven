@@ -851,7 +851,7 @@ func (m *openAITextThenAskUserMock) handle(w http.ResponseWriter, r *http.Reques
 						"call_id": "call_text_then_ask_2",
 						"name":    "ask_user",
 						"arguments": fmt.Sprintf(
-							`{"questions":[{"id":"question_1","header":"Need input","question":%q,"is_secret":false,"response_mode":"select","choices":[{"choice_id":"choice_1","label":"Option 1","kind":"select"},{"choice_id":"choice_2","label":"Option 2","kind":"select"}]}],"reason_code":"user_decision_required","required_from_user":["Choose one option."],"evidence_refs":["model asked for the next user choice"]}`,
+							`{"questions":[{"id":"question_1","header":"Need input","question":%q,"is_secret":false,"response_mode":"select","choices_exhaustive":true,"choices":[{"choice_id":"choice_1","label":"Option 1","kind":"select"},{"choice_id":"choice_2","label":"Option 2","kind":"select"}]}],"reason_code":"user_decision_required","required_from_user":["Choose one option."],"evidence_refs":["model asked for the next user choice"]}`,
 							questionText,
 						),
 					},
