@@ -30,6 +30,7 @@ import {
 import { setAskFlowerAttachmentSourcePath } from '../utils/askFlowerAttachmentMetadata';
 import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from '../utils/fileBrowserClipboard';
 import { buildFilePathAskFlowerIntent } from '../utils/filePathAskFlower';
+import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from '../utils/openDirectoryInTerminal';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
@@ -2254,20 +2255,21 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     Boolean(ctx.env()?.permissions?.can_execute)
     && items.length === 1
     && items[0]?.type === 'folder'
-    && Boolean(normalizeAbsolutePath(items[0]?.path ?? ''))
+    && canOpenDirectoryPathInTerminal(items[0]?.path ?? '')
   );
 
   const handleOpenInTerminal = (items: FileItem[]) => {
     const item = items[0];
     if (!item || item.type !== 'folder') return;
 
-    const workingDir = normalizeAbsolutePath(item.path);
-    if (!workingDir) {
-      notification.error('Invalid directory', 'Could not resolve a terminal working directory.');
-      return;
-    }
-
-    ctx.openTerminalInDirectory(workingDir, { preferredName: item.name });
+    openDirectoryInTerminal({
+      path: item.path,
+      preferredName: item.name,
+      openTerminalInDirectory: ctx.openTerminalInDirectory,
+      onInvalidDirectory: () => {
+        notification.error('Invalid directory', 'Could not resolve a terminal working directory.');
+      },
+    });
   };
 
   const ctxMenu: ContextMenuCallbacks = {
