@@ -3,14 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type { Message } from '../chat/types';
 import {
   carryForwardTransientMessageState,
-  projectThreadRenderMessages,
-  pruneConvergedOverlayMessages,
+  projectThreadTranscriptMessages,
   syncSubagentBlocksWithLatest,
 } from './aiThreadRenderProjection';
 import type { SubagentView } from './aiDataNormalizers';
 
 describe('aiThreadRenderProjection', () => {
-  it('keeps optimistic local user messages ahead of overlay assistant messages', () => {
+  it('keeps optimistic local user messages ahead of settled transcript messages', () => {
     const optimisticUser: Message = {
       id: 'u_local_1',
       role: 'user',
@@ -18,22 +17,21 @@ describe('aiThreadRenderProjection', () => {
       status: 'complete',
       timestamp: 10,
     };
-    const overlayAssistant: Message = {
+    const transcriptAssistant: Message = {
       id: 'm_ai_1',
       role: 'assistant',
-      blocks: [{ type: 'text', content: 'streamed answer' }],
-      status: 'streaming',
+      blocks: [{ type: 'text', content: 'persisted answer' }],
+      status: 'complete',
       timestamp: 20,
     };
 
-    const projected = projectThreadRenderMessages({
-      transcriptMessages: [],
-      overlayMessages: [overlayAssistant],
+    const projected = projectThreadTranscriptMessages({
+      transcriptMessages: [transcriptAssistant],
       previousRenderedMessages: [optimisticUser],
       subagentById: {},
     });
 
-    expect(projected.map((message) => message.id)).toEqual(['u_local_1', 'm_ai_1']);
+    expect(projected.map((message: Message) => message.id)).toEqual(['m_ai_1', 'u_local_1']);
   });
 
   it('carries forward transient tool collapse state during transcript refresh', () => {
@@ -138,78 +136,23 @@ describe('aiThreadRenderProjection', () => {
     expect((synced[0].blocks[0] as any).status).toBe('running');
   });
 
-  it('drops converged overlay messages after transcript catches up', () => {
-    const transcript: Message[] = [
-      { id: 'm_ai_1', role: 'assistant', blocks: [{ type: 'text', content: 'persisted' }], status: 'complete', timestamp: 20 },
-    ];
-    const overlay: Message[] = [
-      { id: 'm_ai_1', role: 'assistant', blocks: [{ type: 'text', content: 'overlay' }], status: 'complete', timestamp: 21 },
-      { id: 'm_ai_2', role: 'assistant', blocks: [{ type: 'text', content: 'still live' }], status: 'streaming', timestamp: 22 },
-    ];
-
-    const pruned = pruneConvergedOverlayMessages(transcript, overlay);
-    expect(pruned.map((message) => message.id)).toEqual(['m_ai_2']);
-  });
-
-  it('keeps prior non-empty assistant content when a streaming overlay temporarily loses it', () => {
+  it('does not carry forward prior assistant-only messages that are absent from the settled transcript', () => {
     const previousRendered: Message[] = [
       {
-        id: 'm_ai_1',
+        id: 'm_ai_old',
         role: 'assistant',
-        blocks: [{ type: 'markdown', content: 'Visible partial answer' }],
-        status: 'streaming',
-        timestamp: 10,
-      },
-    ];
-    const overlay: Message[] = [
-      {
-        id: 'm_ai_1',
-        role: 'assistant',
-        blocks: [{ type: 'thinking', content: 'Hidden reasoning' }],
-        status: 'streaming',
-        timestamp: 11,
-      },
-    ];
-
-    const projected = projectThreadRenderMessages({
-      transcriptMessages: [],
-      overlayMessages: overlay,
-      previousRenderedMessages: previousRendered,
-      subagentById: {},
-    });
-
-    expect(projected).toHaveLength(1);
-    expect(projected[0].status).toBe('streaming');
-    expect(projected[0].blocks).toEqual(previousRendered[0].blocks);
-  });
-
-  it('releases carried assistant content once the message leaves streaming state', () => {
-    const previousRendered: Message[] = [
-      {
-        id: 'm_ai_1',
-        role: 'assistant',
-        blocks: [{ type: 'markdown', content: 'Visible partial answer' }],
-        status: 'streaming',
-        timestamp: 10,
-      },
-    ];
-    const transcript: Message[] = [
-      {
-        id: 'm_ai_1',
-        role: 'assistant',
-        blocks: [{ type: 'markdown', content: 'Final persisted answer' }],
+        blocks: [{ type: 'markdown', content: 'stale live content' }],
         status: 'complete',
-        timestamp: 12,
+        timestamp: 10,
       },
     ];
 
-    const projected = projectThreadRenderMessages({
-      transcriptMessages: transcript,
-      overlayMessages: [],
+    const projected = projectThreadTranscriptMessages({
+      transcriptMessages: [],
       previousRenderedMessages: previousRendered,
       subagentById: {},
     });
 
-    expect(projected).toEqual(transcript);
+    expect(projected).toEqual([]);
   });
 });

@@ -1,7 +1,7 @@
 // Virtualized message list with a single, explicit follow-state machine.
 
 import { createEffect, createMemo, createSignal, onCleanup, Show, For } from 'solid-js';
-import type { Component } from 'solid-js';
+import type { Component, JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { useChatContext } from '../ChatProvider';
 import { useVirtualList } from '../hooks/useVirtualList';
@@ -12,6 +12,8 @@ import { captureViewportAnchor, resolveViewportAnchorScrollTop, type ViewportAnc
 
 export interface VirtualMessageListProps {
   class?: string;
+  footer?: JSX.Element;
+  hasFooter?: boolean;
 }
 
 /** Chevron-down icon for the scroll-to-bottom button. */
@@ -82,6 +84,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   let lastHandledScrollRequestSeq = 0;
   let followToBottomRaf: number | null = null;
   let viewportAnchor: ViewportAnchor | null = null;
+  let footerEl: HTMLElement | null = null;
 
   const getDistanceToBottom = (el: HTMLElement) =>
     Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight);
@@ -157,8 +160,9 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   // Auto-follow only when in FOLLOWING mode; otherwise collect unread count.
   createEffect(() => {
     const currentCount = messages().length;
+    const hasFooter = props.hasFooter === true;
 
-    if (currentCount <= 0) {
+    if (currentCount <= 0 && !hasFooter) {
       prevMessageCount = 0;
       didInitialBottomSync = false;
       setPendingMessageCount(0);
@@ -187,7 +191,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   createEffect(() => {
     scrollContainerVersion();
     const currentCount = messages().length;
-    if (currentCount <= 0 || !scrollContainerEl) {
+    if ((currentCount <= 0 && props.hasFooter !== true) || !scrollContainerEl) {
       didInitialBottomSync = false;
       return;
     }
@@ -313,9 +317,18 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     }
   });
 
+  const footerResizeObserver = new ResizeObserver(() => {
+    updateDistanceToBottom();
+    if (followMode() === 'following') {
+      scheduleFollowToBottom('auto');
+    }
+  });
+
   onCleanup(() => {
     scrollContainerEl = null;
     resizeObserver.disconnect();
+    footerResizeObserver.disconnect();
+    footerEl = null;
     if (followToBottomRaf !== null) {
       cancelAnimationFrame(followToBottomRaf);
       followToBottomRaf = null;
@@ -327,6 +340,24 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     resizeObserverMap.set(el, messageId);
     resizeObserver.observe(el);
   }
+
+  function observeFooter(el: HTMLElement | null): void {
+    if (footerEl === el) return;
+    if (footerEl) {
+      footerResizeObserver.unobserve(footerEl);
+    }
+    footerEl = el;
+    if (footerEl) {
+      footerResizeObserver.observe(footerEl);
+    }
+  }
+
+  createEffect(() => {
+    if (props.hasFooter === true) return;
+    if (!footerEl) return;
+    footerResizeObserver.unobserve(footerEl);
+    footerEl = null;
+  });
 
   const visibleMessageIds = createMemo<string[]>(() => {
     const currentMessages = messages();
@@ -382,6 +413,15 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
             class="chat-vlist-spacer"
             style={{ height: `${virtualList.paddingBottom()}px` }}
           />
+
+          <Show when={props.hasFooter === true && props.footer}>
+            <div
+              class="chat-message-list-footer"
+              ref={(el: HTMLElement) => observeFooter(el)}
+            >
+              {props.footer}
+            </div>
+          </Show>
         </div>
 
         <Show when={showListWorkingIndicator() && isWorking()}>
