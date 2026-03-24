@@ -363,6 +363,8 @@ vi.mock('../protocol/redeven_v1', () => ({
 vi.mock('@floegence/floeterm-terminal-web', () => {
   class MockTerminalCore {
     container: HTMLDivElement;
+    config: any;
+    handlers: any;
     terminal = {
       options: {},
       selectionManager: {
@@ -379,8 +381,10 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
       input: terminalInputSpy,
     };
 
-    constructor(container: HTMLDivElement, config?: any) {
+    constructor(container: HTMLDivElement, config?: any, handlers?: any) {
       this.container = container;
+      this.config = config ?? {};
+      this.handlers = handlers ?? {};
       terminalConfigState.values.push(config ?? null);
       const input = document.createElement('textarea');
       input.setAttribute('aria-label', 'Terminal input');
@@ -395,7 +399,13 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     startHistoryReplay = vi.fn();
     endHistoryReplay = vi.fn();
     write = vi.fn();
-    focus = focusSpy;
+    focus = vi.fn(() => {
+      focusSpy();
+      const responsive = this.config?.responsive ?? {};
+      if ((responsive.fitOnFocus || responsive.emitResizeOnFocus) && typeof this.handlers?.onResize === 'function') {
+        this.handlers.onResize({ cols: 80, rows: 24 });
+      }
+    });
     setFontSize = vi.fn();
     setSearchResultsCallback = vi.fn();
     clearSearch = vi.fn();
@@ -694,7 +704,7 @@ describe('TerminalPanel', () => {
     expect(host.textContent).toContain('Terminal settings');
   });
 
-  it('configures TerminalCore with copy-on-select disabled and no focus-triggered fit behavior', async () => {
+  it('configures TerminalCore with focus-triggered remote resize handoff enabled', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -706,6 +716,8 @@ describe('TerminalPanel', () => {
       copyOnSelect: false,
     });
     expect(terminalConfigState.values[0]?.responsive).toEqual({
+      fitOnFocus: true,
+      emitResizeOnFocus: true,
       notifyResizeOnlyWhenFocused: true,
     });
   });
@@ -812,6 +824,27 @@ describe('TerminalPanel', () => {
     await Promise.resolve();
 
     expect(focusSpy).toHaveBeenCalled();
+  });
+
+  it('re-sends terminal resize when focus is restored after closing settings', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'system';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+    focusSpy.mockClear();
+    transportMocks.resize.mockClear();
+
+    (host.querySelector('[data-testid="dropdown-item-settings"]') as HTMLButtonElement | null)?.click();
+    await Promise.resolve();
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Close'))?.click();
+    await Promise.resolve();
+
+    expect(focusSpy).toHaveBeenCalled();
+    expect(transportMocks.resize).toHaveBeenCalledWith('session-1', 80, 24);
   });
 
   it('defaults to the Floe keyboard on mobile and sends payloads to the active session', async () => {
