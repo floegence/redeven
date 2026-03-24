@@ -597,25 +597,23 @@ describe('GitBranchesPanel interactions', () => {
     ), host);
 
     try {
-      const branchHeader = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('lg:flex-row lg:flex-wrap lg:items-start lg:justify-between')) as HTMLDivElement | undefined;
-      const actionsColumn = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('lg:flex-[0_1_20rem] lg:max-w-[min(50%,22rem)] lg:items-stretch')) as HTMLDivElement | undefined;
-      const actionsDeck = Array.from(host.querySelectorAll('div')).find((node) => node.textContent?.includes('Actions') && node.className.includes('rounded-lg border border-border/60 bg-muted/[0.14] p-1.5')) as HTMLDivElement | undefined;
-      const viewDeck = Array.from(host.querySelectorAll('div')).find((node) => node.textContent?.includes('View') && node.className.includes('rounded-lg border border-border/60 bg-muted/[0.14] p-1.5')) as HTMLDivElement | undefined;
+      const branchHeader = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('xl:flex-row xl:items-start xl:justify-between')) as HTMLDivElement | undefined;
+      const controlBar = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('rounded-xl border border-border/60 bg-muted/[0.12] p-2 shadow-sm shadow-black/5')) as HTMLDivElement | undefined;
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       const tablist = host.querySelector('[aria-label="Branch detail tabs"]') as HTMLDivElement | null;
 
       expect(branchHeader).toBeTruthy();
-      expect(actionsColumn?.className).toContain('w-full');
-      expect(actionsColumn?.className).toContain('lg:max-w-[min(50%,22rem)]');
-      expect(actionsDeck).toBeTruthy();
-      expect(viewDeck).toBeTruthy();
-      expect(checkoutButton?.className).toContain('w-full');
-      expect(deleteButton?.className).toContain('w-full');
+      expect(controlBar).toBeTruthy();
+      expect(controlBar?.textContent).toContain('Actions');
+      expect(checkoutButton?.className).toContain('rounded-full');
+      expect(deleteButton?.className).toContain('rounded-full');
+      expect(deleteButton?.className).toContain('bg-destructive/[0.08]');
       expect(tablist?.className).toContain('grid');
       expect(tablist?.className).toContain('w-full');
       expect(tablist?.className).toContain('grid-cols-2');
-      expect(tablist?.className).toContain('bg-background/72');
+      expect(tablist?.className).toContain('rounded-full');
+      expect(tablist?.className).toContain('sm:w-[15rem]');
     } finally {
       dispose();
     }
