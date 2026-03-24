@@ -122,8 +122,6 @@ func TestE2E_DBConfiguredModel_GuidedStructuredInteractionProducesWaitingPrompt(
 		Model:    modelID,
 		Input: RunInput{Text: strings.Join([]string{
 			"请你和我一问一答猜我的岁数，不要有直接的问题。",
-			"每一轮都必须使用结构化 ask_user 给出几个可点击选项，不能输出 markdown A/B/C/D 列表。",
-			"并且必须始终提供一个“以上都不是：___”的可填写选项。",
 			"现在先只给出第一个问题。",
 		}, "")},
 		Options: RunOptions{MaxSteps: 4, MaxNoToolRounds: 2, Mode: "plan"},
@@ -158,6 +156,9 @@ func TestE2E_DBConfiguredModel_GuidedStructuredInteractionProducesWaitingPrompt(
 	}
 	if got := strings.TrimSpace(question.ResponseMode); got != requestUserInputResponseModeSelectText {
 		t.Fatalf("response_mode=%q, want %q", got, requestUserInputResponseModeSelectText)
+	}
+	if question.ChoicesExhaustive == nil || *question.ChoicesExhaustive {
+		t.Fatalf("choices_exhaustive=%v, want false", question.ChoicesExhaustive)
 	}
 	hasSelect := false
 	for _, choice := range question.Choices {

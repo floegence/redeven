@@ -22,6 +22,12 @@ func TestBuiltInToolDefinitions_AskUserDescriptionMentionsStructuredInput(t *tes
 		if !strings.Contains(def.Description, "Each question must declare response_mode") {
 			t.Fatalf("ask_user description missing response_mode guidance: %q", def.Description)
 		}
+		if !strings.Contains(def.Description, "choices_exhaustive") {
+			t.Fatalf("ask_user description missing choices_exhaustive guidance: %q", def.Description)
+		}
+		if !strings.Contains(def.Description, "Preserve explicit interaction-shape constraints from the user") {
+			t.Fatalf("ask_user description missing interaction-shape guidance: %q", def.Description)
+		}
 		if !strings.Contains(def.Description, "choices[] should contain fixed options only") {
 			t.Fatalf("ask_user description missing fixed-choice-only guidance: %q", def.Description)
 		}

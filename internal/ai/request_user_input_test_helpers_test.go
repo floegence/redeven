@@ -8,6 +8,10 @@ import (
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
+func testBoolPtr(value bool) *bool {
+	return &value
+}
+
 func testRequestUserInputPrompt(messageID string, toolID string, reasonCode string, questions []RequestUserInputQuestion) *RequestUserInputPrompt {
 	return normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
 		MessageID:        strings.TrimSpace(messageID),
