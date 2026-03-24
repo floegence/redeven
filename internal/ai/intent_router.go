@@ -63,6 +63,9 @@ type modelRunPolicyClassifier func() (runPolicyDecision, error)
 
 func classifyRunPolicy(userInput string, attachments []RunAttachmentIn, openGoal string, structuredResponse bool, classifyByModel modelRunPolicyClassifier) runPolicyDecision {
 	structuredResponse = structuredResponse && strings.TrimSpace(openGoal) != ""
+	if structuredResponse {
+		return structuredResponseContinuationRunPolicyDecision()
+	}
 	if len(attachments) > 0 {
 		return enforceStructuredResponseContinuation(runPolicyDecision{
 			Intent:           RunIntentTask,
@@ -99,6 +102,22 @@ func classifyRunPolicy(userInput string, attachments []RunAttachmentIn, openGoal
 			Source: interactionContractSourceDeterministic,
 		},
 	}, structuredResponse)
+}
+
+func structuredResponseContinuationRunPolicyDecision() runPolicyDecision {
+	return runPolicyDecision{
+		Intent:           RunIntentTask,
+		Reason:           "structured_response_continuation",
+		Source:           RunIntentSourceDeterministic,
+		ObjectiveMode:    RunObjectiveModeContinue,
+		Complexity:       TaskComplexityStandard,
+		TodoPolicy:       TodoPolicyRecommended,
+		MinimumTodoItems: 0,
+		Confidence:       1,
+		InteractionContract: interactionContract{
+			Source: interactionContractSourceDeterministic,
+		},
+	}
 }
 
 func normalizeModelRunPolicyDecision(decision runPolicyDecision) runPolicyDecision {

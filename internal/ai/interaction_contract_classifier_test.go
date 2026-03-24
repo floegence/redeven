@@ -84,6 +84,44 @@ func TestClassifyInteractionContract_UsesSeedFallback(t *testing.T) {
 	}
 }
 
+func TestClassifyInteractionContractWithMetadata_ReusesSeedForStructuredContinuation(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	got, meta := classifyInteractionContractWithMetadata(
+		RunIntentTask,
+		"请你和我一问一答猜我的岁数，不要有直接的问题，每个问题应该提供几个选项。",
+		"A",
+		interactionContract{
+			Enabled:                  true,
+			Source:                   interactionContractSourceModel,
+			SingleQuestionPerTurn:    true,
+			FixedChoicesRequired:     true,
+			OpenTextFallbackRequired: true,
+		},
+		true,
+		func() (interactionContract, error) {
+			called = true
+			return interactionContract{}, nil
+		},
+	)
+	if called {
+		t.Fatalf("model classifier should be skipped when structured continuation can reuse the seed")
+	}
+	if !got.Enabled {
+		t.Fatalf("expected the persisted seed contract to stay enabled")
+	}
+	if got.Source != interactionContractSourceModel {
+		t.Fatalf("source=%q, want %q", got.Source, interactionContractSourceModel)
+	}
+	if meta.Mode != interactionContractClassificationModeSeedReuse {
+		t.Fatalf("classification_mode=%q, want %q", meta.Mode, interactionContractClassificationModeSeedReuse)
+	}
+	if !meta.SeedReused {
+		t.Fatalf("seed_reused=false, want true")
+	}
+}
+
 func TestStructuredClassifierResultPayload_FallsBackToReasoning(t *testing.T) {
 	t.Parallel()
 
