@@ -22,6 +22,21 @@ Notes:
 - Avoid global `border-style` injections on `*` selectors. They can turn intentional `border: none` declarations back into visible medium-width borders on native controls.
 - When a visual adjustment only belongs to one surface or component family, scope it to that component class instead of patching every element globally.
 
+## Flower Chat Render Contract
+
+The Flower chat UI now follows three explicit constraints:
+
+1. `EnvAIPage` owns the message source states.
+   - Transcript rows, active-run snapshot recovery, live assistant stream overlays, and optimistic local user messages must converge through a single render projection before the chat store is updated.
+   - Feature code must not add new direct `chat.setMessages()` write paths for individual recovery flows.
+
+2. `VirtualMessageList` owns scroll anchoring.
+   - `following` mode is bottom-pinned.
+   - `paused` mode is anchored to the first visible message plus its in-item offset, so late message reflow does not pull the viewport upward.
+
+3. Transcript overlays consume a shared bottom inset contract.
+   - The transcript scroll area, file-browser FAB, and scroll-to-bottom affordance must use the shared transcript overlay inset variables instead of ad-hoc message margins.
+
 ## Verification
 
 From this directory:

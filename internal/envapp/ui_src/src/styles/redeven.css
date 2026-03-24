@@ -241,6 +241,8 @@ html.dark {
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
+  --flower-chat-transcript-overlay-edge-gap: 12px;
+  --flower-chat-transcript-overlay-bottom-inset: calc(5rem + env(safe-area-inset-bottom, 0px));
 }
 
 .flower-chat-bottom-dock {
@@ -2131,7 +2133,7 @@ a.chat-sources-cell-url:focus-visible {
 .redeven-fab-file-browser {
   position: absolute;
   right: 12px;
-  bottom: 12px;
+  bottom: var(--flower-chat-transcript-overlay-edge-gap, 12px);
   z-index: 40;
   touch-action: none;
 }
