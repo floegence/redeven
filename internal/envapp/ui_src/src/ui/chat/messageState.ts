@@ -81,6 +81,28 @@ export function createEmptyBlock(blockType: MessageBlock['type']): MessageBlock 
   }
 }
 
+function createHiddenPlaceholderBlock(): MessageBlock {
+  // Preserve sparse stream block indices without rendering fake visible content.
+  return { type: 'thinking' };
+}
+
+function ensureBlockSlots(
+  blocks: MessageBlock[],
+  target: number,
+  createTargetBlock: () => MessageBlock,
+): void {
+  ensureGapSlots(blocks, target);
+  if (blocks.length === target) {
+    blocks.push(createTargetBlock());
+  }
+}
+
+function ensureGapSlots(blocks: MessageBlock[], target: number): void {
+  while (blocks.length < target) {
+    blocks.push(createHiddenPlaceholderBlock());
+  }
+}
+
 export function readBlockContent(block: MessageBlock | undefined): string {
   if (!block) {
     return '';
@@ -192,9 +214,7 @@ export function applyStreamEventToMessages(
       const message = nextMessages[index];
       const blocks = [...message.blocks];
       const target = Math.max(0, event.blockIndex);
-      while (blocks.length <= target) {
-        blocks.push(createEmptyBlock(event.blockType));
-      }
+      ensureBlockSlots(blocks, target, () => createEmptyBlock(event.blockType));
       const existingBlock = blocks[target];
       if (existingBlock && existingBlock.type !== event.blockType) {
         blocks[target] = createEmptyBlock(event.blockType);
@@ -211,9 +231,7 @@ export function applyStreamEventToMessages(
       const message = nextMessages[index];
       const blocks = [...message.blocks];
       const target = Math.max(0, event.blockIndex);
-      while (blocks.length <= target) {
-        blocks.push(createEmptyBlock('text'));
-      }
+      ensureBlockSlots(blocks, target, () => createEmptyBlock('text'));
       blocks[target] = appendDeltaToBlock(blocks[target], event.delta);
       nextMessages[index] = { ...message, blocks };
       return {
@@ -227,9 +245,7 @@ export function applyStreamEventToMessages(
       const message = nextMessages[index];
       const blocks = [...message.blocks];
       const target = Math.max(0, event.blockIndex);
-      while (blocks.length < target) {
-        blocks.push(createEmptyBlock(event.block.type));
-      }
+      ensureGapSlots(blocks, target);
       if (target === blocks.length) {
         blocks.push(event.block);
       } else {

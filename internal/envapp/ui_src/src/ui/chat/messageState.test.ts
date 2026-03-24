@@ -60,4 +60,20 @@ describe('messageState', () => {
     expect(ended.streamingMessageId).toBeNull();
     expect(ended.messages[0].status).toBe('complete');
   });
+
+  it('fills skipped stream block slots with hidden placeholders instead of visible markdown blocks', () => {
+    const started = applyStreamEventToMessages([], { type: 'message-start', messageId: 'm_ai_gap' }, { now: 100 });
+
+    const withLaterBlock = applyStreamEventToMessages(
+      started.messages,
+      { type: 'block-start', messageId: 'm_ai_gap', blockIndex: 2, blockType: 'markdown' },
+      { currentStreamingMessageId: started.streamingMessageId, now: 110 },
+    );
+
+    expect(withLaterBlock.messages).toHaveLength(1);
+    expect(withLaterBlock.messages[0].blocks).toHaveLength(3);
+    expect(withLaterBlock.messages[0].blocks[0]).toMatchObject({ type: 'thinking' });
+    expect(withLaterBlock.messages[0].blocks[1]).toMatchObject({ type: 'thinking' });
+    expect(withLaterBlock.messages[0].blocks[2]).toMatchObject({ type: 'markdown', content: '' });
+  });
 });

@@ -49,4 +49,38 @@ describe('messageVisibility', () => {
     expect(hasVisibleMessageContent(placeholder)).toBe(true);
     expect(hasNonEmptyVisibleMessageContent(placeholder)).toBe(false);
   });
+
+  it('hides earlier empty streaming markdown blocks when a later block is renderable', () => {
+    const message: Message = {
+      id: 'm4',
+      role: 'assistant',
+      status: 'streaming',
+      timestamp: 1,
+      blocks: [
+        { type: 'markdown', content: '' },
+        { type: 'markdown', content: 'Later visible content.' },
+      ],
+    };
+
+    expect(visibleMessageBlocks(message).map(({ index, block }) => ({ index, type: block.type }))).toEqual([
+      { index: 1, type: 'markdown' },
+    ]);
+  });
+
+  it('keeps only the last empty streaming markdown placeholder when several are present', () => {
+    const message: Message = {
+      id: 'm5',
+      role: 'assistant',
+      status: 'streaming',
+      timestamp: 1,
+      blocks: [
+        { type: 'markdown', content: '' },
+        { type: 'markdown', content: '' },
+      ],
+    };
+
+    expect(visibleMessageBlocks(message).map(({ index }) => index)).toEqual([1]);
+    expect(hasVisibleMessageContent(message)).toBe(true);
+    expect(hasNonEmptyVisibleMessageContent(message)).toBe(false);
+  });
 });
