@@ -233,14 +233,14 @@ describe('TextFilePreviewPane', () => {
     expect(host.querySelector('[data-testid="text-preview-fallback"]')).toBeNull();
   });
 
-  it('keeps plain-text previews on the Monaco viewer path until the user enters an exceptional fallback case', async () => {
+  it('keeps markdown previews on the Monaco viewer path with markdown tokenization', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => (
       <TextFilePreviewPane
         path="/workspace/README.md"
-        descriptor={{ mode: 'text', textPresentation: 'plain', wrapText: true }}
+        descriptor={{ mode: 'text', textPresentation: 'plain', language: 'markdown', wrapText: true }}
         text={'hello\nredeven'}
       />
     ), host);
@@ -248,7 +248,7 @@ describe('TextFilePreviewPane', () => {
 
     expect(host.querySelector('[data-testid="mock-editor"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="text-preview-fallback"]')).toBeNull();
-    expect(host.textContent).toContain('plaintext:hello\nredeven:ro');
+    expect(host.textContent).toContain('markdown:hello\nredeven:ro');
   });
 
   it('uses the plain-text fallback for truncated previews and clears selection state', async () => {

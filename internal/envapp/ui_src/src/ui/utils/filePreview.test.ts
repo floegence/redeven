@@ -77,15 +77,23 @@ describe('describeFilePreview', () => {
     });
   });
 
-  it('keeps prose and logs as wrapped plain text previews', () => {
+  it('keeps prose and logs as wrapped plain text previews while preserving markdown language ids', () => {
     expect(describeFilePreview('README.md')).toEqual({
       mode: 'text',
       textPresentation: 'plain',
+      language: 'markdown',
+      wrapText: true,
+    });
+    expect(describeFilePreview('docs/guide.markdown')).toEqual({
+      mode: 'text',
+      textPresentation: 'plain',
+      language: 'markdown',
       wrapText: true,
     });
     expect(describeFilePreview('server.log')).toEqual({
       mode: 'text',
       textPresentation: 'plain',
+      language: undefined,
       wrapText: true,
     });
   });
