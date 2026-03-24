@@ -624,15 +624,20 @@ function makeCompletedEmptyAssistantMessage(messageId = 'assistant-empty-1') {
 }
 
 function assistantRunIndicator(host: HTMLElement): HTMLElement | null {
+  return host.querySelector('.chat-message-item-assistant .chat-message-ornament .flower-message-run-indicator')
+    ?? host.querySelector('.flower-live-run-pane .flower-message-run-indicator');
+}
+
+function pendingRunIndicator(host: HTMLElement): HTMLElement | null {
   return host.querySelector('.flower-live-run-pane .flower-message-run-indicator');
 }
 
 function liveRunPlaceholder(host: HTMLElement): HTMLElement | null {
-  return host.querySelector('.flower-live-run-answer-placeholder');
+  return host.querySelector('.chat-message-item-assistant .chat-markdown-empty-streaming');
 }
 
 function liveRunAnswerText(host: HTMLElement): HTMLElement | null {
-  return host.querySelector('.flower-live-run-answer-text');
+  return host.querySelector('.chat-message-item-assistant .chat-streaming-text');
 }
 
 type SubmitTrigger = 'button' | 'enter';
@@ -873,7 +878,7 @@ export function registerEnvAIPageSendTests() {
         await flushAsync();
 
         await waitForActiveRunSnapshotRecovery();
-        expect(getActiveRunSnapshotMock).toHaveBeenCalledTimes(1);
+        expect(getActiveRunSnapshotMock).toHaveBeenCalledTimes(2);
       } finally {
         dispose();
       }
@@ -891,7 +896,7 @@ export function registerEnvAIPageSendTests() {
         await waitFor(() => {
           const block = liveRunAnswerText(host);
           expect(block?.textContent).toContain('Hello Flower');
-          expect(block?.lastElementChild?.classList.contains('flower-live-run-inline-cursor')).toBe(true);
+          expect(host.querySelector('.chat-message-item-assistant .chat-markdown-streaming-cursor-row')).toBeTruthy();
           expect(liveRunPlaceholder(host)).toBeNull();
         });
       } finally {
@@ -1031,7 +1036,7 @@ export function registerEnvAIPageSendTests() {
         });
         await flushAsync();
 
-        expect(host.querySelectorAll('.flower-live-run-answer-placeholder')).toHaveLength(1);
+        expect(host.querySelectorAll('.chat-message-item-assistant .chat-markdown-empty-streaming')).toHaveLength(1);
 
         emitRealtimeEvent({
           threadId: 'thread-1',
@@ -1045,7 +1050,7 @@ export function registerEnvAIPageSendTests() {
         });
         await flushAsync();
 
-        expect(host.querySelectorAll('.flower-live-run-answer-placeholder')).toHaveLength(0);
+        expect(host.querySelectorAll('.chat-message-item-assistant .chat-markdown-empty-streaming')).toHaveLength(0);
         await waitFor(() => {
           expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello from the latest block');
         });
@@ -1098,7 +1103,7 @@ export function registerEnvAIPageSendTests() {
         });
         await flushAsync();
 
-        expect(host.querySelectorAll('.flower-live-run-answer-placeholder')).toHaveLength(0);
+        expect(host.querySelectorAll('.chat-message-item-assistant .chat-markdown-empty-streaming')).toHaveLength(0);
         await waitFor(() => {
           expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Tail block content');
         });
@@ -1117,7 +1122,8 @@ export function registerEnvAIPageSendTests() {
 
         const reasoning = host.querySelector('.chat-thinking-block');
         expect(reasoning).toBeNull();
-        expect(liveRunPlaceholder(host)).toBeTruthy();
+        expect(liveRunPlaceholder(host)).toBeNull();
+        expect(pendingRunIndicator(host)).toBeTruthy();
       } finally {
         dispose();
       }
@@ -1158,6 +1164,34 @@ export function registerEnvAIPageSendTests() {
         const assistant = host.querySelector('.chat-message-item-assistant');
         expect(assistant).toBeTruthy();
         expect(liveRunPlaceholder(host)).toBeTruthy();
+      } finally {
+        dispose();
+      }
+    });
+
+    it('does not duplicate a settled assistant when the same-id active snapshot arrives on initial load', async () => {
+      const messageId = 'assistant-inline-dedupe';
+      listMessagesMock.mockImplementation(async (req: any): Promise<any> => {
+        if (req?.tail) {
+          return {
+            messages: [{ rowId: 1, messageJson: makeCompletedAssistantTranscriptMessage(messageId) }],
+            nextAfterRowId: 1,
+            hasMore: false,
+          };
+        }
+        return { messages: [], nextAfterRowId: 1, hasMore: false };
+      });
+      getActiveRunSnapshotMock.mockResolvedValueOnce(makeStreamingAssistantSnapshot(messageId));
+
+      const { host, dispose } = await renderPage();
+      try {
+        await flushAsync();
+        await flushAsync();
+
+        expect(host.querySelectorAll('.chat-message-item-assistant')).toHaveLength(1);
+        expect(host.textContent).toContain('Final answer recovered from transcript.');
+        expect(liveRunPlaceholder(host)).toBeNull();
+        expect(pendingRunIndicator(host)).toBeNull();
       } finally {
         dispose();
       }
@@ -1238,7 +1272,7 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('renders the live-run indicator inside the dedicated live surface after send', async () => {
+    it('renders the live-run indicator on the active inline assistant row after send', async () => {
       getActiveRunSnapshotMock.mockResolvedValueOnce({ ok: false });
 
       const { host, dispose } = await renderPage();
@@ -1253,6 +1287,7 @@ export function registerEnvAIPageSendTests() {
         expect(assistant).toBeTruthy();
         expect(assistantRunIndicator(host)).toBeTruthy();
         expect(host.querySelectorAll('.flower-message-run-indicator')).toHaveLength(1);
+        expect(pendingRunIndicator(host)).toBeNull();
         expect(host.querySelector('.chat-working-indicator')).toBeNull();
       } finally {
         dispose();
@@ -1314,7 +1349,6 @@ export function registerEnvAIPageSendTests() {
         });
         await flushAsync();
 
-        expect(host.querySelector('.chat-message-item-assistant')).toBeTruthy();
         expect(assistantRunIndicator(host)).toBeTruthy();
         expect(host.querySelector('.chat-working-indicator')).toBeNull();
       } finally {

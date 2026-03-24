@@ -4,9 +4,8 @@ import type { Message } from '../chat/types';
 import {
   applyStreamEventBatchToLiveRunMessage,
   clearLiveRunMessageIfTranscriptCaughtUp,
-  getLiveRunActivityBlockEntries,
-  getLiveRunAnswerBlockEntries,
   mergeLiveRunSnapshot,
+  resolveRenderableLiveRunMessage,
 } from './flowerLiveRunState';
 
 describe('flowerLiveRunState', () => {
@@ -20,28 +19,6 @@ describe('flowerLiveRunState', () => {
     expect(next?.id).toBe('m_live_1');
     expect(next?.status).toBe('streaming');
     expect(next?.blocks).toEqual([{ type: 'markdown', content: 'Hello Flower' }]);
-  });
-
-  it('keeps answer and activity blocks in separate partitions', () => {
-    const message: Message = {
-      id: 'm_live_2',
-      role: 'assistant',
-      status: 'streaming',
-      timestamp: 1000,
-      blocks: [
-        { type: 'markdown', content: 'Visible answer' },
-        {
-          type: 'tool-call',
-          toolName: 'terminal.exec',
-          toolId: 'tool_1',
-          args: {},
-          status: 'running',
-        },
-      ],
-    };
-
-    expect(getLiveRunAnswerBlockEntries(message).map((entry) => entry.index)).toEqual([0]);
-    expect(getLiveRunActivityBlockEntries(message).map((entry) => entry.index)).toEqual([1]);
   });
 
   it('clears the live run once the transcript includes the same message id', () => {
@@ -66,6 +43,28 @@ describe('flowerLiveRunState', () => {
     expect(clearLiveRunMessageIfTranscriptCaughtUp(current, transcript)).toBeNull();
   });
 
+  it('treats transcript catch-up as the authoritative render gate for late live snapshots', () => {
+    const current: Message = {
+      id: 'm_live_3b',
+      role: 'assistant',
+      status: 'streaming',
+      timestamp: 1000,
+      blocks: [{ type: 'markdown', content: 'Late snapshot' }],
+    };
+
+    const transcript: Message[] = [
+      {
+        id: 'm_live_3b',
+        role: 'assistant',
+        status: 'complete',
+        timestamp: 1001,
+        blocks: [{ type: 'markdown', content: 'Settled transcript' }],
+      },
+    ];
+
+    expect(resolveRenderableLiveRunMessage(current, transcript)).toBeNull();
+  });
+
   it('accepts active-run snapshots as the current live message', () => {
     const snapshot: Message = {
       id: 'm_live_4',
@@ -88,6 +87,26 @@ describe('flowerLiveRunState', () => {
     };
 
     expect(mergeLiveRunSnapshot(null, snapshot)).toBeNull();
+  });
+
+  it('keeps completed snapshots that still contain non-thinking activity blocks', () => {
+    const snapshot: Message = {
+      id: 'm_live_5b',
+      role: 'assistant',
+      status: 'complete',
+      timestamp: 1000,
+      blocks: [
+        {
+          type: 'tool-call',
+          toolName: 'terminal.exec',
+          toolId: 'tool_1',
+          args: {},
+          status: 'running',
+        },
+      ],
+    };
+
+    expect(mergeLiveRunSnapshot(null, snapshot)).toEqual(snapshot);
   });
 
   it('keeps an empty streaming assistant message so the live surface can render a placeholder', () => {
