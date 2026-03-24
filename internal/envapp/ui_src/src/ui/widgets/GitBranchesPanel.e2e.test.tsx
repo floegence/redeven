@@ -177,16 +177,26 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).toContain('Merge');
       expect(host.textContent).toContain('Delete');
       expect(host.textContent).toContain('src/linked.ts');
+      expect(host.textContent).toContain('notes.txt');
       expect(host.textContent).toContain('Upstream origin/feature/demo');
       expect(host.textContent).not.toContain('Current · Upstream origin/feature/demo');
+      expect(host.textContent).toContain('Changes');
       expect(host.textContent).toContain('Staged');
+      expect(host.textContent).toContain('Unstaged');
+      expect(host.textContent).toContain('Untracked');
       expect(host.textContent).toContain('View Diff');
       expect(host.textContent).not.toContain('Select another branch to merge into the current branch.');
       expect(host.textContent).not.toContain('Switch to another branch before deleting it.');
       expect(host.textContent).not.toContain('pending review');
+      const changesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Changes')) as HTMLButtonElement | undefined;
+      const unstagedButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Unstaged')) as HTMLButtonElement | undefined;
+      const untrackedButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Untracked')) as HTMLButtonElement | undefined;
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
       const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Merge') as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
+      expect(changesButton).toBeTruthy();
+      expect(unstagedButton).toBeFalsy();
+      expect(untrackedButton).toBeFalsy();
       expect(checkoutButton).toBeTruthy();
       expect(mergeButton).toBeTruthy();
       expect(deleteButton).toBeTruthy();
@@ -311,12 +321,14 @@ describe('GitBranchesPanel interactions', () => {
 
       expect(mockListWorkspaceChanges).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo-linked' });
       expect(host.textContent).toContain('src/linked.ts');
+      expect(host.textContent).toContain('scratch.txt');
+      expect(host.textContent).toContain('Changes');
       expect(host.textContent).toContain('View Diff');
 
+      const changesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Changes')) as HTMLButtonElement | undefined;
       const untrackedButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Untracked')) as HTMLButtonElement | undefined;
-      expect(untrackedButton).toBeTruthy();
-      untrackedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      expect(host.textContent).toContain('scratch.txt');
+      expect(changesButton).toBeTruthy();
+      expect(untrackedButton).toBeFalsy();
     } finally {
       dispose();
     }
