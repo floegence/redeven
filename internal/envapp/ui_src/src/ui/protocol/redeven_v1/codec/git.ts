@@ -4,6 +4,7 @@ import type {
   GitDeleteLinkedWorktreePreview,
   GitDeleteBranchRequest,
   GitDeleteBranchResponse,
+  GitDiffFileRef,
   GitMergeBranchRequest,
   GitMergeBranchResponse,
   GitPreviewDeleteBranchRequest,
@@ -22,6 +23,8 @@ import type {
   GitGetBranchCompareResponse,
   GitGetCommitDetailRequest,
   GitGetCommitDetailResponse,
+  GitGetFullContextDiffRequest,
+  GitGetFullContextDiffResponse,
   GitLinkedWorktreeSnapshot,
   GitListBranchesRequest,
   GitListBranchesResponse,
@@ -50,6 +53,7 @@ import type {
   wire_git_delete_linked_worktree_preview,
   wire_git_delete_branch_req,
   wire_git_delete_branch_resp,
+  wire_git_diff_file_ref,
   wire_git_merge_branch_req,
   wire_git_merge_branch_resp,
   wire_git_preview_delete_branch_req,
@@ -68,6 +72,8 @@ import type {
   wire_git_get_branch_compare_resp,
   wire_git_get_commit_detail_req,
   wire_git_get_commit_detail_resp,
+  wire_git_get_full_context_diff_req,
+  wire_git_get_full_context_diff_resp,
   wire_git_get_repo_summary_req,
   wire_git_get_repo_summary_resp,
   wire_git_linked_worktree_snapshot,
@@ -172,6 +178,15 @@ function fromWireGitCommitFileSummary(resp: wire_git_commit_file_summary): GitCo
     additions: typeof resp?.additions === 'number' ? resp.additions : undefined,
     deletions: typeof resp?.deletions === 'number' ? resp.deletions : undefined,
     isBinary: typeof resp?.is_binary === 'boolean' ? resp.is_binary : undefined,
+  };
+}
+
+function toWireGitDiffFileRef(req: GitDiffFileRef): wire_git_diff_file_ref {
+  return {
+    change_type: typeof req.changeType === 'string' ? req.changeType : undefined,
+    path: typeof req.path === 'string' ? req.path : undefined,
+    old_path: typeof req.oldPath === 'string' ? req.oldPath : undefined,
+    new_path: typeof req.newPath === 'string' ? req.newPath : undefined,
   };
 }
 
@@ -329,6 +344,25 @@ export function fromWireGitGetCommitDetailResponse(resp: wire_git_get_commit_det
     repoRootPath: String(resp?.repo_root_path ?? ''),
     commit: fromWireGitCommitDetail(resp?.commit ?? {}),
     files: Array.isArray(resp?.files) ? resp.files.map(fromWireGitCommitFileSummary) : [],
+  };
+}
+
+export function toWireGitGetFullContextDiffRequest(req: GitGetFullContextDiffRequest): wire_git_get_full_context_diff_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    source_kind: req.sourceKind,
+    workspace_section: typeof req.workspaceSection === 'string' ? req.workspaceSection : undefined,
+    commit: typeof req.commit === 'string' ? req.commit : undefined,
+    base_ref: typeof req.baseRef === 'string' ? req.baseRef : undefined,
+    target_ref: typeof req.targetRef === 'string' ? req.targetRef : undefined,
+    file: toWireGitDiffFileRef(req.file),
+  };
+}
+
+export function fromWireGitGetFullContextDiffResponse(resp: wire_git_get_full_context_diff_resp): GitGetFullContextDiffResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    file: fromWireGitCommitFileSummary(resp?.file ?? {}),
   };
 }
 

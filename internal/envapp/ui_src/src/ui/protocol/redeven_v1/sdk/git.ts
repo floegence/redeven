@@ -315,6 +315,13 @@ export type GitCommitFileSummary = {
   isBinary?: boolean;
 };
 
+export type GitDiffFileRef = {
+  changeType?: 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'conflicted' | string;
+  path?: string;
+  oldPath?: string;
+  newPath?: string;
+};
+
 export type GitGetCommitDetailRequest = {
   repoRootPath: string;
   commit: string;
@@ -343,4 +350,21 @@ export type GitGetBranchCompareResponse = {
   commits: GitCommitSummary[];
   files: GitCommitFileSummary[];
   linkedWorktree?: GitLinkedWorktreeSnapshot;
+};
+
+export type GitFullContextDiffSourceKind = 'workspace' | 'commit' | 'compare';
+
+export type GitGetFullContextDiffRequest = {
+  repoRootPath: string;
+  sourceKind: GitFullContextDiffSourceKind | string;
+  workspaceSection?: GitWorkspaceSection | string;
+  commit?: string;
+  baseRef?: string;
+  targetRef?: string;
+  file: GitDiffFileRef;
+};
+
+export type GitGetFullContextDiffResponse = {
+  repoRootPath: string;
+  file: GitCommitFileSummary;
 };

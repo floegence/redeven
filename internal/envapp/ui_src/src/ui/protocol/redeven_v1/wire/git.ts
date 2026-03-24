@@ -313,6 +313,13 @@ export type wire_git_commit_file_summary = {
   is_binary?: boolean;
 };
 
+export type wire_git_diff_file_ref = {
+  change_type?: string;
+  path?: string;
+  old_path?: string;
+  new_path?: string;
+};
+
 export type wire_git_get_commit_detail_req = {
   repo_root_path: string;
   commit: string;
@@ -341,4 +348,19 @@ export type wire_git_get_branch_compare_resp = {
   commits: wire_git_commit_summary[];
   files: wire_git_commit_file_summary[];
   linked_worktree?: wire_git_linked_worktree_snapshot;
+};
+
+export type wire_git_get_full_context_diff_req = {
+  repo_root_path: string;
+  source_kind: string;
+  workspace_section?: string;
+  commit?: string;
+  base_ref?: string;
+  target_ref?: string;
+  file: wire_git_diff_file_ref;
+};
+
+export type wire_git_get_full_context_diff_resp = {
+  repo_root_path: string;
+  file: wire_git_commit_file_summary;
 };

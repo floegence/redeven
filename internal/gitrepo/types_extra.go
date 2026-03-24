@@ -241,3 +241,25 @@ type getBranchCompareResp struct {
 	Files             []gitCommitFileSummary     `json:"files,omitempty"`
 	LinkedWorktree    *gitLinkedWorktreeSnapshot `json:"linked_worktree,omitempty"`
 }
+
+type gitDiffFileRef struct {
+	ChangeType string `json:"change_type,omitempty"`
+	Path       string `json:"path,omitempty"`
+	OldPath    string `json:"old_path,omitempty"`
+	NewPath    string `json:"new_path,omitempty"`
+}
+
+type getFullContextDiffReq struct {
+	RepoRootPath     string         `json:"repo_root_path"`
+	SourceKind       string         `json:"source_kind"`
+	WorkspaceSection string         `json:"workspace_section,omitempty"`
+	Commit           string         `json:"commit,omitempty"`
+	BaseRef          string         `json:"base_ref,omitempty"`
+	TargetRef        string         `json:"target_ref,omitempty"`
+	File             gitDiffFileRef `json:"file"`
+}
+
+type getFullContextDiffResp struct {
+	RepoRootPath string               `json:"repo_root_path"`
+	File         gitCommitFileSummary `json:"file"`
+}
