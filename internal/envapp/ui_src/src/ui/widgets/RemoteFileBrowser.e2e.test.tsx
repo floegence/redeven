@@ -198,7 +198,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     const fileItems = resolver?.([copyNameTarget]) ?? props.overrideContextMenuItems ?? [];
     const multiSelectItems = resolver?.([folderTarget, copyNameTarget]) ?? props.overrideContextMenuItems ?? [];
     const describeMenuItems = (items: ContextMenuItem[]) => items.flatMap((item) => (
-      item.separator ? [`separator:${item.id}`, item.id] : [item.id]
+      item.separator ? [item.id, `separator:${item.id}`] : [item.id]
     )).join(',');
 
     onMount(() => {
@@ -966,13 +966,13 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(host.querySelector('[data-testid="mock-folder-menu-order"]')?.textContent).toBe(
-        'ask-flower,open-in-terminal,separator:duplicate,duplicate,copy-name,copy-to,separator:move-to,move-to,rename,delete',
+        'ask-flower,open-in-terminal,separator:open-in-terminal,duplicate,copy-name,copy-to,move-to,separator:move-to,rename,delete',
       );
       expect(host.querySelector('[data-testid="mock-file-menu-order"]')?.textContent).toBe(
-        'ask-flower,separator:duplicate,duplicate,copy-name,copy-to,separator:move-to,move-to,rename,delete',
+        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-to,move-to,separator:move-to,rename,delete',
       );
       expect(host.querySelector('[data-testid="mock-multi-menu-order"]')?.textContent).toBe(
-        'ask-flower,separator:duplicate,duplicate,copy-name,copy-to,separator:move-to,move-to,rename,delete',
+        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-to,move-to,separator:move-to,rename,delete',
       );
 
       const folderButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-folder') as HTMLButtonElement | undefined;
@@ -1014,7 +1014,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(host.querySelector('[data-testid="mock-folder-menu-order"]')?.textContent).toBe(
-        'ask-flower,separator:duplicate,duplicate,copy-name,copy-to,separator:move-to,move-to,rename,delete',
+        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-to,move-to,separator:move-to,rename,delete',
       );
       const folderButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-folder') as HTMLButtonElement | undefined;
       expect(folderButton).toBeUndefined();
