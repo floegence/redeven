@@ -61,7 +61,6 @@ export interface TextFilePreviewPaneProps {
 export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   const [monacoFailed, setMonacoFailed] = createSignal(false);
   const resolvedLanguage = createMemo<string | undefined>(() => {
-    if (props.descriptor.textPresentation !== 'code') return 'plaintext';
     return props.descriptor.language;
   });
   const shouldUseMonaco = createMemo(() => !props.truncated && !monacoFailed());
