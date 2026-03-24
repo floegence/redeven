@@ -493,6 +493,20 @@ async function flushAsync(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+async function waitFor(check: () => void): Promise<void> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      check();
+      return;
+    } catch (err) {
+      lastError = err;
+      await flushAsync();
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
 async function waitForActiveRunSnapshotRecovery(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ACTIVE_RUN_SNAPSHOT_RECOVERY_SETTLE_MS));
   await flushAsync();
@@ -857,6 +871,133 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
+    it('keeps the streaming cursor at the bottom of non-empty assistant output', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        const messageId = emitAssistantRealtimeMessageStart('assistant-live-cursor');
+        await flushAsync();
+
+        emitAssistantRealtimeDelta(messageId, 'Hello Flower');
+        await flushAsync();
+
+        await waitFor(() => {
+          const block = host.querySelector('.chat-message-item-assistant .chat-markdown-block');
+          expect(block?.lastElementChild?.classList.contains('chat-markdown-streaming-cursor-row')).toBe(true);
+          expect(host.querySelector('.chat-message-item-assistant .chat-markdown-empty-streaming')).toBeNull();
+        });
+      } finally {
+        dispose();
+      }
+    });
+
+    it('keeps the active markdown block mounted while batched realtime deltas are applied', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        const messageId = 'assistant-batched-deltas';
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'message-start',
+            messageId,
+          },
+        });
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-start',
+            messageId,
+            blockIndex: 0,
+            blockType: 'markdown',
+          },
+        });
+        await flushAsync();
+
+        const firstBlock = host.querySelector('.chat-markdown-block');
+        expect(firstBlock).toBeTruthy();
+
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-delta',
+            messageId,
+            blockIndex: 0,
+            delta: 'Hello',
+          },
+        });
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-delta',
+            messageId,
+            blockIndex: 0,
+            delta: ' world',
+          },
+        });
+        await flushAsync();
+
+        const nextBlock = host.querySelector('.chat-markdown-block');
+        expect(nextBlock).toBe(firstBlock);
+        await waitFor(() => {
+          expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello world');
+        });
+      } finally {
+        dispose();
+      }
+    });
+
+    it('keeps the inline run indicator mounted across streaming deltas', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        const messageId = 'assistant-indicator-stability';
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'message-start',
+            messageId,
+          },
+        });
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-start',
+            messageId,
+            blockIndex: 0,
+            blockType: 'markdown',
+          },
+        });
+        await flushAsync();
+
+        const firstIndicator = host.querySelector('.flower-message-run-indicator');
+        expect(firstIndicator).toBeTruthy();
+
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-delta',
+            messageId,
+            blockIndex: 0,
+            delta: 'Hello Flower',
+          },
+        });
+        await flushAsync();
+        await waitFor(() => {
+          expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello Flower');
+        });
+
+        const nextIndicator = host.querySelector('.flower-message-run-indicator');
+        expect(nextIndicator).toBe(firstIndicator);
+      } finally {
+        dispose();
+      }
+    });
+
     it('does not leave a ghost streaming cursor above later markdown content when block indices skip ahead', async () => {
       const { host, dispose } = await renderPage();
       try {
@@ -896,7 +1037,9 @@ export function registerEnvAIPageSendTests() {
         await flushAsync();
 
         expect(host.querySelectorAll('.chat-markdown-empty-streaming')).toHaveLength(0);
-        expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello from the latest block');
+        await waitFor(() => {
+          expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello from the latest block');
+        });
       } finally {
         dispose();
       }
@@ -947,7 +1090,9 @@ export function registerEnvAIPageSendTests() {
         await flushAsync();
 
         expect(host.querySelectorAll('.chat-markdown-empty-streaming')).toHaveLength(0);
-        expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Tail block content');
+        await waitFor(() => {
+          expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Tail block content');
+        });
       } finally {
         dispose();
       }

@@ -23,7 +23,7 @@ import type {
 } from './types';
 import { DEFAULT_VIRTUAL_LIST_CONFIG } from './types';
 import { createClientId } from '../utils/clientId';
-import { applyStreamEventToMessages, buildUserBlocks } from './messageState';
+import { applyStreamEventBatchToMessages, buildUserBlocks } from './messageState';
 
 // ---- Defer helper (avoids blocking the UI thread) ----
 
@@ -235,25 +235,25 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
     const events = pendingEvents;
     pendingEvents = [];
     rafHandle = null;
-    batch(() => {
-      events.forEach(applySingleStreamEvent);
-    });
-  };
+    if (events.length === 0) {
+      return;
+    }
 
-  const applySingleStreamEvent = (event: StreamEvent): void => {
-    const result = applyStreamEventToMessages(messages, event, {
+    const result = applyStreamEventBatchToMessages(messages, events, {
       currentStreamingMessageId: streamingMessageId(),
       now: Date.now(),
     });
-    if (result.consumeOnePrepId) {
-      consumeOnePrepId();
-    }
-    if (result.messages !== messages) {
-      setMessages(reconcile(result.messages));
-    }
-    if (streamingMessageId() !== result.streamingMessageId) {
-      setStreamingMessageId(result.streamingMessageId);
-    }
+    batch(() => {
+      for (let index = 0; index < result.consumePrepCount; index += 1) {
+        consumeOnePrepId();
+      }
+      if (result.messages !== messages) {
+        setMessages(reconcile(result.messages));
+      }
+      if (streamingMessageId() !== result.streamingMessageId) {
+        setStreamingMessageId(result.streamingMessageId);
+      }
+    });
   };
 
   // ---- Context value ----

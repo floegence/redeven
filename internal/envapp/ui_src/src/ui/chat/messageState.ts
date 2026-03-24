@@ -6,6 +6,12 @@ export interface AppliedStreamEventResult {
   consumeOnePrepId: boolean;
 }
 
+export interface AppliedStreamEventBatchResult {
+  messages: Message[];
+  streamingMessageId: string | null;
+  consumePrepCount: number;
+}
+
 export function upsertMessageById(existing: Message[], next: Message): Message[] {
   const id = String(next?.id ?? '').trim();
   if (!id) return existing;
@@ -310,4 +316,35 @@ export function applyStreamEventToMessages(
         consumeOnePrepId: false,
       };
   }
+}
+
+export function applyStreamEventBatchToMessages(
+  existing: Message[],
+  events: StreamEvent[],
+  opts?: {
+    currentStreamingMessageId?: string | null;
+    now?: number;
+  },
+): AppliedStreamEventBatchResult {
+  let messages = existing;
+  let streamingMessageId = opts?.currentStreamingMessageId ?? null;
+  let consumePrepCount = 0;
+
+  for (const event of events) {
+    const result = applyStreamEventToMessages(messages, event, {
+      currentStreamingMessageId: streamingMessageId,
+      now: opts?.now,
+    });
+    messages = result.messages;
+    streamingMessageId = result.streamingMessageId;
+    if (result.consumeOnePrepId) {
+      consumePrepCount += 1;
+    }
+  }
+
+  return {
+    messages,
+    streamingMessageId,
+    consumePrepCount,
+  };
 }

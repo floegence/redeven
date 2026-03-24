@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeMarkdownForDisplay } from './normalizeMarkdownForDisplay';
+import { normalizeMarkdownForDisplay, normalizeMarkdownForStreamingDisplay } from './normalizeMarkdownForDisplay';
 
 describe('normalizeMarkdownForDisplay', () => {
+  it('keeps streaming content append-safe by only normalizing line endings', () => {
+    const input = '# Title##Chapter One\r\n\r\nLine two';
+
+    expect(normalizeMarkdownForStreamingDisplay(input)).toBe([
+      '# Title##Chapter One',
+      '',
+      'Line two',
+    ].join('\n'));
+  });
+
   it('repairs glued chapter headings from malformed transcript content', () => {
     const input = [
       '# 🌟星光森林的秘密##第一章：莉莉的发现在遥远的北方，有一片被繁星眷顾的神秘森林。',
