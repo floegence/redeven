@@ -1,5 +1,6 @@
-import { For, Show, createEffect, createResource, createSignal } from "solid-js";
+import { For, Show, createEffect, createResource, createSignal, onCleanup } from "solid-js";
 import { cn, useNotification } from "@floegence/floe-webapp-core";
+import { Sparkles } from "@floegence/floe-webapp-core/icons";
 import type { FileItem } from "@floegence/floe-webapp-core/file-browser";
 import { Panel, PanelContent } from "@floegence/floe-webapp-core/layout";
 import { LoadingOverlay, SnakeLoader } from "@floegence/floe-webapp-core/loading";
@@ -18,6 +19,7 @@ import {
   Tooltip,
 } from "@floegence/floe-webapp-core/ui";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
+import { useEnvContext } from "./EnvContext";
 import { useRedevenRpc, type FsFileInfo } from "../protocol/redeven_v1";
 import { getEnvPublicIDFromSession, getLocalRuntime, mintEnvEntryTicketForApp } from "../services/controlplaneApi";
 import { FLOE_APP_CODE } from "../services/floeproxyContract";
@@ -25,6 +27,7 @@ import { fetchGatewayJSON } from "../services/gatewayApi";
 import { appendLocalAccessResumeQuery } from "../services/localAccessAuth";
 import { trustedLauncherOriginFromSandboxLocation } from "../services/sandboxOrigins";
 import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
+import { buildFilePathAskFlowerIntent } from "../utils/filePathAskFlower";
 import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPickerTreeAbsolutePath } from "../utils/directoryPickerTree";
 
 type SpaceStatus = Readonly<{
@@ -41,6 +44,12 @@ type SpaceStatus = Readonly<{
 }>;
 
 type CodespaceBusyAction = "open" | "start" | "stop";
+
+type CodespaceContextMenuState = Readonly<{
+  x: number;
+  y: number;
+  space: SpaceStatus;
+}>;
 
 function fmtTime(ms: number): string {
   if (!ms) return "Never";
@@ -68,6 +77,21 @@ function fmtRelativeTime(ms: number): string {
   } catch {
     return String(ms);
   }
+}
+
+function clampCodespaceContextMenuPosition(x: number, y: number): { x: number; y: number } {
+  if (typeof window === "undefined") return { x, y };
+
+  const margin = 8;
+  const menuWidth = 180;
+  const menuHeight = 48;
+  const maxX = Math.max(margin, window.innerWidth - menuWidth - margin);
+  const maxY = Math.max(margin, window.innerHeight - menuHeight - margin);
+
+  return {
+    x: Math.min(Math.max(x, margin), maxX),
+    y: Math.min(Math.max(y, margin), maxY),
+  };
 }
 
 function codespaceOrigin(codeSpaceID: string): string {
@@ -220,6 +244,8 @@ function CodespaceCard(props: {
   onStart: () => void;
   onStop: () => void;
   onDelete: () => void;
+  onContextMenu: (event: MouseEvent) => void;
+  contextMenuOpen?: boolean;
 }) {
   const isRunning = () => props.space.running;
   const isBusy = () => !!props.busyAction;
@@ -230,8 +256,10 @@ function CodespaceCard(props: {
         "border transition-all duration-200",
         isRunning()
           ? "border-emerald-500/30 bg-emerald-500/[0.02] hover:border-emerald-500/50"
-          : "border-border/60 opacity-75 hover:opacity-100 hover:border-border"
+          : "border-border/60 opacity-75 hover:opacity-100 hover:border-border",
+        props.contextMenuOpen ? "ring-1 ring-primary/40" : undefined,
       )}
+      onContextMenu={props.onContextMenu}
     >
       <CardHeader class="pb-2">
         <div class="flex items-start justify-between gap-2">
@@ -470,6 +498,7 @@ export function EnvCodespacesPage() {
   const notification = useNotification();
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
+  const env = useEnvContext();
 
   const [createDialogOpen, setCreateDialogOpen] = createSignal(false);
   const [createLoading, setCreateLoading] = createSignal(false);
@@ -477,6 +506,8 @@ export function EnvCodespacesPage() {
   const [deleteTarget, setDeleteTarget] = createSignal<SpaceStatus | null>(null);
   const [deleteLoading, setDeleteLoading] = createSignal(false);
   const [busyActions, setBusyActions] = createSignal<Record<string, CodespaceBusyAction | undefined>>({});
+  const [codespaceContextMenu, setCodespaceContextMenu] = createSignal<CodespaceContextMenuState | null>(null);
+  let codespaceContextMenuEl: HTMLDivElement | null = null;
 
   const busyActionOf = (codeSpaceID: string): CodespaceBusyAction | undefined => busyActions()[codeSpaceID];
 
@@ -523,6 +554,36 @@ export function EnvCodespacesPage() {
     homePath();
     cache = new Map();
     setFiles([]);
+  });
+
+  createEffect(() => {
+    const menu = codespaceContextMenu();
+    if (!menu) return;
+
+    const closeMenu = () => {
+      setCodespaceContextMenu(null);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && codespaceContextMenuEl?.contains(target)) return;
+      closeMenu();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    };
+
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    window.addEventListener("keydown", onKeyDown);
+    onCleanup(() => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+      window.removeEventListener("keydown", onKeyDown);
+    });
   });
 
   const loadPickerDir = async (pickerPath: string) => {
@@ -641,6 +702,41 @@ export function EnvCodespacesPage() {
     setDeleteDialogOpen(true);
   };
 
+  const openCodespaceContextMenu = (event: MouseEvent, space: SpaceStatus) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const pos = clampCodespaceContextMenuPosition(event.clientX, event.clientY);
+    setCodespaceContextMenu({
+      x: pos.x,
+      y: pos.y,
+      space,
+    });
+  };
+
+  const handleAskFlowerFromCodespace = () => {
+    const menu = codespaceContextMenu();
+    if (!menu) return;
+
+    const anchor = { x: menu.x, y: menu.y };
+    setCodespaceContextMenu(null);
+
+    const result = buildFilePathAskFlowerIntent({
+      items: [
+        {
+          path: menu.space.workspace_path,
+          isDirectory: true,
+        },
+      ],
+      fallbackWorkingDirAbs: menu.space.workspace_path,
+    });
+    if (!result.intent) {
+      notification.error("Ask Flower unavailable", result.error ?? "Failed to resolve codespace workspace path.");
+      return;
+    }
+
+    env.openAskFlowerComposer(result.intent, anchor);
+  };
+
   const spaceList = () => spaces() ?? [];
   const sortedSpaces = () => {
     return [...spaceList()].sort((a, b) => {
@@ -698,6 +794,8 @@ export function EnvCodespacesPage() {
                         onStart={() => void handleStart(space)}
                         onStop={() => void handleStop(space)}
                         onDelete={() => openDeleteDialog(space)}
+                        onContextMenu={(event) => openCodespaceContextMenu(event, space)}
+                        contextMenuOpen={codespaceContextMenu()?.space.code_space_id === space.code_space_id}
                       />
                     )}
                   </For>
@@ -753,6 +851,28 @@ export function EnvCodespacesPage() {
           </p>
         </div>
       </Dialog>
+
+      <Show when={codespaceContextMenu()} keyed>
+        {(menu) => (
+          <div
+            ref={(el) => {
+              codespaceContextMenuEl = el;
+            }}
+            class="fixed z-50 min-w-[180px] py-1 bg-popover border border-border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100"
+            style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 hover:bg-accent hover:text-accent-foreground focus:outline-none focus-visible:bg-accent focus-visible:text-accent-foreground"
+              onClick={handleAskFlowerFromCodespace}
+            >
+              <Sparkles class="w-3.5 h-3.5 opacity-60" />
+              <span class="flex-1 text-left">Ask Flower</span>
+            </button>
+          </div>
+        )}
+      </Show>
     </div>
   );
 }

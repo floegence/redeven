@@ -25,12 +25,11 @@ import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { useEnvContext } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
 import {
-  deriveAbsoluteWorkingDirFromItems,
   normalizeAbsolutePath,
 } from '../utils/askFlowerPath';
 import { setAskFlowerAttachmentSourcePath } from '../utils/askFlowerAttachmentMetadata';
 import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from '../utils/fileBrowserClipboard';
-import { createClientId } from '../utils/clientId';
+import { buildFilePathAskFlowerIntent } from '../utils/filePathAskFlower';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
@@ -2147,21 +2146,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     ctx.openAskFlowerComposer(intent);
   };
 
-  const toAbsolutePath = (path: string): string => normalizeAbsolutePath(path);
-
-  const toFileContextItems = (items: FileItem[]): AskFlowerIntent['contextItems'] =>
-    items
-      .map((item) => {
-        const absolutePath = toAbsolutePath(item.path);
-        if (!absolutePath) return null;
-        return {
-          kind: 'file_path' as const,
-          path: absolutePath,
-          isDirectory: item.type === 'folder',
-        };
-      })
-      .filter((item): item is NonNullable<typeof item> => !!item);
-
   const createAttachmentFromFileItem = async (
     item: FileItem,
     client: Client,
@@ -2238,29 +2222,21 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
     }
 
-    const contextItems = toFileContextItems(normalizedItems);
-    if (contextItems.length <= 0) {
-      notification.error('Ask Flower unavailable', 'Failed to resolve selected file paths.');
-      return;
-    }
-
-    const absoluteItems = normalizedItems
-      .map((item) => ({
-        path: normalizeAbsolutePath(item.path),
+    const result = buildFilePathAskFlowerIntent({
+      items: normalizedItems.map((item) => ({
+        path: item.path,
         isDirectory: item.type === 'folder',
-      }))
-      .filter((item) => item.path);
-    const suggestedWorkingDirAbs = deriveAbsoluteWorkingDirFromItems(absoluteItems, currentBrowserPath());
-
-    dispatchAskFlowerIntent({
-      id: createClientId('ask-flower'),
-      source: 'file_browser',
-      mode: 'append',
-      suggestedWorkingDirAbs: suggestedWorkingDirAbs || undefined,
-      contextItems,
+      })),
+      fallbackWorkingDirAbs: currentBrowserPath(),
       pendingAttachments,
       notes,
     });
+    if (!result.intent) {
+      notification.error('Ask Flower unavailable', result.error ?? 'Failed to resolve selected file paths.');
+      return;
+    }
+
+    dispatchAskFlowerIntent(result.intent);
   };
 
   const handleCopyName = (items: FileItem[]) => {
