@@ -1336,6 +1336,16 @@ func (r *run) assistantMarkdownTextSnapshot() string {
 	return strings.TrimSpace(strings.Join(parts, "\n\n"))
 }
 
+func (r *run) canonicalAssistantMarkdownOrFallback(fallback string) string {
+	if r == nil {
+		return normalizeCanonicalMarkdownText(fallback)
+	}
+	if current := normalizeCanonicalMarkdownText(r.assistantMarkdownTextSnapshot()); current != "" {
+		return current
+	}
+	return normalizeCanonicalMarkdownText(fallback)
+}
+
 func normalizeCanonicalMarkdownText(text string) string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")

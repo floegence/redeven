@@ -127,6 +127,7 @@ Behavior summary:
   - `intent` describes user-facing semantics (`social`, `creative`, `task`).
   - `execution_contract` describes runtime shape (`direct_reply`, `hybrid_first_turn`, `agentic_loop`).
 - `task` intent no longer implies explicit-completion by itself. Flower may start a task run in `hybrid_first_turn`, answer directly in the first turn when the request is fully resolved, and only promote into `agentic_loop` when durable multi-step execution is actually needed.
+- Implicit reply completion is provider-finish-aware, not text-presence-only. A reply may auto-complete only after a clean terminal provider outcome; truncation must continue/recover, and blocked provider finishes such as `content_filter` must fail visibly instead of being relabeled as a successful answer.
 - When a validated structured prompt response continues an existing guided objective, Flower should reuse that continuation context deterministically instead of spending extra classifier turns to rediscover `task + continue`.
 - Persisted waiting-prompt interaction contracts are the durable source of truth for those guided continuations; the runtime should reuse them directly and mark observability payloads explicitly when seed reuse is taken.
 - The run-policy classifier should prefer a single synthetic tool call with an explicit schema, including `interaction_contract`, and only fall back to text JSON parsing when tool calls are unavailable, so reasoning-heavy providers do not leak prose into classifier payloads.
