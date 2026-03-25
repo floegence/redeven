@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type Component, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack, type Component } from 'solid-js';
 import { cn, useNotification } from '@floegence/floe-webapp-core';
 import { Motion } from 'solid-motionone';
 import {
@@ -101,10 +101,10 @@ import {
   projectThreadTranscriptMessages,
   sameSubagentViewContent,
 } from './aiThreadRenderProjection';
-import { FlowerLiveRunPane } from './FlowerLiveRunPane';
 import { FlowerMessageRunIndicator } from '../widgets/FlowerMessageRunIndicator';
 import {
   applyStreamEventBatchToLiveRunMessage,
+  buildPendingLiveRunMessage,
   clearLiveRunMessageIfTranscriptCaughtUp,
   mergeLiveRunSnapshot,
   resolveRenderableLiveRunMessage,
@@ -135,6 +135,7 @@ const CONTEXT_TIMELINE_WINDOW_LIMIT = 200;
 const RUN_CONTEXT_EVENTS_PAGE_LIMIT = 200;
 const RUN_CONTEXT_EVENTS_MAX_PAGES = 12;
 const ACTIVE_RUN_SNAPSHOT_RECOVERY_DELAY_MS = 300;
+const ACTIVE_RUN_RENDER_KEY_PREFIX = 'active-run';
 
 type RunEventResponseItem = {
   event_id?: number;
@@ -1764,8 +1765,6 @@ interface MessageListWithEmptyStateProps {
   loading?: boolean;
   onSuggestionClick: (prompt: string) => void;
   disabled?: boolean;
-  footer?: JSX.Element;
-  hasFooter?: boolean;
   class?: string;
 }
 
@@ -1773,7 +1772,7 @@ const MessageListWithEmptyState: Component<MessageListWithEmptyStateProps> = (pr
   return (
     <div class={cn('relative flex-1 min-h-0', props.class)}>
       <Show when={props.hasMessages}>
-        <VirtualMessageList class="h-full" footer={props.footer} hasFooter={props.hasFooter} />
+        <VirtualMessageList class="h-full" />
       </Show>
       <Show when={!props.hasMessages && !props.loading}>
         <EmptyChat
@@ -1841,13 +1840,37 @@ export function EnvAIPage() {
   const sendIntentByMessageId = new Map<string, SendIntent>();
   const sourceFollowupIDByMessageId = new Map<string, string>();
   const draftSnapshotByMessageId = new Map<string, AIChatInputDraftSnapshot>();
-  const activeLiveRunMessage = createMemo(() =>
+  let lastPendingLiveRunRenderKey = '';
+  let lastPendingLiveRunMessage: Message | null = null;
+  const resolvedLiveRunMessage = createMemo(() =>
     resolveRenderableLiveRunMessage(liveRunMessage(), transcriptMessages()),
   );
   const visibleLiveRunMessage = createMemo(() => {
-    const liveMessage = activeLiveRunMessage();
+    const liveMessage = resolvedLiveRunMessage();
     return liveMessage && hasVisibleMessageContent(liveMessage) ? liveMessage : null;
   });
+  const pendingLiveRunMessage = createMemo(() => {
+    if (!liveRunPending()) {
+      lastPendingLiveRunRenderKey = '';
+      lastPendingLiveRunMessage = null;
+      return null;
+    }
+
+    const tid = String(ai.activeThreadId() ?? '').trim();
+    const renderKey = `${ACTIVE_RUN_RENDER_KEY_PREFIX}:${tid || 'pending'}`;
+    if (lastPendingLiveRunMessage && lastPendingLiveRunRenderKey === renderKey) {
+      return lastPendingLiveRunMessage;
+    }
+
+    lastPendingLiveRunRenderKey = renderKey;
+    lastPendingLiveRunMessage = buildPendingLiveRunMessage({
+      messageId: `m_ai_pending:${tid || 'pending'}`,
+      renderKey,
+      timestamp: Date.now(),
+    });
+    return lastPendingLiveRunMessage;
+  });
+  const activeAssistantRowMessage = createMemo(() => visibleLiveRunMessage() ?? pendingLiveRunMessage());
 
   let chat: ChatContextValue | null = null;
   const [chatReady, setChatReady] = createSignal(false);
@@ -2116,7 +2139,8 @@ export function EnvAIPage() {
   const setLiveRunSnapshotMessage = (message: Message): void => {
     const transcript = untrack(transcriptMessages);
     setLiveRunMessage((current) => {
-      const next = clearLiveRunMessageIfTranscriptCaughtUp(mergeLiveRunSnapshot(current, message), transcript);
+      const base = current ?? untrack(pendingLiveRunMessage);
+      const next = clearLiveRunMessageIfTranscriptCaughtUp(mergeLiveRunSnapshot(base, message), transcript);
       setLiveRunPending(next ? !hasVisibleMessageContent(next) : false);
       return next;
     });
@@ -2129,7 +2153,8 @@ export function EnvAIPage() {
 
     const transcript = untrack(transcriptMessages);
     setLiveRunMessage((current) => {
-      const next = clearLiveRunMessageIfTranscriptCaughtUp(applyStreamEventBatchToLiveRunMessage(current, events), transcript);
+      const base = current ?? untrack(pendingLiveRunMessage);
+      const next = clearLiveRunMessageIfTranscriptCaughtUp(applyStreamEventBatchToLiveRunMessage(base, events), transcript);
       setLiveRunPending(next ? !hasVisibleMessageContent(next) : false);
       return next;
     });
@@ -2348,7 +2373,7 @@ export function EnvAIPage() {
 
     const projectedMessages = projectThreadTranscriptMessages({
       transcriptMessages: transcriptMessages(),
-      liveAssistantMessage: visibleLiveRunMessage(),
+      liveAssistantMessage: activeAssistantRowMessage(),
       previousRenderedMessages: untrack(() => chat?.messages() ?? []),
       subagentById: threadSubagentsById(),
     });
@@ -2414,11 +2439,8 @@ export function EnvAIPage() {
   };
 
   const activeThreadRunning = createMemo(() => ai.isThreadRunning(ai.activeThreadId()));
-  const showPendingLiveRunFooter = createMemo(() =>
-    liveRunPending() && visibleLiveRunMessage() === null,
-  );
   const hasMessages = createMemo(() =>
-    transcriptMessages().length > 0 || visibleLiveRunMessage() !== null || showPendingLiveRunFooter(),
+    transcriptMessages().length > 0 || activeAssistantRowMessage() !== null,
   );
   const activeThreadWaitingUser = createMemo(() => {
     const status = String(ai.activeThread()?.run_status ?? '').trim().toLowerCase();
@@ -2710,7 +2732,7 @@ export function EnvAIPage() {
     status === 'success' || status === 'failed' || status === 'canceled' || status === 'timed_out' || status === 'waiting_user';
 
   const hasStreamingAssistantMessage = (): boolean => {
-    return activeLiveRunMessage()?.status === 'streaming';
+    return resolvedLiveRunMessage()?.status === 'streaming';
   };
 
   const cancelActiveRunSnapshotRecovery = (): void => {
@@ -3453,7 +3475,6 @@ export function EnvAIPage() {
           if (isAssistantProgressEvent) {
             activeAssistantMessageSeq += 1;
             cancelActiveRunSnapshotRecovery();
-            setLiveRunPending(false);
           }
           applyLiveRunStreamEvent(decorateStreamEvent(streamEvent) as StreamEvent);
         }
@@ -3630,7 +3651,9 @@ export function EnvAIPage() {
       const collapsed = (toolBlock as any)?.collapsed;
       if (typeof collapsed !== 'boolean') return;
 
-      void rpc.ai.setToolCollapsed({ threadId: tid, messageId: mid, toolId: tidTool, collapsed }).catch(() => {
+      const persistedMessageId = String((msg as any)?.sourceMessageId ?? mid).trim() || mid;
+
+      void rpc.ai.setToolCollapsed({ threadId: tid, messageId: persistedMessageId, toolId: tidTool, collapsed }).catch(() => {
         // Best-effort: ignore persistence failures (snapshot/transcript refresh can self-heal).
       });
     };
@@ -4202,9 +4225,9 @@ export function EnvAIPage() {
           assistantAvatar: FlowerAssistantAvatar,
           showListWorkingIndicator: false,
           renderMessageOrnament: (props) => (
-            props.message.role === 'assistant' && props.isActiveAssistantStreaming
-              ? <FlowerMessageRunIndicator phaseLabel={runPhaseLabel()} />
-              : <></>
+            props.message.role === 'assistant' && props.isActiveAssistantStreaming && (
+              <FlowerMessageRunIndicator phaseLabel={runPhaseLabel()} />
+            )
           ),
           allowAttachments: canInteract(),
           maxAttachments: 5,
@@ -4458,14 +4481,6 @@ export function EnvAIPage() {
                         loading={messagesLoading()}
                         onSuggestionClick={handleSuggestionClick}
                         disabled={!canInteract()}
-                        hasFooter={showPendingLiveRunFooter()}
-                        footer={(
-                          <Show when={showPendingLiveRunFooter()}>
-                            <FlowerLiveRunPane
-                              phaseLabel={runPhaseLabel()}
-                            />
-                          </Show>
-                        )}
                         class="h-full"
                       />
                       <ChatFileBrowserFAB

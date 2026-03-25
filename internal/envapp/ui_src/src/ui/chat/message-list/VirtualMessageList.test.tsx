@@ -123,26 +123,31 @@ describe('VirtualMessageList', () => {
     document.body.innerHTML = '';
   });
 
-  it('keeps follow-bottom active when the live footer grows', async () => {
+  it('keeps follow-bottom active when the active assistant row grows', async () => {
     const mod = await import('./VirtualMessageList');
+    currentMessages = [
+      {
+        id: 'm_ai_live_1',
+        renderKey: 'active-run:thread-1',
+        role: 'assistant',
+        status: 'streaming',
+        timestamp: 100,
+        blocks: [{ type: 'markdown', content: 'Hello Flower' }],
+      },
+    ];
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    const dispose = render(() => (
-      <mod.VirtualMessageList
-        hasFooter
-        footer={<div data-testid="live-footer-content">live surface</div>}
-      />
-    ), host);
+    const dispose = render(() => <mod.VirtualMessageList />, host);
 
     try {
       await flushAsync();
 
       const scroller = host.querySelector('.chat-message-list-scroll') as HTMLDivElement | null;
-      const footer = host.querySelector('.chat-message-list-footer') as HTMLDivElement | null;
+      const item = host.querySelector('.chat-message-list-item') as HTMLDivElement | null;
 
       expect(scroller).toBeTruthy();
-      expect(footer).toBeTruthy();
+      expect(item).toBeTruthy();
 
       let scrollTop = 120;
       Object.defineProperty(scroller!, 'scrollHeight', {
@@ -163,9 +168,10 @@ describe('VirtualMessageList', () => {
 
       scrollToBottomMock.mockClear();
 
-      triggerResize(footer!, 220);
+      triggerResize(item!, 220);
       await flushAsync();
 
+      expect(setMessageHeightMock).toHaveBeenCalledWith('active-run:thread-1', 220);
       expect(scrollToBottomMock).toHaveBeenCalledTimes(1);
     } finally {
       dispose();

@@ -212,6 +212,8 @@ export type ChatAvatar = string | ChatAvatarRenderer;
 
 export interface Message {
   id: string;
+  renderKey?: string;
+  sourceMessageId?: string;
   role: MessageRole;
   blocks: MessageBlock[];
   status: MessageStatus;

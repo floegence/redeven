@@ -624,12 +624,7 @@ function makeCompletedEmptyAssistantMessage(messageId = 'assistant-empty-1') {
 }
 
 function assistantRunIndicator(host: HTMLElement): HTMLElement | null {
-  return host.querySelector('.chat-message-item-assistant .chat-message-ornament .flower-message-run-indicator')
-    ?? host.querySelector('.flower-live-run-pane .flower-message-run-indicator');
-}
-
-function pendingRunIndicator(host: HTMLElement): HTMLElement | null {
-  return host.querySelector('.flower-live-run-pane .flower-message-run-indicator');
+  return host.querySelector('.chat-message-item-assistant .chat-message-ornament .flower-message-run-indicator');
 }
 
 function liveRunPlaceholder(host: HTMLElement): HTMLElement | null {
@@ -1122,8 +1117,8 @@ export function registerEnvAIPageSendTests() {
 
         const reasoning = host.querySelector('.chat-thinking-block');
         expect(reasoning).toBeNull();
-        expect(liveRunPlaceholder(host)).toBeNull();
-        expect(pendingRunIndicator(host)).toBeTruthy();
+        expect(liveRunPlaceholder(host)).toBeTruthy();
+        expect(assistantRunIndicator(host)).toBeTruthy();
       } finally {
         dispose();
       }
@@ -1141,6 +1136,7 @@ export function registerEnvAIPageSendTests() {
         await flushAsync();
 
         expect(host.querySelector('.chat-message-item-assistant')).toBeTruthy();
+        expect(assistantRunIndicator(host)).toBeTruthy();
         expect(liveRunPlaceholder(host)).toBeTruthy();
 
         await waitForActiveRunSnapshotRecovery();
@@ -1149,6 +1145,35 @@ export function registerEnvAIPageSendTests() {
         expect(assistant).toBeTruthy();
         expect(liveRunPlaceholder(host)).toBeTruthy();
         expect(getActiveRunSnapshotMock).toHaveBeenCalledTimes(2);
+      } finally {
+        dispose();
+      }
+    });
+
+    it('keeps the active assistant render slot mounted while the pending placeholder hands off to realtime streaming', async () => {
+      getActiveRunSnapshotMock.mockResolvedValueOnce({ ok: false });
+
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'hold the active assistant row steady');
+        submitComposer(host, 'button', 'Send message');
+        await flushAsync();
+
+        expect(host.querySelectorAll('.chat-message-item-assistant')).toHaveLength(1);
+        expect(host.querySelector('.chat-message-item-assistant .chat-markdown-block')).toBeTruthy();
+        expect(assistantRunIndicator(host)).toBeTruthy();
+        expect(liveRunPlaceholder(host)).toBeTruthy();
+
+        const messageId = emitAssistantRealtimeMessageStart('assistant-row-handoff');
+        emitAssistantRealtimeDelta(messageId, 'Hello Flower');
+        await flushAsync();
+
+        expect(host.querySelectorAll('.chat-message-item-assistant')).toHaveLength(1);
+        expect(host.querySelector('.chat-message-item-assistant .chat-markdown-block')).toBeTruthy();
+        expect(assistantRunIndicator(host)).toBeTruthy();
+        await waitFor(() => {
+          expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello Flower');
+        });
       } finally {
         dispose();
       }
@@ -1163,6 +1188,7 @@ export function registerEnvAIPageSendTests() {
 
         const assistant = host.querySelector('.chat-message-item-assistant');
         expect(assistant).toBeTruthy();
+        expect(assistantRunIndicator(host)).toBeTruthy();
         expect(liveRunPlaceholder(host)).toBeTruthy();
       } finally {
         dispose();
@@ -1191,7 +1217,7 @@ export function registerEnvAIPageSendTests() {
         expect(host.querySelectorAll('.chat-message-item-assistant')).toHaveLength(1);
         expect(host.textContent).toContain('Final answer recovered from transcript.');
         expect(liveRunPlaceholder(host)).toBeNull();
-        expect(pendingRunIndicator(host)).toBeNull();
+        expect(assistantRunIndicator(host)).toBeNull();
       } finally {
         dispose();
       }
@@ -1287,7 +1313,6 @@ export function registerEnvAIPageSendTests() {
         expect(assistant).toBeTruthy();
         expect(assistantRunIndicator(host)).toBeTruthy();
         expect(host.querySelectorAll('.flower-message-run-indicator')).toHaveLength(1);
-        expect(pendingRunIndicator(host)).toBeNull();
         expect(host.querySelector('.chat-working-indicator')).toBeNull();
       } finally {
         dispose();
