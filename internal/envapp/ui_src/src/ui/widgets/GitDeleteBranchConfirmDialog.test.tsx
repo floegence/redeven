@@ -85,7 +85,7 @@ describe('GitDeleteBranchConfirmDialog', () => {
     document.body.innerHTML = '';
   });
 
-  it('renders the disabled delete tooltip outside the dialog container', async () => {
+  it('renders the force-delete confirmation tooltip outside the dialog container', async () => {
     const blockedReason = 'Branch is not fully merged into HEAD.';
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -108,6 +108,8 @@ describe('GitDeleteBranchConfirmDialog', () => {
             requiresDiscardConfirmation: false,
             safeDeleteAllowed: false,
             safeDeleteReason: blockedReason,
+            forceDeleteAllowed: true,
+            forceDeleteRequiresConfirm: true,
             planFingerprint: 'plan-1',
           }}
           onClose={() => {}}
@@ -118,12 +120,16 @@ describe('GitDeleteBranchConfirmDialog', () => {
     try {
       const dialog = document.body.querySelector('[role="dialog"]') as HTMLElement | null;
       expect(dialog).toBeTruthy();
+      expect(dialog?.textContent).toContain('Force delete consequences');
 
       const confirmButton = Array.from(document.body.querySelectorAll('button')).find(
-        (node) => node.textContent?.trim() === 'Delete Branch',
+        (node) => node.textContent?.trim() === 'Force Delete Branch',
       ) as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.disabled).toBe(true);
+
+      const confirmationInput = document.body.querySelector('input[type="text"]') as HTMLInputElement | null;
+      expect(confirmationInput?.placeholder).toBe('backup/main-before-protocol-hardening-cleanup-20260308');
 
       const anchor = confirmButton?.closest('[data-redeven-tooltip-anchor]') as HTMLElement | null;
       expect(anchor).toBeTruthy();
@@ -132,7 +138,7 @@ describe('GitDeleteBranchConfirmDialog', () => {
       await flushPositioning();
 
       const tooltip = document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
-      expect(tooltip?.textContent).toContain(blockedReason);
+      expect(tooltip?.textContent).toContain('Type backup/main-before-protocol-hardening-cleanup-20260308 to enable force delete.');
       expect(dialog?.querySelector('[role="tooltip"]')).toBeNull();
     } finally {
       dispose();

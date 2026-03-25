@@ -253,17 +253,27 @@ func (s *Service) mergeBranch(ctx context.Context, repo repoContext, name string
 	return resp, nil
 }
 
+type deleteBranchOptions struct {
+	Name                         string
+	FullName                     string
+	Kind                         string
+	DeleteMode                   string
+	ConfirmBranchName            string
+	RemoveLinkedWorktree         bool
+	DiscardLinkedWorktreeChanges bool
+	PlanFingerprint              string
+}
+
 func (s *Service) deleteBranch(
 	ctx context.Context,
 	repo repoContext,
-	name string,
-	fullName string,
-	kind string,
-	removeLinkedWorktree bool,
-	discardLinkedWorktreeChanges bool,
-	planFingerprint string,
+	req deleteBranchOptions,
 ) (*deleteBranchResp, error) {
-	target, err := normalizeDeleteBranchTarget(name, fullName, kind)
+	target, err := normalizeDeleteBranchTarget(req.Name, req.FullName, req.Kind)
+	if err != nil {
+		return nil, err
+	}
+	deleteMode, err := normalizeDeleteBranchMode(req.DeleteMode)
 	if err != nil {
 		return nil, err
 	}
@@ -271,27 +281,35 @@ func (s *Service) deleteBranch(
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(planFingerprint) == "" {
+	if strings.TrimSpace(req.PlanFingerprint) == "" {
 		return nil, errors.New("delete plan fingerprint is required")
 	}
-	if plan.PlanFingerprint != strings.TrimSpace(planFingerprint) {
+	if plan.PlanFingerprint != strings.TrimSpace(req.PlanFingerprint) {
 		return nil, errors.New("delete plan is stale; review the branch again")
 	}
 	if strings.TrimSpace(plan.BlockingReason) != "" {
 		return nil, errors.New(plan.BlockingReason)
 	}
-	if !plan.SafeDeleteAllowed {
+	if deleteMode == deleteBranchModeSafe && !plan.SafeDeleteAllowed {
 		return nil, errors.New(plan.SafeDeleteReason)
+	}
+	if deleteMode == deleteBranchModeForce {
+		if !plan.ForceDeleteAllowed {
+			return nil, errors.New(plan.ForceDeleteReason)
+		}
+		if plan.ForceDeleteRequiresConfirm && strings.TrimSpace(req.ConfirmBranchName) != target.LocalName {
+			return nil, errors.New("branch name confirmation does not match the target branch")
+		}
 	}
 
 	removedWorktreePath := ""
 	if plan.LinkedWorktree != nil {
-		if !removeLinkedWorktree {
+		if !req.RemoveLinkedWorktree {
 			return nil, errors.New("linked worktree removal must be confirmed before deleting this branch")
 		}
 		args := []string{"worktree", "remove"}
-		if plan.RequiresDiscardConfirmation {
-			if !discardLinkedWorktreeChanges {
+		if deleteMode == deleteBranchModeForce || plan.RequiresDiscardConfirmation {
+			if deleteMode != deleteBranchModeForce && !req.DiscardLinkedWorktreeChanges {
 				return nil, errors.New("discard confirmation is required for linked worktree changes")
 			}
 			args = append(args, "--force")
@@ -303,7 +321,11 @@ func (s *Service) deleteBranch(
 		removedWorktreePath = plan.LinkedWorktree.WorktreePath
 	}
 
-	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "branch", "-d", target.LocalName); err != nil {
+	deleteFlag := "-d"
+	if deleteMode == deleteBranchModeForce {
+		deleteFlag = "-D"
+	}
+	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "branch", deleteFlag, target.LocalName); err != nil {
 		return nil, err
 	}
 	updatedRepo, err := s.loadRepoContext(ctx, repo.repoRootReal)

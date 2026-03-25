@@ -175,15 +175,22 @@ export type GitPreviewDeleteBranchResponse = {
   safeDeleteAllowed: boolean;
   safeDeleteBaseRef?: string;
   safeDeleteReason?: string;
+  forceDeleteAllowed: boolean;
+  forceDeleteRequiresConfirm: boolean;
+  forceDeleteReason?: string;
   blockingReason?: string;
   planFingerprint?: string;
 };
+
+export type GitDeleteBranchMode = 'safe' | 'force';
 
 export type GitDeleteBranchRequest = {
   repoRootPath: string;
   name?: string;
   fullName?: string;
   kind?: 'local' | 'remote' | string;
+  deleteMode?: GitDeleteBranchMode | string;
+  confirmBranchName?: string;
   removeLinkedWorktree: boolean;
   discardLinkedWorktreeChanges: boolean;
   planFingerprint?: string;

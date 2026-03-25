@@ -22,6 +22,9 @@ type deleteBranchPlan struct {
 	SafeDeleteAllowed           bool
 	SafeDeleteBaseRef           string
 	SafeDeleteReason            string
+	ForceDeleteAllowed          bool
+	ForceDeleteRequiresConfirm  bool
+	ForceDeleteReason           string
 	BlockingReason              string
 	TargetHeadCommit            string
 	SafeDeleteBaseCommit        string
@@ -37,10 +40,31 @@ type deleteBranchFingerprintPayload struct {
 	SafeDeleteBaseCommit        string                                 `json:"safe_delete_base_commit"`
 	SafeDeleteAllowed           bool                                   `json:"safe_delete_allowed"`
 	SafeDeleteReason            string                                 `json:"safe_delete_reason"`
+	ForceDeleteAllowed          bool                                   `json:"force_delete_allowed"`
+	ForceDeleteRequiresConfirm  bool                                   `json:"force_delete_requires_confirm"`
+	ForceDeleteReason           string                                 `json:"force_delete_reason"`
 	BlockingReason              string                                 `json:"blocking_reason"`
 	RequiresWorktreeRemoval     bool                                   `json:"requires_worktree_removal"`
 	RequiresDiscardConfirmation bool                                   `json:"requires_discard_confirmation"`
 	LinkedWorktree              *deleteBranchFingerprintLinkedWorktree `json:"linked_worktree,omitempty"`
+}
+
+type deleteBranchMode string
+
+const (
+	deleteBranchModeSafe  deleteBranchMode = "safe"
+	deleteBranchModeForce deleteBranchMode = "force"
+)
+
+func normalizeDeleteBranchMode(value string) (deleteBranchMode, error) {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case "", string(deleteBranchModeSafe):
+		return deleteBranchModeSafe, nil
+	case string(deleteBranchModeForce):
+		return deleteBranchModeForce, nil
+	default:
+		return "", errors.New("invalid delete mode")
+	}
 }
 
 type deleteBranchFingerprintLinkedWorktree struct {
@@ -81,6 +105,9 @@ func (s *Service) previewDeleteBranch(ctx context.Context, repo repoContext, nam
 		SafeDeleteAllowed:           plan.SafeDeleteAllowed,
 		SafeDeleteBaseRef:           plan.SafeDeleteBaseRef,
 		SafeDeleteReason:            plan.SafeDeleteReason,
+		ForceDeleteAllowed:          plan.ForceDeleteAllowed,
+		ForceDeleteRequiresConfirm:  plan.ForceDeleteRequiresConfirm,
+		ForceDeleteReason:           plan.ForceDeleteReason,
 		BlockingReason:              plan.BlockingReason,
 		PlanFingerprint:             plan.PlanFingerprint,
 	}, nil
@@ -115,11 +142,15 @@ func (s *Service) buildDeleteBranchPlan(ctx context.Context, repo repoContext, t
 		SafeDeleteAllowed:           safeDeleteAllowed,
 		SafeDeleteBaseRef:           safeDeleteBaseRef,
 		SafeDeleteReason:            safeDeleteReason,
+		ForceDeleteAllowed:          true,
+		ForceDeleteRequiresConfirm:  true,
 		TargetHeadCommit:            targetHeadCommit,
 		SafeDeleteBaseCommit:        safeDeleteBaseCommit,
 	}
 	if linkedWorktree != nil && !linkedWorktree.Accessible {
 		plan.BlockingReason = fmt.Sprintf("Linked worktree %s is not accessible from this agent.", linkedWorktree.WorktreePath)
+		plan.ForceDeleteAllowed = false
+		plan.ForceDeleteReason = plan.BlockingReason
 	}
 	plan.PlanFingerprint = buildDeleteBranchPlanFingerprint(repo, plan)
 	return plan, nil
@@ -220,6 +251,9 @@ func buildDeleteBranchPlanFingerprint(repo repoContext, plan deleteBranchPlan) s
 		SafeDeleteBaseCommit:        plan.SafeDeleteBaseCommit,
 		SafeDeleteAllowed:           plan.SafeDeleteAllowed,
 		SafeDeleteReason:            plan.SafeDeleteReason,
+		ForceDeleteAllowed:          plan.ForceDeleteAllowed,
+		ForceDeleteRequiresConfirm:  plan.ForceDeleteRequiresConfirm,
+		ForceDeleteReason:           plan.ForceDeleteReason,
 		BlockingReason:              plan.BlockingReason,
 		RequiresWorktreeRemoval:     plan.RequiresWorktreeRemoval,
 		RequiresDiscardConfirmation: plan.RequiresDiscardConfirmation,

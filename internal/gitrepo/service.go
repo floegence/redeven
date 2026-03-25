@@ -411,12 +411,16 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		resp, err := s.deleteBranch(
 			ctx,
 			repo,
-			req.Name,
-			req.FullName,
-			req.Kind,
-			req.RemoveLinkedWorktree,
-			req.DiscardLinkedWorktreeChanges,
-			req.PlanFingerprint,
+			deleteBranchOptions{
+				Name:                         req.Name,
+				FullName:                     req.FullName,
+				Kind:                         req.Kind,
+				DeleteMode:                   req.DeleteMode,
+				ConfirmBranchName:            req.ConfirmBranchName,
+				RemoveLinkedWorktree:         req.RemoveLinkedWorktree,
+				DiscardLinkedWorktreeChanges: req.DiscardLinkedWorktreeChanges,
+				PlanFingerprint:              req.PlanFingerprint,
+			},
 		)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
@@ -838,8 +842,12 @@ func classifyGitMutationRPCError(err error) *rpc.Error {
 		return &rpc.Error{Code: 400, Message: "remote branches cannot be deleted here"}
 	case strings.Contains(lower, "cannot delete the current branch"):
 		return &rpc.Error{Code: 400, Message: "cannot delete the current branch"}
+	case strings.Contains(lower, "invalid delete mode"):
+		return &rpc.Error{Code: 400, Message: "invalid delete mode"}
 	case strings.Contains(lower, "delete plan fingerprint is required"):
 		return &rpc.Error{Code: 400, Message: "delete plan fingerprint is required"}
+	case strings.Contains(lower, "branch name confirmation does not match"):
+		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "delete plan is stale"):
 		return &rpc.Error{Code: 409, Message: message}
 	case strings.Contains(lower, "merge plan fingerprint is required"):

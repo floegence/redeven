@@ -65,6 +65,7 @@ Git browse mode distinguishes between the active repository workspace and per-br
 - For remote branches or local branches without a checked-out worktree, branch status stays unavailable and the UI points users to `Compare` or to opening the branch in a worktree.
 - Git browse `Ask Flower` entry points use Git-authored snapshot context instead of pretending commit or workspace summaries are file-browser selections, so Flower receives a clean summary of the selected workspace section or commit metadata/file list.
 - Git diff dialogs keep the embedded `Patch` preview as the default fast path, and now also expose an on-demand `Full Context` mode that re-fetches a single selected file diff with unchanged lines included for broader review context.
+- Git branch deletion keeps `safe delete` as the default path, but when an unmerged local branch cannot be safely deleted the review dialog can escalate into an exact branch-name-confirmed `force delete`; linked worktrees are force-removed together with their pending changes, while inaccessible linked worktrees remain blocked.
 
 This keeps worktree status consistent even when the user opens `Branches` first without visiting `Changes`.
 

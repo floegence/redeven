@@ -1389,6 +1389,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const handleConfirmDeleteBranch = async (
     branch: GitBranchSummary,
     options: {
+      deleteMode: 'safe' | 'force';
+      confirmBranchName?: string;
       removeLinkedWorktree: boolean;
       discardLinkedWorktreeChanges: boolean;
       planFingerprint?: string;
@@ -1410,6 +1412,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         name: branch.name,
         fullName: branch.fullName,
         kind: branch.kind,
+        deleteMode: options.deleteMode,
+        confirmBranchName: options.confirmBranchName,
         removeLinkedWorktree: options.removeLinkedWorktree,
         discardLinkedWorktreeChanges: options.discardLinkedWorktreeChanges,
         planFingerprint: options.planFingerprint,

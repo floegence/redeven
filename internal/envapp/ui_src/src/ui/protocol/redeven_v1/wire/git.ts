@@ -173,6 +173,9 @@ export type wire_git_preview_delete_branch_resp = {
   safe_delete_allowed: boolean;
   safe_delete_base_ref?: string;
   safe_delete_reason?: string;
+  force_delete_allowed: boolean;
+  force_delete_requires_confirm: boolean;
+  force_delete_reason?: string;
   blocking_reason?: string;
   plan_fingerprint?: string;
 };
@@ -182,6 +185,8 @@ export type wire_git_delete_branch_req = {
   name?: string;
   full_name?: string;
   kind?: string;
+  delete_mode?: string;
+  confirm_branch_name?: string;
   remove_linked_worktree: boolean;
   discard_linked_worktree_changes: boolean;
   plan_fingerprint?: string;

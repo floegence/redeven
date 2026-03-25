@@ -314,7 +314,7 @@ vi.mock('./GitWorkspace', () => ({
     ) => void;
     onConfirmDeleteBranch?: (
       branch: { name?: string; fullName?: string; kind?: string },
-      options: { removeLinkedWorktree: boolean; discardLinkedWorktreeChanges: boolean; planFingerprint?: string },
+      options: { deleteMode: 'safe' | 'force'; confirmBranchName?: string; removeLinkedWorktree: boolean; discardLinkedWorktreeChanges: boolean; planFingerprint?: string },
     ) => void;
   }) => {
     onMount(() => {
@@ -454,6 +454,7 @@ vi.mock('./GitWorkspace', () => ({
               fullName: 'refs/heads/feature/demo',
               kind: 'local',
             }, {
+              deleteMode: 'safe',
               removeLinkedWorktree: false,
               discardLinkedWorktreeChanges: false,
               planFingerprint: props.deletePreview?.planFingerprint,
@@ -663,6 +664,8 @@ beforeEach(() => {
     requiresDiscardConfirmation: false,
     safeDeleteAllowed: true,
     safeDeleteBaseRef: 'main',
+    forceDeleteAllowed: true,
+    forceDeleteRequiresConfirm: true,
     planFingerprint: 'plan-1',
   });
   mockRpc.git.deleteBranch.mockResolvedValue({
@@ -1608,6 +1611,8 @@ describe('RemoteFileBrowser persistence', () => {
         name: 'feature/demo',
         fullName: 'refs/heads/feature/demo',
         kind: 'local',
+        deleteMode: 'safe',
+        confirmBranchName: undefined,
         removeLinkedWorktree: false,
         discardLinkedWorktreeChanges: false,
         planFingerprint: 'plan-1',

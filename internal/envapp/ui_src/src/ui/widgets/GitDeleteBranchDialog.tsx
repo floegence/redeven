@@ -1,18 +1,11 @@
 import { Show } from 'solid-js';
-import { cn, useLayout } from '@floegence/floe-webapp-core';
-import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
+import { cn } from '@floegence/floe-webapp-core';
 import type { GitBranchSummary, GitPreviewDeleteBranchResponse, GitWorkspaceSummary } from '../protocol/redeven_v1';
 import { branchDisplayName } from '../utils/gitWorkbench';
-import { GitDeleteBranchConfirmButton, resolveDeleteBranchConfirmDisabledReason } from './GitDeleteBranchConfirmButton';
-import { GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
+import { GitDeleteBranchReviewDialog } from './GitDeleteBranchReviewDialog';
+import { type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchReviewModel';
 
-export type GitDeleteBranchDialogState = 'idle' | 'previewing' | 'deleting';
-
-export interface GitDeleteBranchDialogConfirmOptions {
-  removeLinkedWorktree: boolean;
-  discardLinkedWorktreeChanges: boolean;
-  planFingerprint?: string;
-}
+export type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchReviewModel';
 
 export interface GitDeleteBranchDialogProps {
   open: boolean;
@@ -43,44 +36,13 @@ function formatPendingSummary(summary: GitWorkspaceSummary | null | undefined): 
 }
 
 export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
-  const layout = useLayout();
-
   const branchName = () => branchDisplayName(props.branch);
   const preview = () => props.preview ?? null;
   const linkedWorktree = () => preview()?.linkedWorktree;
-  const blockingReason = () => String(preview()?.blockingReason ?? '').trim();
-  const state = () => props.state ?? 'idle';
-  const loading = () => state() === 'previewing';
-  const deleting = () => state() === 'deleting';
   const requiresWorktreeRemoval = () => Boolean(preview()?.requiresWorktreeRemoval);
   const linkedWorktreePath = () => linkedWorktree()?.worktreePath || 'the linked worktree path';
   const worktreeAccessible = () => Boolean(linkedWorktree()?.accessible);
   const pendingChangeSummary = () => formatPendingSummary(linkedWorktree()?.summary);
-  const confirmDisabledReason = () => resolveDeleteBranchConfirmDisabledReason({
-    branch: props.branch,
-    preview: preview(),
-    previewError: props.previewError,
-    loading: loading(),
-    deleting: deleting(),
-    blockingReason: blockingReason(),
-  });
-
-  const canConfirm = () => {
-    return Boolean(
-      props.open
-      && props.branch
-      && preview()
-      && !loading()
-      && !deleting()
-      && preview()?.safeDeleteAllowed
-      && !blockingReason(),
-    );
-  };
-
-  const confirmLabel = () => {
-    if (deleting()) return 'Deleting...';
-    return requiresWorktreeRemoval() ? 'Delete Branch and Worktree' : 'Delete Branch';
-  };
 
   const changeImpact = () => {
     if (!requiresWorktreeRemoval()) return 'No worktree or uncommitted files will be removed.';
@@ -89,106 +51,52 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
     return `Uncommitted changes in that worktree will be discarded (${pendingChangeSummary()}).`;
   };
 
-  const dialogWidthClass = () => {
-    if (layout.isMobile()) return 'w-[calc(100vw-0.5rem)] max-w-none';
-    return 'w-[min(34rem,94vw)]';
-  };
-
   return (
-    <Dialog
+    <GitDeleteBranchReviewDialog
       open={props.open}
-      onOpenChange={(open) => {
-        if (!open) props.onClose();
-      }}
-      title="Delete Branch"
-      description={requiresWorktreeRemoval()
-        ? `Delete ${branchName()} and its linked worktree.`
-        : `Delete ${branchName()} from this repository.`}
-      footer={(
-        <div class="border-t border-border/60 bg-background/88 px-4 pt-3 pb-4 backdrop-blur supports-[backdrop-filter]:bg-background/78">
-          <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-            <Button size="sm" variant="outline" class="w-full sm:w-auto" disabled={loading() || deleting()} onClick={props.onClose}>
-              Cancel
-            </Button>
-            <Show when={props.previewError && props.branch}>
-              <Button
-                size="sm"
-                variant="outline"
-                class="w-full sm:w-auto"
-                disabled={loading() || deleting()}
-                onClick={() => props.branch && props.onRetryPreview?.(props.branch)}
-              >
-                Retry
-              </Button>
+      branch={props.branch}
+      preview={props.preview}
+      previewError={props.previewError}
+      actionError={props.actionError}
+      state={props.state}
+      description={`Delete ${branchName()} and its linked worktree.`}
+      safeConfirmLabel="Delete Branch and Worktree"
+      forceConfirmLabel="Force Delete Branch and Worktree"
+      dialogDesktopWidthClass="w-[min(34rem,94vw)]"
+      summaryNoteClass={cn('text-foreground', requiresWorktreeRemoval() ? 'border-error/20 bg-error/10' : 'border-border/55 bg-background/72')}
+      safeSummary={(
+        <div class="space-y-2">
+          <div class="text-xs font-semibold text-foreground">This action will:</div>
+          <ul class="space-y-1.5 pl-4 text-[11px] leading-relaxed text-muted-foreground">
+            <li class="list-disc">
+              Delete the local branch reference for <span class="font-medium text-foreground">{branchName()}</span>.
+            </li>
+            <Show when={requiresWorktreeRemoval()}>
+              <li class="list-disc">
+                Remove the linked worktree at <span class="break-all font-medium text-foreground">{linkedWorktreePath()}</span>.
+              </li>
             </Show>
-            <GitDeleteBranchConfirmButton
-              label={confirmLabel()}
-              class="w-full sm:w-auto"
-              disabled={!canConfirm()}
-              disabledReason={confirmDisabledReason()}
-              loading={deleting()}
-              onClick={() => {
-                const branch = props.branch;
-                const currentPreview = preview();
-                if (!branch || !currentPreview) return;
-                props.onConfirm?.(branch, {
-                  removeLinkedWorktree: Boolean(currentPreview.requiresWorktreeRemoval),
-                  discardLinkedWorktreeChanges: Boolean(currentPreview.requiresDiscardConfirmation),
-                  planFingerprint: currentPreview.planFingerprint,
-                });
-              }}
-            />
-          </div>
+            <li class="list-disc">{changeImpact()}</li>
+          </ul>
         </div>
       )}
-      class={cn(
-        'flex max-w-none flex-col overflow-hidden rounded-md p-0',
-        '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
-        '[&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:!overflow-hidden [&>div:last-child]:!p-0',
-        dialogWidthClass(),
+      forceDeleteSummary={(
+        <ul class="space-y-1.5 pl-4 text-[11px] leading-relaxed text-muted-foreground">
+          <li class="list-disc">
+            The local branch reference for <span class="font-medium text-foreground">{branchName()}</span> will be permanently removed.
+          </li>
+          <li class="list-disc">
+            The linked worktree at <span class="break-all font-medium text-foreground">{linkedWorktreePath()}</span> will be removed.
+          </li>
+          <li class="list-disc">{changeImpact()}</li>
+          <li class="list-disc">
+            Your current repository worktree at <span class="break-all font-medium text-foreground">{preview()?.repoRootPath || 'the current repository root'}</span> will not be modified.
+          </li>
+        </ul>
       )}
-    >
-      <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <Show
-          when={!loading()}
-          fallback={<GitStatePane loading message="Reviewing branch deletion..." class="m-4" surface />}
-        >
-          <Show when={!props.previewError} fallback={<GitStatePane tone="error" message={props.previewError ?? 'Delete review failed.'} class="m-4" surface />}>
-            <Show when={props.branch && preview()} fallback={<GitStatePane message="Choose a branch to review its deletion plan." class="m-4" surface />}>
-              <div class="flex flex-col gap-3 px-4 pt-2 pb-4">
-                <GitSubtleNote class={cn('text-foreground', requiresWorktreeRemoval() ? 'border-error/20 bg-error/10' : 'border-border/55 bg-background/72')}>
-                  <div class="space-y-2">
-                    <div class="text-xs font-semibold text-foreground">This action will:</div>
-                    <ul class="space-y-1.5 pl-4 text-[11px] leading-relaxed text-muted-foreground">
-                      <li class="list-disc">
-                        Delete the local branch reference for <span class="font-medium text-foreground">{branchName()}</span>.
-                      </li>
-                      <Show when={requiresWorktreeRemoval()}>
-                        <li class="list-disc">
-                          Remove the linked worktree at <span class="break-all font-medium text-foreground">{linkedWorktreePath()}</span>.
-                        </li>
-                      </Show>
-                      <li class="list-disc">{changeImpact()}</li>
-                    </ul>
-                  </div>
-                </GitSubtleNote>
-
-                <Show when={!preview()?.safeDeleteAllowed}>
-                  <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">
-                    {preview()?.safeDeleteReason || 'Safe delete is blocked.'}
-                  </GitSubtleNote>
-                </Show>
-                <Show when={blockingReason()}>
-                  <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{blockingReason()}</GitSubtleNote>
-                </Show>
-                <Show when={props.actionError}>
-                  <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{props.actionError}</GitSubtleNote>
-                </Show>
-              </div>
-            </Show>
-          </Show>
-        </Show>
-      </div>
-    </Dialog>
+      onClose={props.onClose}
+      onRetryPreview={props.onRetryPreview}
+      onConfirm={props.onConfirm}
+    />
   );
 }

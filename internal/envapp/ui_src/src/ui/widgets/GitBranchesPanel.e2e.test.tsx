@@ -497,6 +497,8 @@ describe('GitBranchesPanel interactions', () => {
       requiresDiscardConfirmation: true,
       safeDeleteAllowed: true,
       safeDeleteBaseRef: 'main',
+      forceDeleteAllowed: true,
+      forceDeleteRequiresConfirm: true,
       planFingerprint: 'plan-1',
       linkedWorktree: {
         worktreePath: '/workspace/repo-linked',
@@ -708,6 +710,8 @@ describe('GitBranchesPanel interactions', () => {
       requiresDiscardConfirmation: false,
       safeDeleteAllowed: true,
       safeDeleteBaseRef: 'main',
+      forceDeleteAllowed: true,
+      forceDeleteRequiresConfirm: true,
       planFingerprint: 'plan-1',
     };
 
@@ -796,6 +800,8 @@ describe('GitBranchesPanel interactions', () => {
       safeDeleteAllowed: false,
       safeDeleteReason: blockedReason,
       safeDeleteBaseRef: 'HEAD',
+      forceDeleteAllowed: true,
+      forceDeleteRequiresConfirm: true,
       planFingerprint: 'plan-blocked-plain',
     };
 
@@ -828,11 +834,19 @@ describe('GitBranchesPanel interactions', () => {
     ), host);
 
     try {
-      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete Branch') as HTMLButtonElement | undefined;
+      expect(document.body.textContent).toContain('Force delete consequences');
+      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Force Delete Branch') as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.disabled).toBe(true);
+      const confirmationInput = document.body.querySelector('input[type="text"]') as HTMLInputElement | null;
+      expect(confirmationInput?.placeholder).toBe('feature/unmerged');
       const tooltip = await revealTooltipForButton(confirmButton);
-      expect(tooltip?.textContent).toContain(blockedReason);
+      expect(tooltip?.textContent).toContain('Type feature/unmerged to enable force delete.');
+      confirmationInput!.value = 'feature/unmerged';
+      confirmationInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+      const enabledConfirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Force Delete Branch') as HTMLButtonElement | undefined;
+      expect(enabledConfirmButton?.disabled).toBe(false);
     } finally {
       dispose();
     }
@@ -1057,6 +1071,8 @@ describe('GitBranchesPanel interactions', () => {
       safeDeleteAllowed: false,
       safeDeleteReason: blockedReason,
       safeDeleteBaseRef: 'HEAD',
+      forceDeleteAllowed: true,
+      forceDeleteRequiresConfirm: true,
       planFingerprint: 'plan-blocked-linked',
       linkedWorktree: {
         worktreePath: '/workspace/repo-linked-blocked',
@@ -1098,11 +1114,19 @@ describe('GitBranchesPanel interactions', () => {
     ), host);
 
     try {
-      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete Branch and Worktree') as HTMLButtonElement | undefined;
+      expect(document.body.textContent).toContain('Force delete consequences');
+      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Force Delete Branch and Worktree') as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.disabled).toBe(true);
+      const confirmationInput = document.body.querySelector('input[type="text"]') as HTMLInputElement | null;
+      expect(confirmationInput?.placeholder).toBe('feature/linked-blocked');
       const tooltip = await revealTooltipForButton(confirmButton);
-      expect(tooltip?.textContent).toContain(blockedReason);
+      expect(tooltip?.textContent).toContain('Type feature/linked-blocked to enable force delete.');
+      confirmationInput!.value = 'feature/linked-blocked';
+      confirmationInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+      const enabledConfirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Force Delete Branch and Worktree') as HTMLButtonElement | undefined;
+      expect(enabledConfirmButton?.disabled).toBe(false);
     } finally {
       dispose();
     }

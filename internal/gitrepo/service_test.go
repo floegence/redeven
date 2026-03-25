@@ -884,12 +884,13 @@ func TestDeleteBranch_DeletesMergedLocalBranch(t *testing.T) {
 	resp, err := svc.deleteBranch(
 		context.Background(),
 		repo,
-		compare.Branch,
-		"refs/heads/"+compare.Branch,
-		"local",
-		false,
-		false,
-		preview.PlanFingerprint,
+		deleteBranchOptions{
+			Name:            compare.Branch,
+			FullName:        "refs/heads/" + compare.Branch,
+			Kind:            "local",
+			DeleteMode:      string(deleteBranchModeSafe),
+			PlanFingerprint: preview.PlanFingerprint,
+		},
 	)
 	if err != nil {
 		t.Fatalf("deleteBranch(local): %v", err)
@@ -911,7 +912,13 @@ func TestDeleteBranch_RejectsCurrentBranch(t *testing.T) {
 		t.Fatalf("resolveExplicitRepo: %v", err)
 	}
 
-	_, err = svc.deleteBranch(context.Background(), repo, repo.headRef, "refs/heads/"+repo.headRef, "local", false, false, "stale")
+	_, err = svc.deleteBranch(context.Background(), repo, deleteBranchOptions{
+		Name:            repo.headRef,
+		FullName:        "refs/heads/" + repo.headRef,
+		Kind:            "local",
+		DeleteMode:      string(deleteBranchModeSafe),
+		PlanFingerprint: "stale",
+	})
 	if err == nil {
 		t.Fatalf("expected deleting current branch to fail")
 	}
@@ -937,21 +944,94 @@ func TestDeleteBranch_RejectsUnmergedBranch(t *testing.T) {
 	if !strings.Contains(strings.ToLower(preview.SafeDeleteReason), "not fully merged") {
 		t.Fatalf("unexpected preview safe delete reason: %+v", preview)
 	}
+	if !preview.ForceDeleteAllowed || !preview.ForceDeleteRequiresConfirm {
+		t.Fatalf("expected force delete fallback for unmerged branch: %+v", preview)
+	}
 
 	_, err = svc.deleteBranch(
 		context.Background(),
 		repo,
-		compare.Branch,
-		"refs/heads/"+compare.Branch,
-		"local",
-		false,
-		false,
-		preview.PlanFingerprint,
+		deleteBranchOptions{
+			Name:            compare.Branch,
+			FullName:        "refs/heads/" + compare.Branch,
+			Kind:            "local",
+			DeleteMode:      string(deleteBranchModeSafe),
+			PlanFingerprint: preview.PlanFingerprint,
+		},
 	)
 	if err == nil {
 		t.Fatalf("expected deleting unmerged branch to fail")
 	}
 	if !strings.Contains(strings.ToLower(err.Error()), "not fully merged") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDeleteBranch_ForceDeletesUnmergedBranchWithExactBranchName(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewDeleteBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if preview.SafeDeleteAllowed || !preview.ForceDeleteAllowed {
+		t.Fatalf("expected force delete fallback for unmerged branch: %+v", preview)
+	}
+
+	resp, err := svc.deleteBranch(
+		context.Background(),
+		repo,
+		deleteBranchOptions{
+			Name:              compare.Branch,
+			FullName:          "refs/heads/" + compare.Branch,
+			Kind:              "local",
+			DeleteMode:        string(deleteBranchModeForce),
+			ConfirmBranchName: compare.Branch,
+			PlanFingerprint:   preview.PlanFingerprint,
+		},
+	)
+	if err != nil {
+		t.Fatalf("force deleteBranch(unmerged): %v", err)
+	}
+	if resp.HeadRef != compare.BaseBranch {
+		t.Fatalf("HeadRef=%q, want %q", resp.HeadRef, compare.BaseBranch)
+	}
+	if gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
+		t.Fatalf("expected branch %q to be force deleted", compare.Branch)
+	}
+}
+
+func TestDeleteBranch_RejectsForceDeleteWhenBranchNameConfirmationMismatches(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewDeleteBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	_, err = svc.deleteBranch(
+		context.Background(),
+		repo,
+		deleteBranchOptions{
+			Name:              compare.Branch,
+			FullName:          "refs/heads/" + compare.Branch,
+			Kind:              "local",
+			DeleteMode:        string(deleteBranchModeForce),
+			ConfirmBranchName: "feature/wrong-branch",
+			PlanFingerprint:   preview.PlanFingerprint,
+		},
+	)
+	if err == nil {
+		t.Fatalf("expected force delete confirmation mismatch to fail")
+	}
+	if !strings.Contains(err.Error(), "branch name confirmation does not match") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -989,6 +1069,40 @@ func TestPreviewDeleteBranch_ReportsLinkedDirtyWorktree(t *testing.T) {
 	if len(preview.LinkedWorktree.Untracked) != 1 || preview.LinkedWorktree.Untracked[0].Path != "scratch.txt" {
 		t.Fatalf("unexpected worktree changes: %+v", preview.LinkedWorktree.Untracked)
 	}
+	if !preview.ForceDeleteAllowed || !preview.ForceDeleteRequiresConfirm {
+		t.Fatalf("expected force delete fallback for linked worktree preview: %+v", preview)
+	}
+}
+
+func TestPreviewDeleteBranch_BlocksForceDeleteForInaccessibleLinkedWorktree(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
+	worktree := filepath.Join(t.TempDir(), "compare-inaccessible-wt")
+	runGitFixture(t, fixture.Root, "worktree", "add", worktree, compare.Branch)
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewDeleteBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if preview.LinkedWorktree == nil || preview.LinkedWorktree.Accessible {
+		t.Fatalf("expected inaccessible linked worktree preview: %+v", preview)
+	}
+	if preview.SafeDeleteAllowed {
+		t.Fatalf("expected safe delete to remain blocked for unmerged branch: %+v", preview)
+	}
+	if preview.ForceDeleteAllowed {
+		t.Fatalf("expected force delete to be blocked for inaccessible linked worktree: %+v", preview)
+	}
+	if !strings.Contains(preview.BlockingReason, "not accessible from this agent") {
+		t.Fatalf("unexpected blocking reason: %+v", preview)
+	}
+	if preview.ForceDeleteReason != preview.BlockingReason {
+		t.Fatalf("expected force delete reason to mirror the blocking reason: %+v", preview)
+	}
 }
 
 func TestDeleteBranch_RejectsRemoteBranch(t *testing.T) {
@@ -1009,7 +1123,13 @@ func TestDeleteBranch_RejectsRemoteBranch(t *testing.T) {
 	}
 
 	remoteName := "origin/" + remote.RemoteFeatureBranch
-	_, err = svc.deleteBranch(context.Background(), repo, remoteName, "refs/remotes/"+remoteName, "remote", false, false, "stale")
+	_, err = svc.deleteBranch(context.Background(), repo, deleteBranchOptions{
+		Name:            remoteName,
+		FullName:        "refs/remotes/" + remoteName,
+		Kind:            "remote",
+		DeleteMode:      string(deleteBranchModeSafe),
+		PlanFingerprint: "stale",
+	})
 	if err == nil {
 		t.Fatalf("expected deleting remote branch to fail")
 	}
@@ -1042,12 +1162,14 @@ func TestDeleteBranch_RemovesLinkedCleanWorktreeAndBranch(t *testing.T) {
 	resp, err := svc.deleteBranch(
 		context.Background(),
 		repo,
-		compare.Branch,
-		"refs/heads/"+compare.Branch,
-		"local",
-		true,
-		false,
-		preview.PlanFingerprint,
+		deleteBranchOptions{
+			Name:                 compare.Branch,
+			FullName:             "refs/heads/" + compare.Branch,
+			Kind:                 "local",
+			DeleteMode:           string(deleteBranchModeSafe),
+			RemoveLinkedWorktree: true,
+			PlanFingerprint:      preview.PlanFingerprint,
+		},
 	)
 	if err != nil {
 		t.Fatalf("deleteBranch(clean linked worktree): %v", err)
@@ -1089,12 +1211,14 @@ func TestDeleteBranch_RejectsDirtyLinkedWorktreeWithoutDiscardConsent(t *testing
 	_, err = svc.deleteBranch(
 		context.Background(),
 		repo,
-		compare.Branch,
-		"refs/heads/"+compare.Branch,
-		"local",
-		true,
-		false,
-		preview.PlanFingerprint,
+		deleteBranchOptions{
+			Name:                 compare.Branch,
+			FullName:             "refs/heads/" + compare.Branch,
+			Kind:                 "local",
+			DeleteMode:           string(deleteBranchModeSafe),
+			RemoveLinkedWorktree: true,
+			PlanFingerprint:      preview.PlanFingerprint,
+		},
 	)
 	if err == nil {
 		t.Fatalf("expected dirty linked worktree delete to require discard confirmation")
@@ -1126,12 +1250,15 @@ func TestDeleteBranch_RemovesDirtyLinkedWorktreeAndBranchWithConsent(t *testing.
 	resp, err := svc.deleteBranch(
 		context.Background(),
 		repo,
-		compare.Branch,
-		"refs/heads/"+compare.Branch,
-		"local",
-		true,
-		true,
-		preview.PlanFingerprint,
+		deleteBranchOptions{
+			Name:                         compare.Branch,
+			FullName:                     "refs/heads/" + compare.Branch,
+			Kind:                         "local",
+			DeleteMode:                   string(deleteBranchModeSafe),
+			RemoveLinkedWorktree:         true,
+			DiscardLinkedWorktreeChanges: true,
+			PlanFingerprint:              preview.PlanFingerprint,
+		},
 	)
 	if err != nil {
 		t.Fatalf("deleteBranch(dirty linked worktree): %v", err)
@@ -1144,6 +1271,55 @@ func TestDeleteBranch_RemovesDirtyLinkedWorktreeAndBranchWithConsent(t *testing.
 	}
 	if gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
 		t.Fatalf("expected branch %q to be deleted", compare.Branch)
+	}
+}
+
+func TestDeleteBranch_ForceDeletesUnmergedDirtyLinkedWorktreeAndBranch(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
+	serviceRoot := filepath.Dir(fixture.Root)
+	worktree := filepath.Join(serviceRoot, "compare-force-wt")
+	runGitFixture(t, fixture.Root, "worktree", "add", worktree, compare.Branch)
+	if err := os.WriteFile(filepath.Join(worktree, "scratch.txt"), []byte("pending worktree file\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(scratch.txt): %v", err)
+	}
+
+	svc := NewService(serviceRoot)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewDeleteBranch(t, svc, repo, compare.Branch, "refs/heads/"+compare.Branch, "local")
+	if preview.SafeDeleteAllowed || !preview.ForceDeleteAllowed || !preview.RequiresDiscardConfirmation {
+		t.Fatalf("unexpected preview for force delete linked worktree: %+v", preview)
+	}
+
+	resp, err := svc.deleteBranch(
+		context.Background(),
+		repo,
+		deleteBranchOptions{
+			Name:                 compare.Branch,
+			FullName:             "refs/heads/" + compare.Branch,
+			Kind:                 "local",
+			DeleteMode:           string(deleteBranchModeForce),
+			ConfirmBranchName:    compare.Branch,
+			RemoveLinkedWorktree: true,
+			PlanFingerprint:      preview.PlanFingerprint,
+		},
+	)
+	if err != nil {
+		t.Fatalf("force deleteBranch(unmerged linked worktree): %v", err)
+	}
+	if !resp.LinkedWorktreeRemoved {
+		t.Fatalf("expected linked worktree removal: %+v", resp)
+	}
+	if _, err := os.Stat(worktree); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected worktree %q to be removed, err=%v", worktree, err)
+	}
+	if gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
+		t.Fatalf("expected branch %q to be force deleted", compare.Branch)
 	}
 }
 
@@ -1167,12 +1343,13 @@ func TestDeleteBranch_RejectsStaleDeletePlan(t *testing.T) {
 	_, err = svc.deleteBranch(
 		context.Background(),
 		repo,
-		compare.Branch,
-		"refs/heads/"+compare.Branch,
-		"local",
-		false,
-		false,
-		preview.PlanFingerprint,
+		deleteBranchOptions{
+			Name:            compare.Branch,
+			FullName:        "refs/heads/" + compare.Branch,
+			Kind:            "local",
+			DeleteMode:      string(deleteBranchModeSafe),
+			PlanFingerprint: preview.PlanFingerprint,
+		},
 	)
 	if err == nil {
 		t.Fatalf("expected stale delete plan to fail")

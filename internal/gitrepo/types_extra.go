@@ -123,6 +123,9 @@ type previewDeleteBranchResp struct {
 	SafeDeleteAllowed           bool                            `json:"safe_delete_allowed"`
 	SafeDeleteBaseRef           string                          `json:"safe_delete_base_ref,omitempty"`
 	SafeDeleteReason            string                          `json:"safe_delete_reason,omitempty"`
+	ForceDeleteAllowed          bool                            `json:"force_delete_allowed"`
+	ForceDeleteRequiresConfirm  bool                            `json:"force_delete_requires_confirm"`
+	ForceDeleteReason           string                          `json:"force_delete_reason,omitempty"`
 	BlockingReason              string                          `json:"blocking_reason,omitempty"`
 	PlanFingerprint             string                          `json:"plan_fingerprint,omitempty"`
 }
@@ -132,6 +135,8 @@ type deleteBranchReq struct {
 	Name                         string `json:"name,omitempty"`
 	FullName                     string `json:"full_name,omitempty"`
 	Kind                         string `json:"kind,omitempty"`
+	DeleteMode                   string `json:"delete_mode,omitempty"`
+	ConfirmBranchName            string `json:"confirm_branch_name,omitempty"`
 	RemoveLinkedWorktree         bool   `json:"remove_linked_worktree"`
 	DiscardLinkedWorktreeChanges bool   `json:"discard_linked_worktree_changes"`
 	PlanFingerprint              string `json:"plan_fingerprint,omitempty"`

@@ -409,6 +409,9 @@ func TestE2E_GitRepoRPC_PreviewDeleteBranchWithLinkedWorktree(t *testing.T) {
 	if !previewResp.RequiresWorktreeRemoval || !previewResp.RequiresDiscardConfirmation {
 		t.Fatalf("unexpected preview flags: %+v", previewResp)
 	}
+	if !previewResp.ForceDeleteAllowed || !previewResp.ForceDeleteRequiresConfirm {
+		t.Fatalf("expected force delete fallback in preview: %+v", previewResp)
+	}
 	if previewResp.LinkedWorktree == nil || !previewResp.LinkedWorktree.Accessible {
 		t.Fatalf("expected accessible linked worktree: %+v", previewResp)
 	}
@@ -417,6 +420,62 @@ func TestE2E_GitRepoRPC_PreviewDeleteBranchWithLinkedWorktree(t *testing.T) {
 	}
 	if len(previewResp.LinkedWorktree.Untracked) != 1 || previewResp.LinkedWorktree.Untracked[0].Path != "scratch.txt" {
 		t.Fatalf("unexpected preview worktree changes: %+v", previewResp.LinkedWorktree.Untracked)
+	}
+}
+
+func TestE2E_GitRepoRPC_ForceDeleteBranch(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
+
+	svc := NewService(fixture.Root)
+	client, closeServer := startGitRepoRPCSession(t, svc)
+	defer closeServer()
+
+	previewPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_PREVIEW_DELETE, mustMarshalJSON(t, previewDeleteBranchReq{
+		RepoRootPath: fixture.Root,
+		Name:         compare.Branch,
+		FullName:     "refs/heads/" + compare.Branch,
+		Kind:         "local",
+	}))
+	if err != nil {
+		t.Fatalf("preview delete branch call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("preview delete branch rpc error: %+v", rpcErr)
+	}
+	var previewResp previewDeleteBranchResp
+	if err := json.Unmarshal(previewPayload, &previewResp); err != nil {
+		t.Fatalf("unmarshal preview delete branch: %v", err)
+	}
+	if previewResp.SafeDeleteAllowed || !previewResp.ForceDeleteAllowed {
+		t.Fatalf("expected force-delete-only preview: %+v", previewResp)
+	}
+
+	deletePayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DELETE_BRANCH, mustMarshalJSON(t, deleteBranchReq{
+		RepoRootPath:      fixture.Root,
+		Name:              compare.Branch,
+		FullName:          "refs/heads/" + compare.Branch,
+		Kind:              "local",
+		DeleteMode:        string(deleteBranchModeForce),
+		ConfirmBranchName: compare.Branch,
+		PlanFingerprint:   previewResp.PlanFingerprint,
+	}))
+	if err != nil {
+		t.Fatalf("force delete branch call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("force delete branch rpc error: %+v", rpcErr)
+	}
+	var deleteResp deleteBranchResp
+	if err := json.Unmarshal(deletePayload, &deleteResp); err != nil {
+		t.Fatalf("unmarshal force delete branch: %v", err)
+	}
+	if deleteResp.HeadRef != compare.BaseBranch {
+		t.Fatalf("HeadRef=%q, want %q", deleteResp.HeadRef, compare.BaseBranch)
+	}
+	if gitRefExists(context.Background(), fixture.Root, "refs/heads/"+compare.Branch) {
+		t.Fatalf("expected branch %q to be force deleted", compare.Branch)
 	}
 }
 

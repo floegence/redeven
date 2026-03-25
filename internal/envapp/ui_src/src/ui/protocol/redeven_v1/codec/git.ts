@@ -484,6 +484,9 @@ export function fromWireGitPreviewDeleteBranchResponse(resp: wire_git_preview_de
     safeDeleteAllowed: Boolean(resp?.safe_delete_allowed),
     safeDeleteBaseRef: typeof resp?.safe_delete_base_ref === 'string' ? resp.safe_delete_base_ref : undefined,
     safeDeleteReason: typeof resp?.safe_delete_reason === 'string' ? resp.safe_delete_reason : undefined,
+    forceDeleteAllowed: Boolean(resp?.force_delete_allowed),
+    forceDeleteRequiresConfirm: Boolean(resp?.force_delete_requires_confirm),
+    forceDeleteReason: typeof resp?.force_delete_reason === 'string' ? resp.force_delete_reason : undefined,
     blockingReason: typeof resp?.blocking_reason === 'string' ? resp.blocking_reason : undefined,
     planFingerprint: typeof resp?.plan_fingerprint === 'string' ? resp.plan_fingerprint : undefined,
   };
@@ -495,6 +498,8 @@ export function toWireGitDeleteBranchRequest(req: GitDeleteBranchRequest): wire_
     name: typeof req.name === 'string' ? req.name : undefined,
     full_name: typeof req.fullName === 'string' ? req.fullName : undefined,
     kind: typeof req.kind === 'string' ? req.kind : undefined,
+    delete_mode: typeof req.deleteMode === 'string' ? req.deleteMode : undefined,
+    confirm_branch_name: typeof req.confirmBranchName === 'string' ? req.confirmBranchName : undefined,
     remove_linked_worktree: Boolean(req.removeLinkedWorktree),
     discard_linked_worktree_changes: Boolean(req.discardLinkedWorktreeChanges),
     plan_fingerprint: typeof req.planFingerprint === 'string' ? req.planFingerprint : undefined,
