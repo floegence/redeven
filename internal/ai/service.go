@@ -1158,39 +1158,6 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	req.Options.Complexity = normalizeTaskComplexity(policyDecision.Complexity)
 	req.Options.TodoPolicy = normalizeTodoPolicy(policyDecision.TodoPolicy)
 	req.Options.MinimumTodoItems = normalizeMinimumTodoItems(req.Options.TodoPolicy, policyDecision.MinimumTodoItems)
-	r.persistRunEvent("intent.classified", RealtimeStreamKindLifecycle, map[string]any{
-		"intent":                           policyDecision.Intent,
-		"reason":                           policyDecision.Reason,
-		"source":                           policyDecision.Source,
-		"objective_mode":                   policyDecision.ObjectiveMode,
-		"intent_source":                    policyDecision.Source,
-		"intent_reason":                    policyDecision.Reason,
-		"mode":                             req.Options.Mode,
-		"structured_response_continuation": structuredResponseContinuation,
-	})
-	r.persistRunEvent("policy.classified", RealtimeStreamKindLifecycle, map[string]any{
-		"intent":                           req.Options.Intent,
-		"complexity":                       req.Options.Complexity,
-		"todo_policy":                      req.Options.TodoPolicy,
-		"minimum_todo_items":               req.Options.MinimumTodoItems,
-		"source":                           policyDecision.Source,
-		"reason":                           policyDecision.Reason,
-		"confidence":                       policyDecision.Confidence,
-		"structured_response_continuation": structuredResponseContinuation,
-	})
-	if policyDecision.Intent == RunIntentSocial {
-		r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{
-			"path": "social_responder",
-		})
-	} else if policyDecision.Intent == RunIntentCreative {
-		r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{
-			"path": "creative_responder",
-		})
-	} else {
-		r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{
-			"path": "task_engine",
-		})
-	}
 
 	// open_goal is only updated by task intent explicit user input.
 	// social intent keeps existing open_goal unchanged.
@@ -1212,11 +1179,48 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		interactionContractSeed,
 		structuredResponseContinuation,
 	)
+	req.Options.ExecutionContract = normalizeExecutionContract(
+		policyDecision.ExecutionContract,
+		req.Options.Intent,
+		policyDecision.ObjectiveMode,
+		req.Options.Complexity,
+		req.Options.TodoPolicy,
+		policyDecision.InteractionContract,
+	)
 	interactionPayload := policyDecision.InteractionContract.eventPayload()
 	interactionPayload["classification_mode"] = interactionMeta.Mode
 	interactionPayload["seed_reused"] = interactionMeta.SeedReused
 	interactionPayload["structured_response_continuation"] = interactionMeta.StructuredResponseContinuation
 	r.persistRunEvent("interaction.contract.classified", RealtimeStreamKindLifecycle, interactionPayload)
+	r.persistRunEvent("intent.classified", RealtimeStreamKindLifecycle, map[string]any{
+		"intent":                           policyDecision.Intent,
+		"execution_contract":               req.Options.ExecutionContract,
+		"reason":                           policyDecision.Reason,
+		"source":                           policyDecision.Source,
+		"objective_mode":                   policyDecision.ObjectiveMode,
+		"intent_source":                    policyDecision.Source,
+		"intent_reason":                    policyDecision.Reason,
+		"mode":                             req.Options.Mode,
+		"structured_response_continuation": structuredResponseContinuation,
+	})
+	r.persistRunEvent("policy.classified", RealtimeStreamKindLifecycle, map[string]any{
+		"intent":                           req.Options.Intent,
+		"execution_contract":               req.Options.ExecutionContract,
+		"complexity":                       req.Options.Complexity,
+		"todo_policy":                      req.Options.TodoPolicy,
+		"minimum_todo_items":               req.Options.MinimumTodoItems,
+		"source":                           policyDecision.Source,
+		"reason":                           policyDecision.Reason,
+		"confidence":                       policyDecision.Confidence,
+		"structured_response_continuation": structuredResponseContinuation,
+	})
+	r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{
+		"path":               req.Options.ExecutionContract,
+		"intent":             req.Options.Intent,
+		"execution_contract": req.Options.ExecutionContract,
+		"source":             policyDecision.Source,
+		"reason":             policyDecision.Reason,
+	})
 	effectiveInput := req.Input
 
 	userMsgID := ""
@@ -1430,11 +1434,22 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}
 
 	finalReason := strings.TrimSpace(r.getFinalizationReason())
+	finalExecutionContract := r.getExecutionContract()
+	if finalExecutionContract == "" {
+		finalExecutionContract = normalizeExecutionContract(
+			req.Options.ExecutionContract,
+			req.Options.Intent,
+			policyDecision.ObjectiveMode,
+			req.Options.Complexity,
+			req.Options.TodoPolicy,
+			policyDecision.InteractionContract,
+		)
+	}
 	if s.contextRepo != nil {
 		stateCtx, cancelState := context.WithTimeout(context.Background(), persistTO)
-		if shouldClearThreadState(finalReason) {
+		if shouldClearOpenGoalAfterRun(existingOpenGoal, policyDecision, finalExecutionContract, finalReason) {
 			_ = s.contextRepo.SetOpenGoal(stateCtx, endpointID, threadID, "")
-		} else if req.Options.Intent == RunIntentTask && strings.TrimSpace(openGoal) != "" {
+		} else if shouldPersistOpenGoalAfterRun(finalExecutionContract, finalReason) && strings.TrimSpace(openGoal) != "" {
 			_ = s.contextRepo.SetOpenGoal(stateCtx, endpointID, threadID, openGoal)
 		}
 		cancelState()
@@ -1553,11 +1568,37 @@ func (s *Service) classifyRunPolicyByModel(ctx context.Context, resolved resolve
 
 func shouldClearThreadState(finalReason string) bool {
 	switch strings.TrimSpace(finalReason) {
-	case "task_complete":
+	case "task_complete", "task_complete_forced":
 		return true
 	default:
 		return false
 	}
+}
+
+func shouldPersistOpenGoalAfterRun(executionContract string, finalReason string) bool {
+	if shouldClearThreadState(finalReason) {
+		return false
+	}
+	if classifyFinalizationReason(finalReason) == finalizationClassWaitingUser {
+		return true
+	}
+	return normalizeExecutionContractValue(executionContract) == RunExecutionContractAgenticLoop
+}
+
+func shouldClearOpenGoalAfterRun(existingOpenGoal string, policy runPolicyDecision, executionContract string, finalReason string) bool {
+	if shouldClearThreadState(finalReason) {
+		return true
+	}
+	if shouldPersistOpenGoalAfterRun(executionContract, finalReason) {
+		return false
+	}
+	if strings.TrimSpace(existingOpenGoal) == "" {
+		return false
+	}
+	if normalizeRunIntent(policy.Intent) != RunIntentTask {
+		return false
+	}
+	return normalizeObjectiveMode(policy.ObjectiveMode) == RunObjectiveModeReplace
 }
 
 func promptPackToHistory(pack contextmodel.PromptPack, currentUserInput string) []RunHistoryMsg {

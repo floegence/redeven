@@ -24,6 +24,7 @@ const (
 
 type runPolicyDecision struct {
 	Intent              string
+	ExecutionContract   string
 	Reason              string
 	Source              string
 	ObjectiveMode       string
@@ -68,14 +69,15 @@ func classifyRunPolicy(userInput string, attachments []RunAttachmentIn, openGoal
 	}
 	if len(attachments) > 0 {
 		return enforceStructuredResponseContinuation(runPolicyDecision{
-			Intent:           RunIntentTask,
-			Reason:           "attachments_present",
-			Source:           RunIntentSourceDeterministic,
-			ObjectiveMode:    RunObjectiveModeReplace,
-			Complexity:       TaskComplexityStandard,
-			TodoPolicy:       TodoPolicyRecommended,
-			MinimumTodoItems: 0,
-			Confidence:       1,
+			Intent:            RunIntentTask,
+			ExecutionContract: RunExecutionContractHybridFirstTurn,
+			Reason:            "attachments_present",
+			Source:            RunIntentSourceDeterministic,
+			ObjectiveMode:     RunObjectiveModeReplace,
+			Complexity:        TaskComplexityStandard,
+			TodoPolicy:        TodoPolicyRecommended,
+			MinimumTodoItems:  0,
+			Confidence:        1,
 			InteractionContract: interactionContract{
 				Source: interactionContractSourceDeterministic,
 			},
@@ -90,14 +92,15 @@ func classifyRunPolicy(userInput string, attachments []RunAttachmentIn, openGoal
 	}
 
 	return enforceStructuredResponseContinuation(runPolicyDecision{
-		Intent:           RunIntentTask,
-		Reason:           "model_classifier_failed",
-		Source:           RunIntentSourceDeterministic,
-		ObjectiveMode:    RunObjectiveModeReplace,
-		Complexity:       TaskComplexityStandard,
-		TodoPolicy:       TodoPolicyRecommended,
-		MinimumTodoItems: 0,
-		Confidence:       0,
+		Intent:            RunIntentTask,
+		ExecutionContract: RunExecutionContractHybridFirstTurn,
+		Reason:            "model_classifier_failed",
+		Source:            RunIntentSourceDeterministic,
+		ObjectiveMode:     RunObjectiveModeReplace,
+		Complexity:        TaskComplexityStandard,
+		TodoPolicy:        TodoPolicyRecommended,
+		MinimumTodoItems:  0,
+		Confidence:        0,
 		InteractionContract: interactionContract{
 			Source: interactionContractSourceDeterministic,
 		},
@@ -106,14 +109,15 @@ func classifyRunPolicy(userInput string, attachments []RunAttachmentIn, openGoal
 
 func structuredResponseContinuationRunPolicyDecision() runPolicyDecision {
 	return runPolicyDecision{
-		Intent:           RunIntentTask,
-		Reason:           "structured_response_continuation",
-		Source:           RunIntentSourceDeterministic,
-		ObjectiveMode:    RunObjectiveModeContinue,
-		Complexity:       TaskComplexityStandard,
-		TodoPolicy:       TodoPolicyRecommended,
-		MinimumTodoItems: 0,
-		Confidence:       1,
+		Intent:            RunIntentTask,
+		ExecutionContract: RunExecutionContractAgenticLoop,
+		Reason:            "structured_response_continuation",
+		Source:            RunIntentSourceDeterministic,
+		ObjectiveMode:     RunObjectiveModeContinue,
+		Complexity:        TaskComplexityStandard,
+		TodoPolicy:        TodoPolicyRecommended,
+		MinimumTodoItems:  0,
+		Confidence:        1,
 		InteractionContract: interactionContract{
 			Source: interactionContractSourceDeterministic,
 		},
@@ -132,6 +136,14 @@ func normalizeModelRunPolicyDecision(decision runPolicyDecision) runPolicyDecisi
 		InteractionContract: normalizeInteractionContract(decision.InteractionContract),
 	}
 	normalized.InteractionContract.Source = interactionContractSourceModel
+	normalized.ExecutionContract = normalizeExecutionContract(
+		decision.ExecutionContract,
+		normalized.Intent,
+		normalized.ObjectiveMode,
+		normalized.Complexity,
+		normalized.TodoPolicy,
+		normalized.InteractionContract,
+	)
 
 	if strings.TrimSpace(normalized.Reason) == "" {
 		normalized.Reason = "model_classifier"
@@ -148,6 +160,7 @@ func normalizeModelRunPolicyDecision(decision runPolicyDecision) runPolicyDecisi
 		normalized.Complexity = TaskComplexitySimple
 		normalized.TodoPolicy = TodoPolicyNone
 		normalized.MinimumTodoItems = 0
+		normalized.ExecutionContract = RunExecutionContractDirectReply
 		normalized.InteractionContract = normalizeInteractionContract(interactionContract{Source: interactionContractSourceModel})
 		return normalized
 	}
@@ -162,6 +175,7 @@ func enforceStructuredResponseContinuation(decision runPolicyDecision, active bo
 	}
 	decision.Intent = RunIntentTask
 	decision.ObjectiveMode = RunObjectiveModeContinue
+	decision.ExecutionContract = RunExecutionContractAgenticLoop
 	decision.Reason = "structured_response_continuation"
 	return decision
 }
@@ -197,13 +211,17 @@ func buildRunPolicyClassifierMessages(userInput string, openGoal string, structu
 		runPolicyClassifierMarker,
 		"You classify run policy for an on-device coding assistant.",
 		fmt.Sprintf("Call tool `%s` exactly once with the final run policy classification.", structuredClassifierRunPolicyToolName),
-		"If tool calls are unavailable, return exactly one JSON object with keys: intent, reason, objective_mode, complexity, todo_policy, minimum_todo_items, confidence, interaction_contract.",
+		"If tool calls are unavailable, return exactly one JSON object with keys: intent, execution_contract, reason, objective_mode, complexity, todo_policy, minimum_todo_items, confidence, interaction_contract.",
 		"intent must be one of: social, creative, task.",
+		"execution_contract must be one of: direct_reply, hybrid_first_turn, agentic_loop.",
 		"reason must be a short snake_case phrase.",
 		"objective_mode must be one of: replace, continue.",
 		"Use objective_mode=continue only when there is an existing open goal and user message clearly continues it.",
 		"If there is no existing open goal, objective_mode must be replace.",
 		"When input_origin=structured_waiting_prompt_response and there is an existing open goal, this turn continues that open goal. Use intent=task and objective_mode=continue unless the reply explicitly replaces the objective.",
+		"For social or creative intent, always output execution_contract=direct_reply.",
+		"For task intent, use execution_contract=hybrid_first_turn when the request may be answered in one first turn but might still need tools or escalation if the model chooses to continue.",
+		"For task intent, use execution_contract=agentic_loop for durable multi-step work, guided structured interactions, or any continuation of an existing open goal.",
 		"complexity must be one of: simple, standard, complex.",
 		"todo_policy must be one of: none, recommended, required.",
 		"minimum_todo_items must be an integer. Use 0 unless todo_policy=required.",
@@ -258,6 +276,14 @@ func runPolicyClassifierToolDef() ToolDef {
 			"intent": map[string]any{
 				"type": "string",
 				"enum": []string{RunIntentSocial, RunIntentCreative, RunIntentTask},
+			},
+			"execution_contract": map[string]any{
+				"type": "string",
+				"enum": []string{
+					RunExecutionContractDirectReply,
+					RunExecutionContractHybridFirstTurn,
+					RunExecutionContractAgenticLoop,
+				},
 			},
 			"reason": map[string]any{
 				"type":        "string",
@@ -326,6 +352,7 @@ func runPolicyClassifierToolDef() ToolDef {
 		},
 		"required": []string{
 			"intent",
+			"execution_contract",
 			"reason",
 			"objective_mode",
 			"complexity",
@@ -353,6 +380,7 @@ func parseModelRunPolicyDecision(raw string) (runPolicyDecision, error) {
 
 	type modelRunPolicyPayload struct {
 		Intent              string              `json:"intent"`
+		ExecutionContract   string              `json:"execution_contract"`
 		Reason              string              `json:"reason"`
 		ObjectiveMode       string              `json:"objective_mode"`
 		Complexity          string              `json:"complexity"`
@@ -391,6 +419,7 @@ func parseModelRunPolicyDecision(raw string) (runPolicyDecision, error) {
 
 	decision := runPolicyDecision{
 		Intent:              intent,
+		ExecutionContract:   payload.ExecutionContract,
 		Reason:              payload.Reason,
 		ObjectiveMode:       payload.ObjectiveMode,
 		Complexity:          payload.Complexity,

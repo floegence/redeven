@@ -96,15 +96,15 @@ type run struct {
 	doneCh         chan struct{}
 	doneOnce       sync.Once
 
-	muCancel         sync.Mutex
-	cancelReason     string // "canceled"|"timed_out"|""
-	endReason        string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
-	cancelRequested  bool
-	cancelFn         context.CancelFunc
-	detached         atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
-	busyCount        atomic.Int32
-	runtimeToolCalls atomic.Int64
-	runtimeTokens    atomic.Int64
+	muCancel           sync.Mutex
+	cancelReason       string // "canceled"|"timed_out"|""
+	endReason          string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
+	cancelRequested    bool
+	cancelFn           context.CancelFunc
+	detached           atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
+	busyCount          atomic.Int32
+	runtimeToolCalls   atomic.Int64
+	runtimeTokens      atomic.Int64
 	assistantPersisted atomic.Bool
 
 	uploadsDir       string
@@ -134,9 +134,10 @@ type run struct {
 	muAssistant              sync.Mutex
 	assistantCreatedAtUnixMs int64
 	assistantBlocks          []any
-	assistantCanonicalTurns  []string
+	assistantAnswer          assistantAnswerState
 
 	finalizationReason string
+	executionContract  string
 	currentModelID     string
 
 	webSearchToolEnabled   bool
@@ -157,6 +158,10 @@ type run struct {
 
 	muCheckpoint               sync.Mutex
 	workspaceCheckpointCreated bool
+}
+
+type assistantAnswerState struct {
+	CanonicalMarkdown string
 }
 
 func newRun(opts runOptions) *run {
@@ -393,6 +398,25 @@ func (r *run) getFinalizationReason() string {
 	}
 	r.muCancel.Lock()
 	v := strings.TrimSpace(r.finalizationReason)
+	r.muCancel.Unlock()
+	return v
+}
+
+func (r *run) setExecutionContract(contract string) {
+	if r == nil {
+		return
+	}
+	r.muCancel.Lock()
+	r.executionContract = normalizeExecutionContractValue(contract)
+	r.muCancel.Unlock()
+}
+
+func (r *run) getExecutionContract() string {
+	if r == nil {
+		return ""
+	}
+	r.muCancel.Lock()
+	v := normalizeExecutionContractValue(r.executionContract)
 	r.muCancel.Unlock()
 	return v
 }
@@ -977,6 +1001,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		ctx = context.Background()
 	}
 	r.setFinalizationReason("")
+	r.setExecutionContract(req.Options.ExecutionContract)
 	startedAt := time.Now()
 	r.persistRunRecord(RunStateRunning, "", "", startedAt.UnixMilli(), 0)
 	runStartPayload := map[string]any{
@@ -999,7 +1024,18 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		eventType := "run.error"
 		finalizationReason := strings.TrimSpace(r.getFinalizationReason())
 		finalizationClass := classifyFinalizationReason(finalizationReason)
-		completionContract := completionContractForIntent(strings.TrimSpace(req.Options.Intent))
+		executionContract := r.getExecutionContract()
+		if executionContract == "" {
+			executionContract = normalizeExecutionContract(
+				req.Options.ExecutionContract,
+				req.Options.Intent,
+				RunObjectiveModeReplace,
+				req.Options.Complexity,
+				req.Options.TodoPolicy,
+				req.InteractionContract,
+			)
+		}
+		completionContract := completionContractForExecutionContract(executionContract)
 		switch endReason {
 		case "complete":
 			switch finalizationClass {
@@ -1049,12 +1085,14 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 			"error":               errMsg,
 			"finalization_reason": finalizationReason,
 			"finalization_class":  finalizationClass,
+			"execution_contract":  executionContract,
 			"completion_contract": completionContract,
 		})
 		r.debug("ai.run.end",
 			"end_reason", endReason,
 			"finalization_reason", finalizationReason,
 			"finalization_class", finalizationClass,
+			"execution_contract", executionContract,
 			"completion_contract", completionContract,
 			"cancel_reason", strings.TrimSpace(r.getCancelReason()),
 			"duration_ms", time.Since(startedAt).Milliseconds(),
@@ -1304,7 +1342,7 @@ func normalizeCanonicalMarkdownText(text string) string {
 	return strings.TrimSpace(text)
 }
 
-func (r *run) rememberCanonicalMarkdownTurn(text string) {
+func (r *run) setCanonicalMarkdownCandidate(text string) {
 	if r == nil {
 		return
 	}
@@ -1314,10 +1352,10 @@ func (r *run) rememberCanonicalMarkdownTurn(text string) {
 	}
 	r.muAssistant.Lock()
 	defer r.muAssistant.Unlock()
-	if n := len(r.assistantCanonicalTurns); n > 0 && strings.TrimSpace(r.assistantCanonicalTurns[n-1]) == text {
+	if strings.TrimSpace(r.assistantAnswer.CanonicalMarkdown) == text {
 		return
 	}
-	r.assistantCanonicalTurns = append(r.assistantCanonicalTurns, text)
+	r.assistantAnswer.CanonicalMarkdown = text
 }
 
 func (r *run) canonicalMarkdownTextSnapshot(fallback string) string {
@@ -1325,12 +1363,12 @@ func (r *run) canonicalMarkdownTextSnapshot(fallback string) string {
 		return ""
 	}
 	r.muAssistant.Lock()
-	parts := append([]string(nil), r.assistantCanonicalTurns...)
+	canonical := strings.TrimSpace(r.assistantAnswer.CanonicalMarkdown)
 	r.muAssistant.Unlock()
-	if len(parts) == 0 {
+	if canonical == "" {
 		return normalizeCanonicalMarkdownText(fallback)
 	}
-	return strings.TrimSpace(strings.Join(parts, "\n\n"))
+	return canonical
 }
 
 func (r *run) pureMarkdownBlockIndexLocked() int {
@@ -2364,6 +2402,9 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 	assistantText := strings.TrimSpace(sb.String())
 	if assistantText == "" {
 		assistantText = askUserSummary
+	}
+	if assistantText == "" {
+		assistantText = r.canonicalMarkdownTextSnapshot("")
 	}
 	return string(b), assistantText, assistantAt, nil
 }

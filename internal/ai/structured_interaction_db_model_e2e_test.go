@@ -186,8 +186,8 @@ func TestE2E_DBConfiguredModel_GuidedStructuredInteractionProducesWaitingPrompt(
 		t.Fatalf("intent=%q, want %q", got, RunIntentTask)
 	}
 	routed := findRunEventPayload(t, runEvents.Events, "intent.routed")
-	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != "task_engine" {
-		t.Fatalf("path=%q, want task_engine", got)
+	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != RunExecutionContractAgenticLoop {
+		t.Fatalf("path=%q, want %q", got, RunExecutionContractAgenticLoop)
 	}
 
 	foundWaiting := false

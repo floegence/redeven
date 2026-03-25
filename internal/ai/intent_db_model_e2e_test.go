@@ -141,8 +141,8 @@ func TestE2E_IntentRouting_DBConfiguredModelIdentityPrompt(t *testing.T) {
 		}
 
 		routed := findRunEventPayload(t, runEvents.Events, "intent.routed")
-		if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != "social_responder" {
-			t.Fatalf("attempt=%d routed_path=%q, want=%q", i, got, "social_responder")
+		if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != RunExecutionContractDirectReply {
+			t.Fatalf("attempt=%d routed_path=%q, want=%q", i, got, RunExecutionContractDirectReply)
 		}
 
 		for _, ev := range runEvents.Events {

@@ -445,7 +445,7 @@ func (m *openAITextOnlyContinuationMock) handle(w http.ResponseWriter, r *http.R
 		})
 		writeOpenAISSEJSON(w, f, map[string]any{
 			"type":  "response.output_text.delta",
-			"delta": classifyIntentResponseToken(req),
+			"delta": `{"intent":"task","execution_contract":"agentic_loop","reason":"continued_workspace_investigation","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.89}`,
 		})
 		writeOpenAISSEJSON(w, f, map[string]any{
 			"type": "response.completed",
@@ -559,7 +559,7 @@ func (m *openAITextOnlyContinuationMock) snapshot() (step int, sawAssistantHisto
 	return m.step, m.sawAssistantHistory, m.secondInputJSON
 }
 
-func TestIntegration_NativeSDK_OpenAI_TextOnlyContinuationCommitsAssistantHistory(t *testing.T) {
+func TestIntegration_NativeSDK_OpenAI_TextOnlyContinuationDoesNotCommitDraftAssistantHistory(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -641,23 +641,19 @@ func TestIntegration_NativeSDK_OpenAI_TextOnlyContinuationCommitsAssistantHistor
 	if !strings.Contains(body, textToken) {
 		t.Fatalf("stream output missing text token %q, body=%q", textToken, body)
 	}
-	if !strings.Contains(body, finalToken) {
-		t.Fatalf("stream output missing final token %q, body=%q", finalToken, body)
-	}
 
 	stepCount, sawAssistantHistory, secondInputJSON := mock.snapshot()
 	if stepCount != 2 {
 		t.Fatalf("provider step count=%d, want 2", stepCount)
 	}
-	if !sawAssistantHistory {
-		t.Fatalf("expected second provider turn to include prior assistant text in input history, input=%s", secondInputJSON)
+	if sawAssistantHistory {
+		t.Fatalf("second provider turn unexpectedly included provisional assistant text in input history, input=%s", secondInputJSON)
 	}
 
 	events, err := svc.ListRunEvents(ctx, &meta, runID, 200)
 	if err != nil {
 		t.Fatalf("ListRunEvents: %v", err)
 	}
-	foundCommitEvent := false
 	for _, ev := range events.Events {
 		if strings.TrimSpace(ev.EventType) != "assistant.turn.history" {
 			continue
@@ -669,14 +665,22 @@ func TestIntegration_NativeSDK_OpenAI_TextOnlyContinuationCommitsAssistantHistor
 		if strings.TrimSpace(fmt.Sprint(payload["source"])) != "text_only_continuation" {
 			continue
 		}
-		if committed := strings.TrimSpace(fmt.Sprint(payload["committed"])); committed != "true" {
-			t.Fatalf("assistant.turn.history committed=%q, want true", committed)
-		}
-		foundCommitEvent = true
-		break
+		t.Fatalf("text_only_continuation should not be committed into assistant history: %+v", payload)
 	}
-	if !foundCommitEvent {
-		t.Fatalf("missing assistant.turn.history event for text_only_continuation")
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 50, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	var assistantText string
+	for _, msg := range msgs {
+		if strings.TrimSpace(msg.Role) != "assistant" {
+			continue
+		}
+		assistantText = strings.TrimSpace(msg.TextContent)
+	}
+	if assistantText != finalToken {
+		t.Fatalf("assistant text=%q, want %q", assistantText, finalToken)
 	}
 }
 

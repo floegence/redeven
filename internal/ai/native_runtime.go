@@ -1705,6 +1705,16 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	r.runMode = mode
 	intent := normalizeRunIntent(req.Options.Intent)
 	req.Options.Intent = intent
+	executionContract := normalizeExecutionContract(
+		req.Options.ExecutionContract,
+		intent,
+		RunObjectiveModeReplace,
+		req.Options.Complexity,
+		req.Options.TodoPolicy,
+		req.InteractionContract,
+	)
+	req.Options.ExecutionContract = executionContract
+	r.setExecutionContract(executionContract)
 	taskComplexity := normalizeTaskComplexity(req.Options.Complexity)
 	req.Options.Complexity = taskComplexity
 
@@ -1764,6 +1774,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		"max_steps":                    maxSteps,
 		"mode":                         mode,
 		"intent":                       intent,
+		"execution_contract":           executionContract,
 		"complexity":                   taskComplexity,
 		"interaction_contract_enabled": normalizeInteractionContract(req.InteractionContract).Enabled,
 	})
@@ -1775,8 +1786,9 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		return r.runNativeCreative(execCtx, adapter, providerType, modelName, mode, req)
 	}
 	r.persistRunEvent("completion.contract", RealtimeStreamKindLifecycle, map[string]any{
-		"contract": completionContractExplicitOnly,
-		"intent":   intent,
+		"contract":           completionContractForExecutionContract(executionContract),
+		"intent":             intent,
+		"execution_contract": executionContract,
 	})
 
 	registry := NewInMemoryToolRegistry()
@@ -1825,6 +1837,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		taskObjective = strings.TrimSpace(req.ContextPack.Objective)
 	}
 	state := newRuntimeState(taskObjective)
+	state.ExecutionContract = executionContract
 	state.TodoPolicy = normalizeTodoPolicy(req.Options.TodoPolicy)
 	state.MinimumTodoItems = normalizeMinimumTodoItems(state.TodoPolicy, req.Options.MinimumTodoItems)
 	state.InteractionContract = normalizeInteractionContract(req.InteractionContract)
@@ -2108,6 +2121,28 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		}
 		r.persistRunEvent("assistant.turn.history", RealtimeStreamKindLifecycle, payload)
 		return ok
+	}
+	currentCompletionContract := func() string {
+		return completionContractForExecutionContract(state.ExecutionContract)
+	}
+	promoteToAgenticLoop := func(step int, reason string) {
+		if normalizeExecutionContractValue(state.ExecutionContract) != RunExecutionContractHybridFirstTurn {
+			return
+		}
+		reason = strings.TrimSpace(reason)
+		if reason == "" {
+			reason = "continued_beyond_first_turn"
+		}
+		state.ExecutionContract = RunExecutionContractAgenticLoop
+		r.setExecutionContract(state.ExecutionContract)
+		r.persistRunEvent("execution.contract.promoted", RealtimeStreamKindLifecycle, map[string]any{
+			"step_index":           step,
+			"reason":               reason,
+			"from":                 RunExecutionContractHybridFirstTurn,
+			"to":                   RunExecutionContractAgenticLoop,
+			"completion_contract":  currentCompletionContract(),
+			"interaction_contract": normalizeInteractionContract(state.InteractionContract).Enabled,
+		})
 	}
 
 mainLoop:
@@ -2423,7 +2458,7 @@ mainLoop:
 			"estimate_source": estimateSource,
 		})
 		if len(stepResult.ToolCalls) == 0 {
-			r.rememberCanonicalMarkdownTurn(stepResult.Text)
+			r.setCanonicalMarkdownCandidate(stepResult.Text)
 		}
 		r.persistRunEvent("native.turn.checkpoint", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index":         step,
@@ -2467,6 +2502,7 @@ mainLoop:
 		processedNormalCalls := false
 
 		if len(normalCalls) > 0 {
+			promoteToAgenticLoop(step, "tool_execution_required")
 			noToolRounds = 0
 			sigByCallID := make(map[string]string, len(normalCalls))
 			dispatchCalls := make([]ToolCall, 0, len(normalCalls))
@@ -2639,6 +2675,7 @@ mainLoop:
 		}
 
 		if askUserCall != nil {
+			promoteToAgenticLoop(step, "waiting_user_required")
 			signal := askUserSignal{
 				Questions:        extractSignalRequestUserInputQuestions(*askUserCall, "questions"),
 				ReasonCode:       extractSignalText(*askUserCall, "reason_code"),
@@ -2685,7 +2722,7 @@ mainLoop:
 					continue
 				}
 				if !approved {
-					appendAssistantHistory(step, "completion_rejected_continuation", resultText, stepResult.Reasoning, nil)
+					promoteToAgenticLoop(step, "completion_confirmation_rejected")
 					messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "The user rejected completion. Continue the same objective with improved evidence."}}})
 					state.PendingUserInputQueue = appendLimited(state.PendingUserInputQueue, "completion_rejected", 4)
 					exceptionOverlay = "[RECOVERY] Completion rejected. Continue same objective and provide stronger evidence."
@@ -2697,7 +2734,7 @@ mainLoop:
 			r.persistRunEvent("completion.attempt", RealtimeStreamKindLifecycle, map[string]any{
 				"step_index":          step,
 				"attempt":             "task_complete",
-				"completion_contract": completionContractExplicitOnly,
+				"completion_contract": currentCompletionContract(),
 				"gate_passed":         gatePassed,
 				"gate_reason":         gateReason,
 				"complexity":          taskComplexity,
@@ -2737,7 +2774,7 @@ mainLoop:
 					emptyTaskCompleteRejects = 0
 					continue
 				}
-				appendAssistantHistory(step, "task_complete_rejected_continuation", resultText, stepResult.Reasoning, nil)
+				promoteToAgenticLoop(step, "completion_gate_rejected")
 				rejectionMsg := "task_complete was rejected. Provide concrete completion evidence and retry task_complete."
 				recoveryOverlay := "[RECOVERY] task_complete rejected by completion gate. Provide explicit completion evidence and call task_complete again."
 				if capabilityContract.AllowUserInteraction {
@@ -2762,7 +2799,7 @@ mainLoop:
 			if strings.TrimSpace(resultText) != "" && strings.TrimSpace(stepResult.Text) == "" {
 				_ = r.appendTextDelta(strings.TrimSpace(resultText))
 			}
-			r.rememberCanonicalMarkdownTurn(resultText)
+			r.setCanonicalMarkdownCandidate(resultText)
 			r.reconcileCanonicalMarkdownMessage(resultText)
 			r.emitSourcesToolBlock("task_complete")
 			r.setFinalizationReason("task_complete")
@@ -2779,6 +2816,7 @@ mainLoop:
 		}
 
 		if todoRequired, todoReason := todoTrackingRequirement(taskComplexity, state); todoRequired {
+			promoteToAgenticLoop(step, "todo_tracking_required")
 			todoSetupNudges++
 			r.persistRunEvent("guard.todo_setup_required", RealtimeStreamKindLifecycle, map[string]any{
 				"step_index":       step,
@@ -2815,7 +2853,7 @@ mainLoop:
 		finishReason := strings.ToLower(strings.TrimSpace(stepResult.FinishReason))
 		if finishReason == "length" {
 			// Genuine truncation — recovery path.
-			appendAssistantHistory(step, "truncated_turn_continuation", stepResult.Text, stepResult.Reasoning, nil)
+			promoteToAgenticLoop(step, "provider_truncation")
 			recoveryCount++
 			fail := errors.New("provider output truncated (length)")
 			exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, fail, "", capabilityContract.AllowUserInteraction)
@@ -2825,7 +2863,7 @@ mainLoop:
 		}
 		if finishReason == "tool_calls" || finishReason == "unknown" {
 			// Model wanted tools but parsing failed, or unknown state — treat as backpressure nudge.
-			appendAssistantHistory(step, "unparsed_tool_continuation", stepResult.Text, stepResult.Reasoning, nil)
+			promoteToAgenticLoop(step, "tool_signal_recovery")
 			noToolRounds++
 			exceptionOverlay = fmt.Sprintf("[BACKPRESSURE] Provider returned finish_reason=%q but no valid tool calls were parsed. You MUST do one of: (1) Call task_complete if done, (2) Use tools to investigate.", finishReason)
 			if capabilityContract.AllowUserInteraction {
@@ -2872,8 +2910,20 @@ mainLoop:
 			continue
 		}
 
+		if normalizeExecutionContractValue(state.ExecutionContract) == RunExecutionContractHybridFirstTurn && step == 0 && strings.TrimSpace(stepResult.Text) != "" {
+			if !r.hasNonEmptyAssistantText() {
+				_ = r.appendTextDelta(strings.TrimSpace(stepResult.Text))
+			}
+			r.reconcileCanonicalMarkdownMessage(stepResult.Text)
+			r.setFinalizationReason("hybrid_first_turn_reply")
+			r.setEndReason("complete")
+			r.emitLifecyclePhase("ended", map[string]any{"reason": "hybrid_first_turn_reply", "step_index": step})
+			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+			return nil
+		}
+
 		noToolRounds++
-		appendAssistantHistory(step, "text_only_continuation", stepResult.Text, stepResult.Reasoning, nil)
+		promoteToAgenticLoop(step, "text_only_continuation")
 		r.emitLifecyclePhase("finalizing", map[string]any{
 			"reason":             "waiting_explicit_completion",
 			"step_index":         step,
@@ -2905,7 +2955,7 @@ mainLoop:
 		r.persistRunEvent("completion.attempt", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index":          step,
 			"attempt":             "implicit",
-			"completion_contract": completionContractExplicitOnly,
+			"completion_contract": currentCompletionContract(),
 			"gate_passed":         false,
 			"gate_reason":         "missing_explicit_task_complete",
 			"no_progress_rounds":  noToolRounds,
@@ -2988,7 +3038,7 @@ mainLoop:
 					r.persistRunEvent("completion.attempt", RealtimeStreamKindLifecycle, map[string]any{
 						"step_index":          step,
 						"attempt":             "task_complete_forced",
-						"completion_contract": completionContractExplicitOnly,
+						"completion_contract": currentCompletionContract(),
 						"gate_passed":         gatePassed,
 						"gate_reason":         gateReason,
 						"forced":              true,
@@ -2999,7 +3049,7 @@ mainLoop:
 					if strings.TrimSpace(forcedResult.Text) == "" {
 						_ = r.appendTextDelta(strings.TrimSpace(resultText))
 					}
-					r.rememberCanonicalMarkdownTurn(resultText)
+					r.setCanonicalMarkdownCandidate(resultText)
 					r.reconcileCanonicalMarkdownMessage(resultText)
 					r.emitSourcesToolBlock("task_complete")
 					r.setFinalizationReason("task_complete_forced")
@@ -3008,9 +3058,6 @@ mainLoop:
 					r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 					return nil
 				}
-			}
-			if strings.TrimSpace(forcedResult.Text) != "" || strings.TrimSpace(forcedResult.Reasoning) != "" {
-				appendAssistantHistory(step, "forced_signal_recovery_text_only", forcedResult.Text, forcedResult.Reasoning, nil)
 			}
 		}
 
@@ -3083,7 +3130,7 @@ mainLoop:
 				r.persistRunEvent("completion.attempt", RealtimeStreamKindLifecycle, map[string]any{
 					"step_index":          nativeHardMaxSteps,
 					"attempt":             "task_complete_forced",
-					"completion_contract": completionContractExplicitOnly,
+					"completion_contract": currentCompletionContract(),
 					"gate_passed":         gatePassed,
 					"gate_reason":         gateReason,
 					"forced":              true,
@@ -3094,7 +3141,7 @@ mainLoop:
 				if strings.TrimSpace(summaryResult.Text) == "" {
 					_ = r.appendTextDelta(strings.TrimSpace(resultText))
 				}
-				r.rememberCanonicalMarkdownTurn(resultText)
+				r.setCanonicalMarkdownCandidate(resultText)
 				r.reconcileCanonicalMarkdownMessage(resultText)
 				r.emitSourcesToolBlock("task_complete")
 				r.setFinalizationReason("task_complete_forced")
@@ -3127,7 +3174,7 @@ mainLoop:
 	r.persistRunEvent("completion.attempt", RealtimeStreamKindLifecycle, map[string]any{
 		"step_index":          nativeHardMaxSteps,
 		"attempt":             "implicit",
-		"completion_contract": completionContractExplicitOnly,
+		"completion_contract": currentCompletionContract(),
 		"gate_passed":         false,
 		"gate_reason":         "hard_max_steps_reached",
 		"complexity":          taskComplexity,
@@ -3269,7 +3316,7 @@ func (r *run) runNativeConversational(
 		"intent":          intent,
 	})
 	if txt := strings.TrimSpace(stepResult.Text); txt != "" {
-		r.rememberCanonicalMarkdownTurn(txt)
+		r.setCanonicalMarkdownCandidate(txt)
 	}
 
 	if !r.hasNonEmptyAssistantText() {
@@ -4700,6 +4747,15 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 	if !allowUserInteraction && strings.TrimSpace(capability.PromptProfile) == "" {
 		allowUserInteraction = !r.noUserInteraction
 	}
+	executionContract := normalizeExecutionContract(
+		state.ExecutionContract,
+		RunIntentTask,
+		RunObjectiveModeReplace,
+		complexity,
+		state.TodoPolicy,
+		state.InteractionContract,
+	)
+	completionContract := completionContractForExecutionContract(executionContract)
 	core := []string{
 		"# Identity & Mandate",
 		"You are Flower, an autonomous AI assistant running on the user's current device/environment that completes requests by using tools.",
@@ -4749,9 +4805,7 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"",
 		"# Mandatory Rules",
 		"- Use tools when they are needed for reliable evidence or actions.",
-		"- You MUST call task_complete with a detailed result summary when done. Never end without it.",
 		"- If you cannot complete safely, use the allowed completion path for this run. Do not stop silently.",
-		"- Task runs are explicit-completion only: no task_complete means the task is not complete.",
 		"- You MUST use tools to investigate before answering questions about files, code, or the workspace.",
 		"- When knowledge.search is available, query it first for domain background, then verify with terminal.exec before final conclusions.",
 		"- Do NOT expose internal evidence path:line details to end users unless they explicitly ask for repository-level traceability.",
@@ -4797,6 +4851,20 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		"- **Shell tasks**: terminal.exec → inspect output → task_complete",
 		"- **Debugging**: terminal.exec (reproduce) → apply_patch fix → terminal.exec (verify) → task_complete",
 		"",
+	}
+	switch completionContract {
+	case completionContractFirstTurn:
+		core = append(core,
+			"- This run starts in hybrid_first_turn mode: if the first turn fully resolves the objective, you may reply with the final markdown answer directly.",
+			"- If you continue beyond the first turn, switch to explicit signals: call task_complete when done or ask_user when structured user input is required.",
+			"",
+		)
+	case completionContractExplicitOnly:
+		core = append(core,
+			"- You MUST call task_complete with a detailed result summary when done. Never end without it.",
+			"- Task runs are explicit-completion only: no task_complete means the task is not complete.",
+			"",
+		)
 	}
 	core = append(core, buildMarkdownOutputContractLines()...)
 	core = append(core,
@@ -4874,6 +4942,8 @@ func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity
 		fmt.Sprintf("- Working directory: %s", cwd),
 		fmt.Sprintf("- Current round: %d (first_round=%t)", round+1, isFirstRound),
 		fmt.Sprintf("- Mode: %s", strings.TrimSpace(mode)),
+		fmt.Sprintf("- Execution contract: %s", executionContract),
+		fmt.Sprintf("- Completion contract: %s", completionContract),
 		fmt.Sprintf("- Task complexity: %s", complexity),
 		fmt.Sprintf("- Todo policy: %s", normalizeTodoPolicy(state.TodoPolicy)),
 		fmt.Sprintf("- Available tools: %s", toolNames),

@@ -318,6 +318,10 @@ type RunOptions struct {
 	// Clients should not set this field directly.
 	Intent string `json:"intent,omitempty"`
 
+	// ExecutionContract is classified by the runtime (direct_reply|hybrid_first_turn|agentic_loop).
+	// Clients should not set this field directly.
+	ExecutionContract string `json:"execution_contract,omitempty"`
+
 	// Complexity is classified by the runtime (simple|standard|complex).
 	// Clients should not set this field directly.
 	Complexity string `json:"complexity,omitempty"`
