@@ -41,25 +41,25 @@ The Flower chat UI now follows five explicit constraints:
    - Transcript rows, active-run snapshot recovery, live assistant stream overlays, and optimistic local user messages must converge through a single render projection before the chat store is updated.
    - Feature code must not add new direct `chat.setMessages()` write paths for individual recovery flows.
 
-2. A live run owns exactly one assistant row in the transcript.
-   - Pending lifecycle states, empty streaming placeholders, streamed answer content, finalization status, and transcript handoff must stay on the same projected assistant row instead of switching between footer containers and message rows.
-   - Footer-based ownership for Flower live-run UI is forbidden.
-   - The active assistant row may use a frontend-only render identity to stay stable across pending placeholder, live stream, and transcript catch-up, but persisted message ids must remain unchanged.
-   - When a pending placeholder adopts the real assistant message, the projection must retain the existing render identity and carry the persisted source id alongside it instead of replacing the row.
+2. A live run owns exactly one assistant surface in the transcript tail.
+   - Settled transcript rows stay transcript-only `MessageItem` rows.
+   - In-flight assistant output renders through a dedicated non-virtualized live surface mounted at the transcript tail, not through synthetic transcript messages.
+   - Pending lifecycle states, empty streaming placeholders, hidden-only `thinking`, streamed answer content, finalization status, and transcript catch-up are all inner states of that one mounted live surface.
+   - Synthetic pending assistant messages, display-slot adoption, and frontend-only message-id remapping are forbidden.
 
 3. `VirtualMessageList` owns scroll anchoring.
    - `following` mode is bottom-pinned.
    - `paused` mode is anchored to the first visible message plus its in-item offset, so late message reflow does not pull the viewport upward.
-   - Live-run status changes must not introduce separate footer height that competes with the message list.
+   - The live assistant tail is the only non-virtualized appendage inside the scroll container. Live-run status changes must stay inside that tail surface instead of competing with transcript row ownership.
 
 4. Transcript overlays consume a shared bottom inset contract.
    - The transcript scroll area, file-browser FAB, and scroll-to-bottom affordance must use the shared transcript overlay inset variables instead of ad-hoc message margins.
 
 5. Streaming assistant visibility is monotonic while a run is live.
-   - Hidden `thinking` blocks are sideband data and must never reuse or replace an already-visible markdown slot.
-   - Thinking-only or otherwise hidden live frames should keep the active assistant row mounted through the pending placeholder path rather than moving visibility to a different container.
-   - Backend stream reconciliation should publish the next visible markdown state before clearing obsolete markdown slots whenever possible.
-   - The live-run display resolver may temporarily carry forward the last non-empty visible assistant content when an intermediate live frame or recovered snapshot regresses to hidden-only or poorer visible content for the same run lineage.
+   - Hidden `thinking` blocks are sideband data and must never reuse or replace an already-visible answer slot.
+   - Thinking-only or otherwise hidden live frames must keep the live assistant surface mounted instead of toggling ownership between transcript rows, placeholders, or footer containers.
+   - Backend stream reconciliation should publish the next visible answer state before clearing obsolete answer slots whenever possible.
+   - The live-run state reducer may temporarily carry forward the last richer visible answer content when an intermediate live frame or recovered snapshot regresses to hidden-only or poorer visible content for the same run lineage.
    - Bubble and block renderers must preserve stable mounted slots when streaming frames replace block objects; switching block type guards must not implicitly remount the visible answer subtree.
 
 6. Context telemetry is run-scoped and monotonic.

@@ -1,12 +1,6 @@
 import { applyStreamEventBatchToMessages } from '../chat/messageState';
-import {
-  hasNonEmptyVisibleMessageContent,
-  hasVisibleMessageContent,
-} from '../chat/message/messageVisibility';
 import type { Message, MessageBlock, StreamEvent } from '../chat/types';
-import { getMessageRenderKey, getMessageSourceId } from '../chat/messageIdentity';
-
-const PENDING_LIVE_RUN_MESSAGE_ID_PREFIX = 'm_ai_pending:';
+import { getMessageSourceId } from '../chat/messageIdentity';
 
 function hasVisibleString(value: unknown): boolean {
   return String(value ?? '').trim() !== '';
@@ -67,109 +61,6 @@ function normalizeLiveRunMessage(message: Message | null | undefined): Message |
   return hasVisibleLiveRunMessageContent(message) ? message : null;
 }
 
-export function buildPendingLiveRunMessage(args: {
-  messageId: string;
-  renderKey: string;
-  timestamp: number;
-}): Message {
-  return {
-    id: args.messageId,
-    renderKey: args.renderKey,
-    role: 'assistant',
-    status: 'streaming',
-    timestamp: args.timestamp,
-    blocks: [{ type: 'markdown', content: '' }],
-  };
-}
-
-function hasPendingDisplayMessageId(message: Message | null | undefined): boolean {
-  return String(message?.id ?? '').trim().startsWith(PENDING_LIVE_RUN_MESSAGE_ID_PREFIX);
-}
-
-function readStreamEventMessageId(event: StreamEvent): string {
-  switch (event.type) {
-    case 'message-start':
-    case 'message-end':
-    case 'error':
-      return String(event.messageId ?? '').trim();
-    case 'block-start':
-    case 'block-delta':
-    case 'block-set':
-    case 'block-end':
-      return String(event.messageId ?? '').trim();
-    default:
-      return '';
-  }
-}
-
-function writeStreamEventMessageId(event: StreamEvent, messageId: string): StreamEvent {
-  switch (event.type) {
-    case 'message-start':
-    case 'message-end':
-    case 'error':
-      return { ...event, messageId };
-    case 'block-start':
-    case 'block-delta':
-    case 'block-set':
-    case 'block-end':
-      return { ...event, messageId };
-    default:
-      return event;
-  }
-}
-
-function remapEventsIntoActiveDisplaySlot(
-  current: Message | null,
-  events: StreamEvent[],
-): {
-  events: StreamEvent[];
-  sourceMessageId: string;
-} {
-  const currentMessageId = String(current?.id ?? '').trim();
-  if (!current || !currentMessageId) {
-    return { events, sourceMessageId: '' };
-  }
-
-  const currentSourceMessageId = String(current.sourceMessageId ?? '').trim();
-  const firstIncomingMessageId = events.map((event) => readStreamEventMessageId(event)).find(Boolean) ?? '';
-
-  if (!firstIncomingMessageId) {
-    return { events, sourceMessageId: currentSourceMessageId };
-  }
-
-  const shouldBindPendingDisplaySlot =
-    !currentSourceMessageId
-    && hasPendingDisplayMessageId(current)
-    && firstIncomingMessageId !== currentMessageId;
-  const shouldFollowKnownSourceMessage =
-    !!currentSourceMessageId
-    && firstIncomingMessageId === currentSourceMessageId;
-
-  if (!shouldBindPendingDisplaySlot && !shouldFollowKnownSourceMessage) {
-    return { events, sourceMessageId: currentSourceMessageId };
-  }
-
-  const sourceMessageId = shouldBindPendingDisplaySlot ? firstIncomingMessageId : currentSourceMessageId;
-  const rewrittenEvents = events.map((event) => {
-    const incomingMessageId = readStreamEventMessageId(event);
-    if (!incomingMessageId) {
-      return event;
-    }
-    if (incomingMessageId === currentMessageId) {
-      return event;
-    }
-    if (incomingMessageId !== sourceMessageId) {
-      return event;
-    }
-    return writeStreamEventMessageId(event, currentMessageId);
-  });
-
-  return {
-    events: rewrittenEvents,
-    sourceMessageId,
-  };
-}
-
 export function applyStreamEventBatchToLiveRunMessage(
   current: Message | null,
   events: StreamEvent[],
@@ -179,11 +70,9 @@ export function applyStreamEventBatchToLiveRunMessage(
     return current;
   }
 
-  const remapped = remapEventsIntoActiveDisplaySlot(current, events);
-
   const result = applyStreamEventBatchToMessages(
     current ? [current] : [],
-    remapped.events,
+    events,
     {
       currentStreamingMessageId: current?.status === 'streaming' ? current.id : null,
       now,
@@ -195,16 +84,7 @@ export function applyStreamEventBatchToLiveRunMessage(
   if (!normalized) {
     return normalized;
   }
-
-  const sourceMessageId = remapped.sourceMessageId || String(current?.sourceMessageId ?? '').trim();
-  if (!sourceMessageId || sourceMessageId === String(normalized.id ?? '').trim()) {
-    return normalized;
-  }
-
-  return {
-    ...normalized,
-    sourceMessageId,
-  };
+  return current ? preserveVisibleAnswerBlocks(current, normalized) : normalized;
 }
 
 export function mergeLiveRunSnapshot(current: Message | null, snapshot: Message | null | undefined): Message | null {
@@ -218,33 +98,7 @@ export function mergeLiveRunSnapshot(current: Message | null, snapshot: Message 
   if (!current) {
     return normalizedSnapshot;
   }
-
-  const currentMessageId = String(current.id ?? '').trim();
-  const currentSourceMessageId = String(current.sourceMessageId ?? '').trim();
-  const snapshotMessageId = String(normalizedSnapshot.id ?? '').trim();
-  if (!currentMessageId || !snapshotMessageId) {
-    return normalizedSnapshot;
-  }
-
-  if (snapshotMessageId === currentMessageId) {
-    const sourceMessageId = currentSourceMessageId && currentSourceMessageId !== currentMessageId
-      ? currentSourceMessageId
-      : '';
-    return sourceMessageId
-      ? { ...normalizedSnapshot, renderKey: current.renderKey ?? normalizedSnapshot.renderKey, sourceMessageId }
-      : { ...normalizedSnapshot, renderKey: current.renderKey ?? normalizedSnapshot.renderKey };
-  }
-
-  if (hasPendingDisplayMessageId(current) || (currentSourceMessageId && snapshotMessageId === currentSourceMessageId)) {
-    return {
-      ...normalizedSnapshot,
-      id: currentMessageId,
-      renderKey: current.renderKey ?? normalizedSnapshot.renderKey,
-      sourceMessageId: snapshotMessageId,
-    };
-  }
-
-  return normalizedSnapshot;
+  return preserveVisibleAnswerBlocks(current, normalizedSnapshot);
 }
 
 export function clearLiveRunMessageIfTranscriptCaughtUp(
@@ -293,7 +147,7 @@ function liveRunMessageAnswerScore(message: Message | null | undefined): number 
   return message.blocks.reduce((score, block) => score + liveRunAnswerBlockScore(block), 0);
 }
 
-function sameLiveRunDisplayLineage(left: Message | null | undefined, right: Message | null | undefined): boolean {
+function sameLiveRunLineage(left: Message | null | undefined, right: Message | null | undefined): boolean {
   if (!left || !right) {
     return false;
   }
@@ -304,9 +158,13 @@ function sameLiveRunDisplayLineage(left: Message | null | undefined, right: Mess
     return true;
   }
 
-  const leftRenderKey = getMessageRenderKey(left);
-  const rightRenderKey = getMessageRenderKey(right);
-  return !!leftRenderKey && leftRenderKey === rightRenderKey;
+  const leftId = String(left.id ?? '').trim();
+  const rightId = String(right.id ?? '').trim();
+  if (leftId && rightId && leftId === rightId) {
+    return true;
+  }
+  return !!leftSourceId && !!rightId && leftSourceId === rightId
+    || (!!rightSourceId && !!leftId && rightSourceId === leftId);
 }
 
 function carryForwardVisibleAnswerBlocks(previous: Message, current: Message): MessageBlock[] {
@@ -349,40 +207,20 @@ function carryForwardVisibleAnswerBlocks(previous: Message, current: Message): M
   return changed ? merged : current.blocks;
 }
 
-export function resolveDisplayedLiveRunMessage(args: {
-  current: Message | null;
-  previousDisplayed: Message | null;
-  pending: Message | null;
-  transcriptMessages: Message[];
-}): Message | null {
-  const current = clearLiveRunMessageIfTranscriptCaughtUp(args.current, args.transcriptMessages);
-  const previousDisplayed = clearLiveRunMessageIfTranscriptCaughtUp(args.previousDisplayed, args.transcriptMessages);
-
-  if (current) {
-    if (previousDisplayed && sameLiveRunDisplayLineage(previousDisplayed, current)) {
-      const mergedBlocks = carryForwardVisibleAnswerBlocks(previousDisplayed, current);
-      if (mergedBlocks !== current.blocks) {
-        return {
-          ...current,
-          blocks: mergedBlocks,
-        };
-      }
-    }
-
-    if (hasVisibleMessageContent(current)) {
-      return current;
-    }
+function preserveVisibleAnswerBlocks(previous: Message, current: Message): Message {
+  if (!sameLiveRunLineage(previous, current)) {
+    return current;
   }
 
-  if (previousDisplayed && hasNonEmptyVisibleMessageContent(previousDisplayed)) {
-    return previousDisplayed;
+  const mergedBlocks = carryForwardVisibleAnswerBlocks(previous, current);
+  if (mergedBlocks === current.blocks) {
+    return current;
   }
 
-  if (args.pending) {
-    return args.pending;
-  }
-
-  return current;
+  return {
+    ...current,
+    blocks: mergedBlocks,
+  };
 }
 
 export function resolveRenderableLiveRunMessage(

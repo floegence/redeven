@@ -3,21 +3,18 @@
 import { Show, createMemo } from 'solid-js';
 import type { Component } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
-import { cn } from '@floegence/floe-webapp-core';
 import { useChatContext } from '../ChatProvider';
 import type { ChatAvatar, Message } from '../types';
-import { MessageAvatar } from './MessageAvatar';
 import { MessageBubble } from './MessageBubble';
 import { MessageMeta } from './MessageMeta';
 import { MessageActions } from './MessageActions';
 import { hasVisibleMessageContent } from './messageVisibility';
+import { MessageFrame } from './MessageFrame';
 
 export interface MessageItemProps {
   message: Message;
   showAvatar?: boolean;
   class?: string;
-  activeAssistantStreaming?: boolean;
-  transient?: boolean;
 }
 
 export const MessageItem: Component<MessageItemProps> = (props) => {
@@ -31,10 +28,6 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
   };
 
   const isActiveAssistantStreaming = () => {
-    if (typeof props.activeAssistantStreaming === 'boolean') {
-      return props.message.role === 'assistant' && props.activeAssistantStreaming;
-    }
-
     if (props.message.role !== 'assistant') return false;
 
     const currentStreamingId = ctx.streamingMessageId();
@@ -62,30 +55,18 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
     !!MessageOrnament(),
   );
   const shouldRenderMessage = createMemo(() => hasVisibleMessageContent(props.message) || shouldRenderOrnament());
-  const isTransientAssistantMessage = createMemo(() => props.message.role === 'assistant' && props.transient === true);
-  const showFooter = createMemo(() =>
-    !isTransientAssistantMessage() && !(props.message.role === 'assistant' && isActiveAssistantStreaming()),
-  );
+  const showFooter = createMemo(() => !(props.message.role === 'assistant' && isActiveAssistantStreaming()));
   const showStatusRail = createMemo(() => shouldRenderOrnament() || showFooter());
 
   return (
     <Show when={shouldRenderMessage()}>
-      <div
-        class={cn(
-          'chat-message-item',
-          props.message.role === 'user' && 'chat-message-item-user',
-          props.message.role === 'assistant' && 'chat-message-item-assistant',
-          props.class,
-        )}
+      <MessageFrame
+        role={props.message.role}
+        avatar={avatar()}
+        showAvatar={props.showAvatar}
+        avatarStreaming={isActiveAssistantStreaming()}
+        class={props.class}
       >
-        <Show when={props.showAvatar !== false}>
-          <MessageAvatar
-            role={props.message.role}
-            avatar={avatar()}
-            isStreaming={isActiveAssistantStreaming()}
-          />
-        </Show>
-
         <div class="chat-message-content-wrapper">
           <MessageBubble message={props.message} />
 
@@ -113,7 +94,7 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
             </div>
           </Show>
         </div>
-      </div>
+      </MessageFrame>
     </Show>
   );
 };

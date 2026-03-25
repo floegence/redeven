@@ -1,4 +1,4 @@
-import { createContext } from 'solid-js';
+import { createContext, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -58,6 +58,7 @@ const submitStructuredPromptResponseMock = vi.fn(async (args: unknown) => {
       run_status: 'running',
     };
   }
+  touchRunState();
   return {
     runId: 'run-structured-1',
     consumedWaitingPromptId: 'prompt-1',
@@ -143,9 +144,24 @@ const aiState = {
   waitingPrompt: null as MockWaitingPrompt | null,
   structuredDrafts: {} as Record<string, { choiceId?: string; text?: string; writeSelected?: boolean }>,
   runIdByThread: {} as Record<string, string>,
+  pendingRunByThread: {} as Record<string, boolean>,
 };
+const [runStateVersion, setRunStateVersion] = createSignal(0);
 
 const realtimeListeners = new Set<(event: any) => void>();
+
+function touchRunState(): void {
+  setRunStateVersion((version) => version + 1);
+}
+
+function isMockThreadRunActive(status: unknown): boolean {
+  const normalized = String(status ?? '').trim().toLowerCase();
+  return normalized === 'accepted'
+    || normalized === 'running'
+    || normalized === 'waiting_approval'
+    || normalized === 'recovering'
+    || normalized === 'finalizing';
+}
 
 const aiContextValue = new Proxy({
   settings: { error: null },
@@ -197,22 +213,67 @@ const aiContextValue = new Proxy({
   setDraftMode: () => {},
   draftWorkingDir: () => '/workspace',
   setDraftWorkingDir: () => {},
-  markThreadPendingRun: () => {},
-  clearThreadPendingRun: () => {},
-  confirmThreadRun: (_threadId: string, runId: string) => {
-    const tid = String(aiState.activeThreadId ?? '').trim();
+  markThreadPendingRun: (threadId: string) => {
+    const tid = String(threadId ?? '').trim();
     if (!tid) return;
-    aiState.runIdByThread[tid] = runId;
+    aiState.pendingRunByThread[tid] = true;
+    if (aiState.activeThread && String(aiState.activeThread.thread_id ?? '').trim() === tid) {
+      aiState.activeThread = {
+        ...aiState.activeThread,
+        run_status: 'accepted',
+      };
+    }
+    touchRunState();
   },
-  runIdForThread: (threadId: string) => aiState.runIdByThread[String(threadId ?? '').trim()] ?? null,
+  clearThreadPendingRun: (threadId: string) => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return;
+    delete aiState.pendingRunByThread[tid];
+    if (aiState.activeThread && String(aiState.activeThread.thread_id ?? '').trim() === tid) {
+      aiState.activeThread = {
+        ...aiState.activeThread,
+        run_status: String(aiState.runIdByThread[tid] ?? '').trim() ? 'running' : 'idle',
+      };
+    }
+    touchRunState();
+  },
+  confirmThreadRun: (threadId: string, runId: string) => {
+    const tid = String(threadId ?? '').trim();
+    const rid = String(runId ?? '').trim();
+    if (!tid || !rid) return;
+    aiState.runIdByThread[tid] = rid;
+    delete aiState.pendingRunByThread[tid];
+    if (aiState.activeThread && String(aiState.activeThread.thread_id ?? '').trim() === tid) {
+      aiState.activeThread = {
+        ...aiState.activeThread,
+        run_status: 'running',
+      };
+    }
+    touchRunState();
+  },
+  runIdForThread: (threadId: string) => {
+    runStateVersion();
+    return aiState.runIdByThread[String(threadId ?? '').trim()] ?? null;
+  },
   consumeWaitingPrompt: () => {
     aiState.waitingPrompt = null;
     if (aiState.activeThread) {
       aiState.activeThread = { ...aiState.activeThread, run_status: 'running' };
     }
+    touchRunState();
   },
   bumpThreadsSeq: () => {},
-  isThreadRunning: () => false,
+  isThreadRunning: (threadId: string | null | undefined) => {
+    runStateVersion();
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return false;
+    if (aiState.pendingRunByThread[tid]) return true;
+    if (String(aiState.runIdByThread[tid] ?? '').trim()) return true;
+    if (aiState.activeThread && String(aiState.activeThread.thread_id ?? '').trim() === tid) {
+      return isMockThreadRunActive(aiState.activeThread.run_status);
+    }
+    return false;
+  },
   onRealtimeEvent: (handler: (event: any) => void) => {
     realtimeListeners.add(handler);
     return () => {
@@ -430,6 +491,8 @@ function resetScenario() {
   aiState.waitingPrompt = null;
   aiState.structuredDrafts = {};
   aiState.runIdByThread = {};
+  aiState.pendingRunByThread = {};
+  touchRunState();
   realtimeListeners.clear();
 }
 
@@ -624,19 +687,27 @@ function makeCompletedEmptyAssistantMessage(messageId = 'assistant-empty-1') {
 }
 
 function assistantRunIndicator(host: HTMLElement): HTMLElement | null {
-  return host.querySelector('.chat-message-item-assistant .chat-message-ornament .flower-message-run-indicator');
+  return liveAssistantSurface(host)?.querySelector('.flower-message-run-indicator')
+    ?? host.querySelector('.flower-message-run-indicator');
 }
 
 function liveRunPlaceholder(host: HTMLElement): HTMLElement | null {
-  return host.querySelector('.chat-message-item-assistant .chat-markdown-empty-streaming');
+  return liveAssistantSurface(host)?.querySelector('.chat-markdown-empty-streaming')
+    ?? host.querySelector('.chat-markdown-empty-streaming');
 }
 
 function liveRunAnswerText(host: HTMLElement): HTMLElement | null {
-  return host.querySelector('.chat-message-item-assistant .chat-streaming-text');
+  return liveAssistantSurface(host)?.querySelector('.chat-streaming-text')
+    ?? host.querySelector('.chat-streaming-text');
 }
 
 function liveRunTail(host: HTMLElement): HTMLElement | null {
   return host.querySelector('.chat-message-list-tail');
+}
+
+function liveAssistantSurface(host: HTMLElement): HTMLElement | null {
+  return liveRunTail(host)?.querySelector('.chat-live-assistant-surface')
+    ?? host.querySelector('.chat-live-assistant-surface');
 }
 
 type SubmitTrigger = 'button' | 'enter';

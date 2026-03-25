@@ -12,8 +12,8 @@ export { VirtualMessageList, type VirtualMessageListProps } from './message-list
 
 // Message components
 export {
-  MessageItem, MessageBubble, MessageAvatar, MessageMeta, MessageActions,
-  type MessageItemProps, type MessageBubbleProps, type MessageAvatarProps, type MessageMetaProps, type MessageActionsProps,
+  MessageItem, MessageFrame, MessageBubble, MessageAvatar, MessageMeta, MessageActions,
+  type MessageItemProps, type MessageFrameProps, type MessageBubbleProps, type MessageAvatarProps, type MessageMetaProps, type MessageActionsProps,
 } from './message';
 
 // Block renderers

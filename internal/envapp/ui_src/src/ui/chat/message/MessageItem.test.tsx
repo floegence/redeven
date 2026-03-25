@@ -77,24 +77,6 @@ describe('MessageItem', () => {
     expect(host.querySelector('.chat-message-footer')).toBeTruthy();
   });
 
-  it('keeps footer affordances hidden for transient assistant displays even after streaming stops', () => {
-    const message: Message = {
-      id: 'msg-live-transient',
-      role: 'assistant',
-      status: 'complete',
-      timestamp: 0,
-      blocks: [{ type: 'markdown', content: 'Live surface awaiting transcript catch-up' }],
-    };
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    currentMessages = [];
-    render(() => <MessageItem message={message} transient />, host);
-
-    expect(host.querySelector('.chat-message-footer')).toBeNull();
-    expect(host.querySelector('[data-testid="assistant-ornament"]')).toBeNull();
-  });
-
   it('keeps the assistant row node mounted when a pending placeholder becomes visible streaming content', () => {
     const [message, setMessage] = createSignal<Message>({
       id: 'msg-pending',

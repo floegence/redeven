@@ -265,6 +265,10 @@
   border-bottom-left-radius: 0.25rem;
 }
 
+.chat-live-assistant-placeholder-bubble {
+  min-width: 4rem;
+}
+
 .chat-message-bubble-assistant > * {
   padding: 0.375rem 1rem;
 }

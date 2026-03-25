@@ -58,12 +58,57 @@ export function hasContextTelemetryData(
   return !!runState.usage || runState.compactions.length > 0;
 }
 
+function sameNumberMap(left: Record<string, number>, right: Record<string, number>): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  for (const key of leftKeys) {
+    if (left[key] !== right[key]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sameContextUsage(
+  current: ContextUsageView | null,
+  next: ContextUsageView,
+): boolean {
+  if (!current) {
+    return false;
+  }
+
+  return current.eventId === next.eventId
+    && current.atUnixMs === next.atUnixMs
+    && current.stepIndex === next.stepIndex
+    && current.estimateTokens === next.estimateTokens
+    && current.estimateSource === next.estimateSource
+    && current.contextWindow === next.contextWindow
+    && current.contextLimit === next.contextLimit
+    && current.pressure === next.pressure
+    && current.usagePercent === next.usagePercent
+    && current.effectiveThreshold === next.effectiveThreshold
+    && current.configuredThreshold === next.configuredThreshold
+    && current.windowBasedThreshold === next.windowBasedThreshold
+    && current.turnMessages === next.turnMessages
+    && current.historyMessages === next.historyMessages
+    && current.promptPackEstimate === next.promptPackEstimate
+    && current.sectionsTokensTotal === next.sectionsTokensTotal
+    && current.unattributedTokens === next.unattributedTokens
+    && sameNumberMap(current.sectionsTokens, next.sectionsTokens);
+}
+
 function shouldReplaceContextUsage(
   current: ContextUsageView | null,
   next: ContextUsageView,
 ): boolean {
   if (!current) {
     return true;
+  }
+  if (sameContextUsage(current, next)) {
+    return false;
   }
 
   const nextEventId = Number(next.eventId ?? 0);
@@ -72,10 +117,51 @@ function shouldReplaceContextUsage(
   const currentAt = Number(current.atUnixMs ?? 0);
 
   if (nextEventId > 0 && currentEventId > 0 && nextEventId < currentEventId) return false;
-  if (nextEventId > 0 && currentEventId > 0 && nextEventId === currentEventId && nextAt < currentAt) return false;
+  if (nextEventId > 0 && currentEventId > 0 && nextEventId === currentEventId && nextAt <= currentAt) return false;
   if (nextEventId <= 0 && currentEventId > 0 && nextAt <= currentAt) return false;
-  if (nextEventId <= 0 && currentEventId <= 0 && nextAt < currentAt) return false;
+  if (nextEventId <= 0 && currentEventId <= 0 && nextAt <= currentAt) return false;
 
+  return true;
+}
+
+function sameContextCompactionEvent(
+  left: ContextCompactionEventView,
+  right: ContextCompactionEventView,
+): boolean {
+  return left.eventId === right.eventId
+    && left.atUnixMs === right.atUnixMs
+    && left.eventType === right.eventType
+    && left.stage === right.stage
+    && left.compactionId === right.compactionId
+    && left.stepIndex === right.stepIndex
+    && left.strategy === right.strategy
+    && left.reason === right.reason
+    && left.error === right.error
+    && left.estimateTokensBefore === right.estimateTokensBefore
+    && left.estimateTokensAfter === right.estimateTokensAfter
+    && left.contextWindow === right.contextWindow
+    && left.contextLimit === right.contextLimit
+    && left.pressure === right.pressure
+    && left.effectiveThreshold === right.effectiveThreshold
+    && left.configuredThreshold === right.configuredThreshold
+    && left.windowBasedThreshold === right.windowBasedThreshold
+    && left.messagesBefore === right.messagesBefore
+    && left.messagesAfter === right.messagesAfter
+    && left.dedupeKey === right.dedupeKey;
+}
+
+function sameContextCompactionList(
+  left: ContextCompactionEventView[],
+  right: ContextCompactionEventView[],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    if (!sameContextCompactionEvent(left[index]!, right[index]!)) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -137,7 +223,7 @@ export function applyContextCompactionToRun(
   const ensured = ensureContextTelemetryRun(current, rid);
   const runState = ensured[rid]!;
   const compactions = mergeContextCompactionEvents(runState.compactions, [normalized], maxItems);
-  if (compactions === runState.compactions) {
+  if (compactions === runState.compactions || sameContextCompactionList(runState.compactions, compactions)) {
     return ensured;
   }
 

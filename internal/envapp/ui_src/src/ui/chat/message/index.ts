@@ -3,6 +3,9 @@
 export { MessageItem } from './MessageItem';
 export type { MessageItemProps } from './MessageItem';
 
+export { MessageFrame } from './MessageFrame';
+export type { MessageFrameProps } from './MessageFrame';
+
 export { MessageBubble } from './MessageBubble';
 export type { MessageBubbleProps } from './MessageBubble';
 

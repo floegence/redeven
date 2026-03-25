@@ -67,6 +67,62 @@ describe('aiContextTelemetryState', () => {
     expect(hasContextTelemetryData(getContextTelemetryRun(state, 'run_2'))).toBe(true);
   });
 
+  it('keeps the same state object when an identical usage payload is replayed', () => {
+    const state = applyContextUsageToRun({}, 'run_4', {
+      estimate_tokens: 420,
+      context_limit: 1000,
+      usage_percent: 42,
+      section_tokens: {
+        prompt: 200,
+        history: 220,
+      },
+    }, {
+      eventId: 21,
+      atUnixMs: 2100,
+    });
+
+    const replayed = applyContextUsageToRun(state, 'run_4', {
+      estimate_tokens: 420,
+      context_limit: 1000,
+      usage_percent: 42,
+      section_tokens: {
+        prompt: 200,
+        history: 220,
+      },
+    }, {
+      eventId: 21,
+      atUnixMs: 2100,
+    });
+
+    expect(replayed).toBe(state);
+  });
+
+  it('keeps the same state object when an identical compaction replay arrives', () => {
+    const state = applyContextCompactionToRun({}, 'run_5', 'context.compaction.completed', {
+      compaction_id: 'cmp_5',
+      step_index: 1,
+      strategy: 'summarize_history',
+      estimate_tokens_before: 1200,
+      estimate_tokens_after: 800,
+    }, {
+      eventId: 31,
+      atUnixMs: 3100,
+    });
+
+    const replayed = applyContextCompactionToRun(state, 'run_5', 'context.compaction.completed', {
+      compaction_id: 'cmp_5',
+      step_index: 1,
+      strategy: 'summarize_history',
+      estimate_tokens_before: 1200,
+      estimate_tokens_after: 800,
+    }, {
+      eventId: 31,
+      atUnixMs: 3100,
+    });
+
+    expect(replayed).toBe(state);
+  });
+
   it('advances cursors monotonically per run', () => {
     let state: ContextTelemetryByRun = {};
     state = setContextTelemetryCursor(state, 'run_3', 12);
