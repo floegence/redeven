@@ -2444,10 +2444,11 @@ mainLoop:
 		if strings.TrimSpace(stepResult.Text) != "" {
 			turnTextSeen = true
 		}
+		finishReason := normalizeReplyFinishReason(stepResult.FinishReason)
 		r.recordRuntimeTurnUsage(stepResult.Usage, estimateTokens)
 		r.persistRunEvent("native.turn.result", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index":    step,
-			"finish_reason": strings.TrimSpace(stepResult.FinishReason),
+			"finish_reason": finishReason,
 			"tool_calls":    len(stepResult.ToolCalls),
 			"usage": map[string]any{
 				"input_tokens":     stepResult.Usage.InputTokens,
@@ -2458,7 +2459,7 @@ mainLoop:
 			"estimate_source": estimateSource,
 		})
 		if len(stepResult.ToolCalls) == 0 {
-			r.setCanonicalMarkdownCandidate(stepResult.Text)
+			r.setCanonicalMarkdownCandidate(r.canonicalAssistantMarkdownOrFallback(stepResult.Text))
 		}
 		r.persistRunEvent("native.turn.checkpoint", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index":         step,
@@ -2850,16 +2851,25 @@ mainLoop:
 			continue
 		}
 
-		finishReason := strings.ToLower(strings.TrimSpace(stepResult.FinishReason))
 		if finishReason == "length" {
-			// Genuine truncation — recovery path.
-			promoteToAgenticLoop(step, "provider_truncation")
+			// Genuine truncation — keep the reply on the implicit-answer path and
+			// request a bounded continuation instead of silently finalizing a partial answer.
+			r.persistReplyContinuation(step, state.ExecutionContract, finishReason)
 			recoveryCount++
 			fail := errors.New("provider output truncated (length)")
 			exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, fail, "", capabilityContract.AllowUserInteraction)
-			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "Continue from where you left off, without repeating previous content."}}})
+			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: replyContinuationPrompt}}})
 			isFirstRound = false
 			continue
+		}
+		if finishReason == "content_filter" {
+			return r.failReplyFinish(
+				step,
+				state.ExecutionContract,
+				finishReason,
+				"reply_finish_blocked",
+				"AI provider blocked the reply before Flower could finish the answer.",
+			)
 		}
 		if finishReason == "tool_calls" || finishReason == "unknown" {
 			// Model wanted tools but parsing failed, or unknown state — treat as backpressure nudge.
@@ -2910,15 +2920,11 @@ mainLoop:
 			continue
 		}
 
-		if normalizeExecutionContractValue(state.ExecutionContract) == RunExecutionContractHybridFirstTurn && step == 0 && strings.TrimSpace(stepResult.Text) != "" {
+		if currentCompletionContract() == completionContractFirstTurn && implicitReplyCompletionEligible(finishReason) && strings.TrimSpace(r.canonicalAssistantMarkdownOrFallback(stepResult.Text)) != "" {
 			if !r.hasNonEmptyAssistantText() {
 				_ = r.appendTextDelta(strings.TrimSpace(stepResult.Text))
 			}
-			r.reconcileCanonicalMarkdownMessage(stepResult.Text)
-			r.setFinalizationReason("hybrid_first_turn_reply")
-			r.setEndReason("complete")
-			r.emitLifecyclePhase("ended", map[string]any{"reason": "hybrid_first_turn_reply", "step_index": step})
-			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+			r.finalizeImplicitReply(step, "hybrid_first_turn_reply", stepResult.Text)
 			return nil
 		}
 
@@ -3246,94 +3252,125 @@ func (r *run) runNativeConversational(
 
 	r.emitLifecyclePhase("synthesizing", map[string]any{"intent": intent})
 	messages := buildMessagesForRun(req)
-
-	turnReq := TurnRequest{
-		Model:            modelName,
-		Messages:         composeTurnMessages(systemPrompt, messages),
-		Tools:            nil,
-		Budgets:          TurnBudgets{MaxSteps: 1, MaxInputTokens: req.Options.MaxInputTokens, MaxOutputToken: req.Options.MaxOutputTokens, MaxCostUSD: req.Options.MaxCostUSD},
-		ModeFlags:        ModeFlags{Mode: mode, ReasoningOnly: true},
-		ProviderControls: ProviderControls{ThinkingBudgetTokens: req.Options.ThinkingBudgetTokens, CacheControl: req.Options.CacheControl, ResponseFormat: req.Options.ResponseFormat, Temperature: req.Options.Temperature, TopP: req.Options.TopP},
-	}
-	estimateTokens, estimateSource := estimateTurnTokens(providerType, turnReq)
-	contextWindow := nativeDefaultContextLimit
-	if req.ModelCapability.MaxContextTokens > 0 {
-		contextWindow = req.ModelCapability.MaxContextTokens
-	}
-	inputContextLimit := resolveInputContextLimit(contextWindow, req.Options.MaxInputTokens)
-	windowBasedThreshold := deriveModelWindowCompactionThreshold(contextWindow, inputContextLimit)
-	r.emitContextUsageEvent(contextUsageEventInput{
-		StepIndex:             0,
-		EstimateTokens:        estimateTokens,
-		EstimateSource:        estimateSource,
-		ContextWindow:         contextWindow,
-		ContextLimit:          inputContextLimit,
-		EffectiveThreshold:    resolveCompactionThreshold(req.Options.CompactionThreshold, contextWindow, inputContextLimit),
-		ConfiguredThreshold:   normalizeCompactionThreshold(req.Options.CompactionThreshold),
-		WindowBasedThreshold:  windowBasedThreshold,
-		TurnMessagesCount:     len(turnReq.Messages),
-		HistoryMessagesCount:  len(messages),
-		PromptPackEstimated:   req.ContextPack.EstimatedInputTokens,
-		ContextSectionsTokens: req.ContextPack.ContextSectionsTokenUsage,
-	})
-	endBusy := r.beginBusy()
-	stepResult, stepErr := adapter.StreamTurn(execCtx, turnReq, func(event StreamEvent) {
-		switch event.Type {
-		case StreamEventTextDelta:
-			if strings.TrimSpace(event.Text) != "" {
-				_ = r.appendTextDelta(event.Text)
-			}
-		case StreamEventThinkingDelta:
-			if strings.TrimSpace(event.Text) != "" {
-				r.touchActivity()
-				_ = r.appendThinkingDelta(event.Text)
-				r.persistRunEvent("thinking.delta", RealtimeStreamKindLifecycle, map[string]any{
-					"delta": truncateRunes(event.Text, 2000),
-				})
-			}
+	continuationCount := 0
+	for step := 0; ; step++ {
+		turnReq := TurnRequest{
+			Model:            modelName,
+			Messages:         composeTurnMessages(systemPrompt, messages),
+			Tools:            nil,
+			Budgets:          TurnBudgets{MaxSteps: 1, MaxInputTokens: req.Options.MaxInputTokens, MaxOutputToken: req.Options.MaxOutputTokens, MaxCostUSD: req.Options.MaxCostUSD},
+			ModeFlags:        ModeFlags{Mode: mode, ReasoningOnly: true},
+			ProviderControls: ProviderControls{ThinkingBudgetTokens: req.Options.ThinkingBudgetTokens, CacheControl: req.Options.CacheControl, ResponseFormat: req.Options.ResponseFormat, Temperature: req.Options.Temperature, TopP: req.Options.TopP},
 		}
-	})
-	endBusy()
-	if stepErr != nil {
-		if r.finalizeIfContextCanceled(execCtx) {
+		estimateTokens, estimateSource := estimateTurnTokens(providerType, turnReq)
+		contextWindow := nativeDefaultContextLimit
+		if req.ModelCapability.MaxContextTokens > 0 {
+			contextWindow = req.ModelCapability.MaxContextTokens
+		}
+		inputContextLimit := resolveInputContextLimit(contextWindow, req.Options.MaxInputTokens)
+		windowBasedThreshold := deriveModelWindowCompactionThreshold(contextWindow, inputContextLimit)
+		r.emitContextUsageEvent(contextUsageEventInput{
+			StepIndex:             step,
+			EstimateTokens:        estimateTokens,
+			EstimateSource:        estimateSource,
+			ContextWindow:         contextWindow,
+			ContextLimit:          inputContextLimit,
+			EffectiveThreshold:    resolveCompactionThreshold(req.Options.CompactionThreshold, contextWindow, inputContextLimit),
+			ConfiguredThreshold:   normalizeCompactionThreshold(req.Options.CompactionThreshold),
+			WindowBasedThreshold:  windowBasedThreshold,
+			TurnMessagesCount:     len(turnReq.Messages),
+			HistoryMessagesCount:  len(messages),
+			PromptPackEstimated:   req.ContextPack.EstimatedInputTokens,
+			ContextSectionsTokens: req.ContextPack.ContextSectionsTokenUsage,
+		})
+		endBusy := r.beginBusy()
+		stepResult, stepErr := adapter.StreamTurn(execCtx, turnReq, func(event StreamEvent) {
+			switch event.Type {
+			case StreamEventTextDelta:
+				if strings.TrimSpace(event.Text) != "" {
+					_ = r.appendTextDelta(event.Text)
+				}
+			case StreamEventThinkingDelta:
+				if strings.TrimSpace(event.Text) != "" {
+					r.touchActivity()
+					_ = r.appendThinkingDelta(event.Text)
+					r.persistRunEvent("thinking.delta", RealtimeStreamKindLifecycle, map[string]any{
+						"delta": truncateRunes(event.Text, 2000),
+					})
+				}
+			}
+		})
+		endBusy()
+		if stepErr != nil {
+			if r.finalizeIfContextCanceled(execCtx) {
+				return nil
+			}
+			return r.failRun("Failed to generate conversational response", stepErr)
+		}
+
+		finishReason := normalizeReplyFinishReason(stepResult.FinishReason)
+		r.recordRuntimeTurnUsage(stepResult.Usage, estimateTokens)
+		r.persistRunEvent("native.turn.result", RealtimeStreamKindLifecycle, map[string]any{
+			"step_index":    step,
+			"finish_reason": finishReason,
+			"tool_calls":    len(stepResult.ToolCalls),
+			"usage": map[string]any{
+				"input_tokens":     stepResult.Usage.InputTokens,
+				"output_tokens":    stepResult.Usage.OutputTokens,
+				"reasoning_tokens": stepResult.Usage.ReasoningTokens,
+			},
+			"estimate_tokens": estimateTokens,
+			"estimate_source": estimateSource,
+			"intent":          intent,
+		})
+		if canonical := r.canonicalAssistantMarkdownOrFallback(stepResult.Text); canonical != "" {
+			r.setCanonicalMarkdownCandidate(canonical)
+		}
+
+		switch classifyReplyFinish(finishReason) {
+		case replyFinishClassClean:
+			if !r.hasNonEmptyAssistantText() {
+				if txt := strings.TrimSpace(stepResult.Text); txt != "" {
+					_ = r.appendTextDelta(txt)
+				}
+			}
+			if !r.hasNonEmptyAssistantText() {
+				_ = r.appendTextDelta(fallbackText)
+			}
+			r.finalizeImplicitReply(step, finalizationReason, fallbackText)
 			return nil
+		case replyFinishClassRetry:
+			continuationCount++
+			if continuationCount > maxConversationalReplyContinuations {
+				return r.failReplyFinish(
+					step,
+					RunExecutionContractDirectReply,
+					finishReason,
+					"reply_finish_retry_exhausted",
+					"AI provider repeatedly truncated the reply before Flower could finish.",
+				)
+			}
+			r.persistReplyContinuation(step, RunExecutionContractDirectReply, finishReason)
+			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: replyContinuationPrompt}}})
+			continue
+		case replyFinishClassBlocked:
+			return r.failReplyFinish(
+				step,
+				RunExecutionContractDirectReply,
+				finishReason,
+				"reply_finish_blocked",
+				"AI provider blocked the reply before Flower could finish the answer.",
+			)
+		default:
+			return r.failReplyFinish(
+				step,
+				RunExecutionContractDirectReply,
+				finishReason,
+				"reply_finish_invalid",
+				"AI provider returned an invalid terminal state for a direct reply.",
+			)
 		}
-		return r.failRun("Failed to generate conversational response", stepErr)
 	}
-
-	r.recordRuntimeTurnUsage(stepResult.Usage, estimateTokens)
-	r.persistRunEvent("native.turn.result", RealtimeStreamKindLifecycle, map[string]any{
-		"step_index":    0,
-		"finish_reason": strings.TrimSpace(stepResult.FinishReason),
-		"tool_calls":    len(stepResult.ToolCalls),
-		"usage": map[string]any{
-			"input_tokens":     stepResult.Usage.InputTokens,
-			"output_tokens":    stepResult.Usage.OutputTokens,
-			"reasoning_tokens": stepResult.Usage.ReasoningTokens,
-		},
-		"estimate_tokens": estimateTokens,
-		"estimate_source": estimateSource,
-		"intent":          intent,
-	})
-	if txt := strings.TrimSpace(stepResult.Text); txt != "" {
-		r.setCanonicalMarkdownCandidate(txt)
-	}
-
-	if !r.hasNonEmptyAssistantText() {
-		if txt := strings.TrimSpace(stepResult.Text); txt != "" {
-			_ = r.appendTextDelta(txt)
-		}
-	}
-	if !r.hasNonEmptyAssistantText() {
-		_ = r.appendTextDelta(fallbackText)
-	}
-	r.reconcileCanonicalMarkdownMessage(fallbackText)
-
-	r.setFinalizationReason(finalizationReason)
-	r.setEndReason("complete")
-	r.emitLifecyclePhase("ended", map[string]any{"reason": finalizationReason, "step_index": 0})
-	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-	return nil
 }
 
 func buildInitialMessages(history []RunHistoryMsg, userInput string) []Message {
@@ -4414,6 +4451,56 @@ func buildRecoveryOverlay(used int, max int, failure error, lastSignature string
 	return fmt.Sprintf("[RECOVERY] Step %d/%d\nLast failure: %s\nDo NOT repeat signature: %s\nYou MUST choose one action from: repair args | switch tool | summarize safe status.", used, max, failureType, strings.TrimSpace(lastSignature))
 }
 
+const (
+	replyContinuationPrompt             = "Continue from where you left off, without repeating previous content."
+	maxConversationalReplyContinuations = 3
+)
+
+func (r *run) persistReplyContinuation(step int, executionContract string, finishReason string) {
+	if r == nil {
+		return
+	}
+	r.persistRunEvent("reply.continuation_requested", RealtimeStreamKindLifecycle, map[string]any{
+		"step_index":          step,
+		"execution_contract":  normalizeExecutionContractValue(executionContract),
+		"completion_contract": completionContractForExecutionContract(executionContract),
+		"finish_reason":       normalizeReplyFinishReason(finishReason),
+	})
+}
+
+func (r *run) failReplyFinish(step int, executionContract string, finishReason string, finalizationReason string, errMsg string) error {
+	if r == nil {
+		return errors.New(strings.TrimSpace(errMsg))
+	}
+	normalizedFinishReason := normalizeReplyFinishReason(finishReason)
+	r.persistRunEvent("reply.finish_rejected", RealtimeStreamKindLifecycle, map[string]any{
+		"step_index":          step,
+		"execution_contract":  normalizeExecutionContractValue(executionContract),
+		"completion_contract": completionContractForExecutionContract(executionContract),
+		"finish_reason":       normalizedFinishReason,
+		"finish_class":        string(classifyReplyFinish(normalizedFinishReason)),
+	})
+	if strings.TrimSpace(finalizationReason) != "" {
+		r.setFinalizationReason(finalizationReason)
+	}
+	return r.failRun(errMsg, fmt.Errorf("provider returned finish_reason=%q", normalizedFinishReason))
+}
+
+func (r *run) finalizeImplicitReply(step int, finalizationReason string, fallback string) {
+	if r == nil {
+		return
+	}
+	canonical := r.canonicalAssistantMarkdownOrFallback(fallback)
+	if canonical != "" {
+		r.setCanonicalMarkdownCandidate(canonical)
+	}
+	r.reconcileCanonicalMarkdownMessage(fallback)
+	r.setFinalizationReason(finalizationReason)
+	r.setEndReason("complete")
+	r.emitLifecyclePhase("ended", map[string]any{"reason": finalizationReason, "step_index": step})
+	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+}
+
 func finalizationReasonForAskUserSource(source string) string {
 	source = strings.TrimSpace(source)
 	if source == "model_signal" {
@@ -5350,6 +5437,8 @@ func extractOpenAIURLSources(resp oresponses.Response) []SourceRef {
 
 func mapOpenAIStatus(status oresponses.ResponseStatus) string {
 	switch strings.TrimSpace(strings.ToLower(string(status))) {
+	case "":
+		return "stop"
 	case "completed":
 		return "stop"
 	case "incomplete":
