@@ -62,6 +62,7 @@ export interface GitBranchesPanelProps {
   branchesError?: string;
   commits?: GitCommitSummary[];
   listLoading?: boolean;
+  listRefreshing?: boolean;
   listLoadingMore?: boolean;
   listError?: string;
   hasMore?: boolean;
@@ -336,17 +337,28 @@ function summarizeCommitFileChanges(files: GitCommitFileSummary[]): { additions:
 
 function HistoryList(props: Pick<
   GitBranchesPanelProps,
-  'repoRootPath' | 'selectedBranch' | 'commits' | 'listLoading' | 'listLoadingMore' | 'listError' | 'hasMore' | 'selectedCommitHash' | 'onSelectCommit' | 'onLoadMore' | 'onAskFlower'
+  'repoRootPath' | 'selectedBranch' | 'commits' | 'listLoading' | 'listRefreshing' | 'listLoadingMore' | 'listError' | 'hasMore' | 'selectedCommitHash' | 'onSelectCommit' | 'onLoadMore' | 'onAskFlower'
 >) {
   const rpc = useRedevenRpc();
 
-  const [commitDetails, setCommitDetails] = createSignal<Record<string, BranchHistoryCommitDetailState>>({});
+  const [commitDetailsByContext, setCommitDetailsByContext] = createSignal<Record<string, Record<string, BranchHistoryCommitDetailState>>>({});
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitCommitFileSummary | null>(null);
   const [diffDialogCommitHash, setDiffDialogCommitHash] = createSignal('');
 
   const expandedCommitHash = createMemo(() => String(props.selectedCommitHash ?? '').trim());
   const repoRootPath = createMemo(() => String(props.repoRootPath ?? '').trim());
+  const historyContextKey = createMemo(() => {
+    const repo = repoRootPath();
+    const branchKey = String(props.selectedBranch?.fullName ?? props.selectedBranch?.name ?? '').trim();
+    if (!repo || !branchKey) return '';
+    return `${repo}|${branchKey}`;
+  });
+  const commitDetails = createMemo(() => {
+    const contextKey = historyContextKey();
+    if (!contextKey) return {};
+    return commitDetailsByContext()[contextKey] ?? {};
+  });
   const selectedDiffKey = () => gitDiffEntryIdentity(diffDialogItem());
 
   const toggleCommit = (hash: string) => {
@@ -354,9 +366,7 @@ function HistoryList(props: Pick<
   };
 
   createEffect(() => {
-    void repoRootPath();
-    void props.selectedBranch?.fullName;
-    setCommitDetails({});
+    void historyContextKey();
     setDiffDialogItem(null);
     setDiffDialogCommitHash('');
     setDiffDialogOpen(false);
@@ -365,31 +375,50 @@ function HistoryList(props: Pick<
   createEffect(() => {
     const repo = repoRootPath();
     const hash = expandedCommitHash();
-    if (!repo || !hash) return;
+    const contextKey = historyContextKey();
+    if (!repo || !hash || !contextKey) return;
     const existing = commitDetails()[hash];
     if (existing?.loading || existing?.loaded) return;
 
-    setCommitDetails((prev) => ({
-      ...prev,
-      [hash]: { files: [], loading: true, error: '', loaded: false },
-    }));
+    setCommitDetailsByContext((prev) => {
+      const currentContext = prev[contextKey] ?? {};
+      return {
+        ...prev,
+        [contextKey]: {
+          ...currentContext,
+          [hash]: { files: [], loading: true, error: '', loaded: false },
+        },
+      };
+    });
 
     void rpc.git.getCommitDetail({ repoRootPath: repo, commit: hash }).then((resp) => {
       const files = Array.isArray(resp?.files) ? resp.files : [];
-      setCommitDetails((prev) => ({
-        ...prev,
-        [hash]: { files, loading: false, error: '', loaded: true },
-      }));
+      setCommitDetailsByContext((prev) => {
+        const currentContext = prev[contextKey] ?? {};
+        return {
+          ...prev,
+          [contextKey]: {
+            ...currentContext,
+            [hash]: { files, loading: false, error: '', loaded: true },
+          },
+        };
+      });
     }).catch((err) => {
-      setCommitDetails((prev) => ({
-        ...prev,
-        [hash]: {
-          files: [],
-          loading: false,
-          error: err instanceof Error ? err.message : String(err ?? 'Failed to load commit detail'),
-          loaded: true,
-        },
-      }));
+      setCommitDetailsByContext((prev) => {
+        const currentContext = prev[contextKey] ?? {};
+        return {
+          ...prev,
+          [contextKey]: {
+            ...currentContext,
+            [hash]: {
+              files: [],
+              loading: false,
+              error: err instanceof Error ? err.message : String(err ?? 'Failed to load commit detail'),
+              loaded: true,
+            },
+          },
+        };
+      });
     });
   });
 
@@ -398,6 +427,14 @@ function HistoryList(props: Pick<
       <div class="flex h-full min-h-0 flex-col overflow-hidden">
         <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
           <div class="flex min-h-0 flex-1 flex-col gap-3">
+            <Show when={props.listRefreshing && (props.commits?.length ?? 0) > 0}>
+              <div class="rounded-md border border-border/45 bg-background/72 px-2.5 py-1.5">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="text-[11px] text-muted-foreground">Refreshing branch history in the background.</div>
+                  <GitMetaPill tone="neutral">Refreshing...</GitMetaPill>
+                </div>
+              </div>
+            </Show>
             <Show
               when={!props.listLoading}
               fallback={<GitStatePane loading message="Loading commit history..." class="px-1" />}
@@ -910,16 +947,18 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     setDiffDialogOpen(false);
   });
 
-  const renderStatus = () => {
+  const renderStatus = (active: boolean) => {
     const branch = props.selectedBranch;
     if (!branch) {
       return (
         <div
-          class="flex-1 px-3 py-4 text-xs text-muted-foreground"
+          class={cn('flex-1 px-3 py-4 text-xs text-muted-foreground', !active && 'hidden')}
           role="tabpanel"
           id={gitBranchSubviewPanelId('status')}
           aria-labelledby={gitBranchSubviewTabId('status')}
-          tabIndex={0}
+          aria-hidden={!active}
+          hidden={!active}
+          tabIndex={active ? 0 : -1}
         >
           Choose a branch from the sidebar to inspect its status or history.
         </div>
@@ -928,11 +967,13 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
     return (
       <div
-        class="flex h-full min-h-0 flex-col overflow-hidden"
+        class={cn('flex h-full min-h-0 flex-col overflow-hidden', !active && 'hidden')}
         role="tabpanel"
         id={gitBranchSubviewPanelId('status')}
         aria-labelledby={gitBranchSubviewTabId('status')}
-        tabIndex={0}
+        aria-hidden={!active}
+        hidden={!active}
+        tabIndex={active ? 0 : -1}
       >
         <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
           <div class="flex min-h-0 flex-1 flex-col gap-3">
@@ -1213,29 +1254,32 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                 </div>
               </div>
 
-              <Show when={branchSubview() === 'history'} fallback={renderStatus()}>
-                <div
-                  role="tabpanel"
-                  id={gitBranchSubviewPanelId('history')}
-                  aria-labelledby={gitBranchSubviewTabId('history')}
-                  tabIndex={0}
-                  class="flex min-h-0 flex-1 flex-col overflow-hidden"
-                >
-                  <HistoryList
-                    repoRootPath={activeRepoRootPath()}
-                    selectedBranch={props.selectedBranch}
-                    commits={props.commits}
-                    listLoading={props.listLoading}
-                    listLoadingMore={props.listLoadingMore}
-                    listError={props.listError}
-                    hasMore={props.hasMore}
-                    selectedCommitHash={props.selectedCommitHash}
-                    onSelectCommit={props.onSelectCommit}
-                    onLoadMore={props.onLoadMore}
-                    onAskFlower={props.onAskFlower}
-                  />
-                </div>
-              </Show>
+              {renderStatus(branchSubview() === 'status')}
+
+              <div
+                role="tabpanel"
+                id={gitBranchSubviewPanelId('history')}
+                aria-labelledby={gitBranchSubviewTabId('history')}
+                aria-hidden={branchSubview() !== 'history'}
+                hidden={branchSubview() !== 'history'}
+                tabIndex={branchSubview() === 'history' ? 0 : -1}
+                class={cn('flex min-h-0 flex-1 flex-col overflow-hidden', branchSubview() !== 'history' && 'hidden')}
+              >
+                <HistoryList
+                  repoRootPath={activeRepoRootPath()}
+                  selectedBranch={props.selectedBranch}
+                  commits={props.commits}
+                  listLoading={props.listLoading}
+                  listRefreshing={props.listRefreshing}
+                  listLoadingMore={props.listLoadingMore}
+                  listError={props.listError}
+                  hasMore={props.hasMore}
+                  selectedCommitHash={props.selectedCommitHash}
+                  onSelectCommit={props.onSelectCommit}
+                  onLoadMore={props.onLoadMore}
+                  onAskFlower={props.onAskFlower}
+                />
+              </div>
             </div>
           </Show>
         </Show>

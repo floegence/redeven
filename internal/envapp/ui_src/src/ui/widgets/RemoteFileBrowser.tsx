@@ -113,6 +113,28 @@ type GitLoadOptions = {
   repoRootPath?: string;
 };
 
+type GitCommitContextScope = 'repo' | 'branch';
+
+type GitCommitContext = {
+  key: string;
+  scope: GitCommitContextScope;
+  repoRootPath: string;
+  ref: string;
+};
+
+type GitCommitLoadOptions = GitLoadOptions & {
+  context?: GitCommitContext | null;
+  mode?: 'blocking' | 'background';
+};
+
+type GitCommitListCacheEntry = {
+  commits: GitCommitSummary[];
+  hasMore: boolean;
+  nextOffset: number;
+  resolved: boolean;
+  selectedCommitHash: string;
+};
+
 function normalizePageSidebarWidth(width: unknown): number {
   const raw = typeof width === 'number' && Number.isFinite(width) ? width : PAGE_SIDEBAR_DEFAULT_WIDTH;
   return Math.max(PAGE_SIDEBAR_MIN_WIDTH, Math.min(PAGE_SIDEBAR_MAX_WIDTH, Math.round(raw)));
@@ -196,6 +218,35 @@ function classifyPathLoadError(err: unknown): PathLoadResult {
 
   const text = String(err ?? '').trim();
   return text ? { status: 'transport_error', message: text } : { status: 'transport_error' };
+}
+
+function createGitCommitContext(params: {
+  repoRootPath?: string;
+  subview: GitWorkbenchSubview;
+  branchSubview: GitBranchSubview;
+  branch?: GitBranchSummary | null;
+}): GitCommitContext | null {
+  const repoRootPath = String(params.repoRootPath ?? '').trim();
+  if (!repoRootPath) return null;
+  if (params.subview === 'history') {
+    return {
+      key: `${repoRootPath}|repo|`,
+      scope: 'repo',
+      repoRootPath,
+      ref: '',
+    };
+  }
+  if (params.subview === 'branches' && params.branchSubview === 'history') {
+    const ref = String(params.branch?.name ?? '').trim();
+    if (!ref) return null;
+    return {
+      key: `${repoRootPath}|branch|${ref}`,
+      scope: 'branch',
+      repoRootPath,
+      ref,
+    };
+  }
+  return null;
 }
 
 export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
@@ -298,7 +349,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitHasMore, setGitHasMore] = createSignal(false);
   const [gitNextOffset, setGitNextOffset] = createSignal(0);
   const [gitCommitListRef, setGitCommitListRef] = createSignal('');
+  const [gitCommitContextKey, setGitCommitContextKey] = createSignal('');
+  const [gitCommitListCache, setGitCommitListCache] = createSignal<Record<string, GitCommitListCacheEntry>>({});
   const [selectedCommitHash, setSelectedCommitHash] = createSignal('');
+  const [gitListRefreshing, setGitListRefreshing] = createSignal(false);
   const [browserSidebarWidth, setBrowserSidebarWidth] = createSignal(readPersistedSidebarWidth());
   const [browserSidebarOpen, setBrowserSidebarOpen] = createSignal(false);
   const [gitSubview, setGitSubview] = createSignal<GitWorkbenchSubview>('changes');
@@ -342,6 +396,52 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let gitDeleteReviewReqSeq = 0;
   let lastGitCommitContextKey = '';
   let lastGitRepoKey = '';
+
+  const readGitCommitCacheEntry = (contextKey: string): GitCommitListCacheEntry | null => {
+    const key = String(contextKey ?? '').trim();
+    if (!key) return null;
+    return gitCommitListCache()[key] ?? null;
+  };
+
+  const applyGitCommitContextEntry = (context: GitCommitContext | null, entry: GitCommitListCacheEntry | null) => {
+    const nextContextKey = String(context?.key ?? '').trim();
+    const nextRef = String(context?.ref ?? '').trim();
+    const nextCommits = entry?.commits ?? [];
+    const nextSelectedCommitHash = String(entry?.selectedCommitHash ?? '').trim();
+    const selectedStillVisible = nextSelectedCommitHash.length > 0 && nextCommits.some((item) => item.hash === nextSelectedCommitHash);
+
+    setGitCommitContextKey(nextContextKey);
+    setGitCommitListRef(nextRef);
+    setGitCommits(nextCommits);
+    setGitHasMore(Boolean(entry?.hasMore));
+    setGitNextOffset(Number(entry?.nextOffset ?? 0));
+    setGitListResolved(Boolean(entry?.resolved));
+    setGitListError('');
+    setGitListLoading(false);
+    setGitListLoadingMore(false);
+    setGitListRefreshing(false);
+    setSelectedCommitHash(selectedStillVisible ? nextSelectedCommitHash : '');
+  };
+
+  const restoreGitCommitContextFromCache = (context: GitCommitContext): boolean => {
+    const entry = readGitCommitCacheEntry(context.key);
+    applyGitCommitContextEntry(context, entry);
+    return Boolean(entry?.resolved);
+  };
+
+  const currentGitCommitContext = (): GitCommitContext | null => createGitCommitContext({
+    repoRootPath: repoInfo()?.repoRootPath,
+    subview: gitSubview(),
+    branchSubview: selectedGitBranchSubview(),
+    branch: selectedGitBranch(),
+  });
+
+  const prefersBackgroundGitCommitReload = (context: GitCommitContext | null): boolean => {
+    const contextKey = String(context?.key ?? '').trim();
+    if (!contextKey) return false;
+    if (gitCommitContextKey() === contextKey && gitListResolved()) return true;
+    return Boolean(readGitCommitCacheEntry(contextKey)?.resolved);
+  };
 
   const resetFileBrowser = () => {
     setFileBrowserResetSeq((value) => value + 1);
@@ -587,9 +687,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
     if (gitSubview() === 'branches') {
       if (!gitBranches() && !gitBranchesError()) return 'Loading branches...';
-      if (selectedGitBranchSubview() === 'history' && gitBranches() && !gitListResolved() && !gitListError()) {
-        return 'Loading commit history...';
-      }
       return '';
     }
     if (gitSubview() === 'history') {
@@ -669,15 +766,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const resetGitCommitSidebar = () => {
     gitListReqSeq += 1;
     lastGitCommitContextKey = '';
-    setGitCommitListRef('');
-    setGitCommits([]);
-    setGitListLoading(false);
-    setGitListLoadingMore(false);
-    setGitListError('');
-    setGitListResolved(false);
-    setGitHasMore(false);
-    setGitNextOffset(0);
-    setSelectedCommitHash('');
+    setGitCommitListCache({});
+    applyGitCommitContextEntry(null, null);
   };
 
   const resetGitWorkbenchData = () => {
@@ -782,6 +872,25 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       closePageSidebar();
     }
   };
+
+  createEffect(() => {
+    const contextKey = String(gitCommitContextKey() ?? '').trim();
+    if (!contextKey) return;
+    const selectedHash = String(selectedCommitHash() ?? '').trim();
+    setGitCommitListCache((prev) => {
+      const current = prev[contextKey];
+      if (!current || current.selectedCommitHash === selectedHash) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [contextKey]: {
+          ...current,
+          selectedCommitHash: selectedHash,
+        },
+      };
+    });
+  });
 
   const busyWorkspaceAction = (): 'stage' | 'unstage' | '' => {
     const scope = gitMutationScope();
@@ -949,13 +1058,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     );
   };
 
-  const currentGitCommitRef = (): string => {
-    if (gitSubview() === 'branches' && selectedGitBranchSubview() === 'history') {
-      return String(selectedGitBranch()?.name ?? '').trim();
-    }
-    return '';
-  };
-
   const applyGitMutationRepoState = (resp: GitMutationRepoResponse) => {
     const repoRootPath = String(resp.repoRootPath ?? '').trim() || resolveActiveRepoRootPath();
     const nextHeadRef = typeof resp.headRef === 'string' ? resp.headRef : undefined;
@@ -1010,8 +1112,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     await Promise.all(refreshes);
 
     if (plan.refreshCommits) {
+      const commitContext = currentGitCommitContext();
+      if (!commitContext) return;
+      const useBackgroundRefresh = prefersBackgroundGitCommitReload(commitContext);
       lastGitCommitContextKey = '';
-      await loadGitCommits(true, currentGitCommitRef(), { silent: true, repoRootPath });
+      await loadGitCommits(true, commitContext.ref, {
+        context: commitContext,
+        mode: useBackgroundRefresh ? 'background' : 'blocking',
+        repoRootPath,
+        silent: useBackgroundRefresh,
+      });
     }
   };
 
@@ -1197,13 +1307,24 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
     const nextBranches = branchesResp ?? gitBranches();
     const nextBranch = findGitBranchByKey(nextBranches, selectedGitBranchName()) ?? pickDefaultGitBranch(nextBranches);
-    const nextRef = String(nextBranch?.name ?? '').trim();
+    const nextContext = createGitCommitContext({
+      repoRootPath,
+      subview: 'branches',
+      branchSubview: 'history',
+      branch: nextBranch,
+    });
     lastGitCommitContextKey = '';
-    if (!nextRef) {
-      resetGitCommitSidebar();
+    if (!nextContext) {
+      applyGitCommitContextEntry(null, null);
       return;
     }
-    await loadGitCommits(true, nextRef, { silent: true, repoRootPath });
+    const hasCachedContext = restoreGitCommitContextFromCache(nextContext);
+    await loadGitCommits(true, nextContext.ref, {
+      context: nextContext,
+      mode: hasCachedContext ? 'background' : 'blocking',
+      repoRootPath,
+      silent: hasCachedContext,
+    });
   };
 
   const handleConfirmMergeBranch = async (
@@ -1415,25 +1536,45 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (gitSubview() === 'branches') {
       void loadGitBranches({ silent: Boolean(gitBranches()) });
     }
-    if (gitSubview() === 'history' || (gitSubview() === 'branches' && selectedGitBranchSubview() === 'history')) {
-      void loadGitCommits(true, currentGitCommitRef(), { silent: gitCommits().length > 0 });
+    const commitContext = currentGitCommitContext();
+    if (commitContext) {
+      const useBackgroundRefresh = prefersBackgroundGitCommitReload(commitContext);
+      void loadGitCommits(true, commitContext.ref, {
+        context: commitContext,
+        mode: useBackgroundRefresh ? 'background' : 'blocking',
+        silent: useBackgroundRefresh,
+      });
     }
   };
 
-  const loadGitCommits = async (reset: boolean, ref = gitCommitListRef(), options: GitLoadOptions = {}) => {
+  const loadGitCommits = async (reset: boolean, ref = gitCommitListRef(), options: GitCommitLoadOptions = {}) => {
     const repoRootPath = resolveActiveRepoRootPath(options.repoRootPath);
     if (!repoRootPath || !protocol.client()) return;
     const seq = ++gitListReqSeq;
     const nextRef = String(ref ?? '').trim();
+    const context = options.context ?? createGitCommitContext({
+      repoRootPath,
+      subview: gitSubview(),
+      branchSubview: selectedGitBranchSubview(),
+      branch: selectedGitBranch(),
+    });
+    const contextKey = String(context?.key ?? '').trim();
+    const backgroundRefresh = reset && options.mode === 'background';
     if (!options.silent) {
       setGitListError('');
       if (reset) {
         setGitCommitListRef(nextRef);
-        setGitListLoading(true);
-        setGitListResolved(false);
+        if (backgroundRefresh) {
+          setGitListRefreshing(true);
+        } else {
+          setGitListLoading(true);
+          setGitListResolved(false);
+        }
       } else {
         setGitListLoadingMore(true);
       }
+    } else if (backgroundRefresh) {
+      setGitListRefreshing(true);
     }
     try {
       const resp = await rpc.git.listCommits({
@@ -1444,19 +1585,45 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       });
       if (seq !== gitListReqSeq) return;
       const nextItems = Array.isArray(resp?.commits) ? resp.commits : [];
-      if (reset) {
-        setGitCommits(nextItems);
-        setGitListResolved(true);
-      } else {
-        const seen = new Set(gitCommits().map((item) => item.hash));
-        setGitCommits([...gitCommits(), ...nextItems.filter((item) => !seen.has(item.hash))]);
+      const cachedEntry = readGitCommitCacheEntry(contextKey);
+      const existingItems = reset
+        ? []
+        : (gitCommitContextKey() === contextKey ? gitCommits() : (cachedEntry?.commits ?? []));
+      const seenCommitHashes = new Set(existingItems.map((entry) => entry.hash));
+      const mergedItems = reset
+        ? nextItems
+        : [...existingItems, ...nextItems.filter((item) => !seenCommitHashes.has(item.hash))];
+      const nextSelectedCommitHash = (() => {
+        const currentSelection = gitCommitContextKey() === contextKey
+          ? String(selectedCommitHash() ?? '').trim()
+          : String(cachedEntry?.selectedCommitHash ?? '').trim();
+        if (currentSelection && mergedItems.some((item) => item.hash === currentSelection)) {
+          return currentSelection;
+        }
+        return '';
+      })();
+
+      if (contextKey) {
+        setGitCommitListCache((prev) => ({
+          ...prev,
+          [contextKey]: {
+            commits: mergedItems,
+            hasMore: Boolean(resp?.hasMore),
+            nextOffset: Number(resp?.nextOffset ?? 0),
+            resolved: true,
+            selectedCommitHash: nextSelectedCommitHash,
+          },
+        }));
       }
-      setGitHasMore(Boolean(resp?.hasMore));
-      setGitNextOffset(Number(resp?.nextOffset ?? 0));
-      const allItems = reset ? nextItems : gitCommits();
-      const current = selectedCommitHash();
-      if (current && !allItems.some((item) => item.hash === current)) {
-        setSelectedCommitHash('');
+
+      if (!contextKey || gitCommitContextKey() === contextKey) {
+        setGitCommits(mergedItems);
+        setGitHasMore(Boolean(resp?.hasMore));
+        setGitNextOffset(Number(resp?.nextOffset ?? 0));
+        setGitListResolved(true);
+        if (selectedCommitHash() !== nextSelectedCommitHash) {
+          setSelectedCommitHash(nextSelectedCommitHash);
+        }
       }
       if (reset) {
         setGitCommitListRef(nextRef);
@@ -1465,15 +1632,18 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     } catch (err) {
       if (seq !== gitListReqSeq) return;
       const message = err instanceof Error ? err.message : String(err ?? 'Failed to load commits');
-      if (!options.silent) {
+      if (!options.silent && !backgroundRefresh) {
         setGitListError(message);
-      } else {
+      } else if (!backgroundRefresh) {
         notification.warning('Git refresh incomplete', message);
       }
     } finally {
-      if (!options.silent && seq === gitListReqSeq) {
-        setGitListLoading(false);
+      if (seq === gitListReqSeq) {
+        if (!options.silent && !backgroundRefresh) {
+          setGitListLoading(false);
+        }
         setGitListLoadingMore(false);
+        setGitListRefreshing(false);
       }
     }
   };
@@ -2121,29 +2291,28 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   createEffect(() => {
     const mode = pageMode();
-    const subview = gitSubview();
-    const branchSubview = selectedGitBranchSubview();
-    const branch = selectedGitBranch();
     const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
-    const isBranchHistory = subview === 'branches' && branchSubview === 'history';
-    const isRepoHistory = subview === 'history';
-    const ref = isBranchHistory ? String(branch?.name ?? '').trim() : '';
+    const context = currentGitCommitContext();
 
-    if (mode !== 'git' || !repoRootPath || (!isRepoHistory && !isBranchHistory)) {
+    if (mode !== 'git' || !repoRootPath) {
       lastGitCommitContextKey = '';
       return;
     }
-    if (isBranchHistory && !ref) {
-      resetGitCommitSidebar();
+    if (!context) {
+      setGitListRefreshing(false);
       return;
     }
 
-    const contextKey = `${repoRootPath}|${subview}|${ref}`;
-    if (contextKey === lastGitCommitContextKey) {
+    if (context.key === lastGitCommitContextKey) {
       return;
     }
-    lastGitCommitContextKey = contextKey;
-    void loadGitCommits(true, ref);
+    lastGitCommitContextKey = context.key;
+    const hasCachedContext = restoreGitCommitContextFromCache(context);
+    void loadGitCommits(true, context.ref, {
+      context,
+      mode: hasCachedContext ? 'background' : 'blocking',
+      silent: hasCachedContext,
+    });
   });
 
   const dispatchAskFlowerIntent = (intent: AskFlowerIntent) => {
@@ -2557,6 +2726,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onSelectBranchSubview={selectGitBranchSubview}
                       commits={gitCommits()}
                       listLoading={gitListLoading()}
+                      listRefreshing={gitListRefreshing()}
                       listLoadingMore={gitListLoadingMore()}
                       listError={gitListError()}
                       hasMore={gitHasMore()}

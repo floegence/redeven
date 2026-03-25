@@ -38,12 +38,15 @@ const legacyClipboardStore = vi.hoisted(() => ({
 const gitWorkspaceRenderStore = vi.hoisted(() => ({
   snapshots: [] as Array<{
     subview: string;
+    selectedBranchSubview?: string;
     selectedWorkspaceSection?: string;
     repoInfoLoading: boolean;
     repoSummaryLoading: boolean;
     workspaceLoading: boolean;
     branchesLoading: boolean;
     listLoading: boolean;
+    listRefreshing: boolean;
+    shellLoadingMessage?: string;
     fetchBusy: boolean;
     pullBusy: boolean;
     pushBusy: boolean;
@@ -265,8 +268,11 @@ vi.mock('./GitWorkspace', () => ({
     mode: string;
     currentPath: string;
     subview: string;
+    selectedBranchSubview?: string;
     width?: number;
     selectedWorkspaceSection?: string;
+    listRefreshing?: boolean;
+    shellLoadingMessage?: string;
     onModeChange?: (mode: string) => void;
     onResize?: (delta: number) => void;
     repoInfoLoading?: boolean;
@@ -286,6 +292,7 @@ vi.mock('./GitWorkspace', () => ({
     deleteReviewOpen?: boolean;
     deletePreview?: { planFingerprint?: string } | null;
     deleteDialogState?: string;
+    onSelectBranchSubview?: (view: 'status' | 'history') => void;
     onFetch?: () => void;
     onPull?: () => void;
     onPush?: () => void;
@@ -321,12 +328,15 @@ vi.mock('./GitWorkspace', () => ({
     createEffect(() => {
       gitWorkspaceRenderStore.snapshots.push({
         subview: props.subview,
+        selectedBranchSubview: props.selectedBranchSubview,
         selectedWorkspaceSection: props.selectedWorkspaceSection,
         repoInfoLoading: Boolean(props.repoInfoLoading),
         repoSummaryLoading: Boolean(props.repoSummaryLoading),
         workspaceLoading: Boolean(props.workspaceLoading),
         branchesLoading: Boolean(props.branchesLoading),
         listLoading: Boolean(props.listLoading),
+        listRefreshing: Boolean(props.listRefreshing),
+        shellLoadingMessage: props.shellLoadingMessage,
         fetchBusy: Boolean(props.fetchBusy),
         pullBusy: Boolean(props.pullBusy),
         pushBusy: Boolean(props.pushBusy),
@@ -339,8 +349,12 @@ vi.mock('./GitWorkspace', () => ({
     return (
       <div data-testid="git-workspace">
         <div>git:{props.mode}:{props.subview}:{props.currentPath}:{props.width ?? 0}</div>
+        <div>branch-subview:{props.selectedBranchSubview ?? 'status'}</div>
+        <div>shell-loading:{props.shellLoadingMessage ?? ''}</div>
         <button type="button" onClick={() => props.onModeChange?.('files')}>mock-to-files</button>
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
+        <button type="button" onClick={() => props.onSelectBranchSubview?.('status')}>mock-branch-status</button>
+        <button type="button" onClick={() => props.onSelectBranchSubview?.('history')}>mock-branch-history</button>
         <button type="button" onClick={() => props.onFetch?.()}>mock-fetch</button>
         <button type="button" onClick={() => props.onPull?.()}>mock-pull</button>
         <button type="button" onClick={() => props.onPush?.()}>mock-push</button>
@@ -924,6 +938,108 @@ describe('RemoteFileBrowser persistence', () => {
       expect(filesWorkspace?.parentElement?.style.display).toBe('block');
       expect(filesWorkspace?.textContent).toContain('files:files:/workspace/repo/src:312:1');
     } finally {
+      dispose();
+    }
+  });
+
+  it('does not refetch the same branch history when returning from status to history', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'branches' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.git.listCommits.mockClear();
+
+      const toHistoryButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-branch-history') as HTMLButtonElement | undefined;
+      const toStatusButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-branch-status') as HTMLButtonElement | undefined;
+      expect(toHistoryButton).toBeTruthy();
+      expect(toStatusButton).toBeTruthy();
+
+      toHistoryButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.git.listCommits).toHaveBeenCalledTimes(1);
+      expect(mockRpc.git.listCommits).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo',
+        ref: 'main',
+        offset: 0,
+        limit: 50,
+      });
+
+      toStatusButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      toHistoryButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.git.listCommits).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps branch history loading local to the panel instead of sending a shell blocking message', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'branches' },
+    };
+
+    let resolveCommits: ((value: Awaited<ReturnType<typeof mockRpc.git.listCommits>>) => void) | undefined;
+    mockRpc.git.listCommits.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveCommits = resolve;
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const toHistoryButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-branch-history') as HTMLButtonElement | undefined;
+      expect(toHistoryButton).toBeTruthy();
+
+      toHistoryButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(host.textContent).toContain('branch-subview:history');
+      expect(host.textContent).toContain('shell-loading:');
+      expect(host.textContent).not.toContain('Loading commit history...');
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => (
+        item.subview === 'branches'
+        && item.selectedBranchSubview === 'history'
+        && item.listLoading
+        && item.shellLoadingMessage === ''
+      ))).toBe(true);
+    } finally {
+      resolveCommits?.({
+        repoRootPath: '/workspace/repo',
+        commits: [{ hash: 'abc1234', shortHash: 'abc1234', parents: [], subject: 'Initial commit' }],
+        hasMore: false,
+        nextOffset: 0,
+      });
       dispose();
     }
   });

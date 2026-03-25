@@ -65,6 +65,7 @@ export interface GitWorkspaceProps {
   onSelectBranchSubview?: (view: GitBranchSubview) => void;
   commits?: GitCommitSummary[];
   listLoading?: boolean;
+  listRefreshing?: boolean;
   listLoadingMore?: boolean;
   listError?: string;
   hasMore?: boolean;
@@ -206,6 +207,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               selectedCommitHash={props.selectedCommitHash}
               commits={props.commits}
               listLoading={props.listLoading}
+              listRefreshing={props.listRefreshing}
               listLoadingMore={props.listLoadingMore}
               listError={props.listError}
               hasMore={props.hasMore}
