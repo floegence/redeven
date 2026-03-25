@@ -246,14 +246,23 @@ describe('GitChangesPanel interactions', () => {
       const askFlowerButton = host.querySelector('button[aria-label="Ask Flower"]') as HTMLButtonElement | null;
       const openInTerminalButton = host.querySelector('button[aria-label="Terminal"]') as HTMLButtonElement | null;
       const browseFilesButton = host.querySelector('button[aria-label="Files"]') as HTMLButtonElement | null;
+      const askFlowerShell = askFlowerButton?.firstElementChild as HTMLSpanElement | null;
 
       expect(shortcutDock).toBeTruthy();
+      expect(shortcutDock?.className).toContain('items-center');
       expect(askFlowerButton).toBeTruthy();
       expect(openInTerminalButton).toBeTruthy();
       expect(browseFilesButton).toBeTruthy();
       expect(askFlowerButton?.dataset.gitShortcutOrb).toBe('flower');
       expect(openInTerminalButton?.dataset.gitShortcutOrb).toBe('terminal');
       expect(browseFilesButton?.dataset.gitShortcutOrb).toBe('files');
+      expect(askFlowerButton?.className).toContain('h-7');
+      expect(openInTerminalButton?.className).toContain('h-7');
+      expect(browseFilesButton?.className).toContain('h-7');
+      expect(askFlowerButton?.className).not.toContain('hover:-translate-y-0.5');
+      expect(askFlowerShell?.className).toContain('backdrop-blur-md');
+      expect(askFlowerShell?.className).toContain('from-orange-300');
+      expect(askFlowerShell?.className).not.toContain('group-hover:scale');
       expect(askFlowerButton?.textContent).toBe('');
       expect(openInTerminalButton?.textContent).toBe('');
       expect(browseFilesButton?.textContent).toBe('');

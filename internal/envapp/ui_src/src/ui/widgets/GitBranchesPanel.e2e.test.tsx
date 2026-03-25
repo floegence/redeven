@@ -393,12 +393,16 @@ describe('GitBranchesPanel interactions', () => {
       const browseFilesButton = host.querySelector('button[aria-label="Files"]') as HTMLButtonElement | null;
 
       expect(shortcutDocks.length).toBeGreaterThan(0);
+      expect(shortcutDocks[0]?.className).toContain('items-center');
       expect(askFlowerButton).toBeTruthy();
       expect(openInTerminalButton).toBeTruthy();
       expect(browseFilesButton).toBeTruthy();
       expect(askFlowerButton?.dataset.gitShortcutOrb).toBe('flower');
       expect(openInTerminalButton?.dataset.gitShortcutOrb).toBe('terminal');
       expect(browseFilesButton?.dataset.gitShortcutOrb).toBe('files');
+      expect(askFlowerButton?.className).toContain('h-7');
+      expect(openInTerminalButton?.className).toContain('h-7');
+      expect(browseFilesButton?.className).toContain('h-7');
       expect(askFlowerButton?.textContent).toBe('');
       expect(openInTerminalButton?.textContent).toBe('');
       expect(browseFilesButton?.textContent).toBe('');

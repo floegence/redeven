@@ -208,8 +208,10 @@ describe('GitHistoryBrowser interactions', () => {
       const shortcutDock = host.querySelector('[data-git-shortcut-dock]');
       const askFlowerButton = host.querySelector('button[aria-label="Ask Flower"]') as HTMLButtonElement | null;
       expect(shortcutDock).toBeTruthy();
+      expect(shortcutDock?.className).toContain('items-center');
       expect(askFlowerButton).toBeTruthy();
       expect(askFlowerButton?.dataset.gitShortcutOrb).toBe('flower');
+      expect(askFlowerButton?.className).toContain('h-7');
       expect(askFlowerButton?.textContent).toBe('');
 
       askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));

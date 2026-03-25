@@ -302,12 +302,12 @@ export interface GitShortcutOrbButtonProps {
 function gitShortcutOrbShellClass(tone: GitShortcutOrbTone): string {
   switch (tone) {
     case 'flower':
-      return 'border-orange-300/45 bg-gradient-to-br from-amber-200/95 via-orange-300/88 to-orange-500/82 text-orange-950 shadow-[0_18px_36px_-24px_rgba(249,115,22,0.58)] dark:text-orange-50';
+      return 'border-orange-500/55 bg-gradient-to-br from-orange-300 via-orange-400 to-amber-600 text-orange-950 shadow-[0_10px_20px_-14px_rgba(194,65,12,0.72)] hover:from-orange-200 hover:via-orange-300 hover:to-amber-500 dark:border-orange-400/55 dark:from-orange-500 dark:via-orange-600 dark:to-amber-500 dark:text-orange-50 dark:hover:from-orange-400 dark:hover:via-orange-500 dark:hover:to-amber-400';
     case 'terminal':
-      return 'border-sky-500/24 bg-gradient-to-br from-sky-500/18 via-background/92 to-cyan-300/16 text-sky-700 shadow-[0_18px_36px_-24px_rgba(14,165,233,0.42)] dark:text-sky-200';
+      return 'border-sky-500/50 bg-gradient-to-br from-slate-200 via-sky-300 to-cyan-500 text-sky-950 shadow-[0_10px_20px_-14px_rgba(3,105,161,0.64)] hover:from-slate-100 hover:via-sky-200 hover:to-cyan-400 dark:border-sky-400/50 dark:from-slate-700 dark:via-sky-800 dark:to-cyan-600 dark:text-sky-50 dark:hover:from-slate-600 dark:hover:via-sky-700 dark:hover:to-cyan-500';
     case 'files':
     default:
-      return 'border-emerald-500/22 bg-gradient-to-br from-emerald-500/18 via-background/92 to-amber-300/16 text-emerald-700 shadow-[0_18px_36px_-24px_rgba(16,185,129,0.38)] dark:text-emerald-200';
+      return 'border-emerald-500/50 bg-gradient-to-br from-emerald-200 via-emerald-300 to-lime-500 text-emerald-950 shadow-[0_10px_20px_-14px_rgba(5,150,105,0.62)] hover:from-emerald-100 hover:via-emerald-200 hover:to-lime-400 dark:border-emerald-400/50 dark:from-emerald-700 dark:via-emerald-800 dark:to-lime-600 dark:text-emerald-50 dark:hover:from-emerald-600 dark:hover:via-emerald-700 dark:hover:to-lime-500';
   }
 }
 
@@ -324,27 +324,27 @@ export function GitShortcutOrbButton(props: GitShortcutOrbButtonProps) {
       aria-label={props.label}
       disabled={Boolean(props.disabled)}
       class={cn(
-        'group relative inline-flex cursor-pointer items-center justify-center rounded-full p-0.5 transition-[transform,color,opacity] duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45',
-        size() === 'sm' ? 'h-9 w-9' : 'h-10 w-10',
+        'group relative inline-flex cursor-pointer items-center justify-center rounded-full align-middle transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45',
+        size() === 'sm' ? 'h-7 w-7' : 'h-8 w-8',
         props.class,
       )}
       onClick={props.onClick}
     >
       <span
         class={cn(
-          'relative flex items-center justify-center rounded-full border shadow-[inset_0_1px_0_rgba(255,255,255,0.32)] backdrop-blur-xl transition-[transform,box-shadow,filter] duration-200 group-hover:scale-[1.04] group-hover:shadow-[0_22px_42px_-26px_rgba(15,23,42,0.68)]',
-          size() === 'sm' ? 'h-8 w-8' : 'h-9 w-9',
+          'relative flex items-center justify-center rounded-full border backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_8px_16px_-12px_rgba(15,23,42,0.42)] transition-colors duration-150',
+          size() === 'sm' ? 'h-7 w-7' : 'h-8 w-8',
           gitShortcutOrbShellClass(props.tone),
         )}
       >
-        <span class="pointer-events-none absolute inset-[1px] rounded-full bg-white/14 opacity-90" aria-hidden="true" />
-        <span class="pointer-events-none absolute inset-[2px] rounded-full bg-gradient-to-b from-white/18 via-transparent to-black/[0.04]" aria-hidden="true" />
+        <span class="pointer-events-none absolute inset-px rounded-full bg-white/12" aria-hidden="true" />
+        <span class="pointer-events-none absolute inset-px rounded-full bg-gradient-to-b from-white/16 via-white/[0.03] to-black/[0.08]" aria-hidden="true" />
         <Icon
           class={cn(
             'relative z-[1]',
             props.tone === 'flower'
-              ? (size() === 'sm' ? 'h-5 w-5' : 'h-6 w-6')
-              : (size() === 'sm' ? 'h-4 w-4' : 'h-[1.125rem] w-[1.125rem]'),
+              ? (size() === 'sm' ? 'h-4 w-4' : 'h-[1.125rem] w-[1.125rem]')
+              : (size() === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4'),
             props.iconClass,
           )}
         />
@@ -363,7 +363,7 @@ export function GitShortcutOrbDock(props: GitShortcutOrbDockProps) {
     <div
       data-git-shortcut-dock
       class={cn(
-        'inline-flex items-start gap-1',
+        'inline-flex items-center gap-1.5',
         props.class,
       )}
     >
