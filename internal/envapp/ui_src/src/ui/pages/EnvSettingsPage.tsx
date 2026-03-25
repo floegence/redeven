@@ -682,7 +682,7 @@ export function EnvSettingsPage() {
     const current = codexStatus();
     return [
       {
-        label: 'available',
+        label: 'host_binary_detected',
         value: current?.available ? 'Yes' : 'No',
         note: 'Whether Redeven can resolve `codex` from the host machine PATH.',
       },
@@ -693,13 +693,13 @@ export function EnvSettingsPage() {
       },
       {
         label: 'binary_path',
-        value: current?.binary_path || 'Unavailable',
+        value: current?.binary_path || 'Not detected',
         note: 'Resolved host binary used for Codex sessions.',
         mono: true,
       },
       {
         label: 'agent_home_dir',
-        value: current?.agent_home_dir || 'Unavailable',
+        value: current?.agent_home_dir || 'Not detected',
         note: 'Current agent runtime home directory exposed to the Codex bridge.',
         mono: true,
       },
@@ -3547,8 +3547,8 @@ export function EnvSettingsPage() {
             <SettingsCard
               icon={CodexIcon}
               title="Codex"
-              description="Redeven does not persist Codex runtime settings. It uses the host machine's `codex` binary directly and shows status here for diagnostics only."
-              badge={codexStatus()?.available ? 'Available' : 'Unavailable'}
+              description="Redeven uses the host machine's `codex` binary directly. This section is diagnostics-only; there is no separate in-app Codex runtime toggle to maintain."
+              badge={codexStatus()?.available ? 'Host detected' : 'Needs host install'}
               badgeVariant={codexStatus()?.available ? 'success' : 'default'}
               error={codexStatusError()}
               actions={
@@ -3561,7 +3561,7 @@ export function EnvSettingsPage() {
               <div class="space-y-6">
                 <div class="flex flex-wrap gap-2">
                   <SettingsPill tone={codexStatus()?.available ? 'success' : 'default'}>
-                    {codexStatus()?.available ? 'Host binary available' : 'Host binary unavailable'}
+                    {codexStatus()?.available ? 'Host binary detected' : 'Install Codex on host'}
                   </SettingsPill>
                   <SettingsPill tone={codexStatus()?.ready ? 'success' : 'default'}>
                     {codexStatus()?.ready ? 'Bridge connected' : 'Bridge starts on demand'}
@@ -3572,7 +3572,7 @@ export function EnvSettingsPage() {
                   <div class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-4">
                     <Code class="h-5 w-5 text-muted-foreground" />
                     <div class="text-sm text-muted-foreground">
-                      Codex is not configured in Redeven. Install <span class="font-mono">codex</span> on the host and expose it on <span class="font-mono">PATH</span>; this page is diagnostic-only and does not store Codex runtime settings.
+                      Redeven is waiting for the host machine&apos;s <span class="font-mono">codex</span> binary. Install it on the host and expose it on <span class="font-mono">PATH</span>; this page remains diagnostics-only and does not store Codex runtime settings.
                     </div>
                   </div>
                 </Show>

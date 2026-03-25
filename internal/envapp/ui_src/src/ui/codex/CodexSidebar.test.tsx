@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EnvContext } from '../pages/EnvContext';
 import { CodexPage } from './CodexPage';
 import { CodexProvider } from './CodexProvider';
+import { CodexSidebar } from './CodexSidebar';
 
 const fetchCodexStatusMock = vi.fn();
 const listCodexThreadsMock = vi.fn();
@@ -22,6 +23,7 @@ const notification = {
 };
 
 vi.mock('@floegence/floe-webapp-core', () => ({
+  cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
   useLayout: () => ({
     sidebarActiveTab: () => 'codex',
   }),
@@ -40,7 +42,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
 });
 
 vi.mock('@floegence/floe-webapp-core/loading', () => ({
-  LoadingOverlay: (props: any) => <div>{props.message}</div>,
+  LoadingOverlay: () => null,
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
@@ -75,7 +77,7 @@ async function flushAsync(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function renderPage(host: HTMLDivElement) {
+function renderSurface(host: HTMLDivElement) {
   render(() => (
     <EnvContext.Provider
       value={{
@@ -108,7 +110,10 @@ function renderPage(host: HTMLDivElement) {
       }}
     >
       <CodexProvider>
-        <CodexPage />
+        <div>
+          <CodexSidebar />
+          <CodexPage />
+        </div>
       </CodexProvider>
     </EnvContext.Provider>
   ), host);
@@ -119,25 +124,91 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('CodexPage', () => {
-  it('shows host diagnostics instead of a disabled settings flow when the host binary is missing', async () => {
+describe('CodexSidebar', () => {
+  it('drives the active thread shown in the main Codex page', async () => {
     fetchCodexStatusMock.mockResolvedValue({
-      available: false,
-      ready: false,
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
       agent_home_dir: '/workspace',
     });
-    listCodexThreadsMock.mockResolvedValue([]);
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Backend audit',
+        preview: 'Review the gateway wiring',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'idle',
+        cwd: '/workspace',
+      },
+      {
+        id: 'thread_2',
+        name: 'UI polish',
+        preview: 'Align the Codex shell with floe-webapp',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 3,
+        updated_at_unix_s: 4,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockImplementation(async (threadID: string) => ({
+      thread: {
+        id: threadID,
+        name: threadID === 'thread_1' ? 'Backend audit' : 'UI polish',
+        preview: threadID === 'thread_1' ? 'Review the gateway wiring' : 'Align the Codex shell with floe-webapp',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 4,
+        status: threadID === 'thread_1' ? 'idle' : 'running',
+        cwd: threadID === 'thread_1' ? '/workspace' : '/workspace/ui',
+        turns: [
+          {
+            id: `${threadID}_turn_1`,
+            status: 'completed',
+            items: [
+              {
+                id: `${threadID}_item_1`,
+                type: 'agentMessage',
+                text: threadID === 'thread_1' ? 'Gateway note' : 'Polish note',
+              },
+            ],
+          },
+        ],
+      },
+      pending_requests: [],
+      last_event_seq: 0,
+      active_status: threadID === 'thread_1' ? 'idle' : 'running',
+      active_status_flags: [],
+    }));
     connectCodexEventStreamMock.mockResolvedValue(undefined);
 
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    renderPage(host);
+    renderSurface(host);
 
     await flushAsync();
+    await flushAsync();
 
-    expect(host.textContent).toContain('Install Codex on the host');
-    expect(host.textContent).toContain('there is no separate in-app Codex runtime toggle to manage here');
-    expect(host.textContent).not.toContain('Open Codex Status');
+    expect(host.textContent).toContain('Backend audit');
+
+    const target = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('UI polish'));
+    if (!target) {
+      throw new Error('UI polish thread button not found');
+    }
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(openCodexThreadMock).toHaveBeenCalledWith('thread_2');
+    expect(host.textContent).toContain('Align the Codex shell with floe-webapp');
+    expect(host.textContent).toContain('UI polish');
   });
 });
