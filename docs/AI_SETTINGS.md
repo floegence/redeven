@@ -2,7 +2,7 @@
 
 This document describes the current configuration and local secret model for Flower in Redeven Agent.
 
-Codex is documented separately in [`docs/CODEX_UI.md`](CODEX_UI.md). It does not share Flower providers, Flower settings shape, or Flower secret storage rules.
+Codex is documented separately in [`docs/CODEX_UI.md`](CODEX_UI.md). It does not share Flower providers, Flower settings shape, or Flower secret storage rules, and Redeven does not persist Codex runtime defaults in `config.json`.
 
 ## Goals
 

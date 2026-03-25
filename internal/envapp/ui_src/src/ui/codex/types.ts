@@ -1,10 +1,7 @@
 export type CodexStatus = Readonly<{
-  enabled: boolean;
+  available: boolean;
   ready: boolean;
   binary_path?: string;
-  default_model?: string;
-  approval_policy?: string;
-  sandbox_mode?: string;
   agent_home_dir?: string;
   error?: string;
 }>;

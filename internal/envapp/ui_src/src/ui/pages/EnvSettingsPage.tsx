@@ -76,7 +76,7 @@ import type {
   AIProviderType,
   AISecretsView,
   AIPreservedUIFields,
-  CodexConfig,
+  CodexHostStatus,
   PermissionPolicy,
   PermissionRow,
   PermissionSet,
@@ -112,7 +112,6 @@ type SettingsResponse = Readonly<{
   codespaces: Readonly<{ code_server_port_min: number; code_server_port_max: number }>;
   permission_policy: PermissionPolicy | null;
   ai: AIConfig | null;
-  codex: CodexConfig | null;
   ai_secrets?: AISecretsView | null;
 }>;
 
@@ -133,8 +132,6 @@ type SettingsUpdateResponse = Readonly<{
 const DEFAULT_CODE_SERVER_PORT_MIN = 20000;
 const DEFAULT_CODE_SERVER_PORT_MAX = 21000;
 const AUTO_SAVE_DELAY_MS = 700;
-const DEFAULT_CODEX_APPROVAL_POLICY = 'on_request';
-const DEFAULT_CODEX_SANDBOX_MODE = 'workspace_write';
 
 type SettingsNavItem = Readonly<{
   id: EnvSettingsSection;
@@ -255,34 +252,6 @@ function defaultAIConfig(): AIConfig {
   };
 }
 
-function defaultCodexConfig(): CodexConfig {
-  return {
-    enabled: false,
-    approval_policy: DEFAULT_CODEX_APPROVAL_POLICY,
-    sandbox_mode: DEFAULT_CODEX_SANDBOX_MODE,
-  };
-}
-
-function normalizeCodexApprovalPolicy(raw: unknown): CodexConfig['approval_policy'] {
-  const value = String(raw ?? '')
-    .trim()
-    .toLowerCase();
-  if (value === 'untrusted' || value === 'on_failure' || value === 'on_request' || value === 'never') {
-    return value as CodexConfig['approval_policy'];
-  }
-  return DEFAULT_CODEX_APPROVAL_POLICY;
-}
-
-function normalizeCodexSandboxMode(raw: unknown): CodexConfig['sandbox_mode'] {
-  const value = String(raw ?? '')
-    .trim()
-    .toLowerCase();
-  if (value === 'read_only' || value === 'workspace_write' || value === 'danger_full_access') {
-    return value as CodexConfig['sandbox_mode'];
-  }
-  return DEFAULT_CODEX_SANDBOX_MODE;
-}
-
 type AIModelOption = Readonly<{ id: string; label: string }>;
 
 function collectAIModelOptions(rows: AIProviderRow[]): AIModelOption[] {
@@ -381,6 +350,10 @@ export function EnvSettingsPage() {
   const [diagnosticsData, { refetch: refetchDiagnostics }] = createResource<DiagnosticsView | null, number | null>(
     () => key(),
     async (k) => (k == null ? null : await getDiagnostics()),
+  );
+  const [codexStatus, { refetch: refetchCodexStatus }] = createResource<CodexHostStatus | null, number | null>(
+    () => key(),
+    async (k) => (k == null ? null : await fetchGatewayJSON<CodexHostStatus>('/_redeven_proxy/api/codex/status', { method: 'GET' })),
   );
 
   const canInteract = createMemo(() => protocol.status() === 'connected' && !settings.loading && !settings.error);
@@ -525,7 +498,6 @@ export function EnvSettingsPage() {
   const [codespacesView, setCodespacesView] = createSignal<ViewMode>('ui');
   const [policyView, setPolicyView] = createSignal<ViewMode>('ui');
   const [aiView, setAiView] = createSignal<ViewMode>('ui');
-  const [codexView, setCodexView] = createSignal<ViewMode>('ui');
 
   // Dirty flags
   const [runtimeDirty, setRuntimeDirty] = createSignal(false);
@@ -566,9 +538,16 @@ export function EnvSettingsPage() {
       setDiagnosticsExporting(false);
     }
   };
+  const refreshCodexHostStatus = async () => {
+    try {
+      await refetchCodexStatus();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Codex status refresh failed', msg || 'Request failed.');
+    }
+  };
   const [policyDirty, setPolicyDirty] = createSignal(false);
   const [aiDirty, setAiDirty] = createSignal(false);
-  const [codexDirty, setCodexDirty] = createSignal(false);
 
   // Runtime fields
   const [agentHomeDir, setAgentHomeDir] = createSignal('');
@@ -611,13 +590,6 @@ export function EnvSettingsPage() {
   const [aiProviderDialogSourceIndex, setAiProviderDialogSourceIndex] = createSignal<number | null>(null);
   const [aiProviderDialogDraft, setAiProviderDialogDraft] = createSignal<AIProviderRow | null>(null);
   const [aiProviderPresetModel, setAiProviderPresetModel] = createSignal('');
-
-  // Codex fields
-  const [codexEnabled, setCodexEnabled] = createSignal(false);
-  const [codexBinaryPath, setCodexBinaryPath] = createSignal('');
-  const [codexDefaultModel, setCodexDefaultModel] = createSignal('');
-  const [codexApprovalPolicy, setCodexApprovalPolicy] = createSignal<CodexConfig['approval_policy']>(DEFAULT_CODEX_APPROVAL_POLICY);
-  const [codexSandboxMode, setCodexSandboxMode] = createSignal<CodexConfig['sandbox_mode']>(DEFAULT_CODEX_SANDBOX_MODE);
 
   // AI provider keys (stored locally in secrets.json; never returned in plaintext).
   const [aiProviderKeySet, setAiProviderKeySet] = createSignal<Record<string, boolean>>({});
@@ -676,7 +648,6 @@ export function EnvSettingsPage() {
   const [codespacesJSON, setCodespacesJSON] = createSignal('');
   const [policyJSON, setPolicyJSON] = createSignal('');
   const [aiJSON, setAiJSON] = createSignal('');
-  const [codexJSON, setCodexJSON] = createSignal('');
 
   // Saving states
   const [runtimeSaving, setRuntimeSaving] = createSignal(false);
@@ -684,13 +655,11 @@ export function EnvSettingsPage() {
   const [codespacesSaving, setCodespacesSaving] = createSignal(false);
   const [policySaving, setPolicySaving] = createSignal(false);
   const [aiSaving, setAiSaving] = createSignal(false);
-  const [codexSaving, setCodexSaving] = createSignal(false);
   const [runtimeSavedAt, setRuntimeSavedAt] = createSignal<number | null>(null);
   const [loggingSavedAt, setLoggingSavedAt] = createSignal<number | null>(null);
   const [codespacesSavedAt, setCodespacesSavedAt] = createSignal<number | null>(null);
   const [policySavedAt, setPolicySavedAt] = createSignal<number | null>(null);
   const [aiSavedAt, setAiSavedAt] = createSignal<number | null>(null);
-  const [codexSavedAt, setCodexSavedAt] = createSignal<number | null>(null);
   const [disableAIOpen, setDisableAIOpen] = createSignal(false);
   const [disableAISaving, setDisableAISaving] = createSignal(false);
 
@@ -700,9 +669,47 @@ export function EnvSettingsPage() {
   const [codespacesError, setCodespacesError] = createSignal<string | null>(null);
   const [policyError, setPolicyError] = createSignal<string | null>(null);
   const [aiError, setAiError] = createSignal<string | null>(null);
-  const [codexError, setCodexError] = createSignal<string | null>(null);
 
   const aiEnabled = createMemo(() => !!settings()?.ai);
+  const codexStatusError = createMemo(() => {
+    const payloadError = String(codexStatus()?.error ?? '').trim();
+    if (payloadError) return payloadError;
+    const err = codexStatus.error;
+    if (!err) return null;
+    return err instanceof Error ? err.message : String(err);
+  });
+  const codexStatusRows = createMemo(() => {
+    const current = codexStatus();
+    return [
+      {
+        label: 'available',
+        value: current?.available ? 'Yes' : 'No',
+        note: 'Whether Redeven can resolve `codex` from the host machine PATH.',
+      },
+      {
+        label: 'bridge_state',
+        value: current?.ready ? 'Connected' : 'On-demand',
+        note: 'The app-server bridge starts only when the Codex workspace needs it.',
+      },
+      {
+        label: 'binary_path',
+        value: current?.binary_path || 'Unavailable',
+        note: 'Resolved host binary used for Codex sessions.',
+        mono: true,
+      },
+      {
+        label: 'agent_home_dir',
+        value: current?.agent_home_dir || 'Unavailable',
+        note: 'Current agent runtime home directory exposed to the Codex bridge.',
+        mono: true,
+      },
+      {
+        label: 'error',
+        value: codexStatusError() || 'None',
+        note: 'Latest host capability or bridge startup error, if any.',
+      },
+    ] as const;
+  });
   const aiModelOptions = createMemo(() => collectAIModelOptions(aiProviders()));
   const aiProviderDialogProvider = createMemo(() => aiProviderDialogDraft());
   const aiProviderDialogRecommendedModels = createMemo<readonly AIProviderModelPreset[]>(() => {
@@ -793,19 +800,6 @@ export function EnvSettingsPage() {
       block_dangerous_commands: !!aiBlockDangerousCommands(),
     };
     return out as AIConfig;
-  };
-
-  const buildCodexValue = (): CodexConfig => {
-    const out: any = {
-      enabled: !!codexEnabled(),
-      approval_policy: normalizeCodexApprovalPolicy(codexApprovalPolicy()),
-      sandbox_mode: normalizeCodexSandboxMode(codexSandboxMode()),
-    };
-    const binaryPath = String(codexBinaryPath() ?? '').trim();
-    if (binaryPath) out.binary_path = binaryPath;
-    const defaultModel = String(codexDefaultModel() ?? '').trim();
-    if (defaultModel) out.default_model = defaultModel;
-    return out as CodexConfig;
   };
 
   const validateAIValue = (cfg: AIConfig) => {
@@ -940,21 +934,6 @@ export function EnvSettingsPage() {
     const currentModelID = String((cfg as any).current_model_id ?? '').trim();
     if (!currentModelID) throw new Error('Missing current_model_id.');
     if (!modelIDs.has(currentModelID)) throw new Error(`current_model_id is not in providers[].models[]: ${currentModelID}`);
-  };
-
-  const validateCodexValue = (cfg: CodexConfig) => {
-    if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) throw new Error('Codex JSON must be an object.');
-    if (typeof cfg.enabled !== 'boolean') throw new Error('enabled must be a boolean.');
-    if (cfg.binary_path !== undefined && typeof cfg.binary_path !== 'string') throw new Error('binary_path must be a string.');
-    if (cfg.default_model !== undefined && typeof cfg.default_model !== 'string') throw new Error('default_model must be a string.');
-    if (cfg.approval_policy !== undefined) {
-      const approvalPolicy = normalizeCodexApprovalPolicy(cfg.approval_policy);
-      if (approvalPolicy !== cfg.approval_policy) throw new Error(`Invalid approval_policy: ${cfg.approval_policy}`);
-    }
-    if (cfg.sandbox_mode !== undefined) {
-      const sandboxMode = normalizeCodexSandboxMode(cfg.sandbox_mode);
-      if (sandboxMode !== cfg.sandbox_mode) throw new Error(`Invalid sandbox_mode: ${cfg.sandbox_mode}`);
-    }
   };
 
   const normalizeAIProviders = (rows: AIProviderRow[]): AIProviderRow[] => {
@@ -1756,25 +1735,6 @@ export function EnvSettingsPage() {
       void refreshWebSearchKeyStatus(['brave']);
     }
 
-    if (!codexDirty()) {
-      const c = s.codex ?? defaultCodexConfig();
-      const normalized: any = {
-        enabled: !!c.enabled,
-        approval_policy: normalizeCodexApprovalPolicy(c.approval_policy),
-        sandbox_mode: normalizeCodexSandboxMode(c.sandbox_mode),
-      };
-      const binaryPath = String(c.binary_path ?? '').trim();
-      if (binaryPath) normalized.binary_path = binaryPath;
-      const defaultModel = String(c.default_model ?? '').trim();
-      if (defaultModel) normalized.default_model = defaultModel;
-
-      setCodexEnabled(!!normalized.enabled);
-      setCodexBinaryPath(String(normalized.binary_path ?? ''));
-      setCodexDefaultModel(String(normalized.default_model ?? ''));
-      setCodexApprovalPolicy(normalizeCodexApprovalPolicy(normalized.approval_policy));
-      setCodexSandboxMode(normalizeCodexSandboxMode(normalized.sandbox_mode));
-      setCodexJSON(JSON.stringify(normalized as CodexConfig, null, 2));
-    }
   });
 
   createEffect(() => {
@@ -1995,35 +1955,6 @@ export function EnvSettingsPage() {
     }
   };
 
-  const switchCodexView = (next: ViewMode) => {
-    setCodexError(null);
-    if (next === codexView()) return;
-    if (next === 'json') {
-      try {
-        const value = buildCodexValue();
-        setCodexJSON(JSON.stringify(value, null, 2));
-      } catch {
-        // Keep the existing editor content if the current draft cannot be built.
-      }
-      setCodexView('json');
-      return;
-    }
-
-    try {
-      const value = parseJSONOrThrow(codexJSON());
-      if (!isJSONObject(value)) throw new Error('Codex JSON must be an object.');
-      validateCodexValue(value as CodexConfig);
-      setCodexEnabled(!!value.enabled);
-      setCodexBinaryPath(String((value as any).binary_path ?? '').trim());
-      setCodexDefaultModel(String((value as any).default_model ?? '').trim());
-      setCodexApprovalPolicy(normalizeCodexApprovalPolicy((value as any).approval_policy));
-      setCodexSandboxMode(normalizeCodexSandboxMode((value as any).sandbox_mode));
-      setCodexView('ui');
-    } catch (e) {
-      setCodexError(e instanceof Error ? e.message : String(e));
-    }
-  };
-
   // Save handlers
   const buildRuntimeDraft = () => {
     const body = runtimeView() === 'json' ? parseJSONOrThrow(runtimeJSON()) : buildRuntimePatch();
@@ -2079,20 +2010,6 @@ export function EnvSettingsPage() {
     }
     validateAIValue(cfg);
     const body = { ai: cfg };
-    return { body, signature: JSON.stringify(body) };
-  };
-
-  const buildCodexDraft = () => {
-    let cfg: CodexConfig | null = null;
-    if (codexView() === 'json') {
-      const value = parseJSONOrThrow(codexJSON());
-      if (!isJSONObject(value)) throw new Error('Codex JSON must be an object.');
-      cfg = value as CodexConfig;
-    } else {
-      cfg = buildCodexValue();
-    }
-    validateCodexValue(cfg);
-    const body = { codex: cfg };
     return { body, signature: JSON.stringify(body) };
   };
 
@@ -2280,38 +2197,6 @@ export function EnvSettingsPage() {
     }
   };
 
-  const saveCodex = async () => {
-    let draft: { body: { codex: CodexConfig | null }; signature: string };
-    try {
-      draft = buildCodexDraft();
-      setCodexError(null);
-    } catch (e) {
-      setCodexError(formatUnknownError(e) || 'Save failed.');
-      return;
-    }
-    setCodexSaving(true);
-    try {
-      await saveSettings(draft.body);
-      const now = Date.now();
-      setCodexSavedAt(now);
-      setCodexError(null);
-      notifyAutoSaveSuccess('Codex settings', now);
-      let unchanged = false;
-      try {
-        unchanged = buildCodexDraft().signature === draft.signature;
-      } catch {
-        unchanged = false;
-      }
-      setCodexDirty(!unchanged);
-    } catch (e) {
-      const msg = formatUnknownError(e) || 'Save failed.';
-      setCodexError(msg);
-      notifyAutoSaveFailed('Codex settings', e);
-    } finally {
-      setCodexSaving(false);
-    }
-  };
-
   const saveAICurrentModelDirectly = async (nextModelID: string, prevModelID: string) => {
     const modelID = String(nextModelID ?? '').trim();
     if (!modelID) return;
@@ -2362,7 +2247,6 @@ export function EnvSettingsPage() {
   let codespacesAutoSaveTimer: number | null = null;
   let policyAutoSaveTimer: number | null = null;
   let aiAutoSaveTimer: number | null = null;
-  let codexAutoSaveTimer: number | null = null;
 
   const clearAutoSaveTimer = (timer: number | null): null => {
     if (timer != null) window.clearTimeout(timer);
@@ -2484,36 +2368,12 @@ export function EnvSettingsPage() {
     }, AUTO_SAVE_DELAY_MS);
   });
 
-  createEffect(() => {
-    const dirty = codexDirty();
-    const canAutoSave = canInteract() && !codexSaving();
-    if (!dirty || !canAutoSave) {
-      codexAutoSaveTimer = clearAutoSaveTimer(codexAutoSaveTimer);
-      return;
-    }
-    try {
-      buildCodexDraft();
-      setCodexError(null);
-    } catch (e) {
-      codexAutoSaveTimer = clearAutoSaveTimer(codexAutoSaveTimer);
-      setCodexError(formatUnknownError(e) || 'Save failed.');
-      return;
-    }
-    codexAutoSaveTimer = clearAutoSaveTimer(codexAutoSaveTimer);
-    codexAutoSaveTimer = window.setTimeout(() => {
-      codexAutoSaveTimer = null;
-      if (!codexDirty() || codexSaving() || !canInteract()) return;
-      void saveCodex();
-    }, AUTO_SAVE_DELAY_MS);
-  });
-
   onCleanup(() => {
     runtimeAutoSaveTimer = clearAutoSaveTimer(runtimeAutoSaveTimer);
     loggingAutoSaveTimer = clearAutoSaveTimer(loggingAutoSaveTimer);
     codespacesAutoSaveTimer = clearAutoSaveTimer(codespacesAutoSaveTimer);
     policyAutoSaveTimer = clearAutoSaveTimer(policyAutoSaveTimer);
     aiAutoSaveTimer = clearAutoSaveTimer(aiAutoSaveTimer);
-    codexAutoSaveTimer = clearAutoSaveTimer(codexAutoSaveTimer);
   });
 
   // When local max is tightened, clamp row-level caps to avoid confusing "true but ineffective" UI.
@@ -3687,169 +3547,46 @@ export function EnvSettingsPage() {
             <SettingsCard
               icon={CodexIcon}
               title="Codex"
-              description="Configure the independent Codex app-server bridge. Changes are auto-saved and apply to new Codex threads."
-              badge={codexEnabled() ? 'Enabled' : 'Disabled'}
-              badgeVariant={codexEnabled() ? 'success' : 'default'}
-              error={codexError()}
+              description="Redeven does not persist Codex runtime settings. It uses the host machine's `codex` binary directly and shows status here for diagnostics only."
+              badge={codexStatus()?.available ? 'Available' : 'Unavailable'}
+              badgeVariant={codexStatus()?.available ? 'success' : 'default'}
+              error={codexStatusError()}
               actions={
-                <>
-                  <ViewToggle value={codexView} disabled={!canInteract()} onChange={(value) => switchCodexView(value)} />
-                  <AutoSaveIndicator
-                    dirty={codexDirty()}
-                    saving={codexSaving()}
-                    error={codexError()}
-                    savedAt={codexSavedAt()}
-                    enabled={canInteract()}
-                  />
-                </>
+                <Button size="sm" variant="outline" onClick={() => void refreshCodexHostStatus()} disabled={codexStatus.loading}>
+                  <RefreshIcon class="mr-2 h-4 w-4" />
+                  {codexStatus.loading ? 'Refreshing...' : 'Refresh'}
+                </Button>
               }
             >
-              <Show when={!codexEnabled()}>
-                <div class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-4">
-                  <Code class="h-5 w-5 text-muted-foreground" />
-                  <div class="text-sm text-muted-foreground">
-                    Codex is currently disabled. Enable it here to keep the dedicated Codex activity entry usable without coupling it to Flower.
-                  </div>
+              <div class="space-y-6">
+                <div class="flex flex-wrap gap-2">
+                  <SettingsPill tone={codexStatus()?.available ? 'success' : 'default'}>
+                    {codexStatus()?.available ? 'Host binary available' : 'Host binary unavailable'}
+                  </SettingsPill>
+                  <SettingsPill tone={codexStatus()?.ready ? 'success' : 'default'}>
+                    {codexStatus()?.ready ? 'Bridge connected' : 'Bridge starts on demand'}
+                  </SettingsPill>
                 </div>
-              </Show>
 
-              <Show
-                when={codexView() === 'ui'}
-                fallback={
-                  <JSONEditor
-                    value={codexJSON()}
-                    onChange={(value) => {
-                      setCodexJSON(value);
-                      setCodexDirty(true);
-                    }}
-                    disabled={!canInteract()}
-                    rows={10}
-                  />
-                }
-              >
-                <div class="space-y-6">
-                  <SettingsTable minWidthClass="min-w-[60rem]">
-                    <SettingsTableHead>
-                      <SettingsTableHeaderRow>
-                        <SettingsTableHeaderCell class="w-52">Setting</SettingsTableHeaderCell>
-                        <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
-                        <SettingsTableHeaderCell class="w-80">Notes</SettingsTableHeaderCell>
-                      </SettingsTableHeaderRow>
-                    </SettingsTableHead>
-                    <SettingsTableBody>
-                      <SettingsTableRow>
-                        <SettingsTableCell class="font-medium text-muted-foreground">enabled</SettingsTableCell>
-                        <SettingsTableCell>
-                          <Checkbox
-                            checked={codexEnabled()}
-                            onChange={(value) => {
-                              setCodexEnabled(value);
-                              setCodexDirty(true);
-                            }}
-                            disabled={!canInteract()}
-                            label="Enable the independent Codex runtime"
-                            size="sm"
-                          />
-                        </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">
-                          Keeps Codex fully separate from Flower while allowing a dedicated activity-bar entry and gateway namespace.
-                        </SettingsTableCell>
-                      </SettingsTableRow>
-                      <SettingsTableRow>
-                        <SettingsTableCell class="font-medium text-muted-foreground">binary_path</SettingsTableCell>
-                        <SettingsTableCell>
-                          <Input
-                            value={codexBinaryPath()}
-                            onInput={(event) => {
-                              setCodexBinaryPath(event.currentTarget.value);
-                              setCodexDirty(true);
-                            }}
-                            placeholder="Resolve `codex` from PATH"
-                            size="sm"
-                            class="w-full"
-                            disabled={!canInteract()}
-                          />
-                        </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">
-                          Optional absolute path to the `codex` binary. Leave empty to resolve it from <span class="font-mono">PATH</span>.
-                        </SettingsTableCell>
-                      </SettingsTableRow>
-                      <SettingsTableRow>
-                        <SettingsTableCell class="font-medium text-muted-foreground">default_model</SettingsTableCell>
-                        <SettingsTableCell>
-                          <Input
-                            value={codexDefaultModel()}
-                            onInput={(event) => {
-                              setCodexDefaultModel(event.currentTarget.value);
-                              setCodexDirty(true);
-                            }}
-                            placeholder="gpt-5.4"
-                            size="sm"
-                            class="w-full"
-                            disabled={!canInteract()}
-                          />
-                        </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">
-                          Optional model override used for new Codex threads when the user does not provide one explicitly.
-                        </SettingsTableCell>
-                      </SettingsTableRow>
-                      <SettingsTableRow>
-                        <SettingsTableCell class="font-medium text-muted-foreground">approval_policy</SettingsTableCell>
-                        <SettingsTableCell>
-                          <Select
-                            value={codexApprovalPolicy() ?? DEFAULT_CODEX_APPROVAL_POLICY}
-                            onChange={(value) => {
-                              setCodexApprovalPolicy(normalizeCodexApprovalPolicy(value));
-                              setCodexDirty(true);
-                            }}
-                            disabled={!canInteract()}
-                            options={[
-                              { value: 'on_request', label: 'on_request (recommended)' },
-                              { value: 'on_failure', label: 'on_failure' },
-                              { value: 'untrusted', label: 'untrusted' },
-                              { value: 'never', label: 'never' },
-                            ]}
-                            class="w-full"
-                          />
-                        </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">
-                          Default approval behavior for new Codex threads. Live threads can still request approvals independently.
-                        </SettingsTableCell>
-                      </SettingsTableRow>
-                      <SettingsTableRow>
-                        <SettingsTableCell class="font-medium text-muted-foreground">sandbox_mode</SettingsTableCell>
-                        <SettingsTableCell>
-                          <Select
-                            value={codexSandboxMode() ?? DEFAULT_CODEX_SANDBOX_MODE}
-                            onChange={(value) => {
-                              setCodexSandboxMode(normalizeCodexSandboxMode(value));
-                              setCodexDirty(true);
-                            }}
-                            disabled={!canInteract()}
-                            options={[
-                              { value: 'workspace_write', label: 'workspace_write (recommended)' },
-                              { value: 'read_only', label: 'read_only' },
-                              { value: 'danger_full_access', label: 'danger_full_access' },
-                            ]}
-                            class="w-full"
-                          />
-                        </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">
-                          Default sandbox for new Codex threads. Choose the least-permissive mode that still supports your local workflows.
-                        </SettingsTableCell>
-                      </SettingsTableRow>
-                    </SettingsTableBody>
-                  </SettingsTable>
-
-                  <div class="rounded-lg border border-border bg-muted/20 p-4">
-                    <div class="text-sm font-semibold text-foreground">Notes</div>
-                    <div class="mt-2 space-y-1 text-xs leading-6 text-muted-foreground">
-                      <div>Codex secrets stay outside <span class="font-mono">config.json</span>; the agent only stores bridge settings here.</div>
-                      <div>Settings changes update the bridge immediately and affect new Codex threads without requiring an agent restart.</div>
+                <Show when={!codexStatus()?.available}>
+                  <div class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-4">
+                    <Code class="h-5 w-5 text-muted-foreground" />
+                    <div class="text-sm text-muted-foreground">
+                      Codex is not configured in Redeven. Install <span class="font-mono">codex</span> on the host and expose it on <span class="font-mono">PATH</span>; this page is diagnostic-only and does not store Codex runtime settings.
                     </div>
                   </div>
+                </Show>
+
+                <SettingsKeyValueTable rows={codexStatusRows()} minWidthClass="min-w-[52rem]" />
+
+                <div class="rounded-lg border border-border bg-muted/20 p-4">
+                  <div class="text-sm font-semibold text-foreground">Notes</div>
+                  <div class="mt-2 space-y-1 text-xs leading-6 text-muted-foreground">
+                    <div>Codex keeps its own runtime defaults on the host machine; Redeven does not mirror them into <span class="font-mono">config.json</span>.</div>
+                    <div>The dedicated Codex activity entry and gateway namespace stay isolated from Flower, so both surfaces can evolve independently.</div>
+                  </div>
                 </div>
-              </Show>
+              </div>
             </SettingsCard>
           </div>
         </SectionGroup>

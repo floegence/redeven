@@ -12,12 +12,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/floegence/redeven-agent/internal/config"
 )
 
 var (
-	ErrDisabled        = errors.New("codex integration is disabled")
+	ErrUnavailable     = errors.New("codex is not available on this host")
 	ErrThreadNotFound  = errors.New("codex thread not found")
 	ErrRequestNotFound = errors.New("codex pending request not found")
 	ErrInvalidResponse = errors.New("invalid codex request response")
@@ -25,13 +23,11 @@ var (
 
 type Options struct {
 	Logger       *slog.Logger
-	Config       *config.CodexConfig
 	AgentHomeDir string
 }
 
 type Manager struct {
 	log          *slog.Logger
-	cfg          *config.CodexConfig
 	agentHomeDir string
 
 	startMu sync.Mutex
@@ -70,15 +66,8 @@ func NewManager(opts Options) (*Manager, error) {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
-	if opts.Config != nil {
-		opts.Config.Normalize()
-		if err := opts.Config.Validate(); err != nil {
-			return nil, err
-		}
-	}
 	return &Manager{
 		log:          logger,
-		cfg:          opts.Config,
 		agentHomeDir: agentHomeDir,
 		threads:      make(map[string]*threadState),
 	}, nil
@@ -98,45 +87,16 @@ func (m *Manager) Close() error {
 	return nil
 }
 
-func (m *Manager) UpdateConfig(next *config.CodexConfig) error {
-	if m == nil {
-		return nil
-	}
-	if next != nil {
-		next.Normalize()
-		if err := next.Validate(); err != nil {
-			return err
-		}
-	}
-	m.mu.Lock()
-	proc := m.proc
-	m.proc = nil
-	m.cfg = next
-	m.binaryPath = ""
-	m.lastError = ""
-	m.mu.Unlock()
-	if proc != nil {
-		return proc.close()
-	}
-	return nil
-}
-
 func (m *Manager) Status(_ context.Context) Status {
 	if m == nil {
 		return Status{}
 	}
 	out := Status{
-		Enabled:      m.cfg != nil && m.cfg.Enabled,
-		DefaultModel: "",
 		AgentHomeDir: m.agentHomeDir,
-	}
-	if m.cfg != nil {
-		out.DefaultModel = strings.TrimSpace(m.cfg.DefaultModel)
-		out.ApprovalPolicy = m.cfg.ApprovalPolicyValue()
-		out.SandboxMode = m.cfg.SandboxModeValue()
 	}
 	path, err := m.resolveBinaryPath()
 	if err == nil {
+		out.Available = true
 		out.BinaryPath = path
 	}
 	m.mu.Lock()
@@ -146,16 +106,13 @@ func (m *Manager) Status(_ context.Context) Status {
 		out.BinaryPath = m.binaryPath
 	}
 	m.mu.Unlock()
-	if err != nil && out.Error == "" && out.Enabled {
+	if err != nil && out.Error == "" {
 		out.Error = err.Error()
 	}
 	return out
 }
 
 func (m *Manager) ListThreads(ctx context.Context, limit int) ([]Thread, error) {
-	if !m.enabled() {
-		return nil, ErrDisabled
-	}
 	if limit <= 0 || limit > 200 {
 		limit = 100
 	}
@@ -174,9 +131,6 @@ func (m *Manager) ListThreads(ctx context.Context, limit int) ([]Thread, error) 
 }
 
 func (m *Manager) OpenThread(ctx context.Context, threadID string) (*ThreadDetail, error) {
-	if !m.enabled() {
-		return nil, ErrDisabled
-	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return nil, ErrThreadNotFound
@@ -201,21 +155,13 @@ func (m *Manager) OpenThread(ctx context.Context, threadID string) (*ThreadDetai
 }
 
 func (m *Manager) StartThread(ctx context.Context, req StartThreadRequest) (*Thread, error) {
-	if !m.enabled() {
-		return nil, ErrDisabled
-	}
 	cwd := strings.TrimSpace(req.CWD)
 	if cwd == "" {
 		cwd = m.agentHomeDir
 	}
 	model := strings.TrimSpace(req.Model)
-	if model == "" {
-		model = m.cfgDefaultModel()
-	}
 	var params wireThreadStartParams
 	params.CWD = stringPtr(cwd)
-	params.ApprovalPolicy = stringPtr(m.mapApprovalPolicy())
-	params.Sandbox = stringPtr(m.mapSandboxMode())
 	params.ServiceName = stringPtr("redeven_envapp")
 	params.ExperimentalRawEvents = false
 	params.PersistExtendedHistory = false
@@ -235,9 +181,6 @@ func (m *Manager) StartThread(ctx context.Context, req StartThreadRequest) (*Thr
 }
 
 func (m *Manager) StartTurn(ctx context.Context, req StartTurnRequest) (*Turn, error) {
-	if !m.enabled() {
-		return nil, ErrDisabled
-	}
 	threadID := strings.TrimSpace(req.ThreadID)
 	if threadID == "" {
 		return nil, ErrThreadNotFound
@@ -261,9 +204,6 @@ func (m *Manager) StartTurn(ctx context.Context, req StartTurnRequest) (*Turn, e
 }
 
 func (m *Manager) ArchiveThread(ctx context.Context, threadID string) error {
-	if !m.enabled() {
-		return ErrDisabled
-	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return ErrThreadNotFound
@@ -278,9 +218,6 @@ func (m *Manager) ArchiveThread(ctx context.Context, threadID string) error {
 }
 
 func (m *Manager) SubscribeThreadEvents(ctx context.Context, threadID string, afterSeq int64) ([]Event, <-chan Event, error) {
-	if !m.enabled() {
-		return nil, nil, ErrDisabled
-	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return nil, nil, ErrThreadNotFound
@@ -314,9 +251,6 @@ func (m *Manager) SubscribeThreadEvents(ctx context.Context, threadID string, af
 }
 
 func (m *Manager) RespondToRequest(ctx context.Context, threadID string, requestID string, resp PendingRequestResponse) error {
-	if !m.enabled() {
-		return ErrDisabled
-	}
 	threadID = strings.TrimSpace(threadID)
 	requestID = strings.TrimSpace(requestID)
 	if threadID == "" || requestID == "" {
@@ -423,9 +357,6 @@ func (m *Manager) call(ctx context.Context, method string, params any, out any) 
 }
 
 func (m *Manager) ensureProcess(ctx context.Context) (*appServerProcess, error) {
-	if !m.enabled() {
-		return nil, ErrDisabled
-	}
 	m.startMu.Lock()
 	defer m.startMu.Unlock()
 
@@ -749,27 +680,16 @@ func (m *Manager) storePendingRequest(record *pendingRequestRecord) {
 	})
 }
 
-func (m *Manager) enabled() bool {
-	return m != nil && m.cfg != nil && m.cfg.Enabled
-}
-
 func (m *Manager) resolveBinaryPath() (string, error) {
 	m.mu.Lock()
 	current := strings.TrimSpace(m.binaryPath)
-	configured := ""
-	if m.cfg != nil {
-		configured = strings.TrimSpace(m.cfg.BinaryPath)
-	}
 	m.mu.Unlock()
 	if current != "" {
 		return current, nil
 	}
-	if configured != "" {
-		return configured, nil
-	}
 	path, err := exec.LookPath("codex")
 	if err != nil {
-		return "", errors.New("codex binary not found; configure codex.binary_path or add codex to PATH")
+		return "", fmtUnavailable()
 	}
 	return path, nil
 }
@@ -833,43 +753,6 @@ func (m *Manager) recordError(err error) {
 	m.mu.Unlock()
 }
 
-func (m *Manager) cfgDefaultModel() string {
-	if m == nil || m.cfg == nil {
-		return ""
-	}
-	return strings.TrimSpace(m.cfg.DefaultModel)
-}
-
-func (m *Manager) mapApprovalPolicy() string {
-	if m == nil || m.cfg == nil {
-		return "on-request"
-	}
-	switch m.cfg.ApprovalPolicyValue() {
-	case "untrusted":
-		return "untrusted"
-	case "on_failure":
-		return "on-failure"
-	case "never":
-		return "never"
-	default:
-		return "on-request"
-	}
-}
-
-func (m *Manager) mapSandboxMode() string {
-	if m == nil || m.cfg == nil {
-		return "workspace-write"
-	}
-	switch m.cfg.SandboxModeValue() {
-	case "read_only":
-		return "read-only"
-	case "danger_full_access":
-		return "danger-full-access"
-	default:
-		return "workspace-write"
-	}
-}
-
 func stringPtr(v string) *string {
 	if strings.TrimSpace(v) == "" {
 		return nil
@@ -883,6 +766,10 @@ func withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 		return ctx, func() {}
 	}
 	return context.WithTimeout(ctx, 30*time.Second)
+}
+
+func fmtUnavailable() error {
+	return errors.Join(ErrUnavailable, errors.New("host codex binary not found on PATH; install Codex on this machine and ensure `codex` is available"))
 }
 
 func normalizeDecision(v string) string {

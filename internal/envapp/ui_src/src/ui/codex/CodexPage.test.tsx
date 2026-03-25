@@ -80,10 +80,8 @@ afterEach(() => {
 describe('CodexPage', () => {
   it('shows setup guidance and opens the dedicated Codex settings section when disabled', async () => {
     fetchCodexStatusMock.mockResolvedValue({
-      enabled: false,
+      available: false,
       ready: false,
-      approval_policy: 'on_request',
-      sandbox_mode: 'workspace_write',
       agent_home_dir: '/workspace',
     });
     listCodexThreadsMock.mockResolvedValue([]);
@@ -129,12 +127,12 @@ describe('CodexPage', () => {
 
     await flushAsync();
 
-    expect(host.textContent).toContain('Codex is disabled');
-    expect(host.textContent).toContain('Open Codex Settings');
+    expect(host.textContent).toContain('Codex is unavailable on this host');
+    expect(host.textContent).toContain('Open Codex Status');
 
-    const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Open Codex Settings'));
+    const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Open Codex Status'));
     if (!button) {
-      throw new Error('Open Codex Settings button not found');
+      throw new Error('Open Codex Status button not found');
     }
     button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(openSettings).toHaveBeenCalledWith('codex');

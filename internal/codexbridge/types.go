@@ -1,14 +1,11 @@
 package codexbridge
 
 type Status struct {
-	Enabled        bool   `json:"enabled"`
-	Ready          bool   `json:"ready"`
-	BinaryPath     string `json:"binary_path,omitempty"`
-	DefaultModel   string `json:"default_model,omitempty"`
-	ApprovalPolicy string `json:"approval_policy,omitempty"`
-	SandboxMode    string `json:"sandbox_mode,omitempty"`
-	AgentHomeDir   string `json:"agent_home_dir,omitempty"`
-	Error          string `json:"error,omitempty"`
+	Available    bool   `json:"available"`
+	Ready        bool   `json:"ready"`
+	BinaryPath   string `json:"binary_path,omitempty"`
+	AgentHomeDir string `json:"agent_home_dir,omitempty"`
+	Error        string `json:"error,omitempty"`
 }
 
 type StartThreadRequest struct {

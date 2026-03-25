@@ -7,7 +7,8 @@ Key points:
 - The Env App UI is **agent-bundled** (built + embedded into the agent binary).
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower/Codex).
-- Codex is a separate optional AI runtime with its own activity-bar entry, settings section, and gateway namespace; it is not implemented as a Flower mode, provider, or sub-page.
+- Codex is a separate optional AI runtime with its own activity-bar entry and gateway namespace; it is not implemented as a Flower mode, provider, or sub-page.
+- Agent Settings -> Codex is a read-only host/runtime status panel. Redeven does not persist Codex approval, sandbox, model, or binary configuration in agent settings.
 - Flower chat keeps model-picking scope explicit: the draft chat picker updates the default model for future new chats, active unlocked threads edit only their own thread model, and locked threads show a read-only model badge instead of a misleading editable control.
 - Flower thread history keeps the chat `title` separate from the latest `last_message_preview` snippet: untitled chats render as `New chat` until the agent later writes a generated title, while the preview line continues to reflect the newest visible message text.
 - Flower auto titles are best-effort but resilient: the agent retries transient generation failures in the background, can expand the title-generation output budget once for reasoning-heavy models, falls back to a truncated first user message after three failed generation passes, and also recovers recent untitled threads after restart, so users should see a usable title appear without manual refresh or rename in normal cases.
@@ -88,7 +89,7 @@ Agent side:
 
 - The agent serves Env App static assets under `/_redeven_proxy/env/*` via the local gateway.
 - The Env App UI talks to the agent using **Flowersec RPC/streams** (fs/terminal/monitor domains).
-- Codex uses a separate browser-facing gateway contract under `/_redeven_proxy/api/codex/*`; the browser never connects directly to `codex app-server`.
+- Codex uses a separate browser-facing gateway contract under `/_redeven_proxy/api/codex/*`; the browser never connects directly to `codex app-server`, and the agent resolves the host `codex` binary on demand instead of mirroring Codex runtime defaults into `config.json`.
 - Flower assistant live rendering now separates the settled transcript from the in-flight assistant surface. Persisted transcript rows stay in the virtualized message list, while the active assistant run renders as a dedicated non-virtualized tail inside the same scroll container until transcript persistence catches up.
 - Flower assistant live output keeps `thinking` hidden from the default transcript view. Before transcript persistence catches up, visible live answer text may render inline as plain text; settled markdown rendering remains a transcript concern once the canonical assistant message lands.
 - Active-run snapshots are recovery-only input for the live assistant tail. If the persisted transcript already contains the same assistant `message.id`, the UI must suppress the live tail and rely on the settled transcript row only.

@@ -44,12 +44,12 @@ export type AIConfig = Readonly<{
 
 export type AISecretsView = Readonly<{ provider_api_key_set: Record<string, boolean> }>;
 
-export type CodexConfig = Readonly<{
-  enabled: boolean;
+export type CodexHostStatus = Readonly<{
+  available: boolean;
+  ready: boolean;
   binary_path?: string;
-  default_model?: string;
-  approval_policy?: 'untrusted' | 'on_failure' | 'on_request' | 'never';
-  sandbox_mode?: 'read_only' | 'workspace_write' | 'danger_full_access';
+  agent_home_dir?: string;
+  error?: string;
 }>;
 
 export type SkillCatalogNotice = Readonly<{
