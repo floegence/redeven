@@ -33,9 +33,12 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
+    Activity: Icon,
     Code: Icon,
     FileText: Icon,
+    Folder: Icon,
     Refresh: Icon,
+    Send: Icon,
     Terminal: Icon,
     Trash: Icon,
   };
@@ -71,6 +74,8 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
   Input: (props: any) => (
     <input
+      type={props.type}
+      class={props.class}
       value={props.value ?? ''}
       placeholder={props.placeholder}
       onInput={(event) => props.onInput?.(event)}
@@ -79,10 +84,14 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
   Textarea: (props: any) => (
     <textarea
+      class={props.class}
       value={props.value ?? ''}
       placeholder={props.placeholder}
       rows={props.rows}
       onInput={(event) => props.onInput?.(event)}
+      onKeyDown={(event) => props.onKeyDown?.(event)}
+      onCompositionStart={(event) => props.onCompositionStart?.(event)}
+      onCompositionEnd={(event) => props.onCompositionEnd?.(event)}
     />
   ),
 }));
@@ -263,6 +272,7 @@ describe('CodexSidebar', () => {
     expect(host.textContent).toContain('UI polish');
     expect(host.textContent).toContain('Polish note');
     expect(host.textContent).toContain('src/ui/codex/CodexSidebar.tsx');
+    expect(host.textContent).toContain('Review recent changes');
     expect(host.textContent).toContain('Send to Codex');
   });
 });
