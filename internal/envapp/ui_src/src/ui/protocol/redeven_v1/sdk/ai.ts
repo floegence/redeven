@@ -245,6 +245,7 @@ export type AIRealtimeEvent = {
   lastMessagePreview?: string;
   lastMessageAtUnixMs?: number;
   activeRunId?: string;
+  lastContextRunId?: string;
   executionMode?: 'act' | 'plan';
   queuedTurnCount?: number;
 

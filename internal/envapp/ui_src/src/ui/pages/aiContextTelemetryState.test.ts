@@ -6,6 +6,7 @@ import {
   ensureContextTelemetryRun,
   getContextTelemetryRun,
   hasContextTelemetryData,
+  selectVisibleContextRunId,
   setContextTelemetryCursor,
   type ContextTelemetryByRun,
 } from './aiContextTelemetryState';
@@ -129,5 +130,30 @@ describe('aiContextTelemetryState', () => {
     state = setContextTelemetryCursor(state, 'run_3', 9);
 
     expect(getContextTelemetryRun(state, 'run_3')?.cursor).toBe(12);
+  });
+
+  it('keeps showing the stable run until the new live run has telemetry', () => {
+    let state: ContextTelemetryByRun = {};
+    state = applyContextUsageToRun(state, 'run_old', {
+      estimate_tokens: 420,
+      context_limit: 1000,
+      usage_percent: 42,
+    }, {
+      eventId: 41,
+      atUnixMs: 4100,
+    });
+
+    expect(selectVisibleContextRunId(state, 'run_new', 'run_old')).toBe('run_old');
+
+    state = applyContextUsageToRun(state, 'run_new', {
+      estimate_tokens: 610,
+      context_limit: 1000,
+      usage_percent: 61,
+    }, {
+      eventId: 42,
+      atUnixMs: 4200,
+    });
+
+    expect(selectVisibleContextRunId(state, 'run_new', 'run_old')).toBe('run_new');
   });
 });

@@ -66,8 +66,11 @@ The Flower chat UI now follows five explicit constraints:
 
 6. Context telemetry is run-scoped and monotonic.
    - Context usage, compaction events, and replay cursors belong to `run_id`-scoped UI state instead of one resettable page-level slot.
+   - Thread-scoped runtime metadata must expose the latest context-bearing run (`last_context_run_id`) so completed threads can recover their latest summary without relying on ephemeral page memory.
+   - The page runtime must distinguish the active live run from the latest stable context-bearing run. If a new live run has not produced telemetry yet, the UI should continue showing the latest stable summary instead of flickering back to an empty chip.
    - Rebinding the active thread to the same known run must preserve already-visible context telemetry; replay/backfill is incremental and must not clear the current chip state first.
    - The bottom-dock context summary may mount before usage telemetry arrives, but it must not disappear and reappear for the same run because of confirmation or replay timing.
+   - Context details popovers must render through a body-level anchored overlay so toolbar overflow/scroll rules cannot clip the panel.
 
 7. Transcript presentation is a shared conversation column.
    - User and assistant rows render in the same centered transcript lane instead of splitting into separate left/right screen rails.

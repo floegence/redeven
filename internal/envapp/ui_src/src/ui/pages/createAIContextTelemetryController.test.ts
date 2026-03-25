@@ -4,11 +4,11 @@ import { describe, expect, it } from 'vitest';
 import { createAIContextTelemetryController } from './createAIContextTelemetryController';
 
 describe('createAIContextTelemetryController', () => {
-  it('binds telemetry to a run and preserves the same run binding on replay', () => {
+  it('binds live telemetry to a run and preserves the same run binding on replay', () => {
     const dispose = createRoot((disposeRoot) => {
       const controller = createAIContextTelemetryController();
 
-      expect(controller.bindRun('run_1')).toEqual({ ok: true, switched: true });
+      expect(controller.setLiveRun('run_1')).toEqual({ ok: true, switched: true });
 
       controller.applyUsagePayload('run_1', {
         estimate_tokens: 240,
@@ -20,7 +20,7 @@ describe('createAIContextTelemetryController', () => {
       });
       controller.commitReplayCursor('run_1', 25);
 
-      expect(controller.bindRun('run_1')).toEqual({ ok: true, switched: false });
+      expect(controller.setLiveRun('run_1')).toEqual({ ok: true, switched: false });
       expect(controller.activeContextRunId()).toBe('run_1');
       expect(controller.contextUsage()?.estimateTokens).toBe(240);
       expect(controller.contextTelemetryByRun().run_1?.cursor).toBe(25);
@@ -35,7 +35,7 @@ describe('createAIContextTelemetryController', () => {
     const dispose = createRoot((disposeRoot) => {
       const controller = createAIContextTelemetryController();
 
-      controller.bindRun('run_2');
+      controller.setLiveRun('run_2');
       controller.applyCompactionPayload('run_2', 'context.compaction.applied', {
         compaction_id: 'cmp_1',
         step_index: 2,
@@ -54,6 +54,44 @@ describe('createAIContextTelemetryController', () => {
       expect(controller.activeContextRunId()).toBe('');
       expect(controller.contextTelemetryByRun()).toEqual({});
       expect(controller.contextCompactions()).toEqual([]);
+
+      return disposeRoot;
+    });
+
+    dispose();
+  });
+
+  it('keeps showing the stable run until the live run produces telemetry', () => {
+    const dispose = createRoot((disposeRoot) => {
+      const controller = createAIContextTelemetryController();
+
+      controller.setStableRun('run_old');
+      controller.applyUsagePayload('run_old', {
+        estimate_tokens: 240,
+        context_limit: 4000,
+        usage_percent: 6,
+      }, {
+        eventId: 7,
+        atUnixMs: 700,
+      });
+
+      controller.setLiveRun('run_new');
+      expect(controller.activeContextRunId()).toBe('run_old');
+
+      controller.applyUsagePayload('run_new', {
+        estimate_tokens: 360,
+        context_limit: 4000,
+        usage_percent: 9,
+      }, {
+        eventId: 8,
+        atUnixMs: 800,
+      });
+
+      expect(controller.activeContextRunId()).toBe('run_new');
+      expect(controller.contextUsage()?.estimateTokens).toBe(360);
+
+      controller.setLiveRun('');
+      expect(controller.activeContextRunId()).toBe('run_old');
 
       return disposeRoot;
     });

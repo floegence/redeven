@@ -78,6 +78,7 @@ export type ThreadView = Readonly<{
   run_updated_at_unix_ms?: number;
   run_error?: string;
   waiting_prompt?: WaitingPromptView;
+  last_context_run_id?: string;
   created_at_unix_ms: number;
   updated_at_unix_ms: number;
   last_message_at_unix_ms: number;
@@ -224,6 +225,7 @@ export interface AIChatContextValue {
 
   // Run state (global realtime source of truth)
   runIdForThread: (threadId: string | null | undefined) => string | null;
+  lastContextRunIdForThread: (threadId: string | null | undefined) => string | null;
   markThreadPendingRun: (threadId: string) => void;
   confirmThreadRun: (threadId: string, runId: string) => void;
   clearThreadPendingRun: (threadId: string) => void;
@@ -364,6 +366,7 @@ export function createAIChatContextValue(): AIChatContextValue {
   );
 
   const [activeRunByThread, setActiveRunByThread] = createSignal<Record<string, string>>({});
+  const [lastContextRunByThread, setLastContextRunByThread] = createSignal<Record<string, string>>({});
   const [pendingRunByThread, setPendingRunByThread] = createSignal<Record<string, true>>({});
   const [waitingPromptByThread, setWaitingPromptByThread] = createSignal<Record<string, WaitingPromptView | null>>({});
   const [structuredPromptDraftsByPrompt, setStructuredPromptDraftsByPrompt] = createSignal<Record<string, Record<string, StructuredPromptAnswerDraft>>>({});
@@ -392,6 +395,35 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (!tid) return null;
     const runId = String(activeRunByThread()[tid] ?? '').trim();
     return runId || null;
+  };
+
+  const lastContextRunIdForThread = (threadId: string | null | undefined): string | null => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return null;
+    const override = String(lastContextRunByThread()[tid] ?? '').trim();
+    if (override) return override;
+    const persisted = String(threadById().get(tid)?.last_context_run_id ?? '').trim();
+    return persisted || null;
+  };
+
+  const setThreadLastContextRunId = (threadId: string, runId: string) => {
+    const tid = String(threadId ?? '').trim();
+    const rid = String(runId ?? '').trim();
+    if (!tid) return;
+    setLastContextRunByThread((prev) => {
+      const current = String(prev[tid] ?? '').trim();
+      if (!rid) {
+        if (!current) return prev;
+        const next = { ...prev };
+        delete next[tid];
+        return next;
+      }
+      if (current === rid) return prev;
+      return {
+        ...prev,
+        [tid]: rid,
+      };
+    });
   };
 
   const threadById = createMemo(() => {
@@ -689,6 +721,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (event.eventType === 'thread_summary') {
       const status = normalizeThreadRunStatus(event.runStatus);
       const activeRunId = String(event.activeRunId ?? '').trim();
+      const lastContextRunId = String(event.lastContextRunId ?? '').trim();
       const waitingPrompt = normalizeWaitingPrompt(event.waitingPrompt);
 
       if (activeRunId && isActiveRunStatus(status)) {
@@ -703,6 +736,7 @@ export function createAIChatContextValue(): AIChatContextValue {
         });
         clearThreadPendingRun(tid);
       }
+      setThreadLastContextRunId(tid, lastContextRunId);
       if (waitingPrompt) {
         clearPendingWaitingChoicesForThread(tid, waitingPrompt.promptId);
       } else {
@@ -724,6 +758,12 @@ export function createAIChatContextValue(): AIChatContextValue {
     }
 
     if (event.eventType === 'stream_event') {
+      const streamEvent = event.streamEvent as any;
+      const streamType = String(streamEvent?.type ?? '').trim().toLowerCase();
+      const streamKind = String(event.streamKind ?? '').trim().toLowerCase();
+      if (rid && (streamKind === 'context' || streamType === 'context-usage' || streamType === 'context-compaction')) {
+        setThreadLastContextRunId(tid, rid);
+      }
       emitRealtimeEvent(event);
       return;
     }
@@ -796,6 +836,7 @@ export function createAIChatContextValue(): AIChatContextValue {
       disposed = true;
       unsub();
       setActiveRunByThread({});
+      setLastContextRunByThread({});
       setPendingRunByThread({});
       setWaitingPromptByThread({});
       setStructuredPromptDraftsByPrompt({});
@@ -820,6 +861,7 @@ export function createAIChatContextValue(): AIChatContextValue {
   createEffect(() => {
     if (protocol.status() === 'connected') return;
     setActiveRunByThread({});
+    setLastContextRunByThread({});
     setPendingRunByThread({});
     setWaitingPromptByThread({});
     setStructuredPromptDraftsByPrompt({});
@@ -1279,6 +1321,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     draftWorkingDir,
     setDraftWorkingDir,
     runIdForThread,
+    lastContextRunIdForThread,
     markThreadPendingRun,
     confirmThreadRun,
     clearThreadPendingRun,

@@ -489,6 +489,7 @@ export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtime
     lastMessagePreview: typeof payload?.last_message_preview === 'string' ? payload.last_message_preview : undefined,
     lastMessageAtUnixMs: typeof payload?.last_message_at_unix_ms === 'number' ? payload.last_message_at_unix_ms : undefined,
     activeRunId: typeof payload?.active_run_id === 'string' ? payload.active_run_id : undefined,
+    lastContextRunId: typeof payload?.last_context_run_id === 'string' ? payload.last_context_run_id : undefined,
     executionMode: normalizeExecutionMode(payload?.execution_mode),
     queuedTurnCount: typeof payload?.queued_turn_count === 'number' ? payload.queued_turn_count : undefined,
 

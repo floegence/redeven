@@ -166,6 +166,7 @@ type ThreadView struct {
 	RunUpdatedAtUnixMs  int64                   `json:"run_updated_at_unix_ms"`
 	RunError            string                  `json:"run_error,omitempty"`
 	WaitingPrompt       *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
+	LastContextRunID    string                  `json:"last_context_run_id,omitempty"`
 	CreatedAtUnixMs     int64                   `json:"created_at_unix_ms"`
 	UpdatedAtUnixMs     int64                   `json:"updated_at_unix_ms"`
 	LastMessageAtUnixMs int64                   `json:"last_message_at_unix_ms"`
@@ -559,6 +560,7 @@ type RealtimeEvent struct {
 	LastMessagePreview  string `json:"last_message_preview,omitempty"`
 	LastMessageAtUnixMs int64  `json:"last_message_at_unix_ms,omitempty"`
 	ActiveRunID         string `json:"active_run_id,omitempty"`
+	LastContextRunID    string `json:"last_context_run_id,omitempty"`
 	ExecutionMode       string `json:"execution_mode,omitempty"`
 	QueuedTurnCount     int    `json:"queued_turn_count,omitempty"`
 

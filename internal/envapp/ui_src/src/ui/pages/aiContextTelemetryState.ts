@@ -58,6 +58,27 @@ export function hasContextTelemetryData(
   return !!runState.usage || runState.compactions.length > 0;
 }
 
+export function selectVisibleContextRunId(
+  current: ContextTelemetryByRun,
+  liveRunId: string | null | undefined,
+  stableRunId: string | null | undefined,
+): string {
+  const live = String(liveRunId ?? '').trim();
+  const stable = String(stableRunId ?? '').trim();
+  const liveState = live ? getContextTelemetryRun(current, live) : null;
+  const stableState = stable ? getContextTelemetryRun(current, stable) : null;
+  const liveHasData = hasContextTelemetryData(liveState);
+  const stableHasData = hasContextTelemetryData(stableState);
+
+  if (live && (live === stable || liveHasData || !stableHasData)) {
+    return live;
+  }
+  if (stable) {
+    return stable;
+  }
+  return live;
+}
+
 function sameNumberMap(left: Record<string, number>, right: Record<string, number>): boolean {
   const leftKeys = Object.keys(left);
   const rightKeys = Object.keys(right);

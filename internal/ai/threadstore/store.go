@@ -85,6 +85,7 @@ type Thread struct {
 	RunUpdatedAtUnixMs     int64  `json:"run_updated_at_unix_ms"`
 	RunError               string `json:"run_error"`
 	WaitingUserInputJSON   string `json:"waiting_user_input_json"`
+	LastContextRunID       string `json:"last_context_run_id"`
 
 	CreatedByUserPublicID string `json:"created_by_user_public_id"`
 	CreatedByUserEmail    string `json:"created_by_user_email"`
@@ -154,7 +155,7 @@ const threadSelectColumnsSQL = `
   thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error,
-  waiting_user_input_json,
+  waiting_user_input_json, last_context_run_id,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
@@ -187,6 +188,7 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 		&t.RunUpdatedAtUnixMs,
 		&t.RunError,
 		&t.WaitingUserInputJSON,
+		&t.LastContextRunID,
 		&t.CreatedByUserPublicID,
 		&t.CreatedByUserEmail,
 		&t.UpdatedByUserPublicID,
@@ -453,12 +455,12 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
 	  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
 	  run_status, run_updated_at_unix_ms, run_error,
-	  waiting_user_input_json,
+	  waiting_user_input_json, last_context_run_id,
 	  created_by_user_public_id, created_by_user_email,
 	  updated_by_user_public_id, updated_by_user_email,
 	  created_at_unix_ms, updated_at_unix_ms,
 	  last_message_at_unix_ms, last_message_preview
-	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		t.ThreadID,
 		t.EndpointID,
@@ -477,6 +479,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		t.RunUpdatedAtUnixMs,
 		t.RunError,
 		t.WaitingUserInputJSON,
+		t.LastContextRunID,
 		t.CreatedByUserPublicID,
 		t.CreatedByUserEmail,
 		t.UpdatedByUserPublicID,
@@ -744,6 +747,11 @@ func normalizeWaitingUserInputJSONForStatus(runStatus string, waitingUserInputJS
 		return ""
 	}
 	return waitingUserInputJSON
+}
+
+func isPersistedContextRunEventType(eventType string) bool {
+	eventType = strings.TrimSpace(strings.ToLower(eventType))
+	return eventType == "context.usage.updated" || strings.HasPrefix(eventType, "context.compaction.")
 }
 
 // ResetStaleActiveThreadRunStates marks startup-orphaned active thread states as canceled.
@@ -2102,6 +2110,15 @@ VALUES(?, ?, ?, ?, ?, ?, ?)
 `, rec.EndpointID, rec.ThreadID, rec.RunID, rec.StreamKind, rec.EventType, rec.PayloadJSON, rec.AtUnixMs)
 	if err != nil {
 		return err
+	}
+	if isPersistedContextRunEventType(rec.EventType) {
+		if _, err := s.db.ExecContext(ctx, `
+UPDATE ai_threads
+SET last_context_run_id = ?
+WHERE endpoint_id = ? AND thread_id = ?
+`, rec.RunID, rec.EndpointID, rec.ThreadID); err != nil {
+			return err
+		}
 	}
 	return s.pruneRunEventsForThread(ctx, rec.EndpointID, rec.ThreadID)
 }

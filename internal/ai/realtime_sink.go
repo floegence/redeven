@@ -528,6 +528,7 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 		LastMessagePreview:  strings.TrimSpace(th.LastMessagePreview),
 		LastMessageAtUnixMs: th.LastMessageAtUnixMs,
 		ActiveRunID:         activeRunID,
+		LastContextRunID:    strings.TrimSpace(th.LastContextRunID),
 		ExecutionMode:       executionMode,
 		QueuedTurnCount:     queuedTurnCount,
 		WaitingPrompt:       waitingPrompt,

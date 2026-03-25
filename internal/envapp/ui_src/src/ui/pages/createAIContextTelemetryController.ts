@@ -6,6 +6,7 @@ import {
   ensureContextTelemetryRun,
   getContextTelemetryRun,
   hasContextTelemetryData,
+  selectVisibleContextRunId,
   setContextTelemetryCursor,
   type ContextTelemetryByRun,
   type ContextTelemetryRunState,
@@ -14,13 +15,18 @@ import type { ContextCompactionEventView, ContextUsageView } from './aiDataNorma
 
 export interface AIContextTelemetryController {
   contextTelemetryByRun: Accessor<ContextTelemetryByRun>;
+  liveContextRunId: Accessor<string>;
+  stableContextRunId: Accessor<string>;
   activeContextRunId: Accessor<string>;
   activeContextTelemetry: Accessor<ContextTelemetryRunState | null>;
   contextUsage: Accessor<ContextUsageView | null>;
   contextCompactions: Accessor<ContextCompactionEventView[]>;
   hasContextTelemetry: Accessor<boolean>;
+  hasKnownContextRun: Accessor<boolean>;
   reset: () => void;
-  bindRun: (runId: string) => { ok: boolean; switched: boolean };
+  setLiveRun: (runId: string | null | undefined) => { ok: boolean; switched: boolean };
+  setStableRun: (runId: string | null | undefined) => { ok: boolean; switched: boolean };
+  ensureRun: (runId: string | null | undefined) => boolean;
   applyUsagePayload: (
     runId: string,
     payload: unknown,
@@ -44,7 +50,12 @@ export interface AIContextTelemetryController {
 
 export function createAIContextTelemetryController(): AIContextTelemetryController {
   const [contextTelemetryByRun, setContextTelemetryByRun] = createSignal<ContextTelemetryByRun>({});
-  const [activeContextRunId, setActiveContextRunId] = createSignal('');
+  const [liveContextRunId, setLiveContextRunId] = createSignal('');
+  const [stableContextRunId, setStableContextRunId] = createSignal('');
+
+  const activeContextRunId = createMemo(() => (
+    selectVisibleContextRunId(contextTelemetryByRun(), liveContextRunId(), stableContextRunId())
+  ));
 
   const activeContextTelemetry = createMemo(() => {
     const runId = activeContextRunId();
@@ -53,26 +64,48 @@ export function createAIContextTelemetryController(): AIContextTelemetryControll
   const contextUsage = createMemo<ContextUsageView | null>(() => activeContextTelemetry()?.usage ?? null);
   const contextCompactions = createMemo<ContextCompactionEventView[]>(() => activeContextTelemetry()?.compactions ?? []);
   const hasContextTelemetry = createMemo(() => hasContextTelemetryData(activeContextTelemetry()));
+  const hasKnownContextRun = createMemo(() => !!activeContextRunId());
 
   const reset = (): void => {
     setContextTelemetryByRun({});
-    setActiveContextRunId('');
+    setLiveContextRunId('');
+    setStableContextRunId('');
   };
 
-  const bindRun = (runId: string): { ok: boolean; switched: boolean } => {
+  const ensureRun = (runId: string | null | undefined): boolean => {
     const normalizedRunId = String(runId ?? '').trim();
-    if (!normalizedRunId) {
-      return { ok: false, switched: false };
-    }
-
-    const previousRunId = String(activeContextRunId() ?? '').trim();
-    const switched = previousRunId !== normalizedRunId;
-    if (switched) {
-      setActiveContextRunId(normalizedRunId);
-    }
+    if (!normalizedRunId) return false;
     setContextTelemetryByRun((current) => ensureContextTelemetryRun(current, normalizedRunId));
-    return { ok: true, switched };
+    return true;
   };
+
+  const setRunAccessor = (
+    currentValue: () => string,
+    setValue: (runId: string) => void,
+    runId: string | null | undefined,
+  ): { ok: boolean; switched: boolean } => {
+    const normalizedRunId = String(runId ?? '').trim();
+    const previousRunId = String(currentValue() ?? '').trim();
+    if (!normalizedRunId) {
+      if (!previousRunId) return { ok: false, switched: false };
+      setValue('');
+      return { ok: false, switched: true };
+    }
+    ensureRun(normalizedRunId);
+    if (previousRunId === normalizedRunId) {
+      return { ok: true, switched: false };
+    }
+    setValue(normalizedRunId);
+    return { ok: true, switched: true };
+  };
+
+  const setLiveRun = (runId: string | null | undefined): { ok: boolean; switched: boolean } => (
+    setRunAccessor(liveContextRunId, setLiveContextRunId, runId)
+  );
+
+  const setStableRun = (runId: string | null | undefined): { ok: boolean; switched: boolean } => (
+    setRunAccessor(stableContextRunId, setStableContextRunId, runId)
+  );
 
   const applyUsagePayload = (
     runId: string,
@@ -112,13 +145,18 @@ export function createAIContextTelemetryController(): AIContextTelemetryControll
 
   return {
     contextTelemetryByRun,
+    liveContextRunId,
+    stableContextRunId,
     activeContextRunId,
     activeContextTelemetry,
     contextUsage,
     contextCompactions,
     hasContextTelemetry,
+    hasKnownContextRun,
     reset,
-    bindRun,
+    setLiveRun,
+    setStableRun,
+    ensureRun,
     applyUsagePayload,
     applyCompactionPayload,
     commitReplayCursor,

@@ -119,6 +119,74 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 	}
 }
 
+func TestStore_AppendRunEvent_ContextEventsUpdateLastContextRunID(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	if err := s.AppendRunEvent(ctx, RunEventRecord{
+		EndpointID:  "env_1",
+		ThreadID:    "th_1",
+		RunID:       "run_non_context",
+		StreamKind:  "lifecycle",
+		EventType:   "run.start",
+		PayloadJSON: "{}",
+		AtUnixMs:    1000,
+	}); err != nil {
+		t.Fatalf("AppendRunEvent non-context: %v", err)
+	}
+
+	th, err := s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread after non-context: %v", err)
+	}
+	if got := strings.TrimSpace(th.LastContextRunID); got != "" {
+		t.Fatalf("LastContextRunID=%q, want empty after non-context event", got)
+	}
+
+	if err := s.AppendRunEvent(ctx, RunEventRecord{
+		EndpointID:  "env_1",
+		ThreadID:    "th_1",
+		RunID:       "run_context_1",
+		StreamKind:  "context",
+		EventType:   "context.usage.updated",
+		PayloadJSON: "{}",
+		AtUnixMs:    1100,
+	}); err != nil {
+		t.Fatalf("AppendRunEvent context usage: %v", err)
+	}
+
+	if err := s.AppendRunEvent(ctx, RunEventRecord{
+		EndpointID:  "env_1",
+		ThreadID:    "th_1",
+		RunID:       "run_context_2",
+		StreamKind:  "context",
+		EventType:   "context.compaction.applied",
+		PayloadJSON: "{}",
+		AtUnixMs:    1200,
+	}); err != nil {
+		t.Fatalf("AppendRunEvent context compaction: %v", err)
+	}
+
+	th, err = s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread after context events: %v", err)
+	}
+	if got := strings.TrimSpace(th.LastContextRunID); got != "run_context_2" {
+		t.Fatalf("LastContextRunID=%q, want %q", got, "run_context_2")
+	}
+}
+
 func TestStore_AppendMessage_DoesNotPopulateEmptyTitle(t *testing.T) {
 	t.Parallel()
 
@@ -599,7 +667,7 @@ PRAGMA user_version=1;
 		t.Fatalf("rows err: %v", err)
 	}
 
-	for _, col := range []string{"model_id", "model_locked", "execution_mode", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version"} {
+	for _, col := range []string{"model_id", "model_locked", "execution_mode", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json", "last_context_run_id", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version"} {
 		if !cols[col] {
 			t.Fatalf("missing migrated column %q", col)
 		}

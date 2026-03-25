@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 19
+	threadstoreCurrentSchemaVersion = 20
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -47,6 +47,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 16, ToVersion: 17, Apply: migrateThreadstoreToV17},
 			{FromVersion: 17, ToVersion: 18, Apply: migrateThreadstoreToV18},
 			{FromVersion: 18, ToVersion: 19, Apply: migrateThreadstoreToV19},
+			{FromVersion: 19, ToVersion: 20, Apply: migrateThreadstoreToV20},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -198,6 +199,10 @@ func migrateThreadstoreToV19(tx *sql.Tx) error {
 	return err
 }
 
+func migrateThreadstoreToV20(tx *sql.Tx) error {
+	return ensureAIThreadsLastContextRunIDTx(tx)
+}
+
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "model_id", `ALTER TABLE ai_threads ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`)
 }
@@ -255,6 +260,10 @@ func ensureAIThreadsWaitingPromptColumnsTx(tx *sql.Tx) error {
 
 func ensureAIThreadsWaitingUserInputJSONTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "waiting_user_input_json", `ALTER TABLE ai_threads ADD COLUMN waiting_user_input_json TEXT NOT NULL DEFAULT ''`)
+}
+
+func ensureAIThreadsLastContextRunIDTx(tx *sql.Tx) error {
+	return ensureColumnTx(tx, "ai_threads", "last_context_run_id", `ALTER TABLE ai_threads ADD COLUMN last_context_run_id TEXT NOT NULL DEFAULT ''`)
 }
 
 func ensureAIThreadsTitleMetadataColumnsTx(tx *sql.Tx) error {
@@ -669,7 +678,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			"thread_id", "endpoint_id", "namespace_public_id", "model_id", "model_locked",
 			"execution_mode", "working_dir", "title", "title_source", "title_generated_at_unix_ms",
 			"title_input_message_id", "title_model_id", "title_prompt_version", "followups_revision",
-			"run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json",
+			"run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json", "last_context_run_id",
 			"created_by_user_public_id", "created_by_user_email", "updated_by_user_public_id",
 			"updated_by_user_email", "created_at_unix_ms", "updated_at_unix_ms",
 			"last_message_at_unix_ms", "last_message_preview",

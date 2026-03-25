@@ -169,6 +169,7 @@ export type wire_ai_event_notify = {
   last_message_preview?: string;
   last_message_at_unix_ms?: number;
   active_run_id?: string;
+  last_context_run_id?: string;
   execution_mode?: string;
   queued_turn_count?: number;
 

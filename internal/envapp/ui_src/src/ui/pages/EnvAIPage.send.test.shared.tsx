@@ -144,6 +144,7 @@ const aiState = {
   waitingPrompt: null as MockWaitingPrompt | null,
   structuredDrafts: {} as Record<string, { choiceId?: string; text?: string; writeSelected?: boolean }>,
   runIdByThread: {} as Record<string, string>,
+  lastContextRunIdByThread: {} as Record<string, string>,
   pendingRunByThread: {} as Record<string, boolean>,
 };
 const [runStateVersion, setRunStateVersion] = createSignal(0);
@@ -161,6 +162,102 @@ function isMockThreadRunActive(status: unknown): boolean {
     || normalized === 'waiting_approval'
     || normalized === 'recovering'
     || normalized === 'finalizing';
+}
+
+function setMockThreadRunId(threadId: string, runId: string, active: boolean): boolean {
+  const tid = String(threadId ?? '').trim();
+  if (!tid) return false;
+  const rid = String(runId ?? '').trim();
+  const previous = String(aiState.runIdByThread[tid] ?? '').trim();
+
+  if (active && rid) {
+    if (previous === rid) return false;
+    aiState.runIdByThread[tid] = rid;
+    return true;
+  }
+
+  if (!previous) return false;
+  delete aiState.runIdByThread[tid];
+  return true;
+}
+
+function setMockThreadLastContextRunId(threadId: string, runId: string): boolean {
+  const tid = String(threadId ?? '').trim();
+  if (!tid) return false;
+  const rid = String(runId ?? '').trim();
+  const previous = String(aiState.lastContextRunIdByThread[tid] ?? '').trim();
+
+  if (!rid) {
+    if (!previous) return false;
+    delete aiState.lastContextRunIdByThread[tid];
+    return true;
+  }
+
+  if (previous === rid) return false;
+  aiState.lastContextRunIdByThread[tid] = rid;
+  return true;
+}
+
+function setMockActiveThreadStatus(threadId: string, status: unknown): boolean {
+  const tid = String(threadId ?? '').trim();
+  if (!tid || !aiState.activeThread || String(aiState.activeThread.thread_id ?? '').trim() !== tid) {
+    return false;
+  }
+
+  const normalized = String(status ?? '').trim().toLowerCase();
+  const nextStatus = normalized || String(aiState.activeThread.run_status ?? '').trim();
+  if (nextStatus === String(aiState.activeThread.run_status ?? '').trim()) {
+    return false;
+  }
+
+  aiState.activeThread = {
+    ...aiState.activeThread,
+    run_status: nextStatus,
+  };
+  return true;
+}
+
+function applyMockRealtimeEvent(event: any): void {
+  const tid = String(event?.threadId ?? '').trim();
+  if (!tid) return;
+
+  let changed = false;
+  const eventType = String(event?.eventType ?? '').trim().toLowerCase();
+
+  if (eventType === 'thread_summary') {
+    const status = String(event?.runStatus ?? '').trim().toLowerCase();
+    const activeRunId = String(event?.activeRunId ?? '').trim();
+    const lastContextRunId = String(event?.lastContextRunId ?? '').trim();
+    changed = setMockThreadRunId(tid, activeRunId, isMockThreadRunActive(status)) || changed;
+    changed = setMockThreadLastContextRunId(tid, lastContextRunId) || changed;
+    changed = setMockActiveThreadStatus(tid, status) || changed;
+    if (aiState.pendingRunByThread[tid]) {
+      delete aiState.pendingRunByThread[tid];
+      changed = true;
+    }
+  } else if (eventType === 'stream_event') {
+    const rid = String(event?.runId ?? '').trim();
+    const streamKind = String(event?.streamKind ?? '').trim().toLowerCase();
+    const streamType = String(event?.streamEvent?.type ?? '').trim().toLowerCase();
+    if (rid && (streamKind === 'context' || streamType === 'context-usage' || streamType === 'context-compaction')) {
+      changed = setMockThreadLastContextRunId(tid, rid) || changed;
+    }
+  } else {
+    const rid = String(event?.runId ?? '').trim();
+    const status = String(event?.runStatus ?? '').trim().toLowerCase();
+    if (rid) {
+      changed = setMockThreadRunId(tid, rid, isMockThreadRunActive(status)) || changed;
+      changed = setMockActiveThreadStatus(tid, status) || changed;
+      if (aiState.pendingRunByThread[tid]) {
+        delete aiState.pendingRunByThread[tid];
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    touchRunState();
+  }
 }
 
 const aiContextValue = new Proxy({
@@ -254,6 +351,10 @@ const aiContextValue = new Proxy({
   runIdForThread: (threadId: string) => {
     runStateVersion();
     return aiState.runIdByThread[String(threadId ?? '').trim()] ?? null;
+  },
+  lastContextRunIdForThread: (threadId: string) => {
+    runStateVersion();
+    return aiState.lastContextRunIdByThread[String(threadId ?? '').trim()] ?? null;
   },
   consumeWaitingPrompt: () => {
     aiState.waitingPrompt = null;
@@ -491,12 +592,14 @@ function resetScenario() {
   aiState.waitingPrompt = null;
   aiState.structuredDrafts = {};
   aiState.runIdByThread = {};
+  aiState.lastContextRunIdByThread = {};
   aiState.pendingRunByThread = {};
   touchRunState();
   realtimeListeners.clear();
 }
 
 function emitRealtimeEvent(event: any) {
+  applyMockRealtimeEvent(event);
   Array.from(realtimeListeners).forEach((listener) => {
     listener(event);
   });

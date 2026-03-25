@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven-agent/internal/ai/threadstore"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
 )
@@ -256,4 +257,58 @@ func TestListActiveThreadRuns_ReturnsDetachedRunSnapshot(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("run still active after cancel")
+}
+
+func TestGetThreadAndListThreadsExposeLastContextRunID(t *testing.T) {
+	t.Parallel()
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_a",
+		UserPublicID:      "u_a",
+		UserEmail:         "u_a@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+	svc := newRealtimeTestService(t, 0)
+
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "hello", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	if err := svc.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
+		EndpointID:  meta.EndpointID,
+		ThreadID:    th.ThreadID,
+		RunID:       "run_ctx_1",
+		StreamKind:  "context",
+		EventType:   "context.usage.updated",
+		PayloadJSON: "{}",
+		AtUnixMs:    time.Now().UnixMilli(),
+	}); err != nil {
+		t.Fatalf("AppendRunEvent: %v", err)
+	}
+
+	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if got := strings.TrimSpace(view.LastContextRunID); got != "run_ctx_1" {
+		t.Fatalf("GetThread LastContextRunID=%q, want %q", got, "run_ctx_1")
+	}
+
+	list, err := svc.ListThreads(ctx, &meta, 20, "")
+	if err != nil {
+		t.Fatalf("ListThreads: %v", err)
+	}
+	if len(list.Threads) != 1 {
+		t.Fatalf("len(list.Threads)=%d, want 1", len(list.Threads))
+	}
+	if got := strings.TrimSpace(list.Threads[0].LastContextRunID); got != "run_ctx_1" {
+		t.Fatalf("ListThreads LastContextRunID=%q, want %q", got, "run_ctx_1")
+	}
 }
