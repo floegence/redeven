@@ -141,17 +141,20 @@ export function CodexProvider(props: ParentProps) {
 
   createEffect(() => {
     if (!codexVisible()) return;
-    const currentSession = session();
-    const threadID = String(currentSession?.thread.id ?? '').trim();
-    if (!threadID) return;
+    const threadID = String(activeThreadID() ?? '').trim();
+    const detail = threadDetail();
+    if (!threadID || !detail) return;
+    if (String(detail.thread.id ?? '').trim() !== threadID) return;
 
     const controller = new AbortController();
+    let lastEventSeq = Math.max(0, Number(detail.last_event_seq ?? 0) || 0);
     setStreamError(null);
     void connectCodexEventStream({
       threadID,
-      afterSeq: 0,
+      afterSeq: lastEventSeq,
       signal: controller.signal,
       onEvent: (event) => {
+        lastEventSeq = Math.max(lastEventSeq, Number(event.seq ?? 0) || 0);
         setSession((prev) => applyCodexEvent(prev, event));
       },
     }).catch((error) => {

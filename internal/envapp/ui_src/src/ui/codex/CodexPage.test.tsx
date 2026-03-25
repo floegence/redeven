@@ -254,4 +254,75 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('finalizing');
     expect(host.textContent).toContain('Send to Codex');
   });
+
+  it('subscribes once per loaded thread and resumes from the latest known event sequence', async () => {
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Stable stream thread',
+        preview: 'Keep the Codex stream stable',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        name: 'Stable stream thread',
+        preview: 'Keep the Codex stream stable',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [],
+      },
+      pending_requests: [],
+      last_event_seq: 4,
+      active_status: 'running',
+      active_status_flags: [],
+    });
+    let delivered = false;
+    connectCodexEventStreamMock.mockImplementation(async (args: { onEvent: (event: unknown) => void }) => {
+      if (!delivered) {
+        delivered = true;
+        args.onEvent({
+          seq: 5,
+          type: 'agent_message_delta',
+          thread_id: 'thread_1',
+          item_id: 'item_live',
+          delta: 'Stream update',
+        });
+      }
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+
+    await flushAsync();
+    await flushAsync();
+    await flushAsync();
+
+    expect(connectCodexEventStreamMock).toHaveBeenCalledTimes(1);
+    expect(connectCodexEventStreamMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadID: 'thread_1',
+        afterSeq: 4,
+      }),
+    );
+    expect(host.textContent).toContain('Stream update');
+  });
 });
