@@ -3,7 +3,7 @@
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('../primitives/Tooltip', () => ({
   Tooltip: (props: any) => (
     <div data-testid="tooltip" data-content={String(props.content ?? '')}>
       {props.children}

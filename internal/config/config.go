@@ -23,6 +23,9 @@ type Config struct {
 	// AI config controls optional native AI agent features.
 	AI *AIConfig `json:"ai,omitempty"`
 
+	// Codex config controls the optional Codex app-server integration.
+	Codex *CodexConfig `json:"codex,omitempty"`
+
 	// PermissionPolicy is the local permission cap applied on the endpoint.
 	// It is designed to limit the effective permissions even if the control-plane grants more.
 	PermissionPolicy *PermissionPolicy `json:"permission_policy,omitempty"`
@@ -62,6 +65,12 @@ func (c *Config) ValidateLocalMinimal() error {
 	if c.AI != nil {
 		if err := c.AI.Validate(); err != nil {
 			return fmt.Errorf("invalid ai: %w", err)
+		}
+	}
+	if c.Codex != nil {
+		c.Codex.Normalize()
+		if err := c.Codex.Validate(); err != nil {
+			return fmt.Errorf("invalid codex: %w", err)
 		}
 	}
 	return nil

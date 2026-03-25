@@ -2,7 +2,7 @@ import { createContext, useContext, type Resource } from 'solid-js';
 import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
 import type { AskFlowerIntent } from './askFlowerIntent';
 
-export type EnvNavTab = 'deck' | 'terminal' | 'monitor' | 'files' | 'codespaces' | 'ports' | 'ai';
+export type EnvNavTab = 'deck' | 'terminal' | 'monitor' | 'files' | 'codespaces' | 'ports' | 'ai' | 'codex';
 
 export type EnvSettingsSection =
   | 'config'
@@ -13,7 +13,8 @@ export type EnvSettingsSection =
   | 'codespaces'
   | 'permission_policy'
   | 'skills'
-  | 'ai';
+  | 'ai'
+  | 'codex';
 
 export type AskFlowerComposerAnchor = {
   x: number;
