@@ -388,9 +388,9 @@ describe('GitBranchesPanel interactions', () => {
       await flush();
 
       const shortcutDocks = host.querySelectorAll('[data-git-shortcut-dock]');
-      const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Ask Flower')) as HTMLButtonElement | undefined;
-      const openInTerminalButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Terminal')) as HTMLButtonElement | undefined;
-      const browseFilesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Files')) as HTMLButtonElement | undefined;
+      const askFlowerButton = host.querySelector('button[aria-label="Ask Flower"]') as HTMLButtonElement | null;
+      const openInTerminalButton = host.querySelector('button[aria-label="Terminal"]') as HTMLButtonElement | null;
+      const browseFilesButton = host.querySelector('button[aria-label="Files"]') as HTMLButtonElement | null;
 
       expect(shortcutDocks.length).toBeGreaterThan(0);
       expect(askFlowerButton).toBeTruthy();
@@ -399,6 +399,9 @@ describe('GitBranchesPanel interactions', () => {
       expect(askFlowerButton?.dataset.gitShortcutOrb).toBe('flower');
       expect(openInTerminalButton?.dataset.gitShortcutOrb).toBe('terminal');
       expect(browseFilesButton?.dataset.gitShortcutOrb).toBe('files');
+      expect(askFlowerButton?.textContent).toBe('');
+      expect(openInTerminalButton?.textContent).toBe('');
+      expect(browseFilesButton?.textContent).toBe('');
 
       askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       openInTerminalButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -1166,12 +1169,12 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).toContain('src/history.ts');
       expect(host.textContent).toContain('+8');
       expect(host.textContent).toContain('-3');
-      expect(host.textContent).toContain('Ask Flower');
 
       const historyPanel = host.querySelector('#git-branch-subview-panel-history:not([hidden])') as HTMLElement | null;
       expect(historyPanel).toBeTruthy();
-      const askFlowerButton = Array.from(historyPanel!.querySelectorAll('button')).find((node) => node.textContent?.includes('Ask Flower')) as HTMLButtonElement | undefined;
+      const askFlowerButton = historyPanel!.querySelector('button[aria-label="Ask Flower"]') as HTMLButtonElement | null;
       expect(askFlowerButton).toBeTruthy();
+      expect(askFlowerButton?.textContent).toBe('');
       askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
       expect(onAskFlower).toHaveBeenCalledWith({

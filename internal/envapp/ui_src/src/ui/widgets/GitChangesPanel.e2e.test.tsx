@@ -243,9 +243,9 @@ describe('GitChangesPanel interactions', () => {
 
     try {
       const shortcutDock = host.querySelector('[data-git-shortcut-dock]');
-      const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Ask Flower')) as HTMLButtonElement | undefined;
-      const openInTerminalButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Terminal')) as HTMLButtonElement | undefined;
-      const browseFilesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Files')) as HTMLButtonElement | undefined;
+      const askFlowerButton = host.querySelector('button[aria-label="Ask Flower"]') as HTMLButtonElement | null;
+      const openInTerminalButton = host.querySelector('button[aria-label="Terminal"]') as HTMLButtonElement | null;
+      const browseFilesButton = host.querySelector('button[aria-label="Files"]') as HTMLButtonElement | null;
 
       expect(shortcutDock).toBeTruthy();
       expect(askFlowerButton).toBeTruthy();
@@ -254,6 +254,9 @@ describe('GitChangesPanel interactions', () => {
       expect(askFlowerButton?.dataset.gitShortcutOrb).toBe('flower');
       expect(openInTerminalButton?.dataset.gitShortcutOrb).toBe('terminal');
       expect(browseFilesButton?.dataset.gitShortcutOrb).toBe('files');
+      expect(askFlowerButton?.textContent).toBe('');
+      expect(openInTerminalButton?.textContent).toBe('');
+      expect(browseFilesButton?.textContent).toBe('');
 
       askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       openInTerminalButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
