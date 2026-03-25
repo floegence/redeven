@@ -136,7 +136,7 @@ afterEach(() => {
 });
 
 describe('CodexPage', () => {
-  it('shows host diagnostics instead of a disabled settings flow when the host binary is missing', async () => {
+  it('shows host diagnostics inside the review workbench when the host binary is missing', async () => {
     fetchCodexStatusMock.mockResolvedValue({
       available: false,
       ready: false,
@@ -152,9 +152,103 @@ describe('CodexPage', () => {
 
     await flushAsync();
 
+    expect(host.textContent).toContain('Artifact review workbench');
     expect(host.textContent).toContain('Install Codex on the host');
     expect(host.textContent).toContain('there is no separate in-app Codex runtime toggle to manage here');
-    expect(host.textContent).not.toContain('Open Codex Status');
+    expect(host.textContent).toContain('Review contract');
     expect(host.querySelector('img')).not.toBeNull();
+  });
+
+  it('surfaces artifact previews and transcript evidence for the active review thread', async () => {
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Codex page polish review',
+        preview: 'Align the Codex workbench with the selected review shell',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        name: 'Codex page polish review',
+        preview: 'Align the Codex workbench with the selected review shell',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [
+          {
+            id: 'turn_1',
+            status: 'completed',
+            items: [
+              {
+                id: 'item_1',
+                type: 'userMessage',
+                text: 'Please align the Codex shell with the selected Artifact Review direction.',
+              },
+              {
+                id: 'item_2',
+                type: 'agentMessage',
+                text: 'I will split the work into navigator polish, artifact hierarchy, and composer cleanup.',
+              },
+              {
+                id: 'item_3',
+                type: 'fileChange',
+                changes: [
+                  {
+                    path: 'src/ui/codex/CodexPage.tsx',
+                    kind: 'update',
+                    diff: '+ review shell\n- generic shell',
+                  },
+                ],
+              },
+              {
+                id: 'item_4',
+                type: 'commandExecution',
+                cwd: '/workspace/ui',
+                command: 'pnpm test',
+                status: 'completed',
+                exit_code: 0,
+                aggregated_output: 'PASS CodexPage.test.tsx',
+              },
+            ],
+          },
+        ],
+      },
+      pending_requests: [],
+      last_event_seq: 0,
+      active_status: 'running',
+      active_status_flags: ['finalizing'],
+    });
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(host.textContent).toContain('Codex page polish review');
+    expect(host.textContent).toContain('Latest artifacts');
+    expect(host.textContent).toContain('src/ui/codex/CodexPage.tsx');
+    expect(host.textContent).toContain('Execution evidence');
+    expect(host.textContent).toContain('Review transcript');
+    expect(host.textContent).toContain('Send to Codex');
   });
 });

@@ -152,7 +152,7 @@ afterEach(() => {
 });
 
 describe('CodexSidebar', () => {
-  it('drives the active thread shown in the main Codex page', async () => {
+  it('drives the active review thread shown in the main Codex workbench', async () => {
     fetchCodexStatusMock.mockResolvedValue({
       available: true,
       ready: true,
@@ -198,13 +198,32 @@ describe('CodexSidebar', () => {
           {
             id: `${threadID}_turn_1`,
             status: 'completed',
-            items: [
-              {
-                id: `${threadID}_item_1`,
-                type: 'agentMessage',
-                text: threadID === 'thread_1' ? 'Gateway note' : 'Polish note',
-              },
-            ],
+            items: threadID === 'thread_1'
+              ? [
+                  {
+                    id: `${threadID}_item_1`,
+                    type: 'agentMessage',
+                    text: 'Gateway note',
+                  },
+                ]
+              : [
+                  {
+                    id: `${threadID}_item_1`,
+                    type: 'agentMessage',
+                    text: 'Polish note',
+                  },
+                  {
+                    id: `${threadID}_item_2`,
+                    type: 'fileChange',
+                    changes: [
+                      {
+                        path: 'src/ui/codex/CodexSidebar.tsx',
+                        kind: 'update',
+                        diff: '+ navigator polish',
+                      },
+                    ],
+                  },
+                ],
           },
         ],
       },
@@ -223,9 +242,11 @@ describe('CodexSidebar', () => {
     await flushAsync();
     await flushAsync();
 
+    expect(host.textContent).toContain('Codex review navigator');
+    expect(host.textContent).toContain('Review threads');
+    expect(host.textContent).toContain('Host Codex detected');
     expect(host.textContent).toContain('Backend audit');
-    expect(host.textContent).toContain('Threads');
-    expect(host.textContent).toContain('Host ready');
+    expect(host.textContent).toContain('/workspace');
 
     const target = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('UI polish'));
     if (!target) {
@@ -237,7 +258,8 @@ describe('CodexSidebar', () => {
     await flushAsync();
 
     expect(openCodexThreadMock).toHaveBeenCalledWith('thread_2');
-    expect(host.textContent).toContain('Align the Codex shell with floe-webapp');
     expect(host.textContent).toContain('UI polish');
+    expect(host.textContent).toContain('Align the Codex shell with floe-webapp');
+    expect(host.textContent).toContain('src/ui/codex/CodexSidebar.tsx');
   });
 });
