@@ -132,9 +132,12 @@ func TestIntentRouting_SocialInputUsesSocialPathWithoutTools(t *testing.T) {
 	if got := strings.TrimSpace(fmt.Sprint(classified["intent_source"])); got != RunIntentSourceModel {
 		t.Fatalf("intent_source=%q, want %q", got, RunIntentSourceModel)
 	}
+	if got := strings.TrimSpace(fmt.Sprint(classified["execution_contract"])); got != RunExecutionContractDirectReply {
+		t.Fatalf("execution_contract=%q, want %q", got, RunExecutionContractDirectReply)
+	}
 	routed := findRunEventPayload(t, runEvents.Events, "intent.routed")
-	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != "social_responder" {
-		t.Fatalf("intent path=%q, want social_responder", got)
+	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != RunExecutionContractDirectReply {
+		t.Fatalf("intent path=%q, want %q", got, RunExecutionContractDirectReply)
 	}
 }
 
@@ -182,9 +185,80 @@ func TestIntentRouting_CreativeInputUsesCreativePathWithoutTools(t *testing.T) {
 	if got := strings.TrimSpace(fmt.Sprint(classified["intent_source"])); got != RunIntentSourceModel {
 		t.Fatalf("intent_source=%q, want %q", got, RunIntentSourceModel)
 	}
+	if got := strings.TrimSpace(fmt.Sprint(classified["execution_contract"])); got != RunExecutionContractDirectReply {
+		t.Fatalf("execution_contract=%q, want %q", got, RunExecutionContractDirectReply)
+	}
 	routed := findRunEventPayload(t, runEvents.Events, "intent.routed")
-	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != "creative_responder" {
-		t.Fatalf("intent path=%q, want creative_responder", got)
+	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != RunExecutionContractDirectReply {
+		t.Fatalf("intent path=%q, want %q", got, RunExecutionContractDirectReply)
+	}
+}
+
+func TestIntentRouting_ClassifierFailureFallsBackToHybridFirstTurnWithoutDuplicateAssistantOutput(t *testing.T) {
+	t.Parallel()
+
+	reply := "我是 Flower，一个运行在你当前设备上的 AI 助手。"
+	mock := &openAIMock{
+		token:           reply,
+		classifierToken: "not-json",
+	}
+	svc, meta := newIntentRoutingService(t, mock)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	thread, err := svc.CreateThread(ctx, &meta, "hybrid fallback", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_intent_hybrid_fallback_1"
+	rr := httptest.NewRecorder()
+	err = svc.StartRun(ctx, &meta, runID, RunStartRequest{
+		ThreadID: thread.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "你是谁"},
+		Options:  RunOptions{MaxSteps: 2, MaxNoToolRounds: 1, Mode: "act"},
+	}, rr)
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	runEvents, err := svc.ListRunEvents(ctx, &meta, runID, 2000)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	classified := findRunEventPayload(t, runEvents.Events, "intent.classified")
+	if got := strings.TrimSpace(fmt.Sprint(classified["execution_contract"])); got != RunExecutionContractHybridFirstTurn {
+		t.Fatalf("execution_contract=%q, want %q", got, RunExecutionContractHybridFirstTurn)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(classified["intent_source"])); got != RunIntentSourceDeterministic {
+		t.Fatalf("intent_source=%q, want %q", got, RunIntentSourceDeterministic)
+	}
+	completion := findRunEventPayload(t, runEvents.Events, "completion.contract")
+	if got := strings.TrimSpace(fmt.Sprint(completion["contract"])); got != completionContractFirstTurn {
+		t.Fatalf("completion contract=%q, want %q", got, completionContractFirstTurn)
+	}
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, thread.ThreadID, 50, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	assistantCount := 0
+	for _, msg := range msgs {
+		if strings.TrimSpace(msg.Role) != "assistant" {
+			continue
+		}
+		assistantCount++
+		if got := strings.TrimSpace(msg.TextContent); got != reply {
+			t.Fatalf("assistant text=%q, want %q", got, reply)
+		}
+		if strings.Count(msg.TextContent, "Flower") != 1 {
+			t.Fatalf("assistant text unexpectedly duplicated: %q", msg.TextContent)
+		}
+	}
+	if assistantCount != 1 {
+		t.Fatalf("assistant message count=%d, want 1", assistantCount)
 	}
 }
 
@@ -242,9 +316,12 @@ func TestIntentRouting_ContinuationWithOpenGoalStaysTask(t *testing.T) {
 	if got := strings.TrimSpace(fmt.Sprint(classified["objective_mode"])); got != RunObjectiveModeContinue {
 		t.Fatalf("objective_mode=%q, want %q", got, RunObjectiveModeContinue)
 	}
+	if got := strings.TrimSpace(fmt.Sprint(classified["execution_contract"])); got != RunExecutionContractAgenticLoop {
+		t.Fatalf("execution_contract=%q, want %q", got, RunExecutionContractAgenticLoop)
+	}
 	routed := findRunEventPayload(t, runEvents.Events, "intent.routed")
-	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != "task_engine" {
-		t.Fatalf("intent path=%q, want task_engine", got)
+	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != RunExecutionContractAgenticLoop {
+		t.Fatalf("intent path=%q, want %q", got, RunExecutionContractAgenticLoop)
 	}
 }
 
@@ -295,8 +372,11 @@ func TestIntentRouting_GuidedStructuredInteractionUsesTaskPath(t *testing.T) {
 	if got := strings.TrimSpace(fmt.Sprint(classified["reason"])); got != "guided_structured_interaction_requested" {
 		t.Fatalf("reason=%q, want %q", got, "guided_structured_interaction_requested")
 	}
+	if got := strings.TrimSpace(fmt.Sprint(classified["execution_contract"])); got != RunExecutionContractAgenticLoop {
+		t.Fatalf("execution_contract=%q, want %q", got, RunExecutionContractAgenticLoop)
+	}
 	routed := findRunEventPayload(t, runEvents.Events, "intent.routed")
-	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != "task_engine" {
-		t.Fatalf("intent path=%q, want task_engine", got)
+	if got := strings.TrimSpace(fmt.Sprint(routed["path"])); got != RunExecutionContractAgenticLoop {
+		t.Fatalf("intent path=%q, want %q", got, RunExecutionContractAgenticLoop)
 	}
 }

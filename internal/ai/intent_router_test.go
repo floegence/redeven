@@ -35,6 +35,9 @@ func TestClassifyRunPolicy_UsesModelDecision(t *testing.T) {
 	if got.TodoPolicy != TodoPolicyNone {
 		t.Fatalf("todo_policy=%q, want %q", got.TodoPolicy, TodoPolicyNone)
 	}
+	if got.ExecutionContract != RunExecutionContractDirectReply {
+		t.Fatalf("execution_contract=%q, want %q", got.ExecutionContract, RunExecutionContractDirectReply)
+	}
 }
 
 func TestClassifyRunPolicy_ModelFailureFallsBackToTask(t *testing.T) {
@@ -54,6 +57,9 @@ func TestClassifyRunPolicy_ModelFailureFallsBackToTask(t *testing.T) {
 	}
 	if got.TodoPolicy != TodoPolicyRecommended {
 		t.Fatalf("todo_policy=%q, want %q", got.TodoPolicy, TodoPolicyRecommended)
+	}
+	if got.ExecutionContract != RunExecutionContractHybridFirstTurn {
+		t.Fatalf("execution_contract=%q, want %q", got.ExecutionContract, RunExecutionContractHybridFirstTurn)
 	}
 }
 
@@ -80,6 +86,9 @@ func TestClassifyRunPolicy_ModelControlsContinuationObjectiveMode(t *testing.T) 
 	if got.ObjectiveMode != RunObjectiveModeContinue {
 		t.Fatalf("objective_mode=%q, want %q", got.ObjectiveMode, RunObjectiveModeContinue)
 	}
+	if got.ExecutionContract != RunExecutionContractAgenticLoop {
+		t.Fatalf("execution_contract=%q, want %q", got.ExecutionContract, RunExecutionContractAgenticLoop)
+	}
 }
 
 func TestClassifyRunPolicy_TaskByAttachment(t *testing.T) {
@@ -97,6 +106,9 @@ func TestClassifyRunPolicy_TaskByAttachment(t *testing.T) {
 	}
 	if got.TodoPolicy != TodoPolicyRecommended {
 		t.Fatalf("todo_policy=%q, want %q", got.TodoPolicy, TodoPolicyRecommended)
+	}
+	if got.ExecutionContract != RunExecutionContractHybridFirstTurn {
+		t.Fatalf("execution_contract=%q, want %q", got.ExecutionContract, RunExecutionContractHybridFirstTurn)
 	}
 }
 
@@ -122,6 +134,9 @@ func TestBuildRunPolicyClassifierMessages_GuidedStructuredInteractionsAreTask(t 
 	}
 	if !strings.Contains(system, "interaction_contract") {
 		t.Fatalf("system prompt missing interaction_contract contract: %q", system)
+	}
+	if !strings.Contains(system, "execution_contract") {
+		t.Fatalf("system prompt missing execution_contract guidance: %q", system)
 	}
 	if !strings.Contains(system, "open_text_fallback_required") {
 		t.Fatalf("system prompt missing open fallback guidance: %q", system)
@@ -158,6 +173,9 @@ func TestClassifyRunPolicy_StructuredResponseForcesContinuation(t *testing.T) {
 	if got.Source != RunIntentSourceDeterministic {
 		t.Fatalf("source=%q, want %q", got.Source, RunIntentSourceDeterministic)
 	}
+	if got.ExecutionContract != RunExecutionContractAgenticLoop {
+		t.Fatalf("execution_contract=%q, want %q", got.ExecutionContract, RunExecutionContractAgenticLoop)
+	}
 }
 
 func TestClassifyRunPolicy_StructuredResponseContinuationSkipsModelClassifier(t *testing.T) {
@@ -174,12 +192,15 @@ func TestClassifyRunPolicy_StructuredResponseContinuationSkipsModelClassifier(t 
 	if got.ObjectiveMode != RunObjectiveModeContinue {
 		t.Fatalf("objective_mode=%q, want %q", got.ObjectiveMode, RunObjectiveModeContinue)
 	}
+	if got.ExecutionContract != RunExecutionContractAgenticLoop {
+		t.Fatalf("execution_contract=%q, want %q", got.ExecutionContract, RunExecutionContractAgenticLoop)
+	}
 }
 
 func TestParseModelRunPolicyDecision_CodeFenceJSON(t *testing.T) {
 	t.Parallel()
 
-	got, err := parseModelRunPolicyDecision("```json\n{\"intent\":\"task\",\"reason\":\"needs_multi_step_execution\",\"objective_mode\":\"replace\",\"complexity\":\"complex\",\"todo_policy\":\"required\",\"minimum_todo_items\":4,\"confidence\":0.91,\"interaction_contract\":{\"enabled\":true,\"reason\":\"guided_interaction_requested\",\"single_question_per_turn\":true,\"fixed_choices_required\":true,\"open_text_fallback_required\":true,\"indirect_questions_only\":true,\"confidence\":0.87}}\n```")
+	got, err := parseModelRunPolicyDecision("```json\n{\"intent\":\"task\",\"execution_contract\":\"agentic_loop\",\"reason\":\"needs_multi_step_execution\",\"objective_mode\":\"replace\",\"complexity\":\"complex\",\"todo_policy\":\"required\",\"minimum_todo_items\":4,\"confidence\":0.91,\"interaction_contract\":{\"enabled\":true,\"reason\":\"guided_interaction_requested\",\"single_question_per_turn\":true,\"fixed_choices_required\":true,\"open_text_fallback_required\":true,\"indirect_questions_only\":true,\"confidence\":0.87}}\n```")
 	if err != nil {
 		t.Fatalf("parseModelRunPolicyDecision: %v", err)
 	}
@@ -198,6 +219,9 @@ func TestParseModelRunPolicyDecision_CodeFenceJSON(t *testing.T) {
 	if got.MinimumTodoItems != 4 {
 		t.Fatalf("minimum_todo_items=%d, want 4", got.MinimumTodoItems)
 	}
+	if got.ExecutionContract != RunExecutionContractAgenticLoop {
+		t.Fatalf("execution_contract=%q, want %q", got.ExecutionContract, RunExecutionContractAgenticLoop)
+	}
 	if !got.InteractionContract.Enabled {
 		t.Fatalf("interaction contract should be enabled")
 	}
@@ -215,7 +239,7 @@ func TestParseModelRunPolicyDecision_CodeFenceJSON(t *testing.T) {
 func TestParseModelRunPolicyDecision_NonTaskForcesTodoNone(t *testing.T) {
 	t.Parallel()
 
-	got, err := parseModelRunPolicyDecision(`{"intent":"creative","reason":"story_generation_requested","objective_mode":"replace","complexity":"complex","todo_policy":"required","minimum_todo_items":8,"confidence":0.99}`)
+	got, err := parseModelRunPolicyDecision(`{"intent":"creative","execution_contract":"agentic_loop","reason":"story_generation_requested","objective_mode":"replace","complexity":"complex","todo_policy":"required","minimum_todo_items":8,"confidence":0.99}`)
 	if err != nil {
 		t.Fatalf("parseModelRunPolicyDecision: %v", err)
 	}
@@ -231,6 +255,9 @@ func TestParseModelRunPolicyDecision_NonTaskForcesTodoNone(t *testing.T) {
 	if got.MinimumTodoItems != 0 {
 		t.Fatalf("minimum_todo_items=%d, want 0", got.MinimumTodoItems)
 	}
+	if got.ExecutionContract != RunExecutionContractDirectReply {
+		t.Fatalf("execution_contract=%q, want %q", got.ExecutionContract, RunExecutionContractDirectReply)
+	}
 }
 
 func TestRunPolicyClassifierToolDef_IncludesInteractionContractSchema(t *testing.T) {
@@ -244,6 +271,9 @@ func TestRunPolicyClassifierToolDef_IncludesInteractionContractSchema(t *testing
 	properties, ok := schema["properties"].(map[string]any)
 	if !ok {
 		t.Fatalf("schema properties missing: %v", schema)
+	}
+	if _, ok := properties["execution_contract"]; !ok {
+		t.Fatalf("execution_contract schema missing: %v", properties)
 	}
 	rawContract, ok := properties["interaction_contract"].(map[string]any)
 	if !ok {

@@ -51,6 +51,7 @@ Each task runs against the real Flower runtime with:
 
 - a real thread execution mode (`act` or `plan`)
 - real run knobs (`max_steps`, `max_no_tool_rounds`, `reasoning_only`, `no_user_interaction`, `require_user_confirm_on_task_complete`)
+- real runtime policy decisions, including `intent` and `execution_contract`
 - real tools and real persisted runtime state
 
 Each task gets its own isolated workspace copy under the report directory. This protects the source repo while still allowing Flower to run with normal RWX permissions and real tool semantics.
@@ -76,6 +77,12 @@ Assertion groups are intentionally structural:
 - tools: required tool calls, forbidden tool calls, success requirements, call budget
 - events: required event types, forbidden event types, hard-fail event types
 - todos: snapshot presence, non-empty plan, closed plan, in-progress discipline
+
+Runtime-output invariants worth asserting explicitly:
+
+- a single assistant run should converge to one canonical visible answer, not multiple concatenated final-answer revisions
+- draft text from a still-active run must not be replayed into later provider turns as committed assistant history
+- `execution_contract` should explain why a run ended directly, promoted into an agentic loop, or persisted into `waiting_user`
 
 ## Report model
 

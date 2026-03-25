@@ -6,17 +6,17 @@ import (
 	"github.com/floegence/redeven-agent/internal/config"
 )
 
-func TestCompletionContractForIntent(t *testing.T) {
+func TestCompletionContractForExecutionContract(t *testing.T) {
 	t.Parallel()
 
-	if got := completionContractForIntent(RunIntentTask); got != completionContractExplicitOnly {
-		t.Fatalf("task contract=%q, want %q", got, completionContractExplicitOnly)
+	if got := completionContractForExecutionContract(RunExecutionContractAgenticLoop); got != completionContractExplicitOnly {
+		t.Fatalf("agentic_loop contract=%q, want %q", got, completionContractExplicitOnly)
 	}
-	if got := completionContractForIntent(RunIntentSocial); got != completionContractNone {
-		t.Fatalf("social contract=%q, want %q", got, completionContractNone)
+	if got := completionContractForExecutionContract(RunExecutionContractHybridFirstTurn); got != completionContractFirstTurn {
+		t.Fatalf("hybrid_first_turn contract=%q, want %q", got, completionContractFirstTurn)
 	}
-	if got := completionContractForIntent(RunIntentCreative); got != completionContractNone {
-		t.Fatalf("creative contract=%q, want %q", got, completionContractNone)
+	if got := completionContractForExecutionContract(RunExecutionContractDirectReply); got != completionContractNone {
+		t.Fatalf("direct_reply contract=%q, want %q", got, completionContractNone)
 	}
 }
 
@@ -28,8 +28,10 @@ func TestClassifyFinalizationReason(t *testing.T) {
 		want   string
 	}{
 		{reason: "task_complete", want: finalizationClassSuccess},
+		{reason: "task_complete_forced", want: finalizationClassSuccess},
 		{reason: "social_reply", want: finalizationClassSuccess},
 		{reason: "creative_reply", want: finalizationClassSuccess},
+		{reason: "hybrid_first_turn_reply", want: finalizationClassSuccess},
 		{reason: "ask_user_waiting", want: finalizationClassWaitingUser},
 		{reason: "ask_user_waiting_model", want: finalizationClassWaitingUser},
 		{reason: "ask_user_waiting_guard", want: finalizationClassWaitingUser},

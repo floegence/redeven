@@ -113,14 +113,14 @@ func TestAppendThinkingDelta_PreservesInitialMarkdownBlock(t *testing.T) {
 	}
 }
 
-func TestCanonicalMarkdownTextSnapshot_JoinsRememberedTurns(t *testing.T) {
+func TestCanonicalMarkdownTextSnapshot_UsesLatestCandidate(t *testing.T) {
 	t.Parallel()
 
 	r := &run{}
-	r.rememberCanonicalMarkdownTurn("first section")
-	r.rememberCanonicalMarkdownTurn("second section")
+	r.setCanonicalMarkdownCandidate("first section")
+	r.setCanonicalMarkdownCandidate("second section")
 
-	if got, want := r.canonicalMarkdownTextSnapshot(""), "first section\n\nsecond section"; got != want {
+	if got, want := r.canonicalMarkdownTextSnapshot(""), "second section"; got != want {
 		t.Fatalf("canonicalMarkdownTextSnapshot got=%q want=%q", got, want)
 	}
 }
@@ -138,7 +138,7 @@ func TestReconcileCanonicalMarkdownMessage_ReplacesPureMarkdownBlock(t *testing.
 			&persistedMarkdownBlock{Type: "markdown", Content: "broken output"},
 		},
 	}
-	r.rememberCanonicalMarkdownTurn("clean output")
+	r.setCanonicalMarkdownCandidate("clean output")
 
 	if !r.reconcileCanonicalMarkdownMessage("") {
 		t.Fatalf("reconcileCanonicalMarkdownMessage returned false, want true")
@@ -175,7 +175,7 @@ func TestReconcileCanonicalMarkdownMessage_PublishesCanonicalBeforeClearingEarli
 			&persistedMarkdownBlock{Type: "markdown", Content: "teaser"},
 		},
 	}
-	r.rememberCanonicalMarkdownTurn("canonical")
+	r.setCanonicalMarkdownCandidate("canonical")
 
 	if !r.reconcileCanonicalMarkdownMessage("") {
 		t.Fatalf("reconcileCanonicalMarkdownMessage returned false, want true")
@@ -231,7 +231,7 @@ func TestReconcileCanonicalMarkdownMessage_AppendsMarkdownWhenNoMarkdownBlocksEx
 		},
 		nextBlockIndex: 2,
 	}
-	r.rememberCanonicalMarkdownTurn("canonical")
+	r.setCanonicalMarkdownCandidate("canonical")
 
 	if !r.reconcileCanonicalMarkdownMessage("") {
 		t.Fatalf("reconcileCanonicalMarkdownMessage returned false, want true")
@@ -267,7 +267,7 @@ func TestReconcileCanonicalMarkdownMessage_UpdatesPersistedAssistantSnapshotText
 			&persistedMarkdownBlock{Type: "markdown", Content: "teaser"},
 		},
 	}
-	r.rememberCanonicalMarkdownTurn("canonical final answer")
+	r.setCanonicalMarkdownCandidate("canonical final answer")
 
 	if !r.reconcileCanonicalMarkdownMessage("") {
 		t.Fatalf("reconcileCanonicalMarkdownMessage returned false, want true")

@@ -123,6 +123,10 @@ Behavior summary:
 - Every `ask_user` question should use the canonical question-level response contract. Each question declares `response_mode`, `choices[]` contains fixed options only, and any choice-based question must also declare `choices_exhaustive`.
 - `ask_user` is the canonical structured-input primitive both for true blockers and for guided structured interaction turns such as questionnaires, interviews, quizzes, guessing games, decision trees, and other option-driven conversations.
 - Guided structured interactions should be front-loaded into an explicit interaction contract classified with the run policy, then preserved consistently across prompts, gates, waiting-user rendering, and completion.
+- Run policy is split into `intent` and `execution_contract`:
+  - `intent` describes user-facing semantics (`social`, `creative`, `task`).
+  - `execution_contract` describes runtime shape (`direct_reply`, `hybrid_first_turn`, `agentic_loop`).
+- `task` intent no longer implies explicit-completion by itself. Flower may start a task run in `hybrid_first_turn`, answer directly in the first turn when the request is fully resolved, and only promote into `agentic_loop` when durable multi-step execution is actually needed.
 - When a validated structured prompt response continues an existing guided objective, Flower should reuse that continuation context deterministically instead of spending extra classifier turns to rediscover `task + continue`.
 - Persisted waiting-prompt interaction contracts are the durable source of truth for those guided continuations; the runtime should reuse them directly and mark observability payloads explicitly when seed reuse is taken.
 - The run-policy classifier should prefer a single synthetic tool call with an explicit schema, including `interaction_contract`, and only fall back to text JSON parsing when tool calls are unavailable, so reasoning-heavy providers do not leak prose into classifier payloads.
@@ -143,7 +147,9 @@ Behavior summary:
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.
 - `task_complete` is rejected when todo tracking is active and open todos still exist.
-- When a run completes through `task_complete`, its `task_complete.result` is the canonical final assistant completion text. Persisted assistant transcript snapshots must keep that canonical completion text aligned with the user-visible markdown content even if the run streamed mixed `thinking`, `tool-call`, and `markdown` blocks before completion.
+- Flower keeps exactly one canonical visible answer slot per assistant run. Later answer revisions replace the current candidate instead of being appended as additional final-answer turns.
+- Draft text produced inside the same run must stay separate from assistant history. Flower may stream draft markdown to the active answer block, but it must not feed that draft back into the next provider turn as if it were a committed assistant transcript message.
+- When a run completes through `task_complete`, its `task_complete.result` is the canonical final assistant completion text. Persisted assistant transcript snapshots must keep that canonical completion text aligned with the single user-visible markdown answer even if the run streamed mixed `thinking`, `tool-call`, and `markdown` blocks before completion.
 - `ask_user` follows a structured contract (`questions`, `reason_code`, `required_from_user`, `evidence_refs`) and is deterministically validated before entering `waiting_user`; runtime enforcement is limited to capability, schema, evidence, todo, and interaction-contract consistency checks rather than a second semantic policy classifier.
 - When a run completes into `waiting_user` through `ask_user`, the final assistant transcript must canonically converge to the structured waiting interaction instead of keeping provisional text-only markdown from earlier no-tool turns.
 - Structured prompt answers are submitted through a dedicated prompt-response action rather than the plain chat `sendMessage` path.

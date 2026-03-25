@@ -18,7 +18,8 @@ import (
 )
 
 type openAIMock struct {
-	token string
+	token           string
+	classifierToken string
 
 	mu           sync.Mutex
 	sawResponses bool
@@ -119,7 +120,7 @@ func classifyIntentResponseToken(req map[string]any) string {
 	guidedAgeGuess := strings.Contains(userMessage, "猜我的岁数") || strings.Contains(userMessage, "每个问题") || strings.Contains(userMessage, "几个选项")
 	guidedAgeGuess = guidedAgeGuess || strings.Contains(openGoalText, "猜我的岁数") || strings.Contains(openGoalText, "每个问题") || strings.Contains(openGoalText, "几个选项")
 	if userText == "" {
-		return `{"intent":"task","reason":"empty_input","objective_mode":"replace","complexity":"simple","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.42}`
+		return `{"intent":"task","execution_contract":"hybrid_first_turn","reason":"empty_input","objective_mode":"replace","complexity":"simple","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.42}`
 	}
 	if guidedAgeGuess {
 		instructionsLower := strings.ToLower(strings.TrimSpace(instructions))
@@ -130,22 +131,22 @@ func classifyIntentResponseToken(req map[string]any) string {
 				objectiveMode = "continue"
 				reason = "guided_structured_interaction_continuation"
 			}
-			return fmt.Sprintf(`{"intent":"task","reason":"%s","objective_mode":"%s","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.89,"interaction_contract":{"enabled":true,"reason":"guided_option_interaction","single_question_per_turn":true,"fixed_choices_required":true,"open_text_fallback_required":true,"indirect_questions_only":true,"confidence":0.93}}`, reason, objectiveMode)
+			return fmt.Sprintf(`{"intent":"task","execution_contract":"agentic_loop","reason":"%s","objective_mode":"%s","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.89,"interaction_contract":{"enabled":true,"reason":"guided_option_interaction","single_question_per_turn":true,"fixed_choices_required":true,"open_text_fallback_required":true,"indirect_questions_only":true,"confidence":0.93}}`, reason, objectiveMode)
 		}
-		return `{"intent":"social","reason":"guided_interaction_misclassified_without_prompt","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.61}`
+		return `{"intent":"social","execution_contract":"direct_reply","reason":"guided_interaction_misclassified_without_prompt","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.61}`
 	}
 	if strings.TrimSpace(openGoalText) != "" {
 		continuationSignals := []string{"continue", "go on", "keep going", "proceed"}
 		for _, signal := range continuationSignals {
 			if strings.Contains(userMessage, signal) {
-				return `{"intent":"task","reason":"follow_up_to_open_goal","objective_mode":"continue","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.91}`
+				return `{"intent":"task","execution_contract":"agentic_loop","reason":"follow_up_to_open_goal","objective_mode":"continue","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.91}`
 			}
 		}
 	}
 	creativeSignals := []string{"write a story", "fairy tale", "poem", "creative writing", "童话", "故事", "小说", "诗歌", "文案"}
 	for _, signal := range creativeSignals {
 		if strings.Contains(userText, signal) {
-			return `{"intent":"creative","reason":"creative_generation_requested","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.93}`
+			return `{"intent":"creative","execution_contract":"direct_reply","reason":"creative_generation_requested","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.93}`
 		}
 	}
 	taskSignals := []string{
@@ -154,16 +155,16 @@ func classifyIntentResponseToken(req map[string]any) string {
 	}
 	for _, signal := range taskSignals {
 		if strings.Contains(userText, signal) {
-			return `{"intent":"task","reason":"actionable_request_detected","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.86}`
+			return `{"intent":"task","execution_contract":"hybrid_first_turn","reason":"actionable_request_detected","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.86}`
 		}
 	}
 	socialSignals := []string{"hello", "hi", "hey", "thanks", "thank you", "你好", "谢谢"}
 	for _, signal := range socialSignals {
 		if strings.Contains(userText, signal) {
-			return `{"intent":"social","reason":"small_talk_detected","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.95}`
+			return `{"intent":"social","execution_contract":"direct_reply","reason":"small_talk_detected","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.95}`
 		}
 	}
-	return `{"intent":"task","reason":"actionable_request_detected","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.78}`
+	return `{"intent":"task","execution_contract":"hybrid_first_turn","reason":"actionable_request_detected","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.78}`
 }
 
 func extractClassifierInstructions(req map[string]any) string {
@@ -330,7 +331,10 @@ func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
 		isClassifier := isIntentClassifierRequest(req)
 		respToken := m.token
 		if isClassifier {
-			respToken = classifyIntentResponseToken(req)
+			respToken = strings.TrimSpace(m.classifierToken)
+			if respToken == "" {
+				respToken = classifyIntentResponseToken(req)
+			}
 		}
 		m.mu.Lock()
 		m.sawResponses = true

@@ -168,7 +168,7 @@ func (m *openAIDoomLoopGuardMock) handle(w http.ResponseWriter, r *http.Request)
 		}
 		writeOpenAISSEJSON(w, f, map[string]any{
 			"type":  "response.output_text.delta",
-			"delta": classifyIntentResponseToken(req),
+			"delta": `{"intent":"task","execution_contract":"agentic_loop","reason":"continued_workspace_investigation","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.89}`,
 		})
 		writeOpenAISSEJSON(w, f, map[string]any{
 			"type": "response.completed",
@@ -934,13 +934,16 @@ func TestIntegration_NativeSDK_OpenAI_MissingExplicitCompletionDoesNotPolluteAss
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
+	if err := svc.contextRepo.SetOpenGoal(ctx, meta.EndpointID, th.ThreadID, "continue repository analysis"); err != nil {
+		t.Fatalf("SetOpenGoal: %v", err)
+	}
 
 	runID := "run_test_native_openai_missing_explicit_completion_1"
 	rr := httptest.NewRecorder()
 	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
-		Input:    RunInput{Text: "analyze repository architecture"},
+		Input:    RunInput{Text: "continue"},
 		Options:  RunOptions{MaxSteps: 4, MaxNoToolRounds: 1},
 	}, rr); err != nil {
 		t.Fatalf("StartRun: %v", err)
@@ -1056,13 +1059,16 @@ func TestIntegration_NativeSDK_OpenAI_TextThenAskUser_ReconcilesFinalWaitingTran
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
+	if err := svc.contextRepo.SetOpenGoal(ctx, meta.EndpointID, th.ThreadID, "continue guided interaction"); err != nil {
+		t.Fatalf("SetOpenGoal: %v", err)
+	}
 
 	runID := "run_test_native_openai_text_then_ask_user_1"
 	rr := httptest.NewRecorder()
 	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
-		Input:    RunInput{Text: "start a guided interaction"},
+		Input:    RunInput{Text: "continue"},
 		Options:  RunOptions{MaxSteps: 4, MaxNoToolRounds: 2},
 	}, rr); err != nil {
 		t.Fatalf("StartRun: %v", err)
