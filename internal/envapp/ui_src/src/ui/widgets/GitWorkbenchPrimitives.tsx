@@ -325,7 +325,7 @@ function gitShortcutOrbLabelClass(tone: GitShortcutOrbTone): string {
 
 export function GitShortcutOrbButton(props: GitShortcutOrbButtonProps) {
   const Icon = props.icon;
-  const size = () => props.size ?? 'md';
+  const size = () => props.size ?? 'sm';
 
   return (
     <button
@@ -336,8 +336,8 @@ export function GitShortcutOrbButton(props: GitShortcutOrbButtonProps) {
       aria-label={props.label}
       disabled={Boolean(props.disabled)}
       class={cn(
-        'group relative flex cursor-pointer flex-col items-center justify-start gap-1 rounded-[1rem] px-1.5 py-1.5 text-center transition-[transform,color,opacity] duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45',
-        size() === 'sm' ? 'min-w-[3.75rem]' : 'min-w-[4.375rem]',
+        'group relative flex cursor-pointer flex-col items-center justify-start gap-0.5 rounded-xl px-0.5 py-0.5 text-center transition-[transform,color,opacity] duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45',
+        size() === 'sm' ? 'min-w-[2.75rem]' : 'min-w-[3.125rem]',
         props.class,
       )}
       onClick={props.onClick}
@@ -345,7 +345,7 @@ export function GitShortcutOrbButton(props: GitShortcutOrbButtonProps) {
       <span
         class={cn(
           'relative flex items-center justify-center rounded-full border shadow-[inset_0_1px_0_rgba(255,255,255,0.32)] backdrop-blur-xl transition-[transform,box-shadow,filter] duration-200 group-hover:scale-[1.04] group-hover:shadow-[0_22px_42px_-26px_rgba(15,23,42,0.68)]',
-          size() === 'sm' ? 'h-9 w-9' : 'h-11 w-11',
+          size() === 'sm' ? 'h-8 w-8' : 'h-9 w-9',
           gitShortcutOrbShellClass(props.tone),
         )}
       >
@@ -355,16 +355,16 @@ export function GitShortcutOrbButton(props: GitShortcutOrbButtonProps) {
           class={cn(
             'relative z-[1]',
             props.tone === 'flower'
-              ? (size() === 'sm' ? 'h-6 w-6' : 'h-7 w-7')
-              : (size() === 'sm' ? 'h-[1.125rem] w-[1.125rem]' : 'h-5 w-5'),
+              ? (size() === 'sm' ? 'h-5 w-5' : 'h-6 w-6')
+              : (size() === 'sm' ? 'h-4 w-4' : 'h-[1.125rem] w-[1.125rem]'),
             props.iconClass,
           )}
         />
       </span>
       <span
         class={cn(
-          'text-[10px] font-semibold leading-none tracking-[0.04em] transition-colors duration-200',
-          size() === 'sm' && 'text-[9px]',
+          'text-[9px] font-semibold leading-none tracking-[0.03em] transition-colors duration-200',
+          size() === 'sm' && 'text-[8px]',
           gitShortcutOrbLabelClass(props.tone),
         )}
       >
@@ -384,7 +384,7 @@ export function GitShortcutOrbDock(props: GitShortcutOrbDockProps) {
     <div
       data-git-shortcut-dock
       class={cn(
-        'inline-flex items-start gap-0.5 rounded-[1.35rem] border border-border/55 bg-background/60 p-1.5 shadow-[0_20px_40px_-30px_rgba(15,23,42,0.82),inset_0_1px_0_rgba(255,255,255,0.36)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/52',
+        'inline-flex items-start gap-1',
         props.class,
       )}
     >
