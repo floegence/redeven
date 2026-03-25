@@ -302,24 +302,12 @@ export interface GitShortcutOrbButtonProps {
 function gitShortcutOrbShellClass(tone: GitShortcutOrbTone): string {
   switch (tone) {
     case 'flower':
-      return 'border-primary/24 bg-gradient-to-br from-primary/24 via-background/92 to-amber-400/18 text-primary shadow-[0_18px_36px_-24px_rgba(37,99,235,0.52)]';
+      return 'border-orange-300/45 bg-gradient-to-br from-amber-200/95 via-orange-300/88 to-orange-500/82 text-orange-950 shadow-[0_18px_36px_-24px_rgba(249,115,22,0.58)] dark:text-orange-50';
     case 'terminal':
       return 'border-sky-500/24 bg-gradient-to-br from-sky-500/18 via-background/92 to-cyan-300/16 text-sky-700 shadow-[0_18px_36px_-24px_rgba(14,165,233,0.42)] dark:text-sky-200';
     case 'files':
     default:
       return 'border-emerald-500/22 bg-gradient-to-br from-emerald-500/18 via-background/92 to-amber-300/16 text-emerald-700 shadow-[0_18px_36px_-24px_rgba(16,185,129,0.38)] dark:text-emerald-200';
-  }
-}
-
-function gitShortcutOrbLabelClass(tone: GitShortcutOrbTone): string {
-  switch (tone) {
-    case 'flower':
-      return 'text-primary/78 group-hover:text-primary';
-    case 'terminal':
-      return 'text-sky-700/78 group-hover:text-sky-800 dark:text-sky-200/82 dark:group-hover:text-sky-100';
-    case 'files':
-    default:
-      return 'text-emerald-700/80 group-hover:text-emerald-800 dark:text-emerald-200/82 dark:group-hover:text-emerald-100';
   }
 }
 
@@ -336,8 +324,8 @@ export function GitShortcutOrbButton(props: GitShortcutOrbButtonProps) {
       aria-label={props.label}
       disabled={Boolean(props.disabled)}
       class={cn(
-        'group relative flex cursor-pointer flex-col items-center justify-start gap-0.5 rounded-xl px-0.5 py-0.5 text-center transition-[transform,color,opacity] duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45',
-        size() === 'sm' ? 'min-w-[2.75rem]' : 'min-w-[3.125rem]',
+        'group relative inline-flex cursor-pointer items-center justify-center rounded-full p-0.5 transition-[transform,color,opacity] duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45',
+        size() === 'sm' ? 'h-9 w-9' : 'h-10 w-10',
         props.class,
       )}
       onClick={props.onClick}
@@ -360,15 +348,6 @@ export function GitShortcutOrbButton(props: GitShortcutOrbButtonProps) {
             props.iconClass,
           )}
         />
-      </span>
-      <span
-        class={cn(
-          'text-[9px] font-semibold leading-none tracking-[0.03em] transition-colors duration-200',
-          size() === 'sm' && 'text-[8px]',
-          gitShortcutOrbLabelClass(props.tone),
-        )}
-      >
-        {props.label}
       </span>
     </button>
   );
