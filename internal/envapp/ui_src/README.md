@@ -27,6 +27,12 @@ Notes:
 - Avoid global `border-style` injections on `*` selectors. They can turn intentional `border: none` declarations back into visible medium-width borders on native controls.
 - When a visual adjustment only belongs to one surface or component family, scope it to that component class instead of patching every element globally.
 
+## Floating Layer Contract
+
+- Tooltips and other anchored floating affordances must not rely on inline absolute positioning inside dialog bodies, cards, or other `overflow-hidden` containers.
+- The shared Env App tooltip primitive renders through a body-level portal and resolves viewport-safe anchor geometry so dialogs can keep their clipping and scroll boundaries intact.
+- New anchored overlays should reuse the shared positioning helper instead of weakening dialog/container overflow rules just to make a floating layer visible.
+
 ## Flower Chat Render Contract
 
 The Flower chat UI now follows four explicit constraints:

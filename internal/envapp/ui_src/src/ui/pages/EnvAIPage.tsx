@@ -16,7 +16,7 @@ import { FlowerIcon } from '../icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from '../icons/FlowerSoftAuraIcon';
 import { LoadingOverlay, SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Button, ConfirmDialog, Dialog, DirectoryPicker, Dropdown, Input, Select, Tooltip, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, Dialog, DirectoryPicker, Dropdown, Input, Select, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import {
   AttachmentPreview,
   ChatProvider,
@@ -44,6 +44,7 @@ import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
 import { useAIChatContext } from './AIChatContext';
 import { useRedevenRpc, type FsFileInfo } from '../protocol/redeven_v1';
+import { Tooltip } from '../primitives/Tooltip';
 import { fetchGatewayJSON, prepareGatewayRequestInit, uploadGatewayFile } from '../services/gatewayApi';
 import { decorateMessageBlocks, decorateStreamEvent } from './aiBlockPresentation';
 import {

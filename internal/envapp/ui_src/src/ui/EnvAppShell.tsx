@@ -20,7 +20,6 @@ import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Tooltip } from '@floegence/floe-webapp-core/ui';
 import type { ClientObserverLike } from '@floegence/flowersec-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
@@ -52,6 +51,7 @@ import { createAgentVersionModel } from './maintenance/createAgentVersionModel';
 import { AuditLogDialog } from './widgets/AuditLogDialog';
 import { AgentUpdateFloatingPrompt } from './widgets/AgentUpdateFloatingPrompt';
 import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
+import { Tooltip } from './primitives/Tooltip';
 import { createFileBrowserSurfaceController } from './widgets/createFileBrowserSurfaceController';
 import { createFilePreviewController } from './widgets/createFilePreviewController';
 import { DetachedSurfaceScene } from './widgets/DetachedSurfaceScene';

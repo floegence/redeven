@@ -16,7 +16,6 @@ import {
   Input,
   Tag,
   type TagProps,
-  Tooltip,
 } from '@floegence/floe-webapp-core/ui';
 
 import { getEnvPublicIDFromSession, mintEnvEntryTicketForApp } from '../services/controlplaneApi';
@@ -24,6 +23,7 @@ import { FLOE_APP_PORT_FORWARD } from '../services/floeproxyContract';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { trustedLauncherOriginFromSandboxLocation } from '../services/sandboxOrigins';
 import { registerSandboxWindow } from '../services/sandboxWindowRegistry';
+import { Tooltip } from '../primitives/Tooltip';
 import { useEnvContext } from './EnvContext';
 
 // ============================================================================

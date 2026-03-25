@@ -1,7 +1,7 @@
 import { Show } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Files as FilesIcon, History } from '@floegence/floe-webapp-core/icons';
-import { Tooltip } from '@floegence/floe-webapp-core/ui';
+import { Tooltip } from '../primitives/Tooltip';
 
 export type GitHistoryMode = 'files' | 'git';
 

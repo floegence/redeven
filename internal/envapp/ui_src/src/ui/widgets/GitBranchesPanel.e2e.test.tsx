@@ -99,7 +99,7 @@ async function revealTooltipForButton(button: HTMLButtonElement | undefined): Pr
   expect(host).toBeTruthy();
   host!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
   await Promise.resolve();
-  return host!.querySelector('[role="tooltip"]') as HTMLElement | null;
+  return document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
 }
 
 describe('GitBranchesPanel interactions', () => {

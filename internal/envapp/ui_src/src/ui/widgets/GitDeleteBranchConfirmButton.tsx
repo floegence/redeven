@@ -1,6 +1,7 @@
 import { Show, type JSX } from 'solid-js';
-import { Button, Tooltip } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
 import type { GitBranchSummary, GitPreviewDeleteBranchResponse } from '../protocol/redeven_v1';
+import { Tooltip } from '../primitives/Tooltip';
 
 const deleteReviewLoadingReason = 'Reviewing branch deletion...';
 const deleteReviewMissingReason = 'Choose a branch to review its deletion plan.';

@@ -16,11 +16,11 @@ import {
   DirectoryInput,
   Input,
   Tag,
-  Tooltip,
 } from "@floegence/floe-webapp-core/ui";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
 import { useEnvContext } from "./EnvContext";
 import { useRedevenRpc, type FsFileInfo } from "../protocol/redeven_v1";
+import { Tooltip } from "../primitives/Tooltip";
 import { getEnvPublicIDFromSession, getLocalRuntime, mintEnvEntryTicketForApp } from "../services/controlplaneApi";
 import { FLOE_APP_CODE } from "../services/floeproxyContract";
 import { fetchGatewayJSON } from "../services/gatewayApi";
