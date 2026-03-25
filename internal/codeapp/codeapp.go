@@ -16,6 +16,7 @@ import (
 	"github.com/floegence/redeven-agent/internal/codeapp/gateway"
 	"github.com/floegence/redeven-agent/internal/codeapp/registry"
 	"github.com/floegence/redeven-agent/internal/codeapp/ui"
+	"github.com/floegence/redeven-agent/internal/codexbridge"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/diagnostics"
 	envui "github.com/floegence/redeven-agent/internal/envapp/ui"
@@ -48,6 +49,7 @@ type Options struct {
 	Shell        string
 
 	AIConfig    *config.AIConfig
+	CodexConfig *config.CodexConfig
 	Audit       *auditlog.Store
 	Diagnostics *diagnostics.Store
 	// LocalUIEnabled enables Local UI-specific runtime behavior such as shorter
@@ -74,6 +76,7 @@ type Service struct {
 	pf     *portforward.Service
 	runner *codeserver.Runner
 	ai     *ai.Service
+	codex  *codexbridge.Manager
 	gw     *gateway.Gateway
 }
 
@@ -185,12 +188,25 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 
+	codexSvc, err := codexbridge.NewManager(codexbridge.Options{
+		Logger:       logger,
+		Config:       opts.CodexConfig,
+		AgentHomeDir: agentHomeDir,
+	})
+	if err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		_ = aiSvc.Close()
+		return nil, err
+	}
+
 	gw, err := gateway.New(gateway.Options{
 		Logger:                  logger,
 		DistFS:                  mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
 		Backend:                 svc,
 		PortForward:             pfSvc,
 		AI:                      aiSvc,
+		Codex:                   codexSvc,
 		Audit:                   opts.Audit,
 		Diagnostics:             opts.Diagnostics,
 		ResolveSessionMeta:      opts.ResolveSessionMeta,
@@ -203,16 +219,19 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = reg.Close()
 		_ = pfSvc.Close()
 		_ = aiSvc.Close()
+		_ = codexSvc.Close()
 		return nil, err
 	}
 	if err := gw.Start(ctx); err != nil {
 		_ = reg.Close()
 		_ = pfSvc.Close()
 		_ = aiSvc.Close()
+		_ = codexSvc.Close()
 		return nil, err
 	}
 	svc.gw = gw
 	svc.ai = aiSvc
+	svc.codex = codexSvc
 
 	return svc, nil
 }
@@ -235,6 +254,9 @@ func (s *Service) Close() error {
 	}
 	if s.ai != nil {
 		_ = s.ai.Close()
+	}
+	if s.codex != nil {
+		_ = s.codex.Close()
 	}
 	return nil
 }

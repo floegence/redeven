@@ -44,6 +44,14 @@ export type AIConfig = Readonly<{
 
 export type AISecretsView = Readonly<{ provider_api_key_set: Record<string, boolean> }>;
 
+export type CodexConfig = Readonly<{
+  enabled: boolean;
+  binary_path?: string;
+  default_model?: string;
+  approval_policy?: 'untrusted' | 'on_failure' | 'on_request' | 'never';
+  sandbox_mode?: 'read_only' | 'workspace_write' | 'danger_full_access';
+}>;
+
 export type SkillCatalogNotice = Readonly<{
   name?: string;
   path?: string;

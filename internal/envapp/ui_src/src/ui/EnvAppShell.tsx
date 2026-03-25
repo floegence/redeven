@@ -18,6 +18,7 @@ import {
 } from '@floegence/floe-webapp-core/icons';
 import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
+import { CodexIcon } from './icons/CodexIcon';
 import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { ClientObserverLike } from '@floegence/flowersec-core';
@@ -38,6 +39,7 @@ import { EnvFileBrowserPage } from './pages/EnvFileBrowserPage';
 import { EnvCodespacesPage } from './pages/EnvCodespacesPage';
 import { EnvPortForwardsPage } from './pages/EnvPortForwardsPage';
 import { EnvAIPage } from './pages/EnvAIPage';
+import { CodexPage } from './codex/CodexPage';
 import { AIChatContext, createAIChatContextValue, type ModelsResponse } from './pages/AIChatContext';
 import { AIChatSidebar } from './pages/AIChatSidebar';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
@@ -204,7 +206,8 @@ function readPersistedActiveTab(): EnvNavTab | null {
     v === 'files' ||
     v === 'codespaces' ||
     v === 'ports' ||
-    v === 'ai'
+    v === 'ai' ||
+    v === 'codex'
   ) {
     return v;
   }
@@ -406,6 +409,7 @@ export function EnvAppShell() {
   const canAdmin = createMemo(() => Boolean(env()?.permissions?.can_admin || env()?.permissions?.is_owner));
   const controlplaneStatus = createMemo(() => String(env()?.status ?? '').trim());
   const canUseFlower = createMemo(() => env.state === 'ready' && hasRWXPermissions(env()));
+  const canUseCodex = createMemo(() => env.state === 'ready' && hasRWXPermissions(env()));
 
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
   const [filesMobileSidebarOpen, setFilesMobileSidebarOpen] = createSignal(false);
@@ -1274,6 +1278,7 @@ export function EnvAppShell() {
     // permissions load asynchronously, but FloeRegistryRuntime registers components only once on mount.
     // Access to Flower is still gated via navigation + permission checks.
     list.push({ id: 'ai', name: 'Flower', icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
+    list.push({ id: 'codex', name: 'Codex', icon: CodexIcon, component: CodexPage, sidebar: { order: 8, fullScreen: false, renderIn: 'main' } });
     list.push({ id: 'settings', name: 'Agent Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
     return list;
   });
@@ -1283,6 +1288,10 @@ export function EnvAppShell() {
 
   const goTab = (tab: EnvNavTab) => {
     if (tab === 'ai' && !canUseFlower()) {
+      notify.error('Permission denied', 'Read/write/execute permission required.');
+      return;
+    }
+    if (tab === 'codex' && !canUseCodex()) {
       notify.error('Permission denied', 'Read/write/execute permission required.');
       return;
     }
@@ -1324,6 +1333,13 @@ export function EnvAppShell() {
   });
 
   createEffect(() => {
+    if (layout.sidebarActiveTab() !== 'codex') return;
+    if (canUseCodex()) return;
+    const fallback = layout.isMobile() ? 'terminal' : 'deck';
+    layout.setSidebarActiveTab(fallback, { openSidebar: false });
+  });
+
+  createEffect(() => {
     if (!layout.isMobile() || layout.sidebarActiveTab() !== 'files') {
       setFilesMobileSidebarOpen(false);
     }
@@ -1342,6 +1358,7 @@ export function EnvAppShell() {
       id === 'files' ||
       id === 'codespaces' ||
       (id === 'ai' && canUseFlower()) ||
+      (id === 'codex' && canUseCodex()) ||
       (allowPorts && id === 'ports');
     if (!isKnown) return;
     if (skipPersistOnce) {
@@ -1388,6 +1405,14 @@ export function EnvAppShell() {
         id: 'ai',
         icon: (props) => <FlowerSoftAuraIcon class={props.class} tone="primary" />,
         label: 'Flower',
+        collapseBehavior: 'toggle',
+      });
+    }
+    if (canUseCodex()) {
+      items.push({
+        id: 'codex',
+        icon: CodexIcon,
+        label: 'Codex',
         collapseBehavior: 'toggle',
       });
     }
@@ -1485,6 +1510,16 @@ export function EnvAppShell() {
         execute: () => goTab('ports'),
       });
     }
+
+    list.push({
+      id: 'redeven.env.goToCodex',
+      title: 'Go to Codex',
+      description: 'Open Codex',
+      category: 'Navigation',
+      keybind: 'mod+shift+x',
+      icon: CodexIcon,
+      execute: () => goTab('codex'),
+    });
 
     list.push(
       {

@@ -25,6 +25,7 @@ import (
 
 	"github.com/floegence/redeven-agent/internal/ai"
 	"github.com/floegence/redeven-agent/internal/auditlog"
+	"github.com/floegence/redeven-agent/internal/codexbridge"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/diagnostics"
 	"github.com/floegence/redeven-agent/internal/pathutil"
@@ -41,6 +42,7 @@ type Options struct {
 	Backend                 Backend
 	PortForward             PortForwardBackend
 	AI                      *ai.Service
+	Codex                   CodexBackend
 	Audit                   *auditlog.Store
 	Diagnostics             *diagnostics.Store
 	ResolveSessionMeta      func(channelID string) (*session.Meta, bool)
@@ -70,6 +72,18 @@ type PortForwardBackend interface {
 	UpdateForward(ctx context.Context, forwardID string, req portforward.UpdateForwardRequest) (*pfregistry.Forward, error)
 	DeleteForward(ctx context.Context, forwardID string) error
 	TouchLastOpened(ctx context.Context, forwardID string) (*pfregistry.Forward, error)
+}
+
+type CodexBackend interface {
+	Status(ctx context.Context) codexbridge.Status
+	UpdateConfig(next *config.CodexConfig) error
+	ListThreads(ctx context.Context, limit int) ([]codexbridge.Thread, error)
+	OpenThread(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
+	StartThread(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.Thread, error)
+	StartTurn(ctx context.Context, req codexbridge.StartTurnRequest) (*codexbridge.Turn, error)
+	ArchiveThread(ctx context.Context, threadID string) error
+	SubscribeThreadEvents(ctx context.Context, threadID string, afterSeq int64) ([]codexbridge.Event, <-chan codexbridge.Event, error)
+	RespondToRequest(ctx context.Context, threadID string, requestID string, resp codexbridge.PendingRequestResponse) error
 }
 
 type SpaceStatus struct {
@@ -103,6 +117,7 @@ type Gateway struct {
 	backend Backend
 	pf      PortForwardBackend
 	ai      *ai.Service
+	codex   CodexBackend
 	audit   *auditlog.Store
 	diag    *diagnostics.Store
 
@@ -214,6 +229,7 @@ func New(opts Options) (*Gateway, error) {
 		backend:                 opts.Backend,
 		pf:                      opts.PortForward,
 		ai:                      opts.AI,
+		codex:                   opts.Codex,
 		audit:                   opts.Audit,
 		diag:                    opts.Diagnostics,
 		resolveSessionMeta:      opts.ResolveSessionMeta,
@@ -403,6 +419,7 @@ type settingsView struct {
 
 	PermissionPolicy *config.PermissionPolicy `json:"permission_policy"`
 	AI               *config.AIConfig         `json:"ai"`
+	Codex            *config.CodexConfig      `json:"codex"`
 	AISecrets        *settingsAISecretsView   `json:"ai_secrets,omitempty"`
 }
 
@@ -506,6 +523,23 @@ func writeAISkillError(w http.ResponseWriter, fallbackStatus int, err error) {
 	writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: code})
 }
 
+func writeCodexError(w http.ResponseWriter, err error) {
+	var status int
+	switch {
+	case err == nil:
+		status = http.StatusOK
+	case errors.Is(err, codexbridge.ErrDisabled):
+		status = http.StatusServiceUnavailable
+	case errors.Is(err, codexbridge.ErrThreadNotFound), errors.Is(err, codexbridge.ErrRequestNotFound):
+		status = http.StatusNotFound
+	case errors.Is(err, codexbridge.ErrInvalidResponse):
+		status = http.StatusBadRequest
+	default:
+		status = http.StatusBadRequest
+	}
+	writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+}
+
 type diagnosticsView struct {
 	Enabled      bool                      `json:"enabled"`
 	StateDir     string                    `json:"state_dir,omitempty"`
@@ -598,6 +632,82 @@ func (g *Gateway) buildDiagnosticsExportView(sourceLimit int, summaryLimit int) 
 	return view, nil
 }
 
+func (g *Gateway) handleCodexEventStream(w http.ResponseWriter, r *http.Request, threadID string) {
+	if g == nil || g.codex == nil {
+		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "codex service not ready"})
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "streaming not supported"})
+		return
+	}
+	afterSeq := int64(0)
+	if raw := strings.TrimSpace(r.URL.Query().Get("after_seq")); raw != "" {
+		value, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || value < 0 {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid after_seq"})
+			return
+		}
+		afterSeq = value
+	}
+	snapshot, ch, err := g.codex.SubscribeThreadEvents(r.Context(), threadID, afterSeq)
+	if err != nil {
+		writeCodexError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Connection", "keep-alive")
+	for _, ev := range snapshot {
+		if err := writeCodexSSEEvent(w, ev); err != nil {
+			return
+		}
+		flusher.Flush()
+	}
+
+	keepAlive := time.NewTicker(20 * time.Second)
+	defer keepAlive.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-keepAlive.C:
+			if _, err := io.WriteString(w, ": keepalive\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		case ev, ok := <-ch:
+			if !ok {
+				return
+			}
+			if err := writeCodexSSEEvent(w, ev); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
+func writeCodexSSEEvent(w io.Writer, ev codexbridge.Event) error {
+	b, err := json.Marshal(ev)
+	if err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, "event: codex_event\n"); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, "data: "); err != nil {
+		return err
+	}
+	if _, err := w.Write(b); err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, "\n\n")
+	return err
+}
+
 func toSettingsView(cfg *config.Config, configPath string, secrets *settings.SecretsStore) settingsView {
 	var direct settingsDirectView
 	if cfg != nil && cfg.Direct != nil {
@@ -633,6 +743,7 @@ func toSettingsView(cfg *config.Config, configPath string, secrets *settings.Sec
 		}
 		out.PermissionPolicy = cfg.PermissionPolicy
 		out.AI = cfg.AI
+		out.Codex = cfg.Codex
 
 		if secrets != nil && cfg.AI != nil && len(cfg.AI.Providers) > 0 {
 			ids := make([]string, 0, len(cfg.AI.Providers))
@@ -992,6 +1103,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 			PermissionPolicy json.RawMessage `json:"permission_policy,omitempty"`
 			AI               json.RawMessage `json:"ai,omitempty"`
+			Codex            json.RawMessage `json:"codex,omitempty"`
 		}
 
 		dec := json.NewDecoder(r.Body)
@@ -1009,7 +1121,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if body.AgentHomeDir == nil && body.Shell == nil &&
 			body.LogFormat == nil && body.LogLevel == nil &&
 			body.CodeServerPortMin == nil && body.CodeServerPortMax == nil &&
-			len(body.PermissionPolicy) == 0 && len(body.AI) == 0 {
+			len(body.PermissionPolicy) == 0 && len(body.AI) == 0 && len(body.Codex) == 0 {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 			return
 		}
@@ -1061,6 +1173,30 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		var nextCodex *config.CodexConfig
+		if len(body.Codex) > 0 {
+			raw := bytes.TrimSpace(body.Codex)
+			if !bytes.Equal(raw, []byte("null")) {
+				var cfg config.CodexConfig
+				codexDec := json.NewDecoder(bytes.NewReader(raw))
+				codexDec.DisallowUnknownFields()
+				if err := codexDec.Decode(&cfg); err != nil {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid codex json"})
+					return
+				}
+				if err := codexDec.Decode(&struct{}{}); err != io.EOF {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid codex json"})
+					return
+				}
+				cfg.Normalize()
+				if err := cfg.Validate(); err != nil {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: fmt.Sprintf("invalid codex: %s", err.Error())})
+					return
+				}
+				nextCodex = &cfg
+			}
+		}
+
 		auditDetail := map[string]any{}
 		if body.AgentHomeDir != nil {
 			auditDetail["agent_home_dir"] = strings.TrimSpace(*body.AgentHomeDir)
@@ -1086,6 +1222,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if len(body.AI) > 0 {
 			// Do NOT log any AI config details (may include secrets).
 			auditDetail["ai_updated"] = true
+		}
+		if len(body.Codex) > 0 {
+			auditDetail["codex_updated"] = true
 		}
 		endpointID := strings.TrimSpace(meta.EndpointID)
 		aiUpdate := (*settingsAIUpdateView)(nil)
@@ -1132,6 +1271,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				if len(body.AI) > 0 {
 					c.AI = nextAI
 				}
+				if len(body.Codex) > 0 {
+					c.Codex = nextCodex
+				}
 				return nil
 			})
 			if err != nil {
@@ -1157,6 +1299,13 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
+		if len(body.Codex) > 0 && g.codex != nil {
+			if err := g.codex.UpdateConfig(nextCodex); err != nil {
+				g.appendAudit(meta, "settings_update", "failure", auditDetail, err)
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+		}
 
 		g.appendAudit(meta, "settings_update", "success", auditDetail, nil)
 		writeJSON(w, http.StatusOK, apiResp{
@@ -1167,6 +1316,178 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			},
 		})
 		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/codex/status":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		if g.codex == nil {
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: codexbridge.Status{AgentHomeDir: ""}})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.codex.Status(r.Context())})
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/codex/threads":
+		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
+			return
+		}
+		if g.codex == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "codex service not ready"})
+			return
+		}
+		limit := 100
+		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+			if v, err := strconv.Atoi(raw); err == nil {
+				limit = v
+			}
+		}
+		threads, err := g.codex.ListThreads(r.Context(), limit)
+		if err != nil {
+			writeCodexError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"threads": threads}})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/codex/threads":
+		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
+			return
+		}
+		if g.codex == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "codex service not ready"})
+			return
+		}
+		type reqBody struct {
+			CWD   string `json:"cwd"`
+			Model string `json:"model"`
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body reqBody
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		thread, err := g.codex.StartThread(r.Context(), codexbridge.StartThreadRequest{
+			CWD:   strings.TrimSpace(body.CWD),
+			Model: strings.TrimSpace(body.Model),
+		})
+		if err != nil {
+			writeCodexError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"thread": thread}})
+		return
+
+	case strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/codex/threads/"):
+		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
+			return
+		}
+		if g.codex == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "codex service not ready"})
+			return
+		}
+		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/codex/threads/")
+		parts := strings.Split(rest, "/")
+		if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+		threadID, err := url.PathUnescape(parts[0])
+		if err != nil || strings.TrimSpace(threadID) == "" {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+		if len(parts) == 1 {
+			if r.Method != http.MethodGet {
+				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+				return
+			}
+			detail, err := g.codex.OpenThread(r.Context(), threadID)
+			if err != nil {
+				writeCodexError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: detail})
+			return
+		}
+		switch {
+		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "archive":
+			if err := g.codex.ArchiveThread(r.Context(), threadID); err != nil {
+				writeCodexError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
+		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "turns":
+			type reqBody struct {
+				InputText string `json:"input_text"`
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body reqBody
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			turn, err := g.codex.StartTurn(r.Context(), codexbridge.StartTurnRequest{
+				ThreadID:  threadID,
+				InputText: strings.TrimSpace(body.InputText),
+			})
+			if err != nil {
+				writeCodexError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"turn": turn}})
+			return
+		case len(parts) == 2 && r.Method == http.MethodGet && parts[1] == "events":
+			g.handleCodexEventStream(w, r, threadID)
+			return
+		case len(parts) == 4 && r.Method == http.MethodPost && parts[1] == "requests" && parts[3] == "response":
+			requestID, err := url.PathUnescape(parts[2])
+			if err != nil || strings.TrimSpace(requestID) == "" {
+				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+				return
+			}
+			type reqBody struct {
+				Type     string              `json:"type"`
+				Decision string              `json:"decision"`
+				Answers  map[string][]string `json:"answers"`
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body reqBody
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := g.codex.RespondToRequest(r.Context(), threadID, requestID, codexbridge.PendingRequestResponse{
+				Type:     strings.TrimSpace(body.Type),
+				Decision: strings.TrimSpace(body.Decision),
+				Answers:  body.Answers,
+			}); err != nil {
+				writeCodexError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
+		default:
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/provider_keys/status":
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
