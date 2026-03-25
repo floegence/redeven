@@ -1,3 +1,4 @@
+import { getMessageRenderKey } from '../chat/messageIdentity';
 import type { Message, MessageBlock } from '../chat/types';
 import type { SubagentView } from './aiDataNormalizers';
 
@@ -59,7 +60,7 @@ export function projectThreadTranscriptMessages(args: ProjectThreadTranscriptMes
   const liveAssistantMessage = args.liveAssistantMessage;
   const liveAssistantID = String(liveAssistantMessage?.id ?? '').trim();
   if (liveAssistantMessage && liveAssistantMessage.role === 'assistant' && liveAssistantID && !seen.has(liveAssistantID)) {
-    projected.push(liveAssistantMessage);
+    projected.push(carryForwardActiveAssistantRenderIdentity(args.previousRenderedMessages, liveAssistantMessage));
     seen.add(liveAssistantID);
   }
 
@@ -195,14 +196,17 @@ export function carryForwardTransientMessageState(previousRenderedMessages: Mess
     const previous = previousById.get(String(message?.id ?? '').trim());
     if (!previous) return message;
 
+    const nextRenderKey = carryForwardRenderKey(previous, message);
     const mergedBlocks = carryForwardBlocks(previous.blocks, message.blocks);
-    if (mergedBlocks === message.blocks) {
+    const renderKeyChanged = nextRenderKey !== String(message.renderKey ?? '').trim();
+    if (mergedBlocks === message.blocks && !renderKeyChanged) {
       return message;
     }
 
     changed = true;
     return {
       ...message,
+      renderKey: nextRenderKey || undefined,
       blocks: mergedBlocks,
     };
   });
@@ -212,6 +216,41 @@ export function carryForwardTransientMessageState(previousRenderedMessages: Mess
 
 function shouldCarryForwardLocalOnlyMessage(message: Message): boolean {
   return message.role === 'user' || message.role === 'system';
+}
+
+function carryForwardActiveAssistantRenderIdentity(previousRenderedMessages: Message[], nextMessage: Message): Message {
+  const previous = findPreviousActiveAssistantMessage(previousRenderedMessages);
+  if (!previous) {
+    return nextMessage;
+  }
+
+  const nextRenderKey = getMessageRenderKey(previous);
+  if (!nextRenderKey || nextRenderKey === String(nextMessage.renderKey ?? '').trim()) {
+    return nextMessage;
+  }
+
+  return {
+    ...nextMessage,
+    renderKey: nextRenderKey,
+  };
+}
+
+function findPreviousActiveAssistantMessage(messages: Message[]): Message | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== 'assistant') continue;
+    if (message.status !== 'streaming') continue;
+    return message;
+  }
+  return null;
+}
+
+function carryForwardRenderKey(previous: Message, next: Message): string {
+  const previousRenderKey = String(previous.renderKey ?? '').trim();
+  if (previousRenderKey) {
+    return previousRenderKey;
+  }
+  return String(next.renderKey ?? '').trim();
 }
 
 function carryForwardBlocks(previousBlocks: MessageBlock[], nextBlocks: MessageBlock[]): MessageBlock[] {

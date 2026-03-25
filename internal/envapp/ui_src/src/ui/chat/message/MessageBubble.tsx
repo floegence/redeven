@@ -1,6 +1,6 @@
 // Renders message blocks inside a styled bubble.
 
-import { For, Show, createMemo } from 'solid-js';
+import { Index, Show, createMemo } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { Message, MessageBlock } from '../types';
@@ -68,21 +68,22 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
         props.class,
       )}
     >
-      <For each={visibleBlockIndices()}>
-        {(index) => {
-          const block = () => props.message.blocks[index];
+      <Index each={visibleBlockIndices()}>
+        {(indexAccessor) => {
+          const blockIndex = () => indexAccessor();
+          const block = () => props.message.blocks[blockIndex()];
           return (
             <div class={slotClass(block()!)}>
               <BlockRenderer
                 block={block()!}
                 messageId={props.message.id}
-                blockIndex={index}
+                blockIndex={blockIndex()}
                 isStreaming={block()!.type === 'markdown' ? props.message.status === 'streaming' : undefined}
               />
             </div>
           );
         }}
-      </For>
+      </Index>
 
       <Show when={props.message.status === 'error' && props.message.error}>
         <div class="chat-message-error">

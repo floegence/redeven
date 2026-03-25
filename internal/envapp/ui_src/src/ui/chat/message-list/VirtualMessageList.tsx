@@ -1,10 +1,11 @@
 // Virtualized message list with a single, explicit follow-state machine.
 
 import { createEffect, createMemo, createSignal, onCleanup, Show, For } from 'solid-js';
-import type { Component, JSX } from 'solid-js';
+import type { Accessor, Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { useChatContext } from '../ChatProvider';
 import { useVirtualList } from '../hooks/useVirtualList';
+import { getMessageRenderKey } from '../messageIdentity';
 import { WorkingIndicator } from '../status/WorkingIndicator';
 import { MessageItem } from '../message/MessageItem';
 import type { Message } from '../types';
@@ -12,8 +13,12 @@ import { captureViewportAnchor, resolveViewportAnchorScrollTop, type ViewportAnc
 
 export interface VirtualMessageListProps {
   class?: string;
-  footer?: JSX.Element;
-  hasFooter?: boolean;
+}
+
+interface VirtualMessageRowProps {
+  renderKey: string;
+  observeItem: (el: HTMLElement, renderKey: string) => void;
+  messageByRenderKey: Accessor<Map<string, Message>>;
 }
 
 /** Chevron-down icon for the scroll-to-bottom button. */
@@ -37,6 +42,15 @@ type FollowMode = 'following' | 'paused';
 const FOLLOW_BOTTOM_THRESHOLD_PX = 24;
 const EXTERNAL_SCROLL_SYNC_PASSES = 2;
 
+const VirtualMessageRow: Component<VirtualMessageRowProps> = (props) => (
+  <div
+    class="chat-message-list-item"
+    ref={(el: HTMLElement) => props.observeItem(el, props.renderKey)}
+  >
+    <MessageItem message={props.messageByRenderKey().get(props.renderKey)!} />
+  </div>
+);
+
 export const VirtualMessageList: Component<VirtualMessageListProps> = (props) => {
   const ctx = useChatContext();
 
@@ -50,29 +64,32 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   const [pendingMessageCount, setPendingMessageCount] = createSignal(0);
   const [scrollContainerVersion, setScrollContainerVersion] = createSignal(0);
 
-  const messageById = createMemo(() => {
-    const byId = new Map<string, Message>();
+  const messageByRenderKey = createMemo(() => {
+    const byKey = new Map<string, Message>();
     messages().forEach((msg) => {
-      byId.set(msg.id, msg);
+      byKey.set(getMessageRenderKey(msg), msg);
     });
-    return byId;
+    return byKey;
   });
 
-  const messageIndexById = createMemo(() => {
-    const indexById = new Map<string, number>();
+  const messageIndexByRenderKey = createMemo(() => {
+    const indexByKey = new Map<string, number>();
     messages().forEach((msg, index) => {
-      indexById.set(msg.id, index);
+      indexByKey.set(getMessageRenderKey(msg), index);
     });
-    return indexById;
+    return indexByKey;
   });
 
   const virtualList = useVirtualList({
     count: () => messages().length,
-    getItemKey: (index: number) => messages()[index]?.id ?? String(index),
+    getItemKey: (index: number) => {
+      const message = messages()[index];
+      return message ? getMessageRenderKey(message) : String(index);
+    },
     getItemHeight: (index: number) => {
       const msg = messages()[index];
       if (!msg) return ctx.virtualListConfig().defaultItemHeight;
-      return ctx.getMessageHeight(msg.id);
+      return ctx.getMessageHeight(getMessageRenderKey(msg));
     },
     config: ctx.virtualListConfig(),
   });
@@ -84,7 +101,6 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   let lastHandledScrollRequestSeq = 0;
   let followToBottomRaf: number | null = null;
   let viewportAnchor: ViewportAnchor | null = null;
-  let footerEl: HTMLElement | null = null;
 
   const getDistanceToBottom = (el: HTMLElement) =>
     Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight);
@@ -116,7 +132,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
 
   const capturePausedViewportAnchor = (el: HTMLElement): void => {
     viewportAnchor = captureViewportAnchor({
-      messageIds: messages().map((message) => message.id),
+      messageIds: messages().map((message) => getMessageRenderKey(message)),
       visibleRangeStart: virtualList.visibleRange().start,
       scrollTop: el.scrollTop,
       getItemOffset: virtualList.getItemOffset,
@@ -125,7 +141,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
         if (!message) {
           return ctx.virtualListConfig().defaultItemHeight;
         }
-        return ctx.getMessageHeight(message.id);
+        return ctx.getMessageHeight(getMessageRenderKey(message));
       },
     });
   };
@@ -160,9 +176,8 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   // Auto-follow only when in FOLLOWING mode; otherwise collect unread count.
   createEffect(() => {
     const currentCount = messages().length;
-    const hasFooter = props.hasFooter === true;
 
-    if (currentCount <= 0 && !hasFooter) {
+    if (currentCount <= 0) {
       prevMessageCount = 0;
       didInitialBottomSync = false;
       setPendingMessageCount(0);
@@ -191,7 +206,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   createEffect(() => {
     scrollContainerVersion();
     const currentCount = messages().length;
-    if ((currentCount <= 0 && props.hasFooter !== true) || !scrollContainerEl) {
+    if (currentCount <= 0 || !scrollContainerEl) {
       didInitialBottomSync = false;
       return;
     }
@@ -267,7 +282,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
       const messageId = resizeObserverMap.get(el);
       if (!messageId) continue;
 
-      const index = messageIndexById().get(messageId);
+      const index = messageIndexByRenderKey().get(messageId);
       if (index === undefined) continue;
 
       const rawHeight =
@@ -302,7 +317,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     if (keepViewportAnchor && target) {
       const nextAnchorScrollTop = resolveViewportAnchorScrollTop(
         viewportAnchor,
-        messageIndexById(),
+        messageIndexByRenderKey(),
         virtualList.getItemOffset,
       );
       if (nextAnchorScrollTop !== null && Math.abs(nextAnchorScrollTop - target.scrollTop) > 0.5) {
@@ -317,18 +332,9 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     }
   });
 
-  const footerResizeObserver = new ResizeObserver(() => {
-    updateDistanceToBottom();
-    if (followMode() === 'following') {
-      scheduleFollowToBottom('auto');
-    }
-  });
-
   onCleanup(() => {
     scrollContainerEl = null;
     resizeObserver.disconnect();
-    footerResizeObserver.disconnect();
-    footerEl = null;
     if (followToBottomRaf !== null) {
       cancelAnimationFrame(followToBottomRaf);
       followToBottomRaf = null;
@@ -341,33 +347,15 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     resizeObserver.observe(el);
   }
 
-  function observeFooter(el: HTMLElement | null): void {
-    if (footerEl === el) return;
-    if (footerEl) {
-      footerResizeObserver.unobserve(footerEl);
-    }
-    footerEl = el;
-    if (footerEl) {
-      footerResizeObserver.observe(footerEl);
-    }
-  }
-
-  createEffect(() => {
-    if (props.hasFooter === true) return;
-    if (!footerEl) return;
-    footerResizeObserver.unobserve(footerEl);
-    footerEl = null;
-  });
-
-  const visibleMessageIds = createMemo<string[]>(() => {
+  const visibleMessageRenderKeys = createMemo<string[]>(() => {
     const currentMessages = messages();
-    const ids: string[] = [];
+    const keys: string[] = [];
     virtualList.virtualItems().forEach((item) => {
       const msg = currentMessages[item.index];
       if (!msg) return;
-      ids.push(msg.id);
+      keys.push(getMessageRenderKey(msg));
     });
-    return ids;
+    return keys;
   });
 
   return (
@@ -394,18 +382,13 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
             style={{ height: `${virtualList.paddingTop()}px` }}
           />
 
-          <For each={visibleMessageIds()}>
-            {(messageId) => (
-              <Show when={messageById().get(messageId)}>
-                {(msg) => (
-                  <div
-                    class="chat-message-list-item"
-                    ref={(el: HTMLElement) => observeItem(el, messageId)}
-                  >
-                    <MessageItem message={msg()} />
-                  </div>
-                )}
-              </Show>
+          <For each={visibleMessageRenderKeys()}>
+            {(renderKey) => (
+              <VirtualMessageRow
+                renderKey={renderKey}
+                observeItem={observeItem}
+                messageByRenderKey={messageByRenderKey}
+              />
             )}
           </For>
 
@@ -413,15 +396,6 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
             class="chat-vlist-spacer"
             style={{ height: `${virtualList.paddingBottom()}px` }}
           />
-
-          <Show when={props.hasFooter === true && props.footer}>
-            <div
-              class="chat-message-list-footer"
-              ref={(el: HTMLElement) => observeFooter(el)}
-            >
-              {props.footer}
-            </div>
-          </Show>
         </div>
 
         <Show when={showListWorkingIndicator() && isWorking()}>

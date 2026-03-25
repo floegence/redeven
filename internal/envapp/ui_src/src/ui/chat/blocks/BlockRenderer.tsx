@@ -68,29 +68,27 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
       }
     >
       {/* Eagerly loaded blocks */}
-      <Match when={props.block.type === 'text' && props.block}>
-        {(block) => <TextBlock content={block().content} />}
+      <Match when={props.block.type === 'text'}>
+        <TextBlock content={(props.block as { content: string }).content} />
       </Match>
 
-      <Match when={props.block.type === 'markdown' && props.block}>
-        {(block) => (
-          <MarkdownBlock
-            content={(block() as { content: string }).content}
-            streaming={props.isStreaming}
-          />
-        )}
+      <Match when={props.block.type === 'markdown'}>
+        <MarkdownBlock
+          content={(props.block as { content: string }).content}
+          streaming={props.isStreaming}
+        />
       </Match>
 
-      <Match when={props.block.type === 'image' && props.block}>
-        {(block) => {
-          const b = block() as { src: string; alt?: string };
+      <Match when={props.block.type === 'image'}>
+        {(() => {
+          const b = props.block as { src: string; alt?: string };
           return <ImageBlock src={b.src} alt={b.alt} />;
-        }}
+        })()}
       </Match>
 
-      <Match when={props.block.type === 'file' && props.block}>
-        {(block) => {
-          const b = block() as {
+      <Match when={props.block.type === 'file'}>
+        {(() => {
+          const b = props.block as {
             name: string;
             size: number;
             mimeType: string;
@@ -104,12 +102,12 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               url={b.url}
             />
           );
-        }}
+        })()}
       </Match>
 
-      <Match when={props.block.type === 'checklist' && props.block}>
-        {(block) => {
-          const b = block() as { items: import('../types').ChecklistItem[] };
+      <Match when={props.block.type === 'checklist'}>
+        {(() => {
+          const b = props.block as { items: import('../types').ChecklistItem[] };
           return (
             <ChecklistBlock
               items={b.items}
@@ -117,12 +115,12 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               blockIndex={props.blockIndex}
             />
           );
-        }}
+        })()}
       </Match>
 
-      <Match when={props.block.type === 'shell' && props.block}>
-        {(block) => {
-          const b = block() as {
+      <Match when={props.block.type === 'shell'}>
+        {(() => {
+          const b = props.block as {
             command: string;
             output?: string;
             outputRef?: { runId: string; toolId: string };
@@ -148,19 +146,19 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               status={b.status}
             />
           );
-        }}
+        })()}
       </Match>
 
-      <Match when={props.block.type === 'thinking' && props.block}>
-        {(block) => {
-          const b = block() as { content?: string; duration?: number };
+      <Match when={props.block.type === 'thinking'}>
+        {(() => {
+          const b = props.block as { content?: string; duration?: number };
           return <ThinkingBlock content={b.content} duration={b.duration} />;
-        }}
+        })()}
       </Match>
 
-      <Match when={props.block.type === 'request_user_input_response' && props.block}>
-        {(block) => {
-          const b = block() as {
+      <Match when={props.block.type === 'request_user_input_response'}>
+        {(() => {
+          const b = props.block as {
             public_summary?: string;
             responses?: Array<{ public_summary?: string }>;
             contains_secret?: boolean;
@@ -177,13 +175,13 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               </p>
             </div>
           );
-        }}
+        })()}
       </Match>
 
       {/* Lazy-loaded blocks wrapped in Suspense */}
-      <Match when={props.block.type === 'code' && props.block}>
-        {(block) => {
-          const b = block() as {
+      <Match when={props.block.type === 'code'}>
+        {(() => {
+          const b = props.block as {
             language: string;
             content: string;
             filename?: string;
@@ -197,12 +195,12 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               />
             </Suspense>
           );
-        }}
+        })()}
       </Match>
 
-      <Match when={props.block.type === 'code-diff' && props.block}>
-        {(block) => {
-          const b = block() as {
+      <Match when={props.block.type === 'code-diff'}>
+        {(() => {
+          const b = props.block as {
             language: string;
             oldCode: string;
             newCode: string;
@@ -218,34 +216,34 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               />
             </Suspense>
           );
-        }}
+        })()}
       </Match>
 
-      <Match when={props.block.type === 'mermaid' && props.block}>
-        {(block) => {
-          const b = block() as { content: string };
+      <Match when={props.block.type === 'mermaid'}>
+        {(() => {
+          const b = props.block as { content: string };
           return (
             <Suspense fallback={<BlockSkeleton />}>
               <MermaidBlock content={b.content} />
             </Suspense>
           );
-        }}
+        })()}
       </Match>
 
-      <Match when={props.block.type === 'svg' && props.block}>
-        {(block) => {
-          const b = block() as { content: string };
+      <Match when={props.block.type === 'svg'}>
+        {(() => {
+          const b = props.block as { content: string };
           return (
             <Suspense fallback={<BlockSkeleton />}>
               <SvgBlock content={b.content} />
             </Suspense>
           );
-        }}
+        })()}
       </Match>
 
-      <Match when={props.block.type === 'tool-call' && props.block}>
-        {(block) => {
-          const b = block() as import('../types').ToolCallBlock;
+      <Match when={props.block.type === 'tool-call'}>
+        {(() => {
+          const b = props.block as import('../types').ToolCallBlock;
           return (
             <Suspense fallback={<BlockSkeleton />}>
               <ToolCallBlock
@@ -255,12 +253,12 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               />
             </Suspense>
           );
-        }}
+        })()}
       </Match>
 
-      <Match when={props.block.type === 'todos' && props.block}>
-        {(block) => {
-          const b = block() as import('../types').TodosBlock;
+      <Match when={props.block.type === 'todos'}>
+        {(() => {
+          const b = props.block as import('../types').TodosBlock;
           return (
             <TodosBlock
               version={b.version}
@@ -268,21 +266,15 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               todos={b.todos}
             />
           );
-        }}
+        })()}
       </Match>
 
-      <Match when={props.block.type === 'sources' && props.block}>
-        {(block) => {
-          const b = block() as import('../types').SourcesBlock;
-          return <SourcesBlock sources={b.sources} />;
-        }}
+      <Match when={props.block.type === 'sources'}>
+        <SourcesBlock sources={(props.block as import('../types').SourcesBlock).sources} />
       </Match>
 
-      <Match when={props.block.type === 'subagent' && props.block}>
-        {(block) => {
-          const b = block() as import('../types').SubagentBlock;
-          return <SubagentBlock block={b} />;
-        }}
+      <Match when={props.block.type === 'subagent'}>
+        <SubagentBlock block={props.block as import('../types').SubagentBlock} />
       </Match>
     </Switch>
   );

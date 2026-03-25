@@ -68,11 +68,6 @@
   padding: 0.75rem 1rem;
 }
 
-.chat-message-list-footer {
-  width: 100%;
-  padding: 0 1rem 0.75rem;
-}
-
 .chat-message-list-simple > .chat-message-list-item {
   animation: chatMessageFadeIn 250ms ease-out both;
 }
@@ -149,6 +144,12 @@
   gap: 0.375rem;
   max-width: 85%;
   min-width: 0;
+}
+
+.chat-message-status-rail {
+  display: flex;
+  align-items: center;
+  min-height: 1rem;
 }
 
 .chat-message-ornament {
@@ -274,17 +275,6 @@
 
 .chat-message-block-slot {
   min-width: 0;
-}
-
-.flower-live-run-pane {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.flower-live-run-header {
-  display: flex;
-  justify-content: flex-start;
 }
 
 .chat-markdown-empty-streaming {

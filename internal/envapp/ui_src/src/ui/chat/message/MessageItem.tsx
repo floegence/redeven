@@ -57,6 +57,7 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
   const showFooter = createMemo(() =>
     !(props.message.role === 'assistant' && isActiveAssistantStreaming()),
   );
+  const showStatusRail = createMemo(() => !!messageOrnament() || showFooter());
 
   return (
     <Show when={shouldRenderMessage()}>
@@ -79,21 +80,25 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
         <div class="chat-message-content-wrapper">
           <MessageBubble message={props.message} />
 
-          <Show when={messageOrnament()}>
-            {(ornament) => (
-              <div class="chat-message-ornament">
-                {ornament()}
-              </div>
-            )}
-          </Show>
+          <Show when={showStatusRail()}>
+            <div class="chat-message-status-rail">
+              <Show when={messageOrnament()}>
+                {(ornament) => (
+                  <div class="chat-message-ornament">
+                    {ornament()}
+                  </div>
+                )}
+              </Show>
 
-          <Show when={showFooter()}>
-            <div class="chat-message-footer">
-              <MessageMeta
-                timestamp={props.message.timestamp}
-                status={props.message.status}
-              />
-              <MessageActions message={props.message} />
+              <Show when={showFooter()}>
+                <div class="chat-message-footer">
+                  <MessageMeta
+                    timestamp={props.message.timestamp}
+                    status={props.message.status}
+                  />
+                  <MessageActions message={props.message} />
+                </div>
+              </Show>
             </div>
           </Show>
         </div>

@@ -35,23 +35,32 @@ Notes:
 
 ## Flower Chat Render Contract
 
-The Flower chat UI now follows four explicit constraints:
+The Flower chat UI now follows five explicit constraints:
 
 1. `EnvAIPage` owns the message source states.
    - Transcript rows, active-run snapshot recovery, live assistant stream overlays, and optimistic local user messages must converge through a single render projection before the chat store is updated.
    - Feature code must not add new direct `chat.setMessages()` write paths for individual recovery flows.
 
-2. `VirtualMessageList` owns scroll anchoring.
+2. A live run owns exactly one assistant row in the transcript.
+   - Pending lifecycle states, empty streaming placeholders, streamed answer content, finalization status, and transcript handoff must stay on the same projected assistant row instead of switching between footer containers and message rows.
+   - Footer-based ownership for Flower live-run UI is forbidden.
+   - The active assistant row may use a frontend-only render identity to stay stable across pending placeholder, live stream, and transcript catch-up, but persisted message ids must remain unchanged.
+   - When a pending placeholder adopts the real assistant message, the projection must retain the existing render identity and carry the persisted source id alongside it instead of replacing the row.
+
+3. `VirtualMessageList` owns scroll anchoring.
    - `following` mode is bottom-pinned.
    - `paused` mode is anchored to the first visible message plus its in-item offset, so late message reflow does not pull the viewport upward.
+   - Live-run status changes must not introduce separate footer height that competes with the message list.
 
-3. Transcript overlays consume a shared bottom inset contract.
+4. Transcript overlays consume a shared bottom inset contract.
    - The transcript scroll area, file-browser FAB, and scroll-to-bottom affordance must use the shared transcript overlay inset variables instead of ad-hoc message margins.
 
-4. Streaming assistant visibility is monotonic while a run is live.
+5. Streaming assistant visibility is monotonic while a run is live.
    - Hidden `thinking` blocks are sideband data and must never reuse or replace an already-visible markdown slot.
+   - Thinking-only or otherwise hidden live frames should keep the active assistant row mounted through the pending placeholder path rather than moving visibility to a different container.
    - Backend stream reconciliation should publish the next visible markdown state before clearing obsolete markdown slots whenever possible.
    - The render projection may temporarily carry forward the last non-empty visible assistant content for a still-streaming message when an intermediate overlay frame regresses to hidden-only content.
+   - Bubble and block renderers must preserve stable mounted slots when streaming frames replace block objects; switching block type guards must not implicitly remount the visible answer subtree.
 
 ## Verification
 
