@@ -1163,7 +1163,9 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).toContain('-3');
       expect(host.textContent).toContain('Ask Flower');
 
-      const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Ask Flower')) as HTMLButtonElement | undefined;
+      const historyPanel = host.querySelector('#git-branch-subview-panel-history:not([hidden])') as HTMLElement | null;
+      expect(historyPanel).toBeTruthy();
+      const askFlowerButton = Array.from(historyPanel!.querySelectorAll('button')).find((node) => node.textContent?.includes('Ask Flower')) as HTMLButtonElement | undefined;
       expect(askFlowerButton).toBeTruthy();
       askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
@@ -1278,6 +1280,81 @@ describe('GitBranchesPanel interactions', () => {
 
     try {
       expect(host.textContent).toContain('Choose a branch from the sidebar to inspect its status or history.');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('preserves loaded commit details when toggling between status and history for the same branch', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mockGetCommitDetail.mockResolvedValue({
+      repoRootPath: '/workspace/repo',
+      commit: {
+        hash: '2222222222222222',
+        shortHash: '22222222',
+        parents: ['1111111111111111'],
+        subject: 'Merge feature',
+      },
+      files: [
+        {
+          changeType: 'modified',
+          path: 'src/history.ts',
+          displayPath: 'src/history.ts',
+          additions: 8,
+          deletions: 3,
+          patchText: '@@ -1 +1 @@\n-history\n+history updated',
+        },
+      ],
+    });
+
+    const dispose = render(() => {
+      const [subview, setSubview] = createSignal<'status' | 'history'>('history');
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  selectedBranch={{
+                    name: 'feature/demo',
+                    fullName: 'refs/heads/feature/demo',
+                    kind: 'local',
+                    current: true,
+                  }}
+                  selectedBranchSubview={subview()}
+                  onSelectBranchSubview={setSubview}
+                  commits={[
+                    { hash: '2222222222222222', shortHash: '22222222', parents: ['1111111111111111'], subject: 'Merge feature', authorName: 'Bob', authorTimeMs: 1706003600000 },
+                  ]}
+                  selectedCommitHash="2222222222222222"
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+      expect(mockGetCommitDetail).toHaveBeenCalledTimes(1);
+      expect(host.textContent).toContain('src/history.ts');
+
+      const statusTab = host.querySelector('#git-branch-subview-tab-status') as HTMLButtonElement | null;
+      const historyTab = host.querySelector('#git-branch-subview-tab-history') as HTMLButtonElement | null;
+      expect(statusTab).toBeTruthy();
+      expect(historyTab).toBeTruthy();
+
+      statusTab!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      historyTab!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockGetCommitDetail).toHaveBeenCalledTimes(1);
+      expect(host.textContent).toContain('src/history.ts');
     } finally {
       dispose();
     }

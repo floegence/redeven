@@ -322,4 +322,59 @@ describe('GitWorkspace interactions', () => {
       dispose();
     }
   });
+
+  it('keeps the shell chrome visible when branch history is loading inside branches view', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <ProtocolProvider contract={redevenV1Contract}>
+          <div class="h-[620px]">
+            <GitWorkspace
+              mode="git"
+              onModeChange={() => {}}
+              subview="branches"
+              onSubviewChange={() => {}}
+              width={280}
+              open
+              currentPath="/workspace/repo/src"
+              repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
+              repoSummary={{
+                repoRootPath: '/workspace/repo',
+                headRef: 'main',
+                headCommit: 'abc1234',
+                aheadCount: 1,
+                behindCount: 0,
+                workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+              }}
+              branches={{
+                repoRootPath: '/workspace/repo',
+                currentRef: 'main',
+                local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
+                remote: [],
+              }}
+              selectedBranch={{
+                name: 'main',
+                fullName: 'refs/heads/main',
+                kind: 'local',
+                current: true,
+              }}
+              selectedBranchSubview="history"
+              commits={[]}
+              listLoading
+            />
+          </div>
+        </ProtocolProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.querySelector('[data-testid="git-sidebar-scroll-region"]')).toBeTruthy();
+      expect(host.textContent).toContain('Loading commit history...');
+      expect(host.textContent).not.toContain('Preparing the active Git view...');
+    } finally {
+      dispose();
+    }
+  });
 });

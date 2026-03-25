@@ -49,6 +49,7 @@ export interface GitWorkbenchProps {
   onSelectBranchSubview?: (view: GitBranchSubview) => void;
   commits?: GitCommitSummary[];
   listLoading?: boolean;
+  listRefreshing?: boolean;
   listLoadingMore?: boolean;
   listError?: string;
   hasMore?: boolean;
@@ -276,6 +277,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               branchesError={props.branchesError}
               commits={props.commits}
               listLoading={props.listLoading}
+              listRefreshing={props.listRefreshing}
               listLoadingMore={props.listLoadingMore}
               listError={props.listError}
               hasMore={props.hasMore}
