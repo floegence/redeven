@@ -1,7 +1,8 @@
 import { For, Show } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Refresh } from '@floegence/floe-webapp-core/icons';
-import { Button } from '@floegence/floe-webapp-core/ui';
+import { SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
 
 import { CodexIcon } from '../icons/CodexIcon';
 import { useCodexContext } from './CodexProvider';
@@ -21,115 +22,186 @@ function formatUpdatedAt(unixSeconds: number): string {
   }
 }
 
+function statusTagVariant(status: string): TagProps['variant'] {
+  const normalized = String(status ?? '').trim().toLowerCase();
+  if (!normalized) return 'neutral';
+  if (normalized === 'idle' || normalized === 'ready' || normalized === 'archived') return 'neutral';
+  if (normalized === 'completed' || normalized === 'success') return 'success';
+  if (
+    normalized === 'running' ||
+    normalized === 'accepted' ||
+    normalized === 'recovering' ||
+    normalized === 'finalizing'
+  ) {
+    return 'info';
+  }
+  if (normalized.includes('approval') || normalized.includes('waiting') || normalized.includes('input')) {
+    return 'warning';
+  }
+  if (normalized.includes('error') || normalized.includes('fail') || normalized.includes('decline')) {
+    return 'error';
+  }
+  return 'neutral';
+}
+
+function displayStatus(status: string): string {
+  const value = String(status ?? '').trim();
+  if (!value) return 'Idle';
+  return value.replaceAll('_', ' ');
+}
+
 export function CodexSidebar() {
   const codex = useCodexContext();
 
   return (
-    <div class="flex h-full min-h-0 flex-col bg-background/95">
-      <div class="border-b border-border/70 px-4 py-4">
-        <div class="flex items-start justify-between gap-3">
-          <div class="flex min-w-0 items-start gap-3">
-            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/15">
-              <CodexIcon class="h-5 w-5" />
+    <SidebarContent class="h-full min-h-full">
+      <Card class="border-border/60">
+        <CardHeader class="pb-3">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex min-w-0 items-start gap-3">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/20">
+                <CodexIcon class="h-5 w-5" />
+              </div>
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <CardTitle class="text-sm">Codex</CardTitle>
+                  <Tag
+                    variant={codex.hasHostBinary() ? 'success' : 'warning'}
+                    tone="soft"
+                    size="sm"
+                  >
+                    {codex.hasHostBinary() ? 'Host ready' : 'Install required'}
+                  </Tag>
+                </div>
+                <CardDescription class="mt-1 leading-5">
+                  Host-managed sessions routed through the dedicated Codex gateway.
+                </CardDescription>
+              </div>
             </div>
-            <div class="min-w-0">
-              <div class="text-sm font-semibold text-foreground">Codex</div>
-              <div class="mt-1 text-xs leading-5 text-muted-foreground">Host-managed sessions with a dedicated gateway surface.</div>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void codex.refreshSidebar()}
+              disabled={codex.statusLoading()}
+              aria-label="Refresh Codex sidebar"
+            >
+              <Refresh class="h-4 w-4" />
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent class="space-y-3">
+          <div class="grid gap-2">
+            <div class="rounded-lg border border-border/60 bg-muted/10 p-3">
+              <div class="flex items-center justify-between gap-2">
+                <div class="text-xs font-medium text-foreground">Runtime</div>
+                <Tag
+                  variant={codex.hasHostBinary() ? 'success' : 'warning'}
+                  tone="soft"
+                  size="sm"
+                >
+                  {codex.hasHostBinary() ? 'Detected' : 'Waiting'}
+                </Tag>
+              </div>
+              <div class="mt-2 text-xs leading-5 text-muted-foreground">
+                {codex.status()?.binary_path || 'Redeven uses the host machine\'s `codex` binary directly as soon as it is available on PATH.'}
+              </div>
+            </div>
+
+            <div class="rounded-lg border border-border/60 bg-muted/10 p-3">
+              <div class="text-xs font-medium text-foreground">Workspace root</div>
+              <div class="mt-2 truncate font-mono text-xs leading-5 text-muted-foreground">
+                {codex.workingDirDraft() || codex.status()?.agent_home_dir || 'Set a workspace path from the Codex composer.'}
+              </div>
             </div>
           </div>
 
-          <Button size="sm" variant="outline" onClick={() => void codex.refreshSidebar()} disabled={codex.statusLoading()}>
-            <Refresh class="h-4 w-4" />
+          <Show when={codex.statusError()}>
+            <div class="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5 text-warning">
+              {codex.statusError()}
+            </div>
+          </Show>
+
+          <Button class="w-full" onClick={codex.startNewThreadDraft}>
+            New thread
           </Button>
-        </div>
+        </CardContent>
+      </Card>
 
-        <div class="mt-4 grid gap-2">
-          <div class="rounded-2xl border border-border/70 bg-muted/15 p-3">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Host runtime</div>
-            <div class="mt-2 text-sm font-medium text-foreground">
-              {codex.hasHostBinary() ? 'Codex detected on PATH' : 'Install Codex on the host'}
-            </div>
-            <div class="mt-1 text-xs leading-5 text-muted-foreground">
-              {codex.status()?.binary_path || 'Redeven will use the host machine\'s `codex` binary as soon as it is available on PATH.'}
-            </div>
-          </div>
-
-          <div class="rounded-2xl border border-border/70 bg-background p-3">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workspace root</div>
-            <div class="mt-2 truncate font-mono text-xs text-foreground">
-              {codex.workingDirDraft() || codex.status()?.agent_home_dir || 'Use the composer below to set a workspace path.'}
-            </div>
-          </div>
-        </div>
-
-        <Show when={codex.statusError()}>
-          <div class="mt-4 rounded-2xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5 text-warning">
-            {codex.statusError()}
-          </div>
-        </Show>
-
-        <Button size="sm" class="mt-4 w-full" onClick={codex.startNewThreadDraft}>
-          New thread
-        </Button>
-      </div>
-
-      <div class="min-h-0 flex-1 overflow-auto px-3 py-3">
-        <div class="mb-3 flex items-center justify-between gap-3 px-1">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Threads</div>
-          <div class="text-[11px] text-muted-foreground">{codex.threads().length}</div>
-        </div>
-
+      <SidebarSection
+        title="Threads"
+        actions={
+          <Tag variant="neutral" tone="soft" size="sm">
+            {codex.threads().length}
+          </Tag>
+        }
+      >
         <Show
           when={codex.threads().length > 0}
           fallback={
-            <div class="rounded-2xl border border-dashed border-border/80 bg-muted/15 p-4 text-sm leading-6 text-muted-foreground">
-              {codex.hasHostBinary()
-                ? 'Create a thread to keep Codex work separated from Flower while staying inside the same env shell.'
-                : 'Install `codex` on the host, refresh this panel, then create the first Codex thread here.'}
-            </div>
+            <Card class="border-dashed border-border/60 bg-muted/10">
+              <CardContent class="space-y-2 p-4">
+                <div class="text-sm font-medium text-foreground">
+                  {codex.hasHostBinary() ? 'No threads yet' : 'Codex is not available yet'}
+                </div>
+                <div class="text-xs leading-5 text-muted-foreground">
+                  {codex.hasHostBinary()
+                    ? 'Create a Codex thread here to keep its workstream and approvals separate from Flower.'
+                    : 'Install `codex` on the host, refresh this panel, and the dedicated Codex workflow will be ready to use.'}
+                </div>
+              </CardContent>
+            </Card>
           }
         >
-          <div class="space-y-2">
+          <SidebarItemList class="space-y-2">
             <For each={codex.threads()}>
               {(thread) => {
                 const active = () => codex.activeThreadID() === thread.id;
                 return (
-                  <button
-                    type="button"
-                    onClick={() => codex.selectThread(thread.id)}
+                  <Card
                     class={cn(
-                      'w-full rounded-2xl border px-3 py-3 text-left transition-colors',
-                      active()
-                        ? 'border-primary/35 bg-primary/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]'
-                        : 'border-border/70 bg-background hover:border-primary/25 hover:bg-muted/20'
+                      'border-border/60 transition-colors',
+                      active() && 'border-primary/35 bg-primary/[0.04] shadow-sm'
                     )}
                   >
-                    <div class="flex items-start justify-between gap-3">
-                      <div class="min-w-0">
-                        <div class="truncate text-sm font-semibold text-foreground">
-                          {String(thread.name ?? thread.preview ?? '').trim() || 'Untitled thread'}
+                    <button
+                      type="button"
+                      onClick={() => codex.selectThread(thread.id)}
+                      aria-pressed={active()}
+                      class={cn(
+                        'w-full rounded-lg text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/30',
+                        active() && 'ring-1 ring-primary/20'
+                      )}
+                    >
+                      <CardContent class="space-y-3 p-3">
+                        <div class="flex items-start justify-between gap-3">
+                          <div class="min-w-0">
+                            <div class="truncate text-sm font-medium text-foreground">
+                              {String(thread.name ?? thread.preview ?? '').trim() || 'Untitled thread'}
+                            </div>
+                            <div class="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                              {thread.preview || thread.cwd || 'No thread preview yet.'}
+                            </div>
+                          </div>
+                          <Tag variant={statusTagVariant(thread.status)} tone="soft" size="sm">
+                            {displayStatus(thread.status)}
+                          </Tag>
                         </div>
-                        <div class="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                          {thread.preview || thread.cwd || 'No thread preview yet.'}
+
+                        <div class="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+                          <span class="truncate">{thread.model_provider || 'Host default model'}</span>
+                          <span>{formatUpdatedAt(thread.updated_at_unix_s)}</span>
                         </div>
-                      </div>
-
-                      <div class="rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                        {thread.status}
-                      </div>
-                    </div>
-
-                    <div class="mt-3 flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
-                      <span class="truncate">{thread.model_provider || 'default model'}</span>
-                      <span>{formatUpdatedAt(thread.updated_at_unix_s)}</span>
-                    </div>
-                  </button>
+                      </CardContent>
+                    </button>
+                  </Card>
                 );
               }}
             </For>
-          </div>
+          </SidebarItemList>
         </Show>
-      </div>
-    </div>
+      </SidebarSection>
+    </SidebarContent>
   );
 }
