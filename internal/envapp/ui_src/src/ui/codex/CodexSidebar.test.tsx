@@ -244,10 +244,11 @@ describe('CodexSidebar', () => {
 
     expect(host.textContent).toContain('New Chat');
     expect(host.textContent).toContain('Conversations');
-    expect(host.textContent).toContain('Dedicated Codex chat shell with host-native runtime and independent thread state');
-    expect(host.textContent).toContain('/usr/local/bin/codex');
+    expect(host.textContent).toContain('Host ready');
     expect(host.textContent).toContain('Backend audit');
     expect(host.textContent).toContain('Review the gateway wiring');
+    expect(host.textContent).not.toContain('Dedicated Codex chat shell with host-native runtime and independent thread state');
+    expect(host.textContent).not.toContain('/usr/local/bin/codex');
 
     const target = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('UI polish'));
     if (!target) {
