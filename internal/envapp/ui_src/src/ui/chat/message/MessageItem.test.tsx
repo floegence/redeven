@@ -77,7 +77,7 @@ describe('MessageItem', () => {
     expect(host.querySelector('.chat-message-footer')).toBeTruthy();
   });
 
-  it('renders only the assistant avatar so both roles share the same transcript column', () => {
+  it('renders only the assistant avatar while keeping user rows in the shared transcript lane', () => {
     const assistantHost = renderMessageItem({
       id: 'msg-assistant-avatar',
       role: 'assistant',
@@ -96,6 +96,7 @@ describe('MessageItem', () => {
       blocks: [{ type: 'text', content: 'User reply' }],
     });
 
+    expect(userHost.querySelector('.chat-message-item-user')?.className).toContain('chat-message-item-without-avatar');
     expect(userHost.querySelector('.chat-message-avatar-user')).toBeNull();
   });
 
