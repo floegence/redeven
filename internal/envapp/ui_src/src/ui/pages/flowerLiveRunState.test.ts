@@ -6,8 +6,22 @@ import {
   buildPendingLiveRunMessage,
   clearLiveRunMessageIfTranscriptCaughtUp,
   mergeLiveRunSnapshot,
+  resolveDisplayedLiveRunMessage,
   resolveRenderableLiveRunMessage,
 } from './flowerLiveRunState';
+
+function makeAssistantMessage(args: Partial<Message> & Pick<Message, 'id'>): Message {
+  return {
+    id: args.id,
+    role: 'assistant',
+    status: args.status ?? 'streaming',
+    timestamp: args.timestamp ?? 1000,
+    blocks: args.blocks ?? [],
+    renderKey: args.renderKey,
+    sourceMessageId: args.sourceMessageId,
+    error: args.error,
+  };
+}
 
 describe('flowerLiveRunState', () => {
   it('builds a single assistant live message from batched stream events', () => {
@@ -87,25 +101,92 @@ describe('flowerLiveRunState', () => {
   });
 
   it('treats transcript catch-up as the authoritative render gate for late live snapshots', () => {
-    const current: Message = {
+    const current = makeAssistantMessage({
       id: 'm_live_3b',
-      role: 'assistant',
-      status: 'streaming',
-      timestamp: 1000,
       blocks: [{ type: 'markdown', content: 'Late snapshot' }],
-    };
+    });
 
     const transcript: Message[] = [
-      {
+      makeAssistantMessage({
         id: 'm_live_3b',
-        role: 'assistant',
         status: 'complete',
         timestamp: 1001,
         blocks: [{ type: 'markdown', content: 'Settled transcript' }],
-      },
+      }),
     ];
 
     expect(resolveRenderableLiveRunMessage(current, transcript)).toBeNull();
+  });
+
+  it('keeps the last visible answer when the current live frame regresses to hidden-only content', () => {
+    const previousDisplayed = makeAssistantMessage({
+      id: 'm_ai_pending:thread-1',
+      renderKey: 'active-run:thread-1',
+      sourceMessageId: 'm_live_hidden_1',
+      blocks: [{ type: 'markdown', content: 'Visible answer' }],
+    });
+    const current = makeAssistantMessage({
+      id: 'm_ai_pending:thread-1',
+      renderKey: 'active-run:thread-1',
+      sourceMessageId: 'm_live_hidden_1',
+      blocks: [{ type: 'thinking', content: 'Hidden reasoning' }],
+    });
+
+    expect(resolveDisplayedLiveRunMessage({
+      current,
+      previousDisplayed,
+      pending: null,
+      transcriptMessages: [],
+    })).toEqual(previousDisplayed);
+  });
+
+  it('preserves richer visible answer blocks when a same-lineage snapshot lags behind', () => {
+    const previousDisplayed = makeAssistantMessage({
+      id: 'm_ai_pending:thread-1',
+      renderKey: 'active-run:thread-1',
+      sourceMessageId: 'm_live_snapshot_lag',
+      blocks: [{ type: 'markdown', content: 'Visible answer that should stay on screen' }],
+    });
+    const current = makeAssistantMessage({
+      id: 'm_ai_pending:thread-1',
+      renderKey: 'active-run:thread-1',
+      sourceMessageId: 'm_live_snapshot_lag',
+      status: 'complete',
+      blocks: [{ type: 'markdown', content: 'Visible answer' }],
+    });
+
+    expect(resolveDisplayedLiveRunMessage({
+      current,
+      previousDisplayed,
+      pending: null,
+      transcriptMessages: [],
+    })).toEqual({
+      ...current,
+      blocks: [{ type: 'markdown', content: 'Visible answer that should stay on screen' }],
+    });
+  });
+
+  it('clears the previously displayed live message once the transcript catches up to its source id', () => {
+    const previousDisplayed = makeAssistantMessage({
+      id: 'm_ai_pending:thread-1',
+      renderKey: 'active-run:thread-1',
+      sourceMessageId: 'm_live_caught_up',
+      blocks: [{ type: 'markdown', content: 'Visible answer' }],
+    });
+
+    expect(resolveDisplayedLiveRunMessage({
+      current: null,
+      previousDisplayed,
+      pending: null,
+      transcriptMessages: [
+        makeAssistantMessage({
+          id: 'm_live_caught_up',
+          status: 'complete',
+          timestamp: 1001,
+          blocks: [{ type: 'markdown', content: 'Settled transcript answer' }],
+        }),
+      ],
+    })).toBeNull();
   });
 
   it('accepts active-run snapshots as the current live message', () => {

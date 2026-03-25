@@ -49,10 +49,7 @@ import { fetchGatewayJSON, prepareGatewayRequestInit, uploadGatewayFile } from '
 import { decorateMessageBlocks, decorateStreamEvent } from './aiBlockPresentation';
 import {
   extractSubagentViewsFromWaitResult,
-  mergeContextCompactionEvents,
   mapSubagentPayloadSnakeToCamel,
-  normalizeContextCompactionEvent,
-  normalizeContextUsage,
   mergeSubagentEventsByTimestamp,
   normalizeSubagentStatus,
   normalizeThreadTodosView,
@@ -107,8 +104,17 @@ import {
   buildPendingLiveRunMessage,
   clearLiveRunMessageIfTranscriptCaughtUp,
   mergeLiveRunSnapshot,
-  resolveRenderableLiveRunMessage,
+  resolveDisplayedLiveRunMessage,
 } from './flowerLiveRunState';
+import {
+  applyContextCompactionToRun,
+  applyContextUsageToRun,
+  ensureContextTelemetryRun,
+  getContextTelemetryRun,
+  hasContextTelemetryData,
+  setContextTelemetryCursor,
+  type ContextTelemetryByRun,
+} from './aiContextTelemetryState';
 
 type DirCache = Map<string, FileItem[]>;
 
@@ -933,7 +939,13 @@ function CompactContextSummary(props: {
     return out.slice(out.length - 12);
   });
 
-  const chipLabel = createMemo(() => (props.usage ? usagePercentLabel() : `${compactionAttempts().length} events`));
+  const chipLabel = createMemo(() => {
+    if (props.usage) {
+      return usagePercentLabel();
+    }
+    const eventCount = compactionAttempts().length;
+    return eventCount > 0 ? `${eventCount} events` : '--';
+  });
   const usageTokensLabel = createMemo(() => {
     const usage = props.usage;
     if (!usage) return '';
@@ -1808,8 +1820,8 @@ export function EnvAIPage() {
   const [todosError, setTodosError] = createSignal('');
   const [threadTodos, setThreadTodos] = createSignal<ThreadTodosView | null>(null);
   const [threadSubagentsById, setThreadSubagentsById] = createSignal<Record<string, SubagentView>>({});
-  const [contextUsage, setContextUsage] = createSignal<ContextUsageView | null>(null);
-  const [contextCompactions, setContextCompactions] = createSignal<ContextCompactionEventView[]>([]);
+  const [contextTelemetryByRun, setContextTelemetryByRun] = createSignal<ContextTelemetryByRun>({});
+  const [activeContextRunId, setActiveContextRunId] = createSignal('');
   // Tracks the network send itself; live-run occupancy is managed separately.
   const [sendPending, setSendPending] = createSignal(false);
   const [transcriptMessages, setTranscriptMessages] = createSignal<Message[]>([]);
@@ -1842,13 +1854,7 @@ export function EnvAIPage() {
   const draftSnapshotByMessageId = new Map<string, AIChatInputDraftSnapshot>();
   let lastPendingLiveRunRenderKey = '';
   let lastPendingLiveRunMessage: Message | null = null;
-  const resolvedLiveRunMessage = createMemo(() =>
-    resolveRenderableLiveRunMessage(liveRunMessage(), transcriptMessages()),
-  );
-  const visibleLiveRunMessage = createMemo(() => {
-    const liveMessage = resolvedLiveRunMessage();
-    return liveMessage && hasVisibleMessageContent(liveMessage) ? liveMessage : null;
-  });
+  const [displayedLiveRunMessage, setDisplayedLiveRunMessage] = createSignal<Message | null>(null);
   const pendingLiveRunMessage = createMemo(() => {
     if (!liveRunPending()) {
       lastPendingLiveRunRenderKey = '';
@@ -1870,7 +1876,24 @@ export function EnvAIPage() {
     });
     return lastPendingLiveRunMessage;
   });
-  const activeAssistantRowMessage = createMemo(() => visibleLiveRunMessage() ?? pendingLiveRunMessage());
+  createEffect(() => {
+    const nextDisplayed = resolveDisplayedLiveRunMessage({
+      current: liveRunMessage(),
+      previousDisplayed: untrack(displayedLiveRunMessage),
+      pending: pendingLiveRunMessage(),
+      transcriptMessages: transcriptMessages(),
+    });
+    if (nextDisplayed !== untrack(displayedLiveRunMessage)) {
+      setDisplayedLiveRunMessage(nextDisplayed);
+    }
+  });
+  const activeAssistantRowMessage = displayedLiveRunMessage;
+  const activeContextTelemetry = createMemo(() => {
+    const runId = activeContextRunId();
+    return runId ? getContextTelemetryRun(contextTelemetryByRun(), runId) : null;
+  });
+  const contextUsage = createMemo<ContextUsageView | null>(() => activeContextTelemetry()?.usage ?? null);
+  const contextCompactions = createMemo<ContextCompactionEventView[]>(() => activeContextTelemetry()?.compactions ?? []);
 
   let chat: ChatContextValue | null = null;
   const [chatReady, setChatReady] = createSignal(false);
@@ -1965,53 +1988,43 @@ export function EnvAIPage() {
   let activeSnapshotReqSeq = 0;
   let activeSnapshotRecoverySeq = 0;
   let activeSnapshotRecoveryTimer: number | null = null;
-  let activeContextRunID = '';
-  let activeContextEventCursor = 0;
   let activeContextReplaySeq = 0;
   let pendingLiveRunEvents: StreamEvent[] = [];
   let liveRunRaf: number | null = null;
   const failureNotifiedRuns = new Set<string>();
   const [runPhaseLabel, setRunPhaseLabel] = createSignal('Working');
-  const resetContextTelemetryState = (opts?: { keepRunId?: boolean }) => {
-    setContextUsage(null);
-    setContextCompactions([]);
-    activeContextEventCursor = 0;
+  const resetContextTelemetryState = () => {
+    setContextTelemetryByRun({});
+    setActiveContextRunId('');
     activeContextReplaySeq += 1;
-    if (!opts?.keepRunId) {
-      activeContextRunID = '';
-    }
   };
-  const ensureContextRun = (runId: string, opts?: { reset?: boolean }) => {
+  const bindContextRun = (runId: string): { ok: boolean; switched: boolean } => {
     const rid = String(runId ?? '').trim();
-    if (!rid) return false;
-    if (rid === activeContextRunID && !opts?.reset) return true;
-    activeContextRunID = rid;
-    resetContextTelemetryState({ keepRunId: true });
-    return true;
+    if (!rid) return { ok: false, switched: false };
+
+    const previousRunId = String(untrack(activeContextRunId) ?? '').trim();
+    const switched = previousRunId !== rid;
+    if (switched) {
+      activeContextReplaySeq += 1;
+      setActiveContextRunId(rid);
+    }
+    setContextTelemetryByRun((current) => ensureContextTelemetryRun(current, rid));
+    return { ok: true, switched };
   };
   const applyContextUsagePayload = (
+    runId: string,
     payload: unknown,
     meta?: {
       eventId?: unknown;
       atUnixMs?: unknown;
     },
   ) => {
-    const normalized = normalizeContextUsage(payload, meta);
-    if (!normalized) return;
-    const current = contextUsage();
-    const nextEventId = Number(normalized.eventId ?? 0);
-    const currentEventId = Number(current?.eventId ?? 0);
-    const nextAt = Number(normalized.atUnixMs ?? 0);
-    const currentAt = Number(current?.atUnixMs ?? 0);
-
-    if (nextEventId > 0 && currentEventId > 0 && nextEventId < currentEventId) return;
-    if (nextEventId > 0 && currentEventId > 0 && nextEventId === currentEventId && nextAt < currentAt) return;
-    if (nextEventId <= 0 && currentEventId > 0 && nextAt <= currentAt) return;
-    if (nextEventId <= 0 && currentEventId <= 0 && nextAt < currentAt) return;
-
-    setContextUsage(normalized);
+    const rid = String(runId ?? '').trim();
+    if (!rid) return;
+    setContextTelemetryByRun((current) => applyContextUsageToRun(current, rid, payload, meta));
   };
   const applyContextCompactionPayload = (
+    runId: string,
     eventType: string,
     payload: unknown,
     meta?: {
@@ -2019,11 +2032,11 @@ export function EnvAIPage() {
       atUnixMs?: unknown;
     },
   ) => {
-    const normalized = normalizeContextCompactionEvent(eventType, payload, meta);
-    if (!normalized) return;
-    setContextCompactions((prev) =>
-      mergeContextCompactionEvents(prev, [normalized], CONTEXT_TIMELINE_WINDOW_LIMIT),
-    );
+    const rid = String(runId ?? '').trim();
+    if (!rid) return;
+    setContextTelemetryByRun((current) => (
+      applyContextCompactionToRun(current, rid, eventType, payload, meta, CONTEXT_TIMELINE_WINDOW_LIMIT)
+    ));
   };
   const loadContextRunEvents = async (
     runId: string,
@@ -2035,10 +2048,12 @@ export function EnvAIPage() {
     if (!canRWXReady()) return;
     const rid = String(runId ?? '').trim();
     if (!rid) return;
-    if (!ensureContextRun(rid, { reset: opts?.reset })) return;
+    const binding = bindContextRun(rid);
+    if (!binding.ok) return;
 
     const reqSeq = ++activeContextReplaySeq;
-    let cursor = activeContextEventCursor;
+    const currentRunState = getContextTelemetryRun(untrack(contextTelemetryByRun), rid);
+    let cursor = opts?.reset && binding.switched ? 0 : Math.max(0, Number(currentRunState?.cursor ?? 0) || 0);
     const maxPages = Math.max(1, Math.floor(Number(opts?.maxPages ?? RUN_CONTEXT_EVENTS_MAX_PAGES)));
     let pages = 0;
     try {
@@ -2055,6 +2070,7 @@ export function EnvAIPage() {
           { method: 'GET' },
         );
         if (reqSeq !== activeContextReplaySeq) return;
+        if (rid !== String(untrack(activeContextRunId) ?? '').trim()) return;
 
         const events = Array.isArray(resp?.events) ? resp.events : [];
         const cursorBeforePage = cursor;
@@ -2066,9 +2082,9 @@ export function EnvAIPage() {
           const payload = entry?.payload;
 
           if (eventType === 'context.usage.updated') {
-            applyContextUsagePayload(payload, { eventId: eventID, atUnixMs });
+            applyContextUsagePayload(rid, payload, { eventId: eventID, atUnixMs });
           } else if (eventType.startsWith('context.compaction.')) {
-            applyContextCompactionPayload(eventType, payload, { eventId: eventID, atUnixMs });
+            applyContextCompactionPayload(rid, eventType, payload, { eventId: eventID, atUnixMs });
           }
 
           if (eventID > pageMaxEventID) {
@@ -2085,8 +2101,8 @@ export function EnvAIPage() {
         if (events.length <= 0 && nextCursor <= cursorBeforePage) break;
       }
 
-      if (reqSeq === activeContextReplaySeq) {
-        activeContextEventCursor = Math.max(activeContextEventCursor, cursor);
+      if (reqSeq === activeContextReplaySeq && rid === String(untrack(activeContextRunId) ?? '').trim()) {
+        setContextTelemetryByRun((current) => setContextTelemetryCursor(current, rid, cursor));
       }
     } catch {
       // best effort, realtime stream continues to update the UI
@@ -2134,6 +2150,7 @@ export function EnvAIPage() {
     }
     setTranscriptMessages([]);
     setLiveRunMessage(null);
+    setDisplayedLiveRunMessage(null);
     setLiveRunPending(false);
   };
   const setLiveRunSnapshotMessage = (message: Message): void => {
@@ -2398,7 +2415,13 @@ export function EnvAIPage() {
     if (Number.isNaN(date.getTime())) return '';
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   });
-  const hasContextTelemetry = createMemo(() => !!contextUsage() || contextCompactions().length > 0);
+  const hasContextTelemetry = createMemo(() => hasContextTelemetryData(activeContextTelemetry()));
+  const shouldShowContextSummary = createMemo(() => {
+    if (!ai.activeThreadId()) {
+      return false;
+    }
+    return !!activeContextRunId() || hasContextTelemetry();
+  });
 
   const normalizeLifecyclePhase = (raw: unknown): string => {
     const v = String(raw ?? '').trim().toLowerCase();
@@ -2732,7 +2755,7 @@ export function EnvAIPage() {
     status === 'success' || status === 'failed' || status === 'canceled' || status === 'timed_out' || status === 'waiting_user';
 
   const hasStreamingAssistantMessage = (): boolean => {
-    return resolvedLiveRunMessage()?.status === 'streaming';
+    return activeAssistantRowMessage()?.status === 'streaming';
   };
 
   const cancelActiveRunSnapshotRecovery = (): void => {
@@ -3424,18 +3447,18 @@ export function EnvAIPage() {
         const eventRunID = String(event.runId ?? '').trim();
         if (tid === String(ai.activeThreadId() ?? '').trim()) {
           if (eventRunID) {
-            ensureContextRun(eventRunID);
+            bindContextRun(eventRunID);
           }
         }
         if (tid === String(ai.activeThreadId() ?? '').trim() && (streamKind === 'context' || streamType === 'context-usage' || streamType === 'context-compaction')) {
           if (streamType === 'context-usage') {
-            applyContextUsagePayload(streamEvent?.payload, {
+            applyContextUsagePayload(eventRunID, streamEvent?.payload, {
               atUnixMs: event.atUnixMs,
             });
           } else if (streamType === 'context-compaction') {
             const eventType = String(streamEvent?.eventType ?? '').trim();
             if (eventType) {
-              applyContextCompactionPayload(eventType, streamEvent?.payload, {
+              applyContextCompactionPayload(eventRunID, eventType, streamEvent?.payload, {
                 atUnixMs: event.atUnixMs,
               });
             }
@@ -3496,7 +3519,7 @@ export function EnvAIPage() {
       const runId = String(event.runId ?? '').trim();
       if (tid === String(ai.activeThreadId() ?? '').trim() && runId) {
         void loadContextRunEvents(runId, {
-          reset: runId !== activeContextRunID,
+          reset: runId !== String(untrack(activeContextRunId) ?? '').trim(),
           maxPages: RUN_CONTEXT_EVENTS_MAX_PAGES,
         });
       }
@@ -3523,10 +3546,10 @@ export function EnvAIPage() {
     const runId = String(ai.runIdForThread(tid) ?? '').trim();
     if (!runId) return;
 
-    const needReset = runId !== activeContextRunID;
-    if (!ensureContextRun(runId, { reset: needReset })) return;
+    const binding = bindContextRun(runId);
+    if (!binding.ok) return;
     void loadContextRunEvents(runId, {
-      reset: needReset,
+      reset: binding.switched,
       maxPages: RUN_CONTEXT_EVENTS_MAX_PAGES,
     });
   });
@@ -3540,7 +3563,7 @@ export function EnvAIPage() {
     if (!tid) return;
     if (!activeThreadRunning()) return;
 
-    const runId = String(ai.runIdForThread(tid) ?? activeContextRunID).trim();
+    const runId = String(ai.runIdForThread(tid) ?? activeContextRunId()).trim();
     if (!runId) return;
 
     const timer = window.setInterval(() => {
@@ -3863,7 +3886,7 @@ export function EnvAIPage() {
       const runId = String(resp.runId ?? '').trim();
       if (runId) {
         void loadActiveRunSnapshot(tid);
-        ensureContextRun(runId, { reset: true });
+        bindContextRun(runId);
         void loadContextRunEvents(runId, { reset: true });
         scheduleActiveRunSnapshotRecovery(tid, runId);
       } else {
@@ -4022,7 +4045,7 @@ export function EnvAIPage() {
       if (rid) {
         ai.confirmThreadRun(tid, rid);
         void loadActiveRunSnapshot(tid);
-        ensureContextRun(rid, { reset: true });
+        bindContextRun(rid);
         void loadContextRunEvents(rid, { reset: true });
         scheduleActiveRunSnapshotRecovery(tid, rid);
       }
@@ -4514,13 +4537,13 @@ export function EnvAIPage() {
                               updatedLabel={subagentsUpdatedLabel()}
                             />
                           </Show>
-                          <Show when={ai.activeThreadId() && hasContextTelemetry()}>
+                          <Show when={shouldShowContextSummary()}>
                             <CompactContextSummary
                               usage={contextUsage()}
                               compactions={contextCompactions()}
                             />
                           </Show>
-                          <Show when={!ai.activeThreadId() || (activeThreadTodos().length === 0 && activeThreadSubagents().length === 0 && !hasContextTelemetry())}>
+                          <Show when={!ai.activeThreadId() || (activeThreadTodos().length === 0 && activeThreadSubagents().length === 0 && !shouldShowContextSummary())}>
                             <span class="text-[11px] text-muted-foreground">Execution mode</span>
                           </Show>
                         </div>

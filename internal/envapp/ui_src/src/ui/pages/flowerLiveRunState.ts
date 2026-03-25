@@ -1,6 +1,10 @@
 import { applyStreamEventBatchToMessages } from '../chat/messageState';
+import {
+  hasNonEmptyVisibleMessageContent,
+  hasVisibleMessageContent,
+} from '../chat/message/messageVisibility';
 import type { Message, MessageBlock, StreamEvent } from '../chat/types';
-import { getMessageSourceId } from '../chat/messageIdentity';
+import { getMessageRenderKey, getMessageSourceId } from '../chat/messageIdentity';
 
 const PENDING_LIVE_RUN_MESSAGE_ID_PREFIX = 'm_ai_pending:';
 
@@ -257,6 +261,128 @@ export function clearLiveRunMessageIfTranscriptCaughtUp(
   return transcriptMessages.some((message) => getMessageSourceId(message) === currentSourceId)
     ? null
     : current;
+}
+
+function liveRunAnswerBlockScore(block: MessageBlock | null | undefined): number {
+  if (!block || !isLiveRunAnswerBlock(block)) {
+    return 0;
+  }
+
+  switch (block.type) {
+    case 'markdown':
+    case 'text':
+    case 'code':
+    case 'svg':
+    case 'mermaid':
+      return String(block.content ?? '').trim().length;
+    case 'code-diff':
+      return String(block.oldCode ?? '').trim().length + String(block.newCode ?? '').trim().length;
+    case 'image':
+      return String(block.src ?? '').trim().length;
+    case 'file':
+      return String(block.name ?? '').trim().length;
+    default:
+      return 0;
+  }
+}
+
+function liveRunMessageAnswerScore(message: Message | null | undefined): number {
+  if (!message) {
+    return 0;
+  }
+  return message.blocks.reduce((score, block) => score + liveRunAnswerBlockScore(block), 0);
+}
+
+function sameLiveRunDisplayLineage(left: Message | null | undefined, right: Message | null | undefined): boolean {
+  if (!left || !right) {
+    return false;
+  }
+
+  const leftSourceId = getMessageSourceId(left);
+  const rightSourceId = getMessageSourceId(right);
+  if (leftSourceId && rightSourceId && leftSourceId === rightSourceId) {
+    return true;
+  }
+
+  const leftRenderKey = getMessageRenderKey(left);
+  const rightRenderKey = getMessageRenderKey(right);
+  return !!leftRenderKey && leftRenderKey === rightRenderKey;
+}
+
+function carryForwardVisibleAnswerBlocks(previous: Message, current: Message): MessageBlock[] {
+  const previousScore = liveRunMessageAnswerScore(previous);
+  const currentScore = liveRunMessageAnswerScore(current);
+  if (previousScore <= 0 || currentScore >= previousScore) {
+    return current.blocks;
+  }
+
+  const maxLength = Math.max(previous.blocks.length, current.blocks.length);
+  let changed = false;
+  const merged: MessageBlock[] = [];
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const previousBlock = previous.blocks[index];
+    const currentBlock = current.blocks[index];
+
+    if (!previousBlock) {
+      if (currentBlock) {
+        merged.push(currentBlock);
+      }
+      continue;
+    }
+
+    if (!currentBlock) {
+      merged.push(previousBlock);
+      changed = true;
+      continue;
+    }
+
+    if (liveRunAnswerBlockScore(previousBlock) > liveRunAnswerBlockScore(currentBlock)) {
+      merged.push(previousBlock);
+      changed = true;
+      continue;
+    }
+
+    merged.push(currentBlock);
+  }
+
+  return changed ? merged : current.blocks;
+}
+
+export function resolveDisplayedLiveRunMessage(args: {
+  current: Message | null;
+  previousDisplayed: Message | null;
+  pending: Message | null;
+  transcriptMessages: Message[];
+}): Message | null {
+  const current = clearLiveRunMessageIfTranscriptCaughtUp(args.current, args.transcriptMessages);
+  const previousDisplayed = clearLiveRunMessageIfTranscriptCaughtUp(args.previousDisplayed, args.transcriptMessages);
+
+  if (current) {
+    if (previousDisplayed && sameLiveRunDisplayLineage(previousDisplayed, current)) {
+      const mergedBlocks = carryForwardVisibleAnswerBlocks(previousDisplayed, current);
+      if (mergedBlocks !== current.blocks) {
+        return {
+          ...current,
+          blocks: mergedBlocks,
+        };
+      }
+    }
+
+    if (hasVisibleMessageContent(current)) {
+      return current;
+    }
+  }
+
+  if (previousDisplayed && hasNonEmptyVisibleMessageContent(previousDisplayed)) {
+    return previousDisplayed;
+  }
+
+  if (args.pending) {
+    return args.pending;
+  }
+
+  return current;
 }
 
 export function resolveRenderableLiveRunMessage(
