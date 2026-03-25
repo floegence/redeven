@@ -2,6 +2,7 @@
 
 import { Show, createMemo } from 'solid-js';
 import type { Component } from 'solid-js';
+import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import { useChatContext } from '../ChatProvider';
 import type { ChatAvatar, Message } from '../types';
@@ -15,6 +16,8 @@ export interface MessageItemProps {
   message: Message;
   showAvatar?: boolean;
   class?: string;
+  activeAssistantStreaming?: boolean;
+  transient?: boolean;
 }
 
 export const MessageItem: Component<MessageItemProps> = (props) => {
@@ -28,6 +31,10 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
   };
 
   const isActiveAssistantStreaming = () => {
+    if (typeof props.activeAssistantStreaming === 'boolean') {
+      return props.message.role === 'assistant' && props.activeAssistantStreaming;
+    }
+
     if (props.message.role !== 'assistant') return false;
 
     const currentStreamingId = ctx.streamingMessageId();
@@ -48,16 +55,18 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
     return false;
   };
 
-  const messageOrnament = createMemo(() =>
-    config().renderMessageOrnament?.({
-      message: props.message,
-      isActiveAssistantStreaming: isActiveAssistantStreaming(),
-    }));
-  const shouldRenderMessage = createMemo(() => hasVisibleMessageContent(props.message) || !!messageOrnament());
-  const showFooter = createMemo(() =>
-    !(props.message.role === 'assistant' && isActiveAssistantStreaming()),
+  const MessageOrnament = createMemo(() => config().renderMessageOrnament);
+  const shouldRenderOrnament = createMemo(() =>
+    props.message.role === 'assistant' &&
+    isActiveAssistantStreaming() &&
+    !!MessageOrnament(),
   );
-  const showStatusRail = createMemo(() => !!messageOrnament() || showFooter());
+  const shouldRenderMessage = createMemo(() => hasVisibleMessageContent(props.message) || shouldRenderOrnament());
+  const isTransientAssistantMessage = createMemo(() => props.message.role === 'assistant' && props.transient === true);
+  const showFooter = createMemo(() =>
+    !isTransientAssistantMessage() && !(props.message.role === 'assistant' && isActiveAssistantStreaming()),
+  );
+  const showStatusRail = createMemo(() => shouldRenderOrnament() || showFooter());
 
   return (
     <Show when={shouldRenderMessage()}>
@@ -82,12 +91,14 @@ export const MessageItem: Component<MessageItemProps> = (props) => {
 
           <Show when={showStatusRail()}>
             <div class="chat-message-status-rail">
-              <Show when={messageOrnament()}>
-                {(ornament) => (
-                  <div class="chat-message-ornament">
-                    {ornament()}
-                  </div>
-                )}
+              <Show when={shouldRenderOrnament() && MessageOrnament()}>
+                <div class="chat-message-ornament">
+                  <Dynamic
+                    component={MessageOrnament()!}
+                    message={props.message}
+                    isActiveAssistantStreaming={isActiveAssistantStreaming()}
+                  />
+                </div>
               </Show>
 
               <Show when={showFooter()}>

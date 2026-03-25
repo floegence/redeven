@@ -20,6 +20,7 @@ import { Button, ConfirmDialog, Dialog, DirectoryPicker, Dropdown, Input, Select
 import {
   AttachmentPreview,
   ChatProvider,
+  MessageItem,
   VirtualMessageList,
   useChatContext,
   useAttachments,
@@ -1778,13 +1779,19 @@ interface MessageListWithEmptyStateProps {
   onSuggestionClick: (prompt: string) => void;
   disabled?: boolean;
   class?: string;
+  tailVisible?: boolean;
+  tailComponent?: Component;
 }
 
 const MessageListWithEmptyState: Component<MessageListWithEmptyStateProps> = (props) => {
   return (
     <div class={cn('relative flex-1 min-h-0', props.class)}>
       <Show when={props.hasMessages}>
-        <VirtualMessageList class="h-full" />
+        <VirtualMessageList
+          class="h-full"
+          tailVisible={props.tailVisible}
+          tailComponent={props.tailComponent}
+        />
       </Show>
       <Show when={!props.hasMessages && !props.loading}>
         <EmptyChat
@@ -1887,7 +1894,7 @@ export function EnvAIPage() {
       setDisplayedLiveRunMessage(nextDisplayed);
     }
   });
-  const activeAssistantRowMessage = displayedLiveRunMessage;
+  const liveAssistantDisplayMessage = displayedLiveRunMessage;
   const activeContextTelemetry = createMemo(() => {
     const runId = activeContextRunId();
     return runId ? getContextTelemetryRun(contextTelemetryByRun(), runId) : null;
@@ -2390,7 +2397,6 @@ export function EnvAIPage() {
 
     const projectedMessages = projectThreadTranscriptMessages({
       transcriptMessages: transcriptMessages(),
-      liveAssistantMessage: activeAssistantRowMessage(),
       previousRenderedMessages: untrack(() => chat?.messages() ?? []),
       subagentById: threadSubagentsById(),
     });
@@ -2463,7 +2469,7 @@ export function EnvAIPage() {
 
   const activeThreadRunning = createMemo(() => ai.isThreadRunning(ai.activeThreadId()));
   const hasMessages = createMemo(() =>
-    transcriptMessages().length > 0 || activeAssistantRowMessage() !== null,
+    transcriptMessages().length > 0 || liveAssistantDisplayMessage() !== null,
   );
   const activeThreadWaitingUser = createMemo(() => {
     const status = String(ai.activeThread()?.run_status ?? '').trim().toLowerCase();
@@ -2755,8 +2761,24 @@ export function EnvAIPage() {
     status === 'success' || status === 'failed' || status === 'canceled' || status === 'timed_out' || status === 'waiting_user';
 
   const hasStreamingAssistantMessage = (): boolean => {
-    return activeAssistantRowMessage()?.status === 'streaming';
+    return liveAssistantDisplayMessage()?.status === 'streaming';
   };
+
+  const hasLiveAssistantTail = createMemo(() => liveAssistantDisplayMessage() !== null);
+
+  const LiveAssistantTail: Component = () => (
+    <Show when={liveAssistantDisplayMessage()}>
+      {(message) => (
+        <div class="chat-message-list-item">
+          <MessageItem
+            message={message()}
+            activeAssistantStreaming={message().status === 'streaming'}
+            transient
+          />
+        </div>
+      )}
+    </Show>
+  );
 
   const cancelActiveRunSnapshotRecovery = (): void => {
     activeSnapshotRecoverySeq += 1;
@@ -4505,6 +4527,8 @@ export function EnvAIPage() {
                         onSuggestionClick={handleSuggestionClick}
                         disabled={!canInteract()}
                         class="h-full"
+                        tailVisible={hasLiveAssistantTail()}
+                        tailComponent={LiveAssistantTail}
                       />
                       <ChatFileBrowserFAB
                         workingDir={activeWorkingDir()}

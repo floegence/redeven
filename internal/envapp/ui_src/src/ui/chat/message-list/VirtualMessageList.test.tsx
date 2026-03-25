@@ -177,4 +177,71 @@ describe('VirtualMessageList', () => {
       dispose();
     }
   });
+
+  it('follows live tail growth without mutating virtual row height bookkeeping', async () => {
+    const mod = await import('./VirtualMessageList');
+    currentMessages = [
+      {
+        id: 'm_ai_settled_1',
+        role: 'assistant',
+        status: 'complete',
+        timestamp: 100,
+        blocks: [{ type: 'markdown', content: 'Settled transcript row' }],
+      },
+    ];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const TestTail = () => (
+      <div class="chat-message-list-item">
+        <div data-testid="live-tail">Streaming tail</div>
+      </div>
+    );
+
+    const dispose = render(() => (
+      <mod.VirtualMessageList
+        tailVisible
+        tailComponent={TestTail}
+      />
+    ), host);
+
+    try {
+      await flushAsync();
+
+      const scroller = host.querySelector('.chat-message-list-scroll') as HTMLDivElement | null;
+      const tail = host.querySelector('.chat-message-list-tail') as HTMLDivElement | null;
+
+      expect(scroller).toBeTruthy();
+      expect(tail).toBeTruthy();
+
+      let scrollTop = 120;
+      Object.defineProperty(scroller!, 'scrollHeight', {
+        configurable: true,
+        get: () => 520,
+      });
+      Object.defineProperty(scroller!, 'clientHeight', {
+        configurable: true,
+        get: () => 400,
+      });
+      Object.defineProperty(scroller!, 'scrollTop', {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value) => {
+          scrollTop = Number(value);
+        },
+      });
+
+      scrollToBottomMock.mockClear();
+      setMessageHeightMock.mockClear();
+      setItemHeightMock.mockClear();
+
+      triggerResize(tail!, 220);
+      await flushAsync();
+
+      expect(setMessageHeightMock).not.toHaveBeenCalled();
+      expect(setItemHeightMock).not.toHaveBeenCalled();
+      expect(scrollToBottomMock).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+    }
+  });
 });

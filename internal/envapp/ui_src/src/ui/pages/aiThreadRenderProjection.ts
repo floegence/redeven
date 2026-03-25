@@ -1,4 +1,3 @@
-import { getMessageRenderKey } from '../chat/messageIdentity';
 import type { Message, MessageBlock } from '../chat/types';
 import type { SubagentView } from './aiDataNormalizers';
 
@@ -7,7 +6,6 @@ type ChecklistBlock = Extract<MessageBlock, { type: 'checklist' }>;
 
 export interface ProjectThreadTranscriptMessagesArgs {
   transcriptMessages: Message[];
-  liveAssistantMessage?: Message | null;
   previousRenderedMessages: Message[];
   subagentById: Record<string, SubagentView>;
 }
@@ -55,13 +53,6 @@ export function projectThreadTranscriptMessages(args: ProjectThreadTranscriptMes
     if (!shouldCarryForwardLocalOnlyMessage(previous)) continue;
     projected.push(previous);
     seen.add(id);
-  }
-
-  const liveAssistantMessage = args.liveAssistantMessage;
-  const liveAssistantID = String(liveAssistantMessage?.id ?? '').trim();
-  if (liveAssistantMessage && liveAssistantMessage.role === 'assistant' && liveAssistantID && !seen.has(liveAssistantID)) {
-    projected.push(carryForwardActiveAssistantRenderIdentity(args.previousRenderedMessages, liveAssistantMessage));
-    seen.add(liveAssistantID);
   }
 
   const withSubagentSync = syncSubagentBlocksWithLatest(projected, args.subagentById);
@@ -216,33 +207,6 @@ export function carryForwardTransientMessageState(previousRenderedMessages: Mess
 
 function shouldCarryForwardLocalOnlyMessage(message: Message): boolean {
   return message.role === 'user' || message.role === 'system';
-}
-
-function carryForwardActiveAssistantRenderIdentity(previousRenderedMessages: Message[], nextMessage: Message): Message {
-  const previous = findPreviousActiveAssistantMessage(previousRenderedMessages);
-  if (!previous) {
-    return nextMessage;
-  }
-
-  const nextRenderKey = getMessageRenderKey(previous);
-  if (!nextRenderKey || nextRenderKey === String(nextMessage.renderKey ?? '').trim()) {
-    return nextMessage;
-  }
-
-  return {
-    ...nextMessage,
-    renderKey: nextRenderKey,
-  };
-}
-
-function findPreviousActiveAssistantMessage(messages: Message[]): Message | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.role !== 'assistant') continue;
-    if (message.status !== 'streaming') continue;
-    return message;
-  }
-  return null;
 }
 
 function carryForwardRenderKey(previous: Message, next: Message): string {

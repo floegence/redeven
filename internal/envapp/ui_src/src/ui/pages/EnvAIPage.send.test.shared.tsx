@@ -635,6 +635,10 @@ function liveRunAnswerText(host: HTMLElement): HTMLElement | null {
   return host.querySelector('.chat-message-item-assistant .chat-streaming-text');
 }
 
+function liveRunTail(host: HTMLElement): HTMLElement | null {
+  return host.querySelector('.chat-message-list-tail');
+}
+
 type SubmitTrigger = 'button' | 'enter';
 
 function clickButton(host: HTMLElement, title: string) {
@@ -1210,6 +1214,23 @@ export function registerEnvAIPageSendTests() {
         await waitFor(() => {
           expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello Flower');
         });
+      } finally {
+        dispose();
+      }
+    });
+
+    it('renders the live assistant surface through the non-virtualized transcript tail', async () => {
+      getActiveRunSnapshotMock.mockResolvedValueOnce({ ok: false });
+
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'route the live surface through the transcript tail');
+        submitComposer(host, 'button', 'Send message');
+        await flushAsync();
+
+        expect(liveRunTail(host)).toBeTruthy();
+        expect(liveRunTail(host)?.querySelector('.chat-message-item-assistant')).toBeTruthy();
+        expect(assistantRunIndicator(host)).toBeTruthy();
       } finally {
         dispose();
       }

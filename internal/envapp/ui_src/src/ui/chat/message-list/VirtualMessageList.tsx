@@ -2,6 +2,7 @@
 
 import { createEffect, createMemo, createSignal, onCleanup, Show, For } from 'solid-js';
 import type { Accessor, Component } from 'solid-js';
+import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import { useChatContext } from '../ChatProvider';
 import { useVirtualList } from '../hooks/useVirtualList';
@@ -13,6 +14,8 @@ import { captureViewportAnchor, resolveViewportAnchorScrollTop, type ViewportAnc
 
 export interface VirtualMessageListProps {
   class?: string;
+  tailVisible?: boolean;
+  tailComponent?: Component;
 }
 
 interface VirtualMessageRowProps {
@@ -97,6 +100,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   let prevMessageCount = messages().length;
   let prevScrollTop = 0;
   let scrollContainerEl: HTMLElement | null = null;
+  let tailContainerEl: HTMLDivElement | null = null;
   let didInitialBottomSync = false;
   let lastHandledScrollRequestSeq = 0;
   let followToBottomRaf: number | null = null;
@@ -332,9 +336,33 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     }
   });
 
+  const tailResizeObserver = new ResizeObserver(() => {
+    const target = scrollContainerEl;
+    if (!target) return;
+    updateDistanceToBottom(target);
+    if (followMode() === 'following') {
+      scheduleFollowToBottom('auto');
+    }
+  });
+
+  createEffect(() => {
+    const tailVisible = props.tailVisible === true;
+    const el = tailContainerEl;
+    tailResizeObserver.disconnect();
+    if (!tailVisible || !el) return;
+    tailResizeObserver.observe(el);
+    requestAnimationFrame(() => {
+      updateDistanceToBottom();
+      if (followMode() === 'following') {
+        scheduleFollowToBottom('auto');
+      }
+    });
+  });
+
   onCleanup(() => {
     scrollContainerEl = null;
     resizeObserver.disconnect();
+    tailResizeObserver.disconnect();
     if (followToBottomRaf !== null) {
       cancelAnimationFrame(followToBottomRaf);
       followToBottomRaf = null;
@@ -396,6 +424,17 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
             class="chat-vlist-spacer"
             style={{ height: `${virtualList.paddingBottom()}px` }}
           />
+
+          <Show when={props.tailVisible && props.tailComponent}>
+            <div
+              class="chat-message-list-tail"
+              ref={(el) => {
+                tailContainerEl = el;
+              }}
+            >
+              <Dynamic component={props.tailComponent} />
+            </div>
+          </Show>
         </div>
 
         <Show when={showListWorkingIndicator() && isWorking()}>

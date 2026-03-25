@@ -156,90 +156,7 @@ describe('aiThreadRenderProjection', () => {
     expect(projected).toEqual([]);
   });
 
-  it('appends the active live assistant after optimistic local user messages', () => {
-    const optimisticUser: Message = {
-      id: 'u_local_2',
-      role: 'user',
-      blocks: [{ type: 'text', content: 'latest optimistic turn' }],
-      status: 'complete',
-      timestamp: 30,
-    };
-    const liveAssistant: Message = {
-      id: 'm_ai_live_1',
-      role: 'assistant',
-      blocks: [{ type: 'markdown', content: 'Streaming answer' }],
-      status: 'streaming',
-      timestamp: 31,
-    };
-
-    const projected = projectThreadTranscriptMessages({
-      transcriptMessages: [],
-      liveAssistantMessage: liveAssistant,
-      previousRenderedMessages: [optimisticUser],
-      subagentById: {},
-    });
-
-    expect(projected.map((message: Message) => message.id)).toEqual(['u_local_2', 'm_ai_live_1']);
-  });
-
-  it('reuses the previous active assistant render identity for a new live message source', () => {
-    const previousRendered: Message[] = [
-      {
-        id: 'm_ai_pending_thread_1',
-        renderKey: 'active-run:thread-1',
-        role: 'assistant',
-        blocks: [{ type: 'markdown', content: '' }],
-        status: 'streaming',
-        timestamp: 30,
-      },
-    ];
-    const liveAssistant: Message = {
-      id: 'm_ai_live_real_1',
-      role: 'assistant',
-      blocks: [{ type: 'markdown', content: 'Streaming answer' }],
-      status: 'streaming',
-      timestamp: 31,
-    };
-
-    const projected = projectThreadTranscriptMessages({
-      transcriptMessages: [],
-      liveAssistantMessage: liveAssistant,
-      previousRenderedMessages: previousRendered,
-      subagentById: {},
-    });
-
-    expect(projected).toHaveLength(1);
-    expect(projected[0].id).toBe('m_ai_live_real_1');
-    expect(projected[0].renderKey).toBe('active-run:thread-1');
-  });
-
-  it('suppresses the live assistant once the transcript already contains the same assistant id', () => {
-    const transcriptAssistant: Message = {
-      id: 'm_ai_live_2',
-      role: 'assistant',
-      blocks: [{ type: 'markdown', content: 'Persisted answer' }],
-      status: 'complete',
-      timestamp: 40,
-    };
-    const liveAssistant: Message = {
-      id: 'm_ai_live_2',
-      role: 'assistant',
-      blocks: [{ type: 'markdown', content: 'Streaming answer' }],
-      status: 'streaming',
-      timestamp: 39,
-    };
-
-    const projected = projectThreadTranscriptMessages({
-      transcriptMessages: [transcriptAssistant],
-      liveAssistantMessage: liveAssistant,
-      previousRenderedMessages: [],
-      subagentById: {},
-    });
-
-    expect(projected).toEqual([transcriptAssistant]);
-  });
-
-  it('carries the active assistant render identity onto the settled transcript message', () => {
+  it('keeps transcript projection scoped to settled transcript semantics only', () => {
     const previousRendered: Message[] = [
       {
         id: 'm_ai_live_3',
@@ -249,23 +166,21 @@ describe('aiThreadRenderProjection', () => {
         status: 'streaming',
         timestamp: 50,
       },
+      {
+        id: 'u_local_3',
+        role: 'user',
+        blocks: [{ type: 'text', content: 'optimistic user turn' }],
+        status: 'complete',
+        timestamp: 49,
+      },
     ];
-    const transcriptAssistant: Message = {
-      id: 'm_ai_live_3',
-      role: 'assistant',
-      blocks: [{ type: 'markdown', content: 'Final answer' }],
-      status: 'complete',
-      timestamp: 51,
-    };
 
     const projected = projectThreadTranscriptMessages({
-      transcriptMessages: [transcriptAssistant],
+      transcriptMessages: [],
       previousRenderedMessages: previousRendered,
       subagentById: {},
     });
 
-    expect(projected).toHaveLength(1);
-    expect(projected[0].id).toBe('m_ai_live_3');
-    expect(projected[0].renderKey).toBe('active-run:thread-3');
+    expect(projected.map((message: Message) => message.id)).toEqual(['u_local_3']);
   });
 });

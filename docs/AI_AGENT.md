@@ -148,6 +148,7 @@ Behavior summary:
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.
 - `task_complete` is rejected when todo tracking is active and open todos still exist.
 - Flower keeps exactly one canonical visible answer slot per assistant run. Later answer revisions replace the current candidate instead of being appended as additional final-answer turns.
+- In the Env App UI, that canonical answer slot is rendered through two coordinated surfaces: settled transcript rows for persisted history, and a dedicated live assistant tail for the current in-flight answer. The runtime must never let both surfaces show the same assistant message at once.
 - Draft text produced inside the same run must stay separate from assistant history. Flower may stream draft markdown to the active answer block, but it must not feed that draft back into the next provider turn as if it were a committed assistant transcript message.
 - When a run completes through `task_complete`, its `task_complete.result` is the canonical final assistant completion text. Persisted assistant transcript snapshots must keep that canonical completion text aligned with the single user-visible markdown answer even if the run streamed mixed `thinking`, `tool-call`, and `markdown` blocks before completion.
 - `ask_user` follows a structured contract (`questions`, `reason_code`, `required_from_user`, `evidence_refs`) and is deterministically validated before entering `waiting_user`; runtime enforcement is limited to capability, schema, evidence, todo, and interaction-contract consistency checks rather than a second semantic policy classifier.
@@ -167,6 +168,7 @@ Behavior summary:
 - `terminal.exec` output is rendered with structured shell blocks in the Env App (no markdown fallback conversion).
 - Live assistant `block-delta` transport must preserve complete user-visible markdown/reasoning content. Provider adapters must keep provider-emitted visible whitespace semantics intact for streamed reasoning fragments so persisted transcripts and live blocks stay human-readable.
 - Active-run snapshots are a recovery path for the in-flight assistant turn, not a second transcript source. Once the assistant message has been appended to persisted transcript history, snapshot reads must return empty for that turn so the UI cannot render duplicate assistant answers from both transcript and live state.
+- The live assistant surface is intentionally outside transcript virtualization so streaming markdown growth, phase-label changes, and context telemetry ornament updates do not thrash transcript row measurement or remount settled history during a run.
 - The realtime sink may coalesce low-priority assistant/context updates, but the active thread UI must still converge to the canonical persisted assistant transcript when the run reaches a terminal state, even if some tail realtime frames were missed.
 - Subagents are for parallelizable or independently reviewable work. Simple local inspection tasks should stay in the main Flower run instead of spawning subagents.
 
