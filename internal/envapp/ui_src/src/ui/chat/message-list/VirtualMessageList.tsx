@@ -21,6 +21,7 @@ export interface VirtualMessageListProps {
 interface VirtualMessageRowProps {
   renderKey: string;
   observeItem: (el: HTMLElement, renderKey: string) => void;
+  unobserveItem: (el: HTMLElement) => void;
   messageByRenderKey: Accessor<Map<string, Message>>;
 }
 
@@ -45,14 +46,30 @@ type FollowMode = 'following' | 'paused';
 const FOLLOW_BOTTOM_THRESHOLD_PX = 24;
 const EXTERNAL_SCROLL_SYNC_PASSES = 2;
 
-const VirtualMessageRow: Component<VirtualMessageRowProps> = (props) => (
-  <div
-    class="chat-message-list-item"
-    ref={(el: HTMLElement) => props.observeItem(el, props.renderKey)}
-  >
-    <MessageItem message={props.messageByRenderKey().get(props.renderKey)!} />
-  </div>
-);
+const VirtualMessageRow: Component<VirtualMessageRowProps> = (props) => {
+  let rowEl: HTMLDivElement | undefined;
+
+  createEffect(() => {
+    const el = rowEl;
+    if (!el) return;
+
+    props.observeItem(el, props.renderKey);
+    onCleanup(() => {
+      props.unobserveItem(el);
+    });
+  });
+
+  return (
+    <div
+      class="chat-message-list-item"
+      ref={(el: HTMLDivElement) => {
+        rowEl = el;
+      }}
+    >
+      <MessageItem message={props.messageByRenderKey().get(props.renderKey)!} />
+    </div>
+  );
+};
 
 export const VirtualMessageList: Component<VirtualMessageListProps> = (props) => {
   const ctx = useChatContext();
@@ -105,6 +122,8 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   let lastHandledScrollRequestSeq = 0;
   let followToBottomRaf: number | null = null;
   let viewportAnchor: ViewportAnchor | null = null;
+  let tailObservedHeight = 0;
+  let scrollViewportHeight = 0;
 
   const getDistanceToBottom = (el: HTMLElement) =>
     Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight);
@@ -116,6 +135,21 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     const target = el ?? scrollContainerEl;
     if (!target) return;
     setDistanceToBottomPx(getDistanceToBottom(target));
+  };
+
+  const syncProgrammaticScroll = (target: HTMLElement) => {
+    prevScrollTop = target.scrollTop;
+    virtualList.onScroll();
+    updateDistanceToBottom(target);
+  };
+
+  const applyFollowScrollDelta = (target: HTMLElement, delta: number): void => {
+    if (Math.abs(delta) < 1) {
+      updateDistanceToBottom(target);
+      return;
+    }
+    target.scrollTop = Math.max(0, target.scrollTop + delta);
+    syncProgrammaticScroll(target);
   };
 
   const applyFollowingMode = () => {
@@ -160,8 +194,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
       virtualList.scrollToBottom();
     }
 
-    prevScrollTop = el.scrollTop;
-    updateDistanceToBottom(el);
+    syncProgrammaticScroll(el);
     return true;
   };
 
@@ -278,7 +311,6 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
       messageId: string;
       nextHeight: number;
       delta: number;
-      startOffset: number;
     }> = [];
 
     for (const entry of entries) {
@@ -304,7 +336,6 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
         messageId,
         nextHeight: height,
         delta: height - cachedHeight,
-        startOffset: virtualList.getItemOffset(index),
       });
     }
 
@@ -312,6 +343,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
 
     const target = scrollContainerEl;
     const keepViewportAnchor = followMode() === 'paused' && !!target;
+    const totalDelta = updates.reduce((sum, update) => sum + update.delta, 0);
 
     for (const update of updates) {
       ctx.setMessageHeight(update.messageId, update.nextHeight);
@@ -326,22 +358,54 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
       );
       if (nextAnchorScrollTop !== null && Math.abs(nextAnchorScrollTop - target.scrollTop) > 0.5) {
         target.scrollTop = nextAnchorScrollTop;
-        prevScrollTop = target.scrollTop;
+        syncProgrammaticScroll(target);
       }
+    } else if (followMode() === 'following' && target) {
+      applyFollowScrollDelta(target, totalDelta);
     }
 
     updateDistanceToBottom(target);
+  });
+
+  const tailResizeObserver = new ResizeObserver((entries) => {
+    const target = scrollContainerEl;
+    if (!target) return;
+    const entry = entries[0];
+    if (!entry) return;
+
+    const rawHeight =
+      entry.contentBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+    const nextHeight = Math.round(rawHeight);
+    if (nextHeight <= 0) return;
+
+    const delta = tailObservedHeight > 0 ? nextHeight - tailObservedHeight : 0;
+    tailObservedHeight = nextHeight;
+
     if (followMode() === 'following') {
-      scheduleFollowToBottom('auto');
+      applyFollowScrollDelta(target, delta);
+    } else {
+      updateDistanceToBottom(target);
     }
   });
 
-  const tailResizeObserver = new ResizeObserver(() => {
+  const scrollContainerResizeObserver = new ResizeObserver((entries) => {
     const target = scrollContainerEl;
     if (!target) return;
-    updateDistanceToBottom(target);
+    const entry = entries[0];
+    if (!entry) return;
+
+    const rawHeight =
+      entry.contentBoxSize?.[0]?.blockSize ?? entry.contentRect.height;
+    const nextHeight = Math.round(rawHeight);
+    if (nextHeight <= 0) return;
+
+    const delta = scrollViewportHeight > 0 ? scrollViewportHeight - nextHeight : 0;
+    scrollViewportHeight = nextHeight;
+
     if (followMode() === 'following') {
-      scheduleFollowToBottom('auto');
+      applyFollowScrollDelta(target, delta);
+    } else {
+      updateDistanceToBottom(target);
     }
   });
 
@@ -349,6 +413,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     const tailVisible = props.tailVisible === true;
     const el = tailContainerEl;
     tailResizeObserver.disconnect();
+    tailObservedHeight = el ? Math.round(el.getBoundingClientRect().height) : 0;
     if (!tailVisible || !el) return;
     tailResizeObserver.observe(el);
     requestAnimationFrame(() => {
@@ -363,6 +428,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     scrollContainerEl = null;
     resizeObserver.disconnect();
     tailResizeObserver.disconnect();
+    scrollContainerResizeObserver.disconnect();
     if (followToBottomRaf !== null) {
       cancelAnimationFrame(followToBottomRaf);
       followToBottomRaf = null;
@@ -373,6 +439,11 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   function observeItem(el: HTMLElement, messageId: string): void {
     resizeObserverMap.set(el, messageId);
     resizeObserver.observe(el);
+  }
+
+  function unobserveItem(el: HTMLElement): void {
+    resizeObserverMap.delete(el);
+    resizeObserver.unobserve(el);
   }
 
   const visibleMessageRenderKeys = createMemo<string[]>(() => {
@@ -395,7 +466,10 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
       <div
         class="chat-message-list-scroll"
         ref={((el: HTMLElement) => {
+          scrollContainerResizeObserver.disconnect();
           scrollContainerEl = el;
+          scrollViewportHeight = Math.round(el.clientHeight);
+          scrollContainerResizeObserver.observe(el);
           virtualList.containerRef(el);
           virtualList.scrollRef(el);
           prevScrollTop = el.scrollTop;
@@ -415,6 +489,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
               <VirtualMessageRow
                 renderKey={renderKey}
                 observeItem={observeItem}
+                unobserveItem={unobserveItem}
                 messageByRenderKey={messageByRenderKey}
               />
             )}

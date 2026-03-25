@@ -51,6 +51,7 @@ The Flower chat UI now follows five explicit constraints:
    - `following` mode is bottom-pinned.
    - `paused` mode is anchored to the first visible message plus its in-item offset, so late message reflow does not pull the viewport upward.
    - The live assistant tail is the only non-virtualized appendage inside the scroll container. Live-run status changes must stay inside that tail surface instead of competing with transcript row ownership.
+   - Follow-mode resize handling must preserve the current bottom anchor by applying measured height deltas from transcript rows, the live tail, and the scroll viewport itself. Streaming line wraps must not be implemented as repeated full `scrollToBottom()` retries.
 
 4. Transcript overlays consume a shared bottom inset contract.
    - The transcript scroll area, file-browser FAB, and scroll-to-bottom affordance must use the shared transcript overlay inset variables instead of ad-hoc message margins.
@@ -66,6 +67,12 @@ The Flower chat UI now follows five explicit constraints:
    - Context usage, compaction events, and replay cursors belong to `run_id`-scoped UI state instead of one resettable page-level slot.
    - Rebinding the active thread to the same known run must preserve already-visible context telemetry; replay/backfill is incremental and must not clear the current chip state first.
    - The bottom-dock context summary may mount before usage telemetry arrives, but it must not disappear and reappear for the same run because of confirmation or replay timing.
+
+7. Transcript presentation is a shared conversation column.
+   - User and assistant rows render in the same centered transcript lane instead of splitting to opposite screen edges.
+   - Only assistant rows render an avatar; user rows rely on bubble styling and column placement for distinction.
+   - Assistant answers render as borderless transcript content, while user turns keep the compact bubble treatment.
+   - Runtime chips in the bottom toolbar must stay inside a stable single-line lane so chip churn cannot resize the transcript viewport mid-stream.
 
 ## Verification
 

@@ -150,13 +150,15 @@ describe('VirtualMessageList', () => {
       expect(item).toBeTruthy();
 
       let scrollTop = 120;
+      let scrollHeight = 520;
+      let clientHeight = 400;
       Object.defineProperty(scroller!, 'scrollHeight', {
         configurable: true,
-        get: () => 520,
+        get: () => scrollHeight,
       });
       Object.defineProperty(scroller!, 'clientHeight', {
         configurable: true,
-        get: () => 400,
+        get: () => clientHeight,
       });
       Object.defineProperty(scroller!, 'scrollTop', {
         configurable: true,
@@ -166,13 +168,20 @@ describe('VirtualMessageList', () => {
         },
       });
 
-      scrollToBottomMock.mockClear();
+      triggerResize(scroller!, 400);
+      await flushAsync();
 
+      scrollToBottomMock.mockClear();
+      onScrollMock.mockClear();
+
+      scrollHeight = 620;
       triggerResize(item!, 220);
       await flushAsync();
 
       expect(setMessageHeightMock).toHaveBeenCalledWith('active-run:thread-1', 220);
-      expect(scrollToBottomMock).toHaveBeenCalledTimes(1);
+      expect(scrollTop).toBe(220);
+      expect(scrollToBottomMock).not.toHaveBeenCalled();
+      expect(onScrollMock).toHaveBeenCalled();
     } finally {
       dispose();
     }
@@ -214,13 +223,15 @@ describe('VirtualMessageList', () => {
       expect(tail).toBeTruthy();
 
       let scrollTop = 120;
+      let scrollHeight = 520;
+      let clientHeight = 400;
       Object.defineProperty(scroller!, 'scrollHeight', {
         configurable: true,
-        get: () => 520,
+        get: () => scrollHeight,
       });
       Object.defineProperty(scroller!, 'clientHeight', {
         configurable: true,
-        get: () => 400,
+        get: () => clientHeight,
       });
       Object.defineProperty(scroller!, 'scrollTop', {
         configurable: true,
@@ -230,16 +241,86 @@ describe('VirtualMessageList', () => {
         },
       });
 
+      triggerResize(scroller!, 400);
+      triggerResize(tail!, 120);
+      await flushAsync();
+
       scrollToBottomMock.mockClear();
       setMessageHeightMock.mockClear();
       setItemHeightMock.mockClear();
+      onScrollMock.mockClear();
 
+      scrollHeight = 620;
       triggerResize(tail!, 220);
       await flushAsync();
 
       expect(setMessageHeightMock).not.toHaveBeenCalled();
       expect(setItemHeightMock).not.toHaveBeenCalled();
-      expect(scrollToBottomMock).toHaveBeenCalledTimes(1);
+      expect(scrollTop).toBe(220);
+      expect(scrollToBottomMock).not.toHaveBeenCalled();
+      expect(onScrollMock).toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('preserves the bottom anchor when the transcript viewport height changes mid-run', async () => {
+    const mod = await import('./VirtualMessageList');
+    currentMessages = [
+      {
+        id: 'm_ai_live_resize_1',
+        renderKey: 'active-run:thread-resize',
+        role: 'assistant',
+        status: 'streaming',
+        timestamp: 100,
+        blocks: [{ type: 'markdown', content: 'Hello Flower' }],
+      },
+    ];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => <mod.VirtualMessageList />, host);
+
+    try {
+      await flushAsync();
+
+      const scroller = host.querySelector('.chat-message-list-scroll') as HTMLDivElement | null;
+
+      expect(scroller).toBeTruthy();
+
+      let scrollTop = 120;
+      let scrollHeight = 520;
+      let clientHeight = 400;
+      Object.defineProperty(scroller!, 'scrollHeight', {
+        configurable: true,
+        get: () => scrollHeight,
+      });
+      Object.defineProperty(scroller!, 'clientHeight', {
+        configurable: true,
+        get: () => clientHeight,
+      });
+      Object.defineProperty(scroller!, 'scrollTop', {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value) => {
+          scrollTop = Number(value);
+        },
+      });
+
+      triggerResize(scroller!, 400);
+      await flushAsync();
+
+      scrollToBottomMock.mockClear();
+      onScrollMock.mockClear();
+
+      clientHeight = 360;
+      triggerResize(scroller!, 360);
+      await flushAsync();
+
+      expect(scrollHeight).toBe(520);
+      expect(scrollTop).toBe(160);
+      expect(scrollToBottomMock).not.toHaveBeenCalled();
+      expect(onScrollMock).toHaveBeenCalled();
     } finally {
       dispose();
     }

@@ -13,23 +13,28 @@ export interface MessageFrameProps {
   children: JSX.Element;
 }
 
-export const MessageFrame: Component<MessageFrameProps> = (props) => (
-  <div
-    class={cn(
-      'chat-message-item',
-      props.role === 'user' && 'chat-message-item-user',
-      props.role === 'assistant' && 'chat-message-item-assistant',
-      props.class,
-    )}
-  >
-    <Show when={props.showAvatar !== false}>
-      <MessageAvatar
-        role={props.role}
-        avatar={props.avatar}
-        isStreaming={props.avatarStreaming}
-      />
-    </Show>
+export const MessageFrame: Component<MessageFrameProps> = (props) => {
+  const showAvatar = () => props.showAvatar ?? props.role === 'assistant';
 
-    {props.children}
-  </div>
-);
+  return (
+    <div
+      class={cn(
+        'chat-message-item',
+        props.role === 'user' && 'chat-message-item-user',
+        props.role === 'assistant' && 'chat-message-item-assistant',
+        showAvatar() ? 'chat-message-item-with-avatar' : 'chat-message-item-without-avatar',
+        props.class,
+      )}
+    >
+      <Show when={showAvatar()}>
+        <MessageAvatar
+          role={props.role}
+          avatar={props.avatar}
+          isStreaming={props.avatarStreaming}
+        />
+      </Show>
+
+      {props.children}
+    </div>
+  );
+};

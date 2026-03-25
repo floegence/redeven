@@ -77,6 +77,28 @@ describe('MessageItem', () => {
     expect(host.querySelector('.chat-message-footer')).toBeTruthy();
   });
 
+  it('renders only the assistant avatar so both roles share the same transcript column', () => {
+    const assistantHost = renderMessageItem({
+      id: 'msg-assistant-avatar',
+      role: 'assistant',
+      status: 'complete',
+      timestamp: 0,
+      blocks: [{ type: 'markdown', content: 'Assistant reply' }],
+    });
+
+    expect(assistantHost.querySelector('.chat-message-avatar-assistant')).toBeTruthy();
+
+    const userHost = renderMessageItem({
+      id: 'msg-user-no-avatar',
+      role: 'user',
+      status: 'complete',
+      timestamp: 0,
+      blocks: [{ type: 'text', content: 'User reply' }],
+    });
+
+    expect(userHost.querySelector('.chat-message-avatar-user')).toBeNull();
+  });
+
   it('keeps the assistant row node mounted when a pending placeholder becomes visible streaming content', () => {
     const [message, setMessage] = createSignal<Message>({
       id: 'msg-pending',

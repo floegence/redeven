@@ -4486,10 +4486,10 @@ export function EnvAIPage() {
                   </div>
 
                   <div class="flower-chat-bottom-dock">
-                    {/* Toolbar: Tasks chip + Execution mode toggle */}
-                    <div class="relative px-3 pt-1 pb-1.5 chat-toolbar-separator flower-chat-toolbar">
-                      <div class="flex items-center justify-between gap-2 flex-wrap">
-                        <div class="min-w-0 flex items-center gap-1.5 flex-wrap">
+                    {/* Toolbar: runtime chips + execution mode toggle */}
+                    <div class="chat-toolbar-separator flower-chat-toolbar">
+                      <div class="flower-chat-toolbar-main">
+                        <div class="flower-chat-toolbar-lane">
                           <Show when={ai.activeThreadId() && activeThreadTodos().length > 0}>
                             <CompactTasksSummary
                               executionMode={executionMode()}
@@ -4517,13 +4517,15 @@ export function EnvAIPage() {
                             <span class="text-[11px] text-muted-foreground">Execution mode</span>
                           </Show>
                         </div>
-                        <ExecutionModeToggle
-                          value={executionMode()}
-                          disabled={activeThreadRunning()}
-                          onChange={(mode) => {
-                            void updateExecutionMode(mode);
-                          }}
-                        />
+                        <div class="flower-chat-toolbar-mode">
+                          <ExecutionModeToggle
+                            value={executionMode()}
+                            disabled={activeThreadRunning()}
+                            onChange={(mode) => {
+                              void updateExecutionMode(mode);
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
 
