@@ -1,4 +1,4 @@
-import { For, Show, type JSX } from 'solid-js';
+import { For, Show, type Component, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
@@ -281,6 +281,115 @@ export function GitChangedFilesActionButton(props: GitChangedFilesActionButtonPr
     >
       {props.children}
     </button>
+  );
+}
+
+export type GitShortcutOrbTone = 'flower' | 'terminal' | 'files';
+
+export interface GitShortcutOrbButtonProps {
+  label: string;
+  tone: GitShortcutOrbTone;
+  icon: Component<{ class?: string }>;
+  class?: string;
+  iconClass?: string;
+  disabled?: boolean;
+  type?: 'button' | 'submit' | 'reset';
+  size?: 'sm' | 'md';
+  title?: string;
+  onClick?: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>;
+}
+
+function gitShortcutOrbShellClass(tone: GitShortcutOrbTone): string {
+  switch (tone) {
+    case 'flower':
+      return 'border-primary/24 bg-gradient-to-br from-primary/24 via-background/92 to-amber-400/18 text-primary shadow-[0_18px_36px_-24px_rgba(37,99,235,0.52)]';
+    case 'terminal':
+      return 'border-sky-500/24 bg-gradient-to-br from-sky-500/18 via-background/92 to-cyan-300/16 text-sky-700 shadow-[0_18px_36px_-24px_rgba(14,165,233,0.42)] dark:text-sky-200';
+    case 'files':
+    default:
+      return 'border-emerald-500/22 bg-gradient-to-br from-emerald-500/18 via-background/92 to-amber-300/16 text-emerald-700 shadow-[0_18px_36px_-24px_rgba(16,185,129,0.38)] dark:text-emerald-200';
+  }
+}
+
+function gitShortcutOrbLabelClass(tone: GitShortcutOrbTone): string {
+  switch (tone) {
+    case 'flower':
+      return 'text-primary/78 group-hover:text-primary';
+    case 'terminal':
+      return 'text-sky-700/78 group-hover:text-sky-800 dark:text-sky-200/82 dark:group-hover:text-sky-100';
+    case 'files':
+    default:
+      return 'text-emerald-700/80 group-hover:text-emerald-800 dark:text-emerald-200/82 dark:group-hover:text-emerald-100';
+  }
+}
+
+export function GitShortcutOrbButton(props: GitShortcutOrbButtonProps) {
+  const Icon = props.icon;
+  const size = () => props.size ?? 'md';
+
+  return (
+    <button
+      type={props.type ?? 'button'}
+      data-git-shortcut-orb={props.tone}
+      data-git-shortcut-size={size()}
+      title={props.title ?? props.label}
+      aria-label={props.label}
+      disabled={Boolean(props.disabled)}
+      class={cn(
+        'group relative flex cursor-pointer flex-col items-center justify-start gap-1 rounded-[1rem] px-1.5 py-1.5 text-center transition-[transform,color,opacity] duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-45',
+        size() === 'sm' ? 'min-w-[3.75rem]' : 'min-w-[4.375rem]',
+        props.class,
+      )}
+      onClick={props.onClick}
+    >
+      <span
+        class={cn(
+          'relative flex items-center justify-center rounded-full border shadow-[inset_0_1px_0_rgba(255,255,255,0.32)] backdrop-blur-xl transition-[transform,box-shadow,filter] duration-200 group-hover:scale-[1.04] group-hover:shadow-[0_22px_42px_-26px_rgba(15,23,42,0.68)]',
+          size() === 'sm' ? 'h-9 w-9' : 'h-11 w-11',
+          gitShortcutOrbShellClass(props.tone),
+        )}
+      >
+        <span class="pointer-events-none absolute inset-[1px] rounded-full bg-white/14 opacity-90" aria-hidden="true" />
+        <span class="pointer-events-none absolute inset-[2px] rounded-full bg-gradient-to-b from-white/18 via-transparent to-black/[0.04]" aria-hidden="true" />
+        <Icon
+          class={cn(
+            'relative z-[1]',
+            props.tone === 'flower'
+              ? (size() === 'sm' ? 'h-6 w-6' : 'h-7 w-7')
+              : (size() === 'sm' ? 'h-[1.125rem] w-[1.125rem]' : 'h-5 w-5'),
+            props.iconClass,
+          )}
+        />
+      </span>
+      <span
+        class={cn(
+          'text-[10px] font-semibold leading-none tracking-[0.04em] transition-colors duration-200',
+          size() === 'sm' && 'text-[9px]',
+          gitShortcutOrbLabelClass(props.tone),
+        )}
+      >
+        {props.label}
+      </span>
+    </button>
+  );
+}
+
+export interface GitShortcutOrbDockProps {
+  class?: string;
+  children: JSX.Element;
+}
+
+export function GitShortcutOrbDock(props: GitShortcutOrbDockProps) {
+  return (
+    <div
+      data-git-shortcut-dock
+      class={cn(
+        'inline-flex items-start gap-0.5 rounded-[1.35rem] border border-border/55 bg-background/60 p-1.5 shadow-[0_20px_40px_-30px_rgba(15,23,42,0.82),inset_0_1px_0_rgba(255,255,255,0.36)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/52',
+        props.class,
+      )}
+    >
+      {props.children}
+    </div>
   );
 }
 

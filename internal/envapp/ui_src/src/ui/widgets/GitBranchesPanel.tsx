@@ -1,7 +1,8 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
-import { ChevronRight, Folder, Sparkles, Terminal } from '@floegence/floe-webapp-core/icons';
+import { ChevronRight, Folder, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
+import { FlowerIcon } from '../icons/FlowerIcon';
 import { useRedevenRpc, type GitBranchSummary, type GitCommitFileSummary, type GitCommitSummary, type GitGetBranchCompareResponse, type GitListBranchesResponse, type GitListWorkspaceChangesResponse, type GitPreviewDeleteBranchResponse, type GitPreviewMergeBranchResponse, type GitRepoSummaryResponse, type GitWorkspaceChange, type GitWorkspaceSection } from '../protocol/redeven_v1';
 import {
   WORKSPACE_VIEW_SECTIONS,
@@ -42,6 +43,8 @@ import {
   GitLabelBlock,
   GitMetaPill,
   GitPrimaryTitle,
+  GitShortcutOrbButton,
+  GitShortcutOrbDock,
   GitStatePane,
   GitSubtleNote,
   gitChangedFilesRowClass,
@@ -524,22 +527,22 @@ function HistoryList(props: Pick<
                                                       </div>
                                                       <div class="flex items-center gap-2">
                                                         <Show when={props.onAskFlower}>
-                                                          <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            icon={Sparkles}
-                                                            class="rounded-md bg-background/80"
-                                                            onClick={() => props.onAskFlower?.({
-                                                              kind: 'commit',
-                                                              repoRootPath: repoRootPath(),
-                                                              location: 'branch_history',
-                                                              branchName: props.selectedBranch ? branchDisplayName(props.selectedBranch) : undefined,
-                                                              commit,
-                                                              files: files(),
-                                                            })}
-                                                          >
-                                                            Ask Flower
-                                                          </Button>
+                                                          <GitShortcutOrbDock>
+                                                            <GitShortcutOrbButton
+                                                              label="Ask Flower"
+                                                              tone="flower"
+                                                              icon={FlowerIcon}
+                                                              size="sm"
+                                                              onClick={() => props.onAskFlower?.({
+                                                                kind: 'commit',
+                                                                repoRootPath: repoRootPath(),
+                                                                location: 'branch_history',
+                                                                branchName: props.selectedBranch ? branchDisplayName(props.selectedBranch) : undefined,
+                                                                commit,
+                                                                files: files(),
+                                                              })}
+                                                            />
+                                                          </GitShortcutOrbDock>
                                                         </Show>
                                                         <div class="text-[11px] text-muted-foreground">Select a file to inspect the diff.</div>
                                                       </div>
@@ -872,11 +875,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && branchDirectoryRequest());
   const canBrowseFiles = () => Boolean(props.onBrowseFiles && branchDirectoryRequest());
   const showWorkspaceHelpers = () => Boolean(props.onOpenInTerminal || props.onBrowseFiles);
-  const workspaceHelperGridClass = () => (
-    (Number(Boolean(props.onOpenInTerminal)) + Number(Boolean(props.onBrowseFiles))) > 1
-      ? 'grid-cols-2'
-      : 'grid-cols-1'
-  );
   const branchActionCount = () => Number(Boolean(props.onCheckoutBranch))
     + Number(mergeAvailable())
     + Number(deleteAvailable());
@@ -889,7 +887,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   );
   const headerControlBarClass = 'rounded-xl border border-border/60 bg-muted/[0.12] p-2 shadow-sm shadow-black/5';
   const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';
-  const helperActionButtonClass = 'w-full cursor-pointer rounded-md border border-border/55 bg-background/72 px-3 text-muted-foreground shadow-sm shadow-black/5 hover:bg-background hover:text-foreground sm:w-auto';
   const secondaryActionButtonClass = 'w-full cursor-pointer rounded-md border border-border/60 bg-background/88 px-4 shadow-sm shadow-black/5 hover:bg-background sm:w-auto';
   const primaryActionButtonClass = 'w-full cursor-pointer rounded-md px-4 shadow-sm shadow-black/10 sm:w-auto';
   const dangerActionButtonClass = 'w-full cursor-pointer rounded-md border border-destructive/20 bg-destructive/[0.08] px-4 text-destructive shadow-sm shadow-black/5 hover:bg-destructive/[0.14] hover:text-destructive sm:w-auto';
@@ -983,26 +980,26 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
                 <div class="flex min-w-fit items-start justify-end gap-2">
                   <Show when={props.onAskFlower}>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      icon={Sparkles}
-                      class="rounded-md bg-background/80"
-                      disabled={!canAskFlowerStatus()}
-                      onClick={() => {
-                        if (!props.selectedBranch || !canAskFlowerStatus()) return;
-                        props.onAskFlower?.({
-                          kind: 'branch_status',
-                          repoRootPath: activeRepoRootPath(),
-                          worktreePath: statusRepoRootPath(),
-                          branch: props.selectedBranch,
-                          section: selectedStatusSection(),
-                          items: visibleStatusItems(),
-                        });
-                      }}
-                    >
-                      Ask Flower
-                    </Button>
+                    <GitShortcutOrbDock>
+                      <GitShortcutOrbButton
+                        label="Ask Flower"
+                        tone="flower"
+                        icon={FlowerIcon}
+                        size="sm"
+                        disabled={!canAskFlowerStatus()}
+                        onClick={() => {
+                          if (!props.selectedBranch || !canAskFlowerStatus()) return;
+                          props.onAskFlower?.({
+                            kind: 'branch_status',
+                            repoRootPath: activeRepoRootPath(),
+                            worktreePath: statusRepoRootPath(),
+                            branch: props.selectedBranch,
+                            section: selectedStatusSection(),
+                            items: visibleStatusItems(),
+                          });
+                        }}
+                      />
+                    </GitShortcutOrbDock>
                   </Show>
                   <Button size="sm" variant="outline" class="rounded-md bg-background/80" onClick={() => setCompareDialogOpen(true)}>
                     Compare
@@ -1168,43 +1165,37 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     <div class={headerControlBarClass}>
                       <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                         <Show when={showWorkspaceHelpers()}>
-                          <div class="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
+                          <div class="flex flex-col gap-1.5">
                             <div class={headerControlGroupLabelClass}>Workspace</div>
-                            <div class={cn('grid gap-1.5 sm:flex sm:flex-wrap', workspaceHelperGridClass())}>
+                            <GitShortcutOrbDock>
                               <Show when={props.onOpenInTerminal}>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
+                                <GitShortcutOrbButton
+                                  label="Terminal"
+                                  tone="terminal"
                                   icon={Terminal}
-                                  class={helperActionButtonClass}
                                   disabled={!canOpenInTerminal()}
                                   onClick={() => {
                                     const request = branchDirectoryRequest();
                                     if (!request) return;
                                     props.onOpenInTerminal?.(request);
                                   }}
-                                >
-                                  Terminal
-                                </Button>
+                                />
                               </Show>
 
                               <Show when={props.onBrowseFiles}>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
+                                <GitShortcutOrbButton
+                                  label="Files"
+                                  tone="files"
                                   icon={Folder}
-                                  class={helperActionButtonClass}
                                   disabled={!canBrowseFiles()}
                                   onClick={() => {
                                     const request = branchDirectoryRequest();
                                     if (!request) return;
                                     void props.onBrowseFiles?.(request);
                                   }}
-                                >
-                                  Files
-                                </Button>
+                                />
                               </Show>
-                            </div>
+                            </GitShortcutOrbDock>
                           </div>
                         </Show>
 

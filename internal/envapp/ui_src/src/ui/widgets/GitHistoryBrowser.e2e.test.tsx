@@ -205,8 +205,11 @@ describe('GitHistoryBrowser interactions', () => {
 
     try {
       await flush();
-      const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Ask Flower'));
+      const shortcutDock = host.querySelector('[data-git-shortcut-dock]');
+      const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Ask Flower')) as HTMLButtonElement | undefined;
+      expect(shortcutDock).toBeTruthy();
       expect(askFlowerButton).toBeTruthy();
+      expect(askFlowerButton?.dataset.gitShortcutOrb).toBe('flower');
 
       askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 

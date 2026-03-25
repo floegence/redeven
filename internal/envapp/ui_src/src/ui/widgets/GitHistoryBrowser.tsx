@@ -1,9 +1,8 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { Sparkles } from '@floegence/floe-webapp-core/icons';
-import { Button } from '@floegence/floe-webapp-core/ui';
 import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
+import { FlowerIcon } from '../icons/FlowerIcon';
 import { changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench';
 import type { GitAskFlowerRequest } from '../utils/gitBrowserShortcuts';
 import { gitChangePathClass } from './GitChrome';
@@ -21,6 +20,8 @@ import {
   GitLabelBlock,
   GitMetaPill,
   GitPrimaryTitle,
+  GitShortcutOrbButton,
+  GitShortcutOrbDock,
   GitStatePane,
   GitSubtleNote,
   gitChangedFilesRowClass,
@@ -219,21 +220,20 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                               </Show>
                             </GitLabelBlock>
                             <Show when={props.onAskFlower}>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                icon={Sparkles}
-                                class="shrink-0 rounded-md bg-background/80"
-                                onClick={() => props.onAskFlower?.({
-                                  kind: 'commit',
-                                  repoRootPath: String(props.repoInfo?.repoRootPath ?? '').trim(),
-                                  location: 'graph',
-                                  commit: detail,
-                                  files: commitFiles(),
-                                })}
-                              >
-                                Ask Flower
-                              </Button>
+                              <GitShortcutOrbDock class="shrink-0">
+                                <GitShortcutOrbButton
+                                  label="Ask Flower"
+                                  tone="flower"
+                                  icon={FlowerIcon}
+                                  onClick={() => props.onAskFlower?.({
+                                    kind: 'commit',
+                                    repoRootPath: String(props.repoInfo?.repoRootPath ?? '').trim(),
+                                    location: 'graph',
+                                    commit: detail,
+                                    files: commitFiles(),
+                                  })}
+                                />
+                              </GitShortcutOrbDock>
                             </Show>
                           </div>
                         </section>

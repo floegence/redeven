@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createSignal } from 'solid-js';
-import { Folder, Sparkles, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Folder, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
+import { FlowerIcon } from '../icons/FlowerIcon';
 import type { GitListWorkspaceChangesResponse, GitRepoSummaryResponse, GitWorkspaceChange } from '../protocol/redeven_v1';
 import {
   changeSecondaryPath,
@@ -30,6 +31,8 @@ import {
   GitLabelBlock,
   GitMetaPill,
   GitPrimaryTitle,
+  GitShortcutOrbButton,
+  GitShortcutOrbDock,
   GitStatePane,
   GitSubtleNote,
   gitChangedFilesRowClass,
@@ -245,79 +248,77 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                         : 'Stage the files you want from this table, then commit them from the staged dialog.'}
                     </div>
                   </GitLabelBlock>
-                  <div class="flex shrink-0 items-center justify-end gap-2 self-start">
-                    <Show when={props.onAskFlower}>
+                  <div class="flex shrink-0 flex-wrap items-center justify-end gap-2.5 self-start">
+                    <Show when={props.onAskFlower || props.onOpenInTerminal || props.onBrowseFiles}>
+                      <GitShortcutOrbDock>
+                        <Show when={props.onAskFlower}>
+                          <GitShortcutOrbButton
+                            label="Ask Flower"
+                            tone="flower"
+                            icon={FlowerIcon}
+                            disabled={!canAskFlower()}
+                            onClick={() => {
+                              if (!canAskFlower()) return;
+                              props.onAskFlower?.({
+                                kind: 'workspace_section',
+                                repoRootPath: repoRootPath(),
+                                headRef: props.repoSummary?.headRef,
+                                section: selectedSection(),
+                                items: visibleItems(),
+                              });
+                            }}
+                          />
+                        </Show>
+                        <Show when={props.onOpenInTerminal}>
+                          <GitShortcutOrbButton
+                            label="Terminal"
+                            tone="terminal"
+                            icon={Terminal}
+                            disabled={!canOpenInTerminal()}
+                            onClick={() => {
+                              const request = repoShortcutRequest();
+                              if (!request) return;
+                              props.onOpenInTerminal?.(request);
+                            }}
+                          />
+                        </Show>
+                        <Show when={props.onBrowseFiles}>
+                          <GitShortcutOrbButton
+                            label="Files"
+                            tone="files"
+                            icon={Folder}
+                            disabled={!canBrowseFiles()}
+                            onClick={() => {
+                              const request = repoShortcutRequest();
+                              if (!request) return;
+                              void props.onBrowseFiles?.(request);
+                            }}
+                          />
+                        </Show>
+                      </GitShortcutOrbDock>
+                    </Show>
+
+                    <div class="flex flex-wrap items-center justify-end gap-2">
                       <Button
                         size="sm"
                         variant="outline"
-                        icon={Sparkles}
-                        class="rounded-md bg-background/80"
-                        disabled={!canAskFlower()}
-                        onClick={() => {
-                          if (!canAskFlower()) return;
-                          props.onAskFlower?.({
-                            kind: 'workspace_section',
-                            repoRootPath: repoRootPath(),
-                            headRef: props.repoSummary?.headRef,
-                            section: selectedSection(),
-                            items: visibleItems(),
-                          });
-                        }}
+                        class="rounded-md"
+                        onClick={() => props.onBulkAction?.(selectedSection())}
+                        disabled={visibleItems().length === 0 || bulkActionBusy()}
+                        loading={bulkActionBusy()}
                       >
-                        Ask Flower
+                        {bulkActionLabel()}
                       </Button>
-                    </Show>
-                    <Show when={props.onOpenInTerminal}>
                       <Button
                         size="sm"
-                        variant="outline"
-                        icon={Terminal}
-                        class="rounded-md bg-background/80"
-                        disabled={!canOpenInTerminal()}
-                        onClick={() => {
-                          const request = repoShortcutRequest();
-                          if (!request) return;
-                          props.onOpenInTerminal?.(request);
-                        }}
+                        variant="default"
+                        class="rounded-md"
+                        onClick={() => setCommitDialogOpen(true)}
+                        disabled={stagedCount() === 0}
                       >
-                        Terminal
+                        Commit...
                       </Button>
-                    </Show>
-                    <Show when={props.onBrowseFiles}>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        icon={Folder}
-                        class="rounded-md bg-background/80"
-                        disabled={!canBrowseFiles()}
-                        onClick={() => {
-                          const request = repoShortcutRequest();
-                          if (!request) return;
-                          void props.onBrowseFiles?.(request);
-                        }}
-                      >
-                        Files
-                      </Button>
-                    </Show>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      class="rounded-md"
-                      onClick={() => props.onBulkAction?.(selectedSection())}
-                      disabled={visibleItems().length === 0 || bulkActionBusy()}
-                      loading={bulkActionBusy()}
-                    >
-                      {bulkActionLabel()}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="default"
-                      class="rounded-md"
-                      onClick={() => setCommitDialogOpen(true)}
-                      disabled={stagedCount() === 0}
-                    >
-                      Commit...
-                    </Button>
+                    </div>
                   </div>
                 </div>
               </div>
