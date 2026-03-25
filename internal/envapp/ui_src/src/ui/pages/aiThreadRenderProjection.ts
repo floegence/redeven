@@ -1,5 +1,6 @@
 import type { Message, MessageBlock } from '../chat/types';
 import type { SubagentView } from './aiDataNormalizers';
+import { sameSubagentViewContent } from './aiSubagentState';
 
 type ToolCallBlock = Extract<MessageBlock, { type: 'tool-call' }>;
 type ChecklistBlock = Extract<MessageBlock, { type: 'checklist' }>;
@@ -8,35 +9,6 @@ export interface ProjectThreadTranscriptMessagesArgs {
   transcriptMessages: Message[];
   previousRenderedMessages: Message[];
   subagentById: Record<string, SubagentView>;
-}
-
-export function sameSubagentViewContent(left: SubagentView | null | undefined, right: SubagentView | null | undefined): boolean {
-  if (!left || !right) return left === right;
-  return (
-    left.subagentId === right.subagentId &&
-    left.taskId === right.taskId &&
-    left.specId === right.specId &&
-    left.title === right.title &&
-    left.objective === right.objective &&
-    left.contextMode === right.contextMode &&
-    left.promptHash === right.promptHash &&
-    left.delegationPromptMarkdown === right.delegationPromptMarkdown &&
-    left.agentType === right.agentType &&
-    left.triggerReason === right.triggerReason &&
-    left.status === right.status &&
-    left.summary === right.summary &&
-    left.updatedAtUnixMs === right.updatedAtUnixMs &&
-    left.error === right.error &&
-    JSON.stringify(left.deliverables ?? []) === JSON.stringify(right.deliverables ?? []) &&
-    JSON.stringify(left.definitionOfDone ?? []) === JSON.stringify(right.definitionOfDone ?? []) &&
-    JSON.stringify(left.outputSchema ?? {}) === JSON.stringify(right.outputSchema ?? {}) &&
-    JSON.stringify(left.evidenceRefs ?? []) === JSON.stringify(right.evidenceRefs ?? []) &&
-    JSON.stringify(left.keyFiles ?? []) === JSON.stringify(right.keyFiles ?? []) &&
-    JSON.stringify(left.openRisks ?? []) === JSON.stringify(right.openRisks ?? []) &&
-    JSON.stringify(left.nextActions ?? []) === JSON.stringify(right.nextActions ?? []) &&
-    JSON.stringify(left.history ?? []) === JSON.stringify(right.history ?? []) &&
-    JSON.stringify(left.stats ?? {}) === JSON.stringify(right.stats ?? {})
-  );
 }
 
 export function projectThreadTranscriptMessages(args: ProjectThreadTranscriptMessagesArgs): Message[] {

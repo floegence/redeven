@@ -30,7 +30,6 @@ import {
   type MessageRole,
   type StreamEvent,
 } from '../chat';
-import { upsertMessageById } from '../chat/messageState';
 import {
   normalizeAskUserDraft,
   normalizeAskUserDraftForQuestion,
@@ -47,10 +46,6 @@ import { Tooltip } from '../primitives/Tooltip';
 import { fetchGatewayJSON, prepareGatewayRequestInit, uploadGatewayFile } from '../services/gatewayApi';
 import { decorateMessageBlocks, decorateStreamEvent } from './aiBlockPresentation';
 import {
-  extractSubagentViewsFromWaitResult,
-  mapSubagentPayloadSnakeToCamel,
-  mergeSubagentEventsByTimestamp,
-  normalizeSubagentStatus,
   normalizeThreadTodosView,
   normalizeWriteTodosToolView,
   todoStatusBadgeClass,
@@ -93,27 +88,10 @@ import {
   type FollowupLane,
   type ListFollowupsResponse,
 } from './followupsState';
-import {
-  projectThreadTranscriptMessages,
-  sameSubagentViewContent,
-} from './aiThreadRenderProjection';
 import { FlowerMessageRunIndicator } from '../widgets/FlowerMessageRunIndicator';
 import { FlowerLiveAssistantSurface } from '../widgets/FlowerLiveAssistantSurface';
-import {
-  applyStreamEventBatchToLiveRunMessage,
-  clearLiveRunMessageIfTranscriptCaughtUp,
-  mergeLiveRunSnapshot,
-  resolveRenderableLiveRunMessage,
-} from './flowerLiveRunState';
-import {
-  applyContextCompactionToRun,
-  applyContextUsageToRun,
-  ensureContextTelemetryRun,
-  getContextTelemetryRun,
-  hasContextTelemetryData,
-  setContextTelemetryCursor,
-  type ContextTelemetryByRun,
-} from './aiContextTelemetryState';
+import { createAIThreadRenderController } from './createAIThreadRenderController';
+import { createAIContextTelemetryController } from './createAIContextTelemetryController';
 
 type DirCache = Map<string, FileItem[]>;
 
@@ -1823,13 +1801,8 @@ export function EnvAIPage() {
   const [todosLoading, setTodosLoading] = createSignal(false);
   const [todosError, setTodosError] = createSignal('');
   const [threadTodos, setThreadTodos] = createSignal<ThreadTodosView | null>(null);
-  const [threadSubagentsById, setThreadSubagentsById] = createSignal<Record<string, SubagentView>>({});
-  const [contextTelemetryByRun, setContextTelemetryByRun] = createSignal<ContextTelemetryByRun>({});
-  const [activeContextRunId, setActiveContextRunId] = createSignal('');
   // Tracks the network send itself; live-run occupancy is managed separately.
   const [sendPending, setSendPending] = createSignal(false);
-  const [transcriptMessages, setTranscriptMessages] = createSignal<Message[]>([]);
-  const [liveRunMessage, setLiveRunMessage] = createSignal<Message | null>(null);
   const [draftExecutionMode, setDraftExecutionMode] = createSignal<ExecutionMode>(readPersistedExecutionMode());
   const [threadExecutionModeOverrideById, setThreadExecutionModeOverrideById] = createSignal<Record<string, ExecutionMode>>({});
   const [queuedFollowups, setQueuedFollowups] = createSignal<FollowupItem[]>([]);
@@ -1850,29 +1823,32 @@ export function EnvAIPage() {
   const [followupReorderingLane, setFollowupReorderingLane] = createSignal<FollowupLane | null>(null);
   const [draggingFollowupID, setDraggingFollowupID] = createSignal('');
   const [draggingFollowupLane, setDraggingFollowupLane] = createSignal<FollowupLane | null>(null);
+  let chat: ChatContextValue | null = null;
+  const threadRenderController = createAIThreadRenderController({
+    previousRenderedMessages: () => chat?.messages() ?? [],
+  });
+  const contextTelemetryController = createAIContextTelemetryController();
+  const transcriptMessages = threadRenderController.transcriptMessages;
+  const activeThreadSubagents = threadRenderController.activeThreadSubagents;
+  const liveAssistantTailMessage = threadRenderController.liveAssistantTailMessage;
+  const hasStreamingAssistantMessage = threadRenderController.hasStreamingAssistantMessage;
+  const contextTelemetryByRun = contextTelemetryController.contextTelemetryByRun;
+  const activeContextRunId = contextTelemetryController.activeContextRunId;
+  const contextUsage = contextTelemetryController.contextUsage;
+  const contextCompactions = contextTelemetryController.contextCompactions;
+  const hasContextTelemetry = contextTelemetryController.hasContextTelemetry;
   let lastFollowupsReq = 0;
   let nextSendIntent: SendIntent = 'default';
   const sendIntentByMessageId = new Map<string, SendIntent>();
   const sourceFollowupIDByMessageId = new Map<string, string>();
   const draftSnapshotByMessageId = new Map<string, AIChatInputDraftSnapshot>();
-  const activeContextTelemetry = createMemo(() => {
-    const runId = activeContextRunId();
-    return runId ? getContextTelemetryRun(contextTelemetryByRun(), runId) : null;
-  });
-  const contextUsage = createMemo<ContextUsageView | null>(() => activeContextTelemetry()?.usage ?? null);
-  const contextCompactions = createMemo<ContextCompactionEventView[]>(() => activeContextTelemetry()?.compactions ?? []);
   const activeThreadRunning = createMemo(() => ai.isThreadRunning(ai.activeThreadId()));
-  const liveAssistantTailMessage = createMemo(() => (
-    resolveRenderableLiveRunMessage(liveRunMessage(), transcriptMessages())
-  ));
   const liveAssistantSurfaceActive = createMemo(() => (
     sendPending()
     || activeThreadRunning()
     || liveAssistantTailMessage()?.status === 'streaming'
   ));
   const hasLiveAssistantTail = createMemo(() => liveAssistantSurfaceActive() || liveAssistantTailMessage() !== null);
-
-  let chat: ChatContextValue | null = null;
   const [chatReady, setChatReady] = createSignal(false);
   const [chatInputApi, setChatInputApi] = createSignal<AIChatInputApi | null>(null);
   let queuedAskFlowerIntents: AskFlowerIntent[] = [];
@@ -1966,27 +1942,18 @@ export function EnvAIPage() {
   let activeSnapshotRecoverySeq = 0;
   let activeSnapshotRecoveryTimer: number | null = null;
   let activeContextReplaySeq = 0;
-  let pendingLiveRunEvents: StreamEvent[] = [];
-  let liveRunRaf: number | null = null;
   const failureNotifiedRuns = new Set<string>();
   const [runPhaseLabel, setRunPhaseLabel] = createSignal('Working');
   const resetContextTelemetryState = () => {
-    setContextTelemetryByRun({});
-    setActiveContextRunId('');
+    contextTelemetryController.reset();
     activeContextReplaySeq += 1;
   };
   const bindContextRun = (runId: string): { ok: boolean; switched: boolean } => {
-    const rid = String(runId ?? '').trim();
-    if (!rid) return { ok: false, switched: false };
-
-    const previousRunId = String(untrack(activeContextRunId) ?? '').trim();
-    const switched = previousRunId !== rid;
-    if (switched) {
+    const binding = contextTelemetryController.bindRun(runId);
+    if (binding.switched) {
       activeContextReplaySeq += 1;
-      setActiveContextRunId(rid);
     }
-    setContextTelemetryByRun((current) => ensureContextTelemetryRun(current, rid));
-    return { ok: true, switched };
+    return binding;
   };
   const applyContextUsagePayload = (
     runId: string,
@@ -1996,9 +1963,7 @@ export function EnvAIPage() {
       atUnixMs?: unknown;
     },
   ) => {
-    const rid = String(runId ?? '').trim();
-    if (!rid) return;
-    setContextTelemetryByRun((current) => applyContextUsageToRun(current, rid, payload, meta));
+    contextTelemetryController.applyUsagePayload(runId, payload, meta);
   };
   const applyContextCompactionPayload = (
     runId: string,
@@ -2009,11 +1974,7 @@ export function EnvAIPage() {
       atUnixMs?: unknown;
     },
   ) => {
-    const rid = String(runId ?? '').trim();
-    if (!rid) return;
-    setContextTelemetryByRun((current) => (
-      applyContextCompactionToRun(current, rid, eventType, payload, meta, CONTEXT_TIMELINE_WINDOW_LIMIT)
-    ));
+    contextTelemetryController.applyCompactionPayload(runId, eventType, payload, meta, CONTEXT_TIMELINE_WINDOW_LIMIT);
   };
   const loadContextRunEvents = async (
     runId: string,
@@ -2029,7 +1990,7 @@ export function EnvAIPage() {
     if (!binding.ok) return;
 
     const reqSeq = ++activeContextReplaySeq;
-    const currentRunState = getContextTelemetryRun(untrack(contextTelemetryByRun), rid);
+    const currentRunState = untrack(contextTelemetryByRun)[rid] ?? null;
     let cursor = opts?.reset && binding.switched ? 0 : Math.max(0, Number(currentRunState?.cursor ?? 0) || 0);
     const maxPages = Math.max(1, Math.floor(Number(opts?.maxPages ?? RUN_CONTEXT_EVENTS_MAX_PAGES)));
     let pages = 0;
@@ -2079,7 +2040,7 @@ export function EnvAIPage() {
       }
 
       if (reqSeq === activeContextReplaySeq && rid === String(untrack(activeContextRunId) ?? '').trim()) {
-        setContextTelemetryByRun((current) => setContextTelemetryCursor(current, rid, cursor));
+        contextTelemetryController.commitReplayCursor(rid, cursor);
       }
     } catch {
       // best effort, realtime stream continues to update the UI
@@ -2098,242 +2059,12 @@ export function EnvAIPage() {
     }
     setThreadTodos(next);
   };
-  const resetThreadSubagents = (): void => {
-    setThreadSubagentsById({});
-  };
-  const sameSubagentMap = (
-    left: Record<string, SubagentView>,
-    right: Record<string, SubagentView>,
-  ): boolean => {
-    const leftKeys = Object.keys(left);
-    const rightKeys = Object.keys(right);
-    if (leftKeys.length !== rightKeys.length) {
-      return false;
-    }
-    for (const key of leftKeys) {
-      if (!sameSubagentViewContent(left[key], right[key])) {
-        return false;
-      }
-    }
-    return true;
-  };
   const resetThreadRenderSources = (): void => {
-    pendingLiveRunEvents = [];
-    if (liveRunRaf !== null) {
-      if (typeof cancelAnimationFrame === 'function') {
-        cancelAnimationFrame(liveRunRaf);
-      }
-      liveRunRaf = null;
-    }
-    setTranscriptMessages([]);
-    setLiveRunMessage(null);
-  };
-  const setLiveRunSnapshotMessage = (message: Message): void => {
-    const transcript = untrack(transcriptMessages);
-    setLiveRunMessage((current) => {
-      return clearLiveRunMessageIfTranscriptCaughtUp(mergeLiveRunSnapshot(current, message), transcript);
-    });
-  };
-  const flushLiveRunStreamEvents = (): void => {
-    const events = pendingLiveRunEvents;
-    pendingLiveRunEvents = [];
-    liveRunRaf = null;
-    if (events.length === 0) return;
-
-    const transcript = untrack(transcriptMessages);
-    setLiveRunMessage((current) => {
-      return clearLiveRunMessageIfTranscriptCaughtUp(applyStreamEventBatchToLiveRunMessage(current, events), transcript);
-    });
-  };
-  const applyLiveRunStreamEvent = (event: StreamEvent): void => {
-    pendingLiveRunEvents.push(event);
-    if (liveRunRaf !== null) {
-      return;
-    }
-    if (typeof requestAnimationFrame !== 'function') {
-      flushLiveRunStreamEvents();
-      return;
-    }
-    liveRunRaf = requestAnimationFrame(flushLiveRunStreamEvents);
-  };
-  onCleanup(() => {
-    pendingLiveRunEvents = [];
-    if (liveRunRaf !== null) {
-      if (typeof cancelAnimationFrame === 'function') {
-        cancelAnimationFrame(liveRunRaf);
-      }
-      liveRunRaf = null;
-    }
-  });
-  const rebuildSubagentsFromMessages = (messages: Message[]): void => {
-    const normalizeSubagentHistory = (raw: any): Array<{ role: 'user' | 'assistant' | 'system'; text: string }> => {
-      if (!Array.isArray(raw)) return [];
-      const history: Array<{ role: 'user' | 'assistant' | 'system'; text: string }> = [];
-      for (const item of raw) {
-        const rec = item && typeof item === 'object' && !Array.isArray(item) ? item as any : null;
-        if (!rec) continue;
-        const roleRaw = String(rec.role ?? '').trim().toLowerCase();
-        const role = roleRaw === 'user' || roleRaw === 'assistant' || roleRaw === 'system'
-          ? roleRaw
-          : '';
-        const text = String(rec.text ?? '').trim();
-        if (!role || !text) continue;
-        history.push({
-          role,
-          text,
-        });
-      }
-      return history;
-    };
-    const nextMap: Record<string, SubagentView> = {};
-    const mergeIntoMap = (incoming: SubagentView | null, fallbackUpdatedAt = 0): void => {
-      if (!incoming || !incoming.subagentId) return;
-      const normalized: SubagentView = incoming.updatedAtUnixMs > 0
-        ? incoming
-        : {
-          ...incoming,
-          updatedAtUnixMs: Math.max(0, Number(fallbackUpdatedAt || 0)),
-        };
-      const merged = mergeSubagentEventsByTimestamp(nextMap[normalized.subagentId] ?? null, normalized);
-      if (merged) {
-        nextMap[normalized.subagentId] = merged;
-      }
-    };
-    const emptySubagentView = (subagentId: string, fallbackUpdatedAt = 0): SubagentView => ({
-      subagentId,
-      taskId: '',
-      agentType: '',
-      triggerReason: '',
-      status: 'unknown',
-      summary: '',
-      evidenceRefs: [],
-      keyFiles: [],
-      openRisks: [],
-      nextActions: [],
-      history: [],
-      stats: {
-        steps: 0,
-        toolCalls: 0,
-        tokens: 0,
-        elapsedMs: 0,
-        outcome: '',
-      },
-      updatedAtUnixMs: Math.max(0, Number(fallbackUpdatedAt || 0)),
-      error: undefined,
-    });
-    const walkBlocks = (blocks: any[], messageTimestamp: number): void => {
-      for (const block of blocks) {
-        if (!block || typeof block !== 'object') continue;
-        const blockType = String((block as any).type ?? '').trim().toLowerCase();
-        if (blockType === 'subagent') {
-          const candidate = block as any;
-          const subagentId = String(candidate.subagentId ?? '').trim();
-          if (!subagentId) continue;
-          const view: SubagentView = {
-            subagentId,
-            taskId: String(candidate.taskId ?? '').trim(),
-            specId: String(candidate.specId ?? '').trim() || undefined,
-            title: String(candidate.title ?? '').trim() || undefined,
-            objective: String(candidate.objective ?? '').trim() || undefined,
-            contextMode: String(candidate.contextMode ?? '').trim() || undefined,
-            promptHash: String(candidate.promptHash ?? '').trim() || undefined,
-            delegationPromptMarkdown: String(candidate.delegationPromptMarkdown ?? '').trim() || undefined,
-            deliverables: Array.isArray(candidate.deliverables) ? candidate.deliverables : [],
-            definitionOfDone: Array.isArray(candidate.definitionOfDone) ? candidate.definitionOfDone : [],
-            outputSchema: candidate.outputSchema && typeof candidate.outputSchema === 'object' && !Array.isArray(candidate.outputSchema)
-              ? candidate.outputSchema
-              : {},
-            agentType: String(candidate.agentType ?? '').trim(),
-            triggerReason: String(candidate.triggerReason ?? '').trim(),
-            status: normalizeSubagentStatus(candidate.status),
-            summary: String(candidate.summary ?? '').trim(),
-            evidenceRefs: Array.isArray(candidate.evidenceRefs) ? candidate.evidenceRefs : [],
-            keyFiles: Array.isArray(candidate.keyFiles) ? candidate.keyFiles : [],
-            openRisks: Array.isArray(candidate.openRisks) ? candidate.openRisks : [],
-            nextActions: Array.isArray(candidate.nextActions) ? candidate.nextActions : [],
-            history: normalizeSubagentHistory(candidate.history),
-            stats: candidate.stats ?? {
-              steps: 0,
-              toolCalls: 0,
-              tokens: 0,
-              elapsedMs: 0,
-              outcome: '',
-            },
-            updatedAtUnixMs: Math.max(0, Number(candidate.updatedAtUnixMs ?? 0) || messageTimestamp || 0),
-            error: String(candidate.error ?? '').trim() || undefined,
-          };
-          mergeIntoMap(view, messageTimestamp);
-        } else if (blockType === 'tool-call') {
-          const toolBlock = block as any;
-          const toolName = String(toolBlock.toolName ?? '').trim();
-          const toolStatus = String(toolBlock.status ?? '').trim().toLowerCase();
-          const args = toolBlock.args && typeof toolBlock.args === 'object' && !Array.isArray(toolBlock.args) ? toolBlock.args : {};
-          const result = toolBlock.result && typeof toolBlock.result === 'object' && !Array.isArray(toolBlock.result) ? toolBlock.result : {};
-
-          if (toolName === 'subagents' && toolStatus === 'success') {
-            const action = String((args as any).action ?? (result as any).action ?? '').trim().toLowerCase();
-            if (action === 'create') {
-              mergeIntoMap(mapSubagentPayloadSnakeToCamel({
-                ...(result as any),
-                status: (result as any).subagent_status ?? (result as any).subagentStatus ?? (result as any).status,
-                spec_id: (result as any).spec_id ?? (result as any).specId,
-                title: (result as any).title ?? (args as any).title,
-                objective: (result as any).objective ?? (args as any).objective,
-                context_mode: (result as any).context_mode ?? (args as any).context_mode,
-                prompt_hash: (result as any).prompt_hash ?? (result as any).promptHash,
-                delegation_prompt_markdown: (result as any).delegation_prompt_markdown ?? (result as any).delegationPromptMarkdown,
-                deliverables: (result as any).deliverables ?? (args as any).deliverables,
-                definition_of_done: (result as any).definition_of_done ?? (args as any).definition_of_done,
-                output_schema: (result as any).output_schema ?? (args as any).output_schema,
-                agent_type: (result as any).agent_type ?? (args as any).agent_type,
-                trigger_reason: (result as any).trigger_reason ?? (args as any).trigger_reason,
-              }), messageTimestamp);
-            } else if (action === 'wait') {
-              const views = extractSubagentViewsFromWaitResult({
-                status: (result as any).snapshots ?? {},
-              });
-              views.forEach((item) => mergeIntoMap(item, messageTimestamp));
-            } else if (action === 'list') {
-              const listItems = Array.isArray((result as any).items) ? ((result as any).items as unknown[]) : [];
-              listItems.forEach((entry) => {
-                mergeIntoMap(mapSubagentPayloadSnakeToCamel(entry), messageTimestamp);
-              });
-            } else if (action === 'inspect') {
-              mergeIntoMap(mapSubagentPayloadSnakeToCamel((result as any).item), messageTimestamp);
-            } else if (action === 'steer' || action === 'terminate') {
-              mergeIntoMap(mapSubagentPayloadSnakeToCamel((result as any).snapshot), messageTimestamp);
-            } else if (action === 'terminate_all') {
-              const ids = Array.isArray((result as any).affected_ids) ? ((result as any).affected_ids as unknown[]) : [];
-              ids.forEach((rawID) => {
-                const id = String(rawID ?? '').trim();
-                if (!id) return;
-                const prev = nextMap[id] ?? emptySubagentView(id, messageTimestamp);
-                mergeIntoMap({
-                  ...prev,
-                  status: 'canceled',
-                  updatedAtUnixMs: Math.max(prev.updatedAtUnixMs, messageTimestamp),
-                }, messageTimestamp);
-              });
-            }
-          }
-        }
-        const children = Array.isArray((block as any).children) ? ((block as any).children as any[]) : [];
-        if (children.length > 0) walkBlocks(children, messageTimestamp);
-      }
-    };
-    for (const message of messages) {
-      const messageTimestamp = Math.max(0, Number((message as any)?.timestamp ?? 0) || 0);
-      const blocks = Array.isArray((message as any)?.blocks) ? ((message as any).blocks as any[]) : [];
-      walkBlocks(blocks, messageTimestamp);
-    }
-    setThreadSubagentsById((current) => (sameSubagentMap(current, nextMap) ? current : nextMap));
+    threadRenderController.reset();
   };
   const activeThreadTodos = createMemo(() => threadTodos()?.todos ?? []);
   const unresolvedTodoCount = createMemo(() =>
     activeThreadTodos().filter((item) => item.status === 'pending' || item.status === 'in_progress').length,
-  );
-  const activeThreadSubagents = createMemo(() =>
-    Object.values(threadSubagentsById()).sort((a, b) => b.updatedAtUnixMs - a.updatedAtUnixMs),
   );
   const sameRenderedMessageSequence = (left: Message[], right: Message[]): boolean => {
     if (left.length !== right.length) {
@@ -2347,27 +2078,14 @@ export function EnvAIPage() {
     return true;
   };
   createEffect(() => {
-    const liveMessage = liveRunMessage();
-    const transcript = transcriptMessages();
-    const nextLiveMessage = clearLiveRunMessageIfTranscriptCaughtUp(liveMessage, transcript);
-    if (nextLiveMessage !== liveMessage) {
-      setLiveRunMessage(nextLiveMessage);
-    }
-  });
-  createEffect(() => {
     if (!chatReady()) return;
 
-    const projectedMessages = projectThreadTranscriptMessages({
-      transcriptMessages: transcriptMessages(),
-      previousRenderedMessages: untrack(() => chat?.messages() ?? []),
-      subagentById: threadSubagentsById(),
-    });
+    const projectedMessages = threadRenderController.projectedMessages();
     const currentMessages = untrack(() => chat?.messages() ?? []);
 
     if (!sameRenderedMessageSequence(currentMessages, projectedMessages)) {
       chat?.setMessages(projectedMessages);
     }
-    rebuildSubagentsFromMessages(projectedMessages);
   });
   const subagentsUpdatedLabel = createMemo(() => {
     const latest = activeThreadSubagents()[0];
@@ -2383,7 +2101,6 @@ export function EnvAIPage() {
     if (Number.isNaN(date.getTime())) return '';
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   });
-  const hasContextTelemetry = createMemo(() => hasContextTelemetryData(activeContextTelemetry()));
   const shouldShowContextSummary = createMemo(() => {
     if (!ai.activeThreadId()) {
       return false;
@@ -2721,10 +2438,6 @@ export function EnvAIPage() {
   const isTerminalRunStatus = (status: string) =>
     status === 'success' || status === 'failed' || status === 'canceled' || status === 'timed_out' || status === 'waiting_user';
 
-  const hasStreamingAssistantMessage = (): boolean => {
-    return liveRunMessage()?.status === 'streaming';
-  };
-
   const LiveAssistantTail: Component = () => (
     <div class="chat-message-list-item">
       <FlowerLiveAssistantSurface
@@ -2795,15 +2508,9 @@ export function EnvAIPage() {
       }
 
       if (baseline) {
-        setTranscriptMessages(loaded);
+        threadRenderController.replaceTranscriptMessages(loaded);
       } else {
-        setTranscriptMessages((current) => {
-          let next = current;
-          loaded.forEach((message) => {
-            next = upsertMessageById(next, message);
-          });
-          return next;
-        });
+        threadRenderController.mergeTranscriptMessages(loaded);
       }
       if (opts?.scrollToBottom) {
         requestScrollToBottom('system');
@@ -2840,7 +2547,7 @@ export function EnvAIPage() {
       if (assistantSeqAtStart !== activeAssistantMessageSeq) return;
 
       const decorated = decorateMessageBlocks(resp.messageJson as Message);
-      setLiveRunSnapshotMessage(decorated);
+      threadRenderController.applyLiveRunSnapshot(decorated);
     } catch {
       // Best-effort: ignore snapshot failures (realtime frames / transcript refresh can self-heal).
     }
@@ -3304,7 +3011,6 @@ export function EnvAIPage() {
       setRunPhaseLabel('Working');
       setThreadTodos(null);
       resetFollowupsState();
-      resetThreadSubagents();
       resetContextTelemetryState();
       setTodosError('');
       setTodosLoading(false);
@@ -3320,7 +3026,6 @@ export function EnvAIPage() {
       setRunPhaseLabel('Working');
       setThreadTodos(null);
       resetFollowupsState();
-      resetThreadSubagents();
       resetContextTelemetryState();
       setTodosError('');
       setTodosLoading(false);
@@ -3341,7 +3046,6 @@ export function EnvAIPage() {
 
     setRunPhaseLabel('Working');
     setThreadTodos(null);
-    resetThreadSubagents();
     resetContextTelemetryState();
     setTodosError('');
     setTodosLoading(true);
@@ -3375,7 +3079,6 @@ export function EnvAIPage() {
         resetThreadRenderSources();
         setRunPhaseLabel('Working');
         setThreadTodos(null);
-        resetThreadSubagents();
         resetContextTelemetryState();
         setTodosError('');
         setTodosLoading(true);
@@ -3410,7 +3113,7 @@ export function EnvAIPage() {
             activeTranscriptCursor = Math.max(activeTranscriptCursor, rowId);
           }
 
-          setTranscriptMessages((current) => upsertMessageById(current, decorated));
+          threadRenderController.upsertTranscriptMessage(decorated);
         }
         return;
       }
@@ -3474,7 +3177,7 @@ export function EnvAIPage() {
             activeAssistantMessageSeq += 1;
             cancelActiveRunSnapshotRecovery();
           }
-          applyLiveRunStreamEvent(decorateStreamEvent(streamEvent) as StreamEvent);
+          threadRenderController.applyLiveRunStreamEvent(decorateStreamEvent(streamEvent) as StreamEvent);
         }
         return;
       }

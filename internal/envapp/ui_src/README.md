@@ -37,9 +37,10 @@ Notes:
 
 The Flower chat UI now follows five explicit constraints:
 
-1. `EnvAIPage` owns the message source states.
-   - Transcript rows, active-run snapshot recovery, live assistant stream overlays, and optimistic local user messages must converge through a single render projection before the chat store is updated.
-   - Feature code must not add new direct `chat.setMessages()` write paths for individual recovery flows.
+1. `EnvAIPage` owns transport/page wiring, while dedicated controllers own render-state reconciliation.
+   - `createAIThreadRenderController` owns transcript rows, active-run snapshot recovery, live assistant stream overlays, optimistic local user carry-forward, and transcript-derived subagent state before the chat store is updated.
+   - `createAIContextTelemetryController` owns run-scoped context usage, compaction, and replay cursor binding.
+   - `EnvAIPage` may consume controller accessors and invoke controller methods, but feature code must not re-implement those reducers inline, add new direct `chat.setMessages()` write paths for individual recovery flows, or introduce projection feedback loops where derived render output becomes the source of truth for controller state.
 
 2. A live run owns exactly one assistant surface in the transcript tail.
    - Settled transcript rows stay transcript-only `MessageItem` rows.
