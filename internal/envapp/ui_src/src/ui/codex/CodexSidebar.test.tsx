@@ -45,16 +45,43 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
   LoadingOverlay: () => null,
 }));
 
+vi.mock('@floegence/floe-webapp-core/layout', () => ({
+  SidebarContent: (props: any) => <div data-testid="sidebar-content" class={props.class}>{props.children}</div>,
+  SidebarItemList: (props: any) => <div class={props.class}>{props.children}</div>,
+  SidebarSection: (props: any) => (
+    <section class={props.class}>
+      {props.title ? <div>{props.title}</div> : null}
+      {props.actions}
+      {props.children}
+    </section>
+  ),
+}));
+
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
-    <button type="button" disabled={props.disabled} onClick={props.onClick}>
+    <button type={props.type ?? 'button'} disabled={props.disabled} onClick={props.onClick}>
       {props.children}
     </button>
   ),
+  Card: (props: any) => <div class={props.class}>{props.children}</div>,
+  CardContent: (props: any) => <div class={props.class}>{props.children}</div>,
+  CardDescription: (props: any) => <p class={props.class}>{props.children}</p>,
+  CardFooter: (props: any) => <div class={props.class}>{props.children}</div>,
+  CardHeader: (props: any) => <div class={props.class}>{props.children}</div>,
+  CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
   Input: (props: any) => (
     <input
       value={props.value ?? ''}
       placeholder={props.placeholder}
+      onInput={(event) => props.onInput?.(event)}
+    />
+  ),
+  Tag: (props: any) => <span class={props.class}>{props.children}</span>,
+  Textarea: (props: any) => (
+    <textarea
+      value={props.value ?? ''}
+      placeholder={props.placeholder}
+      rows={props.rows}
       onInput={(event) => props.onInput?.(event)}
     />
   ),
@@ -197,6 +224,8 @@ describe('CodexSidebar', () => {
     await flushAsync();
 
     expect(host.textContent).toContain('Backend audit');
+    expect(host.textContent).toContain('Threads');
+    expect(host.textContent).toContain('Host ready');
 
     const target = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('UI polish'));
     if (!target) {

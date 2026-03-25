@@ -41,7 +41,7 @@ This repository stays open-source and auditable. It documents the public agent r
 | `Code App` | code-server over Flowersec E2EE proxying for HTTP and WebSocket traffic | Browser IDE access without exposing the editor directly to the control plane | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
 | `Desktop Shell` | Native Electron app that opens this device or another Redeven Local UI | Local UX, Desktop Settings, connection management, blocked-state handling, and diagnostics in a desktop wrapper | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
 | `Flower` (optional) | AI workflows that can start from terminal, file, and monitoring context | AI assistance stays attached to the same endpoint runtime and permission model | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
-| `Codex` (optional) | Independent Codex threads backed by the host machine's `codex app-server` | Keeps Codex UI and upgrade cadence separate from Flower while staying inside the same endpoint security boundary | [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
+| `Codex` (optional) | Independent Codex threads backed by the host machine's `codex app-server` | Keeps Codex UI, official Codex branding, and upgrade cadence separate from Flower while staying inside the same endpoint security boundary | [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
 
 ## Example workflows
 

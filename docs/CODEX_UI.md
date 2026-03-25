@@ -8,6 +8,7 @@ This integration is intentionally independent from Flower:
 - Codex uses its own gateway namespace: `/_redeven_proxy/api/codex/*`.
 - Codex UI state, request handling, and thread lifecycle do not reuse Flower thread/runtime contracts.
 - Agent Settings only shows read-only Codex host/runtime status; it does not persist Codex runtime settings.
+- The Codex surface uses official OpenAI Codex branding assets and floe-webapp primitives without coupling Codex implementation details back to Flower.
 
 ## Architecture
 
@@ -63,7 +64,9 @@ The event stream endpoint is SSE and is used for live transcript / approval upda
 Current Env App behavior:
 
 - Codex shows as a separate activity-bar item, not inside Flower.
-- If host `codex` is unavailable, the entry point still stays visible so users can open the surface and jump directly to Agent Settings -> Codex status.
+- If host `codex` is unavailable, the entry point still stays visible and the Codex surface shows inline host diagnostics instead of a separate disabled/settings-jump flow.
+- The Codex sidebar is dedicated to Codex thread navigation and host runtime context; it is not a shared Flower sidebar.
+- The main Codex page uses floe-webapp cards/forms/tags for a consistent Env App look while keeping Codex-specific state and request handling separate.
 - New threads can override working directory and model before the first turn.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
 - Env Settings -> Codex does not edit approval policy, sandbox, or model defaults; it only reports host capability and bridge status.
