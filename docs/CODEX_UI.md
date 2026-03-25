@@ -65,12 +65,12 @@ Current Env App behavior:
 
 - Codex shows as a separate activity-bar item, not inside Flower.
 - If host `codex` is unavailable, the entry point still stays visible and the Codex surface shows inline host diagnostics instead of a separate disabled/settings-jump flow.
-- The Codex sidebar is a dedicated review navigator for Codex threads and host runtime context; it is not a shared Flower sidebar.
-- The main Codex page is a review-oriented workbench that keeps the active brief, artifact previews, transcript evidence, approvals, and composer in one Codex-owned surface.
+- The Codex sidebar is a dedicated conversation navigator for Codex threads plus compact host/runtime context; it mirrors the same overall layout rhythm as Flower without reusing Flower-owned UI modules.
+- The main Codex page is a Codex-owned chat shell with a compact header, transcript stage, inline approvals, and bottom-docked composer.
 - The Codex surface uses floe-webapp cards/forms/tags for a consistent Env App look while keeping Codex-specific state and request handling separate.
 - New threads can override working directory and model before the first turn.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
-- Recent file changes are surfaced as artifact previews above the full transcript so review-heavy sessions can inspect concrete output before diving into raw event history.
+- Transcript rows project user prompts, Codex replies, command evidence, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets.
 - Env Settings -> Codex does not edit approval policy, sandbox, or model defaults; it only reports host capability and bridge status.
 
 ## Permissions

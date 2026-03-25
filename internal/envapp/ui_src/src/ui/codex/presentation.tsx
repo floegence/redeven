@@ -3,7 +3,7 @@ import { Code, FileText, Terminal } from '@floegence/floe-webapp-core/icons';
 import type { TagProps } from '@floegence/floe-webapp-core/ui';
 
 import { CodexIcon } from '../icons/CodexIcon';
-import type { CodexItem, CodexTranscriptItem } from './types';
+import type { CodexItem, CodexThread, CodexTranscriptItem } from './types';
 
 export type CodexReviewArtifact = Readonly<{
   path: string;
@@ -17,6 +17,11 @@ export type CodexReviewSnapshot = Readonly<{
   commandCount: number;
   responseCount: number;
   reasoningCount: number;
+}>;
+
+export type CodexThreadGroup = Readonly<{
+  group: 'Today' | 'Yesterday' | 'This Week' | 'Older';
+  threads: CodexThread[];
 }>;
 
 export function itemTitle(item: CodexItem): string {
@@ -92,6 +97,105 @@ export function formatUpdatedAt(unixSeconds: number): string {
   } catch {
     return '';
   }
+}
+
+export function formatRelativeThreadTime(unixSeconds: number): string {
+  const value = Number(unixSeconds ?? 0);
+  if (!Number.isFinite(value) || value <= 0) return '';
+  try {
+    const now = Date.now();
+    const diff = now - value * 1000;
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 7) {
+      const date = new Date(value * 1000);
+      return `${date.getMonth() + 1}/${date.getDate()}`;
+    }
+    if (days > 0) return `${days}d`;
+    if (hours > 0) return `${hours}h`;
+    if (minutes > 0) return `${minutes}m`;
+    return 'now';
+  } catch {
+    return '';
+  }
+}
+
+export function threadStatusDotClass(status: string | null | undefined): string {
+  const normalized = String(status ?? '').trim().toLowerCase();
+  if (
+    normalized === 'accepted' ||
+    normalized === 'running' ||
+    normalized === 'recovering' ||
+    normalized === 'finalizing'
+  ) {
+    return 'bg-primary';
+  }
+  if (normalized.includes('approval') || normalized.includes('waiting') || normalized.includes('input')) {
+    return 'bg-amber-500';
+  }
+  if (normalized === 'completed' || normalized === 'success') {
+    return 'bg-emerald-500';
+  }
+  if (normalized.includes('error') || normalized.includes('fail') || normalized.includes('decline')) {
+    return 'bg-error';
+  }
+  return 'bg-muted-foreground/35';
+}
+
+export function threadPreview(thread: CodexThread): string {
+  const preview = String(thread.preview ?? '').trim();
+  if (preview) return preview;
+  const path = String(thread.path ?? thread.cwd ?? '').trim();
+  if (path) return path;
+  return 'No conversation preview yet.';
+}
+
+function threadSortTime(thread: CodexThread): number {
+  const updated = Number(thread.updated_at_unix_s ?? 0);
+  if (updated > 0) return updated * 1000;
+  const created = Number(thread.created_at_unix_s ?? 0);
+  if (created > 0) return created * 1000;
+  return 0;
+}
+
+export function groupThreadsByDate(threads: readonly CodexThread[]): CodexThreadGroup[] {
+  if (threads.length === 0) return [];
+  if (threads.length < 5) {
+    return [{ group: 'Today', threads: [...threads] }];
+  }
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const yesterdayStart = todayStart - 86_400_000;
+  const dayOfWeek = now.getDay();
+  const weekStart = todayStart - ((dayOfWeek === 0 ? 6 : dayOfWeek - 1) * 86_400_000);
+
+  const groups: Record<CodexThreadGroup['group'], CodexThread[]> = {
+    Today: [],
+    Yesterday: [],
+    'This Week': [],
+    Older: [],
+  };
+
+  for (const thread of threads) {
+    const timestamp = threadSortTime(thread);
+    if (timestamp >= todayStart) {
+      groups.Today.push(thread);
+    } else if (timestamp >= yesterdayStart) {
+      groups.Yesterday.push(thread);
+    } else if (timestamp >= weekStart) {
+      groups['This Week'].push(thread);
+    } else {
+      groups.Older.push(thread);
+    }
+  }
+
+  return (['Today', 'Yesterday', 'This Week', 'Older'] as const)
+    .filter((group) => groups[group].length > 0)
+    .map((group) => ({ group, threads: groups[group] }));
 }
 
 export function itemGlyph(item: CodexItem): JSX.Element {

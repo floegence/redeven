@@ -64,6 +64,7 @@ export type CodexContextValue = Readonly<{
   refreshSidebar: () => Promise<void>;
   refreshActiveThread: () => Promise<void>;
   sendTurn: () => Promise<void>;
+  archiveThread: (threadID: string) => Promise<void>;
   archiveActiveThread: () => Promise<void>;
   answerRequest: (request: CodexPendingRequest, decision?: string) => Promise<void>;
 }>;
@@ -256,17 +257,24 @@ export function CodexProvider(props: ParentProps) {
     }
   };
 
-  const archiveActiveThread = async () => {
-    const threadID = String(activeThreadID() ?? '').trim();
-    if (!threadID) return;
+  const archiveThread = async (threadID: string) => {
+    const normalizedThreadID = String(threadID ?? '').trim();
+    if (!normalizedThreadID) return;
+    const wasActiveThread = normalizedThreadID === String(activeThreadID() ?? '').trim();
     try {
-      await archiveCodexThread(threadID);
+      await archiveCodexThread(normalizedThreadID);
       notify.success('Archived', 'The Codex thread has been archived.');
-      startNewThreadDraft();
+      if (wasActiveThread) {
+        startNewThreadDraft();
+      }
       await refetchThreads();
     } catch (error) {
       notify.error('Archive failed', error instanceof Error ? error.message : String(error));
     }
+  };
+
+  const archiveActiveThread = async () => {
+    await archiveThread(String(activeThreadID() ?? '').trim());
   };
 
   const setRequestDraftValue = (requestID: string, questionID: string, value: string) => {
@@ -328,6 +336,7 @@ export function CodexProvider(props: ParentProps) {
     refreshSidebar,
     refreshActiveThread,
     sendTurn,
+    archiveThread,
     archiveActiveThread,
     answerRequest,
   };

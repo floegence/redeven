@@ -136,7 +136,7 @@ afterEach(() => {
 });
 
 describe('CodexPage', () => {
-  it('shows host diagnostics inside the review workbench when the host binary is missing', async () => {
+  it('shows host diagnostics inside the Codex chat shell when the host binary is missing', async () => {
     fetchCodexStatusMock.mockResolvedValue({
       available: false,
       ready: false,
@@ -152,14 +152,15 @@ describe('CodexPage', () => {
 
     await flushAsync();
 
-    expect(host.textContent).toContain('Artifact review workbench');
+    expect(host.textContent).toContain('Host diagnostics');
     expect(host.textContent).toContain('Install Codex on the host');
-    expect(host.textContent).toContain('there is no separate in-app Codex runtime toggle to manage here');
-    expect(host.textContent).toContain('Review contract');
+    expect(host.textContent).toContain('There is no separate in-app Codex runtime toggle to manage here');
+    expect(host.textContent).toContain('Redeven does not install Codex for you');
+    expect(host.textContent).toContain('Create chat and send');
     expect(host.querySelector('img')).not.toBeNull();
   });
 
-  it('surfaces artifact previews and transcript evidence for the active review thread', async () => {
+  it('renders the conversation shell, transcript rows, and runtime flags for the active Codex thread', async () => {
     fetchCodexStatusMock.mockResolvedValue({
       available: true,
       ready: true,
@@ -245,10 +246,12 @@ describe('CodexPage', () => {
     await flushAsync();
 
     expect(host.textContent).toContain('Codex page polish review');
-    expect(host.textContent).toContain('Latest artifacts');
+    expect(host.textContent).toContain('Review brief');
+    expect(host.textContent).toContain('Review response');
     expect(host.textContent).toContain('src/ui/codex/CodexPage.tsx');
-    expect(host.textContent).toContain('Execution evidence');
-    expect(host.textContent).toContain('Review transcript');
+    expect(host.textContent).toContain('Command evidence');
+    expect(host.textContent).toContain('Runtime flags');
+    expect(host.textContent).toContain('finalizing');
     expect(host.textContent).toContain('Send to Codex');
   });
 });

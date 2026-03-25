@@ -152,7 +152,7 @@ afterEach(() => {
 });
 
 describe('CodexSidebar', () => {
-  it('drives the active review thread shown in the main Codex workbench', async () => {
+  it('drives the active conversation shown in the Codex chat shell', async () => {
     fetchCodexStatusMock.mockResolvedValue({
       available: true,
       ready: true,
@@ -242,11 +242,12 @@ describe('CodexSidebar', () => {
     await flushAsync();
     await flushAsync();
 
-    expect(host.textContent).toContain('Codex review navigator');
-    expect(host.textContent).toContain('Review threads');
-    expect(host.textContent).toContain('Host Codex detected');
+    expect(host.textContent).toContain('New Chat');
+    expect(host.textContent).toContain('Conversations');
+    expect(host.textContent).toContain('Dedicated Codex chat shell with host-native runtime and independent thread state');
+    expect(host.textContent).toContain('/usr/local/bin/codex');
     expect(host.textContent).toContain('Backend audit');
-    expect(host.textContent).toContain('/workspace');
+    expect(host.textContent).toContain('Review the gateway wiring');
 
     const target = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('UI polish'));
     if (!target) {
@@ -259,7 +260,8 @@ describe('CodexSidebar', () => {
 
     expect(openCodexThreadMock).toHaveBeenCalledWith('thread_2');
     expect(host.textContent).toContain('UI polish');
-    expect(host.textContent).toContain('Align the Codex shell with floe-webapp');
+    expect(host.textContent).toContain('Polish note');
     expect(host.textContent).toContain('src/ui/codex/CodexSidebar.tsx');
+    expect(host.textContent).toContain('Send to Codex');
   });
 });
