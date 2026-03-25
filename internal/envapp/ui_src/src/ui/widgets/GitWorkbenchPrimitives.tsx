@@ -299,15 +299,19 @@ export interface GitShortcutOrbButtonProps {
   onClick?: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>;
 }
 
-function gitShortcutOrbShellClass(tone: GitShortcutOrbTone): string {
+function gitShortcutOrbShellClass(): string {
+  return 'border-slate-400/90 bg-slate-200 text-slate-900 shadow-sm hover:bg-slate-300 dark:border-slate-500 dark:bg-slate-700 dark:text-slate-50 dark:hover:bg-slate-600';
+}
+
+function gitShortcutOrbIconClass(tone: GitShortcutOrbTone): string {
   switch (tone) {
     case 'flower':
-      return 'border-orange-500/55 bg-gradient-to-br from-orange-300 via-orange-400 to-amber-600 text-orange-950 shadow-[0_10px_20px_-14px_rgba(194,65,12,0.72)] hover:from-orange-200 hover:via-orange-300 hover:to-amber-500 dark:border-orange-400/55 dark:from-orange-500 dark:via-orange-600 dark:to-amber-500 dark:text-orange-50 dark:hover:from-orange-400 dark:hover:via-orange-500 dark:hover:to-amber-400';
+      return 'text-orange-700 dark:text-orange-200';
     case 'terminal':
-      return 'border-sky-500/50 bg-gradient-to-br from-slate-200 via-sky-300 to-cyan-500 text-sky-950 shadow-[0_10px_20px_-14px_rgba(3,105,161,0.64)] hover:from-slate-100 hover:via-sky-200 hover:to-cyan-400 dark:border-sky-400/50 dark:from-slate-700 dark:via-sky-800 dark:to-cyan-600 dark:text-sky-50 dark:hover:from-slate-600 dark:hover:via-sky-700 dark:hover:to-cyan-500';
+      return 'text-sky-700 dark:text-sky-200';
     case 'files':
     default:
-      return 'border-emerald-500/50 bg-gradient-to-br from-emerald-200 via-emerald-300 to-lime-500 text-emerald-950 shadow-[0_10px_20px_-14px_rgba(5,150,105,0.62)] hover:from-emerald-100 hover:via-emerald-200 hover:to-lime-400 dark:border-emerald-400/50 dark:from-emerald-700 dark:via-emerald-800 dark:to-lime-600 dark:text-emerald-50 dark:hover:from-emerald-600 dark:hover:via-emerald-700 dark:hover:to-lime-500';
+      return 'text-emerald-700 dark:text-emerald-200';
   }
 }
 
@@ -332,16 +336,15 @@ export function GitShortcutOrbButton(props: GitShortcutOrbButtonProps) {
     >
       <span
         class={cn(
-          'relative flex items-center justify-center rounded-full border backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_8px_16px_-12px_rgba(15,23,42,0.42)] transition-colors duration-150',
+          'relative flex items-center justify-center rounded-full border shadow-sm transition-colors duration-150',
           size() === 'sm' ? 'h-7 w-7' : 'h-8 w-8',
-          gitShortcutOrbShellClass(props.tone),
+          gitShortcutOrbShellClass(),
         )}
       >
-        <span class="pointer-events-none absolute inset-px rounded-full bg-white/12" aria-hidden="true" />
-        <span class="pointer-events-none absolute inset-px rounded-full bg-gradient-to-b from-white/16 via-white/[0.03] to-black/[0.08]" aria-hidden="true" />
         <Icon
           class={cn(
             'relative z-[1]',
+            gitShortcutOrbIconClass(props.tone),
             props.tone === 'flower'
               ? (size() === 'sm' ? 'h-4 w-4' : 'h-[1.125rem] w-[1.125rem]')
               : (size() === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4'),
@@ -362,10 +365,7 @@ export function GitShortcutOrbDock(props: GitShortcutOrbDockProps) {
   return (
     <div
       data-git-shortcut-dock
-      class={cn(
-        'inline-flex items-center gap-1.5',
-        props.class,
-      )}
+      class={cn('inline-flex items-center gap-1.5', props.class)}
     >
       {props.children}
     </div>
