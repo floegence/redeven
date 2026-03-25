@@ -49,7 +49,6 @@ type Options struct {
 	Shell        string
 
 	AIConfig    *config.AIConfig
-	CodexConfig *config.CodexConfig
 	Audit       *auditlog.Store
 	Diagnostics *diagnostics.Store
 	// LocalUIEnabled enables Local UI-specific runtime behavior such as shorter
@@ -190,7 +189,6 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 
 	codexSvc, err := codexbridge.NewManager(codexbridge.Options{
 		Logger:       logger,
-		Config:       opts.CodexConfig,
 		AgentHomeDir: agentHomeDir,
 	})
 	if err != nil {

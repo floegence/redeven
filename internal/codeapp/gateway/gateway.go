@@ -76,7 +76,6 @@ type PortForwardBackend interface {
 
 type CodexBackend interface {
 	Status(ctx context.Context) codexbridge.Status
-	UpdateConfig(next *config.CodexConfig) error
 	ListThreads(ctx context.Context, limit int) ([]codexbridge.Thread, error)
 	OpenThread(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
 	StartThread(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.Thread, error)
@@ -419,7 +418,6 @@ type settingsView struct {
 
 	PermissionPolicy *config.PermissionPolicy `json:"permission_policy"`
 	AI               *config.AIConfig         `json:"ai"`
-	Codex            *config.CodexConfig      `json:"codex"`
 	AISecrets        *settingsAISecretsView   `json:"ai_secrets,omitempty"`
 }
 
@@ -528,7 +526,7 @@ func writeCodexError(w http.ResponseWriter, err error) {
 	switch {
 	case err == nil:
 		status = http.StatusOK
-	case errors.Is(err, codexbridge.ErrDisabled):
+	case errors.Is(err, codexbridge.ErrUnavailable):
 		status = http.StatusServiceUnavailable
 	case errors.Is(err, codexbridge.ErrThreadNotFound), errors.Is(err, codexbridge.ErrRequestNotFound):
 		status = http.StatusNotFound
@@ -743,7 +741,6 @@ func toSettingsView(cfg *config.Config, configPath string, secrets *settings.Sec
 		}
 		out.PermissionPolicy = cfg.PermissionPolicy
 		out.AI = cfg.AI
-		out.Codex = cfg.Codex
 
 		if secrets != nil && cfg.AI != nil && len(cfg.AI.Providers) > 0 {
 			ids := make([]string, 0, len(cfg.AI.Providers))
@@ -1117,11 +1114,18 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
+		if len(body.Codex) > 0 {
+			writeJSON(w, http.StatusBadRequest, apiResp{
+				OK:    false,
+				Error: "Codex is host-managed and cannot be configured from Agent Settings. Install and configure `codex` on the host machine instead.",
+			})
+			return
+		}
 
 		if body.AgentHomeDir == nil && body.Shell == nil &&
 			body.LogFormat == nil && body.LogLevel == nil &&
 			body.CodeServerPortMin == nil && body.CodeServerPortMax == nil &&
-			len(body.PermissionPolicy) == 0 && len(body.AI) == 0 && len(body.Codex) == 0 {
+			len(body.PermissionPolicy) == 0 && len(body.AI) == 0 {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 			return
 		}
@@ -1173,30 +1177,6 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		var nextCodex *config.CodexConfig
-		if len(body.Codex) > 0 {
-			raw := bytes.TrimSpace(body.Codex)
-			if !bytes.Equal(raw, []byte("null")) {
-				var cfg config.CodexConfig
-				codexDec := json.NewDecoder(bytes.NewReader(raw))
-				codexDec.DisallowUnknownFields()
-				if err := codexDec.Decode(&cfg); err != nil {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid codex json"})
-					return
-				}
-				if err := codexDec.Decode(&struct{}{}); err != io.EOF {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid codex json"})
-					return
-				}
-				cfg.Normalize()
-				if err := cfg.Validate(); err != nil {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: fmt.Sprintf("invalid codex: %s", err.Error())})
-					return
-				}
-				nextCodex = &cfg
-			}
-		}
-
 		auditDetail := map[string]any{}
 		if body.AgentHomeDir != nil {
 			auditDetail["agent_home_dir"] = strings.TrimSpace(*body.AgentHomeDir)
@@ -1222,9 +1202,6 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if len(body.AI) > 0 {
 			// Do NOT log any AI config details (may include secrets).
 			auditDetail["ai_updated"] = true
-		}
-		if len(body.Codex) > 0 {
-			auditDetail["codex_updated"] = true
 		}
 		endpointID := strings.TrimSpace(meta.EndpointID)
 		aiUpdate := (*settingsAIUpdateView)(nil)
@@ -1271,9 +1248,6 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				if len(body.AI) > 0 {
 					c.AI = nextAI
 				}
-				if len(body.Codex) > 0 {
-					c.Codex = nextCodex
-				}
 				return nil
 			})
 			if err != nil {
@@ -1298,13 +1272,6 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			g.appendAudit(meta, "settings_update", "failure", auditDetail, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
-		}
-		if len(body.Codex) > 0 && g.codex != nil {
-			if err := g.codex.UpdateConfig(nextCodex); err != nil {
-				g.appendAudit(meta, "settings_update", "failure", auditDetail, err)
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
-				return
-			}
 		}
 
 		g.appendAudit(meta, "settings_update", "success", auditDetail, nil)

@@ -248,7 +248,6 @@ func New(opts Options) (*Agent, error) {
 		AgentHomeDir:        agentHomeAbs,
 		Shell:               shell,
 		AIConfig:            opts.Config.AI,
-		CodexConfig:         opts.Config.Codex,
 		Audit:               auditStore,
 		Diagnostics:         a.diag,
 		LocalUIEnabled:      a.localUIEnabled,

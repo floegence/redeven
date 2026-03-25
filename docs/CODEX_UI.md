@@ -1,65 +1,47 @@
 # Codex (Optional)
 
-Redeven Agent can optionally enable **Codex** as a separate Env App surface backed by the Codex CLI `app-server`.
+Redeven Agent exposes **Codex** as a separate Env App surface that uses the host machine's `codex` binary directly.
 
 This integration is intentionally independent from Flower:
 
 - Codex has its own activity-bar entry in Env App.
-- Codex has its own Agent Settings section rooted at `config.codex`.
 - Codex uses its own gateway namespace: `/_redeven_proxy/api/codex/*`.
 - Codex UI state, request handling, and thread lifecycle do not reuse Flower thread/runtime contracts.
+- Agent Settings only shows read-only Codex host/runtime status; it does not persist Codex runtime settings.
 
 ## Architecture
 
 High-level design:
 
 - The browser talks only to Redeven Agent gateway routes.
-- The Go agent owns the Codex process boundary and spawns `codex app-server` as a child process.
+- The Go agent owns the Codex process boundary and spawns `codex app-server` from the host's `codex` binary as a child process.
 - Transport between Redeven Agent and Codex uses stdio (`codex app-server --listen stdio://`).
 - The bridge keeps `experimentalApi=false` and targets the stable app-server surface only.
+- `thread/start` only forwards explicitly user-supplied fields such as `cwd` and optional `model`; host Codex defaults stay owned by Codex itself.
 
 This keeps the upgrade boundary small:
 
-- Codex CLI and app-server protocol may evolve.
-- Redeven UI remains owned in this repository.
-- Most upgrade work stays inside the bridge and route adapters instead of forcing a separate upstream UI embed.
+- Codex CLI and app-server protocol may evolve independently.
+- Redeven owns only the gateway adapter and the dedicated UI surface.
+- We do not mirror Codex defaults into Redeven config, so new Codex releases do not require a matching front-end settings schema here.
 
-## Configuration
+## Host-managed runtime
 
-Codex settings live under `codex` in the main agent config file (`~/.redeven/config.json` by default).
+There is **no** `config.codex` block in `~/.redeven/config.json`.
 
-Example:
+Redeven resolves `codex` like this:
 
-```json
-{
-  "codex": {
-    "enabled": true,
-    "binary_path": "/usr/local/bin/codex",
-    "default_model": "gpt-5.4",
-    "approval_policy": "on_request",
-    "sandbox_mode": "workspace_write"
-  }
-}
-```
+1. Look up `codex` on the host `PATH`.
+2. Start `codex app-server` on demand when a Codex route needs it.
+3. Let the local Codex installation keep its own defaults for model, approvals, sandboxing, and other runtime behavior unless the user explicitly overrides a field in the Codex page request itself.
 
-Fields:
+Agent Settings -> Codex is diagnostic-only and currently shows:
 
-- `enabled`
-  - Enables the Codex integration surface.
+- `available`
+- `ready`
 - `binary_path`
-  - Optional absolute path to the `codex` binary.
-  - If omitted, the agent resolves `codex` from `PATH`.
-- `default_model`
-  - Optional model override for new Codex threads.
-- `approval_policy`
-  - One of `untrusted`, `on_failure`, `on_request`, or `never`.
-- `sandbox_mode`
-  - One of `read_only`, `workspace_write`, or `danger_full_access`.
-
-Notes:
-
-- Codex secrets are not stored in `config.json`.
-- Agent Settings updates the bridge live; changes apply to new Codex threads without requiring an agent restart.
+- `agent_home_dir`
+- `error`
 
 ## Gateway contract
 
@@ -81,15 +63,16 @@ The event stream endpoint is SSE and is used for live transcript / approval upda
 Current Env App behavior:
 
 - Codex shows as a separate activity-bar item, not inside Flower.
-- Disabled Codex still keeps the entry point visible so users can open the surface and jump directly to Agent Settings → Codex.
+- If host `codex` is unavailable, the entry point still stays visible so users can open the surface and jump directly to Agent Settings -> Codex status.
 - New threads can override working directory and model before the first turn.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
+- Env Settings -> Codex does not edit approval policy, sandbox, or model defaults; it only reports host capability and bridge status.
 
 ## Permissions
 
 Current permission policy is:
 
 - Opening the Codex activity requires `read + write + execute`.
-- Updating Codex settings requires `admin`.
+- Reading Codex status in Agent Settings requires `read`.
 
 This matches the fact that Codex may inspect files, edit files, and run commands on the endpoint runtime.

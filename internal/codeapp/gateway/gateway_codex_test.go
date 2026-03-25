@@ -3,21 +3,19 @@ package gateway
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"testing/fstest"
 
 	"github.com/floegence/redeven-agent/internal/codexbridge"
-	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
 )
 
 type stubCodexBackend struct {
 	status               func(ctx context.Context) codexbridge.Status
-	updateConfig         func(next *config.CodexConfig) error
 	listThreads          func(ctx context.Context, limit int) ([]codexbridge.Thread, error)
 	openThread           func(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
 	startThread          func(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.Thread, error)
@@ -32,13 +30,6 @@ func (s *stubCodexBackend) Status(ctx context.Context) codexbridge.Status {
 		return s.status(ctx)
 	}
 	return codexbridge.Status{}
-}
-
-func (s *stubCodexBackend) UpdateConfig(next *config.CodexConfig) error {
-	if s.updateConfig != nil {
-		return s.updateConfig(next)
-	}
-	return nil
 }
 
 func (s *stubCodexBackend) ListThreads(ctx context.Context, limit int) ([]codexbridge.Thread, error) {
@@ -99,17 +90,19 @@ func codexTestDistFS() fs.FS {
 	}
 }
 
-func TestGateway_SettingsUpdate_PersistsCodexConfigAndUpdatesService(t *testing.T) {
+func TestGateway_SettingsUpdate_RejectsHostManagedCodexConfig(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := writeTestConfig(t)
+	before, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("ReadFile(before): %v", err)
+	}
 	channelID := "ch_test_codex_settings"
 	envOrigin := envOriginWithChannel(channelID)
 
-	var updated *config.CodexConfig
 	gw, err := New(Options{
 		Backend:            &stubBackend{},
-		Codex:              &stubCodexBackend{updateConfig: func(next *config.CodexConfig) error { copy := *next; updated = &copy; return nil }},
 		DistFS:             codexTestDistFS(),
 		ListenAddr:         "127.0.0.1:0",
 		ConfigPath:         cfgPath,
@@ -121,51 +114,26 @@ func TestGateway_SettingsUpdate_PersistsCodexConfigAndUpdatesService(t *testing.
 
 	req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/settings", bytes.NewBufferString(`{
   "codex": {
-    "enabled": true,
-    "binary_path": "/usr/local/bin/codex",
-    "default_model": "gpt-5.4",
-    "approval_policy": "on_request",
-    "sandbox_mode": "workspace_write"
+    "binary_path": "/usr/local/bin/codex"
   }
 }`))
 	req.Header.Set("Origin", envOrigin)
 	rr := httptest.NewRecorder()
 	gw.serveHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status=%d, want=%d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d, want=%d body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
 	}
-	if updated == nil {
-		t.Fatalf("UpdateConfig was not called")
-	}
-	if !updated.Enabled || updated.BinaryPath != "/usr/local/bin/codex" || updated.DefaultModel != "gpt-5.4" {
-		t.Fatalf("unexpected updated config: %+v", updated)
+	if !bytes.Contains(rr.Body.Bytes(), []byte("Codex is host-managed")) {
+		t.Fatalf("unexpected body: %s", rr.Body.String())
 	}
 
-	loaded, err := config.Load(cfgPath)
+	after, err := os.ReadFile(cfgPath)
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("ReadFile(after): %v", err)
 	}
-	if loaded.Codex == nil || !loaded.Codex.Enabled {
-		t.Fatalf("persisted codex config missing: %+v", loaded.Codex)
-	}
-	if loaded.Codex.BinaryPath != "/usr/local/bin/codex" {
-		t.Fatalf("BinaryPath=%q, want=%q", loaded.Codex.BinaryPath, "/usr/local/bin/codex")
-	}
-
-	var resp struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			Settings struct {
-				Codex *config.CodexConfig `json:"codex"`
-			} `json:"settings"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if !resp.OK || resp.Data.Settings.Codex == nil || !resp.Data.Settings.Codex.Enabled {
-		t.Fatalf("unexpected response: %s", rr.Body.String())
+	if !bytes.Equal(before, after) {
+		t.Fatalf("config.json changed unexpectedly:\n%s", string(after))
 	}
 }
 
@@ -200,13 +168,10 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		Codex: &stubCodexBackend{
 			status: func(ctx context.Context) codexbridge.Status {
 				return codexbridge.Status{
-					Enabled:        true,
-					Ready:          true,
-					BinaryPath:     "/usr/local/bin/codex",
-					DefaultModel:   "gpt-5.4",
-					ApprovalPolicy: "on_request",
-					SandboxMode:    "workspace_write",
-					AgentHomeDir:   "/workspace",
+					Available:    true,
+					Ready:        true,
+					BinaryPath:   "/usr/local/bin/codex",
+					AgentHomeDir: "/workspace",
 				}
 			},
 			listThreads: func(ctx context.Context, limit int) ([]codexbridge.Thread, error) {

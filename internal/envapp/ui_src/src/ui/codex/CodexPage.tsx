@@ -147,8 +147,8 @@ export function CodexPage() {
 
   const [status] = createResource(() => env.settingsSeq(), async () => fetchCodexStatus());
   const [threads, { refetch: refetchThreads }] = createResource(
-    () => (status.loading ? null : status()?.enabled ? env.settingsSeq() : null),
-    async () => (status()?.enabled ? listCodexThreads(100) : []),
+    () => (status.loading ? null : status()?.available ? env.settingsSeq() : null),
+    async () => (status()?.available ? listCodexThreads(100) : []),
   );
   const [threadDetail, { refetch: refetchThreadDetail }] = createResource(
     () => activeThreadID(),
@@ -160,9 +160,6 @@ export function CodexPage() {
     if (!currentStatus) return;
     if (!workingDirDraft()) {
       setWorkingDirDraft(String(currentStatus.agent_home_dir ?? '').trim());
-    }
-    if (!modelDraft()) {
-      setModelDraft(String(currentStatus.default_model ?? '').trim());
     }
   });
 
@@ -327,7 +324,7 @@ export function CodexPage() {
     }
   };
 
-  const showSetupState = createMemo(() => !status.loading && !status()?.enabled);
+  const showSetupState = createMemo(() => !status.loading && !status()?.available);
   const showStatusError = createMemo(() => String(status()?.error ?? '').trim());
 
   return (
@@ -403,9 +400,9 @@ export function CodexPage() {
                   <h2 class="text-lg font-semibold text-foreground">{threadTitle()}</h2>
                 </div>
                 <div class="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                  <span class="rounded-full border border-border/70 bg-background px-2 py-1">Model: {modelDraft() || status()?.default_model || 'default'}</span>
-                  <span class="rounded-full border border-border/70 bg-background px-2 py-1">Approval: {status()?.approval_policy || 'default'}</span>
-                  <span class="rounded-full border border-border/70 bg-background px-2 py-1">Sandbox: {status()?.sandbox_mode || 'default'}</span>
+                  <span class="rounded-full border border-border/70 bg-background px-2 py-1">Bridge: {status()?.ready ? 'Connected' : 'On-demand'}</span>
+                  <span class="rounded-full border border-border/70 bg-background px-2 py-1">Binary: {status()?.binary_path || 'Unavailable'}</span>
+                  <span class="rounded-full border border-border/70 bg-background px-2 py-1">Working dir: {workingDirDraft() || status()?.agent_home_dir || 'Not set'}</span>
                 </div>
               </div>
 
@@ -433,13 +430,13 @@ export function CodexPage() {
 
           <Show when={showSetupState()}>
             <div class="m-5 rounded-2xl border border-dashed border-border/80 bg-background/80 p-6">
-              <div class="mb-2 text-lg font-semibold text-foreground">Codex is disabled</div>
+              <div class="mb-2 text-lg font-semibold text-foreground">Codex is unavailable on this host</div>
               <div class="max-w-2xl text-sm leading-6 text-muted-foreground">
-                Enable the independent Codex integration from Agent Settings, then point it at a `codex` binary if it is not already available on `PATH`.
+                Redeven uses the host machine&apos;s <span class="font-mono">codex</span> binary directly. Install Codex on this machine and ensure <span class="font-mono">codex</span> is available on <span class="font-mono">PATH</span>.
               </div>
               <div class="mt-4">
                 <Button size="sm" variant="outline" onClick={() => env.openSettings('codex')}>
-                  Open Codex Settings
+                  Open Codex Status
                 </Button>
               </div>
             </div>
@@ -614,7 +611,7 @@ export function CodexPage() {
                       <Input
                         value={modelDraft()}
                         onInput={(event) => setModelDraft(event.currentTarget.value)}
-                        placeholder={status()?.default_model || 'Use Codex default model'}
+                        placeholder="Use host Codex default model"
                         class="w-full"
                       />
                     </label>
