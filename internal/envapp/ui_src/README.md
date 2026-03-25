@@ -69,8 +69,9 @@ The Flower chat UI now follows five explicit constraints:
    - The bottom-dock context summary may mount before usage telemetry arrives, but it must not disappear and reappear for the same run because of confirmation or replay timing.
 
 7. Transcript presentation is a shared conversation column.
-   - User and assistant rows render in the same centered transcript lane instead of splitting to opposite screen edges.
-   - Only assistant rows render an avatar; user rows rely on bubble styling and column placement for distinction.
+   - User and assistant rows render in the same centered transcript lane instead of splitting into separate left/right screen rails.
+   - Within that shared lane, assistant rows stay left-aligned and user rows stay right-aligned so the transcript still reads like a conversation.
+   - Only assistant rows render an avatar; user rows rely on bubble styling and right-side placement for distinction.
    - Assistant answers render as borderless transcript content, while user turns keep the compact bubble treatment.
    - Runtime chips in the bottom toolbar must stay inside a stable single-line lane so chip churn cannot resize the transcript viewport mid-stream.
 
