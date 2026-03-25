@@ -79,7 +79,7 @@ const defaultFetchGatewayJSON: (url: string) => Promise<any> = async (url: strin
   if (url.includes('/followups')) {
     return { queued: [], drafts: [], revision: 0, paused_reason: '' };
   }
-  if (url.includes('/context_events')) {
+  if (url.includes('/runs/') && url.includes('/events')) {
     return { events: [], has_more: false, next_cursor: 0 };
   }
   if (url.includes('/validate_working_dir')) {
@@ -958,6 +958,42 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
+    it('keeps the visible assistant answer on screen when a live frame temporarily regresses to hidden-only content', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        const messageId = emitAssistantRealtimeMessageStart('assistant-hidden-regression');
+        emitAssistantRealtimeDelta(messageId, 'Visible answer');
+        await waitFor(() => {
+          expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Visible answer');
+        });
+
+        const assistantRow = host.querySelector('.chat-message-item-assistant');
+        expect(assistantRow).toBeTruthy();
+
+        emitAssistantRealtimeBlockSet(messageId, 0, { type: 'thinking' });
+        emitAssistantRealtimeDelta(messageId, 'Hidden reasoning');
+        await flushAsync();
+
+        expect(host.querySelector('.chat-message-item-assistant')).toBe(assistantRow);
+        expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Visible answer');
+        expect(liveRunPlaceholder(host)).toBeNull();
+
+        emitAssistantRealtimeBlockSet(messageId, 0, { type: 'markdown', content: '' });
+        await flushAsync();
+
+        expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Visible answer');
+        expect(liveRunPlaceholder(host)).toBeNull();
+
+        emitAssistantRealtimeDelta(messageId, 'Visible answer extended');
+        await waitFor(() => {
+          expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Visible answer extended');
+        });
+        expect(host.querySelectorAll('.chat-message-item-assistant')).toHaveLength(1);
+      } finally {
+        dispose();
+      }
+    });
+
     it('keeps the inline run indicator mounted across streaming deltas', async () => {
       const { host, dispose } = await renderPage();
       try {
@@ -1314,6 +1350,46 @@ export function registerEnvAIPageSendTests() {
         expect(assistantRunIndicator(host)).toBeTruthy();
         expect(host.querySelectorAll('.flower-message-run-indicator')).toHaveLength(1);
         expect(host.querySelector('.chat-working-indicator')).toBeNull();
+      } finally {
+        dispose();
+      }
+    });
+
+    it('keeps same-run context telemetry visible when realtime context events arrive before send confirmation', async () => {
+      const sendDeferred = createDeferred<{ runId: string; kind: string }>();
+      sendUserTurnMock.mockImplementationOnce(async () => sendDeferred.promise);
+
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'show me the context chip continuity');
+        submitComposer(host, 'button', 'Send message');
+        await flushAsync();
+
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          runId: 'run-send-1',
+          streamKind: 'context',
+          atUnixMs: 1710000000000,
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'context-usage',
+            payload: {
+              estimate_tokens: 420,
+              context_limit: 1000,
+              usage_percent: 42,
+            },
+          },
+        });
+        await flushAsync();
+
+        expect(bottomDock(host)?.textContent).toContain('42.0%');
+
+        sendDeferred.resolve({ runId: 'run-send-1', kind: 'start' });
+        await flushAsync();
+
+        await waitFor(() => {
+          expect(bottomDock(host)?.textContent).toContain('42.0%');
+        });
       } finally {
         dispose();
       }

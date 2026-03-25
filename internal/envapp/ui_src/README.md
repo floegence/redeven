@@ -59,8 +59,13 @@ The Flower chat UI now follows five explicit constraints:
    - Hidden `thinking` blocks are sideband data and must never reuse or replace an already-visible markdown slot.
    - Thinking-only or otherwise hidden live frames should keep the active assistant row mounted through the pending placeholder path rather than moving visibility to a different container.
    - Backend stream reconciliation should publish the next visible markdown state before clearing obsolete markdown slots whenever possible.
-   - The render projection may temporarily carry forward the last non-empty visible assistant content for a still-streaming message when an intermediate overlay frame regresses to hidden-only content.
+   - The live-run display resolver may temporarily carry forward the last non-empty visible assistant content when an intermediate live frame or recovered snapshot regresses to hidden-only or poorer visible content for the same run lineage.
    - Bubble and block renderers must preserve stable mounted slots when streaming frames replace block objects; switching block type guards must not implicitly remount the visible answer subtree.
+
+6. Context telemetry is run-scoped and monotonic.
+   - Context usage, compaction events, and replay cursors belong to `run_id`-scoped UI state instead of one resettable page-level slot.
+   - Rebinding the active thread to the same known run must preserve already-visible context telemetry; replay/backfill is incremental and must not clear the current chip state first.
+   - The bottom-dock context summary may mount before usage telemetry arrives, but it must not disappear and reappear for the same run because of confirmation or replay timing.
 
 ## Verification
 
