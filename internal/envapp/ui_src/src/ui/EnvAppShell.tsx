@@ -40,6 +40,8 @@ import { EnvCodespacesPage } from './pages/EnvCodespacesPage';
 import { EnvPortForwardsPage } from './pages/EnvPortForwardsPage';
 import { EnvAIPage } from './pages/EnvAIPage';
 import { CodexPage } from './codex/CodexPage';
+import { CodexProvider } from './codex/CodexProvider';
+import { CodexSidebar } from './codex/CodexSidebar';
 import { AIChatContext, createAIChatContextValue, type ModelsResponse } from './pages/AIChatContext';
 import { AIChatSidebar } from './pages/AIChatSidebar';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
@@ -1301,7 +1303,7 @@ export function EnvAppShell() {
     if (layout.isMobile() && next === 'deck') next = 'terminal';
     // Prevent the downgraded "terminal" tab from overriding the user's persisted preference ("deck").
     if (layout.isMobile() && tab === 'deck' && next === 'terminal') skipPersistOnce = true;
-    layout.setSidebarActiveTab(next, { openSidebar: next === 'ai' });
+    layout.setSidebarActiveTab(next, { openSidebar: next === 'ai' || next === 'codex' });
   };
 
   // If the user preferred Flower and the session has RWX, open it once after permissions load.
@@ -1815,7 +1817,13 @@ export function EnvAppShell() {
   const renderMainShell = () => (
     <Shell
       sidebarMode="auto"
-      sidebarContent={(activeTab) => activeTab === 'ai' && canUseFlower() ? <AIChatSidebar /> : <></>}
+      sidebarContent={(activeTab) =>
+        activeTab === 'ai' && canUseFlower()
+          ? <AIChatSidebar />
+          : activeTab === 'codex' && canUseCodex()
+            ? <CodexSidebar />
+            : <></>
+      }
       logo={
         <TopBarIconButton
           label="Back to dashboard"
@@ -1960,9 +1968,11 @@ export function EnvAppShell() {
           >
             <FloeRegistryRuntime components={components()}>
               <AIChatProviderBridge>
-                <Show when={detachedSurface()} fallback={renderMainShell()}>
-                  {renderDetachedSurface()}
-                </Show>
+                <CodexProvider>
+                  <Show when={detachedSurface()} fallback={renderMainShell()}>
+                    {renderDetachedSurface()}
+                  </Show>
+                </CodexProvider>
                 <AskFlowerComposerWindow
                   open={askFlowerComposerOpen()}
                   intent={askFlowerComposerIntent()}

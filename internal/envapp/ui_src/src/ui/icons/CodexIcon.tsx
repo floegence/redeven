@@ -1,21 +1,12 @@
 export function CodexIcon(props: { class?: string }) {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.8"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class={props.class}
-      aria-hidden="true"
-    >
-      <path d="M6.5 4.5L3.5 12l3 7.5" />
-      <path d="M17.5 4.5l3 7.5-3 7.5" />
-      <path d="M14 4.5l-4 15" />
-      <path d="M8.5 8.5h7" />
-      <path d="M7.5 15.5h7" />
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" class={props.class} aria-hidden="true">
+      <path
+        fill="currentColor"
+        fill-rule="evenodd"
+        clip-rule="evenodd"
+        d="M12 2.45c-1.29 0-2.47.5-3.37 1.33-1.41-.14-2.85.34-3.92 1.41-1.07 1.07-1.55 2.51-1.41 3.92A4.7 4.7 0 0 0 1.97 12c0 1.1.39 2.1 1.03 2.9-.14 1.41.34 2.85 1.41 3.92 1.07 1.07 2.51 1.55 3.92 1.41A4.87 4.87 0 0 0 12 21.55c1.29 0 2.47-.5 3.37-1.33 1.41.14 2.85-.34 3.92-1.41 1.07-1.07 1.55-2.51 1.41-3.92.64-.8 1.03-1.8 1.03-2.9 0-1.1-.39-2.1-1.03-2.9.14-1.41-.34-2.85-1.41-3.92-1.07-1.07-2.51-1.55-3.92-1.41A4.87 4.87 0 0 0 12 2.45Zm-2.63 6.3a.85.85 0 0 1 1.2 0l2.58 2.58a.85.85 0 0 1 0 1.2l-2.58 2.58a.85.85 0 1 1-1.2-1.2L11.35 12 9.37 10.02a.85.85 0 0 1 0-1.27Zm5.35 5.68c0-.47.38-.85.85-.85h2.05a.85.85 0 0 1 0 1.7h-2.05a.85.85 0 0 1-.85-.85Z"
+      />
     </svg>
   );
 }

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvContext } from '../pages/EnvContext';
 import { CodexPage } from './CodexPage';
+import { CodexProvider } from './CodexProvider';
 
 const fetchCodexStatusMock = vi.fn();
 const listCodexThreadsMock = vi.fn();
@@ -21,6 +22,9 @@ const notification = {
 };
 
 vi.mock('@floegence/floe-webapp-core', () => ({
+  useLayout: () => ({
+    sidebarActiveTab: () => 'codex',
+  }),
   useNotification: () => notification,
 }));
 
@@ -29,7 +33,6 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   return {
     Code: Icon,
     FileText: Icon,
-    Pencil: Icon,
     Refresh: Icon,
     Terminal: Icon,
     Trash: Icon,
@@ -37,7 +40,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
 });
 
 vi.mock('@floegence/floe-webapp-core/loading', () => ({
-  LoadingOverlay: (props: any) => <div>{props.label}</div>,
+  LoadingOverlay: (props: any) => <div>{props.message}</div>,
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
@@ -72,69 +75,69 @@ async function flushAsync(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function renderPage(host: HTMLDivElement) {
+  render(() => (
+    <EnvContext.Provider
+      value={{
+        env_id: () => 'env_1',
+        env: (() => null) as any,
+        localRuntime: () => null,
+        connect: async () => undefined,
+        connecting: () => false,
+        connectError: () => null,
+        goTab: () => undefined,
+        filesSidebarOpen: () => false,
+        setFilesSidebarOpen: () => undefined,
+        toggleFilesSidebar: () => undefined,
+        settingsSeq: () => 1,
+        bumpSettingsSeq: () => undefined,
+        openSettings: () => undefined,
+        settingsFocusSeq: () => 0,
+        settingsFocusSection: () => null,
+        askFlowerIntentSeq: () => 0,
+        askFlowerIntent: () => null,
+        injectAskFlowerIntent: () => undefined,
+        openAskFlowerComposer: () => undefined,
+        openTerminalInDirectoryRequestSeq: () => 0,
+        openTerminalInDirectoryRequest: () => null,
+        openTerminalInDirectory: () => undefined,
+        consumeOpenTerminalInDirectoryRequest: () => undefined,
+        aiThreadFocusSeq: () => 0,
+        aiThreadFocusId: () => null,
+        focusAIThread: () => undefined,
+      }}
+    >
+      <CodexProvider>
+        <CodexPage />
+      </CodexProvider>
+    </EnvContext.Provider>
+  ), host);
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
   vi.clearAllMocks();
 });
 
 describe('CodexPage', () => {
-  it('shows setup guidance and opens the dedicated Codex settings section when disabled', async () => {
+  it('shows host diagnostics instead of a disabled settings flow when the host binary is missing', async () => {
     fetchCodexStatusMock.mockResolvedValue({
       available: false,
       ready: false,
       agent_home_dir: '/workspace',
     });
     listCodexThreadsMock.mockResolvedValue([]);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
 
-    const openSettings = vi.fn();
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => (
-      <EnvContext.Provider
-        value={{
-          env_id: () => 'env_1',
-          env: (() => null) as any,
-          localRuntime: () => null,
-          connect: async () => undefined,
-          connecting: () => false,
-          connectError: () => null,
-          goTab: () => undefined,
-          filesSidebarOpen: () => false,
-          setFilesSidebarOpen: () => undefined,
-          toggleFilesSidebar: () => undefined,
-          settingsSeq: () => 1,
-          bumpSettingsSeq: () => undefined,
-          openSettings,
-          settingsFocusSeq: () => 0,
-          settingsFocusSection: () => null,
-          askFlowerIntentSeq: () => 0,
-          askFlowerIntent: () => null,
-          injectAskFlowerIntent: () => undefined,
-          openAskFlowerComposer: () => undefined,
-          openTerminalInDirectoryRequestSeq: () => 0,
-          openTerminalInDirectoryRequest: () => null,
-          openTerminalInDirectory: () => undefined,
-          consumeOpenTerminalInDirectoryRequest: () => undefined,
-          aiThreadFocusSeq: () => 0,
-          aiThreadFocusId: () => null,
-          focusAIThread: () => undefined,
-        }}
-      >
-        <CodexPage />
-      </EnvContext.Provider>
-    ), host);
+    renderPage(host);
 
     await flushAsync();
 
-    expect(host.textContent).toContain('Codex is unavailable on this host');
-    expect(host.textContent).toContain('Open Codex Status');
-
-    const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Open Codex Status'));
-    if (!button) {
-      throw new Error('Open Codex Status button not found');
-    }
-    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(openSettings).toHaveBeenCalledWith('codex');
+    expect(host.textContent).toContain('Install Codex on the host');
+    expect(host.textContent).toContain('there is no separate in-app Codex runtime toggle to manage here');
+    expect(host.textContent).not.toContain('Open Codex Status');
   });
 });
