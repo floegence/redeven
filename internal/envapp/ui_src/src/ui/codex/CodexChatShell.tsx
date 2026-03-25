@@ -245,9 +245,11 @@ export function CodexChatShell() {
       </div>
 
       <div class="flex min-h-0 flex-1 flex-col">
-        <div class="min-h-0 flex-1 overflow-auto">
-          <div class="mx-auto flex h-full w-full max-w-5xl flex-col">
-            <div class="space-y-3 px-4 pt-4 lg:px-6">
+        <div class="relative min-h-0 flex-1 overflow-auto">
+          <div class="pointer-events-none absolute inset-x-0 top-0 h-56 bg-[radial-gradient(circle_at_top,rgba(88,102,123,0.14),transparent_72%)]" />
+          <div class="pointer-events-none absolute inset-x-0 top-24 h-px bg-gradient-to-r from-transparent via-border/60 to-transparent" />
+          <div class="relative mx-auto flex h-full w-full max-w-5xl flex-col">
+            <div class="space-y-3 px-4 pt-5 lg:px-6">
               <Show when={codex.statusError()}>
                 <Banner title="Status error" body={codex.statusError() || ''} tone="warning" />
               </Show>
@@ -275,28 +277,17 @@ export function CodexChatShell() {
           </div>
         </div>
 
-        <div class="border-t border-border/80 bg-background/95 backdrop-blur-md">
+        <div class="relative border-t border-border/80 bg-background/95 backdrop-blur-md">
+          <div class="pointer-events-none absolute inset-x-0 bottom-full h-16 bg-gradient-to-t from-background via-background/85 to-transparent" />
           <div class="mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-3 lg:px-6">
             <Show when={codex.pendingRequests().length > 0}>
               <PendingRequestsPanel />
             </Show>
 
-            <Show when={codex.activeStatusFlags().length > 0}>
-              <div class="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                <span class="font-medium text-foreground">Runtime flags</span>
-                <For each={codex.activeStatusFlags()}>
-                  {(flag) => (
-                    <Tag variant={statusTagVariant(flag)} tone="soft" size="sm">
-                      {displayStatus(flag, 'Flag')}
-                    </Tag>
-                  )}
-                </For>
-              </div>
-            </Show>
-
             <CodexComposerShell
               activeThreadID={codex.activeThreadID()}
               activeStatus={codex.activeStatus()}
+              statusFlags={codex.activeStatusFlags()}
               workspaceLabel={codex.workingDirDraft()}
               modelLabel={codex.modelDraft()}
               composerText={codex.composerText()}
@@ -305,6 +296,7 @@ export function CodexChatShell() {
               onWorkspaceInput={codex.setWorkingDirDraft}
               onModelInput={codex.setModelDraft}
               onComposerInput={codex.setComposerText}
+              onPromptSelect={codex.setComposerText}
               onSend={() => void codex.sendTurn()}
             />
           </div>

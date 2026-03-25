@@ -30,17 +30,17 @@ function EmptySuggestion(props: {
       onClick={() => props.onClick(props.prompt)}
       disabled={props.disabled}
       class={cn(
-        'group flex w-full cursor-pointer items-start gap-3 rounded-xl border border-border/50 bg-card/40 p-4 text-left transition-all duration-200',
-        'hover:border-primary/30 hover:bg-card hover:shadow-lg hover:shadow-primary/5',
+        'group flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-border/55 bg-card/55 p-4 text-left transition-all duration-200',
+        'hover:border-primary/30 hover:bg-card/90 hover:shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]',
         'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border/50 disabled:hover:bg-card/40',
       )}
     >
-      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-all duration-200 group-hover:bg-primary/20">
+      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/[0.08] text-primary transition-all duration-200 group-hover:bg-primary/[0.14]">
         <CodexIcon class="h-5 w-5" />
       </div>
       <div class="min-w-0 flex-1">
         <div class="text-sm font-medium text-foreground">Suggested Codex prompt</div>
-        <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.prompt}</div>
+        <div class="mt-1 text-sm leading-6 text-muted-foreground">{props.prompt}</div>
       </div>
     </button>
   );
@@ -53,16 +53,16 @@ function EmptyTranscriptState(props: {
   suggestionDisabled?: boolean;
 }) {
   return (
-    <div class="mx-auto flex w-full max-w-3xl flex-col items-center px-4 py-14 text-center">
-      <div class="relative mb-6 inline-flex items-center justify-center">
-        <div class="absolute -inset-2 rounded-full bg-primary/8" />
-        <div class="relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary/15 to-primary/5 shadow-sm">
-          <CodexIcon class="h-9 w-9" />
+    <div class="mx-auto flex w-full max-w-4xl flex-col items-center px-4 py-16 text-center">
+      <div class="relative mb-7 inline-flex items-center justify-center">
+        <div class="absolute -inset-5 rounded-full bg-primary/[0.06] blur-2xl" />
+        <div class="relative flex h-16 w-16 items-center justify-center rounded-full border border-border/60 bg-background/92 shadow-[0_20px_50px_-30px_rgba(15,23,42,0.45)]">
+          <CodexIcon class="h-8 w-8" />
         </div>
       </div>
 
-      <h2 class="text-xl font-semibold text-foreground">{props.title}</h2>
-      <p class="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">{props.body}</p>
+      <h2 class="text-[1.75rem] font-semibold tracking-tight text-foreground">{props.title}</h2>
+      <p class="mt-3 max-w-2xl text-[15px] leading-8 text-muted-foreground">{props.body}</p>
 
       <div class="mt-8 grid w-full gap-3 md:grid-cols-2">
         <For each={EMPTY_SUGGESTIONS}>
@@ -91,7 +91,7 @@ function TranscriptMeta(props: {
 }) {
   return (
     <div class="flex flex-wrap items-center gap-2">
-      <div class="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+      <div class="text-sm font-semibold text-foreground">
         {props.label}
       </div>
       <Show when={props.status}>
@@ -107,15 +107,21 @@ function TranscriptMeta(props: {
 function CommandExecutionBody(props: { item: CodexTranscriptItem }) {
   return (
     <div class="space-y-3">
-      <div class="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
-        <div class="border-b border-slate-800 px-4 py-3">
-          <div class="text-[11px] uppercase tracking-[0.14em] text-slate-400">Working directory</div>
-          <div class="mt-1 truncate font-mono text-xs text-slate-200">{props.item.cwd || 'Working directory unavailable'}</div>
+      <div class="overflow-hidden rounded-[1.25rem] border border-slate-800/90 bg-slate-950 shadow-[0_20px_45px_-32px_rgba(15,23,42,0.9)]">
+        <div class="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
+          <div class="flex items-center gap-2">
+            <span class="h-2.5 w-2.5 rounded-full bg-rose-400/70" />
+            <span class="h-2.5 w-2.5 rounded-full bg-amber-300/70" />
+            <span class="h-2.5 w-2.5 rounded-full bg-emerald-400/70" />
+          </div>
+          <div class="truncate font-mono text-[11px] text-slate-400">
+            {props.item.cwd || 'Working directory unavailable'}
+          </div>
         </div>
         <div class="space-y-3 p-4 font-mono text-xs text-slate-100">
-          <div>{props.item.command || 'Command unavailable'}</div>
+          <div class="whitespace-pre-wrap break-words text-slate-100">{props.item.command || 'Command unavailable'}</div>
           <Show when={props.item.aggregated_output}>
-            <pre class="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-slate-900/80 p-3 text-[11px] text-slate-300">
+            <pre class="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-slate-800 bg-slate-900/80 p-3 text-[11px] text-slate-300">
               {props.item.aggregated_output}
             </pre>
           </Show>
@@ -142,7 +148,7 @@ function FileChangeBody(props: { item: CodexTranscriptItem }) {
     <div class="space-y-3">
       <For each={props.item.changes ?? []}>
         {(change) => (
-          <div class="rounded-xl border border-border/60 bg-background/80 p-4">
+          <div class="rounded-[1.25rem] border border-border/60 bg-background/90 p-4 shadow-sm">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
                 <div class="truncate font-mono text-xs text-foreground">{change.path}</div>
@@ -154,7 +160,7 @@ function FileChangeBody(props: { item: CodexTranscriptItem }) {
                 {change.kind}
               </Tag>
             </div>
-            <pre class="mt-4 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-muted/10 p-3 font-mono text-[11px] text-muted-foreground">
+            <pre class="mt-4 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-slate-800/80 bg-slate-950 p-3 font-mono text-[11px] text-slate-200">
               {change.diff || 'No diff provided.'}
             </pre>
           </div>
@@ -171,12 +177,12 @@ function ReasoningBody(props: { item: CodexTranscriptItem }) {
   return (
     <div class="space-y-3">
       <Show when={(props.item.summary?.length ?? 0) > 0}>
-        <ul class="list-disc space-y-1 pl-5 text-sm leading-6 text-foreground">
+        <ul class="list-disc space-y-1.5 pl-5 text-sm leading-7 text-foreground">
           <For each={props.item.summary}>{(entry) => <li>{entry}</li>}</For>
         </ul>
       </Show>
       <Show when={props.item.text}>
-        <pre class="whitespace-pre-wrap break-words rounded-xl border border-border/60 bg-background/80 p-4 text-sm leading-6 text-muted-foreground">
+        <pre class="whitespace-pre-wrap break-words rounded-[1.25rem] border border-border/60 bg-background/85 p-4 text-sm leading-7 text-muted-foreground">
           {props.item.text}
         </pre>
       </Show>
@@ -186,12 +192,12 @@ function ReasoningBody(props: { item: CodexTranscriptItem }) {
 
 function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
   return (
-    <div class="flex items-start gap-3">
-      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/80 text-foreground shadow-sm">
+    <div class="flex items-start gap-4">
+      <div class="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/88 text-foreground shadow-sm">
         {itemGlyph(props.item)}
       </div>
       <div class="min-w-0 flex-1">
-        <div class="rounded-2xl border border-border/60 bg-card/80 p-4 shadow-sm">
+        <div class="rounded-[1.5rem] border border-border/60 bg-card/82 p-4 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.45)]">
           <TranscriptMeta
             label={itemTitle(props.item)}
             status={props.item.status}
@@ -219,7 +225,7 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
                 props.item.type !== 'plan'
               }
             >
-              <div class="whitespace-pre-wrap break-words text-sm leading-7 text-foreground">{itemText(props.item)}</div>
+              <div class="whitespace-pre-wrap break-words text-[15px] leading-8 text-foreground">{itemText(props.item)}</div>
             </Show>
           </div>
         </div>
@@ -230,12 +236,12 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
 
 function AgentMessageRow(props: { item: CodexTranscriptItem }) {
   return (
-    <div class="flex items-start gap-3">
-      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/80 shadow-sm">
+    <div class="flex items-start gap-4">
+      <div class="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/88 shadow-sm">
         <CodexIcon class="h-5 w-5" />
       </div>
       <div class="min-w-0 flex-1">
-        <div class="rounded-3xl rounded-tl-md border border-border/60 bg-card/85 p-5 shadow-sm">
+        <div class="rounded-[1.75rem] rounded-tl-md border border-border/60 bg-card/88 p-5 shadow-[0_22px_50px_-34px_rgba(15,23,42,0.45)]">
           <TranscriptMeta
             label="Codex"
             status={props.item.status}
@@ -245,7 +251,7 @@ function AgentMessageRow(props: { item: CodexTranscriptItem }) {
               </Tag>
             }
           />
-          <div class="mt-3 whitespace-pre-wrap break-words text-[15px] leading-7 text-foreground">
+          <div class="mt-3 whitespace-pre-wrap break-words text-[15px] leading-8 text-foreground">
             {itemText(props.item)}
           </div>
         </div>
@@ -257,8 +263,8 @@ function AgentMessageRow(props: { item: CodexTranscriptItem }) {
 function UserMessageRow(props: { item: CodexTranscriptItem }) {
   return (
     <div class="flex justify-end">
-      <div class="max-w-3xl">
-        <div class="rounded-3xl rounded-br-md border border-primary/20 bg-primary/[0.08] p-4 shadow-sm">
+      <div class="w-full max-w-[min(42rem,84%)]">
+        <div class="rounded-[1.75rem] rounded-br-md border border-primary/20 bg-[color-mix(in_srgb,var(--primary)_8%,var(--background))] p-5 shadow-[0_20px_50px_-36px_rgba(15,23,42,0.42)]">
           <TranscriptMeta
             label="You"
             status={props.item.status}
@@ -268,7 +274,7 @@ function UserMessageRow(props: { item: CodexTranscriptItem }) {
               </Tag>
             }
           />
-          <div class="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-foreground">
+          <div class="mt-3 whitespace-pre-wrap break-words text-[15px] leading-8 text-foreground">
             {itemText(props.item)}
           </div>
         </div>
@@ -307,7 +313,7 @@ export function CodexTranscript(props: {
           />
         }
       >
-        <div class="flex flex-col gap-5 px-4 py-6 lg:px-6">
+        <div class="flex flex-col gap-7 px-4 py-8 lg:px-6 lg:py-10">
           <For each={props.items}>{(item) => <TranscriptRow item={item} />}</For>
         </div>
       </Show>

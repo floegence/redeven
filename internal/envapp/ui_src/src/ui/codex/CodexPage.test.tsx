@@ -32,9 +32,12 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
+    Activity: Icon,
     Code: Icon,
     FileText: Icon,
+    Folder: Icon,
     Refresh: Icon,
+    Send: Icon,
     Terminal: Icon,
     Trash: Icon,
   };
@@ -58,6 +61,8 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
   Input: (props: any) => (
     <input
+      type={props.type}
+      class={props.class}
       value={props.value ?? ''}
       placeholder={props.placeholder}
       onInput={(event) => props.onInput?.(event)}
@@ -66,10 +71,14 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
   Textarea: (props: any) => (
     <textarea
+      class={props.class}
       value={props.value ?? ''}
       placeholder={props.placeholder}
       rows={props.rows}
       onInput={(event) => props.onInput?.(event)}
+      onKeyDown={(event) => props.onKeyDown?.(event)}
+      onCompositionStart={(event) => props.onCompositionStart?.(event)}
+      onCompositionEnd={(event) => props.onCompositionEnd?.(event)}
     />
   ),
 }));
@@ -250,8 +259,9 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('Review response');
     expect(host.textContent).toContain('src/ui/codex/CodexPage.tsx');
     expect(host.textContent).toContain('Command evidence');
-    expect(host.textContent).toContain('Runtime flags');
     expect(host.textContent).toContain('finalizing');
+    expect(host.textContent).toContain('Review recent changes');
+    expect(host.textContent).toContain('Workspace');
     expect(host.textContent).toContain('Send to Codex');
   });
 
@@ -324,5 +334,38 @@ describe('CodexPage', () => {
       }),
     );
     expect(host.textContent).toContain('Stream update');
+  });
+
+  it('applies a composer preset into the Codex textarea', async () => {
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    const preset = Array.from(host.querySelectorAll('button')).find((node) =>
+      node.textContent?.includes('Review recent changes'),
+    );
+    if (!preset) {
+      throw new Error('Review recent changes preset not found');
+    }
+    preset.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await flushAsync();
+
+    const textarea = host.querySelector('textarea');
+    expect(textarea).not.toBeNull();
+    expect((textarea as HTMLTextAreaElement).value).toContain('Review the latest file changes');
   });
 });
