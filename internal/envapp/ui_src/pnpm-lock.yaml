@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@floegence/flowersec-core': ^0.16.3
+  '@floegence/flowersec-core': ^0.17.0
   dompurify: ^3.3.2
   flatted: ^3.4.2
   minimatch@^3.0.0: ^3.1.4
@@ -27,8 +27,8 @@ importers:
         specifier: ^0.4.8
         version: 0.4.8(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@floegence/flowersec-core':
-        specifier: ^0.16.3
-        version: 0.16.3
+        specifier: ^0.17.0
+        version: 0.17.0
       '@fontsource/iosevka':
         specifier: ^5.2.5
         version: 5.2.5
@@ -473,8 +473,8 @@ packages:
       react: '>=18'
       react-dom: '>=18'
 
-  '@floegence/flowersec-core@0.16.3':
-    resolution: {integrity: sha512-NdpF/1irpHcLy9bCqTxUU/O4YnE6BJtn/FzPOzw/0zcXONwelEBTAE1aPfUm3btymHnJqxY+bAMnu5RfeAAQwg==}
+  '@floegence/flowersec-core@0.17.0':
+    resolution: {integrity: sha512-F8bkHxIB9nVGCdNJxsuy50mbqE0TQt0jTtq+1FNtgy1M7qdkh7II7GyfwDAMoH+FF+Uw8r3kuRAQjZWp8fhLMA==}
     engines: {node: ^20.0.0 || ^22.0.0 || >=24.0.0}
 
   '@fontsource/iosevka@5.2.5':
@@ -3069,7 +3069,7 @@ snapshots:
 
   '@floegence/floe-webapp-protocol@0.35.25(solid-js@1.9.11)':
     dependencies:
-      '@floegence/flowersec-core': 0.16.3
+      '@floegence/flowersec-core': 0.17.0
       solid-js: 1.9.11
     transitivePeerDependencies:
       - bufferutil
@@ -3081,7 +3081,7 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  '@floegence/flowersec-core@0.16.3':
+  '@floegence/flowersec-core@0.17.0':
     dependencies:
       '@noble/ciphers': 0.6.0
       '@noble/curves': 1.9.7
