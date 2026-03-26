@@ -168,7 +168,7 @@ vi.mock('./accessResume', () => ({
 }));
 
 vi.mock('./icons/FlowerIcon', () => ({ FlowerIcon: () => <span /> }));
-vi.mock('./icons/CodexIcon', () => ({ CodexIcon: () => <span /> }));
+vi.mock('./icons/CodexIcon', () => ({ CodexIcon: () => <span />, CodexNavigationIcon: () => <span /> }));
 vi.mock('./pages/EnvDeckPage', () => ({ EnvDeckPage: () => <div /> }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div /> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));

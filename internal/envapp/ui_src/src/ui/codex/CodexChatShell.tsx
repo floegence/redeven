@@ -187,9 +187,7 @@ export function CodexChatShell() {
       <div class="border-b border-border/80 bg-background/95 backdrop-blur-md">
         <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-6">
           <div class="flex min-w-0 items-center gap-3">
-            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/85 shadow-sm">
-              <CodexIcon class="h-5 w-5" />
-            </div>
+            <CodexIcon class="h-8 w-8 shrink-0" />
             <div class="min-w-0">
               <div class="truncate text-sm font-medium text-foreground">{codex.threadTitle()}</div>
               <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">

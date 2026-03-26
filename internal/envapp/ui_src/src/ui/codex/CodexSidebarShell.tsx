@@ -26,9 +26,7 @@ function RuntimeSummary() {
       title={hostSummary()}
     >
       <div class="flex items-center gap-2">
-        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-background/85 shadow-sm">
-          <CodexIcon class="h-4 w-4" />
-        </div>
+        <CodexIcon class="h-6 w-6 shrink-0" />
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <div class="truncate text-sm font-medium text-foreground">Codex</div>
@@ -57,9 +55,7 @@ function EmptyState() {
 
   return (
     <div class="px-2.5 py-8 text-center">
-      <div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-primary/8">
-        <CodexIcon class="h-7 w-7" />
-      </div>
+      <CodexIcon class="mx-auto mb-3 h-10 w-10" />
       <p class="text-xs font-medium text-muted-foreground/80">
         {codex.hasHostBinary() ? 'No conversations yet' : 'Codex is not available yet'}
       </p>
