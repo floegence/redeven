@@ -33,15 +33,17 @@ function EmptySuggestion(props: {
       onClick={() => props.onClick(props.prompt)}
       disabled={props.disabled}
       class={cn(
-        'group flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-border/55 bg-card/55 p-4 text-left transition-all duration-200',
-        'hover:border-primary/30 hover:bg-card/90 hover:shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]',
+        'group flex w-full cursor-pointer items-start gap-3 rounded-xl border border-border/50 bg-card/40 p-4 text-left transition-all duration-200',
+        'hover:border-primary/30 hover:bg-card hover:shadow-lg hover:shadow-primary/5',
         'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border/50 disabled:hover:bg-card/40',
       )}
     >
-      <CodexIcon class="mt-0.5 h-6 w-6 shrink-0" />
+      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 transition-all duration-200 group-hover:bg-primary/20 group-hover:scale-110">
+        <CodexIcon class="h-5 w-5" />
+      </div>
       <div class="min-w-0 flex-1">
-        <div class="text-sm font-medium text-foreground">Suggested Codex prompt</div>
-        <div class="mt-1 text-sm leading-6 text-muted-foreground">{props.prompt}</div>
+        <div class="mb-0.5 text-sm font-medium text-foreground">Suggested Codex prompt</div>
+        <div class="text-xs leading-relaxed text-muted-foreground">{props.prompt}</div>
       </div>
     </button>
   );
@@ -56,13 +58,15 @@ function EmptyTranscriptState(props: {
   return (
     <div data-codex-surface="empty-state" class="codex-empty-state">
       <div class="codex-empty-hero">
-        <div class="relative mb-7 inline-flex items-center justify-center">
-          <div class="absolute -inset-5 rounded-full bg-primary/[0.06] blur-2xl" />
-          <CodexIcon class="relative h-11 w-11" />
+        <div class="relative mb-6 inline-flex items-center justify-center">
+          <div class="absolute -inset-2 rounded-full bg-primary/8" />
+          <div class="relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary/15 to-primary/8 shadow-sm">
+            <CodexIcon class="h-9 w-9 text-primary" />
+          </div>
         </div>
 
-        <h2 class="text-[1.75rem] font-semibold tracking-tight text-foreground">{props.title}</h2>
-        <p class="mt-3 text-[15px] leading-8 text-muted-foreground">{props.body}</p>
+        <h2 class="mb-3 text-xl font-semibold text-foreground">{props.title}</h2>
+        <p class="text-sm leading-relaxed text-muted-foreground">{props.body}</p>
       </div>
 
       <div class="codex-empty-suggestions">
@@ -118,8 +122,8 @@ function TranscriptMeta(props: {
   extra?: JSX.Element;
 }) {
   return (
-    <div class="flex flex-wrap items-center gap-2">
-      <div class="text-sm font-semibold text-foreground">
+    <div class="codex-chat-transcript-meta">
+      <div class="codex-chat-transcript-meta-label">
         {props.label}
       </div>
       <Show when={props.status}>
@@ -186,7 +190,7 @@ function ReasoningBody(props: { item: CodexTranscriptItem }) {
   return (
     <div class="space-y-3">
       <Show when={(props.item.summary?.length ?? 0) > 0}>
-        <ul class="list-disc space-y-1.5 pl-5 text-sm leading-7 text-foreground">
+        <ul class="codex-chat-summary-list">
           <For each={props.item.summary}>{(entry) => <li>{entry}</li>}</For>
         </ul>
       </Show>
@@ -278,8 +282,8 @@ function UserMessageRow(props: { item: CodexTranscriptItem }) {
               </Tag>
             }
           />
-          <div class="mt-3 whitespace-pre-wrap break-words text-[15px] leading-8 text-primary-foreground">
-            {itemText(props.item)}
+          <div class="mt-3">
+            <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block codex-chat-user-markdown-block" />
           </div>
         </div>
       </div>
@@ -318,7 +322,13 @@ export function CodexTranscript(props: {
         )}
       >
         <div class="codex-transcript-feed">
-          <For each={props.items}>{(item) => <TranscriptRow item={item} />}</For>
+          <For each={props.items}>
+            {(item) => (
+              <div class="codex-transcript-row">
+                <TranscriptRow item={item} />
+              </div>
+            )}
+          </For>
         </div>
       </Show>
     </div>
