@@ -4,6 +4,7 @@ import { Activity, Folder, Send } from '@floegence/floe-webapp-core/icons';
 import { Input } from '@floegence/floe-webapp-core/ui';
 
 import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown';
+import { compactPathLabel } from './presentation';
 
 const COMPOSER_PRESETS = [
   {
@@ -23,16 +24,6 @@ const COMPOSER_PRESETS = [
     prompt: 'Turn the current implementation state into a short execution plan with checkpoints.',
   },
 ] as const;
-
-function compactPathLabel(value: string, fallback: string): string {
-  const normalized = String(value ?? '').trim();
-  if (!normalized) return fallback;
-  const parts = normalized.split('/').filter(Boolean);
-  if (parts.length === 0) return normalized;
-  if (normalized.length <= 24) return normalized;
-  if (parts.length === 1) return parts[0] ?? fallback;
-  return `…/${parts.slice(-2).join('/')}`;
-}
 
 export function CodexComposerShell(props: {
   activeThreadID: string | null;

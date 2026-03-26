@@ -62,7 +62,14 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
-    <button type={props.type ?? 'button'} disabled={props.disabled} onClick={props.onClick}>
+    <button
+      type={props.type ?? 'button'}
+      class={props.class}
+      disabled={props.disabled}
+      onClick={props.onClick}
+      aria-label={props['aria-label']}
+      title={props.title}
+    >
       {props.children}
     </button>
   ),

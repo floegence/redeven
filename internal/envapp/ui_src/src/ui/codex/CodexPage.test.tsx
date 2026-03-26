@@ -49,7 +49,14 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
-    <button type={props.type ?? 'button'} disabled={props.disabled} onClick={props.onClick}>
+    <button
+      type={props.type ?? 'button'}
+      class={props.class}
+      disabled={props.disabled}
+      onClick={props.onClick}
+      aria-label={props['aria-label']}
+      title={props.title}
+    >
       {props.children}
     </button>
   ),
@@ -257,17 +264,22 @@ describe('CodexPage', () => {
 
     expect(host.querySelector('[data-codex-surface="transcript"]')).not.toBeNull();
     expect(host.textContent).toContain('Codex page polish review');
-    expect(host.textContent).toContain('Review brief');
-    expect(host.textContent).toContain('Review response');
     expect(host.textContent).toContain('src/ui/codex/CodexPage.tsx');
     expect(host.textContent).toContain('Command evidence');
     expect(host.textContent).toContain('finalizing');
     expect(host.textContent).toContain('Prompt ideas');
     expect(host.textContent).not.toContain('Review recent changes');
     expect(host.textContent).not.toContain('Options');
+    expect(host.textContent).not.toContain('Review brief');
+    expect(host.textContent).not.toContain('Review response');
+    expect(host.textContent).not.toContain('Dedicated Codex review shell with isolated thread state.');
+    expect(host.textContent).not.toContain('Host ready');
+    expect(host.textContent).not.toContain('Updated');
     expect(host.textContent).toContain('/workspace/ui');
     expect(host.querySelector('.codex-chat-input-meta-rail')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="Refresh Codex thread"]')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="Archive Codex thread"]')).not.toBeNull();
 
     const promptIdeasButton = Array.from(host.querySelectorAll('button')).find((node) =>
       node.textContent?.includes('Prompt ideas'),
