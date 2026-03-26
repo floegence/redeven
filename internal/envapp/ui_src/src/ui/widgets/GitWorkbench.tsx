@@ -193,7 +193,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             </div>
             <div class="min-w-0 max-w-full truncate text-[11px] text-muted-foreground">{repoPath()}</div>
             <Show when={headDisplay().detached}>
-              <div class="text-[11px] text-warning">{detachedHeadSummary()}</div>
+              <div class="text-[11px] text-foreground">{detachedHeadSummary()}</div>
               <Show when={reattachBranch()}>
                 <div class="text-[11px] text-muted-foreground">{reattachSummary()}</div>
               </Show>
@@ -204,8 +204,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             <Show when={headDisplay().detached && reattachBranch() && props.onCheckoutBranch}>
               <Button
                 size="xs"
-                variant="outline"
-                class="shrink-0"
+                variant="ghost"
+                class={cn('shrink-0', gitToneActionButtonClass())}
                 disabled={repoActionsDisabled() || props.checkoutBusy}
                 onClick={() => {
                   const branch = reattachBranch();

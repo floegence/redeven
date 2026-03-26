@@ -1277,24 +1277,24 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     </div>
 
                     <Show when={repoHeadDisplay().detached}>
-                      <div class="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-[11px] leading-relaxed text-warning">
+                      <div class="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-[11px] leading-relaxed">
                         <div class="flex flex-wrap items-center gap-1.5">
                           <GitMetaPill tone="warning">Detached HEAD</GitMetaPill>
                           <Show when={repoHeadDisplay().detail}>
                             <GitMetaPill tone="neutral">{repoHeadDisplay().detail}</GitMetaPill>
                           </Show>
                         </div>
-                        <div class="mt-2">{detachedHeadViewingSummary(props.repoSummary?.headCommit)}</div>
-                        <div class="mt-1">Checkout a local branch to reattach HEAD before pull, push, or merge.</div>
+                        <div class="mt-2 text-foreground">{detachedHeadViewingSummary(props.repoSummary?.headCommit)}</div>
+                        <div class="mt-1 text-muted-foreground">Checkout a local branch to reattach HEAD before pull, push, or merge.</div>
                         <Show when={reattachBranch()}>
-                          <div class="mt-1 text-warning/90">{detachedHeadReattachSummary(reattachBranch())}</div>
+                          <div class="mt-1 text-muted-foreground">{detachedHeadReattachSummary(reattachBranch())}</div>
                         </Show>
                         <Show when={reattachBranch() && props.onCheckoutBranch}>
                           <div class="mt-2">
                             <Button
                               size="sm"
-                              variant="outline"
-                              class={secondaryActionButtonClass}
+                              variant="ghost"
+                              class={cn('w-full sm:w-auto', gitToneActionButtonClass())}
                               disabled={Boolean(props.checkoutBusy)}
                               onClick={() => {
                                 const branch = reattachBranch();
