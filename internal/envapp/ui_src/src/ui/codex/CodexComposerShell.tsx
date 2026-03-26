@@ -213,7 +213,6 @@ export function CodexComposerShell(props: {
               type="button"
               class={cn(
                 'codex-chat-chip codex-chat-working-dir-chip codex-chat-chip-actionable',
-                showWorkspaceEditor() && 'codex-chat-working-dir-chip-active',
               )}
               onClick={() => setShowWorkspaceEditor((value) => !value)}
               title={workspaceTitle()}
