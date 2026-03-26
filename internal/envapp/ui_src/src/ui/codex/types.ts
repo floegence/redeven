@@ -6,6 +6,46 @@ export type CodexStatus = Readonly<{
   error?: string;
 }>;
 
+export type CodexThreadRuntimeConfig = Readonly<{
+  model?: string;
+  model_provider?: string;
+  cwd?: string;
+  approval_policy?: string;
+  approvals_reviewer?: string;
+  sandbox_mode?: string;
+  reasoning_effort?: string;
+}>;
+
+export type CodexModelOption = Readonly<{
+  id: string;
+  display_name: string;
+  description?: string;
+  is_default?: boolean;
+  supports_image_input?: boolean;
+  default_reasoning_effort?: string;
+  supported_reasoning_efforts?: string[];
+}>;
+
+export type CodexConfigRequirements = Readonly<{
+  allowed_approval_policies?: string[];
+  allowed_sandbox_modes?: string[];
+}>;
+
+export type CodexCapabilitiesSnapshot = Readonly<{
+  models?: CodexModelOption[];
+  effective_config?: CodexThreadRuntimeConfig;
+  requirements?: CodexConfigRequirements | null;
+}>;
+
+export type CodexComposerAttachmentDraft = Readonly<{
+  id: string;
+  name: string;
+  mime_type: string;
+  size_bytes: number;
+  data_url: string;
+  preview_url: string;
+}>;
+
 export type CodexFileChange = Readonly<{
   path: string;
   kind: string;
@@ -109,6 +149,7 @@ export type CodexPendingRequest = Readonly<{
 
 export type CodexThreadDetail = Readonly<{
   thread: CodexThread;
+  runtime_config?: CodexThreadRuntimeConfig;
   pending_requests?: CodexPendingRequest[];
   last_event_seq: number;
   active_status?: string;
@@ -151,6 +192,7 @@ export type CodexTranscriptItem = CodexItem & Readonly<{
 
 export type CodexThreadSession = Readonly<{
   thread: CodexThread;
+  runtime_config: CodexThreadRuntimeConfig;
   items_by_id: Record<string, CodexTranscriptItem>;
   item_order: string[];
   pending_requests: Record<string, CodexPendingRequest>;

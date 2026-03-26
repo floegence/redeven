@@ -43,11 +43,12 @@ type Manager struct {
 }
 
 type threadState struct {
-	thread       *Thread
-	lastEventSeq int64
-	events       []Event
-	pending      map[string]*pendingRequestRecord
-	subscribers  map[int64]chan Event
+	thread        *Thread
+	runtimeConfig ThreadRuntimeConfig
+	lastEventSeq  int64
+	events        []Event
+	pending       map[string]*pendingRequestRecord
+	subscribers   map[int64]chan Event
 }
 
 type pendingRequestRecord struct {
@@ -146,20 +147,33 @@ func (m *Manager) OpenThread(ctx context.Context, threadID string) (*ThreadDetai
 		return nil, err
 	}
 	thread := normalizeThread(resp.Thread)
+	runtimeConfig := normalizeThreadRuntimeConfig(
+		resp.Model,
+		resp.ModelProvider,
+		resp.CWD,
+		resp.ApprovalPolicy,
+		resp.ApprovalsReviewer,
+		resp.Sandbox,
+		resp.ReasoningEffort,
+	)
 	m.mu.Lock()
 	state := m.ensureThreadStateLocked(thread.ID)
 	state.thread = &thread
+	state.runtimeConfig = runtimeConfig
 	detail := m.buildThreadDetailLocked(state, thread)
 	m.mu.Unlock()
 	return &detail, nil
 }
 
-func (m *Manager) StartThread(ctx context.Context, req StartThreadRequest) (*Thread, error) {
+func (m *Manager) StartThread(ctx context.Context, req StartThreadRequest) (*ThreadDetail, error) {
 	cwd := strings.TrimSpace(req.CWD)
 	if cwd == "" {
 		cwd = m.agentHomeDir
 	}
 	model := strings.TrimSpace(req.Model)
+	approvalPolicy := normalizeApprovalPolicyRequest(req.ApprovalPolicy)
+	sandboxMode := normalizeSandboxModeRequest(req.SandboxMode)
+	approvalsReviewer := normalizeApprovalsReviewer(req.ApprovalsReviewer)
 	var params wireThreadStartParams
 	params.CWD = stringPtr(cwd)
 	params.ServiceName = stringPtr("redeven_envapp")
@@ -168,16 +182,72 @@ func (m *Manager) StartThread(ctx context.Context, req StartThreadRequest) (*Thr
 	if model != "" {
 		params.Model = stringPtr(model)
 	}
+	if approvalPolicy != "" {
+		params.ApprovalPolicy = stringPtr(approvalPolicy)
+	}
+	if sandboxMode != "" {
+		params.Sandbox = stringPtr(sandboxMode)
+	}
+	if approvalsReviewer != "" {
+		params.ApprovalsReviewer = stringPtr(approvalsReviewer)
+	}
 	var resp wireThreadStartResponse
 	if err := m.call(ctx, "thread/start", params, &resp); err != nil {
 		return nil, err
 	}
 	thread := normalizeThread(resp.Thread)
+	runtimeConfig := normalizeThreadRuntimeConfig(
+		resp.Model,
+		resp.ModelProvider,
+		resp.CWD,
+		resp.ApprovalPolicy,
+		resp.ApprovalsReviewer,
+		resp.Sandbox,
+		resp.ReasoningEffort,
+	)
 	m.mu.Lock()
 	state := m.ensureThreadStateLocked(thread.ID)
 	state.thread = &thread
+	state.runtimeConfig = runtimeConfig
+	detail := m.buildThreadDetailLocked(state, thread)
 	m.mu.Unlock()
-	return &thread, nil
+	return &detail, nil
+}
+
+func (m *Manager) ReadCapabilities(ctx context.Context, cwd string) (*Capabilities, error) {
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" {
+		cwd = m.agentHomeDir
+	}
+	includeHidden := false
+	var modelResp wireModelListResponse
+	if err := m.call(ctx, "model/list", wireModelListParams{
+		IncludeHidden: &includeHidden,
+	}, &modelResp); err != nil {
+		return nil, err
+	}
+	var configResp wireConfigReadResponse
+	if err := m.call(ctx, "config/read", wireConfigReadParams{
+		IncludeLayers: false,
+		CWD:           stringPtr(cwd),
+	}, &configResp); err != nil {
+		return nil, err
+	}
+	var requirementsResp wireConfigRequirementsReadResponse
+	if err := m.call(ctx, "configRequirements/read", map[string]any{}, &requirementsResp); err != nil {
+		return nil, err
+	}
+	out := &Capabilities{
+		EffectiveConfig: normalizeEffectiveConfig(configResp.Config, cwd),
+		Requirements:    normalizeConfigRequirements(requirementsResp.Requirements),
+	}
+	if len(modelResp.Data) > 0 {
+		out.Models = make([]ModelOption, 0, len(modelResp.Data))
+		for i := range modelResp.Data {
+			out.Models = append(out.Models, normalizeModelOption(modelResp.Data[i]))
+		}
+	}
+	return out, nil
 }
 
 func (m *Manager) StartTurn(ctx context.Context, req StartTurnRequest) (*Turn, error) {
@@ -185,21 +255,76 @@ func (m *Manager) StartTurn(ctx context.Context, req StartTurnRequest) (*Turn, e
 	if threadID == "" {
 		return nil, ErrThreadNotFound
 	}
-	text := strings.TrimSpace(req.InputText)
-	if text == "" {
-		return nil, errors.New("missing input_text")
-	}
-	var resp wireTurnStartResponse
-	if err := m.call(ctx, "turn/start", wireTurnStartParams{
-		ThreadID: threadID,
-		Input: []wireUserInput{{
+	inputs := make([]wireUserInput, 0, len(req.Inputs)+1)
+	if text := strings.TrimSpace(req.InputText); text != "" {
+		inputs = append(inputs, wireUserInput{
 			Type: "text",
 			Text: text,
-		}},
-	}, &resp); err != nil {
+		})
+	}
+	for i := range req.Inputs {
+		inputType := strings.TrimSpace(req.Inputs[i].Type)
+		if inputType == "" {
+			continue
+		}
+		entry := wireUserInput{
+			Type: inputType,
+			Text: strings.TrimSpace(req.Inputs[i].Text),
+			URL:  strings.TrimSpace(req.Inputs[i].URL),
+			Path: strings.TrimSpace(req.Inputs[i].Path),
+			Name: strings.TrimSpace(req.Inputs[i].Name),
+		}
+		inputs = append(inputs, entry)
+	}
+	if len(inputs) == 0 {
+		return nil, errors.New("missing inputs")
+	}
+	approvalPolicy := normalizeApprovalPolicyRequest(req.ApprovalPolicy)
+	sandboxMode := normalizeSandboxModeRequest(req.SandboxMode)
+	approvalsReviewer := normalizeApprovalsReviewer(req.ApprovalsReviewer)
+	var resp wireTurnStartResponse
+	params := wireTurnStartParams{
+		ThreadID: threadID,
+		Input:    inputs,
+		CWD:      stringPtr(req.CWD),
+		Model:    stringPtr(req.Model),
+		Effort:   stringPtr(req.Effort),
+	}
+	if approvalPolicy != "" {
+		params.ApprovalPolicy = stringPtr(approvalPolicy)
+	}
+	if approvalsReviewer != "" {
+		params.ApprovalsReviewer = stringPtr(approvalsReviewer)
+	}
+	if policy := buildSandboxPolicyRequest(sandboxMode); policy != nil {
+		params.SandboxPolicy = policy
+	}
+	if err := m.call(ctx, "turn/start", params, &resp); err != nil {
 		return nil, err
 	}
 	turn := normalizeTurn(resp.Turn)
+	m.mu.Lock()
+	if state := m.threads[threadID]; state != nil {
+		if nextCWD := strings.TrimSpace(req.CWD); nextCWD != "" {
+			state.runtimeConfig.CWD = nextCWD
+		}
+		if nextModel := strings.TrimSpace(req.Model); nextModel != "" {
+			state.runtimeConfig.Model = nextModel
+		}
+		if nextEffort := strings.TrimSpace(req.Effort); nextEffort != "" {
+			state.runtimeConfig.ReasoningEffort = nextEffort
+		}
+		if approvalPolicy != "" {
+			state.runtimeConfig.ApprovalPolicy = approvalPolicy
+		}
+		if sandboxMode != "" {
+			state.runtimeConfig.SandboxMode = sandboxMode
+		}
+		if approvalsReviewer != "" {
+			state.runtimeConfig.ApprovalsReviewer = approvalsReviewer
+		}
+	}
+	m.mu.Unlock()
 	return &turn, nil
 }
 
@@ -731,6 +856,7 @@ func (m *Manager) appendEventLocked(state *threadState, ev Event) {
 func (m *Manager) buildThreadDetailLocked(state *threadState, thread Thread) ThreadDetail {
 	out := ThreadDetail{
 		Thread:           thread,
+		RuntimeConfig:    state.runtimeConfig,
 		LastEventSeq:     state.lastEventSeq,
 		ActiveStatus:     thread.Status,
 		ActiveStatusFlag: append([]string(nil), thread.ActiveFlags...),
@@ -770,6 +896,64 @@ func withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 
 func fmtUnavailable() error {
 	return errors.Join(ErrUnavailable, errors.New("host codex binary not found on PATH; install Codex on this machine and ensure `codex` is available"))
+}
+
+func normalizeApprovalPolicyRequest(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "untrusted", "unlesstrusted":
+		return "untrusted"
+	case "on-failure", "onfailure":
+		return "on-failure"
+	case "on-request", "onrequest":
+		return "on-request"
+	case "never":
+		return "never"
+	default:
+		return ""
+	}
+}
+
+func normalizeSandboxModeRequest(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "read-only", "readonly":
+		return "read-only"
+	case "workspace-write", "workspacewrite":
+		return "workspace-write"
+	case "danger-full-access", "dangerfullaccess":
+		return "danger-full-access"
+	default:
+		return ""
+	}
+}
+
+func normalizeApprovalsReviewer(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "user":
+		return "user"
+	case "guardian_subagent", "guardiansubagent":
+		return "guardian_subagent"
+	default:
+		return ""
+	}
+}
+
+func buildSandboxPolicyRequest(mode string) *wireSandboxPolicy {
+	switch normalizeSandboxModeRequest(mode) {
+	case "read-only":
+		return &wireSandboxPolicy{Type: "readOnly"}
+	case "workspace-write":
+		return &wireSandboxPolicy{
+			Type:                "workspaceWrite",
+			WritableRoots:       []string{},
+			NetworkAccess:       false,
+			ExcludeTmpdirEnvVar: false,
+			ExcludeSlashTmp:     false,
+		}
+	case "danger-full-access":
+		return &wireSandboxPolicy{Type: "dangerFullAccess"}
+	default:
+		return nil
+	}
 }
 
 func normalizeDecision(v string) string {

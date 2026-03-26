@@ -78,3 +78,92 @@ func TestNormalizePermissionProfile_ReturnsNilWhenEmpty(t *testing.T) {
 		t.Fatalf("expected network_enabled=true, got=%v", got.NetworkEnabled)
 	}
 }
+
+func TestNormalizeThreadRuntimeConfig_UsesActualRuntimeFields(t *testing.T) {
+	t.Parallel()
+
+	effort := "high"
+	got := normalizeThreadRuntimeConfig(
+		"gpt-5.4",
+		"openai",
+		"/workspace/ui",
+		json.RawMessage(`"on-request"`),
+		"human",
+		wireSandboxPolicy{Type: "workspaceWrite"},
+		&effort,
+	)
+
+	if got.Model != "gpt-5.4" {
+		t.Fatalf("Model=%q", got.Model)
+	}
+	if got.ModelProvider != "openai" {
+		t.Fatalf("ModelProvider=%q", got.ModelProvider)
+	}
+	if got.CWD != "/workspace/ui" {
+		t.Fatalf("CWD=%q", got.CWD)
+	}
+	if got.ApprovalPolicy != "on-request" {
+		t.Fatalf("ApprovalPolicy=%q", got.ApprovalPolicy)
+	}
+	if got.ApprovalsReviewer != "human" {
+		t.Fatalf("ApprovalsReviewer=%q", got.ApprovalsReviewer)
+	}
+	if got.SandboxMode != "workspace-write" {
+		t.Fatalf("SandboxMode=%q", got.SandboxMode)
+	}
+	if got.ReasoningEffort != "high" {
+		t.Fatalf("ReasoningEffort=%q", got.ReasoningEffort)
+	}
+}
+
+func TestNormalizeCapabilitiesParts_KeepModelAndRequirementSemantics(t *testing.T) {
+	t.Parallel()
+
+	model := normalizeModelOption(wireModel{
+		ID:                     "gpt-5.4",
+		DisplayName:            "GPT-5.4",
+		Description:            "Default host model",
+		IsDefault:              true,
+		DefaultReasoningEffort: "medium",
+		SupportedReasoningEfforts: []wireReasoningEffortOption{
+			{ReasoningEffort: "low"},
+			{ReasoningEffort: "medium"},
+			{ReasoningEffort: "high"},
+			{ReasoningEffort: "medium"},
+		},
+		InputModalities: []string{"text", "image"},
+	})
+	if model.ID != "gpt-5.4" || model.DisplayName != "GPT-5.4" {
+		t.Fatalf("unexpected model: %+v", model)
+	}
+	if !model.SupportsImageInput {
+		t.Fatalf("expected image input support")
+	}
+	if len(model.SupportedReasoningEfforts) != 3 {
+		t.Fatalf("unexpected supported efforts: %+v", model.SupportedReasoningEfforts)
+	}
+
+	requirements := normalizeConfigRequirements(&wireConfigRequirements{
+		AllowedApprovalPolicies: []json.RawMessage{
+			json.RawMessage(`"on-request"`),
+			json.RawMessage(`{"granular":{}}`),
+			json.RawMessage(`"on-request"`),
+		},
+		AllowedSandboxModes: []string{"workspaceWrite", "dangerFullAccess", "workspaceWrite"},
+	})
+	if requirements == nil {
+		t.Fatalf("expected requirements")
+	}
+	if len(requirements.AllowedApprovalPolicies) != 2 {
+		t.Fatalf("unexpected approval policies: %+v", requirements.AllowedApprovalPolicies)
+	}
+	if requirements.AllowedApprovalPolicies[1] != "granular" {
+		t.Fatalf("unexpected normalized approval policies: %+v", requirements.AllowedApprovalPolicies)
+	}
+	if len(requirements.AllowedSandboxModes) != 2 {
+		t.Fatalf("unexpected sandbox modes: %+v", requirements.AllowedSandboxModes)
+	}
+	if requirements.AllowedSandboxModes[0] != "workspace-write" || requirements.AllowedSandboxModes[1] != "danger-full-access" {
+		t.Fatalf("unexpected normalized sandbox modes: %+v", requirements.AllowedSandboxModes)
+	}
+}

@@ -15,6 +15,7 @@ import { useEnvContext } from '../pages/EnvContext';
 import {
   archiveCodexThread,
   connectCodexEventStream,
+  fetchCodexCapabilities,
   fetchCodexStatus,
   listCodexThreads,
   openCodexThread,
@@ -23,24 +24,54 @@ import {
   startCodexTurn,
 } from './api';
 import { applyCodexEvent, buildCodexThreadSession } from './state';
+import { codexSupportedReasoningEfforts } from './viewModel';
 import type {
+  CodexCapabilitiesSnapshot,
+  CodexComposerAttachmentDraft,
   CodexPendingRequest,
   CodexStatus,
   CodexThread,
-  CodexThreadDetail,
+  CodexThreadRuntimeConfig,
   CodexThreadSession,
   CodexTranscriptItem,
+  CodexUserInputEntry,
 } from './types';
 
 type CodexRequestDrafts = Record<string, Record<string, string>>;
+
+function createAttachmentID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function fileToDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error(`Failed to read ${file.name}`));
+    reader.onload = () => {
+      const value = String(reader.result ?? '').trim();
+      if (!value) {
+        reject(new Error(`Failed to read ${file.name}`));
+        return;
+      }
+      resolve(value);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export type CodexContextValue = Readonly<{
   status: Accessor<CodexStatus | null | undefined>;
   statusLoading: Accessor<boolean>;
   statusError: Accessor<string | null>;
   hasHostBinary: Accessor<boolean>;
+  capabilities: Accessor<CodexCapabilitiesSnapshot | null | undefined>;
+  capabilitiesLoading: Accessor<boolean>;
   activeThreadID: Accessor<string | null>;
   activeThread: Accessor<CodexThread | null>;
+  activeRuntimeConfig: Accessor<CodexThreadRuntimeConfig>;
   activeStatus: Accessor<string>;
   activeStatusFlags: Accessor<string[]>;
   threadTitle: Accessor<string>;
@@ -52,6 +83,15 @@ export type CodexContextValue = Readonly<{
   setWorkingDirDraft: (value: string) => void;
   modelDraft: Accessor<string>;
   setModelDraft: (value: string) => void;
+  effortDraft: Accessor<string>;
+  setEffortDraft: (value: string) => void;
+  approvalPolicyDraft: Accessor<string>;
+  setApprovalPolicyDraft: (value: string) => void;
+  sandboxModeDraft: Accessor<string>;
+  setSandboxModeDraft: (value: string) => void;
+  attachments: Accessor<CodexComposerAttachmentDraft[]>;
+  addImageAttachments: (files: readonly File[]) => Promise<void>;
+  removeAttachment: (attachmentID: string) => void;
   composerText: Accessor<string>;
   setComposerText: (value: string) => void;
   submitting: Accessor<boolean>;
@@ -87,10 +127,15 @@ export function CodexProvider(props: ParentProps) {
   const [session, setSession] = createSignal<CodexThreadSession | null>(null);
   const [workingDirDraft, setWorkingDirDraft] = createSignal('');
   const [modelDraft, setModelDraft] = createSignal('');
+  const [effortDraft, setEffortDraft] = createSignal('');
+  const [approvalPolicyDraft, setApprovalPolicyDraft] = createSignal('');
+  const [sandboxModeDraft, setSandboxModeDraft] = createSignal('');
+  const [attachments, setAttachments] = createSignal<CodexComposerAttachmentDraft[]>([]);
   const [composerText, setComposerText] = createSignal('');
   const [submitting, setSubmitting] = createSignal(false);
   const [requestDrafts, setRequestDrafts] = createSignal<CodexRequestDrafts>({});
   const [streamError, setStreamError] = createSignal<string | null>(null);
+  let lastComposerOwner = '__boot__';
 
   const codexVisible = createMemo(() => layout.sidebarActiveTab() === 'codex');
 
@@ -106,6 +151,37 @@ export function CodexProvider(props: ParentProps) {
     () => (codexVisible() ? activeThreadID() : null),
     async (threadID) => (threadID ? openCodexThread(threadID) : null),
   );
+  const [capabilities, { refetch: refetchCapabilities }] = createResource(
+    () => {
+      if (!codexVisible() || status.loading || !status()?.available) return null;
+      return {
+        settingsSeq: env.settingsSeq(),
+        cwd: String(
+          workingDirDraft() ||
+          session()?.runtime_config?.cwd ||
+          threadDetail()?.runtime_config?.cwd ||
+          status()?.agent_home_dir,
+        ).trim(),
+      };
+    },
+    async (key) => fetchCodexCapabilities(key.cwd),
+  );
+
+  const applyRuntimeDrafts = (config: CodexThreadRuntimeConfig | null | undefined) => {
+    const fallbackWorkingDir = String(status()?.agent_home_dir ?? '').trim();
+    setWorkingDirDraft(String(config?.cwd ?? fallbackWorkingDir).trim());
+    setModelDraft(String(config?.model ?? '').trim());
+    setEffortDraft(String(config?.reasoning_effort ?? '').trim());
+    setApprovalPolicyDraft(String(config?.approval_policy ?? '').trim());
+    setSandboxModeDraft(String(config?.sandbox_mode ?? '').trim());
+  };
+
+  const resetNewThreadDrafts = () => {
+    applyRuntimeDrafts({
+      ...(capabilities()?.effective_config ?? {}),
+      cwd: String(capabilities()?.effective_config?.cwd ?? status()?.agent_home_dir ?? '').trim(),
+    });
+  };
 
   createEffect(() => {
     const currentStatus = status();
@@ -134,8 +210,51 @@ export function CodexProvider(props: ParentProps) {
     }
     setSession(buildCodexThreadSession(detail));
     setStreamError(null);
-    setWorkingDirDraft(String(detail.thread.cwd ?? '').trim());
-    setModelDraft(String(detail.thread.model_provider ?? '').trim());
+    applyRuntimeDrafts({
+      ...(detail.runtime_config ?? {}),
+      cwd: String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? '').trim(),
+    });
+  });
+
+  createEffect(() => {
+    if (!codexVisible()) return;
+    const owner = String(activeThreadID() ?? '').trim() || '__new__';
+    if (owner === lastComposerOwner) return;
+    lastComposerOwner = owner;
+    setComposerText('');
+    setAttachments([]);
+  });
+
+  createEffect(() => {
+    if (!codexVisible()) return;
+    if (activeThreadID()) return;
+    const effectiveConfig = capabilities()?.effective_config;
+    if (!effectiveConfig) return;
+    const agentHomeDir = String(status()?.agent_home_dir ?? '').trim();
+    if (!workingDirDraft() || workingDirDraft() === agentHomeDir) {
+      setWorkingDirDraft(String(effectiveConfig.cwd ?? agentHomeDir).trim());
+    }
+    if (!modelDraft()) {
+      setModelDraft(String(effectiveConfig.model ?? '').trim());
+    }
+    if (!effortDraft()) {
+      setEffortDraft(String(effectiveConfig.reasoning_effort ?? '').trim());
+    }
+    if (!approvalPolicyDraft()) {
+      setApprovalPolicyDraft(String(effectiveConfig.approval_policy ?? '').trim());
+    }
+    if (!sandboxModeDraft()) {
+      setSandboxModeDraft(String(effectiveConfig.sandbox_mode ?? '').trim());
+    }
+  });
+
+  createEffect(() => {
+    if (!codexVisible()) return;
+    const supportedEfforts = codexSupportedReasoningEfforts(capabilities(), modelDraft());
+    if (supportedEfforts.length === 0) return;
+    const currentEffort = String(effortDraft() ?? '').trim();
+    if (currentEffort && supportedEfforts.includes(currentEffort)) return;
+    setEffortDraft(supportedEfforts[0]);
   });
 
   createEffect(() => {
@@ -180,6 +299,7 @@ export function CodexProvider(props: ParentProps) {
     return Object.values(current.pending_requests);
   });
   const activeThread = createMemo<CodexThread | null>(() => session()?.thread ?? null);
+  const activeRuntimeConfig = createMemo<CodexThreadRuntimeConfig>(() => session()?.runtime_config ?? {});
   const activeStatus = createMemo(() => String(session()?.active_status ?? activeThread()?.status ?? '').trim());
   const activeStatusFlags = createMemo(() => [...(session()?.active_status_flags ?? activeThread()?.active_flags ?? [])]);
   const threadTitle = createMemo(() => {
@@ -198,19 +318,64 @@ export function CodexProvider(props: ParentProps) {
     setActiveThreadID(null);
     setSession(null);
     setStreamError(null);
+    setAttachments([]);
+    resetNewThreadDrafts();
   };
 
   const refreshSidebar = async () => {
     try {
-      await Promise.all([refetchStatus(), refetchThreads()]);
+      await Promise.all([refetchStatus(), refetchThreads(), refetchCapabilities()]);
     } catch (error) {
       notify.error('Refresh failed', error instanceof Error ? error.message : String(error));
     }
   };
 
+  const removeAttachment = (attachmentID: string) => {
+    const targetID = String(attachmentID ?? '').trim();
+    if (!targetID) return;
+    setAttachments((current) => current.filter((attachment) => attachment.id !== targetID));
+  };
+
+  const addImageAttachments = async (files: readonly File[]) => {
+    const inputFiles = Array.from(files ?? []);
+    if (inputFiles.length === 0) return;
+    const nextAttachments: CodexComposerAttachmentDraft[] = [];
+    let rejectedCount = 0;
+    for (const file of inputFiles) {
+      if (!(file instanceof File) || !String(file.type ?? '').startsWith('image/')) {
+        rejectedCount += 1;
+        continue;
+      }
+      try {
+        const dataURL = await fileToDataURL(file);
+        nextAttachments.push({
+          id: createAttachmentID(),
+          name: String(file.name ?? 'Image').trim() || 'Image',
+          mime_type: String(file.type ?? 'image/*').trim() || 'image/*',
+          size_bytes: Math.max(0, Number(file.size ?? 0) || 0),
+          data_url: dataURL,
+          preview_url: dataURL,
+        });
+      } catch (error) {
+        notify.error('Attachment failed', error instanceof Error ? error.message : String(error));
+      }
+    }
+    if (rejectedCount > 0) {
+      notify.error('Unsupported attachment', 'Codex attachments currently support images only.');
+    }
+    if (nextAttachments.length > 0) {
+      setAttachments((current) => [...current, ...nextAttachments]);
+    }
+  };
+
   const sendTurn = async () => {
-    const message = String(composerText() ?? '').trim();
-    if (!message || submitting()) return;
+    const message = String(composerText() ?? '');
+    const attachmentInputs: CodexUserInputEntry[] = attachments().map((attachment) => ({
+      type: 'image',
+      url: attachment.data_url,
+      name: attachment.name,
+    }));
+    if ((!message.trim() && attachmentInputs.length === 0) || submitting()) return;
     if (!hasHostBinary()) {
       notify.error('Host Codex not detected', 'Install `codex` on the host machine and refresh diagnostics.');
       return;
@@ -218,27 +383,43 @@ export function CodexProvider(props: ParentProps) {
     setSubmitting(true);
     try {
       let targetThreadID = String(activeThreadID() ?? '').trim();
+      const resolvedWorkingDir = String(
+        workingDirDraft() ||
+        capabilities()?.effective_config?.cwd ||
+        activeRuntimeConfig().cwd ||
+        status()?.agent_home_dir,
+      ).trim();
       if (!targetThreadID) {
-        const thread = await startCodexThread({
-          cwd: workingDirDraft(),
+        const detail = await startCodexThread({
+          cwd: resolvedWorkingDir,
           model: modelDraft(),
+          approval_policy: approvalPolicyDraft(),
+          sandbox_mode: sandboxModeDraft(),
         });
-        targetThreadID = thread.id;
+        targetThreadID = detail.thread.id;
         setPreferBlankComposer(false);
         setActiveThreadID(targetThreadID);
-        const bootstrapDetail: CodexThreadDetail = {
-          thread,
-          pending_requests: [],
-          last_event_seq: 0,
-          active_status: thread.status,
-          active_status_flags: thread.active_flags ?? [],
-        };
-        setSession(buildCodexThreadSession(bootstrapDetail));
+        setSession(buildCodexThreadSession(detail));
+        applyRuntimeDrafts({
+          ...(detail.runtime_config ?? {}),
+          cwd: String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? resolvedWorkingDir).trim(),
+        });
       }
-      await startCodexTurn({ threadID: targetThreadID, inputText: message });
+      await startCodexTurn({
+        threadID: targetThreadID,
+        inputText: message,
+        inputs: attachmentInputs,
+        cwd: resolvedWorkingDir,
+        model: modelDraft(),
+        effort: effortDraft(),
+        approval_policy: approvalPolicyDraft(),
+        sandbox_mode: sandboxModeDraft(),
+      });
       setComposerText('');
+      setAttachments([]);
       void refetchThreads();
       void refetchThreadDetail();
+      void refetchCapabilities();
     } catch (error) {
       notify.error('Send failed', error instanceof Error ? error.message : String(error));
     } finally {
@@ -300,8 +481,11 @@ export function CodexProvider(props: ParentProps) {
     statusLoading: () => status.loading,
     statusError,
     hasHostBinary,
+    capabilities,
+    capabilitiesLoading: () => capabilities.loading,
     activeThreadID,
     activeThread,
+    activeRuntimeConfig,
     activeStatus,
     activeStatusFlags,
     threadTitle,
@@ -313,6 +497,15 @@ export function CodexProvider(props: ParentProps) {
     setWorkingDirDraft,
     modelDraft,
     setModelDraft,
+    effortDraft,
+    setEffortDraft,
+    approvalPolicyDraft,
+    setApprovalPolicyDraft,
+    sandboxModeDraft,
+    setSandboxModeDraft,
+    attachments,
+    addImageAttachments,
+    removeAttachment,
     composerText,
     setComposerText,
     submitting,

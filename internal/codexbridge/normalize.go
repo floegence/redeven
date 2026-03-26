@@ -113,6 +113,109 @@ func normalizeUserInput(in wireUserInput) UserInputEntry {
 	}
 }
 
+func normalizeThreadRuntimeConfig(
+	model string,
+	modelProvider string,
+	cwd string,
+	approvalPolicy json.RawMessage,
+	approvalsReviewer string,
+	sandbox wireSandboxPolicy,
+	reasoningEffort *string,
+) ThreadRuntimeConfig {
+	return ThreadRuntimeConfig{
+		Model:             strings.TrimSpace(model),
+		ModelProvider:     strings.TrimSpace(modelProvider),
+		CWD:               strings.TrimSpace(cwd),
+		ApprovalPolicy:    normalizeApprovalPolicyValue(approvalPolicy),
+		ApprovalsReviewer: strings.TrimSpace(approvalsReviewer),
+		SandboxMode:       normalizeSandboxModeValue(sandbox.Type),
+		ReasoningEffort:   strings.TrimSpace(stringValue(reasoningEffort)),
+	}
+}
+
+func normalizeEffectiveConfig(in wireConfig, cwd string) ThreadRuntimeConfig {
+	return ThreadRuntimeConfig{
+		Model:             strings.TrimSpace(stringValue(in.Model)),
+		ModelProvider:     strings.TrimSpace(stringValue(in.ModelProvider)),
+		CWD:               strings.TrimSpace(cwd),
+		ApprovalPolicy:    normalizeApprovalPolicyValue(in.ApprovalPolicy),
+		ApprovalsReviewer: strings.TrimSpace(stringValue(in.ApprovalsReviewer)),
+		SandboxMode:       normalizeSandboxModeValue(stringValue(in.SandboxMode)),
+		ReasoningEffort:   strings.TrimSpace(stringValue(in.ModelReasoningEffort)),
+	}
+}
+
+func normalizeModelOption(in wireModel) ModelOption {
+	out := ModelOption{
+		ID:                     strings.TrimSpace(in.ID),
+		DisplayName:            strings.TrimSpace(in.DisplayName),
+		Description:            strings.TrimSpace(in.Description),
+		IsDefault:              in.IsDefault,
+		DefaultReasoningEffort: strings.TrimSpace(in.DefaultReasoningEffort),
+	}
+	if len(in.SupportedReasoningEfforts) > 0 {
+		seen := make(map[string]struct{}, len(in.SupportedReasoningEfforts))
+		out.SupportedReasoningEfforts = make([]string, 0, len(in.SupportedReasoningEfforts))
+		for i := range in.SupportedReasoningEfforts {
+			value := strings.TrimSpace(in.SupportedReasoningEfforts[i].ReasoningEffort)
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			out.SupportedReasoningEfforts = append(out.SupportedReasoningEfforts, value)
+		}
+	}
+	for i := range in.InputModalities {
+		if strings.EqualFold(strings.TrimSpace(in.InputModalities[i]), "image") {
+			out.SupportsImageInput = true
+			break
+		}
+	}
+	return out
+}
+
+func normalizeConfigRequirements(in *wireConfigRequirements) *ConfigRequirements {
+	if in == nil {
+		return nil
+	}
+	out := &ConfigRequirements{}
+	if len(in.AllowedApprovalPolicies) > 0 {
+		seen := map[string]struct{}{}
+		for i := range in.AllowedApprovalPolicies {
+			value := normalizeApprovalPolicyValue(in.AllowedApprovalPolicies[i])
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			out.AllowedApprovalPolicies = append(out.AllowedApprovalPolicies, value)
+		}
+	}
+	if len(in.AllowedSandboxModes) > 0 {
+		seen := map[string]struct{}{}
+		for i := range in.AllowedSandboxModes {
+			value := normalizeSandboxModeValue(in.AllowedSandboxModes[i])
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			out.AllowedSandboxModes = append(out.AllowedSandboxModes, value)
+		}
+	}
+	if len(out.AllowedApprovalPolicies) == 0 && len(out.AllowedSandboxModes) == 0 {
+		return nil
+	}
+	return out
+}
+
 func normalizePermissionProfile(in *wirePermissionProfile) *PermissionProfile {
 	if in == nil {
 		return nil
@@ -239,6 +342,37 @@ func normalizeExternalRequestID(raw json.RawMessage) string {
 		return strconv.FormatInt(n, 10)
 	}
 	return strings.TrimSpace(string(raw))
+}
+
+func normalizeApprovalPolicyValue(raw json.RawMessage) string {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return strings.TrimSpace(text)
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err == nil && len(obj) > 0 {
+		return "granular"
+	}
+	return ""
+}
+
+func normalizeSandboxModeValue(raw string) string {
+	switch strings.TrimSpace(raw) {
+	case "readOnly":
+		return "read-only"
+	case "workspaceWrite":
+		return "workspace-write"
+	case "dangerFullAccess":
+		return "danger-full-access"
+	case "externalSandbox":
+		return "external-sandbox"
+	default:
+		return strings.TrimSpace(raw)
+	}
 }
 
 func pendingResponseKey(raw json.RawMessage) string {

@@ -9,6 +9,7 @@ import { CodexProvider } from './CodexProvider';
 import { CodexSidebar } from './CodexSidebar';
 
 const fetchCodexStatusMock = vi.fn();
+const fetchCodexCapabilitiesMock = vi.fn();
 const listCodexThreadsMock = vi.fn();
 const openCodexThreadMock = vi.fn();
 const startCodexThreadMock = vi.fn();
@@ -46,6 +47,18 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
 
 vi.mock('@floegence/floe-webapp-core/loading', () => ({
   LoadingOverlay: () => null,
+}));
+
+vi.mock('../chat/blocks/MarkdownBlock', () => ({
+  MarkdownBlock: (props: any) => <div class={props.class}>{props.content}</div>,
+}));
+
+vi.mock('../chat/blocks/ShellBlock', () => ({
+  ShellBlock: (props: any) => <div class={props.class}>{props.command}{props.output}</div>,
+}));
+
+vi.mock('../chat/blocks/ThinkingBlock', () => ({
+  ThinkingBlock: (props: any) => <div class={props.class}>{props.content}</div>,
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
@@ -89,6 +102,20 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     />
   ),
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
+  Select: (props: any) => (
+    <select
+      class={props.class}
+      value={props.value ?? ''}
+      disabled={props.disabled}
+      onChange={(event) => props.onChange?.(event.currentTarget.value)}
+      aria-label={props['aria-label']}
+    >
+      <option value="">{props.placeholder ?? ''}</option>
+      {(props.options ?? []).map((option: any) => (
+        <option value={option.value}>{option.label}</option>
+      ))}
+    </select>
+  ),
   Textarea: (props: any) => (
     <textarea
       class={props.class}
@@ -105,6 +132,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 
 vi.mock('./api', () => ({
   fetchCodexStatus: (...args: any[]) => fetchCodexStatusMock(...args),
+  fetchCodexCapabilities: (...args: any[]) => fetchCodexCapabilitiesMock(...args),
   listCodexThreads: (...args: any[]) => listCodexThreadsMock(...args),
   openCodexThread: (...args: any[]) => openCodexThreadMock(...args),
   startCodexThread: (...args: any[]) => startCodexThreadMock(...args),
@@ -175,6 +203,26 @@ describe('CodexSidebar', () => {
       binary_path: '/usr/local/bin/codex',
       agent_home_dir: '/workspace',
     });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request', 'never'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
     listCodexThreadsMock.mockResolvedValue([
       {
         id: 'thread_1',
@@ -243,6 +291,13 @@ describe('CodexSidebar', () => {
           },
         ],
       },
+      runtime_config: {
+        cwd: threadID === 'thread_1' ? '/workspace' : '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
       pending_requests: [],
       last_event_seq: 0,
       active_status: threadID === 'thread_1' ? 'idle' : 'running',
@@ -283,8 +338,9 @@ describe('CodexSidebar', () => {
     expect(host.textContent).toContain('src/ui/codex/CodexSidebar.tsx');
     expect(host.textContent).not.toContain('Prompt ideas');
     expect(host.textContent).not.toContain('Review recent changes');
-    expect(host.textContent).not.toContain('gpt-5.4');
+    expect(host.textContent).toContain('GPT-5.4');
     expect(host.querySelector('.codex-page-header-context')).toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
+    expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('UI polish');
   });
 });
