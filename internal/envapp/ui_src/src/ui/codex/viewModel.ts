@@ -1,26 +1,14 @@
-import { buildTranscriptSnapshot, displayStatus, formatRelativeThreadTime } from './presentation';
-import type { CodexPendingRequest, CodexStatus, CodexThread, CodexTranscriptItem } from './types';
-
-export type CodexChipTone = 'neutral' | 'accent' | 'success' | 'warning';
-
-export type CodexWorkbenchMetric = Readonly<{
-  id: string;
-  label: string;
-  value: string;
-  tone: CodexChipTone;
-  title?: string;
-}>;
+import { displayStatus } from './presentation';
+import type { CodexPendingRequest, CodexStatus, CodexThread } from './types';
 
 export type CodexWorkbenchSummary = Readonly<{
   threadTitle: string;
   workspaceLabel: string;
   modelLabel: string;
-  latestActivityLabel: string;
   statusLabel: string;
   statusFlags: string[];
   hostReady: boolean;
   pendingRequestCount: number;
-  metrics: CodexWorkbenchMetric[];
 }>;
 
 export type CodexSidebarSummary = Readonly<{
@@ -88,7 +76,6 @@ export function buildCodexWorkbenchSummary(args: {
   activeStatus: string;
   activeStatusFlags: readonly string[];
   pendingRequests: readonly CodexPendingRequest[];
-  transcriptItems: readonly CodexTranscriptItem[];
 }): CodexWorkbenchSummary {
   const workspaceLabel = firstNonEmpty(
     args.thread?.cwd,
@@ -96,62 +83,16 @@ export function buildCodexWorkbenchSummary(args: {
     args.status?.agent_home_dir,
   );
   const modelLabel = firstNonEmpty(args.modelDraft, args.thread?.model_provider);
-  const latestActivityLabel = formatRelativeThreadTime(Number(args.thread?.updated_at_unix_s ?? 0));
   const hostReady = Boolean(args.status?.available);
   const pendingRequestCount = args.pendingRequests.length;
-  const snapshot = buildTranscriptSnapshot(args.transcriptItems);
-  const metrics: CodexWorkbenchMetric[] = [];
-
-  if (snapshot.artifactCount > 0) {
-    metrics.push({
-      id: 'artifacts',
-      label: 'Files',
-      value: String(snapshot.artifactCount),
-      tone: 'accent',
-    });
-  }
-  if (snapshot.commandCount > 0) {
-    metrics.push({
-      id: 'commands',
-      label: 'Commands',
-      value: String(snapshot.commandCount),
-      tone: 'neutral',
-    });
-  }
-  if (snapshot.responseCount > 0) {
-    metrics.push({
-      id: 'responses',
-      label: 'Responses',
-      value: String(snapshot.responseCount),
-      tone: 'success',
-    });
-  }
-  if (snapshot.reasoningCount > 0) {
-    metrics.push({
-      id: 'notes',
-      label: 'Notes',
-      value: String(snapshot.reasoningCount),
-      tone: 'warning',
-    });
-  }
-  if (pendingRequestCount > 0) {
-    metrics.push({
-      id: 'pending',
-      label: 'Pending',
-      value: String(pendingRequestCount),
-      tone: 'warning',
-    });
-  }
   return {
     threadTitle: firstNonEmpty(args.thread?.name, args.thread?.preview, 'New thread'),
     workspaceLabel,
     modelLabel,
-    latestActivityLabel,
     statusLabel: displayStatus(args.activeStatus, 'idle'),
     statusFlags: args.activeStatusFlags.map((flag) => displayStatus(flag)).filter(Boolean),
     hostReady,
     pendingRequestCount,
-    metrics,
   };
 }
 

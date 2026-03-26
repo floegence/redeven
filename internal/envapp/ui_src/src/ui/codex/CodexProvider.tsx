@@ -55,14 +55,12 @@ export type CodexContextValue = Readonly<{
   composerText: Accessor<string>;
   setComposerText: (value: string) => void;
   submitting: Accessor<boolean>;
-  refreshingThread: Accessor<boolean>;
   streamError: Accessor<string | null>;
   requestDraftValue: (requestID: string, questionID: string) => string;
   setRequestDraftValue: (requestID: string, questionID: string, value: string) => void;
   selectThread: (threadID: string) => void;
   startNewThreadDraft: () => void;
   refreshSidebar: () => Promise<void>;
-  refreshActiveThread: () => Promise<void>;
   sendTurn: () => Promise<void>;
   archiveThread: (threadID: string) => Promise<void>;
   archiveActiveThread: () => Promise<void>;
@@ -91,7 +89,6 @@ export function CodexProvider(props: ParentProps) {
   const [modelDraft, setModelDraft] = createSignal('');
   const [composerText, setComposerText] = createSignal('');
   const [submitting, setSubmitting] = createSignal(false);
-  const [refreshingThread, setRefreshingThread] = createSignal(false);
   const [requestDrafts, setRequestDrafts] = createSignal<CodexRequestDrafts>({});
   const [streamError, setStreamError] = createSignal<string | null>(null);
 
@@ -137,6 +134,8 @@ export function CodexProvider(props: ParentProps) {
     }
     setSession(buildCodexThreadSession(detail));
     setStreamError(null);
+    setWorkingDirDraft(String(detail.thread.cwd ?? '').trim());
+    setModelDraft(String(detail.thread.model_provider ?? '').trim());
   });
 
   createEffect(() => {
@@ -206,19 +205,6 @@ export function CodexProvider(props: ParentProps) {
       await Promise.all([refetchStatus(), refetchThreads()]);
     } catch (error) {
       notify.error('Refresh failed', error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  const refreshActiveThread = async () => {
-    if (!activeThreadID()) return;
-    setRefreshingThread(true);
-    try {
-      await Promise.all([refetchStatus(), refetchThreads(), refetchThreadDetail()]);
-      setStreamError(null);
-    } catch (error) {
-      notify.error('Refresh failed', error instanceof Error ? error.message : String(error));
-    } finally {
-      setRefreshingThread(false);
     }
   };
 
@@ -330,14 +316,12 @@ export function CodexProvider(props: ParentProps) {
     composerText,
     setComposerText,
     submitting,
-    refreshingThread,
     streamError,
     requestDraftValue,
     setRequestDraftValue,
     selectThread,
     startNewThreadDraft,
     refreshSidebar,
-    refreshActiveThread,
     sendTurn,
     archiveThread,
     archiveActiveThread,

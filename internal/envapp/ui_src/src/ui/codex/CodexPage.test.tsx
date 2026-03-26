@@ -275,10 +275,13 @@ describe('CodexPage', () => {
     expect(host.textContent).not.toContain('Dedicated Codex review shell with isolated thread state.');
     expect(host.textContent).not.toContain('Host ready');
     expect(host.textContent).not.toContain('Updated');
+    expect(host.textContent).not.toContain('Responses');
     expect(host.textContent).toContain('/workspace/ui');
     expect(host.querySelector('.codex-chat-input-meta-rail')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
-    expect(host.querySelector('button[aria-label="Refresh Codex thread"]')).not.toBeNull();
+    expect(host.querySelector('.codex-page-toolbar')).toBeNull();
+    expect(host.querySelector('.codex-chat-working-dir-chip')?.getAttribute('title')).toBe('/workspace/ui');
+    expect(host.querySelector('button[aria-label="Refresh Codex thread"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Archive Codex thread"]')).not.toBeNull();
 
     const promptIdeasButton = Array.from(host.querySelectorAll('button')).find((node) =>
