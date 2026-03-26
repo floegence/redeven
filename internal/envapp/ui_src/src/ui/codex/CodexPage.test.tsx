@@ -322,6 +322,8 @@ describe('CodexPage', () => {
     await flushAsync();
 
     expect(host.querySelector('[data-codex-surface="transcript"]')).not.toBeNull();
+    expect(host.innerHTML).not.toContain('radial-gradient(circle_at_top');
+    expect(host.querySelector('.codex-page-transcript-divider')).not.toBeNull();
     expect(host.textContent).toContain('Codex page polish review');
     expect(host.textContent).toContain('src/ui/codex/CodexPage.tsx');
     expect(host.textContent).toContain('Command evidence');
@@ -340,6 +342,7 @@ describe('CodexPage', () => {
     expect(host.querySelector('.codex-chat-input-meta')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
     expect(host.querySelector('button[title="Add attachments"]')).not.toBeNull();
+    expect(host.querySelector('.codex-chat-markdown-block')).not.toBeNull();
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
     expect(host.querySelector('.codex-page-header-context')).toBeNull();
     expect(host.querySelector('button[aria-label="Refresh Codex thread"]')).toBeNull();

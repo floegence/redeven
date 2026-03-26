@@ -125,8 +125,7 @@ export function CodexPageShell() {
           </Show>
 
           <div class="codex-page-transcript-main">
-            <div class="pointer-events-none absolute inset-x-0 top-0 h-56 bg-[radial-gradient(circle_at_top,rgba(88,102,123,0.14),transparent_72%)]" />
-            <div class="pointer-events-none absolute inset-x-0 top-24 h-px bg-gradient-to-r from-transparent via-border/60 to-transparent" />
+            <div class="codex-page-transcript-divider" />
             <div class="relative mx-auto flex h-full w-full max-w-5xl flex-col">
               <CodexTranscript
                 items={codex.transcriptItems()}
