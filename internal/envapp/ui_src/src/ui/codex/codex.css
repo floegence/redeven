@@ -96,20 +96,6 @@
   --flower-chat-transcript-overlay-bottom-inset: calc(5rem + env(safe-area-inset-bottom, 0px));
 }
 
-.codex-page-transcript-divider {
-  pointer-events: none;
-  position: absolute;
-  inset-inline: 0;
-  top: 6rem;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--border) 60%, transparent),
-    transparent
-  );
-}
-
 .codex-page-bottom-dock {
   display: flex;
   min-width: 0;
@@ -1097,10 +1083,6 @@
 
   .codex-transcript-row {
     padding: 0.375rem 0.625rem;
-  }
-
-  .codex-page-transcript-divider {
-    top: 5rem;
   }
 
   .codex-chat-message-item {

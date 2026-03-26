@@ -125,7 +125,6 @@ export function CodexPageShell() {
           </Show>
 
           <div class="codex-page-transcript-main">
-            <div class="codex-page-transcript-divider" />
             <div class="relative mx-auto flex h-full w-full max-w-5xl flex-col">
               <CodexTranscript
                 items={codex.transcriptItems()}

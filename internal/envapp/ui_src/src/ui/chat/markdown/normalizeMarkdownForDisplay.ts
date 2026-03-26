@@ -1,5 +1,4 @@
 const FENCED_CODE_BLOCK_RE = /```[\s\S]*?```/g;
-const INLINE_HEADING_RE = /([^\n#])((?:#{1,6})(?!#)(?=\S))/g;
 const THEMATIC_BREAK_BEFORE_RE = /([^\n])(?=---(?:\n|$))/g;
 const THEMATIC_BREAK_AFTER_RE = /(^|\n)(---)([^\n])/g;
 const CHINESE_SECTION_HEADING_RE =
@@ -12,10 +11,111 @@ const WEAK_TITLE_END_RE = /[的了着在是和与及把将向对从于而并或�
 const LIKELY_SENTENCE_START_RE =
   /^(在|当|按|从|向|沿|随着|为了|通过|这时|这天|此时|后来|随后|突然|多年后|很久以前|一天|今夜|今天|夜幕|清晨|黄昏|前方|眼前|这里|那里|她|他|它|他们|她们|我|我们|你|你们|一个|一位|一只|一道|一阵|整片|整个|远处|门外|天空|大地|森林|城堡|宫殿|洞穴|花园|湖边|水晶|光芒|终于|最终|于是|Meanwhile|Later|Suddenly|When|After|Before|In|The |A |An )/u;
 const LIKELY_BODY_PUNCTUATION_RE = /[，。！？,.!?]/u;
+const HORIZONTAL_WHITESPACE_RE = /[ \t]/;
+
+function countRepeatedCharacter(input: string, start: number, character: string): number {
+  let index = start;
+  while (input[index] === character) index += 1;
+  return index - start;
+}
+
+function shouldInsertInlineHeadingBoundary(segment: string, index: number): boolean {
+  const previous = segment[index - 1];
+  if (!previous || previous === '\n' || previous === '#') return false;
+
+  const markerLength = countRepeatedCharacter(segment, index, '#');
+  if (markerLength < 1 || markerLength > 6) return false;
+
+  const next = segment[index + markerLength];
+  if (!next || next === '#' || /\s/.test(next)) return false;
+
+  return true;
+}
+
+function repairInlineHeadingBoundaries(segment: string): string {
+  let output = '';
+  let index = 0;
+  let inlineCodeFenceLength = 0;
+  let pendingLinkDestination = false;
+  let linkDestinationDepth = 0;
+
+  while (index < segment.length) {
+    const character = segment[index];
+    const escapedCharacter = segment[index + 1];
+    const backtickRunLength = countRepeatedCharacter(segment, index, '`');
+
+    if (character === '\\') {
+      output += escapedCharacter ? `${character}${escapedCharacter}` : character;
+      index += escapedCharacter ? 2 : 1;
+      continue;
+    }
+
+    if (backtickRunLength > 0) {
+      output += segment.slice(index, index + backtickRunLength);
+      if (inlineCodeFenceLength === 0) {
+        inlineCodeFenceLength = backtickRunLength;
+      } else if (inlineCodeFenceLength === backtickRunLength) {
+        inlineCodeFenceLength = 0;
+      }
+      index += backtickRunLength;
+      continue;
+    }
+
+    if (inlineCodeFenceLength > 0) {
+      output += character;
+      index += 1;
+      continue;
+    }
+
+    if (linkDestinationDepth > 0) {
+      output += character;
+      if (character === '(') {
+        linkDestinationDepth += 1;
+      } else if (character === ')') {
+        linkDestinationDepth -= 1;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (pendingLinkDestination) {
+      if (HORIZONTAL_WHITESPACE_RE.test(character)) {
+        output += character;
+        index += 1;
+        continue;
+      }
+      pendingLinkDestination = false;
+      if (character === '(') {
+        linkDestinationDepth = 1;
+        output += character;
+        index += 1;
+        continue;
+      }
+    }
+
+    if (character === ']') {
+      pendingLinkDestination = true;
+      output += character;
+      index += 1;
+      continue;
+    }
+
+    if (character === '#' && shouldInsertInlineHeadingBoundary(segment, index)) {
+      const markerLength = countRepeatedCharacter(segment, index, '#');
+      output += `\n\n${segment.slice(index, index + markerLength)}`;
+      index += markerLength;
+      continue;
+    }
+
+    output += character;
+    index += 1;
+  }
+
+  return output;
+}
 
 function repairInlineBlockBoundaries(segment: string): string {
-  let output = segment;
-  output = output.replace(INLINE_HEADING_RE, '$1\n\n$2');
+  let output = repairInlineHeadingBoundaries(segment);
   output = output.replace(THEMATIC_BREAK_BEFORE_RE, '$1\n\n');
   output = output.replace(THEMATIC_BREAK_AFTER_RE, '$1$2\n\n$3');
   return output;

@@ -295,4 +295,30 @@ describe('MarkdownBlock', () => {
     expect(host.textContent).toContain('我将为您创作一篇完整的童话故事。');
     expect(host.textContent).not.toContain('##第一章');
   });
+
+  it('renders file links with line anchors as links instead of headings', async () => {
+    const content = [
+      'Current behavior is controlled in',
+      '[TerminalPanel.tsx](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx#L1069)',
+      'and',
+      '[TerminalPanel.tsx](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx#L1113).',
+    ].join(' ');
+    const normalized = normalizeMarkdownForDisplay(content);
+    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <MarkdownBlock content={content} />, host);
+
+    await waitFor(() => {
+      expect(host.querySelectorAll('a.chat-md-link')).toHaveLength(2);
+    });
+
+    const links = Array.from(host.querySelectorAll('a.chat-md-link')) as HTMLAnchorElement[];
+    expect(links[0]?.getAttribute('href')).toContain('#L1069');
+    expect(links[1]?.getAttribute('href')).toContain('#L1113');
+    expect(host.querySelector('h1')?.textContent ?? '').not.toContain('L1069');
+    expect(host.querySelector('h1')?.textContent ?? '').not.toContain('L1113');
+  });
 });
