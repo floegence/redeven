@@ -404,6 +404,11 @@ html.dark {
     );
 }
 
+.ask-flower-composer-message-row {
+  --chat-transcript-avatar-size: 2rem;
+  --chat-transcript-gap: 0.875rem;
+}
+
 .ask-flower-composer-message-surface {
   border: none;
   background:
