@@ -167,7 +167,7 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
                 props.item.type !== 'plan'
               }
             >
-              <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block" />
+              <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block" rendererVariant="codex" />
             </Show>
           </div>
         </div>
@@ -181,7 +181,7 @@ function AgentMessageRow(props: { item: CodexTranscriptItem }) {
     <CodexMessageLane role="assistant" showAvatar>
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
         <div class="codex-chat-message-surface codex-chat-message-surface-assistant">
-          <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block" />
+          <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block" rendererVariant="codex" />
         </div>
       </div>
     </CodexMessageLane>
@@ -234,7 +234,7 @@ function UserMessageRow(props: { item: CodexTranscriptItem }) {
           </Show>
 
           <Show when={body()}>
-            <MarkdownBlock content={body()} class="codex-chat-markdown-block codex-chat-user-markdown-block" />
+            <MarkdownBlock content={body()} class="codex-chat-markdown-block codex-chat-user-markdown-block" rendererVariant="codex" />
           </Show>
         </div>
       </div>

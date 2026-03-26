@@ -1,5 +1,8 @@
 import type { RendererObject } from 'marked';
 
+import { parseMarkdownFileReference } from './markdownFileReference';
+import type { MarkdownRendererOptions } from './markdownRendererOptions';
+
 function escapeHtml(raw: string): string {
   return String(raw ?? '')
     .replace(/&/g, '&amp;')
@@ -16,11 +19,34 @@ function normalizeLanguageClass(lang?: string): string {
   return safe ? ` language-${safe}` : '';
 }
 
-export function createMarkdownRenderer(): RendererObject<string, string> {
+function renderDefaultLink(token: { href: string; title?: string | null; text: string }): string {
+  const titleAttr = token.title ? ` title="${escapeHtml(token.title)}"` : '';
+  return `<a href="${escapeHtml(token.href)}" class="chat-md-link" target="_blank" rel="noopener noreferrer"${titleAttr}>${token.text}</a>`;
+}
+
+function renderCodexFileReference(token: { href: string; title?: string | null; text: string }): string | null {
+  const reference = parseMarkdownFileReference(token.href, token.text);
+  if (!reference) return null;
+
+  const title = token.title ? String(token.title) : reference.title;
+  const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
+  const line = reference.lineLabel
+    ? `<span class="chat-md-file-ref-line">${escapeHtml(reference.lineLabel)}</span>`
+    : '';
+
+  return `<a href="${escapeHtml(reference.href)}" class="chat-md-link chat-md-file-ref" target="_blank" rel="noopener noreferrer"${titleAttr}><span class="chat-md-file-ref-name">${escapeHtml(reference.displayName)}</span>${line}</a>`;
+}
+
+export function createMarkdownRenderer(options?: MarkdownRendererOptions): RendererObject<string, string> {
+  const variant = options?.variant === 'codex' ? 'codex' : 'default';
+
   return {
     link(token: { href: string; title?: string | null; text: string }) {
-      const titleAttr = token.title ? ` title="${token.title}"` : '';
-      return `<a href="${token.href}" class="chat-md-link" target="_blank" rel="noopener noreferrer"${titleAttr}>${token.text}</a>`;
+      if (variant === 'codex') {
+        const fileReferenceLink = renderCodexFileReference(token);
+        if (fileReferenceLink) return fileReferenceLink;
+      }
+      return renderDefaultLink(token);
     },
     codespan(token: { text: string }) {
       return `<code class="chat-md-inline-code">${escapeHtml(token.text)}</code>`;
