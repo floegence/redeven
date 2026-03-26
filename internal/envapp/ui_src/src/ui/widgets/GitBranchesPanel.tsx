@@ -1293,8 +1293,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           <div class="mt-2">
                             <Button
                               size="sm"
-                              variant="ghost"
-                              class={cn('w-full sm:w-auto', gitToneActionButtonClass())}
+                              variant="default"
+                              class={primaryActionButtonClass}
                               disabled={Boolean(props.checkoutBusy)}
                               onClick={() => {
                                 const branch = reattachBranch();
