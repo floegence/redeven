@@ -463,23 +463,32 @@ func readStashParentCount(ctx context.Context, repoRoot string, id string) int {
 }
 
 func (s *Service) readStashFiles(ctx context.Context, repoRoot string, ref string) ([]gitCommitFileSummary, error) {
-	entries, err := s.readGitDiffEntries(ctx, repoRoot,
-		"stash",
-		"show",
-		"--patch",
-		"--include-untracked",
-		"--find-renames",
-		"--find-copies",
-		"--no-ext-diff",
-		"--binary",
-		ref,
+	files, err := s.readGitDiffMetadata(ctx, repoRoot,
+		[]string{
+			"stash",
+			"show",
+			"--name-status",
+			"-z",
+			"--include-untracked",
+			"--find-renames",
+			"--find-copies",
+			"--no-ext-diff",
+			ref,
+		},
+		[]string{
+			"stash",
+			"show",
+			"--numstat",
+			"-z",
+			"--include-untracked",
+			"--find-renames",
+			"--find-copies",
+			"--no-ext-diff",
+			ref,
+		},
 	)
 	if err != nil {
 		return nil, err
-	}
-	files := make([]gitCommitFileSummary, 0, len(entries))
-	for _, entry := range entries {
-		files = append(files, entry.toCommitFileSummary())
 	}
 	return files, nil
 }

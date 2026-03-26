@@ -1,14 +1,18 @@
 import type {
   GitBranchSummary,
   GitCommitFileSummary,
+  GitDiffFileContent,
   GitGetBranchCompareResponse,
   GitListBranchesResponse,
   GitListWorkspaceChangesResponse,
   GitRepoSummaryResponse,
+  GitStashDetail,
   GitWorkspaceChange,
   GitWorkspaceSection,
   GitWorkspaceSummary,
 } from '../protocol/redeven_v1';
+
+type GitDiffEntryLike = GitWorkspaceChange | GitCommitFileSummary | GitDiffFileContent;
 
 export type GitWorkbenchSubview = 'overview' | 'changes' | 'branches' | 'history';
 export type GitBranchSubview = 'status' | 'history';
@@ -30,11 +34,46 @@ export type GitDetachedSwitchTarget = {
   branchName?: string;
 };
 
+type GitSeededDiffFields = Pick<Partial<GitDiffFileContent>, 'patchText' | 'patchTruncated'>;
+
+export type GitSeededDiffEntry<T extends GitCommitFileSummary | GitWorkspaceChange> = T & GitSeededDiffFields;
+export type GitSeededCommitFileSummary = GitSeededDiffEntry<GitCommitFileSummary>;
+export type GitSeededWorkspaceChange = GitSeededDiffEntry<GitWorkspaceChange>;
+export type GitSeededWorkspaceChangesResponse = Omit<GitListWorkspaceChangesResponse, 'staged' | 'unstaged' | 'untracked' | 'conflicted'> & {
+  staged: GitSeededWorkspaceChange[];
+  unstaged: GitSeededWorkspaceChange[];
+  untracked: GitSeededWorkspaceChange[];
+  conflicted: GitSeededWorkspaceChange[];
+};
+export type GitSeededStashDetail = Omit<GitStashDetail, 'files'> & {
+  files: GitSeededCommitFileSummary[];
+};
+
 export type GitHeadDisplay = {
   label: string;
   detail?: string;
   detached: boolean;
 };
+
+export function seedGitDiffContent(
+  item: GitSeededCommitFileSummary | GitSeededWorkspaceChange | GitDiffFileContent | null | undefined,
+): GitDiffFileContent | null {
+  if (!item) return null;
+  const patchText = typeof item.patchText === 'string' ? item.patchText : '';
+  if (!patchText.trim()) return null;
+  return {
+    changeType: item.changeType,
+    path: item.path,
+    oldPath: item.oldPath,
+    newPath: item.newPath,
+    displayPath: item.displayPath,
+    additions: item.additions,
+    deletions: item.deletions,
+    isBinary: item.isBinary,
+    patchText,
+    patchTruncated: item.patchTruncated,
+  };
+}
 
 export type GitWorkbenchSubviewItem = {
   id: GitWorkbenchSubview;
@@ -262,7 +301,7 @@ export function workspaceViewSectionHasItem(
   return workspaceViewSectionForItem(item) === section;
 }
 
-export function gitDiffEntryIdentity(item: GitWorkspaceChange | GitCommitFileSummary | null | undefined): string {
+export function gitDiffEntryIdentity(item: GitDiffEntryLike | null | undefined): string {
   if (!item) return '';
   return [item.changeType || '', item.path || '', item.oldPath || '', item.newPath || ''].join(':');
 }
@@ -398,11 +437,11 @@ export function workspaceHealthLabel(summary: GitWorkspaceSummary | null | undef
   return `${pending} pending change${pending === 1 ? '' : 's'} to review.`;
 }
 
-export function changeDisplayPath(change: GitWorkspaceChange | GitCommitFileSummary | null | undefined): string {
+export function changeDisplayPath(change: GitDiffEntryLike | null | undefined): string {
   return String(change?.displayPath || change?.path || change?.newPath || change?.oldPath || '').trim() || '(unknown path)';
 }
 
-export function changeSecondaryPath(change: GitWorkspaceChange | GitCommitFileSummary | null | undefined): string {
+export function changeSecondaryPath(change: GitDiffEntryLike | null | undefined): string {
   if (!change) return '';
   if (change.oldPath && change.newPath && change.oldPath !== change.newPath) {
     return `${change.oldPath} → ${change.newPath}`;
@@ -410,7 +449,7 @@ export function changeSecondaryPath(change: GitWorkspaceChange | GitCommitFileSu
   return changeDisplayPath(change);
 }
 
-export function changeMetricsText(change: GitWorkspaceChange | GitCommitFileSummary | null | undefined): string {
+export function changeMetricsText(change: GitDiffEntryLike | null | undefined): string {
   return `+${change?.additions ?? 0} / −${change?.deletions ?? 0}`;
 }
 

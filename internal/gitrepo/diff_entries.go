@@ -27,47 +27,25 @@ type gitDiffEntryData struct {
 	PatchTruncated bool
 }
 
-func (entry gitDiffEntryData) toCommitFileSummary() gitCommitFileSummary {
-	return gitCommitFileSummary{
-		ChangeType:     entry.ChangeType,
-		Path:           entry.Path,
-		OldPath:        entry.OldPath,
-		NewPath:        entry.NewPath,
-		DisplayPath:    entry.DisplayPath,
-		Additions:      entry.Additions,
-		Deletions:      entry.Deletions,
-		IsBinary:       entry.IsBinary,
-		PatchText:      entry.PatchText,
-		PatchTruncated: entry.PatchTruncated,
+func (entry gitDiffEntryData) toDiffFileSummary() gitDiffFileSummary {
+	return gitDiffFileSummary{
+		ChangeType:  entry.ChangeType,
+		Path:        entry.Path,
+		OldPath:     entry.OldPath,
+		NewPath:     entry.NewPath,
+		DisplayPath: entry.DisplayPath,
+		Additions:   entry.Additions,
+		Deletions:   entry.Deletions,
+		IsBinary:    entry.IsBinary,
 	}
 }
 
-func (entry gitDiffEntryData) toWorkspaceChange(section string) gitWorkspaceChange {
-	return gitWorkspaceChange{
-		Section:        section,
-		ChangeType:     entry.ChangeType,
-		Path:           entry.Path,
-		OldPath:        entry.OldPath,
-		NewPath:        entry.NewPath,
-		DisplayPath:    entry.DisplayPath,
-		Additions:      entry.Additions,
-		Deletions:      entry.Deletions,
-		IsBinary:       entry.IsBinary,
-		PatchText:      entry.PatchText,
-		PatchTruncated: entry.PatchTruncated,
+func (entry gitDiffEntryData) toDiffFileContent() gitDiffFileContent {
+	return gitDiffFileContent{
+		gitDiffFileSummary: entry.toDiffFileSummary(),
+		PatchText:          entry.PatchText,
+		PatchTruncated:     entry.PatchTruncated,
 	}
-}
-
-func (s *Service) readGitDiffEntries(ctx context.Context, repoRoot string, args ...string) ([]gitDiffEntryData, error) {
-	entries, _, err := s.readGitDiffEntriesWithAllowedExitCodes(ctx, repoRoot, nil, args...)
-	if err != nil {
-		return nil, err
-	}
-	return entries, nil
-}
-
-func (s *Service) readGitDiffEntriesWithAllowedExitCodes(ctx context.Context, repoRoot string, allowedExitCodes []int, args ...string) ([]gitDiffEntryData, []byte, error) {
-	return s.readGitDiffEntriesWithLimit(ctx, repoRoot, embeddedGitDiffEntryMaxBytes, allowedExitCodes, args...)
 }
 
 func (s *Service) readGitDiffEntriesWithLimit(ctx context.Context, repoRoot string, maxBytes int, allowedExitCodes []int, args ...string) ([]gitDiffEntryData, []byte, error) {

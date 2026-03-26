@@ -47,18 +47,24 @@ export type wire_git_get_repo_summary_resp = {
   workspace_summary: wire_git_workspace_summary;
 };
 
-export type wire_git_workspace_change = {
-  section?: string;
+export type wire_git_diff_file_summary = {
   change_type?: string;
   path?: string;
   old_path?: string;
   new_path?: string;
   display_path?: string;
-  patch_text?: string;
-  patch_truncated?: boolean;
   additions?: number;
   deletions?: number;
   is_binary?: boolean;
+};
+
+export type wire_git_diff_file_content = wire_git_diff_file_summary & {
+  patch_text?: string;
+  patch_truncated?: boolean;
+};
+
+export type wire_git_workspace_change = wire_git_diff_file_summary & {
+  section?: string;
 };
 
 export type wire_git_list_workspace_changes_req = {
@@ -432,18 +438,7 @@ export type wire_git_commit_detail = {
   body?: string;
 };
 
-export type wire_git_commit_file_summary = {
-  change_type?: string;
-  path?: string;
-  old_path?: string;
-  new_path?: string;
-  display_path?: string;
-  patch_text?: string;
-  patch_truncated?: boolean;
-  additions?: number;
-  deletions?: number;
-  is_binary?: boolean;
-};
+export type wire_git_commit_file_summary = wire_git_diff_file_summary;
 
 export type wire_git_diff_file_ref = {
   change_type?: string;
@@ -482,17 +477,20 @@ export type wire_git_get_branch_compare_resp = {
   linked_worktree?: wire_git_linked_worktree_snapshot;
 };
 
-export type wire_git_get_full_context_diff_req = {
+export type wire_git_get_diff_content_req = {
   repo_root_path: string;
   source_kind: string;
   workspace_section?: string;
   commit?: string;
   base_ref?: string;
   target_ref?: string;
+  stash_id?: string;
+  mode?: string;
   file: wire_git_diff_file_ref;
 };
 
-export type wire_git_get_full_context_diff_resp = {
+export type wire_git_get_diff_content_resp = {
   repo_root_path: string;
-  file: wire_git_commit_file_summary;
+  mode?: string;
+  file: wire_git_diff_file_content;
 };

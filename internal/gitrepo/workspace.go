@@ -93,8 +93,8 @@ func (s *Service) listWorkspaceChanges(ctx context.Context, repo repoContext) (*
 	}, nil
 }
 
-func workspacePatchArgs(section string) ([]string, error) {
-	base := []string{"diff", "--patch", "--find-renames", "--find-copies", "--no-ext-diff", "--binary"}
+func workspaceMetadataArgs(section string) ([]string, error) {
+	base := []string{"diff", "--numstat", "-z", "--find-renames", "--find-copies", "--no-ext-diff"}
 	switch section {
 	case "staged":
 		base = append(base, "--cached")
@@ -111,18 +111,18 @@ func (s *Service) readWorkspaceSectionChanges(ctx context.Context, repoRoot stri
 	if len(statusItems) == 0 {
 		return nil, nil
 	}
-	args, err := workspacePatchArgs(section)
+	args, err := workspaceMetadataArgs(section)
 	if err != nil {
 		return nil, err
 	}
-	entries, err := s.readGitDiffEntries(ctx, repoRoot, args...)
+	entries, err := s.readGitDiffNumstatMetadata(ctx, repoRoot, args...)
 	if err != nil {
 		return nil, err
 	}
 
-	patchByPath := make(map[string]gitDiffEntryData, len(entries))
+	patchByPath := make(map[string]gitDiffFileSummary, len(entries))
 	for _, entry := range entries {
-		for _, key := range workspaceSectionMatchKeys(entry.toWorkspaceChange(section)) {
+		for _, key := range diffSummaryMatchKeys(entry) {
 			if key == "" {
 				continue
 			}
@@ -152,8 +152,6 @@ func (s *Service) readWorkspaceSectionChanges(ctx context.Context, repoRoot stri
 			change.Additions = entry.Additions
 			change.Deletions = entry.Deletions
 			change.IsBinary = entry.IsBinary
-			change.PatchText = entry.PatchText
-			change.PatchTruncated = entry.PatchTruncated
 			break
 		}
 		changes = append(changes, change)
@@ -173,11 +171,13 @@ func workspaceSectionMatchKeys(item gitWorkspaceChange) []string {
 func decorateUntrackedWorkspaceChange(item gitWorkspaceChange) gitWorkspaceChange {
 	pathValue := firstNonEmptyPath(item.Path, item.NewPath, item.DisplayPath, item.OldPath)
 	return gitWorkspaceChange{
-		Section:     "untracked",
-		ChangeType:  "added",
-		Path:        pathValue,
-		NewPath:     firstNonEmptyPath(item.NewPath, pathValue),
-		DisplayPath: firstNonEmptyPath(item.DisplayPath, pathValue, item.NewPath, item.OldPath),
+		Section: "untracked",
+		gitDiffFileSummary: gitDiffFileSummary{
+			ChangeType:  "added",
+			Path:        pathValue,
+			NewPath:     firstNonEmptyPath(item.NewPath, pathValue),
+			DisplayPath: firstNonEmptyPath(item.DisplayPath, pathValue, item.NewPath, item.OldPath),
+		},
 	}
 }
 
@@ -204,21 +204,49 @@ func (s *Service) readUntrackedWorkspaceChange(ctx context.Context, repoRoot str
 		return change, nil
 	}
 
-	entries, rawPatch, err := s.readGitDiffEntriesWithAllowedExitCodes(
+	entries, err := s.readGitDiffNumstatMetadataWithAllowedExitCodes(
 		ctx,
 		repoRoot,
 		[]int{1},
 		"diff",
 		"--no-index",
-		"--patch",
-		"--no-ext-diff",
-		"--binary",
+		"--numstat",
+		"-z",
 		"--",
 		"/dev/null",
 		targetPath,
 	)
 	if err != nil {
 		return gitWorkspaceChange{}, err
+	}
+	if len(entries) == 0 {
+		diffEntries, _, diffErr := s.readGitDiffEntriesWithLimit(
+			ctx,
+			repoRoot,
+			embeddedGitDiffEntryMaxBytes,
+			[]int{1},
+			"diff",
+			"--no-index",
+			"--patch",
+			"--no-ext-diff",
+			"--binary",
+			"--",
+			"/dev/null",
+			targetPath,
+		)
+		if diffErr != nil {
+			return gitWorkspaceChange{}, diffErr
+		}
+		if len(diffEntries) > 0 {
+			entry := diffEntries[0]
+			change.Path = firstNonEmptyPath(change.Path, entry.Path, entry.NewPath, entry.OldPath)
+			change.NewPath = firstNonEmptyPath(change.NewPath, entry.NewPath, change.Path)
+			change.DisplayPath = firstNonEmptyPath(change.DisplayPath, entry.DisplayPath, entry.Path, change.Path, change.NewPath)
+			change.Additions = entry.Additions
+			change.Deletions = entry.Deletions
+			change.IsBinary = entry.IsBinary
+		}
+		return change, nil
 	}
 	if len(entries) == 0 {
 		return change, nil
@@ -235,7 +263,6 @@ func (s *Service) readUntrackedWorkspaceChange(ctx context.Context, repoRoot str
 		change.DisplayPath = firstNonEmptyPath(change.DisplayPath, entry.DisplayPath, entry.Path, change.Path, change.NewPath)
 		change.IsBinary = entry.IsBinary
 	}
-	change.PatchText, change.PatchTruncated = truncateEmbeddedPatchText(strings.TrimSpace(string(rawPatch)), embeddedGitDiffEntryMaxBytes)
 	return change, nil
 }
 
@@ -293,19 +320,23 @@ func parseWorkspaceStatusPorcelainV2(out []byte) workspaceStatusSnapshot {
 			}
 			pathValue := strings.TrimSpace(fields[10])
 			snapshot.Conflicted = append(snapshot.Conflicted, gitWorkspaceChange{
-				Section:     "conflicted",
-				ChangeType:  "conflicted",
-				Path:        pathValue,
-				DisplayPath: pathValue,
+				Section: "conflicted",
+				gitDiffFileSummary: gitDiffFileSummary{
+					ChangeType:  "conflicted",
+					Path:        pathValue,
+					DisplayPath: pathValue,
+				},
 			})
 		case strings.HasPrefix(token, "? "):
 			pathValue := strings.TrimSpace(token[2:])
 			snapshot.Untracked = append(snapshot.Untracked, gitWorkspaceChange{
-				Section:     "untracked",
-				ChangeType:  "added",
-				Path:        pathValue,
-				NewPath:     pathValue,
-				DisplayPath: pathValue,
+				Section: "untracked",
+				gitDiffFileSummary: gitDiffFileSummary{
+					ChangeType:  "added",
+					Path:        pathValue,
+					NewPath:     pathValue,
+					DisplayPath: pathValue,
+				},
 			})
 		}
 	}
@@ -348,33 +379,39 @@ func applyTrackedWorkspaceRecord(snapshot *workspaceStatusSnapshot, xy string, p
 	worktreeStatus := xy[1]
 	if indexStatus == 'U' || worktreeStatus == 'U' {
 		snapshot.Conflicted = append(snapshot.Conflicted, gitWorkspaceChange{
-			Section:     "conflicted",
-			ChangeType:  "conflicted",
-			Path:        pathValue,
-			OldPath:     oldPath,
-			NewPath:     newPath,
-			DisplayPath: firstNonEmptyPath(pathValue, newPath, oldPath),
+			Section: "conflicted",
+			gitDiffFileSummary: gitDiffFileSummary{
+				ChangeType:  "conflicted",
+				Path:        pathValue,
+				OldPath:     oldPath,
+				NewPath:     newPath,
+				DisplayPath: firstNonEmptyPath(pathValue, newPath, oldPath),
+			},
 		})
 		return
 	}
 	if indexStatus != '.' {
 		snapshot.Staged = append(snapshot.Staged, gitWorkspaceChange{
-			Section:     "staged",
-			ChangeType:  workspaceChangeType(indexStatus, oldPath, newPath),
-			Path:        pathValue,
-			OldPath:     oldPath,
-			NewPath:     newPath,
-			DisplayPath: firstNonEmptyPath(pathValue, newPath, oldPath),
+			Section: "staged",
+			gitDiffFileSummary: gitDiffFileSummary{
+				ChangeType:  workspaceChangeType(indexStatus, oldPath, newPath),
+				Path:        pathValue,
+				OldPath:     oldPath,
+				NewPath:     newPath,
+				DisplayPath: firstNonEmptyPath(pathValue, newPath, oldPath),
+			},
 		})
 	}
 	if worktreeStatus != '.' {
 		snapshot.Unstaged = append(snapshot.Unstaged, gitWorkspaceChange{
-			Section:     "unstaged",
-			ChangeType:  workspaceChangeType(worktreeStatus, oldPath, newPath),
-			Path:        pathValue,
-			OldPath:     oldPath,
-			NewPath:     newPath,
-			DisplayPath: firstNonEmptyPath(pathValue, newPath, oldPath),
+			Section: "unstaged",
+			gitDiffFileSummary: gitDiffFileSummary{
+				ChangeType:  workspaceChangeType(worktreeStatus, oldPath, newPath),
+				Path:        pathValue,
+				OldPath:     oldPath,
+				NewPath:     newPath,
+				DisplayPath: firstNonEmptyPath(pathValue, newPath, oldPath),
+			},
 		})
 	}
 }

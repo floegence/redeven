@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
 
 const mockGetCommitDetail = vi.hoisted(() => vi.fn());
+const mockGetDiffContent = vi.hoisted(() => vi.fn());
 
 vi.mock('@floegence/floe-webapp-protocol', async () => {
   const actual = await vi.importActual<typeof import('@floegence/floe-webapp-protocol')>('@floegence/floe-webapp-protocol');
@@ -25,6 +26,7 @@ vi.mock('../protocol/redeven_v1', async () => {
     useRedevenRpc: () => ({
       git: {
         getCommitDetail: mockGetCommitDetail,
+        getDiffContent: mockGetDiffContent,
       },
     }),
   };
@@ -77,6 +79,25 @@ beforeEach(() => {
         ].join('\n'),
       },
     ],
+  });
+  mockGetDiffContent.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    mode: 'preview',
+    file: {
+      changeType: 'modified',
+      path: 'src/app.ts',
+      displayPath: 'src/app.ts',
+      additions: 1,
+      deletions: 1,
+      patchText: [
+        'diff --git a/src/app.ts b/src/app.ts',
+        '--- a/src/app.ts',
+        '+++ b/src/app.ts',
+        '@@ -1 +1 @@',
+        '-oldValue',
+        '+newValue',
+      ].join('\n'),
+    },
   });
 });
 

@@ -1,9 +1,16 @@
 import { Match, Show, Switch, createEffect, createMemo, createSignal, on } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
-import { useRedevenRpc, type GitGetFullContextDiffRequest } from '../protocol/redeven_v1';
-import { GitPatchViewer, type GitPatchRenderable } from './GitPatchViewer';
+import {
+  useRedevenRpc,
+  type GitDiffFileContent,
+  type GitGetDiffContentRequest,
+} from '../protocol/redeven_v1';
+import { seedGitDiffContent, type GitSeededCommitFileSummary, type GitSeededWorkspaceChange } from '../utils/gitWorkbench';
+import { GitPatchViewer } from './GitPatchViewer';
 import { GitStatePane } from './GitWorkbenchPrimitives';
+
+export type GitDiffDialogItem = GitSeededCommitFileSummary | GitSeededWorkspaceChange | GitDiffFileContent;
 
 export type GitDiffDialogSource =
   | {
@@ -21,26 +28,36 @@ export type GitDiffDialogSource =
     repoRootPath: string;
     baseRef: string;
     targetRef: string;
+  }
+  | {
+    kind: 'stash';
+    repoRootPath: string;
+    stashId: string;
   };
 
 type GitDiffDialogMode = 'patch' | 'full-context';
+type GitDiffContentMode = 'preview' | 'full';
 
 const gitDiffModeButtonClass =
   'cursor-pointer rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-50';
 
-export interface GitDiffDialogProps<T extends GitPatchRenderable> {
+export interface GitDiffDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  item: T | null | undefined;
+  item: GitDiffDialogItem | null | undefined;
   source?: GitDiffDialogSource | null;
   title?: string;
   description?: string;
   emptyMessage: string;
-  unavailableMessage?: string | ((item: T) => string | undefined);
+  unavailableMessage?: string | ((item: GitDiffFileContent) => string | undefined);
   class?: string;
 }
 
-function buildFullContextDiffRequest(source: GitDiffDialogSource | null | undefined, item: GitPatchRenderable | null | undefined): GitGetFullContextDiffRequest | null {
+function buildDiffContentRequest(
+  source: GitDiffDialogSource | null | undefined,
+  item: GitDiffDialogItem | null | undefined,
+  mode: GitDiffContentMode,
+): GitGetDiffContentRequest | null {
   const repoRootPath = String(source?.repoRootPath ?? '').trim();
   if (!repoRootPath || !source || !item) return null;
   const file = {
@@ -55,6 +72,7 @@ function buildFullContextDiffRequest(source: GitDiffDialogSource | null | undefi
         repoRootPath,
         sourceKind: 'workspace',
         workspaceSection: String(source.workspaceSection ?? '').trim(),
+        mode,
         file,
       };
     case 'commit':
@@ -62,6 +80,7 @@ function buildFullContextDiffRequest(source: GitDiffDialogSource | null | undefi
         repoRootPath,
         sourceKind: 'commit',
         commit: String(source.commit ?? '').trim(),
+        mode,
         file,
       };
     case 'compare':
@@ -70,6 +89,15 @@ function buildFullContextDiffRequest(source: GitDiffDialogSource | null | undefi
         sourceKind: 'compare',
         baseRef: String(source.baseRef ?? '').trim(),
         targetRef: String(source.targetRef ?? '').trim(),
+        mode,
+        file,
+      };
+    case 'stash':
+      return {
+        repoRootPath,
+        sourceKind: 'stash',
+        stashId: String(source.stashId ?? '').trim(),
+        mode,
         file,
       };
     default:
@@ -77,54 +105,90 @@ function buildFullContextDiffRequest(source: GitDiffDialogSource | null | undefi
   }
 }
 
-function fullContextRequestKey(req: GitGetFullContextDiffRequest | null): string {
+function diffRequestKey(req: GitGetDiffContentRequest | null): string {
   if (!req) return '';
   return JSON.stringify(req);
 }
 
-export function GitDiffDialog<T extends GitPatchRenderable>(props: GitDiffDialogProps<T>) {
+export function GitDiffDialog(props: GitDiffDialogProps) {
   const layout = useLayout();
   const rpc = useRedevenRpc();
   const [mode, setMode] = createSignal<GitDiffDialogMode>('patch');
-  const [fullContextItem, setFullContextItem] = createSignal<GitPatchRenderable | null>(null);
-  const [fullContextLoading, setFullContextLoading] = createSignal(false);
-  const [fullContextError, setFullContextError] = createSignal('');
-  const [loadedRequestKey, setLoadedRequestKey] = createSignal('');
+  const [previewItem, setPreviewItem] = createSignal<GitDiffFileContent | null>(null);
+  const [previewLoading, setPreviewLoading] = createSignal(false);
+  const [previewError, setPreviewError] = createSignal('');
+  const [previewLoadedKey, setPreviewLoadedKey] = createSignal('');
+  const [fullItem, setFullItem] = createSignal<GitDiffFileContent | null>(null);
+  const [fullLoading, setFullLoading] = createSignal(false);
+  const [fullError, setFullError] = createSignal('');
+  const [fullLoadedKey, setFullLoadedKey] = createSignal('');
 
-  let fullContextReqSeq = 0;
+  let previewReqSeq = 0;
+  let fullReqSeq = 0;
 
-  const request = createMemo(() => buildFullContextDiffRequest(props.source, props.item));
-  const requestKey = createMemo(() => fullContextRequestKey(request()));
-  const canLoadFullContext = createMemo(() => requestKey() !== '');
-  const keepPatchVisibleWhileLoading = createMemo(() => mode() === 'patch' || (mode() === 'full-context' && fullContextLoading()));
+  const previewRequest = createMemo(() => buildDiffContentRequest(props.source, props.item, 'preview'));
+  const fullRequest = createMemo(() => buildDiffContentRequest(props.source, props.item, 'full'));
+  const previewRequestKey = createMemo(() => diffRequestKey(previewRequest()));
+  const fullRequestKey = createMemo(() => diffRequestKey(fullRequest()));
+  const canLoadFullContext = createMemo(() => fullRequestKey() !== '');
+  const seededPreviewItem = createMemo(() => seedGitDiffContent(props.item));
+  const effectivePreviewItem = createMemo(() => previewItem() ?? seededPreviewItem());
+  const activeItem = createMemo(() => (mode() === 'full-context' ? fullItem() : effectivePreviewItem()));
 
-  createEffect(on(() => [props.open, requestKey()] as const, () => {
-    fullContextReqSeq += 1;
+  createEffect(on(() => [props.open, previewRequestKey(), fullRequestKey()] as const, () => {
+    previewReqSeq += 1;
+    fullReqSeq += 1;
     setMode('patch');
-    setFullContextItem(null);
-    setFullContextLoading(false);
-    setFullContextError('');
-    setLoadedRequestKey('');
+    setPreviewItem(seededPreviewItem());
+    setPreviewLoading(false);
+    setPreviewError('');
+    setPreviewLoadedKey(seededPreviewItem() && previewRequestKey() ? previewRequestKey() : '');
+    setFullItem(null);
+    setFullLoading(false);
+    setFullError('');
+    setFullLoadedKey('');
   }, { defer: true }));
 
-  createEffect(on(() => [props.open, mode(), request(), requestKey()] as const, ([open, nextMode, nextRequest, nextRequestKey]) => {
-    if (!open || nextMode !== 'full-context' || !nextRequest || !nextRequestKey) return;
-    if (loadedRequestKey() === nextRequestKey || fullContextLoading()) return;
+  createEffect(on(() => [props.open, previewRequest(), previewRequestKey()] as const, ([open, nextRequest, nextRequestKey]) => {
+    if (!open || !nextRequest || !nextRequestKey) return;
+    if (seededPreviewItem()) return;
+    if (previewLoadedKey() === nextRequestKey || previewLoading()) return;
 
-    const seq = ++fullContextReqSeq;
-    setFullContextLoading(true);
-    setFullContextError('');
+    const seq = ++previewReqSeq;
+    setPreviewLoading(true);
+    setPreviewError('');
 
-    void rpc.git.getFullContextDiff(nextRequest).then((resp) => {
-      if (seq !== fullContextReqSeq || requestKey() !== nextRequestKey) return;
-      setFullContextItem(resp.file ?? null);
-      setLoadedRequestKey(nextRequestKey);
+    void rpc.git.getDiffContent(nextRequest).then((resp) => {
+      if (seq !== previewReqSeq || previewRequestKey() !== nextRequestKey) return;
+      setPreviewItem(resp.file ?? null);
+      setPreviewLoadedKey(nextRequestKey);
     }).catch((err) => {
-      if (seq !== fullContextReqSeq || requestKey() !== nextRequestKey) return;
-      setFullContextItem(null);
-      setFullContextError(err instanceof Error ? err.message : String(err ?? 'Failed to load full-context diff.'));
+      if (seq !== previewReqSeq || previewRequestKey() !== nextRequestKey) return;
+      setPreviewItem(null);
+      setPreviewError(err instanceof Error ? err.message : String(err ?? 'Failed to load patch preview.'));
     }).finally(() => {
-      if (seq === fullContextReqSeq) setFullContextLoading(false);
+      if (seq === previewReqSeq) setPreviewLoading(false);
+    });
+  }, { defer: true }));
+
+  createEffect(on(() => [props.open, mode(), fullRequest(), fullRequestKey()] as const, ([open, nextMode, nextRequest, nextRequestKey]) => {
+    if (!open || nextMode !== 'full-context' || !nextRequest || !nextRequestKey) return;
+    if (fullLoadedKey() === nextRequestKey || fullLoading()) return;
+
+    const seq = ++fullReqSeq;
+    setFullLoading(true);
+    setFullError('');
+
+    void rpc.git.getDiffContent(nextRequest).then((resp) => {
+      if (seq !== fullReqSeq || fullRequestKey() !== nextRequestKey) return;
+      setFullItem(resp.file ?? null);
+      setFullLoadedKey(nextRequestKey);
+    }).catch((err) => {
+      if (seq !== fullReqSeq || fullRequestKey() !== nextRequestKey) return;
+      setFullItem(null);
+      setFullError(err instanceof Error ? err.message : String(err ?? 'Failed to load full-context diff.'));
+    }).finally(() => {
+      if (seq === fullReqSeq) setFullLoading(false);
     });
   }, { defer: true }));
 
@@ -174,43 +238,60 @@ export function GitDiffDialog<T extends GitPatchRenderable>(props: GitDiffDialog
 
           <div class="text-[11px] text-muted-foreground">
             <Switch>
-              <Match when={mode() === 'full-context' && fullContextLoading()}>Loading full context...</Match>
-              <Match when={mode() === 'full-context' && !fullContextLoading()}>Includes unchanged lines for broader review context.</Match>
-              <Match when={true}>Compact patch preview from the current Git payload.</Match>
+              <Match when={mode() === 'full-context' && fullLoading()}>Loading full context...</Match>
+              <Match when={mode() === 'full-context' && !fullLoading()}>Includes unchanged lines for broader review context.</Match>
+              <Match when={mode() === 'patch' && previewLoading()}>Loading patch preview...</Match>
+              <Match when={true}>Loads a single-file patch on demand.</Match>
             </Switch>
           </div>
         </div>
 
         <div class="relative min-h-0 flex-1">
           <Switch>
-            <Match when={keepPatchVisibleWhileLoading()}>
+            <Match when={mode() === 'patch' && previewError()}>
+              <GitStatePane tone="error" message={previewError()} surface class="min-h-0 flex-1" />
+            </Match>
+
+            <Match when={mode() === 'full-context' && fullError()}>
+              <GitStatePane tone="error" message={fullError()} surface class="min-h-0 flex-1" />
+            </Match>
+
+            <Match when={activeItem()}>
               <GitPatchViewer
                 class="min-h-0 flex-1"
-                item={props.item}
+                item={activeItem()}
+                emptyMessage={mode() === 'patch' ? props.emptyMessage : 'Full-context diff is unavailable for this file.'}
+                unavailableMessage={props.unavailableMessage}
+              />
+            </Match>
+
+            <Match when={mode() === 'patch' && previewLoading()}>
+              <GitStatePane loading message="Loading patch preview..." surface class="min-h-0 flex-1" />
+            </Match>
+
+            <Match when={mode() === 'full-context' && effectivePreviewItem()}>
+              <GitPatchViewer
+                class="min-h-0 flex-1"
+                item={effectivePreviewItem()}
                 emptyMessage={props.emptyMessage}
                 unavailableMessage={props.unavailableMessage}
               />
             </Match>
 
-            <Match when={Boolean(fullContextError())}>
-              <GitStatePane tone="error" message={fullContextError()} surface class="min-h-0 flex-1" />
-            </Match>
-
-            <Match when={fullContextItem()}>
-              <GitPatchViewer
-                class="min-h-0 flex-1"
-                item={fullContextItem()}
-                emptyMessage="Full-context diff is unavailable for this file."
-                unavailableMessage={props.unavailableMessage as string | ((item: GitPatchRenderable) => string | undefined) | undefined}
-              />
+            <Match when={mode() === 'full-context' && fullLoading()}>
+              <GitStatePane loading message="Loading full-context diff..." surface class="min-h-0 flex-1" />
             </Match>
 
             <Match when={true}>
-              <GitStatePane message="Full-context diff is unavailable for this file." surface class="min-h-0 flex-1" />
+              <GitStatePane
+                message={mode() === 'patch' ? props.emptyMessage : 'Full-context diff is unavailable for this file.'}
+                surface
+                class="min-h-0 flex-1"
+              />
             </Match>
           </Switch>
 
-          <Show when={mode() === 'full-context' && fullContextLoading()}>
+          <Show when={mode() === 'full-context' && fullLoading() && effectivePreviewItem()}>
             <GitStatePane
               loading
               message="Loading full-context diff..."

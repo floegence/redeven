@@ -35,18 +35,26 @@ type getRepoSummaryResp struct {
 	WorkspaceSummary gitWorkspaceSummary `json:"workspace_summary"`
 }
 
-type gitWorkspaceChange struct {
-	Section        string `json:"section,omitempty"`
-	ChangeType     string `json:"change_type,omitempty"`
-	Path           string `json:"path,omitempty"`
-	OldPath        string `json:"old_path,omitempty"`
-	NewPath        string `json:"new_path,omitempty"`
-	DisplayPath    string `json:"display_path,omitempty"`
+type gitDiffFileSummary struct {
+	ChangeType  string `json:"change_type,omitempty"`
+	Path        string `json:"path,omitempty"`
+	OldPath     string `json:"old_path,omitempty"`
+	NewPath     string `json:"new_path,omitempty"`
+	DisplayPath string `json:"display_path,omitempty"`
+	Additions   int    `json:"additions,omitempty"`
+	Deletions   int    `json:"deletions,omitempty"`
+	IsBinary    bool   `json:"is_binary,omitempty"`
+}
+
+type gitDiffFileContent struct {
+	gitDiffFileSummary
 	PatchText      string `json:"patch_text,omitempty"`
 	PatchTruncated bool   `json:"patch_truncated,omitempty"`
-	Additions      int    `json:"additions,omitempty"`
-	Deletions      int    `json:"deletions,omitempty"`
-	IsBinary       bool   `json:"is_binary,omitempty"`
+}
+
+type gitWorkspaceChange struct {
+	Section string `json:"section,omitempty"`
+	gitDiffFileSummary
 }
 
 type listWorkspaceChangesReq struct {
@@ -382,17 +390,22 @@ type gitDiffFileRef struct {
 	NewPath    string `json:"new_path,omitempty"`
 }
 
-type getFullContextDiffReq struct {
+type getDiffContentReq struct {
 	RepoRootPath     string         `json:"repo_root_path"`
 	SourceKind       string         `json:"source_kind"`
 	WorkspaceSection string         `json:"workspace_section,omitempty"`
 	Commit           string         `json:"commit,omitempty"`
 	BaseRef          string         `json:"base_ref,omitempty"`
 	TargetRef        string         `json:"target_ref,omitempty"`
+	StashID          string         `json:"stash_id,omitempty"`
+	Mode             string         `json:"mode,omitempty"`
 	File             gitDiffFileRef `json:"file"`
 }
 
-type getFullContextDiffResp struct {
-	RepoRootPath string               `json:"repo_root_path"`
-	File         gitCommitFileSummary `json:"file"`
+type getDiffContentResp struct {
+	RepoRootPath string             `json:"repo_root_path"`
+	Mode         string             `json:"mode,omitempty"`
+	File         gitDiffFileContent `json:"file"`
 }
+
+type gitCommitFileSummary = gitDiffFileSummary

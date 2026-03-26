@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockGetCommitDetail = vi.fn();
 const mockGetBranchCompare = vi.fn();
 const mockListWorkspaceChanges = vi.fn();
+const mockGetDiffContent = vi.fn();
 
 vi.mock('../protocol/redeven_v1', async () => {
   const actual = await vi.importActual<typeof import('../protocol/redeven_v1')>('../protocol/redeven_v1');
@@ -18,6 +19,7 @@ vi.mock('../protocol/redeven_v1', async () => {
       git: {
         getCommitDetail: mockGetCommitDetail,
         getBranchCompare: mockGetBranchCompare,
+        getDiffContent: mockGetDiffContent,
         listWorkspaceChanges: mockListWorkspaceChanges,
       },
     }),
@@ -37,6 +39,7 @@ beforeEach(() => {
   mockGetCommitDetail.mockReset();
   mockGetBranchCompare.mockReset();
   mockListWorkspaceChanges.mockReset();
+  mockGetDiffContent.mockReset();
   mockGetCommitDetail.mockResolvedValue({
     repoRootPath: '/workspace/repo',
     commit: {
@@ -65,6 +68,18 @@ beforeEach(() => {
         patchText: '@@ -1 +1 @@\n-before\n+after',
       },
     ],
+  });
+  mockGetDiffContent.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    mode: 'preview',
+    file: {
+      changeType: 'modified',
+      path: 'src/compare.ts',
+      displayPath: 'src/compare.ts',
+      additions: 12,
+      deletions: 4,
+      patchText: '@@ -1 +1 @@\n-before\n+after',
+    },
   });
   mockListWorkspaceChanges.mockResolvedValue({
     repoRootPath: '/workspace/repo-linked',

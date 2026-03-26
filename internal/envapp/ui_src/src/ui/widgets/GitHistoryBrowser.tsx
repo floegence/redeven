@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
@@ -11,7 +11,6 @@ import { GitDiffDialog } from './GitDiffDialog';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
   GIT_CHANGED_FILES_HEADER_CELL_CLASS,
-  GIT_CHANGED_FILES_HEAD_CLASS,
   GIT_CHANGED_FILES_HEADER_ROW_CLASS,
   GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_TABLE_CLASS,
@@ -28,6 +27,7 @@ import {
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
+import { GitVirtualTable } from './GitVirtualTable';
 
 const COMMIT_BODY_PREVIEW_LINES = 2;
 const COMMIT_BODY_PREVIEW_CHARS = 160;
@@ -276,59 +276,57 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                           </GitLabelBlock>
                           <Show when={commitFiles().length > 0} fallback={<GitSubtleNote>No changed files are available for this commit.</GitSubtleNote>}>
                             <div class="mt-2.5 overflow-hidden rounded-md border border-border/65 bg-card">
-                              <div class="min-h-0 overflow-auto">
-                                <table class={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[42rem] md:min-w-0`}>
-                                  <thead class={GIT_CHANGED_FILES_HEAD_CLASS}>
-                                    <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-                                      <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-                                      <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-                                      <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
-                                      <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    <For each={commitFiles()}>
-                                      {(file) => {
-                                        const active = () => selectedFileIdentity(diffDialogItem()) === selectedFileIdentity(file) && diffDialogOpen();
-                                        return (
-                                          <tr
-                                            aria-selected={active()}
-                                            class={gitChangedFilesRowClass(active())}
+                              <GitVirtualTable
+                                items={commitFiles()}
+                                colSpan={4}
+                                rowHeight={54}
+                                tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[42rem] md:min-w-0`}
+                                header={(
+                                  <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
+                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
+                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
+                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
+                                    <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
+                                  </tr>
+                                )}
+                                renderRow={(file) => {
+                                  const active = () => selectedFileIdentity(diffDialogItem()) === selectedFileIdentity(file) && diffDialogOpen();
+                                  return (
+                                    <tr
+                                      aria-selected={active()}
+                                      class={gitChangedFilesRowClass(active())}
+                                    >
+                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                                        <div class="min-w-0">
+                                          <button
+                                            type="button"
+                                            class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(file.changeType)}`}
+                                            title={changeSecondaryPath(file)}
+                                            onClick={() => {
+                                              setDiffDialogItem(file);
+                                              setDiffDialogOpen(true);
+                                            }}
                                           >
-                                            <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                                              <div class="min-w-0">
-                                                <button
-                                                  type="button"
-                                                  class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(file.changeType)}`}
-                                                  title={changeSecondaryPath(file)}
-                                                  onClick={() => {
-                                                    setDiffDialogItem(file);
-                                                    setDiffDialogOpen(true);
-                                                  }}
-                                                >
-                                                  {changeSecondaryPath(file)}
-                                                </button>
-                                              </div>
-                                            </td>
-                                            <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeStatusPill change={file.changeType} /></td>
-                                            <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={file.additions} deletions={file.deletions} /></td>
-                                            <td class={gitChangedFilesStickyCellClass(active())}>
-                                              <GitChangedFilesActionButton
-                                                onClick={() => {
-                                                  setDiffDialogItem(file);
-                                                  setDiffDialogOpen(true);
-                                                }}
-                                              >
-                                                View Diff
-                                              </GitChangedFilesActionButton>
-                                            </td>
-                                          </tr>
-                                        );
-                                      }}
-                                    </For>
-                                  </tbody>
-                                </table>
-                              </div>
+                                            {changeSecondaryPath(file)}
+                                          </button>
+                                        </div>
+                                      </td>
+                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeStatusPill change={file.changeType} /></td>
+                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={file.additions} deletions={file.deletions} /></td>
+                                      <td class={gitChangedFilesStickyCellClass(active())}>
+                                        <GitChangedFilesActionButton
+                                          onClick={() => {
+                                            setDiffDialogItem(file);
+                                            setDiffDialogOpen(true);
+                                          }}
+                                        >
+                                          View Diff
+                                        </GitChangedFilesActionButton>
+                                      </td>
+                                    </tr>
+                                  );
+                                }}
+                              />
                             </div>
                           </Show>
                         </section>

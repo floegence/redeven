@@ -192,21 +192,28 @@ func (s *Service) getBranchCompare(ctx context.Context, repo repoContext, baseRe
 		return nil, err
 	}
 	compareRef := baseRef + "..." + targetRef
-	entries, err := s.readGitDiffEntries(ctx, repo.repoRootReal,
-		"diff",
-		"--patch",
-		"--find-renames",
-		"--find-copies",
-		"--no-ext-diff",
-		"--binary",
-		compareRef,
+	files, err := s.readGitDiffMetadata(ctx, repo.repoRootReal,
+		[]string{
+			"diff",
+			"--name-status",
+			"-z",
+			"--find-renames",
+			"--find-copies",
+			"--no-ext-diff",
+			compareRef,
+		},
+		[]string{
+			"diff",
+			"--numstat",
+			"-z",
+			"--find-renames",
+			"--find-copies",
+			"--no-ext-diff",
+			compareRef,
+		},
 	)
 	if err != nil {
 		return nil, err
-	}
-	files := make([]gitCommitFileSummary, 0, len(entries))
-	for _, entry := range entries {
-		files = append(files, entry.toCommitFileSummary())
 	}
 
 	var linkedWorktree *gitLinkedWorktreeSnapshot

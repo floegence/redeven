@@ -1,22 +1,26 @@
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Refresh } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type {
-  GitListWorkspaceChangesResponse,
+  GitDiffFileContent,
   GitPreviewApplyStashResponse,
   GitPreviewDropStashResponse,
   GitRepoSummaryResponse,
-  GitStashDetail,
   GitStashSummary,
+  GitWorkspaceSummary,
 } from '../protocol/redeven_v1';
+import { useRedevenRpc } from '../protocol/redeven_v1';
 import {
   changeDisplayPath,
   gitDiffEntryIdentity,
   repoDisplayName,
+  seedGitDiffContent,
   shortGitHash,
   summarizeWorkspaceCount,
   workspaceHealthLabel,
+  type GitSeededCommitFileSummary,
+  type GitSeededStashDetail,
   type GitStashWindowSource,
   type GitStashWindowTab,
 } from '../utils/gitWorkbench';
@@ -52,7 +56,7 @@ export interface GitStashWindowProps {
   repoRootPath?: string;
   source?: GitStashWindowSource;
   repoSummary?: GitRepoSummaryResponse | null;
-  workspace?: GitListWorkspaceChangesResponse | null;
+  workspaceSummary?: GitWorkspaceSummary | null;
   contextLoading?: boolean;
   contextError?: string;
   stashes: GitStashSummary[];
@@ -60,7 +64,7 @@ export interface GitStashWindowProps {
   stashesError?: string;
   selectedStashId?: string;
   onSelectStash?: (id: string) => void;
-  stashDetail?: GitStashDetail | null;
+  stashDetail?: GitSeededStashDetail | null;
   stashDetailLoading?: boolean;
   stashDetailError?: string;
   saveMessage?: string;
@@ -95,8 +99,7 @@ function formatStashTime(value?: number): string {
   return new Date(value).toLocaleString();
 }
 
-function contextTone(workspace?: GitListWorkspaceChangesResponse | null): ReturnType<typeof workspaceSectionTone> {
-  const summary = workspace?.summary;
+function contextTone(summary?: GitWorkspaceSummary | null): ReturnType<typeof workspaceSectionTone> {
   if ((summary?.conflictedCount ?? 0) > 0) return 'danger';
   if ((summary?.stagedCount ?? 0) > 0) return 'success';
   if (summarizeWorkspaceCount(summary) > 0) return 'warning';
@@ -118,11 +121,22 @@ function sourceLabel(source?: GitStashWindowSource): string {
 }
 
 export function GitStashWindow(props: GitStashWindowProps) {
+  let rpc: ReturnType<typeof useRedevenRpc> | null = null;
+  try {
+    rpc = useRedevenRpc();
+  } catch {
+    rpc = null;
+  }
   const [selectedFileKey, setSelectedFileKey] = createSignal('');
+  const [selectedFileDiff, setSelectedFileDiff] = createSignal<GitDiffFileContent | null>(null);
+  const [selectedFileDiffLoading, setSelectedFileDiffLoading] = createSignal(false);
+  const [selectedFileDiffError, setSelectedFileDiffError] = createSignal('');
+  const [selectedFileDiffLoadedKey, setSelectedFileDiffLoadedKey] = createSignal('');
+  let selectedFileDiffReqSeq = 0;
 
   const repoPath = () => String(props.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim();
   const repoName = () => repoDisplayName(repoPath());
-  const workspaceTotal = () => summarizeWorkspaceCount(props.workspace?.summary);
+  const workspaceTotal = () => summarizeWorkspaceCount(props.workspaceSummary);
   const canSave = createMemo(() => Boolean(
     repoPath()
     && !props.contextLoading
@@ -136,11 +150,22 @@ export function GitStashWindow(props: GitStashWindowProps) {
     return props.stashes[0] ?? null;
   });
   const detailFiles = createMemo(() => props.stashDetail?.files ?? []);
-  const selectedFile = createMemo(() => {
+  const selectedFile = createMemo<GitSeededCommitFileSummary | null>(() => {
     const files = detailFiles();
     if (files.length === 0) return null;
     return files.find((item) => gitDiffEntryIdentity(item) === selectedFileKey()) ?? files[0] ?? null;
   });
+  const selectedFileRequestKey = createMemo(() => JSON.stringify({
+    repoRootPath: repoPath(),
+    stashId: selectedStash()?.id ?? '',
+    file: {
+      changeType: selectedFile()?.changeType ?? '',
+      path: selectedFile()?.path ?? '',
+      oldPath: selectedFile()?.oldPath ?? '',
+      newPath: selectedFile()?.newPath ?? '',
+    },
+  }));
+  const seededSelectedFileDiff = createMemo(() => seedGitDiffContent(selectedFile()));
   const reviewMatchesSelection = createMemo(() => {
     const review = props.review;
     const stashId = selectedStash()?.id;
@@ -172,6 +197,48 @@ export function GitStashWindow(props: GitStashWindowProps) {
     if (current && files.some((item) => gitDiffEntryIdentity(item) === current)) return;
     setSelectedFileKey(gitDiffEntryIdentity(files[0]));
   });
+
+  createEffect(on(() => [props.open, props.tab, selectedFileRequestKey()] as const, () => {
+    selectedFileDiffReqSeq += 1;
+    setSelectedFileDiff(seededSelectedFileDiff());
+    setSelectedFileDiffLoading(false);
+    setSelectedFileDiffError('');
+    setSelectedFileDiffLoadedKey(seededSelectedFileDiff() ? selectedFileRequestKey() : '');
+  }, { defer: true }));
+
+  createEffect(on(() => [props.open, props.tab, selectedStash()?.id, selectedFile(), selectedFileRequestKey()] as const, ([open, tab, stashId, file, requestKey]) => {
+    if (!open || tab !== 'stashes' || !stashId || !file || !repoPath()) return;
+    if (seededSelectedFileDiff()) return;
+    if (!rpc?.git?.getDiffContent) return;
+    if (selectedFileDiffLoadedKey() === requestKey || selectedFileDiffLoading()) return;
+
+    const seq = ++selectedFileDiffReqSeq;
+    setSelectedFileDiffLoading(true);
+    setSelectedFileDiffError('');
+
+    void rpc.git.getDiffContent({
+      repoRootPath: repoPath(),
+      sourceKind: 'stash',
+      stashId,
+      mode: 'preview',
+      file: {
+        changeType: file.changeType,
+        path: file.path,
+        oldPath: file.oldPath,
+        newPath: file.newPath,
+      },
+    }).then((resp) => {
+      if (seq !== selectedFileDiffReqSeq || selectedFileRequestKey() !== requestKey) return;
+      setSelectedFileDiff(resp.file ?? null);
+      setSelectedFileDiffLoadedKey(requestKey);
+    }).catch((err) => {
+      if (seq !== selectedFileDiffReqSeq || selectedFileRequestKey() !== requestKey) return;
+      setSelectedFileDiff(null);
+      setSelectedFileDiffError(err instanceof Error ? err.message : String(err ?? 'Failed to load stash patch.'));
+    }).finally(() => {
+      if (seq === selectedFileDiffReqSeq) setSelectedFileDiffLoading(false);
+    });
+  }, { defer: true }));
 
   return (
     <PreviewWindow
@@ -375,12 +442,19 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                   </Show>
                                 </div>
 
-                                <GitPatchViewer
-                                  class="min-h-0"
-                                  item={selectedFile()}
-                                  emptyMessage="Select a stash file to inspect its patch."
-                                  unavailableMessage={(item) => item.isBinary ? 'Binary file changed. Inline text diff is not available.' : undefined}
-                                />
+                                <Show
+                                  when={!selectedFileDiffLoading()}
+                                  fallback={<GitStatePane loading message="Loading stash patch..." surface class="min-h-0" />}
+                                >
+                                  <Show when={!selectedFileDiffError()} fallback={<GitStatePane tone="error" message={selectedFileDiffError() || 'Failed to load stash patch.'} surface class="min-h-0" />}>
+                                    <GitPatchViewer
+                                      class="min-h-0"
+                                      item={selectedFileDiff()}
+                                      emptyMessage="Select a stash file to inspect its patch."
+                                      unavailableMessage={(item) => item.isBinary ? 'Binary file changed. Inline text diff is not available.' : undefined}
+                                    />
+                                  </Show>
+                                </Show>
                               </div>
                             </Show>
                           </Show>
@@ -398,19 +472,19 @@ export function GitStashWindow(props: GitStashWindowProps) {
                   <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
                     <GitSection
                       label="Target Workspace"
-                      tone={contextTone(props.workspace)}
+                      tone={contextTone(props.workspaceSummary)}
                       aside={<GitMetaPill tone="neutral">{sourceLabel(props.source)}</GitMetaPill>}
                     >
                       <div class="space-y-2">
                         <div class="flex flex-wrap items-center gap-2">
                           <GitPrimaryTitle>{repoName()}</GitPrimaryTitle>
-                          <GitMetaPill tone={contextTone(props.workspace)}>{workspaceTotal()} file{workspaceTotal() === 1 ? '' : 's'}</GitMetaPill>
+                          <GitMetaPill tone={contextTone(props.workspaceSummary)}>{workspaceTotal()} file{workspaceTotal() === 1 ? '' : 's'}</GitMetaPill>
                           <Show when={(props.repoSummary?.stashCount ?? 0) > 0}>
                             <GitMetaPill tone="violet">{props.repoSummary?.stashCount} stash{props.repoSummary?.stashCount === 1 ? '' : 'es'}</GitMetaPill>
                           </Show>
                         </div>
                         <div class="text-[11px] text-muted-foreground">{repoPath() || 'Repository path unavailable'}</div>
-                        <GitSubtleNote>{workspaceHealthLabel(props.workspace?.summary)}</GitSubtleNote>
+                        <GitSubtleNote>{workspaceHealthLabel(props.workspaceSummary)}</GitSubtleNote>
                       </div>
                     </GitSection>
 

@@ -63,14 +63,7 @@ describe('GitStashWindow', () => {
                 stashCount: 1,
                 workspaceSummary: { stagedCount: 1, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
               }}
-              workspace={{
-                repoRootPath: '/workspace/repo',
-                summary: { stagedCount: 1, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
-                staged: [{ section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts' }],
-                unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts' }],
-                untracked: [],
-                conflicted: [],
-              }}
+              workspaceSummary={{ stagedCount: 1, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 }}
               stashes={[{
                 id: 'stash-1',
                 ref: 'stash@{0}',
@@ -138,14 +131,7 @@ describe('GitStashWindow', () => {
               stashCount: 1,
               workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
             }}
-            workspace={{
-              repoRootPath: '/workspace/repo',
-              summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
-              staged: [],
-              unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts' }],
-              untracked: [],
-              conflicted: [],
-            }}
+            workspaceSummary={{ stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 }}
             stashes={[{
               id: 'stash-1',
               ref: 'stash@{0}',

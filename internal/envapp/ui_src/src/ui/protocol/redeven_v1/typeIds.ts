@@ -27,7 +27,7 @@ export const redevenV1TypeIds = {
     deleteBranch: 1116,
     previewMergeBranch: 1117,
     mergeBranch: 1118,
-    getFullContextDiff: 1119,
+    getDiffContent: 1119,
     switchDetached: 1120,
     listStashes: 1121,
     getStashDetail: 1122,
