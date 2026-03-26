@@ -4,8 +4,9 @@ go 1.25.8
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.22.1
+	github.com/creack/pty v1.1.24
 	github.com/floegence/floeterm/terminal-go v0.4.8
-	github.com/floegence/flowersec/flowersec-go v0.16.3
+	github.com/floegence/flowersec/flowersec-go v0.17.0
 	github.com/openai/openai-go v1.12.0
 	github.com/shirou/gopsutil/v4 v4.25.12
 	golang.org/x/sys v0.38.0
@@ -15,7 +16,6 @@ require (
 )
 
 require (
-	github.com/creack/pty v1.1.24 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
