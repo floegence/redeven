@@ -23,7 +23,7 @@ import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/share
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { diagnosticsExportFilename, exportDiagnostics, getDiagnostics, type DiagnosticsView } from '../services/diagnosticsApi';
 import { FlowerIcon } from '../icons/FlowerIcon';
-import { CodexIcon } from '../icons/CodexIcon';
+import { CodexIcon, CodexNavigationIcon } from '../icons/CodexIcon';
 import { useEnvContext, type EnvSettingsSection } from './EnvContext';
 import { EnvDiagnosticsPanel } from './EnvDiagnosticsPanel';
 import { AIProviderDialog } from './settings/AIProviderDialog';
@@ -149,7 +149,7 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   { id: 'permission_policy', label: 'Permission Policy', icon: Shield },
   { id: 'skills', label: 'Skills', icon: Layers },
   { id: 'ai', label: 'Flower', icon: FlowerIcon },
-  { id: 'codex', label: 'Codex', icon: CodexIcon },
+  { id: 'codex', label: 'Codex', icon: CodexNavigationIcon },
 ];
 
 function settingsSectionElementID(section: EnvSettingsSection): string {

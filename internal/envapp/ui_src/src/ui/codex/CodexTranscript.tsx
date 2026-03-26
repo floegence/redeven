@@ -35,9 +35,7 @@ function EmptySuggestion(props: {
         'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border/50 disabled:hover:bg-card/40',
       )}
     >
-      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/[0.08] text-primary transition-all duration-200 group-hover:bg-primary/[0.14]">
-        <CodexIcon class="h-5 w-5" />
-      </div>
+      <CodexIcon class="mt-0.5 h-6 w-6 shrink-0" />
       <div class="min-w-0 flex-1">
         <div class="text-sm font-medium text-foreground">Suggested Codex prompt</div>
         <div class="mt-1 text-sm leading-6 text-muted-foreground">{props.prompt}</div>
@@ -56,9 +54,7 @@ function EmptyTranscriptState(props: {
     <div class="mx-auto flex w-full max-w-4xl flex-col items-center px-4 py-16 text-center">
       <div class="relative mb-7 inline-flex items-center justify-center">
         <div class="absolute -inset-5 rounded-full bg-primary/[0.06] blur-2xl" />
-        <div class="relative flex h-16 w-16 items-center justify-center rounded-full border border-border/60 bg-background/92 shadow-[0_20px_50px_-30px_rgba(15,23,42,0.45)]">
-          <CodexIcon class="h-8 w-8" />
-        </div>
+        <CodexIcon class="relative h-11 w-11" />
       </div>
 
       <h2 class="text-[1.75rem] font-semibold tracking-tight text-foreground">{props.title}</h2>
@@ -237,9 +233,7 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
 function AgentMessageRow(props: { item: CodexTranscriptItem }) {
   return (
     <div class="flex items-start gap-4">
-      <div class="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/88 shadow-sm">
-        <CodexIcon class="h-5 w-5" />
-      </div>
+      <CodexIcon class="mt-1 h-8 w-8 shrink-0" />
       <div class="min-w-0 flex-1">
         <div class="rounded-[1.75rem] rounded-tl-md border border-border/60 bg-card/88 p-5 shadow-[0_22px_50px_-34px_rgba(15,23,42,0.45)]">
           <TranscriptMeta

@@ -18,7 +18,7 @@ import {
 } from '@floegence/floe-webapp-core/icons';
 import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
-import { CodexIcon } from './icons/CodexIcon';
+import { CodexNavigationIcon } from './icons/CodexIcon';
 import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { ClientObserverLike } from '@floegence/flowersec-core';
@@ -1280,7 +1280,7 @@ export function EnvAppShell() {
     // permissions load asynchronously, but FloeRegistryRuntime registers components only once on mount.
     // Access to Flower is still gated via navigation + permission checks.
     list.push({ id: 'ai', name: 'Flower', icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
-    list.push({ id: 'codex', name: 'Codex', icon: CodexIcon, component: CodexPage, sidebar: { order: 8, fullScreen: false, renderIn: 'main' } });
+    list.push({ id: 'codex', name: 'Codex', icon: CodexNavigationIcon, component: CodexPage, sidebar: { order: 8, fullScreen: false, renderIn: 'main' } });
     list.push({ id: 'settings', name: 'Agent Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
     return list;
   });
@@ -1413,7 +1413,7 @@ export function EnvAppShell() {
     if (canUseCodex()) {
       items.push({
         id: 'codex',
-        icon: CodexIcon,
+        icon: CodexNavigationIcon,
         label: 'Codex',
         collapseBehavior: 'toggle',
       });
@@ -1519,7 +1519,7 @@ export function EnvAppShell() {
       description: 'Open Codex',
       category: 'Navigation',
       keybind: 'mod+shift+x',
-      icon: CodexIcon,
+      icon: CodexNavigationIcon,
       execute: () => goTab('codex'),
     });
 
