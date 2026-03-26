@@ -95,6 +95,14 @@ export function describeGitHead(
   };
 }
 
+export function reattachBranchFromRepoSummary(summary?: GitRepoSummaryResponse | null): GitBranchSummary | null {
+  const branch = summary?.reattachBranch;
+  if (!branch) return null;
+  if (String(branch.kind ?? '').trim() !== 'local') return null;
+  if (!String(branch.name ?? '').trim()) return null;
+  return branch;
+}
+
 export function workspaceSectionLabel(section: GitWorkspaceSection): string {
   switch (section) {
     case 'staged':

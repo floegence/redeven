@@ -1468,4 +1468,56 @@ describe('GitBranchesPanel interactions', () => {
       dispose();
     }
   });
+
+  it('offers a one-click return to the suggested reattach branch in detached branch view', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onCheckoutBranch = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'HEAD',
+                  headCommit: '1111111111111111',
+                  detached: true,
+                  reattachBranch: { name: 'main', fullName: 'refs/heads/main', kind: 'local', headCommit: 'aaaaaaaa' },
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                selectedBranch={{
+                  name: 'feature/demo',
+                  fullName: 'refs/heads/feature/demo',
+                  kind: 'local',
+                }}
+                onCheckoutBranch={onCheckoutBranch}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(host.textContent).toContain('Return to main to reattach HEAD');
+      const returnButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Return to main')) as HTMLButtonElement | undefined;
+      expect(returnButton).toBeTruthy();
+
+      returnButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onCheckoutBranch).toHaveBeenCalledWith({
+        name: 'main',
+        fullName: 'refs/heads/main',
+        kind: 'local',
+        headCommit: 'aaaaaaaa',
+      });
+    } finally {
+      dispose();
+    }
+  });
 });

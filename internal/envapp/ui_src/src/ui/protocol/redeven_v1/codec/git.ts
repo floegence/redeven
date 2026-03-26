@@ -251,6 +251,7 @@ export function fromWireGitGetRepoSummaryResponse(resp: wire_git_get_repo_summar
     headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
     headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
     detached: typeof resp?.detached === 'boolean' ? resp.detached : undefined,
+    reattachBranch: resp?.reattach_branch ? fromWireGitBranchSummary(resp.reattach_branch) : undefined,
     upstreamRef: typeof resp?.upstream_ref === 'string' ? resp.upstream_ref : undefined,
     aheadCount: typeof resp?.ahead_count === 'number' ? resp.ahead_count : undefined,
     behindCount: typeof resp?.behind_count === 'number' ? resp.behind_count : undefined,

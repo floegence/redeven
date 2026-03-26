@@ -30,6 +30,7 @@ export type GitRepoSummaryResponse = {
   headRef?: string;
   headCommit?: string;
   detached?: boolean;
+  reattachBranch?: GitBranchSummary;
   upstreamRef?: string;
   aheadCount?: number;
   behindCount?: number;

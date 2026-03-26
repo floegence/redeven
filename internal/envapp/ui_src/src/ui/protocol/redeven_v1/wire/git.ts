@@ -30,6 +30,7 @@ export type wire_git_get_repo_summary_resp = {
   head_ref?: string;
   head_commit?: string;
   detached?: boolean;
+  reattach_branch?: wire_git_branch_summary;
   upstream_ref?: string;
   ahead_count?: number;
   behind_count?: number;

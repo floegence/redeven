@@ -13,7 +13,7 @@ import type {
   GitResolveRepoResponse,
   GitWorkspaceChange,
 } from '../protocol/redeven_v1';
-import { describeGitHead, repoDisplayName, syncStatusLabel, type GitBranchSubview, type GitDetachedSwitchTarget, type GitWorkbenchSubview, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
+import { branchDisplayName, describeGitHead, reattachBranchFromRepoSummary, repoDisplayName, syncStatusLabel, type GitBranchSubview, type GitDetachedSwitchTarget, type GitWorkbenchSubview, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
 import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
@@ -128,6 +128,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
   const repoPath = () => String(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath || '/').trim() || '/';
   const headRef = () => String(props.repoSummary?.headRef || props.repoInfo?.headRef || '').trim();
   const headDisplay = () => describeGitHead(props.repoSummary, props.repoInfo);
+  const reattachBranch = () => reattachBranchFromRepoSummary(props.repoSummary);
   const activeSubview = () => normalizeSubview(props.subview);
   const loadingBusy = () => {
     if (props.repoInfoLoading) return true;
@@ -143,6 +144,12 @@ export function GitWorkbench(props: GitWorkbenchProps) {
     || !(props.repoInfo?.available ?? Boolean(props.repoSummary?.repoRootPath))
     || !(props.repoInfo?.repoRootPath || props.repoSummary?.repoRootPath)
   );
+  const reattachLabel = () => {
+    const branch = reattachBranch();
+    if (!branch) return 'Return to branch';
+    if (props.checkoutBusy) return 'Returning...';
+    return `Return to ${branchDisplayName(branch)}`;
+  };
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
@@ -183,6 +190,20 @@ export function GitWorkbench(props: GitWorkbenchProps) {
           </GitLabelBlock>
 
           <div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5 self-start">
+            <Show when={headDisplay().detached && reattachBranch() && props.onCheckoutBranch}>
+              <Button
+                size="xs"
+                variant="outline"
+                class="shrink-0"
+                disabled={repoActionsDisabled() || props.checkoutBusy}
+                onClick={() => {
+                  const branch = reattachBranch();
+                  if (branch) props.onCheckoutBranch?.(branch);
+                }}
+              >
+                {reattachLabel()}
+              </Button>
+            </Show>
             <Show when={props.onFetch}>
               <Button
                 size="xs"

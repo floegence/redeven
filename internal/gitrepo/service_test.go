@@ -136,6 +136,66 @@ func TestResolveRepoForPath_Worktree(t *testing.T) {
 	}
 }
 
+func TestGetRepoSummary_DetachedSuggestsReattachBranch(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
+	runGitFixture(t, fixture.Root, "checkout", compare.Branch)
+	runGitFixture(t, fixture.Root, "switch", "--detach", fixture.BinaryCommit)
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp, err := svc.getRepoSummary(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("getRepoSummary: %v", err)
+	}
+	if !resp.Detached {
+		t.Fatalf("Detached=%v, want true", resp.Detached)
+	}
+	if resp.ReattachBranch == nil {
+		t.Fatalf("ReattachBranch=nil, want branch")
+	}
+	if resp.ReattachBranch.Name != compare.Branch {
+		t.Fatalf("ReattachBranch.Name=%q, want %q", resp.ReattachBranch.Name, compare.Branch)
+	}
+	if resp.ReattachBranch.FullName != "refs/heads/"+compare.Branch {
+		t.Fatalf("ReattachBranch.FullName=%q, want %q", resp.ReattachBranch.FullName, "refs/heads/"+compare.Branch)
+	}
+	if resp.ReattachBranch.Kind != "local" {
+		t.Fatalf("ReattachBranch.Kind=%q, want local", resp.ReattachBranch.Kind)
+	}
+}
+
+func TestGetRepoSummary_DetachedSkipsDetachedHistoryWhenSuggestingReattachBranch(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	compare := createComparisonBranchFixture(t, fixture.Root, fixture.UpdateCommit)
+	runGitFixture(t, fixture.Root, "checkout", compare.Branch)
+	runGitFixture(t, fixture.Root, "switch", "--detach", fixture.UpdateCommit)
+	runGitFixture(t, fixture.Root, "switch", "--detach", fixture.BinaryCommit)
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp, err := svc.getRepoSummary(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("getRepoSummary: %v", err)
+	}
+	if resp.ReattachBranch == nil {
+		t.Fatalf("ReattachBranch=nil, want branch")
+	}
+	if resp.ReattachBranch.Name != compare.Branch {
+		t.Fatalf("ReattachBranch.Name=%q, want %q", resp.ReattachBranch.Name, compare.Branch)
+	}
+}
+
 func TestGetCommitDetail_RenameAndBinary(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)

@@ -163,4 +163,58 @@ describe('GitWorkbench interactions', () => {
       dispose();
     }
   });
+
+  it('offers a one-click return to the suggested reattach branch while detached', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onCheckoutBranch = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitWorkbench
+                currentPath="/workspace/repo/src"
+                subview="changes"
+                repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'HEAD', headCommit: 'def56789abc12345' }}
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'HEAD',
+                  headCommit: 'def56789abc12345',
+                  detached: true,
+                  reattachBranch: { name: 'main', fullName: 'refs/heads/main', kind: 'local', headCommit: 'abc12345' },
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                onCheckoutBranch={onCheckoutBranch}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const returnButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Return to main')) as HTMLButtonElement | undefined;
+      expect(returnButton).toBeTruthy();
+      returnButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onCheckoutBranch).toHaveBeenCalledWith({
+        name: 'main',
+        fullName: 'refs/heads/main',
+        kind: 'local',
+        headCommit: 'abc12345',
+      });
+    } finally {
+      dispose();
+    }
+  });
 });

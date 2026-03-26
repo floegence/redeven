@@ -16,6 +16,7 @@ import {
   describeGitHead,
   gitDiffEntryIdentity,
   pickDefaultWorkspaceViewSection,
+  reattachBranchFromRepoSummary,
   repoDisplayName,
   shortGitHash,
   workspaceEntryKey,
@@ -850,6 +851,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const branchSubview = () => props.selectedBranchSubview ?? 'status';
   const activeRepoRootPath = () => String(props.repoRootPath || props.repoSummary?.repoRootPath || '').trim();
   const repoHeadDisplay = () => describeGitHead(props.repoSummary);
+  const reattachBranch = () => reattachBranchFromRepoSummary(props.repoSummary);
   const statusRepoRootPath = () => resolveGitBranchWorktreePath(props.selectedBranch, activeRepoRootPath());
   const branchDirectoryRequest = (): GitDirectoryShortcutRequest | null => {
     const path = statusRepoRootPath();
@@ -1273,7 +1275,27 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
                     <Show when={repoHeadDisplay().detached}>
                       <div class="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-[11px] leading-relaxed text-warning">
-                        Repository HEAD is detached{repoHeadDisplay().detail ? ` at ${repoHeadDisplay().detail}` : ''}. Checkout a local branch to reattach HEAD before pull, push, or merge.
+                        <div>
+                          Repository HEAD is detached{repoHeadDisplay().detail ? ` at ${repoHeadDisplay().detail}` : ''}. {reattachBranch()
+                            ? `Return to ${branchDisplayName(reattachBranch()!)} to reattach HEAD, or checkout another local branch before pull, push, or merge.`
+                            : 'Checkout a local branch to reattach HEAD before pull, push, or merge.'}
+                        </div>
+                        <Show when={reattachBranch() && props.onCheckoutBranch}>
+                          <div class="mt-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              class={secondaryActionButtonClass}
+                              disabled={Boolean(props.checkoutBusy)}
+                              onClick={() => {
+                                const branch = reattachBranch();
+                                if (branch) props.onCheckoutBranch?.(branch);
+                              }}
+                            >
+                              {props.checkoutBusy ? 'Returning...' : `Return to ${branchDisplayName(reattachBranch()!)}`}
+                            </Button>
+                          </div>
+                        </Show>
                       </div>
                     </Show>
                   </div>

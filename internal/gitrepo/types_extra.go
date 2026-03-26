@@ -18,6 +18,7 @@ type getRepoSummaryResp struct {
 	HeadRef          string              `json:"head_ref,omitempty"`
 	HeadCommit       string              `json:"head_commit,omitempty"`
 	Detached         bool                `json:"detached,omitempty"`
+	ReattachBranch   *gitBranchSummary   `json:"reattach_branch,omitempty"`
 	UpstreamRef      string              `json:"upstream_ref,omitempty"`
 	AheadCount       int                 `json:"ahead_count,omitempty"`
 	BehindCount      int                 `json:"behind_count,omitempty"`

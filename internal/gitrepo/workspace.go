@@ -36,6 +36,10 @@ func (s *Service) getRepoSummary(ctx context.Context, repo repoContext) (*getRep
 		return nil, err
 	}
 	stashCount := readStashCount(ctx, repo.repoRootReal)
+	var reattachBranch *gitBranchSummary
+	if status.Detached {
+		reattachBranch = findReattachBranch(ctx, repo.repoRootReal)
+	}
 	return &getRepoSummaryResp{
 		RepoRootPath:     repo.repoRootReal,
 		WorktreePath:     repo.repoRootReal,
@@ -43,6 +47,7 @@ func (s *Service) getRepoSummary(ctx context.Context, repo repoContext) (*getRep
 		HeadRef:          repo.headRef,
 		HeadCommit:       repo.headCommit,
 		Detached:         status.Detached,
+		ReattachBranch:   reattachBranch,
 		UpstreamRef:      status.UpstreamRef,
 		AheadCount:       status.AheadCount,
 		BehindCount:      status.BehindCount,
