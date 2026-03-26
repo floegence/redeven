@@ -95,10 +95,10 @@ afterEach(() => {
 });
 
 async function revealTooltipForButton(button: HTMLButtonElement | undefined): Promise<HTMLElement | null> {
-  const host = button?.closest('.relative.inline-block') as HTMLElement | null;
+  const host = button?.closest('[data-redeven-tooltip-anchor]') as HTMLElement | null;
   expect(host).toBeTruthy();
   host!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-  await Promise.resolve();
+  await flush();
   return document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
 }
 
@@ -472,6 +472,69 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).toContain('Status is only available for checked-out local worktrees.');
       expect(host.textContent).toContain('Use Compare to inspect file diffs, or open this branch in a worktree to review workspace changes.');
       expect(mockListWorkspaceChanges).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('shows tooltip reasons for disabled branch shortcuts without a checked-out worktree', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={{
+                  name: 'feature/offline',
+                  fullName: 'refs/heads/feature/offline',
+                  kind: 'local',
+                }}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    { name: 'feature/offline', fullName: 'refs/heads/feature/offline', kind: 'local' },
+                  ],
+                  remote: [],
+                }}
+                onAskFlower={() => {}}
+                onOpenInTerminal={() => {}}
+                onBrowseFiles={() => {}}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const askFlowerButton = host.querySelector('button[aria-label="Ask Flower"]') as HTMLButtonElement | undefined;
+      const terminalButton = host.querySelector('button[aria-label="Terminal"]') as HTMLButtonElement | undefined;
+      const filesButton = host.querySelector('button[aria-label="Files"]') as HTMLButtonElement | undefined;
+
+      expect(askFlowerButton?.disabled).toBe(true);
+      expect(terminalButton?.disabled).toBe(true);
+      expect(filesButton?.disabled).toBe(true);
+
+      const askTooltip = await revealTooltipForButton(askFlowerButton);
+      expect(askTooltip?.textContent).toContain('Open this branch in a worktree first.');
+      (askFlowerButton?.closest('[data-redeven-tooltip-anchor]') as HTMLElement | null)?.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+      await flush();
+
+      const terminalTooltip = await revealTooltipForButton(terminalButton);
+      expect(terminalTooltip?.textContent).toContain('Open this branch in a worktree first.');
+      (terminalButton?.closest('[data-redeven-tooltip-anchor]') as HTMLElement | null)?.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+      await flush();
+
+      const filesTooltip = await revealTooltipForButton(filesButton);
+      expect(filesTooltip?.textContent).toContain('Open this branch in a worktree first.');
     } finally {
       dispose();
     }
