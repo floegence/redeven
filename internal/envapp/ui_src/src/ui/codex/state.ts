@@ -10,6 +10,7 @@ import type {
 
 type MutableCodexThreadSession = {
   thread: CodexThread;
+  runtime_config: CodexThreadSession['runtime_config'];
   items_by_id: Record<string, CodexTranscriptItem>;
   item_order: string[];
   pending_requests: Record<string, CodexPendingRequest>;
@@ -22,6 +23,7 @@ function cloneSession(session: CodexThreadSession): MutableCodexThreadSession {
   return {
     ...session,
     thread: { ...session.thread },
+    runtime_config: { ...session.runtime_config },
     items_by_id: { ...session.items_by_id },
     item_order: [...session.item_order],
     pending_requests: { ...session.pending_requests },
@@ -62,7 +64,10 @@ function itemTextOrContent(item: CodexItem | null | undefined): string {
   if (directText) return directText;
   const content = Array.isArray(item?.inputs)
     ? item!.inputs
-        .map((entry) => String(entry.text ?? entry.path ?? entry.url ?? '').trim())
+        .map((entry) => {
+          if (String(entry.type ?? '').trim() === 'image') return '';
+          return String(entry.text ?? entry.path ?? entry.name ?? '').trim();
+        })
         .filter(Boolean)
         .join('\n\n')
     : '';
@@ -96,6 +101,7 @@ export function buildCodexThreadSession(detail: CodexThreadDetail): CodexThreadS
 
   return {
     thread: detail.thread,
+    runtime_config: detail.runtime_config ?? {},
     items_by_id,
     item_order,
     pending_requests,

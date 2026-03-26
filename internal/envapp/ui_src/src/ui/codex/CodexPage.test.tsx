@@ -8,6 +8,7 @@ import { CodexPage } from './CodexPage';
 import { CodexProvider } from './CodexProvider';
 
 const fetchCodexStatusMock = vi.fn();
+const fetchCodexCapabilitiesMock = vi.fn();
 const listCodexThreadsMock = vi.fn();
 const openCodexThreadMock = vi.fn();
 const startCodexThreadMock = vi.fn();
@@ -47,6 +48,18 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
   LoadingOverlay: (props: any) => <div>{props.message}</div>,
 }));
 
+vi.mock('../chat/blocks/MarkdownBlock', () => ({
+  MarkdownBlock: (props: any) => <div class={props.class}>{props.content}</div>,
+}));
+
+vi.mock('../chat/blocks/ShellBlock', () => ({
+  ShellBlock: (props: any) => <div class={props.class}>{props.command}{props.output}</div>,
+}));
+
+vi.mock('../chat/blocks/ThinkingBlock', () => ({
+  ThinkingBlock: (props: any) => <div class={props.class}>{props.content}</div>,
+}));
+
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
     <button
@@ -76,6 +89,20 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     />
   ),
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
+  Select: (props: any) => (
+    <select
+      class={props.class}
+      value={props.value ?? ''}
+      disabled={props.disabled}
+      onChange={(event) => props.onChange?.(event.currentTarget.value)}
+      aria-label={props['aria-label']}
+    >
+      <option value="">{props.placeholder ?? ''}</option>
+      {(props.options ?? []).map((option: any) => (
+        <option value={option.value}>{option.label}</option>
+      ))}
+    </select>
+  ),
   Textarea: (props: any) => (
     <textarea
       class={props.class}
@@ -92,6 +119,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 
 vi.mock('./api', () => ({
   fetchCodexStatus: (...args: any[]) => fetchCodexStatusMock(...args),
+  fetchCodexCapabilities: (...args: any[]) => fetchCodexCapabilitiesMock(...args),
   listCodexThreads: (...args: any[]) => listCodexThreadsMock(...args),
   openCodexThread: (...args: any[]) => openCodexThreadMock(...args),
   startCodexThread: (...args: any[]) => startCodexThreadMock(...args),
@@ -173,8 +201,9 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('Install Codex on the host');
     expect(host.textContent).toContain('There is no separate in-app Codex runtime toggle to manage here');
     expect(host.textContent).toContain('Redeven does not install Codex for you');
-    expect(host.querySelector('button[aria-label="Create chat and send"]')).not.toBeNull();
-    expect(host.querySelector('img')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
+    expect(host.querySelector('.codex-chat-input-controls')).not.toBeNull();
+    expect(host.querySelector('.codex-page-toolbar')).toBeNull();
   });
 
   it('renders the conversation shell, transcript rows, and runtime flags for the active Codex thread', async () => {
@@ -183,6 +212,27 @@ describe('CodexPage', () => {
       ready: true,
       binary_path: '/usr/local/bin/codex',
       agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['low', 'medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request', 'never'],
+        allowed_sandbox_modes: ['workspace-write', 'danger-full-access'],
+      },
     });
     listCodexThreadsMock.mockResolvedValue([
       {
@@ -247,6 +297,13 @@ describe('CodexPage', () => {
           },
         ],
       },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
       pending_requests: [],
       last_event_seq: 0,
       active_status: 'running',
@@ -269,22 +326,22 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('finalizing');
     expect(host.textContent).not.toContain('Prompt ideas');
     expect(host.textContent).not.toContain('Review recent changes');
-    expect(host.textContent).not.toContain('Options');
-    expect(host.textContent).not.toContain('Review brief');
-    expect(host.textContent).not.toContain('Review response');
     expect(host.textContent).not.toContain('Dedicated Codex review shell with isolated thread state.');
     expect(host.textContent).not.toContain('Host ready');
     expect(host.textContent).not.toContain('Updated');
     expect(host.textContent).not.toContain('Responses');
-    expect(host.textContent).not.toContain('gpt-5.4');
-    expect(host.textContent).toContain('/workspace/ui');
-    expect(host.querySelector('.codex-chat-input-meta-rail')).not.toBeNull();
+    expect(host.textContent).toContain('GPT-5.4');
+    expect(host.textContent).toContain('Effort');
+    expect(host.textContent).toContain('Approval');
+    expect(host.textContent).toContain('Sandbox');
+    expect(host.querySelector('.codex-chat-input-controls')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
     expect(host.querySelector('.codex-page-header-context')).toBeNull();
-    expect(host.querySelector('.codex-chat-working-dir-chip')?.getAttribute('title')).toBe('/workspace/ui');
     expect(host.querySelector('button[aria-label="Refresh Codex thread"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Archive Codex thread"]')).not.toBeNull();
+    const workingDirInput = host.querySelector('input[placeholder="Use host default working directory"]') as HTMLInputElement | null;
+    expect(workingDirInput?.value).toBe('/workspace/ui');
   });
 
   it('renders pending request cards inside the Codex dock support lane', async () => {
@@ -293,6 +350,16 @@ describe('CodexPage', () => {
       ready: true,
       binary_path: '/usr/local/bin/codex',
       agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [],
+      effective_config: {
+        cwd: '/workspace/ui',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request', 'never'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
     });
     listCodexThreadsMock.mockResolvedValue([
       {
@@ -319,6 +386,12 @@ describe('CodexPage', () => {
         status: 'waiting_approval',
         cwd: '/workspace/ui',
         turns: [],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
       },
       pending_requests: [
         {
@@ -361,6 +434,16 @@ describe('CodexPage', () => {
       binary_path: '/usr/local/bin/codex',
       agent_home_dir: '/workspace',
     });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [],
+      effective_config: {
+        cwd: '/workspace/ui',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
     listCodexThreadsMock.mockResolvedValue([
       {
         id: 'thread_1',
@@ -386,6 +469,13 @@ describe('CodexPage', () => {
         status: 'running',
         cwd: '/workspace/ui',
         turns: [],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
       },
       pending_requests: [],
       last_event_seq: 4,
@@ -423,6 +513,120 @@ describe('CodexPage', () => {
       }),
     );
     expect(host.textContent).toContain('Stream update');
+  });
+
+  it('sends image attachments through the Codex-only turn contract', async () => {
+    const startedDetail = {
+      thread: {
+        id: 'thread_new',
+        name: 'New chat',
+        preview: 'Attachment review',
+        ephemeral: false,
+        model_provider: 'openai',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_event_seq: 0,
+      active_status: 'running',
+      active_status_flags: [],
+    };
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    startCodexThreadMock.mockResolvedValue(startedDetail);
+    openCodexThreadMock.mockResolvedValue(startedDetail);
+    startCodexTurnMock.mockResolvedValue(undefined);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    const fileInput = host.querySelector('input[type="file"]') as HTMLInputElement | null;
+    if (!fileInput) {
+      throw new Error('attachment input not found');
+    }
+    const file = new File(['png'], 'screen.png', { type: 'image/png' });
+    Object.defineProperty(fileInput, 'files', {
+      configurable: true,
+      value: [file],
+    });
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    await flushAsync();
+    await flushAsync();
+
+    const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
+    if (!sendButton) {
+      throw new Error('send button not found');
+    }
+    sendButton.click();
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(startCodexThreadMock).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: '/workspace/ui',
+      model: 'gpt-5.4',
+      approval_policy: 'on-request',
+      sandbox_mode: 'workspace-write',
+    }));
+    expect(startCodexTurnMock).toHaveBeenCalledWith(expect.objectContaining({
+      threadID: 'thread_new',
+      cwd: '/workspace/ui',
+      model: 'gpt-5.4',
+      effort: 'medium',
+      approval_policy: 'on-request',
+      sandbox_mode: 'workspace-write',
+      inputs: [
+        expect.objectContaining({
+          type: 'image',
+          name: 'screen.png',
+          url: expect.stringContaining('data:image/png;base64,'),
+        }),
+      ],
+    }));
   });
 
 });

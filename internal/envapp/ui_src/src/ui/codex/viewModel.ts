@@ -1,5 +1,12 @@
 import { displayStatus } from './presentation';
-import type { CodexPendingRequest, CodexStatus, CodexThread } from './types';
+import type {
+  CodexCapabilitiesSnapshot,
+  CodexModelOption,
+  CodexPendingRequest,
+  CodexStatus,
+  CodexThread,
+  CodexThreadRuntimeConfig,
+} from './types';
 
 export type CodexWorkbenchSummary = Readonly<{
   threadTitle: string;
@@ -38,6 +45,111 @@ function firstNonEmpty(...candidates: unknown[]): string {
   return '';
 }
 
+function firstDefinedList(candidates: unknown[]): string[] {
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) continue;
+    const values = candidate
+      .map((entry) => String(entry ?? '').trim())
+      .filter(Boolean);
+    if (values.length > 0) return values;
+  }
+  return [];
+}
+
+export function findCodexModelOption(
+  capabilities: CodexCapabilitiesSnapshot | null | undefined,
+  modelID: string | null | undefined,
+): CodexModelOption | null {
+  const target = String(modelID ?? '').trim();
+  const models = Array.isArray(capabilities?.models) ? capabilities?.models : [];
+  if (!target) {
+    return models.find((model) => Boolean(model.is_default)) ?? models[0] ?? null;
+  }
+  return models.find((model) => String(model.id ?? '').trim() === target) ?? null;
+}
+
+export function codexModelLabel(
+  capabilities: CodexCapabilitiesSnapshot | null | undefined,
+  modelID: string | null | undefined,
+): string {
+  const option = findCodexModelOption(capabilities, modelID);
+  if (option) {
+    return String(option.display_name ?? option.id ?? '').trim();
+  }
+  return String(modelID ?? '').trim();
+}
+
+export function codexModelSupportsImages(
+  capabilities: CodexCapabilitiesSnapshot | null | undefined,
+  modelID: string | null | undefined,
+): boolean {
+  const option = findCodexModelOption(capabilities, modelID);
+  if (!option) return true;
+  return option.supports_image_input !== false;
+}
+
+export function codexSupportedReasoningEfforts(
+  capabilities: CodexCapabilitiesSnapshot | null | undefined,
+  modelID: string | null | undefined,
+): string[] {
+  const option = findCodexModelOption(capabilities, modelID);
+  return firstDefinedList([
+    option?.supported_reasoning_efforts,
+    option?.default_reasoning_effort ? [option.default_reasoning_effort] : [],
+    ['medium'],
+  ]);
+}
+
+export function codexAllowedApprovalPolicies(
+  capabilities: CodexCapabilitiesSnapshot | null | undefined,
+): string[] {
+  return firstDefinedList([
+    capabilities?.requirements?.allowed_approval_policies,
+    ['untrusted', 'on-failure', 'on-request', 'never'],
+  ]);
+}
+
+export function codexAllowedSandboxModes(
+  capabilities: CodexCapabilitiesSnapshot | null | undefined,
+): string[] {
+  return firstDefinedList([
+    capabilities?.requirements?.allowed_sandbox_modes,
+    ['read-only', 'workspace-write', 'danger-full-access'],
+  ]);
+}
+
+export function codexApprovalPolicyLabel(value: string | null | undefined): string {
+  switch (String(value ?? '').trim()) {
+    case 'untrusted':
+      return 'Untrusted';
+    case 'on-failure':
+      return 'On failure';
+    case 'on-request':
+      return 'On request';
+    case 'never':
+      return 'Never';
+    case 'granular':
+      return 'Granular';
+    default:
+      return displayStatus(String(value ?? '').trim(), 'Default');
+  }
+}
+
+export function codexSandboxModeLabel(value: string | null | undefined): string {
+  switch (String(value ?? '').trim()) {
+    case 'read-only':
+      return 'Read only';
+    case 'workspace-write':
+      return 'Workspace write';
+    case 'danger-full-access':
+      return 'Full access';
+    case 'external-sandbox':
+      return 'External sandbox';
+    default:
+      return displayStatus(String(value ?? '').trim(), 'Default');
+  }
+}
+
 function requestTitle(type: string): string {
   switch (String(type ?? '').trim().toLowerCase()) {
     case 'user_input':
@@ -70,6 +182,8 @@ function requestFallbackDetail(request: CodexPendingRequest): string {
 
 export function buildCodexWorkbenchSummary(args: {
   thread: CodexThread | null;
+  runtimeConfig: CodexThreadRuntimeConfig | null | undefined;
+  capabilities: CodexCapabilitiesSnapshot | null | undefined;
   status: CodexStatus | null | undefined;
   workingDirDraft: string;
   modelDraft: string;
@@ -78,17 +192,18 @@ export function buildCodexWorkbenchSummary(args: {
   pendingRequests: readonly CodexPendingRequest[];
 }): CodexWorkbenchSummary {
   const workspaceLabel = firstNonEmpty(
-    args.thread?.cwd,
     args.workingDirDraft,
+    args.runtimeConfig?.cwd,
+    args.thread?.cwd,
     args.status?.agent_home_dir,
   );
-  const modelLabel = firstNonEmpty(args.modelDraft, args.thread?.model_provider);
+  const modelValue = firstNonEmpty(args.modelDraft, args.runtimeConfig?.model);
   const hostReady = Boolean(args.status?.available);
   const pendingRequestCount = args.pendingRequests.length;
   return {
     threadTitle: firstNonEmpty(args.thread?.name, args.thread?.preview, 'New thread'),
     workspaceLabel,
-    modelLabel,
+    modelLabel: codexModelLabel(args.capabilities, modelValue),
     statusLabel: displayStatus(args.activeStatus, 'idle'),
     statusFlags: args.activeStatusFlags.map((flag) => displayStatus(flag)).filter(Boolean),
     hostReady,
@@ -112,8 +227,8 @@ export function buildCodexSidebarSummary(args: {
     pendingRequestCount: args.pendingRequests.length,
     statusError,
     secondaryLabel: hostReady
-      ? 'Dedicated Codex runtime bridge is ready on this host.'
-      : 'Install the host `codex` binary and refresh to enable Codex chats.',
+      ? 'Host Codex runtime is available.'
+      : 'Install the host `codex` binary to use Codex chat.',
   };
 }
 

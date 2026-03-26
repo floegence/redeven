@@ -104,6 +104,64 @@ type wireUserInput struct {
 	Name string `json:"name,omitempty"`
 }
 
+type wireSandboxPolicy struct {
+	Type                string   `json:"type"`
+	WritableRoots       []string `json:"writableRoots,omitempty"`
+	NetworkAccess       bool     `json:"networkAccess,omitempty"`
+	ExcludeTmpdirEnvVar bool     `json:"excludeTmpdirEnvVar,omitempty"`
+	ExcludeSlashTmp     bool     `json:"excludeSlashTmp,omitempty"`
+}
+
+type wireReasoningEffortOption struct {
+	ReasoningEffort string `json:"reasoningEffort"`
+	Description     string `json:"description"`
+}
+
+type wireModel struct {
+	ID                        string                      `json:"id"`
+	DisplayName               string                      `json:"displayName"`
+	Description               string                      `json:"description"`
+	IsDefault                 bool                        `json:"isDefault"`
+	DefaultReasoningEffort    string                      `json:"defaultReasoningEffort"`
+	SupportedReasoningEfforts []wireReasoningEffortOption `json:"supportedReasoningEfforts"`
+	InputModalities           []string                    `json:"inputModalities"`
+}
+
+type wireModelListParams struct {
+	IncludeHidden *bool `json:"includeHidden,omitempty"`
+}
+
+type wireModelListResponse struct {
+	Data []wireModel `json:"data"`
+}
+
+type wireConfigReadParams struct {
+	IncludeLayers bool    `json:"includeLayers"`
+	CWD           *string `json:"cwd,omitempty"`
+}
+
+type wireConfig struct {
+	Model                *string         `json:"model"`
+	ModelProvider        *string         `json:"model_provider"`
+	ApprovalPolicy       json.RawMessage `json:"approval_policy"`
+	ApprovalsReviewer    *string         `json:"approvals_reviewer"`
+	SandboxMode          *string         `json:"sandbox_mode"`
+	ModelReasoningEffort *string         `json:"model_reasoning_effort"`
+}
+
+type wireConfigReadResponse struct {
+	Config wireConfig `json:"config"`
+}
+
+type wireConfigRequirements struct {
+	AllowedApprovalPolicies []json.RawMessage `json:"allowedApprovalPolicies"`
+	AllowedSandboxModes     []string          `json:"allowedSandboxModes"`
+}
+
+type wireConfigRequirementsReadResponse struct {
+	Requirements *wireConfigRequirements `json:"requirements"`
+}
+
 type wireThreadListResponse struct {
 	Data       []wireThread `json:"data"`
 	NextCursor *string      `json:"nextCursor"`
@@ -114,13 +172,21 @@ type wireThreadStartParams struct {
 	CWD                    *string `json:"cwd,omitempty"`
 	ApprovalPolicy         *string `json:"approvalPolicy,omitempty"`
 	Sandbox                *string `json:"sandbox,omitempty"`
+	ApprovalsReviewer      *string `json:"approvalsReviewer,omitempty"`
 	ServiceName            *string `json:"serviceName,omitempty"`
 	ExperimentalRawEvents  bool    `json:"experimentalRawEvents"`
 	PersistExtendedHistory bool    `json:"persistExtendedHistory"`
 }
 
 type wireThreadStartResponse struct {
-	Thread wireThread `json:"thread"`
+	Thread            wireThread        `json:"thread"`
+	Model             string            `json:"model"`
+	ModelProvider     string            `json:"modelProvider"`
+	CWD               string            `json:"cwd"`
+	ApprovalPolicy    json.RawMessage   `json:"approvalPolicy"`
+	ApprovalsReviewer string            `json:"approvalsReviewer"`
+	Sandbox           wireSandboxPolicy `json:"sandbox"`
+	ReasoningEffort   *string           `json:"reasoningEffort"`
 }
 
 type wireThreadResumeParams struct {
@@ -129,11 +195,19 @@ type wireThreadResumeParams struct {
 	CWD                    *string `json:"cwd,omitempty"`
 	ApprovalPolicy         *string `json:"approvalPolicy,omitempty"`
 	Sandbox                *string `json:"sandbox,omitempty"`
+	ApprovalsReviewer      *string `json:"approvalsReviewer,omitempty"`
 	PersistExtendedHistory bool    `json:"persistExtendedHistory"`
 }
 
 type wireThreadResumeResponse struct {
-	Thread wireThread `json:"thread"`
+	Thread            wireThread        `json:"thread"`
+	Model             string            `json:"model"`
+	ModelProvider     string            `json:"modelProvider"`
+	CWD               string            `json:"cwd"`
+	ApprovalPolicy    json.RawMessage   `json:"approvalPolicy"`
+	ApprovalsReviewer string            `json:"approvalsReviewer"`
+	Sandbox           wireSandboxPolicy `json:"sandbox"`
+	ReasoningEffort   *string           `json:"reasoningEffort"`
 }
 
 type wireThreadArchiveParams struct {
@@ -146,8 +220,14 @@ type wireThreadListParams struct {
 }
 
 type wireTurnStartParams struct {
-	ThreadID string          `json:"threadId"`
-	Input    []wireUserInput `json:"input"`
+	ThreadID          string             `json:"threadId"`
+	Input             []wireUserInput    `json:"input"`
+	CWD               *string            `json:"cwd,omitempty"`
+	ApprovalPolicy    *string            `json:"approvalPolicy,omitempty"`
+	ApprovalsReviewer *string            `json:"approvalsReviewer,omitempty"`
+	SandboxPolicy     *wireSandboxPolicy `json:"sandboxPolicy,omitempty"`
+	Model             *string            `json:"model,omitempty"`
+	Effort            *string            `json:"effort,omitempty"`
 }
 
 type wireTurnStartResponse struct {

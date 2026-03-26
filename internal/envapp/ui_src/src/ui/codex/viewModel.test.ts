@@ -23,6 +23,18 @@ describe('buildCodexWorkbenchSummary', () => {
         cwd: '/workspace/ui',
         name: 'Workbench alignment',
       },
+      runtimeConfig: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+      },
+      capabilities: {
+        models: [
+          {
+            id: 'gpt-5.4',
+            display_name: 'GPT-5.4',
+          },
+        ],
+      },
       status: {
         available: true,
         ready: true,
@@ -45,7 +57,7 @@ describe('buildCodexWorkbenchSummary', () => {
 
     expect(summary.threadTitle).toBe('Workbench alignment');
     expect(summary.workspaceLabel).toBe('/workspace/ui');
-    expect(summary.modelLabel).toBe('gpt-5.4');
+    expect(summary.modelLabel).toBe('GPT-5.4');
     expect(summary.statusLabel).toBe('running');
     expect(summary.statusFlags).toEqual(['finalizing']);
     expect(summary.pendingRequestCount).toBe(1);
@@ -66,6 +78,18 @@ describe('buildCodexWorkbenchSummary', () => {
         cwd: '/workspace/codex-ui',
         name: 'Metadata cleanup',
       },
+      runtimeConfig: {
+        cwd: '/workspace/codex-ui',
+        model: 'gpt-5.4',
+      },
+      capabilities: {
+        models: [
+          {
+            id: 'gpt-5.4',
+            display_name: 'GPT-5.4',
+          },
+        ],
+      },
       status: {
         available: true,
         ready: true,
@@ -79,7 +103,7 @@ describe('buildCodexWorkbenchSummary', () => {
     });
 
     expect(summary.workspaceLabel).toBe('/workspace/codex-ui');
-    expect(summary.modelLabel).toBe('gpt-5.4');
+    expect(summary.modelLabel).toBe('GPT-5.4');
   });
 });
 

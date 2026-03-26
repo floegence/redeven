@@ -8,22 +8,64 @@ type Status struct {
 	Error        string `json:"error,omitempty"`
 }
 
+type ThreadRuntimeConfig struct {
+	Model             string `json:"model,omitempty"`
+	ModelProvider     string `json:"model_provider,omitempty"`
+	CWD               string `json:"cwd,omitempty"`
+	ApprovalPolicy    string `json:"approval_policy,omitempty"`
+	ApprovalsReviewer string `json:"approvals_reviewer,omitempty"`
+	SandboxMode       string `json:"sandbox_mode,omitempty"`
+	ReasoningEffort   string `json:"reasoning_effort,omitempty"`
+}
+
+type ModelOption struct {
+	ID                        string   `json:"id"`
+	DisplayName               string   `json:"display_name"`
+	Description               string   `json:"description,omitempty"`
+	IsDefault                 bool     `json:"is_default,omitempty"`
+	SupportsImageInput        bool     `json:"supports_image_input,omitempty"`
+	DefaultReasoningEffort    string   `json:"default_reasoning_effort,omitempty"`
+	SupportedReasoningEfforts []string `json:"supported_reasoning_efforts,omitempty"`
+}
+
+type ConfigRequirements struct {
+	AllowedApprovalPolicies []string `json:"allowed_approval_policies,omitempty"`
+	AllowedSandboxModes     []string `json:"allowed_sandbox_modes,omitempty"`
+}
+
+type Capabilities struct {
+	Models          []ModelOption       `json:"models,omitempty"`
+	EffectiveConfig ThreadRuntimeConfig `json:"effective_config"`
+	Requirements    *ConfigRequirements `json:"requirements,omitempty"`
+}
+
 type StartThreadRequest struct {
-	CWD   string `json:"cwd,omitempty"`
-	Model string `json:"model,omitempty"`
+	CWD               string `json:"cwd,omitempty"`
+	Model             string `json:"model,omitempty"`
+	ApprovalPolicy    string `json:"approval_policy,omitempty"`
+	SandboxMode       string `json:"sandbox_mode,omitempty"`
+	ApprovalsReviewer string `json:"approvals_reviewer,omitempty"`
 }
 
 type StartTurnRequest struct {
-	ThreadID  string `json:"thread_id"`
-	InputText string `json:"input_text"`
+	ThreadID          string           `json:"thread_id"`
+	InputText         string           `json:"input_text,omitempty"`
+	Inputs            []UserInputEntry `json:"inputs,omitempty"`
+	CWD               string           `json:"cwd,omitempty"`
+	Model             string           `json:"model,omitempty"`
+	Effort            string           `json:"effort,omitempty"`
+	ApprovalPolicy    string           `json:"approval_policy,omitempty"`
+	SandboxMode       string           `json:"sandbox_mode,omitempty"`
+	ApprovalsReviewer string           `json:"approvals_reviewer,omitempty"`
 }
 
 type ThreadDetail struct {
-	Thread           Thread           `json:"thread"`
-	PendingRequests  []PendingRequest `json:"pending_requests,omitempty"`
-	LastEventSeq     int64            `json:"last_event_seq"`
-	ActiveStatus     string           `json:"active_status,omitempty"`
-	ActiveStatusFlag []string         `json:"active_status_flags,omitempty"`
+	Thread           Thread              `json:"thread"`
+	RuntimeConfig    ThreadRuntimeConfig `json:"runtime_config,omitempty"`
+	PendingRequests  []PendingRequest    `json:"pending_requests,omitempty"`
+	LastEventSeq     int64               `json:"last_event_seq"`
+	ActiveStatus     string              `json:"active_status,omitempty"`
+	ActiveStatusFlag []string            `json:"active_status_flags,omitempty"`
 }
 
 type Thread struct {

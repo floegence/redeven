@@ -76,9 +76,10 @@ type PortForwardBackend interface {
 
 type CodexBackend interface {
 	Status(ctx context.Context) codexbridge.Status
+	ReadCapabilities(ctx context.Context, cwd string) (*codexbridge.Capabilities, error)
 	ListThreads(ctx context.Context, limit int) ([]codexbridge.Thread, error)
 	OpenThread(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
-	StartThread(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.Thread, error)
+	StartThread(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.ThreadDetail, error)
 	StartTurn(ctx context.Context, req codexbridge.StartTurnRequest) (*codexbridge.Turn, error)
 	ArchiveThread(ctx context.Context, threadID string) error
 	SubscribeThreadEvents(ctx context.Context, threadID string, afterSeq int64) ([]codexbridge.Event, <-chan codexbridge.Event, error)
@@ -1295,6 +1296,22 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.codex.Status(r.Context())})
 		return
 
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/codex/capabilities":
+		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
+			return
+		}
+		if g.codex == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "codex service not ready"})
+			return
+		}
+		capabilities, err := g.codex.ReadCapabilities(r.Context(), strings.TrimSpace(r.URL.Query().Get("cwd")))
+		if err != nil {
+			writeCodexError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: capabilities})
+		return
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/codex/threads":
 		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
 			return
@@ -1326,8 +1343,11 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		type reqBody struct {
-			CWD   string `json:"cwd"`
-			Model string `json:"model"`
+			CWD               string `json:"cwd"`
+			Model             string `json:"model"`
+			ApprovalPolicy    string `json:"approval_policy"`
+			SandboxMode       string `json:"sandbox_mode"`
+			ApprovalsReviewer string `json:"approvals_reviewer"`
 		}
 		dec := json.NewDecoder(r.Body)
 		dec.DisallowUnknownFields()
@@ -1340,15 +1360,18 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
-		thread, err := g.codex.StartThread(r.Context(), codexbridge.StartThreadRequest{
-			CWD:   strings.TrimSpace(body.CWD),
-			Model: strings.TrimSpace(body.Model),
+		detail, err := g.codex.StartThread(r.Context(), codexbridge.StartThreadRequest{
+			CWD:               strings.TrimSpace(body.CWD),
+			Model:             strings.TrimSpace(body.Model),
+			ApprovalPolicy:    strings.TrimSpace(body.ApprovalPolicy),
+			SandboxMode:       strings.TrimSpace(body.SandboxMode),
+			ApprovalsReviewer: strings.TrimSpace(body.ApprovalsReviewer),
 		})
 		if err != nil {
 			writeCodexError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"thread": thread}})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: detail})
 		return
 
 	case strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/codex/threads/"):
@@ -1393,7 +1416,14 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "turns":
 			type reqBody struct {
-				InputText string `json:"input_text"`
+				InputText         string                       `json:"input_text"`
+				Inputs            []codexbridge.UserInputEntry `json:"inputs"`
+				CWD               string                       `json:"cwd"`
+				Model             string                       `json:"model"`
+				Effort            string                       `json:"effort"`
+				ApprovalPolicy    string                       `json:"approval_policy"`
+				SandboxMode       string                       `json:"sandbox_mode"`
+				ApprovalsReviewer string                       `json:"approvals_reviewer"`
 			}
 			dec := json.NewDecoder(r.Body)
 			dec.DisallowUnknownFields()
@@ -1407,8 +1437,15 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			turn, err := g.codex.StartTurn(r.Context(), codexbridge.StartTurnRequest{
-				ThreadID:  threadID,
-				InputText: strings.TrimSpace(body.InputText),
+				ThreadID:          threadID,
+				InputText:         strings.TrimSpace(body.InputText),
+				Inputs:            body.Inputs,
+				CWD:               strings.TrimSpace(body.CWD),
+				Model:             strings.TrimSpace(body.Model),
+				Effort:            strings.TrimSpace(body.Effort),
+				ApprovalPolicy:    strings.TrimSpace(body.ApprovalPolicy),
+				SandboxMode:       strings.TrimSpace(body.SandboxMode),
+				ApprovalsReviewer: strings.TrimSpace(body.ApprovalsReviewer),
 			})
 			if err != nil {
 				writeCodexError(w, err)

@@ -1,5 +1,5 @@
 import { For, Index, Show, createMemo } from 'solid-js';
-import { Refresh, Trash } from '@floegence/floe-webapp-core/icons';
+import { Trash } from '@floegence/floe-webapp-core/icons';
 import { SidebarContent, SidebarSection } from '@floegence/floe-webapp-core/layout';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
@@ -84,7 +84,7 @@ function ThreadCard(props: {
     <div
       data-thread-id={props.thread.id}
       data-codex-surface="thread-card"
-      class={`group relative w-full cursor-pointer rounded-lg border transition-all duration-150 ${
+      class={`group relative w-full cursor-pointer rounded-lg border transition-colors duration-150 ${
         props.active
           ? 'border-border/20 bg-sidebar-accent text-sidebar-foreground shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
           : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/60 hover:shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
@@ -98,6 +98,7 @@ function ThreadCard(props: {
         type="button"
         class="flex w-full cursor-pointer items-start gap-2 px-2.5 py-2 pr-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
         onClick={props.onClick}
+        aria-current={props.active ? 'page' : undefined}
       >
         <div class="relative mt-1.5 h-2 w-2 shrink-0">
           <div class={`h-2 w-2 rounded-full ${threadStatusDotClass(props.thread.status)}`} title={displayStatus(props.thread.status, 'Idle')} />
@@ -109,11 +110,6 @@ function ThreadCard(props: {
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
           <div class="flex min-w-0 items-center gap-1">
             <span class="flex-1 truncate text-xs font-medium">{title()}</span>
-            <Show when={props.active}>
-              <span class="inline-flex shrink-0 items-center rounded-full border border-primary/20 bg-primary/8 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                Active
-              </span>
-            </Show>
           </div>
           <p class="truncate text-[11px] leading-tight text-muted-foreground/60">{preview()}</p>
         </div>
@@ -167,16 +163,6 @@ export function CodexSidebarShell() {
           onClick={codex.startNewThreadDraft}
         >
           New Chat
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          class="h-8 w-8 border-sidebar-border/60 bg-sidebar text-sidebar-foreground/80 transition-all duration-150 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-          onClick={() => void codex.refreshSidebar()}
-          disabled={codex.statusLoading()}
-          aria-label="Refresh Codex"
-        >
-          <Refresh class="h-3.5 w-3.5" />
         </Button>
       </div>
 

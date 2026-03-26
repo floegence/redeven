@@ -44,6 +44,13 @@ function sampleDetail(): CodexThreadDetail {
         reason: 'needs approval',
       },
     ],
+    runtime_config: {
+      cwd: '/workspace',
+      model: 'gpt-5.4',
+      sandbox_mode: 'workspace-write',
+      approval_policy: 'on-request',
+      reasoning_effort: 'medium',
+    },
     last_event_seq: 4,
     active_status: 'running',
     active_status_flags: ['busy'],
@@ -60,6 +67,8 @@ describe('buildCodexThreadSession', () => {
     expect(session.pending_requests.request_1.reason).toBe('needs approval');
     expect(session.last_event_seq).toBe(4);
     expect(session.active_status_flags).toEqual(['busy']);
+    expect(session.runtime_config.cwd).toBe('/workspace');
+    expect(session.runtime_config.model).toBe('gpt-5.4');
   });
 });
 

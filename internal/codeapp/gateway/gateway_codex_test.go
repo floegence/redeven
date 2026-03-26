@@ -16,9 +16,10 @@ import (
 
 type stubCodexBackend struct {
 	status               func(ctx context.Context) codexbridge.Status
+	readCapabilities     func(ctx context.Context, cwd string) (*codexbridge.Capabilities, error)
 	listThreads          func(ctx context.Context, limit int) ([]codexbridge.Thread, error)
 	openThread           func(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
-	startThread          func(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.Thread, error)
+	startThread          func(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.ThreadDetail, error)
 	startTurn            func(ctx context.Context, req codexbridge.StartTurnRequest) (*codexbridge.Turn, error)
 	archiveThread        func(ctx context.Context, threadID string) error
 	subscribeThreadEvent func(ctx context.Context, threadID string, afterSeq int64) ([]codexbridge.Event, <-chan codexbridge.Event, error)
@@ -30,6 +31,13 @@ func (s *stubCodexBackend) Status(ctx context.Context) codexbridge.Status {
 		return s.status(ctx)
 	}
 	return codexbridge.Status{}
+}
+
+func (s *stubCodexBackend) ReadCapabilities(ctx context.Context, cwd string) (*codexbridge.Capabilities, error) {
+	if s.readCapabilities != nil {
+		return s.readCapabilities(ctx, cwd)
+	}
+	return nil, nil
 }
 
 func (s *stubCodexBackend) ListThreads(ctx context.Context, limit int) ([]codexbridge.Thread, error) {
@@ -46,7 +54,7 @@ func (s *stubCodexBackend) OpenThread(ctx context.Context, threadID string) (*co
 	return nil, nil
 }
 
-func (s *stubCodexBackend) StartThread(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.Thread, error) {
+func (s *stubCodexBackend) StartThread(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.ThreadDetail, error) {
 	if s.startThread != nil {
 		return s.startThread(ctx, req)
 	}
@@ -156,6 +164,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 	var (
 		gotStartThread   codexbridge.StartThreadRequest
 		gotStartTurn     codexbridge.StartTurnRequest
+		gotCapabilitiesCWD string
 		gotArchiveID     string
 		gotRespondThread string
 		gotRespondID     string
@@ -174,19 +183,60 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 					AgentHomeDir: "/workspace",
 				}
 			},
+			readCapabilities: func(ctx context.Context, cwd string) (*codexbridge.Capabilities, error) {
+				gotCapabilitiesCWD = cwd
+				return &codexbridge.Capabilities{
+					Models: []codexbridge.ModelOption{
+						{
+							ID:                        "gpt-5.4",
+							DisplayName:               "GPT-5.4",
+							IsDefault:                 true,
+							SupportsImageInput:        true,
+							DefaultReasoningEffort:    "medium",
+							SupportedReasoningEfforts: []string{"low", "medium", "high"},
+						},
+					},
+					EffectiveConfig: codexbridge.ThreadRuntimeConfig{
+						CWD:             "/workspace/ui",
+						Model:           "gpt-5.4",
+						ApprovalPolicy:  "on-request",
+						SandboxMode:     "workspace-write",
+						ReasoningEffort: "medium",
+					},
+					Requirements: &codexbridge.ConfigRequirements{
+						AllowedApprovalPolicies: []string{"on-request", "never"},
+						AllowedSandboxModes:     []string{"workspace-write", "danger-full-access"},
+					},
+				}, nil
+			},
 			listThreads: func(ctx context.Context, limit int) ([]codexbridge.Thread, error) {
 				return []codexbridge.Thread{thread}, nil
 			},
 			openThread: func(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error) {
 				return &codexbridge.ThreadDetail{
 					Thread:       thread,
+					RuntimeConfig: codexbridge.ThreadRuntimeConfig{
+						CWD:             "/workspace",
+						Model:           "gpt-5.4",
+						ApprovalPolicy:  "on-request",
+						SandboxMode:     "workspace-write",
+						ReasoningEffort: "medium",
+					},
 					LastEventSeq: 2,
 					ActiveStatus: "running",
 				}, nil
 			},
-			startThread: func(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.Thread, error) {
+			startThread: func(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.ThreadDetail, error) {
 				gotStartThread = req
-				return &thread, nil
+				return &codexbridge.ThreadDetail{
+					Thread: thread,
+					RuntimeConfig: codexbridge.ThreadRuntimeConfig{
+						CWD:            req.CWD,
+						Model:          req.Model,
+						ApprovalPolicy: req.ApprovalPolicy,
+						SandboxMode:    req.SandboxMode,
+					},
+				}, nil
 			},
 			startTurn: func(ctx context.Context, req codexbridge.StartTurnRequest) (*codexbridge.Turn, error) {
 				gotStartTurn = req
@@ -246,8 +296,8 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		}
 	})
 
-	t.Run("start thread", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads", bytes.NewBufferString(`{"cwd":"/workspace","model":"gpt-5.4"}`))
+	t.Run("capabilities", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/codex/capabilities?cwd=%2Fworkspace%2Fui", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		gw.serveHTTP(rr, req)
@@ -255,8 +305,28 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 		}
-		if gotStartThread.CWD != "/workspace" || gotStartThread.Model != "gpt-5.4" {
+		if gotCapabilitiesCWD != "/workspace/ui" {
+			t.Fatalf("ReadCapabilities cwd=%q, want=%q", gotCapabilitiesCWD, "/workspace/ui")
+		}
+		if !bytes.Contains(rr.Body.Bytes(), []byte(`"effective_config"`)) || !bytes.Contains(rr.Body.Bytes(), []byte(`"allowed_sandbox_modes"`)) {
+			t.Fatalf("unexpected body: %s", rr.Body.String())
+		}
+	})
+
+	t.Run("start thread", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads", bytes.NewBufferString(`{"cwd":"/workspace","model":"gpt-5.4","approval_policy":"on-request","sandbox_mode":"workspace-write"}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if gotStartThread.CWD != "/workspace" || gotStartThread.Model != "gpt-5.4" || gotStartThread.ApprovalPolicy != "on-request" || gotStartThread.SandboxMode != "workspace-write" {
 			t.Fatalf("unexpected start thread request: %+v", gotStartThread)
+		}
+		if !bytes.Contains(rr.Body.Bytes(), []byte(`"runtime_config"`)) {
+			t.Fatalf("unexpected body: %s", rr.Body.String())
 		}
 	})
 
@@ -275,7 +345,15 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 	})
 
 	t.Run("start turn", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads/thread_1/turns", bytes.NewBufferString(`{"input_text":"please continue"}`))
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads/thread_1/turns", bytes.NewBufferString(`{
+			"input_text":"please continue",
+			"inputs":[{"type":"image","url":"data:image/png;base64,AAA","name":"snapshot.png"}],
+			"cwd":"/workspace/ui",
+			"model":"gpt-5.4",
+			"effort":"high",
+			"approval_policy":"on-request",
+			"sandbox_mode":"workspace-write"
+		}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		gw.serveHTTP(rr, req)
@@ -283,8 +361,17 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 		}
-		if gotStartTurn.ThreadID != "thread_1" || gotStartTurn.InputText != "please continue" {
+		if gotStartTurn.ThreadID != "thread_1" ||
+			gotStartTurn.InputText != "please continue" ||
+			gotStartTurn.CWD != "/workspace/ui" ||
+			gotStartTurn.Model != "gpt-5.4" ||
+			gotStartTurn.Effort != "high" ||
+			gotStartTurn.ApprovalPolicy != "on-request" ||
+			gotStartTurn.SandboxMode != "workspace-write" {
 			t.Fatalf("unexpected start turn request: %+v", gotStartTurn)
+		}
+		if len(gotStartTurn.Inputs) != 1 || gotStartTurn.Inputs[0].Type != "image" || gotStartTurn.Inputs[0].Name != "snapshot.png" {
+			t.Fatalf("unexpected start turn inputs: %+v", gotStartTurn.Inputs)
 		}
 	})
 

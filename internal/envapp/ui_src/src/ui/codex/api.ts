@@ -1,13 +1,28 @@
 import { fetchGatewayJSON, prepareGatewayRequestInit } from '../services/gatewayApi';
 import type {
+  CodexCapabilitiesSnapshot,
   CodexEvent,
   CodexStatus,
   CodexThread,
   CodexThreadDetail,
+  CodexUserInputEntry,
 } from './types';
 
 export async function fetchCodexStatus(): Promise<CodexStatus> {
   return fetchGatewayJSON<CodexStatus>('/_redeven_proxy/api/codex/status', { method: 'GET' });
+}
+
+export async function fetchCodexCapabilities(cwd?: string): Promise<CodexCapabilitiesSnapshot> {
+  const params = new URLSearchParams();
+  const normalizedCWD = String(cwd ?? '').trim();
+  if (normalizedCWD) {
+    params.set('cwd', normalizedCWD);
+  }
+  const query = params.toString();
+  return fetchGatewayJSON<CodexCapabilitiesSnapshot>(
+    `/_redeven_proxy/api/codex/capabilities${query ? `?${query}` : ''}`,
+    { method: 'GET' },
+  );
 }
 
 export async function listCodexThreads(limit = 100): Promise<CodexThread[]> {
@@ -23,23 +38,49 @@ export async function openCodexThread(threadID: string): Promise<CodexThreadDeta
   return fetchGatewayJSON<CodexThreadDetail>(`/_redeven_proxy/api/codex/threads/${id}`, { method: 'GET' });
 }
 
-export async function startCodexThread(args: { cwd?: string; model?: string }): Promise<CodexThread> {
-  const out = await fetchGatewayJSON<Readonly<{ thread?: CodexThread }>>('/_redeven_proxy/api/codex/threads', {
+export async function startCodexThread(args: {
+  cwd?: string;
+  model?: string;
+  approval_policy?: string;
+  sandbox_mode?: string;
+  approvals_reviewer?: string;
+}): Promise<CodexThreadDetail> {
+  return fetchGatewayJSON<CodexThreadDetail>('/_redeven_proxy/api/codex/threads', {
     method: 'POST',
     body: JSON.stringify({
       cwd: String(args.cwd ?? '').trim(),
       model: String(args.model ?? '').trim(),
+      approval_policy: String(args.approval_policy ?? '').trim(),
+      sandbox_mode: String(args.sandbox_mode ?? '').trim(),
+      approvals_reviewer: String(args.approvals_reviewer ?? '').trim(),
     }),
   });
-  if (!out?.thread) throw new Error('Codex thread response missing thread');
-  return out.thread;
 }
 
-export async function startCodexTurn(args: { threadID: string; inputText: string }): Promise<void> {
+export async function startCodexTurn(args: {
+  threadID: string;
+  inputText?: string;
+  inputs?: CodexUserInputEntry[];
+  cwd?: string;
+  model?: string;
+  effort?: string;
+  approval_policy?: string;
+  sandbox_mode?: string;
+  approvals_reviewer?: string;
+}): Promise<void> {
   const threadID = encodeURIComponent(String(args.threadID ?? '').trim());
   await fetchGatewayJSON<unknown>(`/_redeven_proxy/api/codex/threads/${threadID}/turns`, {
     method: 'POST',
-    body: JSON.stringify({ input_text: String(args.inputText ?? '') }),
+    body: JSON.stringify({
+      input_text: String(args.inputText ?? ''),
+      inputs: Array.isArray(args.inputs) ? args.inputs : [],
+      cwd: String(args.cwd ?? '').trim(),
+      model: String(args.model ?? '').trim(),
+      effort: String(args.effort ?? '').trim(),
+      approval_policy: String(args.approval_policy ?? '').trim(),
+      sandbox_mode: String(args.sandbox_mode ?? '').trim(),
+      approvals_reviewer: String(args.approvals_reviewer ?? '').trim(),
+    }),
   });
 }
 

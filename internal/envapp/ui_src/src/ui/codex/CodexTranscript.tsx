@@ -13,77 +13,23 @@ import {
   itemTitle,
   statusTagVariant,
 } from './presentation';
-import type { CodexTranscriptItem } from './types';
-
-const EMPTY_SUGGESTIONS = [
-  'Review the current diff and list the riskiest issues first.',
-  'Summarize the latest file changes and tell me what still needs review.',
-  'Turn this implementation idea into a step-by-step plan with checkpoints.',
-  'Inspect the latest command output and explain the likely failure point.',
-] as const;
-
-function EmptySuggestion(props: {
-  prompt: string;
-  onClick: (prompt: string) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => props.onClick(props.prompt)}
-      disabled={props.disabled}
-      class={cn(
-        'group flex w-full cursor-pointer items-start gap-3 rounded-xl border border-border/50 bg-card/40 p-4 text-left transition-all duration-200',
-        'hover:border-primary/30 hover:bg-card hover:shadow-lg hover:shadow-primary/5',
-        'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border/50 disabled:hover:bg-card/40',
-      )}
-    >
-      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 transition-all duration-200 group-hover:bg-primary/20 group-hover:scale-110">
-        <CodexIcon class="h-5 w-5" />
-      </div>
-      <div class="min-w-0 flex-1">
-        <div class="mb-0.5 text-sm font-medium text-foreground">Suggested Codex prompt</div>
-        <div class="text-xs leading-relaxed text-muted-foreground">{props.prompt}</div>
-      </div>
-    </button>
-  );
-}
+import type { CodexTranscriptItem, CodexUserInputEntry } from './types';
 
 function EmptyTranscriptState(props: {
   title: string;
   body: string;
-  onSuggestionClick: (prompt: string) => void;
-  suggestionDisabled?: boolean;
 }) {
   return (
     <div data-codex-surface="empty-state" class="codex-empty-state">
       <div class="codex-empty-hero">
-        <div class="relative mb-6 inline-flex items-center justify-center">
-          <div class="absolute -inset-2 rounded-full bg-primary/8" />
-          <div class="relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-primary/15 to-primary/8 shadow-sm">
-            <CodexIcon class="h-9 w-9 text-primary" />
+        <div class="relative mb-4 inline-flex items-center justify-center">
+          <div class="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary/14 to-primary/8 shadow-sm">
+            <CodexIcon class="h-8 w-8 text-primary" />
           </div>
         </div>
 
-        <h2 class="mb-3 text-xl font-semibold text-foreground">{props.title}</h2>
+        <h2 class="mb-2 text-lg font-semibold text-foreground">{props.title}</h2>
         <p class="text-sm leading-relaxed text-muted-foreground">{props.body}</p>
-      </div>
-
-      <div class="codex-empty-suggestions">
-        <For each={EMPTY_SUGGESTIONS}>
-          {(prompt) => (
-            <EmptySuggestion
-              prompt={prompt}
-              onClick={props.onSuggestionClick}
-              disabled={props.suggestionDisabled}
-            />
-          )}
-        </For>
-      </div>
-
-      <div class="codex-empty-hint">
-        <span class="codex-page-chip codex-page-chip--neutral">Enter to send</span>
-        <span class="codex-page-chip codex-page-chip--neutral">Shift+Enter for newline</span>
       </div>
     </div>
   );
@@ -112,26 +58,6 @@ function CodexMessageLane(props: {
       <div class="chat-message-content-wrapper">
         {props.children}
       </div>
-    </div>
-  );
-}
-
-function TranscriptMeta(props: {
-  label: string;
-  status?: string | null;
-  extra?: JSX.Element;
-}) {
-  return (
-    <div class="codex-chat-transcript-meta">
-      <div class="codex-chat-transcript-meta-label">
-        {props.label}
-      </div>
-      <Show when={props.status}>
-        <Tag variant={statusTagVariant(props.status)} tone="soft" size="sm">
-          {displayStatus(props.status)}
-        </Tag>
-      </Show>
-      {props.extra}
     </div>
   );
 }
@@ -201,24 +127,29 @@ function ReasoningBody(props: { item: CodexTranscriptItem }) {
   );
 }
 
+function EvidenceHeader(props: { item: CodexTranscriptItem }) {
+  return (
+    <div class="codex-chat-evidence-header">
+      <span class="codex-chat-evidence-kicker">{itemGlyph(props.item)}</span>
+      <div class="min-w-0 flex-1">
+        <div class="truncate text-sm font-medium text-foreground">{itemTitle(props.item)}</div>
+      </div>
+      <Show when={props.item.status}>
+        <Tag variant={statusTagVariant(props.item.status)} tone="soft" size="sm">
+          {displayStatus(props.item.status)}
+        </Tag>
+      </Show>
+    </div>
+  );
+}
+
 function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
   return (
     <CodexMessageLane role="assistant">
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
         <div class="codex-chat-evidence-card">
-          <TranscriptMeta
-            label={itemTitle(props.item)}
-            status={props.item.status}
-            extra={
-              <>
-                <span class="codex-chat-evidence-kicker">{itemGlyph(props.item)}</span>
-                <Tag variant="neutral" tone="soft" size="sm">
-                  {displayStatus(props.item.type, 'Event')}
-                </Tag>
-              </>
-            }
-          />
-          <div class="mt-3 codex-chat-evidence-body">
+          <EvidenceHeader item={props.item} />
+          <div class="codex-chat-evidence-body">
             <Show when={props.item.type === 'commandExecution'}>
               <CommandExecutionBody item={props.item} />
             </Show>
@@ -257,12 +188,54 @@ function AgentMessageRow(props: { item: CodexTranscriptItem }) {
   );
 }
 
+function imageInputs(item: CodexTranscriptItem): CodexUserInputEntry[] {
+  return (item.inputs ?? []).filter((entry) => String(entry.type ?? '').trim() === 'image');
+}
+
+function localImageInputs(item: CodexTranscriptItem): CodexUserInputEntry[] {
+  return (item.inputs ?? []).filter((entry) => String(entry.type ?? '').trim() === 'local_image');
+}
+
 function UserMessageRow(props: { item: CodexTranscriptItem }) {
+  const images = () => imageInputs(props.item);
+  const localImages = () => localImageInputs(props.item);
+  const body = () => String(itemText(props.item) ?? '').trim();
+
   return (
     <CodexMessageLane role="user">
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-user codex-chat-message-bubble-user">
         <div class="codex-chat-message-surface codex-chat-message-surface-user">
-          <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block codex-chat-user-markdown-block" />
+          <Show when={images().length > 0}>
+            <div class="codex-chat-inline-attachments">
+              <For each={images()}>
+                {(entry, index) => (
+                  <img
+                    class="codex-chat-inline-image"
+                    src={entry.url}
+                    alt={entry.name || `Attachment ${index() + 1}`}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                )}
+              </For>
+            </div>
+          </Show>
+
+          <Show when={localImages().length > 0}>
+            <div class="codex-chat-inline-local-attachments">
+              <For each={localImages()}>
+                {(entry) => (
+                  <span class="codex-chat-inline-local-attachment" title={entry.path}>
+                    {entry.path}
+                  </span>
+                )}
+              </For>
+            </div>
+          </Show>
+
+          <Show when={body()}>
+            <MarkdownBlock content={body()} class="codex-chat-markdown-block codex-chat-user-markdown-block" />
+          </Show>
         </div>
       </div>
     </CodexMessageLane>
@@ -283,8 +256,6 @@ export function CodexTranscript(props: {
   items: readonly CodexTranscriptItem[];
   emptyTitle: string;
   emptyBody: string;
-  onSuggestionClick: (prompt: string) => void;
-  suggestionDisabled?: boolean;
 }) {
   return (
     <div data-codex-surface="transcript" class="mx-auto flex w-full max-w-5xl flex-col">
@@ -294,8 +265,6 @@ export function CodexTranscript(props: {
           <EmptyTranscriptState
             title={props.emptyTitle}
             body={props.emptyBody}
-            onSuggestionClick={props.onSuggestionClick}
-            suggestionDisabled={props.suggestionDisabled}
           />
         )}
       >

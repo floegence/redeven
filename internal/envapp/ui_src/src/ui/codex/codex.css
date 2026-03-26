@@ -8,7 +8,7 @@
 }
 
 .codex-page-header {
-  padding: 0.5rem 0.75rem;
+  padding: 0.375rem 0.625rem;
 }
 
 .codex-page-header-main {
@@ -16,8 +16,8 @@
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 0.625rem;
-  min-height: 2.5rem;
+  gap: 0.5rem;
+  min-height: 2.125rem;
 }
 
 .codex-page-header-summary {
@@ -35,7 +35,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--foreground);
 }
@@ -45,7 +45,7 @@
   min-width: 0;
   flex: 0 0 auto;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.1875rem;
   overflow-x: auto;
   overflow-y: hidden;
   flex-wrap: nowrap;
@@ -57,8 +57,8 @@
 }
 
 .codex-page-header-action {
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.625rem;
+  height: 1.625rem;
   padding: 0;
   border-radius: 9999px;
 }
@@ -82,8 +82,8 @@
 .codex-page-status-stack {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.75rem 0.75rem 0;
+  gap: 0.625rem;
+  padding: 0.625rem 0.625rem 0;
 }
 
 .codex-page-transcript-main {
@@ -142,8 +142,8 @@
 .codex-page-bottom-support {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0 0.75rem 0.25rem;
+  gap: 0.4375rem;
+  padding: 0 0.625rem 0.5rem;
 }
 
 .codex-page-chip {
@@ -204,7 +204,7 @@
 .codex-status-banner {
   border-radius: 1rem;
   border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
-  padding: 0.875rem 1rem;
+  padding: 0.75rem 0.875rem;
   box-shadow: 0 14px 34px -30px color-mix(in srgb, var(--foreground) 22%, transparent);
 }
 
@@ -221,7 +221,7 @@
   border: 1px solid color-mix(in srgb, var(--warning) 24%, transparent);
   border-radius: 1rem;
   background: color-mix(in srgb, var(--warning) 7%, transparent);
-  padding: 0.875rem;
+  padding: 0.8125rem;
   box-shadow: 0 18px 40px -34px color-mix(in srgb, var(--foreground) 24%, transparent);
 }
 
@@ -239,7 +239,7 @@
   border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
   border-radius: 1rem;
   background: color-mix(in srgb, var(--background) 86%, var(--card));
-  padding: 0.875rem;
+  padding: 0.8125rem;
 }
 
 .codex-request-command {
@@ -254,17 +254,16 @@
 }
 
 .codex-chat-input.chat-input-container {
-  margin: 0.75rem;
-  margin-top: 0.5rem;
+  margin: 0.5rem 0;
   border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
-  border-radius: 1rem;
+  border-radius: 0.875rem;
   background:
     linear-gradient(
       180deg,
       color-mix(in srgb, var(--card) 98%, var(--background)),
       color-mix(in srgb, var(--card) 95%, var(--muted) 5%)
     );
-  box-shadow: 0 10px 28px -26px color-mix(in srgb, var(--foreground) 24%, transparent);
+  box-shadow: 0 8px 24px -24px color-mix(in srgb, var(--foreground) 24%, transparent);
 }
 
 .codex-chat-input.chat-input-container-focused {
@@ -277,18 +276,18 @@
 .codex-chat-input-body {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
+  gap: 0.5rem;
 }
 
 .codex-chat-input-primary-row {
   display: flex;
   align-items: flex-end;
-  gap: 0.625rem;
-  padding: 0.875rem 0.875rem 0.125rem;
+  gap: 0.5rem;
+  padding: 0.625rem 0.625rem 0;
 }
 
 .codex-chat-input-textarea {
-  min-height: 4rem;
+  min-height: 3.5rem;
   padding: 0;
   border: none !important;
   border-radius: 0;
@@ -296,8 +295,8 @@
   box-shadow: none !important;
   -webkit-appearance: none;
   appearance: none;
-  font-size: 0.875rem;
-  line-height: 1.55;
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
 .codex-chat-input-textarea:focus,
@@ -317,10 +316,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 2.75rem;
-  min-height: 2.75rem;
-  padding: 0.625rem;
-  border-radius: 0.875rem;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0.5rem;
+  border-radius: 0.75rem;
   line-height: 1;
 }
 
@@ -329,120 +328,123 @@
   box-shadow: 0 6px 14px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
-.codex-chat-input-meta {
+.codex-chat-attachment-strip {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0 0.875rem 0.875rem;
-}
-
-.codex-chat-input-meta-rail {
-  display: flex;
-  min-width: 0;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 0.375rem;
-  overflow-x: auto;
-  padding-top: 0.625rem;
-  border-top: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
-  scrollbar-width: none;
+  padding: 0.625rem 0.625rem 0;
 }
 
-.codex-chat-input-meta-rail::-webkit-scrollbar {
-  display: none;
-}
-
-.codex-chat-chip {
+.codex-chat-attachment-card {
   display: inline-flex;
-  min-width: 0;
-  flex: 0 0 auto;
+  max-width: min(100%, 13rem);
   align-items: center;
-  gap: 0.375rem;
-  height: 1.75rem;
-  padding: 0 0.625rem;
-  border: 1px solid transparent;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--muted) 38%, var(--background));
-  color: var(--muted-foreground);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--muted) 22%, var(--background));
+  padding: 0.3125rem 0.4375rem 0.3125rem 0.3125rem;
 }
 
-.codex-chat-chip-actionable {
-  cursor: pointer;
+.codex-chat-attachment-thumb {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  border-radius: 0.5rem;
+  object-fit: cover;
 }
 
-.codex-chat-chip-actionable:hover:not(:disabled),
-.codex-chat-chip-actionable:focus-visible {
-  background: color-mix(in srgb, var(--muted) 56%, var(--background));
-  color: var(--foreground);
-}
-
-.codex-chat-chip:disabled {
-  opacity: 0.56;
-  cursor: not-allowed;
-}
-
-.codex-chat-working-dir-chip {
-  max-width: min(11rem, 32vw);
-}
-
-.codex-chat-working-dir-chip-label {
+.codex-chat-attachment-copy {
   min-width: 0;
+  flex: 1 1 auto;
+}
+
+.codex-chat-attachment-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--foreground);
 }
 
-.codex-chat-secondary-chip {
-  cursor: pointer;
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
-  color: color-mix(in srgb, var(--primary) 82%, var(--foreground));
+.codex-chat-attachment-remove {
+  display: inline-flex;
+  width: 1.375rem;
+  height: 1.375rem;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-radius: 9999px;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, transparent);
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
-.codex-chat-secondary-chip:hover:not(:disabled),
-.codex-chat-secondary-chip:focus-visible {
-  background: color-mix(in srgb, var(--primary) 14%, transparent);
+.codex-chat-attachment-remove:hover,
+.codex-chat-attachment-remove:focus-visible {
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: var(--warning);
 }
 
-.codex-chat-input-options {
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-  border-top: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
-  padding-top: 0.625rem;
-}
-
-.codex-chat-input-options-grid {
+.codex-chat-input-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 13rem);
-  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1.4fr) repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
+  padding: 0.5rem 0.625rem 0.625rem;
 }
 
 .codex-chat-input-field {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 0.3125rem;
+}
+
+.codex-chat-input-field--workspace {
+  grid-column: span 2;
 }
 
 .codex-chat-input-field-label {
-  font-size: 0.6875rem;
+  font-size: 0.625rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--muted-foreground) 88%, transparent);
 }
 
-.codex-chat-input-options-note,
+.codex-chat-input-field-control {
+  min-width: 0;
+}
+
+.codex-chat-input-attachment-row {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
+  border-radius: 0.625rem;
+  background: color-mix(in srgb, var(--background) 94%, transparent);
+  padding: 0.25rem 0.375rem;
+}
+
+.codex-chat-input-attachment-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.codex-chat-input-inline-note,
 .codex-chat-input-status {
   padding-inline: 0.125rem;
-  font-size: 0.6875rem;
+  font-size: 0.625rem;
   line-height: 1.35;
 }
 
-.codex-chat-input-options-note {
+.codex-chat-input-inline-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted-foreground);
 }
 
@@ -486,17 +488,17 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 0.75rem 0;
+  padding: 0.5rem 0 0.875rem;
 }
 
 .codex-transcript-row {
   width: 100%;
-  padding: 0.5rem clamp(0.75rem, 2vw, 1.25rem);
+  padding: 0.4375rem clamp(0.625rem, 1.8vw, 1rem);
 }
 
 .codex-chat-message-item {
   --chat-transcript-avatar-size: 2rem;
-  --chat-transcript-gap: 0.75rem;
+  --chat-transcript-gap: 0.625rem;
   max-width: 100%;
 }
 
@@ -506,11 +508,11 @@
 }
 
 .codex-chat-message-bubble-assistant {
-  width: min(100%, 44rem);
+  width: min(100%, 42rem);
 }
 
 .codex-chat-message-bubble-user {
-  max-width: min(100%, 36rem);
+  max-width: min(100%, 34rem);
 }
 
 .codex-chat-message-surface {
@@ -527,21 +529,6 @@
   min-width: 0;
 }
 
-.codex-chat-transcript-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.375rem 0.5rem;
-}
-
-.codex-chat-transcript-meta-label {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--muted-foreground) 88%, transparent);
-}
-
 .codex-chat-evidence-card {
   display: flex;
   flex-direction: column;
@@ -551,16 +538,23 @@
   background:
     radial-gradient(120% 100% at 100% 0%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 56%),
     color-mix(in srgb, var(--card) 96%, transparent);
-  padding: 0.875rem 1rem;
+  padding: 0.75rem 0.875rem;
   box-shadow: 0 10px 28px -24px color-mix(in srgb, var(--foreground) 18%, transparent);
+}
+
+.codex-chat-evidence-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .codex-chat-evidence-kicker {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.375rem;
+  height: 1.375rem;
   border-radius: 9999px;
   background: color-mix(in srgb, var(--muted) 46%, transparent);
   color: var(--foreground);
@@ -607,7 +601,7 @@
 
 .codex-chat-markdown-block {
   font-size: 0.75rem;
-  line-height: 1.6;
+  line-height: 1.55;
 }
 
 .codex-chat-user-markdown-block,
@@ -622,6 +616,43 @@
 
 .codex-chat-user-markdown-block li::marker {
   color: color-mix(in srgb, var(--primary-foreground) 72%, transparent);
+}
+
+.codex-chat-inline-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.codex-chat-inline-image {
+  width: min(100%, 11rem);
+  max-height: 9rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  object-fit: cover;
+}
+
+.codex-chat-inline-local-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.codex-chat-inline-local-attachment {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted) 24%, transparent);
+  padding: 0.1875rem 0.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  color: var(--muted-foreground);
 }
 
 .codex-sidebar-shell {
@@ -640,16 +671,16 @@
 .codex-sidebar-summary {
   margin: 0 0.25rem 0.5rem;
   border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
-  border-radius: 1rem;
+  border-radius: 0.875rem;
   background: color-mix(in srgb, var(--card) 72%, transparent);
-  padding: 0.75rem;
+  padding: 0.625rem;
   box-shadow: 0 18px 42px -38px color-mix(in srgb, var(--foreground) 24%, transparent);
 }
 
 .codex-sidebar-summary-copy {
-  margin-top: 0.375rem;
-  font-size: 0.6875rem;
-  line-height: 1.45;
+  margin-top: 0.25rem;
+  font-size: 0.625rem;
+  line-height: 1.4;
   color: color-mix(in srgb, var(--muted-foreground) 88%, transparent);
 }
 
@@ -678,16 +709,26 @@
 .codex-sidebar-thread-list {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: 0.1875rem;
 }
 
 .codex-sidebar-group-label {
-  padding: 0.75rem 0.75rem 0.25rem;
+  padding: 0.625rem 0.75rem 0.25rem;
   font-size: 0.625rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--muted-foreground) 56%, transparent);
+}
+
+@media (max-width: 1100px) {
+  .codex-chat-input-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .codex-chat-input-field--workspace {
+    grid-column: span 2;
+  }
 }
 
 @media (max-width: 640px) {
@@ -711,66 +752,61 @@
     max-height: min(38vh, 18rem);
     overflow-y: auto;
     padding-inline: 0.5rem;
-    padding-bottom: 0.125rem;
+    padding-bottom: 0.375rem;
   }
 
   .codex-chat-input.chat-input-container {
-    margin: 0.5rem;
-    margin-top: 0.375rem;
+    margin: 0.4375rem 0 0;
     margin-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
     border-radius: 0.875rem;
   }
 
   .codex-chat-input-primary-row {
-    gap: 0.5rem;
-    padding: 0.75rem 0.75rem 0;
+    gap: 0.4375rem;
+    padding: 0.5625rem 0.5625rem 0;
   }
 
   .codex-chat-input-textarea {
-    min-height: 3.5rem;
-    font-size: 0.8125rem;
+    min-height: 3.25rem;
+    font-size: 0.75rem;
   }
 
   .codex-chat-input-send-btn {
-    min-width: 2.5rem;
-    min-height: 2.5rem;
-    border-radius: 0.75rem;
+    min-width: 2.375rem;
+    min-height: 2.375rem;
+    border-radius: 0.6875rem;
   }
 
-  .codex-chat-input-meta {
-    padding: 0 0.75rem 0.75rem;
+  .codex-chat-attachment-strip {
+    padding: 0.5625rem 0.5625rem 0;
   }
 
-  .codex-chat-input-meta-rail {
-    gap: 0.375rem;
-    padding-top: 0.5rem;
+  .codex-chat-input-controls {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.4375rem;
+    padding: 0.5rem 0.5625rem 0.5625rem;
   }
 
-  .codex-chat-chip {
-    height: 1.75rem;
-    padding-inline: 0.625rem;
+  .codex-chat-input-field--workspace {
+    grid-column: span 2;
   }
 
-  .codex-chat-working-dir-chip {
-    max-width: min(9rem, 54vw);
+  .codex-chat-input-field--attachment {
+    grid-column: span 2;
   }
 
-  .codex-chat-input-options-grid {
-    grid-template-columns: minmax(0, 1fr);
+  .codex-chat-input-attachment-row {
+    padding-inline: 0.3125rem;
+  }
+
+  .codex-chat-input-inline-note {
+    font-size: 0.59375rem;
   }
 
   .codex-empty-state {
     justify-content: flex-start;
     padding: 1rem;
     padding-top: 1.25rem;
-  }
-
-  .codex-empty-hero {
-    margin-bottom: 1.25rem;
-  }
-
-  .codex-empty-suggestions {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .codex-empty-hint {
@@ -784,7 +820,7 @@
   }
 
   .codex-transcript-row {
-    padding: 0.4375rem 0.75rem;
+    padding: 0.375rem 0.625rem;
   }
 
   .codex-chat-message-item {
@@ -798,6 +834,22 @@
 
   .codex-chat-evidence-card {
     border-radius: 0.875rem;
-    padding: 0.75rem 0.875rem;
+    padding: 0.6875rem 0.75rem;
+  }
+
+  .codex-chat-inline-image {
+    width: min(100%, 9.5rem);
+    max-height: 8rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .codex-chat-input-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .codex-chat-input-field--workspace,
+  .codex-chat-input-field--attachment {
+    grid-column: auto;
   }
 }

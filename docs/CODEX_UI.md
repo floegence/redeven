@@ -19,6 +19,7 @@ High-level design:
 - Transport between Redeven Agent and Codex uses stdio (`codex app-server --listen stdio://`).
 - The bridge keeps `experimentalApi=false` and targets the stable app-server surface only.
 - `thread/start` only forwards explicitly user-supplied fields such as `cwd` and optional `model`; host Codex defaults stay owned by Codex itself.
+- The gateway also aggregates a Codex-only capability snapshot for the browser by combining `model/list`, `config/read`, and `configRequirements/read`.
 
 This keeps the upgrade boundary small:
 
@@ -49,6 +50,7 @@ Agent Settings -> Codex is diagnostic-only and currently shows:
 The current browser-facing contract is:
 
 - `GET /_redeven_proxy/api/codex/status`
+- `GET /_redeven_proxy/api/codex/capabilities`
 - `GET /_redeven_proxy/api/codex/threads`
 - `POST /_redeven_proxy/api/codex/threads`
 - `GET /_redeven_proxy/api/codex/threads/:id`
@@ -59,6 +61,26 @@ The current browser-facing contract is:
 
 The event stream endpoint is SSE and is used for live transcript / approval updates.
 
+`POST /_redeven_proxy/api/codex/threads` returns the normalized thread detail bootstrap, including `runtime_config` with the resolved app-server values for:
+
+- `model`
+- `model_provider`
+- `cwd`
+- `approval_policy`
+- `approvals_reviewer`
+- `sandbox_mode`
+- `reasoning_effort`
+
+`POST /_redeven_proxy/api/codex/threads/:id/turns` also accepts Codex-local sticky overrides:
+
+- `inputs`
+- `cwd`
+- `model`
+- `effort`
+- `approval_policy`
+- `sandbox_mode`
+- `approvals_reviewer`
+
 ## UI behavior
 
 Current Env App behavior:
@@ -66,13 +88,22 @@ Current Env App behavior:
 - Codex shows as a separate activity-bar item, not inside Flower.
 - If host `codex` is unavailable, the entry point still stays visible and the Codex surface shows inline host diagnostics instead of a separate disabled/settings-jump flow.
 - The Codex sidebar is a dedicated conversation navigator for Codex threads plus compact host/runtime context; it mirrors the same overall layout rhythm as Flower without reusing Flower-owned UI modules.
-- The main Codex page is a Codex-owned chat shell with a compact header, a Flower-aligned transcript lane for user/assistant/evidence rows, inline approvals, a Flower-aligned bottom dock, and a dedicated composer surface.
+- The main Codex page is a Codex-owned chat shell with a single-row compact header, a Flower-aligned transcript lane for user/assistant/evidence rows, inline approvals, a Flower-aligned bottom dock, and a dedicated composer surface.
 - The Codex surface uses floe-webapp cards/forms/tags for a consistent Env App look while keeping Codex-specific state and request handling separate.
 - The Codex transcript and send bar intentionally mirror Flower's message lane geometry, bubble cadence, and editor chrome through Codex-local components and selectors only; Flower files and selectors are not changed.
 - Codex UI structure stays isolated under `src/ui/codex/*`, including its own namespaced `codex.css` layer, so Flower selectors and component contracts do not change when Codex layout evolves.
-- New threads can override working directory and model before the first turn.
+- The sidebar keeps stable thread row height in both selected and unselected states; Codex-only active chrome never inserts extra row content that would shift Flower-like list rhythm.
+- The composer keeps the most useful Codex controls directly below the input instead of in a noisy chip rail:
+  - working directory
+  - image attachments
+  - model
+  - reasoning effort
+  - approval policy
+  - sandbox mode
+- Image attachments currently use browser-side data URLs and are sent as Codex `image` user inputs; this is intentionally limited to image files only.
+- New threads can override working directory, model, approval policy, and sandbox before the first turn, and later turns can keep those settings sticky through explicit `turn/start` overrides.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
-- Transcript rows project user prompts, Codex replies, command evidence, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets.
+- Transcript rows project user prompts, Codex replies, command evidence, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets, and redundant role badges / prompt ideas / refresh chrome are intentionally removed.
 - Env Settings -> Codex does not edit approval policy, sandbox, or model defaults; it only reports host capability and bridge status.
 
 ## Permissions
