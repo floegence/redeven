@@ -1,9 +1,10 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { Button } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitResolveRepoResponse } from '../protocol/redeven_v1';
+import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitRepoSummaryResponse, type GitResolveRepoResponse } from '../protocol/redeven_v1';
 import { FlowerIcon } from '../icons/FlowerIcon';
-import { changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench';
+import { changeSecondaryPath, describeGitHead, gitDiffEntryIdentity, shortGitHash, type GitDetachedSwitchTarget } from '../utils/gitWorkbench';
 import type { GitAskFlowerRequest } from '../utils/gitBrowserShortcuts';
 import { gitChangePathClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
@@ -34,8 +35,11 @@ const COMMIT_BODY_PREVIEW_CHARS = 160;
 export interface GitHistoryBrowserProps {
   repoInfo?: GitResolveRepoResponse | null;
   repoInfoLoading?: boolean;
+  repoSummary?: GitRepoSummaryResponse | null;
   currentPath: string;
   selectedCommitHash?: string;
+  switchDetachedBusy?: boolean;
+  onSwitchDetached?: (target: GitDetachedSwitchTarget) => void;
   onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'commit' }>) => void;
   class?: string;
 }
@@ -76,6 +80,8 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const repoAvailable = createMemo(() => Boolean(props.repoInfo?.available && props.repoInfo?.repoRootPath));
   const repoUnavailableReason = createMemo(() => String(props.repoInfo?.unavailableReason ?? '').trim());
   const commitHash = createMemo(() => String(props.selectedCommitHash ?? '').trim());
+  const headDisplay = createMemo(() => describeGitHead(props.repoSummary, props.repoInfo));
+  const currentHeadCommit = createMemo(() => String(props.repoSummary?.headCommit ?? props.repoInfo?.headCommit ?? '').trim());
   const commitBodyText = createMemo(() => normalizeCommitBody(commitDetail()));
   const hasExpandableCommitBody = createMemo(() => {
     const body = commitBodyText();
@@ -167,6 +173,12 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
               <Show when={commitDetail()} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Commit details are unavailable.</div>}>
                 {(detailAccessor) => {
                   const detail = detailAccessor();
+                  const alreadyDetachedHere = () => headDisplay().detached && currentHeadCommit() === detail.hash;
+                  const switchDetachedLabel = () => {
+                    if (props.switchDetachedBusy) return 'Switching...';
+                    if (alreadyDetachedHere()) return 'Already detached here';
+                    return 'Switch --detach here';
+                  };
                   return (
                     <div class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
                       <div class="space-y-3">
@@ -219,23 +231,43 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 </div>
                               </Show>
                             </GitLabelBlock>
-                            <Show when={props.onAskFlower}>
-                              <GitShortcutOrbDock class="shrink-0">
-                                <GitShortcutOrbButton
-                                  label="Ask Flower"
-                                  tone="flower"
-                                  icon={FlowerIcon}
-                                  onClick={() => props.onAskFlower?.({
-                                    kind: 'commit',
-                                    repoRootPath: String(props.repoInfo?.repoRootPath ?? '').trim(),
-                                    location: 'graph',
-                                    commit: detail,
-                                    files: commitFiles(),
+                            <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                              <Show when={props.onSwitchDetached}>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  class="rounded-md bg-background/80"
+                                  disabled={Boolean(props.switchDetachedBusy) || alreadyDetachedHere()}
+                                  onClick={() => props.onSwitchDetached?.({
+                                    commitHash: detail.hash,
+                                    shortHash: detail.shortHash || shortGitHash(detail.hash),
+                                    source: 'graph',
                                   })}
-                                />
-                              </GitShortcutOrbDock>
-                            </Show>
+                                >
+                                  {switchDetachedLabel()}
+                                </Button>
+                              </Show>
+                              <Show when={props.onAskFlower}>
+                                <GitShortcutOrbDock class="shrink-0">
+                                  <GitShortcutOrbButton
+                                    label="Ask Flower"
+                                    tone="flower"
+                                    icon={FlowerIcon}
+                                    onClick={() => props.onAskFlower?.({
+                                      kind: 'commit',
+                                      repoRootPath: String(props.repoInfo?.repoRootPath ?? '').trim(),
+                                      location: 'graph',
+                                      commit: detail,
+                                      files: commitFiles(),
+                                    })}
+                                  />
+                                </GitShortcutOrbDock>
+                              </Show>
+                            </div>
                           </div>
+                          <Show when={props.onSwitchDetached && alreadyDetachedHere()}>
+                            <GitSubtleNote>Repository is already detached at this commit.</GitSubtleNote>
+                          </Show>
                         </section>
 
                         <section class="rounded-md border border-border/70 bg-card px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]">

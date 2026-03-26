@@ -35,6 +35,7 @@ const (
 	TypeID_GIT_PREVIEW_MERGE     uint32 = 1117
 	TypeID_GIT_MERGE_BRANCH      uint32 = 1118
 	TypeID_GIT_FULL_CONTEXT_DIFF uint32 = 1119
+	TypeID_GIT_SWITCH_DETACHED   uint32 = 1120
 
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
@@ -373,6 +374,24 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			return nil, classifyRepoRPCError(err)
 		}
 		resp, err := s.checkoutBranch(ctx, repo, req.Name, req.FullName, req.Kind)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
+
+	accessgate.RegisterTyped[switchDetachedReq, switchDetachedResp](r, TypeID_GIT_SWITCH_DETACHED, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *switchDetachedReq) (*switchDetachedResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &switchDetachedReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.switchDetached(ctx, repo, req.TargetRef)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
 		}
@@ -838,6 +857,8 @@ func classifyGitMutationRPCError(err error) *rpc.Error {
 		return &rpc.Error{Code: 400, Message: "no staged changes to commit"}
 	case strings.Contains(lower, "target branch does not exist"):
 		return &rpc.Error{Code: 404, Message: "target branch does not exist"}
+	case strings.Contains(lower, "target commit does not exist"):
+		return &rpc.Error{Code: 404, Message: "target commit does not exist"}
 	case strings.Contains(lower, "remote branches cannot be deleted here"):
 		return &rpc.Error{Code: 400, Message: "remote branches cannot be deleted here"}
 	case strings.Contains(lower, "cannot delete the current branch"):
@@ -865,6 +886,8 @@ func classifyGitMutationRPCError(err error) *rpc.Error {
 	case strings.Contains(lower, "select a different branch to merge"):
 		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "current workspace must be clean before merging"):
+		return &rpc.Error{Code: 400, Message: message}
+	case strings.Contains(lower, "current workspace must be clean before switching to detached head"):
 		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "finish the current"):
 		return &rpc.Error{Code: 400, Message: message}

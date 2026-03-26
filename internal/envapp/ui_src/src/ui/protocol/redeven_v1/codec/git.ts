@@ -32,6 +32,8 @@ import type {
   GitListCommitsResponse,
   GitStageWorkspaceRequest,
   GitStageWorkspaceResponse,
+  GitSwitchDetachedRequest,
+  GitSwitchDetachedResponse,
   GitUnstageWorkspaceRequest,
   GitUnstageWorkspaceResponse,
   GitListWorkspaceChangesRequest,
@@ -83,6 +85,8 @@ import type {
   wire_git_list_commits_resp,
   wire_git_stage_workspace_req,
   wire_git_stage_workspace_resp,
+  wire_git_switch_detached_req,
+  wire_git_switch_detached_resp,
   wire_git_unstage_workspace_req,
   wire_git_unstage_workspace_resp,
   wire_git_list_workspace_changes_req,
@@ -460,6 +464,22 @@ export function fromWireGitCheckoutBranchResponse(resp: wire_git_checkout_branch
     repoRootPath: String(resp?.repo_root_path ?? ''),
     headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
     headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
+  };
+}
+
+export function toWireGitSwitchDetachedRequest(req: GitSwitchDetachedRequest): wire_git_switch_detached_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    target_ref: req.targetRef,
+  };
+}
+
+export function fromWireGitSwitchDetachedResponse(resp: wire_git_switch_detached_resp): GitSwitchDetachedResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
+    headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
+    detached: typeof resp?.detached === 'boolean' ? resp.detached : undefined,
   };
 }
 

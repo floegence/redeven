@@ -145,6 +145,18 @@ export type wire_git_checkout_branch_resp = {
   head_commit?: string;
 };
 
+export type wire_git_switch_detached_req = {
+  repo_root_path: string;
+  target_ref: string;
+};
+
+export type wire_git_switch_detached_resp = {
+  repo_root_path: string;
+  head_ref?: string;
+  head_commit?: string;
+  detached?: boolean;
+};
+
 export type wire_git_preview_delete_branch_req = {
   repo_root_path: string;
   name?: string;

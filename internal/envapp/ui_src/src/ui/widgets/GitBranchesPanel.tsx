@@ -13,9 +13,11 @@ import {
   branchStatusSummary,
   branchSubviewLabel,
   changeSecondaryPath,
+  describeGitHead,
   gitDiffEntryIdentity,
   pickDefaultWorkspaceViewSection,
   repoDisplayName,
+  shortGitHash,
   workspaceEntryKey,
   workspaceSectionLabel,
   workspaceViewSectionCount,
@@ -23,6 +25,7 @@ import {
   workspaceViewSectionLabel,
   resolveGitBranchWorktreePath,
   type GitBranchSubview,
+  type GitDetachedSwitchTarget,
   type GitWorkspaceViewSection,
 } from '../utils/gitWorkbench';
 import { resolveRovingTabTargetId } from '../utils/tabNavigation';
@@ -72,6 +75,7 @@ export interface GitBranchesPanelProps {
   selectedCommitHash?: string;
   onSelectCommit?: (hash: string) => void;
   onLoadMore?: () => void;
+  switchDetachedBusy?: boolean;
   checkoutBusy?: boolean;
   mergeBusy?: boolean;
   deleteBusy?: boolean;
@@ -90,6 +94,7 @@ export interface GitBranchesPanelProps {
   onCheckoutBranch?: (branch: GitBranchSummary) => void;
   onMergeBranch?: (branch: GitBranchSummary) => void;
   onDeleteBranch?: (branch: GitBranchSummary) => void;
+  onSwitchDetached?: (target: GitDetachedSwitchTarget) => void;
   onCloseMergeReview?: () => void;
   onRetryMergePreview?: (branch: GitBranchSummary) => void;
   onConfirmMergeBranch?: (branch: GitBranchSummary, options: GitMergeBranchDialogConfirmOptions) => void;
@@ -340,7 +345,7 @@ function summarizeCommitFileChanges(files: GitCommitFileSummary[]): { additions:
 
 function HistoryList(props: Pick<
   GitBranchesPanelProps,
-  'repoRootPath' | 'selectedBranch' | 'commits' | 'listLoading' | 'listRefreshing' | 'listLoadingMore' | 'listError' | 'hasMore' | 'selectedCommitHash' | 'onSelectCommit' | 'onLoadMore' | 'onAskFlower'
+  'repoRootPath' | 'repoSummary' | 'selectedBranch' | 'commits' | 'listLoading' | 'listRefreshing' | 'listLoadingMore' | 'listError' | 'hasMore' | 'selectedCommitHash' | 'switchDetachedBusy' | 'onSelectCommit' | 'onLoadMore' | 'onAskFlower' | 'onSwitchDetached'
 >) {
   const rpc = useRedevenRpc();
 
@@ -351,6 +356,8 @@ function HistoryList(props: Pick<
 
   const expandedCommitHash = createMemo(() => String(props.selectedCommitHash ?? '').trim());
   const repoRootPath = createMemo(() => String(props.repoRootPath ?? '').trim());
+  const headDisplay = createMemo(() => describeGitHead(props.repoSummary));
+  const currentHeadCommit = createMemo(() => String(props.repoSummary?.headCommit ?? '').trim());
   const historyContextKey = createMemo(() => {
     const repo = repoRootPath();
     const branchKey = String(props.selectedBranch?.fullName ?? props.selectedBranch?.name ?? '').trim();
@@ -465,6 +472,7 @@ function HistoryList(props: Pick<
                                 const detail = () => commitDetails()[commit.hash];
                                 const files = () => detail()?.files ?? [];
                                 const fileTotals = createMemo(() => summarizeCommitFileChanges(files()));
+                                const alreadyDetachedHere = () => headDisplay().detached && currentHeadCommit() === commit.hash;
                                 return (
                                   <>
                                     <tr
@@ -526,6 +534,22 @@ function HistoryList(props: Pick<
                                                         </div>
                                                       </div>
                                                       <div class="flex items-center gap-2">
+                                                        <Show when={props.onSwitchDetached}>
+                                                          <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            class="rounded-md bg-background/80"
+                                                            disabled={Boolean(props.switchDetachedBusy) || alreadyDetachedHere()}
+                                                            onClick={() => props.onSwitchDetached?.({
+                                                              commitHash: commit.hash,
+                                                              shortHash: commit.shortHash || shortGitHash(commit.hash),
+                                                              source: 'branch_history',
+                                                              branchName: props.selectedBranch ? branchDisplayName(props.selectedBranch) : undefined,
+                                                            })}
+                                                          >
+                                                            {props.switchDetachedBusy ? 'Switching...' : alreadyDetachedHere() ? 'Already detached here' : 'Switch --detach here'}
+                                                          </Button>
+                                                        </Show>
                                                         <Show when={props.onAskFlower}>
                                                           <GitShortcutOrbDock>
                                                             <GitShortcutOrbButton
@@ -547,6 +571,9 @@ function HistoryList(props: Pick<
                                                         <div class="text-[11px] text-muted-foreground">Select a file to inspect the diff.</div>
                                                       </div>
                                                     </div>
+                                                    <Show when={props.onSwitchDetached && alreadyDetachedHere()}>
+                                                      <GitSubtleNote>Repository is already detached at this commit.</GitSubtleNote>
+                                                    </Show>
 
                                                     <BranchCompareFilesTable
                                                       items={files()}
@@ -822,6 +849,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
   const branchSubview = () => props.selectedBranchSubview ?? 'status';
   const activeRepoRootPath = () => String(props.repoRootPath || props.repoSummary?.repoRootPath || '').trim();
+  const repoHeadDisplay = () => describeGitHead(props.repoSummary);
   const statusRepoRootPath = () => resolveGitBranchWorktreePath(props.selectedBranch, activeRepoRootPath());
   const branchDirectoryRequest = (): GitDirectoryShortcutRequest | null => {
     const path = statusRepoRootPath();
@@ -847,6 +875,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const mergeDisabled = () => Boolean(
     !mergeAvailable()
     || props.mergeBusy
+    || props.repoSummary?.detached
     || props.selectedBranch?.current
   );
   const mergeLabel = () => (props.mergeBusy ? 'Merging...' : 'Merge');
@@ -1241,6 +1270,12 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                         </div>
                       </div>
                     </div>
+
+                    <Show when={repoHeadDisplay().detached}>
+                      <div class="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-[11px] leading-relaxed text-warning">
+                        Repository HEAD is detached{repoHeadDisplay().detail ? ` at ${repoHeadDisplay().detail}` : ''}. Checkout a local branch to reattach HEAD before pull, push, or merge.
+                      </div>
+                    </Show>
                   </div>
                 </div>
               </div>
@@ -1258,6 +1293,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               >
                 <HistoryList
                   repoRootPath={activeRepoRootPath()}
+                  repoSummary={props.repoSummary}
                   selectedBranch={props.selectedBranch}
                   commits={props.commits}
                   listLoading={props.listLoading}
@@ -1266,8 +1302,10 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                   listError={props.listError}
                   hasMore={props.hasMore}
                   selectedCommitHash={props.selectedCommitHash}
+                  switchDetachedBusy={props.switchDetachedBusy}
                   onSelectCommit={props.onSelectCommit}
                   onLoadMore={props.onLoadMore}
+                  onSwitchDetached={props.onSwitchDetached}
                   onAskFlower={props.onAskFlower}
                 />
               </div>

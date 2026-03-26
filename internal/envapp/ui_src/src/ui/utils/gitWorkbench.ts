@@ -13,6 +13,20 @@ import type {
 export type GitWorkbenchSubview = 'overview' | 'changes' | 'branches' | 'history';
 export type GitBranchSubview = 'status' | 'history';
 export type GitWorkspaceViewSection = GitWorkspaceSection | 'changes';
+export type GitDetachedSwitchSource = 'graph' | 'branch_history';
+
+export type GitDetachedSwitchTarget = {
+  commitHash: string;
+  shortHash?: string;
+  source: GitDetachedSwitchSource;
+  branchName?: string;
+};
+
+export type GitHeadDisplay = {
+  label: string;
+  detail?: string;
+  detached: boolean;
+};
 
 export type GitWorkbenchSubviewItem = {
   id: GitWorkbenchSubview;
@@ -55,6 +69,30 @@ export function repoDisplayName(repoRootPath: string | null | undefined): string
   if (!pathValue || pathValue === '/') return 'Repository';
   const parts = pathValue.split('/').filter(Boolean);
   return parts[parts.length - 1] || 'Repository';
+}
+
+export function shortGitHash(hash: string | null | undefined, length = 8): string {
+  const value = String(hash ?? '').trim();
+  if (!value) return '';
+  return value.slice(0, Math.max(1, length));
+}
+
+export function describeGitHead(
+  primary?: Pick<GitRepoSummaryResponse, 'headRef' | 'headCommit' | 'detached'> | null,
+  fallback?: Pick<GitRepoSummaryResponse, 'headRef' | 'headCommit' | 'detached'> | Pick<{ headRef?: string; headCommit?: string }, 'headRef' | 'headCommit'> | null,
+): GitHeadDisplay {
+  const headRef = String(primary?.headRef ?? fallback?.headRef ?? '').trim();
+  const headCommit = String(primary?.headCommit ?? fallback?.headCommit ?? '').trim();
+  const detached = Boolean(primary?.detached)
+    || Boolean((fallback as { detached?: boolean } | null | undefined)?.detached)
+    || headRef === ''
+    || headRef === 'HEAD'
+    || headRef === '(detached)';
+  return {
+    label: detached ? 'Detached HEAD' : (headRef || 'HEAD'),
+    detail: detached ? shortGitHash(headCommit) || undefined : undefined,
+    detached,
+  };
 }
 
 export function workspaceSectionLabel(section: GitWorkspaceSection): string {

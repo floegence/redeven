@@ -6,7 +6,7 @@ import type {
   GitListWorkspaceChangesResponse,
   GitRepoSummaryResponse,
 } from '../protocol/redeven_v1';
-import { branchDisplayName, branchStatusSummary, compareHeadline, summarizeWorkspaceCount } from '../utils/gitWorkbench';
+import { branchDisplayName, branchStatusSummary, compareHeadline, describeGitHead, summarizeWorkspaceCount } from '../utils/gitWorkbench';
 import { gitCompareTone } from './GitChrome';
 import { GitSection, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
 
@@ -39,10 +39,11 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
               const localBranches = props.branches?.local?.length ?? 0;
               const remoteBranches = props.branches?.remote?.length ?? 0;
               const compareTone = () => gitCompareTone(props.compare?.targetAheadCount, props.compare?.targetBehindCount);
+              const headDisplay = describeGitHead(summary);
               const repoSignals = () => [
-                summary.headRef ? { label: 'Head', value: summary.headRef, tone: 'brand' as const } : null,
+                { label: 'Head', value: headDisplay.label, tone: headDisplay.detached ? 'warning' as const : 'brand' as const },
+                headDisplay.detail ? { label: 'Commit', value: headDisplay.detail, tone: 'neutral' as const } : null,
                 summary.upstreamRef ? { label: 'Upstream', value: summary.upstreamRef, tone: 'violet' as const } : null,
-                summary.detached ? { label: 'State', value: 'Detached HEAD', tone: 'warning' as const } : null,
                 summary.isWorktree
                   ? { label: 'Checkout', value: 'Linked worktree', tone: 'info' as const }
                   : { label: 'Checkout', value: 'Primary checkout', tone: 'neutral' as const },

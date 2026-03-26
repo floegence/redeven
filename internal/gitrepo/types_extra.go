@@ -95,6 +95,18 @@ type checkoutBranchResp struct {
 	HeadCommit   string `json:"head_commit,omitempty"`
 }
 
+type switchDetachedReq struct {
+	RepoRootPath string `json:"repo_root_path"`
+	TargetRef    string `json:"target_ref"`
+}
+
+type switchDetachedResp struct {
+	RepoRootPath string `json:"repo_root_path"`
+	HeadRef      string `json:"head_ref,omitempty"`
+	HeadCommit   string `json:"head_commit,omitempty"`
+	Detached     bool   `json:"detached,omitempty"`
+}
+
 type previewDeleteBranchReq struct {
 	RepoRootPath string `json:"repo_root_path"`
 	Name         string `json:"name,omitempty"`

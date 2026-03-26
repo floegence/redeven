@@ -45,8 +45,10 @@ import {
   findWorkspaceChangeByKey,
   isGitWorkspaceSection,
   recountWorkspaceSummary,
+  shortGitHash,
   summarizeWorkspaceCount,
   type GitBranchSubview,
+  type GitDetachedSwitchTarget,
   type GitWorkspaceViewSection,
   pickDefaultGitBranch,
   pickDefaultWorkspaceChange,
@@ -100,12 +102,13 @@ const GIT_SUBVIEW_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:git-subview:
 const SHOW_HIDDEN_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:show-hidden:';
 const SHOW_HIDDEN_DROPDOWN_ITEM_ID = 'show-hidden-files';
 
-type GitMutationScope = 'stage' | 'unstage' | 'commit' | 'fetch' | 'pull' | 'push' | 'checkout' | 'mergeBranch' | 'deleteBranch' | '';
+type GitMutationScope = 'stage' | 'unstage' | 'commit' | 'fetch' | 'pull' | 'push' | 'checkout' | 'switchDetached' | 'mergeBranch' | 'deleteBranch' | '';
 
 type GitMutationRepoResponse = {
   repoRootPath: string;
   headRef?: string;
   headCommit?: string;
+  detached?: boolean;
 };
 
 type GitLoadOptions = {
@@ -903,7 +906,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     scope: GitMutationScope,
     key: string,
     action: () => Promise<T>,
-    onSuccess: (result: T) => void,
+    onSuccess: (result: T) => void | Promise<void>,
   ) => {
     if (!protocol.client()) {
       notification.error('Git unavailable', 'Connection is not ready.');
@@ -913,7 +916,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitMutationKey(key);
     try {
       const result = await action();
-      onSuccess(result);
+      await onSuccess(result);
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err ?? 'Request failed.');
@@ -931,6 +934,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                 ? 'Push failed'
                 : scope === 'checkout'
                   ? 'Checkout failed'
+                  : scope === 'switchDetached'
+                    ? 'Detach failed'
                   : scope === 'mergeBranch'
                     ? 'Merge failed'
                   : scope === 'deleteBranch'
@@ -1084,6 +1089,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         repoRootPath: repoRootPath || prev.repoRootPath,
         headRef: nextHeadRef ?? prev.headRef,
         headCommit: nextHeadCommit ?? prev.headCommit,
+        detached: typeof resp.detached === 'boolean' ? resp.detached : prev.detached,
       }
       : prev));
   };
@@ -1182,6 +1188,28 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       (resp) => {
         void refreshGitStateAfterMutation('checkout', resp);
         notification.success('Checked out', `${resp.headRef || branch.name || 'branch'} is now active.`);
+      },
+    );
+  };
+
+  const handleSwitchDetached = async (target: GitDetachedSwitchTarget) => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const commitHash = String(target.commitHash ?? '').trim();
+    if (!repoRootPath || !commitHash) return;
+    if (target.source === 'branch_history') {
+      setGitSubview('history');
+    }
+    setSelectedCommitHash(commitHash);
+    await runGitMutation(
+      'switchDetached',
+      commitHash,
+      () => rpc.git.switchDetached({
+        repoRootPath,
+        targetRef: commitHash,
+      }),
+      async (resp) => {
+        await refreshGitStateAfterMutation('switchDetached', resp);
+        notification.success('Detached HEAD', `Detached HEAD at ${shortGitHash(resp.headCommit || commitHash) || target.shortHash || 'selected commit'}.`);
       },
     );
   };
@@ -2737,6 +2765,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       selectedCommitHash={selectedCommitHash()}
                       onSelectCommit={selectGitCommit}
                       onLoadMore={() => void loadGitCommits(false)}
+                      switchDetachedBusy={gitMutationScope() === 'switchDetached'}
                       commitMessage={gitCommitMessage()}
                       commitBusy={gitMutationScope() === 'commit'}
                       onCommitMessageChange={setGitCommitMessage}
@@ -2763,6 +2792,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onPull={() => { void handlePullRepo(); }}
                       onPush={() => { void handlePushRepo(); }}
                       onCheckoutBranch={(branch) => { void handleCheckoutBranch(branch); }}
+                      onSwitchDetached={(target) => { void handleSwitchDetached(target); }}
                       onMergeBranch={(branch) => { void handleMergeBranch(branch); }}
                       onDeleteBranch={(branch) => { void handleDeleteBranch(branch); }}
                       onCloseMergeReview={closeGitMergeReview}
