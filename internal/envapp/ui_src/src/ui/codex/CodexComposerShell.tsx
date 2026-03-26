@@ -30,6 +30,7 @@ export function CodexComposerShell(props: {
   activeStatus: string;
   workspaceLabel: string;
   modelLabel: string;
+  sessionConfigEditable: boolean;
   composerText: string;
   submitting: boolean;
   hostAvailable: boolean;
@@ -72,6 +73,11 @@ export function CodexComposerShell(props: {
     scheduleAdjustHeight();
   });
 
+  createEffect(() => {
+    if (props.sessionConfigEditable) return;
+    setShowOptions(false);
+  });
+
   const statusNote = () => {
     if (!props.hostAvailable) {
       return 'Install `codex` on the host to enable sending from this editor.';
@@ -84,7 +90,11 @@ export function CodexComposerShell(props: {
   const workspaceChipLabel = () => compactPathLabel(workspaceValue(), 'Working dir');
   const modelChipLabel = () => modelValue() || 'Host default';
   const sendLabel = () => (props.activeThreadID ? 'Send to Codex' : 'Create chat and send');
-  const showOptionsButton = () => !workspaceValue() && !modelValue();
+  const showOptionsButton = () => props.sessionConfigEditable && !workspaceValue() && !modelValue();
+  const toggleOptions = () => {
+    if (!props.sessionConfigEditable) return;
+    setShowOptions((value) => !value);
+  };
   const shouldShowStatusChip = () => {
     const value = String(props.activeStatus ?? '').trim().toLowerCase();
     return value.length > 0 && value !== 'idle';
@@ -142,34 +152,54 @@ export function CodexComposerShell(props: {
         <div class="codex-chat-input-meta">
           <div class="codex-chat-input-meta-rail" role="toolbar" aria-label="Codex input secondary actions">
             <Show when={workspaceValue()}>
-              <button
-                type="button"
-                class="codex-chat-chip codex-chat-chip-actionable codex-chat-working-dir-chip"
-                onClick={() => setShowOptions((value) => !value)}
-                title={workspaceValue()}
+              <Show
+                when={props.sessionConfigEditable}
+                fallback={
+                  <span class="codex-chat-chip codex-chat-working-dir-chip" title={workspaceValue()}>
+                    <Folder class="h-3.5 w-3.5" />
+                    <span class="codex-chat-working-dir-chip-label">{workspaceChipLabel()}</span>
+                  </span>
+                }
               >
-                <Folder class="h-3.5 w-3.5" />
-                <span class="codex-chat-working-dir-chip-label">{workspaceChipLabel()}</span>
-              </button>
+                <button
+                  type="button"
+                  class="codex-chat-chip codex-chat-chip-actionable codex-chat-working-dir-chip"
+                  onClick={toggleOptions}
+                  title={workspaceValue()}
+                >
+                  <Folder class="h-3.5 w-3.5" />
+                  <span class="codex-chat-working-dir-chip-label">{workspaceChipLabel()}</span>
+                </button>
+              </Show>
             </Show>
 
             <Show when={modelValue()}>
-              <button
-                type="button"
-                class="codex-chat-chip codex-chat-chip-actionable"
-                onClick={() => setShowOptions((value) => !value)}
-                title={modelValue()}
+              <Show
+                when={props.sessionConfigEditable}
+                fallback={
+                  <span class="codex-chat-chip" title={modelValue()}>
+                    <Activity class="h-3.5 w-3.5" />
+                    <span class="truncate">{modelChipLabel()}</span>
+                  </span>
+                }
               >
-                <Activity class="h-3.5 w-3.5" />
-                <span class="truncate">{modelChipLabel()}</span>
-              </button>
+                <button
+                  type="button"
+                  class="codex-chat-chip codex-chat-chip-actionable"
+                  onClick={toggleOptions}
+                  title={modelValue()}
+                >
+                  <Activity class="h-3.5 w-3.5" />
+                  <span class="truncate">{modelChipLabel()}</span>
+                </button>
+              </Show>
             </Show>
 
             <Show when={showOptionsButton()}>
               <button
                 type="button"
                 class="codex-chat-chip codex-chat-chip-actionable"
-                onClick={() => setShowOptions((value) => !value)}
+                onClick={toggleOptions}
                 aria-expanded={showOptions()}
               >
                 Options
@@ -222,7 +252,7 @@ export function CodexComposerShell(props: {
             </div>
           </Show>
 
-          <Show when={showOptions()}>
+          <Show when={showOptions() && props.sessionConfigEditable}>
             <div class="codex-chat-input-options">
               <div class="codex-chat-input-options-grid">
                 <label class="codex-chat-input-field">
@@ -245,7 +275,7 @@ export function CodexComposerShell(props: {
                 </label>
               </div>
               <div class="codex-chat-input-options-note">
-                Codex runs directly on the host. Keep prompts focused, then review output before applying edits.
+                These settings apply when creating a new Codex thread on the host.
               </div>
             </div>
           </Show>

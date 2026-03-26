@@ -41,26 +41,6 @@ describe('buildCodexWorkbenchSummary', () => {
           item_id: 'item_1',
         },
       ],
-      transcriptItems: [
-        {
-          id: 'item_user',
-          type: 'userMessage',
-          text: 'Review the latest shell changes',
-          order: 1,
-        },
-        {
-          id: 'item_agent',
-          type: 'agentMessage',
-          text: 'I am reviewing the shell changes now.',
-          order: 2,
-        },
-        {
-          id: 'item_file',
-          type: 'fileChange',
-          changes: [{ path: 'src/ui/codex/CodexPageShell.tsx', kind: 'update' }],
-          order: 3,
-        },
-      ],
     });
 
     expect(summary.threadTitle).toBe('Workbench alignment');
@@ -69,12 +49,6 @@ describe('buildCodexWorkbenchSummary', () => {
     expect(summary.statusLabel).toBe('running');
     expect(summary.statusFlags).toEqual(['finalizing']);
     expect(summary.pendingRequestCount).toBe(1);
-    expect(summary.metrics.map((item) => item.label)).toEqual(
-      expect.arrayContaining(['Files', 'Responses', 'Pending']),
-    );
-    expect(summary.metrics.map((item) => item.label)).not.toEqual(
-      expect.arrayContaining(['Workspace', 'Model']),
-    );
   });
 
   it('prefers the real working directory over thread path metadata', () => {
@@ -102,11 +76,10 @@ describe('buildCodexWorkbenchSummary', () => {
       activeStatus: 'running',
       activeStatusFlags: [],
       pendingRequests: [],
-      transcriptItems: [],
     });
 
     expect(summary.workspaceLabel).toBe('/workspace/codex-ui');
-    expect(summary.metrics).toEqual([]);
+    expect(summary.modelLabel).toBe('gpt-5.4');
   });
 });
 

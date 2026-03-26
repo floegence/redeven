@@ -1,5 +1,5 @@
 import { Show } from 'solid-js';
-import { Refresh, Trash } from '@floegence/floe-webapp-core/icons';
+import { Trash } from '@floegence/floe-webapp-core/icons';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { CodexIcon } from '../icons/CodexIcon';
@@ -8,18 +8,13 @@ import type { CodexWorkbenchSummary } from './viewModel';
 
 export function CodexHeaderBar(props: {
   summary: CodexWorkbenchSummary;
-  refreshing: boolean;
-  canRefresh: boolean;
   canArchive: boolean;
-  onRefresh: () => void;
   onArchive: () => void;
 }) {
   const shouldShowStatusTag = () => {
     const value = String(props.summary.statusLabel ?? '').trim().toLowerCase();
     return value.length > 0 && value !== 'idle' && value !== 'ready';
   };
-
-  const refreshLabel = () => (props.refreshing ? 'Refreshing Codex thread' : 'Refresh Codex thread');
   const compactWorkspace = () => compactPathLabel(props.summary.workspaceLabel, 'Workspace');
 
   return (
@@ -58,17 +53,6 @@ export function CodexHeaderBar(props: {
               {props.summary.statusFlags[0]}
             </Tag>
           </Show>
-          <Button
-            size="icon"
-            variant="ghost"
-            class="codex-page-header-action"
-            onClick={props.onRefresh}
-            disabled={!props.canRefresh}
-            aria-label={refreshLabel()}
-            title={refreshLabel()}
-          >
-            <Refresh class={props.refreshing ? 'h-3.5 w-3.5 animate-spin' : 'h-3.5 w-3.5'} />
-          </Button>
           <Button
             size="icon"
             variant="ghost"

@@ -1,4 +1,4 @@
-import { For, Show, createMemo } from 'solid-js';
+import { Show, createMemo } from 'solid-js';
 
 import { useCodexContext } from './CodexProvider';
 import { CodexComposerShell } from './CodexComposerShell';
@@ -6,25 +6,7 @@ import { CodexHeaderBar } from './CodexHeaderBar';
 import { CodexPendingRequestsPanel } from './CodexPendingRequestsPanel';
 import { CodexStatusBannerStack } from './CodexStatusBannerStack';
 import { CodexTranscript } from './CodexTranscript';
-import { buildCodexWorkbenchSummary, type CodexWorkbenchMetric } from './viewModel';
-
-function ToolbarChip(props: { metric: CodexWorkbenchMetric }) {
-  return (
-    <span
-      class={`codex-page-chip codex-page-chip--${props.metric.tone}`}
-      title={props.metric.title || props.metric.value}
-    >
-      <span class="codex-page-chip-label">{props.metric.label}</span>
-      <span
-        class={`codex-page-chip-value ${
-          props.metric.id === 'workspace' ? 'codex-page-chip-value--path' : ''
-        }`}
-      >
-        {props.metric.value}
-      </span>
-    </span>
-  );
-}
+import { buildCodexWorkbenchSummary } from './viewModel';
 
 export function CodexPageShell() {
   const codex = useCodexContext();
@@ -37,7 +19,6 @@ export function CodexPageShell() {
     activeStatus: codex.activeStatus(),
     activeStatusFlags: codex.activeStatusFlags(),
     pendingRequests: codex.pendingRequests(),
-    transcriptItems: codex.transcriptItems(),
   }));
 
   const showBannerStack = createMemo(() =>
@@ -59,10 +40,7 @@ export function CodexPageShell() {
     <div data-codex-surface="page-shell" class="codex-page-shell">
       <CodexHeaderBar
         summary={summary()}
-        refreshing={codex.refreshingThread()}
-        canRefresh={Boolean(codex.activeThreadID()) && !codex.refreshingThread()}
         canArchive={Boolean(codex.activeThreadID())}
-        onRefresh={() => void codex.refreshActiveThread()}
         onArchive={() => void codex.archiveActiveThread()}
       />
 
@@ -94,18 +72,6 @@ export function CodexPageShell() {
         </div>
 
         <div class="codex-page-bottom-dock">
-          <Show when={summary().metrics.length > 0}>
-            <div class="codex-page-toolbar">
-              <div class="codex-page-toolbar-main">
-                <div class="codex-page-toolbar-lane">
-                  <For each={summary().metrics}>
-                    {(metric) => <ToolbarChip metric={metric} />}
-                  </For>
-                </div>
-              </div>
-            </div>
-          </Show>
-
           <div class="codex-page-bottom-support">
             <Show when={codex.pendingRequests().length > 0}>
               <CodexPendingRequestsPanel
@@ -119,8 +85,9 @@ export function CodexPageShell() {
             <CodexComposerShell
               activeThreadID={codex.activeThreadID()}
               activeStatus={codex.activeStatus()}
-              workspaceLabel={codex.workingDirDraft()}
-              modelLabel={codex.modelDraft()}
+              workspaceLabel={summary().workspaceLabel}
+              modelLabel={summary().modelLabel}
+              sessionConfigEditable={!codex.activeThreadID()}
               composerText={codex.composerText()}
               submitting={codex.submitting()}
               hostAvailable={summary().hostReady}
