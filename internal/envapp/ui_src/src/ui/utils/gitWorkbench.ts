@@ -14,6 +14,14 @@ export type GitWorkbenchSubview = 'overview' | 'changes' | 'branches' | 'history
 export type GitBranchSubview = 'status' | 'history';
 export type GitWorkspaceViewSection = GitWorkspaceSection | 'changes';
 export type GitDetachedSwitchSource = 'graph' | 'branch_history';
+export type GitStashWindowTab = 'save' | 'stashes';
+export type GitStashWindowSource = 'header' | 'changes' | 'branch_status' | 'merge_blocker';
+
+export type GitStashWindowRequest = {
+  tab?: GitStashWindowTab;
+  repoRootPath?: string;
+  source?: GitStashWindowSource;
+};
 
 export type GitDetachedSwitchTarget = {
   commitHash: string;

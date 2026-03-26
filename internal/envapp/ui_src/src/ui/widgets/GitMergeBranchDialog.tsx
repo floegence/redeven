@@ -2,7 +2,7 @@ import { For, Show, createSignal } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitBranchSummary, GitCommitFileSummary, GitPreviewMergeBranchResponse, GitWorkspaceSummary } from '../protocol/redeven_v1';
-import { branchDisplayName, changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench';
+import { branchDisplayName, changeSecondaryPath, gitDiffEntryIdentity, type GitStashWindowRequest } from '../utils/gitWorkbench';
 import { gitChangePathClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import {
@@ -38,6 +38,7 @@ export interface GitMergeBranchDialogProps {
   state?: GitMergeBranchDialogState;
   onClose: () => void;
   onRetryPreview?: (branch: GitBranchSummary) => void;
+  onOpenStash?: (request: GitStashWindowRequest) => void;
   onConfirm?: (branch: GitBranchSummary, options: GitMergeBranchDialogConfirmOptions) => void;
 }
 
@@ -116,7 +117,13 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
   const merging = () => state() === 'merging';
   const currentRef = () => String(preview()?.currentRef ?? '').trim() || 'current branch';
   const sourceName = () => String(preview()?.sourceName ?? '').trim() || branchName();
-  const blockingReason = () => String(preview()?.blockingReason ?? '').trim();
+  const blockingReason = () => String(preview()?.blockingReason ?? preview()?.blocking?.reason ?? '').trim();
+  const stashBlockerPath = () => String(preview()?.blocking?.workspacePath ?? '').trim();
+  const canOpenStashShortcut = () => Boolean(
+    props.onOpenStash
+    && preview()?.blocking?.canStashWorkspace
+    && stashBlockerPath()
+  );
   const files = () => preview()?.files ?? [];
   const selectedKey = () => gitDiffEntryIdentity(diffDialogItem());
   const canConfirm = () => {
@@ -245,7 +252,30 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                       </GitSubtleNote>
                     </Show>
                     <Show when={blockingReason()}>
-                      <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{blockingReason()}</GitSubtleNote>
+                      <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                          <span>{blockingReason()}</span>
+                          <Show when={canOpenStashShortcut()}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              class="rounded-md"
+                              disabled={loading() || merging()}
+                              onClick={() => {
+                                const repoRootPath = stashBlockerPath();
+                                if (!repoRootPath) return;
+                                props.onOpenStash?.({
+                                  tab: 'save',
+                                  repoRootPath,
+                                  source: 'merge_blocker',
+                                });
+                              }}
+                            >
+                              Stash current changes
+                            </Button>
+                          </Show>
+                        </div>
+                      </GitSubtleNote>
                     </Show>
                     <Show when={props.actionError}>
                       <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{props.actionError}</GitSubtleNote>

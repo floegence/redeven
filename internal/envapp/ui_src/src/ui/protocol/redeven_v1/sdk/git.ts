@@ -19,6 +19,15 @@ export type GitWorkspaceSummary = {
   conflictedCount?: number;
 };
 
+export type GitMutationBlocker = {
+  kind?: string;
+  reason?: string;
+  workspacePath?: string;
+  workspaceSummary: GitWorkspaceSummary;
+  operation?: string;
+  canStashWorkspace?: boolean;
+};
+
 export type GitRepoSummaryRequest = {
   repoRootPath: string;
 };
@@ -74,6 +83,110 @@ export type GitListWorkspaceChangesResponse = {
   unstaged: GitWorkspaceChange[];
   untracked: GitWorkspaceChange[];
   conflicted: GitWorkspaceChange[];
+};
+
+export type GitListStashesRequest = {
+  repoRootPath: string;
+};
+
+export type GitStashSummary = {
+  id: string;
+  ref?: string;
+  message?: string;
+  branchName?: string;
+  headRef?: string;
+  headCommit?: string;
+  createdAtUnixMs?: number;
+  fileCount?: number;
+  hasUntracked?: boolean;
+};
+
+export type GitListStashesResponse = {
+  repoRootPath: string;
+  stashes: GitStashSummary[];
+};
+
+export type GitGetStashDetailRequest = {
+  repoRootPath: string;
+  id: string;
+};
+
+export type GitStashDetail = GitStashSummary & {
+  files: GitCommitFileSummary[];
+};
+
+export type GitGetStashDetailResponse = {
+  repoRootPath: string;
+  stash: GitStashDetail;
+};
+
+export type GitSaveStashRequest = {
+  repoRootPath: string;
+  message?: string;
+  includeUntracked?: boolean;
+  keepIndex?: boolean;
+};
+
+export type GitSaveStashResponse = {
+  repoRootPath: string;
+  headRef?: string;
+  headCommit?: string;
+  created?: GitStashSummary;
+};
+
+export type GitPreviewApplyStashRequest = {
+  repoRootPath: string;
+  id: string;
+  removeAfterApply?: boolean;
+};
+
+export type GitPreviewApplyStashResponse = {
+  repoRootPath: string;
+  headRef?: string;
+  headCommit?: string;
+  stash?: GitStashSummary;
+  removeAfterApply?: boolean;
+  blockingReason?: string;
+  blocking?: GitMutationBlocker;
+  planFingerprint?: string;
+};
+
+export type GitApplyStashRequest = {
+  repoRootPath: string;
+  id: string;
+  removeAfterApply?: boolean;
+  planFingerprint?: string;
+};
+
+export type GitApplyStashResponse = {
+  repoRootPath: string;
+  headRef?: string;
+  headCommit?: string;
+};
+
+export type GitPreviewDropStashRequest = {
+  repoRootPath: string;
+  id: string;
+};
+
+export type GitPreviewDropStashResponse = {
+  repoRootPath: string;
+  headRef?: string;
+  headCommit?: string;
+  stash?: GitStashSummary;
+  planFingerprint?: string;
+};
+
+export type GitDropStashRequest = {
+  repoRootPath: string;
+  id: string;
+  planFingerprint?: string;
+};
+
+export type GitDropStashResponse = {
+  repoRootPath: string;
+  headRef?: string;
+  headCommit?: string;
 };
 
 export type GitStageWorkspaceRequest = {
@@ -237,6 +350,7 @@ export type GitPreviewMergeBranchResponse = {
   sourceBehindCount?: number;
   outcome?: 'blocked' | 'up_to_date' | 'fast_forward' | 'merge_commit' | string;
   blockingReason?: string;
+  blocking?: GitMutationBlocker;
   planFingerprint?: string;
   files: GitCommitFileSummary[];
   linkedWorktree?: GitLinkedWorktreeSnapshot;

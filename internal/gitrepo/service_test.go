@@ -281,6 +281,219 @@ func TestGetFullContextDiff_CommitRenamePreservesRenameMetadata(t *testing.T) {
 	}
 }
 
+func TestStashListDetailApplyAndDropFlow(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	saveResp, err := svc.saveStash(context.Background(), repo, saveStashReq{
+		RepoRootPath:     fixture.Root,
+		Message:          "stash flow",
+		IncludeUntracked: true,
+	})
+	if err != nil {
+		t.Fatalf("saveStash: %v", err)
+	}
+	if saveResp.Created == nil || strings.TrimSpace(saveResp.Created.ID) == "" {
+		t.Fatalf("saveStash created=%+v, want populated stash summary", saveResp.Created)
+	}
+
+	listResp, err := svc.listStashes(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("listStashes: %v", err)
+	}
+	if len(listResp.Stashes) != 1 {
+		t.Fatalf("stash count=%d, want 1", len(listResp.Stashes))
+	}
+	if listResp.Stashes[0].ID != saveResp.Created.ID {
+		t.Fatalf("stash ID=%q, want %q", listResp.Stashes[0].ID, saveResp.Created.ID)
+	}
+	if !listResp.Stashes[0].HasUntracked {
+		t.Fatalf("expected saved stash to include untracked files: %+v", listResp.Stashes[0])
+	}
+
+	detailResp, err := svc.getStashDetail(context.Background(), repo, saveResp.Created.ID)
+	if err != nil {
+		t.Fatalf("getStashDetail: %v", err)
+	}
+	foundTracked := false
+	foundUntracked := false
+	for _, file := range detailResp.Stash.Files {
+		if file.Path == workspace.TrackedPath || file.NewPath == workspace.TrackedPath {
+			foundTracked = true
+		}
+		if file.Path == workspace.UntrackedPath || file.NewPath == workspace.UntrackedPath {
+			foundUntracked = true
+		}
+	}
+	if !foundTracked || !foundUntracked {
+		t.Fatalf("stash detail files missing expected paths: %+v", detailResp.Stash.Files)
+	}
+
+	previewApplyResp, err := svc.previewApplyStash(context.Background(), repo, saveResp.Created.ID, false)
+	if err != nil {
+		t.Fatalf("previewApplyStash: %v", err)
+	}
+	if previewApplyResp.Blocking != nil || strings.TrimSpace(previewApplyResp.BlockingReason) != "" {
+		t.Fatalf("previewApplyStash unexpectedly blocked: %+v", previewApplyResp)
+	}
+	if strings.TrimSpace(previewApplyResp.PlanFingerprint) == "" {
+		t.Fatalf("expected apply preview fingerprint")
+	}
+
+	if _, err := svc.applyStash(context.Background(), repo, saveResp.Created.ID, false, previewApplyResp.PlanFingerprint); err != nil {
+		t.Fatalf("applyStash: %v", err)
+	}
+
+	status, err := svc.readWorkspaceStatus(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("readWorkspaceStatus: %v", err)
+	}
+	summary := status.Summary()
+	if summary.StagedCount != 1 || summary.UnstagedCount != 1 || summary.UntrackedCount != 1 {
+		t.Fatalf("workspace summary after apply=%+v, want staged=1 unstaged=1 untracked=1", summary)
+	}
+
+	previewDropResp, err := svc.previewDropStash(context.Background(), repo, saveResp.Created.ID)
+	if err != nil {
+		t.Fatalf("previewDropStash: %v", err)
+	}
+	if strings.TrimSpace(previewDropResp.PlanFingerprint) == "" {
+		t.Fatalf("expected drop preview fingerprint")
+	}
+	if _, err := svc.dropStash(context.Background(), repo, saveResp.Created.ID, previewDropResp.PlanFingerprint); err != nil {
+		t.Fatalf("dropStash: %v", err)
+	}
+
+	listResp, err = svc.listStashes(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("listStashes(after drop): %v", err)
+	}
+	if len(listResp.Stashes) != 0 {
+		t.Fatalf("stash count after drop=%d, want 0", len(listResp.Stashes))
+	}
+}
+
+func TestPreviewApplyStash_BlocksDirtyWorkspace(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	createWorkspaceChangesFixture(t, fixture.Root)
+	saveResp, err := svc.saveStash(context.Background(), repo, saveStashReq{
+		RepoRootPath:     fixture.Root,
+		IncludeUntracked: true,
+	})
+	if err != nil {
+		t.Fatalf("saveStash: %v", err)
+	}
+	if saveResp.Created == nil {
+		t.Fatalf("saveStash created=nil")
+	}
+
+	writeFixtureFile(t, fixture.Root, "src/main.txt", []byte("dirty workspace\n"))
+
+	previewResp, err := svc.previewApplyStash(context.Background(), repo, saveResp.Created.ID, false)
+	if err != nil {
+		t.Fatalf("previewApplyStash: %v", err)
+	}
+	if previewResp.Blocking == nil {
+		t.Fatalf("expected dirty workspace blocker")
+	}
+	if previewResp.Blocking.Kind != gitMutationBlockerKindWorkspaceDirty {
+		t.Fatalf("blocking kind=%q, want %q", previewResp.Blocking.Kind, gitMutationBlockerKindWorkspaceDirty)
+	}
+	if mustEvalPath(t, previewResp.Blocking.WorkspacePath) != mustEvalPath(t, fixture.Root) {
+		t.Fatalf("blocking workspace_path=%q, want %q", previewResp.Blocking.WorkspacePath, fixture.Root)
+	}
+	if previewResp.Blocking.CanStashWorkspace {
+		t.Fatalf("dirty apply blocker should not offer re-stashing: %+v", previewResp.Blocking)
+	}
+	if !strings.Contains(previewResp.BlockingReason, "Current workspace must be clean before applying a stash") {
+		t.Fatalf("blocking_reason=%q, want apply blocker message", previewResp.BlockingReason)
+	}
+}
+
+func TestApplyStash_RejectsStaleFingerprint(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	createWorkspaceChangesFixture(t, fixture.Root)
+	saveResp, err := svc.saveStash(context.Background(), repo, saveStashReq{
+		RepoRootPath:     fixture.Root,
+		IncludeUntracked: true,
+	})
+	if err != nil {
+		t.Fatalf("saveStash: %v", err)
+	}
+	if saveResp.Created == nil {
+		t.Fatalf("saveStash created=nil")
+	}
+
+	previewResp, err := svc.previewApplyStash(context.Background(), repo, saveResp.Created.ID, false)
+	if err != nil {
+		t.Fatalf("previewApplyStash: %v", err)
+	}
+
+	writeFixtureFile(t, fixture.Root, "late.txt", []byte("late change\n"))
+
+	_, err = svc.applyStash(context.Background(), repo, saveResp.Created.ID, false, previewResp.PlanFingerprint)
+	if err == nil || !strings.Contains(err.Error(), "stash apply plan is stale") {
+		t.Fatalf("applyStash stale error=%v, want stale fingerprint failure", err)
+	}
+}
+
+func TestDropStash_RejectsStaleFingerprint(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	createWorkspaceChangesFixture(t, fixture.Root)
+	saveResp, err := svc.saveStash(context.Background(), repo, saveStashReq{
+		RepoRootPath: fixture.Root,
+	})
+	if err != nil {
+		t.Fatalf("saveStash: %v", err)
+	}
+	if saveResp.Created == nil {
+		t.Fatalf("saveStash created=nil")
+	}
+
+	previewResp, err := svc.previewDropStash(context.Background(), repo, saveResp.Created.ID)
+	if err != nil {
+		t.Fatalf("previewDropStash: %v", err)
+	}
+
+	runGitFixture(t, fixture.Root, "commit", "--allow-empty", "-m", "advance head")
+	updatedRepo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo(updated): %v", err)
+	}
+
+	_, err = svc.dropStash(context.Background(), updatedRepo, saveResp.Created.ID, previewResp.PlanFingerprint)
+	if err == nil || !strings.Contains(err.Error(), "stash drop plan is stale") {
+		t.Fatalf("dropStash stale error=%v, want stale fingerprint failure", err)
+	}
+}
+
 func TestGetFullContextDiff_WorkspaceUnstagedIncludesFullFileContext(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)

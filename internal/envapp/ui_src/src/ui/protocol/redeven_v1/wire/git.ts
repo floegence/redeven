@@ -19,6 +19,15 @@ export type wire_git_workspace_summary = {
   conflicted_count?: number;
 };
 
+export type wire_git_mutation_blocker = {
+  kind?: string;
+  reason?: string;
+  workspace_path?: string;
+  workspace_summary: wire_git_workspace_summary;
+  operation?: string;
+  can_stash_workspace?: boolean;
+};
+
 export type wire_git_get_repo_summary_req = {
   repo_root_path: string;
 };
@@ -63,6 +72,110 @@ export type wire_git_list_workspace_changes_resp = {
   unstaged: wire_git_workspace_change[];
   untracked: wire_git_workspace_change[];
   conflicted: wire_git_workspace_change[];
+};
+
+export type wire_git_list_stashes_req = {
+  repo_root_path: string;
+};
+
+export type wire_git_stash_summary = {
+  id: string;
+  ref?: string;
+  message?: string;
+  branch_name?: string;
+  head_ref?: string;
+  head_commit?: string;
+  created_at_unix_ms?: number;
+  file_count?: number;
+  has_untracked?: boolean;
+};
+
+export type wire_git_list_stashes_resp = {
+  repo_root_path: string;
+  stashes: wire_git_stash_summary[];
+};
+
+export type wire_git_get_stash_detail_req = {
+  repo_root_path: string;
+  id: string;
+};
+
+export type wire_git_stash_detail = wire_git_stash_summary & {
+  files: wire_git_commit_file_summary[];
+};
+
+export type wire_git_get_stash_detail_resp = {
+  repo_root_path: string;
+  stash: wire_git_stash_detail;
+};
+
+export type wire_git_save_stash_req = {
+  repo_root_path: string;
+  message?: string;
+  include_untracked?: boolean;
+  keep_index?: boolean;
+};
+
+export type wire_git_save_stash_resp = {
+  repo_root_path: string;
+  head_ref?: string;
+  head_commit?: string;
+  created?: wire_git_stash_summary;
+};
+
+export type wire_git_preview_apply_stash_req = {
+  repo_root_path: string;
+  id: string;
+  remove_after_apply?: boolean;
+};
+
+export type wire_git_preview_apply_stash_resp = {
+  repo_root_path: string;
+  head_ref?: string;
+  head_commit?: string;
+  stash?: wire_git_stash_summary;
+  remove_after_apply?: boolean;
+  blocking_reason?: string;
+  blocking?: wire_git_mutation_blocker;
+  plan_fingerprint?: string;
+};
+
+export type wire_git_apply_stash_req = {
+  repo_root_path: string;
+  id: string;
+  remove_after_apply?: boolean;
+  plan_fingerprint?: string;
+};
+
+export type wire_git_apply_stash_resp = {
+  repo_root_path: string;
+  head_ref?: string;
+  head_commit?: string;
+};
+
+export type wire_git_preview_drop_stash_req = {
+  repo_root_path: string;
+  id: string;
+};
+
+export type wire_git_preview_drop_stash_resp = {
+  repo_root_path: string;
+  head_ref?: string;
+  head_commit?: string;
+  stash?: wire_git_stash_summary;
+  plan_fingerprint?: string;
+};
+
+export type wire_git_drop_stash_req = {
+  repo_root_path: string;
+  id: string;
+  plan_fingerprint?: string;
+};
+
+export type wire_git_drop_stash_resp = {
+  repo_root_path: string;
+  head_ref?: string;
+  head_commit?: string;
 };
 
 export type wire_git_linked_worktree_snapshot = {
@@ -233,6 +346,7 @@ export type wire_git_preview_merge_branch_resp = {
   source_behind_count?: number;
   outcome?: string;
   blocking_reason?: string;
+  blocking?: wire_git_mutation_blocker;
   plan_fingerprint?: string;
   files: wire_git_commit_file_summary[];
   linked_worktree?: wire_git_linked_worktree_snapshot;

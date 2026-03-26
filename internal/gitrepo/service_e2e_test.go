@@ -349,6 +349,190 @@ func TestE2E_GitRepoRPC_WorkbenchEndpoints(t *testing.T) {
 	}
 }
 
+func TestE2E_GitRepoRPC_StashEndpoints(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	client, closeServer := startGitRepoRPCSession(t, svc)
+	defer closeServer()
+
+	savePayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_SAVE_STASH, mustMarshalJSON(t, saveStashReq{
+		RepoRootPath:     fixture.Root,
+		Message:          "rpc stash",
+		IncludeUntracked: true,
+	}))
+	if err != nil {
+		t.Fatalf("save stash call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("save stash rpc error: %+v", rpcErr)
+	}
+	var saveResp saveStashResp
+	if err := json.Unmarshal(savePayload, &saveResp); err != nil {
+		t.Fatalf("unmarshal save stash: %v", err)
+	}
+	if saveResp.Created == nil || strings.TrimSpace(saveResp.Created.ID) == "" {
+		t.Fatalf("save stash created=%+v, want populated stash summary", saveResp.Created)
+	}
+
+	listPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_LIST_STASHES, mustMarshalJSON(t, listStashesReq{
+		RepoRootPath: fixture.Root,
+	}))
+	if err != nil {
+		t.Fatalf("list stashes call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("list stashes rpc error: %+v", rpcErr)
+	}
+	var listResp listStashesResp
+	if err := json.Unmarshal(listPayload, &listResp); err != nil {
+		t.Fatalf("unmarshal list stashes: %v", err)
+	}
+	if len(listResp.Stashes) != 1 || listResp.Stashes[0].ID != saveResp.Created.ID {
+		t.Fatalf("unexpected stash list: %+v", listResp.Stashes)
+	}
+
+	detailPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_GET_STASH_DETAIL, mustMarshalJSON(t, getStashDetailReq{
+		RepoRootPath: fixture.Root,
+		ID:           saveResp.Created.ID,
+	}))
+	if err != nil {
+		t.Fatalf("get stash detail call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("get stash detail rpc error: %+v", rpcErr)
+	}
+	var detailResp getStashDetailResp
+	if err := json.Unmarshal(detailPayload, &detailResp); err != nil {
+		t.Fatalf("unmarshal stash detail: %v", err)
+	}
+	foundTracked := false
+	foundUntracked := false
+	for _, file := range detailResp.Stash.Files {
+		if file.Path == workspace.TrackedPath || file.NewPath == workspace.TrackedPath {
+			foundTracked = true
+		}
+		if file.Path == workspace.UntrackedPath || file.NewPath == workspace.UntrackedPath {
+			foundUntracked = true
+		}
+	}
+	if !foundTracked || !foundUntracked {
+		t.Fatalf("stash detail files missing expected paths: %+v", detailResp.Stash.Files)
+	}
+
+	previewApplyPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_PREVIEW_APPLY, mustMarshalJSON(t, previewApplyStashReq{
+		RepoRootPath: fixture.Root,
+		ID:           saveResp.Created.ID,
+	}))
+	if err != nil {
+		t.Fatalf("preview apply stash call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("preview apply stash rpc error: %+v", rpcErr)
+	}
+	var previewApplyResp previewApplyStashResp
+	if err := json.Unmarshal(previewApplyPayload, &previewApplyResp); err != nil {
+		t.Fatalf("unmarshal preview apply stash: %v", err)
+	}
+	if previewApplyResp.Blocking != nil || strings.TrimSpace(previewApplyResp.BlockingReason) != "" {
+		t.Fatalf("preview apply unexpectedly blocked: %+v", previewApplyResp)
+	}
+	if strings.TrimSpace(previewApplyResp.PlanFingerprint) == "" {
+		t.Fatalf("expected apply preview fingerprint")
+	}
+
+	applyPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_APPLY_STASH, mustMarshalJSON(t, applyStashReq{
+		RepoRootPath:    fixture.Root,
+		ID:              saveResp.Created.ID,
+		PlanFingerprint: previewApplyResp.PlanFingerprint,
+	}))
+	if err != nil {
+		t.Fatalf("apply stash call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("apply stash rpc error: %+v", rpcErr)
+	}
+	var applyResp applyStashResp
+	if err := json.Unmarshal(applyPayload, &applyResp); err != nil {
+		t.Fatalf("unmarshal apply stash: %v", err)
+	}
+	if applyResp.HeadCommit != fixture.BinaryCommit {
+		t.Fatalf("apply head_commit=%q, want %q", applyResp.HeadCommit, fixture.BinaryCommit)
+	}
+
+	workspacePayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_LIST_WORKSPACE, mustMarshalJSON(t, listWorkspaceChangesReq{
+		RepoRootPath: fixture.Root,
+	}))
+	if err != nil {
+		t.Fatalf("list workspace after apply call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("list workspace after apply rpc error: %+v", rpcErr)
+	}
+	var workspaceResp listWorkspaceChangesResp
+	if err := json.Unmarshal(workspacePayload, &workspaceResp); err != nil {
+		t.Fatalf("unmarshal workspace after apply: %v", err)
+	}
+	if workspaceResp.Summary.StagedCount != 1 || workspaceResp.Summary.UnstagedCount != 1 || workspaceResp.Summary.UntrackedCount != 1 {
+		t.Fatalf("unexpected workspace summary after apply: %+v", workspaceResp.Summary)
+	}
+
+	previewDropPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_PREVIEW_DROP, mustMarshalJSON(t, previewDropStashReq{
+		RepoRootPath: fixture.Root,
+		ID:           saveResp.Created.ID,
+	}))
+	if err != nil {
+		t.Fatalf("preview drop stash call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("preview drop stash rpc error: %+v", rpcErr)
+	}
+	var previewDropResp previewDropStashResp
+	if err := json.Unmarshal(previewDropPayload, &previewDropResp); err != nil {
+		t.Fatalf("unmarshal preview drop stash: %v", err)
+	}
+	if strings.TrimSpace(previewDropResp.PlanFingerprint) == "" {
+		t.Fatalf("expected drop preview fingerprint")
+	}
+
+	dropPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DROP_STASH, mustMarshalJSON(t, dropStashReq{
+		RepoRootPath:    fixture.Root,
+		ID:              saveResp.Created.ID,
+		PlanFingerprint: previewDropResp.PlanFingerprint,
+	}))
+	if err != nil {
+		t.Fatalf("drop stash call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("drop stash rpc error: %+v", rpcErr)
+	}
+	var dropResp dropStashResp
+	if err := json.Unmarshal(dropPayload, &dropResp); err != nil {
+		t.Fatalf("unmarshal drop stash: %v", err)
+	}
+	if dropResp.HeadCommit != fixture.BinaryCommit {
+		t.Fatalf("drop head_commit=%q, want %q", dropResp.HeadCommit, fixture.BinaryCommit)
+	}
+
+	listPayload, rpcErr, err = client.Call(context.Background(), TypeID_GIT_LIST_STASHES, mustMarshalJSON(t, listStashesReq{
+		RepoRootPath: fixture.Root,
+	}))
+	if err != nil {
+		t.Fatalf("list stashes after drop call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("list stashes after drop rpc error: %+v", rpcErr)
+	}
+	var listAfterResp listStashesResp
+	if err := json.Unmarshal(listPayload, &listAfterResp); err != nil {
+		t.Fatalf("unmarshal list stashes after drop: %v", err)
+	}
+	if len(listAfterResp.Stashes) != 0 {
+		t.Fatalf("stash count after drop=%d, want 0", len(listAfterResp.Stashes))
+	}
+}
+
 func startGitRepoRPCSession(t *testing.T, svc *Service) (*rpc.Client, func()) {
 	t.Helper()
 	serverConn, clientConn := net.Pipe()

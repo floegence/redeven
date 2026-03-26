@@ -29,6 +29,13 @@ export const redevenV1TypeIds = {
     mergeBranch: 1118,
     getFullContextDiff: 1119,
     switchDetached: 1120,
+    listStashes: 1121,
+    getStashDetail: 1122,
+    saveStash: 1123,
+    previewApplyStash: 1124,
+    applyStash: 1125,
+    previewDropStash: 1126,
+    dropStash: 1127,
   },
   terminal: {
     sessionCreate: 2001,

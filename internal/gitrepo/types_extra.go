@@ -11,6 +11,15 @@ type gitWorkspaceSummary struct {
 	ConflictedCount int `json:"conflicted_count,omitempty"`
 }
 
+type gitMutationBlocker struct {
+	Kind              string              `json:"kind,omitempty"`
+	Reason            string              `json:"reason,omitempty"`
+	WorkspacePath     string              `json:"workspace_path,omitempty"`
+	WorkspaceSummary  gitWorkspaceSummary `json:"workspace_summary"`
+	Operation         string              `json:"operation,omitempty"`
+	CanStashWorkspace bool                `json:"can_stash_workspace,omitempty"`
+}
+
 type getRepoSummaryResp struct {
 	RepoRootPath     string              `json:"repo_root_path"`
 	WorktreePath     string              `json:"worktree_path,omitempty"`
@@ -51,6 +60,111 @@ type listWorkspaceChangesResp struct {
 	Unstaged     []gitWorkspaceChange `json:"unstaged,omitempty"`
 	Untracked    []gitWorkspaceChange `json:"untracked,omitempty"`
 	Conflicted   []gitWorkspaceChange `json:"conflicted,omitempty"`
+}
+
+type listStashesReq struct {
+	RepoRootPath string `json:"repo_root_path"`
+}
+
+type gitStashSummary struct {
+	ID              string `json:"id"`
+	Ref             string `json:"ref,omitempty"`
+	Message         string `json:"message,omitempty"`
+	BranchName      string `json:"branch_name,omitempty"`
+	HeadRef         string `json:"head_ref,omitempty"`
+	HeadCommit      string `json:"head_commit,omitempty"`
+	CreatedAtUnixMs int64  `json:"created_at_unix_ms,omitempty"`
+	FileCount       int    `json:"file_count,omitempty"`
+	HasUntracked    bool   `json:"has_untracked,omitempty"`
+}
+
+type listStashesResp struct {
+	RepoRootPath string            `json:"repo_root_path"`
+	Stashes      []gitStashSummary `json:"stashes,omitempty"`
+}
+
+type getStashDetailReq struct {
+	RepoRootPath string `json:"repo_root_path"`
+	ID           string `json:"id"`
+}
+
+type gitStashDetail struct {
+	gitStashSummary
+	Files []gitCommitFileSummary `json:"files,omitempty"`
+}
+
+type getStashDetailResp struct {
+	RepoRootPath string         `json:"repo_root_path"`
+	Stash        gitStashDetail `json:"stash"`
+}
+
+type saveStashReq struct {
+	RepoRootPath     string `json:"repo_root_path"`
+	Message          string `json:"message,omitempty"`
+	IncludeUntracked bool   `json:"include_untracked,omitempty"`
+	KeepIndex        bool   `json:"keep_index,omitempty"`
+}
+
+type saveStashResp struct {
+	RepoRootPath string           `json:"repo_root_path"`
+	HeadRef      string           `json:"head_ref,omitempty"`
+	HeadCommit   string           `json:"head_commit,omitempty"`
+	Created      *gitStashSummary `json:"created,omitempty"`
+}
+
+type previewApplyStashReq struct {
+	RepoRootPath     string `json:"repo_root_path"`
+	ID               string `json:"id"`
+	RemoveAfterApply bool   `json:"remove_after_apply,omitempty"`
+}
+
+type previewApplyStashResp struct {
+	RepoRootPath     string              `json:"repo_root_path"`
+	HeadRef          string              `json:"head_ref,omitempty"`
+	HeadCommit       string              `json:"head_commit,omitempty"`
+	Stash            *gitStashSummary    `json:"stash,omitempty"`
+	RemoveAfterApply bool                `json:"remove_after_apply,omitempty"`
+	BlockingReason   string              `json:"blocking_reason,omitempty"`
+	Blocking         *gitMutationBlocker `json:"blocking,omitempty"`
+	PlanFingerprint  string              `json:"plan_fingerprint,omitempty"`
+}
+
+type applyStashReq struct {
+	RepoRootPath     string `json:"repo_root_path"`
+	ID               string `json:"id"`
+	RemoveAfterApply bool   `json:"remove_after_apply,omitempty"`
+	PlanFingerprint  string `json:"plan_fingerprint,omitempty"`
+}
+
+type applyStashResp struct {
+	RepoRootPath string `json:"repo_root_path"`
+	HeadRef      string `json:"head_ref,omitempty"`
+	HeadCommit   string `json:"head_commit,omitempty"`
+}
+
+type previewDropStashReq struct {
+	RepoRootPath string `json:"repo_root_path"`
+	ID           string `json:"id"`
+}
+
+type previewDropStashResp struct {
+	RepoRootPath    string           `json:"repo_root_path"`
+	HeadRef         string           `json:"head_ref,omitempty"`
+	HeadCommit      string           `json:"head_commit,omitempty"`
+	Stash           *gitStashSummary `json:"stash,omitempty"`
+	PlanFingerprint string           `json:"plan_fingerprint,omitempty"`
+}
+
+type dropStashReq struct {
+	RepoRootPath    string `json:"repo_root_path"`
+	ID              string `json:"id"`
+	PlanFingerprint string `json:"plan_fingerprint,omitempty"`
+}
+
+type dropStashResp struct {
+	RepoRootPath string `json:"repo_root_path"`
+	HeadRef      string `json:"head_ref,omitempty"`
+	HeadCommit   string `json:"head_commit,omitempty"`
 }
 
 type fetchRepoReq struct {
@@ -183,6 +297,7 @@ type previewMergeBranchResp struct {
 	SourceBehindCount int                        `json:"source_behind_count,omitempty"`
 	Outcome           string                     `json:"outcome,omitempty"`
 	BlockingReason    string                     `json:"blocking_reason,omitempty"`
+	Blocking          *gitMutationBlocker        `json:"blocking,omitempty"`
 	PlanFingerprint   string                     `json:"plan_fingerprint,omitempty"`
 	Files             []gitCommitFileSummary     `json:"files,omitempty"`
 	LinkedWorktree    *gitLinkedWorktreeSnapshot `json:"linked_worktree,omitempty"`

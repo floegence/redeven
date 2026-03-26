@@ -219,4 +219,55 @@ describe('GitWorkbench interactions', () => {
       dispose();
     }
   });
+
+  it('opens the shared stash list from the header button', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onOpenStash = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitWorkbench
+                currentPath="/workspace/repo/src"
+                subview="changes"
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  headCommit: 'abc1234',
+                  stashCount: 2,
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts' }],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                onOpenStash={onOpenStash}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const stashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Stashes · 2')) as HTMLButtonElement | undefined;
+      expect(stashButton).toBeTruthy();
+      stashButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onOpenStash).toHaveBeenCalledWith({
+        tab: 'stashes',
+        repoRootPath: '/workspace/repo',
+        source: 'header',
+      });
+    } finally {
+      dispose();
+    }
+  });
 });

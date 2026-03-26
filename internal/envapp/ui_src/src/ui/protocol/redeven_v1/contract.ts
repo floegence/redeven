@@ -27,16 +27,28 @@ import type {
 import type { AccessResumeRequest, AccessResumeResponse, AccessStatusResponse } from './sdk/access';
 import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsListRequest, FsListResponse, FsPathContextResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
 import type {
+  GitApplyStashRequest,
+  GitApplyStashResponse,
   GitCheckoutBranchRequest,
   GitCheckoutBranchResponse,
   GitCommitWorkspaceRequest,
   GitCommitWorkspaceResponse,
   GitDeleteBranchRequest,
   GitDeleteBranchResponse,
+  GitDropStashRequest,
+  GitDropStashResponse,
+  GitGetStashDetailRequest,
+  GitGetStashDetailResponse,
   GitMergeBranchRequest,
   GitMergeBranchResponse,
+  GitListStashesRequest,
+  GitListStashesResponse,
   GitPreviewDeleteBranchRequest,
   GitPreviewDeleteBranchResponse,
+  GitPreviewApplyStashRequest,
+  GitPreviewApplyStashResponse,
+  GitPreviewDropStashRequest,
+  GitPreviewDropStashResponse,
   GitPreviewMergeBranchRequest,
   GitPreviewMergeBranchResponse,
   GitFetchRepoRequest,
@@ -61,6 +73,8 @@ import type {
   GitRepoSummaryResponse,
   GitResolveRepoRequest,
   GitResolveRepoResponse,
+  GitSaveStashRequest,
+  GitSaveStashResponse,
   GitStageWorkspaceRequest,
   GitStageWorkspaceResponse,
   GitSwitchDetachedRequest,
@@ -104,11 +118,17 @@ import {
 import { fromWireAccessResumeResponse, fromWireAccessStatusResponse, toWireAccessResumeRequest } from './codec/access';
 import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsListResponse, fromWireFsPathContextResponse, fromWireFsReadFileResponse, fromWireFsRenameResponse, fromWireFsWriteFileResponse, toWireFsCopyRequest, toWireFsDeleteRequest, toWireFsListRequest, toWireFsReadFileRequest, toWireFsRenameRequest, toWireFsWriteFileRequest } from './codec/fs';
 import {
+  fromWireGitApplyStashResponse,
   fromWireGitCheckoutBranchResponse,
   fromWireGitCommitWorkspaceResponse,
   fromWireGitDeleteBranchResponse,
+  fromWireGitDropStashResponse,
+  fromWireGitGetStashDetailResponse,
   fromWireGitMergeBranchResponse,
+  fromWireGitListStashesResponse,
   fromWireGitPreviewDeleteBranchResponse,
+  fromWireGitPreviewApplyStashResponse,
+  fromWireGitPreviewDropStashResponse,
   fromWireGitPreviewMergeBranchResponse,
   fromWireGitFetchRepoResponse,
   fromWireGitGetBranchCompareResponse,
@@ -121,14 +141,21 @@ import {
   fromWireGitPullRepoResponse,
   fromWireGitPushRepoResponse,
   fromWireGitResolveRepoResponse,
+  fromWireGitSaveStashResponse,
   fromWireGitStageWorkspaceResponse,
   fromWireGitSwitchDetachedResponse,
   fromWireGitUnstageWorkspaceResponse,
+  toWireGitApplyStashRequest,
   toWireGitCheckoutBranchRequest,
   toWireGitCommitWorkspaceRequest,
   toWireGitDeleteBranchRequest,
+  toWireGitDropStashRequest,
+  toWireGitGetStashDetailRequest,
   toWireGitMergeBranchRequest,
+  toWireGitListStashesRequest,
   toWireGitPreviewDeleteBranchRequest,
+  toWireGitPreviewApplyStashRequest,
+  toWireGitPreviewDropStashRequest,
   toWireGitPreviewMergeBranchRequest,
   toWireGitFetchRepoRequest,
   toWireGitGetBranchCompareRequest,
@@ -141,6 +168,7 @@ import {
   toWireGitPullRepoRequest,
   toWireGitPushRepoRequest,
   toWireGitResolveRepoRequest,
+  toWireGitSaveStashRequest,
   toWireGitStageWorkspaceRequest,
   toWireGitSwitchDetachedRequest,
   toWireGitUnstageWorkspaceRequest,
@@ -181,16 +209,28 @@ import type {
 } from './wire/ai';
 import type { wire_fs_copy_req, wire_fs_copy_resp, wire_fs_delete_req, wire_fs_delete_resp, wire_fs_get_path_context_resp, wire_fs_list_req, wire_fs_list_resp, wire_fs_read_file_req, wire_fs_read_file_resp, wire_fs_rename_req, wire_fs_rename_resp, wire_fs_write_file_req, wire_fs_write_file_resp } from './wire/fs';
 import type {
+  wire_git_apply_stash_req,
+  wire_git_apply_stash_resp,
   wire_git_checkout_branch_req,
   wire_git_checkout_branch_resp,
   wire_git_commit_workspace_req,
   wire_git_commit_workspace_resp,
   wire_git_delete_branch_req,
   wire_git_delete_branch_resp,
+  wire_git_drop_stash_req,
+  wire_git_drop_stash_resp,
+  wire_git_get_stash_detail_req,
+  wire_git_get_stash_detail_resp,
   wire_git_merge_branch_req,
   wire_git_merge_branch_resp,
+  wire_git_list_stashes_req,
+  wire_git_list_stashes_resp,
   wire_git_preview_delete_branch_req,
   wire_git_preview_delete_branch_resp,
+  wire_git_preview_apply_stash_req,
+  wire_git_preview_apply_stash_resp,
+  wire_git_preview_drop_stash_req,
+  wire_git_preview_drop_stash_resp,
   wire_git_preview_merge_branch_req,
   wire_git_preview_merge_branch_resp,
   wire_git_fetch_repo_req,
@@ -215,6 +255,8 @@ import type {
   wire_git_push_repo_resp,
   wire_git_resolve_repo_req,
   wire_git_resolve_repo_resp,
+  wire_git_save_stash_req,
+  wire_git_save_stash_resp,
   wire_git_stage_workspace_req,
   wire_git_stage_workspace_resp,
   wire_git_switch_detached_req,
@@ -246,9 +288,12 @@ export type RedevenV1Rpc = {
     resolveRepo: (req: GitResolveRepoRequest) => Promise<GitResolveRepoResponse>;
     getRepoSummary: (req: GitRepoSummaryRequest) => Promise<GitRepoSummaryResponse>;
     listWorkspaceChanges: (req: GitListWorkspaceChangesRequest) => Promise<GitListWorkspaceChangesResponse>;
+    listStashes: (req: GitListStashesRequest) => Promise<GitListStashesResponse>;
+    getStashDetail: (req: GitGetStashDetailRequest) => Promise<GitGetStashDetailResponse>;
     stageWorkspace: (req: GitStageWorkspaceRequest) => Promise<GitStageWorkspaceResponse>;
     unstageWorkspace: (req: GitUnstageWorkspaceRequest) => Promise<GitUnstageWorkspaceResponse>;
     commitWorkspace: (req: GitCommitWorkspaceRequest) => Promise<GitCommitWorkspaceResponse>;
+    saveStash: (req: GitSaveStashRequest) => Promise<GitSaveStashResponse>;
     fetchRepo: (req: GitFetchRepoRequest) => Promise<GitFetchRepoResponse>;
     pullRepo: (req: GitPullRepoRequest) => Promise<GitPullRepoResponse>;
     pushRepo: (req: GitPushRepoRequest) => Promise<GitPushRepoResponse>;
@@ -256,6 +301,10 @@ export type RedevenV1Rpc = {
     switchDetached: (req: GitSwitchDetachedRequest) => Promise<GitSwitchDetachedResponse>;
     previewDeleteBranch: (req: GitPreviewDeleteBranchRequest) => Promise<GitPreviewDeleteBranchResponse>;
     deleteBranch: (req: GitDeleteBranchRequest) => Promise<GitDeleteBranchResponse>;
+    previewApplyStash: (req: GitPreviewApplyStashRequest) => Promise<GitPreviewApplyStashResponse>;
+    applyStash: (req: GitApplyStashRequest) => Promise<GitApplyStashResponse>;
+    previewDropStash: (req: GitPreviewDropStashRequest) => Promise<GitPreviewDropStashResponse>;
+    dropStash: (req: GitDropStashRequest) => Promise<GitDropStashResponse>;
     previewMergeBranch: (req: GitPreviewMergeBranchRequest) => Promise<GitPreviewMergeBranchResponse>;
     mergeBranch: (req: GitMergeBranchRequest) => Promise<GitMergeBranchResponse>;
     listBranches: (req: GitListBranchesRequest) => Promise<GitListBranchesResponse>;
@@ -378,6 +427,16 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const resp = await call<wire_git_list_workspace_changes_req, wire_git_list_workspace_changes_resp>(redevenV1TypeIds.git.listWorkspaceChanges, payload);
         return fromWireGitListWorkspaceChangesResponse(resp);
       },
+      listStashes: async (req) => {
+        const payload = toWireGitListStashesRequest(req);
+        const resp = await call<wire_git_list_stashes_req, wire_git_list_stashes_resp>(redevenV1TypeIds.git.listStashes, payload);
+        return fromWireGitListStashesResponse(resp);
+      },
+      getStashDetail: async (req) => {
+        const payload = toWireGitGetStashDetailRequest(req);
+        const resp = await call<wire_git_get_stash_detail_req, wire_git_get_stash_detail_resp>(redevenV1TypeIds.git.getStashDetail, payload);
+        return fromWireGitGetStashDetailResponse(resp);
+      },
       stageWorkspace: async (req) => {
         const payload = toWireGitStageWorkspaceRequest(req);
         const resp = await call<wire_git_stage_workspace_req, wire_git_stage_workspace_resp>(redevenV1TypeIds.git.stageWorkspace, payload);
@@ -392,6 +451,11 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireGitCommitWorkspaceRequest(req);
         const resp = await call<wire_git_commit_workspace_req, wire_git_commit_workspace_resp>(redevenV1TypeIds.git.commitWorkspace, payload);
         return fromWireGitCommitWorkspaceResponse(resp);
+      },
+      saveStash: async (req) => {
+        const payload = toWireGitSaveStashRequest(req);
+        const resp = await call<wire_git_save_stash_req, wire_git_save_stash_resp>(redevenV1TypeIds.git.saveStash, payload);
+        return fromWireGitSaveStashResponse(resp);
       },
       fetchRepo: async (req) => {
         const payload = toWireGitFetchRepoRequest(req);
@@ -427,6 +491,26 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireGitDeleteBranchRequest(req);
         const resp = await call<wire_git_delete_branch_req, wire_git_delete_branch_resp>(redevenV1TypeIds.git.deleteBranch, payload);
         return fromWireGitDeleteBranchResponse(resp);
+      },
+      previewApplyStash: async (req) => {
+        const payload = toWireGitPreviewApplyStashRequest(req);
+        const resp = await call<wire_git_preview_apply_stash_req, wire_git_preview_apply_stash_resp>(redevenV1TypeIds.git.previewApplyStash, payload);
+        return fromWireGitPreviewApplyStashResponse(resp);
+      },
+      applyStash: async (req) => {
+        const payload = toWireGitApplyStashRequest(req);
+        const resp = await call<wire_git_apply_stash_req, wire_git_apply_stash_resp>(redevenV1TypeIds.git.applyStash, payload);
+        return fromWireGitApplyStashResponse(resp);
+      },
+      previewDropStash: async (req) => {
+        const payload = toWireGitPreviewDropStashRequest(req);
+        const resp = await call<wire_git_preview_drop_stash_req, wire_git_preview_drop_stash_resp>(redevenV1TypeIds.git.previewDropStash, payload);
+        return fromWireGitPreviewDropStashResponse(resp);
+      },
+      dropStash: async (req) => {
+        const payload = toWireGitDropStashRequest(req);
+        const resp = await call<wire_git_drop_stash_req, wire_git_drop_stash_resp>(redevenV1TypeIds.git.dropStash, payload);
+        return fromWireGitDropStashResponse(resp);
       },
       previewMergeBranch: async (req) => {
         const payload = toWireGitPreviewMergeBranchRequest(req);

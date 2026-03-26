@@ -1,14 +1,25 @@
 import type {
+  GitApplyStashRequest,
+  GitApplyStashResponse,
   GitCheckoutBranchRequest,
   GitCheckoutBranchResponse,
+  GitDropStashRequest,
+  GitDropStashResponse,
   GitDeleteLinkedWorktreePreview,
   GitDeleteBranchRequest,
   GitDeleteBranchResponse,
   GitDiffFileRef,
+  GitGetStashDetailRequest,
+  GitGetStashDetailResponse,
   GitMergeBranchRequest,
   GitMergeBranchResponse,
+  GitMutationBlocker,
   GitPreviewDeleteBranchRequest,
   GitPreviewDeleteBranchResponse,
+  GitPreviewApplyStashRequest,
+  GitPreviewApplyStashResponse,
+  GitPreviewDropStashRequest,
+  GitPreviewDropStashResponse,
   GitPreviewMergeBranchRequest,
   GitPreviewMergeBranchResponse,
   GitBranchSummary,
@@ -30,7 +41,13 @@ import type {
   GitListBranchesResponse,
   GitListCommitsRequest,
   GitListCommitsResponse,
+  GitListStashesRequest,
+  GitListStashesResponse,
+  GitSaveStashRequest,
+  GitSaveStashResponse,
   GitStageWorkspaceRequest,
+  GitStashDetail,
+  GitStashSummary,
   GitStageWorkspaceResponse,
   GitSwitchDetachedRequest,
   GitSwitchDetachedResponse,
@@ -50,16 +67,27 @@ import type {
   GitWorkspaceSummary,
 } from '../sdk/git';
 import type {
+  wire_git_apply_stash_req,
+  wire_git_apply_stash_resp,
   wire_git_checkout_branch_req,
   wire_git_checkout_branch_resp,
+  wire_git_drop_stash_req,
+  wire_git_drop_stash_resp,
   wire_git_delete_linked_worktree_preview,
   wire_git_delete_branch_req,
   wire_git_delete_branch_resp,
   wire_git_diff_file_ref,
+  wire_git_get_stash_detail_req,
+  wire_git_get_stash_detail_resp,
   wire_git_merge_branch_req,
   wire_git_merge_branch_resp,
+  wire_git_mutation_blocker,
   wire_git_preview_delete_branch_req,
   wire_git_preview_delete_branch_resp,
+  wire_git_preview_apply_stash_req,
+  wire_git_preview_apply_stash_resp,
+  wire_git_preview_drop_stash_req,
+  wire_git_preview_drop_stash_resp,
   wire_git_preview_merge_branch_req,
   wire_git_preview_merge_branch_resp,
   wire_git_branch_summary,
@@ -83,7 +111,13 @@ import type {
   wire_git_list_branches_resp,
   wire_git_list_commits_req,
   wire_git_list_commits_resp,
+  wire_git_list_stashes_req,
+  wire_git_list_stashes_resp,
+  wire_git_save_stash_req,
+  wire_git_save_stash_resp,
   wire_git_stage_workspace_req,
+  wire_git_stash_detail,
+  wire_git_stash_summary,
   wire_git_stage_workspace_resp,
   wire_git_switch_detached_req,
   wire_git_switch_detached_resp,
@@ -107,6 +141,18 @@ function fromWireGitWorkspaceSummary(resp: wire_git_workspace_summary | undefine
     unstagedCount: typeof resp?.unstaged_count === 'number' ? resp.unstaged_count : undefined,
     untrackedCount: typeof resp?.untracked_count === 'number' ? resp.untracked_count : undefined,
     conflictedCount: typeof resp?.conflicted_count === 'number' ? resp.conflicted_count : undefined,
+  };
+}
+
+function fromWireGitMutationBlocker(resp: wire_git_mutation_blocker | undefined): GitMutationBlocker | undefined {
+  if (!resp) return undefined;
+  return {
+    kind: typeof resp?.kind === 'string' ? resp.kind : undefined,
+    reason: typeof resp?.reason === 'string' ? resp.reason : undefined,
+    workspacePath: typeof resp?.workspace_path === 'string' ? resp.workspace_path : undefined,
+    workspaceSummary: fromWireGitWorkspaceSummary(resp?.workspace_summary),
+    operation: typeof resp?.operation === 'string' ? resp.operation : undefined,
+    canStashWorkspace: typeof resp?.can_stash_workspace === 'boolean' ? resp.can_stash_workspace : undefined,
   };
 }
 
@@ -219,6 +265,37 @@ function fromWireGitDeleteLinkedWorktreePreview(resp: wire_git_delete_linked_wor
   };
 }
 
+function fromWireGitStashSummary(resp: wire_git_stash_summary | undefined): GitStashSummary | undefined {
+  if (!resp) return undefined;
+  return {
+    id: String(resp?.id ?? ''),
+    ref: typeof resp?.ref === 'string' ? resp.ref : undefined,
+    message: typeof resp?.message === 'string' ? resp.message : undefined,
+    branchName: typeof resp?.branch_name === 'string' ? resp.branch_name : undefined,
+    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
+    headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
+    createdAtUnixMs: typeof resp?.created_at_unix_ms === 'number' ? resp.created_at_unix_ms : undefined,
+    fileCount: typeof resp?.file_count === 'number' ? resp.file_count : undefined,
+    hasUntracked: typeof resp?.has_untracked === 'boolean' ? resp.has_untracked : undefined,
+  };
+}
+
+function fromWireGitStashDetail(resp: wire_git_stash_detail | undefined): GitStashDetail {
+  const summary = fromWireGitStashSummary(resp);
+  return {
+    id: String(summary?.id ?? ''),
+    ref: summary?.ref,
+    message: summary?.message,
+    branchName: summary?.branchName,
+    headRef: summary?.headRef,
+    headCommit: summary?.headCommit,
+    createdAtUnixMs: summary?.createdAtUnixMs,
+    fileCount: summary?.fileCount,
+    hasUntracked: summary?.hasUntracked,
+    files: Array.isArray(resp?.files) ? resp.files.map(fromWireGitCommitFileSummary) : [],
+  };
+}
+
 export function toWireGitResolveRepoRequest(req: GitResolveRepoRequest): wire_git_resolve_repo_req {
   return {
     path: req.path,
@@ -274,6 +351,124 @@ export function fromWireGitListWorkspaceChangesResponse(resp: wire_git_list_work
     unstaged: Array.isArray(resp?.unstaged) ? resp.unstaged.map(fromWireGitWorkspaceChange) : [],
     untracked: Array.isArray(resp?.untracked) ? resp.untracked.map(fromWireGitWorkspaceChange) : [],
     conflicted: Array.isArray(resp?.conflicted) ? resp.conflicted.map(fromWireGitWorkspaceChange) : [],
+  };
+}
+
+export function toWireGitListStashesRequest(req: GitListStashesRequest): wire_git_list_stashes_req {
+  return {
+    repo_root_path: req.repoRootPath,
+  };
+}
+
+export function fromWireGitListStashesResponse(resp: wire_git_list_stashes_resp): GitListStashesResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    stashes: Array.isArray(resp?.stashes)
+      ? resp.stashes.map((item) => fromWireGitStashSummary(item)).filter((item): item is GitStashSummary => Boolean(item))
+      : [],
+  };
+}
+
+export function toWireGitGetStashDetailRequest(req: GitGetStashDetailRequest): wire_git_get_stash_detail_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    id: req.id,
+  };
+}
+
+export function fromWireGitGetStashDetailResponse(resp: wire_git_get_stash_detail_resp): GitGetStashDetailResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    stash: fromWireGitStashDetail(resp?.stash),
+  };
+}
+
+export function toWireGitSaveStashRequest(req: GitSaveStashRequest): wire_git_save_stash_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    message: typeof req.message === 'string' ? req.message : undefined,
+    include_untracked: typeof req.includeUntracked === 'boolean' ? req.includeUntracked : undefined,
+    keep_index: typeof req.keepIndex === 'boolean' ? req.keepIndex : undefined,
+  };
+}
+
+export function fromWireGitSaveStashResponse(resp: wire_git_save_stash_resp): GitSaveStashResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
+    headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
+    created: fromWireGitStashSummary(resp?.created),
+  };
+}
+
+export function toWireGitPreviewApplyStashRequest(req: GitPreviewApplyStashRequest): wire_git_preview_apply_stash_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    id: req.id,
+    remove_after_apply: typeof req.removeAfterApply === 'boolean' ? req.removeAfterApply : undefined,
+  };
+}
+
+export function fromWireGitPreviewApplyStashResponse(resp: wire_git_preview_apply_stash_resp): GitPreviewApplyStashResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
+    headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
+    stash: fromWireGitStashSummary(resp?.stash),
+    removeAfterApply: typeof resp?.remove_after_apply === 'boolean' ? resp.remove_after_apply : undefined,
+    blockingReason: typeof resp?.blocking_reason === 'string' ? resp.blocking_reason : undefined,
+    blocking: fromWireGitMutationBlocker(resp?.blocking),
+    planFingerprint: typeof resp?.plan_fingerprint === 'string' ? resp.plan_fingerprint : undefined,
+  };
+}
+
+export function toWireGitApplyStashRequest(req: GitApplyStashRequest): wire_git_apply_stash_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    id: req.id,
+    remove_after_apply: typeof req.removeAfterApply === 'boolean' ? req.removeAfterApply : undefined,
+    plan_fingerprint: typeof req.planFingerprint === 'string' ? req.planFingerprint : undefined,
+  };
+}
+
+export function fromWireGitApplyStashResponse(resp: wire_git_apply_stash_resp): GitApplyStashResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
+    headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
+  };
+}
+
+export function toWireGitPreviewDropStashRequest(req: GitPreviewDropStashRequest): wire_git_preview_drop_stash_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    id: req.id,
+  };
+}
+
+export function fromWireGitPreviewDropStashResponse(resp: wire_git_preview_drop_stash_resp): GitPreviewDropStashResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
+    headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
+    stash: fromWireGitStashSummary(resp?.stash),
+    planFingerprint: typeof resp?.plan_fingerprint === 'string' ? resp.plan_fingerprint : undefined,
+  };
+}
+
+export function toWireGitDropStashRequest(req: GitDropStashRequest): wire_git_drop_stash_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    id: req.id,
+    plan_fingerprint: typeof req.planFingerprint === 'string' ? req.planFingerprint : undefined,
+  };
+}
+
+export function fromWireGitDropStashResponse(resp: wire_git_drop_stash_resp): GitDropStashResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
+    headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
   };
 }
 
@@ -560,6 +755,7 @@ export function fromWireGitPreviewMergeBranchResponse(resp: wire_git_preview_mer
     sourceBehindCount: typeof resp?.source_behind_count === 'number' ? resp.source_behind_count : undefined,
     outcome: typeof resp?.outcome === 'string' ? resp.outcome : undefined,
     blockingReason: typeof resp?.blocking_reason === 'string' ? resp.blocking_reason : undefined,
+    blocking: fromWireGitMutationBlocker(resp?.blocking),
     planFingerprint: typeof resp?.plan_fingerprint === 'string' ? resp.plan_fingerprint : undefined,
     files: Array.isArray(resp?.files) ? resp.files.map(fromWireGitCommitFileSummary) : [],
     linkedWorktree: fromWireGitLinkedWorktreeSnapshot(resp?.linked_worktree),

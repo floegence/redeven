@@ -36,6 +36,13 @@ const (
 	TypeID_GIT_MERGE_BRANCH      uint32 = 1118
 	TypeID_GIT_FULL_CONTEXT_DIFF uint32 = 1119
 	TypeID_GIT_SWITCH_DETACHED   uint32 = 1120
+	TypeID_GIT_LIST_STASHES      uint32 = 1121
+	TypeID_GIT_GET_STASH_DETAIL  uint32 = 1122
+	TypeID_GIT_SAVE_STASH        uint32 = 1123
+	TypeID_GIT_PREVIEW_APPLY     uint32 = 1124
+	TypeID_GIT_APPLY_STASH       uint32 = 1125
+	TypeID_GIT_PREVIEW_DROP      uint32 = 1126
+	TypeID_GIT_DROP_STASH        uint32 = 1127
 
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
@@ -196,6 +203,42 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return status, nil
 	})
 
+	accessgate.RegisterTyped[listStashesReq, listStashesResp](r, TypeID_GIT_LIST_STASHES, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listStashesReq) (*listStashesResp, error) {
+		if meta == nil || !meta.CanRead {
+			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		}
+		if req == nil {
+			req = &listStashesReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.listStashes(ctx, repo)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		return resp, nil
+	})
+
+	accessgate.RegisterTyped[getStashDetailReq, getStashDetailResp](r, TypeID_GIT_GET_STASH_DETAIL, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getStashDetailReq) (*getStashDetailResp, error) {
+		if meta == nil || !meta.CanRead {
+			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		}
+		if req == nil {
+			req = &getStashDetailReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.getStashDetail(ctx, repo, req.ID)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		return resp, nil
+	})
+
 	accessgate.RegisterTyped[listBranchesReq, listBranchesResp](r, TypeID_GIT_LIST_BRANCHES, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listBranchesReq) (*listBranchesResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
@@ -308,6 +351,24 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return resp, nil
 	})
 
+	accessgate.RegisterTyped[saveStashReq, saveStashResp](r, TypeID_GIT_SAVE_STASH, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *saveStashReq) (*saveStashResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &saveStashReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.saveStash(ctx, repo, *req)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
+
 	accessgate.RegisterTyped[fetchRepoReq, fetchRepoResp](r, TypeID_GIT_FETCH_REPO, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *fetchRepoReq) (*fetchRepoResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
@@ -392,6 +453,78 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			return nil, classifyRepoRPCError(err)
 		}
 		resp, err := s.switchDetached(ctx, repo, req.TargetRef)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
+
+	accessgate.RegisterTyped[previewApplyStashReq, previewApplyStashResp](r, TypeID_GIT_PREVIEW_APPLY, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewApplyStashReq) (*previewApplyStashResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &previewApplyStashReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.previewApplyStash(ctx, repo, req.ID, req.RemoveAfterApply)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
+
+	accessgate.RegisterTyped[applyStashReq, applyStashResp](r, TypeID_GIT_APPLY_STASH, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *applyStashReq) (*applyStashResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &applyStashReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.applyStash(ctx, repo, req.ID, req.RemoveAfterApply, req.PlanFingerprint)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
+
+	accessgate.RegisterTyped[previewDropStashReq, previewDropStashResp](r, TypeID_GIT_PREVIEW_DROP, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *previewDropStashReq) (*previewDropStashResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &previewDropStashReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.previewDropStash(ctx, repo, req.ID)
+		if err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return resp, nil
+	})
+
+	accessgate.RegisterTyped[dropStashReq, dropStashResp](r, TypeID_GIT_DROP_STASH, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *dropStashReq) (*dropStashResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &dropStashReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.dropStash(ctx, repo, req.ID, req.PlanFingerprint)
 		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
 		}
@@ -825,6 +958,10 @@ func classifyGitRPCError(err error) *rpc.Error {
 		return &rpc.Error{Code: 400, Message: "missing diff file"}
 	case strings.Contains(lower, "missing ref"):
 		return &rpc.Error{Code: 400, Message: "missing ref"}
+	case strings.Contains(lower, "stash id is required"):
+		return &rpc.Error{Code: 400, Message: "stash id is required"}
+	case strings.Contains(lower, "stash not found"):
+		return &rpc.Error{Code: 404, Message: "stash not found"}
 	case strings.Contains(lower, "file not found in diff"):
 		return &rpc.Error{Code: 404, Message: "file not found in diff"}
 	case strings.Contains(lower, "not a git repository"):
@@ -845,6 +982,8 @@ func classifyGitMutationRPCError(err error) *rpc.Error {
 		return &rpc.Error{Code: 400, Message: "commit message is required"}
 	case strings.Contains(lower, "no staged changes to commit"):
 		return &rpc.Error{Code: 400, Message: "no staged changes to commit"}
+	case strings.Contains(lower, "no local changes to stash"):
+		return &rpc.Error{Code: 400, Message: "no local changes to stash"}
 	case strings.Contains(lower, "cannot unstage before the first commit"):
 		return &rpc.Error{Code: 400, Message: "cannot unstage before the first commit"}
 	case strings.Contains(lower, "invalid git path"):
@@ -875,6 +1014,14 @@ func classifyGitMutationRPCError(err error) *rpc.Error {
 		return &rpc.Error{Code: 400, Message: "merge plan fingerprint is required"}
 	case strings.Contains(lower, "merge plan is stale"):
 		return &rpc.Error{Code: 409, Message: message}
+	case strings.Contains(lower, "stash apply plan fingerprint is required"):
+		return &rpc.Error{Code: 400, Message: "stash apply plan fingerprint is required"}
+	case strings.Contains(lower, "stash apply plan is stale"):
+		return &rpc.Error{Code: 409, Message: message}
+	case strings.Contains(lower, "stash drop plan fingerprint is required"):
+		return &rpc.Error{Code: 400, Message: "stash drop plan fingerprint is required"}
+	case strings.Contains(lower, "stash drop plan is stale"):
+		return &rpc.Error{Code: 409, Message: message}
 	case strings.Contains(lower, "linked worktree removal must be confirmed"):
 		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "discard confirmation is required"):
@@ -887,6 +1034,8 @@ func classifyGitMutationRPCError(err error) *rpc.Error {
 		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "current workspace must be clean before merging"):
 		return &rpc.Error{Code: 400, Message: message}
+	case strings.Contains(lower, "current workspace must be clean before applying a stash"):
+		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "current workspace must be clean before switching to detached head"):
 		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "finish the current"):
@@ -894,6 +1043,10 @@ func classifyGitMutationRPCError(err error) *rpc.Error {
 	case strings.Contains(lower, "unrelated histories support"):
 		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "target branch does not have a readable head commit"):
+		return &rpc.Error{Code: 400, Message: message}
+	case strings.Contains(lower, "current files would be overwritten by this stash"):
+		return &rpc.Error{Code: 400, Message: message}
+	case strings.Contains(lower, "this stash cannot be applied cleanly on the current head"):
 		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "merge is blocked"):
 		return &rpc.Error{Code: 400, Message: message}

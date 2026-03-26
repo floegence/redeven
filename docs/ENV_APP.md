@@ -26,6 +26,7 @@ Key points:
 - Terminal right-click menus can hand off back into File Browser by opening the shared floating browser surface at the active terminal working directory.
 - Env App right-click menus that expose cross-surface handoff actions keep a shared priority order: `Ask Flower` first, `Open in Terminal` second when present, `Browse files` next when present, then a separator before any remaining actions.
 - Git browser cards now follow the same helper-action ordering where it makes semantic sense: `Changes` exposes `Ask Flower`, `Open in Terminal`, and `Browse Files`; `Branches` exposes directory handoffs only when the selected branch resolves to a checked-out worktree; `Graph` exposes commit-scoped `Ask Flower` plus `Switch --detach here`, branch-history commit detail exposes the same detach action, and detached repository chrome now shows explicit `Detached HEAD` state plus a one-click `Checkout <branch>` action back to the latest attached local branch when checkout history can resolve one safely.
+- Git stash is implemented as one shared floating Git surface instead of a fourth top-level browse mode: the header `Stashes` badge opens the saved-stack review tab, `Changes` and `Branches -> Status` open the save tab for the correct worktree target, and merge blockers can deep-link directly into `Stash current changes` when structured blocker data says the workspace can be stashed.
 - CSS, HTML, SCSS, Less, TOML, Makefile-family files, Vue/Svelte-class files, and other text formats now stay on the same Monaco-backed preview/edit path instead of splitting by language support tables.
 - File preview no longer uses a separate Shiki renderer. The only remaining preview fallbacks are a plain-text truncated view and a plain-text emergency view when Monaco fails outside edit mode.
 - Desktop-managed runs can promote serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` and `file_browser` today).
@@ -73,6 +74,28 @@ Git browse mode distinguishes between the active repository workspace and per-br
 - Git branch deletion keeps `safe delete` as the default path, but when an unmerged local branch cannot be safely deleted the review dialog can escalate into an exact branch-name-confirmed `force delete`; linked worktrees are force-removed together with their pending changes, while inaccessible linked worktrees remain blocked.
 
 This keeps worktree status consistent even when the user opens `Branches` first without visiting `Changes`.
+
+## Git browse stash workflow
+
+Git stash stays a workflow overlay owned by Git browse rather than a separate primary navigation mode:
+
+- Desktop uses the shared floating `PreviewWindow`; mobile reuses the same surface as a full-screen dialog.
+- The header `Stashes` action opens the `Saved Stashes` tab and shows the current stash count badge from repository summary data.
+- `Changes -> Stash...` targets the active repository root.
+- `Branches -> Status -> Stash...` targets the selected checked-out branch worktree (`worktreePath` when present, otherwise the active repository root for the current branch).
+- Merge review blockers no longer rely on message parsing. The merge preview returns structured blocker metadata, and the dialog only shows `Stash current changes` when the blocker explicitly exposes a stashable workspace path.
+
+The stash surface itself is split into two tabs:
+
+- `Save Changes` shows the target repository/worktree context, current workspace summary, optional stash message, and explicit `Include untracked files` / `Keep staged changes ready to commit` options.
+- `Saved Stashes` shows the shared stash stack, stash detail, changed-file patch browsing, and guarded actions for `Apply`, `Apply & Remove`, and `Delete`.
+
+Safety and refresh behavior:
+
+- Stash entries use the stash commit OID as their stable identity, so selection survives index shifts like `stash@{0}` changing after new saves or deletions.
+- `Apply` and `Delete` both require preview fingerprints before mutation; stale plans are rejected and must be reviewed again.
+- Stash apply preview simulates the operation in a temporary detached worktree before enabling confirmation, so clean-apply checks do not depend on string heuristics in the visible worktree.
+- After stash mutations, the stash window refreshes its own target worktree context, while the main Git browser refreshes repository summary, stash count, and linked branch status without overwriting the active browse state with the wrong worktree root.
 
 ## What runs where
 

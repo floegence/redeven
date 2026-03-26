@@ -21,6 +21,7 @@ import {
   reattachBranchFromRepoSummary,
   repoDisplayName,
   syncStatusLabel,
+  type GitStashWindowRequest,
   type GitBranchSubview,
   type GitDetachedSwitchTarget,
   type GitWorkbenchSubview,
@@ -56,6 +57,7 @@ export interface GitWorkbenchProps {
   branches?: GitListBranchesResponse | null;
   branchesLoading?: boolean;
   branchesError?: string;
+  statusRefreshToken?: number;
   selectedBranch?: GitBranchSummary | null;
   selectedBranchSubview?: GitBranchSubview;
   onSelectBranchSubview?: (view: GitBranchSubview) => void;
@@ -101,6 +103,7 @@ export interface GitWorkbenchProps {
   onStageSelected?: (item: GitWorkspaceChange) => void;
   onUnstageSelected?: (item: GitWorkspaceChange) => void;
   onBulkAction?: (section: GitWorkspaceViewSection) => void;
+  onOpenStash?: (request: GitStashWindowRequest) => void;
   onAskFlower?: (request: GitAskFlowerRequest) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
   onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
@@ -151,6 +154,10 @@ export function GitWorkbench(props: GitWorkbenchProps) {
   };
   const subviewTone = () => gitSubviewTone(activeSubview());
   const detachedHead = () => headDisplay().detached;
+  const stashCountLabel = () => {
+    const count = Number(props.repoSummary?.stashCount ?? 0);
+    return count > 0 ? `Stashes · ${count}` : 'Stashes';
+  };
   const repoActionsDisabled = () => Boolean(
     props.repoInfoLoading
     || !(props.repoInfo?.available ?? Boolean(props.repoSummary?.repoRootPath))
@@ -213,6 +220,25 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 }}
               >
                 {detachedHeadCheckoutActionLabel(reattachBranch(), props.checkoutBusy)}
+              </Button>
+            </Show>
+            <Show when={props.onOpenStash}>
+              <Button
+                size="xs"
+                variant="ghost"
+                class={cn('shrink-0', gitToneActionButtonClass())}
+                disabled={repoActionsDisabled()}
+                onClick={() => {
+                  const repoRootPath = String(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || '').trim();
+                  if (!repoRootPath) return;
+                  props.onOpenStash?.({
+                    tab: 'stashes',
+                    repoRootPath,
+                    source: 'header',
+                  });
+                }}
+              >
+                {stashCountLabel()}
               </Button>
             </Show>
             <Show when={props.onFetch}>
@@ -296,6 +322,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               onStageSelected={props.onStageSelected}
               onUnstageSelected={props.onUnstageSelected}
               onBulkAction={props.onBulkAction}
+              onOpenStash={props.onOpenStash}
               onAskFlower={(request) => props.onAskFlower?.(request)}
               onOpenInTerminal={props.onOpenInTerminal}
               onBrowseFiles={props.onBrowseFiles}
@@ -314,6 +341,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             <GitBranchesPanel
               repoRootPath={props.repoSummary?.repoRootPath}
               repoSummary={props.repoSummary}
+              statusRefreshToken={props.statusRefreshToken}
               selectedBranch={props.selectedBranch}
               selectedBranchSubview={props.selectedBranchSubview}
               onSelectBranchSubview={props.onSelectBranchSubview}
@@ -352,6 +380,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               onCloseMergeReview={props.onCloseMergeReview}
               onRetryMergePreview={props.onRetryMergePreview}
               onConfirmMergeBranch={props.onConfirmMergeBranch}
+              onOpenStash={props.onOpenStash}
               onCloseDeleteReview={props.onCloseDeleteReview}
               onRetryDeletePreview={props.onRetryDeletePreview}
               onConfirmDeleteBranch={props.onConfirmDeleteBranch}

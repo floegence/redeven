@@ -334,6 +334,69 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
+  it('opens the stash window for a linked branch worktree from status actions', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onOpenStash = vi.fn();
+
+    mockListWorkspaceChanges.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo-linked',
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      staged: [],
+      unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts' }],
+      untracked: [],
+      conflicted: [],
+    });
+
+    const branch = {
+      name: 'feature/linked',
+      fullName: 'refs/heads/feature/linked',
+      kind: 'local' as const,
+      worktreePath: '/workspace/repo-linked',
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={branch}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    branch,
+                  ],
+                  remote: [],
+                }}
+                onOpenStash={onOpenStash}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const stashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Stash...')) as HTMLButtonElement | undefined;
+      expect(stashButton).toBeTruthy();
+      stashButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onOpenStash).toHaveBeenCalledWith({
+        tab: 'save',
+        repoRootPath: '/workspace/repo-linked',
+        source: 'branch_status',
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('exposes Ask Flower, Terminal, and Files for linked branch worktrees', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1022,6 +1085,7 @@ describe('GitBranchesPanel interactions', () => {
 
   it('keeps merge clickable for a dirty workspace and shows the blocked preview reason in the dialog', async () => {
     let requestedBranch: string | undefined;
+    const onOpenStash = vi.fn();
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -1043,7 +1107,13 @@ describe('GitBranchesPanel interactions', () => {
       sourceAheadCount: 1,
       sourceBehindCount: 0,
       outcome: 'blocked' as const,
-      blockingReason: 'Commit, stash, or discard the current workspace changes before merging (1 unstaged).',
+      blocking: {
+        kind: 'workspace_dirty',
+        reason: 'Current workspace must be clean before merging (1 unstaged).',
+        workspacePath: '/workspace/repo-blocked',
+        workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+        canStashWorkspace: true,
+      },
       planFingerprint: 'merge-plan-blocked',
       files: [],
     };
@@ -1080,6 +1150,7 @@ describe('GitBranchesPanel interactions', () => {
                     requestedBranch = selected.name;
                     setMergeReviewOpen(true);
                   }}
+                  onOpenStash={onOpenStash}
                   onCloseMergeReview={() => setMergeReviewOpen(false)}
                 />
               </div>
@@ -1103,11 +1174,83 @@ describe('GitBranchesPanel interactions', () => {
       expect(requestedBranch).toBe('feature/blocked');
       expect(document.body.textContent).toContain('Merge Branch');
       expect(document.body.textContent).toContain('Blocked');
-      expect(document.body.textContent).toContain('Commit, stash, or discard the current workspace changes before merging (1 unstaged).');
+      expect(document.body.textContent).toContain('Current workspace must be clean before merging (1 unstaged).');
+      const stashShortcut = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Stash current changes') as HTMLButtonElement | undefined;
+      expect(stashShortcut).toBeTruthy();
+      stashShortcut!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(onOpenStash).toHaveBeenCalledWith({
+        tab: 'save',
+        repoRootPath: '/workspace/repo-blocked',
+        source: 'merge_blocker',
+      });
 
       const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Merge Into main') as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.disabled).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('reloads linked worktree status when the refresh token changes', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mockListWorkspaceChanges.mockResolvedValue({
+      repoRootPath: '/workspace/repo-linked',
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      staged: [],
+      unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts' }],
+      untracked: [],
+      conflicted: [],
+    });
+
+    let setRefreshToken!: (value: number) => number;
+    const branch = {
+      name: 'feature/linked',
+      fullName: 'refs/heads/feature/linked',
+      kind: 'local' as const,
+      worktreePath: '/workspace/repo-linked',
+    };
+
+    const dispose = render(() => {
+      const [refreshToken, updateRefreshToken] = createSignal(0);
+      setRefreshToken = updateRefreshToken;
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  statusRefreshToken={refreshToken()}
+                  selectedBranch={branch}
+                  branches={{
+                    repoRootPath: '/workspace/repo',
+                    currentRef: 'main',
+                    local: [
+                      { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                      branch,
+                    ],
+                    remote: [],
+                  }}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+      expect(mockListWorkspaceChanges).toHaveBeenCalledTimes(1);
+
+      setRefreshToken(1);
+      await flush();
+
+      expect(mockListWorkspaceChanges).toHaveBeenCalledTimes(2);
+      expect(mockListWorkspaceChanges).toHaveBeenLastCalledWith({ repoRootPath: '/workspace/repo-linked' });
     } finally {
       dispose();
     }

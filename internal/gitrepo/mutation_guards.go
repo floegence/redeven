@@ -5,11 +5,35 @@ import (
 	"fmt"
 )
 
+const (
+	gitMutationBlockerKindWorkspaceDirty    = "workspace_dirty"
+	gitMutationBlockerKindOperationProgress = "operation_in_progress"
+	gitMutationBlockerKindDetachedHead      = "detached_head"
+)
+
 type detachedSwitchState struct {
 	TargetRef        string
 	TargetCommit     string
 	WorkspaceSummary gitWorkspaceSummary
 	BlockingReason   string
+}
+
+func newWorkspaceMutationBlocker(action string, workspacePath string, summary gitWorkspaceSummary, canStashWorkspace bool) *gitMutationBlocker {
+	return &gitMutationBlocker{
+		Kind:              gitMutationBlockerKindWorkspaceDirty,
+		Reason:            formatWorkspaceBlockedReason(action, summary),
+		WorkspacePath:     workspacePath,
+		WorkspaceSummary:  summary,
+		CanStashWorkspace: canStashWorkspace,
+	}
+}
+
+func newOperationMutationBlocker(action string, operation string) *gitMutationBlocker {
+	return &gitMutationBlocker{
+		Kind:      gitMutationBlockerKindOperationProgress,
+		Reason:    formatOperationBlockedReason(action, operation),
+		Operation: operation,
+	}
 }
 
 func formatWorkspaceBlockedReason(action string, summary gitWorkspaceSummary) string {

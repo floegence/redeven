@@ -28,6 +28,7 @@ import {
   workspaceViewSectionItems,
   workspaceViewSectionLabel,
   resolveGitBranchWorktreePath,
+  type GitStashWindowRequest,
   type GitBranchSubview,
   type GitDetachedSwitchTarget,
   type GitWorkspaceViewSection,
@@ -64,6 +65,7 @@ import { GitMergeBranchDialog, type GitMergeBranchDialogConfirmOptions, type Git
 export interface GitBranchesPanelProps {
   repoRootPath?: string;
   repoSummary?: GitRepoSummaryResponse | null;
+  statusRefreshToken?: number;
   selectedBranch?: GitBranchSummary | null;
   selectedBranchSubview?: GitBranchSubview;
   onSelectBranchSubview?: (view: GitBranchSubview) => void;
@@ -102,6 +104,7 @@ export interface GitBranchesPanelProps {
   onCloseMergeReview?: () => void;
   onRetryMergePreview?: (branch: GitBranchSummary) => void;
   onConfirmMergeBranch?: (branch: GitBranchSummary, options: GitMergeBranchDialogConfirmOptions) => void;
+  onOpenStash?: (request: GitStashWindowRequest) => void;
   onCloseDeleteReview?: () => void;
   onRetryDeletePreview?: (branch: GitBranchSummary) => void;
   onConfirmDeleteBranch?: (branch: GitBranchSummary, options: GitDeleteBranchDialogConfirmOptions) => void;
@@ -906,6 +909,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   );
   const deleteLabel = () => (props.deleteBusy ? 'Deleting...' : 'Delete');
   const canAskFlowerStatus = () => Boolean(props.onAskFlower && props.selectedBranch && statusRepoRootPath() && visibleStatusItems().length > 0);
+  const canOpenStash = () => Boolean(props.onOpenStash && statusRepoRootPath());
   const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && branchDirectoryRequest());
   const canBrowseFiles = () => Boolean(props.onBrowseFiles && branchDirectoryRequest());
   const branchWorkspaceDisabledReason = () => {
@@ -957,6 +961,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     const branch = props.selectedBranch;
     const subview = branchSubview();
     const repoRootPath = statusRepoRootPath();
+    const refreshToken = Number(props.statusRefreshToken ?? 0);
+    void refreshToken;
     if (!branch) {
       statusReqSeq += 1;
       setStatusWorkspace(null);
@@ -1060,6 +1066,25 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                   <Button size="sm" variant="outline" class="rounded-md bg-background/80" onClick={() => setCompareDialogOpen(true)}>
                     Compare
                   </Button>
+                  <Show when={props.onOpenStash}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      class="rounded-md bg-background/80"
+                      disabled={!canOpenStash()}
+                      onClick={() => {
+                        const repoRoot = statusRepoRootPath();
+                        if (!repoRoot) return;
+                        props.onOpenStash?.({
+                          tab: 'save',
+                          repoRootPath: repoRoot,
+                          source: 'branch_status',
+                        });
+                      }}
+                    >
+                      Stash...
+                    </Button>
+                  </Show>
                 </div>
               </div>
 
@@ -1403,6 +1428,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         state={mergeReviewState()}
         onClose={() => props.onCloseMergeReview?.()}
         onRetryPreview={(branch) => props.onRetryMergePreview?.(branch)}
+        onOpenStash={(request) => props.onOpenStash?.(request)}
         onConfirm={(branch, options) => props.onConfirmMergeBranch?.(branch, options)}
       />
 

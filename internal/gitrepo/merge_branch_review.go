@@ -37,6 +37,7 @@ type mergeBranchPlan struct {
 	SourceBehindCount int
 	Outcome           string
 	BlockingReason    string
+	Blocking          *gitMutationBlocker
 	WorkspaceSummary  gitWorkspaceSummary
 	Files             []gitCommitFileSummary
 	LinkedWorktree    *gitLinkedWorktreeSnapshot
@@ -54,6 +55,7 @@ type mergeBranchFingerprintPayload struct {
 	SourceBehindCount int                 `json:"source_behind_count"`
 	Outcome           string              `json:"outcome"`
 	BlockingReason    string              `json:"blocking_reason"`
+	Blocking          *gitMutationBlocker `json:"blocking,omitempty"`
 	WorkspaceSummary  gitWorkspaceSummary `json:"workspace_summary"`
 }
 
@@ -79,6 +81,7 @@ func (s *Service) previewMergeBranch(ctx context.Context, repo repoContext, name
 		SourceBehindCount: plan.SourceBehindCount,
 		Outcome:           plan.Outcome,
 		BlockingReason:    plan.BlockingReason,
+		Blocking:          plan.Blocking,
 		PlanFingerprint:   plan.PlanFingerprint,
 		Files:             plan.Files,
 		LinkedWorktree:    plan.LinkedWorktree,
@@ -107,7 +110,11 @@ func (s *Service) buildMergeBranchPlan(ctx context.Context, repo repoContext, ta
 
 	if plan.CurrentRef == "" || plan.CurrentRef == "HEAD" {
 		plan.Outcome = mergeBranchOutcomeBlocked
-		plan.BlockingReason = "Attach HEAD to a local branch before merging."
+		plan.Blocking = &gitMutationBlocker{
+			Kind:   gitMutationBlockerKindDetachedHead,
+			Reason: "Attach HEAD to a local branch before merging.",
+		}
+		plan.BlockingReason = plan.Blocking.Reason
 		plan.PlanFingerprint = buildMergeBranchPlanFingerprint(plan)
 		return plan, nil
 	}
@@ -122,13 +129,15 @@ func (s *Service) buildMergeBranchPlan(ctx context.Context, repo repoContext, ta
 	}
 	if workspaceSummaryHasChanges(plan.WorkspaceSummary) {
 		plan.Outcome = mergeBranchOutcomeBlocked
-		plan.BlockingReason = formatWorkspaceBlockedReason("merging", plan.WorkspaceSummary)
+		plan.Blocking = newWorkspaceMutationBlocker("merging", repo.repoRootReal, plan.WorkspaceSummary, true)
+		plan.BlockingReason = plan.Blocking.Reason
 		plan.PlanFingerprint = buildMergeBranchPlanFingerprint(plan)
 		return plan, nil
 	}
 	if operation := readGitOperationState(ctx, repo.repoRootReal); operation != "" {
 		plan.Outcome = mergeBranchOutcomeBlocked
-		plan.BlockingReason = formatOperationBlockedReason("merging another branch", operation)
+		plan.Blocking = newOperationMutationBlocker("merging another branch", operation)
+		plan.BlockingReason = plan.Blocking.Reason
 		plan.PlanFingerprint = buildMergeBranchPlanFingerprint(plan)
 		return plan, nil
 	}
@@ -240,6 +249,7 @@ func buildMergeBranchPlanFingerprint(plan mergeBranchPlan) string {
 		SourceBehindCount: plan.SourceBehindCount,
 		Outcome:           plan.Outcome,
 		BlockingReason:    plan.BlockingReason,
+		Blocking:          plan.Blocking,
 		WorkspaceSummary:  plan.WorkspaceSummary,
 	}
 	data, err := json.Marshal(payload)

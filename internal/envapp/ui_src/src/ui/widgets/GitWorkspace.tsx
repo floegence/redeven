@@ -9,7 +9,7 @@ import type {
   GitResolveRepoResponse,
   GitWorkspaceChange,
 } from '../protocol/redeven_v1';
-import { buildGitWorkbenchSubviewItems, type GitBranchSubview, type GitDetachedSwitchTarget, type GitWorkbenchSubview, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
+import { buildGitWorkbenchSubviewItems, type GitBranchSubview, type GitDetachedSwitchTarget, type GitStashWindowRequest, type GitWorkbenchSubview, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 import { GitViewNav } from './GitViewNav';
@@ -50,6 +50,7 @@ export interface GitWorkspaceProps {
   onStageWorkspaceItem?: (item: GitWorkspaceChange) => void;
   onUnstageWorkspaceItem?: (item: GitWorkspaceChange) => void;
   onBulkWorkspaceAction?: (section: GitWorkspaceViewSection) => void;
+  onOpenStash?: (request: GitStashWindowRequest) => void;
   onAskFlower?: (request: GitAskFlowerRequest) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
   onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
@@ -58,6 +59,7 @@ export interface GitWorkspaceProps {
   branches?: GitListBranchesResponse | null;
   branchesLoading?: boolean;
   branchesError?: string;
+  statusRefreshToken?: number;
   selectedBranch?: GitBranchSummary | null;
   selectedBranchKey?: string;
   onSelectBranch?: (branch: GitBranchSummary) => void;
@@ -203,6 +205,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               branches={props.branches}
               branchesLoading={props.branchesLoading}
               branchesError={props.branchesError}
+              statusRefreshToken={props.statusRefreshToken}
               selectedBranch={props.selectedBranch}
               selectedBranchSubview={props.selectedBranchSubview}
               onSelectBranchSubview={props.onSelectBranchSubview}
@@ -248,6 +251,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               onStageSelected={props.onStageWorkspaceItem}
               onUnstageSelected={props.onUnstageWorkspaceItem}
               onBulkAction={props.onBulkWorkspaceAction}
+              onOpenStash={props.onOpenStash}
               onAskFlower={props.onAskFlower}
               onOpenInTerminal={props.onOpenInTerminal}
               onBrowseFiles={props.onBrowseFiles}

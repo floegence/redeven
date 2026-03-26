@@ -213,6 +213,55 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
+  it('opens the stash window from the workspace actions', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onOpenStash = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  stashCount: 1,
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts' }],
+                  untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt' }],
+                  conflicted: [],
+                }}
+                selectedSection="changes"
+                onOpenStash={onOpenStash}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const stashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Stash...')) as HTMLButtonElement | undefined;
+      expect(stashButton).toBeTruthy();
+      stashButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onOpenStash).toHaveBeenCalledWith({
+        tab: 'save',
+        repoRootPath: '/workspace/repo',
+        source: 'changes',
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('exposes Ask Flower, Terminal, and Files from the workspace card', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

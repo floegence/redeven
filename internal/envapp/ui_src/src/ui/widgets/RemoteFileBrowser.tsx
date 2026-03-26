@@ -17,6 +17,8 @@ import {
   type GitPreviewMergeBranchResponse,
   type GitRepoSummaryResponse,
   type GitResolveRepoResponse,
+  type GitStashDetail,
+  type GitStashSummary,
   type GitWorkspaceChange,
   type GitWorkspaceSection,
 } from '../protocol/redeven_v1';
@@ -37,6 +39,7 @@ import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
+import { GitStashWindow, type GitStashReviewState } from './GitStashWindow';
 import { GitWorkspace } from './GitWorkspace';
 import {
   applyWorkspaceSectionMutation,
@@ -49,6 +52,9 @@ import {
   summarizeWorkspaceCount,
   type GitBranchSubview,
   type GitDetachedSwitchTarget,
+  type GitStashWindowRequest,
+  type GitStashWindowSource,
+  type GitStashWindowTab,
   type GitWorkspaceViewSection,
   pickDefaultGitBranch,
   pickDefaultWorkspaceChange,
@@ -102,13 +108,32 @@ const GIT_SUBVIEW_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:git-subview:
 const SHOW_HIDDEN_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:show-hidden:';
 const SHOW_HIDDEN_DROPDOWN_ITEM_ID = 'show-hidden-files';
 
-type GitMutationScope = 'stage' | 'unstage' | 'commit' | 'fetch' | 'pull' | 'push' | 'checkout' | 'switchDetached' | 'mergeBranch' | 'deleteBranch' | '';
+type GitMutationScope =
+  | 'stage'
+  | 'unstage'
+  | 'commit'
+  | 'fetch'
+  | 'pull'
+  | 'push'
+  | 'checkout'
+  | 'switchDetached'
+  | 'mergeBranch'
+  | 'deleteBranch'
+  | 'saveStash'
+  | 'applyStash'
+  | 'dropStash'
+  | '';
 
 type GitMutationRepoResponse = {
   repoRootPath: string;
   headRef?: string;
   headCommit?: string;
   detached?: boolean;
+};
+
+type GitStashWindowContext = {
+  repoRootPath: string;
+  source: GitStashWindowSource;
 };
 
 type GitLoadOptions = {
@@ -386,6 +411,27 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitDeleteReviewPreview, setGitDeleteReviewPreview] = createSignal<GitPreviewDeleteBranchResponse | null>(null);
   const [gitDeleteReviewLoading, setGitDeleteReviewLoading] = createSignal(false);
   const [gitDeleteReviewError, setGitDeleteReviewError] = createSignal('');
+  const [gitBranchStatusRefreshToken, setGitBranchStatusRefreshToken] = createSignal(0);
+  const [stashWindowOpen, setStashWindowOpen] = createSignal(false);
+  const [stashWindowTab, setStashWindowTab] = createSignal<GitStashWindowTab>('save');
+  const [stashWindowContext, setStashWindowContext] = createSignal<GitStashWindowContext | null>(null);
+  const [stashRepoSummary, setStashRepoSummary] = createSignal<GitRepoSummaryResponse | null>(null);
+  const [stashWorkspace, setStashWorkspace] = createSignal<GitListWorkspaceChangesResponse | null>(null);
+  const [stashContextLoading, setStashContextLoading] = createSignal(false);
+  const [stashContextError, setStashContextError] = createSignal('');
+  const [stashList, setStashList] = createSignal<GitStashSummary[]>([]);
+  const [stashListLoading, setStashListLoading] = createSignal(false);
+  const [stashListError, setStashListError] = createSignal('');
+  const [selectedStashId, setSelectedStashId] = createSignal('');
+  const [stashDetail, setStashDetail] = createSignal<GitStashDetail | null>(null);
+  const [stashDetailLoading, setStashDetailLoading] = createSignal(false);
+  const [stashDetailError, setStashDetailError] = createSignal('');
+  const [stashSaveMessage, setStashSaveMessage] = createSignal('');
+  const [stashIncludeUntracked, setStashIncludeUntracked] = createSignal(false);
+  const [stashKeepIndex, setStashKeepIndex] = createSignal(false);
+  const [stashReview, setStashReview] = createSignal<GitStashReviewState | null>(null);
+  const [stashReviewLoading, setStashReviewLoading] = createSignal(false);
+  const [stashReviewError, setStashReviewError] = createSignal('');
   let previousEnvId: string | null = null;
   const [gitDeleteActionError, setGitDeleteActionError] = createSignal('');
 
@@ -397,6 +443,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let gitBranchesReqSeq = 0;
   let gitMergeReviewReqSeq = 0;
   let gitDeleteReviewReqSeq = 0;
+  let stashContextReqSeq = 0;
+  let stashListReqSeq = 0;
+  let stashDetailReqSeq = 0;
+  let stashReviewReqSeq = 0;
   let lastGitCommitContextKey = '';
   let lastGitRepoKey = '';
 
@@ -773,6 +823,40 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     applyGitCommitContextEntry(null, null);
   };
 
+  const clearStashReview = (options: { cancelInFlight?: boolean } = {}) => {
+    if (options.cancelInFlight) {
+      stashReviewReqSeq += 1;
+    }
+    setStashReviewLoading(false);
+    setStashReview(null);
+    setStashReviewError('');
+  };
+
+  const resetGitStashState = () => {
+    stashContextReqSeq += 1;
+    stashListReqSeq += 1;
+    stashDetailReqSeq += 1;
+    stashReviewReqSeq += 1;
+    setStashWindowOpen(false);
+    setStashWindowTab('save');
+    setStashWindowContext(null);
+    setStashRepoSummary(null);
+    setStashWorkspace(null);
+    setStashContextLoading(false);
+    setStashContextError('');
+    setStashList([]);
+    setStashListLoading(false);
+    setStashListError('');
+    setSelectedStashId('');
+    setStashDetail(null);
+    setStashDetailLoading(false);
+    setStashDetailError('');
+    setStashSaveMessage('');
+    setStashIncludeUntracked(false);
+    setStashKeepIndex(false);
+    clearStashReview();
+  };
+
   const resetGitWorkbenchData = () => {
     gitRepoSummaryReqSeq += 1;
     gitWorkspaceReqSeq += 1;
@@ -808,11 +892,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitDeleteReviewLoading(false);
     setGitDeleteReviewError('');
     setGitDeleteActionError('');
+    setGitBranchStatusRefreshToken(0);
+    resetGitStashState();
   };
 
   const selectedGitWorkspaceItem = () => findWorkspaceChangeByKey(gitWorkspace(), selectedGitWorkspaceKey());
 
   const selectedGitBranch = () => findGitBranchByKey(gitBranches(), selectedGitBranchName());
+  const activeStashRepoRootPath = () => String(stashWindowContext()?.repoRootPath ?? '').trim();
+  const activeStashSource = () => stashWindowContext()?.source ?? 'header';
 
   const applyWorkspaceSnapshot = (nextWorkspace: GitListWorkspaceChangesResponse | null | undefined) => {
     if (!nextWorkspace) return;
@@ -934,13 +1022,19 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                 ? 'Push failed'
                 : scope === 'checkout'
                   ? 'Checkout failed'
-                  : scope === 'switchDetached'
-                    ? 'Detach failed'
+                : scope === 'switchDetached'
+                  ? 'Detach failed'
                   : scope === 'mergeBranch'
                     ? 'Merge failed'
-                  : scope === 'deleteBranch'
-                    ? 'Delete failed'
-                    : 'Git request failed';
+                    : scope === 'deleteBranch'
+                      ? 'Delete failed'
+                      : scope === 'saveStash'
+                        ? 'Stash save failed'
+                        : scope === 'applyStash'
+                          ? 'Apply stash failed'
+                          : scope === 'dropStash'
+                            ? 'Delete stash failed'
+                            : 'Git request failed';
       notification.error(title, message || 'Request failed.');
       return false;
     } finally {
@@ -1128,6 +1222,387 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         repoRootPath,
         silent: useBackgroundRefresh,
       });
+    }
+  };
+
+  const resolveStashRepoRootPath = (overridePath?: string): string => (
+    String(overridePath ?? activeStashRepoRootPath()).trim()
+  );
+
+  const loadStashContext = async (options: GitLoadOptions = {}) => {
+    const repoRootPath = resolveStashRepoRootPath(options.repoRootPath);
+    if (!repoRootPath || !protocol.client()) return;
+    const seq = ++stashContextReqSeq;
+    if (!options.silent) {
+      setStashContextLoading(true);
+      setStashContextError('');
+    }
+    try {
+      const [repoSummaryResp, workspaceResp] = await Promise.all([
+        rpc.git.getRepoSummary({ repoRootPath }),
+        rpc.git.listWorkspaceChanges({ repoRootPath }),
+      ]);
+      if (seq !== stashContextReqSeq) return;
+      setStashRepoSummary(repoSummaryResp);
+      setStashWorkspace(workspaceResp);
+      setStashContextError('');
+      return {
+        repoSummary: repoSummaryResp,
+        workspace: workspaceResp,
+      };
+    } catch (err) {
+      if (seq !== stashContextReqSeq) return;
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load stash context');
+      if (!options.silent) {
+        setStashRepoSummary(null);
+        setStashWorkspace(null);
+        setStashContextError(message);
+      } else {
+        notification.warning('Stash refresh incomplete', message);
+      }
+    } finally {
+      if (!options.silent && seq === stashContextReqSeq) {
+        setStashContextLoading(false);
+      }
+    }
+  };
+
+  const loadStashList = async (options: GitLoadOptions & { preferredSelectedId?: string } = {}) => {
+    const repoRootPath = resolveStashRepoRootPath(options.repoRootPath);
+    if (!repoRootPath || !protocol.client()) return;
+    const seq = ++stashListReqSeq;
+    if (!options.silent) {
+      setStashListLoading(true);
+      setStashListError('');
+    }
+    try {
+      const resp = await rpc.git.listStashes({ repoRootPath });
+      if (seq !== stashListReqSeq) return;
+      const nextItems = Array.isArray(resp?.stashes) ? resp.stashes : [];
+      const preferredSelectedId = String(options.preferredSelectedId ?? '').trim();
+      const currentSelectedId = String(selectedStashId() ?? '').trim();
+      const nextSelectedId = nextItems.some((item) => item.id === preferredSelectedId)
+        ? preferredSelectedId
+        : nextItems.some((item) => item.id === currentSelectedId)
+          ? currentSelectedId
+          : (nextItems[0]?.id ?? '');
+
+      setStashList(nextItems);
+      setSelectedStashId(nextSelectedId);
+      setStashListError('');
+
+      const reviewStashId = String(stashReview()?.preview.stash?.id ?? '').trim();
+      if (reviewStashId && reviewStashId !== nextSelectedId) {
+        clearStashReview({ cancelInFlight: true });
+      }
+
+      if (!nextSelectedId) {
+        setStashDetail(null);
+        setStashDetailError('');
+      } else if (stashDetail()?.id !== nextSelectedId) {
+        setStashDetail(null);
+        setStashDetailError('');
+      }
+      return resp;
+    } catch (err) {
+      if (seq !== stashListReqSeq) return;
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load stashes');
+      if (!options.silent) {
+        setStashList([]);
+        setSelectedStashId('');
+        setStashDetail(null);
+        setStashListError(message);
+      } else {
+        notification.warning('Stash refresh incomplete', message);
+      }
+    } finally {
+      if (!options.silent && seq === stashListReqSeq) {
+        setStashListLoading(false);
+      }
+    }
+  };
+
+  const loadStashDetail = async (options: GitLoadOptions & { id?: string } = {}) => {
+    const repoRootPath = resolveStashRepoRootPath(options.repoRootPath);
+    const stashId = String(options.id ?? selectedStashId() ?? '').trim();
+    if (!repoRootPath || !stashId || !protocol.client()) return;
+    const seq = ++stashDetailReqSeq;
+    if (!options.silent) {
+      setStashDetailLoading(true);
+      setStashDetailError('');
+    }
+    try {
+      const resp = await rpc.git.getStashDetail({
+        repoRootPath,
+        id: stashId,
+      });
+      if (seq !== stashDetailReqSeq) return;
+      setStashDetail(resp?.stash ?? null);
+      setStashDetailError('');
+      return resp;
+    } catch (err) {
+      if (seq !== stashDetailReqSeq) return;
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load stash detail');
+      if (!options.silent) {
+        setStashDetail(null);
+        setStashDetailError(message);
+      } else {
+        notification.warning('Stash refresh incomplete', message);
+      }
+    } finally {
+      if (!options.silent && seq === stashDetailReqSeq) {
+        setStashDetailLoading(false);
+      }
+    }
+  };
+
+  const refreshStashWindowData = async (options: GitLoadOptions & { preferredSelectedId?: string } = {}) => {
+    const repoRootPath = resolveStashRepoRootPath(options.repoRootPath);
+    if (!repoRootPath) return;
+    await Promise.all([
+      loadStashContext({ silent: Boolean(options.silent), repoRootPath }),
+      loadStashList({
+        silent: Boolean(options.silent),
+        repoRootPath,
+        preferredSelectedId: options.preferredSelectedId,
+      }),
+    ]);
+    const nextSelectedId = String(options.preferredSelectedId ?? selectedStashId() ?? '').trim();
+    if (!nextSelectedId) {
+      setStashDetail(null);
+      setStashDetailError('');
+      return;
+    }
+    await loadStashDetail({
+      silent: Boolean(options.silent),
+      repoRootPath,
+      id: nextSelectedId,
+    });
+  };
+
+  const refreshActiveGitStateAfterStashMutation = async (
+    kind: Extract<GitMutationRefreshKind, 'saveStash' | 'applyStash' | 'dropStash'>,
+    targetRepoRootPath: string,
+    resp: GitMutationRepoResponse,
+  ) => {
+    const normalizedTargetPath = String(targetRepoRootPath ?? '').trim();
+    const activeRepoRootPath = resolveActiveRepoRootPath();
+    if (activeRepoRootPath && activeRepoRootPath === normalizedTargetPath) {
+      await refreshGitStateAfterMutation(kind, resp);
+    } else {
+      const refreshes: Array<Promise<unknown>> = [];
+      if (activeRepoRootPath) {
+        refreshes.push(loadGitRepoSummary({ silent: true, repoRootPath: activeRepoRootPath }));
+        if (pageMode() === 'git' || gitBranches()) {
+          refreshes.push(loadGitBranches({ silent: true, repoRootPath: activeRepoRootPath }));
+        }
+      }
+      await Promise.all(refreshes);
+    }
+    setGitBranchStatusRefreshToken((value) => value + 1);
+  };
+
+  const openGitStashWindow = (request: GitStashWindowRequest = {}) => {
+    const repoRootPath = String(request.repoRootPath ?? resolveActiveRepoRootPath()).trim();
+    if (!repoRootPath) {
+      notification.error('Stash unavailable', 'Repository path is unavailable.');
+      return;
+    }
+    const previousRepoRootPath = activeStashRepoRootPath();
+    const repoChanged = previousRepoRootPath !== repoRootPath;
+    if (repoChanged) {
+      stashContextReqSeq += 1;
+      stashListReqSeq += 1;
+      stashDetailReqSeq += 1;
+      setStashRepoSummary(null);
+      setStashWorkspace(null);
+      setStashContextError('');
+      setStashList([]);
+      setStashListError('');
+      setSelectedStashId('');
+      setStashDetail(null);
+      setStashDetailError('');
+      setStashSaveMessage('');
+      clearStashReview({ cancelInFlight: true });
+    }
+    setStashWindowContext({
+      repoRootPath,
+      source: request.source ?? 'header',
+    });
+    setStashWindowTab(request.tab ?? 'save');
+    setStashWindowOpen(true);
+    void refreshStashWindowData({
+      repoRootPath,
+      silent: !repoChanged && Boolean(stashRepoSummary()) && stashList().length > 0,
+    });
+  };
+
+  const handleStashWindowOpenChange = (open: boolean) => {
+    setStashWindowOpen(open);
+    if (!open) {
+      clearStashReview({ cancelInFlight: true });
+    }
+  };
+
+  const handleSaveStash = async () => {
+    const repoRootPath = activeStashRepoRootPath();
+    if (!repoRootPath) return;
+    const message = String(stashSaveMessage() ?? '').trim();
+    await runGitMutation(
+      'saveStash',
+      `stash:save:${repoRootPath}`,
+      () => rpc.git.saveStash({
+        repoRootPath,
+        message: message || undefined,
+        includeUntracked: stashIncludeUntracked(),
+        keepIndex: stashKeepIndex(),
+      }),
+      async (resp) => {
+        setStashWindowTab('stashes');
+        setStashSaveMessage('');
+        clearStashReview({ cancelInFlight: true });
+        await Promise.all([
+          refreshActiveGitStateAfterStashMutation('saveStash', repoRootPath, resp),
+          refreshStashWindowData({
+            repoRootPath,
+            preferredSelectedId: resp.created?.id,
+            silent: true,
+          }),
+        ]);
+        notification.success(
+          'Stashed',
+          resp.created?.ref
+            ? `Saved current changes as ${resp.created.ref}.`
+            : 'Saved current changes to the stash stack.',
+        );
+      },
+    );
+  };
+
+  const handleRequestApplyStash = async (removeAfterApply: boolean) => {
+    const repoRootPath = activeStashRepoRootPath();
+    const stashId = String(selectedStashId() ?? '').trim();
+    if (!repoRootPath || !stashId || !protocol.client()) return;
+    const seq = ++stashReviewReqSeq;
+    setStashReviewLoading(true);
+    setStashReviewError('');
+    try {
+      const preview = await rpc.git.previewApplyStash({
+        repoRootPath,
+        id: stashId,
+        removeAfterApply,
+      });
+      if (seq !== stashReviewReqSeq) return;
+      setStashReview({
+        kind: 'apply',
+        removeAfterApply,
+        preview,
+      });
+    } catch (err) {
+      if (seq !== stashReviewReqSeq) return;
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to review stash apply');
+      setStashReview(null);
+      setStashReviewError(message);
+      notification.error('Stash review failed', message);
+    } finally {
+      if (seq === stashReviewReqSeq) {
+        setStashReviewLoading(false);
+      }
+    }
+  };
+
+  const handleRequestDropStash = async () => {
+    const repoRootPath = activeStashRepoRootPath();
+    const stashId = String(selectedStashId() ?? '').trim();
+    if (!repoRootPath || !stashId || !protocol.client()) return;
+    const seq = ++stashReviewReqSeq;
+    setStashReviewLoading(true);
+    setStashReviewError('');
+    try {
+      const preview = await rpc.git.previewDropStash({
+        repoRootPath,
+        id: stashId,
+      });
+      if (seq !== stashReviewReqSeq) return;
+      setStashReview({
+        kind: 'drop',
+        preview,
+      });
+    } catch (err) {
+      if (seq !== stashReviewReqSeq) return;
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to review stash deletion');
+      setStashReview(null);
+      setStashReviewError(message);
+      notification.error('Stash review failed', message);
+    } finally {
+      if (seq === stashReviewReqSeq) {
+        setStashReviewLoading(false);
+      }
+    }
+  };
+
+  const handleConfirmStashReview = async () => {
+    const review = stashReview();
+    const repoRootPath = activeStashRepoRootPath();
+    const stashId = String(review?.preview.stash?.id ?? selectedStashId() ?? '').trim();
+    if (!review || !repoRootPath || !stashId || !protocol.client()) return;
+
+    setStashReviewError('');
+    setGitMutationScope(review.kind === 'drop' ? 'dropStash' : 'applyStash');
+    setGitMutationKey(stashId);
+    try {
+      if (review.kind === 'apply') {
+        const resp = await rpc.git.applyStash({
+          repoRootPath,
+          id: stashId,
+          removeAfterApply: review.removeAfterApply,
+          planFingerprint: review.preview.planFingerprint,
+        });
+        clearStashReview({ cancelInFlight: true });
+        await Promise.all([
+          refreshActiveGitStateAfterStashMutation('applyStash', repoRootPath, resp),
+          refreshStashWindowData({
+            repoRootPath,
+            preferredSelectedId: review.removeAfterApply ? undefined : stashId,
+            silent: true,
+          }),
+        ]);
+        notification.success(
+          review.removeAfterApply ? 'Applied and removed' : 'Applied',
+          review.removeAfterApply
+            ? 'Applied the stash and removed it from the stack.'
+            : 'Applied the selected stash to the current worktree.',
+        );
+      } else {
+        const resp = await rpc.git.dropStash({
+          repoRootPath,
+          id: stashId,
+          planFingerprint: review.preview.planFingerprint,
+        });
+        clearStashReview({ cancelInFlight: true });
+        await Promise.all([
+          refreshActiveGitStateAfterStashMutation('dropStash', repoRootPath, resp),
+          refreshStashWindowData({
+            repoRootPath,
+            silent: true,
+          }),
+        ]);
+        notification.success('Deleted stash', 'Removed the selected stash from the stack.');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err ?? 'Request failed.');
+      setStashReviewError(message);
+      if (err instanceof RpcError && (err.code === 404 || err.code === 409)) {
+        void refreshStashWindowData({
+          repoRootPath,
+          preferredSelectedId: stashId,
+          silent: true,
+        });
+      }
+      notification.error(review.kind === 'drop' ? 'Delete stash failed' : 'Apply stash failed', message || 'Request failed.');
+    } finally {
+      setGitMutationScope('');
+      setGitMutationKey('');
     }
   };
 
@@ -2347,6 +2822,28 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     });
   });
 
+  createEffect(() => {
+    const open = stashWindowOpen();
+    const repoRootPath = activeStashRepoRootPath();
+    const tab = stashWindowTab();
+    const stashId = String(selectedStashId() ?? '').trim();
+
+    if (!open || !repoRootPath || tab !== 'stashes') return;
+    if (!stashId) {
+      stashDetailReqSeq += 1;
+      setStashDetail(null);
+      setStashDetailLoading(false);
+      setStashDetailError('');
+      return;
+    }
+    if (stashDetail()?.id === stashId && !stashDetailError()) return;
+    void loadStashDetail({
+      repoRootPath,
+      id: stashId,
+      silent: Boolean(stashDetail()),
+    });
+  });
+
   const dispatchAskFlowerIntent = (intent: AskFlowerIntent) => {
     ctx.openAskFlowerComposer(intent);
   };
@@ -2743,6 +3240,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onStageWorkspaceItem={handleStageWorkspaceItem}
                       onUnstageWorkspaceItem={handleUnstageWorkspaceItem}
                       onBulkWorkspaceAction={handleBulkWorkspaceAction}
+                      onOpenStash={openGitStashWindow}
                       onAskFlower={handleGitAskFlower}
                       onOpenInTerminal={ctx.env()?.permissions?.can_execute ? handleGitOpenInTerminal : undefined}
                       onBrowseFiles={handleGitBrowseFiles}
@@ -2751,6 +3249,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       branches={gitBranches()}
                       branchesLoading={gitBranchesLoading()}
                       branchesError={gitBranchesError()}
+                      statusRefreshToken={gitBranchStatusRefreshToken()}
                       selectedBranch={selectedGitBranch()}
                       selectedBranchKey={selectedGitBranchName()}
                       onSelectBranch={selectGitBranch}
@@ -2816,6 +3315,60 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
       <LoadingOverlay visible={pageMode() === 'files' && loading()} message="Loading files..." />
       <LoadingOverlay visible={dragMoveLoading()} message="Moving..." />
+
+      <GitStashWindow
+        open={stashWindowOpen()}
+        onOpenChange={handleStashWindowOpenChange}
+        tab={stashWindowTab()}
+        onTabChange={setStashWindowTab}
+        repoRootPath={activeStashRepoRootPath()}
+        source={activeStashSource()}
+        repoSummary={stashRepoSummary()}
+        workspace={stashWorkspace()}
+        contextLoading={stashContextLoading()}
+        contextError={stashContextError()}
+        stashes={stashList()}
+        stashesLoading={stashListLoading()}
+        stashesError={stashListError()}
+        selectedStashId={selectedStashId()}
+        onSelectStash={(id) => {
+          setSelectedStashId(id);
+          if (stashReview()?.preview.stash?.id !== id) {
+            clearStashReview({ cancelInFlight: true });
+          }
+        }}
+        stashDetail={stashDetail()}
+        stashDetailLoading={stashDetailLoading()}
+        stashDetailError={stashDetailError()}
+        saveMessage={stashSaveMessage()}
+        includeUntracked={stashIncludeUntracked()}
+        keepIndex={stashKeepIndex()}
+        saveBusy={gitMutationScope() === 'saveStash'}
+        applyBusy={gitMutationScope() === 'applyStash'}
+        dropBusy={gitMutationScope() === 'dropStash'}
+        reviewLoading={stashReviewLoading()}
+        review={stashReview()}
+        reviewError={stashReviewError()}
+        onSaveMessageChange={setStashSaveMessage}
+        onIncludeUntrackedChange={setStashIncludeUntracked}
+        onKeepIndexChange={setStashKeepIndex}
+        onSave={() => { void handleSaveStash(); }}
+        onRefreshStashes={() => {
+          void refreshStashWindowData({
+            repoRootPath: activeStashRepoRootPath(),
+          });
+        }}
+        onRequestApply={(removeAfterApply) => {
+          void handleRequestApplyStash(removeAfterApply);
+        }}
+        onRequestDrop={() => {
+          void handleRequestDropStash();
+        }}
+        onConfirmReview={() => {
+          void handleConfirmStashReview();
+        }}
+        onCancelReview={() => clearStashReview({ cancelInFlight: true })}
+      />
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

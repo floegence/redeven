@@ -12,6 +12,7 @@ import {
   workspaceViewSectionActionKey,
   workspaceViewSectionItems,
   workspaceViewSectionLabel,
+  type GitStashWindowRequest,
   type GitWorkspaceViewSection,
 } from '../utils/gitWorkbench';
 import { gitChangePathClass, workspaceSectionTone } from './GitChrome';
@@ -59,6 +60,7 @@ export interface GitChangesPanelProps {
   onStageSelected?: (item: GitWorkspaceChange) => void;
   onUnstageSelected?: (item: GitWorkspaceChange) => void;
   onBulkAction?: (section: GitWorkspaceViewSection) => void;
+  onOpenStash?: (request: GitStashWindowRequest) => void;
   onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'workspace_section' }>) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
   onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
@@ -211,6 +213,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const canAskFlower = () => Boolean(props.onAskFlower && repoRootPath() && visibleItems().length > 0);
   const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && repoShortcutRequest());
   const canBrowseFiles = () => Boolean(props.onBrowseFiles && repoShortcutRequest());
+  const canOpenStash = () => Boolean(props.onOpenStash && repoRootPath());
   const repoShortcutDisabledReason = () => (repoShortcutRequest() ? '' : 'Repository path is unavailable.');
   const askFlowerDisabledReason = () => {
     if (canAskFlower()) return '';
@@ -309,6 +312,25 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                     </Show>
 
                     <div class="flex flex-wrap items-center justify-end gap-2">
+                      <Show when={props.onOpenStash}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          class="rounded-md"
+                          disabled={!canOpenStash()}
+                          onClick={() => {
+                            const repoRoot = repoRootPath();
+                            if (!repoRoot) return;
+                            props.onOpenStash?.({
+                              tab: 'save',
+                              repoRootPath: repoRoot,
+                              source: 'changes',
+                            });
+                          }}
+                        >
+                          Stash...
+                        </Button>
+                      </Show>
                       <Button
                         size="sm"
                         variant="outline"
