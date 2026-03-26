@@ -32,16 +32,20 @@
   "overrides": {
     "@floegence/flowersec-core": "^0.16.3",
     "dompurify": "^3.3.2",
+    "flatted": "^3.4.2",
     "minimatch@^3.0.0": "^3.1.4",
     "minimatch@^5.0.0": "^5.1.8",
+    "picomatch": "^4.0.4",
     "rollup": "^4.59.0"
   },
   "pnpm": {
     "overrides": {
       "@floegence/flowersec-core": "^0.16.3",
       "dompurify": "^3.3.2",
+      "flatted": "^3.4.2",
       "minimatch@^3.0.0": "^3.1.4",
       "minimatch@^5.0.0": "^5.1.8",
+      "picomatch": "^4.0.4",
       "rollup": "^4.59.0"
     },
     "onlyBuiltDependencies": [
