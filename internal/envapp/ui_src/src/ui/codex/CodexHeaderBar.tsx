@@ -3,7 +3,7 @@ import { Trash } from '@floegence/floe-webapp-core/icons';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { CodexIcon } from '../icons/CodexIcon';
-import { compactPathLabel, statusTagVariant } from './presentation';
+import { statusTagVariant } from './presentation';
 import type { CodexWorkbenchSummary } from './viewModel';
 
 export function CodexHeaderBar(props: {
@@ -15,7 +15,6 @@ export function CodexHeaderBar(props: {
     const value = String(props.summary.statusLabel ?? '').trim().toLowerCase();
     return value.length > 0 && value !== 'idle' && value !== 'ready';
   };
-  const compactWorkspace = () => compactPathLabel(props.summary.workspaceLabel, 'Workspace');
 
   return (
     <div data-codex-surface="header" class="codex-page-header border-b border-border/80 bg-background/95 backdrop-blur-md">
@@ -25,11 +24,6 @@ export function CodexHeaderBar(props: {
           <div class="codex-page-header-thread" title={props.summary.threadTitle}>
             {props.summary.threadTitle}
           </div>
-          <Show when={props.summary.workspaceLabel}>
-            <div class="codex-page-header-context" title={props.summary.workspaceLabel}>
-              {compactWorkspace()}
-            </div>
-          </Show>
         </div>
 
         <div class="codex-page-header-rail">

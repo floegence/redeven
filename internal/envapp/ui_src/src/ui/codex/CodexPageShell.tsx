@@ -94,7 +94,6 @@ export function CodexPageShell() {
               onWorkspaceInput={codex.setWorkingDirDraft}
               onModelInput={codex.setModelDraft}
               onComposerInput={codex.setComposerText}
-              onPromptSelect={codex.setComposerText}
               onSend={() => void codex.sendTurn()}
             />
           </div>

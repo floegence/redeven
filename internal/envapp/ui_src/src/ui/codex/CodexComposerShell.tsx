@@ -1,29 +1,10 @@
-import { For, Show, createEffect, createSignal } from 'solid-js';
+import { Show, createEffect, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Activity, Folder, Send } from '@floegence/floe-webapp-core/icons';
+import { Folder, Send } from '@floegence/floe-webapp-core/icons';
 import { Input } from '@floegence/floe-webapp-core/ui';
 
 import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown';
 import { compactPathLabel } from './presentation';
-
-const COMPOSER_PRESETS = [
-  {
-    label: 'Review recent changes',
-    prompt: 'Review the latest file changes and call out the riskiest issues first.',
-  },
-  {
-    label: 'Inspect last failure',
-    prompt: 'Inspect the latest failing command output and explain the most likely root cause.',
-  },
-  {
-    label: 'Summarize thread',
-    prompt: 'Summarize the current Codex thread and list the next concrete actions.',
-  },
-  {
-    label: 'Plan next step',
-    prompt: 'Turn the current implementation state into a short execution plan with checkpoints.',
-  },
-] as const;
 
 export function CodexComposerShell(props: {
   activeThreadID: string | null;
@@ -37,13 +18,11 @@ export function CodexComposerShell(props: {
   onWorkspaceInput: (value: string) => void;
   onModelInput: (value: string) => void;
   onComposerInput: (value: string) => void;
-  onPromptSelect: (prompt: string) => void;
   onSend: () => void;
 }) {
   const [isComposing, setIsComposing] = createSignal(false);
   const [isFocused, setIsFocused] = createSignal(false);
   const [showOptions, setShowOptions] = createSignal(false);
-  const [showPromptIdeas, setShowPromptIdeas] = createSignal(false);
   let textareaRef: HTMLTextAreaElement | undefined;
   let rafId: number | null = null;
 
@@ -86,11 +65,9 @@ export function CodexComposerShell(props: {
   };
 
   const workspaceValue = () => String(props.workspaceLabel ?? '').trim();
-  const modelValue = () => String(props.modelLabel ?? '').trim();
   const workspaceChipLabel = () => compactPathLabel(workspaceValue(), 'Working dir');
-  const modelChipLabel = () => modelValue() || 'Host default';
   const sendLabel = () => (props.activeThreadID ? 'Send to Codex' : 'Create chat and send');
-  const showOptionsButton = () => props.sessionConfigEditable && !workspaceValue() && !modelValue();
+  const showOptionsButton = () => props.sessionConfigEditable && !workspaceValue();
   const toggleOptions = () => {
     if (!props.sessionConfigEditable) return;
     setShowOptions((value) => !value);
@@ -173,28 +150,6 @@ export function CodexComposerShell(props: {
               </Show>
             </Show>
 
-            <Show when={modelValue()}>
-              <Show
-                when={props.sessionConfigEditable}
-                fallback={
-                  <span class="codex-chat-chip" title={modelValue()}>
-                    <Activity class="h-3.5 w-3.5" />
-                    <span class="truncate">{modelChipLabel()}</span>
-                  </span>
-                }
-              >
-                <button
-                  type="button"
-                  class="codex-chat-chip codex-chat-chip-actionable"
-                  onClick={toggleOptions}
-                  title={modelValue()}
-                >
-                  <Activity class="h-3.5 w-3.5" />
-                  <span class="truncate">{modelChipLabel()}</span>
-                </button>
-              </Show>
-            </Show>
-
             <Show when={showOptionsButton()}>
               <button
                 type="button"
@@ -206,15 +161,6 @@ export function CodexComposerShell(props: {
               </button>
             </Show>
 
-            <button
-              type="button"
-              class="codex-chat-chip codex-chat-chip-actionable"
-              onClick={() => setShowPromptIdeas((value) => !value)}
-              aria-expanded={showPromptIdeas()}
-            >
-              Prompt ideas
-            </button>
-
             <Show when={!props.activeThreadID}>
               <span class="codex-chat-chip">New thread</span>
             </Show>
@@ -225,32 +171,6 @@ export function CodexComposerShell(props: {
               </span>
             </Show>
           </div>
-
-          <Show when={showPromptIdeas()}>
-            <div class="codex-chat-prompt-panel">
-              <div class="codex-chat-prompt-panel-header">
-                Use one of these to start a focused Codex turn.
-              </div>
-              <div class="codex-chat-prompt-grid">
-                <For each={COMPOSER_PRESETS}>
-                  {(preset) => (
-                    <button
-                      type="button"
-                      class="codex-chat-secondary-chip codex-chat-prompt-chip"
-                      onClick={() => {
-                        props.onPromptSelect(preset.prompt);
-                        setShowPromptIdeas(false);
-                      }}
-                      disabled={!props.hostAvailable}
-                      title={preset.prompt}
-                    >
-                      {preset.label}
-                    </button>
-                  )}
-                </For>
-              </div>
-            </div>
-          </Show>
 
           <Show when={showOptions() && props.sessionConfigEditable}>
             <div class="codex-chat-input-options">

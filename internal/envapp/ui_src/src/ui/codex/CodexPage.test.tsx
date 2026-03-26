@@ -267,7 +267,7 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('src/ui/codex/CodexPage.tsx');
     expect(host.textContent).toContain('Command evidence');
     expect(host.textContent).toContain('finalizing');
-    expect(host.textContent).toContain('Prompt ideas');
+    expect(host.textContent).not.toContain('Prompt ideas');
     expect(host.textContent).not.toContain('Review recent changes');
     expect(host.textContent).not.toContain('Options');
     expect(host.textContent).not.toContain('Review brief');
@@ -276,25 +276,15 @@ describe('CodexPage', () => {
     expect(host.textContent).not.toContain('Host ready');
     expect(host.textContent).not.toContain('Updated');
     expect(host.textContent).not.toContain('Responses');
+    expect(host.textContent).not.toContain('gpt-5.4');
     expect(host.textContent).toContain('/workspace/ui');
     expect(host.querySelector('.codex-chat-input-meta-rail')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
+    expect(host.querySelector('.codex-page-header-context')).toBeNull();
     expect(host.querySelector('.codex-chat-working-dir-chip')?.getAttribute('title')).toBe('/workspace/ui');
     expect(host.querySelector('button[aria-label="Refresh Codex thread"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Archive Codex thread"]')).not.toBeNull();
-
-    const promptIdeasButton = Array.from(host.querySelectorAll('button')).find((node) =>
-      node.textContent?.includes('Prompt ideas'),
-    );
-    if (!promptIdeasButton) {
-      throw new Error('Prompt ideas button not found');
-    }
-    promptIdeasButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-    await flushAsync();
-
-    expect(host.textContent).toContain('Review recent changes');
   });
 
   it('renders pending request cards inside the Codex dock support lane', async () => {
@@ -435,46 +425,4 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('Stream update');
   });
 
-  it('applies a composer preset into the Codex textarea', async () => {
-    fetchCodexStatusMock.mockResolvedValue({
-      available: true,
-      ready: true,
-      binary_path: '/usr/local/bin/codex',
-      agent_home_dir: '/workspace',
-    });
-    listCodexThreadsMock.mockResolvedValue([]);
-    connectCodexEventStreamMock.mockResolvedValue(undefined);
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    renderPage(host);
-
-    await flushAsync();
-    await flushAsync();
-
-    const promptIdeasButton = Array.from(host.querySelectorAll('button')).find((node) =>
-      node.textContent?.includes('Prompt ideas'),
-    );
-    if (!promptIdeasButton) {
-      throw new Error('Prompt ideas button not found');
-    }
-    promptIdeasButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-    await flushAsync();
-
-    const preset = Array.from(host.querySelectorAll('button')).find((node) =>
-      node.textContent?.includes('Review recent changes'),
-    );
-    if (!preset) {
-      throw new Error('Review recent changes preset not found');
-    }
-    preset.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-    await flushAsync();
-
-    const textarea = host.querySelector('textarea');
-    expect(textarea).not.toBeNull();
-    expect((textarea as HTMLTextAreaElement).value).toContain('Review the latest file changes');
-  });
 });
