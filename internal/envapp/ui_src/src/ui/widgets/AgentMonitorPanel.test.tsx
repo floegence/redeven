@@ -159,6 +159,32 @@ describe('AgentMonitorPanel', () => {
     expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(2);
   });
 
+  it('renders direct transport for sessions without tunnel endpoint URL', async () => {
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue(makeSnapshot(1));
+    rpcMocks.sessions.listActiveSessions.mockResolvedValue({
+      sessions: [{
+        channelId: 'ch-direct',
+        userPublicID: 'user_1',
+        userEmail: 'user@example.com',
+        floeApp: 'com.floegence.redeven.agent',
+        codeSpaceID: '',
+        sessionKind: 'local_access_resume',
+        tunnelUrl: '',
+        createdAtUnixMs: 1,
+        connectedAtUnixMs: 2,
+        canRead: true,
+        canWrite: true,
+        canExecute: true,
+      }],
+    });
+
+    render(() => <AgentMonitorPanel variant="deck" />, host);
+    await flushPanel();
+
+    expect(host.textContent).toContain('Transport');
+    expect(host.textContent).toContain('Direct (no tunnel)');
+  });
+
   it('kills a process from the row context menu and refreshes monitoring', async () => {
     rpcMocks.monitor.getSysMonitor.mockResolvedValue(
       makeSnapshot(1, [

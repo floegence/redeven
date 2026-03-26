@@ -6,6 +6,7 @@ This folder contains the **source code** for the agent-bundled Env App UI:
 - Served by the agent local gateway under: `/_redeven_proxy/env/*`
 - Delivered to the browser over Flowersec E2EE (runtime mode) when running the sandbox origin:
 - `https://env-<env_id>.<region>.<base-sandbox-domain>/_redeven_boot/`
+- Tunnel endpoint values surfaced in Env App observability views are routing metadata only; authorization/isolation remains session-metadata and policy-authorizer enforced.
 - Cross-surface product flows such as `File Browser -> Open in Terminal` and `Terminal -> Browse files` are implemented here through Env App shell/context orchestration rather than in the region frontend.
 - Right-click menus that expose cross-surface handoffs are also normalized here so `Ask Flower` stays first, `Open in Terminal` stays second when available, `Browse files` follows when available, and separators isolate lower-priority follow-up actions.
 - The optional Codex surface lives in `src/ui/codex/*` and intentionally follows the same high-level sidebar + transcript + bottom-dock rhythm as Flower while keeping all Codex-owned layout/state modules independent from Flower files.

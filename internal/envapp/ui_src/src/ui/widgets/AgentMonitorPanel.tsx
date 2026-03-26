@@ -82,10 +82,10 @@ function formatAppLabel(floeApp: string): string {
 
 function formatTunnelHost(tunnelURL: string): string {
   const v = String(tunnelURL ?? '').trim();
-  if (!v) return '-';
+  if (!v) return 'Direct (no tunnel)';
   try {
     const u = new URL(v);
-    return String(u.host || u.origin || v).trim() || '-';
+    return String(u.host || u.origin || v).trim() || 'Direct (no tunnel)';
   } catch {
     return v;
   }
@@ -669,7 +669,7 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">User</th>
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">App</th>
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">Code Space</th>
-                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">Tunnel</th>
+                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">Transport</th>
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">Connected</th>
                       <th class="text-center py-2 px-2 font-medium text-muted-foreground">Perm</th>
                       <th class="text-left py-2 px-2 font-medium text-muted-foreground">Channel</th>
@@ -707,7 +707,7 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
                               <td class="py-2 px-2 font-mono truncate max-w-[160px]" title={codeSpace}>{codeSpace || '-'}</td>
                               <td class="py-2 px-2 font-mono truncate max-w-[240px]" title={tunnelURL}>
                                 <Show when={tunnelURL} fallback={<span>{tunnelLabel}</span>}>
-                                  <button type="button" class="hover:underline" onClick={() => void copy('Tunnel URL', tunnelURL)}>
+                                  <button type="button" class="hover:underline" onClick={() => void copy('Tunnel endpoint URL', tunnelURL)}>
                                     {tunnelLabel}
                                   </button>
                                 </Show>

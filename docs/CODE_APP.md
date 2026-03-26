@@ -6,6 +6,12 @@ This document describes the **Code App** implementation in the Redeven agent:
 - Browser ↔ Agent traffic is end-to-end encrypted (E2EE) via **Flowersec tunnel**
 - The browser talks to the agent using `flowersec-proxy/http1` and `flowersec-proxy/ws`
 
+## Tunnel endpoint semantics
+
+- The `tunnel_url` surfaced in grants, active-session views, and audit logs is a routing endpoint, not an authorization boundary.
+- Session isolation and blocking decisions are enforced by signed session metadata and tunnel-side policy checks (for example `(aud, iss)` tenant selection and channel binding).
+- Different environments can validly use the same tunnel endpoint URL while still remaining isolated by policy.
+
 ## What runs where
 
 - Browser side:
@@ -148,4 +154,4 @@ This is conservative: code-server is not designed to enforce a partial permissio
   - Ensure the launcher/controller bootstrap can load `/_redeven_boot/`, and the app origin can load `/_redeven_app/` plus `/_redeven_app_sw.js`.
   - Ensure popups are allowed.
   - If you refreshed the codespace window after the bootstrap cleared the URL hash, the page must re-request a fresh `entry_ticket` from its opener (Env App). Reopen the codespace from the Env App if the opener is gone.
-  - Ensure the agent is online and reachable via the Flowersec tunnel.
+  - Ensure the agent is online and reachable via the configured Flowersec tunnel endpoint.

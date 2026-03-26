@@ -135,6 +135,7 @@ There are **two** audit log sources:
      - `<state_dir>/audit/events.jsonl`
      - `state_dir` is the directory of the agent config file (default: `~/.redeven/`)
    - The log is metadata-only and must not contain secrets (PSK/attach token/AI secrets/file contents).
+   - If present, `tunnel_url` is transport routing metadata only. It must not be interpreted as the authorization scope for the session.
 
 ## Diagnostics mode
 
