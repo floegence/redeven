@@ -75,7 +75,8 @@ func (a *Agent) listActiveSessionsSnapshot() []sessionsActiveSession {
 		}
 		connectedAt := s.connectedAtUnixMs
 		if connectedAt <= 0 {
-			// Only expose sessions that have successfully connected to the tunnel.
+			// Only expose sessions that have successfully connected to the data transport.
+			// This includes Flowersec tunnel sessions and local direct sessions.
 			continue
 		}
 

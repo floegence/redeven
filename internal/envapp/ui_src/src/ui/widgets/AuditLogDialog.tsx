@@ -243,7 +243,7 @@ export function AuditLogDialog(props: { open: boolean; envId: string; onClose: (
       }
     >
       <div class="space-y-2">
-        <div class="text-xs text-muted-foreground">Recent events recorded by this agent.</div>
+        <div class="text-xs text-muted-foreground">Recent events recorded by this agent. Tunnel endpoint values are routing metadata only.</div>
 
         <Show when={errorText()}>
           <div class="text-xs text-error break-words">{errorText()}</div>
@@ -322,8 +322,8 @@ export function AuditLogDialog(props: { open: boolean; envId: string; onClose: (
                               </div>
                               <Show when={String(e.tunnel_url ?? '').trim()}>
                                 <div class="text-muted-foreground truncate" title={e.tunnel_url}>
-                                  <button type="button" class="hover:underline" onClick={() => void copy('Tunnel URL', e.tunnel_url ?? '')}>
-                                    {`Tunnel: ${formatTunnelHost(e.tunnel_url ?? '')}`}
+                                  <button type="button" class="hover:underline" onClick={() => void copy('Tunnel endpoint URL', e.tunnel_url ?? '')}>
+                                    {`Tunnel endpoint: ${formatTunnelHost(e.tunnel_url ?? '')}`}
                                   </button>
                                 </div>
                               </Show>
