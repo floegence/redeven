@@ -250,18 +250,7 @@ function AgentMessageRow(props: { item: CodexTranscriptItem }) {
     <CodexMessageLane role="assistant" showAvatar>
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
         <div class="codex-chat-message-surface codex-chat-message-surface-assistant">
-          <TranscriptMeta
-            label="Codex"
-            status={props.item.status}
-            extra={
-              <Tag variant="neutral" tone="soft" size="sm">
-                Review response
-              </Tag>
-            }
-          />
-          <div class="mt-3">
-            <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block" />
-          </div>
+          <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block" />
         </div>
       </div>
     </CodexMessageLane>
@@ -273,18 +262,7 @@ function UserMessageRow(props: { item: CodexTranscriptItem }) {
     <CodexMessageLane role="user">
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-user codex-chat-message-bubble-user">
         <div class="codex-chat-message-surface codex-chat-message-surface-user">
-          <TranscriptMeta
-            label="You"
-            status={props.item.status}
-            extra={
-              <Tag variant="neutral" tone="soft" size="sm">
-                Review brief
-              </Tag>
-            }
-          />
-          <div class="mt-3">
-            <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block codex-chat-user-markdown-block" />
-          </div>
+          <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block codex-chat-user-markdown-block" />
         </div>
       </div>
     </CodexMessageLane>

@@ -55,6 +55,16 @@ export function displayStatus(value: string | null | undefined, fallback = 'Idle
   return normalized.replaceAll('_', ' ');
 }
 
+export function compactPathLabel(value: string | null | undefined, fallback = ''): string {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return fallback;
+  const parts = normalized.split('/').filter(Boolean);
+  if (parts.length === 0) return normalized;
+  if (normalized.length <= 24) return normalized;
+  if (parts.length === 1) return parts[0] ?? fallback;
+  return `…/${parts.slice(-2).join('/')}`;
+}
+
 export function statusTagVariant(status: string | null | undefined): TagProps['variant'] {
   const normalized = String(status ?? '').trim().toLowerCase();
   if (!normalized) return 'neutral';
