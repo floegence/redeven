@@ -323,7 +323,7 @@ describe('CodexPage', () => {
 
     expect(host.querySelector('[data-codex-surface="transcript"]')).not.toBeNull();
     expect(host.innerHTML).not.toContain('radial-gradient(circle_at_top');
-    expect(host.querySelector('.codex-page-transcript-divider')).not.toBeNull();
+    expect(host.querySelector('.codex-page-transcript-divider')).toBeNull();
     expect(host.textContent).toContain('Codex page polish review');
     expect(host.textContent).toContain('src/ui/codex/CodexPage.tsx');
     expect(host.textContent).toContain('Command evidence');

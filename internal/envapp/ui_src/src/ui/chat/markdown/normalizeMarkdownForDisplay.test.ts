@@ -68,4 +68,13 @@ describe('normalizeMarkdownForDisplay', () => {
       '```',
     ].join('\n'));
   });
+
+  it('keeps markdown file links with line anchors intact', () => {
+    const input = [
+      'See [TerminalPanel.tsx](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx#L1069)',
+      'and [TerminalPanel.tsx](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx#L1113).',
+    ].join(' ');
+
+    expect(normalizeMarkdownForDisplay(input)).toBe(input);
+  });
 });
