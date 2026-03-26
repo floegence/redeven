@@ -28,6 +28,14 @@ import { RemoteFileBrowser } from './RemoteFileBrowser';
 const WINDOW_VIEWPORT_MARGIN_DESKTOP = 12;
 const WINDOW_VIEWPORT_MARGIN_MOBILE = 8;
 const WINDOW_ANCHOR_OFFSET = 8;
+const ASK_FLOWER_WINDOW_DEFAULT_WIDTH_DESKTOP = 560;
+const ASK_FLOWER_WINDOW_DEFAULT_HEIGHT_DESKTOP = 640;
+const ASK_FLOWER_WINDOW_DEFAULT_WIDTH_COMPACT = 420;
+const ASK_FLOWER_WINDOW_DEFAULT_HEIGHT_COMPACT = 560;
+const ASK_FLOWER_WINDOW_MIN_WIDTH_DESKTOP = 400;
+const ASK_FLOWER_WINDOW_MIN_HEIGHT_DESKTOP = 500;
+const ASK_FLOWER_WINDOW_MIN_WIDTH_COMPACT = 300;
+const ASK_FLOWER_WINDOW_MIN_HEIGHT_COMPACT = 420;
 const INLINE_FILE_PREVIEW_MAX_BYTES = 160 * 1024;
 const INLINE_TEXT_PREVIEW_MAX_CHARS = 120_000;
 const CONTEXT_PREVIEW_DEFAULT_SIZE = { width: 880, height: 640 };
@@ -95,10 +103,14 @@ function resolveWindowSizing(viewport: { width: number; height: number }): Windo
   const margin = compact ? WINDOW_VIEWPORT_MARGIN_MOBILE : WINDOW_VIEWPORT_MARGIN_DESKTOP;
   const maxWidth = Math.max(280, viewport.width - margin * 2);
   const maxHeight = Math.max(280, viewport.height - margin * 2);
-  const defaultWidth = compact ? Math.min(460, maxWidth) : Math.min(640, maxWidth);
-  const defaultHeight = compact ? Math.min(620, maxHeight) : Math.min(720, maxHeight);
-  const minWidth = Math.min(compact ? 300 : 420, maxWidth);
-  const minHeight = Math.min(compact ? 440 : 520, maxHeight);
+  const defaultWidth = compact
+    ? Math.min(ASK_FLOWER_WINDOW_DEFAULT_WIDTH_COMPACT, maxWidth)
+    : Math.min(ASK_FLOWER_WINDOW_DEFAULT_WIDTH_DESKTOP, maxWidth);
+  const defaultHeight = compact
+    ? Math.min(ASK_FLOWER_WINDOW_DEFAULT_HEIGHT_COMPACT, maxHeight)
+    : Math.min(ASK_FLOWER_WINDOW_DEFAULT_HEIGHT_DESKTOP, maxHeight);
+  const minWidth = Math.min(compact ? ASK_FLOWER_WINDOW_MIN_WIDTH_COMPACT : ASK_FLOWER_WINDOW_MIN_WIDTH_DESKTOP, maxWidth);
+  const minHeight = Math.min(compact ? ASK_FLOWER_WINDOW_MIN_HEIGHT_COMPACT : ASK_FLOWER_WINDOW_MIN_HEIGHT_DESKTOP, maxHeight);
 
   return {
     compact,
@@ -534,10 +546,10 @@ function entryButtonClass(entry: AskFlowerComposerEntry): string {
 }
 
 const FlowerComposerAvatar: Component = () => (
-  <div data-testid="ask-flower-avatar" class="relative flex size-10 shrink-0 items-center justify-center sm:size-11">
+  <div data-testid="ask-flower-avatar" class="ask-flower-composer-avatar relative flex size-8 shrink-0 items-center justify-center">
     <div class="absolute inset-0 rounded-full bg-primary/8 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
-    <div class="relative flex size-10 items-center justify-center rounded-full border border-primary/18 bg-gradient-to-br from-primary/15 to-amber-500/10 shadow-[0_14px_30px_-20px_rgba(37,99,235,0.42)] sm:size-11">
-      <FlowerIcon class="w-8 h-8 text-primary" />
+    <div class="relative flex size-8 items-center justify-center rounded-full border border-primary/18 bg-gradient-to-br from-primary/15 to-amber-500/10 shadow-[0_10px_20px_-16px_rgba(37,99,235,0.42)]">
+      <FlowerIcon class="h-5 w-5 text-primary" />
     </div>
   </div>
 );
@@ -934,7 +946,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
             <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
               <div data-testid="ask-flower-scroll-region" class="ask-flower-scroll-region flex-1 min-h-0 overflow-y-auto px-2 py-2 sm:px-2.5 sm:py-2.5">
                 <div class="mx-auto flex w-full max-w-[40rem] flex-col gap-2">
-                  <div class="chat-message-item items-start gap-2">
+                  <div class="ask-flower-composer-message-row chat-message-item items-start">
                     <FlowerComposerAvatar />
 
                     <div class="chat-message-content-wrapper max-w-[min(100%,37rem)] gap-1">

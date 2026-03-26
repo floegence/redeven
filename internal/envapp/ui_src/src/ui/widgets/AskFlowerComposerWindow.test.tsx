@@ -109,7 +109,13 @@ vi.mock('./PreviewWindow', () => ({
 vi.mock('./PersistentFloatingWindow', () => ({
   PersistentFloatingWindow: (props: any) => (
     props.open ? (
-      <div data-testid="floating-window" data-z-index={String(props.zIndex ?? '')} class={props.class}>
+      <div
+        data-testid="floating-window"
+        data-z-index={String(props.zIndex ?? '')}
+        data-default-width={String(props.defaultSize?.width ?? '')}
+        data-default-height={String(props.defaultSize?.height ?? '')}
+        class={props.class}
+      >
         <div>{props.title}</div>
         <div>{props.children}</div>
         <div>{props.footer}</div>
@@ -176,6 +182,8 @@ describe('AskFlowerComposerWindow', () => {
     const floatingWindow = host.querySelector('[data-testid="floating-window"]');
 
     expect(floatingWindow?.getAttribute('data-z-index')).toBe('160');
+    expect(floatingWindow?.getAttribute('data-default-width')).toBe('560');
+    expect(floatingWindow?.getAttribute('data-default-height')).toBe('640');
   });
 
   it('keeps the Flower message in the scroll region and docks the user composer at the bottom', () => {
@@ -195,6 +203,7 @@ describe('AskFlowerComposerWindow', () => {
     const composerDock = host.querySelector('[data-testid="ask-flower-composer-dock"]');
     const assistantAvatar = host.querySelector('[data-testid="ask-flower-avatar"]');
     const assistantSurface = host.querySelector('.ask-flower-composer-message-surface');
+    const assistantRow = host.querySelector('.ask-flower-composer-message-row');
     const textarea = host.querySelector('textarea');
 
     expect(scrollRegion).toBeTruthy();
@@ -203,6 +212,9 @@ describe('AskFlowerComposerWindow', () => {
     expect(textarea && composerDock?.contains(textarea)).toBe(true);
     expect(textarea && scrollRegion?.contains(textarea)).toBe(false);
     expect(assistantAvatar).toBeTruthy();
+    expect(assistantAvatar?.className).toContain('size-8');
+    expect(assistantRow).toBeTruthy();
+    expect(assistantRow?.className).not.toContain('gap-2');
     expect(assistantSurface).toBeTruthy();
     expect(assistantSurface?.className).not.toContain('border-border/65');
   });
