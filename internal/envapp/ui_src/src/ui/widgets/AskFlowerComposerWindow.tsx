@@ -932,13 +932,13 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
             )}
           >
             <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-              <div data-testid="ask-flower-scroll-region" class="flex-1 min-h-0 overflow-y-auto px-2 py-2 sm:px-2.5 sm:py-2.5">
+              <div data-testid="ask-flower-scroll-region" class="ask-flower-scroll-region flex-1 min-h-0 overflow-y-auto px-2 py-2 sm:px-2.5 sm:py-2.5">
                 <div class="mx-auto flex w-full max-w-[40rem] flex-col gap-2">
                   <div class="chat-message-item items-start gap-2">
                     <FlowerComposerAvatar />
 
                     <div class="chat-message-content-wrapper max-w-[min(100%,37rem)] gap-1">
-                      <div class="min-w-0 rounded-[1.05rem] rounded-tl-md border border-border/65 bg-card/96 px-2.5 py-2 shadow-[0_14px_28px_-28px_rgba(15,23,42,0.34)] backdrop-blur sm:px-3 sm:py-2.5">
+                      <div class="ask-flower-composer-message-surface min-w-0 rounded-[1.05rem] rounded-tl-md px-2.5 py-2 shadow-[0_14px_28px_-28px_rgba(15,23,42,0.34)] backdrop-blur sm:px-3 sm:py-2.5">
                         <div class="text-sm leading-5 text-foreground/95">{composerCopy()?.question}</div>
 
                         <Show when={(composerCopy()?.contextEntries.length ?? 0) > 0}>
