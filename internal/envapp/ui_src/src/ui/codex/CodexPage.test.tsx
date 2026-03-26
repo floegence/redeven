@@ -161,6 +161,7 @@ describe('CodexPage', () => {
 
     await flushAsync();
 
+    expect(host.querySelector('[data-codex-surface="page-shell"]')).not.toBeNull();
     expect(host.textContent).toContain('Host diagnostics');
     expect(host.textContent).toContain('Install Codex on the host');
     expect(host.textContent).toContain('There is no separate in-app Codex runtime toggle to manage here');
@@ -254,6 +255,7 @@ describe('CodexPage', () => {
     await flushAsync();
     await flushAsync();
 
+    expect(host.querySelector('[data-codex-surface="transcript"]')).not.toBeNull();
     expect(host.textContent).toContain('Codex page polish review');
     expect(host.textContent).toContain('Review brief');
     expect(host.textContent).toContain('Review response');
@@ -263,6 +265,73 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('Review recent changes');
     expect(host.textContent).toContain('Workspace');
     expect(host.textContent).toContain('Send to Codex');
+  });
+
+  it('renders pending request cards inside the Codex dock support lane', async () => {
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Approval queue',
+        preview: 'Wait for command approval',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'waiting_approval',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        name: 'Approval queue',
+        preview: 'Wait for command approval',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'waiting_approval',
+        cwd: '/workspace/ui',
+        turns: [],
+      },
+      pending_requests: [
+        {
+          id: 'req_1',
+          type: 'command_approval',
+          thread_id: 'thread_1',
+          turn_id: 'turn_1',
+          item_id: 'item_approval',
+          reason: 'Need approval to run pnpm lint',
+          command: 'pnpm lint',
+          cwd: '/workspace/ui',
+          available_decisions: ['accept', 'decline'],
+        },
+      ],
+      last_event_seq: 0,
+      active_status: 'waiting_approval',
+      active_status_flags: [],
+    });
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(host.querySelector('[data-codex-surface="pending-requests"]')).not.toBeNull();
+    expect(host.textContent).toContain('Pending Codex requests');
+    expect(host.textContent).toContain('Need approval to run pnpm lint');
+    expect(host.textContent).toContain('Approve once');
+    expect(host.textContent).toContain('Decline');
   });
 
   it('subscribes once per loaded thread and resumes from the latest known event sequence', async () => {

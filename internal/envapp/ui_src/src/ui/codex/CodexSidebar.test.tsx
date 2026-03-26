@@ -251,6 +251,8 @@ describe('CodexSidebar', () => {
     await flushAsync();
     await flushAsync();
 
+    expect(host.querySelector('[data-codex-surface="sidebar-summary"]')).not.toBeNull();
+    expect(host.querySelectorAll('[data-codex-surface="thread-card"]').length).toBe(2);
     expect(host.textContent).toContain('New Chat');
     expect(host.textContent).toContain('Conversations');
     expect(host.textContent).toContain('Host ready');

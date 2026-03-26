@@ -13,36 +13,36 @@ import {
   threadStatusDotClass,
 } from './presentation';
 import type { CodexThread } from './types';
+import { buildCodexSidebarSummary } from './viewModel';
 
 function RuntimeSummary() {
   const codex = useCodexContext();
-  const binaryPath = () => String(codex.status()?.binary_path ?? '').trim();
-  const hostSummary = () =>
-    binaryPath() || 'Redeven will use the host `codex` binary as soon as it is available on PATH.';
+  const summary = createMemo(() => buildCodexSidebarSummary({
+    status: codex.status(),
+    pendingRequests: codex.pendingRequests(),
+    statusError: codex.statusError(),
+  }));
 
   return (
     <div
-      class="mx-1 mb-2 rounded-xl border border-border/60 bg-card/65 px-2.5 py-2 shadow-sm"
-      title={hostSummary()}
+      data-codex-surface="sidebar-summary"
+      class="codex-sidebar-summary"
+      title={summary().binaryPath || summary().secondaryLabel}
     >
       <div class="flex items-center gap-2">
         <CodexIcon class="h-6 w-6 shrink-0" />
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <div class="truncate text-sm font-medium text-foreground">Codex</div>
-            <Tag variant={codex.hasHostBinary() ? 'success' : 'warning'} tone="soft" size="sm">
-              {codex.hasHostBinary() ? 'Host ready' : 'Install required'}
+            <Tag variant={summary().hostReady ? 'success' : 'warning'} tone="soft" size="sm">
+              {summary().hostLabel}
             </Tag>
           </div>
-          <Show when={!codex.hasHostBinary()}>
-            <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-              Install the host `codex` binary and refresh to enable Codex chats.
-            </div>
-          </Show>
+          <div class="codex-sidebar-summary-copy">{summary().secondaryLabel}</div>
         </div>
-        <Show when={codex.pendingRequests().length > 0}>
+        <Show when={summary().pendingRequestCount > 0}>
           <span class="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2 py-1 text-[11px] text-warning">
-            {codex.pendingRequests().length} pending
+            {summary().pendingRequestCount} pending
           </span>
         </Show>
       </div>
@@ -54,7 +54,7 @@ function EmptyState() {
   const codex = useCodexContext();
 
   return (
-    <div class="px-2.5 py-8 text-center">
+    <div data-codex-surface="sidebar-empty" class="codex-sidebar-empty">
       <CodexIcon class="mx-auto mb-3 h-10 w-10" />
       <p class="text-xs font-medium text-muted-foreground/80">
         {codex.hasHostBinary() ? 'No conversations yet' : 'Codex is not available yet'}
@@ -83,6 +83,7 @@ function ThreadCard(props: {
   return (
     <div
       data-thread-id={props.thread.id}
+      data-codex-surface="thread-card"
       class={`group relative w-full cursor-pointer rounded-lg border transition-all duration-150 ${
         props.active
           ? 'border-border/20 bg-sidebar-accent text-sidebar-foreground shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
@@ -157,8 +158,8 @@ export function CodexSidebarShell() {
   const showGroupHeaders = createMemo(() => codex.threads().length >= 5);
 
   return (
-    <SidebarContent>
-      <div class="flex items-center gap-1 px-1 pb-1">
+    <SidebarContent class="codex-sidebar-shell">
+      <div class="codex-sidebar-toolbar">
         <Button
           variant="primary"
           size="sm"
@@ -182,7 +183,7 @@ export function CodexSidebarShell() {
       <RuntimeSummary />
 
       <Show when={codex.statusError()}>
-        <div class="mx-1 mb-2 rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-5 text-warning">
+        <div class="codex-sidebar-error">
           {codex.statusError()}
         </div>
       </Show>
@@ -190,21 +191,21 @@ export function CodexSidebarShell() {
       <Show
         when={!codex.threadsLoading()}
         fallback={
-          <div class="px-2.5 py-2 text-xs text-muted-foreground">
+          <div class="codex-sidebar-loading">
             Loading chats...
           </div>
         }
       >
         <Show when={codex.threads().length > 0} fallback={<EmptyState />}>
           <SidebarSection title="Conversations">
-            <div class="flex flex-col gap-0.5">
+            <div class="codex-sidebar-thread-list">
               <Index each={groupedThreads()}>
                 {(groupAccessor) => {
                   const group = () => groupAccessor();
                   return (
                     <>
                       <Show when={showGroupHeaders()}>
-                        <div class="select-none px-2.5 pb-1 pt-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
+                        <div class="codex-sidebar-group-label">
                           {group().group}
                         </div>
                       </Show>

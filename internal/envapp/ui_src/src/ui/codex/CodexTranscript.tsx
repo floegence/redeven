@@ -51,16 +51,18 @@ function EmptyTranscriptState(props: {
   suggestionDisabled?: boolean;
 }) {
   return (
-    <div class="mx-auto flex w-full max-w-4xl flex-col items-center px-4 py-16 text-center">
-      <div class="relative mb-7 inline-flex items-center justify-center">
-        <div class="absolute -inset-5 rounded-full bg-primary/[0.06] blur-2xl" />
-        <CodexIcon class="relative h-11 w-11" />
+    <div data-codex-surface="empty-state" class="codex-empty-state">
+      <div class="codex-empty-hero">
+        <div class="relative mb-7 inline-flex items-center justify-center">
+          <div class="absolute -inset-5 rounded-full bg-primary/[0.06] blur-2xl" />
+          <CodexIcon class="relative h-11 w-11" />
+        </div>
+
+        <h2 class="text-[1.75rem] font-semibold tracking-tight text-foreground">{props.title}</h2>
+        <p class="mt-3 text-[15px] leading-8 text-muted-foreground">{props.body}</p>
       </div>
 
-      <h2 class="text-[1.75rem] font-semibold tracking-tight text-foreground">{props.title}</h2>
-      <p class="mt-3 max-w-2xl text-[15px] leading-8 text-muted-foreground">{props.body}</p>
-
-      <div class="mt-8 grid w-full gap-3 md:grid-cols-2">
+      <div class="codex-empty-suggestions">
         <For each={EMPTY_SUGGESTIONS}>
           {(prompt) => (
             <EmptySuggestion
@@ -72,9 +74,9 @@ function EmptyTranscriptState(props: {
         </For>
       </div>
 
-      <div class="mt-6 flex flex-wrap items-center justify-center gap-3 text-[11px] text-muted-foreground">
-        <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-1">Enter to send</span>
-        <span class="rounded-full border border-border/60 bg-muted/20 px-2 py-1">Shift+Enter for newline</span>
+      <div class="codex-empty-hint">
+        <span class="codex-page-chip codex-page-chip--neutral">Enter to send</span>
+        <span class="codex-page-chip codex-page-chip--neutral">Shift+Enter for newline</span>
       </div>
     </div>
   );
@@ -188,7 +190,7 @@ function ReasoningBody(props: { item: CodexTranscriptItem }) {
 
 function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
   return (
-    <div class="flex items-start gap-4">
+    <div data-codex-item-type={props.item.type} class="flex items-start gap-4">
       <div class="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/88 text-foreground shadow-sm">
         {itemGlyph(props.item)}
       </div>
@@ -232,7 +234,7 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
 
 function AgentMessageRow(props: { item: CodexTranscriptItem }) {
   return (
-    <div class="flex items-start gap-4">
+    <div data-codex-item-type={props.item.type} class="flex items-start gap-4">
       <CodexIcon class="mt-1 h-8 w-8 shrink-0" />
       <div class="min-w-0 flex-1">
         <div class="rounded-[1.75rem] rounded-tl-md border border-border/60 bg-card/88 p-5 shadow-[0_22px_50px_-34px_rgba(15,23,42,0.45)]">
@@ -256,7 +258,7 @@ function AgentMessageRow(props: { item: CodexTranscriptItem }) {
 
 function UserMessageRow(props: { item: CodexTranscriptItem }) {
   return (
-    <div class="flex justify-end">
+    <div data-codex-item-type={props.item.type} class="flex justify-end">
       <div class="w-full max-w-[min(42rem,84%)]">
         <div class="rounded-[1.75rem] rounded-br-md border border-primary/20 bg-[color-mix(in_srgb,var(--primary)_8%,var(--background))] p-5 shadow-[0_20px_50px_-36px_rgba(15,23,42,0.42)]">
           <TranscriptMeta
@@ -295,19 +297,19 @@ export function CodexTranscript(props: {
   suggestionDisabled?: boolean;
 }) {
   return (
-    <div class="mx-auto flex w-full max-w-5xl flex-col">
+    <div data-codex-surface="transcript" class="mx-auto flex w-full max-w-5xl flex-col">
       <Show
         when={props.items.length > 0}
-        fallback={
+        fallback={(
           <EmptyTranscriptState
             title={props.emptyTitle}
             body={props.emptyBody}
             onSuggestionClick={props.onSuggestionClick}
             suggestionDisabled={props.suggestionDisabled}
           />
-        }
+        )}
       >
-        <div class="flex flex-col gap-7 px-4 py-8 lg:px-6 lg:py-10">
+        <div class="codex-transcript-feed">
           <For each={props.items}>{(item) => <TranscriptRow item={item} />}</For>
         </div>
       </Show>

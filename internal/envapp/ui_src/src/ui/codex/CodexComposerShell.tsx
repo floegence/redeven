@@ -45,14 +45,14 @@ export function CodexComposerShell(props: {
     !props.submitting;
 
   return (
-    <div class="space-y-3">
-      <div class="flex flex-wrap gap-2">
+    <div data-codex-surface="composer" class="codex-composer-shell">
+      <div class="codex-composer-presets">
         <For each={COMPOSER_PRESETS}>
           {(preset) => (
             <button
               type="button"
               onClick={() => props.onPromptSelect(preset.prompt)}
-              class="cursor-pointer rounded-full border border-border/60 bg-background/92 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-primary/30 hover:bg-primary/[0.08]"
+              class="codex-composer-preset"
             >
               {preset.label}
             </button>
@@ -60,8 +60,8 @@ export function CodexComposerShell(props: {
         </For>
       </div>
 
-      <div class="overflow-hidden rounded-[1.75rem] border border-border/70 bg-background/90 shadow-[0_20px_60px_-28px_rgba(15,23,42,0.35)] backdrop-blur-xl">
-        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-card/55 px-4 py-3">
+      <div class="codex-composer-card">
+        <div class="codex-composer-top">
           <div class="flex flex-wrap items-center gap-2">
             <Tag variant="neutral" tone="soft" size="sm">
               {props.activeThreadID ? 'Active review' : 'Draft review'}
@@ -83,9 +83,9 @@ export function CodexComposerShell(props: {
           </div>
         </div>
 
-        <div class="grid gap-3 border-b border-border/60 bg-card/35 px-4 py-3 md:grid-cols-[minmax(0,1fr)_14rem]">
-          <div>
-            <div class="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+        <div class="codex-composer-grid">
+          <div class="codex-composer-field">
+            <div class="codex-composer-field-label">
               <Folder class="h-3.5 w-3.5" />
               Workspace
             </div>
@@ -96,8 +96,8 @@ export function CodexComposerShell(props: {
               class="w-full"
             />
           </div>
-          <div>
-            <div class="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          <div class="codex-composer-field">
+            <div class="codex-composer-field-label">
               <Activity class="h-3.5 w-3.5" />
               Model
             </div>
@@ -110,7 +110,7 @@ export function CodexComposerShell(props: {
           </div>
         </div>
 
-        <div class="px-4 py-4">
+        <div class="codex-composer-editor">
           <Textarea
             value={props.composerText}
             onInput={(event) => props.onComposerInput(event.currentTarget.value)}
@@ -123,24 +123,24 @@ export function CodexComposerShell(props: {
             }}
             rows={5}
             placeholder="Ask Codex to review a change, inspect a failure, summarize a diff, or plan the next step..."
-            class="min-h-[9rem] w-full"
+            class="codex-composer-textarea"
           />
         </div>
 
-        <div class="flex flex-wrap items-end justify-between gap-3 border-t border-border/60 bg-card/35 px-4 py-3">
+        <div class="codex-composer-footer">
           <div class="space-y-2">
             <div class="text-xs leading-6 text-muted-foreground">
               Codex runs directly from the host machine. Keep the prompt focused, then review the generated output before applying it.
             </div>
-            <div class="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-              <span class="rounded-full border border-border/60 bg-muted/15 px-2 py-1">
+            <div class="codex-composer-hints">
+              <span class="codex-composer-hint-chip">
                 Enter to send
               </span>
-              <span class="rounded-full border border-border/60 bg-muted/15 px-2 py-1">
+              <span class="codex-composer-hint-chip">
                 Shift+Enter for newline
               </span>
               <Show when={!props.hostAvailable}>
-                <span class="rounded-full border border-warning/30 bg-warning/10 px-2 py-1 text-warning">
+                <span class="codex-composer-hint-chip">
                   Host Codex unavailable
                 </span>
               </Show>

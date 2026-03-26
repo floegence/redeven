@@ -2,7 +2,7 @@ import { Show } from 'solid-js';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 
 import { useCodexContext } from './CodexProvider';
-import { CodexChatShell } from './CodexChatShell';
+import { CodexPageShell } from './CodexPageShell';
 
 export function CodexPage() {
   const codex = useCodexContext();
@@ -12,7 +12,7 @@ export function CodexPage() {
       <Show when={codex.statusLoading()}>
         <LoadingOverlay visible message="Loading Codex..." />
       </Show>
-      <CodexChatShell />
+      <CodexPageShell />
     </div>
   );
 }
