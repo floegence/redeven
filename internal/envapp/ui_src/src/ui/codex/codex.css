@@ -620,14 +620,14 @@
 }
 
 .codex-chat-message-item {
-  --chat-transcript-avatar-size: 2rem;
+  --chat-transcript-avatar-size: 2.25rem;
   --chat-transcript-gap: 0.625rem;
   max-width: 100%;
 }
 
 .codex-chat-message-avatar {
-  width: 2rem;
-  height: 2rem;
+  width: 2.25rem;
+  height: 2.25rem;
 }
 
 .codex-chat-message-bubble-assistant {
@@ -636,6 +636,7 @@
 
 .codex-chat-message-bubble-user {
   max-width: min(100%, 34rem);
+  padding: 0.625rem 0.875rem;
 }
 
 .codex-chat-message-surface {
@@ -650,6 +651,9 @@
 
 .codex-chat-message-surface-user {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
 }
 
 .codex-chat-evidence-card {
@@ -849,6 +853,28 @@
 .codex-chat-user-markdown-block,
 .codex-chat-user-markdown-block :where(h1, h2, h3, p, li, ul, ol, strong, em, a, span, code, pre, blockquote, table, th, td) {
   color: inherit;
+}
+
+.codex-chat-user-markdown-block {
+  line-height: 1.55;
+}
+
+.codex-chat-user-markdown-block p {
+  margin: 0;
+}
+
+.codex-chat-user-markdown-block > .chat-markdown-committed-segment + .chat-markdown-committed-segment,
+.codex-chat-user-markdown-block > .chat-markdown-tail,
+.codex-chat-user-markdown-block > .chat-markdown-streaming-cursor-row {
+  margin-top: 0.375rem;
+}
+
+.codex-chat-user-markdown-block :is(ul, ol, pre, blockquote, table) {
+  margin-bottom: 0;
+}
+
+.codex-chat-user-markdown-block li:last-child {
+  margin-bottom: 0;
 }
 
 .codex-chat-user-markdown-block .chat-md-inline-code {
@@ -1079,11 +1105,12 @@
 
   .codex-chat-message-item {
     --chat-transcript-gap: 0.625rem;
+    --chat-transcript-avatar-size: 2rem;
   }
 
   .codex-chat-message-avatar {
-    width: 1.875rem;
-    height: 1.875rem;
+    width: 2rem;
+    height: 2rem;
   }
 
   .codex-chat-evidence-card {

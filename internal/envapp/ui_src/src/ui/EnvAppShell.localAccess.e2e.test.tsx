@@ -39,14 +39,19 @@ let protocolStatus: 'connected' | 'disconnected' | 'connecting' | 'error' = 'dis
 let protocolClient: unknown = null;
 let resumeCalls: string[] = [];
 let layoutIsMobile = false;
+let sidebarActiveTabValue = 'deck';
+const setSidebarActiveTabMock = vi.fn((tab: string) => {
+  sidebarActiveTabValue = tab;
+});
+const setSidebarCollapsedMock = vi.fn();
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   useCommand: () => ({ open: vi.fn(), registerAll: () => () => {} }),
   useLayout: () => ({
     isMobile: () => layoutIsMobile,
-    sidebarActiveTab: () => 'deck',
-    setSidebarActiveTab: vi.fn(),
-    setSidebarCollapsed: vi.fn(),
+    sidebarActiveTab: () => sidebarActiveTabValue,
+    setSidebarActiveTab: setSidebarActiveTabMock,
+    setSidebarCollapsed: setSidebarCollapsedMock,
   }),
   useNotification: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),
   useTheme: () => ({
@@ -230,9 +235,28 @@ function findButtonByText(root: ParentNode, text: string): HTMLButtonElement | u
   return Array.from(root.querySelectorAll('button')).find((node) => node.textContent?.trim().includes(text)) as HTMLButtonElement | undefined;
 }
 
+function createStorageMock(): Storage {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (key: string) => store.get(String(key)) ?? null,
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+    removeItem: (key: string) => {
+      store.delete(String(key));
+    },
+    setItem: (key: string, value: string) => {
+      store.set(String(key), String(value));
+    },
+  } as Storage;
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 beforeEach(() => {
@@ -242,6 +266,9 @@ beforeEach(() => {
   protocolClient = null;
   resumeCalls = [];
   layoutIsMobile = false;
+  sidebarActiveTabValue = 'deck';
+  setSidebarActiveTabMock.mockClear();
+  setSidebarCollapsedMock.mockClear();
   reloadCurrentPageMock.mockReset();
   accessStatusMock.mockReset();
   accessStatusMock.mockImplementation(async () => ({ passwordRequired: true, unlocked: resumeCalls.length > 0 }));
@@ -478,6 +505,32 @@ describe('EnvAppShell local access gate', () => {
       expect(unlockLocalAccessMock).not.toHaveBeenCalled();
       expect(accessResumeMock).not.toHaveBeenCalled();
       expect(host.textContent).toContain('activity main');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('restores the persisted Codex tab after refresh once permissions are ready', async () => {
+    const storage = createStorageMock();
+    storage.setItem('redeven_envapp_active_tab', 'codex');
+    vi.stubGlobal('localStorage', storage);
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+      await flushAsync();
+
+      expect(setSidebarActiveTabMock).toHaveBeenCalledWith('deck', { openSidebar: false });
+      expect(setSidebarActiveTabMock).toHaveBeenCalledWith('codex', { openSidebar: true });
+      expect(sidebarActiveTabValue).toBe('codex');
+      expect(storage.getItem('redeven_envapp_active_tab')).toBe('codex');
     } finally {
       dispose();
     }

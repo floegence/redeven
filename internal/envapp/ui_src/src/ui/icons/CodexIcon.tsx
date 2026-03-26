@@ -21,8 +21,8 @@ export function CodexNavigationIcon(props: { class?: string }) {
     <CodexIcon
       class={props.class}
       style={{
-        width: '1.25rem',
-        height: '1.25rem',
+        width: '1.5rem',
+        height: '1.5rem',
       }}
     />
   );

@@ -30,7 +30,7 @@ function RuntimeSummary() {
       title={summary().binaryPath || summary().secondaryLabel}
     >
       <div class="flex items-center gap-2">
-        <CodexIcon class="h-6 w-6 shrink-0" />
+        <CodexIcon class="h-7 w-7 shrink-0" />
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
             <div class="truncate text-sm font-medium text-foreground">Codex</div>
@@ -55,7 +55,7 @@ function EmptyState() {
 
   return (
     <div data-codex-surface="sidebar-empty" class="codex-sidebar-empty">
-      <CodexIcon class="mx-auto mb-3 h-10 w-10" />
+      <CodexIcon class="mx-auto mb-3 h-12 w-12" />
       <p class="text-xs font-medium text-muted-foreground/80">
         {codex.hasHostBinary() ? 'No conversations yet' : 'Codex is not available yet'}
       </p>

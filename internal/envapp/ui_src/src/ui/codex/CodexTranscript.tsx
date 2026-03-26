@@ -24,7 +24,7 @@ function EmptyTranscriptState(props: {
       <div class="codex-empty-hero">
         <div class="relative mb-4 inline-flex items-center justify-center">
           <div class="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary/14 to-primary/8 shadow-sm">
-            <CodexIcon class="h-8 w-8 text-primary" />
+            <CodexIcon class="h-10 w-10 text-primary" />
           </div>
         </div>
 
@@ -51,7 +51,7 @@ function CodexMessageLane(props: {
       <Show when={props.showAvatar}>
         <div class="chat-message-avatar chat-message-avatar-assistant codex-chat-message-avatar">
           <div class="chat-message-avatar-custom-wrapper">
-            <CodexIcon class="h-8 w-8" />
+            <CodexIcon class="h-10 w-10" />
           </div>
         </div>
       </Show>

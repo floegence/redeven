@@ -414,6 +414,7 @@ export function EnvAppShell() {
   const canUseCodex = createMemo(() => env.state === 'ready' && hasRWXPermissions(env()));
 
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
+  const [pendingAutoOpenCodex, setPendingAutoOpenCodex] = createSignal(false);
   const [filesMobileSidebarOpen, setFilesMobileSidebarOpen] = createSignal(false);
   const toggleFilesMobileSidebar = () => setFilesMobileSidebarOpen((open) => !open);
   let initialTab: EnvNavTab | null = null;
@@ -1156,6 +1157,11 @@ export function EnvAppShell() {
         preferred = null;
         setPendingAutoOpenAI(true);
       }
+      if (preferred === 'codex') {
+        // Defer opening Codex until permissions are loaded (and only if RWX is granted).
+        preferred = null;
+        setPendingAutoOpenCodex(true);
+      }
 
       const initial = (() => {
         if (preferred) {
@@ -1317,6 +1323,18 @@ export function EnvAppShell() {
     if (initialTab && layout.sidebarActiveTab() !== initialTab) return;
     setPendingAutoOpenAI(false);
     goTab('ai');
+  });
+
+  createEffect(() => {
+    if (!persistReady() || !pendingAutoOpenCodex()) return;
+    if (env.state === 'ready' && !canUseCodex()) {
+      setPendingAutoOpenCodex(false);
+      return;
+    }
+    if (!canUseCodex()) return;
+    if (initialTab && layout.sidebarActiveTab() !== initialTab) return;
+    setPendingAutoOpenCodex(false);
+    goTab('codex');
   });
 
   createEffect(() => {

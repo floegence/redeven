@@ -20,7 +20,7 @@ export function CodexHeaderBar(props: {
     <div data-codex-surface="header" class="codex-page-header border-b border-border/80 bg-background/95 backdrop-blur-md">
       <div class="codex-page-header-main">
         <div class="codex-page-header-summary">
-          <CodexIcon class="h-6 w-6 shrink-0" />
+          <CodexIcon class="h-7 w-7 shrink-0" />
           <div class="codex-page-header-thread" title={props.summary.threadTitle}>
             {props.summary.threadTitle}
           </div>
