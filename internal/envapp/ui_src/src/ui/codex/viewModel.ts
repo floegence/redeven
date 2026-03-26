@@ -91,7 +91,6 @@ export function buildCodexWorkbenchSummary(args: {
   transcriptItems: readonly CodexTranscriptItem[];
 }): CodexWorkbenchSummary {
   const workspaceLabel = firstNonEmpty(
-    args.thread?.path,
     args.thread?.cwd,
     args.workingDirDraft,
     args.status?.agent_home_dir,
@@ -103,24 +102,6 @@ export function buildCodexWorkbenchSummary(args: {
   const snapshot = buildTranscriptSnapshot(args.transcriptItems);
   const metrics: CodexWorkbenchMetric[] = [];
 
-  if (workspaceLabel) {
-    metrics.push({
-      id: 'workspace',
-      label: 'Workspace',
-      value: workspaceLabel,
-      tone: 'neutral',
-      title: workspaceLabel,
-    });
-  }
-  if (modelLabel) {
-    metrics.push({
-      id: 'model',
-      label: 'Model',
-      value: modelLabel,
-      tone: 'neutral',
-      title: modelLabel,
-    });
-  }
   if (snapshot.artifactCount > 0) {
     metrics.push({
       id: 'artifacts',
@@ -161,23 +142,6 @@ export function buildCodexWorkbenchSummary(args: {
       tone: 'warning',
     });
   }
-  if (latestActivityLabel) {
-    metrics.push({
-      id: 'updated',
-      label: 'Updated',
-      value: latestActivityLabel,
-      tone: 'neutral',
-    });
-  }
-  if (metrics.length === 0) {
-    metrics.push({
-      id: 'ready',
-      label: hostReady ? 'Ready' : 'Host',
-      value: hostReady ? 'Start a review' : 'Install `codex`',
-      tone: hostReady ? 'accent' : 'warning',
-    });
-  }
-
   return {
     threadTitle: firstNonEmpty(args.thread?.name, args.thread?.preview, 'New thread'),
     workspaceLabel,

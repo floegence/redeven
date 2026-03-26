@@ -262,10 +262,24 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('src/ui/codex/CodexPage.tsx');
     expect(host.textContent).toContain('Command evidence');
     expect(host.textContent).toContain('finalizing');
-    expect(host.textContent).toContain('Review recent changes');
+    expect(host.textContent).toContain('Prompt ideas');
+    expect(host.textContent).not.toContain('Review recent changes');
+    expect(host.textContent).not.toContain('Options');
     expect(host.textContent).toContain('/workspace/ui');
     expect(host.querySelector('.codex-chat-input-meta-rail')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
+
+    const promptIdeasButton = Array.from(host.querySelectorAll('button')).find((node) =>
+      node.textContent?.includes('Prompt ideas'),
+    );
+    if (!promptIdeasButton) {
+      throw new Error('Prompt ideas button not found');
+    }
+    promptIdeasButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await flushAsync();
+
+    expect(host.textContent).toContain('Review recent changes');
   });
 
   it('renders pending request cards inside the Codex dock support lane', async () => {
@@ -422,6 +436,16 @@ describe('CodexPage', () => {
     renderPage(host);
 
     await flushAsync();
+    await flushAsync();
+
+    const promptIdeasButton = Array.from(host.querySelectorAll('button')).find((node) =>
+      node.textContent?.includes('Prompt ideas'),
+    );
+    if (!promptIdeasButton) {
+      throw new Error('Prompt ideas button not found');
+    }
+    promptIdeasButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
     await flushAsync();
 
     const preset = Array.from(host.querySelectorAll('button')).find((node) =>

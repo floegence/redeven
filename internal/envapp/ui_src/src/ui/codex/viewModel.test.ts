@@ -70,8 +70,43 @@ describe('buildCodexWorkbenchSummary', () => {
     expect(summary.statusFlags).toEqual(['finalizing']);
     expect(summary.pendingRequestCount).toBe(1);
     expect(summary.metrics.map((item) => item.label)).toEqual(
-      expect.arrayContaining(['Workspace', 'Model', 'Files', 'Responses', 'Pending']),
+      expect.arrayContaining(['Files', 'Responses', 'Pending']),
     );
+    expect(summary.metrics.map((item) => item.label)).not.toEqual(
+      expect.arrayContaining(['Workspace', 'Model']),
+    );
+  });
+
+  it('prefers the real working directory over thread path metadata', () => {
+    const summary = buildCodexWorkbenchSummary({
+      thread: {
+        id: 'thread_1',
+        preview: 'Trim noisy metadata',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 10,
+        updated_at_unix_s: 20,
+        status: 'running',
+        active_flags: [],
+        path: '/Users/demo/.codex/sessions/thread.jsonl',
+        cwd: '/workspace/codex-ui',
+        name: 'Metadata cleanup',
+      },
+      status: {
+        available: true,
+        ready: true,
+        agent_home_dir: '/workspace',
+      },
+      workingDirDraft: '',
+      modelDraft: '',
+      activeStatus: 'running',
+      activeStatusFlags: [],
+      pendingRequests: [],
+      transcriptItems: [],
+    });
+
+    expect(summary.workspaceLabel).toBe('/workspace/codex-ui');
+    expect(summary.metrics).toEqual([]);
   });
 });
 

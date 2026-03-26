@@ -89,26 +89,26 @@
 }
 
 .codex-page-toolbar {
-  padding: 0.25rem 0.75rem 0.375rem;
+  padding: 0.25rem 0.75rem 0;
 }
 
 .codex-page-toolbar-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  min-height: 0;
   align-items: center;
-  gap: 0.75rem;
-  min-height: 2.25rem;
+  justify-content: flex-start;
 }
 
 .codex-page-toolbar-lane {
   display: flex;
   min-width: 0;
-  min-height: 2.25rem;
+  min-height: 0;
   align-items: center;
   gap: 0.375rem;
   overflow-x: auto;
   overflow-y: hidden;
   flex-wrap: nowrap;
+  padding-bottom: 0.125rem;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }
@@ -129,12 +129,12 @@
   min-width: 0;
   flex: 0 0 auto;
   align-items: center;
-  gap: 0.45rem;
-  height: 2rem;
-  padding: 0 0.75rem;
+  gap: 0.375rem;
+  height: 1.75rem;
+  padding: 0 0.625rem;
   border: 1px solid transparent;
   border-radius: 9999px;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 600;
 }
 
@@ -175,7 +175,7 @@
 }
 
 .codex-page-chip-value--path {
-  max-width: min(21rem, 48vw);
+  max-width: min(14rem, 40vw);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
@@ -310,7 +310,7 @@
 .codex-chat-input-meta {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 0.5rem;
   padding: 0 0.875rem 0.875rem;
 }
 
@@ -318,7 +318,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.375rem;
   overflow-x: auto;
   padding-top: 0.625rem;
   border-top: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
@@ -335,13 +335,13 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 0.375rem;
-  height: 2rem;
-  padding: 0 0.75rem;
+  height: 1.75rem;
+  padding: 0 0.625rem;
   border: 1px solid transparent;
   border-radius: 9999px;
   background: color-mix(in srgb, var(--muted) 38%, var(--background));
   color: var(--muted-foreground);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease, opacity 150ms ease;
 }
@@ -362,7 +362,7 @@
 }
 
 .codex-chat-working-dir-chip {
-  max-width: min(17rem, 46vw);
+  max-width: min(11rem, 32vw);
 }
 
 .codex-chat-working-dir-chip-label {
@@ -390,6 +390,33 @@
   gap: 0.625rem;
   border-top: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
   padding-top: 0.625rem;
+}
+
+.codex-chat-prompt-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
+  padding-top: 0.625rem;
+}
+
+.codex-chat-prompt-panel-header {
+  padding-inline: 0.125rem;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+
+.codex-chat-prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.codex-chat-prompt-chip {
+  width: 100%;
+  justify-content: center;
+  min-width: 0;
 }
 
 .codex-chat-input-options-grid {
@@ -678,7 +705,7 @@
   }
 
   .codex-page-chip-value--path {
-    max-width: min(14rem, 64vw);
+    max-width: min(10rem, 58vw);
   }
 
   .codex-page-bottom-support {
@@ -721,15 +748,19 @@
   }
 
   .codex-chat-chip {
-    height: 1.875rem;
-    padding-inline: 0.6875rem;
+    height: 1.75rem;
+    padding-inline: 0.625rem;
   }
 
   .codex-chat-working-dir-chip {
-    max-width: min(14rem, 64vw);
+    max-width: min(9rem, 54vw);
   }
 
   .codex-chat-input-options-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .codex-chat-prompt-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
