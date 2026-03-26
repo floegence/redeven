@@ -194,13 +194,17 @@ describe('AskFlowerComposerWindow', () => {
     const scrollRegion = host.querySelector('[data-testid="ask-flower-scroll-region"]');
     const composerDock = host.querySelector('[data-testid="ask-flower-composer-dock"]');
     const assistantAvatar = host.querySelector('[data-testid="ask-flower-avatar"]');
+    const assistantSurface = host.querySelector('.ask-flower-composer-message-surface');
     const textarea = host.querySelector('textarea');
 
     expect(scrollRegion).toBeTruthy();
+    expect(scrollRegion?.className).toContain('ask-flower-scroll-region');
     expect(composerDock).toBeTruthy();
     expect(textarea && composerDock?.contains(textarea)).toBe(true);
     expect(textarea && scrollRegion?.contains(textarea)).toBe(false);
     expect(assistantAvatar).toBeTruthy();
+    expect(assistantSurface).toBeTruthy();
+    expect(assistantSurface?.className).not.toContain('border-border/65');
   });
 
   it('renders the user composer as a flat bottom dock instead of a bordered chat card', () => {
