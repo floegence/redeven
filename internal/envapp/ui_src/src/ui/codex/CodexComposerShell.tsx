@@ -24,10 +24,19 @@ const COMPOSER_PRESETS = [
   },
 ] as const;
 
+function compactPathLabel(value: string, fallback: string): string {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return fallback;
+  const parts = normalized.split('/').filter(Boolean);
+  if (parts.length === 0) return normalized;
+  if (normalized.length <= 24) return normalized;
+  if (parts.length === 1) return parts[0] ?? fallback;
+  return `…/${parts.slice(-2).join('/')}`;
+}
+
 export function CodexComposerShell(props: {
   activeThreadID: string | null;
   activeStatus: string;
-  statusFlags: readonly string[];
   workspaceLabel: string;
   modelLabel: string;
   composerText: string;
@@ -41,7 +50,8 @@ export function CodexComposerShell(props: {
 }) {
   const [isComposing, setIsComposing] = createSignal(false);
   const [isFocused, setIsFocused] = createSignal(false);
-  const [showOptions, setShowOptions] = createSignal(!props.activeThreadID);
+  const [showOptions, setShowOptions] = createSignal(false);
+  const [showPromptIdeas, setShowPromptIdeas] = createSignal(false);
   let textareaRef: HTMLTextAreaElement | undefined;
   let rafId: number | null = null;
 
@@ -71,25 +81,23 @@ export function CodexComposerShell(props: {
     scheduleAdjustHeight();
   });
 
-  createEffect(() => {
-    if (!props.activeThreadID) {
-      setShowOptions(true);
-    }
-  });
-
   const statusNote = () => {
     if (!props.hostAvailable) {
       return 'Install `codex` on the host to enable sending from this editor.';
     }
-    if (props.statusFlags.length > 0) {
-      return `Active status: ${props.statusFlags[0]?.replaceAll('_', ' ')}`;
-    }
     return '';
   };
 
-  const workspaceChipLabel = () => String(props.workspaceLabel ?? '').trim() || 'Working dir';
-  const modelChipLabel = () => String(props.modelLabel ?? '').trim() || 'Host default model';
+  const workspaceValue = () => String(props.workspaceLabel ?? '').trim();
+  const modelValue = () => String(props.modelLabel ?? '').trim();
+  const workspaceChipLabel = () => compactPathLabel(workspaceValue(), 'Working dir');
+  const modelChipLabel = () => modelValue() || 'Host default';
   const sendLabel = () => (props.activeThreadID ? 'Send to Codex' : 'Create chat and send');
+  const showOptionsButton = () => !workspaceValue() && !modelValue();
+  const shouldShowStatusChip = () => {
+    const value = String(props.activeStatus ?? '').trim().toLowerCase();
+    return value.length > 0 && value !== 'idle';
+  };
 
   return (
     <div data-codex-surface="composer" class={cn(
@@ -142,50 +150,86 @@ export function CodexComposerShell(props: {
 
         <div class="codex-chat-input-meta">
           <div class="codex-chat-input-meta-rail" role="toolbar" aria-label="Codex input secondary actions">
-            <button
-              type="button"
-              class="codex-chat-chip codex-chat-chip-actionable codex-chat-working-dir-chip"
-              onClick={() => setShowOptions((value) => !value)}
-              title={workspaceChipLabel()}
-            >
-              <Folder class="h-3.5 w-3.5" />
-              <span class="codex-chat-working-dir-chip-label">{workspaceChipLabel()}</span>
-            </button>
+            <Show when={workspaceValue()}>
+              <button
+                type="button"
+                class="codex-chat-chip codex-chat-chip-actionable codex-chat-working-dir-chip"
+                onClick={() => setShowOptions((value) => !value)}
+                title={workspaceValue()}
+              >
+                <Folder class="h-3.5 w-3.5" />
+                <span class="codex-chat-working-dir-chip-label">{workspaceChipLabel()}</span>
+              </button>
+            </Show>
+
+            <Show when={modelValue()}>
+              <button
+                type="button"
+                class="codex-chat-chip codex-chat-chip-actionable"
+                onClick={() => setShowOptions((value) => !value)}
+                title={modelValue()}
+              >
+                <Activity class="h-3.5 w-3.5" />
+                <span class="truncate">{modelChipLabel()}</span>
+              </button>
+            </Show>
+
+            <Show when={showOptionsButton()}>
+              <button
+                type="button"
+                class="codex-chat-chip codex-chat-chip-actionable"
+                onClick={() => setShowOptions((value) => !value)}
+                aria-expanded={showOptions()}
+              >
+                Options
+              </button>
+            </Show>
 
             <button
               type="button"
               class="codex-chat-chip codex-chat-chip-actionable"
-              onClick={() => setShowOptions((value) => !value)}
-              title={modelChipLabel()}
+              onClick={() => setShowPromptIdeas((value) => !value)}
+              aria-expanded={showPromptIdeas()}
             >
-              <Activity class="h-3.5 w-3.5" />
-              <span class="truncate">{modelChipLabel()}</span>
+              Prompt ideas
             </button>
 
-            <span class="codex-chat-chip">
-              {props.activeThreadID ? 'Continue thread' : 'New thread'}
-            </span>
+            <Show when={!props.activeThreadID}>
+              <span class="codex-chat-chip">New thread</span>
+            </Show>
 
-            <Show when={props.activeStatus}>
+            <Show when={shouldShowStatusChip()}>
               <span class="codex-chat-chip">
                 {props.activeStatus.replaceAll('_', ' ')}
               </span>
             </Show>
-
-            <For each={COMPOSER_PRESETS}>
-              {(preset) => (
-                <button
-                  type="button"
-                  class="codex-chat-chip codex-chat-secondary-chip"
-                  onClick={() => props.onPromptSelect(preset.prompt)}
-                  disabled={!props.hostAvailable}
-                  title={preset.prompt}
-                >
-                  {preset.label}
-                </button>
-              )}
-            </For>
           </div>
+
+          <Show when={showPromptIdeas()}>
+            <div class="codex-chat-prompt-panel">
+              <div class="codex-chat-prompt-panel-header">
+                Use one of these to start a focused Codex turn.
+              </div>
+              <div class="codex-chat-prompt-grid">
+                <For each={COMPOSER_PRESETS}>
+                  {(preset) => (
+                    <button
+                      type="button"
+                      class="codex-chat-secondary-chip codex-chat-prompt-chip"
+                      onClick={() => {
+                        props.onPromptSelect(preset.prompt);
+                        setShowPromptIdeas(false);
+                      }}
+                      disabled={!props.hostAvailable}
+                      title={preset.prompt}
+                    >
+                      {preset.label}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
+          </Show>
 
           <Show when={showOptions()}>
             <div class="codex-chat-input-options">

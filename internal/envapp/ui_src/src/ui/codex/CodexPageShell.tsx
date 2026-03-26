@@ -94,15 +94,17 @@ export function CodexPageShell() {
         </div>
 
         <div class="codex-page-bottom-dock">
-          <div class="codex-page-toolbar">
-            <div class="codex-page-toolbar-main">
-              <div class="codex-page-toolbar-lane">
-                <For each={summary().metrics}>
-                  {(metric) => <ToolbarChip metric={metric} />}
-                </For>
+          <Show when={summary().metrics.length > 0}>
+            <div class="codex-page-toolbar">
+              <div class="codex-page-toolbar-main">
+                <div class="codex-page-toolbar-lane">
+                  <For each={summary().metrics}>
+                    {(metric) => <ToolbarChip metric={metric} />}
+                  </For>
+                </div>
               </div>
             </div>
-          </div>
+          </Show>
 
           <div class="codex-page-bottom-support">
             <Show when={codex.pendingRequests().length > 0}>
@@ -117,7 +119,6 @@ export function CodexPageShell() {
             <CodexComposerShell
               activeThreadID={codex.activeThreadID()}
               activeStatus={codex.activeStatus()}
-              statusFlags={codex.activeStatusFlags()}
               workspaceLabel={codex.workingDirDraft()}
               modelLabel={codex.modelDraft()}
               composerText={codex.composerText()}
