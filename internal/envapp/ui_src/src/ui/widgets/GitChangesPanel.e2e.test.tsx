@@ -28,6 +28,15 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
+async function revealTooltipForButton(button: HTMLButtonElement | null | undefined): Promise<HTMLElement | null> {
+  const host = button?.closest('[data-redeven-tooltip-anchor]') as HTMLElement | null;
+  expect(host).toBeTruthy();
+  host!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  return document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
+}
+
 describe('GitChangesPanel interactions', () => {
   it('renders only the selected section as a compact file table', () => {
     const host = document.createElement('div');
@@ -292,6 +301,49 @@ describe('GitChangesPanel interactions', () => {
         path: '/workspace/repo',
         preferredName: 'repo',
       });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('shows a tooltip when Ask Flower is disabled for an empty section', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                selectedSection="conflicted"
+                onAskFlower={() => {}}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const askFlowerButton = host.querySelector('button[aria-label="Ask Flower"]') as HTMLButtonElement | null;
+      expect(askFlowerButton?.disabled).toBe(true);
+
+      const tooltip = await revealTooltipForButton(askFlowerButton);
+      expect(tooltip?.textContent).toContain('No files in this section.');
     } finally {
       dispose();
     }

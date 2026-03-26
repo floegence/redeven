@@ -211,6 +211,13 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const canAskFlower = () => Boolean(props.onAskFlower && repoRootPath() && visibleItems().length > 0);
   const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && repoShortcutRequest());
   const canBrowseFiles = () => Boolean(props.onBrowseFiles && repoShortcutRequest());
+  const repoShortcutDisabledReason = () => (repoShortcutRequest() ? '' : 'Repository path is unavailable.');
+  const askFlowerDisabledReason = () => {
+    if (canAskFlower()) return '';
+    if (!repoRootPath()) return 'Repository path is unavailable.';
+    if (visibleItems().length === 0) return 'No files in this section.';
+    return 'Ask Flower is unavailable right now.';
+  };
 
   createEffect(() => {
     if (!commitDialogOpen()) return;
@@ -257,6 +264,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                             tone="flower"
                             icon={FlowerIcon}
                             disabled={!canAskFlower()}
+                            disabledReason={askFlowerDisabledReason()}
                             onClick={() => {
                               if (!canAskFlower()) return;
                               props.onAskFlower?.({
@@ -275,6 +283,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                             tone="terminal"
                             icon={Terminal}
                             disabled={!canOpenInTerminal()}
+                            disabledReason={repoShortcutDisabledReason()}
                             onClick={() => {
                               const request = repoShortcutRequest();
                               if (!request) return;
@@ -288,6 +297,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                             tone="files"
                             icon={Folder}
                             disabled={!canBrowseFiles()}
+                            disabledReason={repoShortcutDisabledReason()}
                             onClick={() => {
                               const request = repoShortcutRequest();
                               if (!request) return;

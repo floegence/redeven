@@ -908,6 +908,27 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const canAskFlowerStatus = () => Boolean(props.onAskFlower && props.selectedBranch && statusRepoRootPath() && visibleStatusItems().length > 0);
   const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && branchDirectoryRequest());
   const canBrowseFiles = () => Boolean(props.onBrowseFiles && branchDirectoryRequest());
+  const branchWorkspaceDisabledReason = () => {
+    const branch = props.selectedBranch;
+    if (!branch) return 'Select a branch first.';
+    if (branch.kind === 'remote') return 'Check out this branch locally first.';
+    if (branch.current) return activeRepoRootPath() ? '' : 'Repository path is unavailable.';
+    return 'Open this branch in a worktree first.';
+  };
+  const askFlowerStatusDisabledReason = () => {
+    if (canAskFlowerStatus()) return '';
+    if (!props.selectedBranch) return 'Select a branch first.';
+    if (visibleStatusLoading()) return 'Branch status is still loading.';
+    if (visibleStatusError()) return 'Branch status is unavailable right now.';
+    const workspaceReason = branchWorkspaceDisabledReason();
+    if (workspaceReason) return workspaceReason;
+    if (visibleStatusItems().length === 0) return 'No files in this section.';
+    return 'Ask Flower is unavailable right now.';
+  };
+  const branchWorkspaceShortcutDisabledReason = () => {
+    if (branchDirectoryRequest()) return '';
+    return branchWorkspaceDisabledReason() || 'Repository path is unavailable.';
+  };
   const showWorkspaceHelpers = () => Boolean(props.onOpenInTerminal || props.onBrowseFiles);
   const branchActionCount = () => Number(Boolean(props.onCheckoutBranch))
     + Number(mergeAvailable())
@@ -1021,6 +1042,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                         icon={FlowerIcon}
                         size="sm"
                         disabled={!canAskFlowerStatus()}
+                        disabledReason={askFlowerStatusDisabledReason()}
                         onClick={() => {
                           if (!props.selectedBranch || !canAskFlowerStatus()) return;
                           props.onAskFlower?.({
@@ -1208,6 +1230,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                   tone="terminal"
                                   icon={Terminal}
                                   disabled={!canOpenInTerminal()}
+                                  disabledReason={branchWorkspaceShortcutDisabledReason()}
                                   onClick={() => {
                                     const request = branchDirectoryRequest();
                                     if (!request) return;
@@ -1222,6 +1245,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                   tone="files"
                                   icon={Folder}
                                   disabled={!canBrowseFiles()}
+                                  disabledReason={branchWorkspaceShortcutDisabledReason()}
                                   onClick={() => {
                                     const request = branchDirectoryRequest();
                                     if (!request) return;

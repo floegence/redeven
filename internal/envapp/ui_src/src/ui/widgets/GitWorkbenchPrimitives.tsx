@@ -2,6 +2,7 @@ import { For, Show, type Component, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
+import { Tooltip } from '../primitives/Tooltip';
 import { gitChangeLabel, gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneInsetClass, gitToneSurfaceClass, type GitChromeTone } from './GitChrome';
 
 function gitTagVariant(tone?: GitChromeTone): TagProps['variant'] {
@@ -293,6 +294,7 @@ export interface GitShortcutOrbButtonProps {
   class?: string;
   iconClass?: string;
   disabled?: boolean;
+  disabledReason?: string;
   type?: 'button' | 'submit' | 'reset';
   size?: 'sm' | 'md';
   title?: string;
@@ -318,8 +320,9 @@ function gitShortcutOrbIconClass(tone: GitShortcutOrbTone): string {
 export function GitShortcutOrbButton(props: GitShortcutOrbButtonProps) {
   const Icon = props.icon;
   const size = () => props.size ?? 'sm';
+  const disabledReason = () => String(props.disabledReason ?? '').trim();
 
-  return (
+  const renderButton = () => (
     <button
       type={props.type ?? 'button'}
       data-git-shortcut-orb={props.tone}
@@ -353,6 +356,21 @@ export function GitShortcutOrbButton(props: GitShortcutOrbButtonProps) {
         />
       </span>
     </button>
+  );
+
+  return (
+    <Show when={Boolean(props.disabled) && disabledReason()} fallback={renderButton()}>
+      <Tooltip content={disabledReason()} placement="top" delay={0}>
+        <span
+          class={cn(
+            'inline-flex cursor-not-allowed',
+            size() === 'sm' ? 'h-7 w-7' : 'h-8 w-8',
+          )}
+        >
+          {renderButton()}
+        </span>
+      </Tooltip>
+    </Show>
   );
 }
 
