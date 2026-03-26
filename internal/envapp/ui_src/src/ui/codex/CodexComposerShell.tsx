@@ -1,15 +1,43 @@
-import { For, Show, createEffect, createSignal } from 'solid-js';
+import { For, Show, createEffect, createSignal, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Send } from '@floegence/floe-webapp-core/icons';
-import { Button, Input, Select } from '@floegence/floe-webapp-core/ui';
+import { Input, Select } from '@floegence/floe-webapp-core/ui';
 
 import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown';
+import { compactPathLabel } from './presentation';
 import type { CodexComposerAttachmentDraft } from './types';
 
 type SelectOption = Readonly<{
   value: string;
   label: string;
 }>;
+
+function ComposerSelectChip(props: {
+  label: string;
+  value: string;
+  options: readonly SelectOption[];
+  placeholder: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div class={cn(
+      'codex-chat-select-chip',
+      props.disabled && 'codex-chat-select-chip-disabled',
+    )}>
+      <span class="codex-chat-select-chip-label">{props.label}</span>
+      <Select
+        value={props.value}
+        onChange={(value) => props.onChange(String(value ?? ''))}
+        options={[...props.options]}
+        placeholder={props.placeholder}
+        disabled={props.disabled}
+        aria-label={props.label}
+        class="codex-chat-select-chip-control"
+      />
+    </div>
+  );
+}
 
 function AttachmentCard(props: {
   attachment: CodexComposerAttachmentDraft;
@@ -70,6 +98,7 @@ export function CodexComposerShell(props: {
 }) {
   const [isComposing, setIsComposing] = createSignal(false);
   const [isFocused, setIsFocused] = createSignal(false);
+  const [showWorkspaceEditor, setShowWorkspaceEditor] = createSignal(false);
   let textareaRef: HTMLTextAreaElement | undefined;
   let fileInputRef: HTMLInputElement | undefined;
   let rafId: number | null = null;
@@ -101,10 +130,13 @@ export function CodexComposerShell(props: {
   });
 
   const sendLabel = () => 'Send to Codex';
-  const attachmentHint = () => {
-    if (!props.hostAvailable) return 'Host unavailable';
-    if (!props.supportsImages) return 'Model has no image input';
-    return props.capabilitiesLoading ? 'Loading…' : 'Image only';
+  const workspaceTitle = () => String(props.workspaceLabel ?? '').trim() || 'Working directory';
+  const workspaceChipLabel = () => compactPathLabel(props.workspaceLabel, 'Working dir');
+  const attachmentSupportNote = () => {
+    if (!props.hostAvailable) return '';
+    if (props.capabilitiesLoading) return 'Checking image support…';
+    if (!props.supportsImages) return 'Image attachments unavailable for the current model.';
+    return '';
   };
   const statusNote = () => {
     if (!props.hostAvailable) {
@@ -175,105 +207,125 @@ export function CodexComposerShell(props: {
           </div>
         </div>
 
-        <div class="codex-chat-input-controls">
-          <label class="codex-chat-input-field codex-chat-input-field--workspace">
-            <span class="codex-chat-input-field-label">Working directory</span>
-            <Input
-              value={props.workspaceLabel}
-              onInput={(event) => props.onWorkspaceInput(event.currentTarget.value)}
-              placeholder="Use host default working directory"
-              class="w-full codex-chat-input-field-control"
-            />
-          </label>
+        <div class="codex-chat-input-meta">
+          <div class="codex-chat-input-meta-rail" role="toolbar" aria-label="Codex input controls">
+            <button
+              type="button"
+              class={cn(
+                'codex-chat-chip codex-chat-working-dir-chip codex-chat-chip-actionable',
+                showWorkspaceEditor() && 'codex-chat-working-dir-chip-active',
+              )}
+              onClick={() => setShowWorkspaceEditor((value) => !value)}
+              title={workspaceTitle()}
+              aria-label="Edit working directory"
+              aria-expanded={showWorkspaceEditor()}
+            >
+              <FolderIcon />
+              <span class="codex-chat-working-dir-chip-label">{workspaceChipLabel()}</span>
+            </button>
 
-          <div class="codex-chat-input-field codex-chat-input-field--attachment">
-            <span class="codex-chat-input-field-label">Attachment</span>
-            <div class="codex-chat-input-attachment-row">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                class="codex-chat-input-attachment-btn"
-                onClick={() => fileInputRef?.click()}
-                disabled={!props.hostAvailable || !props.supportsImages}
-              >
-                Attach image
-              </Button>
-              <span class="codex-chat-input-inline-note">{attachmentHint()}</span>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*"
-                class="hidden"
-                onChange={(event) => {
-                  const files = event.currentTarget.files;
-                  if (!files || files.length === 0) return;
-                  void props.onAddAttachments(Array.from(files));
-                  event.currentTarget.value = '';
-                }}
+            <button
+              type="button"
+              class="codex-chat-meta-btn"
+              onClick={() => fileInputRef?.click()}
+              disabled={!props.hostAvailable || !props.supportsImages}
+              aria-label="Add attachments"
+              title="Add attachments"
+            >
+              <PaperclipIcon />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*"
+              class="hidden"
+              onChange={(event) => {
+                const files = event.currentTarget.files;
+                if (!files || files.length === 0) return;
+                void props.onAddAttachments(Array.from(files));
+                event.currentTarget.value = '';
+              }}
+            />
+
+            <ComposerSelectChip
+              label="Model"
+              value={props.modelValue}
+              options={props.modelOptions}
+              placeholder="Default"
+              disabled={!props.hostAvailable || props.modelOptions.length === 0}
+              onChange={props.onModelChange}
+            />
+
+            <ComposerSelectChip
+              label="Effort"
+              value={props.effortValue}
+              options={props.effortOptions}
+              placeholder="Default"
+              disabled={!props.hostAvailable || props.effortOptions.length === 0}
+              onChange={props.onEffortChange}
+            />
+
+            <ComposerSelectChip
+              label="Approval"
+              value={props.approvalPolicyValue}
+              options={props.approvalPolicyOptions}
+              placeholder="Default"
+              disabled={!props.hostAvailable || props.approvalPolicyOptions.length === 0}
+              onChange={props.onApprovalPolicyChange}
+            />
+
+            <ComposerSelectChip
+              label="Sandbox"
+              value={props.sandboxModeValue}
+              options={props.sandboxModeOptions}
+              placeholder="Default"
+              disabled={!props.hostAvailable || props.sandboxModeOptions.length === 0}
+              onChange={props.onSandboxModeChange}
+            />
+          </div>
+
+          <Show when={showWorkspaceEditor()}>
+            <div class="codex-chat-input-workspace-editor">
+              <Input
+                value={props.workspaceLabel}
+                onInput={(event) => props.onWorkspaceInput(event.currentTarget.value)}
+                placeholder="Use host default working directory"
+                aria-label="Working directory"
+                class="w-full codex-chat-input-workspace-input"
               />
             </div>
-          </div>
+          </Show>
 
-          <label class="codex-chat-input-field">
-            <span class="codex-chat-input-field-label">Model</span>
-            <Select
-              value={props.modelValue}
-              onChange={(value) => props.onModelChange(String(value ?? ''))}
-              options={[...props.modelOptions]}
-              placeholder="Use host default model"
-              disabled={!props.hostAvailable || props.modelOptions.length === 0}
-              class="w-full codex-chat-input-field-control"
-            />
-          </label>
-
-          <label class="codex-chat-input-field">
-            <span class="codex-chat-input-field-label">Effort</span>
-            <Select
-              value={props.effortValue}
-              onChange={(value) => props.onEffortChange(String(value ?? ''))}
-              options={[...props.effortOptions]}
-              placeholder="Use model default effort"
-              disabled={!props.hostAvailable || props.effortOptions.length === 0}
-              class="w-full codex-chat-input-field-control"
-            />
-          </label>
-
-          <label class="codex-chat-input-field">
-            <span class="codex-chat-input-field-label">Approval</span>
-            <Select
-              value={props.approvalPolicyValue}
-              onChange={(value) => props.onApprovalPolicyChange(String(value ?? ''))}
-              options={[...props.approvalPolicyOptions]}
-              placeholder="Use host default approval"
-              disabled={!props.hostAvailable || props.approvalPolicyOptions.length === 0}
-              class="w-full codex-chat-input-field-control"
-            />
-          </label>
-
-          <label class="codex-chat-input-field">
-            <span class="codex-chat-input-field-label">Sandbox</span>
-            <Select
-              value={props.sandboxModeValue}
-              onChange={(value) => props.onSandboxModeChange(String(value ?? ''))}
-              options={[...props.sandboxModeOptions]}
-              placeholder="Use host default sandbox"
-              disabled={!props.hostAvailable || props.sandboxModeOptions.length === 0}
-              class="w-full codex-chat-input-field-control"
-            />
-          </label>
+          <Show when={attachmentSupportNote() || statusNote()}>
+            <div class="codex-chat-input-support">
+              <Show when={attachmentSupportNote()}>
+                <div class="codex-chat-input-inline-note">{attachmentSupportNote()}</div>
+              </Show>
+              <Show when={statusNote()}>
+                <div class={cn(
+                  'codex-chat-input-status',
+                  !props.hostAvailable && 'text-error',
+                )}>
+                  {statusNote()}
+                </div>
+              </Show>
+            </div>
+          </Show>
         </div>
-
-        <Show when={statusNote()}>
-          <div class={cn(
-            'codex-chat-input-status',
-            !props.hostAvailable && 'text-error',
-          )}>
-            {statusNote()}
-          </div>
-        </Show>
       </div>
     </div>
   );
 }
+
+const PaperclipIcon: Component = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+  </svg>
+);
+
+const FolderIcon: Component = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+  </svg>
+);

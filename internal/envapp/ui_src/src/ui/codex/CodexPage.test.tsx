@@ -202,7 +202,9 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('There is no separate in-app Codex runtime toggle to manage here');
     expect(host.textContent).toContain('Redeven does not install Codex for you');
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
-    expect(host.querySelector('.codex-chat-input-controls')).not.toBeNull();
+    expect(host.querySelector('.codex-chat-input-controls')).toBeNull();
+    expect(host.querySelector('.codex-chat-input-meta')).not.toBeNull();
+    expect(host.querySelector('button[title="Add attachments"]')).not.toBeNull();
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
   });
 
@@ -334,12 +336,18 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('Effort');
     expect(host.textContent).toContain('Approval');
     expect(host.textContent).toContain('Sandbox');
-    expect(host.querySelector('.codex-chat-input-controls')).not.toBeNull();
+    expect(host.querySelector('.codex-chat-input-controls')).toBeNull();
+    expect(host.querySelector('.codex-chat-input-meta')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
+    expect(host.querySelector('button[title="Add attachments"]')).not.toBeNull();
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
     expect(host.querySelector('.codex-page-header-context')).toBeNull();
     expect(host.querySelector('button[aria-label="Refresh Codex thread"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Archive Codex thread"]')).not.toBeNull();
+    const workingDirChip = host.querySelector('button[aria-label="Edit working directory"]') as HTMLButtonElement | null;
+    expect(workingDirChip?.textContent).toContain('/workspace/ui');
+    workingDirChip?.click();
+    await flushAsync();
     const workingDirInput = host.querySelector('input[placeholder="Use host default working directory"]') as HTMLInputElement | null;
     expect(workingDirInput?.value).toBe('/workspace/ui');
   });
